@@ -270,6 +270,64 @@ def read_docx(
 # ──────────────────────────────────────────────────────────────────────
 
 
+#: WordParagraphSpec.align → docx enum（批次 2.3）。
+_ALIGN_TO_DOCX = {
+    "left": "LEFT",
+    "center": "CENTER",
+    "right": "RIGHT",
+    "justify": "JUSTIFY",
+}
+
+
+def _normalize_hex_color(color: str) -> Optional[str]:
+    """'FF0000' / '#ff0000' → 'FF0000'；非法返回 None（批次 2.3）。"""
+    hex_text = str(color).strip().lstrip("#")
+    if len(hex_text) != 6 or any(c not in "0123456789abcdefABCDEF" for c in hex_text):
+        return None
+    return hex_text.upper()
+
+
+def _apply_paragraph_run_style(para, spec) -> int:
+    """把 WordParagraphSpec 的可选样式（font_size/bold/italic/color/align）
+    施加到刚创建段落的全部 runs（批次 2.3 样式分级 round a）。
+
+    全部字段缺省时不做任何修改（保持既有生成物逐字节语义）。返回处理
+    的 run 数。
+    """
+    fields = ("font_size", "bold", "italic", "color", "align")
+    if all(getattr(spec, f, None) is None for f in fields):
+        return 0
+
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt, RGBColor
+
+    align = getattr(spec, "align", None)
+    if align is not None:
+        para.alignment = getattr(WD_ALIGN_PARAGRAPH, _ALIGN_TO_DOCX[align])
+
+    rgb = None
+    color = getattr(spec, "color", None)
+    if color is not None:
+        normalized = _normalize_hex_color(color)
+        if normalized is None:
+            from .errors import OfficeGenerateError
+
+            raise OfficeGenerateError(f"invalid_color: {color!r}（需 6 位 RGB hex）")
+        rgb = RGBColor.from_string(normalized)
+
+    font_size = getattr(spec, "font_size", None)
+    for run in para.runs:
+        if font_size is not None:
+            run.font.size = Pt(float(font_size))
+        if getattr(spec, "bold", None) is not None:
+            run.font.bold = bool(spec.bold)
+        if getattr(spec, "italic", None) is not None:
+            run.font.italic = bool(spec.italic)
+        if rgb is not None:
+            run.font.color.rgb = rgb
+    return len(para.runs)
+
+
 def generate_docx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .docx file from structured Pydantic input.
 
@@ -306,19 +364,21 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # Body paragraphs
         for para in req.paragraphs:
             if para.heading == "h1":
-                doc.add_heading(para.text, level=1)
+                created = doc.add_heading(para.text, level=1)
             elif para.heading == "h2":
-                doc.add_heading(para.text, level=2)
+                created = doc.add_heading(para.text, level=2)
             elif para.heading == "h3":
-                doc.add_heading(para.text, level=3)
+                created = doc.add_heading(para.text, level=3)
             elif para.style == "bullet":
                 # ★ 新增：bullet 列表
-                doc.add_paragraph(para.text, style="List Bullet")
+                created = doc.add_paragraph(para.text, style="List Bullet")
             elif para.style == "numbered":
                 # ★ 新增：numbered 列表
-                doc.add_paragraph(para.text, style="List Number")
+                created = doc.add_paragraph(para.text, style="List Number")
             else:
-                doc.add_paragraph(para.text)
+                created = doc.add_paragraph(para.text)
+            # 批次 2.3：可选段落级样式（无样式字段时零改动）
+            _apply_paragraph_run_style(created, para)
         # Tables
         for table_spec in req.tables:
             table = doc.add_table(rows=1 + len(table_spec.rows), cols=len(table_spec.headers))
@@ -330,6 +390,21 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                 for ci, cell in enumerate(row):
                     if ci < len(table_spec.headers):
                         table.cell(ri + 1, ci).text = cell
+        # 批次 2.1：可选插图，按顺序追加在正文之后。
+        images = list(getattr(req, "images", None) or [])
+        if images:
+            from .charts import image_bytes_to_stream, resolve_image_payload
+
+            search_dirs = [output_path.parent]
+            if req.workspace_path:
+                search_dirs.insert(0, Path(req.workspace_path))
+            from docx.shared import Inches
+
+            for image in images:
+                payload = resolve_image_payload(image.source, search_dirs=search_dirs)
+                width = Inches(image.width_inches) if image.width_inches else None
+                height = Inches(image.height_inches) if image.height_inches else None
+                doc.add_picture(image_bytes_to_stream(payload), width=width, height=height)
         doc.save(str(output_path))
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate DOCX: {exc}", file_path=output_path) from exc

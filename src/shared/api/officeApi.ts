@@ -20,6 +20,8 @@ import type {
   OfficeDocumentListResponse,
   OfficeExcelGenerateRequest,
   OfficeExcelReadResult,
+  OfficeExportPdfRequest,
+  OfficeExportPdfResult,
   OfficePdfGenerateRequest,
   OfficePdfGenerateResult,
   OfficePdfReadRequest,
@@ -30,6 +32,8 @@ import type {
   OfficeRestoreResponse,
   OfficeSnapshotListResponse,
   OfficeSnapshotRestoreResponse,
+  OfficeUpdatePreviewRequest,
+  OfficeUpdatePreviewResult,
   OfficeWordGenerateRequest,
   OfficeWordReadResult,
 } from './types';
@@ -289,6 +293,55 @@ export const officeApi = {
         pages: req.pages,
         pageSize: req.page_size,
         orientation: req.orientation,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Dry-run update ops against a temp COPY of the document (batch 2,
+   * item 2.5) — the source file is never touched. Resolves the target
+   * by doc_id when given (managed-layout lookup server-side), else by
+   * file_path. Invalid ops come back as
+   * `{ok: false, changes: [], error}` so the UI can show WHY the real
+   * update would fail.
+   *
+   * NOTE: this is preview-only. There is no page-level apply-update
+   * HTTP route; real edits go through the chat office_update tool.
+   *
+   * No retry — runs the full editor pipeline per op.
+   */
+  async previewUpdate(req: OfficeUpdatePreviewRequest): Promise<OfficeUpdatePreviewResult> {
+    try {
+      return await invoke<OfficeUpdatePreviewResult>('office_update_preview', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+        docId: req.doc_id,
+        ops: req.ops,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Export a workspace .docx/.xlsx/.pptx to PDF via locally installed
+   * converters (batch 2, item 2.7) — LibreOffice headless first, then
+   * MS Word COM (Windows/.docx). Output lands next to the source as
+   * `<stem>.pdf`.
+   *
+   * Never throws for converter problems: failures come back as
+   * `{ok: false, method: null, output_path: null, error}`. HTTP-level
+   * failures (4xx/5xx, backend down) still throw via handleApiError.
+   *
+   * No retry — conversion is side-effecting (overwrites the output PDF).
+   */
+  async exportPdf(req: OfficeExportPdfRequest): Promise<OfficeExportPdfResult> {
+    try {
+      return await invoke<OfficeExportPdfResult>('office_export_pdf', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
       });
     } catch (error) {
       throw handleApiError(error);

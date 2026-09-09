@@ -22,6 +22,7 @@ These omissions are intentional per plan §1.3 "non-goals".
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from pathlib import Path
@@ -218,6 +219,77 @@ def read_ppt(
 # Generator (Phase 1.4 step 19, plan §4.1.4)
 # ──────────────────────────────────────────────────────────────────────
 
+#: Same textbox geometry the edit layer uses, so generated decks and
+#: in-place edits blend together（与 edit._TITLE/_BODY_BOX_GEOMETRY 一致）.
+_TITLE_BOX_GEOMETRY = (914400, 274638, 9144000, 1143000)
+_BODY_BOX_GEOMETRY = (914400, 1600200, 9144000, 4572000)
+
+#: 批次 2.3：PptSlideSpec.layout → 默认模板版式名（按名查找，找不到再按
+#: 常见索引兜底，最后回退 Blank + 文本框几何）。
+_LAYOUT_NAME_HINTS = {
+    "title": ("Title Slide",),
+    "title_content": ("Title and Content",),
+    "blank": ("Blank",),
+}
+_LAYOUT_INDEX_FALLBACK = {"title": 0, "title_content": 1, "blank": 6}
+
+
+def _resolve_slide_layout(prs, layout_name: Optional[str]):
+    """按名字在演示文稿模板里找版式；找不到回退常见索引；再不行返回 None
+    （调用方据此走原有 Blank + 文本框几何路径）。"""
+    if not layout_name:
+        return None
+    # PptLayoutName 是 str-Enum：成员的 hash 与裸字符串不同，dict 查找前
+    # 必须归一化为 .value。
+    name = str(getattr(layout_name, "value", layout_name))
+    layouts = prs.slide_layouts
+    for hint in _LAYOUT_NAME_HINTS.get(name, ()):
+        for layout in layouts:
+            if layout.name == hint:
+                return layout
+    fallback = _LAYOUT_INDEX_FALLBACK.get(name)
+    if fallback is not None and 0 <= fallback < len(layouts):
+        return layouts[fallback]
+    logger.warning("未找到 slide layout %r，回退默认几何", name)
+    return None
+
+
+def _slide_body_placeholder(slide):
+    """标题占位符之外、第一个带文本框的占位符（title_content 版式的正文框）。"""
+    title = None
+    with contextlib.suppress(AttributeError, KeyError):
+        title = slide.shapes.title
+    for placeholder in slide.placeholders:
+        if title is not None and placeholder.placeholder_format.idx == title.placeholder_format.idx:
+            continue
+        if placeholder.has_text_frame:
+            return placeholder
+    return None
+
+
+def _fill_text_frame_lines(text_frame, lines) -> None:
+    """首行写入 text，其余逐段 add_paragraph（生成器/编辑层同款语义）。"""
+    if not lines:
+        return
+    text_frame.text = lines[0]
+    for line in lines[1:]:
+        text_frame.add_paragraph().text = line
+
+
+def _add_slide_image(slide, image_spec) -> None:
+    """批次 2.1：把 ImageSourceSpec 插到 slide（缺省位于正文区左上角）。"""
+    from .charts import image_bytes_to_stream, resolve_image_payload
+
+    payload = resolve_image_payload(image_spec.source)
+    left, top = _BODY_BOX_GEOMETRY[0], _BODY_BOX_GEOMETRY[1]
+    from pptx.util import Inches
+
+    width = Inches(image_spec.width_inches) if image_spec.width_inches else None
+    height = Inches(image_spec.height_inches) if image_spec.height_inches else None
+    slide.shapes.add_picture(
+        image_bytes_to_stream(payload), left, top, width=width, height=height
+    )
+
 
 def _safe_filename(name: str, default_ext: str) -> str:
     """Backwards-compat shim retained for callers that still import it.
@@ -258,26 +330,34 @@ def generate_ppt(req, output_dir: Optional[str] = None) -> Path:
         # Layout 6 is "Blank" — most flexible for any content
         blank_layout = prs.slide_layouts[6]
         for spec in req.slides:
-            slide = prs.slides.add_slide(blank_layout)
+            # 批次 2.3：可选 layout 字段按模板版式名查找；未指定或模板里
+            # 找不到对应版式时，保持既有 Blank + 文本框几何行为不变。
+            layout = _resolve_slide_layout(prs, getattr(spec, "layout", None))
+            slide = prs.slides.add_slide(layout if layout is not None else blank_layout)
+            title_shape = None
+            if layout is not None:
+                with contextlib.suppress(AttributeError, KeyError):
+                    title_shape = slide.shapes.title
             # Add a title text box at the top
             if spec.title:
-                title_box = slide.shapes.add_textbox(
-                    914400,
-                    274638,
-                    9144000,
-                    1143000,  # 1"x0.3" position, 10"x1.25" size
-                )
-                title_box.text_frame.text = spec.title
+                if title_shape is not None and title_shape.has_text_frame:
+                    # 版式自带标题占位符：填占位符（继承版式样式）。
+                    title_shape.text_frame.text = spec.title
+                else:
+                    title_box = slide.shapes.add_textbox(*_TITLE_BOX_GEOMETRY)
+                    title_box.text_frame.text = spec.title
             # Add bullets as another text box
             if spec.bullets:
-                body_box = slide.shapes.add_textbox(914400, 1600200, 9144000, 4572000)
-                tf = body_box.text_frame
-                for i, bullet in enumerate(spec.bullets):
-                    if i == 0:
-                        tf.text = bullet
-                    else:
-                        p = tf.add_paragraph()
-                        p.text = bullet
+                body_placeholder = _slide_body_placeholder(slide) if layout is not None else None
+                if body_placeholder is not None:
+                    _fill_text_frame_lines(body_placeholder.text_frame, spec.bullets)
+                else:
+                    body_box = slide.shapes.add_textbox(*_BODY_BOX_GEOMETRY)
+                    _fill_text_frame_lines(body_box.text_frame, spec.bullets)
+            # 批次 2.1：可选插图（位于文本之后）
+            image_spec = getattr(spec, "image", None)
+            if image_spec is not None:
+                _add_slide_image(slide, image_spec)
             # Add speaker notes
             if spec.notes:
                 slide.notes_slide.notes_text_frame.text = spec.notes

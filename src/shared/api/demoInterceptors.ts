@@ -31,8 +31,11 @@ import type {
   OfficeDeleteResponse,
   OfficeDocumentSummary,
   OfficeExcelReadResult,
+  OfficeExportPdfResult,
   OfficePdfReadResult,
   OfficePptReadResult,
+  OfficeUpdateOp,
+  OfficeUpdatePreviewResult,
   OfficeWordReadResult,
   ScheduledTask,
   Session,
@@ -1748,6 +1751,62 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
     };
     demoOfficeDocs = [doc, ...demoOfficeDocs];
     return { output_path: `${workspacePath}/${filename}`, filename, file_size_bytes: 1048576 };
+  },
+
+  // Office parity batch 2 (items 2.5 / 2.7): update preview (dry-run) +
+  // PDF export. Preview turns each composed op into one generic change
+  // entry (the real backend diffs against a temp copy — demo just echoes
+  // a plausible shape so the dialog state machine is exercisable).
+  office_update_preview: (args) => {
+    const ops = Array.isArray(args.ops) ? (args.ops as OfficeUpdateOp[]) : [];
+    const changes = ops.slice(0, 200).map((raw) => {
+      const op = typeof raw?.op === 'string' ? raw.op : 'unknown';
+      if (op === 'replace_text') {
+        return {
+          op,
+          target: asStr(raw.find),
+          before: asStr(raw.find),
+          after: asStr(raw.replace),
+        };
+      }
+      if (op === 'set_cells') {
+        const sheet = asStr(raw.sheet) || 'Sheet1';
+        const cells = Array.isArray(raw.cells) ? raw.cells : [];
+        const first = cells[0] as Record<string, unknown> | undefined;
+        return {
+          op,
+          target: first ? `${sheet}!${asStr(first.addr)}` : sheet,
+          after: first ? asStr(first.value) : '',
+        };
+      }
+      if (op === 'set_slide_title') {
+        return {
+          op,
+          target: `slide[${asNum(raw.index, 0)}]`,
+          after: asStr(raw.title),
+        };
+      }
+      return { op, summary: `${op}` };
+    });
+    const result: OfficeUpdatePreviewResult = {
+      ok: true,
+      changes,
+      truncated: ops.length > 200,
+      error: null,
+    };
+    return result;
+  },
+
+  office_export_pdf: (args) => {
+    const filePath = asStr(args.filePath) || asStr(args.file_path) || 'document.docx';
+    const outputPath = filePath.replace(/\.(docx|xlsx|pptx)$/i, '.pdf');
+    const result: OfficeExportPdfResult = {
+      ok: true,
+      method: 'libreoffice',
+      output_path: outputPath,
+      error: null,
+    };
+    return result;
   },
 
   // ── 进化 / 学习 ──

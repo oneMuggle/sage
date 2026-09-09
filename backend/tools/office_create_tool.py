@@ -71,9 +71,12 @@ class OfficeCreateTool(BaseTool):
                 "a target directory. Use when the user asks to create / generate "
                 "a .docx/.xlsx/.pptx file (e.g. on their Desktop). `content` is "
                 "an object whose shape depends on `doc_type`: word → "
-                "{title, paragraphs:[{text, heading?}], tables:[{headers, rows[]}]}, "
-                "excel → {sheets:[{name, headers[], rows[]}]}, ppt → "
-                "{slides:[{title, bullets[], notes?}]}."
+                "{title, paragraphs:[{text, heading?, font_size?, bold?, "
+                "italic?, color?, align?}], tables:[{headers, rows[]}], "
+                "images?:[{source, width_inches?, height_inches?}]}, excel → "
+                "{sheets:[{name, headers[], rows[], column_widths?}], "
+                "charts?:[{sheet?, type, anchor, data_ref, title?}]}, ppt → "
+                "{slides:[{title, bullets[], notes?, layout?, image?}]}."
             ),
             parameters={
                 "type": "object",
@@ -113,9 +116,13 @@ class OfficeCreateTool(BaseTool):
                         "description": (
                             "Structured content as a JSON object, keyed by "
                             "doc_type: word → {title, paragraphs:[{text, "
-                            "heading?}], tables:[{headers, rows[]}]}; excel → "
-                            "{sheets:[{name, headers[], rows[]}]}; ppt → "
-                            "{slides:[{title, bullets[], notes?}]}. A plain "
+                            "heading?, font_size?, bold?, italic?, color?, "
+                            "align?}], tables:[{headers, rows[]}], images?:"
+                            "[{source, width_inches?, height_inches?}]}; "
+                            "excel → {sheets:[{name, headers[], rows[], "
+                            "column_widths?}], charts?:[{sheet?, type, anchor, "
+                            "data_ref, title?}]}; ppt → {slides:[{title, "
+                            "bullets[], notes?, layout?, image?}]}. A plain "
                             "string is also accepted for word (treated as body "
                             "text). excel 与 ppt 必须传对象（分别含 sheets / "
                             "slides），只有 word 接受纯字符串。"
@@ -135,10 +142,45 @@ class OfficeCreateTool(BaseTool):
                                             "type": ["string", "null"],
                                             "description": "'h1'/'h2'/'h3' 或 null",
                                         },
+                                        "font_size": {
+                                            "type": "number",
+                                            "description": "段落字号（磅），如 12",
+                                        },
+                                        "bold": {"type": "boolean"},
+                                        "italic": {"type": "boolean"},
+                                        "color": {
+                                            "type": "string",
+                                            "description": "字体颜色 6 位 RGB hex（如 'FF0000'）",
+                                        },
+                                        "align": {
+                                            "type": "string",
+                                            "enum": ["left", "center", "right", "justify"],
+                                        },
                                     },
                                     "required": ["text"],
                                 },
-                                "description": "word 段落列表。",
+                                "description": "word 段落列表（可选段落级样式）。",
+                            },
+                            "images": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "source": {
+                                            "type": "string",
+                                            "description": (
+                                                "图片来源：工作区图片路径或 "
+                                                "data:image/... base64（≤10MB）"
+                                            ),
+                                        },
+                                        "width_inches": {"type": "number"},
+                                        "height_inches": {"type": "number"},
+                                    },
+                                    "required": ["source"],
+                                },
+                                "description": (
+                                    "word 插图列表，按顺序追加在正文之后（批次2）。"
+                                ),
                             },
                             "tables": {
                                 "type": "array",
@@ -177,9 +219,59 @@ class OfficeCreateTool(BaseTool):
                                                 "items": {"type": "string"},
                                             },
                                         },
+                                        "column_widths": {
+                                            "type": "array",
+                                            "items": {"type": "number"},
+                                            "description": (
+                                                "各列列宽（index 0 = A 列），如 [20, 12, 30]"
+                                            ),
+                                        },
                                     },
                                 },
                                 "description": "excel 工作表列表。",
+                            },
+                            "charts": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "sheet": {
+                                            "type": "string",
+                                            "description": "目标 sheet 名，缺省第一个 sheet",
+                                        },
+                                        "type": {
+                                            "type": "string",
+                                            "enum": ["line", "bar", "pie"],
+                                        },
+                                        "anchor": {
+                                            "type": "string",
+                                            "description": "左上角锚点单元格，如 'A10'",
+                                        },
+                                        "data_ref": {
+                                            "type": "object",
+                                            "properties": {
+                                                "min_col": {"type": "integer"},
+                                                "min_row": {"type": "integer"},
+                                                "max_col": {"type": "integer"},
+                                                "max_row": {"type": "integer"},
+                                            },
+                                            "required": [
+                                                "min_col",
+                                                "min_row",
+                                                "max_col",
+                                                "max_row",
+                                            ],
+                                            "description": "图表数据矩形（1-based，含端点）",
+                                        },
+                                        "titles_from_data": {"type": "boolean"},
+                                        "from_rows": {"type": "boolean"},
+                                        "title": {"type": "string"},
+                                    },
+                                    "required": ["type", "anchor", "data_ref"],
+                                },
+                                "description": (
+                                    "excel 原生图表列表（Excel 打开可见、可再编辑；批次2）。"
+                                ),
                             },
                             "slides": {
                                 "type": "array",
@@ -192,7 +284,30 @@ class OfficeCreateTool(BaseTool):
                                             "items": {"type": "string"},
                                         },
                                         "notes": {"type": "string"},
+                                        "layout": {
+                                            "type": "string",
+                                            "enum": ["title", "title_content", "blank"],
+                                            "description": (
+                                                "版式；不传时用 Blank + 文本框（默认行为）"
+                                            ),
+                                        },
+                                        "image": {
+                                            "type": "object",
+                                            "properties": {
+                                                "source": {
+                                                    "type": "string",
+                                                    "description": (
+                                                        "图片路径或 data:image/... base64（≤10MB）"
+                                                    ),
+                                                },
+                                                "width_inches": {"type": "number"},
+                                                "height_inches": {"type": "number"},
+                                            },
+                                            "required": ["source"],
+                                            "description": "该页插图（批次2）",
+                                        },
                                     },
+                                    "required": ["title"],
                                 },
                                 "description": "ppt 幻灯片列表。",
                             },

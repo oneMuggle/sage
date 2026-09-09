@@ -56,7 +56,10 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
     # 2026-09-09: PR-3 (office_archive) 给 primary 加了 archive, 测试同步更新。
     # 2026-09 Parity Batch-1: primary 经 *OFFICE_TOOLS 继承 PDF 三类 +
     # Word 模板两件, 测试同步更新。
+    # 2026-09 Parity Batch-2: primary 经 *OFFICE_TOOLS 继承 office_analyze
+    # (pandas 本地数据分析), 13 → 14 件。
     assert visible == [
+        "office_analyze",
         "office_analyze_word_template",
         "office_archive",
         "office_create",
@@ -78,7 +81,10 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
     # 2026-09-09: PR-3 (office_archive) 给 writer 加了 archive, 测试同步更新。
     # 2026-09 Parity Batch-1: writer 白名单补 PDF 三类 + Word 模板两件
     # （仍不给 office_delete）, 测试同步更新。
+    # 2026-09 Parity Batch-2: writer 白名单补 office_analyze
+    # （仍不给 office_delete）, 12 → 13 件。
     assert visible == [
+        "office_analyze",
         "office_analyze_word_template",
         "office_archive",
         "office_create",
@@ -108,7 +114,8 @@ def test_list_and_read_hidden_without_workspace_binding(registry):
     Parity Batch-1: 写三件(office_generate_pdf / office_fill_pdf_form /
     office_fill_word_template)同样是 file_path 模式 → False 仍可见; 读三件
     (office_read_pdf / office_read_pdf_form / office_analyze_word_template)
-    与 office_list/read/restore/archive 一样隐藏。
+    与 office_list/read/restore/archive 一样隐藏。2026-09 Parity Batch-2:
+    office_analyze 是读类工具(同 office_read_pdf) → 隐藏。
     """
     visible = _visible_office_tools(registry, None, _profile("primary").tools)
     assert visible == [

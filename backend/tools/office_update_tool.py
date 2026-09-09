@@ -48,17 +48,25 @@ _OP_DESCRIPTIONS = {
     "word": (
         "word ops: replace_text{find,replace}; append_paragraphs{paragraphs:"
         "[{text,heading?}]}; append_table{headers,rows}; set_table_cell"
-        "{table_index,row,col,text}（row 0 为表头行）; delete_paragraph{find,all?}"
+        "{table_index,row,col,text}（row 0 为表头行）; delete_paragraph{find,all?}; "
+        "add_image{path|base64,width_inches?,height_inches?}（≤10MB）; "
+        "set_paragraph_style{index|match,font_size?,bold?,italic?,color?,align?}"
+        "（样式作用于该段全部 runs）"
     ),
     "excel": (
         "excel ops: set_cells{sheet,cells:[{addr,value}]}（A1 记法，数字串按 Excel "
         "录入语义转数值）; append_rows{sheet,rows}; add_sheet{name,headers?,rows?}; "
-        "rename_sheet{from,to}; delete_sheet{name}"
+        "rename_sheet{from,to}; delete_sheet{name}; add_chart{sheet,type:"
+        "'line'|'bar'|'pie',anchor,data_ref:{min_col,min_row,max_col,max_row},"
+        "titles_from_data?,from_rows?,categories_ref?,title?}（原生图表）; "
+        "set_column_width{sheet,column,width}; set_number_format{sheet,cells,format}; "
+        "set_fill{sheet,cells,color（6 位 hex）}; freeze_panes{sheet,cell}"
     ),
     "ppt": (
         "ppt ops（slide index 从 0 起）: replace_text{find,replace}; set_slide_title"
         "{index,title}; set_slide_bullets{index,bullets}; set_slide_notes{index,notes}; "
-        "append_slide{title,bullets?,notes?}; delete_slide{index}"
+        "append_slide{title,bullets?,notes?}; delete_slide{index}; "
+        "add_picture{index,path|base64,width_inches?,height_inches?}（≤10MB）"
     ),
 }
 

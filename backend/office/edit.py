@@ -20,6 +20,12 @@ the LLM-facing version):
         append_table      {headers, rows}                 — same shape as generate
         set_table_cell    {table_index, row, col, text}   — row 0 = header row
         delete_paragraph  {find, all?}                    — case-insensitive "contains"
+        add_image         {path|base64, width_inches?, height_inches?}
+                          — 文档末尾插图；path 相对文档目录（管理布局下再回退
+                            工作区根），base64 可带 data:image/ 前缀；≤10MB
+        set_paragraph_style {index|match, font_size?, bold?, italic?, color?, align?}
+                          — 样式作用于该段全部 runs；index 0-based 对应
+                            doc.paragraphs；match 为大小写不敏感的包含匹配
 
     excel:
         set_cells   {sheet, cells:[{addr, value}]} — A1 notation; numeric-looking
@@ -29,6 +35,14 @@ the LLM-facing version):
         add_sheet   {name, headers?, rows?}
         rename_sheet{from, to}
         delete_sheet{name}                          — refuses to delete the last sheet
+        add_chart   {sheet, type: 'line'|'bar'|'pie', anchor: 'A10',
+                     data_ref: {min_col, min_row, max_col, max_row},
+                     titles_from_data?, from_rows?, categories_ref?, title?}
+                      — openpyxl 原生图表（Excel 打开可见、可再编辑）
+        set_column_width {sheet, column: 'A'|1, width}
+        set_number_format {sheet, cells: 'B2' | 'B2:B10' | [..], format}
+        set_fill    {sheet, cells, color: 'FF0000'（可带 #）} — solid 填充
+        freeze_panes {sheet, cell: 'B2' | 'A1'(取消冻结)}
 
     ppt (slide ``index`` is 0-based, matching read_ppt):
         replace_text    {find, replace}     — all shapes' text frames
@@ -37,9 +51,12 @@ the LLM-facing version):
         set_slide_notes {index, notes}
         append_slide    {title, bullets?, notes?}
         delete_slide    {index}
+        add_picture     {index|slide, path|base64, width_inches?, height_inches?}
+                          — 插到标题区下方（与生成器正文几何对齐）
 
-Non-goals (mirroring the readers): no style/formatting surgery, no
-charts / images / macros editing, no track-changes support.
+Non-goals: 宏编辑与 track-changes 仍不支持。样式 / 图表 / 图片已于
+批次 2 支持（word.set_paragraph_style、excel.add_chart、word.add_image、
+ppt.add_picture 等，见上表）。
 """
 
 from __future__ import annotations
@@ -158,6 +175,41 @@ def _require_fields(op: Dict[str, Any], fields: Tuple[str, ...]) -> Optional[str
     return None
 
 
+def _image_search_dirs(doc_path: Path) -> List[Path]:
+    """图片相对路径的候选目录：文档所在目录优先，管理布局再回退工作区根。
+
+    管理布局为 ``<workspace>/office/word|excel|ppt/<doc_id>/file.docx``，
+    此时 parents[3] 是工作区根（LLM 常引用 ``@workspace`` 里的图片）。
+    非管理布局（如桌面文件）只提供文档所在目录。
+    """
+    dirs = [doc_path.parent]
+    parents = doc_path.parents
+    if len(parents) >= 4 and parents[2].name == "office" and parents[1].name in (
+        "word",
+        "excel",
+        "ppt",
+    ):
+        dirs.append(parents[3])
+    return dirs
+
+
+def _image_payload_from_op(op: Dict[str, Any], doc_path: Optional[Path]) -> bytes:
+    """按 op 的 ``base64`` / ``path`` 键解析图片字节（二者必传其一）。
+
+    Raises ValueError with a stable message (折算为该 op 的失败结果)。
+    """
+    from .charts import decode_image_base64, resolve_image_payload
+
+    base64_payload = op.get("base64")
+    if base64_payload:
+        return decode_image_base64(str(base64_payload))
+    path = op.get("path")
+    if path:
+        search_dirs = _image_search_dirs(doc_path) if doc_path is not None else []
+        return resolve_image_payload(str(path), search_dirs=search_dirs)
+    raise ValueError("path_or_base64_required")
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Word (.docx)
 # ──────────────────────────────────────────────────────────────────────
@@ -183,7 +235,72 @@ def _docx_replace_in_paragraph(para: Any, find: str, replace: str) -> int:
     return count
 
 
-def _apply_docx_op(doc: Any, op: Dict[str, Any]) -> Dict[str, Any]:  # noqa: PLR0911 — op 分发表
+def _apply_docx_set_paragraph_style(doc: Any, op: Dict[str, Any], op_name: Any) -> Dict[str, Any]:  # noqa: PLR0911 — 逐分支早退是 op 校验链的可读形式
+    """``set_paragraph_style`` 实现：定位段落并对其全部 runs 施加样式。
+
+    定位：``index``（0-based 对应 doc.paragraphs）优先；否则 ``match``
+    （大小写不敏感包含匹配，取第一个命中段）。样式字段至少一个：
+    font_size（磅）/ bold / italic / color（6 位 RGB hex）/ align
+    （left|center|right|justify）。
+    """
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt, RGBColor
+
+    index, match = op.get("index"), op.get("match")
+    if index is None and not match:
+        return {"op": op_name, "ok": False, "error": "index_or_match_required"}
+    if all(op.get(f) is None for f in ("font_size", "bold", "italic", "color", "align")):
+        return {"op": op_name, "ok": False, "error": "style_field_required"}
+
+    if index is not None:
+        idx = int(index)
+        if not (0 <= idx < len(doc.paragraphs)):
+            return {"op": op_name, "ok": False, "error": f"paragraph_index_out_of_range: {idx}"}
+        para = doc.paragraphs[idx]
+    else:
+        needle = str(match).casefold()
+        para = next((p for p in doc.paragraphs if needle in p.text.casefold()), None)
+        if para is None:
+            return {"op": op_name, "ok": False, "error": f"text_not_found: {match!r}"}
+
+    runs = para.runs
+    if not runs:
+        return {"op": op_name, "ok": False, "error": "paragraph_has_no_runs"}
+
+    align = op.get("align")
+    if align is not None:
+        alignments = {
+            "left": WD_ALIGN_PARAGRAPH.LEFT,
+            "center": WD_ALIGN_PARAGRAPH.CENTER,
+            "right": WD_ALIGN_PARAGRAPH.RIGHT,
+            "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
+        }
+        if align not in alignments:
+            return {"op": op_name, "ok": False, "error": f"invalid_align: {align!r}"}
+        para.alignment = alignments[align]
+
+    color = op.get("color")
+    rgb = None
+    if color is not None:
+        hex_text = str(color).strip().lstrip("#")
+        if len(hex_text) != 6 or any(c not in "0123456789abcdefABCDEF" for c in hex_text):
+            return {"op": op_name, "ok": False, "error": f"invalid_color: {color!r}"}
+        rgb = RGBColor.from_string(hex_text.upper())
+
+    font_size = op.get("font_size")
+    for run in runs:
+        if font_size is not None:
+            run.font.size = Pt(float(font_size))
+        if op.get("bold") is not None:
+            run.font.bold = bool(op["bold"])
+        if op.get("italic") is not None:
+            run.font.italic = bool(op["italic"])
+        if rgb is not None:
+            run.font.color.rgb = rgb
+    return {"op": op_name, "ok": True, "runs": len(runs)}
+
+
+def _apply_docx_op(doc: Any, op: Dict[str, Any], doc_path: Optional[Path] = None) -> Dict[str, Any]:  # noqa: PLR0911 — op 分发表
     op_name = op.get("op")
 
     if op_name == "replace_text":
@@ -267,6 +384,26 @@ def _apply_docx_op(doc: Any, op: Dict[str, Any]) -> Dict[str, Any]:  # noqa: PLR
             return {"op": op_name, "ok": False, "error": f"text_not_found: {find!r}"}
         return {"op": op_name, "ok": True, "removed": removed}
 
+    if op_name == "add_image":
+        # 批次 2.1：文档末尾插图（新段落承载 inline picture）。
+        from docx.shared import Inches
+
+        from .charts import image_bytes_to_stream
+
+        try:
+            payload = _image_payload_from_op(op, doc_path)
+        except ValueError as exc:
+            return {"op": op_name, "ok": False, "error": str(exc)}
+        width_inches, height_inches = op.get("width_inches"), op.get("height_inches")
+        width = Inches(float(width_inches)) if width_inches else None
+        height = Inches(float(height_inches)) if height_inches else None
+        doc.add_picture(image_bytes_to_stream(payload), width=width, height=height)
+        return {"op": op_name, "ok": True}
+
+    if op_name == "set_paragraph_style":
+        # 批次 2.3：按 index / match 定位段落，样式作用于全部 runs。
+        return _apply_docx_set_paragraph_style(doc, op, op_name)
+
     return {"op": str(op_name), "ok": False, "error": f"unsupported_op: {op_name}"}
 
 
@@ -287,7 +424,7 @@ def update_docx(file_path: Path, ops: List[Dict[str, Any]]) -> Tuple[bool, List[
     except Exception as exc:
         raise OfficeParseError(f"Failed to parse DOCX: {exc}", file_path=file_path) from exc
 
-    all_ok, results = _apply_all(ops, lambda op: _apply_docx_op(doc, op))
+    all_ok, results = _apply_all(ops, lambda op: _apply_docx_op(doc, op, file_path))
     if not all_ok:
         return False, results
     try:
@@ -300,6 +437,50 @@ def update_docx(file_path: Path, ops: List[Dict[str, Any]]) -> Tuple[bool, List[
 # ──────────────────────────────────────────────────────────────────────
 # Excel (.xlsx)
 # ──────────────────────────────────────────────────────────────────────
+
+#: A1 风格单元格引用（1-3 位列字母 + 行号，行号 ≥1）。
+_CELL_REF_RE = re.compile(r"^[A-Za-z]{1,3}[1-9][0-9]*$")
+
+
+def _normalize_argb(color: Any) -> Optional[str]:
+    """'FF0000' / '#FF0000' / 8 位 ARGB → openpyxl aRGB 字符串；非法返回 None。"""
+    if not isinstance(color, str):
+        return None
+    hex_text = color.strip().lstrip("#")
+    if not all(c in "0123456789abcdefABCDEF" for c in hex_text):
+        return None
+    if len(hex_text) == 6:
+        return "FF" + hex_text.upper()
+    if len(hex_text) == 8:
+        return hex_text.upper()
+    return None
+
+
+def _expand_cell_targets(ws: Any, cells: Any) -> List[Any]:
+    """把 'B2' / 'B2:B10' / ['A1', 'C1:C3'] 展开为 openpyxl cell 列表。
+
+    Raises ValueError on any malformed address/range（op 层折算为失败结果）。
+    """
+    if isinstance(cells, str):
+        cells = [cells]
+    if not isinstance(cells, list) or not cells:
+        raise ValueError("cells_required")
+    targets: List[Any] = []
+    for item in cells:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(f"invalid_cells: {item!r}")
+        ref = item.strip()
+        parts = ref.split(":")
+        if len(parts) == 1:
+            if not _CELL_REF_RE.match(parts[0]):
+                raise ValueError(f"invalid_cells: {ref!r}")
+            targets.append(ws[parts[0].upper()])
+        elif len(parts) == 2 and all(_CELL_REF_RE.match(p) for p in parts):
+            for row in ws[f"{parts[0].upper()}:{parts[1].upper()}"]:
+                targets.extend(row)
+        else:
+            raise ValueError(f"invalid_cells: {ref!r}")
+    return targets
 
 
 def _apply_xlsx_op(wb: Any, op: Dict[str, Any]) -> Dict[str, Any]:  # noqa: PLR0911 — op 分发表
@@ -377,6 +558,96 @@ def _apply_xlsx_op(wb: Any, op: Dict[str, Any]) -> Dict[str, Any]:  # noqa: PLR0
         wb.remove(wb[name])
         return {"op": op_name, "ok": True, "name": name}
 
+    if op_name == "add_chart":
+        # 批次 2.1：openpyxl 原生图表（Excel 打开可见、可再编辑）。
+        missing = _require_fields(op, ("sheet", "type", "anchor", "data_ref"))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        if op["sheet"] not in wb.sheetnames:
+            return {"op": op_name, "ok": False, "error": f"sheet_not_found: {op['sheet']!r}"}
+        from .charts import build_openpyxl_chart
+
+        try:
+            build_openpyxl_chart(wb[op["sheet"]], op)
+        except ValueError as exc:
+            return {"op": op_name, "ok": False, "error": str(exc)}
+        return {"op": op_name, "ok": True, "type": op["type"], "anchor": str(op["anchor"])}
+
+    if op_name == "set_column_width":
+        missing = _require_fields(op, ("sheet", "column", "width"))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        if op["sheet"] not in wb.sheetnames:
+            return {"op": op_name, "ok": False, "error": f"sheet_not_found: {op['sheet']!r}"}
+        from openpyxl.utils import get_column_letter
+
+        column = op["column"]
+        if isinstance(column, str) and column.strip().isalpha():
+            letter = column.strip().upper()
+        else:
+            try:
+                idx = int(column)
+            except (TypeError, ValueError):
+                return {"op": op_name, "ok": False, "error": f"invalid_column: {column!r}"}
+            if idx < 1:
+                return {"op": op_name, "ok": False, "error": f"invalid_column: {column!r}"}
+            letter = get_column_letter(idx)
+        try:
+            width = float(op["width"])
+        except (TypeError, ValueError):
+            return {"op": op_name, "ok": False, "error": f"invalid_width: {op['width']!r}"}
+        if width <= 0:
+            return {"op": op_name, "ok": False, "error": f"invalid_width: {op['width']!r}"}
+        wb[op["sheet"]].column_dimensions[letter].width = width
+        return {"op": op_name, "ok": True, "column": letter, "width": width}
+
+    if op_name in ("set_number_format", "set_fill"):
+        missing = _require_fields(op, ("sheet", "cells"))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        if op["sheet"] not in wb.sheetnames:
+            return {"op": op_name, "ok": False, "error": f"sheet_not_found: {op['sheet']!r}"}
+        ws = wb[op["sheet"]]
+        try:
+            targets = _expand_cell_targets(ws, op["cells"])
+        except ValueError as exc:
+            return {"op": op_name, "ok": False, "error": str(exc)}
+        if not targets:
+            return {"op": op_name, "ok": False, "error": "cells_required"}
+        if op_name == "set_number_format":
+            fmt = op.get("format")
+            if not fmt:
+                return {"op": op_name, "ok": False, "error": "missing_field: format"}
+            for cell in targets:
+                cell.number_format = str(fmt)
+            return {"op": op_name, "ok": True, "cells": len(targets), "format": str(fmt)}
+        # set_fill：solid 填充，颜色接受 6/8 位 hex（可带 #），6 位补 FF alpha。
+        argb = _normalize_argb(op.get("color"))
+        if argb is None:
+            return {"op": op_name, "ok": False, "error": f"invalid_color: {op.get('color')!r}"}
+        from openpyxl.styles import PatternFill
+
+        fill = PatternFill(fill_type="solid", start_color=argb, end_color=argb)
+        for cell in targets:
+            cell.fill = fill
+        return {"op": op_name, "ok": True, "cells": len(targets), "color": argb}
+
+    if op_name == "freeze_panes":
+        missing = _require_fields(op, ("sheet", "cell"))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        if op["sheet"] not in wb.sheetnames:
+            return {"op": op_name, "ok": False, "error": f"sheet_not_found: {op['sheet']!r}"}
+        cell = str(op["cell"]).strip()
+        # 'A1' 语义上等于「不冻结」（openpyxl 冻结基准在 A1 即无冻结窗格）。
+        if cell.upper() in ("A1", "NONE", "NULL"):
+            wb[op["sheet"]].freeze_panes = None
+            return {"op": op_name, "ok": True, "frozen_at": None}
+        if not _CELL_REF_RE.match(cell):
+            return {"op": op_name, "ok": False, "error": f"invalid_cell: {cell!r}"}
+        wb[op["sheet"]].freeze_panes = cell.upper()
+        return {"op": op_name, "ok": True, "frozen_at": cell.upper()}
+
     return {"op": str(op_name), "ok": False, "error": f"unsupported_op: {op_name}"}
 
 
@@ -450,7 +721,7 @@ def _fill_text_frame(tf: Any, lines: List[str]) -> None:
         tf.add_paragraph().text = line
 
 
-def _apply_pptx_op(prs: Any, op: Dict[str, Any]) -> Dict[str, Any]:  # noqa: PLR0911 — op 分发表
+def _apply_pptx_op(prs: Any, op: Dict[str, Any], doc_path: Optional[Path] = None) -> Dict[str, Any]:  # noqa: PLR0911 — op 分发表
     op_name = op.get("op")
     slides = prs.slides
 
@@ -549,6 +820,35 @@ def _apply_pptx_op(prs: Any, op: Dict[str, Any]) -> Dict[str, Any]:  # noqa: PLR
         sld_id_lst.remove(sld_ids[idx])
         return {"op": op_name, "ok": True, "index": idx, "remaining": len(slides)}
 
+    if op_name == "add_picture":
+        # 批次 2.1：定位 slide（index 优先，兼容 'slide' 键名），插入图片。
+        slide_index = op.get("index")
+        if slide_index is None:
+            slide_index = op.get("slide")
+        if slide_index is None:
+            return {"op": op_name, "ok": False, "error": "missing_field: index"}
+        try:
+            slide = _slide_at(int(slide_index))
+        except ValueError as exc:
+            return {"op": op_name, "ok": False, "error": str(exc)}
+        from pptx.util import Inches
+
+        from .charts import image_bytes_to_stream
+
+        try:
+            payload = _image_payload_from_op(op, doc_path)
+        except ValueError as exc:
+            return {"op": op_name, "ok": False, "error": str(exc)}
+        width_inches, height_inches = op.get("width_inches"), op.get("height_inches")
+        # 缺省位置：正文区左上角（与生成器 _BODY_BOX_GEOMETRY 对齐，避免盖标题）。
+        left, top = 914400, 1600200
+        width = Inches(float(width_inches)) if width_inches else None
+        height = Inches(float(height_inches)) if height_inches else None
+        slide.shapes.add_picture(
+            image_bytes_to_stream(payload), left, top, width=width, height=height
+        )
+        return {"op": op_name, "ok": True, "slide": int(slide_index)}
+
     return {"op": str(op_name), "ok": False, "error": f"unsupported_op: {op_name}"}
 
 
@@ -564,7 +864,7 @@ def update_pptx(file_path: Path, ops: List[Dict[str, Any]]) -> Tuple[bool, List[
     except Exception as exc:
         raise OfficeParseError(f"Failed to parse PPTX: {exc}", file_path=file_path) from exc
 
-    all_ok, results = _apply_all(ops, lambda op: _apply_pptx_op(prs, op))
+    all_ok, results = _apply_all(ops, lambda op: _apply_pptx_op(prs, op, file_path))
     if not all_ok:
         return False, results
     try:
