@@ -25,10 +25,38 @@ const SAMPLE_TREND: UsageTrend = {
   range: 'today',
   bucket: 'hour',
   series: [
-    { ts: '2026-09-09T00:00:00Z', requests: 1, prompt_tokens: 100, completion_tokens: 20, cost_usd: 0.001, cache_hit_rate: 0.4 },
-    { ts: '2026-09-09T06:00:00Z', requests: 5, prompt_tokens: 500, completion_tokens: 100, cost_usd: 0.005, cache_hit_rate: 0.5 },
-    { ts: '2026-09-09T12:00:00Z', requests: 12, prompt_tokens: 1200, completion_tokens: 240, cost_usd: 0.012, cache_hit_rate: 0.6 },
-    { ts: '2026-09-09T18:00:00Z', requests: 8, prompt_tokens: 800, completion_tokens: 160, cost_usd: 0.008, cache_hit_rate: 0.55 },
+    {
+      ts: '2026-09-09T00:00:00Z',
+      requests: 1,
+      prompt_tokens: 100,
+      completion_tokens: 20,
+      cost_usd: 0.001,
+      cache_hit_rate: 0.4,
+    },
+    {
+      ts: '2026-09-09T06:00:00Z',
+      requests: 5,
+      prompt_tokens: 500,
+      completion_tokens: 100,
+      cost_usd: 0.005,
+      cache_hit_rate: 0.5,
+    },
+    {
+      ts: '2026-09-09T12:00:00Z',
+      requests: 12,
+      prompt_tokens: 1200,
+      completion_tokens: 240,
+      cost_usd: 0.012,
+      cache_hit_rate: 0.6,
+    },
+    {
+      ts: '2026-09-09T18:00:00Z',
+      requests: 8,
+      prompt_tokens: 800,
+      completion_tokens: 160,
+      cost_usd: 0.008,
+      cache_hit_rate: 0.55,
+    },
   ],
 };
 
@@ -83,9 +111,30 @@ describe('UsageTrendChart', () => {
       range: '30d',
       bucket: 'day',
       series: [
-        { ts: '2026-08-10T00:00:00Z', requests: 2, prompt_tokens: 200, completion_tokens: 40, cost_usd: 0.002, cache_hit_rate: 0.3 },
-        { ts: '2026-08-25T00:00:00Z', requests: 4, prompt_tokens: 400, completion_tokens: 80, cost_usd: 0.004, cache_hit_rate: 0.35 },
-        { ts: '2026-09-09T00:00:00Z', requests: 6, prompt_tokens: 600, completion_tokens: 120, cost_usd: 0.006, cache_hit_rate: 0.4 },
+        {
+          ts: '2026-08-10T00:00:00Z',
+          requests: 2,
+          prompt_tokens: 200,
+          completion_tokens: 40,
+          cost_usd: 0.002,
+          cache_hit_rate: 0.3,
+        },
+        {
+          ts: '2026-08-25T00:00:00Z',
+          requests: 4,
+          prompt_tokens: 400,
+          completion_tokens: 80,
+          cost_usd: 0.004,
+          cache_hit_rate: 0.35,
+        },
+        {
+          ts: '2026-09-09T00:00:00Z',
+          requests: 6,
+          prompt_tokens: 600,
+          completion_tokens: 120,
+          cost_usd: 0.006,
+          cache_hit_rate: 0.4,
+        },
       ],
     };
     renderChart({ trend: dayTrend, loading: false });

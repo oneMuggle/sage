@@ -1084,7 +1084,7 @@ const DEMO_USAGE: UsageSummary = {
     cache_creation_tokens: 12000,
     estimated_cost_usd: 0.52,
   },
-  cache_hit_rate: 0.55,
+  cache_hit_rate: 0.4848,
   range: 'today',
 };
 
