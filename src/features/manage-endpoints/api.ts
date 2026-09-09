@@ -4,7 +4,7 @@ import {
   type ModelCapability,
 } from '../../entities/setting/types';
 import { backendRequest } from '../../shared/api/backendRequest';
-import { isDemoMode } from '../../shared/api/demoInterceptors';
+import { isDemoMode } from '../../shared/api/demoFlag';
 
 interface OpenAIModelInfo {
   id: string;

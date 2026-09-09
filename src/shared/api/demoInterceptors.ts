@@ -15,9 +15,7 @@
  *   cancelLane) 不挡, 仍走真实 invoke 路径 — 演示模式不假装能落库.
  */
 
-import { useSettingsStore } from '../../features/manage-settings/settingsStore';
-
-import { getDemoModeOverride } from './demoRuntime';
+import { isDemoMode } from './demoFlag';
 import type { McpServerConfig, McpStatusReport } from './mcpClient';
 import type {
   AgentProfile,
@@ -45,19 +43,10 @@ import type {
 import type { UsageSummary } from './usageApi';
 
 /**
- * 顶层开关判定: 渲染期间 (含 async 回调) 都会拿到最新 settings.
- *
- * 2026-08-27 修复: 优先读 main 进程经 webPreferences.additionalArguments →
- * preload argv 同步注入的标志。首屏请求 (loadSessions / loadMessages 等)
- * 早于 loadSettings 完成, 只读 store 会竞态漏拦截 → 请求打到已跳过的后端
- * 报 ECONNREFUSED。store 兜底保留, 覆盖设置页即时切换的场景。
+ * 顶层开关判定 —— R2 起实现下沉至 ./demoFlag (轻依赖), 此处仅转发以保持
+ * 既有导入路径兼容。demo 数据模块本身应只被 dynamic import 引用。
  */
-export function isDemoMode(): boolean {
-  const override = getDemoModeOverride();
-  if (override !== undefined) return override;
-  if (typeof window !== 'undefined' && window.electronAPI?.demoMode === true) return true;
-  return useSettingsStore.getState().settings.demoMode === true;
-}
+export { isDemoMode };
 
 // =========================================================================
 // Memory demo 数据 (6 条覆盖 4 层)
