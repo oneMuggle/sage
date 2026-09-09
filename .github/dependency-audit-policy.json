@@ -112,6 +112,18 @@
     {
       "owner": "Sage maintainers",
       "review_by": "2026-10-01",
+      "source": "npm",
+      "package": "extract-zip",
+      "package_version": "2.0.1",
+      "advisory": "GHSA-7pqw-9j4j-h8q3",
+      "advisory_url": "https://github.com/advisories/GHSA-7pqw-9j4j-h8q3",
+      "affected_path": "node_modules/extract-zip",
+      "actual_reachability": "conditionally reachable only in npm/electron archive install toolchain; no patched release available as of 2026-09-09",
+      "controls": "Do not expose archive extraction to runtime input; trusted lockfile/package source, CI artifact checks, and upgrade review when a patched release publishes"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-10-01",
       "source": "pip",
       "package": "fastapi",
       "package_version": "0.109.0",

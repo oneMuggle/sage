@@ -6,6 +6,7 @@ import { useRunControlStore } from '../../../entities/orchestration/runControlSt
 // TaskStatusValue 定义在 shared/api（Task 7 已 re-export），不从 useChat import
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue } from '../../../shared/api';
+import { orchRunClient } from '../../../shared/api/orchRunClient';
 import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
 
 import { SubagentDetailDrawer } from './SubagentDetailDrawer';
@@ -38,6 +39,9 @@ interface TaskTreeSectionProps {
 export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectTask = useRunControlStore((s) => s.selectTask);
+  // B3 (2026-09-09): 单任务跳过 in-flight 集合 —— 防重复点击；终态由
+  // task_status 事件驱动刷新，这里只做乐观禁用。
+  const [skipping, setSkipping] = useState<ReadonlySet<string>>(new Set());
   // live-events P1: run 级审批模式开关（乐观更新，后端 approval_mode 事件
   // 回显为准；失败回滚到 board 上的值）。
   const [approvalMode, setApprovalMode] = useState<'ask' | 'auto'>(
@@ -62,6 +66,24 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
   const handleTaskClick = (taskId: string, runId: string) => {
     selectTask(runId, taskId);
     setDrawerOpen(true);
+  };
+
+  // B3 (2026-09-09): 单任务跳过 —— 只停该子任务；后端 task_status 事件把
+  // 状态收敛到 cancelled，依赖它的下游由级联闭包置 failed。
+  const handleTaskSkip = (taskId: string) => {
+    if (skipping.has(taskId)) return;
+    setSkipping((prev) => new Set(prev).add(taskId));
+    orchRunClient
+      .cancelTask(board.runId, taskId)
+      .then(() => toast.info(`已请求跳过子任务 ${taskId}`))
+      .catch(() => {
+        toast.error(`跳过子任务 ${taskId} 失败（已结束?）`);
+        setSkipping((prev) => {
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+      });
   };
 
   const handleCloseDrawer = () => {
@@ -185,6 +207,23 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
               </span>
               <span className="px-1 rounded bg-primary/10 text-primary">{item.agent_id}</span>
               <span className="text-text-secondary flex-1">{item.goal}</span>
+              {/* B3 (2026-09-09): 单任务跳过 —— queued/running 行内按钮；
+                  stopPropagation 防触发整行的 Drawer 点击。 */}
+              {board.runId && (status === 'queued' || status === 'running') && (
+                <button
+                  type="button"
+                  data-testid={`task-tree-skip-${item.task_id}`}
+                  disabled={skipping.has(item.task_id)}
+                  title="跳过该子任务（依赖它的下游将级联失败）"
+                  className="px-1.5 py-0.5 text-[10px] border border-border rounded text-text-secondary hover:text-error hover:border-error/40 shrink-0 disabled:opacity-50"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleTaskSkip(item.task_id);
+                  }}
+                >
+                  {skipping.has(item.task_id) ? '跳过中…' : '跳过'}
+                </button>
+              )}
               {/* P0-7 (2026-08-20): 重试徽章 —— retry_count>0 才显示 */}
               {(st?.retry_count ?? 0) > 0 && (
                 <span

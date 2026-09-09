@@ -23,6 +23,11 @@ export const orchRunClient = {
   updatePlan(runId: string, plan: TaskPlanItem[]): Promise<{ ok: boolean }> {
     return invoke<{ ok: boolean }>('orchestration_update_plan', { run_id: runId, plan });
   },
+  // B3 (2026-09-09): 单任务跳过 —— queued 短路 / running 软中断，其余子任务不受影响。
+  // 409 = 任务不在本批或已终态；404 = run 不在活动注册表。
+  cancelTask(runId: string, taskId: string): Promise<{ ok: boolean; task_id: string; status: string }> {
+    return invoke('orchestration_cancel_run_task', { run_id: runId, task_id: taskId });
+  },
   // Fix #3 (2026-09-06): 用户确认 → 唤醒 producer 启动 conductor 执行。
   confirmRun(runId: string): Promise<{ ok: boolean }> {
     return invoke<{ ok: boolean }>('orchestration_confirm_run', { run_id: runId });

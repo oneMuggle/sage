@@ -1,26 +1,33 @@
-"""todo_write / structured_output 工具的会话级内存状态存储。
+"""todo_write / structured_output 工具的会话级状态存储。
 
-claw-code 把 todo 列表落盘（``.clawd-todos.json``）；sage 的 todo 与
-structured output 都是**会话内的 agent 内部状态**，无需持久化：
+claw-code 把 todo 列表落盘（``.clawd-todos.json``）。sage 侧：
 
+- **todo 清单自 B4 (2026-09-09) 起 write-through 持久化**（
+  ``session_todos`` 表）：重启/重开会话后任务板可恢复。落库仅作用于
+  todo 单例（``_NotifyingTodoStore``），读 miss 时从 DB 回填缓存；
+  匿名桶（无会话上下文）不落库。落库/读库失败全部静默降级 —— 持久化
+  是增强，绝不影响工具执行。
+- **structured output 状态仍纯内存**：它是单次委派的输出格式 scratch，
+  无跨重启价值，保持 ``SessionStateStore`` 原语义。
 - 以 ``ToolExecutionContext.session_id`` 为键做会话隔离，并发会话互不
   串扰；无上下文的调用（单测 / 内部任务）落到单一匿名桶。
 - 线程安全（``RLock``）；存取均返回拷贝，调用方无法篡改存储内部结构。
 - LRU 上限 ``MAX_SESSION_BUCKETS``（256）：桶数溢出时淘汰最久未访问的
-  桶，防止泄漏/伪造的 session_id 无限堆积撑爆内存。代价是被淘汰的
-  长空闲会话丢失「最后状态」——todo / structured output 都是 agent 内部
-  的 scratch 状态，可接受。
-- 纯内存、无 I/O、导入无副作用。
+  桶，防止泄漏/伪造的 session_id 无限堆积撑爆内存。todo 被淘汰后可经
+  DB 回填（B4），structured output 淘汰即失（可接受）。
 """
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections import OrderedDict
 from contextlib import suppress
 from typing import Any, Callable, Dict, List, Optional
 
 from .context import current_tool_context
+
+logger = logging.getLogger(__name__)
 
 #: 无 ToolExecutionContext 时的兜底会话键
 ANONYMOUS_SESSION_ID = "__anonymous__"
@@ -53,6 +60,10 @@ class SessionStateStore:
 
         写入计为一次 LRU 访问；超过容量上限时淘汰最久未访问的桶。
         """
+        self._cache_put(session_id, value)
+
+    def _cache_put(self, session_id: str, value: Any) -> None:
+        """写缓存（不触发持久化/通知）—— ``replace`` 与读 miss 回填共用。"""
         with self._lock:
             if session_id in self._buckets:
                 self._buckets.move_to_end(session_id)
@@ -116,11 +127,69 @@ def _notify_listeners(session_id: str, value: Any) -> None:
 
 
 class _NotifyingTodoStore(SessionStateStore):
-    """replace 后同步通知监听者（SSE todo_snapshot 的数据源钩子）。"""
+    """replace 后同步通知监听者 + write-through 持久化（todo 单例）。
+
+    B4 (2026-09-09): ``replace`` 同步落 ``session_todos`` 表；``get`` 在
+    缓存 miss（冷启动/被 LRU 淘汰）时从 DB 回填缓存后返回。匿名桶不落
+    库不回填。落库/读库失败静默降级 —— 持久化是增强，绝不影响工具执行。
+    """
 
     def replace(self, session_id: str, value: Any) -> None:
         super().replace(session_id, value)
+        self._persist(session_id, value)
         _notify_listeners(session_id, self.get(session_id))
+
+    def get(self, session_id: str) -> Any:
+        value = super().get(session_id)
+        if value is None:
+            value = self._load_persisted(session_id)
+            if value is not None:
+                # 回填缓存（走 _cache_put：不重复落库、不触发监听通知）。
+                self._cache_put(session_id, value)
+        return value
+
+    @staticmethod
+    def _persist(session_id: str, value: Any) -> None:
+        if session_id == ANONYMOUS_SESSION_ID:
+            return
+        try:
+            from backend.data.session_todo_repo import SessionTodoRepository
+
+            SessionTodoRepository().upsert(
+                session_id, value if isinstance(value, list) else []
+            )
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.debug("todo 持久化失败（忽略）session=%s: %s", session_id, exc)
+
+    @staticmethod
+    def _load_persisted(session_id: str) -> Optional[List[Dict[str, Any]]]:
+        if session_id == ANONYMOUS_SESSION_ID:
+            return None
+        try:
+            from backend.data.session_todo_repo import SessionTodoRepository
+
+            return SessionTodoRepository().get(session_id)
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.debug("todo 读取持久层失败（忽略）session=%s: %s", session_id, exc)
+            return None
+
+    def clear(self, session_id: Optional[str] = None) -> None:
+        """清内存桶 + 删持久行 —— clear 语义是"处处遗忘"。
+
+        B4 前只清内存；持久化后若不删行，get 会从 DB 复活已 clear 的清单。
+        删库失败静默降级（与 _persist 同策略）。
+        """
+        super().clear(session_id)
+        try:
+            from backend.data.session_todo_repo import SessionTodoRepository
+
+            repo = SessionTodoRepository()
+            if session_id is None:
+                repo.delete_all()
+            elif session_id != ANONYMOUS_SESSION_ID:
+                repo.delete(session_id)
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.debug("todo 持久行清理失败（忽略）session=%s: %s", session_id, exc)
 
 
 _todo_store = _NotifyingTodoStore()

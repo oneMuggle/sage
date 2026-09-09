@@ -20,7 +20,6 @@ from backend.domain.tool_names import (
     MEMORY_TOOLS,
     OFFICE_TOOLS,
     PATCH_TOOLS,
-    PLAN_TOOLS,
     RUNTIME_EXEC_TOOLS,
     RUNTIME_PROBE_TOOLS,
     SYMBOL_TOOLS,
@@ -116,8 +115,9 @@ _PRIMARY_SEED_TOOLS = (
     # git_commit / checkpoint_restore 为 WRITE_LOCAL（INTERACTIVE 先审批）。
     *GIT_TOOLS,
     *CHECKPOINT_TOOLS,
-    # 2026-09-06 对标增强 Phase-2: G3 plan_write（先规划后执行，coordinator 职责）
-    *PLAN_TOOLS,
+    # D2 (2026-09-09): plan_write 退役移除 —— 无消费者半成品（存储无读取方、
+    # 无 SSE、无 UI），与 todo_write + 编排计划三套重复；继续暴露只会误导
+    # LLM 把计划写进无处可去的地方。
 )
 
 # coder：bash 三件齐备（同上）。2026-09-03 PR #381 把 TerminalTool 重写为
@@ -425,8 +425,10 @@ def ensure_default_agents() -> int:
             continue
         tools = row.get("tools") or []
         renamed = [LEGACY_TOOL_NAME_RENAMES.get(t, t) for t in tools]
-        if renamed != tools:
-            row["tools"] = renamed
+        # D2 (2026-09-09): plan_write 退役 —— 存量 DB 白名单同步清理。
+        pruned = [t for t in renamed if t != "plan_write"]
+        if pruned != tools:
+            row["tools"] = pruned
             repo.upsert(row)
     inserted = 0
     for agent in create_default_agents():
@@ -615,7 +617,19 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
 )
 
 
+#: D1 (2026-09-09): 任务拆解引导 —— 此前 system prompt 无任何拆解/todo 引导
+#: 文本（唯一引导来自 todo_write 工具自身的 description），复杂任务的清单
+#: 维护全靠模型自觉。短平快一段，与 office 能力声明同模式（未拿到
+#: todo_write 工具的子代理看到文本也无工具可调，无副作用）。
+_TODO_GUIDANCE_PROMPT = (
+    "\n\n任务管理：接到多步骤任务（≥3 步）时，先用 todo_write 写出任务"
+    "清单（全量替换语义），随后随执行推进实时更新各条状态"
+    "（pending → in_progress → completed，同一时刻只保留一条 in_progress）；"
+    "简单单步任务不必建清单。"
+)
+
+
 def build_system_base() -> str:
     """构建 system prompt 基础部分（身份 + 工具能力声明 + agent 列表）。"""
     base = "你是 Sage，一个智能 AI 助手。"
-    return base + _OFFICE_CREATE_CAPABILITY_PROMPT + format_agents_for_prompt()
+    return base + _OFFICE_CREATE_CAPABILITY_PROMPT + _TODO_GUIDANCE_PROMPT + format_agents_for_prompt()
