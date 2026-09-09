@@ -78,14 +78,17 @@ numpy>=1.24,<2
 apscheduler==3.10.4
 
 # Office document features (Phase 1, 2026-07-16)
-# Pure-Python libraries; support Python 3.8+ (Win7 LTS). No C extensions.
-# Mirrors backend/requirements.txt, including pandas for DataFrame-based
-# Excel generation. pandas 2.2.3 ships a cp311 win_amd64 wheel and is
-# required at module import time by backend.office.excel.
+# python-pptx, python-docx, openpyxl are pure-Python (Python 3.8+ supported;
+# safe for Win7 LTS bundled Python). pandas has C extensions and ships
+# cp311-only wheels as of 2.2.x, so it is **bundled into the Win64 cp311
+# installer only** — release/win7 (Python 3.8) does not pull pandas in
+# because (a) no Py3.8 wheel and (b) bundled Win7 has no use case for
+# DataFrame-based Excel generation. Mirrors backend/requirements.txt
+# for the deps the main installer actually ships.
 python-pptx==0.6.23
 python-docx==1.1.2
 openpyxl==3.1.5
-pandas==2.2.3
+pandas==2.2.3  # DataFrame-based Excel generation (backend.office.excel.generate_xlsx)
 
 # Office template + PDF features (Phase 2, 2026-09-05)
 # backend/api/office_routes.py does ``from backend.office.pdf import generate_pdf``
