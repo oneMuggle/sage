@@ -646,6 +646,29 @@ class Database:
                 "ALTER TABLE usage_events ADD COLUMN latency_ms INTEGER"
             )
             conn.commit()
+        # L8 PR-B (2026-09-09): 用量日聚合表 — 7d/30d 时间范围查询的预聚合层,
+        # 避免每次都扫 usage_events 全量。days_bucket 0=今天, 1=昨天 ... 6=6 天前
+        # (7d 范围), >=7 即 30d 范围折叠到月聚合。模型维度另算。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS usage_daily_rollups (
+                day TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                model TEXT NOT NULL,
+                requests INTEGER NOT NULL DEFAULT 0,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                cached_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+                estimated_cost_usd REAL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (day, scope, model)
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_usage_daily_rollups_scope_day
+            ON usage_daily_rollups(scope, day DESC)
+        """)
 
         # Agent 配置表 (PR-3)
         # 4 个默认 agent (primary/researcher/coder/memory_manager) 在 lifespan

@@ -568,6 +568,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
   // M6 生态扩展: 用量/成本面板 (backend/services/usage_tracker.py 内存态)
   // L8 PR-A (2026-09-09): 支持 range=today|total 查询参数, 默认 today。
+  // L8 PR-B (2026-09-09): range 扩到 today|7d|30d|total。
   usage_summary: {
     method: 'GET',
     path: (a) => {
@@ -579,6 +580,18 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   usage_get_session: {
     method: 'GET',
     path: (a) => `/api/v1/usage/session/${encodeURIComponent(String(a.sessionId))}`,
+  },
+  // L8 PR-B (2026-09-09): 单次请求详情 (usage_events 分页)
+  usage_list_requests: {
+    method: 'GET',
+    path: (a) => {
+      const limit = a?.limit ?? 50;
+      const offset = a?.offset ?? 0;
+      const sid = a?.sessionId;
+      let url = `/api/v1/usage/requests?limit=${limit}&offset=${offset}`;
+      if (sid) url += `&session_id=${encodeURIComponent(sid)}`;
+      return url;
+    },
   },
   // 2026-09-04: 本地开发环境助手 — 复用 ChatService.tools 路径,
   // runtime_exec 在后端经 PermissionEnforcer 审批 (与 bash 同等闸口)。

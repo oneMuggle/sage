@@ -6,6 +6,7 @@
  *
  * L8 PR-A (2026-09-09): 新增 cache_read_tokens / cache_creation_tokens
  * 拆分字段 + 派生 cache_hit_rate; sessionUsage 同样扩展。
+ * L8 PR-B (2026-09-09): range 扩到 today|7d|30d|total; 新增 fetchUsageRequests。
  */
 import { invoke } from './desktopInvoke';
 
@@ -32,12 +33,45 @@ export interface UsageSummary {
   today: UsageBucket;
   /** L8 PR-A: cache_read / (prompt + cache_creation) 派生命中率 (0~1) */
   cache_hit_rate: number;
-  /** L8 PR-A: 当前面板时间范围 (today | total), 为 PR-B 7d/30d 占位 */
-  range: 'today' | 'total';
+  /** L8 PR-A/PR-B: 当前面板时间范围 (today | 7d | 30d | total) */
+  range: 'today' | '7d' | '30d' | 'total';
 }
 
-export async function fetchUsageSummary(range?: 'today' | 'total'): Promise<UsageSummary> {
+/** L8 PR-B (2026-09-09): 时间范围联合类型 */
+export type UsageRange = 'today' | '7d' | '30d' | 'total';
+
+export async function fetchUsageSummary(range?: UsageRange): Promise<UsageSummary> {
   return invoke<UsageSummary>('usage_summary', range ? { range } : undefined);
+}
+
+/** L8 PR-B (2026-09-09): 单次请求详情 (usage_events 行) */
+export interface UsageRequestRow {
+  id: string;
+  session_id: string | null;
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cached_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  estimated_cost_usd: number | null;
+  created_at_ms: number;
+  created_at_iso: string;
+}
+
+export interface UsageRequestsPage {
+  items: UsageRequestRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  error?: string;
+}
+
+export async function fetchUsageRequests(
+  params: { limit?: number; offset?: number; sessionId?: string } = {},
+): Promise<UsageRequestsPage> {
+  return invoke<UsageRequestsPage>('usage_list_requests', params);
 }
 
 /** U14 (批次 C): 某会话的持久化用量聚合 (usage_events 表, 重启不丢) */

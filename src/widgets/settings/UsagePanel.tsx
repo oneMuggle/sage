@@ -6,8 +6,9 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { fetchUsageSummary, UsageSummary } from '../../shared/api/usageApi';
+import { fetchUsageSummary, UsageRange, UsageSummary } from '../../shared/api/usageApi';
 import { useI18n } from '../../shared/lib/i18n';
+import { UsageRequestsTable } from './UsageRequestsTable';
 
 function formatCost(cost: number | null): string {
   return cost === null ? '—' : `$${cost.toFixed(4)}`;
@@ -22,9 +23,9 @@ export function UsagePanel() {
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  // L8 PR-A (2026-09-09): range tab state — 与后端 usage_routes pattern 对齐,
-  // today 优先看当日重活, total 看累计。PR-B (7d/30d) 在此处扩展。
-  const [range, setRange] = useState<'today' | 'total'>('today');
+  // L8 PR-A/PR-B: range tab state — 与后端 usage_routes pattern 对齐,
+  // today 看当日, 7d/30d 看预聚合, total 看累计。
+  const [range, setRange] = useState<UsageRange>('today');
   // 卸载守卫: load 的异步 continuation 可能在组件卸载（含测试环境拆除）
   // 之后才 resolve,此刻 setState 会抛 unhandled rejection
   const mountedRef = useRef(true);
@@ -54,13 +55,12 @@ export function UsagePanel() {
     void load();
   }, [load]);
 
-  // L8 PR-A (2026-09-09): 选 range 时显示对应 bucket 的数字。
-  // cache_hit_rate 在 today/total 下语义不同——today 是当日命中率,
-  // total 是自启动以来累计命中率。两个都展示便于用户对比当日效率。
-  const activeBucket = summary ? (range === 'today' ? summary.today : summary.totals) : null;
+  // L8 PR-A/PR-B: today 模式显示 today bucket; 7d/30d/total 模式显示 totals (DB 聚合)
+  const activeBucket =
+    summary !== null ? (range === 'today' ? summary.today : summary.totals) : null;
 
   return (
-    <div className="space-y-2" data-testid="usage-panel">
+    <div className="space-y-3" data-testid="usage-panel">
       {error !== null && (
         <p className="text-xs text-red-500" data-testid="usage-error">
           {t('settings.usage.loadFailed')}: {error}
@@ -68,9 +68,9 @@ export function UsagePanel() {
       )}
       {summary !== null && (
         <>
-          {/* L8 PR-A: 时间范围 Tab — 两段按钮切换 today / total */}
+          {/* 时间范围 Tab — today / 7d / 30d / total */}
           <div className="flex gap-1 text-xs" data-testid="usage-range-tabs" role="tablist">
-            {(['today', 'total'] as const).map((r) => (
+            {(['today', '7d', '30d', 'total'] as const).map((r) => (
               <button
                 key={r}
                 type="button"
@@ -156,9 +156,6 @@ export function UsagePanel() {
               </tbody>
             </table>
           )}
-          <div className="text-xs text-text-muted" data-testid="usage-today">
-            {t(`settings.usage.range.${range}`)}: {activeBucket?.requests ?? 0}
-          </div>
         </>
       )}
       <button
@@ -170,6 +167,8 @@ export function UsagePanel() {
       >
         {t('settings.usage.refresh')}
       </button>
+      {/* L8 PR-B: 单次请求明细表 (与 summary 解耦, 独立加载) */}
+      <UsageRequestsTable />
     </div>
   );
 }

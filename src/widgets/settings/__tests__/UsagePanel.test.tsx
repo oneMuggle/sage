@@ -3,12 +3,22 @@
  *
  * mock desktopInvoke 的 invoke, 验证: 汇总渲染 / by-model 表格 /
  * 刷新按钮重调 / 错误态 / L8 PR-A cache 行 + range tab。
+ *
+ * L8 PR-B (2026-09-09): 引入 UsageRequestsTable 子组件, 它会并发调
+ * usage_list_requests — mock 用 mockResolvedValue 给出持久默认值,
+ * 避免子组件 fetch 失败抛 unhandled rejection。
+ *
+ * 注意: vi.spyOn(module, 'fn') 在 vitest+ESM 下不可靠地替换命名导出
+ * (实测 spy 后 module.invoke 仍指向原函数), 改用 mockImplementation
+ * 直接覆盖 spy 行为 — UsagePanel 通过 usageApi 的 wrapper 调用,
+ * spy 后 usageApi 拿到的引用未必更新, 因此本测试改 mock usageApi 模块
+ * 的导出函数, 保证覆盖 UsagePanel / UsageRequestsTable 两条调用链。
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import * as desktopInvoke from '../../../shared/api/desktopInvoke';
 import { I18nProvider } from '../../../shared/lib/i18n';
+import * as usageApi from '../../../shared/api/usageApi';
 import { UsagePanel } from '../UsagePanel';
 
 const SUMMARY = {
@@ -74,7 +84,16 @@ describe('UsagePanel', () => {
   });
 
   it('渲染汇总数字与成本 (未知模型成本显示占位符)', async () => {
-    const invokeSpy = vi.spyOn(desktopInvoke, 'invoke').mockResolvedValueOnce(cloneSummary());
+    const summarySpy = vi
+      .spyOn(usageApi, 'fetchUsageSummary')
+      .mockResolvedValueOnce(cloneSummary());
+    // L8 PR-B: 子组件 fetchUsageRequests 默认空页
+    vi.spyOn(usageApi, 'fetchUsageRequests').mockResolvedValue({
+      items: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+    });
 
     renderPanel();
 
@@ -89,26 +108,41 @@ describe('UsagePanel', () => {
     expect(table.textContent).toContain('gpt-4o');
     expect(table.textContent).toContain('local-model');
     expect(table.textContent).toContain('—');
-    expect(invokeSpy).toHaveBeenCalledWith('usage_summary', { range: 'today' });
+    expect(summarySpy).toHaveBeenCalledWith('today');
   });
 
   it('刷新按钮重新请求数据', async () => {
-    const invokeSpy = vi.spyOn(desktopInvoke, 'invoke').mockResolvedValue(cloneSummary());
+    const summarySpy = vi
+      .spyOn(usageApi, 'fetchUsageSummary')
+      .mockResolvedValue(cloneSummary());
+    // L8 PR-B: 子组件 fetchUsageRequests 默认空页 (mockResolvedValue 持久)
+    vi.spyOn(usageApi, 'fetchUsageRequests').mockResolvedValue({
+      items: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+    });
 
     renderPanel();
     await waitFor(() => {
       expect(screen.getByTestId('usage-total-requests')).toBeDefined();
     });
-    expect(invokeSpy).toHaveBeenCalledTimes(1);
+    expect(summarySpy).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByTestId('usage-refresh'));
     await waitFor(() => {
-      expect(invokeSpy).toHaveBeenCalledTimes(2);
+      expect(summarySpy).toHaveBeenCalledTimes(2);
     });
   });
 
   it('请求失败显示错误提示', async () => {
-    vi.spyOn(desktopInvoke, 'invoke').mockRejectedValueOnce(new Error('backend down'));
+    vi.spyOn(usageApi, 'fetchUsageSummary').mockRejectedValueOnce(
+      new Error('backend down'),
+    );
+    // L8 PR-B: 子组件 list 通道也抛错, 验证独立错误路径
+    vi.spyOn(usageApi, 'fetchUsageRequests').mockRejectedValue(
+      new Error('list unavailable'),
+    );
 
     renderPanel();
 
@@ -122,7 +156,14 @@ describe('UsagePanel', () => {
   // ==================== L8 PR-A (2026-09-09) ====================
 
   it('渲染 cache 拆分与命中率行', async () => {
-    vi.spyOn(desktopInvoke, 'invoke').mockResolvedValueOnce(cloneSummary());
+    vi.spyOn(usageApi, 'fetchUsageSummary').mockResolvedValueOnce(cloneSummary());
+    // L8 PR-B: 子组件默认空页
+    vi.spyOn(usageApi, 'fetchUsageRequests').mockResolvedValue({
+      items: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+    });
 
     renderPanel();
 
@@ -140,10 +181,17 @@ describe('UsagePanel', () => {
     const totalSummary = cloneSummary();
     totalSummary.range = 'total';
     totalSummary.totals.requests = 99;
-    const invokeSpy = vi
-      .spyOn(desktopInvoke, 'invoke')
+    const summarySpy = vi
+      .spyOn(usageApi, 'fetchUsageSummary')
       .mockResolvedValueOnce(cloneSummary()) // 初次 today
       .mockResolvedValueOnce(totalSummary); // 切到 total
+    // L8 PR-B: 子组件 fetchUsageRequests 持久空页
+    vi.spyOn(usageApi, 'fetchUsageRequests').mockResolvedValue({
+      items: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+    });
 
     renderPanel();
 
@@ -161,6 +209,6 @@ describe('UsagePanel', () => {
     });
     expect(screen.getByTestId('usage-range-total').getAttribute('aria-selected')).toBe('true');
     // 第二次 invoke 必须带 range: total
-    expect(invokeSpy).toHaveBeenNthCalledWith(2, 'usage_summary', { range: 'total' });
+    expect(summarySpy).toHaveBeenNthCalledWith(2, 'total');
   });
 });

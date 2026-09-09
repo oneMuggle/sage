@@ -373,6 +373,21 @@ export const zh = {
   'settings.usage.cacheHitRate': '命中率',
   'settings.usage.range.today': '今日',
   'settings.usage.range.total': '累计',
+  // L8 PR-B (2026-09-09): 7d/30d + 请求详情表
+  'settings.usage.range.7d': '近 7 天',
+  'settings.usage.range.30d': '近 30 天',
+  'settings.usage.requestsTable.title': '请求明细',
+  'settings.usage.requestsTable.col.time': '时间',
+  'settings.usage.requestsTable.col.model': '模型',
+  'settings.usage.requestsTable.col.tokens': 'Tokens',
+  'settings.usage.requestsTable.col.cacheRead': '缓存读',
+  'settings.usage.requestsTable.col.cacheCreation': '缓存写',
+  'settings.usage.requestsTable.col.cost': '成本',
+  'settings.usage.requestsTable.empty': '暂无请求记录',
+  'settings.usage.requestsTable.loadFailed': '请求明细加载失败',
+  'settings.usage.requestsTable.prevPage': '上一页',
+  'settings.usage.requestsTable.nextPage': '下一页',
+  'settings.usage.requestsTable.pageInfo': '第 {offset}-{end} 条 / 共 {total} 条',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
   'office.title': 'Office 文档',

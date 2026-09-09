@@ -226,6 +226,9 @@ class UsageTracker:
                 creation,
             )
         self._persist(entry, session_id)
+        # L8 PR-B (2026-09-09): 写完 usage_events 后, 同步 upsert 当日 rollup。
+        # 4 个 scope 各自 +1 行, 失败静默 (用量是增强信息)。
+        self._upsert_daily_rollup(entry, day)
         return entry
 
     @staticmethod
@@ -260,6 +263,63 @@ class UsageTracker:
                 get_database().get_connection().commit()
         except Exception as exc:  # noqa: BLE001 — fail-open 铁律
             logger.debug("usage_events 落库跳过: %s", exc)
+
+    @staticmethod
+    def _upsert_daily_rollup(entry: UsageRecord, day: str) -> None:
+        """L8 PR-B (2026-09-09): 同步 upsert 当日 rollup 到 4 个 scope。
+
+        scope 语义:
+        - ``today``: 仅当天日期
+        - ``7d``: 仅当天 (7d 视图按 day DESC 取 7 行由 routes 侧合并)
+        - ``30d``: 仅当天 (同理)
+        - ``total``: 仅当天 (total 视图 SUM 全表)
+
+        每个 (day, scope, model) 一行, 每次 record() 增量 UPDATE。
+        失败静默——用量是增强信息。
+        """
+        try:
+            from backend.data.database import _SQLITE_LOCK, get_database
+
+            now_ms = int(time.time() * 1000)
+            with _SQLITE_LOCK:
+                conn = get_database().get_connection()
+                for scope in ("today", "7d", "30d", "total"):
+                    conn.execute(
+                        """
+                        INSERT INTO usage_daily_rollups
+                            (day, scope, model, requests, prompt_tokens,
+                             completion_tokens, cached_tokens,
+                             cache_read_tokens, cache_creation_tokens,
+                             estimated_cost_usd, updated_at)
+                        VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(day, scope, model) DO UPDATE SET
+                            requests = requests + 1,
+                            prompt_tokens = prompt_tokens + excluded.prompt_tokens,
+                            completion_tokens = completion_tokens + excluded.completion_tokens,
+                            cached_tokens = cached_tokens + excluded.cached_tokens,
+                            cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens,
+                            cache_creation_tokens = cache_creation_tokens + excluded.cache_creation_tokens,
+                            estimated_cost_usd = COALESCE(
+                                estimated_cost_usd, 0
+                            ) + COALESCE(excluded.estimated_cost_usd, 0),
+                            updated_at = excluded.updated_at
+                        """,
+                        (
+                            day,
+                            scope,
+                            entry.model,
+                            entry.prompt_tokens,
+                            entry.completion_tokens,
+                            entry.cached_tokens,
+                            entry.cache_read_tokens,
+                            entry.cache_creation_tokens,
+                            entry.estimated_cost_usd,
+                            now_ms,
+                        ),
+                    )
+                conn.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("daily_rollup upsert 失败: %s", exc)
 
     def last_request(self, session_id: str) -> Optional[Dict[str, Any]]:
         """U17: 该会话最近一次 LLM 请求的用量行。
@@ -419,6 +479,94 @@ class UsageTracker:
             "today": today_snapshot,
             "cache_hit_rate": hit_rate,
         }
+
+    def summary_with_range(self, range_: str) -> Dict[str, Any]:
+        """L8 PR-B (2026-09-09): 按时间范围返回 summary。
+
+        ``range_`` 取值:
+        - ``today``: 当前内存态 summary (来自 ``summary()``, 重启即失)
+        - ``7d`` / ``30d``: 从 usage_daily_rollups 取最近 N 天 SUM 聚合
+        - ``total``: 从 usage_daily_rollups 全表 SUM 聚合
+
+        DB 异常时降级返回内存态 summary — 避免面板白屏。
+        """
+        if range_ == "today":
+            data = dict(self.summary())
+            data["range"] = "today"
+            return data
+        try:
+            days = {"7d": 7, "30d": 30}.get(range_)
+            from backend.data.database import _SQLITE_LOCK, get_database
+
+            with _SQLITE_LOCK:
+                conn = get_database().get_connection()
+                if days is not None:
+                    # 取最近 N 天: 按 day DESC 拿 N 行后 SUM
+                    rows = conn.execute(
+                        "SELECT * FROM usage_daily_rollups"
+                        " WHERE scope = ? ORDER BY day DESC LIMIT ?",
+                        (range_, days),
+                    ).fetchall()
+                else:
+                    # total: 全表 SUM
+                    rows = conn.execute(
+                        "SELECT * FROM usage_daily_rollups WHERE scope = ?",
+                        (range_,),
+                    ).fetchall()
+            agg = _empty_bucket()
+            agg["estimated_cost_usd"] = 0.0
+            by_model: Dict[str, Dict[str, Any]] = {}
+            cache_read = 0
+            cache_creation = 0
+            for row in rows:
+                agg["requests"] += int(row["requests"] or 0)
+                agg["prompt_tokens"] += int(row["prompt_tokens"] or 0)
+                agg["completion_tokens"] += int(row["completion_tokens"] or 0)
+                agg["cached_tokens"] += int(row["cached_tokens"] or 0)
+                cache_read += int(row["cache_read_tokens"] or 0)
+                cache_creation += int(row["cache_creation_tokens"] or 0)
+                cost = row["estimated_cost_usd"]
+                if cost is not None:
+                    agg["estimated_cost_usd"] = (
+                        float(agg["estimated_cost_usd"] or 0) + float(cost)
+                    )
+                model = str(row["model"] or "")
+                bucket = by_model.setdefault(model, _empty_bucket())
+                bucket["estimated_cost_usd"] = 0.0
+                bucket["requests"] += int(row["requests"] or 0)
+                bucket["prompt_tokens"] += int(row["prompt_tokens"] or 0)
+                bucket["completion_tokens"] += int(row["completion_tokens"] or 0)
+                bucket["cached_tokens"] += int(row["cached_tokens"] or 0)
+                bucket["cache_read_tokens"] = (
+                    int(bucket.get("cache_read_tokens") or 0)
+                    + int(row["cache_read_tokens"] or 0)
+                )
+                bucket["cache_creation_tokens"] = (
+                    int(bucket.get("cache_creation_tokens") or 0)
+                    + int(row["cache_creation_tokens"] or 0)
+                )
+                if cost is not None:
+                    bucket["estimated_cost_usd"] = (
+                        float(bucket["estimated_cost_usd"] or 0) + float(cost)
+                    )
+            prompt_total = agg["prompt_tokens"]
+            eligible = prompt_total + cache_creation
+            hit_rate = round(cache_read / eligible, 6) if eligible > 0 else 0.0
+            return {
+                "totals": agg,
+                "by_model": [
+                    {"model": m, **b} for m, b in sorted(by_model.items(), key=lambda kv: kv[1]["requests"], reverse=True)
+                ],
+                # 7d/30d/total 没有 today 字段, 用 totals 填占位, 前端按 range 渲染
+                "today": agg if range_ == "today" else _empty_bucket(),
+                "cache_hit_rate": hit_rate,
+                "range": range_,
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("summary_with_range(%s) DB 异常, 降级到内存态: %s", range_, exc)
+            data = dict(self.summary())
+            data["range"] = range_
+            return data
 
     def recent(self, limit: int = 50) -> List[UsageRecord]:
         """返回最近 ``limit`` 条记录 (新 → 旧)。"""
