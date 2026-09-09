@@ -1,6 +1,6 @@
 # 编码代理对标差距分析·第六轮：多智能体编排与通信收口（2026-09-08）
 
-- **状态**：批次 A 已交付（分支 `feat/parity-r6-orchestration`，基线 origin/main `d4a3bbbe`）
+- **状态**：批次 A 已交付（PR #521 → main 07762ec9；win7 PR #523 → 67af641e）；批次 B 已交付（分支 `feat/parity-r6-batch-b`，基线 origin/main 07762ec9）
 - **上游文档**：round4（批次 A-E 已交付）、round5（批次 A 信任闭环还账，`.worktrees/feat-parity-r5-batch-a` 在途）——本文不重复其内容，聚焦此前四轮从未系统盘点的**多智能体链路**：任务拆解、编排分发、记录持久化、主 agent ↔ subagent 通信
 - **对标对象**：Claude Code（Task/Agent 工具 + 后台代理 + TaskOutput/TaskStop）、Cursor（后台 agent + 逐 hunk 审查）、Devin（planner→executor 会话）、OpenHands（全量事件流持久化可回放）
 - **编号约定**：本轮起用 **O 系**（Orchestration），避免与 L/U/F/S 混编
@@ -66,7 +66,7 @@
 | 批次 | 主题 | 内容 | 状态 |
 | --- | --- | --- | --- |
 | **A（本批）** | 断链收口 + 兜底补齐 | O1 steering 投递闭环、O2 子任务 wall-clock 超时、O3 子代理用量归属、O4 observe_subagents 注册、O5 嵌套深度防护、O6 orch_runs 崩溃恢复 | ✅ 已交付 |
-| **B（待排期）** | 拆解层增强 | D1 system prompt 拆解引导、D2 plan_write 退役决策、单任务 skip/cancel 端点（后端 + 任务树按钮）、todo 持久化（重启恢复） | 待排期 |
+| **B** | 拆解层增强 | D1 system prompt 拆解引导、D2 plan_write 退役、B3 单任务 skip/cancel（端点 + 任务树按钮）、B4 todo 持久化 | ✅ 已交付（见 §7） |
 | **C（待排期）** | 记录深化 | R2 messages↔run 关联 + run 列表 API 恢复（历史时间线回放）、审批决策落库、orch_steps 死表处置（接线或删除） | 待排期 |
 
 ## 3. 批次 A 详细设计与实施记录
@@ -137,3 +137,30 @@
 - 实现期修正两处设计：① session_id 透传前做 `inspect.signature` 探测（兼容三参测试桩，避免 TypeError 杀死子任务）；② agent_tool 对 `run_loop_accepts_session_id` 采用函数内惰性导入（subagent_runner 顶层 import SageAgent，与其成环）。
 - 测试：新增 5 个测试文件 26 用例（`test_subagent_runner_session.py` / `test_chat_dispatcher_timeout.py` / `test_agent_tool_depth_guard.py` / `test_orch_run_recovery.py` / `test_observe_tool.py` 扩展）——26 全绿；改动相关目标集（dispatcher/runner/tool/orch 23 文件）240 passed；API 层 49 passed；全仓收集 5740 用例零收集错误；`ruff check` 全过（`asyncio.TimeoutError` 保留 + noqa：py3.8 下 ≠ 内建 TimeoutError，win7 cherry-pick 依赖此语义）。
 - 本地环境既有失败（与 origin/main 基线逐一对照相同：agent_tool 白名单 3 + e2e router 1 + executor 14 errors）确认为本地环境问题，非本批引入，以 CI 为准。
+
+## 7. 批次 B 实施与验证记录（2026-09-09）
+
+### 7.1 D1 system prompt 拆解引导
+
+`build_system_base()` 追加 `_TODO_GUIDANCE_PROMPT`（多步骤任务 ≥3 步先用 `todo_write` 建清单、随执行实时更新、同一时刻一条 in_progress；单步任务不建）。与 office 能力声明同模式——子代理 profile 无 todo_write 时文本无工具可调，无副作用。
+
+### 7.2 D2 plan_write 退役
+
+全链移除：`tools/plan_tool.py`（含内存 store）、`tools/__init__.py` 注册与导出、`domain/tool_names.py` `PLAN_TOOLS` 常量及全集、`agents/profiles.py` primary 种子与 import、`tests/unit/test_plan_tool.py`。存量 DB 清理：`ensure_default_agents()` 改名迁移段顺带剪除 `plan_write`（避免 T3 启动告警"引用未注册工具名"）。新增 2 测试（存量剪除 + 默认种子不再含）。依据：工具无任何读取方/SSE/UI，与 todo_write + 编排计划三套重复，继续暴露只会误导 LLM 把计划写进无处可去的地方。
+
+### 7.3 B3 单任务跳过
+
+- **dispatcher**：`_run_one` 每任务建档 `skip`（用户跳过信号）与 `merged`（skip ∨ run 级取消）事件，relay 协程汇入；源已置位时同步汇入（防 relay 未调度导致 cancel-before-dispatch 守卫漏判——首跑即回归，测试已复现）。`SubagentRunner` 经 `_task_cancel_events` 档案拿 merged，run 级取消与单任务跳过共用软中断通道。`cancel_task(task_id)`：queued → acquire 后短路（"skipped by user"），running → interrupt 通道，终态/未知 → False。跳过任务走既有级联闭包：下游 `blocked_by_failed:` failed。
+- **端点**：`POST /orch/runs/{run_id}/tasks/{task_id}/cancel`（orch_routes；活动注册表 404 / 不可跳过 409）。
+- **前端**：`electron/commands.ts` 路由 `orchestration_cancel_run_task`、`orchRunClient.cancelTask`、`TaskTreeSection` queued/running 行内"跳过"按钮（stopPropagation 防误开 Drawer；in-flight 集合防重复点击）。
+
+### 7.4 B4 todo 持久化
+
+- 新表 `session_todos(session_id PK, todos_json, updated_at)` + `SessionTodoRepository`（upsert/get/delete/delete_all，`_SQLITE_LOCK` 纪律）。
+- `_NotifyingTodoStore` write-through：`replace` 落库、`get` miss 回填（经 `_cache_put` 不重复落库不触发监听）、`clear` 连持久行一起删（"处处遗忘"——否则 get 复活已清清单，首跑即发现）；匿名桶不落库；structured output 用的纯 `SessionStateStore` 保持内存语义。
+- producer 流启动时推送持久化快照（`todo_snapshot`）：重启/重开会话后任务板恢复。
+
+### 7.5 验证
+
+- 新增/扩展 6 个测试文件：`test_session_todo_repo.py`（11 例）、`test_chat_dispatcher_task_skip.py`（4 例）、`test_orch_routes_task_cancel.py`（4 例）、`test_agent_profile_wiring.py` D1 断言、`test_profiles_intranet_web_access_migration.py` D2 两例；改动相关后端集 158 passed，聊天流/编排集成 31 passed；ruff 全过。
+- 前端 tsc：仅 mermaid 模块缺失一处报错（#520 并行合入后本地未 npm install 的环境问题，main 工作区同样复现，CI npm ci 后为绿）；本批前端文件无类型错误。

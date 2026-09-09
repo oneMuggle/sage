@@ -35,7 +35,6 @@ from .office_restore_tool import OfficeRestoreTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
 from .patch_tool import ApplyPatchTool
-from .plan_tool import PlanWriteTool
 from .project_diagnose import ProjectDiagnoseTool
 from .registry import ToolRegistry
 from .repl_tool import ReplTool
@@ -175,8 +174,6 @@ def register_all_tools(
     # 2026-09-06 对标增强 Phase-2: apply_patch —— 多文件原子精确编辑
     # （Codex apply_patch 对标；先整体校验后落盘，任一失败整批不写）。
     registry.register(ApplyPatchTool(policy=policy))
-    # G3: plan_write —— 会话内结构化执行计划（先规划后执行，READ 无副作用）
-    registry.register(PlanWriteTool(policy=policy))
     # G4: symbol_search —— 代码库 Python 符号索引（ast 提取定义处，READ）
     registry.register(SymbolSearchTool(policy=policy))
     # G7: 浏览器自动化 —— CDP 驱动本机 Chrome/Edge（launch=EXEC /
@@ -246,7 +243,6 @@ __all__ = [
     "CheckpointListTool",
     "CheckpointRestoreTool",
     "ApplyPatchTool",
-    "PlanWriteTool",
     "SymbolSearchTool",
     "BrowserLaunchTool",
     "BrowserNavigateTool",

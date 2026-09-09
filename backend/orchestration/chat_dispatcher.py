@@ -245,6 +245,11 @@ class ChatDispatcher:
         self._dispatched_plan_ids: Set[str] = set()
         # P2-9 (2026-08-14): 取消事件 —— cancel() 幂等 set；_run_one 开头检查。
         self._cancelled = asyncio.Event()
+        # B3 (2026-09-09): 单任务跳过 —— task_id → skip 信号（cancel_task 置位）
+        # 与 task_id → merged 取消事件（skip ∨ run 级取消，SubagentRunner 的
+        # interrupt_event 消费）。_run_one 建档、finally 注销。
+        self._task_skip_events: Dict[str, asyncio.Event] = {}
+        self._task_cancel_events: Dict[str, asyncio.Event] = {}
         # live-events P0: canonical RunEvent 通道（EventHub.publish）。None 时
         # 惰性解析 orch_run_control.get_event_hub()（启动即装配），再取不到
         # 则仅镜像聊天流 —— 双通道缺一不阻塞另一。
@@ -298,6 +303,27 @@ class ChatDispatcher:
         if self._cancelled.is_set():
             return False
         self._cancelled.set()
+        return True
+
+    def cancel_task(self, task_id: str) -> bool:
+        """B3 (2026-09-09): 单任务跳过 —— 只停一个子任务，不影响其余。
+
+        queued（含等信号量槽位）→ acquire 后守卫直接转 cancelled（"skipped
+        by user"）；running → merged 事件置位，SubagentRunner watcher 软中断
+        子代理（同 run 级取消通道），下一迭代收口。
+
+        Returns:
+            True = 已受理；False = 任务不存在/已终态/重复跳过（端点转 409）。
+            仅本批（已进 dispatch 的任务）可跳过 —— 尚未开波的后续批次任务
+            还没有事件档案，返回 False。
+        """
+        skip = self._task_skip_events.get(task_id)
+        if skip is None or skip.is_set():
+            return False
+        state = self._states.get(task_id)
+        if state is None or state.status in ("done", "failed", "cancelled"):
+            return False
+        skip.set()
         return True
 
     def _ensure_plan_loaded(self) -> None:
@@ -436,14 +462,54 @@ class ChatDispatcher:
             )
 
         async def _run_one(state: ChatTaskState) -> None:
+            # B3 (2026-09-09): 单任务跳过 —— 每任务一对事件：``skip``（用户
+            # 单任务跳过信号，cancel_task 置位）与 ``merged``（run 级取消 ∨
+            # skip 的合并事件）。SubagentRunner 的 interrupt watcher 只收
+            # 单个事件，故经 relay 把两个源都汇入 merged；runner 拿 merged
+            # 后，run 级取消与单任务跳过走同一条软中断通道。
+            skip = asyncio.Event()
+            merged = asyncio.Event()
+            self._task_skip_events[state.task_id] = skip
+            self._task_cancel_events[state.task_id] = merged
+
+            async def _relay(src: asyncio.Event) -> None:
+                await src.wait()
+                merged.set()
+
+            relays = [
+                asyncio.ensure_future(_relay(self._cancelled)),
+                asyncio.ensure_future(_relay(skip)),
+            ]
+            # 源事件已置位时同步汇入 —— relay 任务尚未获得调度机会，
+            # 否则 cancel-before-dispatch 场景守卫会漏判（历史语义回归）。
+            if self._cancelled.is_set() or skip.is_set():
+                merged.set()
+            try:
+                await _run_one_inner(state, skip, merged)
+            finally:
+                self._task_skip_events.pop(state.task_id, None)
+                self._task_cancel_events.pop(state.task_id, None)
+                for relay_task in relays:
+                    relay_task.cancel()
+
+        async def _run_one_inner(
+            state: ChatTaskState,
+            task_skip: asyncio.Event,
+            merged_cancel: asyncio.Event,
+        ) -> None:
             async with self._semaphore:
                 # P2-9 (2026-08-14) + P0-3 (2026-08-20): 取消后 queued 任务不再启动
                 # （转 cancelled）。守卫在 acquire 之后 —— 排队等槽的任务 cancel 前
                 # 已越过入口，拿到槽后再判一次才真正短路；running 子任务经
-                # SubagentRunner interrupt watcher 打断（interrupt_event=self._cancelled）。
-                if self._cancelled.is_set():
+                # SubagentRunner interrupt watcher 打断（interrupt_event=merged）。
+                # B3: run 级取消与单任务跳过共用该守卫，error 文案区分。
+                if merged_cancel.is_set():
                     state.status = "cancelled"
-                    state.error = "cancelled by user"
+                    state.error = (
+                        "cancelled by user"
+                        if self._cancelled.is_set()
+                        else "skipped by user"
+                    )
                     self._emit_task_status(state)
                     return
                 state.status = "running"
@@ -476,7 +542,10 @@ class ChatDispatcher:
                 except Exception as exc:  # noqa: BLE001 — 单任务失败隔离
                     # P0-3 (2026-08-20): cancel 触发的异常 → cancelled 而非 failed
                     # （SubagentRunner 已有 interrupt 通道，见 P0-1/P0-3）。
-                    state.status = "cancelled" if self._cancelled.is_set() else "failed"
+                    # B3: 单任务跳过（merged 置位但 run 未取消）同归 cancelled。
+                    state.status = (
+                        "cancelled" if merged_cancel.is_set() else "failed"
+                    )
                     state.error = str(exc)
                     logger.warning("subagent %s failed: %s", state.task_id, exc)
                 finally:
@@ -663,7 +732,11 @@ class ChatDispatcher:
             event_recorder=self.event_recorder,
             agent_runner=SubagentRunner(
                 self.llm_config,
-                interrupt_event=self._cancelled,
+                # B3: 消费本任务 merged 取消事件（run 级取消 ∨ 单任务跳过）；
+                # 无档案（理论不可达，防御）回落 run 级事件。
+                interrupt_event=self._task_cancel_events.get(
+                    state.task_id, self._cancelled
+                ),
                 event_sink=sink,
                 approval_mode=self.approval_mode,
                 session_id=self.session_id,

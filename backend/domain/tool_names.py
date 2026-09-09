@@ -81,10 +81,6 @@ CHECKPOINT_TOOLS = ("checkpoint_create", "checkpoint_list", "checkpoint_restore"
 # 全部补丁先校验后落盘，任一失败整批不写。WRITE_LOCAL 审批。
 PATCH_TOOLS = ("apply_patch",)
 
-# Plan 模式（2026-09-06 对标增强 Phase-2，Qoder Quest 对标）：
-# 会话内结构化执行计划（先规划后执行）。会话内存状态 → READ。
-PLAN_TOOLS = ("plan_write",)
-
 # 代码库符号索引（2026-09-06 对标增强 Phase-2，G4 务实版）：
 # stdlib ast 提取 Python 符号 + 内存倒排索引，按名称/概念搜定义处。READ。
 SYMBOL_TOOLS = ("symbol_search",)
@@ -127,7 +123,6 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(GIT_TOOLS)
         | set(CHECKPOINT_TOOLS)
         | set(PATCH_TOOLS)
-        | set(PLAN_TOOLS)
         | set(SYMBOL_TOOLS)
         | set(BROWSER_TOOLS)
         | set(SKILL_TOOLS)
@@ -148,7 +143,6 @@ __all__ = [
     "OFFICE_TOOLS",
     "ORCH_TOOLS",
     "PATCH_TOOLS",
-    "PLAN_TOOLS",
     "RUNTIME_EXEC_TOOLS",
     "RUNTIME_PROBE_TOOLS",
     "RUNTIME_TOOLS",
