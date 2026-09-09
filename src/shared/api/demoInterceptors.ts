@@ -33,6 +33,7 @@ import type {
   OfficeDeleteResponse,
   OfficeDocumentSummary,
   OfficeExcelReadResult,
+  OfficePdfReadResult,
   OfficePptReadResult,
   OfficeWordReadResult,
   ScheduledTask,
@@ -914,6 +915,19 @@ const DEMO_OFFICE_DOCS: OfficeDocumentSummary[] = [
     derived_from: null,
     archived_at: null,
   },
+  {
+    id: 'of-4',
+    workspace_path: DEMO_WORKSPACE_PATH,
+    doc_type: 'pdf',
+    original_filename: '检索策略与纳入排除标准.pdf',
+    generated_filename: '检索策略与纳入排除标准.pdf',
+    status: 'parsed',
+    created_at: NOW_S - 3600 * 8,
+    updated_at: NOW_S - 3600 * 8,
+    metadata: { page_count: 2, file_size_bytes: 1284500 },
+    derived_from: null,
+    archived_at: null,
+  },
 ];
 
 const DEMO_WORD_READ: OfficeWordReadResult = {
@@ -1043,6 +1057,25 @@ const DEMO_PPT_READ: OfficePptReadResult = {
       notes: null,
     },
   ],
+};
+
+const DEMO_PDF_READ: OfficePdfReadResult = {
+  summary: DEMO_OFFICE_DOCS[3],
+  pages: [
+    {
+      page_number: 1,
+      text: '检索策略与纳入排除标准\n\n数据库：PubMed / Embase / Cochrane Library\n检索时间窗：2023-01 至 2026-06',
+      tables: [],
+      images: [],
+    },
+    {
+      page_number: 2,
+      text: '纳入标准：\n1. 同行评审英文文献\n2. 报告大模型在临床任务上的定量评测\n排除标准：预印本、单案例报告。',
+      tables: [],
+      images: [],
+    },
+  ],
+  metadata: { producer: 'Sage demo', page_count: 2 },
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1625,6 +1658,45 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
   office_word_read: () => DEMO_WORD_READ,
   office_excel_read: () => DEMO_EXCEL_READ,
   office_ppt_read: () => DEMO_PPT_READ,
+  office_pdf_read: () => DEMO_PDF_READ,
+
+  // Office parity batch 1 (item 1.7): archive / restore + snapshots.
+  office_archive_document: (args) => {
+    const docId = asStr(args.docId) || asStr(args.id);
+    const doc = demoOfficeDocs.find((d) => d.id === docId);
+    const archivedAt = doc?.archived_at ?? NOW_S * 1000;
+    if (doc) doc.archived_at = archivedAt;
+    return { ok: true, summary: doc ?? null };
+  },
+
+  office_restore_document: (args) => {
+    const docId = asStr(args.docId) || asStr(args.id);
+    const doc = demoOfficeDocs.find((d) => d.id === docId);
+    if (doc) doc.archived_at = null;
+    return { ok: true, summary: doc ?? null };
+  },
+
+  office_list_snapshots: () => ({
+    snapshots: [
+      {
+        snapshot_id: `${(NOW_S - 7200) * 1000}-文献对比表-23篇核心文献.xlsx`,
+        size_bytes: 85504,
+        created_at: (NOW_S - 7200) * 1000,
+      },
+      {
+        snapshot_id: `${(NOW_S - 3600) * 1000}-文献对比表-23篇核心文献.xlsx`,
+        size_bytes: 86528,
+        created_at: (NOW_S - 3600) * 1000,
+      },
+    ],
+  }),
+
+  office_restore_snapshot: (args) => {
+    const docId = asStr(args.docId);
+    const doc = demoOfficeDocs.find((d) => d.id === docId);
+    if (doc) doc.updated_at = NOW_S * 1000;
+    return { ok: true, summary: doc ?? null };
+  },
 
   office_word_generate: (args) => {
     const workspacePath =

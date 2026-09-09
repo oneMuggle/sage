@@ -5,13 +5,14 @@
  *   ┌──────────────────────────────────────┐
  *   │ Header (workspace selector)            │
  *   ├──────────┬───────────────────────────┤
- *   │ 3 file   │   Preview panel (right)   │
+ *   │ 4 file   │   Preview panel (right)   │
  *   │ pickers  │   (PPT slides / Word text │
- *   │ (PPTX/   │   / Excel sheets)        │
- *   │ DOCX/    │                          │
- *   │ XLSX)    │                          │
+ *   │ (PPTX/   │   / Excel sheets / PDF    │
+ *   │ DOCX/    │   pages)                  │
+ *   │ XLSX/    │                          │
+ *   │ PDF)     │                          │
  *   ├──────────┴───────────────────────────┤
- *   │ Document list (history)              │
+ *   │ Document list (live/archived + 历史版本 panel) │
  *   └──────────────────────────────────────┘
  *
  * M0 Task 6 (2026-07-23): rewired the file-pick flow through the
@@ -32,7 +33,7 @@
  * reaches `setPreview`.
  */
 
-import { FileSpreadsheet, FileText, FolderOpen, Presentation } from 'lucide-react';
+import { FileSpreadsheet, FileText, FileType, FolderOpen, Presentation } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -42,7 +43,9 @@ import {
   OfficeFilePicker,
   OfficeGenerateForm,
   OfficePreviewPanel,
+  OfficeSnapshotPanel,
   useOfficeDocuments,
+  type OfficeListView,
   type OfficePreviewData,
   type OfficeReadResult,
 } from '../features/office';
@@ -78,12 +81,23 @@ export function Office() {
     loading,
     error,
     refresh,
+    view,
+    setView,
     importAndRead,
     readDropped,
     saveAs,
     open,
     showInFolder,
+    archiveDocument,
+    restoreDocument,
+    readDocument,
   } = useOfficeDocuments(workspacePath);
+
+  // Item 1.7: 历史版本 panel — the document whose snapshots are listed,
+  // or null when the panel is closed. Resolved against the current list
+  // so the panel follows the row the user opened it from.
+  const [snapshotDocId, setSnapshotDocId] = useState<string | null>(null);
+  const snapshotDoc = snapshotDocId ? documents.find((d) => d.id === snapshotDocId) : undefined;
 
   // The bind modal owns its own IPC; we just need to know when the
   // workspace has actually changed so the stale-read guard can drop any
@@ -185,6 +199,46 @@ export function Office() {
     }
   };
 
+  // Item 1.7: soft-delete lifecycle + snapshot panel handlers.
+  const handleArchive = async (docId: string) => {
+    try {
+      await archiveDocument(docId);
+      toast.success(t('office.toast.archived'));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`${t('office.toast.archiveFailed')}: ${msg}`);
+    }
+  };
+
+  const handleRestore = async (docId: string) => {
+    try {
+      await restoreDocument(docId);
+      toast.success(t('office.toast.restored'));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`${t('office.toast.restoreFailed')}: ${msg}`);
+    }
+  };
+
+  // Snapshot restore overwrote the managed file — re-read it so the
+  // preview reflects the restored bytes, and refresh the list (updated_at
+  // changed). Shares the stale-read guard with the import flows.
+  const handleSnapshotRestored = async (docId: string) => {
+    const doc = documents.find((d) => d.id === docId);
+    await refresh();
+    if (!doc) return;
+    const myReadId = ++readIdRef.current;
+    try {
+      const data = await readDocument(docId);
+      if (myReadId !== readIdRef.current) return;
+      setPreview(toPreview(doc.doc_type, data));
+    } catch (e) {
+      if (myReadId !== readIdRef.current) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`${t('office.toast.readFailed')}: ${msg}`);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col gap-4 p-6 overflow-y-auto" data-testid="office-page">
       {/* Header */}
@@ -279,6 +333,17 @@ export function Office() {
                   <FileSpreadsheet className="w-3.5 h-3.5" /> {t('office.pick.excel')}
                 </span>
               </OfficeFilePicker>
+              <OfficeFilePicker
+                docType="pdf"
+                workspacePath={workspacePath}
+                onPick={handleImportAndRead('pdf')}
+                onDropFile={handleReadDropped('pdf')}
+                disabled={loading}
+              >
+                <span className="flex items-center gap-1.5">
+                  <FileType className="w-3.5 h-3.5" /> {t('office.pick.pdf')}
+                </span>
+              </OfficeFilePicker>
             </div>
 
             {/* Right: preview panel */}
@@ -290,18 +355,60 @@ export function Office() {
             </div>
           </div>
 
-          {/* Document list */}
+          {/* Document list — live / archived toggle (item 1.7) */}
           <div>
-            <h2 className="text-sm font-medium text-text-secondary mb-3">
-              {t('office.section.history')} ({documents.length})
-            </h2>
+            <div className="flex items-center gap-3 mb-3">
+              <h2 className="text-sm font-medium text-text-secondary">
+                {view === 'live'
+                  ? t('office.section.history')
+                  : t('office.section.archived')}{' '}
+                ({documents.length})
+              </h2>
+              <div className="ml-auto flex gap-2">
+                {(
+                  [
+                    ['live', t('office.view.live')],
+                    ['archived', t('office.view.archived')],
+                  ] as [OfficeListView, string][]
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setView(value)}
+                    data-testid={`office-view-${value}`}
+                    className={[
+                      'px-3 py-1.5 rounded text-sm border',
+                      view === value
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-text-secondary hover:bg-bg-hover',
+                    ].join(' ')}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <OfficeDocumentList
               documents={documents}
               loading={loading}
+              variant={view}
               onSaveAs={handleSaveAs}
               onOpen={handleOpen}
               onShowInFolder={handleShowInFolder}
+              onArchive={handleArchive}
+              onRestore={handleRestore}
+              onViewSnapshots={(docId) => setSnapshotDocId(docId)}
             />
+            {/* 历史版本 panel — opened from a row's History action */}
+            {snapshotDoc && (
+              <div className="mt-3">
+                <OfficeSnapshotPanel
+                  doc={snapshotDoc}
+                  onClose={() => setSnapshotDocId(null)}
+                  onRestored={handleSnapshotRestored}
+                />
+              </div>
+            )}
           </div>
 
           {/* Generate form (Phase 1.4) */}

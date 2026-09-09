@@ -8,13 +8,15 @@
  *   - Open (shell.openPath on the managed file)
  *   - Show in Folder (shell.showItemInFolder)
  * The Phase 1.3 delete action was REMOVED. The brief is explicit: do
- * not expose a permanent delete action from the M0 management view;
- * archive/restore and the user confirmation flow are implemented in
- * M3–M5. Existing DB delete code may remain unreachable until the
- * archive migration is complete.
+ * not expose a permanent delete action from the management view.
+ *
+ * Office parity batch 1 (item 1.7): the soft-delete lifecycle is now
+ * user-facing. `variant="live"` rows carry 归档 (archive) + 历史版本
+ * (snapshots) actions; `variant="archived"` rows carry 恢复 (restore).
+ * The destructive delete stays out of the UI.
  */
 
-import { FolderOpen, FileSpreadsheet, FileText, Presentation, Save } from 'lucide-react';
+import { Archive, ArchiveRestore, FolderOpen, FileSpreadsheet, FileText, History, Presentation, Save } from 'lucide-react';
 
 import type { OfficeDocType, OfficeDocumentSummary } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
@@ -23,31 +25,45 @@ const DOC_TYPE_ICONS: Record<OfficeDocType, React.ReactNode> = {
   ppt: <Presentation className="w-4 h-4" />,
   word: <FileText className="w-4 h-4" />,
   excel: <FileSpreadsheet className="w-4 h-4" />,
+  pdf: <FileText className="w-4 h-4" />,
 };
 
 const DOC_TYPE_LABELS: Record<OfficeDocType, string> = {
   ppt: 'PPT',
   word: 'Word',
   excel: 'Excel',
+  pdf: 'PDF',
 };
 
 export interface OfficeDocumentListProps {
   documents: OfficeDocumentSummary[];
   loading: boolean;
+  /** Which slice of the lifecycle this list renders — drives the row actions. */
+  variant?: 'live' | 'archived';
   /** Native Save As dialog → copy managed file to chosen path. */
   onSaveAs?: (docId: string) => void | Promise<void>;
   /** shell.openPath on the managed file. */
   onOpen?: (docId: string) => void | Promise<void>;
   /** shell.showItemInFolder on the managed file. */
   onShowInFolder?: (docId: string) => void | Promise<void>;
+  /** Soft-delete the row (variant="live" only). */
+  onArchive?: (docId: string) => void | Promise<void>;
+  /** Un-archive the row (variant="archived" only). */
+  onRestore?: (docId: string) => void | Promise<void>;
+  /** Open the 历史版本 (snapshots) panel for the row. */
+  onViewSnapshots?: (docId: string) => void | Promise<void>;
 }
 
 export function OfficeDocumentList({
   documents,
   loading,
+  variant = 'live',
   onSaveAs,
   onOpen,
   onShowInFolder,
+  onArchive,
+  onRestore,
+  onViewSnapshots,
 }: OfficeDocumentListProps) {
   const { t } = useI18n();
   // Status labels are built inside the component so the translated
@@ -88,9 +104,47 @@ export function OfficeDocumentList({
               <span>{(doc.metadata.file_size_bytes / 1024).toFixed(1)} KB</span>
               <span>·</span>
               <span>{new Date(doc.created_at).toLocaleString()}</span>
+              {doc.archived_at != null && (
+                <>
+                  <span>·</span>
+                  <span>
+                    {t('office.doc.archivedAt')} {new Date(doc.archived_at).toLocaleString()}
+                  </span>
+                </>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-1">
+            {variant === 'live' && onArchive && (
+              <button
+                type="button"
+                onClick={() => void onArchive(doc.id)}
+                className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                aria-label={t('office.doc.archive')}
+              >
+                <Archive className="w-4 h-4" />
+              </button>
+            )}
+            {variant === 'archived' && onRestore && (
+              <button
+                type="button"
+                onClick={() => void onRestore(doc.id)}
+                className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                aria-label={t('office.doc.restore')}
+              >
+                <ArchiveRestore className="w-4 h-4" />
+              </button>
+            )}
+            {onViewSnapshots && (
+              <button
+                type="button"
+                onClick={() => void onViewSnapshots(doc.id)}
+                className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                aria-label={t('office.doc.snapshots')}
+              >
+                <History className="w-4 h-4" />
+              </button>
+            )}
             {onSaveAs && (
               <button
                 type="button"
