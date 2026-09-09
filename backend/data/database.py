@@ -182,24 +182,30 @@ class Database:
         self._conn_proxy: Optional[_LockedConnection] = None
 
     def get_connection(self) -> sqlite3.Connection:
-        """获取数据库连接 (B2: 返回加锁代理, 全部 SQLite 访问共享 _SQLITE_LOCK)"""
-        if self._connection is None:
-            self._connection = sqlite3.connect(self.db_path, check_same_thread=False)
-            self._connection.row_factory = sqlite3.Row
-            # 启用 WAL 模式提高并发性能
-            self._connection.execute("PRAGMA journal_mode=WAL")
-            self._connection.execute("PRAGMA busy_timeout=5000")
-            # fix/security-perf-quickwins (2026-08-09): 启用外键约束。否则
-            # session_workspace_bindings 等表的 ON DELETE CASCADE 是 silent no-op,
-            # 删会话后留下悬挂行 (见 docs/technical/33-office-m1-m2-completion.md §6-2).
-            self._connection.execute("PRAGMA foreign_keys=ON")
-            # feat/sqlite-fast-pragma: 测试期跳过 fsync (~5x faster setup)。
-            # 仅当 SAGE_TEST_FAST_SQLITE=1 时启用 synchronous=OFF。
-            # 注意：synchronous=OFF 在断电/OS crash 时可能丢最后几个事务，但
-            # Sage 测试用 tempfile，OS crash 后整个文件不存在 → 仅对测试场景安全。
-            # 生产 DB（data/sage.db）始终保持 synchronous=FULL（默认值）。
-            if os.environ.get("SAGE_TEST_FAST_SQLITE") == "1":
-                self._connection.execute("PRAGMA synchronous=OFF")
+        """获取数据库连接 (B2: 返回加锁代理, 全部 SQLite 访问共享 _SQLITE_LOCK)
+
+        代理与 ``self._connection`` 按身份绑定: 测试会直接替换 ``_connection``
+        注入 mock 连接 (如 evolution hooks 的故障注入), 身份变化时重建代理,
+        避免拿到包着旧真实连接的过期代理。
+        """
+        if self._conn_proxy is None or self._conn_proxy._conn is not self._connection:
+            if self._connection is None:
+                self._connection = sqlite3.connect(self.db_path, check_same_thread=False)
+                self._connection.row_factory = sqlite3.Row
+                # 启用 WAL 模式提高并发性能
+                self._connection.execute("PRAGMA journal_mode=WAL")
+                self._connection.execute("PRAGMA busy_timeout=5000")
+                # fix/security-perf-quickwins (2026-08-09): 启用外键约束。否则
+                # session_workspace_bindings 等表的 ON DELETE CASCADE 是 silent no-op,
+                # 删会话后留下悬挂行 (见 docs/technical/33-office-m1-m2-completion.md §6-2).
+                self._connection.execute("PRAGMA foreign_keys=ON")
+                # feat/sqlite-fast-pragma: 测试期跳过 fsync (~5x faster setup)。
+                # 仅当 SAGE_TEST_FAST_SQLITE=1 时启用 synchronous=OFF。
+                # 注意：synchronous=OFF 在断电/OS crash 时可能丢最后几个事务，但
+                # Sage 测试用 tempfile，OS crash 后整个文件不存在 → 仅对测试场景安全。
+                # 生产 DB（data/sage.db）始终保持 synchronous=FULL（默认值）。
+                if os.environ.get("SAGE_TEST_FAST_SQLITE") == "1":
+                    self._connection.execute("PRAGMA synchronous=OFF")
             self._conn_proxy = _LockedConnection(self._connection)
         assert self._conn_proxy is not None
         return self._conn_proxy

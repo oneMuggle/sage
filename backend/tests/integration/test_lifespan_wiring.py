@@ -167,10 +167,16 @@ async def test_watchdog_fetch_waits_for_shared_sqlite_lock(tmp_db_path: str) -> 
     from backend.main import app
 
     class _TrackingLock:
-        """``threading.Lock`` 的薄包装,记录 ``__enter__`` 次数。"""
+        """``threading.RLock`` 的薄包装,记录 ``__enter__`` 次数。
+
+        内部必须是 RLock 而非 Lock: B2 之后 get_connection() 返回加锁代理,
+        _query 的 ``with _SQLITE_LOCK:`` 外层持锁内, 代理会再次 acquire
+        (同线程重入)。替身若用不可重入的 Lock, worker 会在自己持有的锁上
+        自死锁, 与生产 RLock 语义不符。
+        """
 
         def __init__(self) -> None:
-            self._lock = threading.Lock()
+            self._lock = threading.RLock()
             self.acquire_attempts = 0
 
         def __enter__(self) -> _TrackingLock:
