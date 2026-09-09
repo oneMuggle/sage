@@ -264,19 +264,24 @@ class BashTool(BaseTool):
 
             stdout, out_truncated, _ = read_capped_output(stdout_path, cap=self._cfg.output_cap)
             stderr, err_truncated, _ = read_capped_output(stderr_path, cap=self._cfg.output_cap)
+            content: Dict[str, Any] = {
+                "exit_code": process.returncode,
+                "stdout": stdout,
+                "stderr": stderr,
+                "duration_seconds": round(duration, 3),
+                "truncated": out_truncated or err_truncated,
+            }
+            # D-3 (round5 批次 D): 测试命令非零退出 → 解析失败用例清单回喂,
+            # 让模型拿到确定性失败列表而不是在截断文本里盲找。
+            if process.returncode not in (0, None):
+                from backend.tools.test_output_parser import parse_test_failures
+
+                test_failures = parse_test_failures(stdout, stderr)
+                if test_failures is not None:
+                    content["test_failures"] = test_failures
             return ToolResult(
                 success=True,
-                content=self._decorate(
-                    {
-                        "exit_code": process.returncode,
-                        "stdout": stdout,
-                        "stderr": stderr,
-                        "duration_seconds": round(duration, 3),
-                        "truncated": out_truncated or err_truncated,
-                    },
-                    shell,
-                    cwd,
-                ),
+                content=self._decorate(content, shell, cwd),
             )
         finally:
             unlink_quietly(stdout_path)

@@ -2121,6 +2121,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     llm_config["reasoning_effort"] = data.reasoning_effort
                 if data.thinking_budget is not None:
                     llm_config["thinking_budget"] = data.thinking_budget
+                # D-1 (round5 批次 D): 偏好 fallback_model —— 主模型重试耗尽
+                # 后同 endpoint 降级; 未配置时为 None（LLMConfig 默认不降级）
+                from backend.data.settings_repo import SettingsRepository
+
+                fallback_pref = SettingsRepository().get("fallback_model")
+                if fallback_pref and fallback_pref != (data.model or ""):
+                    llm_config["fallback_model"] = fallback_pref
                 logger.info(
                     f"[REQ {request_id}] /chat/stream producer using custom LLM: "
                     f"model={_safe_log_field(llm_config['model'])}"
