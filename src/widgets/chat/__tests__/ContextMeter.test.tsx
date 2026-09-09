@@ -21,6 +21,9 @@ function usageFixture(overrides: Partial<SessionUsage>): SessionUsage {
     total_tokens: 100_000,
     estimated_cost_usd: 0,
     cached_tokens: 0,
+    cache_read_tokens: 0,
+    cache_creation_tokens: 0,
+    cache_hit_rate: 0,
     last_model: 'claude-sonnet-4',
     last_prompt_tokens: 100_000,
     last_cached_tokens: 0,
@@ -56,9 +59,7 @@ describe('ContextMeter', () => {
   });
 
   it('≥90% 显示告警色文本', async () => {
-    mockFetch.mockResolvedValue(
-      usageFixture({ last_prompt_tokens: 190_000 }),
-    );
+    mockFetch.mockResolvedValue(usageFixture({ last_prompt_tokens: 190_000 }));
     render(<ContextMeter sessionId="s1" />);
     await waitFor(() => {
       expect(screen.getByText('95%')).toBeInTheDocument();
@@ -67,9 +68,7 @@ describe('ContextMeter', () => {
   });
 
   it('tooltip 含 token 明细与缓存命中', async () => {
-    mockFetch.mockResolvedValue(
-      usageFixture({ last_cached_tokens: 40_000 }),
-    );
+    mockFetch.mockResolvedValue(usageFixture({ last_cached_tokens: 40_000 }));
     render(<ContextMeter sessionId="s1" />);
     await waitFor(() => {
       expect(screen.getByTestId('context-meter')).toBeInTheDocument();

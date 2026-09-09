@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { SessionUsage } from '../../../shared/api/usageApi';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { SessionUsageBadge } from '../SessionUsageBadge';
 
 const mockFetch = vi.fn<(sessionId: string) => Promise<SessionUsage>>();
@@ -22,6 +23,9 @@ function usageFixture(overrides: Partial<SessionUsage>): SessionUsage {
     total_tokens: 0,
     estimated_cost_usd: 0,
     cached_tokens: 0,
+    cache_read_tokens: 0,
+    cache_creation_tokens: 0,
+    cache_hit_rate: 0,
     last_model: null,
     last_prompt_tokens: null,
     last_cached_tokens: null,
@@ -30,13 +34,23 @@ function usageFixture(overrides: Partial<SessionUsage>): SessionUsage {
   };
 }
 
+// L8 PR-A (2026-09-09): SessionUsageBadge 启用 useI18n 拿 cache 标签,
+// 测试必须包 I18nProvider 否则 useI18n 抛 "must be used within I18nProvider"。
+function renderBadge(props: { sessionId: string | null; refreshKey?: number }) {
+  return render(
+    <I18nProvider defaultLocale="zh">
+      <SessionUsageBadge {...props} />
+    </I18nProvider>,
+  );
+}
+
 describe('SessionUsageBadge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders nothing without a session', () => {
-    const { container } = render(<SessionUsageBadge sessionId={null} />);
+    const { container } = renderBadge({ sessionId: null });
     expect(container.querySelector('[data-testid="session-usage-badge"]')).toBeNull();
   });
 
@@ -50,7 +64,7 @@ describe('SessionUsageBadge', () => {
         estimated_cost_usd: 0.0123,
       }),
     );
-    render(<SessionUsageBadge sessionId="s1" />);
+    renderBadge({ sessionId: 's1' });
     await waitFor(() => {
       expect(screen.getByTestId('session-usage-badge')).toBeInTheDocument();
     });
@@ -60,7 +74,7 @@ describe('SessionUsageBadge', () => {
 
   it('hides badge when session has no usage', async () => {
     mockFetch.mockResolvedValue(usageFixture({}));
-    const { container } = render(<SessionUsageBadge sessionId="s1" />);
+    const { container } = renderBadge({ sessionId: 's1' });
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('s1');
     });

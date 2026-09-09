@@ -1048,6 +1048,9 @@ const DEMO_USAGE: UsageSummary = {
     requests: 1284,
     prompt_tokens: 3412800,
     completion_tokens: 892400,
+    cached_tokens: 2100000,
+    cache_read_tokens: 1800000,
+    cache_creation_tokens: 300000,
     estimated_cost_usd: 12.84,
   },
   by_model: [
@@ -1056,6 +1059,9 @@ const DEMO_USAGE: UsageSummary = {
       requests: 962,
       prompt_tokens: 2610000,
       completion_tokens: 701200,
+      cached_tokens: 1700000,
+      cache_read_tokens: 1450000,
+      cache_creation_tokens: 250000,
       estimated_cost_usd: 9.62,
     },
     {
@@ -1063,6 +1069,9 @@ const DEMO_USAGE: UsageSummary = {
       requests: 322,
       prompt_tokens: 802800,
       completion_tokens: 191200,
+      cached_tokens: 400000,
+      cache_read_tokens: 350000,
+      cache_creation_tokens: 50000,
       estimated_cost_usd: 3.22,
     },
   ],
@@ -1070,8 +1079,13 @@ const DEMO_USAGE: UsageSummary = {
     requests: 47,
     prompt_tokens: 128400,
     completion_tokens: 36200,
+    cached_tokens: 86000,
+    cache_read_tokens: 74000,
+    cache_creation_tokens: 12000,
     estimated_cost_usd: 0.52,
   },
+  cache_hit_rate: 0.4848,
+  range: 'today',
 };
 
 /** 文献调研会话的 session_summary 记忆 (get_session_summaries 专用; 含 1 条 failed 展示徽章) */

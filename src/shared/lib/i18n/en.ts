@@ -375,6 +375,35 @@ export const en: Record<TranslationKey, string> = {
   'settings.usage.today': 'Today',
   'settings.usage.refresh': 'Refresh',
   'settings.usage.loadFailed': 'Failed to load usage data',
+  // L8 PR-A (2026-09-09): cache hit rate + time range
+  'settings.usage.cacheRead': 'Cache read',
+  'settings.usage.cacheCreation': 'Cache creation',
+  'settings.usage.cacheHitRate': 'Hit rate',
+  'settings.usage.range.today': 'Today',
+  'settings.usage.range.total': 'Total',
+  // L8 PR-B (2026-09-09): 7d/30d + request detail table
+  'settings.usage.range.7d': 'Last 7 days',
+  'settings.usage.range.30d': 'Last 30 days',
+  'settings.usage.requestsTable.title': 'Request details',
+  'settings.usage.requestsTable.col.time': 'Time',
+  'settings.usage.requestsTable.col.model': 'Model',
+  'settings.usage.requestsTable.col.tokens': 'Tokens',
+  'settings.usage.requestsTable.col.cacheRead': 'Cache read',
+  'settings.usage.requestsTable.col.cacheCreation': 'Cache creation',
+  'settings.usage.requestsTable.col.cost': 'Cost',
+  'settings.usage.requestsTable.empty': 'No request records yet',
+  'settings.usage.requestsTable.loadFailed': 'Failed to load request details',
+  'settings.usage.requestsTable.prevPage': 'Previous',
+  'settings.usage.requestsTable.nextPage': 'Next',
+  'settings.usage.requestsTable.pageInfo': '{offset}-{end} of {total}',
+  // L8 PR-C (2026-09-09): trend chart + CSV export
+  'settings.usage.trend.title': 'Usage trend',
+  'settings.usage.trend.loading': 'Loading trend data…',
+  'settings.usage.trend.empty': 'No trend data in selected range',
+  'settings.usage.trend.legendRequests': 'Requests',
+  'settings.usage.trend.legendCost': 'Cost',
+  'settings.usage.trend.loadFailed': 'Failed to load trend data',
+  'settings.usage.exportCsv': 'Export CSV',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
   'office.title': 'Office Documents',
@@ -511,7 +540,8 @@ export const en: Record<TranslationKey, string> = {
 
   // ─── U5' Edit & resend (parity round 5 batch A) ─────
   'chat.edit_resend': 'Edit & resend',
-  'chat.edit_resend_notice': 'Editing & resending: sending forks into a new session (original preserved)',
+  'chat.edit_resend_notice':
+    'Editing & resending: sending forks into a new session (original preserved)',
   'chat.edit_resend_cancel': 'Cancel editing',
   'chat.edit_resend_forked': 'Forked into a new session; edited message sent',
 };
