@@ -6,7 +6,7 @@ import sqlite3
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
@@ -279,7 +279,8 @@ def get_workspace_change_diff(
 
 
 class WorkspaceRevertRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
     # pydantic v1.10.x silently ignores Field min_length/max_length on
     # List types — only string/bytes fields are enforced. _constrained_list
     # is the project-wide v1/v2 cross-version factory (see
@@ -290,19 +291,22 @@ class WorkspaceRevertRequest(BaseModel):
 
 
 class WorkspaceRevertEntryModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
     path: str
     error: str
 
 
 class WorkspaceRevertResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
     reverted: List[str]
     errors: List[WorkspaceRevertEntryModel]
 
 
 class WorkspaceCheckpointModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
     checkpoint_id: str
     created_at: str
     bytes: int
@@ -310,12 +314,14 @@ class WorkspaceCheckpointModel(BaseModel):
 
 
 class WorkspaceCheckpointsResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
     checkpoints: List[WorkspaceCheckpointModel]
 
 
 class WorkspaceCheckpointCreateResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
     checkpoint_id: str
     files: int
     skipped: List[str]
@@ -323,12 +329,14 @@ class WorkspaceCheckpointCreateResponse(BaseModel):
 
 
 class WorkspaceCheckpointRestoreRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
     checkpoint_id: str = Field(min_length=1, max_length=100)
 
 
 class WorkspaceCheckpointRestoreResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
     checkpoint_id: str
     restored: int
 
@@ -416,7 +424,8 @@ def restore_workspace_checkpoint(
 
 
 class WorkspaceRevertHunksRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
     path: str = Field(min_length=1, max_length=1024)
     # See WorkspaceRevertRequest.paths — _constrained_list handles v1/v2
     # kwarg name differences internally.
@@ -424,7 +433,8 @@ class WorkspaceRevertHunksRequest(BaseModel):
 
 
 class WorkspaceRevertHunksResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
     reverted_hunks: int
 
 
