@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
@@ -352,6 +353,13 @@ async def test_explicit_null_orchestration_mode_does_not_422():
     assert "done" in states, (
         f"explicit null orchestration_mode 流应正常结束, 实际 events={states}"
     )
+    # producer 是 POST 返回后的后台任务, classify 真正执行与断言之间存在
+    # 竞态（CI xdist 慢速 worker 下出现过 awaited 0 times 的间歇红）——
+    # 轮询等待 classify 被调后再断言。
+    for _ in range(100):
+        if mock_classify.await_count >= 1:
+            break
+        await asyncio.sleep(0.05)
     # 业务层用 `data.orchestration_mode or "auto"`,所以 classifier 收到 "auto"
     mock_classify.assert_awaited_once()
     classify_args = mock_classify.await_args
