@@ -15,6 +15,7 @@ import { Dialog, Transition } from '@headlessui/react';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 
 import { themeCssClient } from '../../shared/api/themeCssClient';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 import { CodeMirrorThemeEditor } from './CodeMirrorThemeEditor';
 import { injectPreviewCss } from './backgroundInjector';
@@ -125,7 +126,7 @@ export function CssThemeModal({ open, onClose, initialTheme, onSaved }: CssTheme
 
   async function handleDelete() {
     if (!initialTheme?.id) return;
-    if (!window.confirm(`确认删除主题 "${name}"？`)) return;
+    if (!(await confirmDialog({ title: `确认删除主题 "${name}"？`, danger: true }))) return;
     try {
       await themeCssClient.delete(initialTheme.id);
       onClose();

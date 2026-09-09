@@ -29,6 +29,7 @@ import { toast } from 'sonner';
 
 import { workspaceApi } from '../../../shared/api/workspaceApi';
 import type { WorkspaceChanges, WorkspaceCheckpoint } from '../../../shared/api/workspaceApi';
+import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
 import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
 import { splitDiffHunks } from './diffHunks';
@@ -142,12 +143,16 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
 
   // U19: 撤销单个文件的工作区改动 (未跟踪条目 = 删除)
   const revertFile = useCallback(
-    (path: string, untracked: boolean) => {
+    async (path: string, untracked: boolean) => {
       if (!sessionId) return;
-      const confirmed = window.confirm(
-        untracked ? `删除未跟踪文件 ${path}？此操作不可恢复` : `撤销 ${path} 的工作区改动？`,
-      );
-      if (!confirmed) return;
+      if (
+        !(await confirmDialog({
+          title: untracked ? `删除未跟踪文件 ${path}？` : `撤销 ${path} 的工作区改动？`,
+          message: untracked ? '此操作不可恢复' : undefined,
+          danger: untracked,
+        }))
+      )
+        return;
       setReverting(true);
       workspaceApi
         .revertChanges(sessionId, [path], untracked)
@@ -167,12 +172,15 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
   );
 
   // U19: 撤销勾选的 hunk 子集
-  const revertSelectedHunks = useCallback(() => {
+  const revertSelectedHunks = useCallback(async () => {
     if (!sessionId || !selectedPath || selectedHunks.size === 0) return;
-    const confirmed = window.confirm(
-      `反向应用所选 ${selectedHunks.size} 个 hunk（撤销对应改动）？`,
-    );
-    if (!confirmed) return;
+    if (
+      !(await confirmDialog({
+        title: `反向应用所选 ${selectedHunks.size} 个 hunk？`,
+        message: '将撤销对应的工作区改动。',
+      }))
+    )
+      return;
     setReverting(true);
     workspaceApi
       .revertChangeHunks(sessionId, selectedPath, [...selectedHunks].sort((a, b) => a - b))
@@ -202,14 +210,16 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
 
   // U2': 覆盖恢复快照(只覆盖快照内文件,不删除快照后新建的文件)
   const restoreCheckpoint = useCallback(
-    (cp: WorkspaceCheckpoint) => {
+    async (cp: WorkspaceCheckpoint) => {
       if (!sessionId) return;
-      const confirmed = window.confirm(
-        `恢复快照 ${cp.checkpointId}？\n` +
-          '将覆盖工作区中快照包含的文件；快照之后新建的文件会保留。\n' +
-          '建议先创建一份当前状态的快照。',
-      );
-      if (!confirmed) return;
+      if (
+        !(await confirmDialog({
+          title: `恢复快照 ${cp.checkpointId}？`,
+          message:
+            '将覆盖工作区中快照包含的文件；快照之后新建的文件会保留。建议先创建一份当前状态的快照。',
+        }))
+      )
+        return;
       setCheckpointBusy(true);
       workspaceApi
         .restoreCheckpoint(sessionId, cp.checkpointId)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { UpdateState } from '../../electron/updateState';
+import { confirmDialog } from '../shared/ui/ConfirmDialog/confirmService';
 import { useI18n } from '../shared/lib/i18n';
 
 function getErrorMessage(error: unknown): string {
@@ -127,8 +128,8 @@ export function UpdateDialog() {
     if (version) setDismissedVersion(version);
   }, [state]);
 
-  const handleRollback = useCallback(() => {
-    if (!window.confirm(t('updateDialog.rollbackConfirm'))) return;
+  const handleRollback = useCallback(async () => {
+    if (!(await confirmDialog({ title: t('updateDialog.rollbackConfirm'), danger: true }))) return;
     void runWithGuard(() => window.electronAPI!.updates.rollback('manual'));
   }, [runWithGuard, t]);
 
