@@ -46,6 +46,7 @@ REQUIRED = {
     "python-pptx": "pptx",
     "python-docx": "docx",
     "openpyxl": "openpyxl",
+    "pandas": "pandas",
     # Phase 2 (2026-09-05): Word template + PDF read/form/generate
     "docxtpl": "docxtpl",
     "PyMuPDF": "pymupdf",
