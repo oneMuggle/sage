@@ -44,6 +44,8 @@ except ImportError:
 if certifi is not None:
     configure_ssl_ca_bundle(certifi.where)
 
+# S7-3 (P7): 会话 CRUD 端点注册到 legacy_router 上, 必须在 include 前导入
+import backend.api.legacy_session_routes  # noqa: F401,E402
 from backend.adapters.out.event.file_adapter import FileEventAdapter
 from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
 from backend.adapters.out.memory.adapter import MemoryAdapter
@@ -615,23 +617,21 @@ async def lifespan(app: FastAPI):
         restored_events,
     )
 
-    # Hex 模式：装配 ChatService 并注入到 hex_routes 的 DI 工厂
-    # Important-1 (final review): 默认值与路由装配对齐 — 实际 serving 的是
-    # legacy 路由（PG-A1 临时默认），lifespan 不该默认构建一个无人使用的
-    # hex ChatService（误导"已装配"）。API_MODE=hex 时行为不变。
-    api_mode = os.environ.get("API_MODE", "legacy").lower()
-    if api_mode == "hex":
-        from backend.api.hex_routes import get_chat_service
+    # S7-1 (P7): ChatService 无条件装配 —— runtime 路由复用其 tools 路径,
+    # 与 API_MODE 无关 (win7 分支此前默认 legacy 不装配, /runtime 会 503);
+    # hex /chat 是否挂载由模块级 API_MODE 决定。
+    # Wire the MemoryLifecycleManager into ChatService so run_turn drives
+    # set_current_turn (F4 — production caller for source_turn_id).
+    from backend.api.hex_routes import get_chat_service
 
-        # Wire the MemoryLifecycleManager into ChatService so run_turn drives
-        # set_current_turn (F4 — production caller for source_turn_id).
-        app.dependency_overrides[get_chat_service] = lambda: _build_chat_service(
-            lifecycle=lifecycle
-        )
-        app.state.chat_service = _build_chat_service(lifecycle=lifecycle)
-        logger.info("Hex 模式：ChatService 已装配（/chat 走 hex_routes，其余走 legacy_routes）")
-    else:
-        logger.info("Legacy 模式：全部端点走 legacy_routes")
+    app.dependency_overrides[get_chat_service] = lambda: _build_chat_service(
+        lifecycle=lifecycle
+    )
+    app.state.chat_service = _build_chat_service(lifecycle=lifecycle)
+    logger.info(
+        "ChatService 已装配 (runtime 与 hex /chat 共享); API_MODE=%s (路由挂载见模块级常量)",
+        API_MODE,
+    )
 
     yield
 
@@ -792,6 +792,12 @@ async def add_request_id_header(request: Request, call_next):
     return response
 
 
+# S7-1 (P7): API_MODE 单一读取点。此前 lifespan (默认 "hex") 与路由挂载
+# (默认 "legacy") 各读各的环境变量, 默认部署会装配 ChatService 却从不挂载
+# hex 路由。现在: ChatService 无条件装配 (runtime 依赖), 本常量只决定
+# hex /chat 是否挂载; 缺省 "legacy" 保持现行 wire 行为不变。
+API_MODE = os.environ.get("API_MODE", "legacy").lower()
+
 # 路由装配（P2 双轨）：
 # - API_MODE=hex：先注册 hex（/chat 走 ChatService），
 #   再注册 legacy（/sessions、/memory、/evolution、/interrupt）。
@@ -799,14 +805,9 @@ async def add_request_id_header(request: Request, call_next):
 # - API_MODE=legacy（默认）：仅注册 legacy。
 # 通用 LLM 代理（/api/v1/llm/*）在两种模式下都注册 — 浏览器到 LLM 的
 # 测试连接 / 拉取模型调用都走它，与 API_MODE 无关（见 llm_proxy_routes.py）。
-#
-# === PG-A1 GREEN-2 临时变更（2026-06-13） ===
-# 默认 API_MODE 从 "hex" 改为 "legacy"。原因:hex_routes 新增了 6 个
-# sessions 端点（PG-A1 端点迁移），但本 PR 不装配 SessionService DI。
-# 若保持默认 hex，新 6 端点会拦截 /sessions 流量并因 DI 缺失而 500，
-# 破坏现有 legacy 集成测试。临时切到 legacy 保证 production 走老路径。
-# 后续 PR 真正装配 SessionService 后，会把默认值改回 "hex"。
-# 跟踪 issue/PR 见 docs/plans/2026-06-13_full-quality-optimization-v2.md。
+# PG-A1 GREEN-2 的"临时切 legacy"已于 S7-1 (P7) 收口为单一读取点;
+# 缺省仍为 "legacy", hex 的 /sessions 端点已随 ChatService DI 装配可安全启用
+# (显式 API_MODE=hex 时)。
 app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/v1/theme")
 app.include_router(office_router, prefix="/api/v1")
@@ -837,14 +838,13 @@ app.include_router(updates_router_module.router, prefix="/api/v1")
 # (与 BashTool 同等门禁), 见 docs/plans/2026-09-04_local-development-assistant.md
 app.include_router(runtime_router, prefix="/api/v1")
 
-_API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"
-if _API_MODE == "hex":
+if API_MODE == "hex":
     app.include_router(hex_router, prefix="/api/v1")
     app.include_router(legacy_router, prefix="/api/v1")
-elif _API_MODE == "legacy":
+elif API_MODE == "legacy":
     app.include_router(legacy_router, prefix="/api/v1")
 else:
-    raise ValueError(f"API_MODE must be 'hex' or 'legacy', got: {_API_MODE!r}")
+    raise ValueError(f"API_MODE must be 'hex' or 'legacy', got: {API_MODE!r}")
 
 # Phase 8: scheduled tasks — mounted for both API modes (independent feature)
 app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v1")
