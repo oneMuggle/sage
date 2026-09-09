@@ -15,11 +15,11 @@ import functools
 import json
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from backend.data.database import _SQLITE_LOCK
-from backend.data.orch_run_repo import OrchRunRepository
+from backend.data.orch_run_repo import OrchRun, OrchRunRepository
 from backend.data.orch_task_repo import OrchTaskRepository
 
 router = APIRouter(prefix="/orch", tags=["orchestration-runs"])
@@ -54,6 +54,12 @@ class OrchRunDetail(BaseModel):
     original_request: Optional[str] = None
 
 
+class SessionRunsResponse(BaseModel):
+    """C1 (2026-09-09): 会话编排 run 列表（历史任务板恢复数据源）。"""
+
+    runs: List[OrchRunDetail]
+
+
 class PlanUpdateRequest(BaseModel):
     plan: List[Dict[str, Any]] = Field()  # ≥1 行守卫
 
@@ -65,14 +71,9 @@ class PlanUpdateRequest(BaseModel):
         return value
 
 
-@router.get("/runs/{run_id}", response_model=OrchRunDetail)
-@with_db_lock
-def get_run(run_id: str) -> OrchRunDetail:
-    run_repo = OrchRunRepository()
+def _run_detail(run: OrchRun) -> OrchRunDetail:
+    """C1 (2026-09-09): OrchRun → OrchRunDetail（get_run / 会话列表共用）。"""
     task_repo = OrchTaskRepository()
-    run = run_repo.get(run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="run not found")
     plan = json.loads(run.plan_json).get("tasks", [])
     tasks = [
         {
@@ -87,7 +88,7 @@ def get_run(run_id: str) -> OrchRunDetail:
             "started_at": t.started_at,
             "finished_at": t.finished_at,
         }
-        for t in task_repo.list_by_run(run_id)
+        for t in task_repo.list_by_run(run.run_id)
     ]
     return OrchRunDetail(
         run_id=run.run_id,
@@ -98,6 +99,31 @@ def get_run(run_id: str) -> OrchRunDetail:
         tasks=tasks,
         original_request=run.original_request,
     )
+
+
+@router.get("/runs", response_model=SessionRunsResponse)
+@with_db_lock
+def list_session_runs(
+    session_id: str = Query(..., min_length=1),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> SessionRunsResponse:
+    """C1 (2026-09-09): 按会话列编排 run（新→旧），历史任务板恢复数据源。
+
+    Wave 4 曾删除无过滤的 ``GET /runs``；本端点是带 session_id 归属过滤的
+    窄口 —— 只返回该会话自己的 run（plan + tasks + 状态）。
+    """
+    runs = OrchRunRepository().list_by_session(session_id, limit=limit)
+    return SessionRunsResponse(runs=[_run_detail(r) for r in runs])
+
+
+@router.get("/runs/{run_id}", response_model=OrchRunDetail)
+@with_db_lock
+def get_run(run_id: str) -> OrchRunDetail:
+    run_repo = OrchRunRepository()
+    run = run_repo.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    return _run_detail(run)
 
 
 @router.post("/runs/{run_id}/plan")

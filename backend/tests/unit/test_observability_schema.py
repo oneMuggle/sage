@@ -6,7 +6,11 @@ from backend.data.database import Database
 
 
 def test_observability_tables_are_initialized(tmp_path):
-    """数据库初始化应创建事件、步骤和上下文表及关键索引。"""
+    """数据库初始化应创建事件和上下文表及关键索引。
+
+    C3 (2026-09-09): orch_steps 死表退役（repo 零生产写入，step 事实由
+    orch_events 的 task.step.* payload 承载），DDL 已移除。
+    """
     db = Database(str(tmp_path / "observability.db"))
     db.init_db()
     conn = db.get_connection()
@@ -16,7 +20,8 @@ def test_observability_tables_are_initialized(tmp_path):
             "SELECT name FROM sqlite_master WHERE type = 'table'"
         ).fetchall()
     }
-    assert {"orch_events", "orch_steps", "orch_context_messages"} <= tables
+    assert {"orch_events", "orch_context_messages"} <= tables
+    assert "orch_steps" not in tables
 
     event_columns = {
         row[1] for row in conn.execute("PRAGMA table_info(orch_events)").fetchall()
@@ -38,7 +43,6 @@ def test_observability_tables_are_initialized(tmp_path):
         ).fetchall()
     }
     assert "idx_orch_events_run_seq" in indexes
-    assert "idx_orch_steps_task_seq" in indexes
 
 
 def test_observability_schema_is_idempotent(tmp_path):

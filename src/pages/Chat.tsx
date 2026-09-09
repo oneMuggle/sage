@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { PlanCard } from '../components/PlanCard';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
+import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
 import { useChat } from '../features/send-message/useChat';
 import { sessionApi, learnApi, type ChatOfficeRef } from '../shared/api';
 import { orchRunClient } from '../shared/api/orchRunClient';
@@ -214,6 +215,69 @@ export function Chat() {
       loadMessages(currentSessionId);
     }
   }, [currentSessionId, loadMessages]);
+
+  // C1 (2026-09-09): 历史任务板恢复 —— 会话切换时拉取该会话最近的编排
+  // run（plan + tasks + 终态），重开历史会话也能看到当时的任务树与结果
+  // 预览（时间线经既有 snapshot/events 回放通道按 runId 订阅）。会话正在
+  // 流式中（直播板已存在）时跳过，避免覆盖实时状态。
+  useEffect(() => {
+    if (!currentSessionId) return;
+    let cancelled = false;
+    const { getState } = useChatStreamStore;
+    const slots = getState().sessions[currentSessionId];
+    if (slots?.streaming || slots?.taskBoard) return;
+    orchRunClient
+      .listSessionRuns(currentSessionId)
+      .then((resp) => {
+        if (cancelled) return;
+        const run = resp.runs[0];
+        if (!run || run.tasks.length === 0) return;
+        type PlanItem = TaskBoardState['plan'][number];
+        const plan = run.plan as unknown as PlanItem[];
+        const statuses: TaskBoardState['statuses'] = {};
+        const progress = { total: 0, done: 0, running: 0, queued: 0, failed: 0, cancelled: 0 };
+        progress.total = run.tasks.length;
+        for (const task of run.tasks) {
+          const status = String(task.status ?? 'queued');
+          const taskId = String(task.task_id);
+          statuses[taskId] = {
+            state: 'task_status',
+            run_id: run.run_id,
+            task_id: taskId,
+            status: status as TaskBoardState['statuses'][string]['status'],
+            agent_id: String(task.agent_id ?? ''),
+            goal: String(task.goal ?? ''),
+            error: (task.error as string | null) ?? null,
+            output_preview: (task.output_preview as string | null) ?? null,
+            retry_count: (task.retry_count as number) ?? 0,
+          };
+          if (status in progress) progress[status as keyof typeof progress] += 1;
+        }
+        // 动态加任务的 run 可能 plan_json 为空 —— 从任务行反推 plan 保证任务树可渲染
+        const effPlan: PlanItem[] =
+          plan.length > 0
+            ? plan
+            : run.tasks.map((task) => ({
+                task_id: String(task.task_id),
+                agent_id: String(task.agent_id ?? ''),
+                goal: String(task.goal ?? ''),
+              }));
+        const board: TaskBoardState = {
+          runId: run.run_id,
+          plan: effPlan,
+          statuses,
+          progress,
+          dispatchedAt: run.created_at,
+        };
+        useChatStreamStore.getState().setTaskBoard(currentSessionId, board);
+      })
+      .catch(() => {
+        /* 历史恢复是增强能力：失败静默（无编排历史的常态路径） */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSessionId]);
 
   // Auto-send pending message passed from Welcome page via router state
   const pendingMessage = (location.state as { pendingMessage?: string } | null)?.pendingMessage;
