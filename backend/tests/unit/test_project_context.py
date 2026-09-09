@@ -133,3 +133,30 @@ def test_symlink_within_workspace_is_allowed(tmp_path):
 
     assert len(ctx.entries) == 1
     assert ctx.entries[0].content == "legit project notes"
+
+
+def test_agents_md_discovered_as_lowest_priority(tmp_path):
+    """C-1 (round5 批次 C): AGENTS.md 被发现, 但同级优先级低于 SAGE/CLAUDE。"""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "AGENTS.md").write_text("agents rules", encoding="utf-8")
+
+    ctx = discover_project_context(workspace)
+
+    assert len(ctx.entries) == 1
+    assert ctx.entries[0].source == "agents_md"
+    assert ctx.entries[0].content == "agents rules"
+
+
+def test_agents_md_loses_to_sage_and_claude_at_same_level(tmp_path):
+    """同级三文件齐备: SAGE > CLAUDE > AGENTS。"""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "SAGE.md").write_text("sage rules", encoding="utf-8")
+    (workspace / "CLAUDE.md").write_text("claude rules", encoding="utf-8")
+    (workspace / "AGENTS.md").write_text("agents rules", encoding="utf-8")
+
+    ctx = discover_project_context(workspace)
+
+    assert [e.source for e in ctx.entries] == ["sage_md", "claude_md", "agents_md"]
+    assert "AGENTS.md" in RENDER_HEADER
