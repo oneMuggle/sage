@@ -42,6 +42,14 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+#: 公式单元格缺缓存值时附加在读取结果里的一行提示（openpyxl 不能计算公式，
+#: 缓存值要等 Excel/LibreOffice 打开后重算写入）。
+_FORMULA_CACHE_NOTE = "公式计算值需在 Excel 中打开后生效"
+
+#: 数值类型元组常量：py38 兼容（isinstance 的 ``int | float`` 写法需 3.10+），
+#: 同时绕开 ruff UP038（同 errors.py 的 _WRITE_FAILURE_ERRORS 惯例）。
+_NUMERIC_TYPES = (int, float)
+
 
 def _cell_value_to_str(value: Any) -> str:
     """Convert any cell value to its string representation.
@@ -59,7 +67,7 @@ def _cell_value_to_str(value: Any) -> str:
     if isinstance(value, bool):
         # bool is subclass of int; check first
         return "true" if value else "false"
-    if isinstance(value, int | float):
+    if isinstance(value, _NUMERIC_TYPES):
         return str(value)
     # datetime / date
     try:
@@ -92,6 +100,41 @@ def _extract_sheet_rows(ws) -> tuple[List[List[str]], int, int]:
             rows.append(row)
 
     return rows, max_row, max_col
+
+
+def _extract_sheet_formulas(ws_formula, ws_values) -> tuple[List[str], bool]:
+    """Collect formula cells as ``CELL=formula_text`` entries + missing-cache flag.
+
+    ``ws_formula`` is the ``data_only=False`` worksheet (formulas visible),
+    ``ws_values`` the matching ``data_only=True`` one (cached values only).
+    openpyxl cannot evaluate formulas — a cached value is present only when
+    Excel/LibreOffice already saved the file, so it is appended where
+    available:
+
+        no cache   ->  "B4=SUM(B2:B3)"
+        cache hit  ->  "B4=SUM(B2:B3) → 30"
+
+    Returns ``(entries, any_cache_missing)``. Array formulas (stored as
+    ``ArrayFormula`` objects, not str) are skipped.
+    """
+    entries: List[str] = []
+    any_cache_missing = False
+    for row in ws_formula.iter_rows():
+        for cell in row:
+            value = cell.value
+            if not isinstance(value, str) or not value.startswith("="):
+                continue
+            cached = ws_values.cell(row=cell.row, column=cell.column).value
+            # 去掉开头的 '='，用单个 '=' 连接坐标 → "B4=SUM(B2:B3)"
+            body = value[1:]
+            if cached is None:
+                entries.append(f"{cell.coordinate}={body}")
+                any_cache_missing = True
+            else:
+                entries.append(
+                    f"{cell.coordinate}={body} → {_cell_value_to_str(cached)}"
+                )
+    return entries, any_cache_missing
 
 
 def _build_xlsx_summary(
@@ -132,6 +175,7 @@ def read_xlsx(
     workspace_path: str = "",
     generated_filename: Optional[str] = None,
     original_filename: Optional[str] = None,
+    include_formulas: bool = False,
 ) -> OfficeExcelReadResult:
     """Read a .xlsx file and return its structured content.
 
@@ -141,10 +185,16 @@ def read_xlsx(
         workspace_path: Required by storage layer; pass empty string for read-only tests.
         generated_filename: Filename as stored in workspace/office/<id>/.
         original_filename: User's uploaded filename.
+        include_formulas: 公式视图（Item 1.4）。True 时再加载一份
+            ``data_only=False`` 工作簿，把每个公式单元格以
+            ``CELL=formula_text`` 形式列进该 sheet 的 ``formulas``
+            （有缓存值时为 ``CELL=formula → cached``）；存在无缓存值的
+            公式时在 ``note`` 附上「公式计算值需在 Excel 中打开后生效」。
+            openpyxl 不能自行计算公式，缺缓存值属正常现象。
 
     Returns:
         OfficeExcelReadResult with summary + sheets array (each with name + rows
-        + max_row + max_col).
+        + max_row + max_col, plus formulas/note when ``include_formulas``).
 
     Raises:
         OfficeFileNotFoundError: file doesn't exist.
@@ -164,15 +214,35 @@ def read_xlsx(
         # openpyxl raises zipfile.BadZipFile, lxml.etree.XMLSyntaxError, etc.
         raise OfficeParseError(f"Failed to parse XLSX: {exc}", file_path=file_path) from exc
 
+    wb_formulas = None
+    if include_formulas:
+        try:
+            # data_only=False: 公式文本可见（缓存值走上面的 wb）
+            wb_formulas = load_workbook(str(file_path), data_only=False)
+        except Exception as exc:
+            raise OfficeParseError(f"Failed to parse XLSX: {exc}", file_path=file_path) from exc
+
     sheets: List[ExcelSheetContent] = []
     for ws in wb.worksheets:
         rows, max_row, max_col = _extract_sheet_rows(ws)
+        formulas: Optional[List[str]] = None
+        note: Optional[str] = None
+        if wb_formulas is not None and ws.title in wb_formulas.sheetnames:
+            entries, any_cache_missing = _extract_sheet_formulas(
+                wb_formulas[ws.title], ws
+            )
+            if entries:
+                formulas = entries
+                if any_cache_missing:
+                    note = _FORMULA_CACHE_NOTE
         sheets.append(
             ExcelSheetContent(
                 name=ws.title,
                 rows=rows,
                 max_row=max_row,
                 max_col=max_col,
+                formulas=formulas,
+                note=note,
             )
         )
 
@@ -196,6 +266,34 @@ def read_xlsx(
 # ──────────────────────────────────────────────────────────────────────
 
 
+def _mark_formula_cells(wb) -> int:
+    """把以 '=' 开头的字符串单元格改写为真正的公式（Item 1.4）。
+
+    openpyxl 只在 ``Cell.value`` 赋值时按 '=' 前缀推断公式类型；pandas
+    ``df.to_excel`` 的写入路径（随版本不同）可能把这些单元格留成纯文本。
+    生成完成后统一兜底：对仍是字符串且以 '=' 开头的单元格重新赋值一次，
+    触发 openpyxl 的公式类型标记。返回改写数量（诊断用）。
+
+    Write-only 工作簿（pandas 部分版本使用）不可随机访问单元格，其
+    append 路径本身按赋值语义写入（'=' 前缀已是公式），直接跳过。
+    """
+    if getattr(wb, "write_only", False):
+        return 0
+    count = 0
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                value = cell.value
+                if (
+                    isinstance(value, str)
+                    and value.startswith("=")
+                    and cell.data_type != "f"
+                ):
+                    cell.value = value  # 重新赋值触发公式类型推断
+                    count += 1
+    return count
+
+
 def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .xlsx file from structured Pydantic input.
 
@@ -205,6 +303,9 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
 
     Per user Q6, uses both openpyxl (low-level sheet creation) and pandas
     (DataFrame-based row writing for ergonomic bulk insert).
+
+    Item 1.4: 以 '=' 开头的字符串单元格写为真正的 Excel 公式（隐式约定，
+    无需开关）；读取侧用 ``read_xlsx(include_formulas=True)`` 查看公式。
     """
     import uuid
 
@@ -290,6 +391,9 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
                     index=False,
                     header=has_headers,
                 )
+            # Item 1.4: '=' 前缀的字符串单元格统一兜底为真公式
+            # （无公式时零改动；见 _mark_formula_cells）。
+            _mark_formula_cells(writer.book)
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate XLSX: {exc}", file_path=output_path) from exc
 

@@ -20,7 +20,7 @@ Public surface:
     .list(conn, session_id, binding_generation, query=None,
           doc_type=None, limit=50) -> List[dict]
     .read(conn, session_id, binding_generation, doc_id,
-          section="summary") -> dict
+          section="summary", formula_mode=False) -> dict
     .create(conn, session_id, binding_generation, *,
             doc_type, filename, content) -> dict
 """
@@ -81,8 +81,12 @@ def _serialize_summary(summary: OfficeDocumentSummary) -> Dict[str, Any]:
     return data
 
 
-def _read_doc(doc: OfficeDocumentSummary) -> Dict[str, Any]:
+def _read_doc(doc: OfficeDocumentSummary, formula_mode: bool = False) -> Dict[str, Any]:
     """Dispatch to the appropriate reader and return a JSON-safe dict.
+
+    ``formula_mode`` only affects Excel documents (Item 1.4 公式视图):
+    the xlsx reader additionally reports formula cells as
+    ``CELL=formula_text`` entries. Ignored for word/ppt.
 
     Raises:
         OSError: the on-disk file is missing or unreadable. The tool
@@ -123,6 +127,7 @@ def _read_doc(doc: OfficeDocumentSummary) -> Dict[str, Any]:
             workspace_path=doc.workspace_path,
             generated_filename=doc.generated_filename,
             original_filename=doc.original_filename,
+            include_formulas=formula_mode,
         )
         return result.model_dump(mode="json")
     raise ValueError(f"unsupported doc_type: {doc_type}")
@@ -241,13 +246,16 @@ class OfficeToolService:
     # read
     # ──────────────────────────────────────────────────────────────
 
-    def _read_content(self, doc: OfficeDocumentSummary) -> Dict[str, Any]:
+    def _read_content(self, doc: OfficeDocumentSummary, formula_mode: bool = False) -> Dict[str, Any]:
         """Read the document body, applying ``max_read_bytes`` cap.
 
         Returns either:
             ``{"ok": True, "data": <parsed dict>}`` on success, or
             ``{"ok": False, "error": {...}}`` on failure (file too large,
             missing on disk, parser error).
+
+        ``formula_mode`` forwards to the Excel reader's 公式视图
+        (``read_xlsx(include_formulas=...)``); ignored for other doc types.
         """
         # Disk-read cap. Applied before invoking the parser so absurdly
         # large Office files (a 50MB .pptx might yield only 100KB of text,
@@ -269,7 +277,7 @@ class OfficeToolService:
             pass  # Fall through to _read_doc which handles missing files.
 
         try:
-            full = _read_doc(doc)
+            full = _read_doc(doc, formula_mode=formula_mode)
         except (OSError, Exception):
             return {
                 "ok": False,
@@ -306,6 +314,7 @@ class OfficeToolService:
         binding_generation: int,
         doc_id: str,
         section: str = "summary",
+        formula_mode: bool = False,
     ) -> Dict[str, Any]:
         """Read a single Office document with bounded output.
 
@@ -316,6 +325,11 @@ class OfficeToolService:
             ``"all"``     -- return summary + full content; if it exceeds
                             ``max_output_bytes``, degrade to bounded head
                             with ``truncated=True``.
+
+        ``formula_mode`` (Excel only, Item 1.4): with ``section="head"`` /
+        ``"all"``, additionally report formula cells as ``CELL=formula_text``
+        entries per sheet (plus a note when cached values are missing —
+        openpyxl cannot compute formulas). ``section="summary"`` ignores it.
 
         Failures (unknown doc, archived, stale generation, missing file)
         all collapse to the same ``document_not_found`` / ``read_failed``
@@ -332,7 +346,7 @@ class OfficeToolService:
                 "content": {"summary": _serialize_summary(doc)},
             }
 
-        content = self._read_content(doc)
+        content = self._read_content(doc, formula_mode=formula_mode)
         if not content["ok"]:
             return {"success": False, "error": content["error"]}
 

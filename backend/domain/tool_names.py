@@ -47,6 +47,8 @@ WEB_TOOLS = WEB_SEARCH_TOOLS + WEB_FETCH_TOOLS
 MEMORY_TOOLS = ("memory_search", "memory_save")
 
 # Office CRUD 七件套（PR-3 补 office_archive — soft-delete，与 office_restore 配对）
+# + 2026-09 Office Parity Batch-1：把 HTTP 端点已验证的 PDF 三类能力
+# （读文本 / 生成 / 表单读写）与 Word 模板两件套（分析 / 填充）接入工具面。
 OFFICE_TOOLS = (
     "office_list",
     "office_read",
@@ -55,6 +57,12 @@ OFFICE_TOOLS = (
     "office_delete",
     "office_restore",
     "office_archive",
+    "office_read_pdf",
+    "office_generate_pdf",
+    "office_read_pdf_form",
+    "office_fill_pdf_form",
+    "office_analyze_word_template",
+    "office_fill_word_template",
 )
 
 # 本地开发环境助手（2026-09-04）：只读探测/诊断两件 + 审批后执行一件。

@@ -23,8 +23,9 @@ the LLM-facing version):
 
     excel:
         set_cells   {sheet, cells:[{addr, value}]} — A1 notation; numeric-looking
-                      strings are converted (Excel-typing semantics)
-        append_rows {sheet, rows}
+                      strings are converted (Excel-typing semantics); strings
+                      starting with '=' are written as formulas
+        append_rows {sheet, rows}                  — '=' strings become formulas
         add_sheet   {name, headers?, rows?}
         rename_sheet{from, to}
         delete_sheet{name}                          — refuses to delete the last sheet
@@ -131,10 +132,17 @@ def _coerce_scalar(value: Any) -> Any:
     trips through the string-typed reader output don't turn a numeric
     column into text. Everything else (bool, numbers, None, other
     strings — including leading-zero strings like "007") passes through.
+
+    公式保留（Item 1.4）：以 '=' 开头的字符串原样返回（仅去掉首尾空白，
+    保证 openpyxl 能识别 '=' 前缀），openpyxl 赋值时会将其标记为公式
+    单元格（data_type='f'）。必须在数值 coerce 之前短路，避免任何路径
+    把公式文本改写成数字/文本。
     """
     if not isinstance(value, str):
         return value
     text = value.strip()
+    if text.startswith("="):
+        return text
     if _INT_RE.match(text):
         return int(text)
     if _FLOAT_RE.match(text):
@@ -376,8 +384,11 @@ def update_xlsx(file_path: Path, ops: List[Dict[str, Any]]) -> Tuple[bool, List[
     """Apply ops to a .xlsx in place. Returns ``(saved, per_op_results)``.
 
     The workbook is loaded with ``data_only=False`` so existing formulas
-    survive the edit. Note openpyxl does not preserve Excel's cached
-    formula results when saving — apps recompute on open.
+    survive the edit, and ``set_cells`` / ``append_rows`` / ``add_sheet``
+    write '=' prefixed strings as real formulas (Item 1.4, see
+    :func:`_coerce_scalar`). Note openpyxl does not preserve Excel's cached
+    formula results when saving — apps recompute on open, and
+    ``read_xlsx(include_formulas=True)`` is the way to inspect formula text.
     """
     from openpyxl import load_workbook
 

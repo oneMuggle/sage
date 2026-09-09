@@ -41,6 +41,7 @@ _DOC_TYPE_EXTENSIONS = {
     OfficeDocType.PPT: "pptx",
     OfficeDocType.WORD: "docx",
     OfficeDocType.EXCEL: "xlsx",
+    OfficeDocType.PDF: "pdf",
 }
 
 
