@@ -1,11 +1,13 @@
 """@ mention → office digest → LLM context block 解析器。
 
-M1: 单文档 `@foo.pptx` 等自动注入 pptx/docx/xlsx 摘要到 system prompt。
+M1: 单文档 `@foo.pptx` 等自动注入 pptx/docx/xlsx/pdf 摘要到 system prompt。
 M2: 多文档按出现顺序拼接, 块首 `=== name ===` 分隔。
 
 设计 (per spec §3.2):
 - 纯函数模块, 无 FastAPI / DB 依赖
-- 复用 `backend.office.{ppt,word,excel}` 的 read_ppt/read_docx/read_xlsx 纯函数
+- 复用 `backend.office.{ppt,word,excel,pdf}` 的 read_ppt/read_docx/read_xlsx/read_pdf 纯函数
+- digest 有每文件字节预算 (MAX_ATTACHMENT_DIGEST_BYTES): word 保 heading/表格全量
+  截正文段, excel 自适应行数 + 数值列统计, pdf 按页预览, 超出部分显式标注截断
 - 失败降级: 单个 mention 抛 OfficeError 时静默 skip + log warning (不污染整块)
 - 与现有 office_ppt_read / office_word_read / office_excel_read IPC endpoint 不同:
   * 不触发 _persist_read_summary (即不写 DB)
@@ -17,6 +19,7 @@ Win7 兼容: 无 walrus, 无 PEP 604 union, str 类型注解仅在必须时用 (
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -27,6 +30,7 @@ from typing import FrozenSet, List, Optional
 from backend.office.errors import OfficeError, OfficePathError, OfficeSizeLimitError
 from backend.office.excel import read_xlsx
 from backend.office.path_safety import resolve_within
+from backend.office.pdf import read_pdf
 from backend.office.ppt import read_ppt
 from backend.office.storage import validate_workspace
 from backend.office.word import read_docx
@@ -48,26 +52,150 @@ def _digest_ppt(file_path: str, workspace: str) -> str:
     return "\n".join(lines)
 
 
+def _render_word_paragraphs(paragraphs) -> List[str]:
+    """段落流 → markdown 行: heading 映射 #/##/###, 列表映射 - / 1., 其余全段原样。
+
+    编号列表的序号按连续出现次序重排 (python-docx 拿不到真实编号), 遇到
+    非 List Number 段落即复位。
+    """
+    lines: List[str] = []
+    number = 0
+    for para in paragraphs:
+        text = para.text.strip()
+        if not text:
+            continue
+        style = para.style or ""
+        if para.level > 0:
+            lines.append("#" * min(para.level, 6) + " " + text)
+            number = 0
+        elif "List Number" in style:
+            number += 1
+            lines.append(f"{number}. {text}")
+        elif "List" in style:  # List Bullet / List Paragraph 等
+            lines.append(f"- {text}")
+            number = 0
+        else:
+            lines.append(text)
+            number = 0
+    return lines
+
+
+def _render_word_table(rows) -> List[str]:
+    """表格 → GFM markdown 表 (首行作表头, 竖线转义, 单元格内换行压成空格)。"""
+    if not rows:
+        return []
+    width = max(len(r) for r in rows)
+
+    def _cell(value: str) -> str:
+        return str(value).replace("\n", " ").replace("|", "\\|").strip()
+
+    def _row_cells(row) -> List[str]:
+        cells = [_cell(c) for c in row]
+        cells.extend([""] * (width - len(cells)))  # 短行补空单元格对齐
+        return cells
+
+    lines = ["| " + " | ".join(_row_cells(rows[0])) + " |"]
+    lines.append("| " + " | ".join(["---"] * width) + " |")
+    for row in rows[1:]:
+        lines.append("| " + " | ".join(_row_cells(row)) + " |")
+    return lines
+
+
 def _digest_word(file_path: str, workspace: str) -> str:
-    """Return per-paragraph first sentence."""
+    """Return structured markdown digest: heading 层级 + 全段文本 + 列表 + GFM 表格。
+
+    Budget: heading 与表格始终全量保留, 正文段落累计超
+    MAX_ATTACHMENT_DIGEST_BYTES 时从截断点起丢弃, 并以
+    `[…已截断，共 N 段]` 标注被丢弃的正文段数。
+    """
     result = read_docx(
         file_path=Path(file_path),
         workspace_path=workspace,
         generated_filename=os.path.basename(file_path),
     )
     lines: List[str] = []
-    for para in result.paragraphs:
-        text = para.text.strip()
-        if not text:
+    dropped = 0
+    truncated = False
+    used = 0
+    for line in _render_word_paragraphs(result.paragraphs):
+        is_heading = line.startswith("#")
+        cost = len(line.encode("utf-8")) + 1
+        if not truncated and (is_heading or used + cost <= MAX_ATTACHMENT_DIGEST_BYTES):
+            lines.append(line)
+            used += cost
             continue
-        first = text.split(".", 1)[0].strip()
-        # 即使整段无句号, 也加 '.' 后缀让 LLM 识别句子边界
-        lines.append(first + ".")
+        # 超 budget: 正文行计入截断计数, heading 仍保留维持文档骨架
+        truncated = True
+        if is_heading:
+            lines.append(line)
+            used += cost
+        else:
+            dropped += 1
+    if truncated and dropped:
+        lines.append(f"[…已截断，共 {dropped} 段]")
+    for table in result.tables:
+        table_lines = _render_word_table(table.rows)
+        if not table_lines:
+            continue
+        if lines:
+            lines.append("")  # GFM 表格前的空行分隔
+        lines.extend(table_lines)
     return "\n".join(lines)
 
 
+def _fmt_num(value: float) -> str:
+    """统计值展示: 整数值不带小数点, 浮点保留 4 位有效数字。"""
+    if abs(value) < 1e15 and value == int(value):
+        return str(int(value))
+    return format(value, ".4g")
+
+
+def _sheet_numeric_stats(rows) -> List[str]:
+    """数值列统计 (纯 Python, 不引入 pandas): count/non_null/min/max/mean。
+
+    仅当某列的全部非空单元格都能 float() 解析时才视为数值列; 含 nan/inf
+    一律按文本列跳过。rows[0] 视为表头, 统计范围是数据行。
+    """
+    if len(rows) < 2:
+        return []
+    header, data = rows[0], rows[1:]
+    width = max(len(r) for r in rows)
+    lines: List[str] = []
+    for col in range(width):
+        values: List[float] = []
+        non_null = 0
+        numeric = True
+        for row in data:
+            cell = row[col].strip() if col < len(row) else ""
+            if not cell:
+                continue
+            non_null += 1
+            try:
+                value = float(cell)
+            except ValueError:
+                numeric = False
+                break
+            if not math.isfinite(value):
+                numeric = False
+                break
+            values.append(value)
+        if not numeric or not values:
+            continue
+        name = header[col].strip() if col < len(header) else f"col{col + 1}"
+        lines.append(
+            f"stat {name}: count={len(values)}, non_null={non_null}, "
+            f"min={_fmt_num(min(values))}, max={_fmt_num(max(values))}, "
+            f"mean={_fmt_num(sum(values) / len(values))}"
+        )
+    return lines
+
+
 def _digest_excel(file_path: str, workspace: str) -> str:
-    """Return sheet names + first 5 rows per sheet as TSV."""
+    """Return per-sheet digest: 行列数 + 表头 + 数值列统计 + 自适应行数 TSV。
+
+    行数不再硬编码 5: 在 MAX_ATTACHMENT_DIGEST_BYTES 预算内能放多少数据行
+    就放多少, 放不下的行数以 `[…已截断，共 N 行]` 标注。
+    """
     result = read_xlsx(
         file_path=Path(file_path),
         workspace_path=workspace,
@@ -75,12 +203,56 @@ def _digest_excel(file_path: str, workspace: str) -> str:
     )
     sheets = result.sheets
     names = [s.name for s in sheets]
-    lines: List[str] = [f"sheets: {', '.join(names)}"]
+    overview = f"sheets: {', '.join(names)}"
+    lines: List[str] = [overview]
+    used = len(overview.encode("utf-8")) + 1
     for sheet in sheets:
-        rows = sheet.rows[:5]
-        lines.append(f"--- {sheet.name} (top {len(rows)} rows) ---")
-        for row in rows:
-            lines.append("\t".join(row))
+        # 固定段: 分隔行 (含行列数) + 表头行 + 数值列统计, 全量保留
+        fixed = [f"--- {sheet.name} ({sheet.max_row} rows x {sheet.max_col} cols) ---"]
+        if sheet.rows:
+            fixed.append("\t".join(sheet.rows[0]))
+        fixed.extend(_sheet_numeric_stats(sheet.rows))
+        lines.extend(fixed)
+        used += sum(len(line.encode("utf-8")) + 1 for line in fixed)
+        data_rows = sheet.rows[1:] if sheet.rows else []
+        shown = 0
+        for row in data_rows:
+            tsv = "\t".join(row)
+            cost = len(tsv.encode("utf-8")) + 1
+            if used + cost > MAX_ATTACHMENT_DIGEST_BYTES:
+                break
+            lines.append(tsv)
+            used += cost
+        if shown < len(data_rows):
+            lines.append(f"[…已截断，共 {len(data_rows) - shown} 行]")
+    return "\n".join(lines)
+
+
+def _digest_pdf(file_path: str, workspace: str) -> str:
+    """Return page count + per-page first-chars preview (budget-aware)。
+
+    每页压掉换行/连续空白后取前 _PDF_PAGE_PREVIEW_CHARS 字符; 整体超
+    MAX_ATTACHMENT_DIGEST_BYTES 时停止装载, 以 `[…已截断，共 N 页]` 标注。
+    """
+    result = read_pdf(
+        file_path=Path(file_path),
+        workspace_path=workspace,
+    )
+    pages = result.pages
+    overview = f"pages: {len(pages)}"
+    lines: List[str] = [overview]
+    used = len(overview.encode("utf-8")) + 1
+    for shown, page in enumerate(pages):
+        text = " ".join(page.text.split())
+        if len(text) > _PDF_PAGE_PREVIEW_CHARS:
+            text = text[:_PDF_PAGE_PREVIEW_CHARS]
+        section = f"--- page {page.page_number} ---\n{text}"
+        cost = len(section.encode("utf-8")) + 1
+        if used + cost > MAX_ATTACHMENT_DIGEST_BYTES:
+            lines.append(f"[…已截断，共 {len(pages) - shown} 页]")
+            break
+        lines.append(section)
+        used += cost
     return "\n".join(lines)
 
 
@@ -88,14 +260,22 @@ logger = logging.getLogger(__name__)
 
 _MENTION_RE = re.compile(r"(?:^|\s)@([^\s]+?)(?=\s|$)")
 
-OFFICE_EXTS: FrozenSet[str] = frozenset({".pptx", ".docx", ".xlsx"})
+OFFICE_EXTS: FrozenSet[str] = frozenset({".pptx", ".docx", ".xlsx", ".pdf"})
 MAX_ATTACHMENT_FILE_SIZE_BYTES = 50 * 1024 * 1024
+
+# 单文件 digest 注入 LLM 前的软字节预算 (UTF-8 计)。与上面的磁盘 50MB 硬上限
+# 语义不同: 这个管 digest 内容量, word/excel/pdf 各自按预算自适应截断。
+MAX_ATTACHMENT_DIGEST_BYTES = 8 * 1024
+
+# PDF 单页文本预览的字符上限 (整体仍受 MAX_ATTACHMENT_DIGEST_BYTES 约束)。
+_PDF_PAGE_PREVIEW_CHARS = 2000
 
 # ext → kind (M1 用)
 _EXT_TO_KIND = {
     ".pptx": "office-ppt",
     ".docx": "office-word",
     ".xlsx": "office-excel",
+    ".pdf": "office-pdf",
 }
 
 
@@ -103,7 +283,7 @@ _EXT_TO_KIND = {
 class Mention:
     raw: str  # @ 后的整段原文 (含 ext)
     path: str  # 与 raw 相同 (本轮不解析 host/relative)
-    kind: Optional[str]  # 'office-ppt'/'office-word'/'office-excel' 或 None
+    kind: Optional[str]  # 'office-ppt'/'office-word'/'office-excel'/'office-pdf' 或 None
 
 
 @dataclass
@@ -176,6 +356,8 @@ def _digest_for_kind(kind: str, file_path: str, workspace: str) -> str:
         return _digest_ppt(file_path, workspace)
     if kind == "office-word":
         return _digest_word(file_path, workspace)
+    if kind == "office-pdf":
+        return _digest_pdf(file_path, workspace)
     return _digest_excel(file_path, workspace)
 
 
@@ -187,7 +369,8 @@ def resolve_mentions(
     office_mentions = [
         mention
         for mention in mentions
-        if mention.kind in ("office-ppt", "office-word", "office-excel")
+        if mention.kind
+        in ("office-ppt", "office-word", "office-excel", "office-pdf")
     ]
     if not office_mentions:
         return []
