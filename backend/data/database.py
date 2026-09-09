@@ -5,6 +5,7 @@ SQLite 实现
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import os
@@ -26,6 +27,41 @@ logger = logging.getLogger(__name__)
 # 上,与 sync def handler 共享同一线程上下文;asyncio.Lock 只能保护
 # event loop 上的协程,看不到 worker 线程。
 _SQLITE_LOCK = threading.RLock()
+
+
+def make_with_db_lock(target_globals):
+    """构造绑定到 ``target_globals`` 命名空间的 ``with_db_lock`` 装饰器 (D3)。
+
+    背景: FastAPI 解析 handler 的 future-import 字符串注解 (body 模型) 时,
+    用 ``call.__globals__`` —— 即装饰后 wrapper 的定义模块 dict。若 wrapper
+    直接定义在 database.py, 各 routes 模块 handler 的 body 模型
+    (PlanUpdateRequest/ChatRequest 等) 会报 PydanticUndefinedAnnotation。
+
+    因此这里提供单一实现: wrapper 逻辑只写一份, 用 ``types.FunctionType``
+    把 wrapper 的 ``__globals__`` 重绑到调用方模块命名空间。注意 wrapper
+    体内引用的 ``_SQLITE_LOCK`` 也随之改为从调用方模块解析 —— 各 routes
+    模块已从本模块 import 同一对象, 语义不变。FunctionType 会丢掉
+    functools.wraps 挂上的 ``__wrapped__``/``__doc__``/``__dict__`` (FastAPI
+    签名解析沿 ``__wrapped__`` 链), 因此重建后必须再 wraps 一次。
+    """
+    import types
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            with _SQLITE_LOCK:
+                return func(*args, **kwargs)
+
+        rebound = types.FunctionType(
+            wrapper.__code__,
+            target_globals,
+            wrapper.__name__,
+            wrapper.__defaults__,
+            wrapper.__closure__,
+        )
+        return functools.wraps(func)(rebound)
+
+    return decorator
 
 
 class _LockedCursor:
@@ -1187,7 +1223,7 @@ class Database:
         backfill_semantic_fts(conn, force=fts_rebuilt)
 
         conn.commit()
-        print(f"数据库初始化完成: {self.db_path}")  # noqa: T201 (历史遗留, init 阶段一次性输出)
+        logger.info("数据库初始化完成: %s", self.db_path)  # D4 (P6): 遗留 print 收敛到 logging
 
 
 # 全局数据库实例
