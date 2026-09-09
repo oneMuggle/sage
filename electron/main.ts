@@ -190,6 +190,14 @@ let backendGeneration = 0;
 let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let backendAuthToken: string | null = null;
+// Captures the first N stderr lines emitted by the most recent backend
+// subprocess so the startup-failure dialog (alpha.18-win7 2026-09-10) can
+// show what Python printed before exiting/hanging. Without this the user
+// sees only "后端服务在 90 秒内未响应" with no actionable detail. The full
+// stderr is always written to the NDJSON log via logger.error('backend:
+// stderr'); this buffer is only the in-memory summary.
+let backendStartupStderrBuffer: string[] = [];
+const BACKEND_STARTUP_STDERR_BUFFER_LIMIT = 40;
 let updateManager: UpdateManager | null = null;
 let cleanupUpdateIpc: (() => void) | null = null;
 
@@ -277,6 +285,19 @@ let reportedBrokenInstaller = false;
  *   process — the actual cause (missing bundled Python) was hidden.
  *   We now refuse the fallback in packaged mode and tell the user what to do.
  */
+function getBackendStartupStderrSnippet(maxChars: number = 1500): string {
+  // alpha.18-win7 2026-09-10: returns the captured stderr lines as a single
+  // string, truncated to maxChars. Empty if the buffer has no data (the
+  // backend hung without printing anything — usually an event-loop block).
+  if (backendStartupStderrBuffer.length === 0) return '';
+  const joined = backendStartupStderrBuffer.join('\n');
+  if (joined.length <= maxChars) return joined;
+  // Truncate at a line boundary so we don't split a Python traceback frame.
+  const sliced = joined.slice(joined.length - maxChars);
+  const firstNewline = sliced.indexOf('\n');
+  return firstNewline >= 0 ? `…\n${sliced.slice(firstNewline + 1)}` : `…${sliced}`;
+}
+
 function spawnBackend(): ChildProcess {
   // Resolve SAGE_DB_PATH and SAGE_USER_DATA_DIR once so both packaged and
   // dev spawn paths share them. Backend prefers these env vars; falls back to:
@@ -333,6 +354,11 @@ function spawnBackend(): ChildProcess {
   backendAuthToken = process.env.SAGE_LOCAL_AUTH_TOKEN ?? randomBytes(32).toString('base64url');
   currentBackend = { generation, pid: -1, ownershipToken };
   backendLifecycle = 'starting';
+  // Reset the stderr capture buffer for this generation (alpha.18-win7
+  // 2026-09-10: surface real Python tracebacks in the startup-failure
+  // dialog instead of just "90 秒未响应"). Previous generations' stderr is
+  // already in the NDJSON log — we only keep the most recent attempt.
+  backendStartupStderrBuffer = [];
   // Task 0 review round 1, finding #6: tell the renderer the new lifecycle
   // state so BackendStatusBanner can show "starting…" before the first
   // health probe lands.
@@ -394,9 +420,17 @@ function spawnBackend(): ChildProcess {
   proc.stdout?.on('data', (b) =>
     logger.debug('backend: stdout', { line: stdoutDecoder.push(b).trim() }),
   );
-  proc.stderr?.on('data', (b) =>
-    logger.error('backend: stderr', { line: stderrDecoder.push(b).trim() }),
-  );
+  proc.stderr?.on('data', (b) => {
+    const line = stderrDecoder.push(b).trim();
+    logger.error('backend: stderr', { line });
+    // alpha.18-win7 2026-09-10: keep the first N decoded lines so the
+    // startup-failure dialog can show the user what Python actually
+    // printed. Capped to LIMIT lines × typical Python traceback fits well
+    // within 80-char lines — limit is a guardrail, not a UX knob.
+    if (backendStartupStderrBuffer.length < BACKEND_STARTUP_STDERR_BUFFER_LIMIT) {
+      backendStartupStderrBuffer.push(line);
+    }
+  });
   proc.on('exit', (code) => {
     if (!isCurrentGeneration({ generation, pid: proc.pid ?? -1, ownershipToken }, currentBackend)) {
       logger.debug('main: stale backend exit ignored', { generation, pid: proc.pid });
@@ -1888,9 +1922,17 @@ app.whenReady().then(async () => {
     });
     // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
     // User can open logs, retry the health check, or quit.
+    // alpha.18-win7 2026-09-10: include the first stderr lines we captured
+    // so the dialog shows the real Python error instead of a generic "is
+    // conda installed?" hint. If the buffer is empty (e.g. backend is hung
+    // without printing anything), fall back to the legacy hint.
+    const stderrSnippet = getBackendStartupStderrSnippet();
+    const baseDetail = stderrSnippet
+      ? `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。\n\n后端最近一次输出:\n${stderrSnippet}`
+      : `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。`;
     const choice = await showStartupFailureDialog({
       reason: `后端服务在 ${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)} 秒内未响应`,
-      detail: `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。`,
+      detail: baseDetail,
     });
     if (choice === 'retry') {
       const ready2 = await waitForBackend();
@@ -1927,7 +1969,23 @@ app.whenReady().then(async () => {
   void updateManager
     ?.onAppStartup(() => mainWindow, BACKEND_URL)
     .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
-});
+})
+  // alpha.18-win7 2026-09-10: catch synchronous throws inside the async chain.
+  // Without this, any uncaught exception (e.g. a TypeError in startup code,
+  // a misconfigured IPC handler) would be swallowed by the Promise and the
+  // app would sit at a blank screen with no diagnostic. Surface the error
+  // via the same startup-failure dialog so the user sees what went wrong
+  // and can open the log for the full traceback.
+  .catch(async (err) => {
+    logger.error('main: app.whenReady chain threw', {
+      error: String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    await showStartupFailureDialog({
+      reason: '启动过程发生未捕获异常',
+      detail: `启动时检测到未捕获异常:\n${err instanceof Error ? err.message : String(err)}\n\n详情请查看日志文件。`,
+    });
+  });
 
 app.on('window-all-closed', () => {
   // On all platforms (incl. macOS), quit when last window closes.
