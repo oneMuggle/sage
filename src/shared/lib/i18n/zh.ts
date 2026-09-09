@@ -367,6 +367,12 @@ export const zh = {
   'settings.usage.today': '今日',
   'settings.usage.refresh': '刷新',
   'settings.usage.loadFailed': '用量数据加载失败',
+  // L8 PR-A (2026-09-09): 缓存命中率与时间范围
+  'settings.usage.cacheRead': '缓存读取',
+  'settings.usage.cacheCreation': '缓存创建',
+  'settings.usage.cacheHitRate': '命中率',
+  'settings.usage.range.today': '今日',
+  'settings.usage.range.total': '累计',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
   'office.title': 'Office 文档',

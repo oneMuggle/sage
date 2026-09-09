@@ -619,6 +619,33 @@ class Database:
                 "ALTER TABLE usage_events ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0"
             )
             conn.commit()
+        # L8 缓存维度拆分 (2026-09-09 PR-A): 把单列 cached_tokens 拆为
+        # cache_read + cache_creation 两列——Anthropic cache_read 命中极便宜
+        # 而 cache_creation 略贵，合并展示无法判断 prompt cache 利用率。
+        # 同时预留流式首字节延迟 (first_token_ms) 与总延迟 (latency_ms) 字段,
+        # 后续 PR-C 写 TTFT 可观测性。
+        cursor.execute("PRAGMA table_info(usage_events)")
+        _usage_cols = [row["name"] for row in cursor.fetchall()]
+        if "cache_read_tokens" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0"
+            )
+            conn.commit()
+        if "cache_creation_tokens" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN cache_creation_tokens INTEGER NOT NULL DEFAULT 0"
+            )
+            conn.commit()
+        if "first_token_ms" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN first_token_ms INTEGER"
+            )
+            conn.commit()
+        if "latency_ms" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN latency_ms INTEGER"
+            )
+            conn.commit()
 
         # Agent 配置表 (PR-3)
         # 4 个默认 agent (primary/researcher/coder/memory_manager) 在 lifespan

@@ -375,6 +375,12 @@ export const en: Record<TranslationKey, string> = {
   'settings.usage.today': 'Today',
   'settings.usage.refresh': 'Refresh',
   'settings.usage.loadFailed': 'Failed to load usage data',
+  // L8 PR-A (2026-09-09): cache hit rate + time range
+  'settings.usage.cacheRead': 'Cache read',
+  'settings.usage.cacheCreation': 'Cache creation',
+  'settings.usage.cacheHitRate': 'Hit rate',
+  'settings.usage.range.today': 'Today',
+  'settings.usage.range.total': 'Total',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
   'office.title': 'Office Documents',

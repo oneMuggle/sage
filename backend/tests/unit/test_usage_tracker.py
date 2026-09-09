@@ -249,3 +249,95 @@ def test_session_summary_without_rows_returns_none_last(monkeypatch: pytest.Monk
     assert summary["last_cached_tokens"] is None
     assert summary["last_at_ms"] is None
     assert UsageTracker().last_request("no-such-session") is None
+
+
+# ==================== L8 PR-A (2026-09-09): cache 拆分 + hit_rate 派生 ====================
+
+
+def test_record_accepts_split_cache_fields():
+    """record() 显式接受 cache_read / cache_creation 两个拆分字段。"""
+    tracker = UsageTracker()
+    record = tracker.record(
+        "claude-sonnet-4",
+        prompt_tokens=1000,
+        completion_tokens=200,
+        cache_read_tokens=600,
+        cache_creation_tokens=400,
+    )
+    # 拆分字段落到 record 与 totals bucket
+    assert record.cache_read_tokens == 600
+    assert record.cache_creation_tokens == 400
+    totals = tracker.summary()["totals"]
+    assert totals["cache_read_tokens"] == 600
+    assert totals["cache_creation_tokens"] == 400
+
+
+def test_cache_hit_rate_derived_when_split_fields_used():
+    """eligible = prompt + cache_creation, hit_rate = cache_read / eligible。"""
+    tracker = UsageTracker()
+    # prompt=200, creation=300, read=400 → eligible=500 → 0.8
+    tracker.record(
+        "claude-sonnet-4",
+        prompt_tokens=200,
+        completion_tokens=50,
+        cache_read_tokens=400,
+        cache_creation_tokens=300,
+    )
+    summary = tracker.summary()
+    assert summary["cache_hit_rate"] == pytest.approx(0.8)
+
+
+def test_cache_hit_rate_zero_when_no_cache_interaction():
+    """无 read/creation 时 hit_rate = 0.0 (避免除零)。"""
+    tracker = UsageTracker()
+    tracker.record("gpt-4o", prompt_tokens=100, completion_tokens=10)
+    assert tracker.summary()["cache_hit_rate"] == 0.0
+
+
+def test_cache_hit_rate_legacy_cached_tokens_fallback():
+    """旧调用只填 cached_tokens, 把 cached_tokens 当作 cache_read 回退。"""
+    tracker = UsageTracker()
+    # prompt=100, cached_tokens=25 → fallback hit_rate = 25/100 = 0.25
+    tracker.record("gpt-4o", prompt_tokens=100, completion_tokens=10, cached_tokens=25)
+    assert tracker.summary()["cache_hit_rate"] == pytest.approx(0.25)
+
+
+def test_session_summary_includes_cache_split_and_hit_rate(monkeypatch: pytest.MonkeyPatch):
+    """session_summary 持久化层同样拆分 read/creation 并派生 hit_rate。"""
+    _patch_memory_db(monkeypatch)
+    tracker = UsageTracker()
+    tracker.record(
+        "claude-sonnet-4",
+        prompt_tokens=500,
+        completion_tokens=100,
+        cache_read_tokens=300,
+        cache_creation_tokens=200,
+        session_id="sess-cache",
+    )
+    summary = tracker.session_summary("sess-cache")
+    assert summary["cache_read_tokens"] == 300
+    assert summary["cache_creation_tokens"] == 200
+    # eligible = 500 + 200 = 700, hit = 300/700
+    assert summary["cache_hit_rate"] == pytest.approx(300 / 700)
+
+
+def test_today_bucket_aggregates_cache_split():
+    """today bucket 也累计 cache_read/creation 拆分。"""
+    tracker = UsageTracker()
+    tracker.record(
+        "claude-sonnet-4",
+        prompt_tokens=100,
+        completion_tokens=10,
+        cache_read_tokens=70,
+        cache_creation_tokens=30,
+    )
+    tracker.record(
+        "claude-sonnet-4",
+        prompt_tokens=50,
+        completion_tokens=5,
+        cache_read_tokens=40,
+        cache_creation_tokens=10,
+    )
+    today = tracker.summary()["today"]
+    assert today["cache_read_tokens"] == 110
+    assert today["cache_creation_tokens"] == 40

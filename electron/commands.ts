@@ -566,7 +566,14 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}`,
   },
   // M6 生态扩展: 用量/成本面板 (backend/services/usage_tracker.py 内存态)
-  usage_summary: { method: 'GET', path: () => '/api/v1/usage' },
+  // L8 PR-A (2026-09-09): 支持 range=today|total 查询参数, 默认 today。
+  usage_summary: {
+    method: 'GET',
+    path: (a) => {
+      const range = (a?.range as string) ?? 'today';
+      return `/api/v1/usage?range=${encodeURIComponent(range)}`;
+    },
+  },
   // U14 (批次 C): 会话级持久化用量
   usage_get_session: {
     method: 'GET',

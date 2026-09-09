@@ -107,7 +107,11 @@ class UsageRecord:
     completion_tokens: int
     estimated_cost_usd: Optional[float]
     at: str  # ISO-8601 (UTC)
-    cached_tokens: int = 0  # L4: prompt 中命中缓存的部分
+    cached_tokens: int = 0  # L4: prompt 中命中缓存的部分（兼容旧字段）
+    # L8 (2026-09-09 PR-A): cache 维度拆分 — Anthropic cache_read 命中极便宜
+    # 而 cache_creation 略贵，合并展示无法判断 prompt cache 利用率。
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
 
 
 def _empty_bucket() -> Dict[str, Any]:
@@ -116,6 +120,8 @@ def _empty_bucket() -> Dict[str, Any]:
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "cached_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 0,
         "estimated_cost_usd": None,
     }
 
@@ -126,11 +132,15 @@ def _accumulate(
     completion_tokens: int,
     cost: Optional[float],
     cached_tokens: int = 0,
+    cache_read_tokens: int = 0,
+    cache_creation_tokens: int = 0,
 ) -> None:
     bucket["requests"] += 1
     bucket["prompt_tokens"] += prompt_tokens
     bucket["completion_tokens"] += completion_tokens
     bucket["cached_tokens"] += cached_tokens
+    bucket["cache_read_tokens"] += cache_read_tokens
+    bucket["cache_creation_tokens"] += cache_creation_tokens
     if cost is not None:
         base = bucket["estimated_cost_usd"] or 0.0
         bucket["estimated_cost_usd"] = round(base + cost, 8)
@@ -153,14 +163,24 @@ class UsageTracker:
         completion_tokens: int,
         session_id: Optional[str] = None,
         cached_tokens: int = 0,
+        cache_read_tokens: int = 0,
+        cache_creation_tokens: int = 0,
     ) -> UsageRecord:
         """记录一次 LLM 调用; 返回生成的 UsageRecord。
 
         L8 (批次 C): 同步 best-effort 落库 (usage_events 表, 带会话维度),
         失败只 debug 日志——内存聚合与调用方永不受 DB 故障影响。
         L4: ``cached_tokens`` 参与缓存价成本折算并随记录持久化。
+        L8 PR-A (2026-09-09): ``cache_read_tokens`` / ``cache_creation_tokens``
+        拆分进入聚合与落库——Anthropic cache_read 命中极便宜，cache_creation
+        略贵，合并展示无法判断 prompt cache 利用率。
         """
         cached = max(0, int(cached_tokens or 0))
+        read = max(0, int(cache_read_tokens or 0))
+        creation = max(0, int(cache_creation_tokens or 0))
+        # 兼容旧调用方: 若只传 cached_tokens, 把全部归到 cache_read (命中态)
+        if cached and not read and not creation:
+            read = cached
         cost = estimate_cost_usd(model, prompt_tokens, completion_tokens, cached_tokens=cached)
         entry = UsageRecord(
             model=model,
@@ -170,15 +190,41 @@ class UsageTracker:
             # noqa UP017: datetime.UTC 需 py3.11+, timezone.utc 是 py3.8 兼容写法
             at=datetime.now(timezone.utc).isoformat(),  # noqa: UP017
             cached_tokens=cached,
+            cache_read_tokens=read,
+            cache_creation_tokens=creation,
         )
         day = datetime.now().strftime("%Y-%m-%d")
         with self._lock:
             self._records.append(entry)
-            _accumulate(self._totals, entry.prompt_tokens, entry.completion_tokens, cost, cached)
+            _accumulate(
+                self._totals,
+                entry.prompt_tokens,
+                entry.completion_tokens,
+                cost,
+                cached,
+                read,
+                creation,
+            )
             model_bucket = self._by_model.setdefault(model, _empty_bucket())
-            _accumulate(model_bucket, entry.prompt_tokens, entry.completion_tokens, cost, cached)
+            _accumulate(
+                model_bucket,
+                entry.prompt_tokens,
+                entry.completion_tokens,
+                cost,
+                cached,
+                read,
+                creation,
+            )
             day_bucket = self._daily.setdefault(day, _empty_bucket())
-            _accumulate(day_bucket, entry.prompt_tokens, entry.completion_tokens, cost, cached)
+            _accumulate(
+                day_bucket,
+                entry.prompt_tokens,
+                entry.completion_tokens,
+                cost,
+                cached,
+                read,
+                creation,
+            )
         self._persist(entry, session_id)
         return entry
 
@@ -200,13 +246,15 @@ class UsageTracker:
                 entry.estimated_cost_usd,
                 int(time.time() * 1000),
                 entry.cached_tokens,
+                entry.cache_read_tokens,
+                entry.cache_creation_tokens,
             )
             with _SQLITE_LOCK:
                 get_database().get_connection().execute(
                     "INSERT INTO usage_events (id, session_id, model, prompt_tokens,"
                     " completion_tokens, total_tokens, estimated_cost_usd, created_at,"
-                    " cached_tokens)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " cached_tokens, cache_read_tokens, cache_creation_tokens)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     row,
                 )
                 get_database().get_connection().commit()
@@ -247,6 +295,10 @@ class UsageTracker:
 
         U17: 追加 ``last_*`` 字段——该会话最近一次请求的模型与 prompt
         用量 (ContextMeter 数据源); 无记录时为 None。
+
+        L8 PR-A (2026-09-09): 补 ``cache_read_tokens`` /
+        ``cache_creation_tokens`` 列聚合，并派生 ``cache_hit_rate`` —
+        cache_read 在所有可缓存 token 中的占比，反映 prompt cache 利用率。
         """
         try:
             from backend.data.database import _SQLITE_LOCK, get_database
@@ -259,6 +311,8 @@ class UsageTracker:
                     " COALESCE(SUM(completion_tokens), 0) AS completion_tokens,"
                     " COALESCE(SUM(total_tokens), 0) AS total_tokens,"
                     " COALESCE(SUM(cached_tokens), 0) AS cached_tokens,"
+                    " COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,"
+                    " COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,"
                     " COALESCE(SUM(estimated_cost_usd), 0) AS estimated_cost_usd"
                     " FROM usage_events WHERE session_id = ?",
                     (session_id,),
@@ -272,17 +326,34 @@ class UsageTracker:
                 "completion_tokens": 0,
                 "total_tokens": 0,
                 "cached_tokens": 0,
+                "cache_read_tokens": 0,
+                "cache_creation_tokens": 0,
                 "estimated_cost_usd": 0.0,
             }
             last = None
         else:
+            cache_read = int(row["cache_read_tokens"]) if row else 0
+            cache_creation = int(row["cache_creation_tokens"]) if row else 0
+            cached_total = int(row["cached_tokens"]) if row else 0
+            prompt_total = int(row["prompt_tokens"]) if row else 0
+            # 派生: 命中占可缓存输入的比例 (回退旧口径 cached_tokens 兼容老库)
+            eligible = prompt_total + cache_creation  # 旧库 cache_creation=0 → 等于 prompt
+            hit_rate = round(cache_read / eligible, 6) if eligible > 0 else 0.0
+            if cache_read == 0 and cache_creation == 0 and cached_total > 0:
+                # 旧库 (PR-A 迁移前写入的记录) 全部 cached_tokens 视为 cache_read
+                hit_rate = (
+                    round(cached_total / prompt_total, 6) if prompt_total > 0 else 0.0
+                )
             summary = {
                 "session_id": session_id,
                 "requests": int(row["requests"]) if row else 0,
-                "prompt_tokens": int(row["prompt_tokens"]) if row else 0,
+                "prompt_tokens": prompt_total,
                 "completion_tokens": int(row["completion_tokens"]) if row else 0,
                 "total_tokens": int(row["total_tokens"]) if row else 0,
-                "cached_tokens": int(row["cached_tokens"]) if row else 0,
+                "cached_tokens": cached_total,
+                "cache_read_tokens": cache_read,
+                "cache_creation_tokens": cache_creation,
+                "cache_hit_rate": hit_rate,
                 "estimated_cost_usd": float(row["estimated_cost_usd"]) if row else 0.0,
             }
             last = self.last_request(session_id)
@@ -315,9 +386,14 @@ class UsageTracker:
             return 0.0
 
     def summary(self) -> Dict[str, Any]:
-        """返回 {totals, by_model: [...], today: {...}} 快照。"""
+        """返回 {totals, by_model, today, cache_hit_rate} 快照。
+
+        L8 PR-A (2026-09-09): 派生 ``cache_hit_rate`` = cache_read /
+        (prompt + cache_creation)。为 0 时返回 0.0 (避免除零)。
+        """
         day = datetime.now().strftime("%Y-%m-%d")
         with self._lock:
+            totals_snapshot = dict(self._totals)
             by_model = [
                 {"model": model, **bucket}
                 for model, bucket in sorted(
@@ -326,11 +402,23 @@ class UsageTracker:
                     reverse=True,
                 )
             ]
-            return {
-                "totals": dict(self._totals),
-                "by_model": by_model,
-                "today": dict(self._daily.get(day, _empty_bucket())),
-            }
+            today_snapshot = dict(self._daily.get(day, _empty_bucket()))
+        cache_read = int(totals_snapshot.get("cache_read_tokens") or 0)
+        cache_creation = int(totals_snapshot.get("cache_creation_tokens") or 0)
+        prompt_total = int(totals_snapshot.get("prompt_tokens") or 0)
+        eligible = prompt_total + cache_creation
+        hit_rate = round(cache_read / eligible, 6) if eligible > 0 else 0.0
+        if cache_read == 0 and cache_creation == 0:
+            # 兼容: 旧调用只填 cached_tokens 时, 把 cached_tokens 当作 cache_read
+            cached_legacy = int(totals_snapshot.get("cached_tokens") or 0)
+            if cached_legacy and prompt_total:
+                hit_rate = round(cached_legacy / prompt_total, 6)
+        return {
+            "totals": totals_snapshot,
+            "by_model": by_model,
+            "today": today_snapshot,
+            "cache_hit_rate": hit_rate,
+        }
 
     def recent(self, limit: int = 50) -> List[UsageRecord]:
         """返回最近 ``limit`` 条记录 (新 → 旧)。"""

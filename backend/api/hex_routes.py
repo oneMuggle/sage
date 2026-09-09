@@ -30,12 +30,11 @@ import logging
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sage_core import LLMError, Message, Role
 from sage_core.exceptions import SessionNotFoundError
 
-from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
 from backend.api.settings_models import SettingsPayload, model_dump_compat
 from backend.application.services.chat_service import ChatService
 from backend.application.services.session_service import SessionService
@@ -181,28 +180,10 @@ async def chat(
     return ChatResponse(session_id=req.session_id, reply=assistant.content)
 
 
-# ==================== Prometheus /metrics 端点（PG3.1） ====================
-
-
-@router.get("/metrics")
-def metrics(svc: ChatService = Depends(get_chat_service)) -> Response:
-    """Prometheus 指标端点（text/plain）。
-
-    行为：
-    - 当 ``svc.metrics`` 是 ``PrometheusMetricAdapter`` 实例时，输出
-      Prometheus 标准的 text-format 字节流（含 9 个预注册指标的
-      ``# HELP`` / ``# TYPE`` 行）。
-    - 其它 adapter（如测试环境的 ``NoopMetricAdapter``）→ 返回
-      HTTP 200 + 空 body（``text/plain``）。
-
-    注意：本端点**不**走 ChatService 业务逻辑，纯粹读 ChatService
-    装配的 metrics adapter；不产生新事件 / 不调用 LLM。
-    """
-    adapter = svc.metrics
-    if isinstance(adapter, PrometheusMetricAdapter):
-        return Response(content=adapter.render(), media_type=adapter.content_type)
-    return Response(content=b"", media_type="text/plain; charset=utf-8")
-
+# ==================== Prometheus /metrics 端点 ====================
+# L8 PR-A (2026-09-09): metrics 端点已抽到 backend/api/metrics_routes.py,
+# 在 main.py 中无条件挂载 (与 API_MODE 解耦)。此处保留 get_chat_service 导出
+# 以兼容现有测试中对该工厂的依赖覆盖 (app.dependency_overrides)。
 
 # ==================== PUT /settings 端点（PG3.2 — settings_changed 审计） ====================
 
