@@ -337,10 +337,6 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
         </SettingRow>
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.permission')}</h3>
-        <PermissionModeSelector />
-      </section>
-      <section>
         <h3 className="text-sm font-semibold text-text mb-3">数据</h3>
         <button
           onClick={resetSettings}
