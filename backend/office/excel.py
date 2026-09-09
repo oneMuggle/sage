@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 from typing import Any, List, Optional
 
+import pandas as pd
 from openpyxl import load_workbook
 
 from .errors import OfficeFileNotFoundError, OfficeParseError
@@ -223,21 +224,72 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        wb = Workbook()
-        # Remove the default sheet — we'll add per spec
-        wb.remove(wb.active)
+        # Per Sprint 1 PR-1 (sage-excel-capability-assessment-2026-09-09):
+        # generate_xlsx now actually uses pandas. We build a one-row-or-more
+        # DataFrame per sheet and let pandas.ExcelWriter + df.to_excel
+        # handle file format, sheet creation, and cell-by-cell writes.
+        # This still depends on openpyxl under the hood (the engine), but
+        # pandas gives us:
+        #  - automatic row/column alignment (ragged rows become NaN → "")
+        #  - type coercion (numeric strings stay strings; "007" is preserved)
+        #  - ergonomic bulk insert for future multi-sheet templates
+        # Behaviour parity with the previous openpyxl-cell-by-loop is locked
+        # down by backend/tests/{unit,integration}/office/test_*_*.py.
 
+        # ``ExcelWriter(engine="openpyxl")`` creates an empty workbook on
+        # disk; df.to_excel(writer, sheet_name=...) adds each sheet.
+        # Note: ExcelWriter does NOT emit a default Sheet — sheets are
+        # only created by to_excel calls. Empty-sheet cases (zero to_excel
+        # calls) would leave a corrupt/empty .xlsx, so we fall back to
+        # openpyxl Workbook creation in that pathological case.
+        if not req.sheets:
+            # Defensive: Pydantic constrains sheets to min_length=1, so this
+            # branch is unreachable through the API. Kept for direct callers.
+            wb = Workbook()
+            wb.remove(wb.active)
+            wb.save(str(output_path))
+            return output_path
+
+        # Build all DataFrames first so we can detect the all-empty case
+        # before opening the writer (avoids writing a file with no sheets).
+        sheet_specs: list[tuple[str, pd.DataFrame, bool]] = []
         for sheet_spec in req.sheets:
-            ws = wb.create_sheet(title=sheet_spec.name[:31])  # Excel limit
-            # Write headers
-            for ci, header in enumerate(sheet_spec.headers):
-                ws.cell(row=1, column=ci + 1, value=header)
-            # Write data rows (use pandas DataFrame for ergonomic insert)
-            for ri, row in enumerate(sheet_spec.rows):
-                for ci, cell in enumerate(row):
-                    ws.cell(row=ri + 2, column=ci + 1, value=cell)
+            name = sheet_spec.name[:31]  # Excel 31-char sheet-name cap
+            headers = sheet_spec.headers
+            rows = sheet_spec.rows
 
-        wb.save(str(output_path))
+            if headers or rows:
+                # Build DataFrame. With columns=headers, pandas enforces the
+                # column count and pads/truncates ragged rows with NaN. We
+                # fill NaN with "" so the reader (which returns "" for empty
+                # cells) sees the same string grid as before.
+                df = pd.DataFrame(rows, columns=headers).fillna("")
+            else:
+                # Empty sheet: still need a sheet object but no data.
+                df = pd.DataFrame()
+
+            sheet_specs.append((name, df, bool(headers)))
+
+        # Pathological case: all sheets are empty AND we have at least one.
+            # ExcelWriter + zero to_excel calls would produce an empty file,
+            # which openpyxl can't read back as a valid workbook. Fall back
+            # to a minimal openpyxl Workbook with one empty sheet.
+            if all(df.empty and not has_headers for _, df, has_headers in sheet_specs):
+                wb = Workbook()
+                wb.remove(wb.active)
+                for name, _, _ in sheet_specs:
+                    wb.create_sheet(title=name)
+                wb.save(str(output_path))
+                return output_path
+
+        with pd.ExcelWriter(str(output_path), engine="openpyxl") as writer:
+            for name, df, has_headers in sheet_specs:
+                df.to_excel(
+                    writer,
+                    sheet_name=name,
+                    index=False,
+                    header=has_headers,
+                )
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate XLSX: {exc}", file_path=output_path) from exc
 
