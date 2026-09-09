@@ -45,12 +45,16 @@ def make_with_db_lock(target_globals):
     """
     import types
 
+    lock = _SQLITE_LOCK
+
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            with _SQLITE_LOCK:
+            with lock:
                 return func(*args, **kwargs)
 
+        # 经闭包携带锁, 重绑 __globals__ 后不依赖目标模块的任何全局名;
+        # target_globals 仅服务于 FastAPI 的注解解析。
         rebound = types.FunctionType(
             wrapper.__code__,
             target_globals,
