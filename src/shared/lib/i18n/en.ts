@@ -517,7 +517,8 @@ export const en: Record<TranslationKey, string> = {
 
   // ─── U5' Edit & resend (parity round 5 batch A) ─────
   'chat.edit_resend': 'Edit & resend',
-  'chat.edit_resend_notice': 'Editing & resending: sending forks into a new session (original preserved)',
+  'chat.edit_resend_notice':
+    'Editing & resending: sending forks into a new session (original preserved)',
   'chat.edit_resend_cancel': 'Cancel editing',
   'chat.edit_resend_forked': 'Forked into a new session; edited message sent',
 };

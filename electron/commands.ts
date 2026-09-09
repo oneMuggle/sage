@@ -58,7 +58,8 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // body {mode: 'ask' | 'auto'}; 404 when the run is not active in-process.
   orchestration_set_approval_mode: {
     method: 'POST',
-    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/approval-mode`,
+    path: (a) =>
+      `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/approval-mode`,
     body: (a) => ({ mode: a.mode }),
   },
 

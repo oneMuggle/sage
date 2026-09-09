@@ -57,11 +57,7 @@ export function UsagePanel() {
   // L8 PR-A (2026-09-09): 选 range 时显示对应 bucket 的数字。
   // cache_hit_rate 在 today/total 下语义不同——today 是当日命中率,
   // total 是自启动以来累计命中率。两个都展示便于用户对比当日效率。
-  const activeBucket = summary
-    ? range === 'today'
-      ? summary.today
-      : summary.totals
-    : null;
+  const activeBucket = summary ? (range === 'today' ? summary.today : summary.totals) : null;
 
   return (
     <div className="space-y-2" data-testid="usage-panel">
@@ -73,11 +69,7 @@ export function UsagePanel() {
       {summary !== null && (
         <>
           {/* L8 PR-A: 时间范围 Tab — 两段按钮切换 today / total */}
-          <div
-            className="flex gap-1 text-xs"
-            data-testid="usage-range-tabs"
-            role="tablist"
-          >
+          <div className="flex gap-1 text-xs" data-testid="usage-range-tabs" role="tablist">
             {(['today', 'total'] as const).map((r) => (
               <button
                 key={r}
@@ -87,9 +79,7 @@ export function UsagePanel() {
                 data-testid={`usage-range-${r}`}
                 onClick={() => setRange(r)}
                 className={`px-2 py-1 border border-border rounded-radius-sm transition-colors ${
-                  range === r
-                    ? 'bg-bg-muted text-text'
-                    : 'text-text-muted hover:text-text'
+                  range === r ? 'bg-bg-muted text-text' : 'text-text-muted hover:text-text'
                 }`}
               >
                 {t(`settings.usage.range.${r}`)}
@@ -121,10 +111,7 @@ export function UsagePanel() {
           {/* L8 PR-A: cache 命中率 + 拆分明细行 — read 与 creation 分开展示
               让用户区分"命中缓存省了多少"和"为了缓存新写了多少" */}
           {activeBucket !== null && (
-            <div
-              className="grid grid-cols-3 gap-2 text-xs"
-              data-testid="usage-cache-row"
-            >
+            <div className="grid grid-cols-3 gap-2 text-xs" data-testid="usage-cache-row">
               <div>
                 <div className="text-text-muted">{t('settings.usage.cacheRead')}</div>
                 <div className="font-mono text-text" data-testid="usage-cache-read">
@@ -160,7 +147,9 @@ export function UsagePanel() {
                   <tr key={entry.model} className="border-t border-border">
                     <td className="font-mono pr-2 py-0.5">{entry.model}</td>
                     <td className="pr-2">{entry.requests}</td>
-                    <td className="pr-2">{formatTokens(entry.prompt_tokens, entry.completion_tokens)}</td>
+                    <td className="pr-2">
+                      {formatTokens(entry.prompt_tokens, entry.completion_tokens)}
+                    </td>
                     <td>{formatCost(entry.estimated_cost_usd)}</td>
                   </tr>
                 ))}

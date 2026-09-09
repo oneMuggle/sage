@@ -74,9 +74,7 @@ describe('UsagePanel', () => {
   });
 
   it('渲染汇总数字与成本 (未知模型成本显示占位符)', async () => {
-    const invokeSpy = vi
-      .spyOn(desktopInvoke, 'invoke')
-      .mockResolvedValueOnce(cloneSummary());
+    const invokeSpy = vi.spyOn(desktopInvoke, 'invoke').mockResolvedValueOnce(cloneSummary());
 
     renderPanel();
 
@@ -95,9 +93,7 @@ describe('UsagePanel', () => {
   });
 
   it('刷新按钮重新请求数据', async () => {
-    const invokeSpy = vi
-      .spyOn(desktopInvoke, 'invoke')
-      .mockResolvedValue(cloneSummary());
+    const invokeSpy = vi.spyOn(desktopInvoke, 'invoke').mockResolvedValue(cloneSummary());
 
     renderPanel();
     await waitFor(() => {

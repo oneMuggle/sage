@@ -51,14 +51,12 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
 
   if (!sessionId || !usage || usage.requests === 0) return null;
 
-  const cost =
-    usage.estimated_cost_usd > 0 ? ` · $${usage.estimated_cost_usd.toFixed(4)}` : '';
+  const cost = usage.estimated_cost_usd > 0 ? ` · $${usage.estimated_cost_usd.toFixed(4)}` : '';
 
   // L8 PR-A (2026-09-09): cache 命中率徽章 — 只在发生过缓存交互时展示
   // (read+creation > 0)。hit rate < 5% 时降级为 dim 颜色,提示用户
   // 当前 prompt 形态不利于缓存复用。
-  const cacheInteractive =
-    usage.cache_read_tokens + usage.cache_creation_tokens > 0;
+  const cacheInteractive = usage.cache_read_tokens + usage.cache_creation_tokens > 0;
   const hitRatePct = (usage.cache_hit_rate * 100).toFixed(0);
   const hitRateTone =
     usage.cache_hit_rate >= 0.5
