@@ -1,4 +1,4 @@
-import { AlertCircle, Check, Clock, GitBranch, Loader2, Paperclip, PauseCircle, Pencil, Pin, Download } from 'lucide-react';
+import { AlertCircle, Check, Clock, GitBranch, Loader2, Paperclip, PauseCircle, Pencil, Pin, Download, Search } from 'lucide-react';
 import { useEffect, useReducer, useRef, useState } from 'react';
 
 import { usePermissionState } from '../../entities/permission/permissionState';
@@ -21,6 +21,8 @@ interface SessionItemProps {
   onDelete: () => void;
   /** U4': 重命名回调——API 与 store 更新由上层负责,组件只管 inline 编辑态 */
   onRename?: (sessionId: string, title: string) => Promise<void>;
+  /** F12: 消息内容命中条数（侧栏搜索增强;缺省不显示徽标） */
+  messageHits?: number;
 }
 
 /** 文件变更类工具（S6-lite: 本次运行的变更文件计数徽章）。
@@ -31,7 +33,7 @@ const FILE_CHANGE_TOOLS = new Set(['write_file', 'edit_file', 'apply_patch']);
 /** S4: completed ✓ 徽章的保鲜期 —— 超过后不再显示（避免整列表常亮绿勾）。 */
 const COMPLETED_FRESH_MS = 60_000;
 
-export function SessionItem({ session, isActive, onSelect, onDelete, onRename }: SessionItemProps) {
+export function SessionItem({ session, isActive, onSelect, onDelete, onRename, messageHits }: SessionItemProps) {
   const { t } = useI18n();
   const [exporting, setExporting] = useState(false);
   // U4': inline 重命名态(标题位置换成输入框,Enter 提交 / Esc 取消)
@@ -270,6 +272,17 @@ export function SessionItem({ session, isActive, onSelect, onDelete, onRename }:
               className="inline-flex flex-shrink-0 text-[10px] font-medium text-primary"
             >
               +{changeCount}
+            </span>
+          )}
+          {/* F12: 消息内容命中（侧栏搜索增强） */}
+          {messageHits != null && messageHits > 0 && (
+            <span
+              data-testid="session-message-hits"
+              title={t('session.message_hits').replace('{count}', String(messageHits))}
+              className="inline-flex flex-shrink-0 items-center gap-0.5 text-[10px] font-medium text-primary"
+            >
+              <Search className="w-3 h-3" />
+              {messageHits}
             </span>
           )}
         </p>

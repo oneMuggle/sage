@@ -53,6 +53,9 @@ class SettingsRepository:
             # F5 花费限额 (批次 C): 今日美元成本上限, 0/缺省 = 不限
             # 读取口径见 backend/api/legacy_routes.py producer F5 块
             "spend_limit_usd",
+            # round5 批次 B-2: 发送前自动快照 ("1"/"0", 缺省 = 关)。
+            # 读取口径见 legacy_routes._auto_checkpoint_if_enabled
+            "auto_checkpoint",
         }
     )
 

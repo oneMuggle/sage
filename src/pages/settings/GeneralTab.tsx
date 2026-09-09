@@ -135,10 +135,23 @@ function SpendLimitInput(): JSX.Element {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    // 卸载守卫: vitest 切换测试环境(jsdom→node)后 promise 才 resolve 时,
+    // setState 会在无 window 的上下文执行并产生 unhandled rejection
+    // (Frontend job 因此间歇红)。get_preference/set_preference 同理均需守卫。
+    let mounted = true;
     invoke<{ value: string | null }>('get_preference', { key: 'spend_limit_usd' })
-      .then((resp) => setLimit(resp.value ?? ''))
-      .catch(() => setLimit(''))
-      .finally(() => setLoaded(true));
+      .then((resp) => {
+        if (mounted) setLimit(resp.value ?? '');
+      })
+      .catch(() => {
+        if (mounted) setLimit('');
+      })
+      .finally(() => {
+        if (mounted) setLoaded(true);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const save = (raw: string): void => {
@@ -167,6 +180,48 @@ function SpendLimitInput(): JSX.Element {
         className="w-24 text-xs border border-border rounded-radius-sm px-2 py-1 bg-surface text-text"
       />
     </SettingRow>
+  );
+}
+
+/**
+ * B-2 (round5 批次 B): 发送前自动快照开关。
+ *
+ * 走后端 preferences KV（auto_checkpoint），producer 在 run 开始前读取——
+ * 与 localStorage 的 app_settings 开关（autoMemory 等）不同，本开关后端
+ * 必须能读到，因此用 settingsClient 而非 updateSettings。
+ */
+function AutoCheckpointCard() {
+  const [enabled, setEnabled] = useState<boolean | null>(null); // null = 加载中
+
+  useEffect(() => {
+    let mounted = true;
+    void settingsClient.getPreference('auto_checkpoint').then((v) => {
+      if (mounted) setEnabled(v === '1');
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleToggle = (v: boolean) => {
+    setEnabled(v);
+    void settingsClient.setPreference('auto_checkpoint', v ? '1' : '0');
+  };
+
+  return (
+    <section data-testid="auto-checkpoint-section">
+      <h3 className="text-sm font-semibold text-text mb-3">安全网</h3>
+      <SettingRow
+        label="发送前自动快照"
+        desc="每轮对话开始前为绑定的工作区创建检查点，可在变更面板一键回滚（默认关）"
+      >
+        {enabled === null ? (
+          <span className="text-xs text-muted">…</span>
+        ) : (
+          <Toggle value={enabled} onChange={handleToggle} />
+        )}
+      </SettingRow>
+    </section>
   );
 }
 
@@ -219,6 +274,11 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
             onChange={(v) => updateSettings({ confirmDelete: v })}
           />
         </SettingRow>
+      </section>
+      <AutoCheckpointCard />
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.permission')}</h3>
+        <PermissionModeSelector />
       </section>
       <section data-testid="orch-settings-section">
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.orch')}</h3>
@@ -275,10 +335,6 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
             }
           />
         </SettingRow>
-      </section>
-      <section>
-        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.permission')}</h3>
-        <PermissionModeSelector />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">数据</h3>
