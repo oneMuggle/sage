@@ -36,7 +36,7 @@ export function LoadingState({
   return (
     <div role="status" aria-live="polite" className={clsx('flex items-center gap-2', className)}>
       <div
-        className="h-5 w-5 border-2 border-t-transparent rounded-full animate-spin border-blue-600"
+        className="h-5 w-5 border-2 border-t-transparent rounded-full animate-spin border-primary"
         aria-hidden
       />
       <span className="text-sm text-muted">{label}</span>

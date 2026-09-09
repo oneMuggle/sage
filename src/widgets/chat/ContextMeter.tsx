@@ -20,8 +20,8 @@ function formatTokens(total: number): string {
 
 /** 占用率 → 颜色档位: <70% 常态, 70-90% 注意, ≥90% 临近压缩/截断 */
 function toneClass(pct: number): { bar: string; text: string } {
-  if (pct >= 0.9) return { bar: 'bg-red-500', text: 'text-red-500' };
-  if (pct >= 0.7) return { bar: 'bg-amber-500', text: 'text-amber-500' };
+  if (pct >= 0.9) return { bar: 'bg-error', text: 'text-error' };
+  if (pct >= 0.7) return { bar: 'bg-warning', text: 'text-warning' };
   return { bar: 'bg-accent', text: 'text-text-secondary' };
 }
 
