@@ -1,6 +1,6 @@
 # 编码代理对标差距分析·第六轮：多智能体编排与通信收口（2026-09-08）
 
-- **状态**：批次 A 已交付（PR #521 → main 07762ec9；win7 PR #523 → 67af641e）；批次 B 已交付（分支 `feat/parity-r6-batch-b`，基线 origin/main 07762ec9）
+- **状态**：批次 A 已交付（PR #521 → main 07762ec9；win7 PR #523 → 67af641e）；批次 B 已交付（PR #525 → main d1228744；win7 PR #528 → 8048b176）；批次 C 已交付（分支 `feat/parity-r6-batch-c`，基线 origin/main d1228744）
 - **上游文档**：round4（批次 A-E 已交付）、round5（批次 A 信任闭环还账，`.worktrees/feat-parity-r5-batch-a` 在途）——本文不重复其内容，聚焦此前四轮从未系统盘点的**多智能体链路**：任务拆解、编排分发、记录持久化、主 agent ↔ subagent 通信
 - **对标对象**：Claude Code（Task/Agent 工具 + 后台代理 + TaskOutput/TaskStop）、Cursor（后台 agent + 逐 hunk 审查）、Devin（planner→executor 会话）、OpenHands（全量事件流持久化可回放）
 - **编号约定**：本轮起用 **O 系**（Orchestration），避免与 L/U/F/S 混编
@@ -67,7 +67,7 @@
 | --- | --- | --- | --- |
 | **A（本批）** | 断链收口 + 兜底补齐 | O1 steering 投递闭环、O2 子任务 wall-clock 超时、O3 子代理用量归属、O4 observe_subagents 注册、O5 嵌套深度防护、O6 orch_runs 崩溃恢复 | ✅ 已交付 |
 | **B** | 拆解层增强 | D1 system prompt 拆解引导、D2 plan_write 退役、B3 单任务 skip/cancel（端点 + 任务树按钮）、B4 todo 持久化 | ✅ 已交付（见 §7） |
-| **C（待排期）** | 记录深化 | R2 messages↔run 关联 + run 列表 API 恢复（历史时间线回放）、审批决策落库、orch_steps 死表处置（接线或删除） | 待排期 |
+| **C** | 记录深化 | C1 会话 run 列表 API + 历史任务板恢复、C2 审批决策落库、C3 orch_steps 死表退役 | ✅ 已交付（见 §8） |
 
 ## 3. 批次 A 详细设计与实施记录
 
@@ -164,3 +164,26 @@
 
 - 新增/扩展 6 个测试文件：`test_session_todo_repo.py`（11 例）、`test_chat_dispatcher_task_skip.py`（4 例）、`test_orch_routes_task_cancel.py`（4 例）、`test_agent_profile_wiring.py` D1 断言、`test_profiles_intranet_web_access_migration.py` D2 两例；改动相关后端集 158 passed，聊天流/编排集成 31 passed；ruff 全过。
 - 前端 tsc：仅 mermaid 模块缺失一处报错（#520 并行合入后本地未 npm install 的环境问题，main 工作区同样复现，CI npm ci 后为绿）；本批前端文件无类型错误。
+
+## 8. 批次 C 实施与验证记录（2026-09-09）
+
+### 8.1 C1 会话 run 列表 + 历史任务板恢复
+
+- **后端**：`OrchRunRepository.list_by_session(session_id, limit)`（新→旧）；`GET /orch/runs?session_id=&limit=`（orch_routes，Wave 4 删除无过滤 list_runs 后的窄口重建——带会话归属过滤）；run→detail 组装提取 `_run_detail` 与 `get_run` 共用。响应 `SessionRunsResponse{runs: OrchRunDetail[]}` 含 plan + tasks + 终态。
+- **前端**：`electron/commands.ts` 路由 `orchestration_list_session_runs`、`orchRunClient.listSessionRuns`；Chat.tsx 会话切换时 hydration effect——拉取最近 run 写入 chatStreamStore 任务板槽位（守卫：会话流式中或已有板时跳过，不覆盖直播态）；plan_json 为空的动态 run 从任务行反推 plan；子代理时间线按 runId 经既有 snapshot/events 回放通道（Drawer 已有能力）。
+- 回放闭环成立的关键：`orch_runs` 一直持有 session_id（init_orch_run 落库），缺的只是列表入口与前端消费。
+
+### 8.2 C2 审批决策落库
+
+- 新表 `approval_decisions`（request/session/run/task 可空归属 + tool_name/args_summary/risk + approved/answered_by + created_at/latency_ms/decided_at）+ `ApprovalDecisionRepository.append/list`（`_SQLITE_LOCK` 纪律）。
+- 三处钩子（全部全吞降级，审计是增强绝不阻塞审批流）：① `ApprovalGate.request` 应答/超时后统一记录（gui + timeout，会话经 ToolExecutionContext、run/task 经 dispatcher 注册表尽力归因）；② `AutoApproveEnforcer.check` 自动放行记录（answered_by="auto"）；③ 落库失败静默（单测覆盖 db-down 场景审批流照常）。
+
+### 8.3 C3 orch_steps 死表退役
+
+处置决策 = **删除**（非接线）：`orch_steps` 表/repo 建好后生产零写入，step 事实已由 `orch_events` 的 `task.step.*` payload 承载且可 after_seq 回放——独立表是重复建设。移除 DDL（database.py）+ `orch_steps_repo.py` + 其测试；存量库残留表不主动 DROP（无害）。`test_observability_schema` 改断言表不存在。
+
+### 8.4 验证
+
+- 新增 3 个后端测试文件 15 用例（会话列表端点 5 + 审批决策 5 + observability 更新）+ 前端 `Chat.history-board.test.tsx` 3 用例（恢复/空/不覆盖直播板）；改动相关后端集 138 passed；权限回归 198 passed（1 个失败经 main 基线对照确认为本地环境既有）。
+- 修复途中发现：批次 B 对 5 个 Chat 测试文件留下的 `listRuns` 陈旧 mock 缺新方法导致 hydration 抛 TypeError——统一更新为 `listSessionRuns`。
+- ruff / tsc / eslint 全过；全量 vitest 仅余 4 个 electron Windows 本地环境失败（与 main 基线相同，CI ubuntu 为准）。

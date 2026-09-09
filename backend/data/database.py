@@ -587,6 +587,32 @@ class Database:
             )
         """)
 
+        # C2 (2026-09-09): 权限审批决策历史 —— 此前审批只在内存 gate 里，
+        # 应答后无任何持久痕迹（仅 remember 规则写 settings）。本表记录每次
+        # 决策（gui 批准/拒绝、超时 default-deny、auto 模式自动放行），
+        # 支撑事后审计与信任面回溯。run/task 可空（主会话审批无编排归属）。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS approval_decisions (
+                id TEXT PRIMARY KEY,
+                request_id TEXT,
+                session_id TEXT,
+                run_id TEXT,
+                task_id TEXT,
+                tool_name TEXT NOT NULL,
+                args_summary TEXT,
+                risk TEXT,
+                approved INTEGER NOT NULL,
+                answered_by TEXT NOT NULL,
+                created_at INTEGER,
+                latency_ms INTEGER,
+                decided_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_approval_decisions_session
+            ON approval_decisions(session_id, created_at DESC)
+        """)
+
         # L8 用量事件表 (对标增强第二轮批次 C): 每次成功 LLM 调用一行,
         # 支撑会话级用量/成本显示 (U14) 与花费限额 (F5)。内存 tracker
         # (usage_tracker) 重启即失, 此表为持久事实源。
@@ -963,36 +989,9 @@ class Database:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_orch_events_run_seq ON orch_events(run_id, seq)"
         )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS orch_steps (
-                step_id TEXT PRIMARY KEY,
-                run_id TEXT NOT NULL REFERENCES orch_runs(run_id),
-                task_id TEXT NOT NULL REFERENCES orch_tasks(task_id),
-                sequence INTEGER NOT NULL,
-                kind TEXT NOT NULL,
-                name TEXT NOT NULL,
-                status TEXT NOT NULL,
-                input_summary TEXT,
-                output_preview TEXT,
-                tool_name TEXT,
-                error_code TEXT,
-                retry_count INTEGER NOT NULL DEFAULT 0,
-                started_at INTEGER,
-                finished_at INTEGER,
-                created_at INTEGER NOT NULL
-            )
-            """
-        )
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_orch_steps_run_seq ON orch_steps(run_id, sequence)"
-        )
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_orch_steps_task_seq ON orch_steps(task_id, sequence)"
-        )
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_orch_steps_task_status ON orch_steps(task_id, status)"
-        )
+        # C3 (2026-09-09): orch_steps 死表退役 —— 表/repo 曾建好但生产路径
+        # 零写入，step 事实已由 orch_events 的 task.step.* payload 承载（可
+        # after_seq 回放）。存量库中的残留表不主动 DROP（无害，随库保留）。
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS orch_context_messages (

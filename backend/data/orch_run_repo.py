@@ -101,6 +101,33 @@ class OrchRunRepository:
             for row in cursor.fetchall()
         ]
 
+    def list_by_session(self, session_id: str, limit: int = 20) -> List[OrchRun]:
+        """C1 (2026-09-09): 按会话列编排 run（新→旧），历史任务板恢复用。
+
+        ``init_orch_run`` 落库时绑定 session_id；本查询把它暴露给
+        ``GET /orch/runs?session_id=``（Wave 4 删除 list_runs 后唯一入口）。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM orch_runs WHERE session_id = ? "
+            "ORDER BY created_at DESC LIMIT ?",
+            (session_id, limit),
+        )
+        return [
+            OrchRun(
+                run_id=row["run_id"],
+                session_id=row["session_id"],
+                status=row["status"],
+                created_at=row["created_at"],
+                plan_json=row["plan_json"],
+                final_summary=row["final_summary"],
+                dispatched_at=row["dispatched_at"],
+                original_request=row["original_request"],
+            )
+            for row in cursor.fetchall()
+        ]
+
     def mark_dispatched(self, run_id: str, dispatched_at: int) -> None:
         """首次派发标记：仅当 run 尚未派发时写入（幂等,first-dispatch-wins）。
 

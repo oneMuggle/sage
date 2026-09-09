@@ -39,7 +39,7 @@ vi.mock('../features/manage-settings/useSettings', () => ({
 }));
 
 vi.mock('../shared/api/orchRunClient', () => ({
-  orchRunClient: { listRuns: vi.fn().mockResolvedValue([]) },
+  orchRunClient: { listSessionRuns: vi.fn().mockResolvedValue({ runs: [] }) },
 }));
 
 vi.mock('../shared/api/desktopInvoke', () => ({
