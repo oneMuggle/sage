@@ -273,6 +273,20 @@ async def lifespan(app: FastAPI):
             "启动恢复: %d 个遗留 running 编排 run 已标记为 failed", _stale_orch_runs
         )
 
+    # C2 (2026-09-09): 审批决策 run/task 归属解析器注册（依赖反转）——
+    # services 层不得 import orchestration（六边形 import 契约），故由
+    # 顶层装配注入回查回调；子代理审批决策落库时经它归因 run/task。
+    from backend.orchestration.chat_dispatcher import find_dispatcher_for_approval
+    from backend.services import permission_gate as _approval_gate
+
+    def _resolve_approval_context(request_id: str):
+        dispatcher = find_dispatcher_for_approval(request_id)
+        if dispatcher is None:
+            return (None, None)
+        return (dispatcher.run_id, dispatcher._pending_approvals.get(request_id))
+
+    _approval_gate.set_approval_context_resolver(_resolve_approval_context)
+
     # PR-3: agents 表种子化 — 用 ensure_default_agents 替代 seed_defaults_if_empty:
     # 首次启动插全量默认集, 已存在的 DB 增量补 writer 等新增默认角色。
     from backend.agents.profiles import ensure_default_agents, validate_profile_tools

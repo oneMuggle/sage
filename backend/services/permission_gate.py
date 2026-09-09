@@ -30,7 +30,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +306,20 @@ class ApprovalRequest:
         )
 
 
+#: C2 (2026-09-09): 审批 run/task 归属解析器 —— 由编排层在启动时经
+#: ``set_approval_context_resolver`` 注册（依赖反转）。services 层不得直接
+#: import orchestration（六边形 import 契约），故经此回调解耦；未注册时
+#: run/task 归属为空（主会话审批本就无编排归属）。
+ApprovalContextResolver = Callable[[str], Tuple[Optional[str], Optional[str]]]
+_approval_context_resolver: Optional[ApprovalContextResolver] = None
+
+
+def set_approval_context_resolver(resolver: ApprovalContextResolver) -> None:
+    """注册 run/task 归属解析器（backend.main 启动时调用一次）。"""
+    global _approval_context_resolver
+    _approval_context_resolver = resolver
+
+
 class ApprovalGate:
     """挂起 / 解析待审批请求的闸口。"""
 
@@ -323,16 +337,66 @@ class ApprovalGate:
         loop = asyncio.get_running_loop()
         future: asyncio.Future[ApprovalAnswer] = loop.create_future()
         self._pending[req.request_id] = (req, future)
+        registered_ms = int(time.time() * 1000)
         try:
-            return await asyncio.wait_for(future, timeout=timeout)
+            answer = await asyncio.wait_for(future, timeout=timeout)
         # noqa 说明: py3.8 (Win7 LTS) 下 asyncio.TimeoutError 是
         # concurrent.futures.TimeoutError, 与内建 TimeoutError 不同源;
         # 必须捕获 asyncio.TimeoutError 才能在两个版本上都 default-deny。
         except asyncio.TimeoutError:  # noqa: UP041
             logger.info("审批请求超时 default-deny: request_id=%s tool=%s", req.request_id, req.tool_name)
-            return ApprovalAnswer(approved=False, remember=False, answered_by="timeout")
+            answer = ApprovalAnswer(approved=False, remember=False, answered_by="timeout")
         finally:
             self._pending.pop(req.request_id, None)
+        # C2 (2026-09-09): 决策落库（gui 批准/拒绝 + 超时 default-deny）。
+        self._record_decision(req, answer, registered_ms)
+        return answer
+
+    @staticmethod
+    def _record_decision(
+        req: ApprovalRequest, answer: ApprovalAnswer, registered_ms: int
+    ) -> None:
+        """C2 (2026-09-09): 审批决策落库，全吞降级 —— 审计是增强能力，
+        绝不因持久化失败阻塞审批流。会话经 ToolExecutionContext 归因；
+        run/task 经活动 dispatcher 注册表归因（子代理审批，尽力而为——
+        路由侧 resolve_approval 弹出映射的时序竞争下允许归属为空）。"""
+        try:
+            from backend.data.approval_decision_repo import (
+                ApprovalDecisionRepository,
+            )
+
+            session_id: Optional[str] = None
+            run_id: Optional[str] = None
+            task_id: Optional[str] = None
+            try:
+                from backend.tools.context import current_tool_context
+
+                ctx = current_tool_context()
+                session_id = ctx.session_id if ctx is not None else None
+            except Exception:  # noqa: BLE001 — 上下文缺失降级
+                session_id = None
+            resolver = _approval_context_resolver
+            if resolver is not None:
+                try:
+                    run_id, task_id = resolver(req.request_id)
+                except Exception:  # noqa: BLE001 — 编排归属降级
+                    run_id = task_id = None
+            ApprovalDecisionRepository().append(
+                tool_name=req.tool_name,
+                approved=answer.approved,
+                answered_by=answer.answered_by,
+                request_id=req.request_id,
+                session_id=session_id,
+                run_id=run_id,
+                task_id=task_id,
+                args_summary=req.args_summary,
+                risk=req.risk,
+                created_at=registered_ms,
+            )
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.debug(
+                "审批决策落库失败（忽略）request=%s: %s", req.request_id, exc
+            )
 
     def answer(self, request_id: str, approved: bool, remember: bool = False) -> bool:
         """解析一个挂起的请求。
