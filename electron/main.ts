@@ -177,8 +177,27 @@ const V8_MAX_OLD_SPACE_SIZE_MB = 2048;
 //     display compositor; Win7 D3D11 not feature-complete.
 //   - --js-flags=--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}: cap V8 heap to 2GB so Win7
 //     systems with 4GB RAM don't OOM-kill during chat streaming.
+//
+// S2 (P3 安全批次): sandbox 按平台条件化。--no-sandbox 此前无条件生效,
+// Win10/11 用户白白失去渲染进程隔离。现在仅旧版 Windows (6.x, 即 Win7/8
+// 的 SUID-less chrome-sandbox 场景) 与 SAGE_NO_SANDBOX=1 显式逃生门关闭
+// sandbox; 现代平台恢复 Chromium sandbox —— preload 只依赖 electron 运行
+// 时 API (contextBridge/ipcRenderer), 满足 sandboxed preload 约束。
+// GPU 系 flag 仍保留 (Electron 升级专项统一重审)。
+function isLegacyWindows(): boolean {
+  if (process.platform !== 'win32') return false;
+  try {
+    const major = Number(process.getSystemVersion().split('.')[0]);
+    return Number.isFinite(major) && major < 10;
+  } catch {
+    return false;
+  }
+}
+const NEEDS_NO_SANDBOX = isLegacyWindows() || process.env.SAGE_NO_SANDBOX === '1';
 app.disableHardwareAcceleration();
-app.commandLine.appendSwitch('no-sandbox');
+if (NEEDS_NO_SANDBOX) {
+  app.commandLine.appendSwitch('no-sandbox');
+}
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('in-process-gpu');
@@ -805,7 +824,10 @@ function createMainWindow(): void {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false, // Phase 3: keep false for Win7 compat (sandbox needs SUID)
+      // S2: 旧版 Windows (Win7/8) 或 SAGE_NO_SANDBOX=1 时保持无 sandbox
+      // (SUID 限制); 现代平台启用 Chromium sandbox —— preload 仅用
+      // contextBridge/ipcRenderer, 满足 sandboxed preload 约束。
+      sandbox: !NEEDS_NO_SANDBOX,
       // 演示模式 (2026-08-27): 同步把演示标志传给 renderer (preload 读 argv
       // 暴露)。首屏请求早于 loadSettings 完成, renderer 的 isDemoMode() 若
       // 只读 settings store 会竞态漏拦截 → 请求打到已跳过的后端报错。
@@ -839,6 +861,14 @@ function createMainWindow(): void {
     if (!isDemoProcess()) {
       win.webContents.openDevTools({ mode: 'detach' });
     }
+    // S3 (P3 安全批次): 渲染层 console 全量转发仅 dev —— 生产转发会把
+    // 可能携带会话内容的前端日志写进明文日志文件; dev 有独立 DevTools,
+    // 转发仅作为留档补充。
+    win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const logLevel =
+        level === 0 ? 'debug' : level === 1 ? 'info' : level === 2 ? 'warn' : 'error';
+      logger[logLevel]('main: frontend console', { level, message, line, sourceId });
+    });
   } else {
     // tsconfig.electron.json uses rootDirs: [electron, src], so the compiled
     // main.js lives at dist-electron/electron/main.js (one extra directory level
@@ -871,46 +901,32 @@ function createMainWindow(): void {
         win.webContents.send('update:state-changed', { type: 'state', state });
       });
       logger.info('main: frontend did-finish-load', { url: win.webContents.getURL() });
-      // Diagnostic: check if React root is mounted after page loads
+      // S3 (P3 安全批次): 白屏诊断探针收敛 —— innerHTML/scripts/title 会把
+      // 用户会话内容写进明文日志。生产只留无内容的挂载信号 (hasRoot /
+      // 元素数 / electronAPI 存在性); 全量探针已移入 dev 分支。
       win.webContents
         .executeJavaScript(
           `
           (function() {
             const root = document.getElementById('root');
-            const body = document.body;
-            const hasElectronAPI = typeof window.electronAPI !== 'undefined';
-            const apiKeys = hasElectronAPI ? Object.keys(window.electronAPI || {}) : [];
             return {
               hasRoot: !!root,
               rootChildren: root?.children.length || 0,
-              rootInnerHTML: root?.innerHTML?.substring(0, 500) || '',
-              bodyInnerHTML: body?.innerHTML?.substring(0, 500) || '',
-              hasSidebar: !!document.querySelector('[class*="sidebar" i], aside, nav'),
-              hasLayout: !!document.querySelector('[class*="layout" i]'),
               allElements: document.querySelectorAll('*').length,
-              hasElectronAPI,
-              apiKeys,
-              scripts: Array.from(document.scripts).map(s => s.src || s.textContent?.substring(0, 100) || ''),
-              title: document.title,
+              hasElectronAPI: typeof window.electronAPI !== 'undefined',
             };
           })()
         `,
         )
         .then((result) => {
-          logger.info('main: frontend React root check', result);
+          logger.info('main: frontend root check', result);
         })
         .catch((e) => {
-          logger.error('main: failed to check React root', { error: e.message });
+          logger.error('main: failed to check root', { error: e.message });
         });
     });
     win.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
       logger.error('main: frontend did-fail-load', { errorCode, errorDescription });
-    });
-    // Diagnostic: capture console messages (JS errors, warnings, logs)
-    win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-      const logLevel =
-        level === 0 ? 'debug' : level === 1 ? 'info' : level === 2 ? 'warn' : 'error';
-      logger[logLevel]('main: frontend console', { level, message, line, sourceId });
     });
     // Diagnostic: capture page crashes (using non-deprecated render-process-gone)
     win.webContents.on('render-process-gone', (_event, details) => {

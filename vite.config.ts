@@ -1,7 +1,8 @@
 /// <reference types="vitest" />
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 
-import { defineConfig } from 'vitest/config';
+import { defineConfig, type Plugin } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 // 读 package.json 拿真实版本号，注入为编译期常量供 UI 展示（sidebar 页脚）。
@@ -9,9 +10,50 @@ import react from '@vitejs/plugin-react';
 // package.json（含 devDependencies）纳入模块图。
 const pkg = createRequire(import.meta.url)('./package.json') as { version: string };
 
+// S1 (P3 安全批次): 仅生产构建向 index.html 注入 CSP meta。
+//
+// 背景: 生产渲染层走 file:// 加载, 页面渲染 markdown/KaTeX/Shiki 等不可
+// 信内容, 此前无 CSP —— 注入脚本后没有第二道防线。dev 不注入 (Vite HMR
+// 与 React refresh 需要宽松策略), 生产产物由 e2e smoke 验证。
+//
+// 策略说明:
+// - file:// 页面里 'self' 不匹配 file: 子资源, 必须显式列 file:。
+// - script-src 的 'sha256-*' 由构建时对 index.html 里现存内联脚本
+//   (主题 boot 脚本) 逐个计算 —— 以后增删内联脚本无需手工维护哈希。
+// - img-src 放行 http(s): 避免 markdown 远程图片回归。
+// - connect-src: 生产渲染层经 IPC relay 访问后端, 不应有直连; 保留
+//   loopback http/ws 以防未知直连路径静默破裂, 收紧留给后续评审。
+function cspInjectionPlugin(): Plugin {
+  return {
+    name: 'sage:csp-injection',
+    apply: 'build',
+    transformIndexHtml(html) {
+      const hashes: string[] = [];
+      const inlineScript = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+      let m: RegExpExecArray | null;
+      while ((m = inlineScript.exec(html)) !== null) {
+        const digest = createHash('sha256').update(m[1]).digest('base64');
+        hashes.push(`'sha256-${digest}'`);
+      }
+      const csp = [
+        "default-src 'self' file:",
+        `script-src 'self' file: ${hashes.join(' ')}`.trim(),
+        "style-src 'self' file: 'unsafe-inline'",
+        "img-src 'self' file: data: blob: https: http:",
+        "font-src 'self' file: data:",
+        "connect-src 'self' file: ws://localhost:* ws://127.0.0.1:* http://127.0.0.1:* http://localhost:*",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'none'",
+      ].join('; ');
+      return html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${csp}">`);
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), cspInjectionPlugin()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
