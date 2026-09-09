@@ -527,9 +527,21 @@ export const en: Record<TranslationKey, string> = {
   'office.edit.previewFailed': 'Preview failed',
   'office.edit.rejected': 'This edit cannot be applied',
   'office.edit.noChanges': 'No changes produced',
-  'office.edit.applyInChat':
-    'This page previews only: to apply, ask the assistant to run the same office_update edit in chat',
   'office.edit.required': 'Please complete the edit fields',
+  // Round 2 (R1): in-page apply — secondary confirm after a successful
+  // preview + apply feedback + self-check summary line.
+  'office.edit.apply': 'Apply changes',
+  'office.edit.applying': 'Applying…',
+  'office.edit.applyHint': 'Look good? Applying writes the changes above to the document.',
+  'office.edit.applied': 'Edits applied',
+  'office.edit.applyFailed': 'Apply failed',
+  'office.edit.selfCheckOk': 'Self-check passed',
+  'office.edit.selfCheckFailed': 'Self-check failed',
+  'office.edit.selfCheckParagraphs': '{n} paragraphs',
+  'office.edit.selfCheckTables': '{n} tables',
+  'office.edit.selfCheckSheets': '{n} sheets',
+  'office.edit.selfCheckSlides': '{n} slides',
+  'office.edit.selfCheckPages': '{n} pages',
 
   // ─── Office parity batch 2: export PDF (item 2.7) ─────
   'office.export.pdf': 'Export PDF',

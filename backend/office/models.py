@@ -151,6 +151,38 @@ class WordTableContent(BaseModel):
     rows: List[List[str]]
 
 
+class WordCommentContent(BaseModel):
+    """One Word comment.
+
+    Moved here in round 2 — 批次 3.3 originally defined it in word.py because
+    models.py was owned by another agent at the time. ``id`` matches the
+    ``w:id`` of the ``w:commentRangeStart/End`` pair and ``w:commentReference``
+    in document.xml; ``anchor_text`` is the body text inside the anchored
+    range, falling back to the anchor's paragraph text when the range is empty.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(description="批注 id（w:comment/@w:id，十进制字符串）")
+    author: Optional[str] = Field(default=None, description="批注作者（w:author）")
+    date: Optional[str] = Field(default=None, description="ISO 8601 时间（w:date）")
+    text: str = Field(description="批注正文（w:comment 内各段文本）")
+    anchor_text: str = Field(default="", description="批注锚定的正文文本")
+
+
+class WordCommentsResult(BaseModel):
+    """Result of :func:`backend.office.word.read_docx_comments`.
+
+    Standalone envelope kept for the dedicated comments reader;
+    :class:`OfficeWordReadResult` embeds the same
+    :class:`WordCommentContent` items directly via its ``comments`` field.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    comments: List[WordCommentContent] = Field(default_factory=list)
+
+
 class OfficeWordReadResult(BaseModel):
     """Result of POST /api/v1/office/word/read."""
 
@@ -160,6 +192,10 @@ class OfficeWordReadResult(BaseModel):
     paragraphs: List[WordParagraphContent]
     tables: List[WordTableContent]
     images: int = Field(ge=0, default=0)
+    # Round 2 (R3): comments merged into the read result. ``default_factory``
+    # keeps payloads produced before this field existed valid under
+    # ``extra="forbid"`` (old consumers may ignore the field entirely).
+    comments: List[WordCommentContent] = Field(default_factory=list)
 
 
 class ExcelSheetContent(BaseModel):

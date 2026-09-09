@@ -35,9 +35,11 @@
  * Office parity batch 2 (2026-09-09): the preview panel toolbar carries
  * 编辑预览 (item 2.5 — opens <OfficeEditPreviewDialog>, which dry-runs a
  * composed edit via POST /office/update/preview and renders the change
- * list; there is no page-level apply route, edits apply via chat) and
- * 导出 PDF (item 2.7 — handled inside the panel via
+ * list) and 导出 PDF (item 2.7 — handled inside the panel via
  * POST /office/export-pdf with a 打开所在文件夹 toast action).
+ * Round 2 (R1): the dialog now also APPLIES — 确认应用 POSTs the previewed
+ * ops to /office/doc/{doc_id}/update, then onApplied refreshes the
+ * document list and re-reads the preview (stale-read guard reused).
  */
 
 import { FileSpreadsheet, FileText, FileType, FolderOpen, Presentation } from 'lucide-react';
@@ -109,8 +111,9 @@ export function Office() {
 
   // Item 2.5: 编辑预览 dialog — opened from the preview panel toolbar.
   // Only meaningful while a word/excel/ppt preview is showing (the panel
-  // hides the entry for pdf). The dialog previews only: there is no
-  // page-level apply-update route, edits apply via chat.
+  // hides the entry for pdf). Round 2 (R1): the dialog applies edits
+  // in-page after previewing (确认应用 → POST /office/doc/{id}/update);
+  // onApplied refreshes the list + preview via handleEditApplied.
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const editDoc = preview ? preview.data.summary : null;
   const editSheetNames =
@@ -259,6 +262,27 @@ export function Office() {
     }
   };
 
+  // Round 2 (R1): the edit-preview dialog applied its ops — the managed
+  // file changed under us. Same follow-up as a snapshot restore: refresh
+  // the list (updated_at/status changed), then re-read the preview with
+  // the shared stale-read guard. The dialog stays open showing its
+  // self-check summary while this runs.
+  const handleEditApplied = async (docId: string) => {
+    const doc = documents.find((d) => d.id === docId);
+    await refresh();
+    if (!doc) return;
+    const myReadId = ++readIdRef.current;
+    try {
+      const data = await readDocument(docId);
+      if (myReadId !== readIdRef.current) return;
+      setPreview(toPreview(doc.doc_type, data));
+    } catch (e) {
+      if (myReadId !== readIdRef.current) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`${t('office.toast.readFailed')}: ${msg}`);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col gap-4 p-6 overflow-y-auto" data-testid="office-page">
       {/* Header */}
@@ -388,6 +412,7 @@ export function Office() {
                     workspacePath={workspacePath}
                     doc={editDoc}
                     sheetNames={editSheetNames}
+                    onApplied={handleEditApplied}
                     onClose={() => setEditDialogOpen(false)}
                   />
                 </div>

@@ -24,6 +24,14 @@ Plan 3.4 self-check readback: on success the result carries
 ``content["self_check"]`` — a compact read-back of the edited file
 (counts per doc_type) so the model can immediately verify the edit
 landed. Best-effort: read-back failure never fails the tool result.
+
+Round-2 R4 ``dry_run``: with ``dry_run=true`` the tool resolves the
+target file exactly like a real update, then runs the read-only
+:func:`backend.office.diff_preview.preview_update` (ops applied to a
+temp copy, source untouched) and returns
+``{"dry_run": True, "changes": [...], "truncated": bool}`` instead of
+writing anything. Preview failure (invalid ops / unreadable file)
+collapses to the standard ``success=False`` error shape.
 """
 
 from __future__ import annotations
@@ -33,10 +41,15 @@ from typing import Any, Dict, List, Optional
 
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
+from backend.office.diff_preview import preview_update
 from backend.office.edit import update_document
 from backend.office.models import OfficeDocType
 from backend.office.path_safety import validate_supported_filename
-from backend.office.session_workspace import get_active_workspace
+from backend.office.session_workspace import (
+    get_active_workspace,
+    get_document_in_workspace,
+)
+from backend.office.storage import document_path
 from backend.office.tool_service import OfficeToolService
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import ToolExecutionContext, current_tool_context
@@ -143,21 +156,34 @@ class OfficeUpdateTool(BaseTool):
                             + _OP_DESCRIPTIONS["ppt"]
                         ),
                     },
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": (
+                            "true 时仅预览变更不落盘（返回 diff 变更清单），默认 false"
+                        ),
+                    },
                 },
                 "required": ["ops"],
             },
         )
 
-    def execute(
+    def execute(  # noqa: PLR0911 — dry_run/正式路径守卫链，逐条早退
         self,
         doc_id: Optional[str] = None,
         file_path: Optional[str] = None,
         ops: Optional[List[Dict[str, Any]]] = None,
+        dry_run: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
         normalized = _normalize_ops(ops)
         if normalized is None:
             return ToolResult(success=False, error="ops_required")
+        if dry_run:
+            if isinstance(doc_id, str) and doc_id.strip():
+                return self._dry_run_bound(doc_id.strip(), normalized)
+            if isinstance(file_path, str) and file_path.strip():
+                return self._dry_run_by_path(file_path.strip(), normalized)
+            return ToolResult(success=False, error="doc_id_or_file_path_required")
         if isinstance(doc_id, str) and doc_id.strip():
             return self._execute_bound(doc_id.strip(), normalized)
         if isinstance(file_path, str) and file_path.strip():
@@ -220,6 +246,83 @@ class OfficeUpdateTool(BaseTool):
         if binding is None:
             return None
         return managed_self_check(conn, binding.workspace_path, doc_id, doc_type)
+
+    # ── dry_run 模式：只读预览（diff_preview 在临时副本上试跑） ──────
+
+    def _dry_run_bound(self, doc_id: str, ops: List[Dict[str, Any]]) -> ToolResult:
+        """dry_run + doc_id：与正式路径同构地解析受管文档，但不写盘。
+
+        解析语义与 ``OfficeToolService._resolve_doc`` 一致（binding 有效 +
+        ``get_document_in_workspace``，归档/跨工作区/未知 id 折叠为
+        ``document_not_found``），解析不到目标文件时绝不退化为预览。
+        """
+        ctx = current_tool_context()
+        if ctx is None or not ctx.session_id:
+            return ToolResult(success=False, error="missing_tool_context")
+        try:
+            conn = get_database().get_connection()
+            binding = get_active_workspace(
+                conn, ctx.session_id, expected_generation=ctx.binding_generation
+            )
+        except Exception:  # noqa: BLE001 — DB 层异常按「文档不存在」折叠
+            return ToolResult(success=False, error="document_not_found")
+        doc = (
+            get_document_in_workspace(conn, doc_id, binding.workspace_path)
+            if binding is not None
+            else None
+        )
+        if doc is None:
+            return ToolResult(success=False, error="document_not_found")
+        return self._dry_run_result(document_path(doc), ops)
+
+    def _dry_run_by_path(self, file_path: str, ops: List[Dict[str, Any]]) -> ToolResult:
+        """dry_run + file_path：复用正式路径的全部定位守卫，但不写盘。"""
+        blocked = self._enforce_workspace(file_path)
+        if blocked is not None:
+            return blocked
+        path = Path(file_path).expanduser()
+        if not path.is_absolute():
+            return ToolResult(
+                success=False,
+                error="file_path_absolute_required: 请传绝对路径",
+            )
+        doc_type = _infer_doc_type(path)
+        if doc_type is None:
+            return ToolResult(
+                success=False,
+                error="unsupported_file_type: 仅支持 .docx/.xlsx/.pptx",
+            )
+        try:
+            validate_supported_filename(path.name, _DOC_TYPE_ENUM[doc_type])
+        except Exception:
+            return ToolResult(success=False, error="invalid_filename")
+        if not path.is_file():
+            return ToolResult(success=False, error="file_not_found")
+        return self._dry_run_result(path, ops)
+
+    def _dry_run_result(self, path: Path, ops: List[Dict[str, Any]]) -> ToolResult:
+        """跑只读预览并折算成 ToolResult（源文件零写入）。
+
+        预览失败（非法 op / 不可读文件）→ 标准 ``success=False`` 错误形状，
+        error 里带上 preview 的人类可读原因。
+        """
+        try:
+            preview = preview_update(path, ops)
+        except Exception as exc:  # noqa: BLE001 — preview 异常折算为失败
+            return ToolResult(success=False, error=f"preview_failed: {exc}")
+        if not preview.ok:
+            return ToolResult(
+                success=False,
+                error=f"preview_failed: {preview.error or 'one or more ops failed'}",
+            )
+        return ToolResult(
+            success=True,
+            content={
+                "dry_run": True,
+                "changes": [change.model_dump() for change in preview.changes],
+                "truncated": preview.truncated,
+            },
+        )
 
     # ── file_path 模式：直接编辑（越界由权限层守卫） ─────────────────
 

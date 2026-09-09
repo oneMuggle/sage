@@ -1,5 +1,6 @@
 /**
- * OfficeEditPreviewDialog tests — office parity batch 2 (item 2.5).
+ * OfficeEditPreviewDialog tests — office parity batch 2 (item 2.5) +
+ * round 2 (R1 apply loop).
  *
  * Coverage:
  *  - state machine: compose → previewing → result (ok with diff rows /
@@ -7,8 +8,11 @@
  *    returns to compose.
  *  - op building: word replace_text, excel set_cells, ppt 1-based slide
  *    number → 0-based index; incomplete compose is rejected locally.
- *  - NO apply button: the backend has no page-level apply-update route,
- *    so the dialog shows the apply-in-chat notice instead.
+ *  - apply loop (round 2, R1): 确认应用 appears ONLY after an ok preview
+ *    (secondary confirm); clicking it POSTs the SAME ops via
+ *    officeApi.updateDocument, toasts success, renders the self-check
+ *    summary line and fires onApplied; a thrown apply error toasts the
+ *    backend message and returns to result for retry.
  *  - buildUpdateOps unit table.
  */
 
@@ -17,9 +21,11 @@ import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockPreviewUpdate = vi.fn();
+const mockUpdateDocument = vi.fn();
 vi.mock('../../../shared/api/officeApi', () => ({
   officeApi: {
     previewUpdate: (...args: unknown[]) => mockPreviewUpdate(...args),
+    updateDocument: (...args: unknown[]) => mockUpdateDocument(...args),
   },
 }));
 
@@ -31,9 +37,15 @@ import type { OfficeDocumentSummary } from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { buildUpdateOps, OfficeEditPreviewDialog } from '../OfficeEditPreviewDialog';
 
-const toastMock = toast as unknown as { error: ReturnType<typeof vi.fn> };
+const toastMock = toast as unknown as {
+  error: ReturnType<typeof vi.fn>;
+  success: ReturnType<typeof vi.fn>;
+};
 
-function makeDoc(docType: OfficeDocumentSummary['doc_type']): OfficeDocumentSummary {
+function makeDoc(
+  docType: OfficeDocumentSummary['doc_type'],
+  metadata: OfficeDocumentSummary['metadata'] = { file_size_bytes: 2048 },
+): OfficeDocumentSummary {
   return {
     id: 'doc-1',
     workspace_path: '/tmp/ws',
@@ -43,7 +55,7 @@ function makeDoc(docType: OfficeDocumentSummary['doc_type']): OfficeDocumentSumm
     status: 'parsed',
     created_at: 1700000000,
     updated_at: 1700000000,
-    metadata: { file_size_bytes: 2048 },
+    metadata,
     derived_from: null,
     archived_at: null,
   };
@@ -52,13 +64,16 @@ function makeDoc(docType: OfficeDocumentSummary['doc_type']): OfficeDocumentSumm
 function renderDialog(props: {
   docType: OfficeDocumentSummary['doc_type'];
   sheetNames?: string[];
+  metadata?: OfficeDocumentSummary['metadata'];
+  onApplied?: (docId: string) => void;
 }) {
   return render(
     <I18nProvider defaultLocale="zh">
       <OfficeEditPreviewDialog
         workspacePath="/tmp/ws"
-        doc={makeDoc(props.docType)}
+        doc={makeDoc(props.docType, props.metadata)}
         sheetNames={props.sheetNames}
+        onApplied={props.onApplied}
         onClose={vi.fn()}
       />
     </I18nProvider>,
@@ -68,7 +83,9 @@ function renderDialog(props: {
 describe('OfficeEditPreviewDialog — state machine', () => {
   beforeEach(() => {
     mockPreviewUpdate.mockReset();
+    mockUpdateDocument.mockReset();
     toastMock.error.mockReset();
+    toastMock.success.mockReset();
   });
 
   it('word: composes replace_text, previews and renders the diff rows', async () => {
@@ -222,30 +239,147 @@ describe('OfficeEditPreviewDialog — state machine', () => {
   });
 });
 
-describe('OfficeEditPreviewDialog — apply semantics (no apply route)', () => {
+describe('OfficeEditPreviewDialog — apply loop (round 2, R1)', () => {
+  const onAppliedMock = vi.fn();
+
   beforeEach(() => {
     mockPreviewUpdate.mockReset();
+    mockUpdateDocument.mockReset();
+    onAppliedMock.mockReset();
     toastMock.error.mockReset();
+    toastMock.success.mockReset();
   });
 
-  it('never renders an apply button; the apply-in-chat notice is shown instead', async () => {
+  async function previewOk() {
     mockPreviewUpdate.mockResolvedValueOnce({
       ok: true,
-      changes: [{ op: 'replace_text', before: 'a', after: 'b' }],
+      changes: [{ op: 'replace_text', target: 'a', before: 'a', after: 'b' }],
       truncated: false,
       error: null,
     });
-    renderDialog({ docType: 'word' });
+    renderDialog({
+      docType: 'word',
+      metadata: { file_size_bytes: 2048, paragraph_count: 3, table_count: 1 },
+      onApplied: onAppliedMock,
+    });
     fireEvent.change(screen.getByTestId('office-edit-find'), { target: { value: 'a' } });
+    fireEvent.change(screen.getByTestId('office-edit-replace'), { target: { value: 'b' } });
     fireEvent.click(screen.getByTestId('office-edit-preview-submit'));
-
     expect(await screen.findByTestId('office-edit-result')).toBeInTheDocument();
-    // The backend exposes no page-level apply-update HTTP route, so the
-    // dialog must not offer an apply action in ANY language.
-    expect(screen.queryByRole('button', { name: /应用|apply/i })).toBeNull();
-    expect(screen.getByTestId('office-edit-apply-notice')).toHaveTextContent(
-      '页面内仅支持预览：应用编辑请在对话中让助手执行相同的 office_update 操作',
+  }
+
+  it('offers no apply step before a preview exists (compose phase)', () => {
+    renderDialog({ docType: 'word' });
+    expect(screen.queryByTestId('office-edit-apply-step')).toBeNull();
+    expect(screen.queryByTestId('office-edit-apply')).toBeNull();
+  });
+
+  it('offers no apply step after a rejected (ok=false) preview', async () => {
+    mockPreviewUpdate.mockResolvedValueOnce({
+      ok: false,
+      changes: [],
+      truncated: false,
+      error: 'find text not found',
+    });
+    renderDialog({ docType: 'word' });
+    fireEvent.change(screen.getByTestId('office-edit-find'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByTestId('office-edit-preview-submit'));
+    expect(await screen.findByTestId('office-edit-rejected')).toBeInTheDocument();
+    expect(screen.queryByTestId('office-edit-apply-step')).toBeNull();
+    expect(screen.queryByTestId('office-edit-apply')).toBeNull();
+  });
+
+  it('apply appears only after an ok preview and POSTs the same ops via updateDocument', async () => {
+    await previewOk();
+
+    // Secondary confirm step is visible with its hint.
+    expect(screen.getByTestId('office-edit-apply-step')).toBeInTheDocument();
+    const apply = screen.getByTestId('office-edit-apply');
+    expect(apply).toHaveTextContent('确认应用');
+
+    mockUpdateDocument.mockResolvedValueOnce({
+      ok: true,
+      summary: {
+        id: 'doc-1',
+        doc_type: 'word',
+        status: 'edited',
+        metadata: { file_size_bytes: 4096, paragraph_count: 3, table_count: 1 },
+      },
+      self_check: { ok: true, summary: { ops_applied: 1 }, error: null },
+    });
+    fireEvent.click(apply);
+
+    await waitFor(() => {
+      expect(mockUpdateDocument).toHaveBeenCalledWith({
+        doc_id: 'doc-1',
+        ops: [{ op: 'replace_text', find: 'a', replace: 'b' }],
+      });
+    });
+    expect(mockUpdateDocument).toHaveBeenCalledTimes(1);
+
+    // Success: applied panel replaces the confirm step, toast fires,
+    // onApplied hands the doc id to the parent for refresh.
+    expect(await screen.findByTestId('office-edit-applied')).toBeInTheDocument();
+    expect(screen.queryByTestId('office-edit-apply')).toBeNull();
+    expect(toastMock.success).toHaveBeenCalledWith('已应用编辑');
+    expect(onAppliedMock).toHaveBeenCalledTimes(1);
+    expect(onAppliedMock).toHaveBeenCalledWith('doc-1');
+  });
+
+  it('renders the self-check summary line from the post-update summary counts', async () => {
+    await previewOk();
+    mockUpdateDocument.mockResolvedValueOnce({
+      ok: true,
+      summary: {
+        id: 'doc-1',
+        doc_type: 'word',
+        status: 'edited',
+        metadata: { file_size_bytes: 4096, paragraph_count: 3, table_count: 1 },
+      },
+      self_check: { ok: true, summary: null, error: null },
+    });
+    fireEvent.click(screen.getByTestId('office-edit-apply'));
+
+    // 段落 3 · 表格 1 — built from the refreshed OfficeDocumentSummary.
+    expect(await screen.findByTestId('office-edit-self-check')).toHaveTextContent(
+      '自检通过 · 段落 3 · 表格 1',
     );
+  });
+
+  it('flags a failed self-check with the backend error', async () => {
+    await previewOk();
+    mockUpdateDocument.mockResolvedValueOnce({
+      ok: true,
+      summary: {
+        id: 'doc-1',
+        doc_type: 'word',
+        status: 'edited',
+        metadata: { file_size_bytes: 4096 },
+      },
+      self_check: { ok: false, summary: null, error: 'replacement not found on re-read' },
+    });
+    fireEvent.click(screen.getByTestId('office-edit-apply'));
+
+    expect(await screen.findByTestId('office-edit-self-check')).toHaveTextContent('自检未通过');
+    expect(screen.getByText('replacement not found on re-read')).toBeInTheDocument();
+  });
+
+  it('toasts apply failures with the backend message and returns to result for retry', async () => {
+    await previewOk();
+    mockUpdateDocument.mockRejectedValueOnce(new Error('Backend POST → 422: invalid ops'));
+    fireEvent.click(screen.getByTestId('office-edit-apply'));
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith(
+        '应用失败: Backend POST → 422: invalid ops',
+      );
+    });
+    // Back in result phase — the confirm step is offered again so the
+    // user can retry the same ops.
+    expect(screen.getByTestId('office-edit-preview-dialog').dataset.phase).toBe('result');
+    expect(screen.getByTestId('office-edit-apply')).toBeInTheDocument();
+    expect(onAppliedMock).not.toHaveBeenCalled();
+    expect(toastMock.success).not.toHaveBeenCalled();
   });
 });
 

@@ -29,6 +29,7 @@ import type {
   Memory,
   Message,
   OfficeDeleteResponse,
+  OfficeDocUpdateResponse,
   OfficeDocumentSummary,
   OfficeExcelReadResult,
   OfficeExportPdfResult,
@@ -1839,6 +1840,30 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
       method: 'libreoffice',
       output_path: outputPath,
       error: null,
+    };
+    return result;
+  },
+
+  // Office parity round 2 (R1): 页内应用编辑 —— 回读 preview 的 ops 真正
+  // 写入 demo 文档行 (status → edited, updated_at 刷新), 并按后端契约回
+  // {ok, summary, self_check}。self_check.summary 模拟后端自检回读的
+  // 计数形状。未知 doc 在 demo 里不抛 404 (与 archive/restore 桩一致)。
+  office_doc_update: (args) => {
+    const docId = asStr(args.docId);
+    const doc = demoOfficeDocs.find((d) => d.id === docId);
+    const ops = Array.isArray(args.ops) ? (args.ops as OfficeUpdateOp[]) : [];
+    if (doc) {
+      doc.status = 'edited';
+      doc.updated_at = NOW_S * 1000;
+    }
+    const result: OfficeDocUpdateResponse = {
+      ok: true,
+      summary: doc ?? demoOfficeDocs[0],
+      self_check: {
+        ok: true,
+        summary: { ops_applied: ops.length, re_read: true },
+        error: null,
+      },
     };
     return result;
   },

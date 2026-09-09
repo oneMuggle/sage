@@ -370,8 +370,8 @@ describe('COMMAND_ROUTES', () => {
 
   // Office parity batch 2 (items 2.5 / 2.7): update PREVIEW dry-run +
   // PDF export. Backend routes: backend/api/office_routes.py:620-658.
-  // There is deliberately NO apply-update route — the preview endpoint
-  // is the only office_update surface the office page talks to.
+  // Batch 2 shipped preview-only; round 2 (R1) adds the apply-update
+  // route office_doc_update right below.
   it('has office_update_preview posting to the update/preview dry-run route', () => {
     const r = COMMAND_ROUTES.office_update_preview;
     expect(r).toBeDefined();
@@ -386,6 +386,38 @@ describe('COMMAND_ROUTES', () => {
     expect(r.method).toBe('POST');
     expect(r.path({})).toBe('/api/v1/office/export-pdf');
     expect(r.rawBody).toBeUndefined();
+  });
+
+  // Office parity round 2 (R1): page-level apply-update closing the
+  // preview loop. Backend: POST /office/doc/{doc_id}/update.
+  it('has office_doc_update posting to the doc-scoped update route', () => {
+    const r = COMMAND_ROUTES.office_doc_update;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({ docId: 'doc-1' })).toBe('/api/v1/office/doc/doc-1/update');
+    // Path param, so a doc id with special chars must be encoded.
+    expect(r.path({ docId: 'd/1' })).toBe('/api/v1/office/doc/d%2F1/update');
+  });
+
+  it('office_doc_update uses rawBody so op dict keys survive verbatim', () => {
+    const r = COMMAND_ROUTES.office_doc_update;
+    // Ops are forwarded to the backend editor verbatim — the recursive
+    // camelToSnakeKeys would mangle any camelCase op key (e.g. a future
+    // "cellStyle" → "cell_style"), so the body skips translation.
+    expect(r.rawBody).toBe(true);
+    const ops = [
+      { op: 'replace_text', find: '大模型', replace: 'LLM' },
+      {
+        op: 'set_cells',
+        sheet: 'Sheet1',
+        cells: [{ addr: 'B2', value: '10', cellStyle: 'bold' }],
+      },
+    ];
+    expect(r.body?.({ docId: 'doc-1', ops })).toEqual({ ops });
+    // doc_id rides in the path — it must not leak into the body.
+    expect(r.body?.({ docId: 'doc-1', ops })).not.toHaveProperty('doc_id');
+    // Missing ops degrade to an empty list (backend 422s on that shape).
+    expect(r.body?.({ docId: 'doc-1' })).toEqual({ ops: [] });
   });
 
   // Office parity batch 3 (item 3.2): Word template library.

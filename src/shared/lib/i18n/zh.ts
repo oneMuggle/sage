@@ -519,9 +519,20 @@ export const zh = {
   'office.edit.previewFailed': '预览失败',
   'office.edit.rejected': '该编辑无法应用',
   'office.edit.noChanges': '没有产生变更',
-  'office.edit.applyInChat':
-    '页面内仅支持预览：应用编辑请在对话中让助手执行相同的 office_update 操作',
   'office.edit.required': '请完整填写编辑内容',
+  // Round 2 (R1): 页内应用 —— 预览成功后的二次确认 + 应用反馈 + 自检摘要行。
+  'office.edit.apply': '确认应用',
+  'office.edit.applying': '正在应用…',
+  'office.edit.applyHint': '预览无误？应用后上述变更将写入文档。',
+  'office.edit.applied': '已应用编辑',
+  'office.edit.applyFailed': '应用失败',
+  'office.edit.selfCheckOk': '自检通过',
+  'office.edit.selfCheckFailed': '自检未通过',
+  'office.edit.selfCheckParagraphs': '段落 {n}',
+  'office.edit.selfCheckTables': '表格 {n}',
+  'office.edit.selfCheckSheets': '工作表 {n}',
+  'office.edit.selfCheckSlides': '幻灯片 {n}',
+  'office.edit.selfCheckPages': '页 {n}',
 
   // ─── Office parity batch 2: 导出 PDF (item 2.7) ─────
   'office.export.pdf': '导出 PDF',

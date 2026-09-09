@@ -1,5 +1,6 @@
 /**
- * OfficeEditPreviewDialog — 编辑预览 (item 2.5, office parity batch 2).
+ * OfficeEditPreviewDialog — 编辑预览 (item 2.5, office parity batch 2;
+ * apply loop closed in round 2, item R1).
  *
  * Compose a simple edit for the document currently shown in the preview
  * panel, dry-run it against POST /office/update/preview (which applies
@@ -11,30 +12,41 @@
  *   Excel: set_cells     {sheet, cells:[{addr, value}]}
  *   PPT  : set_slide_title {index (0-based, from a 1-based input), title}
  *
- * Apply semantics — IMPORTANT: the backend intentionally exposes NO
- * page-level apply-update HTTP route (real edits go through the
- * chat-driven office_update tool). The dialog therefore previews only
- * and says so via the `office.edit.applyInChat` notice instead of
- * offering an apply button.
+ * Apply semantics (round 2, R1): after a successful preview (result.ok)
+ * the dialog offers 确认应用 — a deliberate secondary confirm step
+ * between "generating a diff" and "writing the file". Confirming POSTs
+ * the SAME ops to /office/doc/{doc_id}/update. Success renders the
+ * self-check summary line (e.g. 段落 3 · 表格 1), toasts, and fires
+ * `onApplied` so the parent refreshes the document list + preview.
+ * Batch 2 shipped preview-only with an "apply in chat" notice; that
+ * notice is gone now that the apply route exists.
  *
- * State machine: compose → previewing → result (ok | rejected).
- * Errors during the preview call surface as toasts and return to compose.
+ * State machine: compose → previewing → result (ok | rejected)
+ *   → applying → applied.
+ * Preview failures toast and return to compose; apply failures toast
+ * and return to result so the user can retry the same ops.
  */
 
-import { Pencil, X } from 'lucide-react';
+import { CheckCircle2, Pencil, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { officeApi } from '../../shared/api/officeApi';
 import type {
   OfficeDiffPreviewChange,
+  OfficeDocUpdateResponse,
   OfficeDocumentSummary,
   OfficeUpdateOp,
   OfficeUpdatePreviewResult,
 } from '../../shared/api/types';
-import { useI18n } from '../../shared/lib/i18n';
+import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
-export type OfficeEditPreviewPhase = 'compose' | 'previewing' | 'result';
+export type OfficeEditPreviewPhase =
+  | 'compose'
+  | 'previewing'
+  | 'result'
+  | 'applying'
+  | 'applied';
 
 export interface OfficeEditPreviewDialogProps {
   workspacePath: string;
@@ -42,6 +54,12 @@ export interface OfficeEditPreviewDialogProps {
   doc: OfficeDocumentSummary;
   /** Excel sheet names for the sheet selector (from the read result). */
   sheetNames?: string[];
+  /**
+   * Fired once the update route confirmed the apply (round 2, R1). The
+   * parent refreshes the document list and re-reads the preview — the
+   * managed file's bytes changed under it.
+   */
+  onApplied?: (docId: string) => void;
   onClose: () => void;
 }
 
@@ -102,6 +120,7 @@ export function OfficeEditPreviewDialog({
   workspacePath,
   doc,
   sheetNames,
+  onApplied,
   onClose,
 }: OfficeEditPreviewDialogProps) {
   const { t } = useI18n();
@@ -111,6 +130,12 @@ export function OfficeEditPreviewDialog({
     sheet: sheetNames?.[0] ?? '',
   }));
   const [result, setResult] = useState<OfficeUpdatePreviewResult | null>(null);
+  // The exact ops the successful preview dry-ran — the apply step must
+  // POST the SAME ops, not a re-derived copy (compose state may look
+  // identical, but storing the previewed ops makes that guarantee).
+  const [previewedOps, setPreviewedOps] = useState<OfficeUpdateOp[] | null>(null);
+  // Set once /office/doc/{id}/update confirmed the apply (round 2, R1).
+  const [applied, setApplied] = useState<OfficeDocUpdateResponse | null>(null);
 
   const setField = (key: keyof ComposeState) => (value: string) =>
     setCompose((prev) => ({ ...prev, [key]: value }));
@@ -129,6 +154,7 @@ export function OfficeEditPreviewDialog({
         ops,
       });
       setResult(res);
+      setPreviewedOps(ops);
       setPhase('result');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -137,13 +163,39 @@ export function OfficeEditPreviewDialog({
     }
   };
 
+  // Round 2 (R1): apply the previewed ops for real. Only reachable from
+  // the result phase with an ok preview — the button IS the secondary
+  // confirm between "diff" and "write". Failures toast the backend
+  // message and return to result so the user can retry.
+  const handleApply = async () => {
+    if (!previewedOps || phase !== 'result') return;
+    setPhase('applying');
+    try {
+      const res = await officeApi.updateDocument({ doc_id: doc.id, ops: previewedOps });
+      setApplied(res);
+      setPhase('applied');
+      toast.success(t('office.edit.applied'));
+      onApplied?.(doc.id);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`${t('office.edit.applyFailed')}: ${msg}`);
+      setPhase('result');
+    }
+  };
+
   const backToCompose = () => {
     setPhase('compose');
     setResult(null);
+    setPreviewedOps(null);
+    setApplied(null);
   };
 
   const inputClass =
     'w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text';
+
+  // Post-apply count line, e.g. "段落 3 · 表格 1" — empty when the
+  // backend reports no counts at all.
+  const selfCheckLine = applied ? formatSelfCheckSummary(applied.summary, t) : '';
 
   // The compose form stays mounted while previewing (fields must not
   // vanish if the preview call fails), so the compose branch covers both
@@ -310,7 +362,7 @@ export function OfficeEditPreviewDialog({
           </>
         )}
 
-        {phase === 'result' && result && (
+        {(phase === 'result' || phase === 'applying' || phase === 'applied') && result && (
           <div className="space-y-3" data-testid="office-edit-result">
             {result.ok ? (
               <>
@@ -338,19 +390,62 @@ export function OfficeEditPreviewDialog({
               </div>
             )}
 
-            {/* No apply button on purpose: there is no page-level
-                apply-update HTTP route — edits apply via chat. */}
-            <p
-              className="text-xs text-muted bg-bg-subtle border border-border rounded px-3 py-2"
-              data-testid="office-edit-apply-notice"
-            >
-              {t('office.edit.applyInChat')}
-            </p>
+            {/* Round 2 (R1): a successful preview unlocks the apply step.
+                确认应用 is the deliberate secondary confirm between
+                "diff on a temp copy" and "write the managed file". */}
+            {result.ok && !applied && (
+              <div className="space-y-2" data-testid="office-edit-apply-step">
+                <p className="text-xs text-muted bg-bg-subtle border border-border rounded px-3 py-2">
+                  {t('office.edit.applyHint')}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void handleApply()}
+                  disabled={phase === 'applying'}
+                  className="w-full px-4 py-2 bg-primary text-text-inverse rounded text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
+                  data-testid="office-edit-apply"
+                >
+                  {phase === 'applying'
+                    ? t('office.edit.applying')
+                    : t('office.edit.apply')}
+                </button>
+              </div>
+            )}
+
+            {/* Applied — success panel with the post-update self-check
+                summary line (e.g. 段落 3 · 表格 1). The parent refreshes
+                the document list + preview via onApplied. */}
+            {applied && (
+              <div
+                className="px-3 py-2 bg-success/10 border border-success/30 rounded text-sm"
+                data-testid="office-edit-applied"
+              >
+                <div className="flex items-center gap-1.5 font-medium text-success">
+                  <CheckCircle2 className="w-4 h-4" />
+                  {t('office.edit.applied')}
+                </div>
+                <div
+                  className="mt-1 text-xs text-text-secondary"
+                  data-testid="office-edit-self-check"
+                >
+                  {applied.self_check?.ok
+                    ? t('office.edit.selfCheckOk')
+                    : t('office.edit.selfCheckFailed')}
+                  {selfCheckLine ? ` · ${selfCheckLine}` : ''}
+                </div>
+                {applied.self_check?.error && (
+                  <div className="mt-1 text-xs text-warning break-all">
+                    {applied.self_check.error}
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               type="button"
               onClick={backToCompose}
-              className="w-full px-4 py-2 border border-border rounded text-sm text-text-secondary hover:bg-bg-hover"
+              disabled={phase === 'applying'}
+              className="w-full px-4 py-2 border border-border rounded text-sm text-text-secondary hover:bg-bg-hover disabled:opacity-50"
               data-testid="office-edit-back"
             >
               {t('office.edit.preview')}
@@ -360,6 +455,37 @@ export function OfficeEditPreviewDialog({
       </div>
     </div>
   );
+}
+
+/**
+ * Post-apply summary line (round 2, R1) — renders the refreshed document
+ * metadata as a compact count list, e.g. "段落 3 · 表格 1". The backend's
+ * self_check.summary is an opaque object, so the human-readable line is
+ * built from the typed OfficeDocumentSummary instead. Only counts the
+ * backend actually reports are included.
+ */
+function formatSelfCheckSummary(
+  doc: OfficeDocumentSummary,
+  t: (key: TranslationKey) => string,
+): string {
+  const meta = doc.metadata ?? { file_size_bytes: 0 };
+  const parts: string[] = [];
+  const push = (n: number | undefined, key: TranslationKey) => {
+    if (typeof n === 'number' && Number.isFinite(n)) {
+      parts.push(t(key).replace('{n}', String(n)));
+    }
+  };
+  if (doc.doc_type === 'word') {
+    push(meta.paragraph_count, 'office.edit.selfCheckParagraphs');
+    push(meta.table_count, 'office.edit.selfCheckTables');
+  } else if (doc.doc_type === 'excel') {
+    push(meta.sheet_count, 'office.edit.selfCheckSheets');
+  } else if (doc.doc_type === 'ppt') {
+    push(meta.page_count, 'office.edit.selfCheckSlides');
+  } else {
+    push(meta.page_count, 'office.edit.selfCheckPages');
+  }
+  return parts.join(' · ');
 }
 
 function DiffChangeRow({ change }: { change: OfficeDiffPreviewChange }) {

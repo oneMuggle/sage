@@ -1230,11 +1230,11 @@ export interface OfficeSnapshotRestoreResponse {
 // DiffPreviewResult / OfficeUpdatePreviewRequest) and
 // backend/office/export_pdf.py (ExportPdfResult; OfficeExportPdfRequest
 // lives in the same module).
-// NOTE (item 2.5): the backend exposes a preview (dry-run) route only —
-// POST /office/update/preview. There is NO page-level apply-update HTTP
-// route; real updates go through the chat-driven office_update tool
-// (backend/office/edit.py). The office page can therefore preview but
-// not apply edits; the UI states this explicitly.
+// NOTE (round 2, R1): batch 2 shipped preview-only — there was no
+// page-level apply-update route and real updates went through the
+// chat-driven office_update tool. Round 2 adds POST
+// /office/doc/{doc_id}/update (types below), so the edit-preview dialog
+// now applies in-page after a successful preview.
 // ──────────────────────────────────────────────────────────────────────
 
 /**
@@ -1279,6 +1279,45 @@ export interface OfficeUpdatePreviewResult {
   truncated: boolean;
   /** Why the real update would fail (set when ok=false). */
   error?: string | null;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Update apply (Office parity round 2 — R1 close the edit-preview loop)
+// Route: POST /api/v1/office/doc/{doc_id}/update, body {ops} (same op
+// dicts the preview route takes). Errors: unknown doc → 404 JSON
+// {error_type, message, file_path}; invalid ops → 422 same shape (both
+// surface as thrown errors via handleApiError, never as ok=false).
+// ──────────────────────────────────────────────────────────────────────
+
+/** Request of POST /office/doc/{doc_id}/update. */
+export interface OfficeDocUpdateRequest {
+  doc_id: string;
+  ops: OfficeUpdateOp[];
+}
+
+/**
+ * Post-apply self-check report (backend re-reads the document and
+ * verifies the ops landed). `summary` is an opaque object — the UI
+ * renders the counts line from the updated OfficeDocumentSummary instead.
+ */
+export interface OfficeUpdateSelfCheck {
+  ok: boolean;
+  summary?: Record<string, unknown> | null;
+  error?: string | null;
+}
+
+/** Response of POST /office/doc/{doc_id}/update (backend OfficeDocUpdateResult). */
+export interface OfficeDocUpdateResponse {
+  ok: boolean;
+  /** Post-update document summary (status='edited', refreshed updated_at). */
+  summary: OfficeDocumentSummary;
+  self_check: OfficeUpdateSelfCheck;
+  /**
+   * Per-op outcomes from the backend editor (backend.office.edit) —
+   * `[{op, ok, ...}]`. Not rendered today; typed so the contract is
+   * visible at the call site.
+   */
+  results?: Record<string, unknown>[];
 }
 
 /** Request of POST /office/export-pdf. */

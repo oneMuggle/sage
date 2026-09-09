@@ -4,12 +4,20 @@ Pure functions: no FastAPI, no I/O outside the file argument. Caller (the
 FastAPI route handler in office_routes.py) wraps exceptions into HTTP errors.
 
 The reader extracts a structured view of a .docx:
-- paragraphs with style + level (heading level 0 means body text)
+- paragraphs with style + level (heading level 0 means body text); run-level
+  bold/italic is rendered as ``**bold**`` / ``*italic*`` markers (round 2 R2b)
 - tables (rows of cell text, ignoring nested tables / images inside cells)
 - image count (inline shapes count as images)
-- comments via the separate :func:`read_docx_comments` (批次 3.3)。批注不并入
-  :func:`read_docx`：``OfficeWordReadResult``（models.py，extra="forbid"）
-  本批次无法追加字段，先用独立轻量结果模型，后续需要改 models.py 才能合流。
+- comments (round 2 R3): ``read_docx`` fills ``OfficeWordReadResult.comments``
+  through the same extraction the dedicated :func:`read_docx_comments` uses
+  (shared :func:`_extract_comments` helper; the OOXML is walked once per read)
+
+Marker simplifications (documented, round 2 R2b):
+- only *direct* run formatting counts: ``run.bold`` / ``run.italic`` are
+  ``None`` when inherited from a style, and ``None`` is treated as
+  not-bold / not-italic (resolving the style cascade is out of scope);
+- paragraphs whose text already contains ``**`` are returned verbatim (no
+  marker wrapping — it would be ambiguous with the literal markdown).
 
 It does NOT extract:
 - headers / footers (out of scope per plan §1.3)
@@ -25,12 +33,11 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from pydantic import BaseModel, ConfigDict, Field
 
 DEFAULT_ASCII_FONT = "Times New Roman"
 DEFAULT_EA_FONT = "宋体"
@@ -77,7 +84,7 @@ def _patch_linked_character_styles(doc: Document, ascii_name: str, ea_name: str)
     本身的 rFonts——所以仅 patch paragraph style 不够，必须同步 patch 所有
     linked character style。
     """
-    linked_style_ids: set[str] = set()
+    linked_style_ids: Set[str] = set()
     for style in doc.styles:
         link = style.element.find(qn("w:link"))
         if link is not None:
@@ -111,6 +118,8 @@ from .models import (
     OfficeDocumentMetadata,
     OfficeDocumentSummary,
     OfficeWordReadResult,
+    WordCommentContent,
+    WordCommentsResult,
     WordParagraphContent,
     WordTableContent,
 )
@@ -136,12 +145,65 @@ def _extract_heading_level(style_name: str) -> int:
     return 0
 
 
+def _render_paragraph_text(para) -> str:
+    """Paragraph text with run-level bold/italic rendered as markdown markers.
+
+    Consecutive runs sharing the same effective formatting are merged into one
+    ``**bold**`` / ``*italic*`` (``***both***``) span; whitespace-only and
+    empty runs are kept verbatim inside their span.
+
+    Simplifications (round 2 R2b, documented):
+    - ``run.bold`` / ``run.italic`` are *direct* formatting only; ``None``
+      (inherited from a paragraph/character style) counts as not-bold /
+      not-italic — resolving the full style cascade is out of scope.
+    - Paragraphs whose text already contains ``**`` are returned verbatim:
+      wrapping spans would be ambiguous with the literal markdown.
+    - The marked-up text is assembled from runs only. ``Paragraph.text`` also
+      folds in hyperlink text (python-docx ≥1.1), so paragraphs containing
+      hyperlinks are complete only on the no-marker fast path below (which
+      returns ``para.text`` unchanged for unformatted paragraphs).
+    """
+    plain = para.text
+    if "**" in plain:
+        return plain
+    if not any(bool(run.bold) or bool(run.italic) for run in para.runs):
+        return plain
+
+    # Merge consecutive runs with identical (bold, italic) formatting.
+    spans: List[Tuple[bool, bool, List[str]]] = []
+    for run in para.runs:
+        bold, italic = bool(run.bold), bool(run.italic)
+        if spans and spans[-1][0] == bold and spans[-1][1] == italic:
+            spans[-1][2].append(run.text)
+        else:
+            spans.append((bold, italic, [run.text]))
+
+    parts: List[str] = []
+    for bold, italic, texts in spans:
+        chunk = "".join(texts)
+        if not chunk:
+            continue
+        if bold and italic:
+            parts.append(f"***{chunk}***")
+        elif bold:
+            parts.append(f"**{chunk}**")
+        elif italic:
+            parts.append(f"*{chunk}*")
+        else:
+            parts.append(chunk)
+    return "".join(parts)
+
+
 def _extract_paragraphs(doc: Document) -> List[WordParagraphContent]:
-    """Extract body paragraphs (skipping tables, headers, footers)."""
+    """Extract body paragraphs (skipping tables, headers, footers).
+
+    Text keeps run-level bold/italic as ``**...**`` / ``*...*`` markers; see
+    :func:`_render_paragraph_text` for the exact rules and simplifications.
+    """
     paragraphs: List[WordParagraphContent] = []
     for para in doc.paragraphs:
         style_name = para.style.name if para.style else "Normal"
-        text = para.text.strip()
+        text = _render_paragraph_text(para).strip()
         # Skip empty paragraphs (would just clutter result)
         if not text:
             continue
@@ -226,7 +288,8 @@ def read_docx(
         original_filename: User's uploaded filename.
 
     Returns:
-        OfficeWordReadResult with summary + paragraphs + tables + image count.
+        OfficeWordReadResult with summary + paragraphs + tables + image count
+        + comments (round 2 R3; empty list when the file has no comments).
 
     Raises:
         OfficeFileNotFoundError: file doesn't exist.
@@ -248,6 +311,16 @@ def read_docx(
     paragraphs = _extract_paragraphs(doc)
     tables = _extract_tables(doc)
     images = _count_images(doc)
+    # Round 2 R3: comments ride along in the read result. A corrupt comments
+    # part must not fail the whole read (body extraction already succeeded);
+    # the dedicated read_docx_comments still surfaces it as OfficeParseError.
+    try:
+        comments = _extract_comments(doc, file_path)
+    except Exception:  # noqa: BLE001 — 批注部分损坏不阻断正文读取
+        logger.warning(
+            "Failed to extract comments from %s; comments omitted", file_path.name, exc_info=True
+        )
+        comments = []
 
     doc_id = document_id or file_path.stem
 
@@ -266,42 +339,64 @@ def read_docx(
         paragraphs=paragraphs,
         tables=tables,
         images=images,
+        comments=comments,
     )
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Comments reader (批次 3.3, plan §3.3 "Word comments only")
+# Comments reader (批次 3.3; round 2 R3 merged into read_docx)
 # ──────────────────────────────────────────────────────────────────────
+# WordCommentContent / WordCommentsResult live in models.py since round 2
+# (batch 3 had them here because models.py was locked at the time); they are
+# re-imported above so existing ``from backend.office.word import ...`` users
+# keep working.
 
 
-class WordCommentContent(BaseModel):
-    """One Word comment（批次 3.3）。
+def _extract_comments(doc: Document, file_path: Path) -> List[WordCommentContent]:
+    """Parse the ``word/comments.xml`` part of an opened document.
 
-    ``id`` 与 document.xml 中 ``w:commentRangeStart/End``、
-    ``w:commentReference`` 的 ``w:id`` 对应；``anchor_text`` 是锚定范围
-    内的正文文本（范围为空时回退到锚点所在段落的文本）。
+    Shared by :func:`read_docx` (fills ``OfficeWordReadResult.comments``) and
+    :func:`read_docx_comments` (wraps the list in a
+    :class:`~backend.office.models.WordCommentsResult`) so the OOXML is walked
+    only once per read.
+
+    Raises:
+        OfficeParseError: a comments part exists but its XML is corrupt.
     """
+    part = _find_comments_part(doc)
+    if part is None:
+        return []
 
-    model_config = ConfigDict(extra="forbid")
+    from docx.oxml.parser import parse_xml
 
-    id: str = Field(description="批注 id（w:comment/@w:id，十进制字符串）")
-    author: Optional[str] = Field(default=None, description="批注作者（w:author）")
-    date: Optional[str] = Field(default=None, description="ISO 8601 时间（w:date）")
-    text: str = Field(description="批注正文（w:comment 内各段文本）")
-    anchor_text: str = Field(default="", description="批注锚定的正文文本")
+    try:
+        root = parse_xml(part.blob)
+    except Exception as exc:
+        raise OfficeParseError(
+            f"Failed to parse comments part: {exc}", file_path=file_path
+        ) from exc
 
-
-class WordCommentsResult(BaseModel):
-    """Result of :func:`read_docx_comments`（批次 3.3）。
-
-    独立轻量模型的原因：``OfficeWordReadResult`` 定义在 models.py 且
-    ``extra="forbid"``，本批次 models.py 归另一负责人维护，不能追加
-    ``comments`` 字段；把批注合入 read_docx 响应需要后续改 models.py。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    comments: List[WordCommentContent] = Field(default_factory=list)
+    anchor_map = _collect_anchor_texts(doc.element)
+    comments: List[WordCommentContent] = []
+    for comment_el in root.findall(qn("w:comment")):
+        cid = comment_el.get(qn("w:id")) or ""
+        # 批注正文：w:comment 下各段文本，段内拼 run，段间以换行连接。
+        para_texts = [
+            "".join(t.text or "" for t in p.iter(qn("w:t")))
+            for p in comment_el.findall(qn("w:p"))
+        ]
+        text = "\n".join(pt for pt in para_texts)
+        anchor_text = anchor_map.get(cid, "") or _anchor_fallback_text(doc.element, cid)
+        comments.append(
+            WordCommentContent(
+                id=cid,
+                author=comment_el.get(qn("w:author")),
+                date=comment_el.get(qn("w:date")),
+                text=text,
+                anchor_text=anchor_text,
+            )
+        )
+    return comments
 
 
 def _find_comments_part(doc: Document) -> Optional[Any]:
@@ -385,7 +480,8 @@ def read_docx_comments(file_path: Path) -> WordCommentsResult:
 
     Raises:
         OfficeFileNotFoundError: file doesn't exist.
-        OfficeParseError: file exists but isn't a valid DOCX.
+        OfficeParseError: file exists but isn't a valid DOCX (or its comments
+            part is corrupt).
     """
     file_path = Path(file_path)
 
@@ -399,38 +495,7 @@ def read_docx_comments(file_path: Path) -> WordCommentsResult:
     except Exception as exc:
         raise OfficeParseError(f"Failed to parse DOCX: {exc}", file_path=file_path) from exc
 
-    part = _find_comments_part(doc)
-    if part is None:
-        return WordCommentsResult(comments=[])
-
-    from docx.oxml.parser import parse_xml
-
-    try:
-        root = parse_xml(part.blob)
-    except Exception as exc:
-        raise OfficeParseError(f"Failed to parse comments part: {exc}", file_path=file_path) from exc
-
-    anchor_map = _collect_anchor_texts(doc.element)
-    comments: List[WordCommentContent] = []
-    for comment_el in root.findall(qn("w:comment")):
-        cid = comment_el.get(qn("w:id")) or ""
-        # 批注正文：w:comment 下各段文本，段内拼 run，段间以换行连接。
-        para_texts = [
-            "".join(t.text or "" for t in p.iter(qn("w:t")))
-            for p in comment_el.findall(qn("w:p"))
-        ]
-        text = "\n".join(pt for pt in para_texts)
-        anchor_text = anchor_map.get(cid, "") or _anchor_fallback_text(doc.element, cid)
-        comments.append(
-            WordCommentContent(
-                id=cid,
-                author=comment_el.get(qn("w:author")),
-                date=comment_el.get(qn("w:date")),
-                text=text,
-                anchor_text=anchor_text,
-            )
-        )
-    return WordCommentsResult(comments=comments)
+    return WordCommentsResult(comments=_extract_comments(doc, file_path))
 
 
 # ──────────────────────────────────────────────────────────────────────

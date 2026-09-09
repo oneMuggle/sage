@@ -17,6 +17,8 @@ import { invoke } from './desktopInvoke';
 import type {
   OfficeArchiveResponse,
   OfficeDeleteResponse,
+  OfficeDocUpdateRequest,
+  OfficeDocUpdateResponse,
   OfficeDocumentListResponse,
   OfficeExcelGenerateRequest,
   OfficeExcelReadResult,
@@ -310,8 +312,8 @@ export const officeApi = {
    * `{ok: false, changes: [], error}` so the UI can show WHY the real
    * update would fail.
    *
-   * NOTE: this is preview-only. There is no page-level apply-update
-   * HTTP route; real edits go through the chat office_update tool.
+   * Round 2 (R1): the apply counterpart is `updateDocument` — the
+   * dialog previews first, then applies the SAME ops on user confirm.
    *
    * No retry — runs the full editor pipeline per op.
    */
@@ -320,6 +322,34 @@ export const officeApi = {
       return await invoke<OfficeUpdatePreviewResult>('office_update_preview', {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
+        docId: req.doc_id,
+        ops: req.ops,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Apply previously previewed update ops to the document (round 2, R1).
+   *
+   * POST /api/v1/office/doc/{doc_id}/update body {ops} — the same op
+   * dicts `previewUpdate` dry-ran. Resolves the target by doc_id
+   * (managed-layout lookup server-side). Returns
+   * `{ok, summary, self_check}` where `summary` is the post-update
+   * document row (status='edited') and `self_check` reports whether a
+   * post-apply re-read confirmed the ops landed.
+   *
+   * Errors (unknown doc → 404, invalid ops → 422, both
+   * `{error_type, message, file_path}`) throw via handleApiError —
+   * there is no ok=false transport shape.
+   *
+   * No retry — side-effecting (writes the managed file; a transient
+   * blip must not double-apply).
+   */
+  async updateDocument(req: OfficeDocUpdateRequest): Promise<OfficeDocUpdateResponse> {
+    try {
+      return await invoke<OfficeDocUpdateResponse>('office_doc_update', {
         docId: req.doc_id,
         ops: req.ops,
       });

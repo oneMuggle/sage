@@ -596,14 +596,35 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // Office parity batch 2 (items 2.5 / 2.7): update PREVIEW (dry-run —
   // applies ops to a temp copy, never the source) and explicit PDF export.
   // Backend: backend/api/office_routes.py:620-658 (POST /update/preview,
-  // POST /export-pdf). There is deliberately NO page-level apply-update
-  // route — real edits stay on the chat-driven office_update tool path.
+  // POST /export-pdf). Batch 2 shipped preview-only — real edits stayed on
+  // the chat-driven office_update tool path; round 2 (R1) adds the
+  // page-level office_doc_update route right below.
   // Body keys (workspacePath/filePath/docId/ops) pass through the normal
   // recursive camelToSnakeKeys; the composed op dicts use only lowercase
   // single-word keys (find/replace/sheet/cells/addr/value/index/title),
   // so the translation is a no-op on them.
   office_update_preview: { method: 'POST', path: () => '/api/v1/office/update/preview' },
   office_export_pdf: { method: 'POST', path: () => '/api/v1/office/export-pdf' },
+
+  // Office parity round 2 (R1): page-level apply-update — closes the
+  // edit-preview loop opened by office_update_preview. Backend contract:
+  // POST /api/v1/office/doc/{doc_id}/update body {ops} (same op dicts the
+  // preview route takes) → {ok, summary, self_check:{ok, summary?, error?}}.
+  // Unknown doc → 404 {error_type, message, file_path}; invalid ops → 422
+  // same shape. rawBody: op dicts are forwarded to the backend editor
+  // verbatim (runtime-validated there). The recursive camelToSnakeKeys is
+  // a no-op on the lowercase single-word keys this dialog composes today
+  // (find/replace/sheet/cells/addr/value/index/title), but ops are
+  // pass-through user-shaped data — any future camelCase op key (e.g.
+  // "cellRange") would be mangled into "_cell_range", so the body is
+  // built explicitly snake_case instead (doc_id rides in the path and
+  // must not leak into the body).
+  office_doc_update: {
+    method: 'POST',
+    path: (a) => `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/update`,
+    rawBody: true,
+    body: (a) => ({ ops: Array.isArray(a.ops) ? (a.ops as Record<string, unknown>[]) : [] }),
+  },
 
   // Office parity batch 3 (item 3.2): Word template library (从模板创建).
   // Backend: backend/api/office_routes.py — GET /templates (builtin +

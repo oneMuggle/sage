@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 from openpyxl import load_workbook
@@ -43,7 +43,9 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 #: 公式单元格缺缓存值时附加在读取结果里的一行提示（openpyxl 不能计算公式，
-#: 缓存值要等 Excel/LibreOffice 打开后重算写入）。
+#: 缓存值要等 Excel/LibreOffice 打开后重算写入）。Round2 R5：缺缓存值时
+#: 先尝试 formulas 本地求值（excel_eval.evaluate_workbook），全部公式都
+#: 解析出值的 sheet 不再附此提示；仍有未解析公式时保留。
 _FORMULA_CACHE_NOTE = "公式计算值需在 Excel 中打开后生效"
 
 #: 数值类型元组常量：py38 兼容（isinstance 的 ``int | float`` 写法需 3.10+），
@@ -137,6 +139,28 @@ def _extract_sheet_formulas(ws_formula, ws_values) -> tuple[List[str], bool]:
     return entries, any_cache_missing
 
 
+def _apply_local_eval(
+    entries: List[str], resolved: Optional[Dict[str, Any]]
+) -> List[str]:
+    """R5（Round2）：把本地求值结果回填进缺缓存值的公式条目。
+
+    ``B4=SUM(B2:B3)`` → ``B4=SUM(B2:B3) → 30 (本地求值)``。只处理还没有
+    ``→ 值`` 标记（即缺缓存值）的条目；坐标未命中或求值结果为 None 时
+    视为未解析、保持原样（读取侧据此决定是否保留缓存提示行）。
+    """
+    if not resolved:
+        return entries
+    out: List[str] = []
+    for entry in entries:
+        coord, sep, body = entry.partition("=")
+        value = resolved.get(coord) if sep else None
+        if sep and value is not None and " → " not in body:
+            out.append(f"{coord}={body} → {_cell_value_to_str(value)} (本地求值)")
+        else:
+            out.append(entry)
+    return out
+
+
 def _build_xlsx_summary(
     file_path: Path,
     *,
@@ -191,6 +215,11 @@ def read_xlsx(
             （有缓存值时为 ``CELL=formula → cached``）；存在无缓存值的
             公式时在 ``note`` 附上「公式计算值需在 Excel 中打开后生效」。
             openpyxl 不能自行计算公式，缺缓存值属正常现象。
+            R5（Round2）：存在缺缓存值公式时用 ``formulas`` 库本地求值
+            （见 :mod:`.excel_eval`，全 fail-safe），求出值的条目升级为
+            ``CELL=formula → value (本地求值)``；某 sheet 的公式全部解析
+            出值时不再附 ``note``。求值仅在 include_formulas=True 且至少
+            一个缓存值缺失时触发，且有公式数/超时上限。
 
     Returns:
         OfficeExcelReadResult with summary + sheets array (each with name + rows
@@ -222,26 +251,50 @@ def read_xlsx(
         except Exception as exc:
             raise OfficeParseError(f"Failed to parse XLSX: {exc}", file_path=file_path) from exc
 
-    sheets: List[ExcelSheetContent] = []
+    # R5（Round2）：先收集各 sheet 的公式条目；任一 sheet 存在缺缓存值的
+    # 公式时，才用 formulas 库做一次整簿本地求值（evaluate_workbook 内部
+    # 全 fail-safe，失败返回 None → 行为与不引入求值时完全一致）。
+    collected: List[Tuple[str, List[List[str]], int, int, Optional[List[str]]]] = []
+    any_cache_missing = False
     for ws in wb.worksheets:
         rows, max_row, max_col = _extract_sheet_rows(ws)
-        formulas: Optional[List[str]] = None
-        note: Optional[str] = None
+        entries: Optional[List[str]] = None
         if wb_formulas is not None and ws.title in wb_formulas.sheetnames:
-            entries, any_cache_missing = _extract_sheet_formulas(
+            formula_entries, sheet_cache_missing = _extract_sheet_formulas(
                 wb_formulas[ws.title], ws
             )
-            if entries:
-                formulas = entries
-                if any_cache_missing:
-                    note = _FORMULA_CACHE_NOTE
+            if formula_entries:
+                entries = formula_entries
+                if sheet_cache_missing:
+                    any_cache_missing = True
+        collected.append((ws.title, rows, max_row, max_col, entries))
+
+    evaluated: Optional[Dict[str, Dict[str, Any]]] = None
+    if any_cache_missing:
+        from .excel_eval import evaluate_workbook
+
+        evaluated = evaluate_workbook(file_path)
+
+    sheets: List[ExcelSheetContent] = []
+    for title, rows, max_row, max_col, entries in collected:
+        formulas_out: Optional[List[str]] = None
+        note: Optional[str] = None
+        if entries:
+            if evaluated:
+                formulas_out = _apply_local_eval(entries, evaluated.get(title))
+            else:
+                formulas_out = entries
+            # 缓存提示只对仍有「无缓存值且求值未解析」公式的 sheet 保留；
+            # 全部公式都解析出值时省略。
+            if any(" → " not in entry for entry in formulas_out):
+                note = _FORMULA_CACHE_NOTE
         sheets.append(
             ExcelSheetContent(
-                name=ws.title,
+                name=title,
                 rows=rows,
                 max_row=max_row,
                 max_col=max_col,
-                formulas=formulas,
+                formulas=formulas_out,
                 note=note,
             )
         )

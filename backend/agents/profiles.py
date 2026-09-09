@@ -657,6 +657,8 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "- 批次3：Word 批注（读取/添加文档批注）；模板库（内置周报/会议纪要等"
     "模板，或工作区 office/templates/ 自定义模板）；创建/更新成功后会自动"
     "回读摘要（self_check），请核对摘要是否符合意图。"
+    "office_update 支持 dry_run=true 先预览变更清单（不落盘），"
+    "确认后再正式应用。"
 )
 
 

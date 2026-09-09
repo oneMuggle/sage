@@ -106,6 +106,54 @@ describe('demo office update preview + export (parity batch 2)', () => {
   });
 });
 
+describe('demo office doc update apply (parity round 2, R1)', () => {
+  it('office_doc_update echoes ok + self_check and marks the demo row edited', () => {
+    const before = demoInvoke('office_list_documents', {}).value as {
+      documents: Array<{ id: string; updated_at: number; status: string }>;
+    };
+    const target = before.documents.find((d) => d.id === 'of-1')!;
+    // demoOfficeDocs rows are shared object references — snapshot the
+    // primitive, otherwise the mutation below "updates" the baseline too.
+    const updatedAtBefore = target.updated_at;
+
+    const res = demoInvoke('office_doc_update', {
+      docId: 'of-1',
+      ops: [{ op: 'replace_text', find: '大模型', replace: 'LLM' }],
+    });
+
+    expect(res.hit).toBe(true);
+    const value = res.value as {
+      ok: boolean;
+      summary: { id: string; status: string; updated_at: number };
+      self_check: { ok: boolean; summary?: Record<string, unknown>; error?: string | null };
+    };
+    expect(value.ok).toBe(true);
+    expect(value.summary.id).toBe('of-1');
+    // Apply mutates the demo row: status → edited, updated_at refreshed.
+    expect(value.summary.status).toBe('edited');
+    expect(value.summary.updated_at).toBeGreaterThan(updatedAtBefore);
+    // Self-check echoes a plausible re-read report.
+    expect(value.self_check.ok).toBe(true);
+    expect(value.self_check.summary).toMatchObject({ ops_applied: 1, re_read: true });
+  });
+
+  it('office_doc_update counts the forwarded ops in self_check', () => {
+    const res = demoInvoke('office_doc_update', {
+      docId: 'of-2',
+      ops: [
+        { op: 'set_cells', sheet: 'Sheet1', cells: [{ addr: 'B2', value: '10' }] },
+        { op: 'set_cells', sheet: 'Sheet1', cells: [{ addr: 'B3', value: '11' }] },
+      ],
+    });
+    const value = res.value as {
+      summary: { id: string };
+      self_check: { summary?: Record<string, unknown> };
+    };
+    expect(value.summary.id).toBe('of-2');
+    expect(value.self_check.summary).toMatchObject({ ops_applied: 2 });
+  });
+});
+
 describe('demo office template library (parity batch 3, item 3.2)', () => {
   it('office_list_templates returns exactly 2 builtin word templates', () => {
     const res = demoInvoke('office_list_templates', { workspacePath: '/ws' });

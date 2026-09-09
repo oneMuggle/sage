@@ -5,7 +5,9 @@
 pandas 读 xlsx → 按序执行 1-5 个分析操作（describe / value_counts /
 aggregate / corr）→ 结果以紧凑 markdown 表格进 ToolResult；可选
 ``write_report=true`` 把完整结果落成 ``<stem>-analysis.xlsx`` 分析报告
-（summary sheet + 每 op 一个 sheet + aggregate 原生柱状图）。
+（summary sheet + 每 op 一个 sheet + aggregate 原生柱状图），有 aggregate
+结果时另在其同目录渲染 ``<stem>-chart.png`` PNG 图表并注册为 image
+产物（R6，供聊天侧预览；best-effort，失败不影响分析结果）。
 
 安全姿态与 :mod:`backend.tools.office_pdf_tool` 的读工具一致：
 
@@ -517,6 +519,60 @@ def _write_table_to_sheet(ws: Any, columns: List[str], rows: List[List[Any]]) ->
         ws.append(list(row))
 
 
+def _write_aggregate_chart_png(
+    report_path: Path, aggregate: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
+    """R6（Round2）：aggregate 结果渲染 PNG，落报告同目录，best-effort。
+
+    命名 ``<report_stem>-chart.png``（如 ``sales-analysis-chart.png``），
+    数据与 aggregate sheet / 原生柱状图同源，经 charts.py 的
+    ``render_chart_png``（matplotlib，懒加载）出图后 os.replace 到目标名
+    （派生产物，重跑直接覆盖）。渲染 / 落盘任何失败都返回 None ——
+    图表 PNG 属锦上添花，绝不影响分析报告本身。
+    """
+    rows = aggregate.get("rows") or []
+    labels: List[str] = []
+    values: List[float] = []
+    for row in rows:
+        if not isinstance(row, (list, tuple)) or len(row) < 2:  # noqa: UP038 — py38 兼容
+            continue
+        value = row[1]
+        # None / 文本取值不进图（数值行为 _clean_value 产出的 int/float）
+        if isinstance(value, bool) or not isinstance(value, _NUMERIC_TYPES):
+            continue
+        labels.append(str(row[0]))
+        values.append(float(value))
+    if not values:
+        return None
+    try:
+        import tempfile
+
+        from backend.office.charts import render_chart_png
+        from backend.office.models import ChartSeriesSpec, ChartSpec
+
+        columns = [str(c) for c in aggregate.get("columns") or ()]
+        series_name = (columns[1] if len(columns) > 1 else "") or "value"
+        title_text = str(aggregate.get("title") or "")[:200] or None
+        spec = ChartSpec(
+            type="bar",
+            title=title_text,
+            series=[ChartSeriesSpec(name=series_name[:100], y=values)],
+            labels=labels[:10000],  # ChartSpec.labels 上限（aggregate 行已限 40）
+        )
+        target = report_path.parent / f"{report_path.stem}-chart.png"
+        with tempfile.TemporaryDirectory(dir=str(report_path.parent)) as td:
+            # 与报告同目录中转，保证 os.replace 同卷可用
+            rendered = render_chart_png(spec, Path(td))
+            rendered.replace(target)
+        return {
+            "path": str(target),
+            "filename": target.name,
+            "bytes": target.stat().st_size,
+        }
+    except Exception:  # noqa: BLE001 — 图表 PNG 属锦上添花，失败不影响结果
+        return None
+
+
 def _build_analysis_report(
     output_path: Path,
     *,
@@ -531,7 +587,10 @@ def _build_analysis_report(
 
     summary sheet：来源信息 + 行列数 + 各列非空计数；随后每个 op 一个
     sheet；aggregate sheet 追加原生柱状图（charts.py 的
-    ``build_openpyxl_chart``，best-effort —— 失败不影响报告）。
+    ``build_openpyxl_chart``，best-effort —— 失败不影响报告）。R6：
+    有 aggregate 结果时另渲染 ``<stem>-chart.png`` PNG 到报告同目录
+    （同样 best-effort，见 :func:`_write_aggregate_chart_png`），info 里
+    以 ``chart_png``（path/filename/bytes 或 None）回显。
     """
     from openpyxl import Workbook
 
@@ -604,12 +663,24 @@ def _build_analysis_report(
         with contextlib.suppress(OSError):
             tmp_path.unlink(missing_ok=True)
         raise
+
+    # R6（Round2）：aggregate 结果同步渲染 PNG 图表（<stem>-chart.png，
+    # 供聊天侧图片预览）—— best-effort，失败不带回报告错误。
+    aggregate = next(
+        (r for r in results if r.get("kind") == "aggregate" and r.get("rows")),
+        None,
+    )
+    chart_png: Optional[Dict[str, Any]] = None
+    if aggregate is not None:
+        chart_png = _write_aggregate_chart_png(output_path, aggregate)
+
     return {
         "path": str(output_path),
         "filename": output_path.name,
         "bytes": output_path.stat().st_size,
         "sheets": list(wb.sheetnames),
         "chart_embedded": chart_embedded,
+        "chart_png": chart_png,
     }
 
 
@@ -711,8 +782,9 @@ class OfficeAnalyzeTool(BaseTool):
                         "description": (
                             "Also write an analysis report xlsx "
                             "(<source-stem>-analysis.xlsx, same directory "
-                            "as the source; overwrite allowed). Default "
-                            "false."
+                            "as the source; overwrite allowed) plus a "
+                            "chart PNG (<stem>-chart.png) when an "
+                            "aggregate op is present. Default false."
                         ),
                         "default": False,
                     },
@@ -862,6 +934,14 @@ class OfficeAnalyzeTool(BaseTool):
                     _record_artifact_safely(
                         str(report_path), int(report_info["bytes"])
                     )
+                    # R6：aggregate 图表 PNG 一并注册（detect_artifact_kind
+                    # → kind="image"，聊天侧可预览）；无 PNG（非 aggregate
+                    # op / 渲染失败）时跳过。同样静默失败，不阻断结果。
+                    chart_png = report_info.get("chart_png")
+                    if chart_png:
+                        _record_artifact_safely(
+                            str(chart_png["path"]), int(chart_png["bytes"])
+                        )
                 except Exception as exc:  # noqa: BLE001 — 报告失败不吞分析结果
                     content["report"] = {
                         "success": False,

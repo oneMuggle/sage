@@ -72,6 +72,10 @@ reportlab>=4.0.0      # PDF generation from structured data, ~3MB wheel
 # office.charts.render_chart_png 懒加载；缺库时报可读错误而非崩溃。
 matplotlib>=3.7
 
+# formulas — Excel 公式本地求值（Round2 R5）— main 通道 only；requirements-bundled/py38（Win7）不加。
+# office.excel_eval.evaluate_workbook 懒加载；缺库时公式视图退回缓存值/提示行，不影响读取。
+formulas>=1.2
+
 # certifi: provides Mozilla CA bundle for httpx / requests / curl SSL verification
 # (LTS Pin 2024.7.4, matches release/win7 PR #348 / PR #347 lxml wheel strategy)
 certifi>=2024.7.4

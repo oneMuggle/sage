@@ -25,6 +25,11 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from backend.data.database import Database, get_database
+from backend.office.apply_update import (
+    OfficeDocUpdateRequest,
+    OfficeDocUpdateResult,
+    apply_doc_update,
+)
 from backend.office.diff_preview import (
     DiffPreviewResult,
     OfficeExportPdfRequest,
@@ -705,6 +710,33 @@ def instantiate_template_endpoint(
     return result
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Apply update (Office parity round 2 — R1: edit-preview dialog 的「应用」)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.post("/doc/{doc_id}/update", response_model=OfficeDocUpdateResult)
+def update_document_endpoint(
+    doc_id: str, req: OfficeDocUpdateRequest
+) -> OfficeDocUpdateResult:
+    """Apply update ops to a managed document in place.
+
+    Semantics mirror the office_update tool path: pre-edit snapshot first
+    (best-effort), then the all-or-nothing editor (a rejected op leaves the
+    file untouched), then the row refresh (status → edited, fresh
+    ``updated_at`` / ``file_size_bytes``) and a best-effort self-check
+    readback of the saved file.
+
+    Errors: unknown doc id → 404 (``OfficeFileNotFoundError``); missing
+    managed file → 404; rejected ops → 422 (``OfficeOpRejectedError``,
+    per-op failure info in ``message``); file-level save failure → 500
+    (``OfficeEditError``). All mapped by the registered OfficeError handler.
+    """
+    conn = _db().get_connection()
+    doc = _require_document(conn, doc_id)
+    return apply_doc_update(conn, doc, req.ops)
+
+
 __all__ = [
     "router",
     "register_office_exception_handlers",
@@ -734,4 +766,6 @@ __all__ = [
     # Office parity batch 3 (Item 3.2): template library
     "list_templates_endpoint",
     "instantiate_template_endpoint",
+    # Office parity round 2 (R1): apply update ops to a managed document
+    "update_document_endpoint",
 ]
