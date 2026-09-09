@@ -26,7 +26,7 @@ import time
 import uuid
 from typing import Any, Dict, Optional, Set, Union
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, StrictBool
 
@@ -835,6 +835,65 @@ def _compact_in_progress_add(session_id: str) -> bool:
     return True
 
 
+def _auto_checkpoint_if_enabled(session_id: str) -> Optional[str]:
+    """round5 批次 B-2: 发送前自动快照（偏好 "auto_checkpoint" = "1" 时）。
+
+    在 run 开始前为会话绑定的工作区打一份 checkpoint，提供"整轮改动
+    一键回滚"安全网。设计口径：
+
+    - **默认关**（偏好缺省/非 "1" 一律跳过）——不改变既有行为；
+    - 全程 fail-open：任何一步（偏好读 / 绑定 / zip）失败只记 debug，
+      返回 None，绝不阻塞聊天流；
+    - 快照即 CheckpointCreateTool（与 U2' 面板同一实现口径，受 8MiB/
+      256MiB/10 份保留上限约束）。
+
+    Returns:
+        成功时的 checkpoint_id；未启用/未绑定/失败均为 None。
+
+    注意：zip 大工作区是秒级同步操作，producer 侧须经 ``run_in_executor``
+    调用本函数，不要在事件循环内直接 await。
+    """
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        enabled = SettingsRepository().get("auto_checkpoint")
+        if enabled != "1":
+            return None
+        from backend.office.session_workspace import get_workspace_binding
+
+        root = get_workspace_binding(get_database().get_connection(), session_id)
+        if root is None or not root.workspace_path:
+            return None
+        from backend.domain.tool_policy import ToolPolicy
+        from backend.tools.checkpoint_tool import CheckpointCreateTool
+
+        result = CheckpointCreateTool(ToolPolicy(workspace_root=root.workspace_path)).execute()
+        if not result.success:
+            logger.debug(
+                "[B-2] session=%s 自动快照失败: %s",
+                _safe_log_field(session_id),
+                result.error,
+            )
+            return None
+        content = result.content if isinstance(result.content, dict) else {}
+        checkpoint_id = str(content.get("checkpoint_id", ""))
+        logger.info(
+            "[B-2] session=%s 发送前自动快照: %s files=%s",
+            _safe_log_field(session_id),
+            checkpoint_id,
+            content.get("files"),
+        )
+        return checkpoint_id or None
+    except Exception as checkpoint_err:  # noqa: BLE001 — fail-open
+        logger.debug(
+            "[B-2] session=%s 自动快照异常(忽略): %s",
+            _safe_log_field(session_id),
+            checkpoint_err,
+        )
+        return None
+
+
+# ===== WS-C P0-2: 统一记忆写入路径 (legacy /chat/stream) =====
 async def _extract_legacy_chat_memory(
     request_id: str,
     session_id: str,
@@ -2062,6 +2121,21 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 SessionRepository().update_run_status(data.session_id, "running")
             except Exception as status_err:  # noqa: BLE001 — fail-open
                 logger.debug("会话运行态(running)写入失败: %s", status_err)
+
+            # ===== B-2 (round5 批次 B): 发送前自动快照 BEGIN =====
+            # 偏好 auto_checkpoint="1" 且会话绑定工作区时, run 开始前打一份
+            # checkpoint（一键回滚安全网）。zip 是秒级同步操作, 丢 executor
+            # 跑, 不阻塞事件循环与流启动; 全程 fail-open（函数内部已兜底）。
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    None, _auto_checkpoint_if_enabled, data.session_id
+                )
+            except Exception as auto_cp_err:  # noqa: BLE001 — fail-open
+                logger.debug(
+                    "[B-2] 自动快照调度失败(忽略): %s", auto_cp_err
+                )
+            # ===== B-2 自动快照 END =====
 
             llm_config = None
             if data.api_key and data.api_url:
@@ -3339,6 +3413,63 @@ class MemoryDeleteRequest(BaseModel):
         if self.memory_id and self.id and self.memory_id != self.id:
             raise HTTPException(status_code=422, detail="memory id mismatch")
         return self.memory_id or self.id
+
+
+def _snippet_around(content: str, needle: str, window: int = 80) -> str:
+    """取命中点前后 ``window`` 字符的摘录（前后越界截断，中间不省略号——
+    前端按单行截断展示）。多命中取第一处。"""
+    lowered = content.lower()
+    idx = lowered.find(needle.lower())
+    if idx < 0:
+        return content[: window * 2]
+    start = max(0, idx - window)
+    end = min(len(content), idx + len(needle) + window)
+    return content[start:end]
+
+
+@router.get("/search/messages")
+@with_db_lock
+def search_messages(
+    q: str = Query(min_length=2, max_length=200),
+    session_id: Optional[str] = None,
+    limit: int = Query(default=20, ge=1, le=50),
+):
+    """跨会话消息全文搜索（F12，round5 批次 B）。
+
+    LIKE 子串匹配（通配符转义，转义符用 ``!`` ——反斜杠在部分驱动/书写
+    环境下不是稳定的单字符 ESCAPE），仅 user/assistant 行（tool/system 无
+    检索价值）；新→旧排序；取 limit+1 条探测 has_more，避免 COUNT 双查。
+    """
+    needle = q.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+    pattern = f"%{needle}%"
+    conn = get_database().get_connection()
+    sql = """
+        SELECT m.id, m.session_id, m.role, m.content, m.created_at, s.title
+        FROM messages m
+        JOIN sessions s ON s.id = m.session_id
+        WHERE m.role IN ('user', 'assistant') AND m.content LIKE ? ESCAPE '!'
+    """
+    params: List[Any] = [pattern]
+    if session_id:
+        sql += " AND m.session_id = ?"
+        params.append(session_id)
+    sql += " ORDER BY m.created_at DESC LIMIT ?"
+    params.append(limit + 1)
+    rows = conn.execute(sql, params).fetchall()
+
+    has_more = len(rows) > limit
+    results = [
+        {
+            "message_id": row["id"],
+            "session_id": row["session_id"],
+            "session_title": row["title"],
+            "role": row["role"],
+            "snippet": _snippet_around(row["content"] or "", q),
+            "created_at": row["created_at"],
+        }
+        for row in rows[:limit]
+    ]
+    return {"results": results, "has_more": has_more}
 
 
 @router.get("/memory/search")

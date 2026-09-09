@@ -27,7 +27,8 @@ export type PreferenceKey =
   | 'current_session_id'
   | 'permission_mode'
   | 'permission_rules'
-  | 'network_policy';
+  | 'network_policy'
+  | 'auto_checkpoint';
 
 async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {

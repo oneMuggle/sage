@@ -1,6 +1,7 @@
 import { MessageSquare, Plus, Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
+import { sessionApi } from '../../../shared/api/sessionApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import type { Session } from '../../../shared/lib/store';
 import { SortableSessionList } from '../../session/SortableSessionList';
@@ -20,6 +21,9 @@ interface ConversationsSectionProps {
   onRename?: (sessionId: string, title: string) => Promise<void>;
 }
 
+/** F12: 消息搜索防抖间隔（ms）——输入停顿后才打后端 */
+const MESSAGE_SEARCH_DEBOUNCE_MS = 300;
+
 export function ConversationsSection({
   sessions,
   order,
@@ -36,11 +40,46 @@ export function ConversationsSection({
   // U4': 标题过滤——sessions 全量已在前端内存,纯前端 filter;
   // 只影响展示,不动 dnd 持久化顺序。
   const [searchQuery, setSearchQuery] = useState('');
-  const filteredSessions = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+  // F12: 消息内容命中计数（≥2 字符时防抖搜索,会话 id → 命中条数）
+  const [messageHits, setMessageHits] = useState<Map<string, number>>(new Map());
+
+  const trimmedQuery = searchQuery.trim();
+
+  useEffect(() => {
+    if (trimmedQuery.length < 2) {
+      setMessageHits(new Map());
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      sessionApi
+        .searchMessages(trimmedQuery, { limit: 50 })
+        .then((results) => {
+          if (cancelled) return;
+          const hits = new Map<string, number>();
+          for (const r of results) hits.set(r.sessionId, (hits.get(r.sessionId) ?? 0) + 1);
+          setMessageHits(hits);
+        })
+        .catch(() => {
+          // 搜索失败静默降级为纯标题过滤
+          if (!cancelled) setMessageHits(new Map());
+        });
+    }, MESSAGE_SEARCH_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [trimmedQuery]);
+
+  const displaySessions = useMemo(() => {
+    const q = trimmedQuery.toLowerCase();
     if (!q) return sessions;
-    return sessions.filter((s) => s.title.toLowerCase().includes(q));
-  }, [sessions, searchQuery]);
+    // 标题匹配优先;消息内容命中的会话（标题不匹配也）并入展示
+    const titleMatches = sessions.filter((s) => s.title.toLowerCase().includes(q));
+    const seen = new Set(titleMatches.map((s) => s.id));
+    const messageMatches = sessions.filter((s) => !seen.has(s.id) && messageHits.has(s.id));
+    return [...titleMatches, ...messageMatches];
+  }, [sessions, trimmedQuery, messageHits]);
 
   return (
     <SiderSection
@@ -75,19 +114,20 @@ export function ConversationsSection({
               className="w-full h-6 pl-6 pr-2 text-xs rounded bg-bg-hover border border-transparent focus:border-primary focus:outline-none placeholder:text-muted"
             />
           </div>
-          {filteredSessions.length === 0 && searchQuery.trim() ? (
+          {displaySessions.length === 0 && searchQuery.trim() ? (
             <div className="px-3 py-4 text-xs text-text-muted text-center">
               {t('sidebar.no_match')}
             </div>
           ) : (
             <SortableSessionList
-              sessions={filteredSessions}
+              sessions={displaySessions}
               order={order}
               currentSessionId={currentSessionId}
               onSelect={onSelect}
               onDelete={onDelete}
               onOrderChange={onOrderChange}
               onRename={onRename}
+              messageHitsBySession={messageHits}
             />
           )}
         </div>

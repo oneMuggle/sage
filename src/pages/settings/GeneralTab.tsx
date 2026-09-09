@@ -170,6 +170,48 @@ function SpendLimitInput(): JSX.Element {
   );
 }
 
+/**
+ * B-2 (round5 批次 B): 发送前自动快照开关。
+ *
+ * 走后端 preferences KV（auto_checkpoint），producer 在 run 开始前读取——
+ * 与 localStorage 的 app_settings 开关（autoMemory 等）不同，本开关后端
+ * 必须能读到，因此用 settingsClient 而非 updateSettings。
+ */
+function AutoCheckpointCard() {
+  const [enabled, setEnabled] = useState<boolean | null>(null); // null = 加载中
+
+  useEffect(() => {
+    let mounted = true;
+    void settingsClient.getPreference('auto_checkpoint').then((v) => {
+      if (mounted) setEnabled(v === '1');
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleToggle = (v: boolean) => {
+    setEnabled(v);
+    void settingsClient.setPreference('auto_checkpoint', v ? '1' : '0');
+  };
+
+  return (
+    <section data-testid="auto-checkpoint-section">
+      <h3 className="text-sm font-semibold text-text mb-3">安全网</h3>
+      <SettingRow
+        label="发送前自动快照"
+        desc="每轮对话开始前为绑定的工作区创建检查点，可在变更面板一键回滚（默认关）"
+      >
+        {enabled === null ? (
+          <span className="text-xs text-muted">…</span>
+        ) : (
+          <Toggle value={enabled} onChange={handleToggle} />
+        )}
+      </SettingRow>
+    </section>
+  );
+}
+
 export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
   const { settings, updateSettings } = useSettings();
   const { t } = useI18n();
@@ -219,6 +261,15 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
             onChange={(v) => updateSettings({ confirmDelete: v })}
           />
         </SettingRow>
+      </section>
+      <AutoCheckpointCard />
+      <section data-testid="demo-mode-section">
+        <h3 className="text-sm font-semibold text-text mb-3">演示</h3>
+        <DemoModeSection />
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.permission')}</h3>
+        <PermissionModeSelector />
       </section>
       <section data-testid="orch-settings-section">
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.orch')}</h3>
