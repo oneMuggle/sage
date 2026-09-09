@@ -149,25 +149,26 @@ function renderBindings(value: string) {
 }
 
 describe('useEmacsKeybindings — movement bindings', () => {
-  it('Ctrl+A moves to line start without changing the value', () => {
+  it('Ctrl+A passes through (native select-all preserved on Windows/Linux)', () => {
     const el = makeTextarea('hello world', 5);
     const { result, onChange } = renderBindings(el.value);
     const { event, preventDefault } = makeKeyEvent(el, { key: 'a', ctrlKey: true });
 
-    expect(result.current.handleKeyDown(event)).toBe(true);
-    expect(preventDefault).toHaveBeenCalledOnce();
-    expect(el.selectionStart).toBe(0);
-    expect(el.selectionEnd).toBe(0);
+    expect(result.current.handleKeyDown(event)).toBe(false);
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(el.selectionStart).toBe(5);
+    expect(el.selectionEnd).toBe(5);
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('Ctrl+A targets the current physical line in multi-line text', () => {
+  it('Ctrl+A passes through in multi-line text', () => {
     const el = makeTextarea('hello\nworld', 8);
     const { result } = renderBindings(el.value);
-    const { event } = makeKeyEvent(el, { key: 'a', ctrlKey: true });
+    const { event, preventDefault } = makeKeyEvent(el, { key: 'a', ctrlKey: true });
 
-    result.current.handleKeyDown(event);
-    expect(el.selectionStart).toBe(6);
+    expect(result.current.handleKeyDown(event)).toBe(false);
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(el.selectionStart).toBe(8);
   });
 
   it('Ctrl+E moves to line end', () => {
@@ -207,13 +208,14 @@ describe('useEmacsKeybindings — movement bindings', () => {
     expect(el.selectionStart).toBe(5);
   });
 
-  it('Ctrl+A is case-insensitive (caps lock)', () => {
+  it('Ctrl+A (uppercase, caps lock) also passes through', () => {
     const el = makeTextarea('hello', 3);
     const { result } = renderBindings(el.value);
-    const { event } = makeKeyEvent(el, { key: 'A', ctrlKey: true });
+    const { event, preventDefault } = makeKeyEvent(el, { key: 'A', ctrlKey: true });
 
-    expect(result.current.handleKeyDown(event)).toBe(true);
-    expect(el.selectionStart).toBe(0);
+    expect(result.current.handleKeyDown(event)).toBe(false);
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(el.selectionStart).toBe(3);
   });
 });
 
@@ -340,6 +342,55 @@ describe('useEmacsKeybindings — kill bindings', () => {
   });
 });
 
+describe('useEmacsKeybindings — Ctrl+Backspace (Windows convention)', () => {
+  it('kills the previous word', () => {
+    const el = makeTextarea('foo bar baz', 7);
+    const { result, onChange } = renderBindings(el.value);
+    const { event, preventDefault } = makeKeyEvent(el, { key: 'Backspace', ctrlKey: true });
+
+    expect(result.current.handleKeyDown(event)).toBe(true);
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(onChange).toHaveBeenCalledWith('foo  baz');
+  });
+
+  it('at start of line joins with the previous line', () => {
+    const el = makeTextarea('hello\nworld', 6);
+    const { result, onChange } = renderBindings(el.value);
+    const { event } = makeKeyEvent(el, { key: 'Backspace', ctrlKey: true });
+
+    result.current.handleKeyDown(event);
+    expect(onChange).toHaveBeenCalledWith('helloworld');
+  });
+
+  it('does not cross the line break mid-line', () => {
+    const el = makeTextarea('hello\n   world', 9);
+    const { result, onChange } = renderBindings(el.value);
+    const { event } = makeKeyEvent(el, { key: 'Backspace', ctrlKey: true });
+
+    result.current.handleKeyDown(event);
+    expect(onChange).toHaveBeenCalledWith('hello\nworld');
+  });
+
+  it('kills the selected region when there is a selection', () => {
+    const el = makeTextarea('foo bar baz', 4, 7);
+    const { result, onChange } = renderBindings(el.value);
+    const { event } = makeKeyEvent(el, { key: 'Backspace', ctrlKey: true });
+
+    result.current.handleKeyDown(event);
+    expect(onChange).toHaveBeenCalledWith('foo  baz');
+  });
+
+  it('is a no-op at the start of the buffer', () => {
+    const el = makeTextarea('hello', 0);
+    const { result, onChange } = renderBindings(el.value);
+    const { event, preventDefault } = makeKeyEvent(el, { key: 'Backspace', ctrlKey: true });
+
+    expect(result.current.handleKeyDown(event)).toBe(true);
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
 describe('useEmacsKeybindings — non-binding keys pass through', () => {
   it('returns false for plain letters (no modifier)', () => {
     const el = makeTextarea('hello', 2);
@@ -454,12 +505,11 @@ describe('useEmacsKeybindings — controlled component integration', () => {
     const ta = renderControlled('hello\nworld');
     ta.setSelectionRange(8, 8);
 
-    fireEvent.keyDown(ta, { key: 'a', ctrlKey: true }); // → line start (6)
-    expect(ta.selectionStart).toBe(6);
     fireEvent.keyDown(ta, { key: 'e', ctrlKey: true }); // → line end (11)
     expect(ta.selectionStart).toBe(11);
-    fireEvent.keyDown(ta, { key: 'a', ctrlKey: true }); // → line start (6)
-    fireEvent.keyDown(ta, { key: 'k', ctrlKey: true }); // kill 'world'
+    fireEvent.keyDown(ta, { key: 'a', ctrlKey: true }); // passes through (selection stays)
+    expect(ta.selectionStart).toBe(11);
+    fireEvent.keyDown(ta, { key: 'u', ctrlKey: true }); // kill from line start (6) to cursor (11) → 'hello\n'
 
     expect(ta.value).toBe('hello\n');
     expect(ta.selectionStart).toBe(6);

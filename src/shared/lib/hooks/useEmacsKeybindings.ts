@@ -5,21 +5,27 @@ import { useCallback, useEffect, useRef } from 'react';
  *
  * Bindings (all line-oriented, operating on physical `\n`-separated lines):
  *
- * | Shortcut | Action                                   |
- * | -------- | ---------------------------------------- |
- * | Ctrl+A   | Move cursor to start of line             |
- * | Ctrl+E   | Move cursor to end of line               |
- * | Ctrl+K   | Kill (delete) from cursor to end of line |
- * | Ctrl+U   | Kill from start of line to cursor        |
- * | Ctrl+W   | Kill the word before the cursor          |
- * | Alt+B    | Move backward one word                   |
- * | Alt+F    | Move forward one word                    |
+ * | Shortcut          | Action                                   |
+ * | ----------------- | ---------------------------------------- |
+ * | Ctrl+E            | Move cursor to end of line               |
+ * | Ctrl+K            | Kill (delete) from cursor to end of line |
+ * | Ctrl+U            | Kill from start of line to cursor        |
+ * | Ctrl+W            | Kill the word before the cursor          |
+ * | Ctrl+Backspace    | Kill the word before the cursor (Windows)|
+ * | Alt+B             | Move backward one word                   |
+ * | Alt+F             | Move forward one word                    |
+ *
+ * Ctrl+A is intentionally NOT intercepted: the platform default
+ * (select-all) is the convention Windows/Linux users expect. macOS users
+ * select-all with Cmd+A, which is also untouched. Callers that need
+ * "move to line start" semantics can remap it themselves.
  *
  * Semantics mirror the pi TUI editor (`packages/tui/src/components/editor.ts`),
  * minus the kill ring: Ctrl+K at the end of a line deletes the line break
  * (joining with the next line); Ctrl+U at the start of a line joins with the
- * previous line; Ctrl+W at the start of a line joins with the previous line.
- * With an active selection, Ctrl+K / Ctrl+U / Ctrl+W kill the selected region.
+ * previous line; Ctrl+W / Ctrl+Backspace at the start of a line joins with
+ * the previous line. With an active selection, Ctrl+K / Ctrl+U / Ctrl+W /
+ * Ctrl+Backspace kill the selected region.
  *
  * Platform notes:
  * - Alt+B / Alt+F are matched on `event.code` so they work on macOS, where
@@ -175,10 +181,6 @@ export function useEmacsKeybindings({
 
       if (ctrlOnly) {
         switch (event.key.toLowerCase()) {
-          case 'a':
-            event.preventDefault();
-            moveCursor(lineStartOf(text, start));
-            return true;
           case 'e':
             event.preventDefault();
             moveCursor(lineEndOf(text, end));
@@ -222,6 +224,24 @@ export function useEmacsKeybindings({
               if (start === lineStart) {
                 // Cursor at start of line: kill the preceding line break
                 // (join with previous line), mirroring the pi editor.
+                killRange(lineStart - 1, start);
+              } else {
+                // Never cross the line break: clamp at the line start.
+                killRange(Math.max(findWordBackward(text, start), lineStart), start);
+              }
+            }
+            return true;
+          }
+          case 'backspace': {
+            // Windows convention: Ctrl+Backspace deletes the word before
+            // the cursor. Mirrors Ctrl+W (same kill, different key).
+            event.preventDefault();
+            if (hasSelection) {
+              killRange(start, end);
+            } else if (start > 0) {
+              const lineStart = lineStartOf(text, start);
+              if (start === lineStart) {
+                // Cursor at start of line: join with previous line.
                 killRange(lineStart - 1, start);
               } else {
                 // Never cross the line break: clamp at the line start.
