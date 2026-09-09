@@ -53,6 +53,16 @@ describe('InputCard', () => {
     expect(defaultProps.onSubmit).not.toHaveBeenCalled();
   });
 
+  it('does not call onSubmit when Enter is pressed during IME composition', () => {
+    render(<InputCard {...defaultProps} value="正在输入" />);
+    const textarea = screen.getByRole('textbox');
+    // KeyboardEventInit.isComposing (top-level option) is the W3C-standard
+    // signal we read in the handler. Passing it at the top level lets
+    // fireEvent construct a real KeyboardEvent with the flag set.
+    fireEvent.keyDown(textarea, { key: 'Enter', isComposing: true });
+    expect(defaultProps.onSubmit).not.toHaveBeenCalled();
+  });
+
   it('disables textarea when disabled prop is true', () => {
     render(<InputCard {...defaultProps} disabled />);
     const textarea = screen.getByRole('textbox');
@@ -81,15 +91,18 @@ describe('InputCard', () => {
   });
 
   // U20: Emacs-style keybindings wired into the textarea.
-  it('Ctrl+A moves cursor to line start without calling onChange', () => {
+  // Ctrl+A is intentionally NOT intercepted: native select-all wins.
+  it('Ctrl+A passes through (native select-all preserved)', () => {
     render(<InputCard {...defaultProps} value="hello world" />);
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
     textarea.setSelectionRange(5, 5);
 
     const handled = fireEvent.keyDown(textarea, { key: 'a', ctrlKey: true });
 
-    expect(handled).toBe(false); // default prevented
-    expect(textarea.selectionStart).toBe(0);
+    expect(handled).toBe(true); // fireEvent returns true even when not prevented
+    // The hook returns false (no preventDefault); selection is untouched.
+    expect(textarea.selectionStart).toBe(5);
+    expect(textarea.selectionEnd).toBe(5);
     expect(defaultProps.onChange).not.toHaveBeenCalled();
     expect(defaultProps.onSubmit).not.toHaveBeenCalled();
   });
@@ -102,6 +115,17 @@ describe('InputCard', () => {
     fireEvent.keyDown(textarea, { key: 'k', ctrlKey: true });
 
     expect(defaultProps.onChange).toHaveBeenCalledWith('hello');
+    expect(defaultProps.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+Backspace kills the previous word (Windows convention)', () => {
+    render(<InputCard {...defaultProps} value="foo bar baz" />);
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    textarea.setSelectionRange(7, 7);
+
+    fireEvent.keyDown(textarea, { key: 'Backspace', ctrlKey: true });
+
+    expect(defaultProps.onChange).toHaveBeenCalledWith('foo  baz');
     expect(defaultProps.onSubmit).not.toHaveBeenCalled();
   });
 
@@ -135,5 +159,27 @@ describe('InputCard', () => {
     // (capped at 200px). jsdom reports a 0 scrollHeight, so the cap branch
     // is exercised — what we care about is that style.height is set.
     expect(textarea.style.height).toMatch(/^\d+px$/);
+  });
+
+  // Char-count footer: surfaces a counter when the value approaches the
+  // 4000-char hard limit, switches to red when the limit is exceeded.
+  it('hides the char count below the 75% threshold', () => {
+    render(<InputCard {...defaultProps} value={'a'.repeat(2000)} />);
+    expect(screen.queryByTestId('chat-char-count')).toBeNull();
+  });
+
+  it('shows the char count above the 75% threshold (muted)', () => {
+    render(<InputCard {...defaultProps} value={'a'.repeat(3500)} />);
+    const counter = screen.getByTestId('chat-char-count');
+    expect(counter.textContent).toBe('3500 / 4000');
+    expect(counter.className).toContain('text-muted');
+    expect(counter.className).not.toContain('text-error');
+  });
+
+  it('turns the char count red past the hard limit', () => {
+    render(<InputCard {...defaultProps} value={'a'.repeat(4500)} />);
+    const counter = screen.getByTestId('chat-char-count');
+    expect(counter.textContent).toBe('4500 / 4000');
+    expect(counter.className).toContain('text-error');
   });
 });

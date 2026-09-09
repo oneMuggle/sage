@@ -10,6 +10,10 @@ import { KnowledgeChip } from './KnowledgeChip';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import type { SlashCommand } from './slashCommands';
 
+// Soft warn at 75% of the hard limit, hard limit at the cap.
+const CHAR_VISIBLE_THRESHOLD = 3000;
+const CHAR_HARD_LIMIT = 4000;
+
 export interface FileAttachmentType {
   name: string;
   size: number;
@@ -183,6 +187,11 @@ export function InputCard({
     // over the slash menu (which owns Arrow/Enter/Escape while open).
     if (handleEmacsKeyDown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
+      // Skip during IME composition: the user is confirming a candidate
+      // word (e.g. 拼音 / 仮名 / 한글), not sending the message. The native
+      // `isComposing` flag is the W3C standard signal that all major IMEs
+      // set during composition.
+      if (e.nativeEvent.isComposing) return;
       e.preventDefault();
       onSubmit();
     }
@@ -437,7 +446,19 @@ export function InputCard({
         />
       )}
 
-      {hint && <p className="text-[11px] text-muted text-center mt-1.5">{hint}</p>}
+      {(hint || value.length > CHAR_VISIBLE_THRESHOLD) && (
+        <div className="flex items-center justify-between text-[11px] text-muted mt-1.5 px-1">
+          <span className="flex-1 text-center">{hint}</span>
+          {value.length > CHAR_VISIBLE_THRESHOLD && (
+            <span
+              data-testid="chat-char-count"
+              className={value.length > CHAR_HARD_LIMIT ? 'text-error font-medium' : 'text-muted'}
+            >
+              {value.length} / {CHAR_HARD_LIMIT}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
