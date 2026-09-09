@@ -130,7 +130,7 @@ class TestComplexTurnSignalDetection:
             ) as mock_exec:
                 mock_exec.return_value = False
 
-                asyncio.get_event_loop().run_until_complete(
+                asyncio.run(
                     service._run_turn_inner(
                         session_id="test-session",
                         user_message=Message(role=Role.USER, content="Do a complex task"),
@@ -191,7 +191,7 @@ class TestComplexTurnSignalDetection:
             ) as mock_exec:
                 mock_exec.return_value = False
 
-                asyncio.get_event_loop().run_until_complete(
+                asyncio.run(
                     service._run_turn_inner(
                         session_id="test-session",
                         user_message=Message(role=Role.USER, content="Simple task"),
@@ -252,7 +252,7 @@ class TestComplexTurnSignalDetection:
             ) as mock_exec:
                 mock_exec.return_value = False
 
-                asyncio.get_event_loop().run_until_complete(
+                asyncio.run(
                     service._run_turn_inner(
                         session_id="test-session",
                         user_message=Message(
