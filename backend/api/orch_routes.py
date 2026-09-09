@@ -11,14 +11,16 @@ ResumeResponse)。
 
 from __future__ import annotations
 
-import functools
 import json
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
-from backend.data.database import _SQLITE_LOCK
+from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与文档语义保留
+    _SQLITE_LOCK,
+    make_with_db_lock,
+)
 from backend.data.orch_run_repo import OrchRun, OrchRunRepository
 from backend.data.orch_task_repo import OrchTaskRepository
 
@@ -28,19 +30,12 @@ router = APIRouter(prefix="/orch", tags=["orchestration-runs"])
 def with_db_lock(func):
     """装饰器：把 sync 函数包在全局 `_SQLITE_LOCK` 内,串行化 SQLite 访问。
 
-    与 legacy_routes.py 的本地同名装饰器共用同一把 `_SQLITE_LOCK`。
-    **必须定义在本模块**（而非 database.py）：FastAPI 在 get_typed_signature
-    用 ``call.__globals__`` 解析 future-import 字符串注解（PlanUpdateRequest 等
-    body 模型），wrapper.__globals__ 是定义装饰器模块的 dict —— 定义在别的模块
-    会报 PydanticUndefinedAnnotation。
+    D3 (P6): 实现统一收敛到 ``database.make_with_db_lock`` —— 用
+    FunctionType 把 wrapper 的 ``__globals__`` 重绑到本模块, 既满足
+    FastAPI 字符串注解必须在本模块解析的约束 (body 模型如
+    PlanUpdateRequest), 又消除与 legacy_routes 的重复实现漂移风险。
     """
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        with _SQLITE_LOCK:
-            return func(*args, **kwargs)
-
-    return wrapper
+    return make_with_db_lock(globals())(func)
 
 
 class OrchRunDetail(BaseModel):

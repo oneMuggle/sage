@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Dict, List
 
 from backend.data.database import get_database
+from backend.memory.vector_store import prune_orphan_vectors
 
 logger = logging.getLogger(__name__)
 
@@ -423,12 +424,21 @@ class MemoryPruningTask(BaseEvolutionTask):
                 )
 
         conn.commit()
+
+        # D1 (P6): 向量库补偿式对账 —— 上面的批量 DELETE 只写主表,
+        # memories_vec 的对应条目由对账清扫, 避免已删记忆仍被向量检索命中。
+        orphan_vectors = prune_orphan_vectors(self.db)
+
         logger.info(f"记忆修剪完成，共删除 {total_deleted} 条记忆")
 
         # 记录进化日志
         await self._log_evolution(
             evolution_type="memory_pruning",
-            description=f"记忆修剪完成，删除了 {total_deleted} 条记忆，当前记忆数: {current_count - total_deleted}",
+            description=(
+                f"记忆修剪完成，删除了 {total_deleted} 条记忆，"
+                f"当前记忆数: {current_count - total_deleted}，"
+                f"清理孤儿向量: {orphan_vectors} 条"
+            ),
             status="success",
         )
 

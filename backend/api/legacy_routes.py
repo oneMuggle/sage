@@ -102,7 +102,6 @@ router = APIRouter()
 #
 # Future: 计划在 PR B 把单连接拆成 thread-local connection pool（每 thread 一个
 # sqlite3.Connection），那时可移除本锁。详见 `docs/plans/2026-08-09_*.md` §1.2。
-import functools
 
 # PR B §1.2 (CRITICAL fix): 共用 backend.data.database._SQLITE_LOCK,
 # 而不是本模块私有的 threading.Lock。PR B 的 SqliteStorageAdapter._sync_X
@@ -116,7 +115,10 @@ import functools
 # 的 dict)。若 decorator 定义在 database.py,本文件 34 个带 body 模型的
 # handler(ChatRequest 等)会报 PydanticUndefinedAnnotation。orch_routes.py
 # 因此也保留同构的本地定义,共用同一把 _SQLITE_LOCK。
-from backend.data.database import _SQLITE_LOCK
+from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与文档语义保留
+    _SQLITE_LOCK,
+    make_with_db_lock,
+)
 
 
 def with_db_lock(func):
@@ -124,14 +126,10 @@ def with_db_lock(func):
 
     适用对象：34 个降级为 `def` 的 FastAPI handler —— 它们跑在 anyio threadpool,
     内部 `SessionRepository`/`MessageRepository` 等 sync 调用必须串行访问单连接。
+    D3 (P6): 实现统一收敛到 ``database.make_with_db_lock`` (约束与解法
+    见 orch_routes.with_db_lock docstring)。
     """
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        with _SQLITE_LOCK:
-            return func(*args, **kwargs)
-
-    return wrapper
+    return make_with_db_lock(globals())(func)
 
 
 def _safe_log_field(value: object, max_length: int = 64) -> str:

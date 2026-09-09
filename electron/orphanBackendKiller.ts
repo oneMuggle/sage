@@ -102,6 +102,8 @@ export function killOrphanedBackendOnPort(opts: KillOrphanOpts): KillOrphanResul
 export function extractPidsFromNetstat(netstatOutput: string, selfPid: number): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
+  // 防御: exec 输出缺失 (mock/异常环境) 时不得抛 unhandled rejection
+  if (!netstatOutput) return result;
 
   for (const rawLine of netstatOutput.split(/\r?\n/)) {
     const line = rawLine.trim();
