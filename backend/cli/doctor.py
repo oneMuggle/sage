@@ -21,6 +21,7 @@ Win7 LTS (Py3.8) 兼容约束:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import dataclasses
 import datetime
 import enum
@@ -453,6 +454,18 @@ def _resolve_backend_context(
 
 def main(argv: Optional[list] = None) -> int:
     """CLI 入口,返回退出码(0/1/2)。"""
+    # Win7 cmd 默认 GBK (cp936) —— 中文 hint/消息被 print 时会乱码并可能
+    # UnicodeEncodeError 杀掉进程。强制 stdout/stderr 走 UTF-8, 与 electron
+    # doctor 端 stdout decoder (utf-8) 对齐。reconfigure() 是 Py3.7+ API,
+    # win7 LTS (Py3.8) 与 main (Py3.10) 都支持; CI / 非 TTY 环境
+    # reconfigure() 会抛 ValueError, 同样 fail-open 跳过。
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        with contextlib.suppress(AttributeError, ValueError):
+            reconfigure(encoding="utf-8")
+
     _import_all_checks()
     # python -m X.Y 时 sys.modules['X.Y'] 和 sys.modules['__main__'] 是两个独立模块对象,
     # check 子模块通过 ``from backend.cli.doctor import register`` 实际注册到 sys.modules['backend.cli.doctor'].

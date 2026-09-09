@@ -17,9 +17,23 @@ import { mainWindow } from './mainWindow';
 
 let tray: Tray | null = null;
 
-/** 与 createMainWindow 的窗口图标同源（build/ 随打包资源分发） */
+/** 与 createMainWindow 的窗口图标同源（build/ 随打包资源分发）。
+
+`__dirname` 在 packaged + asar 下解析为 `<asar>/dist-electron/electron/`,
+往上两层 (`__dirname/../..`) 才是 `<asar>/`, 正好对齐
+`electron-builder.yml` files 列表里的 `build/icon.ico`（顶层）。
+
+#513 留下的注释写"asar 内路径变为 `<asar>/build/icon.ico`, 与 tray.ts/main.ts
+期望一致" —— 但代码用的是 `__dirname/..`（即
+`<asar>/dist-electron/build/icon.ico`）, 这条路径在 asar 里**不存在**,
+packaged Win7 必报 `Failed to load image from path '...\app.asar\dist-electron\
+\build\icon.ico'` 然后降级 `continuing without tray`。
+
+本次修复统一到 `__dirname/../..`, 与 main.ts:761 的窗口图标一致,
+让注释和代码终于对齐。
+*/
 function resolveIconPath(): string {
-  return join(__dirname, '..', 'build', 'icon.ico');
+  return join(__dirname, '..', '..', 'build', 'icon.ico');
 }
 
 function showMainWindow(): void {
