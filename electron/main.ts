@@ -37,6 +37,12 @@
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
 import { logger } from './logger';
 import { setupTrayAndGlobalShortcut } from './tray';
+import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
+import {
+  getCloseToTrayPath,
+  readCloseToTray,
+  writeCloseToTray,
+} from './closeToTray';
 logger.info('main: process started', {
   pid: process.pid,
   electronVer: process.versions.electron,
@@ -117,6 +123,17 @@ const buildManifest = loadBuildManifest(
 // line 84 above.
 const gotSingleInstanceLock =
   typeof app.requestSingleInstanceLock === 'function' ? app.requestSingleInstanceLock() : true;
+// E-1 (round5 批次 E): sage:// 深链协议注册。Windows/Linux 生效于注册表
+// （第二实例带 URL 参数走 second-instance）; macOS 走 open-url 事件。
+// vitest guard 同 requestSingleInstanceLock —— 测试 mock 不提供该 API。
+if (typeof app.setAsDefaultProtocolClient === 'function') {
+  try {
+    app.setAsDefaultProtocolClient(SAGE_PROTOCOL);
+  } catch {
+    /* 注册失败不阻断启动（如便携模式无注册表写权限） */
+  }
+}
+
 if (!gotSingleInstanceLock) {
   // CRITICAL: short-circuit ALL subsequent initialization, not just app.quit().
   //
@@ -132,12 +149,37 @@ if (!gotSingleInstanceLock) {
 
 // 二次启动时聚焦/还原已有主窗口。没有这个处理器, 双击图标会静默退出,
 // 用户观感是"点了没反应"。
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv) => {
+  const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
+  // E-1: 第二实例可能携带 sage:// 深链 —— 聚焦窗口并跳转到目标会话
+  const sageUrl = extractSageUrlFromArgv(Array.isArray(argv) ? argv : []);
+  if (sageUrl) {
+    const link = parseSageDeepLink(sageUrl);
+    if (link && win) {
+      if (win.isMinimized()) win.restore();
+      if (!win.isVisible()) win.show();
+      win.focus();
+      win.webContents.send('sage:event:session-notify-click', { sessionId: link.sessionId });
+      return;
+    }
+  }
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.focus();
+});
+
+// E-1: macOS 深链入口（open-url 仅 macOS 触发）
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  const link = parseSageDeepLink(typeof url === 'string' ? url : '');
+  if (!link) return;
   const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
   if (!win) return;
   if (win.isMinimized()) win.restore();
   if (!win.isVisible()) win.show();
   win.focus();
+  win.webContents.send('sage:event:session-notify-click', { sessionId: link.sessionId });
 });
 
 // Window dimensions
@@ -256,6 +298,16 @@ function readDemoMode(): boolean {
     // 文件不存在/JSON 损坏 → 默认 false (正常 LLM 路径)
     return false;
   }
+}
+
+// E-2 (round5 批次 E): 关闭即隐藏到托盘（默认关，保持既有用户预期）
+let closeToTrayEnabled = false;
+try {
+  closeToTrayEnabled = readCloseToTray(
+    getCloseToTrayPath(app.isPackaged, app.getPath('userData'), process.cwd()),
+  );
+} catch {
+  closeToTrayEnabled = false;
 }
 
 let demoModeFromSettings = false;
@@ -906,6 +958,15 @@ function createMainWindow(): void {
     });
   }
 
+  // E-2 (round5 批次 E): 开启"关闭即隐藏到托盘"时拦截关闭——隐藏窗口,
+  // 托盘图标/Alt+Shift+S 可恢复; 真正退出走托盘菜单"退出"(appIsQuitting)。
+  win.on('close', (event) => {
+    if (closeToTrayEnabled && !appIsQuitting) {
+      event.preventDefault();
+      win.hide();
+    }
+  });
+
   win.on('closed', () => {
     setMainWindow(null);
   });
@@ -1159,6 +1220,30 @@ function registerIpcHandlers(): void {
   // Demo mode toggle (2026-08-27): renderer 在 Settings → 通用 改 demoMode
   // 后调用此 IPC 写盘. 主进程下次启动时 readDemoMode() 读取生效.
   // 注意: 当前会话不会立即跳过后端 (已经决定 spawn). 用户需重启应用.
+  // E-2 (round5 批次 E): 关闭即隐藏到托盘偏好读写（JSON 文件,主进程持有）
+  ipcMain.handle('sage:close-to-tray:get', () => {
+    return { enabled: closeToTrayEnabled };
+  });
+
+  ipcMain.handle(
+    'sage:close-to-tray:set',
+    (evt, payload: { enabled: boolean }) => {
+      if (!isTrustedRenderer(evt.sender)) {
+        throw new Error('未授权的窗口请求');
+      }
+      closeToTrayEnabled = payload.enabled === true;
+      try {
+        writeCloseToTray(
+          getCloseToTrayPath(app.isPackaged, app.getPath('userData'), process.cwd()),
+          closeToTrayEnabled,
+        );
+      } catch (err) {
+        logger.warn('main: 写入 close-to-tray 偏好失败:', err);
+      }
+      return { ok: true, enabled: closeToTrayEnabled };
+    },
+  );
+
   ipcMain.handle('sage:demo-mode:set', (evt, payload: { demoMode: boolean }) => {
     if (!isTrustedRenderer(evt.sender)) {
       return { ok: false, error: '未授权的窗口请求' };

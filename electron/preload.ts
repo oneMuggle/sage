@@ -259,6 +259,19 @@ const electronAPI = {
     }>;
   },
 
+  /** E-2 (round5 批次 C/E): 读取「关闭即隐藏到托盘」偏好。 */
+  getCloseToTray(): Promise<{ enabled: boolean }> {
+    return ipcRenderer.invoke('sage:close-to-tray:get') as Promise<{ enabled: boolean }>;
+  },
+
+  /** E-2: 写入「关闭即隐藏到托盘」偏好。 */
+  setCloseToTray(enabled: boolean): Promise<{ ok: boolean; enabled: boolean }> {
+    return ipcRenderer.invoke('sage:close-to-tray:set', { enabled }) as Promise<{
+      ok: boolean;
+      enabled: boolean;
+    }>;
+  },
+
   /**
    * 演示模式同步标志 (2026-08-27): main 进程在演示模式激活时经
    * webPreferences.additionalArguments 注入 --sage-demo-mode=1。
