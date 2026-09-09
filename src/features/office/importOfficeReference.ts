@@ -36,12 +36,17 @@ import type {
   ChatOfficeRef,
   OfficeDocType,
   OfficeExcelReadResult,
+  OfficePdfReadResult,
   OfficePptReadResult,
   OfficeWordReadResult,
 } from '../../shared/api/types';
 
 /** Read result union — same shape as `useOfficeDocuments.OfficeReadResult`. */
-export type OfficeReadResult = OfficePptReadResult | OfficeWordReadResult | OfficeExcelReadResult;
+export type OfficeReadResult =
+  | OfficePptReadResult
+  | OfficeWordReadResult
+  | OfficeExcelReadResult
+  | OfficePdfReadResult;
 
 /** Result returned by `importOfficeReference`. */
 export interface ImportOfficeReferenceResult {
@@ -100,6 +105,10 @@ async function readByType(
   }
   if (docType === 'word') {
     return officeApi.readWord(req);
+  }
+  if (docType === 'pdf') {
+    // PdfReadRequest is extra="forbid" — only the two path fields.
+    return officeApi.readPdf({ workspace_path: workspacePath, file_path: managedPath });
   }
   return officeApi.readExcel(req);
 }

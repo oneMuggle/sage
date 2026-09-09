@@ -243,6 +243,58 @@ def test_xlsx_sheet_not_found(tmp_path: Path):
     assert "sheet_not_found" in results[0]["error"]
 
 
+def test_xlsx_set_cells_preserves_formulas(tmp_path: Path):
+    """'=SUM(...)' 走 set_cells 后保留为公式（Item 1.4，不被数值 coerce 改写）。"""
+    from openpyxl import load_workbook
+
+    path = tmp_path / "formula.xlsx"
+    _make_xlsx(path)
+    saved, results = update_xlsx(
+        path,
+        [
+            {
+                "op": "set_cells",
+                "sheet": "成绩",
+                "cells": [
+                    {"addr": "C1", "value": "合计"},
+                    {"addr": "C2", "value": "=SUM(B2:B2)"},
+                ],
+            }
+        ],
+    )
+    assert saved
+    assert results[0]["ok"]
+    wb = load_workbook(str(path), data_only=False)
+    try:
+        ws = wb["成绩"]
+        assert ws["C2"].value == "=SUM(B2:B2)"
+        assert ws["C2"].data_type == "f"
+        assert ws["C1"].value == "合计"
+    finally:
+        wb.close()
+
+
+def test_xlsx_append_rows_preserves_formulas(tmp_path: Path):
+    """append_rows 里的 '=' 字符串同样写成公式（Item 1.4）。"""
+    from openpyxl import load_workbook
+
+    path = tmp_path / "append_formula.xlsx"
+    _make_xlsx(path)
+    saved, results = update_xlsx(
+        path,
+        [{"op": "append_rows", "sheet": "成绩", "rows": [["合计", "=SUM(B2:B2)"]]}],
+    )
+    assert saved
+    assert results[0]["ok"]
+    wb = load_workbook(str(path), data_only=False)
+    try:
+        ws = wb["成绩"]
+        assert ws["B3"].value == "=SUM(B2:B2)"
+        assert ws["B3"].data_type == "f"
+    finally:
+        wb.close()
+
+
 # ──────────────────────────────────────────────────────────────────────
 # PPT
 # ──────────────────────────────────────────────────────────────────────
