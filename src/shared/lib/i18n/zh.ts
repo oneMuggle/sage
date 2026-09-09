@@ -388,6 +388,14 @@ export const zh = {
   'settings.usage.requestsTable.prevPage': '上一页',
   'settings.usage.requestsTable.nextPage': '下一页',
   'settings.usage.requestsTable.pageInfo': '第 {offset}-{end} 条 / 共 {total} 条',
+  // L8 PR-C (2026-09-09): 趋势图与 CSV 导出
+  'settings.usage.trend.title': '用量趋势',
+  'settings.usage.trend.loading': '趋势数据加载中…',
+  'settings.usage.trend.empty': '所选时间范围内暂无趋势数据',
+  'settings.usage.trend.legendRequests': '请求数',
+  'settings.usage.trend.legendCost': '成本',
+  'settings.usage.trend.loadFailed': '趋势数据加载失败',
+  'settings.usage.exportCsv': '导出 CSV',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
   'office.title': 'Office 文档',

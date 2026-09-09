@@ -112,6 +112,10 @@ class UsageRecord:
     # 而 cache_creation 略贵，合并展示无法判断 prompt cache 利用率。
     cache_read_tokens: int = 0
     cache_creation_tokens: int = 0
+    # L8 (2026-09-09 PR-C): 流式首字节延迟与总延迟 — None 表示未采样
+    # (同步调用 / 旧调用方), 避免与 0 歧义。
+    first_token_ms: Optional[int] = None
+    latency_ms: Optional[int] = None
 
 
 def _empty_bucket() -> Dict[str, Any]:
@@ -165,6 +169,8 @@ class UsageTracker:
         cached_tokens: int = 0,
         cache_read_tokens: int = 0,
         cache_creation_tokens: int = 0,
+        first_token_ms: Optional[int] = None,
+        latency_ms: Optional[int] = None,
     ) -> UsageRecord:
         """记录一次 LLM 调用; 返回生成的 UsageRecord。
 
@@ -182,6 +188,26 @@ class UsageTracker:
         if cached and not read and not creation:
             read = cached
         cost = estimate_cost_usd(model, prompt_tokens, completion_tokens, cached_tokens=cached)
+        # L8 PR-C (2026-09-09): 流式首字节延迟与总延迟——负值/None 视为未采样,
+        # 字符串数字尽力 int() 转换 (兼容 LLMClient 偶发 str 字段)。
+        # 落库时存 None 而不是 -1, 便于 SQL `WHERE first_token_ms IS NOT NULL` 过滤。
+        def _norm_latency(value: Any) -> Optional[int]:
+            if value is None:
+                return None
+            if isinstance(value, bool):  # bool 是 int 子类, 排除 True/False
+                return None
+            if isinstance(value, int):
+                return value if value >= 0 else None
+            if isinstance(value, str):
+                try:
+                    n = int(value)
+                    return n if n >= 0 else None
+                except (TypeError, ValueError):
+                    return None
+            return None
+
+        ft = _norm_latency(first_token_ms)
+        lt = _norm_latency(latency_ms)
         entry = UsageRecord(
             model=model,
             prompt_tokens=int(prompt_tokens),
@@ -192,6 +218,8 @@ class UsageTracker:
             cached_tokens=cached,
             cache_read_tokens=read,
             cache_creation_tokens=creation,
+            first_token_ms=ft,
+            latency_ms=lt,
         )
         day = datetime.now().strftime("%Y-%m-%d")
         with self._lock:
@@ -251,13 +279,16 @@ class UsageTracker:
                 entry.cached_tokens,
                 entry.cache_read_tokens,
                 entry.cache_creation_tokens,
+                entry.first_token_ms,
+                entry.latency_ms,
             )
             with _SQLITE_LOCK:
                 get_database().get_connection().execute(
                     "INSERT INTO usage_events (id, session_id, model, prompt_tokens,"
                     " completion_tokens, total_tokens, estimated_cost_usd, created_at,"
-                    " cached_tokens, cache_read_tokens, cache_creation_tokens)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " cached_tokens, cache_read_tokens, cache_creation_tokens,"
+                    " first_token_ms, latency_ms)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     row,
                 )
                 get_database().get_connection().commit()

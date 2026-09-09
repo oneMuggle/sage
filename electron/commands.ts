@@ -569,10 +569,12 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // M6 生态扩展: 用量/成本面板 (backend/services/usage_tracker.py 内存态)
   // L8 PR-A (2026-09-09): 支持 range=today|total 查询参数, 默认 today。
   // L8 PR-B (2026-09-09): range 扩到 today|7d|30d|total。
+  // 未传 range 时省略 query string (后端会按 today 默认处理)。
   usage_summary: {
     method: 'GET',
     path: (a) => {
-      const range = (a?.range as string) ?? 'today';
+      const range = a?.range as string | undefined;
+      if (!range) return '/api/v1/usage';
       return `/api/v1/usage?range=${encodeURIComponent(range)}`;
     },
   },
@@ -589,6 +591,28 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const offset = a?.offset ?? 0;
       const sid = a?.sessionId;
       let url = `/api/v1/usage/requests?limit=${limit}&offset=${offset}`;
+      if (sid) url += `&session_id=${encodeURIComponent(sid)}`;
+      return url;
+    },
+  },
+  // L8 PR-C (2026-09-09): 趋势图时序 (按桶聚合)
+  usage_trend: {
+    method: 'GET',
+    path: (a) => {
+      const range = (a?.range as string) ?? '7d';
+      const sid = a?.sessionId;
+      let url = `/api/v1/usage/trend?range=${encodeURIComponent(range)}`;
+      if (sid) url += `&session_id=${encodeURIComponent(sid)}`;
+      return url;
+    },
+  },
+  // L8 PR-C (2026-09-09): CSV 导出 (text/plain)
+  usage_export_csv: {
+    method: 'GET',
+    path: (a) => {
+      const range = (a?.range as string) ?? 'total';
+      const sid = a?.sessionId;
+      let url = `/api/v1/usage/export.csv?range=${encodeURIComponent(range)}`;
       if (sid) url += `&session_id=${encodeURIComponent(sid)}`;
       return url;
     },

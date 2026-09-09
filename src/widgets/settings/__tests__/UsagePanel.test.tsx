@@ -83,6 +83,17 @@ describe('UsagePanel', () => {
     vi.restoreAllMocks();
   });
 
+  // L8 PR-C: 子组件 UsageTrendChart 会并发调 fetchUsageTrend —
+  // 默认空 series, 让现有断言不受新 fetch 通道影响。
+  function mockTrendAndCsv() {
+    vi.spyOn(usageApi, 'fetchUsageTrend').mockResolvedValue({
+      range: 'today',
+      bucket: 'hour',
+      series: [],
+    });
+    vi.spyOn(usageApi, 'fetchUsageCsvExport').mockResolvedValue('time,model,tokens,cost\n');
+  }
+
   it('渲染汇总数字与成本 (未知模型成本显示占位符)', async () => {
     const summarySpy = vi
       .spyOn(usageApi, 'fetchUsageSummary')
@@ -94,6 +105,7 @@ describe('UsagePanel', () => {
       limit: 50,
       offset: 0,
     });
+    mockTrendAndCsv();
 
     renderPanel();
 
@@ -112,9 +124,7 @@ describe('UsagePanel', () => {
   });
 
   it('刷新按钮重新请求数据', async () => {
-    const summarySpy = vi
-      .spyOn(usageApi, 'fetchUsageSummary')
-      .mockResolvedValue(cloneSummary());
+    const summarySpy = vi.spyOn(usageApi, 'fetchUsageSummary').mockResolvedValue(cloneSummary());
     // L8 PR-B: 子组件 fetchUsageRequests 默认空页 (mockResolvedValue 持久)
     vi.spyOn(usageApi, 'fetchUsageRequests').mockResolvedValue({
       items: [],
@@ -122,6 +132,7 @@ describe('UsagePanel', () => {
       limit: 50,
       offset: 0,
     });
+    mockTrendAndCsv();
 
     renderPanel();
     await waitFor(() => {
@@ -136,13 +147,10 @@ describe('UsagePanel', () => {
   });
 
   it('请求失败显示错误提示', async () => {
-    vi.spyOn(usageApi, 'fetchUsageSummary').mockRejectedValueOnce(
-      new Error('backend down'),
-    );
+    vi.spyOn(usageApi, 'fetchUsageSummary').mockRejectedValueOnce(new Error('backend down'));
     // L8 PR-B: 子组件 list 通道也抛错, 验证独立错误路径
-    vi.spyOn(usageApi, 'fetchUsageRequests').mockRejectedValue(
-      new Error('list unavailable'),
-    );
+    vi.spyOn(usageApi, 'fetchUsageRequests').mockRejectedValue(new Error('list unavailable'));
+    mockTrendAndCsv();
 
     renderPanel();
 
@@ -164,6 +172,7 @@ describe('UsagePanel', () => {
       limit: 50,
       offset: 0,
     });
+    mockTrendAndCsv();
 
     renderPanel();
 
@@ -192,6 +201,7 @@ describe('UsagePanel', () => {
       limit: 50,
       offset: 0,
     });
+    mockTrendAndCsv();
 
     renderPanel();
 
@@ -210,5 +220,81 @@ describe('UsagePanel', () => {
     expect(screen.getByTestId('usage-range-total').getAttribute('aria-selected')).toBe('true');
     // 第二次 invoke 必须带 range: total
     expect(summarySpy).toHaveBeenNthCalledWith(2, 'total');
+  });
+
+  // ==================== L8 PR-C (2026-09-09) ====================
+
+  it('CSV 导出按钮触发 fetchUsageCsvExport 并下载 (带 BOM 与文件名)', async () => {
+    vi.spyOn(usageApi, 'fetchUsageSummary').mockResolvedValueOnce(cloneSummary());
+    vi.spyOn(usageApi, 'fetchUsageRequests').mockResolvedValue({
+      items: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+    });
+    const csvSpy = vi
+      .spyOn(usageApi, 'fetchUsageCsvExport')
+      .mockResolvedValue('time,model,tokens\n2026-09-09,gpt-4o,1500\n');
+    vi.spyOn(usageApi, 'fetchUsageTrend').mockResolvedValue({
+      range: 'today',
+      bucket: 'hour',
+      series: [],
+    });
+
+    renderPanel();
+    await waitFor(() => {
+      expect(screen.getByTestId('usage-total-requests')).toBeDefined();
+    });
+
+    // 拦截 a.click() — jsdom 不真下载, 验证 URL.createObjectURL + 链接属性
+    const createUrl = vi.fn(() => 'blob:test');
+    const revokeUrl = vi.fn();
+    let clickedDownload = '';
+    let blobText = '';
+    const realCreate = URL.createObjectURL;
+    const realRevoke = URL.revokeObjectURL;
+    const realCreateEl = document.createElement.bind(document);
+    URL.createObjectURL = createUrl;
+    URL.revokeObjectURL = revokeUrl;
+    document.createElement = ((tag: string) => {
+      const el = realCreateEl(tag);
+      if (tag === 'a') {
+        (el as HTMLAnchorElement).click = function (this: HTMLAnchorElement) {
+          // 仅记录下载名, 不要触碰 blobText (BOM 由 Blob 子类捕获)
+          clickedDownload = this.download;
+        };
+      }
+      return el;
+    }) as typeof document.createElement;
+    // Blob 子类取首 part 验证 BOM
+    const realBlob = global.Blob;
+    global.Blob = class extends realBlob {
+      constructor(parts: BlobPart[], init?: BlobPropertyBag) {
+        if (parts.length > 0) {
+          blobText = String(parts[0]).slice(0, 1);
+        }
+        super(parts, init);
+      }
+    } as typeof Blob;
+
+    fireEvent.click(screen.getByTestId('usage-export-csv'));
+
+    await waitFor(() => {
+      expect(csvSpy).toHaveBeenCalledWith({ range: 'today' });
+    });
+    // BOM 写入 (UTF-8 0xEF 0xBB 0xBF 渲染为 '﻿' 一个字符)
+    expect(blobText).toBe('﻿');
+    // createObjectURL / revokeObjectURL 都调过
+    expect(createUrl).toHaveBeenCalledTimes(1);
+    expect(revokeUrl).toHaveBeenCalledTimes(1);
+    // 文件名带 range + timestamp
+    expect(clickedDownload.startsWith('sage-usage-today-')).toBe(true);
+    expect(clickedDownload.endsWith('.csv')).toBe(true);
+
+    // 还原全局
+    URL.createObjectURL = realCreate;
+    URL.revokeObjectURL = realRevoke;
+    document.createElement = realCreateEl;
+    global.Blob = realBlob;
   });
 });

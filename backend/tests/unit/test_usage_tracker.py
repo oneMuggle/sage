@@ -496,3 +496,180 @@ def test_list_usage_requests_empty_table(monkeypatch: pytest.MonkeyPatch):
     assert page["items"] == []
     assert page["limit"] == 50
     assert page["offset"] == 0
+
+
+# ==================== L8 PR-C (2026-09-09): TTFT + trend + CSV ====================
+
+
+def test_record_accepts_first_token_and_latency():
+    """record() 接受 first_token_ms / latency_ms, 落到 UsageRecord。"""
+    tracker = UsageTracker()
+    record = tracker.record(
+        "claude-sonnet-4",
+        prompt_tokens=100,
+        completion_tokens=50,
+        first_token_ms=320,
+        latency_ms=2400,
+    )
+    assert record.first_token_ms == 320
+    assert record.latency_ms == 2400
+
+
+def test_record_normalizes_invalid_latency_to_none():
+    """负值 / 字符串 / None 视为未采样, 落库存 None。"""
+    tracker = UsageTracker()
+    rec1 = tracker.record("gpt-4o", 10, 5, first_token_ms=-1, latency_ms=None)
+    assert rec1.first_token_ms is None
+    assert rec1.latency_ms is None
+    rec2 = tracker.record("gpt-4o", 10, 5, first_token_ms="500", latency_ms="800")  # type: ignore[arg-type]
+    assert rec2.first_token_ms == 500
+    assert rec2.latency_ms == 800
+
+
+def test_persist_stores_first_token_and_latency(monkeypatch: pytest.MonkeyPatch):
+    """_persist 把 TTFT 字段写入 usage_events 行。"""
+    import asyncio
+
+    _patch_memory_db(monkeypatch)
+    tracker = UsageTracker()
+    tracker.record(
+        "claude-sonnet-4",
+        prompt_tokens=100,
+        completion_tokens=50,
+        session_id="sess-ttft",
+        first_token_ms=200,
+        latency_ms=1500,
+    )
+    from backend.api.usage_routes import list_usage_requests
+
+    page = asyncio.run(list_usage_requests(limit=10, offset=0, session_id="sess-ttft"))
+    assert len(page["items"]) == 1
+    # PR-A 路由 list_usage_requests 暂未透出 first_token_ms / latency_ms,
+    # 用直接 SQL 验证落库
+    from backend.data.database import _SQLITE_LOCK, get_database
+
+    with _SQLITE_LOCK:
+        conn = get_database().get_connection()
+        row = conn.execute(
+            "SELECT first_token_ms, latency_ms FROM usage_events WHERE session_id = ?",
+            ("sess-ttft",),
+        ).fetchone()
+    assert int(row["first_token_ms"]) == 200
+    assert int(row["latency_ms"]) == 1500
+
+
+def test_get_usage_trend_groups_by_hour(monkeypatch: pytest.MonkeyPatch):
+    """range=today 时 bucket=hour, ts 是 UTC ISO8601 整点。"""
+    import asyncio
+
+    _patch_memory_db(monkeypatch)
+    from backend.api.usage_routes import get_usage_trend
+
+    tracker = UsageTracker()
+    tracker.record("gpt-4o", 100, 10, cache_read_tokens=20)
+    tracker.record("gpt-4o", 200, 20, cache_read_tokens=40)
+    data = asyncio.run(get_usage_trend(range="today", session_id=None))
+    assert data["range"] == "today"
+    assert data["bucket"] == "hour"
+    assert isinstance(data["series"], list)
+    assert len(data["series"]) >= 1
+    point = data["series"][-1]
+    assert point["requests"] >= 2
+    assert point["prompt_tokens"] >= 300
+    # ts 形如 2026-09-09T07:00:00Z
+    assert point["ts"].endswith(":00:00Z")
+    # cache_hit_rate: prompt=300, creation=0, read=60 → 60/300 = 0.2
+    assert point["cache_hit_rate"] == pytest.approx(0.2)
+
+
+def test_get_usage_trend_db_failure_returns_empty_series(monkeypatch: pytest.MonkeyPatch):
+    """DB 不可用时返回空 series + error 字段。"""
+    import asyncio
+
+    from backend.data import database as database_module
+
+    test_db = database_module.Database(":memory:")
+    test_db.init_db()
+
+    def _explode(*args, **kwargs):  # noqa: ANN001
+        raise RuntimeError("synthetic outage")
+
+    monkeypatch.setattr(database_module, "_db", test_db)
+    monkeypatch.setattr(test_db, "get_connection", _explode)
+
+    from backend.api.usage_routes import get_usage_trend
+
+    data = asyncio.run(get_usage_trend(range="7d", session_id=None))
+    assert data["range"] == "7d"
+    assert data["series"] == []
+    assert "error" in data
+
+
+def test_export_usage_csv_returns_csv_string(monkeypatch: pytest.MonkeyPatch):
+    """GET /usage/export.csv 返回含表头 + 行的 CSV 字符串。"""
+    import asyncio
+    import csv as csv_mod
+    import io
+
+    _patch_memory_db(monkeypatch)
+    from backend.api.usage_routes import export_usage_csv
+
+    tracker = UsageTracker()
+    tracker.record(
+        "gpt-4o",
+        prompt_tokens=100,
+        completion_tokens=20,
+        session_id="sess-csv",
+        first_token_ms=150,
+        latency_ms=900,
+    )
+    csv_text = asyncio.run(export_usage_csv(range="total", session_id=None))
+    assert isinstance(csv_text, str)
+    reader = csv_mod.reader(io.StringIO(csv_text))
+    rows = list(reader)
+    assert len(rows) == 2  # 表头 + 1 行
+    assert rows[0][0] == "id"
+    assert "first_token_ms" in rows[0]
+    assert "latency_ms" in rows[0]
+    assert rows[1][1] == "sess-csv"
+    # first_token_ms 列的值是字符串 "150"
+    ft_col = rows[0].index("first_token_ms")
+    assert rows[1][ft_col] == "150"
+
+
+def test_export_usage_csv_filters_by_session(monkeypatch: pytest.MonkeyPatch):
+    """session_id 过滤时只导出匹配的会话。"""
+    import asyncio
+    import csv as csv_mod
+    import io
+
+    _patch_memory_db(monkeypatch)
+    from backend.api.usage_routes import export_usage_csv
+
+    tracker = UsageTracker()
+    tracker.record("gpt-4o", 100, 20, session_id="keep")
+    tracker.record("gpt-4o", 999, 1, session_id="drop")
+    csv_text = asyncio.run(export_usage_csv(range="total", session_id="keep"))
+    reader = csv_mod.reader(io.StringIO(csv_text))
+    rows = list(reader)
+    assert len(rows) == 2
+    assert rows[1][1] == "keep"
+
+
+def test_export_usage_csv_handles_none_ttft(monkeypatch: pytest.MonkeyPatch):
+    """first_token_ms=None 在 CSV 里渲染为空字符串 (非 "None" 字面量)。"""
+    import asyncio
+    import csv as csv_mod
+    import io
+
+    _patch_memory_db(monkeypatch)
+    from backend.api.usage_routes import export_usage_csv
+
+    tracker = UsageTracker()
+    tracker.record("gpt-4o", 100, 20, session_id="no-ttft")
+    csv_text = asyncio.run(export_usage_csv(range="total", session_id="no-ttft"))
+    reader = csv_mod.reader(io.StringIO(csv_text))
+    rows = list(reader)
+    assert len(rows) == 2
+    ft_col = rows[0].index("first_token_ms")
+    assert rows[1][ft_col] == ""

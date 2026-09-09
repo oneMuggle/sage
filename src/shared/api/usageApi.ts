@@ -7,6 +7,7 @@
  * L8 PR-A (2026-09-09): 新增 cache_read_tokens / cache_creation_tokens
  * 拆分字段 + 派生 cache_hit_rate; sessionUsage 同样扩展。
  * L8 PR-B (2026-09-09): range 扩到 today|7d|30d|total; 新增 fetchUsageRequests。
+ * L8 PR-C (2026-09-09): 新增 fetchUsageTrend 时序 + exportUsageCsv 导出。
  */
 import { invoke } from './desktopInvoke';
 
@@ -100,4 +101,36 @@ export interface SessionUsage {
 
 export async function fetchSessionUsage(sessionId: string): Promise<SessionUsage> {
   return invoke<SessionUsage>('usage_get_session', { sessionId });
+}
+
+/** L8 PR-C (2026-09-09): 趋势图时序点 (单桶聚合) */
+export interface UsageTrendPoint {
+  /** 桶起始 UTC ISO8601, 形如 "2026-09-09T07:00:00Z" (hour) 或 "2026-09-09T00:00:00Z" (day) */
+  ts: string;
+  requests: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  cost_usd: number;
+  cache_hit_rate: number;
+}
+
+export interface UsageTrend {
+  range: UsageRange;
+  /** today → hour; 7d/30d/total → day */
+  bucket: 'hour' | 'day';
+  series: UsageTrendPoint[];
+  error?: string;
+}
+
+export async function fetchUsageTrend(
+  params: { range?: UsageRange; sessionId?: string } = {},
+): Promise<UsageTrend> {
+  return invoke<UsageTrend>('usage_trend', params);
+}
+
+/** L8 PR-C (2026-09-09): 导出 CSV 字符串, 浏览器侧触发下载 */
+export async function fetchUsageCsvExport(
+  params: { range?: UsageRange; sessionId?: string } = {},
+): Promise<string> {
+  return invoke<string>('usage_export_csv', params);
 }

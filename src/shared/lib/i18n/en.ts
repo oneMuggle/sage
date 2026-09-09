@@ -396,6 +396,14 @@ export const en: Record<TranslationKey, string> = {
   'settings.usage.requestsTable.prevPage': 'Previous',
   'settings.usage.requestsTable.nextPage': 'Next',
   'settings.usage.requestsTable.pageInfo': '{offset}-{end} of {total}',
+  // L8 PR-C (2026-09-09): trend chart + CSV export
+  'settings.usage.trend.title': 'Usage trend',
+  'settings.usage.trend.loading': 'Loading trend data…',
+  'settings.usage.trend.empty': 'No trend data in selected range',
+  'settings.usage.trend.legendRequests': 'Requests',
+  'settings.usage.trend.legendCost': 'Cost',
+  'settings.usage.trend.loadFailed': 'Failed to load trend data',
+  'settings.usage.exportCsv': 'Export CSV',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
   'office.title': 'Office Documents',
