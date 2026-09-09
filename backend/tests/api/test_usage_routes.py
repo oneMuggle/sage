@@ -23,13 +23,17 @@ async def test_usage_summary_contract_empty(client):
     resp = await client.get("/api/v1/usage")
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body.keys()) == {"totals", "by_model", "today"}
-    # L4: totals 增加 cached_tokens 维度（缓存感知记账）
+    # L8 PR-A/B: summary 顶层扩 cache_hit_rate + range
+    assert set(body.keys()) == {"totals", "by_model", "today", "cache_hit_rate", "range"}
+    assert body["range"] == "today"
+    # L4 cached_tokens + L8 cache_read_tokens / cache_creation_tokens 维度
     assert body["totals"] == {
         "requests": 0,
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "cached_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 0,
         "estimated_cost_usd": None,
     }
     assert body["by_model"] == []
