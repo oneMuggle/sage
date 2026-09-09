@@ -15,6 +15,8 @@ References:
 - backend/office/ppt.py           imports python-pptx (``pptx``)
 - backend/office/word.py          imports python-docx (``docx``)
 - backend/office/excel.py         imports openpyxl    (``openpyxl``)
+                                  + pandas (``pandas``) at top level
+                                  (DataFrame-based generate_xlsx path)
 - backend/office/word_template.py imports docxtpl     (``docxtpl``)
 - backend/office/pdf.py           imports pymupdf     (``pymupdf``) at top level
                                   + reportlab lazily in ``_generate_pdf_with_reportlab``
@@ -23,6 +25,12 @@ References:
 - backend/api/office_routes.py    imports the above via
                                   ``from backend.office.pdf import generate_pdf``
                                   → import chain loads pymupdf at FastAPI startup
+- backend/office/excel.py         imports ``pandas`` at module load; the
+                                  bundled installer is cp311 and has the
+                                  pandas 2.2.3 cp311 wheel, but the
+                                  release/win7 Py3.8 bundled Python does NOT
+                                  install pandas (no Py3.8 wheel + Win7
+                                  path does not exercise generate_xlsx)
 
 Note: reportlab is imported lazily inside ``_generate_pdf_with_reportlab``,
 so a missing reportlab would only surface on first PDF generation. We still
@@ -46,6 +54,7 @@ REQUIRED = {
     "python-pptx": "pptx",
     "python-docx": "docx",
     "openpyxl": "openpyxl",
+    "pandas": "pandas",
     # Phase 2 (2026-09-05): Word template + PDF read/form/generate
     "docxtpl": "docxtpl",
     "PyMuPDF": "pymupdf",
