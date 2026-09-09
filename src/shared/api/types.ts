@@ -1230,11 +1230,11 @@ export interface OfficeSnapshotRestoreResponse {
 // DiffPreviewResult / OfficeUpdatePreviewRequest) and
 // backend/office/export_pdf.py (ExportPdfResult; OfficeExportPdfRequest
 // lives in the same module).
-// NOTE (item 2.5): the backend exposes a preview (dry-run) route only —
-// POST /office/update/preview. There is NO page-level apply-update HTTP
-// route; real updates go through the chat-driven office_update tool
-// (backend/office/edit.py). The office page can therefore preview but
-// not apply edits; the UI states this explicitly.
+// NOTE (round 2, R1): batch 2 shipped preview-only — there was no
+// page-level apply-update route and real updates went through the
+// chat-driven office_update tool. Round 2 adds POST
+// /office/doc/{doc_id}/update (types below), so the edit-preview dialog
+// now applies in-page after a successful preview.
 // ──────────────────────────────────────────────────────────────────────
 
 /**
@@ -1281,6 +1281,45 @@ export interface OfficeUpdatePreviewResult {
   error?: string | null;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Update apply (Office parity round 2 — R1 close the edit-preview loop)
+// Route: POST /api/v1/office/doc/{doc_id}/update, body {ops} (same op
+// dicts the preview route takes). Errors: unknown doc → 404 JSON
+// {error_type, message, file_path}; invalid ops → 422 same shape (both
+// surface as thrown errors via handleApiError, never as ok=false).
+// ──────────────────────────────────────────────────────────────────────
+
+/** Request of POST /office/doc/{doc_id}/update. */
+export interface OfficeDocUpdateRequest {
+  doc_id: string;
+  ops: OfficeUpdateOp[];
+}
+
+/**
+ * Post-apply self-check report (backend re-reads the document and
+ * verifies the ops landed). `summary` is an opaque object — the UI
+ * renders the counts line from the updated OfficeDocumentSummary instead.
+ */
+export interface OfficeUpdateSelfCheck {
+  ok: boolean;
+  summary?: Record<string, unknown> | null;
+  error?: string | null;
+}
+
+/** Response of POST /office/doc/{doc_id}/update (backend OfficeDocUpdateResult). */
+export interface OfficeDocUpdateResponse {
+  ok: boolean;
+  /** Post-update document summary (status='edited', refreshed updated_at). */
+  summary: OfficeDocumentSummary;
+  self_check: OfficeUpdateSelfCheck;
+  /**
+   * Per-op outcomes from the backend editor (backend.office.edit) —
+   * `[{op, ok, ...}]`. Not rendered today; typed so the contract is
+   * visible at the call site.
+   */
+  results?: Record<string, unknown>[];
+}
+
 /** Request of POST /office/export-pdf. */
 export interface OfficeExportPdfRequest {
   workspace_path: string;
@@ -1297,4 +1336,79 @@ export interface OfficeExportPdfResult {
   method?: 'libreoffice' | 'word_com' | null;
   output_path?: string | null;
   error?: string | null;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Word template library (Office parity batch 3, item 3.2 — 从模板创建)
+// Backend counterpart: GET /office/templates + POST /office/templates/
+// instantiate in backend/api/office_routes.py. Placeholder element shape
+// follows the list-endpoint contract (name/type/description) — narrower
+// than the analysis model `TemplatePlaceholder` (backend/office/models.py),
+// which carries location/index fields that the picker UI never needs.
+// ──────────────────────────────────────────────────────────────────────
+
+/** Placeholder kind (backend `TemplatePlaceholderType`). */
+export type OfficeTemplatePlaceholderType = 'text' | 'image' | 'table' | 'date' | 'rich_text';
+
+/** Where a template comes from (backend `source` discriminator). */
+export type OfficeTemplateSource = 'builtin' | 'workspace';
+
+/** One placeholder in a template (GET /office/templates element). */
+export interface OfficeTemplatePlaceholder {
+  name: string;
+  type: OfficeTemplatePlaceholderType;
+  description?: string;
+}
+
+/**
+ * One template entry. `id` is the instantiate key for builtin templates;
+ * workspace templates resolve by filename (`workspace_template`), with
+ * `id` mirroring the filename stem for list rendering.
+ */
+export interface OfficeTemplateMeta {
+  id: string;
+  name: string;
+  description?: string;
+  doc_type: 'word';
+  placeholders: OfficeTemplatePlaceholder[];
+  source: OfficeTemplateSource;
+  /** Workspace templates only — the .docx filename inside the workspace. */
+  filename?: string;
+}
+
+/** Response of GET /office/templates?workspace_path=… */
+export interface OfficeTemplateListResponse {
+  templates: OfficeTemplateMeta[];
+}
+
+/**
+ * Request of POST /office/templates/instantiate. Exactly one of
+ * `template_id` (builtin) / `workspace_template` (filename) is sent.
+ *
+ * NOTE: `data` / `images` keys are template placeholder names — user
+ * data, not JS identifiers — so the IPC route is declared `rawBody` and
+ * the camelToSnake translation never touches them (same reasoning as
+ * mcp_server_add's env map).
+ */
+export interface OfficeTemplateInstantiateRequest {
+  workspace_path: string;
+  template_id?: string;
+  workspace_template?: string;
+  filename: string;
+  data: Record<string, string>;
+  images?: Record<string, string>;
+}
+
+/**
+ * Result of POST /office/templates/instantiate — same shape as the
+ * word fill-template result (backend `WordTemplateFillResult`,
+ * backend/office/models.py:551-557), which already carries `output_path`.
+ */
+export interface OfficeTemplateInstantiateResult {
+  output_path: string;
+  filename: string;
+  file_size_bytes: number;
+  filled_count: number;
+  /** Placeholder names the template still contains after the fill. */
+  unfilled_placeholders: string[];
 }

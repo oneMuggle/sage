@@ -527,9 +527,21 @@ export const en: Record<TranslationKey, string> = {
   'office.edit.previewFailed': 'Preview failed',
   'office.edit.rejected': 'This edit cannot be applied',
   'office.edit.noChanges': 'No changes produced',
-  'office.edit.applyInChat':
-    'This page previews only: to apply, ask the assistant to run the same office_update edit in chat',
   'office.edit.required': 'Please complete the edit fields',
+  // Round 2 (R1): in-page apply — secondary confirm after a successful
+  // preview + apply feedback + self-check summary line.
+  'office.edit.apply': 'Apply changes',
+  'office.edit.applying': 'Applying…',
+  'office.edit.applyHint': 'Look good? Applying writes the changes above to the document.',
+  'office.edit.applied': 'Edits applied',
+  'office.edit.applyFailed': 'Apply failed',
+  'office.edit.selfCheckOk': 'Self-check passed',
+  'office.edit.selfCheckFailed': 'Self-check failed',
+  'office.edit.selfCheckParagraphs': '{n} paragraphs',
+  'office.edit.selfCheckTables': '{n} tables',
+  'office.edit.selfCheckSheets': '{n} sheets',
+  'office.edit.selfCheckSlides': '{n} slides',
+  'office.edit.selfCheckPages': '{n} pages',
 
   // ─── Office parity batch 2: export PDF (item 2.7) ─────
   'office.export.pdf': 'Export PDF',
@@ -538,6 +550,26 @@ export const en: Record<TranslationKey, string> = {
   'office.export.failed': 'Export failed',
   'office.export.noConverter': 'No local converter found (LibreOffice or MS Word required)',
   'office.export.openFolder': 'Show in Folder',
+
+  // ─── Office parity batch 3: Word template library (item 3.2) ─────
+  'office.template.modeFreeform': 'Free-form',
+  'office.template.modeTemplate': 'From template',
+  'office.template.pickTitle': 'Pick a template',
+  'office.template.loading': 'Loading templates…',
+  'office.template.loadFailed': 'Failed to load templates',
+  'office.template.retry': 'Retry',
+  'office.template.empty': 'No templates available',
+  'office.template.source.builtin': 'Built-in',
+  'office.template.source.workspace': 'Workspace',
+  'office.template.hint.date': 'Date format YYYY-MM-DD',
+  'office.template.hint.rich': 'Supports {{ }} rich-text or table variables, as the template defines',
+  'office.template.hint.image': 'In-template image variables only; leave blank to skip',
+  'office.template.create': 'Create document',
+  'office.template.creating': 'Creating…',
+  'office.template.success': 'Created from template',
+  'office.template.failed': 'Creation failed',
+  'office.template.selectFirst': 'Pick a template first',
+  'office.template.unfilled': 'Unfilled placeholders',
 
   // ─── M6 生态扩展: 编排看板补充 i18n 键 ─────
   'orchestration.loading': 'Loading…',

@@ -151,6 +151,38 @@ class WordTableContent(BaseModel):
     rows: List[List[str]]
 
 
+class WordCommentContent(BaseModel):
+    """One Word comment.
+
+    Moved here in round 2 — 批次 3.3 originally defined it in word.py because
+    models.py was owned by another agent at the time. ``id`` matches the
+    ``w:id`` of the ``w:commentRangeStart/End`` pair and ``w:commentReference``
+    in document.xml; ``anchor_text`` is the body text inside the anchored
+    range, falling back to the anchor's paragraph text when the range is empty.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(description="批注 id（w:comment/@w:id，十进制字符串）")
+    author: Optional[str] = Field(default=None, description="批注作者（w:author）")
+    date: Optional[str] = Field(default=None, description="ISO 8601 时间（w:date）")
+    text: str = Field(description="批注正文（w:comment 内各段文本）")
+    anchor_text: str = Field(default="", description="批注锚定的正文文本")
+
+
+class WordCommentsResult(BaseModel):
+    """Result of :func:`backend.office.word.read_docx_comments`.
+
+    Standalone envelope kept for the dedicated comments reader;
+    :class:`OfficeWordReadResult` embeds the same
+    :class:`WordCommentContent` items directly via its ``comments`` field.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    comments: List[WordCommentContent] = Field(default_factory=list)
+
+
 class OfficeWordReadResult(BaseModel):
     """Result of POST /api/v1/office/word/read."""
 
@@ -160,6 +192,10 @@ class OfficeWordReadResult(BaseModel):
     paragraphs: List[WordParagraphContent]
     tables: List[WordTableContent]
     images: int = Field(ge=0, default=0)
+    # Round 2 (R3): comments merged into the read result. ``default_factory``
+    # keeps payloads produced before this field existed valid under
+    # ``extra="forbid"`` (old consumers may ignore the field entirely).
+    comments: List[WordCommentContent] = Field(default_factory=list)
 
 
 class ExcelSheetContent(BaseModel):
@@ -558,6 +594,83 @@ class WordTemplateFillResult(BaseModel):
     file_size_bytes: int
     filled_count: int
     unfilled_placeholders: List[str]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Template library models (Office parity batch 3 — Item 3.2)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TemplateLibraryPlaceholder(BaseModel):
+    """One placeholder advertised by a template-library entry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    type: TemplatePlaceholderType
+    description: str = Field(default="", description="占位符用途说明（中文，展示给用户）")
+
+
+class TemplateLibraryEntry(BaseModel):
+    """One template in the library: builtin 中文办公模板 or workspace user template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(
+        description=(
+            "builtin: stable id matching ^[a-z0-9_]{1,64}$; "
+            "workspace: 'ws_'-prefixed sanitized filename stem"
+        )
+    )
+    name: str = Field(description="展示名称（中文）")
+    description: str = ""
+    doc_type: OfficeDocType = OfficeDocType.WORD
+    placeholders: List[TemplateLibraryPlaceholder] = Field(default_factory=list)
+    source: Literal["builtin", "workspace"]
+    filename: Optional[str] = Field(
+        default=None,
+        description=(
+            "workspace 模板专用：office/templates/ 下的文件名；"
+            "builtin 模板为 None（按 id 实例化）"
+        ),
+    )
+
+
+class TemplateLibraryResponse(BaseModel):
+    """GET /api/v1/office/templates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    templates: List[TemplateLibraryEntry]
+
+
+class OfficeTemplateInstantiateRequest(BaseModel):
+    """POST /api/v1/office/templates/instantiate.
+
+    ``template_id``（builtin）与 ``workspace_template``（office/templates/ 下的
+    文件名）二选一；同时给出报 400。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    template_id: Optional[str] = Field(
+        default=None, description="builtin 模板 id，如 'weekly_report'"
+    )
+    workspace_template: Optional[str] = Field(
+        default=None,
+        description="workspace 模板文件名（office/templates/ 内，含扩展名可省 .docx）",
+    )
+    filename: str = Field(
+        min_length=1,
+        max_length=200,
+        description="输出文件名（缺 .docx 扩展名时自动补全）",
+    )
+    data: Dict[str, Any] = Field(default_factory=dict)
+    images: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="占位符名 → 图片路径或 data:image URI（与 /word/fill-template 一致，≤10MB）",
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────

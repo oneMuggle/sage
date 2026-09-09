@@ -25,6 +25,11 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from backend.data.database import Database, get_database
+from backend.office.apply_update import (
+    OfficeDocUpdateRequest,
+    OfficeDocUpdateResult,
+    apply_doc_update,
+)
 from backend.office.diff_preview import (
     DiffPreviewResult,
     OfficeExportPdfRequest,
@@ -53,6 +58,7 @@ from backend.office.models import (
     OfficePptReadResult,
     OfficeReadRequest,
     OfficeSnapshotListResponse,
+    OfficeTemplateInstantiateRequest,
     OfficeWordGenerateRequest,
     OfficeWordReadResult,
     PdfFormFillRequest,
@@ -63,6 +69,7 @@ from backend.office.models import (
     PdfGenerateResult,
     PdfReadRequest,
     PdfReadResult,
+    TemplateLibraryResponse,
     WordTemplateAnalysis,
     WordTemplateAnalyzeRequest,
     WordTemplateFillRequest,
@@ -84,6 +91,7 @@ from backend.office.storage import (
     save_document,
     validate_workspace,
 )
+from backend.office.template_library import instantiate_template, list_templates
 from backend.office.word import generate_docx, read_docx
 from backend.office.word_template import analyze_word_template, fill_word_template
 
@@ -658,6 +666,77 @@ def export_pdf_endpoint(req: OfficeExportPdfRequest):
     return export_pdf.export_to_pdf(file_path, Path(req.workspace_path).resolve())
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Template library (batch 3 — Item 3.2)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.get("/templates", response_model=TemplateLibraryResponse)
+def list_templates_endpoint(workspace_path: Optional[str] = None) -> TemplateLibraryResponse:
+    """List the builtin 中文办公模板 + workspace user templates.
+
+    Builtin entries carry curated placeholder metadata and are instantiated by
+    ``id``; workspace entries (``<workspace>/office/templates/*.docx``) are
+    classified with the existing template scanner and instantiated by
+    ``filename``. Broken workspace files are skipped with a logged warning.
+    """
+    return list_templates(workspace_path)
+
+
+@router.post("/templates/instantiate", response_model=WordTemplateFillResult)
+def instantiate_template_endpoint(
+    req: OfficeTemplateInstantiateRequest,
+) -> WordTemplateFillResult:
+    """Instantiate a library template into ``office/word/<uuid>/<filename>``.
+
+    Fills through the same docxtpl machinery as /word/fill-template (ZIP
+    guards, dangerous-Jinja scan, SandboxedEnvironment, ≤10MB images). The
+    generated row is persisted here (like the other generate routes) so the
+    document shows up in GET /documents.
+    """
+    result = instantiate_template(
+        req.workspace_path,
+        template_id=req.template_id,
+        workspace_template=req.workspace_template,
+        filename=req.filename,
+        data=req.data,
+        images=req.images,
+    )
+    _build_summary_for_generated(
+        file_path=Path(result.output_path),
+        doc_type=OfficeDocType.WORD,
+        workspace_path=req.workspace_path,
+    )
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Apply update (Office parity round 2 — R1: edit-preview dialog 的「应用」)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.post("/doc/{doc_id}/update", response_model=OfficeDocUpdateResult)
+def update_document_endpoint(
+    doc_id: str, req: OfficeDocUpdateRequest
+) -> OfficeDocUpdateResult:
+    """Apply update ops to a managed document in place.
+
+    Semantics mirror the office_update tool path: pre-edit snapshot first
+    (best-effort), then the all-or-nothing editor (a rejected op leaves the
+    file untouched), then the row refresh (status → edited, fresh
+    ``updated_at`` / ``file_size_bytes``) and a best-effort self-check
+    readback of the saved file.
+
+    Errors: unknown doc id → 404 (``OfficeFileNotFoundError``); missing
+    managed file → 404; rejected ops → 422 (``OfficeOpRejectedError``,
+    per-op failure info in ``message``); file-level save failure → 500
+    (``OfficeEditError``). All mapped by the registered OfficeError handler.
+    """
+    conn = _db().get_connection()
+    doc = _require_document(conn, doc_id)
+    return apply_doc_update(conn, doc, req.ops)
+
+
 __all__ = [
     "router",
     "register_office_exception_handlers",
@@ -684,4 +763,9 @@ __all__ = [
     # Office parity batch 2 (Item 2.5): update preview + PDF export
     "preview_update_endpoint",
     "export_pdf_endpoint",
+    # Office parity batch 3 (Item 3.2): template library
+    "list_templates_endpoint",
+    "instantiate_template_endpoint",
+    # Office parity round 2 (R1): apply update ops to a managed document
+    "update_document_endpoint",
 ]

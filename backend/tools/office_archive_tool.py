@@ -16,17 +16,70 @@ idempotent (re-archiving an already-archived doc returns the existing
 class routes the call through the permission engine's mode gate
 (逐次审批 in restrictive modes) so soft-deleting still counts as a
 state change.
+
+Round-2 R7 self-check readback: on success the result carries
+``content["self_check"]`` — workspace-level archive counts (from
+``storage.list_documents`` for the bound workspace) plus the touched
+document's filename/doc_type. Best-effort: a failed readback degrades
+to ``{ok: False, error}`` and never fails the tool result.
 """
 
 from __future__ import annotations
 
-from typing import Any, Optional
+import sqlite3
+from typing import Any, Dict, Optional
 
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
+from backend.office.session_workspace import (
+    get_active_workspace,
+    get_document_in_workspace_any_status,
+)
+from backend.office.storage import list_documents
 from backend.office.tool_service import OfficeToolService
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
-from backend.tools.context import current_tool_context
+from backend.tools.context import ToolExecutionContext, current_tool_context
+
+
+def workspace_count_self_check(
+    conn: sqlite3.Connection,
+    ctx: ToolExecutionContext,
+    doc_id: str,
+    count_key: str,
+) -> Dict[str, Any]:
+    """R7 archive/restore 共用的回读：绑定工作区计数 + 触达文档指纹。
+
+    ``count_key``: ``"archived_count"``（office_archive 用）或
+    ``"live_count"``（office_restore 用）。计数来自
+    ``storage.list_documents``（绑定 workspace_path；archived = 全量 − 未归档）。
+    document 只回 ``filename``（original_filename）/``doc_type``，不回绝对路径。
+    尽力而为：任何异常/解析失败折算为 ``{ok: False, error}``，绝不抛出、
+    绝不令主结果失败；返回值恒 < 1KB。
+    """
+    try:
+        binding = get_active_workspace(
+            conn, ctx.session_id, expected_generation=ctx.binding_generation
+        )
+        if binding is None:
+            return {"ok": False, "error": "binding_unavailable"}
+        doc = get_document_in_workspace_any_status(conn, doc_id, binding.workspace_path)
+        if doc is None:
+            return {"ok": False, "error": "document_unavailable"}
+        total = len(list_documents(conn, binding.workspace_path, include_archived=True))
+        live = len(list_documents(conn, binding.workspace_path, include_archived=False))
+        counts = {"archived_count": total - live, "live_count": live}
+        return {
+            "ok": True,
+            "summary": {
+                count_key: counts.get(count_key, 0),
+                "document": {
+                    "filename": doc.original_filename,
+                    "doc_type": doc.doc_type.value,
+                },
+            },
+        }
+    except Exception as exc:  # noqa: BLE001 — best-effort 回读，失败不阻断主结果
+        return {"ok": False, "error": f"self_check_failed: {type(exc).__name__}"}
 
 
 class OfficeArchiveTool(BaseTool):
@@ -88,7 +141,13 @@ class OfficeArchiveTool(BaseTool):
         if not result.get("success"):
             err = result.get("error") or {}
             return ToolResult(success=False, error=str(err.get("code") or "archive_failed"))
-        return ToolResult(success=True, content=result.get("content"))
+        # R7 自校验回读：工作区归档计数 + 触达文档指纹（best-effort，
+        # 回读失败得到 {ok: False, error} 占位，主结果保持 success）。
+        content = dict(result.get("content") or {})
+        content["self_check"] = workspace_count_self_check(
+            conn, ctx, doc_id, "archived_count"
+        )
+        return ToolResult(success=True, content=content)
 
 
 __all__ = ["OfficeArchiveTool"]

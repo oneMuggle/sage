@@ -519,9 +519,20 @@ export const zh = {
   'office.edit.previewFailed': '预览失败',
   'office.edit.rejected': '该编辑无法应用',
   'office.edit.noChanges': '没有产生变更',
-  'office.edit.applyInChat':
-    '页面内仅支持预览：应用编辑请在对话中让助手执行相同的 office_update 操作',
   'office.edit.required': '请完整填写编辑内容',
+  // Round 2 (R1): 页内应用 —— 预览成功后的二次确认 + 应用反馈 + 自检摘要行。
+  'office.edit.apply': '确认应用',
+  'office.edit.applying': '正在应用…',
+  'office.edit.applyHint': '预览无误？应用后上述变更将写入文档。',
+  'office.edit.applied': '已应用编辑',
+  'office.edit.applyFailed': '应用失败',
+  'office.edit.selfCheckOk': '自检通过',
+  'office.edit.selfCheckFailed': '自检未通过',
+  'office.edit.selfCheckParagraphs': '段落 {n}',
+  'office.edit.selfCheckTables': '表格 {n}',
+  'office.edit.selfCheckSheets': '工作表 {n}',
+  'office.edit.selfCheckSlides': '幻灯片 {n}',
+  'office.edit.selfCheckPages': '页 {n}',
 
   // ─── Office parity batch 2: 导出 PDF (item 2.7) ─────
   'office.export.pdf': '导出 PDF',
@@ -530,6 +541,26 @@ export const zh = {
   'office.export.failed': '导出失败',
   'office.export.noConverter': '未找到本机转换器（需要 LibreOffice 或 MS Word）',
   'office.export.openFolder': '打开所在文件夹',
+
+  // ─── Office parity batch 3: Word 模板库 (item 3.2 从模板创建) ─────
+  'office.template.modeFreeform': '自由创建',
+  'office.template.modeTemplate': '从模板创建',
+  'office.template.pickTitle': '选择模板',
+  'office.template.loading': '正在加载模板…',
+  'office.template.loadFailed': '模板加载失败',
+  'office.template.retry': '重试',
+  'office.template.empty': '暂无可用模板',
+  'office.template.source.builtin': '内置',
+  'office.template.source.workspace': '工作区',
+  'office.template.hint.date': '日期格式 YYYY-MM-DD',
+  'office.template.hint.rich': '支持 {{ }} 富文本或表格变量，由模板决定',
+  'office.template.hint.image': '仅模板内图片变量，文本留空跳过',
+  'office.template.create': '创建文档',
+  'office.template.creating': '创建中…',
+  'office.template.success': '已从模板创建',
+  'office.template.failed': '创建失败',
+  'office.template.selectFirst': '请先选择一个模板',
+  'office.template.unfilled': '未填充变量',
 
   // ─── M6 生态扩展: 编排看板补充 i18n 键 ─────
   'orchestration.loading': '加载中…',

@@ -13,6 +13,12 @@ Restore is non-destructive (the on-disk file was never removed by
 success). The WRITE_LOCAL risk class routes the call through the
 permission engine's mode gate (逐次审批 in restrictive modes) so
 unarchiving a doc still counts as a state change.
+
+Round-2 R7 self-check readback: on success the result carries
+``content["self_check"]`` — workspace-level live-document count (from
+``storage.list_documents`` for the bound workspace) plus the touched
+document's filename/doc_type. Best-effort: a failed readback degrades
+to ``{ok: False, error}`` and never fails the tool result.
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ from backend.domain.risk import RiskClass
 from backend.office.tool_service import OfficeToolService
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import current_tool_context
+from backend.tools.office_archive_tool import workspace_count_self_check
 
 
 class OfficeRestoreTool(BaseTool):
@@ -87,7 +94,13 @@ class OfficeRestoreTool(BaseTool):
         if not result.get("success"):
             err = result.get("error") or {}
             return ToolResult(success=False, error=str(err.get("code") or "restore_failed"))
-        return ToolResult(success=True, content=result.get("content"))
+        # R7 自校验回读：工作区存活文档计数 + 触达文档指纹（best-effort，
+        # 回读失败得到 {ok: False, error} 占位，主结果保持 success）。
+        content = dict(result.get("content") or {})
+        content["self_check"] = workspace_count_self_check(
+            conn, ctx, doc_id, "live_count"
+        )
+        return ToolResult(success=True, content=content)
 
 
 __all__ = ["OfficeRestoreTool"]

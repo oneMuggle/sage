@@ -370,8 +370,8 @@ describe('COMMAND_ROUTES', () => {
 
   // Office parity batch 2 (items 2.5 / 2.7): update PREVIEW dry-run +
   // PDF export. Backend routes: backend/api/office_routes.py:620-658.
-  // There is deliberately NO apply-update route — the preview endpoint
-  // is the only office_update surface the office page talks to.
+  // Batch 2 shipped preview-only; round 2 (R1) adds the apply-update
+  // route office_doc_update right below.
   it('has office_update_preview posting to the update/preview dry-run route', () => {
     const r = COMMAND_ROUTES.office_update_preview;
     expect(r).toBeDefined();
@@ -386,6 +386,88 @@ describe('COMMAND_ROUTES', () => {
     expect(r.method).toBe('POST');
     expect(r.path({})).toBe('/api/v1/office/export-pdf');
     expect(r.rawBody).toBeUndefined();
+  });
+
+  // Office parity round 2 (R1): page-level apply-update closing the
+  // preview loop. Backend: POST /office/doc/{doc_id}/update.
+  it('has office_doc_update posting to the doc-scoped update route', () => {
+    const r = COMMAND_ROUTES.office_doc_update;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({ docId: 'doc-1' })).toBe('/api/v1/office/doc/doc-1/update');
+    // Path param, so a doc id with special chars must be encoded.
+    expect(r.path({ docId: 'd/1' })).toBe('/api/v1/office/doc/d%2F1/update');
+  });
+
+  it('office_doc_update uses rawBody so op dict keys survive verbatim', () => {
+    const r = COMMAND_ROUTES.office_doc_update;
+    // Ops are forwarded to the backend editor verbatim — the recursive
+    // camelToSnakeKeys would mangle any camelCase op key (e.g. a future
+    // "cellStyle" → "cell_style"), so the body skips translation.
+    expect(r.rawBody).toBe(true);
+    const ops = [
+      { op: 'replace_text', find: '大模型', replace: 'LLM' },
+      {
+        op: 'set_cells',
+        sheet: 'Sheet1',
+        cells: [{ addr: 'B2', value: '10', cellStyle: 'bold' }],
+      },
+    ];
+    expect(r.body?.({ docId: 'doc-1', ops })).toEqual({ ops });
+    // doc_id rides in the path — it must not leak into the body.
+    expect(r.body?.({ docId: 'doc-1', ops })).not.toHaveProperty('doc_id');
+    // Missing ops degrade to an empty list (backend 422s on that shape).
+    expect(r.body?.({ docId: 'doc-1' })).toEqual({ ops: [] });
+  });
+
+  // Office parity batch 3 (item 3.2): Word template library.
+  // Backend routes: GET /office/templates + POST /office/templates/instantiate.
+  it('has office_list_templates as a workspace-scoped GET route', () => {
+    const r = COMMAND_ROUTES.office_list_templates;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({ workspacePath: '/tmp/my ws' })).toBe(
+      '/api/v1/office/templates?workspace_path=%2Ftmp%2Fmy%20ws',
+    );
+  });
+
+  it('has office_templates_instantiate with rawBody so placeholder keys survive', () => {
+    const r = COMMAND_ROUTES.office_templates_instantiate;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/office/templates/instantiate');
+    // `data` keys are template placeholder names (user data) — camelToSnakeKeys
+    // would mangle e.g. "ReportDate" into "_report_date".
+    expect(r.rawBody).toBe(true);
+    const body = r.body?.({
+      workspacePath: '/ws',
+      templateId: 'weekly_report',
+      filename: '周报-2026-09-10.docx',
+      data: { ReportDate: '2026-09-10', author: '张三' },
+    }) as Record<string, unknown>;
+    expect(body).toEqual({
+      workspace_path: '/ws',
+      template_id: 'weekly_report',
+      filename: '周报-2026-09-10.docx',
+      data: { ReportDate: '2026-09-10', author: '张三' },
+    });
+  });
+
+  it('office_templates_instantiate body prefers workspace_template when given', () => {
+    const r = COMMAND_ROUTES.office_templates_instantiate;
+    const body = r.body?.({
+      workspacePath: '/ws',
+      workspaceTemplate: '项目周报.docx',
+      filename: 'out.docx',
+      data: {},
+      images: { Logo: 'base64' },
+    }) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      workspace_path: '/ws',
+      workspace_template: '项目周报.docx',
+      images: { Logo: 'base64' },
+    });
+    expect(body).not.toHaveProperty('template_id');
   });
 });
 

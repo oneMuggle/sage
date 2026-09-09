@@ -101,12 +101,44 @@ def _render_word_table(rows) -> List[str]:
     return lines
 
 
+def _clamp_comment_text(text: str, limit: int = 60) -> str:
+    """批注正文压成单行并截到 limit 字（超长以 … 收尾，总长仍 ≤ limit）。"""
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[: limit - 1] + "…"
+
+
+def _render_comment_overview(comments) -> List[str]:
+    """批注概况块（round-2 R3-digest）: `comments: N 条` + 前 3 条明细行。
+
+    明细行格式: `[作者: 锚点文本 → 批注 ≤60字]`。无批注 → 空列表
+    （digest 末尾不输出任何批注行）。getattr 全程防御：read_docx 的
+    result 是否已并入 comments 字段由并行批次决定，缺字段/缺属性时
+    静默跳过，绝不影响正文 digest。
+    """
+    lines: List[str] = []
+    total = len(comments)
+    if not total:
+        return lines
+    lines.append(f"comments: {total} 条")
+    for comment in comments[:3]:
+        author = (getattr(comment, "author", None) or "-").strip() or "-"
+        anchor = " ".join((getattr(comment, "anchor_text", "") or "").split())
+        text = getattr(comment, "text", "") or ""
+        lines.append(f"[{author}: {anchor} → {_clamp_comment_text(text)}]")
+    return lines
+
+
 def _digest_word(file_path: str, workspace: str) -> str:
     """Return structured markdown digest: heading 层级 + 全段文本 + 列表 + GFM 表格。
 
     Budget: heading 与表格始终全量保留, 正文段落累计超
     MAX_ATTACHMENT_DIGEST_BYTES 时从截断点起丢弃, 并以
     `[…已截断，共 N 段]` 标注被丢弃的正文段数。
+    摘要末尾附批注概况 (round-2 R3-digest): 有批注时输出
+    `comments: N 条` + 前 3 条 `[作者: 锚点 → 批注 ≤60字]`；
+    无批注（或 read_docx 结果尚无 comments 字段）时不输出。
     """
     result = read_docx(
         file_path=Path(file_path),
@@ -140,6 +172,9 @@ def _digest_word(file_path: str, workspace: str) -> str:
         if lines:
             lines.append("")  # GFM 表格前的空行分隔
         lines.extend(table_lines)
+    # 批注概况附在摘要末尾（正文/表格之后，不受 budget 截断影响——
+    # 批注是独立维度的事实，正文再长也不该把它挤掉）。
+    lines.extend(_render_comment_overview(getattr(result, "comments", None) or []))
     return "\n".join(lines)
 
 

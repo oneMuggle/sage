@@ -653,7 +653,12 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "images 里传工作区图片路径或 data:image/... base64（≤10MB）；默认原地保存，"
     "传 output_path 另存。\n"
     "- 数据分析：office_analyze 用 pandas 做本地数据分析"
-    "（describe/计数/聚合/相关性，可生成分析报告 xlsx）——数据不出本机。"
+    "（describe/计数/聚合/相关性，可生成分析报告 xlsx）——数据不出本机。\n"
+    "- 批次3：Word 批注（读取/添加文档批注）；模板库（内置周报/会议纪要等"
+    "模板，或工作区 office/templates/ 自定义模板）；创建/更新成功后会自动"
+    "回读摘要（self_check），请核对摘要是否符合意图。"
+    "office_update 支持 dry_run=true 先预览变更清单（不落盘），"
+    "确认后再正式应用。"
 )
 
 

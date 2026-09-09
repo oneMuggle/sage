@@ -233,8 +233,25 @@ def test_generate_xlsx_writes_formula_cells(fixture_dir: Path) -> None:
         wb.close()
 
 
-def test_read_xlsx_formula_mode_lists_formulas_and_note(fixture_dir: Path) -> None:
-    """include_formulas=True: 公式以 'CELL=formula_text' 列出 + 缺缓存值提示。"""
+def test_read_xlsx_formula_mode_lists_formulas_and_note(
+    fixture_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """include_formulas=True: 公式以 'CELL=formula_text' 列出 + 缺缓存值提示。
+
+    R5 起缺缓存值会先尝试 formulas 库本地求值（求出值时条目升级、提示行
+    省略，见 test_excel_eval.py）。这里 monkeypatch 掉 import，锁定
+    「本机无 formulas 库」时的降级形状：原始条目 + 提示行原样保留。
+    """
+    import builtins
+
+    real_import = builtins.__import__
+
+    def _no_formulas(name: str, *args, **kwargs):
+        if name == "formulas" or name.startswith("formulas."):
+            raise ImportError("formulas disabled for test")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _no_formulas)
     path = _generate_formula_workbook(fixture_dir)
     result = read_xlsx(path, include_formulas=True)
     sheet = result.sheets[0]

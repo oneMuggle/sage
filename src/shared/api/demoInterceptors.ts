@@ -29,11 +29,15 @@ import type {
   Memory,
   Message,
   OfficeDeleteResponse,
+  OfficeDocUpdateResponse,
   OfficeDocumentSummary,
   OfficeExcelReadResult,
   OfficeExportPdfResult,
   OfficePdfReadResult,
   OfficePptReadResult,
+  OfficeTemplateInstantiateResult,
+  OfficeTemplateListResponse,
+  OfficeTemplateMeta,
   OfficeUpdateOp,
   OfficeUpdatePreviewResult,
   OfficeWordReadResult,
@@ -1210,6 +1214,37 @@ let demoOfficeDocs: OfficeDocumentSummary[] = [...DEMO_OFFICE_DOCS];
 let demoMemories: Memory[] = [...DEMO_MEMORIES];
 let demoScheduled: ScheduledTask[] = [...DEMO_SCHEDULED_TASKS];
 
+// Office parity batch 3 (item 3.2): 内置 Word 模板演示数据 — 两条内置,
+// 覆盖文本/日期与表格/富文本占位符类型。工作区模板依赖磁盘上的
+// templates/*.docx, 演示模式不伪造 (列表自然为空)。
+const DEMO_OFFICE_TEMPLATES: OfficeTemplateMeta[] = [
+  {
+    id: 'weekly_report',
+    name: '周报模板',
+    description: '标准周报：本周进展、数据指标与下周计划。',
+    doc_type: 'word',
+    placeholders: [
+      { name: 'author', type: 'text', description: '作者姓名' },
+      { name: 'report_date', type: 'date', description: '报告日期' },
+      { name: 'this_week', type: 'rich_text', description: '本周进展' },
+      { name: 'metrics_table', type: 'table', description: '关键指标表' },
+    ],
+    source: 'builtin',
+  },
+  {
+    id: 'meeting_minutes',
+    name: '会议纪要模板',
+    description: '会议纪要：议题、结论与行动项。',
+    doc_type: 'word',
+    placeholders: [
+      { name: 'title', type: 'text', description: '会议主题' },
+      { name: 'attendees', type: 'text', description: '参会人' },
+      { name: 'conclusions', type: 'rich_text', description: '会议结论' },
+    ],
+    source: 'builtin',
+  },
+];
+
 // Preferences KV (get_preference / set_preference): 后端不在, 用内存 Map 顶替。
 // current_session_id 特判返回演示文献调研会话, 首屏直接落到聊天页。
 const demoPreferences = new Map<string, string>();
@@ -1805,6 +1840,67 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
       method: 'libreoffice',
       output_path: outputPath,
       error: null,
+    };
+    return result;
+  },
+
+  // Office parity round 2 (R1): 页内应用编辑 —— 回读 preview 的 ops 真正
+  // 写入 demo 文档行 (status → edited, updated_at 刷新), 并按后端契约回
+  // {ok, summary, self_check}。self_check.summary 模拟后端自检回读的
+  // 计数形状。未知 doc 在 demo 里不抛 404 (与 archive/restore 桩一致)。
+  office_doc_update: (args) => {
+    const docId = asStr(args.docId);
+    const doc = demoOfficeDocs.find((d) => d.id === docId);
+    const ops = Array.isArray(args.ops) ? (args.ops as OfficeUpdateOp[]) : [];
+    if (doc) {
+      doc.status = 'edited';
+      doc.updated_at = NOW_S * 1000;
+    }
+    const result: OfficeDocUpdateResponse = {
+      ok: true,
+      summary: doc ?? demoOfficeDocs[0],
+      self_check: {
+        ok: true,
+        summary: { ops_applied: ops.length, re_read: true },
+        error: null,
+      },
+    };
+    return result;
+  },
+
+  // Office parity batch 3 (item 3.2): Word 模板库 — 列表返回 2 条内置模板;
+  // instantiate 走 office_word_generate 同款入库桩 (新文档出现在文档列表),
+  // 并按 fill-template 结果形状回填 filled_count / unfilled_placeholders。
+  office_list_templates: (): OfficeTemplateListResponse => ({
+    templates: DEMO_OFFICE_TEMPLATES,
+  }),
+
+  office_templates_instantiate: (args) => {
+    const workspacePath =
+      asStr(args.workspacePath) || asStr(args.workspace_path) || DEMO_WORKSPACE_PATH;
+    const filename = asStr(args.filename) || '模板文档.docx';
+    const data = (args.data as Record<string, string>) ?? {};
+    const doc: OfficeDocumentSummary = {
+      id: demoUUID(),
+      workspace_path: workspacePath,
+      doc_type: 'word',
+      original_filename: null,
+      generated_filename: filename,
+      status: 'generated',
+      created_at: NOW_S,
+      updated_at: NOW_S,
+      metadata: { paragraph_count: 8, table_count: 0, file_size_bytes: 21504 },
+      derived_from: null,
+      archived_at: null,
+    };
+    demoOfficeDocs = [doc, ...demoOfficeDocs];
+    const filledCount = Object.values(data).filter((v) => String(v).trim() !== '').length;
+    const result: OfficeTemplateInstantiateResult = {
+      output_path: `${workspacePath}/${filename}`,
+      filename,
+      file_size_bytes: 21504,
+      filled_count: filledCount,
+      unfilled_placeholders: [],
     };
     return result;
   },

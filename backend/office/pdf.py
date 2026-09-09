@@ -8,11 +8,16 @@ Security posture mirrors ``word_template.py``:
   fitz opens the file, matching ``_validate_docx_zip`` for DOCX.
 - Catch-all ``except Exception`` blocks wrap with **generic** messages —
   internal paths and low-level exception text never reach the user.
+
+Read fidelity (round 2 R2a): text-layer tables are extracted per page via
+PyMuPDF ``page.find_tables()`` (ruled/lined tables; PyMuPDF ≥1.25 API).
+Scanned / image-only PDFs still yield no tables — OCR remains a non-goal.
 """
 
 from __future__ import annotations
 
 import contextlib
+import logging
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -39,10 +44,17 @@ from .models import (
 from .path_safety import resolve_within
 from .storage import validate_workspace
 
+logger = logging.getLogger(__name__)
+
 # PDF preflight limits — analogous to ``MAX_DOCX_*`` in ``word_template.py``.
 MAX_PDF_SIZE = 50 * 1024 * 1024  # 50 MiB
 MAX_PDF_PAGES = 10_000
 MAX_PDF_OUTPUT_SIZE = 200 * 1024 * 1024  # 200 MiB
+
+#: Round 2 R2a: per-page cap on extracted table cells. Pathological PDFs
+#: (huge ruled grids, or dense line art misread as tables) are truncated
+#: here instead of ballooning the read result; the truncation is logged.
+MAX_TABLE_CELLS_PER_PAGE = 20_000
 
 #: CJK font for generated PDFs. The base-14 Helvetica has no CJK glyphs, so
 #: Chinese text would render as blanks. STSong-Light is the Adobe CID font
@@ -125,13 +137,72 @@ def _build_pdf_summary(
     )
 
 
+def _extract_page_tables(page: pymupdf.Page, *, page_number: int) -> List[List[List[str]]]:
+    """Extract text-layer tables from one page via PyMuPDF ``find_tables``.
+
+    Round 2 R2a. ``find_tables`` detects ruled/lined tables; their cells come
+    back as ``str`` or ``None`` (empty), and ``None`` is normalized to ``""``.
+
+    Guards:
+    - a page whose ``find_tables()`` raises is skipped entirely (logged), so
+      one bad page cannot fail the whole read;
+    - a table whose ``extract()`` raises is skipped (logged);
+    - extraction stops at ``MAX_TABLE_CELLS_PER_PAGE`` cells per page (the
+      tables extracted first win; the truncation is logged).
+
+    Scanned / image-only pages have no vector rules, so they yield ``[]`` —
+    OCR remains a non-goal.
+    """
+    try:
+        table_finder = page.find_tables()
+    except Exception:  # noqa: BLE001 — 单页识别失败不阻断整篇读取
+        logger.warning("PDF table extraction failed on page %d; page skipped", page_number)
+        return []
+
+    tables: List[List[List[str]]] = []
+    cells_seen = 0
+    truncated = False
+    for table in table_finder.tables:
+        try:
+            extracted_rows = table.extract()
+        except Exception:  # noqa: BLE001 — 单个表格提取失败只跳过该表
+            logger.warning("PDF table extraction failed on page %d; table skipped", page_number)
+            continue
+        rows: List[List[str]] = []
+        for row in extracted_rows:
+            row_cells: List[str] = []
+            for cell in row:
+                if cells_seen >= MAX_TABLE_CELLS_PER_PAGE:
+                    truncated = True
+                    break
+                row_cells.append(cell if cell else "")
+                cells_seen += 1
+            if row_cells:
+                rows.append(row_cells)
+            if truncated:
+                break
+        if rows:
+            tables.append(rows)
+        if truncated:
+            break
+    if truncated:
+        logger.warning(
+            "PDF table cells truncated at %d on page %d", MAX_TABLE_CELLS_PER_PAGE, page_number
+        )
+    return tables
+
+
 def read_pdf(
     file_path: Path,
     *,
     workspace_path: str,
     document_id: Optional[str] = None,
 ) -> PdfReadResult:
-    """Read a PDF file and extract text, tables, images, and metadata."""
+    """Read a PDF file and extract text, tables, images, and metadata.
+
+    Round 2 R2a: ``tables`` per page now comes from PyMuPDF ``find_tables``
+    (text-layer ruled tables); scanned/image-only PDFs still report no tables.
+    """
     file_path = Path(file_path)
 
     # Workspace boundary — must validate before any filesystem touch.
@@ -160,7 +231,7 @@ def read_pdf(
                 PdfPageContent(
                     page_number=page_num + 1,
                     text=text,
-                    tables=[],  # Table extraction is complex; stub for now
+                    tables=_extract_page_tables(page, page_number=page_num + 1),
                     images=[],
                 )
             )

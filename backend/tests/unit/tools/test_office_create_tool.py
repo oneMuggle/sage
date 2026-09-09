@@ -363,7 +363,8 @@ def test_create_without_binding_keeps_legacy_output_dir_behavior(tmp_path):
         reset_tool_context(token)
 
     assert result.success is True
-    assert set(result.content.keys()) == {"path", "filename", "bytes"}
+    # 批次 3: 成功结果附带 self_check 回读摘要（best-effort，成功不改变主结果形状）
+    assert set(result.content.keys()) == {"path", "filename", "bytes", "self_check"}
     assert (out_dir / "天气.docx").exists()
 
 
