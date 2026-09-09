@@ -22,8 +22,29 @@ import { join } from 'node:path';
 import { app } from 'electron';
 import type { LogLevel } from '../src/shared/log/levels';
 import { LOG_LEVELS, DEFAULT_LOG_LEVEL } from '../src/shared/log/levels';
+// 循环依赖说明: logRotate → logger (仅在其函数体内引用 logger), logger →
+// logRotate (仅在 maybeRotateCurrentLog 内引用), 双方都不在模块顶层调用
+// 对方导出 —— CJS 下运行时属性访问, 良性。
+import { rotateIfOversized } from './logRotate';
 
 const SOURCE = 'main';
+
+// S4 (P3 安全批次): rotateIfOversized 此前无调用点, 单日日志可无限膨胀。
+// 按写入字节累计, 每超过 512KB 检查一次当日文件是否达到 10MB 轮转阈值
+// —— 避免 Every-line statSync 的开销。
+const ROTATE_CHECK_INTERVAL_BYTES = 512 * 1024;
+let uncheckedLogBytes = 0;
+
+function maybeRotateCurrentLog(lineBytes: number): void {
+  uncheckedLogBytes += lineBytes;
+  if (uncheckedLogBytes < ROTATE_CHECK_INTERVAL_BYTES) return;
+  uncheckedLogBytes = 0;
+  try {
+    rotateIfOversized();
+  } catch {
+    /* 轮转失败不影响日志写入 */
+  }
+}
 
 function resolveLogDir(): string {
   const base = process.env.SAGE_LOG_DIR
@@ -92,7 +113,9 @@ function writeLine(level: LogLevel, source: string, msg: string, meta?: unknown)
   const file = join(LOG_DIR, `sage-${today}.ndjson`);
   try {
     if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
-    appendFileSync(file, JSON.stringify(line) + '\n', 'utf-8');
+    const serialized = JSON.stringify(line) + '\n';
+    appendFileSync(file, serialized, 'utf-8');
+    maybeRotateCurrentLog(serialized.length);
   } catch (err) {
     console.error('[logger] failed to write log line:', err);
   }
