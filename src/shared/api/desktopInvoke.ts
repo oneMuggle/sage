@@ -20,7 +20,14 @@
  */
 import type { ElectronAPI } from '../types/electron-api';
 
-import { demoInvoke, isDemoMode } from './demoInterceptors';
+import { isDemoMode } from './demoFlag';
+
+/** demo 拦截器按需加载 (R2): 仅演示模式才拉取 1800+ 行 demo 数据模块。 */
+let demoInterceptorsPromise: Promise<typeof import('./demoInterceptors')> | null = null;
+function loadDemoInterceptors(): Promise<typeof import('./demoInterceptors')> {
+  demoInterceptorsPromise ??= import('./demoInterceptors');
+  return demoInterceptorsPromise;
+}
 
 /** 跨 IPC 的 HTTP 错误 —— status_code 由本漏斗解析附加。 */
 export interface InvokeError extends Error {
@@ -37,6 +44,7 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   // get_settings / set_settings 不在注册表内, 始终走真实通道。
   // 未命中通道 fallthrough 到原路径 (演示模式下后端已关, 由各 client 既有降级消化)。
   if (isDemoMode()) {
+    const { demoInvoke } = await loadDemoInterceptors();
     const demo = demoInvoke(cmd, args ?? {});
     if (!demo.hit) {
       throw new Error('演示模式不支持该后端操作');

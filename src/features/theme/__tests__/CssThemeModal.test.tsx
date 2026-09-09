@@ -12,6 +12,11 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockConfirmDialog = vi.fn();
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
+  confirmDialog: (...args: unknown[]) => mockConfirmDialog(...args),
+}));
+
 // jsdom 不实现 ResizeObserver，但 @headlessui Dialog 内部使用它
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = class {
@@ -88,8 +93,9 @@ beforeEach(() => {
     .mockResolvedValue({ id: 'test-id' });
   deleteSpy = vi.spyOn(themeCssClientModule.themeCssClient, 'delete').mockResolvedValue(undefined);
   injectPreviewMock.mockReset();
-  // jsdom lacks confirm
-  window.confirm = vi.fn(() => true);
+  // R3: confirmDialog 服务替代 window.confirm
+  mockConfirmDialog.mockReset();
+  mockConfirmDialog.mockResolvedValue(true);
 });
 
 describe('CssThemeModal', () => {

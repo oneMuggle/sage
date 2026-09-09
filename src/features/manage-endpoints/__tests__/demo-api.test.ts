@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockIsDemoMode = vi.fn();
 
-vi.mock('../../../shared/api/demoInterceptors', () => ({
+vi.mock('../../../shared/api/demoFlag', () => ({
   isDemoMode: () => mockIsDemoMode(),
 }));
 

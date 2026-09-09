@@ -1,6 +1,6 @@
 // Wiki API layer - HTTP API calls to backend
 import { backendRequest } from '../api/backendRequest';
-import { isDemoMode } from '../api/demoInterceptors';
+import { isDemoMode } from '../api/demoFlag';
 import { invoke } from '../api/desktopInvoke';
 import type {
   WikiProject,
