@@ -93,6 +93,10 @@ export interface InputCardProps {
   slashCommands?: SlashCommand[];
   slashSelectedIndex?: number;
   onSlashSelect?: (cmd: SlashCommand) => void;
+  /** U1: 上下键高亮移动 (状态由 ChatInput 持有) */
+  onSlashHighlight?: (index: number) => void;
+  /** U1: Esc 关闭菜单 */
+  onSlashClose?: () => void;
 
   // At file menu (for @mentions)
   atFileMenu?: React.ReactNode;
@@ -136,6 +140,8 @@ function InputCardInner({
   slashCommands = [],
   slashSelectedIndex = 0,
   onSlashSelect,
+  onSlashHighlight,
+  onSlashClose,
   atFileMenu,
   orchModeBar,
   hint,
@@ -166,10 +172,12 @@ function InputCardInner({
     if (showSlashMenu && slashCommands.length > 0 && !e.shiftKey) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
+        onSlashHighlight?.((slashSelectedIndex + 1) % slashCommands.length);
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
+        onSlashHighlight?.((slashSelectedIndex - 1 + slashCommands.length) % slashCommands.length);
         return;
       }
       if (e.key === 'Enter') {
@@ -180,6 +188,7 @@ function InputCardInner({
       }
       if (e.key === 'Escape') {
         e.preventDefault();
+        onSlashClose?.();
         return;
       }
     }
