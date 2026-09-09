@@ -112,6 +112,18 @@
     {
       "owner": "Sage maintainers",
       "review_by": "2026-10-01",
+      "source": "npm",
+      "package": "extract-zip",
+      "package_version": "2.0.1",
+      "advisory": "GHSA-7pqw-9j4j-h8q3",
+      "advisory_url": "https://github.com/advisories/GHSA-7pqw-9j4j-h8q3",
+      "affected_path": "node_modules/extract-zip",
+      "actual_reachability": "not reachable at runtime; only electron@21.4.4's install script extracts the Electron binary zip during npm ci of the trusted lockfile. No patched extract-zip release exists (package unmaintained, <=2.0.1 all affected), resolved only by the scheduled Electron upgrade",
+      "controls": "zip-slip (CVE-2026-19693): extraction never processes untrusted archives - registry tarballs from the pinned lockfile only; CI artifact checks; no runtime API exposure; Electron upgrade review tracks removal"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-10-01",
       "source": "pip",
       "package": "fastapi",
       "package_version": "0.109.0",
