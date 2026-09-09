@@ -37,6 +37,7 @@ from .git_tool import (
 )
 from .memory_tool import MemorySaveTool, MemorySearchTool
 from .network_config import load_network_policy
+from .office_archive_tool import OfficeArchiveTool
 from .office_create_tool import OfficeCreateTool
 from .office_delete_tool import OfficeDeleteTool
 from .office_restore_tool import OfficeRestoreTool
@@ -138,6 +139,11 @@ def register_all_tools(
     # 与 office_update 配合使用可实现"撤销最近一次编辑"（pre-edit snapshot
     # 留在 <managed>/.snapshots/，可由 LLM 通过 read_file + write_file 还原）。
     registry.register(OfficeRestoreTool(policy=policy))
+    # PR-3: office_archive — sets archived_at, paired with office_restore
+    # to undo. Symmetric to OfficeRestoreTool (requires_tool_context=True,
+    # doc_id 模式 only). Service layer (`tool_service.archive`) already
+    # exists from PR-2; this just exposes it as an LLM-callable tool.
+    registry.register(OfficeArchiveTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -233,6 +239,7 @@ __all__ = [
     "OfficeUpdateTool",
     "OfficeDeleteTool",
     "OfficeRestoreTool",
+    "OfficeArchiveTool",
     "EditTool",
     "GlobSearchTool",
     "GrepSearchTool",

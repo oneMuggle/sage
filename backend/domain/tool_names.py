@@ -46,7 +46,7 @@ WEB_TOOLS = WEB_SEARCH_TOOLS + WEB_FETCH_TOOLS
 
 MEMORY_TOOLS = ("memory_search", "memory_save")
 
-# Office CRUD 六件套（PR-2 archive/restore 补 office_restore）
+# Office CRUD 七件套（PR-3 补 office_archive — soft-delete，与 office_restore 配对）
 OFFICE_TOOLS = (
     "office_list",
     "office_read",
@@ -54,6 +54,7 @@ OFFICE_TOOLS = (
     "office_update",
     "office_delete",
     "office_restore",
+    "office_archive",
 )
 
 # 本地开发环境助手（2026-09-04）：只读探测/诊断两件 + 审批后执行一件。
