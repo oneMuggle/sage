@@ -41,6 +41,8 @@ def test_default_seed_coder_uses_current_tool_names():
     runtime_exec) —— coder 是唯一拿 runtime_exec 的 agent。
     2026-09-06: git 工具组 + 工作区检查点（对标增强 Phase-1）+ apply_patch
     / symbol_search / browser_*（Phase-2 + G7）。
+    2026-09-09 (round5 批次 D): git 扩面三件——branch/checkout/stash
+    （coder 的多分支/实验现场管理刚需，*GIT_TOOLS 展开自动带上）。
     """
     coder = next(a for a in profiles.create_default_agents() if a.id == "coder")
     assert coder.tools == [
@@ -53,10 +55,13 @@ def test_default_seed_coder_uses_current_tool_names():
         "runtime_probe",
         "project_diagnose",
         "runtime_exec",
+        "git_branch",
+        "git_checkout",
         "git_commit",
         "git_commit_message",
         "git_diff",
         "git_log",
+        "git_stash",
         "git_status",
         "checkpoint_create",
         "checkpoint_list",

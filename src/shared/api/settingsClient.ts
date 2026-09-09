@@ -28,7 +28,8 @@ export type PreferenceKey =
   | 'permission_mode'
   | 'permission_rules'
   | 'network_policy'
-  | 'auto_checkpoint';
+  | 'auto_checkpoint'
+  | 'fallback_model';
 
 async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {

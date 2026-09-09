@@ -56,6 +56,9 @@ class SettingsRepository:
             # round5 批次 B-2: 发送前自动快照 ("1"/"0", 缺省 = 关)。
             # 读取口径见 legacy_routes._auto_checkpoint_if_enabled
             "auto_checkpoint",
+            # round5 批次 D-1: 主模型重试耗尽后的降级模型 (model id, 缺省 = 不降级)。
+            # 读取口径见 legacy_routes producer llm_config 构建
+            "fallback_model",
         }
     )
 

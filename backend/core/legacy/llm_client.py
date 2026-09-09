@@ -178,6 +178,10 @@ class LLMConfig:
         default_factory=lambda: os.environ.get("BACKEND_URL", "http://127.0.0.1:8765")
     )
     use_proxy: bool = True
+    # D-1 (round5 批次 D): 主模型重试耗尽后的同 endpoint 降级模型
+    # （如 gpt-4o → gpt-4o-mini）。None = 不降级。仅对可重试类错误
+    # （限流/服务端错误/超时/网络）生效,每实例至多降级一次。
+    fallback_model: Optional[str] = None
 
 
 class StreamToolCallAggregator:
@@ -450,6 +454,7 @@ class LLMClient:
         # （尊重 retry-after）。请求整体重放安全——非流式,无部分产出。
         max_attempts, base_delay = _retry_settings()
         attempt = 0
+        fallback_used = False
         while True:
             attempt += 1
             try:
@@ -465,6 +470,24 @@ class LLMClient:
                         attempt >= max_attempts
                         or llm_err.type not in _RETRYABLE_ERROR_TYPES
                     ):
+                        # D-1 (round5 批次 D): 主模型重试耗尽 → 降级 fallback_model
+                        # 再来一轮（每实例至多一次）。model 在请求 body 里,
+                        # 无需失效 client 缓存。
+                        if (
+                            not fallback_used
+                            and self.config.fallback_model
+                            and self.config.fallback_model != body.get("model")
+                            and llm_err.type in _RETRYABLE_ERROR_TYPES
+                        ):
+                            fallback_used = True
+                            body["model"] = self.config.fallback_model
+                            attempt = 0
+                            logger.warning(
+                                "LLM 主模型重试耗尽(%s), 降级 fallback model: %s",
+                                llm_err.message,
+                                self.config.fallback_model,
+                            )
+                            continue
                         raise
                     delay = _retry_backoff_seconds(llm_err, attempt, base_delay)
                     logger.warning(
@@ -691,6 +714,7 @@ class LLMClient:
         # 错误面终止（调用方语义见 run_loop）。
         max_attempts, base_delay = _retry_settings()
         attempt = 0
+        fallback_used = False
         while True:
             attempt += 1
             try:
@@ -744,11 +768,36 @@ class LLMClient:
                     self._raise_classified_error(e)  # 总是抛出
                 except LLMError as llm_err:
                     nothing_yielded = not content_parts and not reasoning_parts
+                    can_fallback = (
+                        not fallback_used
+                        and self.config.fallback_model
+                        and self.config.fallback_model != body.get("model")
+                    )
                     if (
                         attempt >= max_attempts
                         or llm_err.type not in _RETRYABLE_ERROR_TYPES
                         or not nothing_yielded
                     ):
+                        # D-1 (round5 批次 D): 主模型重试耗尽且未产出任何增量 →
+                        # 降级 fallback_model 再来一轮（每实例至多一次）。
+                        if (
+                            not nothing_yielded
+                            or llm_err.type not in _RETRYABLE_ERROR_TYPES
+                        ) and can_fallback:
+                            fallback_used = True
+                            body["model"] = self.config.fallback_model
+                            attempt = 0
+                            logger.warning(
+                                "LLM 流式主模型重试耗尽(%s), 降级 fallback model: %s",
+                                llm_err.message,
+                                self.config.fallback_model,
+                            )
+                            aggregator = StreamToolCallAggregator()
+                            content_parts = []
+                            reasoning_parts = []
+                            finish_reason = None
+                            stream_usage = None
+                            continue
                         raise
                     delay = _retry_backoff_seconds(llm_err, attempt, base_delay)
                     logger.warning(

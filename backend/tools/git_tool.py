@@ -403,13 +403,182 @@ class GitCommitTool(GitToolBase):
         )
 
 
+#: D-2 (round5 批次 D): 合法 git ref 名（分支/tag）——防选项注入与路径穿越。
+#: 拒绝: 空/超长、以 "-" 开头（被解析为选项）、含 ".."（引用区间语法）、
+#: 空白与控制字符、".lock" 结尾。仅放行 commit/branch 名的常规字符集。
+_VALID_REF_RE = re.compile(r"^[A-Za-z0-9._/\-]{1,200}$")
+
+
+def _valid_ref(name: str) -> bool:
+    if not name or not isinstance(name, str):
+        return False
+    if name.startswith("-") or name.endswith(".lock") or ".." in name:
+        return False
+    return bool(_VALID_REF_RE.match(name))
+
+
+class GitBranchTool(GitToolBase):
+    """列出本地分支并标记当前分支（READ，纯只读）。"""
+
+    risk = RiskClass.READ
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="git_branch",
+            description="列出本地分支并标记当前分支。",
+            parameters={"type": "object", "properties": {}, "required": []},
+        )
+
+    def execute(self, **kwargs: Any) -> ToolResult:
+        if kwargs:
+            return ToolResult(success=False, error="git_branch 不接受参数")
+        root, rejection = self._resolve_repo_root()
+        if rejection:
+            return rejection
+        out, err = _run_git(["branch", "--list"], cwd=root)
+        if err is not None:
+            return ToolResult(success=False, error=err)
+        branches: List[Dict[str, Any]] = []
+        for raw_line in (out or "").splitlines():
+            entry = raw_line.rstrip()
+            if not entry:
+                continue
+            is_current = entry.startswith("* ")
+            name = entry[2:] if entry[:2] in ("* ", "  ") else entry
+            branches.append({"name": name, "is_current": is_current})
+        return ToolResult(success=True, content={"branches": branches})
+
+
+class GitCheckoutTool(GitToolBase):
+    """切换分支（WRITE_LOCAL；create=true 时先建分支）。"""
+
+    risk = RiskClass.WRITE_LOCAL
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="git_checkout",
+            description="切换到指定分支；create=true 时先创建该分支再切换。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "branch": {"type": "string", "description": "目标分支名"},
+                    "create": {"type": "boolean", "description": "分支不存在时创建"},
+                },
+                "required": ["branch"],
+            },
+        )
+
+    def execute(self, branch: str = "", create: bool = False, **kwargs: Any) -> ToolResult:
+        if kwargs:
+            return ToolResult(
+                success=False, error=f"未知参数: {', '.join(sorted(kwargs))}"
+            )
+        if not _valid_ref(branch):
+            return ToolResult(success=False, error=f"非法分支名: {branch!r}")
+        root, rejection = self._resolve_repo_root()
+        if rejection:
+            return rejection
+        args = ["checkout"] + (["-b"] if create else []) + [branch]
+        out, err = _run_git(args, cwd=root)
+        if err is not None:
+            return ToolResult(success=False, error=err)
+        return ToolResult(
+            success=True,
+            content={
+                "branch": branch,
+                "created": bool(create),
+                "output": (out or "")[-GIT_DIFF_OUTPUT_CAP:],
+            },
+        )
+
+
+class GitStashTool(GitToolBase):
+    """stash 三动作：list / push（可带 message）/ pop（WRITE_LOCAL）。"""
+
+    risk = RiskClass.WRITE_LOCAL
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="git_stash",
+            description=(
+                "暂存或恢复工作区现场。action=list 列出 stash；"
+                "action=push 暂存当前改动（可带 message）；action=pop 恢复最近一次暂存。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "push", "pop"],
+                        "description": "stash 动作",
+                    },
+                    "message": {"type": "string", "description": "push 时的说明（可选）"},
+                },
+                "required": ["action"],
+            },
+        )
+
+    def execute(  # noqa: PLR0911 — list/push/pop 三动作各自带校验早退
+        self, action: str = "list", message: str = "", **kwargs: Any
+    ) -> ToolResult:
+        if kwargs:
+            return ToolResult(
+                success=False, error=f"未知参数: {', '.join(sorted(kwargs))}"
+            )
+        if action not in ("list", "push", "pop"):
+            return ToolResult(success=False, error=f"未知 action: {action!r}")
+        root, rejection = self._resolve_repo_root()
+        if rejection:
+            return rejection
+
+        if action == "list":
+            out, err = _run_git(["stash", "list"], cwd=root)
+            if err is not None:
+                return ToolResult(success=False, error=err)
+            stashes: List[Dict[str, Any]] = []
+            for line in (out or "").splitlines():
+                if not line.strip():
+                    continue
+                head, _, message_part = line.partition(": ")
+                stashes.append({"index": head.strip(), "message": message_part.strip()})
+            return ToolResult(success=True, content={"stashes": stashes})
+
+        if action == "push":
+            args = ["stash", "push"]
+            if message:
+                if len(message) > 200:
+                    return ToolResult(success=False, error="message 超过 200 字符上限")
+                args += ["-m", message]
+            out, err = _run_git(args, cwd=root)
+            if err is not None:
+                return ToolResult(success=False, error=err)
+            saved = "No local changes to save" not in (out or "")
+            return ToolResult(
+                success=True,
+                content={"stashed": saved, "output": (out or "")[-GIT_DIFF_OUTPUT_CAP:]},
+            )
+
+        # pop
+        out, err = _run_git(["stash", "pop"], cwd=root)
+        if err is not None:
+            return ToolResult(success=False, error=err)
+        return ToolResult(
+            success=True,
+            content={"popped": True, "output": (out or "")[-GIT_DIFF_OUTPUT_CAP:]},
+        )
+
+
 __all__ = [
     "GIT_BINARY",
     "GIT_DIFF_OUTPUT_CAP",
     "GIT_LOG_MAX_LIMIT",
     "GIT_TIMEOUT_SECONDS",
+    "GitBranchTool",
+    "GitCheckoutTool",
     "GitCommitTool",
     "GitDiffTool",
     "GitLogTool",
+    "GitStashTool",
     "GitStatusTool",
+    "_valid_ref",
 ]

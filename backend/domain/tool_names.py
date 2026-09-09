@@ -66,10 +66,13 @@ RUNTIME_TOOLS = RUNTIME_PROBE_TOOLS + RUNTIME_EXEC_TOOLS
 # （commit_message 为提交素材只读辅助），git_commit 为 WRITE_LOCAL 审批；
 # 只 commit 不 push。
 GIT_TOOLS = (
+    "git_branch",
+    "git_checkout",
     "git_commit",
     "git_commit_message",
     "git_diff",
     "git_log",
+    "git_stash",
     "git_status",
 )
 

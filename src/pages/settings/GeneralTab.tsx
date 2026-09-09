@@ -129,6 +129,53 @@ function LanguageSelect(): JSX.Element {
   );
 }
 
+/**
+ * D-1 (round5 批次 D): 主模型重试耗尽后的降级模型——preferences KV
+ * fallback_model。留空 = 不降级。producer 在构建 llm_config 时读取。
+ */
+function FallbackModelInput(): JSX.Element {
+  const [model, setModel] = useState('');
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    settingsClient
+      .getPreference('fallback_model')
+      .then((value) => {
+        if (mounted) setModel(value ?? '');
+      })
+      .catch(() => {
+        if (mounted) setModel('');
+      })
+      .finally(() => {
+        if (mounted) setLoaded(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return (
+    <SettingRow
+      label="降级模型 (fallback)"
+      desc="主模型重试耗尽（限流/服务端错误/超时）后自动切换到此模型；留空 = 不降级"
+    >
+      <input
+        type="text"
+        data-testid="settings-fallback-model-input"
+        disabled={!loaded}
+        value={model}
+        onChange={(e) => {
+          setModel(e.target.value);
+          void settingsClient.setPreference('fallback_model', e.target.value.trim());
+        }}
+        placeholder="例如 gpt-4o-mini"
+        className="w-44 text-xs border border-border rounded-radius-sm px-2 py-1 bg-surface text-text font-mono"
+      />
+    </SettingRow>
+  );
+}
+
 /** F5 (批次 C): 每日花费限额 (USD) — preferences KV spend_limit_usd */
 function SpendLimitInput(): JSX.Element {
   const [limit, setLimit] = useState('');
@@ -280,6 +327,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.permission')}</h3>
         <PermissionModeSelector />
       </section>
+      <FallbackModelInput />
       <section data-testid="orch-settings-section">
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.orch')}</h3>
         <NumberField
