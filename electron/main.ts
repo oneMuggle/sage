@@ -758,7 +758,14 @@ function createMainWindow(): void {
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
     title: 'Sage',
-    icon: join(__dirname, '..', 'build', 'icon.ico'),
+    // __dirname = <asar>/dist-electron/electron/, 往上两层才是 <asar>/,
+    // 对齐 electron-builder.yml files 里的 build/icon.ico (顶层).
+    // 之前写 __dirname/../build/icon.ico = <asar>/dist-electron/build/icon.ico,
+    // 该路径在 asar 里不存在, packaged Win7 上 BrowserWindow 会沉默 fallback
+    // 到内置 default icon (无可见错), 但同 bug 在 tray.ts 让 tray 必报
+    // "Failed to load image ... \app.asar\dist-electron\build\icon.ico".
+    // 修复: 与 tray.ts 的 resolveIconPath() 保持一致, 统一用 __dirname/../..
+    icon: join(__dirname, '..', '..', 'build', 'icon.ico'),
     ...titleBarOptions,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
@@ -1712,6 +1719,13 @@ app.whenReady().then(async () => {
           SAGE_BACKEND_CMD: JSON.stringify(supervisorArgv),
           SAGE_BACKEND_CWD: supervisorPlan.kind === 'spawn' ? supervisorPlan.cwd : process.cwd(),
           SAGE_BACKEND_ENV: JSON.stringify(supervisorEnv),
+          // alpha17 (2026-09-09): 标记 packaged 模式让 doctor 跳过
+          // conda_env / runtime_env 等仅对 dev 模式有意义的检查 — 这两项
+          // 在 packaged Win7 上 PATH 扫描看不到 bundled python, 会误报
+          // CRITICAL。详见 backend/cli/checks/{conda_env,runtime_env}.py。
+          // 仅 packaged 注入, dev 模式保持原路径扫描语义 (用户报告 conda
+          // 激活问题时仍能正常诊断)。
+          ...(app.isPackaged ? { SAGE_IS_PACKAGED: '1' } : {}),
         };
         doctorSummary = await runDoctorCheck({
           pythonBin: doctorPlan.command,

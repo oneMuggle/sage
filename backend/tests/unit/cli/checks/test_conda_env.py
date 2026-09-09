@@ -1,6 +1,7 @@
 """Tests for backend.cli.checks.conda_env.CondaEnvCheck."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -115,3 +116,57 @@ class TestCondaEnvCheck:
         assert check.name == "conda_env"
         assert isinstance(check.description, str)
         assert check.description
+
+
+class TestCondaEnvPackagedSkip:
+    """SAGE_IS_PACKAGED=1 (electron doctor spawn sets this on packaged Win7)
+    should short-circuit the conda_env check to INFO without scanning the
+    PATH for a sage conda environment — packaged Python lives at
+    <resourcesPath>/python/, not in any conda env.
+    """
+
+    def test_packaged_returns_info_without_path_scan(self, check):
+        """When SAGE_IS_PACKAGED=1, check returns INFO even if sys.executable
+        looks like a system python (i.e. no conda envs/<name> in its path).
+        Regression: pre-alpha17, packaged Win7 was reporting CRITICAL because
+        process.cwd() resolved to C:\\Program Files\\Sage and Python lived at
+        <resources>\\python\\python.exe.
+        """
+        fake_exe = r"C:\Program Files\Sage\resources\python\python.exe"
+        p_exe, p_resolve = _patch_exe(fake_exe)
+        with p_exe, p_resolve, _patch_py_version(3, 8), mock.patch.dict(
+            os.environ, {"SAGE_IS_PACKAGED": "1"}, clear=False
+        ):
+            result = check.run()
+        assert result.severity == Severity.INFO
+        assert "packaged" in result.message
+
+    def test_packaged_unset_env_falls_through_to_default_logic(self, check):
+        """Without SAGE_IS_PACKAGED, conda_env keeps original behavior
+        (CRITICAL when not in envs/sage-*).
+        """
+        fake_exe = r"C:\Program Files\Sage\resources\python\python.exe"
+        p_exe, p_resolve = _patch_exe(fake_exe)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("SAGE_IS_PACKAGED", None)
+            with p_exe, p_resolve, _patch_py_version(3, 8):
+                result = check.run()
+        assert result.severity == Severity.CRITICAL
+
+    def test_packaged_env_value_must_be_exactly_one(self, check):
+        """SAGE_IS_PACKAGED=0 / 'false' / 'true' / 'yes' / '' should NOT
+        short-circuit (only the canonical '1' triggers the packaged branch
+        — anything else is treated as dev mode and falls through to the
+        default conda-env scan).
+        """
+        fake_exe = r"C:\Program Files\Sage\resources\python\python.exe"
+        for bad_value in ("0", "false", "true", "yes", ""):
+            p_exe, p_resolve = _patch_exe(fake_exe)
+            with mock.patch.dict(
+                os.environ, {"SAGE_IS_PACKAGED": bad_value}, clear=False
+            ), p_exe, p_resolve, _patch_py_version(3, 8):
+                result = check.run()
+            assert result.severity == Severity.CRITICAL, (
+                f"SAGE_IS_PACKAGED={bad_value!r} should not short-circuit; "
+                f"got severity={result.severity!r}"
+            )

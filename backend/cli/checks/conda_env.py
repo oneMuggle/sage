@@ -1,6 +1,7 @@
 """检查当前 Python 解释器是否在 Sage conda 环境中。"""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -21,6 +22,17 @@ class CondaEnvCheck:
     )
 
     def run(self) -> CheckResult:
+        # packaged Win/Linux 上 Python 在 <resourcesPath>/python/, 不在 conda
+        # 环境中。这是正常的安装形态, 不应误报 CRITICAL。SAGE_IS_PACKAGED 由
+        # electron/doctor.ts spawn 时从 app.isPackaged 派生并注入 (CLI 调试
+        # 时也可手动 export)。
+        if os.environ.get("SAGE_IS_PACKAGED") == "1":
+            py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+            return CheckResult(
+                self.name,
+                Severity.INFO,
+                f"环境正确 ({py_ver}, packaged)",
+            )
         exe = str(Path(sys.executable).resolve())
         py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
 

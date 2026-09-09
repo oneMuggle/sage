@@ -13,10 +13,20 @@
 - CRITICAL: Python 完全不可用 (Sage 后端自身依赖 Python, 不可用 = 整体崩)
 - WARN: Python 在但 Node.js 不可用 (Sage 自身不依赖 Node, 仅影响前端/JS 工具链)
 - INFO: 全部可用
+
+packaged 模式 (SAGE_IS_PACKAGED=1): bundled Python 通过 ``sys.executable``
+直接可用, runtime_probe 走 PATH 扫描反而会找不到 packaged python (它不在
+用户 PATH 里), 进而误报 CRITICAL。本 check 在 packaged 下跳过 PATH 扫描,
+直接用 ``sys.executable`` 校验 bundled Python 可执行 + Node.js 走 INFO 兜底
+(前端是 prebuilt dist, 不需 Node 运行时; 用户若真用 JS 工具链仍会从
+runtime_probe API 拿到明细)。
 """
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
+import sys
 
 from backend.cli.doctor import CheckResult, Severity, register
 from backend.tools.runtime_probe import RuntimeProbeTool
@@ -29,7 +39,43 @@ class RuntimeEnvCheck:
     name = "runtime_env"
     description = "探测本机可用编程语言运行时 (Python/Node.js)"
 
+    def _check_packaged(self) -> CheckResult:
+        """Validate the bundled Python in packaged mode.
+
+        On packaged Win7/Linux, ``sys.executable`` points to the bundled
+        interpreter at ``<resources>/python/...``, which is NOT on PATH.
+        Running ``--version`` against it catches a corrupted or missing
+        bundled install. We don't probe Node.js here — packaged dist is
+        pre-built, no Node runtime needed for normal operation.
+        """
+        py_bin = sys.executable
+        try:
+            probe = subprocess.run(
+                [py_bin, "--version"],
+                check=False,
+                capture_output=True,
+                timeout=5,
+            )
+            py_ok = probe.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            py_ok = False
+        if py_ok:
+            return CheckResult(
+                self.name,
+                Severity.INFO,
+                f"packaged 运行时 ok: Python={py_bin} (前端 dist 预构建, 不需 Node.js)",
+            )
+        return CheckResult(
+            self.name,
+            Severity.CRITICAL,
+            f"packaged bundled Python 无法执行: {py_bin}",
+            "重新安装 Sage 或检查 resources/python/ 目录完整性",
+        )
+
     def run(self) -> CheckResult:
+        # packaged 路径见模块 docstring — 跳过 PATH 扫描, 直接报告 bundled 状态
+        if os.environ.get("SAGE_IS_PACKAGED") == "1":
+            return self._check_packaged()
         try:
             tool = RuntimeProbeTool()
             result = tool.execute(
