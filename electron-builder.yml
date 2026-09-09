@@ -13,13 +13,15 @@ files:
   - package.json
   # 2026-09-08 (Win7 launch incident): tray icon + window icon live under
   # repo-root/build/. tray.ts and main.ts resolve
-  #   join(__dirname, '..', 'build', 'icon.ico')
-  # which after compile resolves to <asar>/build/icon.ico. Without this
-  # entry, electron-builder strips the folder and Win7's system tray init
-  # crashes (`continuing without tray`). icon.png is kept alongside even
-  # though Win7 doesn't use it, because some Linux distros fall back to
-  # PNG tray and re-introducing the pattern is cheaper than re-debugging
-  # the next time someone removes "an unused" entry.
+  #   join(__dirname, '..', '..', 'build', 'icon.ico')
+  # which in packaged + asar resolves to <asar>/build/icon.ico (since
+  # __dirname = <asar>/dist-electron/electron/, going up two levels lands
+  # at <asar>/). Without this electron-builder entry, the folder is
+  # stripped and Win7's system tray init crashes
+  # (`continuing without tray`). icon.png is kept alongside even though
+  # Win7 doesn't use it, because some Linux distros fall back to PNG
+  # tray and re-introducing the pattern is cheaper than re-debugging the
+  # next time someone removes "an unused" entry.
   - build/icon.ico
   - build/icon.png
   # electron/**/* (TS 源码) 不进安装包: 编译产物已在 dist-electron/**/*,
