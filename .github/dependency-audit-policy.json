@@ -341,6 +341,18 @@
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
       "exception": "temporary exception pending compatible dependency upgrade"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-12-01",
+      "source": "npm",
+      "package": "extract-zip",
+      "package_version": "2.0.1",
+      "advisory": "GHSA-7pqw-9j4j-h8q3",
+      "advisory_url": "https://github.com/advisories/GHSA-7pqw-9j4j-h8q3",
+      "affected_path": "node_modules/extract-zip",
+      "actual_reachability": "reachable; accepted risk",
+      "controls": "extract-zip 仅经 electron-updater 解压 Sage 自有 GitHub Releases 的安装包（上游已停维护且无补丁版本, CVE-2026-19693 symlink zip-slip）; 归档来源为一方签名发布物, electron-updater 校验 publisher 签名与 SHA512; 不解压任何第三方归档"
     }
   ]
 }
