@@ -144,6 +144,16 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ### Changed
 
+
+## [v0.4.9-alpha.34] - 2026-09-09
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**Win7 安装包启动失败 P0 修复** (#513 → cherry-pick 到 win7 #514):doctor 自检在 packaged Win7 上误报 3 个 CRITICAL(SAGE_USER_DATA_DIR fallback 用了 `process.cwd()` 解析到 `C:\Program Files\Sage\` 只读目录),tray 图标因 `build/icon.ico` 不在 `electron-builder.yml` files 列表里而整个加载失败。新增 `electron/userDataPaths.ts` 统一 backend spawn + doctor spawn 的路径解析(6 vitest 测试);files 列表加 `build/icon.{ico,png}`,asar 内路径变 `<asar>/build/icon.ico` 与 `tray.ts` 期望一致。
+
+### Fixed
+- fix(electron): doctor spawn 改用 userData + tray 图标打包进 app.asar (#513)
+
+🔗 Milestone(s): Win7 启动崩溃 P0 修复
+
 ## [v0.4.5-alpha.3] - 2026-07-11
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。**SAGE_USER_DATA_DIR 修复**(PR #134):v0.4.5-alpha.2 NSIS installer 安装到 `C:\Program Files\Sage\` 后约 4-5 秒必崩(`PermissionError: [WinError 5] 拒绝访问`),因为 backend 写 themes/scheduled_tasks JSON/audit JSONL/logs 到 bundled `resources/backend/data/`,而程序目录对普通用户只读。新 `SAGE_USER_DATA_DIR` env 让 packaged Electron 注入 `<userData>` 作为运行时可变路径,dev 透传 `<project>/data`。4 个 backend 写路径(theme + scheduler JSON + audit JSONL + log)统一签名;`electron/main.ts` + `electron/backendLauncher.ts` 增加 `sageUserDataDir` 在所有 4 个 spawn 分支都注入。
@@ -315,3 +325,4 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 [v0.1.2]: https://github.com/oneMuggle/sage/compare/v0.1.1...v0.1.2
 [v0.1.1]: https://github.com/oneMuggle/sage/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/oneMuggle/sage/releases/tag/v0.1.0
+
