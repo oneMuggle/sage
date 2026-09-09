@@ -278,7 +278,7 @@ function MessageComponent({
             isUser
               ? 'bg-primary text-text-inverse'
               : isError
-                ? 'bg-red-50 border border-red-300 text-red-900'
+                ? 'bg-error/10 border border-error/40 text-error'
                 : 'bg-surface border border-border'
           }`}
         >
