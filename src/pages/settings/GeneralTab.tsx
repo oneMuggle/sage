@@ -276,10 +276,6 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
         </SettingRow>
       </section>
       <AutoCheckpointCard />
-      <section data-testid="demo-mode-section">
-        <h3 className="text-sm font-semibold text-text mb-3">演示</h3>
-        <DemoModeSection />
-      </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.permission')}</h3>
         <PermissionModeSelector />
