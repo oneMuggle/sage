@@ -22,6 +22,7 @@ from .browser_tool import (
 )
 from .calculator import CalculatorTool
 from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, CheckpointRestoreTool
+from .codebase_search_tool import CodebaseSearchTool
 from .commit_message_tool import GitCommitMessageTool
 from .download_tool import HttpDownloadTool
 from .edit_tool import EditTool
@@ -177,6 +178,8 @@ def register_all_tools(
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
     registry.register(GrepSearchTool(policy=policy))
+    # F2 (round5 批次 E): 工作区语义检索（embedding 配置就绪时可用）
+    registry.register(CodebaseSearchTool(policy=policy))
     registry.register(TodoWriteTool(policy=policy))
     registry.register(StructuredOutputTool(policy=policy))
     registry.register(ReplTool(policy=policy))
@@ -282,6 +285,7 @@ __all__ = [
     "OfficeAnalyzeTool",
     "EditTool",
     "GlobSearchTool",
+    "CodebaseSearchTool",
     "GrepSearchTool",
     "TodoWriteTool",
     "StructuredOutputTool",

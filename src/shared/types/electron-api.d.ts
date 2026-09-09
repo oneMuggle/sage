@@ -204,6 +204,9 @@ export interface ElectronAPI {
    */
   resetDemoMode?: () => Promise<{ ok: boolean; error?: string }>;
   setDemoMode?: (demoMode: boolean) => Promise<{ ok: boolean; error?: string }>;
+  /** E-2 (round5 批次 E): 关闭即隐藏到托盘偏好读写 */
+  getCloseToTray?: () => Promise<{ enabled: boolean }>;
+  setCloseToTray?: (enabled: boolean) => Promise<{ ok: boolean; enabled: boolean }>;
   /**
    * 2026-08-27: 演示模式同步标志. main 进程激活演示模式时经
    * webPreferences.additionalArguments → preload argv 注入, 首屏请求在
