@@ -26,8 +26,8 @@ import time
 import uuid
 from typing import Any, Dict, Optional, Set, Union
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, StrictBool
 
 from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
@@ -70,11 +70,7 @@ from backend.orchestration.chat_dispatcher import (
     ChatDispatcher,
     _classify_orchestration_mode,
 )
-from backend.orchestration.llm_factory import (  # G5: 会话级模型覆盖
-    SESSION_MODEL_OVERRIDES_KEY,
-    load_llm_config_for_chat,
-    load_session_model_overrides,
-)
+from backend.orchestration.llm_factory import load_llm_config_for_chat
 from backend.orchestration.orch_settings import load_orch_settings
 from backend.scheduler import get_evolution_logs
 from backend.skills.draft_store import get_skill_draft_store
@@ -115,6 +111,7 @@ router = APIRouter()
 # 的 dict)。若 decorator 定义在 database.py,本文件 34 个带 body 模型的
 # handler(ChatRequest 等)会报 PydanticUndefinedAnnotation。orch_routes.py
 # 因此也保留同构的本地定义,共用同一把 _SQLITE_LOCK。
+from backend.api.error_contract import error_json
 from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与文档语义保留
     _SQLITE_LOCK,
     make_with_db_lock,
@@ -503,24 +500,11 @@ def get_agent() -> SageAgent:
 
 
 # ==================== 会话 API ====================
-
-
-@router.post("/sessions", response_model=dict)
-@with_db_lock
-def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_session_repo)):
-    """创建新会话"""
-    session = repo.create(title=data.title, parent_id=data.parent_id)
-    return session.to_dict()
-
-
-@router.get("/sessions", response_model=List[dict])
-@with_db_lock
-def list_sessions(
-    limit: int = 100, offset: int = 0, repo: SessionRepository = Depends(get_session_repo)
-):
-    """获取会话列表"""
-    sessions = repo.list(limit=limit, offset=offset)
-    return [s.to_dict() for s in sessions]
+#
+# S7-3 (P7): 会话 CRUD 与会话级模型覆盖 7 端点已拆至
+# backend/api/legacy_session_routes.py (复用本模块 router 对象,
+# 装配顺序见 main.py)。本文件保留 compact/fork 等与流/LLM 装配
+# 耦合的会话端点。
 
 
 # ---------------------------------------------------------------------------
@@ -559,85 +543,6 @@ def _validate_chat_images(images: List[str]) -> Optional[str]:
                 f"{_CHAT_IMAGE_MAX_BYTES} 字节 (5 MiB)"
             )
     return None
-
-
-class SessionModelOverride(BaseModel):
-    model_config = {"protected_namespaces": ()}
-
-    model: str
-
-
-@router.get("/sessions/{session_id}/model")
-def get_session_model(session_id: str):
-    """读取某会话的模型覆盖；未设置返回 {"model": null}。"""
-    override = load_session_model_overrides().get(session_id)
-    return {"session_id": session_id, "model": override}
-
-
-@router.put("/sessions/{session_id}/model")
-def set_session_model(session_id: str, payload: SessionModelOverride):
-    """设置/清除（model 传空串）某会话的模型覆盖。
-
-    设置后该会话的 chat 固定用此模型（端点仍取全局选择）；传空串清除
-    覆盖，回到全局选择。非法值整体拒绝，绝不部分写入。
-    """
-    model = payload.model.strip() if isinstance(payload.model, str) else ""
-    overrides = load_session_model_overrides()
-    if model:
-        overrides[session_id] = model
-    else:
-        overrides.pop(session_id, None)
-    try:
-        from backend.data.settings_repo import SettingsRepository
-
-        SettingsRepository().set(
-            SESSION_MODEL_OVERRIDES_KEY,
-            json.dumps(overrides, ensure_ascii=False),
-            value_type="json",
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"写入会话模型覆盖失败: {exc}")
-    return {"session_id": session_id, "model": model or None}
-
-
-@router.get("/sessions/{session_id}", response_model=dict)
-@with_db_lock
-def get_session(session_id: str, repo: SessionRepository = Depends(get_session_repo)):
-    """获取单个会话"""
-    session = repo.get(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="会话不存在")
-    return session.to_dict()
-
-
-@router.patch("/sessions/{session_id}", response_model=dict)
-@with_db_lock
-def update_session(
-    session_id: str, data: SessionUpdate, repo: SessionRepository = Depends(get_session_repo)
-):
-    """更新会话"""
-    update_data = {}
-    if data.title is not None:
-        update_data["title"] = data.title
-    if data.is_pinned is not None:
-        update_data["is_pinned"] = 1 if data.is_pinned else 0
-
-    if update_data:
-        repo.update(session_id, **update_data)
-
-    session = repo.get(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="会话不存在")
-    return session.to_dict()
-
-
-@router.delete("/sessions/{session_id}")
-@with_db_lock
-def delete_session(session_id: str, repo: SessionRepository = Depends(get_session_repo)):
-    """删除会话"""
-    if not repo.delete(session_id):
-        raise HTTPException(status_code=404, detail="会话不存在")
-    return {"status": "ok"}
 
 
 # ==================== 会话压缩 / 分叉 API (M4) ====================
@@ -971,24 +876,14 @@ async def compact_session(session_id: str):
         }
 
     if session_id in _compact_in_progress:
-        return JSONResponse(
-            status_code=409,
-            content={
-                "ok": False,
-                "error": "compact_in_progress",
-                "message": "该会话正在压缩中，请勿重复触发",
-            },
+        return error_json(
+            409, "compact_in_progress", "该会话正在压缩中，请勿重复触发"
         )
 
     llm_complete = _build_compaction_llm_callable()
     if llm_complete is None:
-        return JSONResponse(
-            status_code=502,
-            content={
-                "ok": False,
-                "error": "llm_not_configured",
-                "message": "没有可用的 LLM 配置，无法生成压缩摘要",
-            },
+        return error_json(
+            502, "llm_not_configured", "没有可用的 LLM 配置，无法生成压缩摘要"
         )
 
     _compact_in_progress.add(session_id)
@@ -1002,14 +897,7 @@ async def compact_session(session_id: str):
             logger.warning(
                 "[M4] compact session=%s 失败(DB 未改动): %s", _safe_log_field(session_id), exc
             )
-            return JSONResponse(
-                status_code=502,
-                content={
-                    "ok": False,
-                    "error": "compaction_failed",
-                    "message": "压缩摘要生成失败",
-                },
-            )
+            return error_json(502, "compaction_failed", "压缩摘要生成失败")
 
         try:
             after = await _run_db_sync(
@@ -1022,13 +910,8 @@ async def compact_session(session_id: str):
                 _safe_log_field(session_id),
                 exc,
             )
-            return JSONResponse(
-                status_code=502,
-                content={
-                    "ok": False,
-                    "error": "persist_failed",
-                    "message": "压缩结果落盘失败，数据库未改动",
-                },
+            return error_json(
+                502, "persist_failed", "压缩结果落盘失败，数据库未改动"
             )
     finally:
         _compact_in_progress.discard(session_id)
