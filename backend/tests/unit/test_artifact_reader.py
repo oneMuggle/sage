@@ -94,3 +94,91 @@ def test_read_pdf_oversize_rejected(tmp_path, monkeypatch):
 
     assert result["ok"] is False
     assert "20MB" in result["error"]
+
+
+def test_read_office_docx_roundtrip(tmp_path):
+    """C-2 (round5 批次 C): docx → 全转义 HTML 预览。"""
+    from docx import Document
+
+    f = tmp_path / "report.docx"
+    doc = Document()
+    doc.add_heading("季度报告", level=1)
+    doc.add_paragraph("正文 <script>alert(1)</script> 内容")
+    table = doc.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "指标"
+    table.cell(0, 1).text = "值"
+    table.cell(1, 0).text = "营收"
+    table.cell(1, 1).text = "100"
+    doc.save(str(f))
+
+    aid = artifact_repo.record_artifact("sess_001", str(f), "report.docx", "docx", f.stat().st_size)
+    result = artifact_reader.read_office(aid, kind="docx")
+    assert result["ok"] is True
+    assert result["kind"] == "docx"
+    assert "<h2>季度报告</h2>" in result["html"]
+    assert "<td>营收</td>" in result["html"]
+    # 用户数据必须被转义（script 标签不得原样出现）
+    assert "<script>" not in result["html"]
+    assert "&lt;script&gt;" in result["html"]
+
+
+def test_read_office_xlsx_roundtrip_with_row_cap(tmp_path, monkeypatch):
+    """C-2: xlsx → 分 sheet HTML 表格,行数按 MAX_SHEET_PREVIEW_ROWS 截断。"""
+    from openpyxl import Workbook
+
+    f = tmp_path / "data.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "销售"
+    ws.append(["月份", "金额"])
+    for i in range(1, 260):
+        ws.append([f"m{i}", i])
+    wb.save(str(f))
+
+    aid = artifact_repo.record_artifact("sess_001", str(f), "data.xlsx", "xlsx", f.stat().st_size)
+    result = artifact_reader.read_office(aid, kind="xlsx")
+    assert result["ok"] is True
+    assert "<h3>销售</h3>" in result["html"]
+    assert "预览已截断" in result["html"]
+    assert result["html"].count("<tr>") == artifact_reader.MAX_SHEET_PREVIEW_ROWS
+
+
+def test_read_office_pptx_roundtrip(tmp_path):
+    """C-2: pptx → slide 标题 + 文本块大纲。"""
+    from pptx import Presentation
+
+    f = tmp_path / "deck.pptx"
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "项目计划"
+    slide.placeholders[1].text = "第一要点"
+    prs.save(str(f))
+
+    aid = artifact_repo.record_artifact("sess_001", str(f), "deck.pptx", "pptx", f.stat().st_size)
+    result = artifact_reader.read_office(aid, kind="pptx")
+    assert result["ok"] is True
+    assert "项目计划" in result["html"]
+    assert "第一要点" in result["html"]
+
+
+def test_read_office_oversize_rejected(tmp_path, monkeypatch):
+    """C-2: 超过 20MB 上限拒绝预览。"""
+    from docx import Document
+
+    f = tmp_path / "big.docx"
+    Document().save(str(f))
+    monkeypatch.setattr(artifact_reader, "MAX_OFFICE_BYTES", 10)
+    aid = artifact_repo.record_artifact("sess_001", str(f), "big.docx", "docx", f.stat().st_size)
+    result = artifact_reader.read_office(aid, kind="docx")
+    assert result["ok"] is False
+    assert "20MB" in result["error"]
+
+
+def test_read_office_invalid_file_degrades(tmp_path):
+    """C-2: 非 office 内容解析失败 → ok=False 不抛异常。"""
+    f = tmp_path / "fake.docx"
+    f.write_bytes(b"not a zip archive")
+    aid = artifact_repo.record_artifact("sess_001", str(f), "fake.docx", "docx", f.stat().st_size)
+    result = artifact_reader.read_office(aid, kind="docx")
+    assert result["ok"] is False
+    assert "解析失败" in result["error"]

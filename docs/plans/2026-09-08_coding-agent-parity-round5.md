@@ -37,6 +37,30 @@
 
 round4 批次 F 中的 L12 完整中断粒度、F2 语义索引不在本轮，维持 round4 排期结论。
 
+## 2.2 批次 C 详细设计（2026-09-09 增补，本次实施）
+
+> 基线：origin/main 最新（含 #525/#529/#533/#544 等并行合入）；分支 `feat/parity-r5-batch-c`。
+
+### C-1 AGENTS.md 规则文件兼容（P2，工作量 S）
+
+AGENTS.md 已是跨工具事实标准（OpenAI/Codex/Cursor 等均读取）。`project_context._CANDIDATES` 追加 `("AGENTS.md", "agents_md")`，每级发现顺序 SAGE > CLAUDE > AGENTS（项目自有约定优先）；`RENDER_HEADER` 同步提及。防 symlink 越界/去重/截断逻辑零改动（发现链统一走 `_iter_candidates`）。
+**测试**：`test_project_context.py` 增发现与优先级用例。
+
+### C-2 docx/xlsx/pptx 产物内嵌预览（P2，工作量 L；承 round4 F11）
+
+PDF（批次 B 前的 #489）已有 base64 data URL + iframe 先例。office 三件套复用 `backend/office/` 既有 read 函数（read_docx/read_xlsx/read_ppt，结构化段落/表格/文本块），后端生成**全转义**的轻量预览 HTML：
+
+- `artifact_reader.read_office(artifact_id, kind, max_bytes=20MB)`：docx → 标题层级/段落/表格 HTML；xlsx → 每 sheet HTML 表格（每 sheet 截断前 200 行 + 提示）；pptx → slide 标题 + 文本块大纲。`html.escape` 全转义（office 内容是用户数据，禁裸插 HTML）。
+- `detect_artifact_kind` 加 `.docx/.xlsx/.pptx` 三后缀；路由 kind 分发加 office 分支（含历史 text-kind 后缀兜底，同 PDF 模式）。
+- 前端 `ArtifactKind` 联合类型扩展 + ArtifactViewer office 分支（转义 HTML 渲染、白底容器）+ ArtifactRow 图标映射（xlsx→FileSpreadsheet）。
+
+**测试**：`test_artifact_reader.py` 增三格式往返用例（python-docx/openpyxl/python-pptx 现场生成样例文件）+ 超限拒绝。
+
+### C-3 checkpoint restore 前自动留底（P2，工作量 S）
+
+恢复是覆盖操作——恢复前自动为**当前状态**打一份快照，误恢复可再撤销（把"建议先创建快照"的 UI 提示升级为系统保证）。restore 端点在拿到 root 后、执行 restore 前调 `CheckpointCreateTool`；创建失败不阻断（fail-open 只记日志）；响应追加 `pre_restore_checkpoint_id`，前端 toast 提示留底 id。注意 RETENTION_COUNT=10 的淘汰语义（留底会挤掉最旧快照——正是期望行为）。
+**测试**：`test_workspace_checkpoint_routes.py` 增 restore 响应含留底 id 且 zip 落盘用例。
+
 ## 2.1 批次 B 详细设计（2026-09-09 增补，本次实施）
 
 > 基线：origin/main `07762ec9`（含 round6 #521）；分支 `feat/parity-r5-batch-b`。
