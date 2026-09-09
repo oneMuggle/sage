@@ -40,7 +40,7 @@ def test_default_seed_coder_uses_current_tool_names():
     同日合并本地开发环境三件套 (runtime_probe / project_diagnose /
     runtime_exec) —— coder 是唯一拿 runtime_exec 的 agent。
     2026-09-06: git 工具组 + 工作区检查点（对标增强 Phase-1）+ apply_patch
-    / plan_write / symbol_search / browser_*（Phase-2 + G7）。
+    / symbol_search / browser_*（Phase-2 + G7）。
     """
     coder = next(a for a in profiles.create_default_agents() if a.id == "coder")
     assert coder.tools == [
@@ -303,3 +303,32 @@ def test_primary_system_prompt_already_fetch_direct_no_upsert(monkeypatch):
     assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
     primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
     assert primary_upserts == [], f"primary 不应被 upsert，但收到: {primary_upserts}"
+
+
+# ---------------------------------------------------------------------------
+# D2 (2026-09-09): plan_write 退役 —— 存量 DB 白名单清理
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_primary_plan_write_pruned(monkeypatch):
+    """存量 DB primary 白名单含已退役的 plan_write → ensure_default_agents 清除。"""
+    stored = {
+        "primary": {
+            "id": "primary", "enabled": True,
+            "tools": ["calculator", "read_file", "plan_write", "todo_write"],
+        },
+        "researcher": {"id": "researcher", "enabled": True, "tools": []},
+    }
+    repo = FakeRepo(stored)
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+    profiles.ensure_default_agents()
+    assert "plan_write" not in stored["primary"]["tools"]
+    # 其余工具原样保留
+    assert "calculator" in stored["primary"]["tools"]
+    assert "todo_write" in stored["primary"]["tools"]
+
+
+def test_default_agents_never_seed_plan_write():
+    """代码默认种子不再含 plan_write（新生成的 DB 不会引入死工具）。"""
+    for agent in profiles.create_default_agents():
+        assert "plan_write" not in agent.tools, agent.id

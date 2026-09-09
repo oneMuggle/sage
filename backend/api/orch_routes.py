@@ -196,6 +196,36 @@ def cancel_run(run_id: str, body: Optional[CancelRunRequest] = None) -> CancelRu
     return CancelRunResponse(ok=True, run_id=run_id, status="cancelled")
 
 
+class CancelTaskResponse(BaseModel):
+    ok: bool
+    run_id: str
+    task_id: str
+    status: str
+
+
+@router.post("/runs/{run_id}/tasks/{task_id}/cancel", response_model=CancelTaskResponse)
+def cancel_run_task(run_id: str, task_id: str) -> CancelTaskResponse:
+    """B3 (2026-09-09): 单任务跳过 —— 只停一个子任务，不影响其余。
+
+    进程内注册表定位活动 dispatcher；queued 任务 acquire 后短路、running
+    任务经 interrupt 通道软中断（同 run 级取消语义）。run 不活动 / 任务
+    不在本批或已终态分别 404 / 409。
+    """
+    from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
+
+    dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
+    if dispatcher is None:
+        raise HTTPException(status_code=404, detail="active run not found")
+    if not dispatcher.cancel_task(task_id):
+        raise HTTPException(
+            status_code=409,
+            detail=f"task not cancellable (unknown/terminal): {task_id}",
+        )
+    return CancelTaskResponse(
+        ok=True, run_id=run_id, task_id=task_id, status="cancelling"
+    )
+
+
 # Fix #3 (2026-09-06): 用户确认端点 —— 前端 PlanCard "开始执行" 按钮调用。
 # 唤醒在 legacy_routes.producer 中等待的 asyncio.Event,触发 conductor 启动。
 

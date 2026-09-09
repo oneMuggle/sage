@@ -1982,6 +1982,24 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
         add_todo_listener(_push_todo_snapshot)
 
+        # B4 (2026-09-09): 流启动时推送持久化的 todo 快照 —— 此前 todo 只在
+        # todo_write 写入时推送，重启/重开会话后任务板为空。get() 命中
+        # session_todos 持久层（缓存 miss 回填），恢复上次任务清单。
+        try:
+            from backend.tools.todo_state import get_todo_store
+
+            persisted_todos = get_todo_store().get(data.session_id)
+            if persisted_todos:
+                await entry.queue.put(
+                    {
+                        "state": "todo_snapshot",
+                        "session_id": data.session_id,
+                        "todos": persisted_todos,
+                    }
+                )
+        except Exception:  # noqa: BLE001 — 降级铁律
+            logger.debug("todo_snapshot 初始推送失败（忽略）")
+
         # S7 (2026-09-06): 产物事件 → 活跃流推送。工具线程在 record_artifact
         # 落库后广播，这里按会话过滤后入队；前端据此事件驱动刷新产物面板 +
         # 侧栏徽章（不再依赖手动刷新）。队列满静默降级（尽力而为）。
