@@ -26,6 +26,8 @@ interface SortableSessionListProps {
   onOrderChange: (next: string[]) => void;
   /** U4': 重命名回调(可选——缺省时 SessionItem 不渲染重命名入口) */
   onRename?: (sessionId: string, title: string) => Promise<void>;
+  /** F12: 消息内容命中计数(会话 id → 命中条数;缺省不显示徽标) */
+  messageHitsBySession?: Map<string, number>;
 }
 
 const ACTIVATION_DISTANCE = 8; // px — 避免点击 item 误触发拖拽
@@ -38,6 +40,7 @@ export function SortableSessionList({
   onDelete,
   onOrderChange,
   onRename,
+  messageHitsBySession,
 }: SortableSessionListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: ACTIVATION_DISTANCE } }),
@@ -74,6 +77,7 @@ export function SortableSessionList({
                 onSelect={() => onSelect(session.id)}
                 onDelete={() => onDelete(session.id)}
                 onRename={onRename}
+                messageHits={messageHitsBySession?.get(session.id)}
               />
             </SortableSessionItem>
           ))}

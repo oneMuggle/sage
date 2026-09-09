@@ -37,6 +37,34 @@
 
 round4 批次 F 中的 L12 完整中断粒度、F2 语义索引不在本轮，维持 round4 排期结论。
 
+## 2.1 批次 B 详细设计（2026-09-09 增补，本次实施）
+
+> 基线：origin/main `07762ec9`（含 round6 #521）；分支 `feat/parity-r5-batch-b`。
+
+### B-1 F12 消息全文搜索（P2，工作量 M）
+
+**后端**（`backend/api/legacy_routes.py` 记忆 API 区旁新增，`@with_db_lock`）：
+- `GET /search/messages?q=&session_id=&limit=`：q 长度 2-200（越界 422），limit 1-50 默认 20；LIKE 通配符转义（`%/_/\` + `ESCAPE ''`）；
+- 仅搜 `role IN ('user','assistant')`（tool/system 行无检索价值）；JOIN sessions 取标题；`ORDER BY created_at DESC`（最新优先）；
+- 响应 `{results: [{message_id, session_id, session_title, role, snippet, created_at}], has_more}`——取 limit+1 条探测 has_more，避免 COUNT 双查；snippet 为命中点前后 80 字符 excerpt。
+
+**前端**：
+- `sessionApi.searchMessages(q, opts?)` + `electron/commands.ts` `search_messages` GET 路由（q 进 query string）；
+- **入口复用侧栏搜索框**（U4' 已交付）：输入 ≥2 字符时 debounce 300ms 异步搜消息，命中会话并入过滤列表（标题匹配优先、消息命中次之），SessionItem 显示 `💬N` 徽标，点击即跳会话；
+- `/search` 斜杠命令保持 LLM 知识库搜索语义不变（`commandToPrompt` :187），消息检索入口收敛在侧栏，不做第二入口。
+
+**测试**：`backend/tests/api/test_message_search_api.py`（跨会话命中/role 过滤/转义/session 过滤/limit 与 has_more/空 q 422）；ConversationsSection 消息命中并入 + SessionItem 徽标用例。
+
+### B-2 发送前自动快照（P2，工作量 S-M）
+
+**后端**：
+- `settings_repo.KEYS` 白名单加 `"auto_checkpoint"`（`"1"/"0"` 字符串 KV，**默认关**——不改变既有行为，用户显式开启）；
+- 抽独立函数 `_auto_checkpoint_if_enabled(session_id) -> Optional[str]`（settings 读 → `get_workspace_binding` → `CheckpointCreateTool(...).execute()`，任一步失败静默返回 None——与 S1/L11/F5 同款 fail-open）；producer 在运行态落库（:2013）之后挂调用，经 `run_in_executor` 包裹（zip 大工作区秒级耗时，不阻塞事件循环）；py3.8 纪律：`Optional[str]` 注解、无 to_thread。
+
+**前端**：GeneralTab 新增"发送前自动快照"卡片——走后端 KV（get_preference/set_preference 既有通道），自管加载态；与 autoMemory 等 localStorage 开关并存（后端 producer 必须能读到该开关，故不走 localStorage）。
+
+**测试**：`backend/tests/api/test_auto_checkpoint.py`（开启+绑定→产生快照 / 关闭→不产生 / 开启+未绑定→静默 None，SAGE_USER_DATA_DIR 隔离）；GeneralTab 开关读写用例。
+
 ## 3. 批次 A 详细设计（本次实施）
 
 ### 3.1 U2' checkpoint UI——一键快照 / 一键回滚（P0，工作量 L）
