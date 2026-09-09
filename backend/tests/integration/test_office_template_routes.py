@@ -49,7 +49,8 @@ WEEKLY_DATA = {
 def test_list_templates_endpoint_returns_builtins(workspace: Path):
     response = list_templates_endpoint(workspace_path=str(workspace))
     builtins = [t for t in response.templates if t.source == "builtin"]
-    assert len(builtins) == 6
+    # round 3 N2: registry = 6 word + 2 excel + 2 ppt builtins
+    assert len(builtins) == 10
     assert {t.id for t in builtins} >= {"weekly_report", "meeting_minutes", "resume"}
 
 

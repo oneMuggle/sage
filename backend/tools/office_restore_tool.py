@@ -27,6 +27,7 @@ from typing import Any, Optional
 
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
+from backend.office.selfcheck_history import record
 from backend.office.tool_service import OfficeToolService
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import current_tool_context
@@ -97,8 +98,15 @@ class OfficeRestoreTool(BaseTool):
         # R7 自校验回读：工作区存活文档计数 + 触达文档指纹（best-effort，
         # 回读失败得到 {ok: False, error} 占位，主结果保持 success）。
         content = dict(result.get("content") or {})
-        content["self_check"] = workspace_count_self_check(
-            conn, ctx, doc_id, "live_count"
+        self_check = workspace_count_self_check(conn, ctx, doc_id, "live_count")
+        content["self_check"] = self_check
+        # N4 (round-3) 自检历史：restore 落一行（best-effort，helper 自吞）。
+        record(
+            doc_id,
+            "restore",
+            bool(self_check.get("ok")),
+            self_check.get("summary"),
+            conn=conn,
         )
         return ToolResult(success=True, content=content)
 

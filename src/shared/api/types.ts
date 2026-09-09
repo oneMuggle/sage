@@ -1339,12 +1339,13 @@ export interface OfficeExportPdfResult {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Word template library (Office parity batch 3, item 3.2 — 从模板创建)
-// Backend counterpart: GET /office/templates + POST /office/templates/
-// instantiate in backend/api/office_routes.py. Placeholder element shape
-// follows the list-endpoint contract (name/type/description) — narrower
-// than the analysis model `TemplatePlaceholder` (backend/office/models.py),
-// which carries location/index fields that the picker UI never needs.
+// Document template library (Office parity batch 3, item 3.2 — 从模板创建;
+// round 3 N2 extends it to excel/ppt). Backend counterpart: GET
+// /office/templates + POST /office/templates/instantiate in
+// backend/api/office_routes.py. Placeholder element shape follows the
+// list-endpoint contract (name/type/description) — narrower than the
+// analysis model `TemplatePlaceholder` (backend/office/models.py), which
+// carries location/index fields that the picker UI never needs.
 // ──────────────────────────────────────────────────────────────────────
 
 /** Placeholder kind (backend `TemplatePlaceholderType`). */
@@ -1364,15 +1365,20 @@ export interface OfficeTemplatePlaceholder {
  * One template entry. `id` is the instantiate key for builtin templates;
  * workspace templates resolve by filename (`workspace_template`), with
  * `id` mirroring the filename stem for list rendering.
+ *
+ * Round 3 N2: `doc_type` was widened from the batch-3 `'word'`-only
+ * literal to the OOXML trio — the backend list endpoint now also yields
+ * excel/ppt builtin + workspace templates and instantiate persists the
+ * matching document row for all three.
  */
 export interface OfficeTemplateMeta {
   id: string;
   name: string;
   description?: string;
-  doc_type: 'word';
+  doc_type: 'word' | 'excel' | 'ppt';
   placeholders: OfficeTemplatePlaceholder[];
   source: OfficeTemplateSource;
-  /** Workspace templates only — the .docx filename inside the workspace. */
+  /** Workspace templates only — the source OOXML filename inside the workspace. */
   filename?: string;
 }
 
@@ -1400,9 +1406,12 @@ export interface OfficeTemplateInstantiateRequest {
 }
 
 /**
- * Result of POST /office/templates/instantiate — same shape as the
- * word fill-template result (backend `WordTemplateFillResult`,
- * backend/office/models.py:551-557), which already carries `output_path`.
+ * Result of POST /office/templates/instantiate — same shape for all
+ * doc types (word: backend `WordTemplateFillResult`,
+ * backend/office/models.py:551-557, which already carries `output_path`;
+ * round 3 N2: excel/ppt instantiate reuses the identical response shape).
+ * The backend persists a document row, so the result shows up in the
+ * document list after a refresh.
  */
 export interface OfficeTemplateInstantiateResult {
   output_path: string;

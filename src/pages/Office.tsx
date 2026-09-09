@@ -40,6 +40,12 @@
  * Round 2 (R1): the dialog now also APPLIES — 确认应用 POSTs the previewed
  * ops to /office/doc/{doc_id}/update, then onApplied refreshes the
  * document list and re-reads the preview (stale-read guard reused).
+ *
+ * Round 3 (N5): the document list carries batch operations — multi-select
+ * checkboxes plus 批量归档 (live view) / 批量恢复 (archived view). The
+ * list component owns the selection + progress/summary toasts; the hook's
+ * batchArchive/batchRestore loop the existing archive/restore APIs
+ * sequentially and refetch the list once.
  */
 
 import { FileSpreadsheet, FileText, FileType, FolderOpen, Presentation } from 'lucide-react';
@@ -100,6 +106,8 @@ export function Office() {
     showInFolder,
     archiveDocument,
     restoreDocument,
+    batchArchive,
+    batchRestore,
     readDocument,
   } = useOfficeDocuments(workspacePath);
 
@@ -453,6 +461,8 @@ export function Office() {
                 ))}
               </div>
             </div>
+            {/* Round-3 N5: batch actions — the list owns selection +
+                toasts; the hook loops the APIs and refetches once. */}
             <OfficeDocumentList
               documents={documents}
               loading={loading}
@@ -463,6 +473,8 @@ export function Office() {
               onArchive={handleArchive}
               onRestore={handleRestore}
               onViewSnapshots={(docId) => setSnapshotDocId(docId)}
+              onBatchArchive={batchArchive}
+              onBatchRestore={batchRestore}
             />
             {/* 历史版本 panel — opened from a row's History action */}
             {snapshotDoc && (

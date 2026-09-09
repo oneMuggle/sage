@@ -69,6 +69,24 @@ const WORKSPACE_TEMPLATE: OfficeTemplateMeta = {
   filename: '项目周报.docx',
 };
 
+// Round-3 N2: template mode now exists on the excel/ppt tabs too —
+// entries carrying those doc_types must only surface on their own tab.
+const EXCEL_TEMPLATE: OfficeTemplateMeta = {
+  id: 'quarter_budget',
+  name: '季度预算表',
+  doc_type: 'excel',
+  placeholders: [{ name: 'department', type: 'text', description: '部门名称' }],
+  source: 'builtin',
+};
+
+const PPT_TEMPLATE: OfficeTemplateMeta = {
+  id: 'project_review',
+  name: '项目评审模板',
+  doc_type: 'ppt',
+  placeholders: [{ name: 'review_date', type: 'date' }],
+  source: 'builtin',
+};
+
 function renderForm() {
   return render(
     <I18nProvider defaultLocale="zh">
@@ -210,5 +228,115 @@ describe('OfficeGenerateForm — template picker (item 3.2)', () => {
     expect((screen.getByTestId('office-template-input-author') as HTMLInputElement).value).toBe(
       '张三',
     );
+  });
+});
+
+describe('OfficeGenerateForm — template mode on excel/ppt tabs (round-3 N2)', () => {
+  beforeEach(() => {
+    mockListTemplates.mockReset();
+    mockInstantiate.mockReset();
+    mockOnGenerated.mockReset();
+    toastMock.success.mockReset();
+    toastMock.error.mockReset();
+    mockListTemplates.mockResolvedValue({
+      templates: [BUILTIN_TEMPLATE, EXCEL_TEMPLATE, PPT_TEMPLATE],
+    });
+    mockInstantiate.mockResolvedValue({
+      output_path: '/tmp/ws/out',
+      filename: 'out',
+      file_size_bytes: 20480,
+      filled_count: 1,
+      unfilled_placeholders: [],
+    });
+  });
+
+  it('shows the template toggle on the EXCEL tab and filters entries by doc_type', async () => {
+    renderForm();
+    fireEvent.click(screen.getByText('EXCEL'));
+    expect(screen.getByTestId('office-excel-mode-freeform')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('office-excel-mode-template'));
+
+    await screen.findByTestId('office-template-option-quarter_budget');
+
+    expect(mockListTemplates).toHaveBeenCalledWith('/tmp/ws');
+    // The shared template list is filtered to the active tab's doc_type:
+    // word/ppt entries never leak onto the excel tab.
+    expect(screen.queryByTestId('office-template-option-weekly_report')).toBeNull();
+    expect(screen.queryByTestId('office-template-option-project_review')).toBeNull();
+    // The word tab's toggle is not rendered while the excel tab is active.
+    expect(screen.queryByTestId('office-word-mode-template')).toBeNull();
+    // Submit switches to the template wording.
+    expect(screen.getByTestId('office-generate-submit').textContent).toBe('创建文档');
+  });
+
+  it('instantiates an excel template with the .xlsx default filename', async () => {
+    renderForm();
+    fireEvent.click(screen.getByText('EXCEL'));
+    fireEvent.click(screen.getByTestId('office-excel-mode-template'));
+    await screen.findByTestId('office-template-option-quarter_budget');
+    fireEvent.click(screen.getByTestId('office-template-option-quarter_budget'));
+
+    fireEvent.change(screen.getByTestId('office-template-input-department'), {
+      target: { value: '研发部' },
+    });
+    fireEvent.click(screen.getByTestId('office-generate-submit'));
+
+    await waitFor(() => {
+      expect(mockInstantiate).toHaveBeenCalledTimes(1);
+    });
+    const req = mockInstantiate.mock.calls[0][0] as Record<string, unknown>;
+    expect(req.workspace_path).toBe('/tmp/ws');
+    expect(req.template_id).toBe('quarter_budget');
+    // Default filename = template name + today's date + the EXCEL ext.
+    expect(String(req.filename)).toMatch(/^季度预算表-\d{4}-\d{2}-\d{2}\.xlsx$/);
+    expect(req.data).toEqual({ department: '研发部' });
+    await waitFor(() => {
+      expect(toastMock.success).toHaveBeenCalledWith(expect.stringContaining('已从模板创建'));
+    });
+    expect(mockOnGenerated).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows template mode on the PPT tab, filters doc_type and defaults to .pptx', async () => {
+    renderForm();
+    fireEvent.click(screen.getByText('PPT'));
+    fireEvent.click(screen.getByTestId('office-ppt-mode-template'));
+    await screen.findByTestId('office-template-option-project_review');
+
+    expect(screen.queryByTestId('office-template-option-quarter_budget')).toBeNull();
+    expect(screen.queryByTestId('office-template-option-weekly_report')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('office-template-option-project_review'));
+    expect(screen.getByTestId('office-template-input-review_date').tagName).toBe('INPUT');
+    fireEvent.click(screen.getByTestId('office-generate-submit'));
+
+    await waitFor(() => {
+      expect(mockInstantiate).toHaveBeenCalledTimes(1);
+    });
+    const req = mockInstantiate.mock.calls[0][0] as Record<string, unknown>;
+    expect(req.template_id).toBe('project_review');
+    expect(String(req.filename)).toMatch(/^项目评审模板-\d{4}-\d{2}-\d{2}\.pptx$/);
+  });
+
+  it('drops the template pick when switching tabs so the wrong type cannot be instantiated', async () => {
+    renderForm();
+    fireEvent.click(screen.getByText('WORD'));
+    fireEvent.click(screen.getByTestId('office-word-mode-template'));
+    await screen.findByTestId('office-template-option-weekly_report');
+    fireEvent.click(screen.getByTestId('office-template-option-weekly_report'));
+
+    // Switch to the excel tab: the word pick is dropped, the picker shows
+    // only excel entries.
+    fireEvent.click(screen.getByText('EXCEL'));
+    fireEvent.click(screen.getByTestId('office-excel-mode-template'));
+    await screen.findByTestId('office-template-option-quarter_budget');
+    expect(screen.queryByTestId('office-template-input-author')).toBeNull();
+
+    // Submitting without a pick only toasts selectFirst — it must NOT
+    // instantiate the previously picked word template.
+    fireEvent.click(screen.getByTestId('office-generate-submit'));
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith('请先选择一个模板');
+    });
+    expect(mockInstantiate).not.toHaveBeenCalled();
   });
 });
