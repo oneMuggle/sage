@@ -65,19 +65,18 @@ function resetThemeColors(): void {
   toRemove.forEach((p) => root.removeProperty(p));
 }
 
-/** 应用主题预设 + 亮/暗模式 */
-function applyPresetTheme(resolved: 'light' | 'dark', presetId: string): void {
+/** 应用亮/暗模式到 DOM。
+ *
+ * 双轨必须同步切换: `.dark` class 供 tailwind `dark:` 变体 (tailwind.config
+ * darkMode: 'class')，`data-theme` 属性供 index.css 的暗色 CSS 变量组
+ * ([data-theme='dark'])。只切其一会导致应用内切换主题对一半样式不生效
+ * —— index.html 的 boot 脚本同样是两者一起设置。
+ */
+function applyThemeMode(resolved: 'light' | 'dark'): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
   root.classList.toggle('dark', resolved === 'dark');
-
-  const preset = getThemeById(presetId);
-  if (preset && presetId !== DEFAULT_THEME_ID) {
-    const colors = resolved === 'dark' ? preset.darkColors : preset.colors;
-    applyThemeColors(colors);
-  } else {
-    resetThemeColors();
-  }
+  root.setAttribute('data-theme', resolved);
 }
 
 interface ThemeProviderProps {
@@ -149,11 +148,21 @@ export function ThemeProvider({ children, defaultMode = 'system' }: ThemeProvide
 
   const resolved: 'light' | 'dark' = mode === 'system' ? systemTheme : mode;
 
+  // 亮/暗模式 → DOM 同步。任何主题源 (preset / CSS 主题) 下都要执行:
+  // dark: 变体与基础暗色变量跟随 mode, 与主题源无关。
   useEffect(() => {
-    if (activeSource.kind === 'preset') {
-      applyPresetTheme(resolved, activeSource.id);
+    applyThemeMode(resolved);
+  }, [resolved]);
+
+  // 主题预设颜色只在 preset 源下生效; CSS 主题走自注入的 <style>。
+  useEffect(() => {
+    if (activeSource.kind !== 'preset') return;
+    const preset = getThemeById(activeSource.id);
+    if (preset && activeSource.id !== DEFAULT_THEME_ID) {
+      applyThemeColors(resolved === 'dark' ? preset.darkColors : preset.colors);
+    } else {
+      resetThemeColors();
     }
-    // CSS 主题的 <style> 标签已注入，浏览器自动应用
   }, [resolved, activeSource]);
 
   const setMode = useCallback((next: ThemeMode): void => {

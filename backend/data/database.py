@@ -10,17 +10,106 @@ import os
 import sqlite3
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# Module-level SQLite 写锁(PR B §1.2 fix):被所有同步 SQLite 写共享,
-# 包括 PR A 的 legacy_routes.py handler(用 @with_db_lock 装饰器)和
-# PR B 的 SqliteStorageAdapter._sync_X(在 asyncio.to_thread worker 内执行)。
-# 必须用 threading.Lock 而不是 asyncio.Lock,因为 _sync_X 跑在线程池 worker
-# 上,与 PR A 的 sync def handler 共享同一线程上下文;asyncio.Lock 只能保护
+# Module-level SQLite 访问锁(PR B §1.2 fix / B2 下沉):被所有同步 SQLite
+# 访问共享 —— @with_db_lock 装饰的 handler、SqliteStorageAdapter._sync_X,
+# 以及 Database.get_connection() 返回的代理连接 (B2: 此前 Session/Message/
+# memory 仓库等方法直接用共享单连接不加锁, 被工具 executor 线程 /
+# asyncio.to_thread / APScheduler 线程并发调用, 存在游标交错与事务互踩风险)。
+# 必须用 RLock: with _SQLITE_LOCK 块内调用仓库方法时代理会再次加锁,
+# 同线程可重入; threading.Lock 在该场景下会自死锁。
+# 必须用线程锁而不是 asyncio.Lock,因为 _sync_X 跑在线程池 worker
+# 上,与 sync def handler 共享同一线程上下文;asyncio.Lock 只能保护
 # event loop 上的协程,看不到 worker 线程。
-_SQLITE_LOCK = threading.Lock()
+_SQLITE_LOCK = threading.RLock()
+
+
+class _LockedCursor:
+    """sqlite3.Cursor 代理: 常用方法在 _SQLITE_LOCK 内执行。
+
+    未显式列出的属性/方法经 __getattr__ 透传 (lastrowid / description 等)。
+    """
+
+    def __init__(self, cursor: sqlite3.Cursor) -> None:
+        self._cursor = cursor
+
+    def execute(self, *args: Any, **kwargs: Any) -> _LockedCursor:
+        with _SQLITE_LOCK:
+            return _LockedCursor(self._cursor.execute(*args, **kwargs))
+
+    def executemany(self, *args: Any, **kwargs: Any) -> _LockedCursor:
+        with _SQLITE_LOCK:
+            return _LockedCursor(self._cursor.executemany(*args, **kwargs))
+
+    def fetchone(self) -> Any:
+        with _SQLITE_LOCK:
+            return self._cursor.fetchone()
+
+    def fetchall(self) -> Any:
+        with _SQLITE_LOCK:
+            return self._cursor.fetchall()
+
+    def fetchmany(self, size: Optional[int] = None) -> Any:
+        with _SQLITE_LOCK:
+            if size is None:
+                return self._cursor.fetchmany()
+            return self._cursor.fetchmany(size)
+
+    def close(self) -> None:
+        with _SQLITE_LOCK:
+            self._cursor.close()
+
+    def __iter__(self) -> _LockedCursor:
+        return self
+
+    def __next__(self) -> Any:
+        with _SQLITE_LOCK:
+            return next(self._cursor)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._cursor, name)
+
+
+class _LockedConnection:
+    """sqlite3.Connection 代理: 写路径与事务边界在 _SQLITE_LOCK 内执行。
+
+    覆盖 execute / executemany / executescript / commit / rollback / cursor。
+    代理缓存于 Database 实例 (get_connection 返回同一对象, 保持身份稳定);
+    真实连接仅 Database 内部持有。cursor() 返回 _LockedCursor。
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def cursor(self, *args: Any, **kwargs: Any) -> _LockedCursor:
+        with _SQLITE_LOCK:
+            return _LockedCursor(self._conn.cursor(*args, **kwargs))
+
+    def execute(self, *args: Any, **kwargs: Any) -> _LockedCursor:
+        with _SQLITE_LOCK:
+            return _LockedCursor(self._conn.execute(*args, **kwargs))
+
+    def executemany(self, *args: Any, **kwargs: Any) -> _LockedCursor:
+        with _SQLITE_LOCK:
+            return _LockedCursor(self._conn.executemany(*args, **kwargs))
+
+    def executescript(self, *args: Any, **kwargs: Any) -> Any:
+        with _SQLITE_LOCK:
+            return self._conn.executescript(*args, **kwargs)
+
+    def commit(self) -> None:
+        with _SQLITE_LOCK:
+            self._conn.commit()
+
+    def rollback(self) -> None:
+        with _SQLITE_LOCK:
+            self._conn.rollback()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._conn, name)
 
 def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
     """Add source_turn_id / source_message_id / memory_category columns and
@@ -90,33 +179,43 @@ class Database:
 
         self.db_path = db_path
         self._connection: Optional[sqlite3.Connection] = None
+        self._conn_proxy: Optional[_LockedConnection] = None
 
     def get_connection(self) -> sqlite3.Connection:
-        """获取数据库连接"""
-        if self._connection is None:
-            self._connection = sqlite3.connect(self.db_path, check_same_thread=False)
-            self._connection.row_factory = sqlite3.Row
-            # 启用 WAL 模式提高并发性能
-            self._connection.execute("PRAGMA journal_mode=WAL")
-            self._connection.execute("PRAGMA busy_timeout=5000")
-            # fix/security-perf-quickwins (2026-08-09): 启用外键约束。否则
-            # session_workspace_bindings 等表的 ON DELETE CASCADE 是 silent no-op,
-            # 删会话后留下悬挂行 (见 docs/technical/33-office-m1-m2-completion.md §6-2).
-            self._connection.execute("PRAGMA foreign_keys=ON")
-            # feat/sqlite-fast-pragma: 测试期跳过 fsync (~5x faster setup)。
-            # 仅当 SAGE_TEST_FAST_SQLITE=1 时启用 synchronous=OFF。
-            # 注意：synchronous=OFF 在断电/OS crash 时可能丢最后几个事务，但
-            # Sage 测试用 tempfile，OS crash 后整个文件不存在 → 仅对测试场景安全。
-            # 生产 DB（data/sage.db）始终保持 synchronous=FULL（默认值）。
-            if os.environ.get("SAGE_TEST_FAST_SQLITE") == "1":
-                self._connection.execute("PRAGMA synchronous=OFF")
-        return self._connection
+        """获取数据库连接 (B2: 返回加锁代理, 全部 SQLite 访问共享 _SQLITE_LOCK)
+
+        代理与 ``self._connection`` 按身份绑定: 测试会直接替换 ``_connection``
+        注入 mock 连接 (如 evolution hooks 的故障注入), 身份变化时重建代理,
+        避免拿到包着旧真实连接的过期代理。
+        """
+        if self._conn_proxy is None or self._conn_proxy._conn is not self._connection:
+            if self._connection is None:
+                self._connection = sqlite3.connect(self.db_path, check_same_thread=False)
+                self._connection.row_factory = sqlite3.Row
+                # 启用 WAL 模式提高并发性能
+                self._connection.execute("PRAGMA journal_mode=WAL")
+                self._connection.execute("PRAGMA busy_timeout=5000")
+                # fix/security-perf-quickwins (2026-08-09): 启用外键约束。否则
+                # session_workspace_bindings 等表的 ON DELETE CASCADE 是 silent no-op,
+                # 删会话后留下悬挂行 (见 docs/technical/33-office-m1-m2-completion.md §6-2).
+                self._connection.execute("PRAGMA foreign_keys=ON")
+                # feat/sqlite-fast-pragma: 测试期跳过 fsync (~5x faster setup)。
+                # 仅当 SAGE_TEST_FAST_SQLITE=1 时启用 synchronous=OFF。
+                # 注意：synchronous=OFF 在断电/OS crash 时可能丢最后几个事务，但
+                # Sage 测试用 tempfile，OS crash 后整个文件不存在 → 仅对测试场景安全。
+                # 生产 DB（data/sage.db）始终保持 synchronous=FULL（默认值）。
+                if os.environ.get("SAGE_TEST_FAST_SQLITE") == "1":
+                    self._connection.execute("PRAGMA synchronous=OFF")
+            self._conn_proxy = _LockedConnection(self._connection)
+        assert self._conn_proxy is not None
+        return self._conn_proxy
 
     def close(self):
         """关闭数据库连接"""
         if self._connection:
             self._connection.close()
             self._connection = None
+            self._conn_proxy = None
 
     def init_db(self):
         """初始化数据库表结构"""

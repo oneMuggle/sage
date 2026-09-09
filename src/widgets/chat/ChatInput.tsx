@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 
 import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
 import { importOfficeReference } from '../../features/office/importOfficeReference';
@@ -83,7 +83,7 @@ const KNOWLEDGE_DOCS: KnowledgeDocType[] = [
   { id: 'test-data', title: '测试数据集', desc: '样本对话和测试用例' },
 ];
 
-export function ChatInput({
+function ChatInputInner({
   onSend,
   onInterrupt,
   onClear,
@@ -502,3 +502,7 @@ export function ChatInput({
     </div>
   );
 }
+
+// memo (F1): 流式期间 Chat 每 token 重渲染, 调用方已稳定化回调/对象 props,
+// 输入区自身状态不变时整块跳过重渲染。
+export const ChatInput = memo(ChatInputInner);

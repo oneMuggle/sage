@@ -1,5 +1,5 @@
 import { BookOpen, Clock, Image, Paperclip, Send, Square, X } from 'lucide-react';
-import { useEffect } from 'react';
+import { memo, useEffect } from 'react';
 import type React from 'react';
 
 import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
@@ -104,7 +104,7 @@ export interface InputCardProps {
   hint?: string;
 }
 
-export function InputCard({
+function InputCardInner({
   value,
   onChange,
   onSubmit,
@@ -461,3 +461,6 @@ export function InputCard({
     </div>
   );
 }
+
+// memo (F1): 随 Chat 每 token 重渲染的输入卡片, props 不变时跳过。
+export const InputCard = memo(InputCardInner);
