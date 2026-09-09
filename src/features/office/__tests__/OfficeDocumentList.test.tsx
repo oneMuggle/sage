@@ -25,6 +25,8 @@ const sampleDocs: OfficeDocumentSummary[] = [
     created_at: 1700000000,
     updated_at: 1700000000,
     metadata: { file_size_bytes: 1024 },
+  derived_from: null,
+  archived_at: null,
   },
   {
     id: 'doc-2',
@@ -36,6 +38,8 @@ const sampleDocs: OfficeDocumentSummary[] = [
     created_at: 1700000100,
     updated_at: 1700000100,
     metadata: { file_size_bytes: 2048 },
+  derived_from: null,
+  archived_at: null,
   },
 ];
 
