@@ -213,14 +213,27 @@ def create_default_agents() -> List[AgentProfile]:
                 "你是一个专业的写作 Agent。负责把资料整理成结构清晰、可执行的 "
                 "学习资料、操作指南等 markdown 文档。产出文档请用 write_file 工具落盘。"
             ),
-# 2026-09-04: 写作 agent 此前只能产出 markdown; 加 Office 读写四件套
+# 2026-09-04: 写作 agent 此前只能产出 markdown; 加 Office 读写套件
             # 让它能直接落 docx/xlsx/pptx。不给 delete —— 写作职责不含删档。
             # PR-2: 补 office_restore —— 可恢复误改的 Office 文档。
+            # PR-1 (office CRUD 接线) + PR-2 (archive/restore):
+            # 写作 agent 现在可生成/编辑/还原 Office 文档 (report / 操作手册
+            # 等适合 docx/xlsx/pptx 形态)。office_* 工具与 write_file 互补:
+            # markdown 学习笔记走 write_file, 正式报告走 office_* (可被
+            # office_restore 还原)。不给 office_delete —— 写作职责不含删档。
+            # 2026-09 Parity Batch-1: 补 PDF 三类 + Word 模板两件（与
+            # OFFICE_TOOLS 同步，除 office_delete 外全量继承）。
             tools=[
                 "read_file", "write_file", "memory_search",
                 "office_list", "office_read", "office_create", "office_update",
                 "office_restore",
                 "office_archive",
+                "office_read_pdf",
+                "office_generate_pdf",
+                "office_read_pdf_form",
+                "office_fill_pdf_form",
+                "office_analyze_word_template",
+                "office_fill_word_template",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -376,6 +389,9 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     # 与上方 writer.tools 同步。
     "office_list", "office_read", "office_create", "office_update", "office_restore",
     "office_archive",
+    # 2026-09 Parity Batch-1: PDF 三类 + Word 模板两件（与 writer.tools 同步）。
+    "office_read_pdf", "office_generate_pdf", "office_read_pdf_form",
+    "office_fill_pdf_form", "office_analyze_word_template", "office_fill_word_template",
 ]
 
 
@@ -600,7 +616,7 @@ def format_agents_for_prompt() -> str:
 #: 暴露）。工具/能力变化时手动维护，与 legacy_routes 的 DIAGRAM_TOOL_PROMPT
 #: 同模式。
 _OFFICE_CREATE_CAPABILITY_PROMPT = (
-    "\n\n你可以对 Office 文档（Word/Excel/PPT）执行增删改查：\n"
+    "\n\n你可以对 Office 文档（Word/Excel/PPT/PDF）执行增删改查：\n"
     "- 创建：调用 office_create 工具（提供 doc_type / output_dir / filename / 内容结构）。\n"
     "  · content 接受三种形式，按优先级处理：\n"
     "    1) 结构化对象（首选）：{title, paragraphs:[{text, heading?}], tables:[{headers, rows[]}]}\n"
@@ -614,7 +630,17 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "- 归档文档（隐藏但不删）：office_archive；还原被归档文档：office_restore。"
     "office_update 改前会自动把旧版复制到 <managed_dir>/.snapshots/，可作为"
     "「撤销最近一次编辑」路径。"
-    "写入或修改工作区外的路径（如桌面）时，用户会看到确认框，批准后才会真正执行。"
+    "写入或修改工作区外的路径（如桌面）时，用户会看到确认框，批准后才会真正执行。\n"
+    "- PDF（定位均支持 doc_id 或工作区内绝对路径 file_path）：\n"
+    "  · 读取文本：office_read_pdf（按页返回正文 + 元数据）。\n"
+    "  · 生成新 PDF：office_generate_pdf（output_path + title/paragraphs，"
+    "page_size 可选 a4/letter/legal，目标文件不能已存在）。\n"
+    "  · 表单：先 office_read_pdf_form 列出 AcroForm 字段，再 office_fill_pdf_form"
+    "（data 传 {字段名: 值}；默认原地保存，传 output_path 另存，flatten 可锁定字段）。\n"
+    "- Word 模板（.docx 占位符）：先 office_analyze_word_template 列出 {{占位符}}"
+    "（名称/类型/位置），再 office_fill_word_template 按 data 填充；图片占位符在 "
+    "images 里传工作区图片路径或 data:image/... base64（≤10MB）；默认原地保存，"
+    "传 output_path 另存。"
 )
 
 

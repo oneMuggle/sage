@@ -75,7 +75,14 @@ export interface WorkspaceSearchResponse {
 
 export interface ChatOfficeRef {
   docId: string;
-  docType: OfficeDocType;
+  /**
+   * Deliberately the narrow 3-union (NOT OfficeDocType): the chat @-menu
+   * chip surface does not render pdf refs yet — a managed pdf doc falls
+   * back to the plain-file path in workspace search results
+   * (fileSearchClient coalesces docType 'pdf' → null). Widen together
+   * with widgets/chat InputCard.OfficeRefChipType when chat gains pdf.
+   */
+  docType: 'ppt' | 'word' | 'excel';
   filename: string;
 }
 
@@ -938,7 +945,12 @@ export interface CreateLanesResponse {
 // Backend counterpart: backend/office/models.py
 // ──────────────────────────────────────────────────────────────────────
 
-export type OfficeDocType = 'ppt' | 'word' | 'excel';
+/**
+ * Document kind discriminator. `pdf` added in Office parity batch 1
+ * (item 1.2) — backend counterpart `OfficeDocType` already carries
+ * `PDF = "pdf"` (backend/office/models.py:38-44).
+ */
+export type OfficeDocType = 'ppt' | 'word' | 'excel' | 'pdf';
 
 export type OfficeDocStatus = 'parsed' | 'generated' | 'edited';
 
@@ -1005,6 +1017,65 @@ export interface OfficeExcelReadResult {
   sheets: OfficeExcelSheetContent[];
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// PDF types (Office parity batch 1, item 1.2)
+// Backend counterpart: PdfPageContent / PdfReadResult / PdfReadRequest /
+// PdfPageSpec / PdfGenerateRequest / PdfGenerateResult in
+// backend/office/models.py:419-481
+// ──────────────────────────────────────────────────────────────────────
+
+/** One extracted PDF page (backend `PdfPageContent`). */
+export interface OfficePdfPageContent {
+  page_number: number;
+  text: string;
+  tables: string[][][];
+  images: Record<string, unknown>[];
+}
+
+/** Result of POST /api/v1/office/pdf/read (backend `PdfReadResult`). */
+export interface OfficePdfReadResult {
+  summary: OfficeDocumentSummary;
+  pages: OfficePdfPageContent[];
+  metadata: Record<string, unknown>;
+}
+
+/**
+ * Request of POST /api/v1/office/pdf/read. Deliberately NOT
+ * `OfficeReadRequest` — backend `PdfReadRequest` is `extra="forbid"`
+ * and only accepts `workspace_path` + `file_path`.
+ */
+export interface OfficePdfReadRequest {
+  workspace_path: string;
+  file_path: string;
+}
+
+/** One page to generate in a PDF (backend `PdfPageSpec`). */
+export interface PdfPageSpec {
+  title?: string | null;
+  paragraphs?: string[];
+  tables?: string[][][];
+}
+
+/** Page size accepted by backend `generate_pdf` (backend/office/pdf.py:187-191). */
+export type PdfPageSize = 'A4' | 'Letter' | 'Legal';
+
+export interface OfficePdfGenerateRequest {
+  workspace_path: string;
+  filename: string;
+  pages: PdfPageSpec[];
+  /** Backend default "A4"; unknown values fall back to A4 server-side. */
+  page_size?: PdfPageSize;
+  orientation?: 'portrait' | 'landscape';
+}
+
+/** Result of POST /api/v1/office/pdf/generate (backend `PdfGenerateResult`). */
+export interface OfficePdfGenerateResult {
+  output_path: string;
+  filename: string;
+  file_size_bytes: number;
+  page_count: number;
+}
+
 export interface OfficeReadRequest {
   workspace_path: string;
   file_path: string;
@@ -1027,7 +1098,6 @@ export interface OfficePptGenerateRequest {
   workspace_path: string;
   filename: string;
   slides: PptSlideSpec[];
-  template?: 'default' | 'minimal';
 }
 
 export interface WordParagraphSpec {
@@ -1071,4 +1141,44 @@ export interface OfficeDocumentListResponse {
 export interface OfficeDeleteResponse {
   id: string;
   deleted: boolean;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Archive / restore + snapshot types (Office parity batch 1, item 1.7)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Response of POST /office/doc/{doc_id}/archive — mirrors the snapshot
+ * restore shape: `{ ok, summary }` with the post-archive summary
+ * (`archived_at` set).
+ */
+export interface OfficeArchiveResponse {
+  ok: boolean;
+  summary: OfficeDocumentSummary;
+}
+
+/** Response of POST /office/doc/{doc_id}/restore (`archived_at` cleared). */
+export interface OfficeRestoreResponse {
+  ok: boolean;
+  summary: OfficeDocumentSummary;
+}
+
+/** One pre-edit snapshot (backend `<ms>-<generated_filename>` file). */
+export interface OfficeSnapshotMeta {
+  /** Snapshot filename `<ms>-<generated_filename>`. */
+  snapshot_id: string;
+  size_bytes: number;
+  /** Unix epoch in milliseconds. */
+  created_at: number;
+}
+
+/** Response of GET /office/doc/{doc_id}/snapshots. */
+export interface OfficeSnapshotListResponse {
+  snapshots: OfficeSnapshotMeta[];
+}
+
+/** Response of POST /office/doc/{doc_id}/snapshots/{snapshot_id}/restore. */
+export interface OfficeSnapshotRestoreResponse {
+  ok: boolean;
+  summary: OfficeDocumentSummary;
 }

@@ -16,12 +16,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockListDocuments = vi.fn();
 const mockReadPpt = vi.fn();
+const mockArchiveDocument = vi.fn();
+const mockRestoreDocument = vi.fn();
 vi.mock('../../../shared/api/officeApi', () => ({
   officeApi: {
     listDocuments: (...args: unknown[]) => mockListDocuments(...args),
     readPpt: (...args: unknown[]) => mockReadPpt(...args),
     readWord: vi.fn(),
     readExcel: vi.fn(),
+    readPdf: vi.fn(),
+    archiveDocument: (...args: unknown[]) => mockArchiveDocument(...args),
+    restoreDocument: (...args: unknown[]) => mockRestoreDocument(...args),
+    listSnapshots: vi.fn(),
+    restoreSnapshot: vi.fn(),
   },
 }));
 
@@ -57,11 +64,15 @@ const IMPORT_PAYLOAD = {
 beforeEach(() => {
   mockListDocuments.mockReset();
   mockReadPpt.mockReset();
+  mockArchiveDocument.mockReset();
+  mockRestoreDocument.mockReset();
   mockPickAndImport.mockReset();
   mockCompleteImport.mockReset();
   mockDiscardImport.mockReset();
   mockSweepOrphanStaging.mockReset();
   mockListDocuments.mockResolvedValue({ documents: [] });
+  mockArchiveDocument.mockResolvedValue({ ok: true, summary: {} });
+  mockRestoreDocument.mockResolvedValue({ ok: true, summary: {} });
   mockCompleteImport.mockResolvedValue(undefined);
   mockDiscardImport.mockResolvedValue(undefined);
   mockSweepOrphanStaging.mockResolvedValue({ swept: 0 });
@@ -181,10 +192,84 @@ describe('useOfficeDocuments — workspace entry sweep', () => {
     await waitFor(() => {
       expect(result.current.documents).toHaveLength(2);
     });
-    expect(mockListDocuments).toHaveBeenCalledWith('/tmp/ws');
+    // Item 1.7: listDocuments now carries the include_archived flag
+    // (false on the default live view).
+    expect(mockListDocuments).toHaveBeenCalledWith('/tmp/ws', { includeArchived: false });
     expect(mockSweepOrphanStaging).toHaveBeenCalledWith({
       workspacePath: '/tmp/ws',
       knownDocIds: ['doc-a', 'doc-b'],
+    });
+  });
+
+  it('archived view fetches with includeArchived and keeps only archived rows (item 1.7)', async () => {
+    const liveDoc = {
+      id: 'doc-live',
+      workspace_path: '/tmp/ws',
+      doc_type: 'word',
+      original_filename: null,
+      generated_filename: 'live.docx',
+      status: 'parsed',
+      created_at: 0,
+      updated_at: 0,
+      metadata: { file_size_bytes: 1 },
+      archived_at: null,
+    };
+    const archivedDoc = {
+      id: 'doc-arch',
+      workspace_path: '/tmp/ws',
+      doc_type: 'pdf',
+      original_filename: 'old.pdf',
+      generated_filename: 'old.pdf',
+      status: 'parsed',
+      created_at: 0,
+      updated_at: 0,
+      metadata: { file_size_bytes: 1 },
+      archived_at: 1700000000,
+    };
+    mockListDocuments.mockResolvedValue({ documents: [liveDoc, archivedDoc] });
+
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+    await waitFor(() => expect(result.current.view).toBe('live'));
+    await waitFor(() => {
+      expect(result.current.documents).toHaveLength(2);
+    });
+
+    await act(async () => {
+      result.current.setView('archived');
+    });
+    await waitFor(() => {
+      expect(mockListDocuments).toHaveBeenCalledWith('/tmp/ws', { includeArchived: true });
+    });
+    await waitFor(() => {
+      expect(result.current.documents.map((d) => d.id)).toEqual(['doc-arch']);
+    });
+  });
+
+  it('archiveDocument calls officeApi then re-fetches the current view', async () => {
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+    await waitFor(() => expect(mockListDocuments).toHaveBeenCalled());
+
+    const callsBefore = mockListDocuments.mock.calls.length;
+    await act(async () => {
+      await result.current.archiveDocument('doc-a');
+    });
+    expect(mockArchiveDocument).toHaveBeenCalledWith('doc-a');
+    await waitFor(() => {
+      expect(mockListDocuments.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+  });
+
+  it('restoreDocument calls officeApi then re-fetches the current view', async () => {
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+    await waitFor(() => expect(mockListDocuments).toHaveBeenCalled());
+
+    const callsBefore = mockListDocuments.mock.calls.length;
+    await act(async () => {
+      await result.current.restoreDocument('doc-arch');
+    });
+    expect(mockRestoreDocument).toHaveBeenCalledWith('doc-arch');
+    await waitFor(() => {
+      expect(mockListDocuments.mock.calls.length).toBeGreaterThan(callsBefore);
     });
   });
 

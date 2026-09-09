@@ -2,13 +2,17 @@
  * OfficePreviewPanel — render read results from any Office doc type (Phase 1.3, step 16).
  *
  * Discriminates on the `summary.doc_type` field and renders the appropriate
- * sub-layout (PPT slides / Word paragraphs+tables / Excel sheets).
+ * sub-layout (PPT slides / Word paragraphs+tables / Excel sheets / PDF pages).
+ * PDF (parity batch 1, item 1.2): plain text preview of the extracted page
+ * text returned by POST /office/pdf/read — richer (image/table) rendering
+ * is deliberately deferred.
  */
 
-import { FileSpreadsheet, FileText, Presentation } from 'lucide-react';
+import { FileSpreadsheet, FileText, FileType, Presentation } from 'lucide-react';
 
 import type {
   OfficeExcelReadResult,
+  OfficePdfReadResult,
   OfficePptReadResult,
   OfficeWordReadResult,
 } from '../../shared/api/types';
@@ -17,7 +21,8 @@ import { useI18n } from '../../shared/lib/i18n';
 export type OfficePreviewData =
   | { docType: 'ppt'; data: OfficePptReadResult }
   | { docType: 'word'; data: OfficeWordReadResult }
-  | { docType: 'excel'; data: OfficeExcelReadResult };
+  | { docType: 'excel'; data: OfficeExcelReadResult }
+  | { docType: 'pdf'; data: OfficePdfReadResult };
 
 export interface OfficePreviewPanelProps {
   preview: OfficePreviewData | null;
@@ -47,6 +52,7 @@ export function OfficePreviewPanel({ preview }: OfficePreviewPanelProps) {
         {preview.docType === 'ppt' && <Presentation className="w-4 h-4" />}
         {preview.docType === 'word' && <FileText className="w-4 h-4" />}
         {preview.docType === 'excel' && <FileSpreadsheet className="w-4 h-4" />}
+        {preview.docType === 'pdf' && <FileType className="w-4 h-4" />}
         <span className="font-medium text-sm">{preview.data.summary.generated_filename}</span>
         <span className="ml-auto text-xs text-muted">
           {(preview.data.summary.metadata.file_size_bytes / 1024).toFixed(1)} KB
@@ -57,6 +63,7 @@ export function OfficePreviewPanel({ preview }: OfficePreviewPanelProps) {
         {preview.docType === 'ppt' && <PptPreview data={preview.data} />}
         {preview.docType === 'word' && <WordPreview data={preview.data} />}
         {preview.docType === 'excel' && <ExcelPreview data={preview.data} />}
+        {preview.docType === 'pdf' && <PdfPreview data={preview.data} />}
       </div>
     </div>
   );
@@ -94,6 +101,33 @@ function PptPreview({ data }: { data: OfficePptReadResult }) {
             <div className="text-xs text-muted mt-2 italic">
               {t('office.preview.notes')} {slide.notes}
             </div>
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function PdfPreview({ data }: { data: OfficePdfReadResult }) {
+  const { t } = useI18n();
+  if (data.pages.length === 0) {
+    return <p className="text-muted text-sm">{t('office.preview.emptyPdf')}</p>;
+  }
+  return (
+    <ol className="space-y-3">
+      {data.pages.map((page) => (
+        <li key={page.page_number} className="border border-border rounded p-3">
+          <div className="text-xs text-muted mb-1">
+            {t('office.preview.pagePrefix')}
+            {page.page_number}
+            {t('office.preview.pageSuffix')}
+          </div>
+          {page.text ? (
+            <pre className="text-sm text-text-secondary whitespace-pre-wrap font-sans">
+              {page.text}
+            </pre>
+          ) : (
+            <p className="text-xs text-muted italic">{t('office.preview.emptyPage')}</p>
           )}
         </li>
       ))}

@@ -63,7 +63,7 @@ export interface SkillsElectronApiBridge {
  * `OfficeManagedRef` tuples.
  */
 
-export type OfficeDocType = 'ppt' | 'word' | 'excel';
+export type OfficeDocType = 'ppt' | 'word' | 'excel' | 'pdf';
 
 export interface OfficeManagedRef {
   workspacePath: string;

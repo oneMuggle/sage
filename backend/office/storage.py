@@ -33,10 +33,16 @@ from pathlib import Path
 from typing import List, Optional
 
 from .errors import OfficePathError
-from .models import OfficeDocType, OfficeDocumentSummary
+from .models import OfficeDocType, OfficeDocumentSummary, OfficeSnapshotInfo
 from .path_safety import managed_document_directory, resolve_within, validate_doc_id
 
 logger = logging.getLogger(__name__)
+
+#: 快照保留策略（技术债 L3 还账，2026-09-09 方案 Item 1.7）：
+#: 每文档最多保留 SNAPSHOT_KEEP_COUNT 份、目录总量不超过
+#: SNAPSHOT_MAX_TOTAL_BYTES，超限删最旧。snapshot_pre_edit 每次成功后执行。
+SNAPSHOT_KEEP_COUNT = 10
+SNAPSHOT_MAX_TOTAL_BYTES = 100 * 1024 * 1024  # 100 MiB
 
 
 def validate_workspace(path: Path) -> Path:
@@ -354,6 +360,7 @@ def snapshot_pre_edit(
         # ``copy2`` preserves mtime/atime so the snapshot is byte-identical
         # to what the editor was about to overwrite.
         shutil.copy2(source, destination)
+        _enforce_snapshot_retention(snapshot_dir)
         return destination
     except (OSError, ValueError):
         logger.warning(
@@ -361,3 +368,129 @@ def snapshot_pre_edit(
             summary.id,
         )
         return None
+
+
+def _parse_snapshot_ts(name: str) -> Optional[int]:
+    """Return the millisecond epoch encoded in ``<ms>-<filename>``, else None."""
+    head, sep, _rest = name.partition("-")
+    if not sep or not head.isdigit():
+        return None
+    return int(head)
+
+
+def _snapshot_dir_for(summary: OfficeDocumentSummary) -> Optional[Path]:
+    """Return the document's ``.snapshots`` dir, or None when unavailable."""
+    source = document_path(summary)
+    if not source.is_file():
+        return None
+    return source.parent / ".snapshots"
+
+
+def _enforce_snapshot_retention(snapshot_dir: Path) -> None:
+    """Prune oldest snapshots beyond count/size limits (best-effort).
+
+    Failures are logged and swallowed — retention must never break the
+    edit that just succeeded (same contract as snapshot_pre_edit itself).
+    """
+    try:
+        entries: List[tuple[int, Path, int]] = []
+        for entry in snapshot_dir.iterdir():
+            if not entry.is_file():
+                continue
+            ts = _parse_snapshot_ts(entry.name)
+            if ts is None:
+                continue  # 非快照命名规则的文件不动
+            entries.append((ts, entry, entry.stat().st_size))
+        if len(entries) <= SNAPSHOT_KEEP_COUNT and sum(
+            e[2] for e in entries
+        ) <= SNAPSHOT_MAX_TOTAL_BYTES:
+            return
+        # 最旧的在前，逐个删除直到数量与容量两项限制都满足
+        entries.sort(key=lambda e: e[0])
+        total = sum(e[2] for e in entries)
+        excess = max(0, len(entries) - SNAPSHOT_KEEP_COUNT)
+        for _ts, path, size in entries:
+            if excess <= 0 and total <= SNAPSHOT_MAX_TOTAL_BYTES:
+                break
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as exc:
+                logger.warning(
+                    "snapshot prune unlink failed (%s): %s", path.name, exc
+                )
+                continue  # 删不掉的不再重试，避免死循环
+            excess -= 1
+            total -= size
+    except OSError as exc:
+        logger.warning("snapshot retention prune failed (non-fatal): %s", exc)
+
+
+def list_snapshots(summary: OfficeDocumentSummary) -> List[OfficeSnapshotInfo]:
+    """List a document's pre-edit snapshots, newest first.
+
+    只认 ``<ms>-<generated_filename>`` 命名规则的文件；目录缺失或文档
+    文件不在盘上时返回空列表（无快照不是错误）。
+    """
+    try:
+        snapshot_dir = _snapshot_dir_for(summary)
+        if snapshot_dir is None or not snapshot_dir.is_dir():
+            return []
+        infos: List[OfficeSnapshotInfo] = []
+        for entry in snapshot_dir.iterdir():
+            if not entry.is_file():
+                continue
+            ts = _parse_snapshot_ts(entry.name)
+            if ts is None or not entry.name.endswith(summary.generated_filename):
+                continue
+            infos.append(
+                OfficeSnapshotInfo(
+                    snapshot_id=entry.name,
+                    size_bytes=entry.stat().st_size,
+                    created_at=ts,
+                )
+            )
+        infos.sort(key=lambda info: info.created_at, reverse=True)
+        return infos
+    except OSError as exc:
+        logger.warning("list_snapshots failed for doc=%s: %s", summary.id, exc)
+        return []
+
+
+def restore_from_snapshot(
+    conn: sqlite3.Connection,
+    summary: OfficeDocumentSummary,
+    snapshot_id: str,
+    *,
+    now_ms: Optional[int] = None,
+) -> OfficeDocumentSummary:
+    """Restore the document file from a snapshot; return the refreshed summary.
+
+    恢复前先把当前文件再快照一份（恢复操作本身也可撤销），随后用
+    ``copy2`` 覆盖主文件并刷新 DB 的 ``updated_at`` / ``metadata``。
+
+    Raises:
+        OfficeFileNotFoundError: snapshot_id 不存在或不匹配命名规则。
+        OfficePathError: snapshot_id 尝试路径穿越（``/``、``..`` 等）。
+    """
+    from .errors import OfficeFileNotFoundError  # local: avoids import cycle
+
+    if any(sep in snapshot_id for sep in ("/", "\\", "..")):
+        raise OfficePathError(
+            f"Invalid snapshot id: {snapshot_id}", file_path=Path(snapshot_id)
+        )
+    snapshot_dir = _snapshot_dir_for(summary)
+    target = snapshot_dir / snapshot_id if snapshot_dir is not None else None
+    if target is None or not target.is_file():
+        # OfficeFileNotFoundError 只接受 file_path（message 由基类拼装）
+        raise OfficeFileNotFoundError(Path(snapshot_id))
+
+    # 恢复前留存"恢复前"状态（best-effort，失败不阻断恢复）
+    snapshot_pre_edit(summary, now_ms=now_ms)
+    destination = document_path(summary)
+    shutil.copy2(target, destination)
+
+    ts = int(now_ms if now_ms is not None else time.time() * 1000)
+    summary.metadata.file_size_bytes = destination.stat().st_size
+    summary.updated_at = ts
+    save_document(conn, summary)
+    return summary

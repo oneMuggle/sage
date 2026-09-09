@@ -30,8 +30,8 @@
 
 import path from 'path';
 
-/** Document kind — `ppt` (presentations), `word`, or `excel`. */
-export type OfficeDocType = 'ppt' | 'word' | 'excel';
+/** Document kind — `ppt` (presentations), `word`, `excel`, or `pdf`. */
+export type OfficeDocType = 'ppt' | 'word' | 'excel' | 'pdf';
 
 /** Reference to a managed Office document inside a workspace. */
 export interface OfficeManagedRef {
@@ -68,6 +68,7 @@ export interface OfficeDialogFilterMap {
   ppt: OfficeDialogFilter;
   word: OfficeDialogFilter;
   excel: OfficeDialogFilter;
+  pdf: OfficeDialogFilter;
 }
 
 const PPTX_FILTER: OfficeDialogFilter = {
@@ -85,11 +86,16 @@ const XLSX_FILTER: OfficeDialogFilter = {
   extensions: ['xlsx'],
 };
 
+const PDF_FILTER: OfficeDialogFilter = {
+  name: 'PDF Document (.pdf)',
+  extensions: ['pdf'],
+};
+
 /**
  * Returns the dialog filter catalog for each Office doc type.
  *
- * Security rationale: every filter maps to exactly one OOXML extension
- * (`.pptx` / `.docx` / `.xlsx`). The legacy binary formats
+ * Security rationale: every filter maps to exactly one modern extension
+ * (`.pptx` / `.docx` / `.xlsx` / `.pdf`). The legacy binary formats
  * (`.ppt`/`.doc`/`.xls`) are deliberately excluded — Sage cannot parse
  * them and a renderer that hand-rolls an `ipcRenderer.invoke` with a
  * legacy path must be rejected before any disk operation.
@@ -102,6 +108,7 @@ export function getOpenDialogFilters(): OfficeDialogFilterMap {
     ppt: PPTX_FILTER,
     word: DOCX_FILTER,
     excel: XLSX_FILTER,
+    pdf: PDF_FILTER,
   };
 }
 
@@ -131,6 +138,7 @@ const DOC_TYPE_EXTENSION: Record<OfficeDocType, string> = {
   ppt: 'pptx',
   word: 'docx',
   excel: 'xlsx',
+  pdf: 'pdf',
 };
 
 function assertSafeDocId(documentId: string): void {

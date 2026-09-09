@@ -40,7 +40,17 @@ from .network_config import load_network_policy
 from .office_archive_tool import OfficeArchiveTool
 from .office_create_tool import OfficeCreateTool
 from .office_delete_tool import OfficeDeleteTool
+from .office_pdf_tool import (
+    OfficeFillPdfFormTool,
+    OfficeGeneratePdfTool,
+    OfficeReadPdfFormTool,
+    OfficeReadPdfTool,
+)
 from .office_restore_tool import OfficeRestoreTool
+from .office_template_tool import (
+    OfficeAnalyzeWordTemplateTool,
+    OfficeFillWordTemplateTool,
+)
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
 from .patch_tool import ApplyPatchTool
@@ -144,6 +154,16 @@ def register_all_tools(
     # doc_id 模式 only). Service layer (`tool_service.archive`) already
     # exists from PR-2; this just exposes it as an LLM-callable tool.
     registry.register(OfficeArchiveTool(policy=policy))
+    # Office Parity Batch-1: PDF 三类能力（读文本 / 生成 / 表单读写）+
+    # Word 模板两件套（分析 / 填充）—— HTTP 端点已验证能力的 LLM 工具面
+    # 镜像。读三件 requires_tool_context=True（无绑定自动隐藏），写三件
+    # False（file_path 模式，越界由 path boundary / _enforce_workspace 把守）。
+    registry.register(OfficeReadPdfTool(policy=policy))
+    registry.register(OfficeGeneratePdfTool(policy=policy))
+    registry.register(OfficeReadPdfFormTool(policy=policy))
+    registry.register(OfficeFillPdfFormTool(policy=policy))
+    registry.register(OfficeAnalyzeWordTemplateTool(policy=policy))
+    registry.register(OfficeFillWordTemplateTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -240,6 +260,12 @@ __all__ = [
     "OfficeDeleteTool",
     "OfficeRestoreTool",
     "OfficeArchiveTool",
+    "OfficeReadPdfTool",
+    "OfficeGeneratePdfTool",
+    "OfficeReadPdfFormTool",
+    "OfficeFillPdfFormTool",
+    "OfficeAnalyzeWordTemplateTool",
+    "OfficeFillWordTemplateTool",
     "EditTool",
     "GlobSearchTool",
     "GrepSearchTool",

@@ -1,7 +1,8 @@
-"""3 个 digest 格式化器单元测试 (Task 2).
+"""3 个 digest 格式化器单元测试 (Task 2 + item 1.5 升级后的 mock 级用例).
 
-覆盖 pptx (title + text_blocks), docx (首句), excel (sheet 名 + 前 5 行)
-的边界条件: 空 slide/paragraph/sheet, 长文本裁剪, OfficePathError 透传。
+覆盖 pptx (title + text_blocks), docx (结构化 markdown), excel (自适应行数)
+的边界条件: 空 slide/paragraph/sheet, 预算截断, OfficePathError 透传。
+真实小文件的端到端 digest 形状见 test_attachment_resolver_digest.py。
 """
 
 from __future__ import annotations
@@ -120,7 +121,8 @@ def _fake_word(paragraphs):
     )
 
 
-def test_digest_word_first_sentence() -> None:
+def test_digest_word_full_paragraph_text() -> None:
+    """item 1.5: 段落全文输出, 不再砍到首句"""
     from backend.office.models import WordParagraphContent
 
     paragraphs = [
@@ -135,7 +137,7 @@ def test_digest_word_first_sentence() -> None:
         out = _digest_word("/w/y.docx", workspace="/w")
     lines = out.splitlines()
     assert lines[0] == "First sentence here."
-    assert lines[1] == "Second paragraph spans two sentences."
+    assert lines[1] == "Second paragraph spans two sentences. Final one."
 
 
 def test_digest_word_skips_empty_paragraphs() -> None:
@@ -152,8 +154,8 @@ def test_digest_word_skips_empty_paragraphs() -> None:
     assert lines == ["real.", "another."]
 
 
-def test_digest_word_no_period_falls_back_to_full_text() -> None:
-    """段落不含句号 → split('.', 1)[0] 是整段, 但仍加 '.' 后缀"""
+def test_digest_word_no_period_kept_verbatim() -> None:
+    """段落不含句号 → 全文原样保留, 不再强加 '.' 后缀"""
     from backend.office.models import WordParagraphContent
 
     paragraphs = [
@@ -161,7 +163,8 @@ def test_digest_word_no_period_falls_back_to_full_text() -> None:
     ]
     with patch.object(attachment_resolver, "read_docx", return_value=_fake_word(paragraphs)):
         out = _digest_word("/w/y.docx", workspace="/w")
-    assert "no period here." in out
+    assert "no period here" in out
+    assert "no period here." not in out
 
 
 # ─── _digest_excel ──────────────────────────────────────────────
@@ -188,23 +191,24 @@ def _fake_excel(sheets):
     return OfficeExcelReadResult(summary=summary, sheets=sheets)
 
 
-def test_digest_excel_sheet_names_plus_first_5_rows() -> None:
+def test_digest_excel_sheet_names_plus_adaptive_rows() -> None:
+    """item 1.5: 行列数标注 + 自适应行数 (小表全量, 不再硬编码 5 行)"""
     from backend.office.models import ExcelSheetContent
 
     sheets = [
         ExcelSheetContent(name="A", rows=[["h1", "h2"], ["v1", "v2"]], max_row=2, max_col=2),
-        ExcelSheetContent(name="B", rows=[["x"] for _ in range(10)], max_row=10, max_col=1),
+        ExcelSheetContent(name="B", rows=[["x"] for _ in range(12)], max_row=12, max_col=1),
     ]
     with patch.object(attachment_resolver, "read_xlsx", return_value=_fake_excel(sheets)):
         out = _digest_excel("/w/z.xlsx", workspace="/w")
     assert "sheets: A, B" in out
-    assert "--- A (top 2 rows) ---" in out
+    assert "--- A (2 rows x 2 cols) ---" in out
     assert "h1\th2" in out
     assert "v1\tv2" in out
-    assert "--- B (top 5 rows) ---" in out
-    # B 有 10 行但只输出 5 行
-    assert "x" in out
-    assert out.count("x\n") + out.count("x\t") + (1 if out.endswith("x") else 0) == 5
+    assert "--- B (12 rows x 1 cols) ---" in out
+    # B 有 12 行但表小, 预算内全量输出: 表头 1 行 + 数据 11 行
+    b_lines = [line for line in out.splitlines() if line == "x"]
+    assert len(b_lines) == 12
 
 
 def test_digest_excel_empty() -> None:
@@ -214,16 +218,18 @@ def test_digest_excel_empty() -> None:
     assert out.startswith("sheets: ")
 
 
-def test_digest_excel_truncates_long_rows() -> None:
+def test_digest_excel_truncates_rows_under_budget(monkeypatch) -> None:
+    """超 budget → 数据行按预算装载, 截断 marker 标注剩余行数"""
     from backend.office.models import ExcelSheetContent
 
     rows = [[f"cell{i}"] for i in range(100)]
     sheets = [
         ExcelSheetContent(name="Long", rows=rows, max_row=100, max_col=1),
     ]
+    monkeypatch.setattr(attachment_resolver, "MAX_ATTACHMENT_DIGEST_BYTES", 150)
     with patch.object(attachment_resolver, "read_xlsx", return_value=_fake_excel(sheets)):
         out = _digest_excel("/w/long.xlsx", workspace="/w")
-    # 仅前 5 行, cell5 之后不再出现
-    assert "cell4" in out
-    assert "cell5" not in out
+    # 表头行 (固定段) 在, 预算截断点之后的行不出现
+    assert "cell0" in out
+    assert "[…已截断，共" in out
     assert "cell99" not in out

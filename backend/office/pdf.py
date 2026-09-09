@@ -44,6 +44,29 @@ MAX_PDF_SIZE = 50 * 1024 * 1024  # 50 MiB
 MAX_PDF_PAGES = 10_000
 MAX_PDF_OUTPUT_SIZE = 200 * 1024 * 1024  # 200 MiB
 
+#: CJK font for generated PDFs. The base-14 Helvetica has no CJK glyphs, so
+#: Chinese text would render as blanks. STSong-Light is the Adobe CID font
+#: bundled with reportlab's Asian-language support; it also covers ASCII, so
+#: mixed 中英文 content renders from one font.
+_CJK_PDF_FONT = "STSong-Light"
+
+
+def _register_cjk_font() -> Optional[str]:
+    """Register the CJK CID font and return its name, or ``None`` on failure.
+
+    Guarded: a reportlab build without Asian font packs (or any other
+    registration failure) falls back to the previous Helvetica-only
+    behaviour instead of failing generation.
+    """
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+
+        pdfmetrics.registerFont(UnicodeCIDFont(_CJK_PDF_FONT))
+        return _CJK_PDF_FONT
+    except Exception:  # noqa: BLE001 — 字体注册失败必须回退，不能阻断生成
+        return None
+
 
 def _validate_pdf_file(file_path: Path) -> None:
     """Reject oversized or malformed PDFs before fitz opens them.
@@ -195,6 +218,11 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
         c = canvas.Canvas(str(output_path), pagesize=page_size)
         _width, height = page_size
 
+        # CJK-capable font with Helvetica fallback (registration failed).
+        cjk_font = _register_cjk_font()
+        title_font = cjk_font or "Helvetica-Bold"
+        body_font = cjk_font or "Helvetica"
+
         for i, page_spec in enumerate(req.pages):
             if i > 0:
                 c.showPage()
@@ -203,12 +231,12 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
 
             # Title
             if page_spec.title:
-                c.setFont("Helvetica-Bold", 16)
+                c.setFont(title_font, 16)
                 c.drawString(72, y, page_spec.title)
                 y -= 30
 
             # Paragraphs
-            c.setFont("Helvetica", 12)
+            c.setFont(body_font, 12)
             for para in page_spec.paragraphs:
                 if y < 72:  # Bottom margin
                     c.showPage()
@@ -217,6 +245,7 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
                 y -= 18
 
             # Tables (shallow stub — cells laid out as text rows)
+            c.setFont(body_font, 12)
             for table_data in page_spec.tables:
                 if y < 72:
                     c.showPage()
