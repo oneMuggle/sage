@@ -37,7 +37,7 @@ EXEC_TOOLS = ("bash", "bash_output", "kill_shell")
 FILE_TOOLS = ("read_file", "write_file", "list_dir", "edit_file")
 
 # 代码探索三件套（全部 READ，无副作用风险）
-CODE_SEARCH_TOOLS = ("grep_search", "glob_search", "file_summary")
+CODE_SEARCH_TOOLS = ("grep_search", "glob_search", "file_summary", "codebase_search")
 
 # 出网工具
 WEB_SEARCH_TOOLS = ("web_search",)
