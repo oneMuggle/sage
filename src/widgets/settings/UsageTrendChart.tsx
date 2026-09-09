@@ -15,8 +15,8 @@
  */
 import { useMemo } from 'react';
 
-import { useI18n } from '../../shared/lib/i18n';
 import type { UsageTrend, UsageTrendPoint } from '../../shared/api/usageApi';
+import { useI18n } from '../../shared/lib/i18n';
 
 const SVG_W = 600;
 const SVG_H = 180;
@@ -61,7 +61,7 @@ interface UsageTrendChartProps {
 
 export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
   const { t } = useI18n();
-  const series: UsageTrendPoint[] = trend?.series ?? [];
+  const series = useMemo<UsageTrendPoint[]>(() => trend?.series ?? [], [trend?.series]);
   const bucket = trend?.bucket ?? 'day';
 
   const layout = useMemo(() => {

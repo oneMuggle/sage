@@ -591,7 +591,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const offset = a?.offset ?? 0;
       const sid = a?.sessionId;
       let url = `/api/v1/usage/requests?limit=${limit}&offset=${offset}`;
-      if (sid) url += `&session_id=${encodeURIComponent(sid)}`;
+      if (typeof sid === 'string' && sid) url += `&session_id=${encodeURIComponent(sid)}`;
       return url;
     },
   },
@@ -602,7 +602,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const range = (a?.range as string) ?? '7d';
       const sid = a?.sessionId;
       let url = `/api/v1/usage/trend?range=${encodeURIComponent(range)}`;
-      if (sid) url += `&session_id=${encodeURIComponent(sid)}`;
+      if (typeof sid === 'string' && sid) url += `&session_id=${encodeURIComponent(sid)}`;
       return url;
     },
   },
@@ -613,7 +613,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const range = (a?.range as string) ?? 'total';
       const sid = a?.sessionId;
       let url = `/api/v1/usage/export.csv?range=${encodeURIComponent(range)}`;
-      if (sid) url += `&session_id=${encodeURIComponent(sid)}`;
+      if (typeof sid === 'string' && sid) url += `&session_id=${encodeURIComponent(sid)}`;
       return url;
     },
   },

@@ -651,6 +651,7 @@ app.include_router(runtime_router, prefix="/api/v1")
 # 无条件挂载, 与 API_MODE 解耦 (历史仅 API_MODE=hex 时挂载, 默认 legacy 模式下
 # /api/v1/metrics 不存在, Grafana 无法直接接入)。
 from backend.api.metrics_routes import router as metrics_router
+
 app.include_router(metrics_router, prefix="/api/v1")
 
 _API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"

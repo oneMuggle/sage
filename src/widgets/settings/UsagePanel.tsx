@@ -17,6 +17,7 @@ import {
   UsageTrend,
 } from '../../shared/api/usageApi';
 import { useI18n } from '../../shared/lib/i18n';
+
 import { UsageRequestsTable } from './UsageRequestsTable';
 import { UsageTrendChart } from './UsageTrendChart';
 
@@ -30,8 +31,8 @@ function formatTokens(promptTokens: number, completionTokens: number): string {
 
 /** L8 PR-C: 浏览器侧把 CSV 字符串触发为下载 */
 function triggerCsvDownload(csv: string, filename: string): void {
-  // ﻿ 是 UTF-8 BOM, Excel/Sheets 识别 UTF-8 的标志
-  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
+  // \uFEFF 是 UTF-8 BOM, Excel/Sheets 识别 UTF-8 的标志
+  const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

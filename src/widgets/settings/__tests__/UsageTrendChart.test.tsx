@@ -9,8 +9,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { I18nProvider } from '../../../shared/lib/i18n';
 import type { UsageTrend } from '../../../shared/api/usageApi';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { UsageTrendChart } from '../UsageTrendChart';
 
 function renderChart(props: { trend: UsageTrend | null; loading: boolean }) {

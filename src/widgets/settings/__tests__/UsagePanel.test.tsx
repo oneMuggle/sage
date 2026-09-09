@@ -17,8 +17,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { I18nProvider } from '../../../shared/lib/i18n';
 import * as usageApi from '../../../shared/api/usageApi';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { UsagePanel } from '../UsagePanel';
 
 const SUMMARY = {
@@ -282,8 +282,8 @@ describe('UsagePanel', () => {
     await waitFor(() => {
       expect(csvSpy).toHaveBeenCalledWith({ range: 'today' });
     });
-    // BOM 写入 (UTF-8 0xEF 0xBB 0xBF 渲染为 '﻿' 一个字符)
-    expect(blobText).toBe('﻿');
+    // BOM 写入 (UTF-8 0xEF 0xBB 0xBF 渲染为 '\uFEFF' 一个字符)
+    expect(blobText).toBe('\uFEFF');
     // createObjectURL / revokeObjectURL 都调过
     expect(createUrl).toHaveBeenCalledTimes(1);
     expect(revokeUrl).toHaveBeenCalledTimes(1);
