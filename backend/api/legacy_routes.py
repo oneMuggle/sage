@@ -115,7 +115,10 @@ router = APIRouter()
 # 的 dict)。若 decorator 定义在 database.py,本文件 34 个带 body 模型的
 # handler(ChatRequest 等)会报 PydanticUndefinedAnnotation。orch_routes.py
 # 因此也保留同构的本地定义,共用同一把 _SQLITE_LOCK。
-from backend.data.database import make_with_db_lock
+from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与文档语义保留
+    _SQLITE_LOCK,
+    make_with_db_lock,
+)
 
 
 def with_db_lock(func):
