@@ -502,6 +502,12 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/cancel`,
   },
+  // C1 (2026-09-09): 会话编排 run 列表 —— 历史任务板恢复数据源。
+  orchestration_list_session_runs: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/orch/runs?session_id=${encodeURIComponent(String(a.session_id))}&limit=${encodeURIComponent(String(a.limit ?? 20))}`,
+  },
   // B3 (2026-09-09): 单任务跳过 —— POST /orch/runs/{run_id}/tasks/{task_id}/cancel。
   // queued 任务 acquire 后短路 / running 任务软中断，不影响其余子任务。
   orchestration_cancel_run_task: {
