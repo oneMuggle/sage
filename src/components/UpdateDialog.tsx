@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { UpdateState } from '../../electron/updateState';
-import { confirmDialog } from '../shared/ui/ConfirmDialog/confirmService';
 import { useI18n } from '../shared/lib/i18n';
+import { confirmDialog } from '../shared/ui/ConfirmDialog/confirmService';
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
