@@ -431,16 +431,18 @@ class SemanticMemory:
 
         # 删除主表条目（FTS 索引当前未使用，search() 走 LIKE + jieba）
         cursor.execute("DELETE FROM memories_semantic WHERE id = ?", (memory_id,))
+        deleted = cursor.rowcount > 0
 
-        # D1 (P6): 级联删除向量条目 (best-effort, 与 FTS 删除同模式);
-        # 避免删除后向量仍被检索命中。
+        # D1 (P6): 级联删除向量条目 (best-effort, 表不存在时静默跳过);
+        # 避免删除后向量仍被检索命中。先取主表 rowcount 再做向量清理,
+        # 避免返回值被覆盖。
         try:
             cursor.execute("DELETE FROM memories_vec WHERE memory_id = ?", (memory_id,))
         except sqlite3.DatabaseError as exc:
             logger.warning("向量索引删除失败 (memory_id=%s): %s", memory_id, exc)
 
         conn.commit()
-        return cursor.rowcount > 0
+        return deleted
 
     def count(self, session_id: Optional[str] = None) -> int:
         """
