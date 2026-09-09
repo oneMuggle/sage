@@ -136,3 +136,50 @@ async def test_recording_failure_does_not_block_approval(repo, monkeypatch):
     assert gate.answer(req.request_id, approved=True) is True
     answer = await pending
     assert answer.answered_by == "gui"
+
+
+@pytest.mark.asyncio()
+async def test_resolver_attributes_run_and_task(repo):
+    """C2: 注册归属解析器后（main 启动时注入），gate 决策记录携带 run/task。"""
+    from backend.services.permission_gate import (
+        ApprovalGate,
+        ApprovalRequest,
+        set_approval_context_resolver,
+    )
+
+    def _resolver(request_id):
+        return ("orch-res", "t7")
+
+    set_approval_context_resolver(_resolver)
+    try:
+        gate = ApprovalGate()
+        req = ApprovalRequest.create("bash", {"command": "ls"}, "safe", "原因")
+        pending = asyncio.create_task(gate.request(req, timeout=5))
+        await asyncio.sleep(0.02)
+        gate.answer(req.request_id, approved=True)
+        await pending
+    finally:
+        set_approval_context_resolver(None)
+
+    rows = repo.list()
+    assert len(rows) == 1
+    assert rows[0].run_id == "orch-res"
+    assert rows[0].task_id == "t7"
+
+
+@pytest.mark.asyncio()
+async def test_without_resolver_run_task_stay_none(repo):
+    """未注册解析器（主会话审批/单测环境）→ run/task 为空，记录照常。"""
+    from backend.services.permission_gate import ApprovalGate, ApprovalRequest
+
+    gate = ApprovalGate()
+    req = ApprovalRequest.create("bash", {"command": "ls"}, "safe", "原因")
+    pending = asyncio.create_task(gate.request(req, timeout=5))
+    await asyncio.sleep(0.02)
+    gate.answer(req.request_id, approved=False)
+    await pending
+
+    row = repo.list()[0]
+    assert row.run_id is None
+    assert row.task_id is None
+    assert row.approved is False

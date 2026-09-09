@@ -30,7 +30,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +306,20 @@ class ApprovalRequest:
         )
 
 
+#: C2 (2026-09-09): 审批 run/task 归属解析器 —— 由编排层在启动时经
+#: ``set_approval_context_resolver`` 注册（依赖反转）。services 层不得直接
+#: import orchestration（六边形 import 契约），故经此回调解耦；未注册时
+#: run/task 归属为空（主会话审批本就无编排归属）。
+ApprovalContextResolver = Callable[[str], Tuple[Optional[str], Optional[str]]]
+_approval_context_resolver: Optional[ApprovalContextResolver] = None
+
+
+def set_approval_context_resolver(resolver: ApprovalContextResolver) -> None:
+    """注册 run/task 归属解析器（backend.main 启动时调用一次）。"""
+    global _approval_context_resolver
+    _approval_context_resolver = resolver
+
+
 class ApprovalGate:
     """挂起 / 解析待审批请求的闸口。"""
 
@@ -361,17 +375,12 @@ class ApprovalGate:
                 session_id = ctx.session_id if ctx is not None else None
             except Exception:  # noqa: BLE001 — 上下文缺失降级
                 session_id = None
-            try:
-                from backend.orchestration.chat_dispatcher import (
-                    find_dispatcher_for_approval,
-                )
-
-                dispatcher = find_dispatcher_for_approval(req.request_id)
-                if dispatcher is not None:
-                    run_id = dispatcher.run_id
-                    task_id = dispatcher._pending_approvals.get(req.request_id)
-            except Exception:  # noqa: BLE001 — 编排归属降级
-                run_id = task_id = None
+            resolver = _approval_context_resolver
+            if resolver is not None:
+                try:
+                    run_id, task_id = resolver(req.request_id)
+                except Exception:  # noqa: BLE001 — 编排归属降级
+                    run_id = task_id = None
             ApprovalDecisionRepository().append(
                 tool_name=req.tool_name,
                 approved=answer.approved,

@@ -176,7 +176,10 @@
 ### 8.2 C2 审批决策落库
 
 - 新表 `approval_decisions`（request/session/run/task 可空归属 + tool_name/args_summary/risk + approved/answered_by + created_at/latency_ms/decided_at）+ `ApprovalDecisionRepository.append/list`（`_SQLITE_LOCK` 纪律）。
-- 三处钩子（全部全吞降级，审计是增强绝不阻塞审批流）：① `ApprovalGate.request` 应答/超时后统一记录（gui + timeout，会话经 ToolExecutionContext、run/task 经 dispatcher 注册表尽力归因）；② `AutoApproveEnforcer.check` 自动放行记录（answered_by="auto"）；③ 落库失败静默（单测覆盖 db-down 场景审批流照常）。
+- 归属解析采用依赖反转：services 层不得 import orchestration（六边形
+import 契约，CI lint-imports 实证），故 ``permission_gate`` 暴露
+``set_approval_context_resolver``，由 backend/main 启动时注入
+``find_dispatcher_for_approval`` 回查回调。三处钩子（全部全吞降级，审计是增强绝不阻塞审批流）：① `ApprovalGate.request` 应答/超时后统一记录（gui + timeout，会话经 ToolExecutionContext、run/task 经 dispatcher 注册表尽力归因）；② `AutoApproveEnforcer.check` 自动放行记录（answered_by="auto"）；③ 落库失败静默（单测覆盖 db-down 场景审批流照常）。
 
 ### 8.3 C3 orch_steps 死表退役
 
