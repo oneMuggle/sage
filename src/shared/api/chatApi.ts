@@ -5,12 +5,18 @@
 
 import { clientLogger } from '../log/client';
 
-import { runDemoChatStream } from './demoChatScript';
-import { isDemoMode } from './demoInterceptors';
+import { isDemoMode } from './demoFlag';
 import { listen, type UnlistenFn } from './desktopEvent';
 import { invoke } from './desktopInvoke';
 import type { AgentEvent, ChatConfig, ChatOfficeRef, ChatResponse } from './types';
 import { ApiException, handleApiError, isValidSessionId, withRetry } from './utils';
+
+/** demo 聊天脚本按需加载 (R2): 仅演示模式才拉取 demo 数据模块。 */
+let demoChatScriptPromise: Promise<typeof import('./demoChatScript')> | null = null;
+function loadDemoChatScript(): Promise<typeof import('./demoChatScript')> {
+  demoChatScriptPromise ??= import('./demoChatScript');
+  return demoChatScriptPromise;
+}
 
 // DIAG(2026-07-30): 当 stream 以 FAILED 收尾时,把整轮事件序列推到主进程日志,
 // 便于定位 '为什么 agent 跑到 max_iterations'。仅用于排查,不参与业务逻辑。
@@ -116,6 +122,7 @@ export const chatApi = {
     // 演示模式 (2026-08-27): 不发请求, 按脚本时间线推同形事件流。
     // 仅保留 /btw 使用的特殊会话，其余路径仍遵守 UUID 校验。
     if (isDemoMode()) {
+      const { runDemoChatStream } = await loadDemoChatScript();
       return runDemoChatStream(sessionId, message, handlers);
     }
 
@@ -145,7 +152,41 @@ export const chatApi = {
     let unlisten: UnlistenFn | null = null;
     let settled = false;
 
+    // R1: 流式看门狗 —— 后端 hang (done/failed 永不到达) 时, 前端此前会
+    // 永远停在"思考中"且输入框锁死。任一事件喂狗; 连续静默超过阈值视为
+    // 流已死, 以 onError+onDone 终态化, 用户可重发。默认 180s: 正常长工具
+    // 执行 / 长 LLM 思考期间 reasoning/tool 事件持续流出, 不会误伤。
+    const STREAM_WATCHDOG_SILENCE_MS = 180_000;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearWatchdog = (): void => {
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
+    };
+    const feedWatchdog = (): void => {
+      clearWatchdog();
+      watchdogTimer = setTimeout(() => {
+        if (settled) return;
+        clientLogger.error('chatStream: watchdog timeout, no events', {
+          streamId,
+          silenceMs: STREAM_WATCHDOG_SILENCE_MS,
+        });
+        finishOnce(() => {
+          if (handlers.onError) {
+            handlers.onError(
+              new Error(
+                `流式响应已 ${Math.round(STREAM_WATCHDOG_SILENCE_MS / 1000)} 秒无任何事件,已中断。请重发消息重试。`,
+              ),
+            );
+          }
+          handlers.onDone?.();
+        });
+      }, STREAM_WATCHDOG_SILENCE_MS);
+    };
+
     const cancel = (): void => {
+      clearWatchdog();
       if (unlisten) {
         try {
           unlisten();
@@ -173,6 +214,7 @@ export const chatApi = {
     try {
       unlisten = await listen<AgentEvent>(eventName, (evt) => {
         const payload = evt.payload;
+        feedWatchdog();
         // DIAG(2026-07-30): 仅在 state=failed 时 dump 整轮事件,定位 max_iterations 根因
         trace.push(payload);
         if (trace.length > STREAM_TRACE_MAX) trace.shift();
@@ -228,6 +270,9 @@ export const chatApi = {
         details: { streamId },
       });
     }
+
+    // 订阅成功即开始计静默窗口: 后端在产线首事件之前 hang 也能被看门狗兜住
+    feedWatchdog();
 
     return { streamId, cancel };
   },

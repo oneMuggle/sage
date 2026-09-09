@@ -19,10 +19,17 @@
  *   ``source`` 字段决定徽章样式。
  */
 
-import { isDemoMode, searchDemoMemories } from './demoInterceptors';
+import { isDemoMode } from './demoFlag';
 import { invoke } from './desktopInvoke';
 import type { Memory, MemoryListResponse, MemorySummariesListResponse } from './types';
 import { ApiException, handleApiError, withRetry } from './utils';
+
+/** demo 记忆数据按需加载 (R2): 仅演示模式才拉取 demo 数据模块。 */
+let demoInterceptorsPromise: Promise<typeof import('./demoInterceptors')> | null = null;
+function loadDemoInterceptors(): Promise<typeof import('./demoInterceptors')> {
+  demoInterceptorsPromise ??= import('./demoInterceptors');
+  return demoInterceptorsPromise;
+}
 
 const MEMORY_LAYERS = ['episodic', 'semantic', 'working', 'session_summary', 'all'] as const;
 
@@ -234,6 +241,7 @@ export const memoryApi = {
   async searchMemories(query: string, memoryType?: 'episodic' | 'semantic'): Promise<Memory[]> {
     // 演示模式 (2026-08-27): 关键词包含匹配过滤 demo 集合
     if (isDemoMode()) {
+      const { searchDemoMemories } = await loadDemoInterceptors();
       return searchDemoMemories(query, memoryType);
     }
     // 查询词原文直传: 转义会破坏检索匹配
