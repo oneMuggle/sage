@@ -201,3 +201,31 @@ class VectorStore:
             return row[0] if row else 0
         except Exception:
             return 0
+
+
+def prune_orphan_vectors(db: Any) -> int:
+    """补偿式对账: 删除 memories_vec 中不再对应任何主表记录的孤儿向量。
+
+    与 backfill_semantic_fts 同属补偿模式 —— evolution 的修剪/过期/超限
+    删除只写主表, 向量条目会残留成为孤儿; 本函数按主表存活 id 集合做
+    一次性清扫。best-effort: memories_vec 尚未初始化 (hex 路径从未运行)
+    或查询失败时仅告警并返回 0, 不影响调用方事务。
+
+    Returns:
+        清理的孤儿向量条数
+    """
+    try:
+        conn = db.get_connection()
+        cursor = conn.execute(
+            "DELETE FROM memories_vec WHERE memory_id NOT IN ("
+            "SELECT id FROM memories_episodic "
+            "UNION SELECT id FROM memories_semantic)"
+        )
+        conn.commit()
+        deleted = cursor.rowcount
+        if deleted:
+            logger.info(f"清理孤儿向量: {deleted} 条")
+        return deleted
+    except Exception as e:  # noqa: BLE001 — 对账失败不拖垮调用方
+        logger.warning(f"孤儿向量清理失败 (补偿式, 可下次重试): {e}")
+        return 0

@@ -9,11 +9,16 @@ Episodic Memory - 情景记忆模块
 from __future__ import annotations
 
 import json
+import logging
+import sqlite3
 import time
 import uuid
 from typing import Any, Dict, List, Optional
 
 from backend.memory.chinese_tokenizer import tokenize
+from backend.memory.summary_text import truncate_summary
+
+logger = logging.getLogger(__name__)
 
 
 class EpisodicMemory:
@@ -86,19 +91,8 @@ class EpisodicMemory:
         return memory_id
 
     def _generate_summary(self, content: str, max_length: int = 100) -> str:
-        """
-        生成记忆摘要
-
-        Args:
-            content: 原始内容
-            max_length: 最大长度
-
-        Returns:
-            摘要文本
-        """
-        if len(content) <= max_length:
-            return content
-        return content[:max_length] + "..."
+        """生成记忆摘要 — 实现统一委托共享工具 (D2)。"""
+        return truncate_summary(content, max_length)
 
     def search(
         self,
@@ -263,9 +257,18 @@ class EpisodicMemory:
         """,
             (memory_id,),
         )
+        deleted = cursor.rowcount > 0
+
+        # D1 (P6): 软删除同样移除向量条目 —— 主表行保留供审计, 但失效
+        # 记忆不应再被向量检索命中 (best-effort, 表不存在时静默跳过)。
+        # 注意先取主表 rowcount 再做向量清理, 避免返回值被覆盖。
+        try:
+            cursor.execute("DELETE FROM memories_vec WHERE memory_id = ?", (memory_id,))
+        except sqlite3.DatabaseError as exc:
+            logger.warning("向量索引删除失败 (memory_id=%s): %s", memory_id, exc)
 
         conn.commit()
-        return cursor.rowcount > 0
+        return deleted
 
     def _update_access(self, memory_id: str) -> None:
         """

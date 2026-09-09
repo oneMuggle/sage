@@ -26,6 +26,7 @@ from backend.data.database import (
     fts_row_texts,
 )
 from backend.memory.chinese_tokenizer import tokenize, tokenize_for_search
+from backend.memory.summary_text import truncate_summary
 
 logger = logging.getLogger(__name__)
 
@@ -169,19 +170,8 @@ class SemanticMemory:
             logger.warning("FTS 索引同步失败 (memory_id=%s): %s", memory_id, exc)
 
     def _generate_summary(self, content: str, max_length: int = 150) -> str:
-        """
-        生成记忆摘要
-
-        Args:
-            content: 原始内容
-            max_length: 最大长度
-
-        Returns:
-            摘要文本
-        """
-        if len(content) <= max_length:
-            return content
-        return content[:max_length] + "..."
+        """生成记忆摘要 — 实现统一委托共享工具 (D2)。"""
+        return truncate_summary(content, max_length)
 
     def search(
         self,
@@ -468,6 +458,13 @@ class SemanticMemory:
                 )
             except sqlite3.DatabaseError as exc:
                 logger.warning("FTS 索引删除失败 (memory_id=%s): %s", memory_id, exc)
+
+        # D1 (P6): 级联删除向量条目 (best-effort, 与 FTS 删除同模式);
+        # 避免删除后向量仍被检索命中。
+        try:
+            cursor.execute("DELETE FROM memories_vec WHERE memory_id = ?", (memory_id,))
+        except sqlite3.DatabaseError as exc:
+            logger.warning("向量索引删除失败 (memory_id=%s): %s", memory_id, exc)
 
         conn.commit()
         return deleted
