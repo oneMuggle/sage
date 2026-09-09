@@ -29,13 +29,16 @@ TOTAL_CHAR_CAP = 16_000
 
 SOURCE_SAGE_MD = "sage_md"
 SOURCE_CLAUDE_MD = "claude_md"
+SOURCE_AGENTS_MD = "agents_md"
 
-RENDER_HEADER = "项目指令 (SAGE.md/CLAUDE.md):"
+RENDER_HEADER = "项目指令 (SAGE.md/CLAUDE.md/AGENTS.md):"
 
-# 每级目录检查的候选文件 (顺序 = 优先级, sage 优先)
+# 每级目录检查的候选文件 (顺序 = 优先级, sage 优先; AGENTS.md 为跨工具
+# 事实标准, round5 批次 C-1 兼容——低于 SAGE/CLAUDE 项目自有约定)
 _CANDIDATES: Tuple[Tuple[str, str], ...] = (
     ("SAGE.md", SOURCE_SAGE_MD),
     ("CLAUDE.md", SOURCE_CLAUDE_MD),
+    ("AGENTS.md", SOURCE_AGENTS_MD),
 )
 
 

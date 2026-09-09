@@ -117,9 +117,10 @@ def detect_artifact_kind(path: str) -> str:
         return "code"
     if ext in (".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"):
         return "image"
-    if ext == ".pdf":
-        # F11 (round4 批次 D): PDF 走 base64 data URL 内嵌预览
-        return "pdf"
+    if ext in (".pdf", ".docx", ".xlsx", ".pptx"):
+        # F11 (round4 批次 D): PDF data_url 内嵌预览;
+        # C-2 (round5 批次 C): office 三件套后端转换 HTML 内嵌预览
+        return ext.lstrip(".")
     if ext in (".csv", ".tsv"):
         return "csv"
     return "text"

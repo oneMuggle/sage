@@ -9,6 +9,9 @@ export type ArtifactKind =
   | 'csv'
   | 'json'
   | 'pdf' // F11 (round4 批次 D): data_url iframe 内嵌预览
+  | 'docx' // C-2 (round5 批次 C): 后端转换 HTML 内嵌预览
+  | 'xlsx'
+  | 'pptx'
   | 'text';
 
 export interface Artifact {
@@ -28,6 +31,8 @@ export interface ArtifactContent {
   kind?: string;
   content?: string;
   data_url?: string;
+  /** C-2 (round5 批次 C): office 三件套预览——后端已全转义的 HTML 片段 */
+  html?: string;
   truncated?: boolean;
 }
 

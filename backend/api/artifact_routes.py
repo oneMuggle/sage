@@ -19,10 +19,11 @@ def list_artifacts(session_id: str) -> dict:
 
 @router.get("/{artifact_id}/content")
 def get_artifact_content(session_id: str, artifact_id: str) -> dict:
-    """读取产物内容:文本返回 content,图片/PDF 返回 data_url。
+    """读取产物内容:文本返回 content,图片/PDF 返回 data_url,office 返回 HTML。
 
     F11 (round4 批次 D): PDF 走 base64 data URL,前端 iframe 内嵌渲染。
-    kind 判定带后缀兜底——历史产物注册时 .pdf 曾归为 "text"。
+    C-2 (round5 批次 C): docx/xlsx/pptx 走后端转换的全转义 HTML 预览。
+    kind 判定带后缀兜底——历史产物注册时后缀曾归为 "text"。
     """
     artifact = artifact_repo.get_artifact(artifact_id)
     if artifact is None or artifact.session_id != session_id:
@@ -30,10 +31,14 @@ def get_artifact_content(session_id: str, artifact_id: str) -> dict:
 
     from pathlib import Path
 
-    if artifact.kind == "pdf" or Path(artifact.path).suffix.lower() == ".pdf":
+    suffix = Path(artifact.path).suffix.lower().lstrip(".")
+    if artifact.kind == "pdf" or suffix == "pdf":
         return artifact_reader.read_pdf(artifact_id)
     if artifact.kind == "image":
         return artifact_reader.read_image(artifact_id)
+    if artifact.kind in ("docx", "xlsx", "pptx") or suffix in ("docx", "xlsx", "pptx"):
+        kind = artifact.kind if artifact.kind in ("docx", "xlsx", "pptx") else suffix
+        return artifact_reader.read_office(artifact_id, kind=kind)
     return artifact_reader.read_text(artifact_id)
 
 
