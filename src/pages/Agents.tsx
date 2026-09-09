@@ -25,8 +25,9 @@ export function Agents() {
       const data = await agentsApi.list();
       setAgents(data);
     } catch (err) {
+      // U2 (P5): 失败不再回退渲染 mock agent —— 假数据会误导用户;
+      // 保留 error 态由页面错误分支呈现。
       setError(`加载失败: ${err instanceof Error ? err.message : '未知错误'}`);
-      setAgents(getMockAgents());
     } finally {
       setLoading(false);
     }
@@ -167,61 +168,3 @@ export function Agents() {
   );
 }
 
-function getMockAgents(): AgentProfile[] {
-  // 注: 后端 PR-3 起返回 updated_at; mock 固定为 0 表示"未知/未持久化"。
-  // 仅 loadAgents() 出错时作为占位渲染, 真实数据流不依赖这里。
-  return [
-    {
-      id: 'primary',
-      name: 'Sage 主助手',
-      role: 'coordinator',
-      description: '面向用户的协调 Agent,负责意图识别和任务分发',
-      system_prompt: '你是 Sage,一个智能 AI 助手。',
-      tools: ['calculator', 'memory_search', 'memory_save'],
-      memory_access: ['working', 'episodic', 'semantic'],
-      model_config: { model: 'gpt-4', temperature: 0.7, max_tokens: 4096 },
-      max_iterations: 10,
-      enabled: true,
-      updated_at: 0,
-    },
-    {
-      id: 'researcher',
-      name: '研究 Agent',
-      role: 'researcher',
-      description: '负责网络搜索和信息收集',
-      system_prompt: '你是一个专业的研究 Agent。',
-      tools: ['web_search', 'web_fetch', 'memory_search'],
-      memory_access: ['episodic', 'semantic'],
-      model_config: { model: 'gpt-4', temperature: 0.5, max_tokens: 4096 },
-      max_iterations: 8,
-      enabled: true,
-      updated_at: 0,
-    },
-    {
-      id: 'coder',
-      name: '编码 Agent',
-      role: 'coder',
-      description: '负责代码生成、调试和审查',
-      system_prompt: '你是一个专业的编码 Agent。',
-      tools: ['file_read', 'file_write', 'terminal', 'calculator'],
-      memory_access: ['semantic'],
-      model_config: { model: 'gpt-4', temperature: 0.3, max_tokens: 4096 },
-      max_iterations: 15,
-      enabled: true,
-      updated_at: 0,
-    },
-    {
-      id: 'memory_manager',
-      name: '记忆 Agent',
-      role: 'memory_manager',
-      description: '负责记忆管理和知识提取',
-      system_prompt: '你是一个记忆管理 Agent。',
-      tools: ['memory_search', 'memory_save'],
-      memory_access: ['working', 'episodic', 'semantic'],
-      model_config: { model: 'gpt-3.5-turbo', temperature: 0.5, max_tokens: 4096 },
-      max_iterations: 5,
-      enabled: true,
-      updated_at: 0,
-    },
-  ];
-}
