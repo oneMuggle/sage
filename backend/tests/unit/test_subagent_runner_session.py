@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import List
 from unittest.mock import patch
 
 import pytest
@@ -40,7 +41,7 @@ class _FakeContextRepo:
 
     def __init__(self, messages=None):
         self.messages = list(messages or [])
-        self.delivered: list[str] = []
+        self.delivered: List[str] = []
 
     def list_pending(self, task_id, apply_mode=None):
         return [m for m in self.messages if m.status == "pending"]

@@ -972,6 +972,8 @@ export interface OfficeDocumentSummary {
   created_at: number;
   updated_at: number;
   metadata: OfficeDocumentMetadata;
+  derived_from: string | null;
+  archived_at: number | null;
 }
 
 export interface OfficePptSlideContent {

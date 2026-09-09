@@ -101,7 +101,7 @@ def _extract_sheet_rows(ws) -> Tuple[List[List[str]], int, int]:
     return rows, max_row, max_col
 
 
-def _extract_sheet_formulas(ws_formula, ws_values) -> tuple[List[str], bool]:
+def _extract_sheet_formulas(ws_formula, ws_values) -> Tuple[List[str], bool]:
     """Collect formula cells as ``CELL=formula_text`` entries + missing-cache flag.
 
     ``ws_formula`` is the ``data_only=False`` worksheet (formulas visible),
