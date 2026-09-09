@@ -7,12 +7,15 @@ The reader extracts a structured view of a .docx:
 - paragraphs with style + level (heading level 0 means body text)
 - tables (rows of cell text, ignoring nested tables / images inside cells)
 - image count (inline shapes count as images)
+- comments via the separate :func:`read_docx_comments` (批次 3.3)。批注不并入
+  :func:`read_docx`：``OfficeWordReadResult``（models.py，extra="forbid"）
+  本批次无法追加字段，先用独立轻量结果模型，后续需要改 models.py 才能合流。
 
 It does NOT extract:
 - headers / footers (out of scope per plan §1.3)
 - footnotes / endnotes
 - text boxes / shapes outside the body
-- track changes / comments
+- track changes
 
 These omissions are intentional per plan §1.3 "non-goals".
 """
@@ -22,11 +25,12 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from pydantic import BaseModel, ConfigDict, Field
 
 DEFAULT_ASCII_FONT = "Times New Roman"
 DEFAULT_EA_FONT = "宋体"
@@ -263,6 +267,170 @@ def read_docx(
         tables=tables,
         images=images,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Comments reader (批次 3.3, plan §3.3 "Word comments only")
+# ──────────────────────────────────────────────────────────────────────
+
+
+class WordCommentContent(BaseModel):
+    """One Word comment（批次 3.3）。
+
+    ``id`` 与 document.xml 中 ``w:commentRangeStart/End``、
+    ``w:commentReference`` 的 ``w:id`` 对应；``anchor_text`` 是锚定范围
+    内的正文文本（范围为空时回退到锚点所在段落的文本）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(description="批注 id（w:comment/@w:id，十进制字符串）")
+    author: Optional[str] = Field(default=None, description="批注作者（w:author）")
+    date: Optional[str] = Field(default=None, description="ISO 8601 时间（w:date）")
+    text: str = Field(description="批注正文（w:comment 内各段文本）")
+    anchor_text: str = Field(default="", description="批注锚定的正文文本")
+
+
+class WordCommentsResult(BaseModel):
+    """Result of :func:`read_docx_comments`（批次 3.3）。
+
+    独立轻量模型的原因：``OfficeWordReadResult`` 定义在 models.py 且
+    ``extra="forbid"``，本批次 models.py 归另一负责人维护，不能追加
+    ``comments`` 字段；把批注合入 read_docx 响应需要后续改 models.py。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    comments: List[WordCommentContent] = Field(default_factory=list)
+
+
+def _find_comments_part(doc: Document) -> Optional[Any]:
+    """Locate the ``word/comments.xml`` part of an opened document, or None.
+
+    python-docx 1.1.2 has no comments API; the part loads as a plain blob
+    ``Part``. Iterate the document part's relationships by reltype (first
+    match wins) instead of ``part_related_by`` — the latter raises on the
+    (pathological) multiple-relationships case.
+    """
+    from docx.opc.constants import RELATIONSHIP_TYPE as RT
+
+    for rel in doc.part.rels.values():
+        if rel.reltype == RT.COMMENTS and not rel.is_external:
+            return rel.target_part
+    return None
+
+
+def _collect_anchor_texts(doc_el: Any) -> Dict[str, str]:
+    """Map comment id → text between its ``commentRangeStart`` / ``End``.
+
+    Single pass over ``w:document`` in document order: track open ranges,
+    and attribute every ``w:t`` seen while a range is open to that comment.
+    Ranges may span paragraphs; ids with no ``w:t`` in range map to "".
+    """
+    anchors: Dict[str, List[str]] = {}
+    open_ids: set = set()
+    for el in doc_el.iter():
+        tag = el.tag
+        if tag == qn("w:commentRangeStart"):
+            open_ids.add(el.get(qn("w:id")))
+        elif tag == qn("w:commentRangeEnd"):
+            open_ids.discard(el.get(qn("w:id")))
+        elif tag == qn("w:t") and open_ids:
+            text = el.text or ""
+            if text:
+                for cid in open_ids:
+                    anchors.setdefault(cid, []).append(text)
+    return {cid: "".join(parts) for cid, parts in anchors.items()}
+
+
+def _paragraph_text_of(el: Any) -> str:
+    """Nearest ``w:p`` ancestor's full text ('' when outside a paragraph)."""
+    node = el
+    while node is not None and node.tag != qn("w:p"):
+        node = node.getparent()
+    if node is None:
+        return ""
+    return "".join(t.text or "" for t in node.iter(qn("w:t")))
+
+
+def _anchor_fallback_text(doc_el: Any, cid: str) -> str:
+    """Paragraph context when a comment's anchored range carries no text.
+
+    Prefers the paragraph holding the ``commentRangeStart``; a point comment
+    without range markers falls back to the ``commentReference`` paragraph.
+    """
+    for tag in ("w:commentRangeStart", "w:commentReference"):
+        for el in doc_el.iter(qn(tag)):
+            if el.get(qn("w:id")) == cid:
+                text = _paragraph_text_of(el)
+                if text:
+                    return text
+    return ""
+
+
+def read_docx_comments(file_path: Path) -> WordCommentsResult:
+    """Read all comments from a .docx (批次 3.3).
+
+    Each comment's anchoring text is resolved from the
+    ``commentRangeStart/End`` pair with the same ``w:id`` in document.xml;
+    comments anchored to an empty range (or a bare insertion point) report
+    the surrounding paragraph text instead.
+
+    Args:
+        file_path: Absolute path to the .docx file.
+
+    Returns:
+        WordCommentsResult (empty ``comments`` list when the file has no
+        comments part).
+
+    Raises:
+        OfficeFileNotFoundError: file doesn't exist.
+        OfficeParseError: file exists but isn't a valid DOCX.
+    """
+    file_path = Path(file_path)
+
+    if not file_path.exists():
+        raise OfficeFileNotFoundError(file_path)
+    if not file_path.is_file():
+        raise OfficeParseError(f"Path is not a regular file: {file_path}", file_path=file_path)
+
+    try:
+        doc = Document(str(file_path))
+    except Exception as exc:
+        raise OfficeParseError(f"Failed to parse DOCX: {exc}", file_path=file_path) from exc
+
+    part = _find_comments_part(doc)
+    if part is None:
+        return WordCommentsResult(comments=[])
+
+    from docx.oxml.parser import parse_xml
+
+    try:
+        root = parse_xml(part.blob)
+    except Exception as exc:
+        raise OfficeParseError(f"Failed to parse comments part: {exc}", file_path=file_path) from exc
+
+    anchor_map = _collect_anchor_texts(doc.element)
+    comments: List[WordCommentContent] = []
+    for comment_el in root.findall(qn("w:comment")):
+        cid = comment_el.get(qn("w:id")) or ""
+        # 批注正文：w:comment 下各段文本，段内拼 run，段间以换行连接。
+        para_texts = [
+            "".join(t.text or "" for t in p.iter(qn("w:t")))
+            for p in comment_el.findall(qn("w:p"))
+        ]
+        text = "\n".join(pt for pt in para_texts)
+        anchor_text = anchor_map.get(cid, "") or _anchor_fallback_text(doc.element, cid)
+        comments.append(
+            WordCommentContent(
+                id=cid,
+                author=comment_el.get(qn("w:author")),
+                date=comment_el.get(qn("w:date")),
+                text=text,
+                anchor_text=anchor_text,
+            )
+        )
+    return WordCommentsResult(comments=comments)
 
 
 # ──────────────────────────────────────────────────────────────────────

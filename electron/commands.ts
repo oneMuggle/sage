@@ -605,6 +605,40 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   office_update_preview: { method: 'POST', path: () => '/api/v1/office/update/preview' },
   office_export_pdf: { method: 'POST', path: () => '/api/v1/office/export-pdf' },
 
+  // Office parity batch 3 (item 3.2): Word template library (从模板创建).
+  // Backend: backend/api/office_routes.py — GET /templates (builtin +
+  // workspace *.docx) and POST /templates/instantiate (→ WordTemplateFillResult).
+  office_list_templates: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/office/templates?workspace_path=${encodeURIComponent(String(a.workspacePath))}`,
+  },
+  // rawBody: the `data` / `images` maps are keyed by template placeholder
+  // names — user data, not JS identifiers. The default camelToSnakeKeys
+  // would mangle e.g. "ReportDate" into "_report_date", so the route skips
+  // translation and the body builder maps the top-level fields to the
+  // backend's snake_case contract explicitly; placeholder keys inside the
+  // maps pass through untouched.
+  office_templates_instantiate: {
+    method: 'POST',
+    path: () => '/api/v1/office/templates/instantiate',
+    rawBody: true,
+    body: (a) => {
+      const body: Record<string, unknown> = {
+        workspace_path: String(a.workspacePath ?? ''),
+        filename: String(a.filename ?? ''),
+        data: (a.data as Record<string, string>) ?? {},
+      };
+      // Exactly one of the two instantiate keys is sent (backend contract).
+      if (a.templateId) body.template_id = a.templateId;
+      if (a.workspaceTemplate) body.workspace_template = a.workspaceTemplate;
+      if (a.images && Object.keys(a.images as Record<string, string>).length > 0) {
+        body.images = a.images;
+      }
+      return body;
+    },
+  },
+
   // M3: MCP multi-server management (backend/api/mcp_routes.py).
   // mcp_server_add: args are the full server config, forwarded as body.
   // mcp_server_update: name goes in the path; body carries only the

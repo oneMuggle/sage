@@ -387,6 +387,56 @@ describe('COMMAND_ROUTES', () => {
     expect(r.path({})).toBe('/api/v1/office/export-pdf');
     expect(r.rawBody).toBeUndefined();
   });
+
+  // Office parity batch 3 (item 3.2): Word template library.
+  // Backend routes: GET /office/templates + POST /office/templates/instantiate.
+  it('has office_list_templates as a workspace-scoped GET route', () => {
+    const r = COMMAND_ROUTES.office_list_templates;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({ workspacePath: '/tmp/my ws' })).toBe(
+      '/api/v1/office/templates?workspace_path=%2Ftmp%2Fmy%20ws',
+    );
+  });
+
+  it('has office_templates_instantiate with rawBody so placeholder keys survive', () => {
+    const r = COMMAND_ROUTES.office_templates_instantiate;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/office/templates/instantiate');
+    // `data` keys are template placeholder names (user data) — camelToSnakeKeys
+    // would mangle e.g. "ReportDate" into "_report_date".
+    expect(r.rawBody).toBe(true);
+    const body = r.body?.({
+      workspacePath: '/ws',
+      templateId: 'weekly_report',
+      filename: '周报-2026-09-10.docx',
+      data: { ReportDate: '2026-09-10', author: '张三' },
+    }) as Record<string, unknown>;
+    expect(body).toEqual({
+      workspace_path: '/ws',
+      template_id: 'weekly_report',
+      filename: '周报-2026-09-10.docx',
+      data: { ReportDate: '2026-09-10', author: '张三' },
+    });
+  });
+
+  it('office_templates_instantiate body prefers workspace_template when given', () => {
+    const r = COMMAND_ROUTES.office_templates_instantiate;
+    const body = r.body?.({
+      workspacePath: '/ws',
+      workspaceTemplate: '项目周报.docx',
+      filename: 'out.docx',
+      data: {},
+      images: { Logo: 'base64' },
+    }) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      workspace_path: '/ws',
+      workspace_template: '项目周报.docx',
+      images: { Logo: 'base64' },
+    });
+    expect(body).not.toHaveProperty('template_id');
+  });
 });
 
 // PR-C §5.4: memory IPC bridge 补全。memoryApi.ts(前端)调 invoke('search_memory'|'save_memory'),

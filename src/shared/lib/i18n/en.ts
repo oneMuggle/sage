@@ -539,6 +539,26 @@ export const en: Record<TranslationKey, string> = {
   'office.export.noConverter': 'No local converter found (LibreOffice or MS Word required)',
   'office.export.openFolder': 'Show in Folder',
 
+  // ─── Office parity batch 3: Word template library (item 3.2) ─────
+  'office.template.modeFreeform': 'Free-form',
+  'office.template.modeTemplate': 'From template',
+  'office.template.pickTitle': 'Pick a template',
+  'office.template.loading': 'Loading templates…',
+  'office.template.loadFailed': 'Failed to load templates',
+  'office.template.retry': 'Retry',
+  'office.template.empty': 'No templates available',
+  'office.template.source.builtin': 'Built-in',
+  'office.template.source.workspace': 'Workspace',
+  'office.template.hint.date': 'Date format YYYY-MM-DD',
+  'office.template.hint.rich': 'Supports {{ }} rich-text or table variables, as the template defines',
+  'office.template.hint.image': 'In-template image variables only; leave blank to skip',
+  'office.template.create': 'Create document',
+  'office.template.creating': 'Creating…',
+  'office.template.success': 'Created from template',
+  'office.template.failed': 'Creation failed',
+  'office.template.selectFirst': 'Pick a template first',
+  'office.template.unfilled': 'Unfilled placeholders',
+
   // ─── M6 生态扩展: 编排看板补充 i18n 键 ─────
   'orchestration.loading': 'Loading…',
   'orchestration.error': 'Error:',

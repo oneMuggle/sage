@@ -561,6 +561,83 @@ class WordTemplateFillResult(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Template library models (Office parity batch 3 — Item 3.2)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TemplateLibraryPlaceholder(BaseModel):
+    """One placeholder advertised by a template-library entry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    type: TemplatePlaceholderType
+    description: str = Field(default="", description="占位符用途说明（中文，展示给用户）")
+
+
+class TemplateLibraryEntry(BaseModel):
+    """One template in the library: builtin 中文办公模板 or workspace user template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(
+        description=(
+            "builtin: stable id matching ^[a-z0-9_]{1,64}$; "
+            "workspace: 'ws_'-prefixed sanitized filename stem"
+        )
+    )
+    name: str = Field(description="展示名称（中文）")
+    description: str = ""
+    doc_type: OfficeDocType = OfficeDocType.WORD
+    placeholders: List[TemplateLibraryPlaceholder] = Field(default_factory=list)
+    source: Literal["builtin", "workspace"]
+    filename: Optional[str] = Field(
+        default=None,
+        description=(
+            "workspace 模板专用：office/templates/ 下的文件名；"
+            "builtin 模板为 None（按 id 实例化）"
+        ),
+    )
+
+
+class TemplateLibraryResponse(BaseModel):
+    """GET /api/v1/office/templates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    templates: List[TemplateLibraryEntry]
+
+
+class OfficeTemplateInstantiateRequest(BaseModel):
+    """POST /api/v1/office/templates/instantiate.
+
+    ``template_id``（builtin）与 ``workspace_template``（office/templates/ 下的
+    文件名）二选一；同时给出报 400。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    template_id: Optional[str] = Field(
+        default=None, description="builtin 模板 id，如 'weekly_report'"
+    )
+    workspace_template: Optional[str] = Field(
+        default=None,
+        description="workspace 模板文件名（office/templates/ 内，含扩展名可省 .docx）",
+    )
+    filename: str = Field(
+        min_length=1,
+        max_length=200,
+        description="输出文件名（缺 .docx 扩展名时自动补全）",
+    )
+    data: Dict[str, Any] = Field(default_factory=dict)
+    images: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="占位符名 → 图片路径或 data:image URI（与 /word/fill-template 一致，≤10MB）",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
 # PDF models (Phase 2)
 # ──────────────────────────────────────────────────────────────────────
 

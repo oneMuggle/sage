@@ -19,6 +19,11 @@ Word / Excel / PPT document. Two locating modes:
 Editing is all-or-nothing per call: ``backend.office.edit`` applies ops
 to the in-memory document and only atomically replaces the file when
 every op succeeds, so a malformed op never corrupts the user's file.
+
+Plan 3.4 self-check readback: on success the result carries
+``content["self_check"]`` — a compact read-back of the edited file
+(counts per doc_type) so the model can immediately verify the edit
+landed. Best-effort: read-back failure never fails the tool result.
 """
 
 from __future__ import annotations
@@ -31,9 +36,11 @@ from backend.domain.risk import RiskClass
 from backend.office.edit import update_document
 from backend.office.models import OfficeDocType
 from backend.office.path_safety import validate_supported_filename
+from backend.office.session_workspace import get_active_workspace
 from backend.office.tool_service import OfficeToolService
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
-from backend.tools.context import current_tool_context
+from backend.tools.context import ToolExecutionContext, current_tool_context
+from backend.tools.office_create_tool import build_self_check, managed_self_check
 
 #: file_path 模式允许的扩展名 → doc_type（防误把非 Office 文件喂给编辑器）
 _EXT_TO_DOC_TYPE = {".docx": "word", ".xlsx": "excel", ".pptx": "ppt"}
@@ -51,7 +58,8 @@ _OP_DESCRIPTIONS = {
         "{table_index,row,col,text}（row 0 为表头行）; delete_paragraph{find,all?}; "
         "add_image{path|base64,width_inches?,height_inches?}（≤10MB）; "
         "set_paragraph_style{index|match,font_size?,bold?,italic?,color?,align?}"
-        "（样式作用于该段全部 runs）"
+        "（样式作用于该段全部 runs）; add_comment{find,comment,author?,date?}"
+        "（批注锚定首个包含 find 的段落）; delete_comment{comment_id}"
     ),
     "excel": (
         "excel ops: set_cells{sheet,cells:[{addr,value}]}（A1 记法，数字串按 Excel "
@@ -179,7 +187,39 @@ class OfficeUpdateTool(BaseTool):
                 error=code,
                 content={"results": result.get("results")} if result.get("results") else None,
             )
-        return ToolResult(success=True, content=result.get("content"))
+        # plan 3.4 自校验回读：编辑成功后回读受管文档摘要（解析失败→不加键，
+        # 保持原 {document_id, doc_type, results} 形状不变；self_check 只含
+        # 计数事实，不回显受管绝对路径）。
+        content = dict(result.get("content") or {})
+        edited_id = content.get("document_id")
+        doc_type_value = content.get("doc_type")
+        if isinstance(edited_id, str) and isinstance(doc_type_value, str):
+            self_check = self._managed_self_check(ctx, edited_id, doc_type_value)
+            if self_check is not None:
+                content["self_check"] = self_check
+        return ToolResult(success=True, content=content)
+
+    def _managed_self_check(
+        self,
+        ctx: ToolExecutionContext,
+        doc_id: str,
+        doc_type: str,
+    ) -> Optional[Dict[str, Any]]:
+        """doc_id 模式的 self_check：binding 内解析受管文档后回读。
+
+        binding 过期 / doc 消失 / DB 异常 → ``None``（不附加 self_check
+        键，主结果不变——best-effort 语义）。
+        """
+        try:
+            conn = get_database().get_connection()
+            binding = get_active_workspace(
+                conn, ctx.session_id, expected_generation=ctx.binding_generation
+            )
+        except Exception:  # noqa: BLE001 — DB 层异常按「无法回读」折叠
+            return None
+        if binding is None:
+            return None
+        return managed_self_check(conn, binding.workspace_path, doc_id, doc_type)
 
     # ── file_path 模式：直接编辑（越界由权限层守卫） ─────────────────
 
@@ -219,6 +259,8 @@ class OfficeUpdateTool(BaseTool):
                 error="operation_failed",
                 content={"results": results},
             )
+        # plan 3.4 自校验回读：编辑成功后回读摘要（best-effort，失败也得
+        # 到 {ok: False} 占位，主结果保持 success）。
         return ToolResult(
             success=True,
             content={
@@ -226,6 +268,7 @@ class OfficeUpdateTool(BaseTool):
                 "filename": path.name,
                 "bytes": path.stat().st_size,
                 "results": results,
+                "self_check": build_self_check(doc_type, path, requested=ops),
             },
         )
 

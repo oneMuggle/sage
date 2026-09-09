@@ -32,6 +32,9 @@ import type {
   OfficeRestoreResponse,
   OfficeSnapshotListResponse,
   OfficeSnapshotRestoreResponse,
+  OfficeTemplateInstantiateRequest,
+  OfficeTemplateInstantiateResult,
+  OfficeTemplateListResponse,
   OfficeUpdatePreviewRequest,
   OfficeUpdatePreviewResult,
   OfficeWordGenerateRequest,
@@ -342,6 +345,57 @@ export const officeApi = {
       return await invoke<OfficeExportPdfResult>('office_export_pdf', {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * List Word templates available in a workspace (batch 3, item 3.2) —
+   * builtin entries shipped with the backend plus the workspace's own
+   * `templates/*.docx`. Only doc_type 'word' is produced today; the
+   * picker filters on it anyway so a future ppt/excel kind degrades
+   * gracefully.
+   *
+   * Bounded retry — read-only and idempotent, same policy as listDocuments.
+   */
+  async listTemplates(workspacePath: string): Promise<OfficeTemplateListResponse> {
+    return withRetry(async () => {
+      try {
+        return await invoke<OfficeTemplateListResponse>('office_list_templates', {
+          workspacePath,
+        });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * Instantiate a Word template with placeholder data (batch 3, item 3.2).
+   * Returns the same shape as the word fill-template result (backend
+   * `WordTemplateFillResult`) — `output_path` / `filename` /
+   * `file_size_bytes` / `filled_count` / `unfilled_placeholders`. The
+   * backend persists a document row, so the result shows up in the
+   * document list after a refresh.
+   *
+   * Route is `rawBody` — see OfficeTemplateInstantiateRequest for why the
+   * placeholder-name keys in `data` / `images` must not be key-translated.
+   *
+   * No retry — side-effecting (creates a new .docx + document row).
+   */
+  async instantiateTemplate(
+    req: OfficeTemplateInstantiateRequest,
+  ): Promise<OfficeTemplateInstantiateResult> {
+    try {
+      return await invoke<OfficeTemplateInstantiateResult>('office_templates_instantiate', {
+        workspacePath: req.workspace_path,
+        templateId: req.template_id,
+        workspaceTemplate: req.workspace_template,
+        filename: req.filename,
+        data: req.data,
+        images: req.images,
       });
     } catch (error) {
       throw handleApiError(error);

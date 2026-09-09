@@ -105,3 +105,42 @@ describe('demo office update preview + export (parity batch 2)', () => {
     });
   });
 });
+
+describe('demo office template library (parity batch 3, item 3.2)', () => {
+  it('office_list_templates returns exactly 2 builtin word templates', () => {
+    const res = demoInvoke('office_list_templates', { workspacePath: '/ws' });
+    expect(res.hit).toBe(true);
+    const value = res.value as { templates: Array<Record<string, unknown>> };
+    expect(value.templates).toHaveLength(2);
+    for (const tpl of value.templates) {
+      expect(tpl).toMatchObject({ doc_type: 'word', source: 'builtin' });
+      expect(typeof tpl.id).toBe('string');
+      expect(Array.isArray(tpl.placeholders)).toBe(true);
+    }
+  });
+
+  it('office_templates_instantiate persists a word doc row and returns the fill-template shape', () => {
+    const before = demoInvoke('office_list_documents', {}).value as { documents: unknown[] };
+    const res = demoInvoke('office_templates_instantiate', {
+      workspacePath: '/ws',
+      templateId: 'weekly_report',
+      filename: '周报模板-2026-09-10.docx',
+      data: { author: '张三', report_date: '', logo: '' },
+    });
+    expect(res.hit).toBe(true);
+    expect(res.value).toMatchObject({
+      output_path: '/ws/周报模板-2026-09-10.docx',
+      filename: '周报模板-2026-09-10.docx',
+      file_size_bytes: expect.any(Number),
+      filled_count: 1,
+      unfilled_placeholders: [],
+    });
+    const after = demoInvoke('office_list_documents', {}).value as { documents: Array<Record<string, unknown>>; total: number };
+    expect(after.total).toBe(before.documents.length + 1);
+    expect(after.documents[0]).toMatchObject({
+      doc_type: 'word',
+      status: 'generated',
+      generated_filename: '周报模板-2026-09-10.docx',
+    });
+  });
+});

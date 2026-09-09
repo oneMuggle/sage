@@ -97,16 +97,37 @@ def _extract_placeholders_from_text(
     row_index: Optional[int] = None,
     col_index: Optional[int] = None,
 ) -> List[TemplatePlaceholder]:
-    """Extract {{}} placeholders from a text string."""
+    """Extract {{}} placeholders from a text string.
+
+    Classification conventions (batch 3 — Item 3.2):
+
+    - ``{{ var | filter }}`` — a Jinja filter pipeline means the caller
+      post-processes/derives content, so the placeholder is RICH_TEXT and
+      ``name`` is stripped to the base variable (``var``) so the fill
+      context can address it by its real key.
+    - ``{{...日期/date...}}`` / ``{{...图片/image...}}`` — DATE / IMAGE
+      (pre-existing keyword rules, unchanged and still winning over the
+      table-context rule so existing templates keep their classification).
+    - a ``{{}}`` found inside a ``w:tbl`` cell (``table_index is not None``)
+      with no keyword/filter signal → TABLE (cell-level variable; row-loop
+      ``{%tr for%}`` controls are NOT scanned here — see
+      ``has_jinja_control``).
+    - everything else → TEXT.
+    """
     placeholders = []
     for match in PLACEHOLDER_RE.finditer(text):
         raw_tag = match.group(0)
         name = match.group(1).strip()
 
-        if "日期" in name or "date" in name.lower():
+        if "|" in name:
+            ph_type = TemplatePlaceholderType.RICH_TEXT
+            name = name.split("|", 1)[0].strip()
+        elif "日期" in name or "date" in name.lower():
             ph_type = TemplatePlaceholderType.DATE
         elif "图片" in name or "image" in name.lower():
             ph_type = TemplatePlaceholderType.IMAGE
+        elif table_index is not None:
+            ph_type = TemplatePlaceholderType.TABLE
         else:
             ph_type = TemplatePlaceholderType.TEXT
 

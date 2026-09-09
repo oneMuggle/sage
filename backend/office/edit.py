@@ -26,6 +26,12 @@ the LLM-facing version):
         set_paragraph_style {index|match, font_size?, bold?, italic?, color?, align?}
                           — 样式作用于该段全部 runs；index 0-based 对应
                             doc.paragraphs；match 为大小写不敏感的包含匹配
+        add_comment       {find, comment, author?, date?}  — 给首个包含 find 的
+                          段落（含表格单元格）加批注，锚定整段；date 为 ISO
+                          时间字符串，缺省取当前 UTC；OOXML 级实现（批次 3.3）
+        delete_comment    {comment_id}                    — 删除批注：移除
+                          comments.xml 条目 + document.xml 中的范围/引用，
+                          id 不存在时该 op 失败（尽力而为）
 
     excel:
         set_cells   {sheet, cells:[{addr, value}]} — A1 notation; numeric-looking
@@ -56,7 +62,8 @@ the LLM-facing version):
 
 Non-goals: 宏编辑与 track-changes 仍不支持。样式 / 图表 / 图片已于
 批次 2 支持（word.set_paragraph_style、excel.add_chart、word.add_image、
-ppt.add_picture 等，见上表）。
+ppt.add_picture 等，见上表）；Word 批注已于批次 3.3 支持
+（word.add_comment / delete_comment，读取侧见 word.read_docx_comments）。
 """
 
 from __future__ import annotations
@@ -300,6 +307,257 @@ def _apply_docx_set_paragraph_style(doc: Any, op: Dict[str, Any], op_name: Any) 
     return {"op": op_name, "ok": True, "runs": len(runs)}
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Word comments (批次 3.3) — OOXML 级实现（python-docx 1.1.2 无 comments API）
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _docx_find_comments_part(doc: Any) -> Optional[Any]:
+    """定位已打开文档的 ``word/comments.xml`` part，没有则返回 None。
+
+    python-docx 1.1.2 把未知 part（comments.xml 未注册 PartFactory）载入为
+    纯 blob ``Part``。按 reltype 遍历 rels（而非 ``part_related_by``，后者
+    在病态的多 rel 情形会抛错），取第一个命中的内部关系。
+    """
+    from docx.opc.constants import RELATIONSHIP_TYPE as RT
+
+    for rel in doc.part.rels.values():
+        if rel.reltype == RT.COMMENTS and not rel.is_external:
+            return rel.target_part
+    return None
+
+
+def _docx_comments_partname(doc: Any) -> Any:
+    """返回未占用的批注 partname（'/word/comments.xml'，被占则 commentsN.xml）。"""
+    from docx.opc.packuri import PackURI
+
+    taken = {str(p.partname) for p in doc.part.package.iter_parts()}
+    partname = "/word/comments.xml"
+    suffix = 1
+    while partname in taken:
+        partname = f"/word/comments{suffix}.xml"
+        suffix += 1
+    return PackURI(partname)
+
+
+def _docx_ensure_comments_part(doc: Any) -> Any:
+    """确保文档存在批注 part（含 content-type 与 document→comments 关系）。
+
+    python-docx 保存包时会从 part 的 content_type 自动生成
+    ``[Content_Types].xml`` override，并经 rels 图遍历发现新 part，因此
+    只需 (1) 构造 Part (2) relate_to 挂到 document part。
+    """
+    from docx.opc.constants import CONTENT_TYPE as CT, RELATIONSHIP_TYPE as RT
+    from docx.opc.oxml import serialize_part_xml
+    from docx.opc.part import Part
+    from docx.oxml import OxmlElement
+
+    existing = _docx_find_comments_part(doc)
+    if existing is not None:
+        return existing
+    part = Part(
+        _docx_comments_partname(doc), CT.WML_COMMENTS, package=doc.part.package
+    )
+    part._blob = serialize_part_xml(OxmlElement("w:comments"))
+    doc.part.relate_to(part, RT.COMMENTS)
+    return part
+
+
+def _docx_load_comments_root(part: Any) -> Any:
+    """Parse the comments part blob into its ``w:comments`` root element."""
+    from docx.oxml.parser import parse_xml
+
+    return parse_xml(part.blob)
+
+
+def _docx_sync_comments_part(part: Any, root: Any) -> None:
+    """Serialize the comments root back into the part.
+
+    ``Part.blob`` is a read-only property over ``_blob``; python-docx 1.1.2
+    is pinned, so updating the private attr is the pragmatic write-back.
+    """
+    from docx.opc.oxml import serialize_part_xml
+
+    part._blob = serialize_part_xml(root)
+
+
+def _docx_locate_paragraph_with_text(doc: Any, find: str) -> Optional[Any]:
+    """首个正文包含 ``find``（大小写敏感、contains）的段落，含表格单元格。"""
+    for para in doc.paragraphs:
+        if find in para.text:
+            return para
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    if find in para.text:
+                        return para
+    return None
+
+
+def _docx_next_comment_id(doc: Any, comments_root: Any) -> str:
+    """max(已有批注 id、document.xml 中范围/引用 id) + 1，保证全局唯一。"""
+    from docx.oxml.ns import qn
+
+    max_id = -1
+    candidates = [c.get(qn("w:id")) for c in comments_root.findall(qn("w:comment"))]
+    for tag in ("w:commentRangeStart", "w:commentRangeEnd", "w:commentReference"):
+        candidates.extend(el.get(qn("w:id")) for el in doc.element.iter(qn(tag)))
+    for raw in candidates:
+        try:
+            max_id = max(max_id, int(raw))
+        except (TypeError, ValueError):
+            continue
+    return str(max_id + 1)
+
+
+def _docx_ensure_comment_styles(doc: Any) -> None:
+    """补齐 styles.xml 缺失的 CommentReference / CommentText 内置样式。
+
+    python-docx 默认模板不含这两个样式；rStyle/rStyle 段落引用指向未定义
+    样式时 Word 仍能打开（按默认格式渲染），但补上后与原生 Word 一致。
+    Word 按内置名（annotation reference / annotation text）套用自带格式，
+    所以最小定义即可。尽力而为：任何异常都吞掉，绝不影响 add_comment。
+    """
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    try:
+        styles_el = doc.styles.element
+        existing = {s.get(qn("w:styleId")) for s in styles_el.findall(qn("w:style"))}
+        for style_id, stype, name in (
+            ("CommentReference", "character", "annotation reference"),
+            ("CommentText", "paragraph", "annotation text"),
+        ):
+            if style_id in existing:
+                continue
+            el = OxmlElement("w:style")
+            el.set(qn("w:type"), stype)
+            el.set(qn("w:styleId"), style_id)
+            name_el = OxmlElement("w:name")
+            name_el.set(qn("w:val"), name)
+            el.append(name_el)
+            styles_el.append(el)
+    except Exception:  # noqa: BLE001 — 样式补齐失败不阻塞批注
+        logger.debug("ensure comment styles failed", exc_info=True)
+
+
+def _apply_docx_add_comment(doc: Any, op: Dict[str, Any], op_name: Any) -> Dict[str, Any]:
+    """``add_comment`` 实现：锚定首个包含 ``find`` 的段落，整段加批注。
+
+    范围 = ``w:commentRangeStart``（紧跟 pPr 之后）到 ``w:commentRangeEnd``
+    （段末），并追加 ``w:r/w:rPr/w:rStyle{CommentReference}/
+    w:commentReference`` 引用 run——与 Word 原生结构一致。
+    """
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    missing = _require_fields(op, ("find", "comment"))
+    if missing:
+        return {"op": op_name, "ok": False, "error": missing}
+    find = str(op["find"])
+    comment_text = str(op["comment"])
+    if not find.strip():
+        return {"op": op_name, "ok": False, "error": "missing_field: find"}
+    if not comment_text.strip():
+        return {"op": op_name, "ok": False, "error": "missing_field: comment"}
+
+    para = _docx_locate_paragraph_with_text(doc, find)
+    if para is None:
+        return {"op": op_name, "ok": False, "error": f"text_not_found: {find!r}"}
+
+    part = _docx_ensure_comments_part(doc)
+    root = _docx_load_comments_root(part)
+    cid = _docx_next_comment_id(doc, root)
+
+    comment_el = OxmlElement("w:comment")
+    comment_el.set(qn("w:id"), cid)
+    comment_el.set(qn("w:author"), str(op.get("author") or "Sage"))
+    date = op.get("date")
+    comment_el.set(qn("w:date"), str(date) if date else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    comment_p = OxmlElement("w:p")
+    comment_r = OxmlElement("w:r")
+    comment_t = OxmlElement("w:t")
+    comment_t.text = comment_text
+    if comment_text != comment_text.strip():
+        comment_t.set(qn("xml:space"), "preserve")
+    comment_r.append(comment_t)
+    comment_p.append(comment_r)
+    comment_el.append(comment_p)
+    root.append(comment_el)
+
+    pe = para._element
+    start = OxmlElement("w:commentRangeStart")
+    start.set(qn("w:id"), cid)
+    end = OxmlElement("w:commentRangeEnd")
+    end.set(qn("w:id"), cid)
+    p_pr = pe.find(qn("w:pPr"))
+    if p_pr is not None:
+        p_pr.addnext(start)
+    else:
+        pe.insert(0, start)
+    pe.append(end)
+    ref_run = OxmlElement("w:r")
+    ref_rpr = OxmlElement("w:rPr")
+    ref_style = OxmlElement("w:rStyle")
+    ref_style.set(qn("w:val"), "CommentReference")
+    ref_rpr.append(ref_style)
+    ref = OxmlElement("w:commentReference")
+    ref.set(qn("w:id"), cid)
+    ref_run.append(ref_rpr)
+    ref_run.append(ref)
+    pe.append(ref_run)
+
+    _docx_ensure_comment_styles(doc)
+    _docx_sync_comments_part(part, root)
+    return {"op": op_name, "ok": True, "comment_id": cid, "anchored_text": para.text}
+
+
+def _apply_docx_delete_comment(doc: Any, op: Dict[str, Any], op_name: Any) -> Dict[str, Any]:
+    """``delete_comment`` 实现：按 id 移除批注（comments.xml + 范围/引用）。
+
+    尽力而为：comments part 缺失或三处（w:comment / rangeStart+End /
+    commentReference）都没命中时该 op 失败；引用 run 随其 w:r 一并移除，
+    空的 comments.xml part 保留（Word 可正常打开）。
+    """
+    from docx.oxml.ns import qn
+
+    missing = _require_fields(op, ("comment_id",))
+    if missing:
+        return {"op": op_name, "ok": False, "error": missing}
+    cid = str(op["comment_id"])
+
+    removed = 0
+    part = _docx_find_comments_part(doc)
+    if part is not None:
+        root = _docx_load_comments_root(part)
+        for comment_el in root.findall(qn("w:comment")):
+            if comment_el.get(qn("w:id")) == cid:
+                root.remove(comment_el)
+                removed += 1
+        _docx_sync_comments_part(part, root)
+    for tag in ("w:commentRangeStart", "w:commentRangeEnd"):
+        for el in list(doc.element.iter(qn(tag))):
+            if el.get(qn("w:id")) == cid:
+                el.getparent().remove(el)
+                removed += 1
+    for ref in list(doc.element.iter(qn("w:commentReference"))):
+        if ref.get(qn("w:id")) != cid:
+            continue
+        run = ref
+        while run is not None and run.tag != qn("w:r"):
+            run = run.getparent()
+        if run is not None and run.getparent() is not None:
+            run.getparent().remove(run)
+        else:
+            ref.getparent().remove(ref)
+        removed += 1
+
+    if removed == 0:
+        return {"op": op_name, "ok": False, "error": f"comment_not_found: {cid}"}
+    return {"op": op_name, "ok": True, "comment_id": cid, "removed": removed}
+
+
 def _apply_docx_op(doc: Any, op: Dict[str, Any], doc_path: Optional[Path] = None) -> Dict[str, Any]:  # noqa: PLR0911 — op 分发表
     op_name = op.get("op")
 
@@ -403,6 +661,14 @@ def _apply_docx_op(doc: Any, op: Dict[str, Any], doc_path: Optional[Path] = None
     if op_name == "set_paragraph_style":
         # 批次 2.3：按 index / match 定位段落，样式作用于全部 runs。
         return _apply_docx_set_paragraph_style(doc, op, op_name)
+
+    if op_name == "add_comment":
+        # 批次 3.3：锚定首个包含 find 的段落（含表格单元格）加批注。
+        return _apply_docx_add_comment(doc, op, op_name)
+
+    if op_name == "delete_comment":
+        # 批次 3.3：按 comment_id 删除批注（comments.xml + 范围/引用）。
+        return _apply_docx_delete_comment(doc, op, op_name)
 
     return {"op": str(op_name), "ok": False, "error": f"unsupported_op: {op_name}"}
 
