@@ -15,9 +15,12 @@ import pytest
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools import git_tool
 from backend.tools.git_tool import (
+    GitBranchTool,
+    GitCheckoutTool,
     GitCommitTool,
     GitDiffTool,
     GitLogTool,
+    GitStashTool,
     GitStatusTool,
 )
 
@@ -219,3 +222,82 @@ def test_git_binary_missing_fails_gracefully(repo, monkeypatch):
     result = _tool(GitStatusTool, repo).execute()
     assert result.success is False
     assert "git 可执行文件不可用" in (result.error or "")
+
+
+# ==================== D-2 (round5 批次 D): branch / checkout / stash ====================
+
+
+def test_branch_lists_local_branches_with_current_marker(repo):
+    tool = _tool(GitBranchTool, repo)
+    (repo / ".git").exists()  # fixture 已 init
+    result = tool.execute()
+    assert result.success is True
+    names = [b["name"] for b in result.content["branches"]]
+    assert "main" in names or "master" in names
+    current = [b for b in result.content["branches"] if b["is_current"]]
+    assert len(current) == 1
+
+
+def test_checkout_switches_branch(repo):
+    _git("branch", "feature", cwd=repo)
+    checkout = _tool(GitCheckoutTool, repo)
+    branch_list = _tool(GitBranchTool, repo)
+    result = checkout.execute(branch="feature")
+    assert result.success is True
+    current = [b["name"] for b in branch_list.execute().content["branches"] if b["is_current"]]
+    assert current == ["feature"]
+
+
+def test_checkout_create_switches_to_new_branch(repo):
+    checkout = _tool(GitCheckoutTool, repo)
+    branch_list = _tool(GitBranchTool, repo)
+    result = checkout.execute(branch="experiment", create=True)
+    assert result.success is True
+    assert result.content["created"] is True
+    current = [b["name"] for b in branch_list.execute().content["branches"] if b["is_current"]]
+    assert current == ["experiment"]
+
+
+def test_checkout_rejects_invalid_ref(repo):
+    tool = _tool(GitCheckoutTool, repo)
+    for bad in ("-oProxyCommand=calc", "a..b", "", "x" * 300, "release.lock"):
+        result = tool.execute(branch=bad)
+        assert result.success is False, bad
+
+
+def test_stash_push_and_pop_roundtrip(repo):
+    (repo / "hello.txt").write_text("changed\n", encoding="utf-8")
+    tool = _tool(GitStashTool, repo)
+
+    pushed = tool.execute(action="push", message="wip: 实验改动")
+    assert pushed.success is True
+    assert pushed.content["stashed"] is True
+    assert (repo / "hello.txt").read_text(encoding="utf-8") != "changed\n"
+
+    listed = tool.execute(action="list")
+    assert listed.success is True
+    assert any("wip: 实验改动" in s["message"] for s in listed.content["stashes"])
+
+    popped = tool.execute(action="pop")
+    assert popped.success is True
+    assert (repo / "hello.txt").read_text(encoding="utf-8") == "changed\n"
+
+
+def test_stash_push_without_changes_reports_not_stashed(repo):
+    tool = _tool(GitStashTool, repo)
+    result = tool.execute(action="push")
+    assert result.success is True
+    assert result.content["stashed"] is False
+
+
+def test_stash_unknown_action_rejected(repo):
+    tool = _tool(GitStashTool, repo)
+    result = tool.execute(action="drop")
+    assert result.success is False
+
+
+def test_stash_message_over_limit_rejected(repo):
+    (repo / "hello.txt").write_text("x\n", encoding="utf-8")
+    tool = _tool(GitStashTool, repo)
+    result = tool.execute(action="push", message="m" * 201)
+    assert result.success is False

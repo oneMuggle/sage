@@ -125,3 +125,39 @@ round4 批次 F 中的 L12 完整中断粒度、F2 语义索引不在本轮，�
 | U5' | user 消息操作栏"编辑重发"→ 回填输入框 → 发送后跳转到 fork 会话且新消息为编辑后内容，原会话保留；fork 会话继承源会话工作区绑定 |
 | U7' | 含 ```mermaid 代码块的消息渲染为图表；语法错误回退源码；dark/light 主题正确 |
 | 回归 | `vitest run`、`tsc --noEmit`、`eslint`、本批相关 `pytest` 全绿；主包体积无显著增长（mermaid 独立 chunk） |
+
+
+## 2.3 批次 D 详细设计（2026-09-09 增补，本次实施）
+
+> 基线：origin/main `6b8e66e0`；分支 `feat/parity-r5-batch-d`。主题：**可靠性兜底 + 代理 git 能力补全 + 测试失败感知**（源自首轮对标报告的 fallback model / git 扩面 / 测试感知三项，避开 #547 Office 专项）。
+
+### D-1 fallback model（P2，工作量 M）
+
+主模型重试耗尽（L3 的 429/5xx/超时/网络类错误，attempts 默认 3）后整体失败，长任务因单点抖动报废。对标 Claude Code `fallbackModel`。
+
+- `LLMConfig` 加 `fallback_model: Optional[str] = None`（同 endpoint 换 model，v1 不做跨 endpoint）；
+- `llm_client.chat()` 与 `chat_stream_events()` 的重试耗尽点（:468/:752）：耗尽且错误可重试、`fallback_model` 非空且 != 主 model、且本次会话未用过 fallback → 记 warning、`dataclasses.replace(config, model=fallback)` 重置 attempt 再入循环（每实例至多一次，`_fallback_used` 守卫）；流式沿用 `nothing_yielded` 重放安全判据；
+- 偏好 `fallback_model`（KV 白名单）+ producer 读取注入 `llm_config` dict；GeneralTab 模型区加输入框（同 SpendLimitInput 模式）。
+
+**测试**：`test_llm_client_errors.py` 模式——mock httpx 连续 429，无 fallback 抛 LLMError；配 fallback 后第二轮以 fallback model 成功；fallback 只触发一次；流式同口径。
+
+### D-2 git 工具扩面：branch / checkout / stash（P2，工作量 M）
+
+现有四工具只有 status/diff/log/commit——agent 无法结构化地建分支、切分支、暂存现场（多任务并行/实验分支场景硬需求）。
+
+- `git_branch`（READ）：列本地分支（含当前分支标记）→ `{branches:[{name, is_current}]}`；
+- `git_checkout`（WRITE_LOCAL）：`{branch, create?: bool}`——create 走 `-b`；脏工作区冲突由 git 报错透传；
+- `git_stash`（WRITE_LOCAL）：`{action: "list"|"push"|"pop", message?: str}`——list 出 `{stashes:[{index, message}]}`；push 支持可选 -m；
+- **ref 名校验**（首个 ref 输入面，新纯函数 `_valid_ref`）：`^[A-Za-z0-9._/\-]{1,200}$` 且不以 `-` 开头、不含 `..`——防选项注入与路径穿越；
+- 注册链：tool_names `GIT_TOOLS` + `tools/__init__.py` import/register + profiles `*GIT_TOOLS` 自动带上 + `__all__`。
+
+**测试**：`test_git_tool.py` 照既有 repo fixture 分节新增（列分支/创建切换/stash push-pop 往返/ref 校验拒绝/非仓库优雅失败）；`test_tool_names.py` 注册面对齐自动覆盖。
+
+### D-3 测试失败感知（P2，工作量 M）
+
+bash 跑测试非零退出时，LLM 只能从 30KiB 截断文本里自己找失败清单——新纯函数把 pytest/vitest 失败解析成结构化数据回喂。
+
+- 新模块 `backend/tools/test_output_parser.py`：`parse_test_failures(stdout, stderr) -> Optional[Dict]`——pytest（`FAILED path::test` 行 + `N failed, M passed` 汇总）、vitest/jest（`FAIL path` + `✗/×` 用例行 + `Tests: N failed` 汇总）；只扫末尾 200 行；无命中返回 None；
+- bash_tool 挂点：`_run_foreground` 读输出后解析，命中且 exit_code != 0 → `content["test_failures"] = {...}`（`_decorate` 同款派生字段形态，非零退出本就 success=True 语义不变）。
+
+**测试**：新 `test_output_parser.py`——pytest 样例、vitest 样例、混合噪声、无匹配 None、超长输出只扫尾部。
