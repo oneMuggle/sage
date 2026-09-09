@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 
 import { I18nProvider } from '../../shared/lib/i18n';
+import { ConfirmDialogHost } from '../../shared/ui/ConfirmDialog/ConfirmDialogHost';
 
 import { ErrorBoundary } from './ErrorBoundary';
 import { QueryClientProvider } from './QueryClientProvider';
@@ -37,6 +38,8 @@ export function AppProviders({ children }: AppProvidersProps) {
             <QueryClientProvider>
               {children}
               <ToastProvider />
+              {/* R3: confirmDialog() 服务的全局挂载点, 替代阻塞式 window.confirm */}
+              <ConfirmDialogHost />
             </QueryClientProvider>
           </I18nProvider>
         </SessionWorkspaceProvider>

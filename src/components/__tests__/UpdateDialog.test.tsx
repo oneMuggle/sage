@@ -4,9 +4,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UpdateStateChangedEvent } from '../../../electron/updateIpc';
 import { I18nProvider } from '../../shared/lib/i18n';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import { UpdateDialog } from '../UpdateDialog';
 
+vi.mock('../../shared/ui/ConfirmDialog/confirmService', () => ({
+  confirmDialog: mocks.confirmDialog,
+}));
+
 const mocks = vi.hoisted(() => ({
+  confirmDialog: vi.fn(),
   download: vi.fn(),
   install: vi.fn(),
   rollback: vi.fn(),
@@ -264,14 +270,14 @@ describe('UpdateDialog', () => {
 
   it('confirms rollback and calls rollback when allowed', async () => {
     mocks.canRollback.mockResolvedValue({ allowed: true });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mocks.confirmDialog.mockResolvedValue(true);
     renderDialog();
     await emitState({ type: 'state', state: updateState() });
     await act(async () => {
       fireEvent.click(await screen.findByRole('button', { name: '回退到上一版本' }));
       await Promise.resolve();
     });
-    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(confirmDialog).toHaveBeenCalledOnce();
     expect(mocks.rollback).toHaveBeenCalledWith('manual');
     vi.restoreAllMocks();
   });

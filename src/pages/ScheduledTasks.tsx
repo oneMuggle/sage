@@ -7,6 +7,7 @@ import { CreateTaskModal } from '../features/scheduled/CreateTaskModal';
 import { describeSchedule } from '../features/scheduled/cronValidator';
 import type { ScheduledTask } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
+import { confirmDialog } from '../shared/ui/ConfirmDialog/confirmService';
 
 export function ScheduledTasks() {
   const { t, locale } = useI18n();
@@ -19,7 +20,7 @@ export function ScheduledTasks() {
   }, [load]);
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm(t('scheduled.confirm.delete'))) return;
+    if (!(await confirmDialog({ title: t('scheduled.confirm.delete'), danger: true }))) return;
     try {
       await deleteTask(id);
     } catch (err: unknown) {
