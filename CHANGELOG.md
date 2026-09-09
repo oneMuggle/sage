@@ -133,12 +133,24 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - **docs(technical): 日志基础设施修复归档 (#307)** — 29 §修复记录 + 41 §日志路径优先级
 - **docs(spec): Electron E2E 自动化测试基础设施设计 + 实施计划 (15 任务) (#376 配套)**
 
-## [Unreleased]
+## [v0.4.9-alpha.37] - 2026-09-09
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**orchestration event-loop 修复** (#541):EventHub / SnapshotStore `__init__` 之前 eager 构造 `asyncio.Lock()`,在 Py3.8 (release/win7) 主线程无 running loop 时抛 `RuntimeError`;sync test fixture 用 `asyncio.get_event_loop().run_until_complete` 在 Py3.10+ 同样无 current loop。新 `backend/orchestration/_lazy_lock.py::LazyLock` descriptor 把 lock 构造延迟到第一次 `await`(此时 loop 已 active),并把 3 个测试文件 10 处 `run_until_complete` 迁到 `asyncio.run`。同时累积 #530/#535/#537/#538/#539/#540 主线工作(chat input UX、usage cache、office pandas、office_archive、alpha17 packaged-mode port、bundle pandas fix)。
 
 ### Added
 - feat: 网络模式门禁（online/intranet/offline）+ 主机白名单，内网/气隙下搜索工具按模式不加载
 - feat: web_fetch 正文抽取（text/links/tables/raw 四模式）+ GBK/GB18030 编码嗅探，stdlib 栈式实现
 - feat: http_download 流式下载工具（工作区边界 + Content-Length/实际字节双重大小上限 + 文件名净化）
+
+### Fixed
+- fix(orchestration): #536 EventHub / SnapshotStore LazyLock descriptor + asyncio.run() in sync tests (#541)
+
+### Changed
+- chore(release): bump version to 0.4.9-alpha.37
+
+## [Unreleased]
+
+### Added
 
 ### Fixed
 
