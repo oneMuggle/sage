@@ -885,6 +885,8 @@ const DEMO_OFFICE_DOCS: OfficeDocumentSummary[] = [
     created_at: NOW_S - 3600 * 26,
     updated_at: NOW_S - 3600 * 2,
     metadata: { page_count: 6, paragraph_count: 58, table_count: 2, file_size_bytes: 42381 },
+    derived_from: null,
+    archived_at: null,
   },
   {
     id: 'of-2',
@@ -896,6 +898,8 @@ const DEMO_OFFICE_DOCS: OfficeDocumentSummary[] = [
     created_at: NOW_S - 86400,
     updated_at: NOW_S - 3600 * 20,
     metadata: { sheet_count: 2, file_size_bytes: 86528 },
+    derived_from: null,
+    archived_at: null,
   },
   {
     id: 'of-3',
@@ -907,6 +911,8 @@ const DEMO_OFFICE_DOCS: OfficeDocumentSummary[] = [
     created_at: NOW_S - 86400 * 2,
     updated_at: NOW_S - 86400 * 2 + 600,
     metadata: { page_count: 5, file_size_bytes: 2516582 },
+    derived_from: null,
+    archived_at: null,
   },
 ];
 
@@ -1634,6 +1640,8 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
       created_at: NOW_S,
       updated_at: NOW_S,
       metadata: { paragraph_count: 12, table_count: 1, file_size_bytes: 24576 },
+      derived_from: null,
+      archived_at: null,
     };
     demoOfficeDocs = [doc, ...demoOfficeDocs];
     return { output_path: `${workspacePath}/${filename}`, filename, file_size_bytes: 24576 };
@@ -1653,6 +1661,8 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
       created_at: NOW_S,
       updated_at: NOW_S,
       metadata: { sheet_count: 1, file_size_bytes: 18432 },
+      derived_from: null,
+      archived_at: null,
     };
     demoOfficeDocs = [doc, ...demoOfficeDocs];
     return { output_path: `${workspacePath}/${filename}`, filename, file_size_bytes: 18432 };
@@ -1672,6 +1682,8 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
       created_at: NOW_S,
       updated_at: NOW_S,
       metadata: { page_count: 4, file_size_bytes: 1048576 },
+      derived_from: null,
+      archived_at: null,
     };
     demoOfficeDocs = [doc, ...demoOfficeDocs];
     return { output_path: `${workspacePath}/${filename}`, filename, file_size_bytes: 1048576 };
