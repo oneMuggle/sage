@@ -57,3 +57,51 @@ describe('demo memory state', () => {
     expect(searchDemoMemories(marker)).toEqual([]);
   });
 });
+
+describe('demo office update preview + export (parity batch 2)', () => {
+  it('office_update_preview turns each composed op into a change entry', () => {
+    const res = demoInvoke('office_update_preview', {
+      ops: [
+        { op: 'replace_text', find: '大模型', replace: 'LLM' },
+        { op: 'set_cells', sheet: 'Sheet1', cells: [{ addr: 'B2', value: '10' }] },
+        { op: 'set_slide_title', index: 2, title: '新标题' },
+        { op: 'freeze_panes', sheet: 'Sheet1', cell: 'B2' },
+      ],
+    });
+
+    expect(res.hit).toBe(true);
+    const value = res.value as {
+      ok: boolean;
+      truncated: boolean;
+      changes: { op: string; target?: string; before?: string; after?: string }[];
+    };
+    expect(value.ok).toBe(true);
+    expect(value.truncated).toBe(false);
+    expect(value.changes).toHaveLength(4);
+    expect(value.changes[0]).toMatchObject({ op: 'replace_text', before: '大模型', after: 'LLM' });
+    expect(value.changes[1]).toMatchObject({ op: 'set_cells', target: 'Sheet1!B2', after: '10' });
+    expect(value.changes[2]).toMatchObject({ op: 'set_slide_title', target: 'slide[2]' });
+    // Unknown op shapes fall through to a generic summary entry.
+    expect(value.changes[3]).toMatchObject({ op: 'freeze_panes' });
+  });
+
+  it('office_update_preview caps the demo change list at 200 and flags truncation', () => {
+    const ops = Array.from({ length: 260 }, (_, i) => ({ op: 'replace_text', find: `f${i}`, replace: 'x' }));
+    const res = demoInvoke('office_update_preview', { ops });
+    const value = res.value as { truncated: boolean; changes: unknown[] };
+    expect(value.truncated).toBe(true);
+    expect(value.changes).toHaveLength(200);
+  });
+
+  it('office_export_pdf derives <stem>.pdf next to the source', () => {
+    const res = demoInvoke('office_export_pdf', {
+      filePath: '/ws/office/word/of-1/report.docx',
+    });
+    expect(res.hit).toBe(true);
+    expect(res.value).toMatchObject({
+      ok: true,
+      method: 'libreoffice',
+      output_path: '/ws/office/word/of-1/report.pdf',
+    });
+  });
+});

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, conlist
 
@@ -229,6 +229,31 @@ class OfficeReadRequest(BaseModel):
 # ──────────────────────────────────────────────────────────────────────
 
 
+class PptLayoutName(str, Enum):
+    """批次 2.3：幻灯片版式（映射默认模板的 slide layout）。
+
+    不传（None）时保持既有行为：Blank layout + 手工文本框几何。
+    """
+
+    TITLE = "title"
+    TITLE_CONTENT = "title_content"
+    BLANK = "blank"
+
+
+class ImageSourceSpec(BaseModel):
+    """一张待嵌入图片的来源描述（Word 段落图片 / PPT slide 图片共用）。
+
+    ``source`` 二选一：``data:image/...`` base64 data URI 或工作区/本地
+    图片文件路径。解码后强制 ≤10MB（与 word_template._MAX_IMAGE_BYTES 对齐）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = Field(min_length=1, max_length=20_000_000)
+    width_inches: Optional[float] = Field(default=None, gt=0, le=24)
+    height_inches: Optional[float] = Field(default=None, gt=0, le=24)
+
+
 class PptSlideSpec(BaseModel):
     """One slide to generate in a PPT."""
 
@@ -237,6 +262,13 @@ class PptSlideSpec(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     bullets: _constrained_list(str, max_length=20) = Field(default_factory=list)
     notes: Optional[str] = Field(default=None, max_length=2000)
+    # 批次 2.3：版式选择。None 保持既有 Blank+文本框行为不变。
+    layout: Optional[PptLayoutName] = Field(
+        default=None,
+        description="'title' | 'title_content' | 'blank'；模板中找不到对应版式时回退现有几何",
+    )
+    # 批次 2.1：可选插图（追加在文本之后）。
+    image: Optional[ImageSourceSpec] = None
 
 
 class OfficePptGenerateRequest(BaseModel):
@@ -264,6 +296,15 @@ class WordParagraphSpec(BaseModel):
         description="'bullet' 或 'numbered' 列表样式（与 heading 二选一）",
     )
     text: str = Field(min_length=1, max_length=10000)
+    # 批次 2.3 样式分级（round a）：作用于该段落全部 runs 的可选样式。
+    font_size: Optional[float] = Field(default=None, gt=0, le=400, description="磅值，如 12 / 14.5")
+    bold: Optional[bool] = None
+    italic: Optional[bool] = None
+    color: Optional[str] = Field(
+        default=None,
+        description="字体颜色，6 位 RGB 十六进制（如 'FF0000'，可带 #）",
+    )
+    align: Optional[Literal["left", "center", "right", "justify"]] = None
 
 
 class WordTableSpec(BaseModel):
@@ -285,6 +326,8 @@ class OfficeWordGenerateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     paragraphs: _constrained_list(WordParagraphSpec, max_length=5000) = Field(default_factory=list)
     tables: _constrained_list(WordTableSpec, max_length=100) = Field(default_factory=list)
+    # 批次 2.1：可选插图，按顺序追加在正文段落/表格之后。
+    images: _constrained_list(ImageSourceSpec, max_length=20) = Field(default_factory=list)
     font_family: Optional[str] = Field(
         default=None,
         description="中文正文字体名（如'宋体'/'微软雅黑'/'等线'），默认宋体",
@@ -303,6 +346,41 @@ class ExcelSheetSpec(BaseModel):
     name: str = Field(min_length=1, max_length=31, description="Excel sheet name max length")
     headers: _constrained_list(str, max_length=100) = Field(default_factory=list)
     rows: _constrained_list(_constrained_list(str), max_length=10000) = Field(default_factory=list)
+    # 批次 2.3：按列序号给出列宽（index 0 = A 列），单位为 Excel 字符宽度。
+    column_widths: Optional[_constrained_list(float, max_length=200)] = Field(
+        default=None,
+        description="列宽列表，如 [20, 12, 30] 对应 A/B/C 列；None 不设置",
+    )
+
+
+class ExcelCellRange(BaseModel):
+    """openpyxl Reference 风格的矩形单元格区域（1-based，含端点）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_col: int = Field(ge=1, le=16384)
+    min_row: int = Field(ge=1, le=1048576)
+    max_col: int = Field(ge=1, le=16384)
+    max_row: int = Field(ge=1, le=1048576)
+
+
+class ExcelChartSpec(BaseModel):
+    """批次 2.1：生成 xlsx 时挂载的 Excel 原生图表（openpyxl Chart）。
+
+    ``sheet`` 缺省挂到第一个 sheet；``data_ref`` 指向图表数据矩形
+    （``titles_from_data=True`` 时首行/首列按 ``from_rows`` 解释为系列名）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    sheet: Optional[str] = Field(default=None, max_length=31)
+    type: Literal["line", "bar", "pie"]
+    anchor: str = Field(min_length=2, max_length=10, description="左上角锚点单元格，如 'A10'")
+    data_ref: ExcelCellRange
+    titles_from_data: bool = False
+    from_rows: bool = False
+    categories_ref: Optional[ExcelCellRange] = None
+    title: Optional[str] = Field(default=None, max_length=200)
 
 
 class OfficeExcelGenerateRequest(BaseModel):
@@ -313,6 +391,35 @@ class OfficeExcelGenerateRequest(BaseModel):
     workspace_path: str
     filename: str = Field(min_length=1, max_length=200)
     sheets: _constrained_list(ExcelSheetSpec, min_length=1, max_length=50)
+    # 批次 2.1：数据写完后统一挂载的原生图表。
+    charts: _constrained_list(ExcelChartSpec, max_length=20) = Field(default_factory=list)
+
+
+class ChartSeriesSpec(BaseModel):
+    """matplotlib 图表的一条数据系列。``x`` 可省略（bar/pie 用 labels 补位）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)
+    x: Optional[List[Union[str, float]]] = Field(
+        default=None,
+        description="横轴取值（数值或类别文本）；bar/pie 常省略",
+    )
+    y: _constrained_list(float, min_length=1, max_length=10000)
+
+
+class ChartSpec(BaseModel):
+    """批次 2.1：matplotlib 图表渲染规格（render_chart_png 输入）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["line", "bar", "hbar", "pie"]
+    title: Optional[str] = Field(default=None, max_length=200)
+    series: _constrained_list(ChartSeriesSpec, min_length=1, max_length=10)
+    labels: Optional[_constrained_list(str, max_length=10000)] = Field(
+        default=None,
+        description="类别标签（bar/hbar/pie 或 line 分类轴）；series 无 x 时必选",
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────

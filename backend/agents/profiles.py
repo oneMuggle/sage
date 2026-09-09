@@ -217,6 +217,9 @@ def create_default_agents() -> List[AgentProfile]:
             # office_restore 还原)。不给 office_delete —— 写作职责不含删档。
             # 2026-09 Parity Batch-1: 补 PDF 三类 + Word 模板两件（与
             # OFFICE_TOOLS 同步，除 office_delete 外全量继承）。
+            # 2026-09 Parity Batch-2: 补 office_analyze（本地数据分析，
+            # 仍不给 office_delete —— 批次 1 模式：writer = OFFICE_TOOLS
+            # 除 delete 外全量）。
             tools=[
                 "read_file",
                 "write_file",
@@ -233,6 +236,7 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_fill_pdf_form",
                 "office_analyze_word_template",
                 "office_fill_word_template",
+                "office_analyze",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -391,6 +395,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     # 2026-09 Parity Batch-1: PDF 三类 + Word 模板两件（与 writer.tools 同步）。
     "office_read_pdf", "office_generate_pdf", "office_read_pdf_form",
     "office_fill_pdf_form", "office_analyze_word_template", "office_fill_word_template",
+    # 2026-09 Parity Batch-2: office_analyze（本地数据分析，同步 writer.tools）。
+    "office_analyze",
 ]
 
 
@@ -625,6 +631,12 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "- 查看当前会话工作区里的文档：office_list；读取内容：office_read。\n"
     "- 修改已有文档（原地编辑，按 op 列表执行）：office_update"
     "（用 doc_id 或绝对路径 file_path 定位文件）。\n"
+    "  · 图表与图片（批次2）：可在 Word/PPT 插入图片（word content.images / "
+    "ppt slide.image，传工作区图片路径或 data:image/... base64，≤10MB；编辑期用 "
+    "add_image / add_picture op）、给 Excel 挂原生图表（office_update 的 add_chart "
+    "op 或 excel content.charts，line/bar/pie）、用 matplotlib 渲染统计图，以及 "
+    "set_paragraph_style / set_column_width / set_number_format / set_fill / "
+    "freeze_panes 等样式 op。\n"
     "- 删除文档（不可恢复）：office_delete（同样支持 doc_id / file_path）。\n"
     "- 归档文档（隐藏但不删）：office_archive；还原被归档文档：office_restore。"
     "office_update 改前会自动把旧版复制到 <managed_dir>/.snapshots/，可作为"
@@ -639,7 +651,9 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "- Word 模板（.docx 占位符）：先 office_analyze_word_template 列出 {{占位符}}"
     "（名称/类型/位置），再 office_fill_word_template 按 data 填充；图片占位符在 "
     "images 里传工作区图片路径或 data:image/... base64（≤10MB）；默认原地保存，"
-    "传 output_path 另存。"
+    "传 output_path 另存。\n"
+    "- 数据分析：office_analyze 用 pandas 做本地数据分析"
+    "（describe/计数/聚合/相关性，可生成分析报告 xlsx）——数据不出本机。"
 )
 
 

@@ -485,6 +485,52 @@ export const zh = {
   'office.snapshot.restoreFailed': '恢复失败',
   'office.snapshot.close': '关闭',
 
+  // ─── Office parity batch 2: 预览富渲染 (item 2.6) ─────
+  'office.preview.headings': '标题',
+  'office.preview.formulas': '公式视图',
+  'office.preview.formulasNote': '公式缓存值缺失，仅显示公式文本',
+  'office.preview.rowsTruncated': '…还有 {n} 行未显示',
+  'office.preview.paragraphsTruncated': '…还有 {n} 段未显示',
+  'office.preview.cellsTruncated': '…还有 {n} 列未显示',
+  'office.preview.sheetTab': '工作表',
+
+  // ─── Office parity batch 2: 编辑预览对话框 (item 2.5) ─────
+  'office.edit.title': '编辑预览',
+  'office.edit.open': '编辑预览',
+  'office.edit.close': '关闭',
+  'office.edit.composeHint': '构建一个简单编辑并预览效果（不会修改文档）',
+  'office.edit.wordFind': '查找文本',
+  'office.edit.wordFindPlaceholder': '要替换的原文…',
+  'office.edit.wordReplace': '替换为',
+  'office.edit.wordReplacePlaceholder': '替换后的文本（留空即删除）',
+  'office.edit.excelSheet': '工作表',
+  'office.edit.excelCell': '单元格',
+  'office.edit.excelCellPlaceholder': '如 B2',
+  'office.edit.excelValue': '新值',
+  'office.edit.excelValuePlaceholder': '写入单元格的值',
+  'office.edit.pptSlideNumber': '幻灯片序号',
+  'office.edit.pptTitle': '新标题',
+  'office.edit.preview': '预览变更',
+  'office.edit.previewing': '正在生成预览…',
+  'office.edit.changes': '变更预览',
+  'office.edit.before': '原文',
+  'office.edit.after': '替换后',
+  'office.edit.truncated': '变更较多，仅显示前 200 条',
+  'office.edit.previewFailed': '预览失败',
+  'office.edit.rejected': '该编辑无法应用',
+  'office.edit.noChanges': '没有产生变更',
+  'office.edit.applyInChat':
+    '页面内仅支持预览：应用编辑请在对话中让助手执行相同的 office_update 操作',
+  'office.edit.required': '请完整填写编辑内容',
+
+  // ─── Office parity batch 2: 导出 PDF (item 2.7) ─────
+  'office.export.pdf': '导出 PDF',
+  'office.export.exporting': '导出中…',
+  'office.export.success': '已导出 PDF',
+  'office.export.failed': '导出失败',
+  'office.export.noConverter': '未找到本机转换器（需要 LibreOffice 或 MS Word）',
+  'office.export.openFolder': '打开所在文件夹',
+
   // ─── M6 生态扩展: 编排看板补充 i18n 键 ─────
   'orchestration.loading': '加载中…',
   'orchestration.error': '错误:',

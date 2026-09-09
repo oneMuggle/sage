@@ -294,6 +294,50 @@ def _mark_formula_cells(wb) -> int:
     return count
 
 
+def _apply_sheet_column_widths(writer, req) -> int:
+    """批次 2.3：把 ExcelSheetSpec.column_widths 写入对应 worksheet。
+
+    在 ``pd.ExcelWriter`` 上下文内、工作簿保存前调用；宽度单位为 Excel
+    字符宽度（与 openpyxl ``column_dimensions[..].width`` 一致）。返回
+    设置的列数（诊断用）。
+    """
+    from openpyxl.utils import get_column_letter
+
+    applied = 0
+    for sheet_spec in getattr(req, "sheets", None) or ():
+        widths = getattr(sheet_spec, "column_widths", None)
+        if not widths:
+            continue
+        ws = writer.sheets.get(sheet_spec.name[:31])
+        if ws is None:
+            continue
+        for col_idx, width in enumerate(widths[:200], start=1):
+            ws.column_dimensions[get_column_letter(col_idx)].width = float(width)
+            applied += 1
+    return applied
+
+
+def _apply_generate_charts(writer, req) -> int:
+    """批次 2.1：工作簿保存前挂载 ``req.charts`` 的 Excel 原生图表。
+
+    ``chart_spec.sheet`` 缺省挂到第一个 sheet。 Raises ValueError（由
+    generate_xlsx 折算为 OfficeGenerateError）。
+    """
+    from .charts import build_openpyxl_chart
+
+    applied = 0
+    book = writer.book
+    for chart_spec in getattr(req, "charts", None) or ():
+        name = getattr(chart_spec, "sheet", None) or (
+            book.sheetnames[0] if book.sheetnames else None
+        )
+        if not name or name not in book.sheetnames:
+            raise ValueError(f"chart_sheet_not_found: {getattr(chart_spec, 'sheet', None)!r}")
+        build_openpyxl_chart(book[name], chart_spec)
+        applied += 1
+    return applied
+
+
 def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .xlsx file from structured Pydantic input.
 
@@ -394,6 +438,10 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
             # Item 1.4: '=' 前缀的字符串单元格统一兜底为真公式
             # （无公式时零改动；见 _mark_formula_cells）。
             _mark_formula_cells(writer.book)
+            # 批次 2.3：按 sheet 写入可选列宽；批次 2.1：挂载原生图表
+            # （必须在 writer 保存前，图表才会随工作簿序列化）。
+            _apply_sheet_column_widths(writer, req)
+            _apply_generate_charts(writer, req)
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate XLSX: {exc}", file_path=output_path) from exc
 

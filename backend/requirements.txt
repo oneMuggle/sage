@@ -68,6 +68,10 @@ docxtpl>=0.20.0       # Word template fill with {{variable}} placeholders, ~0.5M
 PyMuPDF>=1.25.0       # PDF read + form fill (C extension, wheels available for py38+), ~15MB wheel
 reportlab>=4.0.0      # PDF generation from structured data, ~3MB wheel
 
+# matplotlib — 图表渲染（批次2）— main 通道 only；requirements-bundled/py38（Win7）不加。
+# office.charts.render_chart_png 懒加载；缺库时报可读错误而非崩溃。
+matplotlib>=3.7
+
 # certifi: provides Mozilla CA bundle for httpx / requests / curl SSL verification
 # (LTS Pin 2024.7.4, matches release/win7 PR #348 / PR #347 lxml wheel strategy)
 certifi>=2024.7.4

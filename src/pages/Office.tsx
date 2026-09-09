@@ -31,6 +31,13 @@
  * IPC. The stale-read guard (`readIdRef`) is preserved: when the user
  * switches workspaces, any in-flight read is dropped before its data
  * reaches `setPreview`.
+ *
+ * Office parity batch 2 (2026-09-09): the preview panel toolbar carries
+ * 编辑预览 (item 2.5 — opens <OfficeEditPreviewDialog>, which dry-runs a
+ * composed edit via POST /office/update/preview and renders the change
+ * list; there is no page-level apply route, edits apply via chat) and
+ * 导出 PDF (item 2.7 — handled inside the panel via
+ * POST /office/export-pdf with a 打开所在文件夹 toast action).
  */
 
 import { FileSpreadsheet, FileText, FileType, FolderOpen, Presentation } from 'lucide-react';
@@ -40,6 +47,7 @@ import { toast } from 'sonner';
 import { useWorkspaceContext } from '../app/providers/SessionWorkspaceProvider';
 import {
   OfficeDocumentList,
+  OfficeEditPreviewDialog,
   OfficeFilePicker,
   OfficeGenerateForm,
   OfficePreviewPanel,
@@ -99,6 +107,15 @@ export function Office() {
   const [snapshotDocId, setSnapshotDocId] = useState<string | null>(null);
   const snapshotDoc = snapshotDocId ? documents.find((d) => d.id === snapshotDocId) : undefined;
 
+  // Item 2.5: 编辑预览 dialog — opened from the preview panel toolbar.
+  // Only meaningful while a word/excel/ppt preview is showing (the panel
+  // hides the entry for pdf). The dialog previews only: there is no
+  // page-level apply-update route, edits apply via chat.
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const editDoc = preview ? preview.data.summary : null;
+  const editSheetNames =
+    preview?.docType === 'excel' ? preview.data.sheets.map((s) => s.name) : undefined;
+
   // The bind modal owns its own IPC; we just need to know when the
   // workspace has actually changed so the stale-read guard can drop any
   // in-flight read from the previous workspace.
@@ -108,6 +125,7 @@ export function Office() {
     // in-flight read is correctly discarded.
     readIdRef.current += 1;
     setPreview(null);
+    setEditDialogOpen(false);
   };
 
   const toPreview = (docType: OfficeDocType, data: OfficeReadResult): OfficePreviewData => ({
@@ -123,6 +141,7 @@ export function Office() {
       return;
     }
     const myReadId = ++readIdRef.current;
+    setEditDialogOpen(false);
     try {
       const data = await importAndRead(docType);
       if (data === null) return; // user cancelled
@@ -154,6 +173,7 @@ export function Office() {
       return;
     }
     const myReadId = ++readIdRef.current;
+    setEditDialogOpen(false);
     try {
       const data = await readDropped(docType, sourcePath);
       if (myReadId !== readIdRef.current) return;
@@ -346,12 +366,32 @@ export function Office() {
               </OfficeFilePicker>
             </div>
 
-            {/* Right: preview panel */}
+            {/* Right: preview panel — toolbar carries 编辑预览 (item 2.5,
+                word/excel/ppt only) and 导出 PDF (item 2.7, handled inside
+                the panel). */}
             <div>
               <h2 className="text-sm font-medium text-text-secondary mb-3">
                 {t('office.section.preview')}
               </h2>
-              <OfficePreviewPanel preview={preview} />
+              <OfficePreviewPanel
+                preview={preview}
+                workspacePath={workspacePath}
+                onEditPreview={
+                  preview && preview.docType !== 'pdf'
+                    ? () => setEditDialogOpen(true)
+                    : undefined
+                }
+              />
+              {editDialogOpen && editDoc && preview?.docType !== 'pdf' && (
+                <div className="mt-3">
+                  <OfficeEditPreviewDialog
+                    workspacePath={workspacePath}
+                    doc={editDoc}
+                    sheetNames={editSheetNames}
+                    onClose={() => setEditDialogOpen(false)}
+                  />
+                </div>
+              )}
             </div>
           </div>
 

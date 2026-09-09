@@ -593,6 +593,17 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) =>
       `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/snapshots/${encodeURIComponent(String(a.snapshotId))}/restore`,
   },
+  // Office parity batch 2 (items 2.5 / 2.7): update PREVIEW (dry-run —
+  // applies ops to a temp copy, never the source) and explicit PDF export.
+  // Backend: backend/api/office_routes.py:620-658 (POST /update/preview,
+  // POST /export-pdf). There is deliberately NO page-level apply-update
+  // route — real edits stay on the chat-driven office_update tool path.
+  // Body keys (workspacePath/filePath/docId/ops) pass through the normal
+  // recursive camelToSnakeKeys; the composed op dicts use only lowercase
+  // single-word keys (find/replace/sheet/cells/addr/value/index/title),
+  // so the translation is a no-op on them.
+  office_update_preview: { method: 'POST', path: () => '/api/v1/office/update/preview' },
+  office_export_pdf: { method: 'POST', path: () => '/api/v1/office/export-pdf' },
 
   // M3: MCP multi-server management (backend/api/mcp_routes.py).
   // mcp_server_add: args are the full server config, forwarded as body.

@@ -1036,6 +1036,15 @@ export interface OfficeExcelSheetContent {
   rows: string[][];
   max_row: number;
   max_col: number;
+  /**
+   * 公式视图 (item 1.4, additive): filled only when the read ran with
+   * include_formulas=true — entries like 'B4=SUM(B2:B3)' (with a cached
+   * value: 'B4=SUM(B2:B3) → 30'). null/absent = no formula view.
+   * Backend field: backend/office/models.py:176-182.
+   */
+  formulas?: string[] | null;
+  /** One-line hint shown when formulas lack cached values. */
+  note?: string | null;
 }
 
 export interface OfficeExcelReadResult {
@@ -1213,4 +1222,79 @@ export interface OfficeSnapshotListResponse {
 export interface OfficeSnapshotRestoreResponse {
   ok: boolean;
   summary: OfficeDocumentSummary;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Update preview + PDF export (Office parity batch 2 — items 2.5 / 2.7)
+// Backend counterpart: backend/office/diff_preview.py (DiffPreviewChange /
+// DiffPreviewResult / OfficeUpdatePreviewRequest) and
+// backend/office/export_pdf.py (ExportPdfResult; OfficeExportPdfRequest
+// lives in the same module).
+// NOTE (item 2.5): the backend exposes a preview (dry-run) route only —
+// POST /office/update/preview. There is NO page-level apply-update HTTP
+// route; real updates go through the chat-driven office_update tool
+// (backend/office/edit.py). The office page can therefore preview but
+// not apply edits; the UI states this explicitly.
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * One update op, passed through verbatim to the backend editor. Ops are
+ * plain dicts on the backend too (runtime-validated there) — see the op
+ * reference in backend/office/edit.py (e.g. word replace_text
+ * `{find, replace}`, excel set_cells `{sheet, cells:[{addr, value}]}`,
+ * ppt set_slide_title `{index, title}`).
+ */
+export interface OfficeUpdateOp {
+  op: string;
+  [key: string]: unknown;
+}
+
+/** Request of POST /office/update/preview — exactly one of file_path / doc_id. */
+export interface OfficeUpdatePreviewRequest {
+  workspace_path: string;
+  file_path?: string;
+  doc_id?: string;
+  ops: OfficeUpdateOp[];
+}
+
+/** One human-readable change entry in a preview (backend DiffPreviewChange). */
+export interface OfficeDiffPreviewChange {
+  op: string;
+  /** Where the change lands: 'Sheet!A1', 'slide[2]', 'table[0]'… */
+  target?: string | null;
+  /** Content before the op (snippet). */
+  before?: string | null;
+  /** Content after the op (snippet). */
+  after?: string | null;
+  /** One-line description when before/after don't tell the story. */
+  summary?: string | null;
+}
+
+/** Result of POST /office/update/preview (backend DiffPreviewResult). */
+export interface OfficeUpdatePreviewResult {
+  /** False when applying the ops to the preview copy failed. */
+  ok: boolean;
+  changes: OfficeDiffPreviewChange[];
+  /** True when the change list was capped server-side (MAX_CHANGES=200). */
+  truncated: boolean;
+  /** Why the real update would fail (set when ok=false). */
+  error?: string | null;
+}
+
+/** Request of POST /office/export-pdf. */
+export interface OfficeExportPdfRequest {
+  workspace_path: string;
+  file_path: string;
+}
+
+/**
+ * Result of POST /office/export-pdf (backend ExportPdfResult). `method`
+ * is null whenever ok=false; `output_path` is populated only on success
+ * (`<stem>.pdf` next to the source inside the workspace).
+ */
+export interface OfficeExportPdfResult {
+  ok: boolean;
+  method?: 'libreoffice' | 'word_com' | null;
+  output_path?: string | null;
+  error?: string | null;
 }

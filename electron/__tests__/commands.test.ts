@@ -367,6 +367,26 @@ describe('COMMAND_ROUTES', () => {
     expect(r.path({})).toBe('/api/v1/orchestration/lanes');
     expect(r.path({ goal: 'x', agent: 'researcher' })).toBe('/api/v1/orchestration/lanes');
   });
+
+  // Office parity batch 2 (items 2.5 / 2.7): update PREVIEW dry-run +
+  // PDF export. Backend routes: backend/api/office_routes.py:620-658.
+  // There is deliberately NO apply-update route — the preview endpoint
+  // is the only office_update surface the office page talks to.
+  it('has office_update_preview posting to the update/preview dry-run route', () => {
+    const r = COMMAND_ROUTES.office_update_preview;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/office/update/preview');
+    expect(r.rawBody).toBeUndefined();
+  });
+
+  it('has office_export_pdf posting to the export-pdf route', () => {
+    const r = COMMAND_ROUTES.office_export_pdf;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/office/export-pdf');
+    expect(r.rawBody).toBeUndefined();
+  });
 });
 
 // PR-C §5.4: memory IPC bridge 补全。memoryApi.ts(前端)调 invoke('search_memory'|'save_memory'),

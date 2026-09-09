@@ -493,6 +493,52 @@ export const en: Record<TranslationKey, string> = {
   'office.snapshot.restoreFailed': 'Failed to restore',
   'office.snapshot.close': 'Close',
 
+  // ─── Office parity batch 2: rich preview rendering (item 2.6) ─────
+  'office.preview.headings': 'headings',
+  'office.preview.formulas': 'Formula view',
+  'office.preview.formulasNote': 'Cached values missing — showing formula text only',
+  'office.preview.rowsTruncated': '…{n} more rows hidden',
+  'office.preview.paragraphsTruncated': '…{n} more paragraphs hidden',
+  'office.preview.cellsTruncated': '…{n} more columns hidden',
+  'office.preview.sheetTab': 'Sheets',
+
+  // ─── Office parity batch 2: edit preview dialog (item 2.5) ─────
+  'office.edit.title': 'Edit Preview',
+  'office.edit.open': 'Edit Preview',
+  'office.edit.close': 'Close',
+  'office.edit.composeHint': 'Compose a simple edit and preview it (the document is not modified)',
+  'office.edit.wordFind': 'Find text',
+  'office.edit.wordFindPlaceholder': 'Text to replace…',
+  'office.edit.wordReplace': 'Replace with',
+  'office.edit.wordReplacePlaceholder': 'Replacement text (leave empty to delete)',
+  'office.edit.excelSheet': 'Sheet',
+  'office.edit.excelCell': 'Cell',
+  'office.edit.excelCellPlaceholder': 'e.g. B2',
+  'office.edit.excelValue': 'New value',
+  'office.edit.excelValuePlaceholder': 'Value written to the cell',
+  'office.edit.pptSlideNumber': 'Slide number',
+  'office.edit.pptTitle': 'New title',
+  'office.edit.preview': 'Preview changes',
+  'office.edit.previewing': 'Generating preview…',
+  'office.edit.changes': 'Change preview',
+  'office.edit.before': 'Before',
+  'office.edit.after': 'After',
+  'office.edit.truncated': 'Many changes — showing the first 200 only',
+  'office.edit.previewFailed': 'Preview failed',
+  'office.edit.rejected': 'This edit cannot be applied',
+  'office.edit.noChanges': 'No changes produced',
+  'office.edit.applyInChat':
+    'This page previews only: to apply, ask the assistant to run the same office_update edit in chat',
+  'office.edit.required': 'Please complete the edit fields',
+
+  // ─── Office parity batch 2: export PDF (item 2.7) ─────
+  'office.export.pdf': 'Export PDF',
+  'office.export.exporting': 'Exporting…',
+  'office.export.success': 'PDF exported',
+  'office.export.failed': 'Export failed',
+  'office.export.noConverter': 'No local converter found (LibreOffice or MS Word required)',
+  'office.export.openFolder': 'Show in Folder',
+
   // ─── M6 生态扩展: 编排看板补充 i18n 键 ─────
   'orchestration.loading': 'Loading…',
   'orchestration.error': 'Error:',

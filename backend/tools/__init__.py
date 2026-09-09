@@ -38,6 +38,7 @@ from .git_tool import (
 )
 from .memory_tool import MemorySaveTool, MemorySearchTool
 from .network_config import load_network_policy
+from .office_analyze_tool import OfficeAnalyzeTool
 from .office_archive_tool import OfficeArchiveTool
 from .office_create_tool import OfficeCreateTool
 from .office_delete_tool import OfficeDeleteTool
@@ -167,6 +168,11 @@ def register_all_tools(
     registry.register(OfficeFillPdfFormTool(policy=policy))
     registry.register(OfficeAnalyzeWordTemplateTool(policy=policy))
     registry.register(OfficeFillWordTemplateTool(policy=policy))
+    # Office Parity Batch-2: office_analyze —— pandas 本地数据分析
+    # （describe/计数/聚合/相关性，可选分析报告 xlsx）。读类工具
+    # requires_tool_context=True（无绑定自动隐藏）；报告只写源文件同目录
+    # 的派生文件名，落点不经 LLM 选择。
+    registry.register(OfficeAnalyzeTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -273,6 +279,7 @@ __all__ = [
     "OfficeFillPdfFormTool",
     "OfficeAnalyzeWordTemplateTool",
     "OfficeFillWordTemplateTool",
+    "OfficeAnalyzeTool",
     "EditTool",
     "GlobSearchTool",
     "GrepSearchTool",

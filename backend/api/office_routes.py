@@ -25,6 +25,12 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from backend.data.database import Database, get_database
+from backend.office.diff_preview import (
+    DiffPreviewResult,
+    OfficeExportPdfRequest,
+    OfficeUpdatePreviewRequest,
+    preview_update,
+)
 from backend.office.errors import (
     OfficeError,
     OfficeFileNotFoundError,
@@ -69,6 +75,7 @@ from backend.office.ppt import generate_ppt, read_ppt
 from backend.office.storage import (
     archive_document,
     delete_document,
+    document_path,
     get_document,
     list_documents,
     list_snapshots,
@@ -605,6 +612,52 @@ def fill_pdf_form_endpoint(req: PdfFormFillRequest) -> PdfFormFillResult:
     return fill_pdf_form(req)
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Update preview + PDF export (Office parity batch 2 — Item 2.5)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.post("/update/preview", response_model=DiffPreviewResult)
+def preview_update_endpoint(req: OfficeUpdatePreviewRequest) -> DiffPreviewResult:
+    """Dry-run update ops against a copy; the source file is never touched.
+
+    File resolution mirrors office_update:
+    - ``file_path`` → validated to lie inside ``workspace_path``;
+    - ``doc_id``    → resolved via ``_require_document`` (404 when unknown)
+      + ``document_path`` (managed dir layout), containment re-checked
+      against the row's canonical ``workspace_path``.
+    Invalid ops come back as ``DiffPreviewResult(ok=False, error=…)`` so
+    the UI can show WHY the real update would fail (this is a preview).
+    """
+    if req.doc_id:
+        doc = _require_document(_db().get_connection(), req.doc_id)
+        managed = document_path(doc)
+        if not managed.is_file():
+            raise OfficeFileNotFoundError(managed)
+        file_path = _validate_file_in_workspace(str(managed), doc.workspace_path)
+    elif req.file_path:
+        file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    else:
+        raise OfficePathError("file_path or doc_id is required")
+    return preview_update(file_path, req.ops)
+
+
+@router.post("/export-pdf")
+def export_pdf_endpoint(req: OfficeExportPdfRequest):
+    """Export a workspace document to PDF via backend.office.export_pdf.
+
+    The ``export_pdf`` module is delivered by a parallel batch-2 agent, so
+    the import is deferred to call time (keeps this router importable
+    before that module lands). Because the route imports the *module
+    object* and looks up the attribute on each call, the clean test patch
+    point is ``backend.office.export_pdf.export_to_pdf``.
+    """
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    from backend.office import export_pdf
+
+    return export_pdf.export_to_pdf(file_path, Path(req.workspace_path).resolve())
+
+
 __all__ = [
     "router",
     "register_office_exception_handlers",
@@ -628,4 +681,7 @@ __all__ = [
     "restore_document_endpoint",
     "list_snapshots_endpoint",
     "restore_snapshot_endpoint",
+    # Office parity batch 2 (Item 2.5): update preview + PDF export
+    "preview_update_endpoint",
+    "export_pdf_endpoint",
 ]
