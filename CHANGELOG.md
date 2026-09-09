@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+> 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
+
+### Added(office)
+- **PDF 全链路**: 中文生成修复(CID 字体)、文本/表格/表单读取、生成、AcroForm 填写、PDF→Word(文本级)、Office→PDF 导出(检测本机 LibreOffice/Word)
+- **PDF/模板 LLM 工具 6 件**: office_read_pdf / office_generate_pdf / office_read_pdf_form / office_fill_pdf_form / office_analyze_word_template / office_fill_word_template
+- **Excel 公式闭环**: 生成/编辑写公式、读取公式视图、formulas 引擎本地求值(main 通道)
+- **图表与图片**: Excel 原生图表、Word/PPT 插图、matplotlib 渲染管线(main 通道)
+- **office_analyze**: 本地数据分析(describe/计数/聚合/相关性)+ 分析报告 xlsx + 图表 artifact
+- **模板库**: 10 套内置中文模板(word×6/excel×2/ppt×2)+ 工作区用户模板 + 前端「从模板创建」
+- **编辑信任闭环**: 改前快照(10 份/100MB 保留)、dry_run 预览、diff 预览对话框一键应用、self_check 回读 + 验证历史表
+- **Word 批注**读/写(OOXML 层);富预览(标题层级/表格/分 sheet/公式视图)
+- **@ 注入升级**: Word 整段+表格+批注、Excel 自适应行+统计、PDF 支持
+- **office e2e**: 3 个 stub-deep 用例进 tier-1 PR 门禁
+- **归档视图批量操作**;前端纳入 PDF 全流程
+
+### Changed(office)
+- Word @ 摘要从"每段第一句"改为全文结构化 markdown;Excel 摘要从固定 5 行改为自适应
+- office 工具面 7→16;writer 档位同步(除 office_delete 外全量)
+- PPT 生成支持版式选择(替代硬编码几何)
+
+### Fixed(office)
+- PDF 生成中文输出为空白(base-14 字体无 CJK 字形)
+- Excel 编辑后公式缓存值丢失的提示缺失
+- 死参数 `OfficePptGenerateRequest.template` 移除;快照目录无保留策略(技术债 L3)
+
 ## Release Tier Definitions
 
 | Tier | Tag Format | Audience | Channel |
