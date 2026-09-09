@@ -45,7 +45,7 @@ vi.mock('../../features/send-message/useChat', () => ({
 // Fix #2 (2026-09-06): PlanCard 移至 Chat.tsx 主对话区域,ProgressSection 仅保留 TaskTreeSection
 // orchRunClient.listRuns();mock 掉避免真实 IPC 抛错 (unhandled rejection)。
 vi.mock('../../shared/api/orchRunClient', () => ({
-  orchRunClient: { listRuns: vi.fn().mockResolvedValue([]) },
+  orchRunClient: { listSessionRuns: vi.fn().mockResolvedValue({ runs: [] }) },
 }));
 
 vi.mock('../../shared/api/desktopInvoke', () => ({

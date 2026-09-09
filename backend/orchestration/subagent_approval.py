@@ -80,11 +80,35 @@ class AutoApproveEnforcer:
             if validation.risk in (BashRisk.DESTRUCTIVE, BashRisk.SUSPICIOUS):
                 return decision
 
-        return PermissionDecision(
+        auto_decision = PermissionDecision(
             allowed=True,
             needs_approval=False,
             reason=f"{reason}{_AUTO_REASON_SUFFIX}",
         )
+        _record_auto_approval(tool_name)
+        return auto_decision
+
+
+def _record_auto_approval(tool_name: str) -> None:
+    """C2 (2026-09-09): 自动批准决策落库，全吞降级。
+
+    auto 模式的放行不走 ApprovalGate（无 request_id / 生命周期），此处
+    以 ``answered_by="auto"`` 追加审计行；会话经 ToolExecutionContext 归因。
+    """
+    try:
+        from backend.data.approval_decision_repo import ApprovalDecisionRepository
+        from backend.tools.context import current_tool_context
+
+        ctx = current_tool_context()
+        ApprovalDecisionRepository().append(
+            tool_name=tool_name,
+            approved=True,
+            answered_by="auto",
+            session_id=ctx.session_id if ctx is not None else None,
+            risk="safe",
+        )
+    except Exception as exc:  # noqa: BLE001 — 审计降级不阻塞执行
+        logger.debug("auto 批准决策落库失败（忽略）tool=%s: %s", tool_name, exc)
 
 
 def build_subagent_enforcer(approval_mode: str) -> Optional[PermissionEnforcer]:

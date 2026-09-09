@@ -40,7 +40,7 @@ const updatePlanMock = vi.fn();
 const confirmRunMock = vi.fn();
 vi.mock('../../shared/api/orchRunClient', () => ({
   orchRunClient: {
-    listRuns: vi.fn().mockResolvedValue([]),
+    listSessionRuns: vi.fn().mockResolvedValue({ runs: [] }),
     cancelRun: (...args: unknown[]) => cancelRunMock(...args),
     // Fix #3 (2026-09-06): PlanCard 现于 Chat.tsx 渲染,补全 updatePlan/confirmRun
     // 防止取消测试中无意触发 handleStart 时 TypeError。
