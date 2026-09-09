@@ -959,7 +959,14 @@ export interface OfficeDocumentMetadata {
 
 export interface OfficeDocumentSummary {
   id: string;
-  workspace_path: string;
+  /**
+   * Binding's canonical absolute workspace directory.
+   * Backend strips this in `_serialize_summary` for LLM tool outputs
+   * (backend/office/tool_service.py:72-81); present in read-result summaries
+   * (OfficeExcelReadResult.summary etc.) which bypass that redactor.
+   * Marked optional so callers handle both shapes.
+   */
+  workspace_path?: string;
   doc_type: OfficeDocType;
   original_filename: string | null;
   generated_filename: string;
@@ -967,6 +974,18 @@ export interface OfficeDocumentSummary {
   created_at: number;
   updated_at: number;
   metadata: OfficeDocumentMetadata;
+  /**
+   * Source document id when this row was produced by an edit/copy/derive
+   * operation; null for fresh reads and from-scratch generations.
+   * Backend field: backend/office/models.py:93-99.
+   */
+  derived_from: string | null;
+  /**
+   * Unix timestamp (ms) when the row was soft-deleted via archive.
+   * Non-null rows are hidden from `list_documents(include_archived=False)`.
+   * Backend field: backend/office/models.py:100-106.
+   */
+  archived_at: number | null;
 }
 
 export interface OfficePptSlideContent {
@@ -1016,6 +1035,12 @@ export interface OfficeReadRequest {
   workspace_path: string;
   file_path: string;
   max_size_bytes?: number;
+  /**
+   * User-visible filename of the dropped/picked file. Optional on backend
+   * (backend/office/models.py:189-209); included so the storage layer can
+   * echo `original_filename` into the resulting OfficeDocumentSummary.
+   */
+  original_filename?: string;
 }
 
 // ──────────────────────────────────────────────────────────────────────
