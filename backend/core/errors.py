@@ -24,6 +24,7 @@ class LLMErrorType(str, Enum):
     NETWORK = "network_error"  # 连接失败、DNS 失败等网络层错误
     TIMEOUT = "timeout"  # 请求超时
     PARSING = "parsing_error"  # 响应格式无法解析
+    CONTEXT_OVERFLOW = "context_overflow"  # 输入超过模型上下文窗口（需压缩后重试）
     UNKNOWN = "unknown"  # 未分类错误
 
 

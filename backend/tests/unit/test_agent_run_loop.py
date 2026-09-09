@@ -898,3 +898,153 @@ async def test_run_loop_run_budget_exhaustion_stops_injecting_results(monkeypatc
     # 第一个: 部分注入 (预算 10 字符) + 截断说明; 第二个: 预算耗尽 → 全占位
     assert "保留前 10 字符" in tool_msgs[0]["content"]
     assert "未注入上下文" in tool_msgs[1]["content"]
+
+
+# ============================================================================
+# RT2 (round7): 上下文溢出急救压缩 + 重试闭环
+# ============================================================================
+
+
+def _overflow_error() -> LLMError:
+    return LLMError(LLMErrorType.CONTEXT_OVERFLOW, "This model's maximum context length is exceeded")
+
+
+def _long_history() -> list:
+    """system + 6 组 assistant(tool_calls)/tool + user —— 长到压缩有实感。"""
+    messages = [{"role": "system", "content": "system prompt"}]
+    for i in range(6):
+        messages.append(
+            {
+                "role": "assistant",
+                "content": "x" * 2000,
+                "tool_calls": [
+                    {"id": f"call_{i}", "type": "function", "function": {"name": "t", "arguments": "{}"}}
+                ],
+            }
+        )
+        messages.append({"role": "tool", "tool_call_id": f"call_{i}", "content": "y" * 5000})
+    messages.append({"role": "user", "content": "继续"})
+    return messages
+
+
+@pytest.mark.asyncio()
+async def test_overflow_first_aid_compacts_and_retries(monkeypatch):
+    """首次 LLM 调用抛 CONTEXT_OVERFLOW → 就地压缩后重试一次 → DONE。
+
+    不变式：消息条数/顺序/role/tool_call_id 不变；早期 tool 结果被截断
+    并带标记；重试后正常完成。
+    """
+    monkeypatch.delenv("SAGE_RUN_CTX_BUDGET_TOKENS", raising=False)
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        side_effect=[_overflow_error(), _make_response(content="完成")]
+    )
+
+    messages = _long_history()
+    roles_before = [m["role"] for m in messages]
+
+    events = []
+    async for evt in agent.run_loop(messages):
+        events.append(evt)
+
+    assert AgentState.DONE in [e.state for e in events]
+    assert agent.llm_client.chat.await_count == 2
+    # 结构不变式：原有 N 条的结构不动（DONE 后 run_loop 会追加 1 条 assistant）
+    assert [m["role"] for m in messages[: len(roles_before)]] == roles_before
+    assert len(messages) == len(roles_before) + 1
+    assert messages[-1]["role"] == "assistant"
+    early_tool = messages[2]
+    assert early_tool["content"].endswith("[已压缩：早期工具结果]")
+    assert early_tool["tool_call_id"] == "call_0"
+
+
+@pytest.mark.asyncio()
+async def test_overflow_persists_after_max_first_aid_attempts(monkeypatch):
+    """始终溢出 → 两次急救压缩耗尽后按原错误面抛出（不无限重试）。"""
+    monkeypatch.delenv("SAGE_RUN_CTX_BUDGET_TOKENS", raising=False)
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(side_effect=_overflow_error())
+
+    messages = _long_history()
+    async def _consume() -> None:
+        async for _ in agent.run_loop(messages):
+            pass
+
+    with pytest.raises(LLMError) as exc_info:
+        await _consume()
+    assert exc_info.value.type == LLMErrorType.CONTEXT_OVERFLOW
+    # 初始 1 次 + 2 次急救重试 = 3 次调用
+    assert agent.llm_client.chat.await_count == 3
+
+
+@pytest.mark.asyncio()
+async def test_overflow_mid_stream_skips_first_aid(monkeypatch):
+    """首个增量之后失败（无法安全重放）→ 不急救重试，按原错误面抛出。"""
+    monkeypatch.delenv("SAGE_RUN_CTX_BUDGET_TOKENS", raising=False)
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    # _should_stream 读 stream_unsupported（MagicMock 自动属性为真值会被判为
+    # "已禁用流式"）——显式置 False 才会走 chat_stream_events 流式路径。
+    agent.llm_client.stream_unsupported = False
+
+    async def _stream_gen(*args, **kwargs):
+        yield ("content_delta", "partial ")
+        raise _overflow_error()
+
+    agent.llm_client.chat_stream_events = _stream_gen
+    agent.llm_client.chat = AsyncMock(return_value=_make_response(content="should not happen"))
+
+    messages = [{"role": "user", "content": "hi"}]
+    async def _consume() -> None:
+        async for _ in agent.run_loop(messages):
+            pass
+
+    with pytest.raises(LLMError) as exc_info:
+        await _consume()
+    assert exc_info.value.type == LLMErrorType.CONTEXT_OVERFLOW
+    assert getattr(exc_info.value, "_saw_content_delta", False) is True
+    agent.llm_client.chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio()
+async def test_high_water_proactive_compaction(monkeypatch):
+    """迭代边界高水位预防：估算超预算 → 先压缩再调 LLM（无溢出也生效）。"""
+    monkeypatch.setenv("SAGE_RUN_CTX_BUDGET_TOKENS", "1")  # 阈值压到极小触发压缩
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    chat = AsyncMock(return_value=_make_response(content="ok"))
+    agent.llm_client.chat = chat
+
+    messages = _long_history()
+    events = []
+    async for evt in agent.run_loop(messages):
+        events.append(evt)
+
+    assert AgentState.DONE in [e.state for e in events]
+    assert chat.await_count == 1
+    assert messages[2]["content"].endswith("[已压缩：早期工具结果]")
+
+
+@pytest.mark.asyncio()
+async def test_non_overflow_llm_error_not_first_aided(monkeypatch):
+    """非溢出 LLMError（如 rate_limited）不触发急救压缩，直接透传。"""
+    monkeypatch.delenv("SAGE_RUN_CTX_BUDGET_TOKENS", raising=False)
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        side_effect=LLMError(LLMErrorType.RATE_LIMITED, "rate limited", retry_after=1)
+    )
+
+    messages = _long_history()
+    snapshot = [dict(m) for m in messages]
+    async def _consume() -> None:
+        async for _ in agent.run_loop(messages):
+            pass
+
+    with pytest.raises(LLMError) as exc_info:
+        await _consume()
+    assert exc_info.value.type == LLMErrorType.RATE_LIMITED
+    assert agent.llm_client.chat.await_count == 1
+    assert messages == snapshot
