@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from typing import Awaitable, Callable, Deque, Dict, Optional, Protocol, cast
 
 from backend.domain.orch_events import RunEvent
+from backend.orchestration._lazy_lock import LazyLock
 
 
 class _EventRepository(Protocol):
@@ -80,7 +81,7 @@ class EventHub:
         self._event_repository = event_repository
         self._event_applier = event_applier
         self._subscribers: Dict[str, list[_Subscriber]] = defaultdict(list)
-        self._lock = asyncio.Lock()
+        self._lock = LazyLock()
 
     async def publish(self, event: RunEvent) -> RunEvent:
         """Assign the next run-local sequence, persist, and broadcast."""

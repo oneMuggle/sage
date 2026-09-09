@@ -11,12 +11,12 @@
 
 from __future__ import annotations
 
-import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from backend.domain.orch_events import RunEvent, RunSnapshot, TaskSummary
+from backend.orchestration._lazy_lock import LazyLock
 
 
 @dataclass
@@ -62,7 +62,7 @@ class SnapshotStore:
 
     def __init__(self) -> None:
         self._runs: Dict[str, _RunSnapshot] = {}
-        self._lock = asyncio.Lock()
+        self._lock = LazyLock()
 
     async def apply_event(self, event: RunEvent) -> None:
         """根据事件类型更新对应快照。"""

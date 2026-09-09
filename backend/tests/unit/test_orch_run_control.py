@@ -44,7 +44,7 @@ def test_snapshot_returns_run_data(client):
         ))
 
     import asyncio
-    asyncio.get_event_loop().run_until_complete(_seed())
+    asyncio.run(_seed())
 
     resp = tc.get("/orch/runs/run-1/snapshot")
     assert resp.status_code == 200
@@ -72,4 +72,4 @@ def test_events_endpoint_subscribes_and_replays(client):
         await sub.close()
 
     import asyncio
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
