@@ -14,7 +14,6 @@ from typing import Any, Dict, List, Optional
 from backend.domain.memory import MemoryContext
 from backend.memory import ConsolidationPipeline, MemoryManager
 from backend.memory.embedder_factory import create_embedder
-from backend.memory.manager import classify_memory_type
 from backend.memory.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)

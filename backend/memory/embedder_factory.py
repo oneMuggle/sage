@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 from backend.memory.embedder import (
     BGE_SMALL_ZH_DIMENSIONS,
