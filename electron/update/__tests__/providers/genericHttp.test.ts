@@ -29,12 +29,7 @@ describe('GenericHttpProvider', () => {
     });
     const provider = createGenericHttpProvider({
       id: 'builtin',
-      type: 'generic-http',
       displayName: 'Official',
-      enabled: true,
-      isDefault: true,
-      createdAt: '',
-      updatedAt: '',
       config: baseCfg,
     });
     const release = await provider.checkForUpdates('stable');
