@@ -18,6 +18,16 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+## [v0.4.9-alpha.23-win7] - 2026-09-10
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS **启动诊断 + 自动重试** (port of release/win7 #585): 部分 Win7 机器首启 >90s 超时,后端 `backend/main.py` 加 6 个 `[sage-startup]` stderr checkpoint(`__name__=='__main__'` 守护),Electron `electron/main.ts` 第一次超时后自动重试一次 (再等 90s) + 日志 backendProc 状态;对话框 detail 显示 pid/exitCode/signalCode 便于诊断。本批累积同期未单独 changelog 的 win7 适配:PR #568 (alpha.19 HMAC fallback 路径)/ #580 (alpha.21 flat-split-bg 图标)/ #583 (alpha.22 圆角蒙版 transparent bg) — 同列于此便于追踪。
+
+### Fixed
+- **fix(electron): Win7 startup diagnostics + auto-retry (#585)** — 6 个 startup checkpoint + Electron 端超时自动重试一次;backend spawn 状态进对话框详情;ruff T201 用 `# noqa: T201` per-line
+
+### Changed
+- **chore(release): bump version to 0.4.9-alpha.23-win7**
+
 ## [v0.4.9-alpha.9-win7] - 2026-08-29
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 同步 main #381 bash-tool-parity:将 `TerminalTool` 替换为 `BashTool` / `BashOutputTool` / `KillShellTool` 三件套,与 Claude Code Bash 工具语义对齐。Cherry-pick 链路: main `81a20b0b` → win7 `00984167` (#382),37 文件 / +7481/-547。
