@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from backend.api.error_contract import error_json
 from backend.api.legacy_routes import (
+    _run_db_sync,
     SessionCreate,
     SessionUpdate,
     get_session_repo,
@@ -178,11 +179,13 @@ async def compact_session(session_id: str):
       DB 不动（落盘走单事务，失败整体回滚）
     """
     session_repo = SessionRepository()
-    if session_repo.get(session_id) is None:
+    if await _run_db_sync(session_repo.get, session_id) is None:
         raise HTTPException(status_code=404, detail="会话不存在")
 
     message_repo = MessageRepository()
-    messages = message_repo.get_by_session(session_id, limit=100000)
+    messages = await _run_db_sync(
+        message_repo.get_by_session, session_id, limit=100000
+    )
     before = len(messages)
 
     if not should_compact(messages):
@@ -222,7 +225,13 @@ async def compact_session(session_id: str):
             return error_json(502, "compaction_failed", str(exc))
 
         try:
-            after = _legacy_routes._persist_compaction(session_id, messages, new_messages, removed_count)
+            after = await _run_db_sync(
+                _legacy_routes._persist_compaction,
+                session_id,
+                messages,
+                new_messages,
+                removed_count,
+            )
         except Exception as exc:
             # 单事务已回滚——DB 保持压缩前状态（CRITICAL-1 的核心保证）。
             logger.warning(
