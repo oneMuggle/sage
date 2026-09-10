@@ -15,7 +15,10 @@ export function JournalSpecCard({ spec }: JournalSpecCardProps) {
     );
   }
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm">
+    <div
+      className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm"
+      data-testid="journal-spec-summary"
+    >
       <div className="mb-2 flex items-center gap-2 font-semibold">
         <FileText className="h-4 w-4" />
         <span>{spec.template_filename}</span>

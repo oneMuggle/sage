@@ -31,7 +31,10 @@ export function JournalValidationReport({
     );
   }
   return (
-    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm">
+    <div
+      className="space-y-2 rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm"
+      data-testid="journal-validation-report"
+    >
       <div className="flex items-center justify-between text-xs">
         <span className="font-medium">
           {errorCount} 错误 · {warningCount} 警告

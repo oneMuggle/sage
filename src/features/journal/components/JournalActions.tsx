@@ -16,6 +16,7 @@ export function JournalActions({ templates, workspacePath }: JournalActionsProps
           type="button"
           onClick={() => void pickTemplate()}
           disabled={loading}
+          data-testid="journal-pick-template"
           className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
           <Upload className="h-3 w-3" />
@@ -28,6 +29,7 @@ export function JournalActions({ templates, workspacePath }: JournalActionsProps
             if (picked) await validateFile(picked.path, spec?.spec_id);
           }}
           disabled={loading || !spec}
+          data-testid="journal-validate"
           className="inline-flex items-center gap-1 rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
         >
           <FileSearch className="h-3 w-3" />
@@ -40,6 +42,7 @@ export function JournalActions({ templates, workspacePath }: JournalActionsProps
             await fillFromContent(workspacePath, `paper-${Date.now()}.docx`);
           }}
           disabled={loading || !spec || !workspacePath}
+          data-testid="journal-fill"
           className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
         >
           <Sparkles className="h-3 w-3" />

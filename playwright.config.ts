@@ -94,5 +94,17 @@ export default defineConfig({
       retries: 0,
       outputDir: './tests/electron/tiers/live/deep/test-results',
     },
+    // Journal template E2E tier-1 (Task 8, 2026-09-10): hermetic IPC mock
+    // against `office_journal_*` commands. Spec lives in tests/e2e/journal.spec.ts;
+    // `testMatch` scopes it so the existing `e2e` project (which sweeps
+    // all *.spec.ts under tests/e2e/) does not double-run it.
+    {
+      name: 'journal-e2e',
+      testDir: './tests/e2e',
+      testMatch: /journal\.spec\.ts$/,
+      use: {
+        baseURL: 'http://localhost:1420',
+      },
+    },
   ],
 });
