@@ -43,6 +43,12 @@ from .office_analyze_tool import OfficeAnalyzeTool
 from .office_archive_tool import OfficeArchiveTool
 from .office_create_tool import OfficeCreateTool
 from .office_delete_tool import OfficeDeleteTool
+from .office_journal_tool import (
+    OfficeJournalFillFromContentTool,
+    OfficeJournalGenerateArticleTool,
+    OfficeJournalParseTemplateTool,
+    OfficeJournalValidateTool,
+)
 from .office_pdf_tool import (
     OfficeFillPdfFormTool,
     OfficeGeneratePdfTool,
@@ -177,6 +183,14 @@ def register_all_tools(
     # requires_tool_context=True（无绑定自动隐藏）；报告只写源文件同目录
     # 的派生文件名，落点不经 LLM 选择。
     registry.register(OfficeAnalyzeTool(policy=policy))
+    # 2026-09-10 journal template subsystem: 期刊模板 4 件套
+    # （parse_template / fill_from_content / generate_article / validate）。
+    # parse/validate 是 READ（docx 解析与 6 类规则校验）；fill/generate 是
+    # WRITE_LOCAL（落盘 docx）。全部 requires_tool_context=True。
+    registry.register(OfficeJournalParseTemplateTool(policy=policy))
+    registry.register(OfficeJournalFillFromContentTool(policy=policy))
+    registry.register(OfficeJournalGenerateArticleTool(policy=policy))
+    registry.register(OfficeJournalValidateTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -287,6 +301,10 @@ __all__ = [
     "OfficeAnalyzeWordTemplateTool",
     "OfficeFillWordTemplateTool",
     "OfficeAnalyzeTool",
+    "OfficeJournalParseTemplateTool",
+    "OfficeJournalFillFromContentTool",
+    "OfficeJournalGenerateArticleTool",
+    "OfficeJournalValidateTool",
     "EditTool",
     "GlobSearchTool",
     "CodebaseSearchTool",

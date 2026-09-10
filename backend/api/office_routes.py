@@ -19,10 +19,11 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from backend.data.database import Database, get_database
 from backend.office.apply_update import (
@@ -44,6 +45,19 @@ from backend.office.errors import (
     office_error_to_http_status,
 )
 from backend.office.excel import generate_xlsx, read_xlsx
+from backend.office.journal.generator import generate_structured
+from backend.office.journal.models import (
+    JournalContent,
+    JournalSpec,
+    JournalViolation,
+)
+from backend.office.journal.parser import parse_journal_spec
+from backend.office.journal.persistence import (
+    list_specs,
+    load_spec,
+    save_spec,
+)
+from backend.office.journal.validator import validate_document
 from backend.office.models import (
     OfficeDeleteResponse,
     OfficeDocStatus,
@@ -811,6 +825,277 @@ def list_self_checks_endpoint(doc_id: str, limit: int = 50) -> dict:
     return {"items": items, "total": len(items)}
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Journal template subsystem (2026-09-10): 5 endpoints
+#
+# - POST /office/journal/parse-template      : docx → JournalSpec (cache by sha256)
+# - GET  /office/journal/specs               : list workspace specs
+# - GET  /office/journal/specs/{spec_id}     : load one spec by id
+# - POST /office/journal/validate            : filled docx → violations[]
+# - POST /office/journal/fill-from-content   : structured fill → docx
+#
+# generate_article (LLM self-correction) is tool-only; no HTTP endpoint
+# because LLM streams are not yet wired into the FastAPI surface.
+# ──────────────────────────────────────────────────────────────────────
+
+
+class OfficeJournalParseRequest(BaseModel):
+    workspace_path: str = Field(..., description="Active workspace root.")
+    file_path: str = Field(..., description="Absolute path to .doc/.docx template.")
+    max_size_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        description="Plan §6 R1: enforce 50MB max before parsing.",
+    )
+
+
+class OfficeJournalSpecSummary(BaseModel):
+    spec_id: str
+    template_sha256: str
+    template_filename: str
+    headings: List[str]
+    body_pt: float
+
+
+class OfficeJournalSpecListResponse(BaseModel):
+    specs: List[OfficeJournalSpecSummary]
+    total: int
+
+
+class OfficeJournalSpecDetailResponse(BaseModel):
+    spec: JournalSpec
+
+
+class OfficeJournalParseResponse(BaseModel):
+    spec: JournalSpec
+    cached: bool = Field(..., description="True if spec was already in workspace cache.")
+
+
+class OfficeJournalFillRequest(BaseModel):
+    workspace_path: str
+    spec_id: Optional[str] = Field(default=None)
+    file_path: Optional[str] = Field(default=None)
+    content: dict
+    output_filename: Optional[str] = Field(default=None)
+
+
+class OfficeJournalFillResponse(BaseModel):
+    gen_id: str
+    spec_id: str
+    output_path: str
+    bytes_written: int
+
+
+class OfficeJournalValidateRequest(BaseModel):
+    workspace_path: str
+    spec_id: Optional[str] = Field(default=None)
+    file_path: str = Field(..., description="Absolute path to the filled .docx.")
+
+
+class OfficeJournalValidateResponse(BaseModel):
+    spec_id: str
+    file_path: str
+    violations: List[JournalViolation]
+    error_count: int
+    warning_count: int
+
+
+def _canonicalize_workspace(workspace_path: str) -> Path:
+    """Resolve workspace root; raise OfficePathError on missing dir."""
+    from backend.office.errors import OfficePathError
+
+    ws = validate_workspace(workspace_path)
+    if not ws.is_dir():
+        raise OfficePathError(f"workspace_path is not a directory: {workspace_path}")
+    return ws
+
+
+@router.post("/journal/parse-template", response_model=OfficeJournalParseResponse)
+def parse_journal_template_endpoint(
+    req: OfficeJournalParseRequest,
+) -> OfficeJournalParseResponse:
+    """Parse a journal .doc/.docx template into a JournalSpec.
+
+    Side effects: caches the spec under
+    ``<workspace>/office/journal/specs/<spec_id>.json`` and the parsed
+    template under ``<workspace>/office/journal/cache/<sha256>.docx``.
+    Subsequent calls with the same template (sha256) return the cached
+    spec and skip re-parsing.
+
+    Errors:
+    - file_path outside workspace → OfficePathError → 400
+    - file not found → OfficeFileNotFoundError → 404
+    - JournalParseError → 422
+    - file > max_size_bytes → OfficeSizeLimitError → 413
+    """
+    from backend.office.errors import OfficeFileNotFoundError, OfficePathError
+
+    canonical_ws = _canonicalize_workspace(req.workspace_path)
+    file_path = Path(req.file_path).expanduser()
+    # workspace boundary check (mirrors _validate_file_in_workspace)
+    try:
+        bounded = resolve_within(canonical_ws, file_path)
+    except Exception:
+        raise OfficePathError(
+            f"file_path escapes workspace: {req.file_path}",
+            file_path=file_path,
+        )
+    if not bounded.is_file():
+        raise OfficeFileNotFoundError(bounded)
+    _check_size_limit(bounded, req.max_size_bytes)
+    # JournalParseError inherits from BOTH JournalError (→ OfficeError)
+    # and OfficeParseError. Let it propagate naturally — the registered
+    # OfficeError exception handler maps OfficeParseError to HTTP 422.
+    spec = parse_journal_spec(bounded)
+    save_spec(canonical_ws, spec)
+    return OfficeJournalParseResponse(spec=spec, cached=False)
+
+
+@router.get("/journal/specs", response_model=OfficeJournalSpecListResponse)
+def list_journal_specs_endpoint(
+    workspace_path: str,
+) -> OfficeJournalSpecListResponse:
+    """List all JournalSpecs in the workspace."""
+    canonical_ws = _canonicalize_workspace(workspace_path)
+    specs = list_specs(canonical_ws)
+    summaries = [
+        OfficeJournalSpecSummary(
+            spec_id=s.spec_id,
+            template_sha256=s.template_sha256,
+            template_filename=s.template_filename,
+            headings=[h.keyword for h in s.headings],
+            body_pt=s.body_pt,
+        )
+        for s in specs
+    ]
+    return OfficeJournalSpecListResponse(specs=summaries, total=len(summaries))
+
+
+@router.get("/journal/specs/{spec_id}", response_model=OfficeJournalSpecDetailResponse)
+def get_journal_spec_endpoint(
+    spec_id: str, workspace_path: str
+) -> OfficeJournalSpecDetailResponse:
+    """Load a single spec by id. 404 when missing."""
+    from backend.office.journal.errors import JournalSpecNotFoundError
+
+    canonical_ws = _canonicalize_workspace(workspace_path)
+    try:
+        spec = load_spec(canonical_ws, spec_id)
+    except JournalSpecNotFoundError as exc:
+        from backend.office.errors import OfficeFileNotFoundError
+
+        raise OfficeFileNotFoundError(
+            Path(spec_id), message=f"journal spec not found: {spec_id}"
+        ) from exc
+    return OfficeJournalSpecDetailResponse(spec=spec)
+
+
+@router.post("/journal/fill-from-content", response_model=OfficeJournalFillResponse)
+def fill_journal_from_content_endpoint(
+    req: OfficeJournalFillRequest,
+) -> OfficeJournalFillResponse:
+    """Structured fill: write a JournalContent into a template, persist docx.
+
+    Source spec is resolved by ``spec_id`` (preferred) or ``file_path``
+    (re-parsed on each call). Output filename defaults to a uuid.
+    """
+    from backend.office.journal.errors import JournalContentShapeError, JournalSpecNotFoundError
+
+    canonical_ws = _canonicalize_workspace(req.workspace_path)
+    # Validate content shape up front for clearer 422.
+    try:
+        content_model = JournalContent.model_validate(req.content)
+    except Exception as exc:
+        raise JournalContentShapeError(f"content shape invalid: {exc}") from exc
+    # Resolve spec.
+    if isinstance(req.spec_id, str) and req.spec_id.strip():
+        try:
+            spec = load_spec(canonical_ws, req.spec_id.strip())
+        except JournalSpecNotFoundError as exc:
+            from backend.office.errors import OfficeFileNotFoundError
+
+            raise OfficeFileNotFoundError(
+                Path(req.spec_id), message=f"journal spec not found: {req.spec_id}"
+            ) from exc
+    elif isinstance(req.file_path, str) and req.file_path.strip():
+        from backend.office.errors import OfficePathError
+
+        try:
+            bounded = resolve_within(canonical_ws, Path(req.file_path))
+        except Exception:
+            raise OfficePathError(
+                f"file_path escapes workspace: {req.file_path}",
+                file_path=Path(req.file_path),
+            )
+        spec = parse_journal_spec(bounded)
+    else:
+        from backend.office.errors import OfficePathError
+
+        raise OfficePathError("spec_id or file_path required")
+    import uuid
+
+    filename = req.output_filename or f"paper-{uuid.uuid4().hex[:8]}.docx"
+    record = generate_structured(spec, content_model, canonical_ws, filename)
+    return OfficeJournalFillResponse(
+        gen_id=record.gen_id,
+        spec_id=record.spec_id,
+        output_path=record.output_path,
+        bytes_written=record.bytes_written,
+    )
+
+
+@router.post("/journal/validate", response_model=OfficeJournalValidateResponse)
+def validate_journal_endpoint(
+    req: OfficeJournalValidateRequest,
+) -> OfficeJournalValidateResponse:
+    """Validate a filled .docx against its spec.
+
+    Uses 6 rule categories (body_font/heading_font/body_size/line_spacing/
+    margins/headings_missing/citation_style). Returns violations grouped
+    into ``error_count`` / ``warning_count`` for UI rendering.
+    """
+    from docx import Document
+
+    from backend.office.errors import OfficeFileNotFoundError, OfficePathError
+    from backend.office.journal.errors import JournalSpecNotFoundError
+
+    canonical_ws = _canonicalize_workspace(req.workspace_path)
+    target = Path(req.file_path).expanduser()
+    try:
+        bounded = resolve_within(canonical_ws, target)
+    except Exception:
+        raise OfficePathError(
+            f"file_path escapes workspace: {req.file_path}",
+            file_path=target,
+        )
+    if not bounded.is_file():
+        raise OfficeFileNotFoundError(bounded)
+    # Resolve spec by id (preferred) or via re-parse of an optional template
+    # file_path on the spec side. We keep one spec path here.
+    if isinstance(req.spec_id, str) and req.spec_id.strip():
+        try:
+            spec = load_spec(canonical_ws, req.spec_id.strip())
+        except JournalSpecNotFoundError as exc:
+            raise OfficeFileNotFoundError(
+                Path(req.spec_id), message=f"journal spec not found: {req.spec_id}"
+            ) from exc
+    else:
+        # Without spec_id we cannot validate — spec is required for the rule
+        # set. Return a 400 to keep the contract explicit (rather than silently
+        # validating against an empty spec).
+        raise OfficePathError("spec_id is required for journal validation")
+    doc = Document(str(bounded))
+    violations = validate_document(doc, spec)
+    error_count = sum(1 for v in violations if v.severity.value == "error")
+    warning_count = sum(1 for v in violations if v.severity.value == "warning")
+    return OfficeJournalValidateResponse(
+        spec_id=spec.spec_id,
+        file_path=str(bounded),
+        violations=violations,
+        error_count=error_count,
+        warning_count=warning_count,
+    )
+
+
 __all__ = [
     "router",
     "register_office_exception_handlers",
@@ -846,4 +1131,10 @@ __all__ = [
     "pdf_to_word_endpoint",
     # Office parity round 3 (N4): self-check verification history
     "list_self_checks_endpoint",
+    # 2026-09-10 journal template subsystem
+    "parse_journal_template_endpoint",
+    "list_journal_specs_endpoint",
+    "get_journal_spec_endpoint",
+    "fill_journal_from_content_endpoint",
+    "validate_journal_endpoint",
 ]

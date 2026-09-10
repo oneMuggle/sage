@@ -754,6 +754,40 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       return url;
     },
   },
+  // Journal template subsystem (Task 7, 2026-09-10). 5 routes for
+  // backend/api/office_routes.py::journal_router (mounted at
+  // /api/v1/office/journal/*). The renderer parses a .docx template into
+  // a structured JournalSpec, lists saved specs, fetches one by id,
+  // validates a written paper against a spec, and fills a paper from
+  // structured content.
+  office_journal_parse_template: {
+    method: 'POST',
+    path: () => `/api/v1/office/journal/parse-template`,
+    body: (a) => ({ file_path: String((a as { file_path: string }).file_path) }),
+  },
+  office_journal_list_specs: {
+    method: 'GET',
+    path: () => `/api/v1/office/journal/specs`,
+  },
+  office_journal_get_spec: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/office/journal/specs/${encodeURIComponent(String((a as { spec_id: string }).spec_id))}`,
+  },
+  office_journal_validate: {
+    method: 'POST',
+    path: () => `/api/v1/office/journal/validate`,
+    body: (a) => {
+      const req = a as { spec_id?: string; file_path?: string };
+      return { spec_id: req.spec_id, file_path: req.file_path };
+    },
+  },
+  office_journal_fill_from_content: {
+    method: 'POST',
+    path: () => `/api/v1/office/journal/fill-from-content`,
+    body: (a) => a as Record<string, unknown>,
+  },
+
   // 2026-09-04: 本地开发环境助手 — 复用 ChatService.tools 路径,
   // runtime_exec 在后端经 PermissionEnforcer 审批 (与 bash 同等闸口)。
   // 见 docs/plans/2026-09-04_local-development-assistant.md Stage 4。

@@ -53,6 +53,7 @@ import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useWorkspaceContext } from '../app/providers/SessionWorkspaceProvider';
+import { JournalPanel } from '../features/journal';
 import {
   OfficeDocumentList,
   OfficeEditPreviewDialog,
@@ -77,8 +78,7 @@ export function Office() {
   // (which expects `string | null`) unchanged.
   const { t } = useI18n();
   const workspacePath = useCurrentWorkspace() ?? null;
-  const { bind, revoke, status: workspaceStatus, error: workspaceError } =
-    useWorkspaceContext();
+  const { bind, revoke, status: workspaceStatus, error: workspaceError } = useWorkspaceContext();
 
   const [preview, setPreview] = useState<OfficePreviewData | null>(null);
   // HIGH FIX: stale-read guard. Increments on every handleImportAndRead
@@ -409,9 +409,7 @@ export function Office() {
                 preview={preview}
                 workspacePath={workspacePath}
                 onEditPreview={
-                  preview && preview.docType !== 'pdf'
-                    ? () => setEditDialogOpen(true)
-                    : undefined
+                  preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined
                 }
               />
               {editDialogOpen && editDoc && preview?.docType !== 'pdf' && (
@@ -432,10 +430,8 @@ export function Office() {
           <div>
             <div className="flex items-center gap-3 mb-3">
               <h2 className="text-sm font-medium text-text-secondary">
-                {view === 'live'
-                  ? t('office.section.history')
-                  : t('office.section.archived')}{' '}
-                ({documents.length})
+                {view === 'live' ? t('office.section.history') : t('office.section.archived')} (
+                {documents.length})
               </h2>
               <div className="ml-auto flex gap-2">
                 {(
@@ -490,6 +486,13 @@ export function Office() {
 
           {/* Generate form (Phase 1.4) */}
           <OfficeGenerateForm workspacePath={workspacePath} onGenerated={refresh} />
+
+          {/* Task 7: journal template panel — parses a .docx template into a
+              JournalSpec, drafts a structured paper, and validates it against
+              the spec. Mounted inside the workspace branch so the panel has a
+              valid workspace path for fill-from-content. Reuses the
+              SessionWorkspaceProvider as its workspace source-of-truth. */}
+          <JournalPanel />
         </>
       )}
 

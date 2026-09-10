@@ -18,6 +18,7 @@
 | 10   | [用量与缓存面板](./10-usage-and-cache.md) | 设置 → 通用 → 用量卡片：请求/Token/成本汇总 + 缓存命中率 + 4 个 range tab + 请求明细分页 + SVG 趋势图 + CSV 导出（UTF-8 BOM，Excel 双击不乱码） |
 | 11   | [sage doctor CLI](./11-sage-doctor.md) | 安装/环境级 self-check：Win7 LTS、白屏、conda 错配一键诊断（退出码 0/1/2 + --json 机器可读） |
 | 12   | [本地开发环境助手](./12-local-development-assistant.md) | 设置 → 开发环境 Tab：自动发现 Python/Node.js 运行时 + 项目诊断 + 试跑代码片段 |
+| 13   | [期刊模板面板](./13-journal-template-panel.md) | Office 页面底部：模板规范抽取 / 论文格式校验 / 结构化填充生成符合期刊要求的 Word 文档 |
 
 ---
 
