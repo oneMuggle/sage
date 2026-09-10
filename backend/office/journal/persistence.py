@@ -24,6 +24,7 @@ from typing import List, Optional
 from backend.data.database import get_database
 from backend.office.journal.errors import JournalSpecNotFoundError
 from backend.office.journal.models import JournalGenerationRecord, JournalSpec
+from backend.office.path_safety import is_within
 
 _LAYOUT_ROOT = Path("office") / "journal"
 
@@ -44,48 +45,77 @@ def _validate_workspace(workspace: Path) -> Path:
     return resolve_within(workspace, workspace)
 
 
+def _safe_spec_path(workspace: Path, spec_id: str) -> Path:
+    """构造 spec JSON 路径并验证不会逃逸 workspace。
+
+    防御 spec_id 含 ``..`` / 路径分隔符的注入攻击（C1 review fix）。
+    """
+    candidate = workspace / _LAYOUT_ROOT / "specs" / f"{spec_id}.json"
+    resolved = candidate.resolve()
+    resolved_specs = (workspace / _LAYOUT_ROOT / "specs").resolve()
+    if not is_within(resolved_specs, resolved):
+        raise JournalSpecNotFoundError(f"invalid spec_id: {spec_id}")
+    return resolved
+
+
 def save_spec(workspace: Path, spec: JournalSpec) -> Path:
     """落 JSON 到 <workspace>/office/journal/specs/<spec_id>.json + 登记 SQLite。"""
     _validate_workspace(workspace)
-    layout = _layout_paths(workspace)
-    path = layout["specs"] / f"{spec.spec_id}.json"
-    # model_dump_json 不支持 ensure_ascii；改用 json.dumps(spec.model_dump())。
-    path.write_text(
+    path = _safe_spec_path(workspace, spec.spec_id)
+    # 原子写入：先写临时文件再 rename，避免写入中途断电/崩溃留半截 JSON（I2）。
+    tmp_path = path.with_suffix(".json.tmp")
+    tmp_path.write_text(
         json.dumps(spec.model_dump(mode="json"), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+    tmp_path.replace(path)
     # 登记 SQLite（spec_id 主键 → INSERT OR REPLACE 即可幂等）。
     # 注意：不关闭连接 —— Database 单例持有 _LockedConnection 代理，连接生命周期
     # 由 Database.close() 统一管理；中途 close 会让后续 init_db 的 conn.commit() 报
     # "Cannot operate on a closed database"（connection 与 proxy 共享同一底层 conn）。
-    db = get_database()
-    conn = db.get_connection()
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO office_journal_specs
-            (spec_id, template_sha256, template_filename, workspace_path, spec_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
-            spec.spec_id,
-            spec.template_sha256,
-            spec.template_filename,
-            str(workspace.resolve()),
-            spec.model_dump_json(),
-            time.time_ns() // 1_000_000,  # epoch ms
-        ),
-    )
+    try:
+        db = get_database()
+        conn = db.get_connection()
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO office_journal_specs
+                (spec_id, template_sha256, template_filename, workspace_path, spec_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                spec.spec_id,
+                spec.template_sha256,
+                spec.template_filename,
+                str(workspace.resolve()),
+                spec.model_dump_json(),
+                time.time_ns() // 1_000_000,  # epoch ms
+            ),
+        )
+    except Exception:
+        # SQLite 写入失败 → 回滚 JSON 文件，避免孤儿文件（I2）。
+        if path.exists():
+            path.unlink()
+        raise
     return path
 
 
 def load_spec(workspace: Path, spec_id: str) -> JournalSpec:
     """从 workspace JSON 读 spec；不存在抛 JournalSpecNotFoundError。"""
     _validate_workspace(workspace)
-    path = workspace / _LAYOUT_ROOT / "specs" / f"{spec_id}.json"
+    path = _safe_spec_path(workspace, spec_id)
     if not path.exists():
         raise JournalSpecNotFoundError(f"spec_id={spec_id}")
     data = path.read_bytes().decode("utf-8")
-    return JournalSpec.model_validate_json(data)
+    # M5: 损坏的 JSON / Pydantic ValidationError 统一包装为 not-found，
+    # 避免把内部异常泄露到 HTTP 路由层。
+    from pydantic import ValidationError
+
+    try:
+        return JournalSpec.model_validate_json(data)
+    except ValidationError as exc:
+        raise JournalSpecNotFoundError(
+            f"spec_id={spec_id} (corrupt: {exc.error_count()} validation error(s))"
+        ) from exc
 
 
 def list_specs(workspace: Path) -> List[JournalSpec]:

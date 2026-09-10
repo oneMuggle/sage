@@ -49,3 +49,52 @@ def test_parse_doc_without_pandoc_raises(tmp_path: Path, monkeypatch):
     with pytest.raises(JournalParseError) as exc:
         parse_journal_spec(src)
     assert "pandoc" in str(exc.value).lower()
+
+
+def test_heading_without_explicit_size_gets_fallback():
+    """I1: 无字号的 Heading 段落应使用 fallback（body_pt + 2.0），不抛 ValidationError。"""
+    spec = parse_journal_spec(FIXTURE_DIR / "simple_chinese_template.docx")
+    for h in spec.headings:
+        assert h.expected_pt > 0, (
+            f"HeadingSpec(keyword={h.keyword!r}) has expected_pt=0, "
+            f"should have fallback > 0"
+        )
+
+
+class _FakePara:
+    def __init__(self, text):
+        self.text = text
+
+
+class _FakeDoc:
+    def __init__(self, texts):
+        self.paragraphs = [_FakePara(t) for t in texts]
+
+
+def test_detect_citation_gb7714():
+    """I3: GB/T 7714 文献类型标记 [J]/[M] 应识别为 GB_T_7714。"""
+    from backend.office.journal.parser import _detect_citation_style
+
+    doc = _FakeDoc(
+        [
+            "张三. 期刊排版规范研究[J]. 编辑学报, 2020, 32(1): 1-5.",
+            "李四. 现代排版技术[M]. 北京: 科学出版社, 2019.",
+        ]
+    )
+    assert _detect_citation_style(doc) == CitationStyle.GB_T_7714
+
+
+def test_detect_citation_circled():
+    """I3: 圈码引用 ①② 应识别为 NUMERIC_CIRCLE。"""
+    from backend.office.journal.parser import _detect_citation_style
+
+    doc = _FakeDoc(["正文引用第一处①和第二处②。"])
+    assert _detect_citation_style(doc) == CitationStyle.NUMERIC_CIRCLE
+
+
+def test_detect_citation_numeric():
+    """I3: 方括号数字引用应识别为 NUMERIC。"""
+    from backend.office.journal.parser import _detect_citation_style
+
+    doc = _FakeDoc(["引用[1]和[2,3]。"])
+    assert _detect_citation_style(doc) == CitationStyle.NUMERIC

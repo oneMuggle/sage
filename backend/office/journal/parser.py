@@ -135,7 +135,9 @@ def _style_margins_cm(section) -> float:
     return float(left) / 360000.0
 
 
-def _heading_keywords(doc: Document) -> List[HeadingSpec]:
+def _heading_keywords(doc: Document, body_pt: float) -> List[HeadingSpec]:
+    """抽取 Heading 段落关键字；无字号时用 body_pt + 2.0 兜底（I1 fix）。"""
+    fallback_pt = max(body_pt + 2.0, 10.5)
     out: List[HeadingSpec] = []
     for para in doc.paragraphs:
         if para.style and para.style.name and para.style.name.startswith("Heading"):
@@ -147,11 +149,12 @@ def _heading_keywords(doc: Document) -> List[HeadingSpec]:
                 level = int(para.style.name.split()[-1])
             except (ValueError, IndexError):
                 level = 1
+            style_pt = _style_pt(para.style)
             out.append(
                 HeadingSpec(
                     keyword=text,
                     level=level,
-                    expected_pt=_style_pt(para.style) or 0.0,
+                    expected_pt=style_pt if style_pt > 0 else fallback_pt,
                 )
             )
     # 去重 keyword
@@ -165,12 +168,19 @@ def _heading_keywords(doc: Document) -> List[HeadingSpec]:
     return deduped
 
 
-def _detect_citation_style(doc: Document) -> CitationStyle:
-    """从全文文本匹配引用模式。"""
+def _detect_citation_style(doc: Document) -> CitationStyle:  # noqa: PLR0911
+    """从全文文本匹配引用模式。覆盖 6 个非 UNKNOWN 变体（I3 review fix）。"""
     full = "\n".join(p.text for p in doc.paragraphs)
     if not full.strip():
         return CitationStyle.UNKNOWN
-    # numeric style — bracket-N / bracket-N-M
+    # GB/T 7714 — author-date with document-type markers [J]/[M]/[C]/[D]/[P]/[S]/[R]/[G]
+    # 形如 "作者. 题名[J]. 刊名, 年" 或 "[1] 作者. 题名[M]. 出版地: 出版社, 年."
+    if re.search(r"\[[JMCDPSRG]\]", full):
+        return CitationStyle.GB_T_7714
+    # circled numbers — ①②③… (U+2460–U+2473)
+    if re.search(r"[①②③④⑤⑥⑦⑧⑨⑩]", full):
+        return CitationStyle.NUMERIC_CIRCLE
+    # numeric style — bracket-N / bracket-N-M (must come after GB/T 7714)
     if re.search(r"\[\d+(?:,\s*\d+)*\]", full):
         return CitationStyle.NUMERIC
     # author_year like "张三等，2020" 或 "(Smith, 2020)"
@@ -178,6 +188,7 @@ def _detect_citation_style(doc: Document) -> CitationStyle:
         return CitationStyle.AUTHOR_YEAR_PAREN
     if re.search(r"等[，,]\s*\d{4}", full):
         return CitationStyle.AUTHOR_YEAR
+    # NUMERIC_PAREN — e.g. "(1)" "(2)" — not yet distinguished; falls through to UNKNOWN.
     return CitationStyle.UNKNOWN
 
 
@@ -245,14 +256,17 @@ def parse_journal_spec(
     if margins_cm == 0.0:
         margins_cm = 2.54
 
-    headings = _heading_keywords(doc) or [
+    headings = _heading_keywords(doc, body_pt) or [
         HeadingSpec(keyword="摘要", level=1, expected_pt=heading_pt),
         HeadingSpec(keyword="关键词", level=1, expected_pt=heading_pt),
     ]
 
+    # M3: compute sha256 once, reuse for both spec_id and template_sha256.
+    file_hash = _sha256(docx_path)
+
     return JournalSpec(
-        spec_id=f"spec_{_sha256(docx_path)[:12]}",
-        template_sha256=_sha256(docx_path),
+        spec_id=f"spec_{file_hash[:12]}",
+        template_sha256=file_hash,
         template_filename=input_path.name,
         font_body=FontFamily(
             family=_normalize_font(body_ea),

@@ -97,3 +97,50 @@ def test_record_generation_round_trip(workspace):
 def test_ensure_journal_tables_idempotent():
     ensure_journal_tables()
     ensure_journal_tables()  # 第二次不抛
+
+
+def test_load_spec_path_traversal_raises(workspace):
+    """C1: spec_id 含 .. 应被 is_within 拦截，不逃逸 workspace。"""
+    with pytest.raises(JournalSpecNotFoundError):
+        load_spec(workspace, "../../etc/passwd")
+
+
+def test_save_spec_path_traversal_raises(workspace):
+    """C1: save_spec 含 .. 的 spec_id 同样应被拦截。"""
+    spec = _sample_spec(spec_id="../../etc/passwd")
+    with pytest.raises(JournalSpecNotFoundError):
+        save_spec(workspace, spec)
+
+
+def test_load_spec_corrupt_json_raises_not_found(workspace):
+    """M5: 损坏的 JSON 应包装为 JournalSpecNotFoundError，不泄露 Pydantic ValidationError。"""
+    corrupt_path = (
+        workspace / "office" / "journal" / "specs" / "spec_corrupt.json"
+    )
+    corrupt_path.write_text("{not valid json", encoding="utf-8")
+    with pytest.raises(JournalSpecNotFoundError) as exc_info:
+        load_spec(workspace, "spec_corrupt")
+    assert "corrupt" in str(exc_info.value).lower()
+
+
+def test_save_spec_atomic_cleanup_on_sqlite_failure(workspace, monkeypatch):
+    """I2: SQLite 写入失败时，已写的 JSON 文件应被清理。"""
+    spec = _sample_spec(spec_id="spec_atomic_test")
+    # 让 SQLite INSERT 抛异常
+    from backend.data.database import get_database
+
+    real_get_connection = get_database().get_connection
+
+    class _FailingConn:
+        def execute(self, *args, **kwargs):
+            raise RuntimeError("simulated SQLite failure")
+
+        def __getattr__(self, name):
+            return getattr(real_get_connection, name)
+
+    monkeypatch.setattr(get_database(), "get_connection", lambda: _FailingConn())
+    with pytest.raises(RuntimeError, match="simulated"):
+        save_spec(workspace, spec)
+    # JSON 文件应被清理
+    json_path = workspace / "office" / "journal" / "specs" / "spec_atomic_test.json"
+    assert not json_path.exists()
