@@ -261,7 +261,9 @@ function ChatInputInner({
   }, [value, atQuery, setValue]);
 
   const handleSend = () => {
-    if (!value.trim() || isLoading) return;
+    // RT5 (round7): 运行中允许发送 —— onSend（useChat.sendMessage）按会话
+    // 活跃流先走 steering 注入当前 run，失败回退队列；不再 UI 硬拦截。
+    if (!value.trim()) return;
     onSend(value.trim(), {
       knowledgeRefs: knowledgeRefs.length > 0 ? knowledgeRefs : undefined,
       attachments: files.length > 0 ? files : undefined,

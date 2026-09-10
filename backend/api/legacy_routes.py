@@ -30,7 +30,12 @@ from fastapi import APIRouter, Body, File, HTTPException, Query, Request, Upload
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, StrictBool
 
-from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
+from backend.api.chat_stream_registry import (
+    SENTINEL,
+    SessionBusyError,
+    StreamEntry,
+    StreamRegistry,
+)
 from backend.api.orch_routes import router as orch_routes_router
 from backend.api.settings_models import LegacySettingsPayload, model_dump_compat
 from backend.chat.compaction import (
@@ -2578,6 +2583,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 否则前端会收到两遍内容。
             streamed_content_delta = False
 
+            # RT7 (round7): 流式增量累积 —— 用户中断时把已产出的 partial
+            # 内容落盘（DONE 才落盘的旧语义会留下无回复的悬空 user 消息，
+            # 已渲染内容重载即丢）。
+            streamed_partial_parts: List[str] = []
+
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
             done_event = None
@@ -2604,6 +2614,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # (事件结构与旧 fake stream 的 content_delta 完全一致,前端无感)。
                 if evt.state.value == "content_delta":
                     streamed_content_delta = True
+                    streamed_partial_parts.append(str(evt.content or ""))
                     await entry.queue.put(evt.to_dict())
                 # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
                 # 真 LLM streaming 已由 run_loop 的 CONTENT_DELTA 覆盖(streamed_content_delta
@@ -2772,6 +2783,37 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # cancelled 标志必须在 _ACTIVE_STREAMS 注销前读取；未捕获异常时
             # sys.exc_info() 仍在传播中，可取到错误摘要。/btw 伪会话零命中静默。
             _cancelled_by_user = bool(_ACTIVE_STREAMS.get(stream_id, {}).get("cancelled"))
+            # RT7 (round7): 用户中断且 DONE 未产出时，把已流出的 partial
+            # 内容落盘为 assistant 消息（带 [已中断] 标记）——对齐 Claude
+            # Code 的 partial 保留语义：重载后 UI 与 DB 一致，续聊上下文
+            # 完整。LLMError / 自然完成路径不落 partial（保持既有语义）。
+            if _cancelled_by_user and not done_content and streamed_partial_parts:
+                partial_text = "".join(streamed_partial_parts).strip()
+                if partial_text:
+                    try:
+                        message_repo.save(
+                            DbMessage(
+                                id=str(uuid.uuid4()),
+                                session_id=data.session_id,
+                                role="assistant",
+                                content=partial_text + "\n\n[已中断]",
+                                reasoning_content=None,
+                                created_at=int(time.time() * 1000),
+                                model=(llm_config.get("model") if llm_config else "local"),
+                            )
+                        )
+                        await entry.queue.put(
+                            {"state": "partial_persisted", "content": partial_text}
+                        )
+                        logger.info(
+                            "[REQ %s] 中断 partial 已落盘 (%d 字符)",
+                            request_id,
+                            len(partial_text),
+                        )
+                    except Exception as partial_err:  # noqa: BLE001 — 收尾尽力而为
+                        logger.warning(
+                            "[REQ %s] 中断 partial 落盘失败: %s", request_id, partial_err
+                        )
             if getattr(entry, "status", None) == "suspended":
                 _terminal_status = "suspended"
                 _terminal_error = None
@@ -2818,7 +2860,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             unregister_stream_emitter(data.session_id)
 
-    await registry.create(stream_id, queue_maxsize=1000, producer=producer)
+    # RT6 (round7): 同会话已有活跃流时服务端仲裁 409（此前纯靠前端守卫）。
+    try:
+        await registry.create(stream_id, queue_maxsize=1000, producer=producer)
+    except SessionBusyError as busy_err:
+        logger.warning(
+            "[REQ %s] /chat/stream create 409 session_busy: active=%s",
+            request_id,
+            busy_err.active_stream_id,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "session_busy", "active_stream_id": busy_err.active_stream_id},
+        )
     return {"streamId": stream_id}
 
 
@@ -2897,6 +2951,43 @@ def interrupt(data: Optional[InterruptRequest] = Body(default=None)):
     stream_id = data.stream_id if data is not None else None
     target = interrupt_stream(stream_id)
     return {"status": "ok", "target": target}
+
+
+class SteerRequest(BaseModel):
+    """/chat/steer 请求体 —— 向运行中的主 agent 注入用户补充消息（RT5）。"""
+
+    stream_id: str
+    content: str
+
+
+#: steering 消息长度上限（与编排链 O1 steering 端点同额度）
+_STEER_MAX_CHARS = 8192
+
+
+@router.post("/chat/steer")
+def steer_agent(data: SteerRequest):
+    """RT5 (round7): 单 agent steering —— 运行中转达用户补充指示。
+
+    消息在目标 run 的**下一迭代边界**注入 LLM 上下文（agent.run_loop
+    消费，与编排链 O1 边界投递同语义）。纯内存注册表 + deque 操作，
+    不走 DB 锁；失败面：
+    - 404 stream_not_found：stream 不存在/已结束
+    - 409 not_running：stream 存在但 agent 不在 run 活跃窗口
+      （前端收到 409 回退排队语义——run 结束后作为新消息发送）
+    - 400 msg_too_long：超过 8KB 额度
+    """
+    text = (data.content or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail={"code": "empty_content"})
+    if len(text) > _STEER_MAX_CHARS:
+        raise HTTPException(status_code=400, detail={"code": "msg_too_long"})
+    entry = _ACTIVE_STREAMS.get(data.stream_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail={"code": "stream_not_found"})
+    agent_obj: SageAgent = entry["agent"]
+    if not agent_obj.inject_user_message(text):
+        raise HTTPException(status_code=409, detail={"code": "not_running"})
+    return {"ok": True}
 
 
 # ==================== 消息 API ====================

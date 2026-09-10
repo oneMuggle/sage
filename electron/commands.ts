@@ -96,6 +96,9 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/chat/stream/${encodeURIComponent(String(a.streamId))}`,
   },
   interrupt_agent: { method: 'POST', path: () => '/api/v1/interrupt' },
+  // RT5 (round7): 单 agent steering —— 运行中注入用户补充消息（body 经
+  // relay camelToSnakeKeys 转成 { stream_id, content }）。
+  chat_steer: { method: 'POST', path: () => '/api/v1/chat/steer' },
 
   // sessions
   list_sessions: {

@@ -106,9 +106,13 @@
 - 测试：新增 `test_context_first_aid.py` 13 例（估算口径/结构不变式/保护区/标记/非法条目/预算 env）；`test_agent_run_loop.py` +5 例（急救重试→DONE、两次耗尽原样抛出、mid-stream 跳过急救、高水位预防、非溢出错误不触发）；`test_llm_client_errors.py` +5 例（4 组溢出特征分类 + 非 400 溢出特征保持 UNKNOWN）；`test_compaction.py` +4 例（env/settings 覆盖优先、无覆盖与截断预算同口径）。四文件 76 用例全绿；相关回归面（subagent_runner/history_context/chat_stream/compactor/orchestration 关键字）204 passed——失败项逐一与基线 stash 对照确认为本地既有（executor 14 errors + e2e router 1，见 round6 §6 同款记录）；ruff 全过。
 - 前端仅 ContextMeter tooltip 文案（既有测试不校验该句子）；tsc/eslint 于批次 B 统一跑（共享 npm ci）。
 
-## 7. 批次 B 实施与验证记录
+## 7. 批次 B 实施与验证记录（2026-09-10）
 
-（实施后回填）
+- **RT5 steering**：`SageAgent` 增 `_pending_user_messages`（deque）+ `_run_loop_active` 窗口标志 + `inject_user_message()`（非活跃/空文本拒绝）+ `_drain_pending_user_messages()`；run_loop 启动清空残留（不跨 run 泄漏）、finally 收窄窗口；迭代顶部（中断检查之后）排空注入，格式 `【用户补充】{content}`（user role，与编排链 O1 边界投递同语义）。端点 `POST /api/v1/chat/steer`（`{stream_id, content}`，查 `_ACTIVE_STREAMS`；404 stream_not_found / 409 not_running / 400 empty_content·msg_too_long，额度 8KB 与 O1 对齐，纯内存不走 DB 锁）。前端：`chatApi.steer`（invoke `chat_steer`，失败归 false）→ `useChat.sendMessage` 会话忙时先试 steer（成功 toast"已转达，将在下一迭代边界生效"），编排模式与失败场景回退既有队列；`ChatInput.handleSend` 去掉 isLoading 硬拦截——三个 slash 路径漏守卫 bug 随统一路径自然修复。
+- **RT6 busy 409**：`StreamRegistry.create` 同会话已有 pending/running 且非挂起的 entry → `SessionBusyError`（挂起流与终态不占位，无 session_id 不检查）；`chat_stream_create` 映射 409 `{code:"session_busy", active_stream_id}`。
+- **RT7 partial 落盘**：producer 累积 CONTENT_DELTA（`streamed_partial_parts`）；finally 中用户取消且 DONE 未产出且有 partial → 落盘 assistant 消息（尾部 `[已中断]` 标记）+ 向队列推 `partial_persisted` 事件；LLMError/自然完成路径不落 partial（保持既有语义）。
+- **RT8 Esc**：`InputCard.handleKeyDown` 在 emacs 绑定之后加 Escape→`onInterrupt`（isLoading 时）；slash 菜单打开时 Escape 优先归菜单（原分支 return），不误触。
+- 测试：新增 `test_chat_steer.py` 9 例（agent 注入窗口/边界消费/跨 run 泄漏 + 端点 200/404/409/400）；`test_chat_stream_registry.py` +5 例（busy 拒绝/终态放行/挂起不占位/跨会话无碍/无 session 不检查）；前端 `ChatInput.steer.test.tsx` 3 例（运行中 Enter 可发送/停止按钮/Esc 空拦截）+ `InputCard.test.tsx` +3 例（Esc 中断/非加载不触发/加载中 Enter 照常）。后端 36 用例回归面全绿（含既有 interrupt/registry/streaming 回归），前端 25 passed；ruff / tsc / eslint 全过。
 
 ## 8. 批次 C 实施与验证记录
 

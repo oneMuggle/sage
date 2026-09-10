@@ -15,7 +15,12 @@ from typing import Optional
 
 import pytest
 
-from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
+from backend.api.chat_stream_registry import (
+    SENTINEL,
+    SessionBusyError,
+    StreamEntry,
+    StreamRegistry,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -212,3 +217,53 @@ async def test_queue_maxsize_bounds_memory():
     entry.queue.get_nowait()
     await asyncio.wait_for(put_task, timeout=0.1)
     put_task.result()  # 不抛错
+
+
+# ============================================================================
+# RT6 (round7): 同会话 busy 仲裁 —— 已有活跃流时 create 拒绝
+# ============================================================================
+
+
+@pytest.mark.asyncio()
+async def test_create_rejects_second_active_stream_for_same_session():
+    reg = StreamRegistry()
+    await reg.create("sid-a", queue_maxsize=10, session_id="sess-1")
+    with pytest.raises(SessionBusyError) as exc_info:
+        await reg.create("sid-b", queue_maxsize=10, session_id="sess-1")
+    assert exc_info.value.session_id == "sess-1"
+    assert exc_info.value.active_stream_id == "sid-a"
+
+
+@pytest.mark.asyncio()
+async def test_create_allows_new_stream_after_terminal_status():
+    reg = StreamRegistry()
+    entry = await reg.create("sid-a", queue_maxsize=10, session_id="sess-1")
+    entry.status = "done"
+    e2 = await reg.create("sid-b", queue_maxsize=10, session_id="sess-1")
+    assert e2.status == "pending"
+
+
+@pytest.mark.asyncio()
+async def test_suspended_stream_does_not_block_new_stream():
+    """挂起（A4 suspend-resume）不占 busy 位。"""
+    reg = StreamRegistry()
+    entry = await reg.create("sid-a", queue_maxsize=10, session_id="sess-1")
+    entry.suspended = True
+    e2 = await reg.create("sid-b", queue_maxsize=10, session_id="sess-1")
+    assert e2 is not None
+
+
+@pytest.mark.asyncio()
+async def test_different_sessions_do_not_block_each_other():
+    reg = StreamRegistry()
+    await reg.create("sid-a", queue_maxsize=10, session_id="sess-1")
+    e2 = await reg.create("sid-b", queue_maxsize=10, session_id="sess-2")
+    assert e2 is not None
+
+
+@pytest.mark.asyncio()
+async def test_create_without_session_id_never_busy():
+    reg = StreamRegistry()
+    await reg.create("sid-a", queue_maxsize=10, session_id=None)
+    e2 = await reg.create("sid-b", queue_maxsize=10, session_id=None)
+    assert e2 is not None
