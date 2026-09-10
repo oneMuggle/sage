@@ -1983,15 +1983,49 @@ app.whenReady().then(async () => {
   }
   const ready = await waitForBackend();
   if (!ready) {
+    // ── Diagnostic: log backend process state at timeout ────────────────
+    // Differentiate "backend crashed" (exitCode != null) from "backend
+    // still running but slow" (exitCode === null). Carried over from
+    // alpha.19-win7 (PR #585) — universally useful on slow-startup machines.
+    const procState = backendProc
+      ? { pid: backendProc.pid, exitCode: backendProc.exitCode, signalCode: backendProc.signalCode }
+      : { pid: null, exitCode: null, signalCode: null };
+    const backendGenState = currentBackend
+      ? { pid: currentBackend.pid, generation: currentBackend.generation }
+      : null;
     logger.error('main: backend health timeout', {
       url: BACKEND_HEALTH,
       timeoutMs: BACKEND_HEALTH_TIMEOUT_MS,
+      backendProc: procState,
+      currentBackend: backendGenState,
     });
+
+    // ── Auto-retry once ─────────────────────────────────────────────────
+    // Some machines need >90s for the full module import chain. Give one
+    // more timeout period before showing the dialog.
+    logger.info('main: auto-retrying backend health check (slow-startup allowance)');
+    const autoRetryReady = await waitForBackend();
+    if (autoRetryReady) {
+      logger.info('main: backend ready after auto-retry');
+      createMainWindow();
+      buildApplicationMenu();
+      void updateManager
+        ?.onAppStartup(() => mainWindow, BACKEND_URL)
+        .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
+      return;
+    }
+
     // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
     // User can open logs, retry the health check, or quit.
+    // Include backend process state so the user (and support logs) can
+    // differentiate crashed vs still-starting.
+    const procStateLine = backendProc
+      ? `\n\n后端进程状态: pid=${backendProc.pid}, exitCode=${backendProc.exitCode}, signalCode=${backendProc.signalCode}`
+      : '\n\n后端进程状态: 进程不存在 (backendProc=null)';
+    const baseDetail = `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。${procStateLine}`;
     const choice = await showStartupFailureDialog({
-      reason: `后端服务在 ${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)} 秒内未响应`,
-      detail: `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。`,
+      reason: `后端服务在 ${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)} 秒内未响应 (已自动重试一次)`,
+      detail: baseDetail,
     });
     if (choice === 'retry') {
       const ready2 = await waitForBackend();

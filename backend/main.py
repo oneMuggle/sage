@@ -5,10 +5,26 @@ FastAPI 后端入口
 import asyncio
 import logging
 import os
+import sys
+import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Callable
+
+# ── Startup diagnostic timer (module-level) ───────────────────────────────
+# 2026-09-10 (slow-startup incident): record monotonic start BEFORE any
+# heavy import so we can diagnose which phase is slow on machines where the
+# backend hangs between "python -m backend.main" and "uvicorn.run()".
+# Guarded by __name__ == "__main__" so pytest imports don't emit noise.
+# Carried over from release/win7 PR #585; equally applicable to main.
+_startup_t0: float = time.monotonic() if __name__ == "__main__" else 0.0
+if __name__ == "__main__":
+    print(  # noqa: T201
+        f"[sage-startup] t=0.0s module load begin (pid={os.getpid()})",
+        file=sys.stderr,
+        flush=True,
+    )
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -245,6 +261,13 @@ async def lifespan(app: FastAPI):
     db = Database()
     db.init_db()
     app.state.db = db
+    if __name__ == "__main__":
+        _elapsed_db = time.monotonic() - _startup_t0
+        print(  # noqa: T201
+            f"[sage-startup] t={_elapsed_db:.1f}s db.init_db() complete",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # L15 SecretBox: 历史明文 apiKey 一次性加密回写(Windows DPAPI / macOS keychain /
     # Linux secret-tool)。fail-open — 任何失败保留明文, 不阻塞启动, doctor
@@ -482,6 +505,14 @@ async def lifespan(app: FastAPI):
         API_MODE,
     )
 
+    if __name__ == "__main__":
+        _elapsed_lifespan = time.monotonic() - _startup_t0
+        print(  # noqa: T201
+            f"[sage-startup] t={_elapsed_lifespan:.1f}s lifespan startup complete (before yield)",
+            file=sys.stderr,
+            flush=True,
+        )
+
     yield
 
     # 关闭时清理
@@ -709,10 +740,30 @@ async def health_check():
     return {"status": "ok", **_build_health_metadata()}
 
 
+# ── Diagnostic: all module-level imports complete ─────────────────────────
+# 2026-09-10: if this line never appears in stderr, the hang is inside the
+# import chain. If it appears but uvicorn never starts, the hang is inside
+# __main__ or lifespan(). Elapsed time isolates slow imports from slow init.
+if __name__ == "__main__":
+    _elapsed_imports = time.monotonic() - _startup_t0
+    print(  # noqa: T201
+        f"[sage-startup] t={_elapsed_imports:.1f}s all module imports complete",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
 
     from backend.utils.logging import setup_logging
+
+    _elapsed_entry = time.monotonic() - _startup_t0
+    print(  # noqa: T201
+        f"[sage-startup] t={_elapsed_entry:.1f}s entering __main__",
+        file=sys.stderr,
+        flush=True,
+    )
 
     port = int(os.environ.get("PYTHON_BACKEND_PORT", "8765"))
     # v2: 把本机后端地址注入环境变量,让 backend.core.legacy.llm_client.LLMConfig
@@ -733,4 +784,10 @@ if __name__ == "__main__":
     for _name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         logging.getLogger(_name).setLevel(logging.INFO)
 
+    _elapsed_serve = time.monotonic() - _startup_t0
+    print(  # noqa: T201
+        f"[sage-startup] t={_elapsed_serve:.1f}s calling uvicorn.run() on :{port}",
+        file=sys.stderr,
+        flush=True,
+    )
     uvicorn.run(app, host="127.0.0.1", port=port, log_config=None)
