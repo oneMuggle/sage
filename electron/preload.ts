@@ -20,6 +20,7 @@ import type { WindowControlsBridge } from '../src/shared/api/windowControlsClien
 import type {
   ImportResult,
   ImportedOfficeFile,
+  JournalElectronApiBridge,
   OfficeDocType,
   OfficeElectronApiBridge,
   OfficeManagedRef,
@@ -29,6 +30,14 @@ import type {
   SkillsElectronApiBridge,
   UpdateElectronApiBridge,
 } from '../src/shared/types/electron-api';
+import type {
+  JournalFillFromContentRequest,
+  JournalFillFromContentResponse,
+  JournalGetSpecResponse,
+  JournalListSpecsResponse,
+  JournalParseTemplateResponse,
+  JournalValidateResponse,
+} from '../src/shared/api/types';
 import type { CheckResult } from './updateManager';
 import type { UpdateStateChangedEvent } from './updateIpc';
 import type { UpdateChannel, UpdateConfig, UpdateStrategy } from './updateConfig';
@@ -198,6 +207,30 @@ const electronAPI = {
     showOfficeDocumentInFolder: (ref: OfficeManagedRef) =>
       ipcRenderer.invoke('office:show-in-folder', ref) as Promise<void>,
   } satisfies OfficeElectronApiBridge,
+
+  /**
+   * Journal template bridge (Task 7, 2026-09-10): parses .doc/.docx
+   * journal templates into structured JournalSpec, lists saved specs,
+   * fetches one by id, validates existing papers against a spec, and
+   * fills papers from structured content. LLM tool wiring is handled
+   * separately via chat-driven `office_journal_generate_article`.
+   */
+  journal: {
+    parseTemplate: (filePath: string) =>
+      ipcRenderer.invoke('office_journal_parse_template', {
+        file_path: filePath,
+      }) as Promise<JournalParseTemplateResponse>,
+    listSpecs: () =>
+      ipcRenderer.invoke('office_journal_list_specs', {}) as Promise<JournalListSpecsResponse>,
+    getSpec: (specId: string) =>
+      ipcRenderer.invoke('office_journal_get_spec', {
+        spec_id: specId,
+      }) as Promise<JournalGetSpecResponse>,
+    validate: (args: { spec_id?: string; file_path?: string }) =>
+      ipcRenderer.invoke('office_journal_validate', args) as Promise<JournalValidateResponse>,
+    fillFromContent: (req: JournalFillFromContentRequest) =>
+      ipcRenderer.invoke('office_journal_fill_from_content', req) as Promise<JournalFillFromContentResponse>,
+  } satisfies JournalElectronApiBridge,
 
   updates: {
     check: () => ipcRenderer.invoke('update:check') as Promise<CheckResult>,

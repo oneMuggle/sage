@@ -10,6 +10,14 @@
  * PR-C (2026-07-02): added skills bridge for Rescan + Import buttons.
  */
 
+import type {
+  JournalFillFromContentRequest,
+  JournalFillFromContentResponse,
+  JournalGetSpecResponse,
+  JournalListSpecsResponse,
+  JournalParseTemplateResponse,
+  JournalValidateResponse,
+} from '../api/types';
 import type { UpdateChannel, UpdateConfig, UpdateStrategy } from '../../../electron/updateConfig';
 import type { UpdateStateChangedEvent } from '../../../electron/updateIpc';
 import type { CheckResult } from '../../../electron/updateManager';
@@ -128,6 +136,34 @@ export interface OfficeElectronApiBridge {
   showOfficeDocumentInFolder: (ref: OfficeManagedRef) => Promise<void>;
 }
 
+/**
+ * Task 7 (2026-09-10): Journal template bridge for /journal side panel.
+ *
+ * - parseTemplate: POST /api/v1/office/journal/parse-template — parses a
+ *   .docx/.doc journal template into a structured JournalSpec.
+ * - listSpecs: GET /api/v1/office/journal/specs — all saved specs.
+ * - getSpec: GET /api/v1/office/journal/specs/{id} — single spec by id.
+ * - validate: POST /api/v1/office/journal/validate — 6-rule validator
+ *   (font/size/spacing/margins/headings/citations) against a saved paper.
+ * - fillFromContent: POST /api/v1/office/journal/fill-from-content —
+ *   structured-fill generator applies spec + content to docx.
+ *
+ * The bridge mirrors the existing `office` shape (a sibling group
+ * returning backend response envelopes). The 5 IPC commands are wired
+ * in electron/commands.ts::COMMAND_ROUTES; the renderer-side wrapper
+ * lives in src/shared/api/journalApi.ts.
+ */
+export interface JournalElectronApiBridge {
+  parseTemplate: (filePath: string) => Promise<JournalParseTemplateResponse>;
+  listSpecs: () => Promise<JournalListSpecsResponse>;
+  getSpec: (specId: string) => Promise<JournalGetSpecResponse>;
+  validate: (args: {
+    spec_id?: string;
+    file_path?: string;
+  }) => Promise<JournalValidateResponse>;
+  fillFromContent: (req: JournalFillFromContentRequest) => Promise<JournalFillFromContentResponse>;
+}
+
 export interface BackendRequest {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
@@ -166,6 +202,7 @@ export interface ElectronAPI {
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
   office: OfficeElectronApiBridge;
+  journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;
   /**
    * Phase 6 (2026-06-27): Native folder picker (used by LLM Wiki and Office).
