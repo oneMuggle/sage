@@ -137,6 +137,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(CODE_SEARCH_TOOLS)
         | set(WEB_TOOLS)
         | set(MEMORY_TOOLS)
+        | set(SESSION_SEARCH_TOOLS)
         | set(OFFICE_TOOLS)
         | set(RUNTIME_TOOLS)
         | set(GIT_TOOLS)
