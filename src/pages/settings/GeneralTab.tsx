@@ -272,6 +272,53 @@ function AutoCheckpointCard() {
   );
 }
 
+/**
+ * E-2 (round5 批次 E): 关闭即隐藏到托盘——状态由 Electron 主进程持有
+ * （JSON 文件，close 事件拦截），因此走 window.electronAPI IPC 而非
+ * 后端 preferences KV。
+ */
+function CloseToTrayCard(): JSX.Element {
+  const [enabled, setEnabled] = useState<boolean | null>(null); // null = 加载中
+
+  useEffect(() => {
+    let mounted = true;
+    window.electronAPI
+      ?.getCloseToTray?.()
+      .then((resp) => {
+        if (mounted) setEnabled(resp.enabled === true);
+      })
+      .catch(() => {
+        if (mounted) setEnabled(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleToggle = (v: boolean): void => {
+    setEnabled(v);
+    window.electronAPI
+      ?.setCloseToTray?.(v)
+      .catch(() => undefined);
+  };
+
+  return (
+    <section data-testid="close-to-tray-section">
+      <h3 className="text-sm font-semibold text-text mb-3">托盘</h3>
+      <SettingRow
+        label="关闭时隐藏到托盘"
+        desc="点关闭按钮时隐藏到系统托盘而非退出；从托盘图标或 Alt+Shift+S 恢复"
+      >
+        {enabled === null ? (
+          <span className="text-xs text-muted">…</span>
+        ) : (
+          <Toggle value={enabled} onChange={handleToggle} />
+        )}
+      </SettingRow>
+    </section>
+  );
+}
+
 export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
   const { settings, updateSettings } = useSettings();
   const { t } = useI18n();
@@ -323,6 +370,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
         </SettingRow>
       </section>
       <AutoCheckpointCard />
+      <CloseToTrayCard />
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.permission')}</h3>
         <PermissionModeSelector />

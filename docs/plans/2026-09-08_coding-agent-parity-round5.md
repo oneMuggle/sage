@@ -161,3 +161,28 @@ bash 跑测试非零退出时，LLM 只能从 30KiB 截断文本里自己找失�
 - bash_tool 挂点：`_run_foreground` 读输出后解析，命中且 exit_code != 0 → `content["test_failures"] = {...}`（`_decorate` 同款派生字段形态，非零退出本就 success=True 语义不变）。
 
 **测试**：新 `test_output_parser.py`——pytest 样例、vitest 样例、混合噪声、无匹配 None、超长输出只扫尾部。
+
+## 2.4 批次 E 详细设计（2026-09-10 增补，本次实施）
+
+> 基线：origin/main `0e46f6f9`；分支 `feat/parity-r5-batch-e`。主题：**桌面壳收尾 + F2 语义索引 v1**（避开 #547 Office 专项与 round6 领域）。
+
+### E-1 `sage://` 深链（P2，工作量 S-M）
+
+- main.ts：`app.setAsDefaultProtocolClient("sage")`（vitest guard 同 requestSingleInstanceLock 模式）；macOS `open-url` 事件 + Windows 经 second-instance argv 消费；
+- 新纯函数 `parseSageDeepLink(argv: string[]): { sessionId: string } | null`（解析 `sage://chat?session=<id>`，非法/无参返回 null）+ 单测；
+- 命中后 show 窗口并复用既有 `sage:event:session-notify-click` 通道 → `App.sessionDeeplink` 桥已有 navigate(`/chat?session=`) 消费端，零前端改动。
+
+### E-2 关闭入托盘（P2，工作量 S；U12 收尾，推翻 tray.ts 头注约定）
+
+- 主进程 JSON 文件先例（demo mode）：`<userData>/sage-close-to-tray.json` + IPC `sage:close-to-tray:get/set`；
+- GeneralTab 新 Toggle（invoke 直连主进程）；close 事件拦截：enabled 且 !appIsQuitting → `e.preventDefault(); win.hide()`；托盘「显示/退出」菜单已可恢复。
+
+### E-3 F2 工作区语义索引 v1（P2，工作量 L）
+
+- 新工具 `codebase_search(query)`（READ）：增量索引工作区源文件 → embedding 余弦 top-k → `{results:[{path, start_line, snippet}]}`；
+- 存储：**sqlite3 + numpy 余弦**（`~/.sage/workspace-index/<workspace-sha1>/index.sqlite3`）——纯 wheel 依赖（numpy 已有），规避 hnswlib 无 py38 wheel / sqlite-vec 打包风险；v1 块数上限 50k；
+- embedding：复用 wiki `build_embed_request/parse_embed_response`（OpenAI 兼容），配置取 `app_settings.modelSelections.embeddingModel`（新增 `load_embedding_config()`）；未配置 embedding → 工具报错引导设置；
+- 增量：源文件 mtime+size 缓存于索引库，只重嵌变化文件；枚举复用 EXCLUDED_DIRS 剪枝 + 源码扩展名白名单；分块按 40 行滑窗；
+- 索引构建同步执行（工具自身就是显式调用，首问全量索引属预期行为），单文件 256KB 读取上限。
+
+**测试**：deep link 解析单测；close-to-tray IPC 单测；workspace_index 枚举/分块/余弦检索/增量单测（embedding 用假向量函数注入，不发网络）。

@@ -237,6 +237,21 @@ export interface ElectronAPI {
   cleanupLogs?: () => Promise<{ removed: number }>;
   /** T13: Update SAGE_LOG_LEVEL for the main process logger. */
   setLogLevel?: (level: LogLevel) => Promise<{ ok: true }>;
+  /**
+   * 2026-08-27: 演示模式开关持久化. 用户在 Settings → 通用 切换后,
+   * 写入 <userData>/sage-demo-mode.json, 下次启动 main 进程读取生效.
+   */
+  resetDemoMode?: () => Promise<{ ok: boolean; error?: string }>;
+  setDemoMode?: (demoMode: boolean) => Promise<{ ok: boolean; error?: string }>;
+  /** E-2 (round5 批次 E): 关闭即隐藏到托盘偏好读写 */
+  getCloseToTray?: () => Promise<{ enabled: boolean }>;
+  setCloseToTray?: (enabled: boolean) => Promise<{ ok: boolean; enabled: boolean }>;
+  /**
+   * 2026-08-27: 演示模式同步标志. main 进程激活演示模式时经
+   * webPreferences.additionalArguments → preload argv 注入, 首屏请求在
+   * settings 加载完成前即可命中拦截。
+   */
+  demoMode?: boolean;
 }
 
 declare global {
