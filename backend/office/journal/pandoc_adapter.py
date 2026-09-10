@@ -11,10 +11,8 @@ import hashlib
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from backend.office.journal.errors import JournalPandocError
-
 
 _TIMEOUT_SECONDS = 30
 
