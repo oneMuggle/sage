@@ -46,6 +46,10 @@ WEB_TOOLS = WEB_SEARCH_TOOLS + WEB_FETCH_TOOLS
 
 MEMORY_TOOLS = ("memory_search", "memory_save")
 
+# Round 2 (session_search): 跨会话历史对话原文检索 —— 记忆库存抽取条目，
+# 本工具补原始对话的检索入口（对标 hermes session search）。
+SESSION_SEARCH_TOOLS = ("session_search",)
+
 # Office CRUD 七件套（PR-3 补 office_archive — soft-delete，与 office_restore 配对）
 # + 2026-09 Office Parity Batch-1：把 HTTP 端点已验证的 PDF 三类能力
 # （读文本 / 生成 / 表单读写）与 Word 模板两件套（分析 / 填充）接入工具面。

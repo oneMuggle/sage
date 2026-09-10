@@ -71,6 +71,13 @@ SKILL_NUDGE_SUFFIX = (
     "如果它可能是你会重复的流程，可以考虑把它保存为一个技能（SKILL.md）。"
 )
 
+# Round 2 (审阅触发升级, 对标 hermes background review 的判断力):
+# 后台审阅入队阈值降到 2 —— 2~3 次工具调用的边缘回合带
+# ``needs_screening=true`` 入队，由 ReviewService LLM 初筛决定要不要起稿
+# （LLM 不可用则跳过，宁缺勿滥）；≥4 次的复杂回合照旧直达起稿。
+# 用户可见的 SKILL_NUDGE 维持 ≥4 不变。审批闸口不变。
+REVIEW_ENQUEUE_TOOL_CALL_THRESHOLD = 2
+
 # OTel tracer（P3.3：用于在 span 上记录关键属性）
 _tracer = get_tracer("chat_service")
 
@@ -415,13 +422,21 @@ class ChatService:
                 tool_call_count >= SKILL_NUDGE_TOOL_CALL_THRESHOLD
                 and not activation_block
             )
+            # Round 2: 低阈值入队（2~3 次工具调用）→ 需要 LLM 初筛
+            should_enqueue_review = (
+                tool_call_count >= REVIEW_ENQUEUE_TOOL_CALL_THRESHOLD
+                and not activation_block
+            )
+            needs_screening = (
+                tool_call_count < SKILL_NUDGE_TOOL_CALL_THRESHOLD
+            )
 
             if response.content and is_complex_turn:
                 response.content = (response.content or "") + SKILL_NUDGE_SUFFIX
                 span.set_attribute("skills.nudge_applied", True)
 
             # 4.5.1) Background Review: enqueue complex_turn signal
-            if is_complex_turn:
+            if should_enqueue_review:
                 from backend.skills.review_queue import get_review_queue
 
                 review_queue = get_review_queue()
@@ -437,6 +452,7 @@ class ChatService:
                         "tool_calls": tool_calls_serialized,
                         "tool_call_count": tool_call_count,
                         "threshold": SKILL_NUDGE_TOOL_CALL_THRESHOLD,
+                        "needs_screening": needs_screening,
                     },
                 )
                 span.set_attribute("review.complex_turn_enqueued", True)
