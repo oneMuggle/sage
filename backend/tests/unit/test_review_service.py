@@ -45,11 +45,10 @@ VALID_LLM_OUTPUT = json.dumps(
 class TestGenerateDraftHappyPath:
     """Core happy-path tests for ReviewService.generate_draft."""
 
-    def test_default_review_service_uses_provider_client_contract(self, monkeypatch):
-        """The production default must expose ProviderClient.complete()."""
-        from backend.adapters.out.llm.openai import OpenAIProvider
+    def test_default_review_service_wraps_settings_llm_client(self, monkeypatch):
+        """L3: 生产默认改为 _LLMClientReviewProvider(settings 构建的 LLMClient)。"""
+        from backend.core.legacy.llm_client import LLMClient
         from backend.data.settings_repo import SettingsRepository
-        from backend.ports.llm import ProviderClient
         from backend.skills import review_service
 
         monkeypatch.setattr(
@@ -69,8 +68,8 @@ class TestGenerateDraftHappyPath:
         review_service.reset_review_service()
         try:
             service = review_service.get_review_service()
-            assert isinstance(service.llm_provider, ProviderClient)
-            assert isinstance(service.llm_provider, OpenAIProvider)
+            assert isinstance(service.llm_provider, review_service._LLMClientReviewProvider)
+            assert isinstance(service.llm_provider._client, LLMClient)
         finally:
             review_service.reset_review_service()
 
@@ -100,11 +99,7 @@ class TestGenerateDraftHappyPath:
         review_service.reset_review_service()
         try:
             service = review_service.get_review_service()
-            service.llm_provider.complete = AsyncMock(
-                return_value=_make_mock_turn(VALID_LLM_OUTPUT)
-            )
-            await service.generate_draft("complex_turn", {})
-            assert service.llm_provider.complete.call_args.kwargs["model"] == "configured-review-model"
+            assert service._model == "configured-review-model"
         finally:
             review_service.reset_review_service()
 
@@ -121,12 +116,29 @@ class TestGenerateDraftHappyPath:
         finally:
             review_service.reset_review_service()
 
-    def test_ollama_provider_allows_empty_api_key(self):
+    def test_ollama_endpoint_allows_empty_api_key(self, monkeypatch):
         """Ollama is local and must remain usable without an API key."""
-        from backend.adapters.out.llm.ollama import OllamaProvider
+        from backend.data.settings_repo import SettingsRepository
+        from backend.orchestration.llm_factory import resolve_model_from_settings
 
-        provider = OllamaProvider(api_key="")
-        assert provider._api_key == ""  # noqa: SLF001
+        monkeypatch.setattr(
+            SettingsRepository,
+            "get_json",
+            lambda self, key: {
+                "endpoints": [
+                    {
+                        "id": "local",
+                        "protocol": "ollama",
+                        "baseUrl": "http://localhost:11434/v1",
+                        "apiKey": "",
+                        "discoveredModels": [{"id": "local-model"}],
+                    }
+                ],
+                "modelSelections": {"chatModel": {"endpointId": "local"}},
+            },
+        )
+
+        assert resolve_model_from_settings() == "local-model"
 
     @pytest.mark.asyncio()
     async def test_generate_draft_uses_selected_chat_model(self, monkeypatch):

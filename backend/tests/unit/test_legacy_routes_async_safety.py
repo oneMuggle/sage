@@ -19,6 +19,10 @@ import pytest
 
 # legacy_routes.py 路径(相对本测试文件位置,跨 cwd 都稳定)
 LEGACY_ROUTES_PATH = Path(__file__).resolve().parent.parent.parent / "api" / "legacy_routes.py"
+# S7-3/L1 (P8): 会话 CRUD 与 compact/fork/messages 已拆至本模块 (同一 router 对象)
+LEGACY_SESSION_ROUTES_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "api" / "legacy_session_routes.py"
+)
 
 # `async def` 但无 await 的 handler 是事件循环阻塞风险点。
 # 本测试维护一份"必须 keep_async"的精确白名单(11 个)。
@@ -29,17 +33,17 @@ LEGACY_ROUTES_PATH = Path(__file__).resolve().parent.parent.parent / "api" / "le
 # win7 另有 4 个 memory 相关 async handler(get_memories_by_turn 等),一并纳入。
 KEEP_ASYNC_HANDLERS = frozenset(
     {
-        "compact_session",  # L597 — M4 manual compact,内调 LLM 摘要
-        "execute_skill",  # L1026 — skill 执行,内调 LLM
-        "execute_slash_command",  # L1068 — slash 命令,内调 LLM
-        "import_skills",  # L1161 — 文件上传,内调 LLM
-        "chat",  # L1352 — 主 chat 端点,内调 LLM 流
-        "chat_stream_create",  # L1466 — SSE 流,内调 LLM 流
-        "chat_stream_attach",  # L2010 — SSE 续接,内调事件流
-        "get_memories_by_turn",  # L2262 — memory 查询
-        "get_user_profile",  # L2270 — 用户画像
-        "get_session_summary",  # L2285 — 会话摘要
-        "memory_events",  # L2296 — memory 事件流
+        "compact_session",  # M4 manual compact,内调 LLM 摘要 (L1 后现居 legacy_session_routes)
+        "execute_skill",  # skill 执行,内调 LLM
+        "execute_slash_command",  # slash 命令,内调 LLM
+        "import_skills",  # 文件上传,内调 LLM
+        "chat",  # 主 chat 端点,内调 LLM 流
+        "chat_stream_create",  # SSE 流,内调 LLM 流
+        "chat_stream_attach",  # SSE 续接,内调事件流
+        "get_memories_by_turn",  # memory 查询 (win7 特有)
+        "get_user_profile",  # 用户画像 (win7 特有)
+        "get_session_summary",  # 会话摘要 (win7 特有)
+        "memory_events",  # memory 事件流 (win7 特有)
     }
 )
 
@@ -113,6 +117,9 @@ def test_keep_async_handlers_actually_async():
     src_path = LEGACY_ROUTES_PATH
     src = src_path.read_text(encoding="utf-8")
     funcs = _load_top_level_functions(src)
+    # L1 (P8): compact_session 已拆至 legacy_session_routes —— 合并两个模块的顶层函数
+    session_src = LEGACY_SESSION_ROUTES_PATH.read_text(encoding="utf-8")
+    funcs += _load_top_level_functions(session_src)
     name_to_func = {f.name: f for f in funcs}
 
     for keep_name in KEEP_ASYNC_HANDLERS:
@@ -132,11 +139,10 @@ def test_async_handler_count_matches_design():
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
 
-    # 修复后:11 个 keep_async (compact_session, execute_skill, execute_slash_command, import_skills,
-    # chat, chat_stream_create, chat_stream_attach, get_memories_by_turn,
-    # get_user_profile, get_session_summary, memory_events)
-    assert len(async_endpoints) == 11, (
-        f"legacy_routes 应有 11 个 async def handler,实际 {len(async_endpoints)}:\n"
+    # win7: 原 11 个,compact_session 已拆至 legacy_session_routes (L1, P8)
+    # 后剩 10 个; compact_session 在那里由 test_keep_async 的合并扫描覆盖。
+    assert len(async_endpoints) == 10, (
+        f"legacy_routes 应有 10 个 async def handler,实际 {len(async_endpoints)}:\n"
         + "\n".join(f"  {f.name} (line {f.lineno})" for f in async_endpoints)
     )
 
@@ -153,8 +159,8 @@ def test_async_handlers_count_invariant_against_internal_helpers():
     async_endpoints = [
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
-    # 同样 11 个,跟 test_async_handler_count_matches_design 一致
-    assert len(async_endpoints) == 11
+    # 同样 10 个,跟 test_async_handler_count_matches_design 一致
+    assert len(async_endpoints) == 10
 
 
 if __name__ == "__main__":
