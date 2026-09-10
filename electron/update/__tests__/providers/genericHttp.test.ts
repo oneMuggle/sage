@@ -5,6 +5,7 @@ import type { GenericHttpConfig } from '../../../../electron/update/providerConf
 
 // mock fetch
 const fetchMock = vi.fn();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 (global as any).fetch = fetchMock;
 
 const baseCfg: GenericHttpConfig = {

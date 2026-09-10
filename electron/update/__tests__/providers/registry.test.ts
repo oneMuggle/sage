@@ -1,4 +1,5 @@
 // electron/update/__tests__/providers/registry.test.ts
+import { describe, it, expect } from 'vitest';
 import { ProviderRegistry } from '../../../../electron/update/providers/registry';
 import type { UpdateProvider } from '../../../../electron/update/providers/base';
 
@@ -11,7 +12,7 @@ describe('ProviderRegistry', () => {
       downloadAsset: async () => '',
       ping: async () => ({ ok: true, latencyMs: 1 }),
     };
-    reg.register('github', (cfg) => fakeProvider);
+    reg.register('github', () => fakeProvider);
     const built = reg.build({
       id: 'a', type: 'github', displayName: 'x', enabled: true, isDefault: true,
       createdAt: '', updatedAt: '',

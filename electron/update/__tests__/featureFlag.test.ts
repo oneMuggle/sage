@@ -5,6 +5,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 // (vitest does not have a real electron runtime). app.isPackaged is read at
 // call time, so we expose it as a mutable handle the tests can flip.
 vi.mock('electron', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const electronMock: any = {
     app: { isPackaged: false },
   };

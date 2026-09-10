@@ -1,4 +1,5 @@
 // electron/update/__tests__/providers/base.test.ts
+import { describe, it, expect } from 'vitest';
 import { ProviderType } from '../../../electron/update/providers/base';
 
 describe('UpdateProvider base types', () => {

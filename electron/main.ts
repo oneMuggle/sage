@@ -1453,6 +1453,7 @@ async function registerIpcHandlers(): Promise<void> {
       createGenericHttpProvider({
         id: cfg.id,
         displayName: cfg.displayName,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         config: cfg.config as any,
       }),
     );

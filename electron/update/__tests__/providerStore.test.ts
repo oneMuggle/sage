@@ -5,9 +5,11 @@ import { ProviderStore } from '../../../electron/update/providerStore';
 
 // mock electron-store
 vi.mock('electron-store', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let data: any = {};
   class MockStore {
     get = (k: string) => data[k];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set = (k: string, v: any) => { data[k] = v; };
     delete = (k: string) => { delete data[k]; };
     _reset = () => { data = {}; };
@@ -20,6 +22,7 @@ vi.mock('electron', () => ({
 
 describe('ProviderStore', () => {
   beforeEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const MockStore = Store as any;
     new MockStore()._reset();
   });
@@ -29,10 +32,12 @@ describe('ProviderStore', () => {
     await store.add({
       type: 'github', displayName: 'G1', enabled: true, isDefault: true,
       config: { owner: 'o', repo: 'r', token: 'ghp_xxx', channelMap: {}, requireArtifactSignature: false },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await store.add({
       type: 'gitee', displayName: 'G2', enabled: true, isDefault: true,
       config: { owner: 'o', repo: 'r', token: 't', channelMap: {}, requireArtifactSignature: false },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     const list = await store.list();
     expect(list).toHaveLength(2);
