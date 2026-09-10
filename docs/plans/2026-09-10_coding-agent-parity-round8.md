@@ -67,4 +67,9 @@
 
 ## 7. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A（编排失败恢复） | PR #598（squash 049258af） | PR #604（cherry-win7-r8，squash c57342cb） |
+| B（单 agent 计划模式） | PR #600（squash b20af9b1） | 同上（A/B 合并对齐） |
+
+win7 对齐说明：两批经 cherry-win7-r8 按序 cherry-pick；Chat.tsx 的 handleCancelRun 保留 win7 既有版本、只新增 handleRerunFailed；useChat destructure 与 slashCommands 冲突按"双方保留"（learn + plan 并存）；本地 ruff 全过后由 CI py3.8 job 终验，squash merge（#604）。
