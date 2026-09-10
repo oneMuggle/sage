@@ -1,5 +1,6 @@
 // electron/update/providerConfig.ts
-import { ProviderType } from './providers/base';
+import type { ProviderType } from './providers/base';
+export type { ProviderType };
 
 export interface ProviderInstanceConfig {
   id: string;
