@@ -61,6 +61,9 @@ def _safe_spec_path(workspace: Path, spec_id: str) -> Path:
 def save_spec(workspace: Path, spec: JournalSpec) -> Path:
     """落 JSON 到 <workspace>/office/journal/specs/<spec_id>.json + 登记 SQLite。"""
     _validate_workspace(workspace)
+    # 确保父目录存在（specs/）；cache/ 与 generated/ 由 parse_journal_spec /
+    # generate_structured 自己负责，这里只关心 specs/ 这一条路径。
+    _layout_paths(workspace)
     path = _safe_spec_path(workspace, spec.spec_id)
     # 原子写入：先写临时文件再 rename，避免写入中途断电/崩溃留半截 JSON（I2）。
     tmp_path = path.with_suffix(".json.tmp")

@@ -39,8 +39,13 @@ class OfficeError(Exception):
 class OfficeFileNotFoundError(OfficeError):
     """The requested file does not exist."""
 
-    def __init__(self, file_path: Path) -> None:
-        super().__init__(f"Office file not found: {file_path}", file_path=file_path)
+    def __init__(self, file_path: Path, message: Optional[str] = None) -> None:
+        # message 可覆盖默认文案（默认走基类自动拼装的 "Office file not found: ..."），
+        # 调用方常用来补一句业务上下文，例如 "journal spec not found: spec_xxx"。
+        if message is None:
+            super().__init__(f"Office file not found: {file_path}", file_path=file_path)
+        else:
+            super().__init__(message, file_path=file_path)
 
 
 class OfficePathError(OfficeError):
