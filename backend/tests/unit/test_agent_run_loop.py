@@ -357,8 +357,13 @@ async def test_run_loop_malformed_tool_arguments_return_error_to_llm():
 
 
 @pytest.mark.asyncio()
-async def test_run_loop_llm_empty_content_yields_done_with_empty_string():
-    """LLM 返回空 content 且无 tool_call → 直接 DONE,content 为空串。"""
+async def test_run_loop_llm_empty_content_yields_done_with_empty_string(monkeypatch):
+    """LLM 返回空 content 且无 tool_call → 直接 DONE,content 为空串。
+
+    注: B1 空响应守卫（test_agent_loop_guards.py）默认开启重试; 本测试
+    显式关闭守卫, 固化禁用路径的旧行为（SAGE_EMPTY_RESPONSE_MAX_RETRIES=0）。
+    """
+    monkeypatch.setenv("SAGE_EMPTY_RESPONSE_MAX_RETRIES", "0")
     agent = SageAgent()
     agent.llm_client = MagicMock()
     agent.llm_client.chat = AsyncMock(return_value=_make_response(content=""))
