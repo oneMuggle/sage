@@ -53,6 +53,7 @@ import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useWorkspaceContext } from '../app/providers/SessionWorkspaceProvider';
+import { JournalPanel } from '../features/journal';
 import {
   OfficeDocumentList,
   OfficeEditPreviewDialog,
@@ -490,6 +491,13 @@ export function Office() {
 
           {/* Generate form (Phase 1.4) */}
           <OfficeGenerateForm workspacePath={workspacePath} onGenerated={refresh} />
+
+          {/* Task 7: journal template panel — parses a .docx template into a
+              JournalSpec, drafts a structured paper, and validates it against
+              the spec. Mounted inside the workspace branch so the panel has a
+              valid workspace path for fill-from-content. Reuses the
+              SessionWorkspaceProvider as its workspace source-of-truth. */}
+          <JournalPanel />
         </>
       )}
 
