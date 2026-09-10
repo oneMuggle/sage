@@ -134,6 +134,35 @@ class ConsolidationService:
         return result
 
 
+def collect_active_skills() -> List[Dict[str, Any]]:
+    """收集 active（未归档）技能的巡检输入清单。
+
+    经 InprocSkillAdapter（与 legacy_routes 同一技能面）惰性获取；
+    适配器不可用（如测试环境无技能注册）返回 []。
+    """
+    try:
+        from backend.api.legacy_routes import _get_skill_adapter
+
+        adapter = _get_skill_adapter()
+    except Exception as exc:  # noqa: BLE001 — 巡检为增强能力
+        logger.warning("技能清单获取失败: %s", exc)
+        return []
+    skills: List[Dict[str, Any]] = []
+    for ext in adapter.list_skills_extended():
+        if ext.get("archived"):
+            continue
+        name = ext.get("name", "")
+        skills.append(
+            {
+                "name": name,
+                "description": ext.get("description", ""),
+                "when_to_use": ext.get("when_to_use", ""),
+                "usage_count": adapter.usage_count(name),
+            }
+        )
+    return skills
+
+
 # ------------------------------------------------------------------ #
 # Global singleton（与 get_review_service 同模式）
 # ------------------------------------------------------------------ #

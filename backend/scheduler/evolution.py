@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import uuid
@@ -1085,6 +1086,105 @@ def _safe_json_loads(s: str) -> list:
         return []
 
 
+
+
+class SkillConsolidationTask(BaseEvolutionTask):
+    """技能巡检任务 (Round 5/7, 对标 hermes curator consolidation review)
+
+    每周用 LLM 审阅 active 技能清单，产出 merge/archive/revise 建议，
+    追加进技能审计台账（consolidation_note，append-only，不动文件）。
+    人工审阅建议后走既有 archive / draft-approve 流程收口。
+    LLM/provider 不可用时静默跳过（no-op，不影响调度）。
+    """
+
+    def __init__(self, db=None, config: dict = None):
+        super().__init__(db=db)
+        self.config = config or {}
+
+    async def run_async(self):
+        logger.info("开始执行技能巡检任务...")
+        try:
+            from backend.skills.consolidator import (
+                collect_active_skills,
+                get_consolidation_service,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("巡检模块导入失败，跳过: %s", exc)
+            return 0
+
+        service = get_consolidation_service()
+        if service is None:
+            logger.info("LLM provider 未装配，技能巡检跳过")
+            return 0
+
+        skills = collect_active_skills()
+        if not skills:
+            logger.info("无 active 技能，巡检跳过")
+            return 0
+
+        pinned = self._pinned_names()
+        suggestions = await service.scan(skills, pinned_names=sorted(pinned))
+
+        from backend.skills.audit import SkillAuditLog
+
+        audit_log = SkillAuditLog(db=self.db)
+        recorded = 0
+        for suggestion in suggestions:
+            ok = audit_log.record(
+                "+".join(suggestion.get("skill_names", [])),
+                "consolidation_note",
+                actor="system",
+                after_content=json.dumps(suggestion, ensure_ascii=False),
+                source="consolidation_cron",
+            )
+            if ok:
+                recorded += 1
+
+        await self._log_evolution(
+            evolution_type="skill_consolidation",
+            description=f"技能巡检完成: {len(skills)} 个技能, {recorded} 条建议",
+            status="success",
+        )
+        logger.info(f"技能巡检完成: {recorded} 条建议")
+        return recorded
+
+    async def _log_evolution(
+        self, evolution_type: str, description: str, status: str, error_message: str = None
+    ):
+        """记录进化日志（与其他任务类同构）"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO evolution_log
+            (id, evolution_type, description, status, error_message, trigger_type, created_at, completed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                str(uuid.uuid4()),
+                evolution_type,
+                description,
+                status,
+                error_message,
+                "scheduled",
+                int(time.time()),
+                int(time.time()) if status == "success" else None,
+            ),
+        )
+
+        conn.commit()
+
+    def _pinned_names(self):
+        try:
+            from backend.skills.lifecycle import get_lifecycle_store
+
+            return get_lifecycle_store().get_pinned_names()
+        except Exception:  # noqa: BLE001
+            return set()
+
+
+
 def create_evolution_tasks(config: dict = None) -> Dict[str, BaseEvolutionTask]:
     """
     创建所有进化任务
@@ -1118,6 +1218,12 @@ def create_evolution_tasks(config: dict = None) -> Dict[str, BaseEvolutionTask]:
     if config.get("importance_reevaluation", {}).get("enabled", True):
         tasks["importance_reevaluation"] = ImportanceReevaluationTask(
             db=db, config=config.get("importance_reevaluation", {})
+        )
+
+    # 技能巡检任务 (Round 5/7) — 默认启用，每周运行；无 LLM 时 no-op
+    if config.get("skill_consolidation", {}).get("enabled", True):
+        tasks["skill_consolidation"] = SkillConsolidationTask(
+            db=db, config=config.get("skill_consolidation", {})
         )
 
     # 记忆整合任务（"做梦"）— 默认启用，每周运行

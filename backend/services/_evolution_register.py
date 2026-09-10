@@ -20,6 +20,8 @@ _DEFAULT_SCHEDULE: Dict[str, Tuple[str, str, str]] = {
     "preference_learning": ("0", "2", "*"),
     "importance_reevaluation": ("0", "4", "0"),
     "memory_consolidation": ("30", "4", "0"),
+    # Round 5/7: 技能巡检 —— 每周六 05:30；LLM/provider 未装配时任务为 no-op
+    "skill_consolidation": ("30", "5", "6"),
 }
 
 _TIME_RE = re.compile(r"^([0-9]{1,2}):([0-9]{2})$")

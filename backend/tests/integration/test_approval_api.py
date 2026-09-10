@@ -27,6 +27,19 @@ def client():
     return TestClient(app, headers={"Authorization": "Bearer test-local-auth-token"})
 
 
+def _with_provenance(content: str) -> str:
+    """Round 7: 与 approve 路由一致的 provenance 注入期望值。"""
+    from backend.skills.skill_md.frontmatter import dump, parse
+
+    meta, body = parse(content)
+    metadata_field = meta.get("metadata")
+    if not isinstance(metadata_field, dict):
+        metadata_field = {}
+    metadata_field.setdefault("provenance", "agent-created")
+    meta["metadata"] = metadata_field
+    return dump(meta, body)
+
+
 def _make_draft(
     draft_id: str = "draft-1",
     name: str = "test-skill",
@@ -175,7 +188,9 @@ class TestApproveSkillDraft:
         mock_port.rescan_skill_mds.assert_called_once_with()
 
         # Approval must explicitly request the non-overwriting behavior.
-        mock_loader.write.assert_called_once_with("cool-skill", content, overwrite=False)
+        mock_loader.write.assert_called_once_with(
+            "cool-skill", _with_provenance(content), overwrite=False
+        )
 
         mock_store.update_status.assert_called_once_with("draft-42", "approved")
 
@@ -207,7 +222,9 @@ class TestApproveSkillDraft:
             "code": "skill_already_exists",
             "message": "Skill already exists",
         }
-        mock_loader.write.assert_called_once_with("cool-skill", content, overwrite=False)
+        mock_loader.write.assert_called_once_with(
+            "cool-skill", _with_provenance(content), overwrite=False
+        )
         mock_store.update_status.assert_not_called()
         mock_port.rescan_skill_mds.assert_not_called()
 
