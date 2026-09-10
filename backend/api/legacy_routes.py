@@ -2889,7 +2889,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 partial_text = "".join(streamed_partial_parts).strip()
                 if partial_text:
                     try:
-                        message_repo.save(
+                        # win7 对齐：本分支无 message_repo 局部（#575 才引入），
+                        # 落盘走与 DONE 持久化同一把 _SQLITE_LOCK（_run_db_sync）。
+                        await _run_db_sync(
+                            MessageRepository().save,
                             DbMessage(
                                 id=str(uuid.uuid4()),
                                 session_id=data.session_id,
@@ -2898,7 +2901,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 reasoning_content=None,
                                 created_at=int(time.time() * 1000),
                                 model=(llm_config.get("model") if llm_config else "local"),
-                            )
+                            ),
                         )
                         await entry.queue.put(
                             {"state": "partial_persisted", "content": partial_text}
