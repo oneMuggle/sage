@@ -19,7 +19,14 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 #: 台账动作（append-only 语义: 记录永不 UPDATE/DELETE）
-AUDIT_ACTIONS = ("create", "update", "archive", "restore", "rollback")
+AUDIT_ACTIONS = (
+    "create",
+    "update",
+    "archive",
+    "restore",
+    "rollback",
+    "consolidation_note",  # Round 5: LLM 巡检建议（只记录，不动文件）
+)
 
 
 class SkillAuditLog:

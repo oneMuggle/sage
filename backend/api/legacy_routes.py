@@ -1103,10 +1103,23 @@ def archive_skill(name: str, data: SkillArchive):
 
     - 200 + 完整 skill dict（含新 lifecycle）
     - 404 + 结构化 detail（技能名不存在）
+    - 409 — 技能被 pin（Round 5: 钉住技能不参与归档）
     - 422（FastAPI 自动）— archived 缺失 / 类型错
 
     归档技能从 auto_activate / slash 候选排除（adapter 层），文件不动、可恢复。
     """
+    # Round 5: pin 防归档 —— 钉住技能拒绝 archive=True 请求
+    if data.archived:
+        from backend.skills.lifecycle import get_lifecycle_store
+
+        if get_lifecycle_store().is_pinned(name):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "type": "skill_pinned",
+                    "message": f"skill '{name}' is pinned; unpin before archiving",
+                },
+            )
     adapter = _get_skill_adapter()
     if not adapter.set_archived(name, data.archived):
         raise HTTPException(
@@ -1117,6 +1130,39 @@ def archive_skill(name: str, data: SkillArchive):
     ext = next((e for e in adapter.list_skills_extended() if e["name"] == name), None)
     assert ext is not None  # set_archived 已 guard
     return _skill_to_dict(ext, adapter.is_enabled(name), adapter.usage_count(name))
+
+
+class SkillPinRequest(BaseModel):
+    """``POST /skills/{name}/pin`` 请求体（Round 5）。"""
+
+    pinned: bool
+
+
+@router.post("/skills/{name}/pin")
+@with_db_lock
+def pin_skill(name: str, data: SkillPinRequest):
+    """钉住 / 取消钉住技能（Round 5: 钉住后不可归档，巡检不给出 archive 建议）。
+
+    - 200 + ``{"name": ..., "pinned": ...}``
+    - 404 — 技能名不存在
+    """
+    from backend.skills.lifecycle import get_lifecycle_store
+
+    store = get_lifecycle_store()
+    if not store.is_pinned(name):
+        # 未 pin 过的技能名也可能尚未注册 —— 校验技能存在于技能面
+        # （adapter 层成员检查，无副作用），否则 404。
+        adapter = _get_skill_adapter()
+        if not any(e.get("name") == name for e in adapter.list_skills_extended()):
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "type": "skill_not_found",
+                    "message": f"skill '{name}' not found",
+                },
+            )
+    store.set_pinned(name, data.pinned)
+    return {"name": name, "pinned": data.pinned}
 
 
 class SkillExecuteRequest(BaseModel):
@@ -3225,6 +3271,85 @@ def rollback_skill(name: str):
     )
     logger.info("Skill rolled back: %s", _safe_log_field(name))
     return {"status": "rolled_back", "skill_name": name}
+
+
+# ---------------------------------------------------------------------------
+# Round 5 (curator consolidation): LLM 巡检建议 —— 只产建议进台账，
+# 不自动动文件；人工审阅后走既有 archive / draft-approve 流程。
+# ---------------------------------------------------------------------------
+
+
+@router.post("/skills/consolidation/scan")
+async def scan_skill_consolidation():
+    """Run an LLM consolidation scan over active skills.
+
+    - 200 + ``{"suggestions": [...], "scanned": N}``
+    - 503 — LLM provider 未装配（巡检不可用）
+    """
+    from backend.skills.consolidator import get_consolidation_service
+    from backend.skills.lifecycle import get_lifecycle_store
+
+    service = get_consolidation_service()
+    if service is None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "type": "llm_unavailable",
+                "message": "LLM provider not configured; consolidation scan unavailable",
+            },
+        )
+
+    adapter = _get_skill_adapter()
+    store = get_lifecycle_store()
+    pinned = store.get_pinned_names()
+    skills = [
+        {
+            "name": e.get("name", ""),
+            "description": e.get("description", ""),
+            "when_to_use": e.get("when_to_use", ""),
+            "usage_count": adapter.usage_count(e.get("name", "")),
+        }
+        for e in adapter.list_skills_extended()
+        if not e.get("archived")
+    ]
+    suggestions = await service.scan(skills, pinned_names=sorted(pinned))
+
+    # 建议落审计台账（append-only；每条建议一条 consolidation_note）
+    from backend.skills.audit import get_skill_audit_log
+
+    audit_log = get_skill_audit_log()
+    for suggestion in suggestions:
+        audit_log.record(
+            "+".join(suggestion["skill_names"]),
+            "consolidation_note",
+            actor="system",
+            after_content=json.dumps(suggestion, ensure_ascii=False),
+            source="consolidation_scan",
+        )
+    return {"suggestions": suggestions, "scanned": len(skills)}
+
+
+@router.get("/skills/consolidation/suggestions")
+def list_consolidation_suggestions(limit: int = 50):
+    """List recorded consolidation suggestions (from the audit ledger)."""
+    from backend.skills.audit import get_skill_audit_log
+
+    entries = get_skill_audit_log().list_entries(limit=limit)
+    suggestions = []
+    for entry in entries:
+        if entry["action"] != "consolidation_note":
+            continue
+        try:
+            suggestions.append(
+                {
+                    "skill_names": entry["skill_name"].split("+"),
+                    "suggestion": json.loads(entry.get("after_content") or "{}"),
+                    "created_at": entry["created_at"],
+                }
+            )
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return {"suggestions": suggestions}
 
 
 def _draft_to_dict(draft) -> dict:
