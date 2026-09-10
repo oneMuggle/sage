@@ -56,10 +56,20 @@ const HMAC_SECRET_ENV = 'SAGE_UPDATE_STATE_HMAC_SECRET';
 export function getUpdateHmacSecret(): string {
   const configuredSecret = process.env[HMAC_SECRET_ENV];
   if (configuredSecret) return configuredSecret;
-  if (app.isPackaged) {
-    throw new Error(`${HMAC_SECRET_ENV} must be configured in packaged builds`);
-  }
 
+  // Packaged and dev modes share the same per-installation fallback:
+  // generate a 32-byte random secret on first launch and persist it to
+  // userData (mode 0o600). Subsequent launches read the same secret.
+  //
+  // This used to throw "must be configured in packaged builds" when
+  // SAGE_UPDATE_STATE_HMAC_SECRET was unset, but neither release.yml nor
+  // release-win7.yml ever injects that env var — so every packaged build
+  // shipped since PR #442/#447 crashed on first launch (alpha.18-win7 /
+  // alpha.37-main all share this bug). The HMAC protects only the local
+  // ``update-state.json`` integrity (it is not a cross-machine trust
+  // anchor), so per-install random secrets are equivalent to a build-time
+  // shared secret for this purpose. See PR #578 (alpha.20-win7) and
+  // PR #579 (alpha.38-main).
   const secretPath = path.join(app.getPath('userData'), '.update-state-hmac-secret');
   try {
     return fssync.readFileSync(secretPath, 'utf8').trim();
