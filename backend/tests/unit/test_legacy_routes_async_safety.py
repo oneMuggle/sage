@@ -116,7 +116,11 @@ def test_keep_async_handlers_actually_async():
 
 
 def test_async_handler_count_matches_design():
-    """legacy_routes.py 应有 7 个 async def handler(PR #294 §1.2 修复后)。"""
+    """legacy_routes.py 应有 7 个 async def handler。
+
+    Round 5 (+1): scan_skill_consolidation —— LLM 巡检端点,
+    async 因为需要 await LLM provider.complete()。
+    """
     src_path = LEGACY_ROUTES_PATH
     src = src_path.read_text(encoding="utf-8")
     funcs = _load_top_level_functions(src)
@@ -124,11 +128,12 @@ def test_async_handler_count_matches_design():
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
 
-    # 修复后:6 个 keep_async (execute_skill, execute_slash_command,
-    # import_skills, chat, chat_stream_create, chat_stream_attach)。
+    # 6 个 keep_async (execute_skill, execute_slash_command,
+    # import_skills, chat, chat_stream_create, chat_stream_attach)
+    # + Round 5: scan_skill_consolidation (LLM 巡检) = 7。
     # compact_session 已拆至 legacy_session_routes (L1, P8), 在那里由
     # test_keep_async_handlers_actually_async 的合并扫描覆盖。
-    assert len(async_endpoints) == 6, (
+    assert len(async_endpoints) == 7, (
         f"legacy_routes 应有 7 个 async def handler,实际 {len(async_endpoints)}:\n"
         + "\n".join(f"  {f.name} (line {f.lineno})" for f in async_endpoints)
     )
@@ -146,8 +151,8 @@ def test_async_handlers_count_invariant_against_internal_helpers():
     async_endpoints = [
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
-    # 同样 6 个,跟 test_async_handler_count_matches_design 一致
-    assert len(async_endpoints) == 6
+    # 同样 7 个,跟 test_async_handler_count_matches_design 一致
+    assert len(async_endpoints) == 7
 
 
 if __name__ == "__main__":
