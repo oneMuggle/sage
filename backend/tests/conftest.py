@@ -6,6 +6,7 @@ import contextlib
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -124,6 +125,15 @@ def setup_test_db(request):
 
     monkeypatch = request.getfixturevalue("monkeypatch")
     monkeypatch.setenv("SAGE_LOCAL_AUTH_TOKEN", "test-local-auth-token")
+    # Round 5 修复: recent_projects 等 user-data 文件是跨 worker 共享的
+    # 读-改-写资源，xdist 并行时互相覆盖 → wiki 授权 403 偶发。
+    # 给每个 xdist worker 独立的 user-data 目录，消除跨进程竞态。
+    xdist_worker = os.environ.get("PYTEST_XDIST_WORKER", "")
+    if xdist_worker:
+        monkeypatch.setenv(
+            "SAGE_USER_DATA_DIR",
+            str(Path(os.environ.get("SAGE_USER_DATA_DIR", tempfile.gettempdir())) / f"xdist-{xdist_worker}"),
+        )
     from backend.api import local_auth
     local_auth._local_auth_token = None
     initialize_local_auth_token()

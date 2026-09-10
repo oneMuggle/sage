@@ -103,6 +103,52 @@ class SkillLifecycleStore:
             self.db = get_database()
         return self.db.get_connection()
 
+    # ------------------------------------------------------------------ #
+    # Round 5: pin（防归档）—— 独立表，不动既有 skill_lifecycle 结构
+    # ------------------------------------------------------------------ #
+
+    def _ensure_pins_table(self) -> None:
+        self._conn().execute(
+            "CREATE TABLE IF NOT EXISTS skill_pins "
+            "(name TEXT PRIMARY KEY, created_at INTEGER NOT NULL)"
+        )
+
+    def set_pinned(self, name: str, pinned: bool) -> None:
+        """设置/取消 pin（钉住的技能不被归档/巡检建议归档）。best-effort。"""
+        if not name:
+            return
+        try:
+            conn = self._conn()
+            self._ensure_pins_table()
+            if pinned:
+                conn.execute(
+                    "INSERT INTO skill_pins (name, created_at) VALUES (?, ?) "
+                    "ON CONFLICT(name) DO NOTHING",
+                    (name, _now_ms()),
+                )
+            else:
+                conn.execute("DELETE FROM skill_pins WHERE name = ?", (name,))
+            conn.commit()
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.warning(f"Skill pin persist failed for {name!r}: {exc}")
+
+    def get_pinned_names(self) -> Set[str]:
+        """全部 pinned 技能名集合。best-effort，失败空集。"""
+        try:
+            self._ensure_pins_table()
+            rows = (
+                self._conn()
+                .execute("SELECT name FROM skill_pins")
+                .fetchall()
+            )
+            return {r["name"] for r in rows}
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.warning(f"Skill pin query failed: {exc}")
+            return set()
+
+    def is_pinned(self, name: str) -> bool:
+        return name in self.get_pinned_names()
+
     def set_archived(self, name: str, archived: bool) -> None:
         """UPSERT 归档状态（归档写 ``archived_at``，取消置 NULL）。best-effort。"""
         if not name:
