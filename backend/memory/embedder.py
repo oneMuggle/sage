@@ -67,7 +67,12 @@ class HashEmbedder:
     缺点:
     - 无语义理解（"高兴" 和 "开心" 不会相近）
     - 语义检索用 OnnxEmbedder (bge-small-zh-v1.5) 替代
+
+    ``is_semantic = False``: 检索融合权重与写入路径按字面匹配能力配置。
     """
+
+    #: 字面 n-gram 匹配, 非语义 (T1: RRF 权重据此配置)
+    is_semantic = False
 
     def __init__(self, dimensions: int = 256) -> None:
         self._dimensions = dimensions
@@ -187,7 +192,12 @@ class OnnxEmbedder:
 
     所有重资源 (ORT session、tokenizer) 懒加载 —— 构造函数只记录路径,
     首次 ``encode`` 时才加载; 加载失败抛出的异常由调用方 (工厂) 捕获降级。
+
+    ``is_semantic = True``: 语义向量质量高于字面哈希 (T1: RRF 权重、
+    T2: 写入路径走编码队列)。
     """
+
+    is_semantic = True
 
     def __init__(
         self,

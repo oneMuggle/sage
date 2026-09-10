@@ -169,11 +169,26 @@ class MemoryAdapter:
                     mem["rrf_score"] = 1.0 / (60 + vr.get("distance", 0) * 100)
                     vector_items.append(mem)
 
-        # 3. RRF 融合两路结果
+        # 3. RRF 融合两路结果 (T1, P10): 权重按嵌入器能力重配 ——
+        #    语义嵌入 (Onnx, 512 维) 向量路是真语义相似度, 权重压过关键词;
+        #    字面哈希 (Hash, 256 维) 与关键词路高度重叠, 关键词路更可靠。
+        weights = [0.3, 0.7] if getattr(self.embedder, "is_semantic", False) else [0.6, 0.4]
         fused = reciprocal_rank_fusion(
             [keyword_items, vector_items],
-            weights=[0.4, 0.6],  # 向量检索权重更高
+            weights=weights,
             k=60,
+        )
+
+        # T3 (P10): 检索命中率观测埋点 (结构化日志, 供命中率/召回质量分析)
+        logger.info(
+            "[retrieval] q_len=%s keyword_hits=%s vector_hits=%s fused=%s "
+            "semantic_embedder=%s weights=%s",
+            len(query),
+            len(keyword_items),
+            len(vector_items),
+            len(fused),
+            getattr(self.embedder, "is_semantic", False),
+            weights,
         )
 
         # 4. 分层：用户画像（始终注入）+ 高重要性 → core，其余 → episodic/semantic
@@ -256,7 +271,8 @@ class MemoryAdapter:
         )
 
         # 向量化存储（仅持久层记忆:工作记忆合成 id 不入向量库）
-        # Round 1: 同 retrieve(), encode 含 HTTP/ONNX 推理, 挪线程执行器。
+        # Round 1: 同 retrieve(), encode 含 HTTP/ONNX 推理, 挪线程执行器
+        # (T2 的队列化由该方案覆盖 —— run_in_executor 同样不阻塞事件循环)。
         if self.vector_store is not None and memory_id and memory_type in ("episodic", "semantic"):
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
