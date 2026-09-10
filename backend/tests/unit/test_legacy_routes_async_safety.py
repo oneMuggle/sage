@@ -33,27 +33,17 @@ LEGACY_SESSION_ROUTES_PATH = (
 # win7 另有 4 个 memory 相关 async handler(get_memories_by_turn 等),一并纳入。
 KEEP_ASYNC_HANDLERS = frozenset(
     {
-<<<<<<< HEAD
-        "compact_session",  # L597 — M4 manual compact,内调 LLM 摘要
-        "execute_skill",  # L1026 — skill 执行,内调 LLM
-        "execute_slash_command",  # L1068 — slash 命令,内调 LLM
-        "import_skills",  # L1161 — 文件上传,内调 LLM
-        "chat",  # L1352 — 主 chat 端点,内调 LLM 流
-        "chat_stream_create",  # L1466 — SSE 流,内调 LLM 流
-        "chat_stream_attach",  # L2010 — SSE 续接,内调事件流
-        "get_memories_by_turn",  # L2262 — memory 查询
-        "get_user_profile",  # L2270 — 用户画像
-        "get_session_summary",  # L2285 — 会话摘要
-        "memory_events",  # L2296 — memory 事件流
-=======
-        "compact_session",  # M4 manual compact,内调 LLM (现居 legacy_session_routes)
-        "execute_skill",  # L974 — skill 执行,内调 LLM
-        "execute_slash_command",  # L1015 — slash 命令,内调 LLM
-        "import_skills",  # L1105 — 文件上传,内调 LLM
-        "chat",  # L1284 — 主 chat 端点,内调 LLM 流
-        "chat_stream_create",  # L1400 — SSE 流,内调 LLM 流
-        "chat_stream_attach",  # L1763 — SSE 续接,内调事件流
->>>>>>> 49467e09 (test: async-safety 结构测试适配会话域拆分 (L1))
+        "compact_session",  # M4 manual compact,内调 LLM 摘要 (L1 后现居 legacy_session_routes)
+        "execute_skill",  # skill 执行,内调 LLM
+        "execute_slash_command",  # slash 命令,内调 LLM
+        "import_skills",  # 文件上传,内调 LLM
+        "chat",  # 主 chat 端点,内调 LLM 流
+        "chat_stream_create",  # SSE 流,内调 LLM 流
+        "chat_stream_attach",  # SSE 续接,内调事件流
+        "get_memories_by_turn",  # memory 查询 (win7 特有)
+        "get_user_profile",  # 用户画像 (win7 特有)
+        "get_session_summary",  # 会话摘要 (win7 特有)
+        "memory_events",  # memory 事件流 (win7 特有)
     }
 )
 
