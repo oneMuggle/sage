@@ -86,6 +86,20 @@ class BroadcastQueue(asyncio.Queue):
 # 必须是单例(用 `is` 比较),不能是 None 或 dict(None) 等可能的合法事件值。
 SENTINEL: Any = object()
 
+
+class SessionBusyError(RuntimeError):
+    """RT6 (round7): 同会话已有活跃 stream 时再次 create。
+
+    此前并发防护纯靠前端守卫（ChatInput isLoading + useChat 队列）——
+    绕过前端的调用方（slash 路径漏守卫、直连 API）会让两道流并行读写
+    同一 history。服务端仲裁是最后防线；路由层映射为 409 session_busy。
+    """
+
+    def __init__(self, session_id: str, active_stream_id: str) -> None:
+        super().__init__(f"session already has an active stream: {session_id}")
+        self.session_id = session_id
+        self.active_stream_id = active_stream_id
+
 # Python 3.8 不支持 typing.Callable/Awaitable[] subscript
 # ProducerFn 在 codebase 中只用作类型提示，使用 Any 兜底
 ProducerFn = Callable[..., Any]
@@ -151,6 +165,16 @@ class StreamRegistry:
         """
         if stream_id in self._entries:
             raise ValueError(f"streamId already exists: {stream_id}")
+        # RT6 (round7): 同会话 busy 仲裁 —— 已有活跃流（pending/running 且非
+        # 挂起）时拒绝新建。挂起（suspended）与终态（done/failed）不占位。
+        if session_id:
+            for existing_id, existing in self._entries.items():
+                if (
+                    existing.session_id == session_id
+                    and existing.status in ("pending", "running")
+                    and not existing.suspended
+                ):
+                    raise SessionBusyError(session_id, existing_id)
         entry = StreamEntry(
             queue=BroadcastQueue(maxsize=queue_maxsize),
             status="pending",

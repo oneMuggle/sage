@@ -158,3 +158,64 @@ async def test_empty_choices_raises_parsing_error(client):
         with pytest.raises(LLMError) as exc_info:
             await client.chat([{"role": "user", "content": "hi"}])
         assert exc_info.value.type == LLMErrorType.PARSING
+
+
+# ============================================================================
+# RT1 (round7): 上下文溢出分类 —— HTTP 400/413 + 溢出特征串 → CONTEXT_OVERFLOW
+# ============================================================================
+
+
+def _http_error_response(status_code: int, text: str):
+    mock_response = Mock()
+    mock_response.status_code = status_code
+    mock_response.text = text
+    mock_response.headers = {}
+    return mock_response
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    ("status_code", "body"),
+    [
+        (400, '{"error": {"message": "This model\'s maximum context length is 8192 tokens"}}'),
+        (400, "prompt is too long: 250000 tokens > 200000 maximum"),
+        (400, "The input token count exceeds the maximum number of tokens allowed"),
+        (413, "Request Entity Too Large: too many tokens"),
+    ],
+)
+async def test_context_overflow_classified(client, status_code, body):
+    """400/413 且命中溢出特征串 → CONTEXT_OVERFLOW（不可重试类）。"""
+    mock_response = _http_error_response(status_code, body)
+    mock_response.raise_for_status = Mock(
+        side_effect=httpx.HTTPStatusError(
+            f"{status_code}", request=AsyncMock(), response=mock_response
+        )
+    )
+    with patch.object(client, "_get_client") as mock_get_client:
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(return_value=mock_response)
+        mock_get_client.return_value = mock_http
+
+        with pytest.raises(LLMError) as exc_info:
+            await client.chat([{"role": "user", "content": "hi"}])
+        assert exc_info.value.type == LLMErrorType.CONTEXT_OVERFLOW
+        assert exc_info.value.status_code == status_code
+
+
+@pytest.mark.asyncio()
+async def test_bad_request_without_overflow_markers_stays_unknown(client):
+    """不命中特征串的 400 维持 UNKNOWN（避免把参数错误误标成溢出）。"""
+    mock_response = _http_error_response(400, "Invalid parameter: temperature=99")
+    mock_response.raise_for_status = Mock(
+        side_effect=httpx.HTTPStatusError(
+            "400", request=AsyncMock(), response=mock_response
+        )
+    )
+    with patch.object(client, "_get_client") as mock_get_client:
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(return_value=mock_response)
+        mock_get_client.return_value = mock_http
+
+        with pytest.raises(LLMError) as exc_info:
+            await client.chat([{"role": "user", "content": "hi"}])
+        assert exc_info.value.type == LLMErrorType.UNKNOWN

@@ -171,6 +171,17 @@ export function useChat() {
       // S3: 守卫按会话 —— 只有**同一会话**已有流在跑时才入队;其它会话
       // 的流与本会话无关,不再被 isLoading 全局守卫误伤。
       if (activeSidsRef.current.has(sid)) {
+        // RT5 (round7): 会话忙时先尝试 steering —— 用户补充指示注入当前
+        // run（下一迭代边界生效），而不是只能排队成"下一个新 run"。
+        // 仅普通聊天路径注入；编排模式的转向走 orch steering（ContextInput），
+        // steer 失败（流已结束/不在运行窗口）回退既有队列语义。
+        if (!orchestrationMode) {
+          const activeStreamId = activeHandleRef.current.get(sid)?.streamId;
+          if (activeStreamId && (await chatApi.steer(activeStreamId, content))) {
+            toast.info('已转达，将在下一迭代边界生效');
+            return;
+          }
+        }
         // U5: 忙时不再丢弃消息——入队,当前回复自然结束后自动发送
         pendingMessagesRef.current.push({ content, sid, orchestrationMode });
         toast.info('已加入队列,当前回复完成后自动发送');

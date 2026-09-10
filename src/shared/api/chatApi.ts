@@ -64,6 +64,22 @@ export const chatApi = {
   },
 
   /**
+   * RT5 (round7): 单 agent steering —— 向运行中的 run 转达用户补充指示。
+   * 返回 true 表示已注入（下一迭代边界生效）；false 表示后端拒绝
+   * （404 流不存在 / 409 不在运行窗口），调用方应回退排队语义。
+   * Electron relay camelToSnakeKeys 会把 body 转成 { stream_id, content }。
+   */
+  async steer(streamId: string, content: string): Promise<boolean> {
+    try {
+      await invoke('chat_steer', { streamId, content });
+      return true;
+    } catch {
+      // 404/409/400 都归入"未注入"——调用方回退排队
+      return false;
+    }
+  },
+
+  /**
    * 流式聊天 (PR-6)
    * 1. invoke('agent_chat_stream') 立刻返回 stream_id (UUID)
    * 2. listen('chat-stream-{stream_id}') 订阅 Tauri event

@@ -120,6 +120,37 @@ def get_compact_threshold(default: int = DEFAULT_COMPACT_THRESHOLD_TOKENS) -> in
     return default
 
 
+def default_compact_threshold() -> int:
+    """读取"无显式覆盖时"的压缩阈值（RT3，round7 口径统一）。
+
+    返回历史截断预算 ``history_token_budget()``——压缩（LLM 摘要，信息
+    可控损失）应恰好先于截断（drop-oldest，直接丢弃）触发，两机制共享
+    同一预算口径。此前的固定默认 6000 会在大窗口模型上远早于截断就压缩，
+    过早损失上下文。
+
+    显式覆盖（env ``SAGE_COMPACT_THRESHOLD`` / settings
+    ``compact_threshold_tokens``）仍然最高优先——用户明确配置了阈值就按
+    配置来，不做口径替换。
+    """
+    if os.environ.get(ENV_THRESHOLD_KEY):
+        return get_compact_threshold()
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get(SETTINGS_KEY)
+        if raw is not None and raw.strip():
+            return get_compact_threshold()
+    except Exception:  # noqa: BLE001 — DB 不可用时按无覆盖处理
+        pass
+    try:
+        # 延迟导入：history_context 模块级 import 了本模块，反向依赖必须惰性
+        from backend.chat.history_context import history_token_budget
+
+        return history_token_budget()
+    except Exception:  # noqa: BLE001 — 预算推导失败回退硬默认
+        return DEFAULT_COMPACT_THRESHOLD_TOKENS
+
+
 def should_compact(
     messages: Sequence[MessageLike],
     threshold: Optional[int] = None,
@@ -128,12 +159,13 @@ def should_compact(
 
     两个条件必须同时满足：
     1. 消息数 >= ``MIN_COMPACT_MESSAGE_COUNT``（地板，保护短对话）
-    2. 估算 token 数 >= 阈值（``threshold`` 缺省时走 ``get_compact_threshold``）
+    2. 估算 token 数 >= 阈值（``threshold`` 缺省时走
+       ``default_compact_threshold``：显式覆盖优先，否则取历史截断预算）
     """
     if len(messages) < MIN_COMPACT_MESSAGE_COUNT:
         return False
     effective_threshold = (
-        threshold if threshold is not None else get_compact_threshold()
+        threshold if threshold is not None else default_compact_threshold()
     )
     return estimate_messages_tokens(messages) >= effective_threshold
 

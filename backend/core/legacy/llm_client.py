@@ -42,6 +42,28 @@ _RETRYABLE_ERROR_TYPES = frozenset(
     }
 )
 
+#: 上下文溢出的响应体特征串（小写匹配）。覆盖主流 provider 的措辞：
+#: OpenAI "maximum context length"、Anthropic "prompt is too long"、
+#: Gemini "input token count exceeds"、DeepSeek "maximum context length" 等。
+_CONTEXT_OVERFLOW_MARKERS = (
+    "context length",
+    "maximum context",
+    "context_length",
+    "context window",
+    "prompt is too long",
+    "input token count",
+    "too many tokens",
+    "exceeds the maximum",
+    "reduce the length",
+    "input length exceeds",
+)
+
+
+def _is_context_overflow_text(text: str) -> bool:
+    """判断错误文本是否命中上下文溢出特征串（大小写不敏感）。"""
+    lowered = text.lower()
+    return any(marker in lowered for marker in _CONTEXT_OVERFLOW_MARKERS)
+
 
 def _retry_settings() -> Tuple[int, float]:
     """读重试配置：env 覆盖 > 默认。任何解析失败回退默认，永不抛错。"""
@@ -315,7 +337,9 @@ class LLMClient:
         - ``httpx.TimeoutException``    → TIMEOUT
         - ``httpx.ConnectError``        → NETWORK
         - ``httpx.HTTPStatusError``     → AUTH_FAILED (401) / RATE_LIMITED (429)
-                                          / SERVER_ERROR (5xx) / UNKNOWN (其余)
+                                          / SERVER_ERROR (5xx)
+                                          / CONTEXT_OVERFLOW (400/413 且命中溢出特征串)
+                                          / UNKNOWN (其余)
         - ``ValueError`` / ``KeyError`` → PARSING（``json.JSONDecodeError`` 是
                                           ValueError 子类）
         - 其余异常                        → UNKNOWN
@@ -345,6 +369,20 @@ class LLMClient:
                 raise LLMError(
                     LLMErrorType.SERVER_ERROR, f"LLM 服务端错误 (HTTP {status})", status_code=status
                 )
+            # RT1 (round7): HTTP 400/413 且响应体命中溢出特征串 → CONTEXT_OVERFLOW。
+            # 不命中特征串的 4xx 维持 UNKNOWN（避免把真实参数错误误标成溢出）。
+            if status in (400, 413):
+                body_text = ""
+                try:
+                    body_text = exc.response.text or ""
+                except Exception:  # noqa: BLE001 — 流式/已关闭响应读不出正文，按空处理
+                    body_text = ""
+                if _is_context_overflow_text(f"{exc} {body_text}"):
+                    raise LLMError(
+                        LLMErrorType.CONTEXT_OVERFLOW,
+                        f"输入超过模型上下文窗口 (HTTP {status})",
+                        status_code=status,
+                    )
             raise LLMError(LLMErrorType.UNKNOWN, f"LLM HTTP 错误: {status}", status_code=status)
         if isinstance(exc, (ValueError, KeyError)):  # noqa: UP038  (Py3.8: isinstance 不支持 X | Y)
             logger.error(f"LLM 响应解析失败: {exc}")
