@@ -98,6 +98,35 @@ def test_parse_template_outside_workspace_rejected(tmp_path: Path):
         parse_journal_template_endpoint(req)
 
 
+def test_parse_template_corrupt_docx_raises_journal_parse_error_mapped_to_422(
+    workspace: Path,
+):
+    """Regression for C1 (Task 6 fix round 1).
+
+    When parse_journal_spec raises JournalParseError, the endpoint MUST let it
+    propagate as-is (not wrap as plain OfficeError) so the registered FastAPI
+    exception handler maps OfficeParseError → HTTP 422. If it gets wrapped as
+    OfficeError, office_error_to_http_status falls through to the 500 base case.
+    """
+    from backend.office.errors import OfficeParseError, office_error_to_http_status
+    from backend.office.journal.errors import JournalParseError
+
+    target = workspace / "corrupt.docx"
+    shutil.copy2(FIXTURE_ROOT / "bad_template_corrupt.docx", target)
+    req = OfficeJournalParseRequest(
+        workspace_path=str(workspace), file_path=str(target)
+    )
+
+    # Endpoints must propagate JournalParseError as-is (not wrap as OfficeError).
+    with pytest.raises(JournalParseError) as excinfo:
+        parse_journal_template_endpoint(req)
+
+    # The raised exception must also be an OfficeParseError subclass so that
+    # office_error_to_http_status returns 422 (not the 500 base case).
+    assert isinstance(excinfo.value, OfficeParseError)
+    assert office_error_to_http_status(excinfo.value) == 422
+
+
 # ─────────────────────────────────────────────────────────────────────
 # GET /office/journal/specs
 # ─────────────────────────────────────────────────────────────────────

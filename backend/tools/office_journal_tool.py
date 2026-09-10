@@ -37,16 +37,15 @@ from backend.office.journal.persistence import load_spec, save_spec
 from backend.office.journal.validator import validate_document
 from backend.office.session_workspace import get_active_workspace
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
-from backend.tools.context import Optional, current_tool_context  # noqa: F401
-
+from backend.tools.context import ToolExecutionContext, current_tool_context
 
 # ──────────────────────────────────────────────────────────────────────
 # Workspace resolution helper
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _resolve_active_workspace(  # type: ignore[no-untyped-def]
-    ctx: Optional[object],
+def _resolve_active_workspace(
+    ctx: Optional[ToolExecutionContext],
 ) -> Optional[Path]:
     """有活动绑定 → 绑定工作区 Path；否则 ``None``。
 

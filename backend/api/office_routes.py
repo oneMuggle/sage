@@ -934,8 +934,6 @@ def parse_journal_template_endpoint(
     """
     from backend.office.errors import OfficeFileNotFoundError, OfficePathError
 
-    from backend.office.journal.errors import JournalParseError
-
     canonical_ws = _canonicalize_workspace(req.workspace_path)
     file_path = Path(req.file_path).expanduser()
     # workspace boundary check (mirrors _validate_file_in_workspace)
@@ -949,16 +947,10 @@ def parse_journal_template_endpoint(
     if not bounded.is_file():
         raise OfficeFileNotFoundError(bounded)
     _check_size_limit(bounded, req.max_size_bytes)
-    try:
-        spec = parse_journal_spec(bounded)
-    except JournalParseError as exc:
-        # Wrap into the registered OfficeError handler: 422 (per errors.py).
-        from backend.office.errors import OfficeError
-
-        raise OfficeError(
-            f"journal parse failed: {exc}",
-            file_path=bounded,
-        ) from exc
+    # JournalParseError inherits from BOTH JournalError (→ OfficeError)
+    # and OfficeParseError. Let it propagate naturally — the registered
+    # OfficeError exception handler maps OfficeParseError to HTTP 422.
+    spec = parse_journal_spec(bounded)
     save_spec(canonical_ws, spec)
     return OfficeJournalParseResponse(spec=spec, cached=False)
 
