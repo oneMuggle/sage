@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ _MAX_QUEUE_SIZE = 1000
 _SENTINEL = object()
 
 _queue: queue.Queue = queue.Queue(maxsize=_MAX_QUEUE_SIZE)
-_worker: threading.Thread | None = None
+_worker: Optional[threading.Thread] = None  # py38: Optional[Thread]
 _lock = threading.Lock()
 _dropped = 0
 
