@@ -159,6 +159,15 @@ def office_error_to_http_status(error: OfficeError) -> int:  # noqa: PLR0911 —
 
     Used by the FastAPI exception handler in office_routes.py.
     """
+    # Lazy import to avoid circular dependency (journal.errors imports OfficeError)
+    from backend.office.journal.errors import (
+        JournalContentShapeError,
+        JournalGenerationError,
+        JournalPandocError,
+        JournalParseError,
+        JournalSpecNotFoundError,
+    )
+
     if isinstance(error, OfficeFileNotFoundError):
         return 404
     if isinstance(error, OfficePathError):
@@ -182,5 +191,16 @@ def office_error_to_http_status(error: OfficeError) -> int:  # noqa: PLR0911 —
     if isinstance(error, OfficePdfFormError):
         return 422
     if isinstance(error, _WRITE_FAILURE_ERRORS):
+        return 500
+    # JournalError 映射（保持与 OfficeError 一致的最优匹配）
+    if isinstance(error, JournalSpecNotFoundError):
+        return 404
+    if isinstance(error, JournalParseError):
+        return 422
+    if isinstance(error, JournalContentShapeError):
+        return 422
+    if isinstance(error, JournalPandocError):
+        return 500
+    if isinstance(error, JournalGenerationError):
         return 500
     return 500  # base OfficeError or unknown subclass
