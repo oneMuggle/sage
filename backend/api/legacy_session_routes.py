@@ -381,3 +381,23 @@ def search_messages(
     return {"results": results, "has_more": has_more}
 
 
+
+
+# ---------------------------------------------------------------------------
+# Round 4 (session lineage, 对标 hermes): 压缩归档谱系查询
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sessions/{session_id}/lineage")
+def list_session_lineage(session_id: str):
+    """List compaction archives (lineage children) of a session.
+
+    归档会话本体（is_archived=1）的消息用既有 /sessions/{id}/messages 读取。
+
+    - 200 + ``{"session_id": ..., "archives": [...]}``
+    """
+    from backend.data.database import get_database
+    from backend.data.session_lineage import list_archives
+
+    archives = list_archives(get_database(), session_id)
+    return {"session_id": session_id, "archives": archives}

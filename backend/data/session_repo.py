@@ -526,6 +526,21 @@ class MessageRepository:
         cursor = conn.cursor()
         now = int(time.time() * 1000)
         try:
+            # Round 4 (压缩谱系): 删除前把前缀消息归档进派生会话 ——
+            # 同 cursor 同事务，与压缩同生共死；「历史已删、归档未写」
+            # 与「历史已删、摘要未写」同为不可接受的永久丢失窗口。
+            try:
+                from backend.data.session_lineage import archive_prefix_in_transaction
+
+                archive_prefix_in_transaction(
+                    cursor,
+                    session_id,
+                    delete_message_ids,
+                    reason="compaction",
+                    now_ms=now,
+                )
+            except Exception:
+                raise  # 归档失败 → 整体回滚（与压缩强一致）
             # sqlite3 默认在首个 DML 处隐式 BEGIN，commit() 前所有语句
             # 同属一个事务；循环逐条 DELETE 避免 IN (?) 占位符数量上限。
             for message_id in delete_message_ids:
