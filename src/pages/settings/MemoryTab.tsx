@@ -16,115 +16,100 @@
  *   写死展示既不准也无用。
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+import { invoke } from '../../shared/api/desktopInvoke';
 
 import type { EndpointsTabProps } from './components';
 import { SettingRow, Toggle } from './components';
 
 export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
-  const navigate = useNavigate();
-  // Source of truth = backend preference via IPC bridge.
-  // null = not yet loaded OR backend returned null (default True).
-  const [autoMemoryLoaded, setAutoMemoryLoaded] = useState<boolean | null>(null);
-  // Important-2: the "记忆检索注入" toggle drives its OWN preference
-  // (memory_retrieval) — independent of auto_memory. Before this fix both
-  // toggles shared autoMemoryLoaded + handleAutoMemoryChange, so flipping
-  // one flipped the other.
-  const [memoryRetrievalLoaded, setMemoryRetrievalLoaded] = useState<boolean | null>(null);
+  const [embedderStatus, setEmbedderStatus] = useState<{
+    type: string;
+    dimensions: number;
+    table: string | null;
+    model_dir: string;
+    model_ready: boolean;
+    semantic: boolean;
+  } | null>(null);
+  const [selecting, setSelecting] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      // electronAPI is optional per the augmentation (web-only renderers
-      // may not have it); bail to True if absent.
-      const api = window.electronAPI;
-      if (!api) {
-        if (!cancelled) setAutoMemoryLoaded(true);
-        return;
-      }
-      try {
-        const raw = await api.memory.getAutoMemory();
-        if (cancelled) return;
-        // null/undefined → default True (backward compat with prior users).
-        if (raw === null || raw === undefined) {
-          setAutoMemoryLoaded(true);
-          return;
-        }
-        setAutoMemoryLoaded(String(raw).toLowerCase() === 'true');
-      } catch {
-        if (!cancelled) setAutoMemoryLoaded(true);
-      }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
+  const loadEmbedderStatus = useCallback(async () => {
+    try {
+      const status = await invoke<{
+        type: string;
+        dimensions: number;
+        table: string | null;
+        model_dir: string;
+        model_ready: boolean;
+        semantic: boolean;
+      }>('embedder_get_status');
+      setEmbedderStatus(status);
+    } catch {
+      setEmbedderStatus(null);
+    }
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      const api = window.electronAPI;
-      if (!api) {
-        if (!cancelled) setMemoryRetrievalLoaded(true);
-        return;
-      }
+    void loadEmbedderStatus();
+  }, [loadEmbedderStatus]);
+
+  const selectEmbedder = useCallback(
+    async (mode: 'onnx' | 'hash') => {
+      setSelecting(true);
       try {
-        const raw = await api.memory.getMemoryRetrieval();
-        if (cancelled) return;
-        if (raw === null || raw === undefined) {
-          setMemoryRetrievalLoaded(true);
-          return;
-        }
-        setMemoryRetrievalLoaded(String(raw).toLowerCase() === 'true');
+        await invoke('embedder_select', { mode });
+        await loadEmbedderStatus();
       } catch {
-        if (!cancelled) setMemoryRetrievalLoaded(true);
+        // 静默——状态刷新会反映真实情况
+      } finally {
+        setSelecting(false);
       }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleAutoMemoryChange = async (next: boolean) => {
-    setAutoMemoryLoaded(next);
-    // Keep the AppSettings-level autoMemory in sync for legacy consumers.
-    try {
-      await updateSettings({ autoMemory: next });
-    } catch {
-      // settingsClient already warns on failure; the IPC bridge is the
-      // authoritative channel for the backend gate, so we don't surface.
-    }
-    try {
-      const api = window.electronAPI;
-      if (!api) return;
-      await api.memory.setAutoMemory({ value: next });
-    } catch {
-      // Best-effort: revert local state if the backend write fails so the
-      // user isn't left looking at a stale "checked" state.
-      setAutoMemoryLoaded(!next);
-    }
-  };
-
-  const handleMemoryRetrievalChange = async (next: boolean) => {
-    setMemoryRetrievalLoaded(next);
-    try {
-      const api = window.electronAPI;
-      if (!api) return;
-      await api.memory.setMemoryRetrieval({ value: next });
-    } catch {
-      // Best-effort: revert local state if the backend write fails.
-      setMemoryRetrievalLoaded(!next);
-    }
-  };
+    },
+    [],
+  );
 
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">记忆管理</h3>
-        <SettingRow
+        <h3 className="text-sm font-semibold text-text mb-3">语义嵌入 (检索增强)</h3>
+        {embedderStatus ? (
+          <div className="space-y-2 text-xs text-text-secondary">
+            <p>
+              当前嵌入器: {embedderStatus.type} · {embedderStatus.dimensions} 维 ·{' '}
+              {embedderStatus.semantic ? '语义匹配' : '字面匹配'} · 表{' '}
+              {embedderStatus.table ?? '-'}
+            </p>
+            <p>
+              模型目录: {embedderStatus.model_dir} · 模型文件:
+              {embedderStatus.model_ready ? '已就绪' : '未就绪'}
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-text-secondary">嵌入器状态加载中…</p>
+        )}
+        <div className="flex gap-2 mt-3">
+          <button
+            type="button"
+            disabled={selecting}
+            onClick={() => void selectEmbedder('onnx')}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            启用语义嵌入
+          </button>
+          <button
+            type="button"
+            disabled={selecting}
+            onClick={() => void selectEmbedder('hash')}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            切回字面匹配
+          </button>
+        </div>
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">记忆管理</h3>        <SettingRow
           label="本地存储"
           desc="记忆数据存储在本地 SQLite 数据库中，具体路径由 SAGE_DB_PATH 环境变量与运行模式决定"
         >

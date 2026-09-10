@@ -69,6 +69,9 @@ from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.artifact_routes import router as artifact_router
 from backend.api.chat_stream_registry import StreamRegistry
+
+# B1 (P11): 记忆嵌入器状态/切换 API
+from backend.api.embedder_routes import router as embedder_router
 from backend.api.export_routes import router as export_router
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
@@ -670,6 +673,8 @@ async def lifespan(app: FastAPI):
         lifecycle=lifecycle
     )
     app.state.chat_service = _build_chat_service(lifecycle=lifecycle)
+    # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
+    app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
     logger.info(
         "ChatService 已装配 (runtime 与 hex /chat 共享); API_MODE=%s (路由挂载见模块级常量)",
         API_MODE,
@@ -895,6 +900,9 @@ elif API_MODE == "legacy":
     app.include_router(legacy_router, prefix="/api/v1")
 else:
     raise ValueError(f"API_MODE must be 'hex' or 'legacy', got: {API_MODE!r}")
+
+# B1 (P11): 记忆嵌入器状态/切换 API (与 API_MODE 解耦, 挂在 legacy 命名空间)
+app.include_router(embedder_router, prefix="/api/v1")
 
 # Phase 8: scheduled tasks — mounted for both API modes (independent feature)
 app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v1")
