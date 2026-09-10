@@ -124,10 +124,10 @@
 
 ## 9. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
-
 | 批次 | main | win7 |
 | --- | --- | --- |
-| A | PR #571 | 待回填 |
-| B | 待回填 | 待回填 |
-| C | 待回填 | 待回填 |
+| A | PR #571（squash c53c1b64） | PR #592（cherry-win7-r7，squash 0a2d054f） |
+| B | PR #574（squash 438414da） | 同上（A/B/C 三批合并对齐） |
+| C | PR #576（squash 9dbbf2ca） | 同上 |
+
+win7 对齐说明：三批经 cherry-win7-r7 分支按序 cherry-pick（A/B 零冲突；C 因 win7 未见 #575 的 legacy_routes 重构，RT7 partial 落盘改走 `_run_db_sync` 与 DONE 持久化同锁），win7 侧 round7 相关 111 用例全绿 + Backend py3.8 job 绿后 squash merge（#592）。

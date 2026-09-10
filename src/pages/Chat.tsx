@@ -492,6 +492,21 @@ export function Chat() {
     clearTaskBoard();
   };
 
+  // RV3 (round8): 只重跑失败任务 —— 调 rerun-failed 拿 planOverride
+  // （done 子任务带 preset_output 回放），经 chatStream 重发全新 run。
+  const handleRerunFailed = async (runId: string) => {
+    if (!currentSessionId) return;
+    try {
+      const res = await orchRunClient.rerunFailed(runId);
+      const sid = res.session_id ?? currentSessionId;
+      await sendMessage(res.goal, sid, undefined, 'force_multi', {
+        planOverride: res.plan_override,
+      });
+    } catch {
+      toast.error('重跑失败任务请求失败（run 未终态或无失败任务）');
+    }
+  };
+
   // 顶层错误：渲染整页 ErrorState，提供"关闭"清除错误后回到聊天
   if (error) {
     return (
@@ -641,6 +656,7 @@ export function Chat() {
         // cancelRun（未派发时后端置 cancelled + dispatcher.cancel() 阻止
         // 自动派发）+ 清空 taskBoard。
         onCancelExecution={(runId) => void handleCancelRun(runId)}
+        onRerunFailed={(runId) => void handleRerunFailed(runId)}
       />
     </div>
   );

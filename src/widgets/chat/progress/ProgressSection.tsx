@@ -22,6 +22,8 @@ interface ProgressSectionProps {
   // 自调 updatePlan 落库，派发由后端驱动，前端无需计划开始回调。
   // Wave 4 (2026-09-06): onResumeRun 已删 —— 历史编排记录功能移除。
   onCancelExecution?: (runId: string) => void;
+  // RV3 (round8): 终态且有失败任务时的"重跑失败任务"入口。
+  onRerunFailed?: (runId: string) => void;
 }
 
 const STATE_LABELS: Record<string, string> = {
@@ -38,6 +40,7 @@ export function ProgressSection({
   taskBoard,
   sessionId,
   onCancelExecution,
+  onRerunFailed,
 }: ProgressSectionProps) {
   // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）。
   // S2: 按会话键控 —— 显示的是当前打开会话的清单。
@@ -88,7 +91,11 @@ export function ProgressSection({
       {/* Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域。
          侧边栏仅展示已派发的任务树。 */}
       {taskBoard?.dispatchedAt && (
-        <TaskTreeSection board={taskBoard} onCancel={() => onCancelExecution?.(taskBoard.runId)} />
+        <TaskTreeSection
+          board={taskBoard}
+          onCancel={() => onCancelExecution?.(taskBoard.runId)}
+          onRerunFailed={() => onRerunFailed?.(taskBoard.runId)}
+        />
       )}
     </div>
   );

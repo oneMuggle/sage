@@ -521,6 +521,23 @@ class ChatDispatcher:
                 self._emit_task_status(state)
                 # 让其他子任务也有机会 emit running,保证 queued/running/done 三阶段序
                 await asyncio.sleep(0)
+                # RV1 (round8): 已完成任务回放 —— 计划条目带 preset_output
+                # （rerun-failed 场景由端点注入原 output_preview）时直接收口
+                # done：不建 lane、不派子代理、零 LLM 调用；histories 注入
+                # user/assistant 对供 followup 回放与下游聚合。
+                _plan_item = self._plan_by_id.get(state.task_id)
+                _preset = _plan_item.get("preset_output") if _plan_item else None
+                if isinstance(_preset, str) and _preset.strip():
+                    preset_text = _preset.strip()
+                    state.status = "done"
+                    state.output = preset_text
+                    self._histories[state.task_id] = [
+                        {"role": "user", "content": state.goal},
+                        {"role": "assistant", "content": preset_text},
+                    ]
+                    state.finished_at = time.time()
+                    self._emit_task_status(state)
+                    return
                 # O2 (2026-09-08): wall-clock 超时 —— wait_for 取消内层协程
                 # （子 run_loop 的 async for 在取消点收口，同 agent_tool 异步
                 # 通路的 L12 根修语义）。0 = 关闭。超时任务置 failed（error

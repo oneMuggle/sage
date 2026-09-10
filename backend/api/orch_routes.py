@@ -121,6 +121,77 @@ def get_run(run_id: str) -> OrchRunDetail:
     return _run_detail(run)
 
 
+class RerunFailedResponse(BaseModel):
+    """RV2 (round8): rerun-failed 响应 —— 前端拿 plan_override 走既有
+    chatStream planOverride 通道重发（Wave 3 A10）。"""
+
+    session_id: Optional[str] = None
+    goal: str
+    plan_override: List[Dict[str, Any]]
+
+
+@router.post("/runs/{run_id}/rerun-failed", response_model=RerunFailedResponse)
+@with_db_lock
+def rerun_failed(run_id: str) -> RerunFailedResponse:
+    """RV2 (round8): 构造"只重跑失败任务"的计划覆盖。
+
+    - done 任务 → 原条目 + ``preset_output``（orch_tasks.output_preview），
+      dispatcher 原生短路回放（RV1），零 LLM 调用；
+    - failed/cancelled/blocked/pending 任务 → 原条目重建（goal/agent_id/
+      depends_on 保持）；
+    - run 非终态 → 409；无失败任务 → 409；无计划 → 409。
+    """
+    run_repo = OrchRunRepository()
+    run = run_repo.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    if run.status == "running":
+        raise HTTPException(status_code=409, detail="run still running")
+    detail = _run_detail(run)
+    if not detail.plan:
+        raise HTTPException(status_code=409, detail="run has no plan to rebuild")
+    status_by_id = {t["task_id"]: t for t in detail.tasks}
+    override: List[Dict[str, Any]] = []
+    done_count = 0
+    failed_count = 0
+    for idx, item in enumerate(detail.plan):
+        if not isinstance(item, dict):
+            continue
+        tid = str(item.get("task_id") or f"t{idx + 1}")
+        task = status_by_id.get(tid) or {}
+        status = str(task.get("status") or "pending")
+        entry: Dict[str, Any] = {
+            "task_id": tid,
+            "goal": str(item.get("goal") or task.get("goal") or ""),
+            "agent_id": str(
+                item.get("agent_id") or task.get("agent_id") or "primary"
+            ),
+        }
+        deps = item.get("depends_on")
+        if isinstance(deps, list) and deps:
+            entry["depends_on"] = [str(d) for d in deps]
+        if status == "done":
+            entry["preset_output"] = (
+                str(task.get("output_preview") or "").strip()
+                or "[已完成，结果未留存预览]"
+            )
+            done_count += 1
+        elif status in ("failed", "cancelled", "blocked"):
+            failed_count += 1
+        override.append(entry)
+    if failed_count == 0:
+        raise HTTPException(status_code=409, detail="no failed tasks to rerun")
+    original = (run.original_request or "").strip()
+    goal = (
+        f"重跑失败任务（已完成 {done_count} 个子任务结果保留）：{original}"
+        if original
+        else f"重跑失败任务（已完成 {done_count} 个子任务结果保留）"
+    )
+    return RerunFailedResponse(
+        session_id=run.session_id, goal=goal, plan_override=override
+    )
+
+
 @router.post("/runs/{run_id}/plan")
 @with_db_lock
 def update_plan(run_id: str, body: PlanUpdateRequest) -> Dict[str, Any]:
