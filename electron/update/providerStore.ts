@@ -2,12 +2,17 @@
 import Store from 'electron-store';
 import { safeStorage } from 'electron';
 import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import { logger } from '../logger';
 import type { ProviderInstanceConfig, ProviderType } from './providerConfig';
 
 interface StoreSchema { 'update.providers': ProviderInstanceConfig[]; }
 
 const STORE_KEY = 'update.providers';
 const SENSITIVE_TYPES: ProviderType[] = ['github', 'gitee', 'gitlab'];
+
+/** Spec §4.5: warn once per process when safeStorage degrades to plaintext. */
+let _degradationWarned = false;
 
 export class ProviderStore {
   private store: Store<StoreSchema>;
@@ -80,7 +85,20 @@ export class ProviderStore {
       }
       return c;
     }
-    // Linux 降级：明文 + 路径 600 + 启动 warn 一次
+    // Linux 降级：明文 + chmod 0600 + 启动 warn 一次（spec §4.5）
+    try {
+      const p = this.store.path;
+      if (p && fs.existsSync(p)) fs.chmodSync(p, 0o600);
+    } catch (e) {
+      logger.warn('[providers] failed to chmod 0600 on degradation store', { err: String(e) });
+    }
+    if (!_degradationWarned) {
+      _degradationWarned = true;
+      logger.warn(
+        '[providers] safeStorage unavailable; provider tokens stored plaintext in ' +
+          'electron-store JSON with 0600 file perms. Do not share this file.',
+      );
+    }
     const plain: ProviderInstanceConfig = { ...cfg, _tokenEncrypted: false };
     return plain;
   }

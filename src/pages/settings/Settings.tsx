@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { useState } from 'react';
 
 import { useSettings } from '../../features/manage-settings/useSettings';
+import { ENABLE_UPDATE_PROVIDERS_UI } from '../../shared/updateFeatureFlag';
 import { EvolutionLog } from '../../widgets/evolution/EvolutionLog';
 import { EvolutionPanel } from '../../widgets/evolution/EvolutionPanel';
 
@@ -15,6 +16,7 @@ import { McpTab } from './McpTab';
 import { MemoryTab } from './MemoryTab';
 import { ModelsTab } from './ModelsTab';
 import { NetworkTab } from './NetworkTab';
+import { ProvidersManager } from './ProvidersManager';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
 import { UpdatesTab } from './UpdatesTab';
 
@@ -27,7 +29,8 @@ type SettingsTab =
   | 'mcp'
   | 'runtime'
   | 'evolution'
-  | 'updates';
+  | 'updates'
+  | 'providers';
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -44,6 +47,9 @@ export function Settings() {
     { key: 'evolution', label: '进化' },
     { key: 'updates', label: '更新' },
   ];
+  if (ENABLE_UPDATE_PROVIDERS_UI()) {
+    tabs.push({ key: 'providers', label: '更新源' });
+  }
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -94,6 +100,7 @@ export function Settings() {
               </div>
             )}
             {activeTab === 'updates' && <UpdatesTab />}
+            {activeTab === 'providers' && ENABLE_UPDATE_PROVIDERS_UI() && <ProvidersManager />}
           </div>
         </div>
       </div>

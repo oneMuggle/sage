@@ -24,6 +24,7 @@ import type {
   OfficeElectronApiBridge,
   OfficeManagedRef,
   PickedOfficeFile,
+  ProvidersElectronApiBridge,
   RescanResult,
   SavedOfficeFile,
   SkillsElectronApiBridge,
@@ -211,6 +212,8 @@ const electronAPI = {
     getConfig: () => ipcRenderer.invoke('update:get-config') as Promise<UpdateConfig>,
     setChannel: (channel: UpdateChannel) =>
       ipcRenderer.invoke('update:set-channel', channel) as Promise<void>,
+    checkWith: (providerId: string, channel?: string) =>
+      ipcRenderer.invoke('update:check-with', { providerId, channel }) as Promise<CheckResult | null>,
     onStateChanged: (handler: (payload: UpdateStateChangedEvent) => void): UnlistenFn => {
       const listener = (_event: IpcRendererEvent, payload: UpdateStateChangedEvent) =>
         handler(payload);
@@ -218,6 +221,59 @@ const electronAPI = {
       return () => ipcRenderer.off('update:state-changed', listener);
     },
   } satisfies UpdateElectronApiBridge,
+
+  /**
+   * Phase 2 (2026-09-10): Provider management bridge for the Settings UI.
+   * Token fields are masked in IPC responses by providerIpc.maskToken(); the
+   * renderer therefore sees `config.token: '***masked***'` when present.
+   *
+   * Channels wired in electron/update/providerIpc.ts:
+   *   provider:list, provider:get, provider:add, provider:update,
+   *   provider:remove, provider:set-default, provider:test
+   */
+  providers: {
+    list: () => ipcRenderer.invoke('provider:list') as Promise<Array<{
+      id: string;
+      type: 'github' | 'gitee' | 'gitlab' | 'generic-http';
+      displayName: string;
+      enabled: boolean;
+      isDefault: boolean;
+      config: Record<string, unknown>;
+    }>>,
+    get: (id: string) =>
+      ipcRenderer.invoke('provider:get', { id }) as Promise<{
+        id: string;
+        type: 'github' | 'gitee' | 'gitlab' | 'generic-http';
+        displayName: string;
+        enabled: boolean;
+        isDefault: boolean;
+        config: Record<string, unknown>;
+      } | null>,
+    add: (cfg: {
+      type: 'github' | 'gitee' | 'gitlab' | 'generic-http';
+      displayName: string;
+      enabled: boolean;
+      isDefault: boolean;
+      config: Record<string, unknown>;
+    }) => ipcRenderer.invoke('provider:add', cfg) as Promise<{ id: string }>,
+    update: (id: string, patch: Partial<{
+      displayName: string;
+      enabled: boolean;
+      isDefault: boolean;
+      config: Record<string, unknown>;
+    }>) =>
+      ipcRenderer.invoke('provider:update', { id, patch }) as Promise<{ ok: boolean }>,
+    remove: (id: string) =>
+      ipcRenderer.invoke('provider:remove', { id }) as Promise<{ ok: boolean }>,
+    setDefault: (id: string) =>
+      ipcRenderer.invoke('provider:set-default', { id }) as Promise<{ ok: boolean }>,
+    test: (id: string) =>
+      ipcRenderer.invoke('provider:test', { id }) as Promise<{
+        ok: boolean;
+        latencyMs: number;
+        error?: string;
+      }>,
+  } satisfies ProvidersElectronApiBridge,
 
   /**
    * T13 (2026-07-02): Log management bridge — Diagnostics card on Settings page.
