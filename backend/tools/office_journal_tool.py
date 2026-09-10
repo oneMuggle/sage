@@ -407,7 +407,7 @@ class OfficeJournalValidateTool(BaseTool):
             },
         )
 
-    def execute(
+    def execute(  # noqa: PLR0911 - many early-return guard clauses for input validation
         self,
         file_path: Optional[str] = None,
         spec_id: Optional[str] = None,

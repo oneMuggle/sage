@@ -45,6 +45,19 @@ from backend.office.errors import (
     office_error_to_http_status,
 )
 from backend.office.excel import generate_xlsx, read_xlsx
+from backend.office.journal.generator import generate_structured
+from backend.office.journal.models import (
+    JournalContent,
+    JournalSpec,
+    JournalViolation,
+)
+from backend.office.journal.parser import parse_journal_spec
+from backend.office.journal.persistence import (
+    list_specs,
+    load_spec,
+    save_spec,
+)
+from backend.office.journal.validator import validate_document
 from backend.office.models import (
     OfficeDeleteResponse,
     OfficeDocStatus,
@@ -76,24 +89,6 @@ from backend.office.models import (
     WordTemplateFillRequest,
     WordTemplateFillResult,
 )
-from backend.office.journal.errors import JournalError
-from backend.office.journal.generator import generate_article, generate_structured
-from backend.office.journal.llm_adapter import get_default_journal_llm_adapter
-from backend.office.journal.models import (
-    JournalContent,
-    JournalGenerationRecord,
-    JournalSpec,
-    JournalViolation,
-)
-from backend.office.journal.parser import parse_journal_spec
-from backend.office.journal.persistence import (
-    list_generations,
-    list_specs,
-    load_spec,
-    record_generation,
-    save_spec,
-)
-from backend.office.journal.validator import validate_document
 from backend.office.path_safety import resolve_within
 from backend.office.pdf import MAX_PDF_SIZE, generate_pdf, read_pdf
 from backend.office.pdf_forms import fill_pdf_form, read_pdf_form

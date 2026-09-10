@@ -58,9 +58,9 @@ def _copy_filled(workspace: Path, src: Path = GOOD_FILLED) -> Path:
     return target
 
 
-# ─────────────────────────────────────────────────────────────────────
+# ——— (section divider) ———
 # POST /office/journal/parse-template
-# ─────────────────────────────────────────────────────────────────────
+# ——— (section divider) ———
 
 
 def test_parse_template_endpoint_returns_spec(workspace: Path):
@@ -127,9 +127,9 @@ def test_parse_template_corrupt_docx_raises_journal_parse_error_mapped_to_422(
     assert office_error_to_http_status(excinfo.value) == 422
 
 
-# ─────────────────────────────────────────────────────────────────────
+# ——— (section divider) ———
 # GET /office/journal/specs
-# ─────────────────────────────────────────────────────────────────────
+# ——— (section divider) ———
 
 
 def test_list_journal_specs_empty(workspace: Path):
@@ -138,9 +138,7 @@ def test_list_journal_specs_empty(workspace: Path):
     assert resp.specs == []
 
 
-# ─────────────────────────────────────────────────────────────────────
-# GET /office/journal/specs/{spec_id}
-# ─────────────────────────────────────────────────────────────────────
+# ——— GET /office/journal/specs/{spec_id} ———
 
 
 def test_get_journal_spec_endpoint_returns_full_spec(workspace: Path):
@@ -160,9 +158,9 @@ def test_get_journal_spec_missing_returns_404(workspace: Path):
         get_journal_spec_endpoint("spec_does_not_exist", workspace_path=str(workspace))
 
 
-# ─────────────────────────────────────────────────────────────────────
+# ——— (section divider) ———
 # POST /office/journal/fill-from-content
-# ─────────────────────────────────────────────────────────────────────
+# ——— (section divider) ———
 
 
 def test_fill_from_content_endpoint_happy_path(workspace: Path):
@@ -229,9 +227,9 @@ def test_fill_from_content_invalid_content_shape(workspace: Path):
         fill_journal_from_content_endpoint(req)
 
 
-# ─────────────────────────────────────────────────────────────────────
+# ——— (section divider) ———
 # POST /office/journal/validate
-# ─────────────────────────────────────────────────────────────────────
+# ——— (section divider) ———
 
 
 def test_validate_endpoint_returns_violations_list(workspace: Path):

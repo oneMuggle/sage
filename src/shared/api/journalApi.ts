@@ -4,8 +4,6 @@
  * Backend: backend/api/office_routes.py (5 endpoints under /api/v1/office/journal/*).
  */
 import { invoke } from './desktopInvoke';
-import { handleApiError } from './utils';
-
 import type {
   JournalFillFromContentRequest,
   JournalFillFromContentResponse,
@@ -14,6 +12,8 @@ import type {
   JournalParseTemplateResponse,
   JournalValidateResponse,
 } from './types';
+import { handleApiError } from './utils';
+
 
 export const journalApi = {
   async parseTemplate(filePath: string): Promise<JournalParseTemplateResponse> {

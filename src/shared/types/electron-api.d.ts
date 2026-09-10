@@ -10,6 +10,9 @@
  * PR-C (2026-07-02): added skills bridge for Rescan + Import buttons.
  */
 
+import type { UpdateChannel, UpdateConfig, UpdateStrategy } from '../../../electron/updateConfig';
+import type { UpdateStateChangedEvent } from '../../../electron/updateIpc';
+import type { CheckResult } from '../../../electron/updateManager';
 import type {
   JournalFillFromContentRequest,
   JournalFillFromContentResponse,
@@ -18,9 +21,6 @@ import type {
   JournalParseTemplateResponse,
   JournalValidateResponse,
 } from '../api/types';
-import type { UpdateChannel, UpdateConfig, UpdateStrategy } from '../../../electron/updateConfig';
-import type { UpdateStateChangedEvent } from '../../../electron/updateIpc';
-import type { CheckResult } from '../../../electron/updateManager';
 import type { WindowControlsBridge } from '../api/windowControlsClient';
 import type { LogLevel } from '../log/levels';
 

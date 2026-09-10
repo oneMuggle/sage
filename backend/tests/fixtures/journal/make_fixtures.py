@@ -50,7 +50,7 @@ def _save_bad_template_corrupt() -> Path:
     if out.exists():
         out.unlink()
     with zipfile.ZipFile(out, "w") as z:
-        z.writestr("word/document.xml", "<w:document xmlns:w=\"w\"/>")
+        z.writestr("word/document.xml", '<w:document xmlns:w="w"/>')
     return out
 
 
@@ -99,7 +99,7 @@ def main() -> None:
         _save_bad_filled_paper(),
     ]
     for p in paths:
-        print(f"wrote {p.name} {p.stat().st_size}B")
+        print(f"wrote {p.name} {p.stat().st_size}B")  # noqa: T201
 
 
 if __name__ == "__main__":
