@@ -31,7 +31,11 @@ from backend.orchestration.models import Lane, RecoveryPolicy, Task, TaskPacket
 from backend.orchestration.orch_settings import OrchSettings, load_orch_settings
 from backend.orchestration.report_schema import Assertion
 from backend.orchestration.subagent_events import SubagentEventSink
-from backend.orchestration.subagent_runner import SubagentRunner, run_lane_with_retry
+from backend.orchestration.subagent_runner import (
+    SubagentRunner,
+    run_lane_accepts_backoff,
+    run_lane_with_retry,
+)
 from backend.orchestration.task_registry import TaskRegistry
 from backend.orchestration.topology import (
     DependencyCycleError,
@@ -698,6 +702,9 @@ class ChatDispatcher:
                 ),
             ),
         )
+        # RT10 (round7): 重试退避配置（RecoveryPolicy.retry_backoff_secs）传入
+        # 重试环——字段此前无消费者，重试是立即连发。
+        _backoff_secs = task.packet.recovery_policy.retry_backoff_secs
         self.task_registry.create_task(task)
         self.task_registry.mark_running(task_id)
 
@@ -756,7 +763,18 @@ class ChatDispatcher:
 
         depth_token = enter_subagent_depth(current_subagent_depth() + 1)
         try:
-            result = await run_lane_with_retry(executor, lane, state.agent_id)
+            # RT10: backoff 仅对接受该 kwarg 的实现传递 —— 测试桩常见
+            # (executor, lane, agent_id) 三参签名。mock.patch(side_effect=…)
+            # 包装的 MagicMock 签名恒为 (*args, **kwargs)，须穿透到
+            # side_effect 真实函数探测（run_lane_accepts_backoff），否则
+            # kwarg 照样落进三参 fake 的 TypeError（CI 实证）。
+            _pass_backoff = run_lane_accepts_backoff(run_lane_with_retry)
+            if _pass_backoff:
+                result = await run_lane_with_retry(
+                    executor, lane, state.agent_id, backoff_secs=_backoff_secs
+                )
+            else:
+                result = await run_lane_with_retry(executor, lane, state.agent_id)
             # Wave 2 Minor 2 fix: 防御性 max-iteration guard。run_lane_with_retry
             # 理论上内循环会收敛（max_retries 耗尽 → failed 终态），但防未来
             # executor 退化一直返回 retrying 导致 hang，调用层设硬上限。
@@ -768,7 +786,12 @@ class ChatDispatcher:
                         f"MAX_ITERATIONS_EXCEEDED: retry loop exceeded "
                         f"max_iterations={self.settings.max_lane_iterations}"
                     )
-                result = await run_lane_with_retry(executor, lane, state.agent_id)
+                if _pass_backoff:
+                    result = await run_lane_with_retry(
+                        executor, lane, state.agent_id, backoff_secs=_backoff_secs
+                    )
+                else:
+                    result = await run_lane_with_retry(executor, lane, state.agent_id)
         finally:
             exit_subagent_depth(depth_token)
 

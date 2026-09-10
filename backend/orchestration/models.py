@@ -110,7 +110,10 @@ class RecoveryPolicy:
     """Defines how to handle task failures."""
 
     on_failure: str = "retry"  # "retry" / "skip" / "abort-siblings" / "ask-human"
-    retry_backoff_secs: List[int] = field(default_factory=lambda: [30, 120, 600])
+    # RT10 (round7): 默认退避调为交互友好档位（原占位值 [30,120,600] 自声明
+    # 起无人消费；现在 run_lane_with_retry 真正按它退避，30s 首档会让桌面
+    # 交互场景的重试体感停滞）。
+    retry_backoff_secs: List[int] = field(default_factory=lambda: [5, 15, 30])
     max_retries: int = 2
 
 
