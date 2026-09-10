@@ -11,9 +11,8 @@ from backend.data.settings_repo import SettingsRepository
 from backend.orchestration.llm_factory import (
     DEFAULT_MODEL,
     build_llm_client_from_settings,
-    build_provider_client_from_settings,
     load_llm_config_from_settings,
-    resolve_provider_and_model_from_settings,
+    resolve_model_from_settings,
 )
 
 
@@ -100,7 +99,7 @@ class TestLoadLLMConfig:
         assert load_llm_config_from_settings() is None
 
 
-    def test_discovered_model_is_resolved_with_provider(self):
+    def test_discovered_model_is_resolved(self):
         _seed_settings(
             {
                 "endpoints": [
@@ -116,28 +115,9 @@ class TestLoadLLMConfig:
             }
         )
 
-        resolved = resolve_provider_and_model_from_settings()
+        assert resolve_model_from_settings() == "discovered-model"
 
-        assert resolved is not None
-        assert resolved[1] == "discovered-model"
-
-    def test_unknown_protocol_fails_closed(self):
-        _seed_settings(
-            {
-                "endpoints": [
-                    {
-                        "id": "unknown",
-                        "protocol": "not-supported",
-                        "baseUrl": "https://api.example.test/v1",
-                        "apiKey": "key",
-                    }
-                ],
-                "modelSelections": {"chatModel": {"endpointId": "unknown"}},
-            }
-        )
-
-        assert resolve_provider_and_model_from_settings() is None
-
+    def test_selected_ollama_endpoint_resolves_selected_model(self):
         _seed_settings(
             {
                 "endpoints": [
@@ -158,13 +138,9 @@ class TestLoadLLMConfig:
             }
         )
 
-        client = build_provider_client_from_settings(model="llama3")
-
-        from backend.adapters.out.llm.ollama import OllamaProvider
-
-        assert isinstance(client, OllamaProvider)
-        assert client._api_key == ""
-        assert client._base_url == "http://localhost:11434/v1"
+        # L3: ProviderClient 家族删除后, ollama 协议仅做白名单校验,
+        # 解析结果为模型名 (不再构造客户端实例)。
+        assert resolve_model_from_settings() == "llama3"
 
     def test_selected_openai_compatible_endpoint_allows_empty_api_key(self):
         _seed_settings(
@@ -189,13 +165,7 @@ class TestLoadLLMConfig:
             }
         )
 
-        client = build_provider_client_from_settings(model="local-model")
-
-        from backend.adapters.out.llm.openai import OpenAIProvider
-
-        assert isinstance(client, OpenAIProvider)
-        assert client._api_key == ""
-        assert client._base_url == "http://localhost:8080/v1"
+        assert resolve_model_from_settings() == "local-model"
 
     def test_selected_endpoint_without_base_url_does_not_fallback(self):
         _seed_settings(
@@ -213,7 +183,7 @@ class TestLoadLLMConfig:
             }
         )
 
-        assert build_provider_client_from_settings(model="local-model") is None
+        assert resolve_model_from_settings() is None
 
 
 class TestBuildClient:

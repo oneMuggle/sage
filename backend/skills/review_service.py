@@ -35,6 +35,33 @@ class _UnavailableReviewProvider:
         raise RuntimeError("Review provider is not configured")
 
 
+class _LLMClientReviewProvider:
+    """ProviderClient 契约的 LLMClient 适配器 (L3)。
+
+    ProviderClient 家族删除后, review 改走 LLMClient (settings 选定的
+    openai-compatible 端点, L3 时已烘焙进 client 配置 —— complete() 的
+    逐调用 model 参数被忽略)。messages 为 sage_core Message 列表, 转成
+    role/content dict 交给 LLMClient.chat。
+    """
+
+    def __init__(self, client: Any) -> None:
+        self._client = client
+
+    async def complete(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
+
+        messages = kwargs.get("messages") or []
+        payload = [
+            {
+                "role": (m.role.value if hasattr(m.role, "value") else m.role),
+                "content": m.content,
+            }
+            for m in messages
+        ]
+        response = await self._client.chat(payload)
+        return SimpleNamespace(text=response.content, model=getattr(response, "model", None))
+
+
 
 @dataclass(frozen=True)
 class _ReviewConfig:
@@ -45,14 +72,17 @@ class _ReviewConfig:
 
 
 def _build_review_config() -> _ReviewConfig:
-    """Resolve provider and model atomically from the same settings snapshot."""
+    """Resolve review LLM atomically from the same settings snapshot (L3)."""
     try:
-        from backend.orchestration.llm_factory import resolve_provider_and_model_from_settings
+        from backend.orchestration.llm_factory import (
+            build_llm_client_from_settings,
+            resolve_model_from_settings,
+        )
 
-        resolved = resolve_provider_and_model_from_settings()
-        if resolved is not None:
-            provider, model = resolved
-            return _ReviewConfig(provider=provider, model=model)
+        client = build_llm_client_from_settings()
+        if client is not None:
+            model = resolve_model_from_settings() or _DEFAULT_REVIEW_MODEL
+            return _ReviewConfig(provider=_LLMClientReviewProvider(client), model=model)
     except Exception:  # noqa: BLE001 - review remains best-effort
         logger.warning("Unable to build configured review provider", exc_info=True)
     return _ReviewConfig(
