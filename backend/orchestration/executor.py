@@ -9,6 +9,7 @@ Handles the complete execution flow for a Lane:
 - Integration with existing agent/task execution
 """
 import asyncio
+import contextlib
 import logging
 from typing import Any, Callable, Dict, Optional
 
@@ -153,6 +154,20 @@ class LaneExecutor:
                 f"Task {lane.task_id} not found",
                 "TASK_NOT_FOUND",
             )
+
+        # RT9 (round7): 重试带失败上下文 —— lane 重试分支记下的 retry_count /
+        # last_error 写入 task.parameters["retry_hint"]，SubagentRunner 组装
+        # prompt 时前置失败说明（盲重试 = 同一 prompt 跑三遍）。写经
+        # task.parameters 而非改 agent_runner 调用签名 —— 测试桩零感知。
+        if lane.metadata:
+            _retry_count = lane.metadata.get("retry_count", 0)
+            _last_error = lane.metadata.get("last_error")
+            if _retry_count and _last_error:
+                with contextlib.suppress(AttributeError):  # 测试桩的 parameters 可能不可写
+                    task.parameters["retry_hint"] = {
+                        "attempt": _retry_count,
+                        "last_error": str(_last_error)[:2000],
+                    }
 
         # Step 5: Execute the task
         try:
