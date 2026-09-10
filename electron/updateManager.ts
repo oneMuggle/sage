@@ -10,6 +10,13 @@ import { ConfigManager } from './updateConfig';
 import type { UpdateChannel, UpdateConfig, UpdateStrategy } from './updateConfig';
 import { LauncherHealthChecker } from './updateHealthChecker';
 import { fetchCompat } from './fetchCompat';
+// Task 1.7: pluggable update provider wiring.
+import type { UpdateProvider, NormalisedRelease } from './update/providers/base';
+import type { ProviderRegistry } from './update/providers/registry';
+import type { ProviderStore } from './update/providerStore';
+import { BUILTIN_GENERIC_CONFIG } from './update/featureFlag';
+import { createGenericHttpProvider } from './update/providers/genericHttp';
+import { logger } from './logger';
 
 export interface CheckResult {
   updateAvailable: boolean;
@@ -77,6 +84,17 @@ interface PreparedUpgradeInfo {
   wasRenamed: boolean;
 }
 
+/**
+ * Task 1.7: constructor options for the provider-injected path.
+ * The old positional `UpdaterBoundary` arg is still accepted for backward
+ * compatibility with existing tests and `electron/main.ts` callers.
+ */
+export interface UpdateManagerOptions {
+  updater?: UpdaterBoundary;
+  providerStore?: ProviderStore;
+  providerRegistry?: ProviderRegistry;
+}
+
 const UPDATE_SIGNING_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA28+4qGf6PSfwqA97ST5x
 +3MW1Udtg9UJDB2gL5CP55tRM2kMg3qFkk3bY548BgJsAVEZxRyE+jS6cS4sTKEK
@@ -99,11 +117,136 @@ export class UpdateManager {
   private stateChangeListeners: Array<(state: UpdateState) => void> = [];
   private automaticUpdateInProgress = false;
   private checkPromise: Promise<CheckResult> | null = null;
+  // Task 1.7: pluggable provider injection.
+  private deps: {
+    providerStore?: ProviderStore;
+    providerRegistry?: ProviderRegistry;
+  } = {};
+  /** Resolved active provider. null until `init()` runs successfully. */
+  private activeProvider: UpdateProvider | null = null;
+  /** Cached normalised release from the last successful active-provider check. */
+  private lastNormalisedRelease: NormalisedRelease | null = null;
 
-  constructor(updater: UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary) {
+  constructor(
+    optionsOrUpdater: UpdateManagerOptions | UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary,
+  ) {
+    // Backward-compat: old callers do `new UpdateManager(updaterBoundary)`,
+    // new callers do `new UpdateManager({ providerStore, providerRegistry })`.
+    // Detect by duck-typing the old UpdaterBoundary shape (`setFeedURL`).
+    if (
+      optionsOrUpdater &&
+      typeof optionsOrUpdater === 'object' &&
+      'setFeedURL' in (optionsOrUpdater as object)
+    ) {
+      this.updater = optionsOrUpdater as UpdaterBoundary;
+    } else {
+      const opts = (optionsOrUpdater ?? {}) as UpdateManagerOptions;
+      this.deps = {
+        providerStore: opts.providerStore,
+        providerRegistry: opts.providerRegistry,
+      };
+      this.updater = opts.updater ?? (autoUpdater as unknown as UpdaterBoundary);
+    }
     this.stateManager = new StateManager();
     this.configManager = new ConfigManager();
-    this.updater = updater;
+  }
+
+  /**
+   * Task 1.7: initialise the active provider from the provider store.
+   *
+   * If the user has configured a default provider, build it via the registry.
+   * Otherwise fall back to the built-in `updates.sage.app` generic-http
+   * provider so the app keeps working without any user configuration.
+   *
+   * Must be called once after construction (and after app.isReady, so electron-
+   * store has a writable userData directory) before `checkForUpdates()` or
+   * `downloadUpdate()` are invoked via the provider path.
+   */
+  async init(): Promise<void> {
+    if (!this.deps.providerStore || !this.deps.providerRegistry) {
+      // Old-style construction (only updater supplied). No provider system
+      // wired up — keep legacy fetch+electron-updater path active.
+      return;
+    }
+    const list = await this.deps.providerStore.list();
+    const def = list.find((c) => c.isDefault && c.enabled);
+    if (def) {
+      this.activeProvider = this.deps.providerRegistry.build(def);
+      logger.info(
+        `active provider = user-configured ${def.displayName} (${def.type})`,
+      );
+    } else {
+      this.activeProvider = createGenericHttpProvider({
+        id: BUILTIN_GENERIC_CONFIG.id,
+        displayName: BUILTIN_GENERIC_CONFIG.displayName,
+        config: BUILTIN_GENERIC_CONFIG.config,
+      });
+      logger.warn(
+        'No user default provider, falling back to built-in updates.sage.app',
+      );
+    }
+  }
+
+  /**
+   * Task 1.8 (preflight): switch the active provider at runtime.
+   *
+   * Builds the named provider, demotes any existing default, and promotes the
+   * target. Throws if the id is unknown or disabled.
+   */
+  async switchProvider(id: string): Promise<void> {
+    if (!this.deps.providerStore || !this.deps.providerRegistry) {
+      throw new Error('Provider system not initialised');
+    }
+    const cfg = await this.deps.providerStore.get(id);
+    if (!cfg || !cfg.enabled) {
+      throw new Error(`Provider not found or disabled: ${id}`);
+    }
+    this.activeProvider = this.deps.providerRegistry.build(cfg);
+    const all = await this.deps.providerStore.list();
+    for (const c of all) {
+      if (c.id !== id && c.isDefault) {
+        await this.deps.providerStore.update(c.id, { isDefault: false });
+      }
+    }
+    await this.deps.providerStore.update(id, { isDefault: true });
+    logger.info(`Switched active provider to ${cfg.displayName} (${cfg.type})`);
+  }
+
+  /**
+   * Task 1.8 (preflight): ping a named provider without mutating activeProvider.
+   * Builds a transient provider from store config and invokes `ping()`.
+   */
+  async pingProvider(
+    id: string,
+  ): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+    if (!this.deps.providerStore || !this.deps.providerRegistry) {
+      throw new Error('Provider system not initialised');
+    }
+    const cfg = await this.deps.providerStore.get(id);
+    if (!cfg) {
+      throw new Error(`Provider not found: ${id}`);
+    }
+    const tmp = this.deps.providerRegistry.build(cfg);
+    return tmp.ping();
+  }
+
+  /**
+   * Task 1.8 (preflight): check a named provider for updates without mutating
+   * activeProvider. Builds a transient provider and invokes `checkForUpdates()`.
+   */
+  async checkWithProvider(
+    id: string,
+    channel: string = 'stable',
+  ): Promise<NormalisedRelease | null> {
+    if (!this.deps.providerStore || !this.deps.providerRegistry) {
+      throw new Error('Provider system not initialised');
+    }
+    const cfg = await this.deps.providerStore.get(id);
+    if (!cfg) {
+      throw new Error(`Provider not found: ${id}`);
+    }
+    const tmp = this.deps.providerRegistry.build(cfg);
+    return tmp.checkForUpdates(channel);
   }
 
   /** Return the current persisted state for renderer initialization. */
@@ -139,7 +282,137 @@ export class UpdateManager {
     }
   }
 
+  /**
+   * Task 1.7: provider-delegating check path.
+   *
+   * When `activeProvider` is set (via the new options-based constructor and a
+   * successful `init()`), this bypasses `performCheckForUpdates` and calls
+   * `activeProvider.checkForUpdates()` instead. The returned `NormalisedRelease`
+   * is cached for the subsequent `downloadUpdate()` call.
+   */
+  private async performProviderCheck(channel: string): Promise<CheckResult> {
+    if (!this.activeProvider) {
+      throw new Error('UpdateManager not initialised');
+    }
+    try {
+      const release = await this.activeProvider.checkForUpdates(channel);
+      if (!release) {
+        this.lastNormalisedRelease = null;
+        return { updateAvailable: false };
+      }
+      this.lastNormalisedRelease = release;
+      const firstAsset = release.assets[0];
+      return {
+        updateAvailable: true,
+        version: release.version,
+        releaseNotes: release.releaseNotes,
+        downloadUrl: firstAsset?.downloadUrl,
+      };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      logger.error?.('Provider checkForUpdates failed', e);
+      return { updateAvailable: false, error: message } as CheckResult;
+    }
+  }
+
+  /**
+   * Task 1.7: provider-delegating download implementation.
+   *
+   * Uses the cached NormalisedRelease from the last provider check (or
+   * accepts an override) and delegates the actual download + verification to
+   * the active provider. The publicKey source is resolved from the provider's
+   * store config, not the asset payload (NormalisedRelease.assets[] only
+   * carries `signature` + `checksum` per spec §4.1).
+   */
+  private async performProviderDownload(
+    updateOverride: CheckedUpdate | undefined,
+    _releaseNotesOverride: string | undefined,
+  ): Promise<void> {
+    if (!this.activeProvider) {
+      throw new Error('UpdateManager not initialised');
+    }
+    const providerStore = this.deps.providerStore;
+    const activeId = this.activeProvider.id;
+    const storeCfg = providerStore ? await providerStore.get(activeId) : null;
+    const release = this.lastNormalisedRelease;
+    if (!release) {
+      throw new Error('No update is available to download');
+    }
+    const firstAsset = release.assets[0];
+    if (!firstAsset) {
+      throw new Error('Release has no downloadable asset');
+    }
+    try {
+      const path = await this.activeProvider.downloadAsset(release, firstAsset.id);
+      // Signature verification: only invoke verifyArtifact when the active
+      // provider exposes it AND the provider config carries a publicKey AND
+      // the asset has a signature. Non-generic providers handle signatures
+      // internally per their type contract (see spec §4.1).
+      if (
+        this.activeProvider.verifyArtifact &&
+        firstAsset.signature &&
+        storeCfg?.type === 'generic-http' &&
+        // Narrow union: only GenericHttpConfig has publicKey.
+        (storeCfg.config as { publicKey?: string }).publicKey
+      ) {
+        const genericCfg = storeCfg.config as { publicKey: string };
+        const ok = await this.activeProvider.verifyArtifact(
+          path,
+          firstAsset.signature,
+          genericCfg.publicKey,
+        );
+        if (!ok) {
+          throw new Error('Signature verification failed; refusing this update');
+        }
+      }
+      // Maintain the legacy state-update contract so downstream consumers
+      // (renderer's state-change listener) see a consistent UpdateState.
+      if (updateOverride) {
+        this.lastCheckedUpdate = updateOverride;
+      }
+      const state = await this.stateManager.getState();
+      const newState: UpdateState = {
+        ...state,
+        updateAvailable: false,
+        availableUpdate: null,
+        pendingUpdate: {
+          version: release.version,
+          downloadedAt: new Date().toISOString(),
+          releaseNotes: release.releaseNotes,
+          fileUrl: firstAsset.downloadUrl,
+          filename: firstAsset.name,
+          sha512: '',
+          size: firstAsset.size,
+          signature: firstAsset.signature ?? '',
+        },
+        cachedRollbackPackage: {
+          path,
+          version: release.version,
+          sha512: '',
+          size: firstAsset.size,
+          signature: firstAsset.signature ?? '',
+          fileUrl: firstAsset.downloadUrl,
+        },
+      };
+      await this.stateManager.setState(newState);
+      this.notifyStateChange(newState);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to download update: ${message}`);
+    }
+  }
+
   private async performCheckForUpdates(): Promise<CheckResult> {
+    // Task 1.7: when a provider is wired up, delegate to it instead of
+    // hitting the legacy fetch + manifest-validation path. The legacy path
+    // remains for callers that construct UpdateManager without provider deps
+    // (preserves backward compatibility with the existing 77-test suite in
+    // electron/tests/, which will be rewritten on top of the provider API in
+    // a later phase).
+    if (this.activeProvider) {
+      const config = await this.configManager.getConfig();
+      return this.performProviderCheck(config.channel ?? 'stable');
+    }
     this.lastCheckedUpdate = null;
     this.lastCheckedReleaseNotes = undefined;
     const config = await this.configManager.getConfig();
@@ -267,6 +540,15 @@ export class UpdateManager {
     updateOverride?: CheckedUpdate,
     releaseNotesOverride?: string,
   ): Promise<void> {
+    // Task 1.7: provider-delegating download path. When activeProvider is
+    // set, route through provider.downloadAsset(). The publicKey source
+    // comes from the provider's store config (GenericHttpConfig.publicKey)
+    // rather than the asset payload, which only carries `signature` +
+    // `checksum` per spec §4.1.
+    if (this.activeProvider) {
+      await this.performProviderDownload(updateOverride, releaseNotesOverride);
+      return;
+    }
     const checkedUpdate = updateOverride ?? this.lastCheckedUpdate;
     if (!checkedUpdate) {
       throw new Error('No update is available to download');
