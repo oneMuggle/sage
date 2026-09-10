@@ -20,6 +20,7 @@ from backend.chat.compaction import (
     build_compaction_prompt,
     compact_messages,
     continuation_message,
+    default_compact_threshold,
     estimate_messages_tokens,
     get_compact_threshold,
     should_compact,
@@ -196,3 +197,43 @@ async def test_compact_messages_too_few_raises():
 
     with pytest.raises(CompactionError, match="nothing to compact"):
         await compact_messages(messages, fake_llm, keep_recent=6)
+
+
+# ---- RT3 (round7): 无显式覆盖时阈值 = 历史截断预算 ---------------------------
+
+
+def test_default_compact_threshold_honors_env(monkeypatch):
+    """显式 env 覆盖优先于口径统一。"""
+    monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "50")
+    assert default_compact_threshold() == 50
+
+
+def test_default_compact_threshold_honors_settings(monkeypatch):
+    """显式 settings 覆盖优先于口径统一。"""
+    monkeypatch.delenv("SAGE_COMPACT_THRESHOLD", raising=False)
+    from backend.data.settings_repo import SettingsRepository
+
+    SettingsRepository().set("compact_threshold_tokens", "42")
+    assert default_compact_threshold() == 42
+
+
+def test_default_compact_threshold_unified_with_history_budget(monkeypatch):
+    """无显式覆盖 → 与历史截断预算同一口径（压缩恰好先于截断触发）。"""
+    monkeypatch.delenv("SAGE_COMPACT_THRESHOLD", raising=False)
+    monkeypatch.delenv("SAGE_HISTORY_TOKEN_BUDGET", raising=False)
+    from backend.chat.history_context import history_token_budget
+
+    assert default_compact_threshold() == history_token_budget()
+
+
+def test_should_compact_default_path_uses_unified_threshold(monkeypatch):
+    """should_compact 缺省阈值经 default_compact_threshold（口径统一后行为）。"""
+    monkeypatch.delenv("SAGE_COMPACT_THRESHOLD", raising=False)
+    monkeypatch.delenv("SAGE_HISTORY_TOKEN_BUDGET", raising=False)
+    from backend.chat.history_context import history_token_budget
+
+    budget = history_token_budget()
+    messages = _dict_messages(MIN_COMPACT_MESSAGE_COUNT)
+    assert should_compact(messages) == (
+        estimate_messages_tokens(messages) >= budget
+    )
