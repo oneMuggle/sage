@@ -23,6 +23,7 @@ from backend.domain.risk import RiskClass
 from .base import BaseTool, ToolResult, ToolSchema
 from .edit_tool import (
     _count_logical_lines,
+    _resolve_fuzzy_range,
     _resolve_matches,
     _validate_edit_params,
     _validate_target_file,
@@ -40,7 +41,15 @@ MAX_PATCHES_PER_CALL = 32
 class _PlannedEdit:
     """校验通过的单文件编辑计划：同一文件的多个补丁链式叠加后的终态。"""
 
-    __slots__ = ("path", "encoding", "updated", "replacements", "lines_added", "lines_removed")
+    __slots__ = (
+        "path",
+        "encoding",
+        "updated",
+        "replacements",
+        "lines_added",
+        "lines_removed",
+        "fuzzy",
+    )
 
     def __init__(self, path: Path, encoding: str, updated: str) -> None:
         self.path = path
@@ -49,6 +58,7 @@ class _PlannedEdit:
         self.replacements = 0
         self.lines_added = 0
         self.lines_removed = 0
+        self.fuzzy = False
 
 
 class ApplyPatchTool(BaseTool):
@@ -154,13 +164,35 @@ class ApplyPatchTool(BaseTool):
             match_count, match_error = _resolve_matches(
                 planned_edit.updated, old_string, replace_all
             )
+            fuzzy_range = None
+            if match_error is not None and not replace_all:
+                # G-2 (round5 批次 G): 精确 0 命中 → 行级 trim 容错兜底
+                # （与 edit_file F-1 同款；命中恰 1 处才替换，原子性不变）
+                fuzzy_range, fuzzy_hits = _resolve_fuzzy_range(
+                    planned_edit.updated, old_string
+                )
+                if fuzzy_range is not None and fuzzy_hits == 1:
+                    match_error = None
+                    match_count = 1
+                    planned_edit.fuzzy = True
             if match_error is not None:
                 return [], self._with_index(index, match_error)
 
             replacements = match_count if replace_all else 1
-            planned_edit.updated = planned_edit.updated.replace(
-                old_string, new_string
-            ) if replace_all else planned_edit.updated.replace(old_string, new_string, 1)
+            if fuzzy_range is not None:
+                start, end, trailing_eol = fuzzy_range
+                insert_new = new_string
+                if "\r\n" in planned_edit.updated and "\r\n" not in insert_new:
+                    insert_new = insert_new.replace("\r\n", "\n").replace("\n", "\r\n")
+                if trailing_eol and insert_new and not insert_new.endswith(("\n", "\r\n")):
+                    insert_new += trailing_eol
+                planned_edit.updated = (
+                    planned_edit.updated[:start] + insert_new + planned_edit.updated[end:]
+                )
+            else:
+                planned_edit.updated = planned_edit.updated.replace(
+                    old_string, new_string
+                ) if replace_all else planned_edit.updated.replace(old_string, new_string, 1)
             planned_edit.replacements += replacements
             planned_edit.lines_added += _count_logical_lines(new_string) * replacements
             planned_edit.lines_removed += _count_logical_lines(old_string) * replacements
@@ -264,6 +296,8 @@ class ApplyPatchTool(BaseTool):
                     "replacements": planned_edit.replacements,
                     "lines_added": planned_edit.lines_added,
                     "lines_removed": planned_edit.lines_removed,
+                    # G-2 (round5 批次 G): 该文件经行级 trim 容错命中
+                    "fuzzy": planned_edit.fuzzy,
                 }
             )
 

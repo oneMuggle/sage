@@ -175,3 +175,68 @@ def test_requires_bound_workspace():
     assert "path_outside_workspace" in (result.error or "") or "绑定工作区" in (
         result.error or ""
     )
+
+
+# ==================== G-2 (round5 批次 G): 行级 trim 容错 ====================
+
+
+def test_apply_patch_whitespace_diff_falls_back_to_trim_match(workspace):
+    """G-2: old_string 缩进/行尾差异 → 精确失配后行级 trim 容错命中。"""
+    target = workspace / "app.py"
+    target.write_text("def main():\n    value = 1\n", encoding="utf-8")
+    tool = ApplyPatchTool(policy=ToolPolicy(workspace_root=str(workspace)))
+    result = tool.execute(
+        patches=[
+            {
+                "file_path": "app.py",
+                "old_string": "def main():\nvalue = 1",  # 缩进被剥掉
+                "new_string": "def main():\n    value = 2",
+            }
+        ]
+    )
+    assert result.success is True
+    entry = result.content["files_changed"][0]
+    assert entry["fuzzy"] is True
+    assert "value = 2" in target.read_text(encoding="utf-8")
+
+
+def test_apply_patch_fuzzy_multiple_hits_still_rejected(workspace):
+    """G-2: trim 容错多处命中 → 维持拒绝语义（不猜）。"""
+    target = workspace / "dup.py"
+    target.write_text("x = 1\ny = 1\n", encoding="utf-8")
+    tool = ApplyPatchTool(policy=ToolPolicy(workspace_root=str(workspace)))
+    result = tool.execute(
+        patches=[
+            {
+                "file_path": "dup.py",
+                "old_string": "= 1",
+                "new_string": "= 2",
+            }
+        ]
+    )
+    assert result.success is False
+    # 原子性：失败不动盘
+    assert (target).read_text(encoding="utf-8") == "x = 1\ny = 1\n"
+
+
+def test_apply_patch_fuzzy_atomic_rollback_preserved(workspace):
+    """G-2: 多文件批次中一个 fuzzy 命中、另一个失败 → 整批放弃。"""
+    (workspace / "a.py").write_text("alpha = 1\n", encoding="utf-8")
+    (workspace / "b.py").write_text("beta = 1\n", encoding="utf-8")
+    tool = ApplyPatchTool(policy=ToolPolicy(workspace_root=str(workspace)))
+    result = tool.execute(
+        patches=[
+            {
+                "file_path": "a.py",
+                "old_string": "alpha = 1",
+                "new_string": "alpha = 2",
+            },
+            {
+                "file_path": "b.py",
+                "old_string": "不存在的片段",
+                "new_string": "x",
+            },
+        ]
+    )
+    assert result.success is False
+    assert "alpha = 1" in (workspace / "a.py").read_text(encoding="utf-8")
