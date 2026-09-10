@@ -198,23 +198,38 @@ class MemoryAdapter:
         # 3. RRF 融合两路结果 (T1, P10): 权重按嵌入器能力重配 ——
         #    语义嵌入 (Onnx, 512 维) 向量路是真语义相似度, 权重压过关键词;
         #    字面哈希 (Hash, 256 维) 与关键词路高度重叠, 关键词路更可靠。
-        weights = [0.3, 0.7] if getattr(self.embedder, "is_semantic", False) else [0.6, 0.4]
+        base_weights = (
+            [0.3, 0.7]
+            if getattr(self.embedder, "is_semantic", False)
+            else [0.6, 0.4]
+        )
+        # B4 (P11): A/B 权重变体 —— 按 query 稳定 hash 二分。
+        # A = 嵌入器类型基线权重; B = 均权对照, 离线对比两组召回质量。
+        import hashlib as _hl
+
+        variant = (
+            "A"
+            if int(_hl.md5(query.encode("utf-8")).hexdigest()[:8], 16) % 2 == 0
+            else "B"
+        )
+        if variant == "A":
+            weights = list(base_weights)
+        else:
+            mid = (base_weights[0] + base_weights[1]) / 2
+            weights = [mid, mid]
         fused = reciprocal_rank_fusion(
             [keyword_items, vector_items],
             weights=weights,
             k=60,
         )
 
-        # T3 (P10): 检索命中率观测埋点 (结构化日志, 供命中率/召回质量分析)
         logger.info(
-            "[retrieval] q_len=%s keyword_hits=%s vector_hits=%s fused=%s "
-            "semantic_embedder=%s weights=%s",
-            len(query),
+            "[retrieval] variant=%s weights=%s keyword_hits=%s vector_hits=%s fused=%s",
+            variant,
+            weights,
             len(keyword_items),
             len(vector_items),
             len(fused),
-            getattr(self.embedder, "is_semantic", False),
-            weights,
         )
 
         # 4. 分层：用户画像（始终注入）+ 高重要性 → core，其余 → episodic/semantic
