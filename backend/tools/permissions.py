@@ -202,6 +202,13 @@ class PermissionEnforcer:
     def mode(self) -> PermissionMode:
         return self._mode
 
+    def force_mode(self, mode: PermissionMode) -> None:
+        """PM1 (round8): 实例级模式覆盖（如计划模式 per-run 只读）。
+
+        只改本实例，不写 settings —— 全局 ``permission_mode`` 配置不受影响。
+        """
+        self._mode = PermissionMode(mode)
+
     @property
     def rules(self) -> Tuple[PermissionRule, ...]:
         return self._rules

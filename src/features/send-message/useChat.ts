@@ -84,6 +84,8 @@ export function useChat() {
   // sid → 活跃流句柄（S3: cancelRef/streamIdRef/finishStreamRef 单例的键控版）
   const activeHandleRef = useRef<Map<string, ActiveStreamHandle>>(new Map());
   const [error, setError] = useState<string | null>(null);
+  // PM2 (round8): 计划模式完成的会话 ID —— 非空时 Chat 渲染"按计划执行"批准条。
+  const [planApprovalFor, setPlanApprovalFor] = useState<string | null>(null);
   const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
   const { settings } = useSettings();
 
@@ -164,7 +166,7 @@ export function useChat() {
       sessionId?: string,
       officeRefs?: readonly ChatOfficeRef[],
       orchestrationMode?: ChatConfig['orchestrationMode'],
-      opts?: { planOverride?: TaskPlanItem[]; runId?: string },
+      opts?: { planOverride?: TaskPlanItem[]; runId?: string; planMode?: boolean },
     ) => {
       const sid = sessionId ?? currentSessionId;
       if (!sid) return;
@@ -283,6 +285,8 @@ export function useChat() {
         // Wave 3: resume 恢复流透传
         planOverride: opts?.planOverride,
         runId: opts?.runId,
+        // PM1 (round8): 计划模式透传（本次 run 只读 + 计划指令）
+        planMode: opts?.planMode,
       };
 
       const appendContent = (next: string): void => {
@@ -742,6 +746,8 @@ export function useChat() {
             onDone: () => {
               // S8: 后台会话完成提醒
               maybeNotify('done', (lastDoneContent ?? '').slice(0, 120));
+              // PM2: 计划模式 run 自然完成 → 该会话进入"待批准"状态
+              if (opts?.planMode) setPlanApprovalFor(sid);
               // 流自然结束 — 把 streaming.content 写回 store,
               // 然后清掉 streaming overlay 让消息退回 store 视图
               // U5: 自然结束才 flush 队列(错误/中断路径 flushQueue=false)
@@ -914,5 +920,9 @@ export function useChat() {
     askBtw,
     /** Phase 6: /btw 是否正在流式输出 */
     isBtwStreaming,
+    /** PM2 (round8): 计划模式已完成、待用户批准的会话 ID（null = 无） */
+    planApprovalFor,
+    /** PM2: 清除计划批准状态（批准执行或忽略时调用） */
+    clearPlanApproval: useCallback(() => setPlanApprovalFor(null), []),
   };
 }

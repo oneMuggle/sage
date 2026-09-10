@@ -34,9 +34,16 @@ interface TaskTreeSectionProps {
   // Wave 3 H2 (2026-08-15): 运行中编排的取消入口。由上层
   // (Chat.handleCancelRun) 统一调 cancelRun + 清空 taskBoard。
   onCancel?: () => void;
+  // RV3 (round8): run 终态且有失败任务时的"重跑失败任务"入口。由上层
+  // 调 rerun-failed 端点拿 planOverride 后经 chatStream 重发。
+  onRerunFailed?: () => void;
 }
 
-export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
+export function TaskTreeSection({
+  board,
+  onCancel,
+  onRerunFailed,
+}: TaskTreeSectionProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectTask = useRunControlStore((s) => s.selectTask);
   // B3 (2026-09-09): 单任务跳过 in-flight 集合 —— 防重复点击；终态由
@@ -148,6 +155,18 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
             className="px-2 py-1 text-xs border rounded shrink-0"
           >
             取消执行
+          </button>
+        )}
+        {/* RV3 (round8): 终态且有失败任务 → 重跑失败任务（已完成结果保留） */}
+        {allDone && failed > 0 && onRerunFailed && (
+          <button
+            type="button"
+            onClick={onRerunFailed}
+            data-testid="task-tree-rerun-failed"
+            title="只重跑失败/取消的子任务，已完成子任务的结果保留"
+            className="px-2 py-1 text-xs border border-primary/40 text-primary rounded shrink-0 hover:bg-primary/10 transition-colors"
+          >
+            重跑失败任务
           </button>
         )}
       </div>

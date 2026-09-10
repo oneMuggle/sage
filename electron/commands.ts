@@ -540,6 +540,12 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/confirm`,
   },
+  // RV2 (round8): 只重跑失败任务 —— 返回 {session_id, goal, plan_override}，
+  // 前端经 chatStream planOverride 通道重发。
+  orchestration_rerun_failed: {
+    method: 'POST',
+    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/rerun-failed`,
+  },
 
   // Office document features (Phase 1.3, plan §4.1.3 step 14).
   // 5 routes for Phase 1.2 backend (3 read + list + delete).

@@ -26,6 +26,8 @@ interface RightPanelProps {
   // M4 (2026-08-15): onPlanStart 已删。
   // Wave 4 (2026-09-06): onResumeRun 已删 —— 历史编排记录功能移除。
   onCancelExecution?: (runId: string) => void;
+  // RV3 (round8): 终态且有失败任务时的重跑入口（透传 ProgressSection → TaskTreeSection）。
+  onRerunFailed?: (runId: string) => void;
 }
 
 type Tab = 'progress' | 'artifacts' | 'changes';
@@ -98,6 +100,7 @@ function RightPanelInner({
   sessionId,
   taskBoard,
   onCancelExecution,
+  onRerunFailed,
 }: RightPanelProps) {
   const [tab, setTab] = useState<Tab>('progress');
   const [selected, setSelected] = useState<Artifact | null>(null);
@@ -130,6 +133,7 @@ function RightPanelInner({
             // S2: todos 从该会话的键控槽位读取（切会话看该会话的清单）
             sessionId={sessionId}
             onCancelExecution={onCancelExecution}
+            onRerunFailed={onRerunFailed}
           />
         ) : tab === 'changes' ? (
           <ChangesSection sessionId={sessionId} />

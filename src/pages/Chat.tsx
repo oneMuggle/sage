@@ -58,6 +58,8 @@ export function Chat() {
     taskBoard, // Multi-Agent Orchestration: 编排任务板
     clearTaskBoard, // Wave 3: 取消执行后清空任务板
     streamingToolCalls, // 右侧面板 Progress: 实时流式工具调用
+    planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
+    clearPlanApproval, // PM2: 清除批准状态
   } = useChat();
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
 
@@ -351,6 +353,8 @@ export function Chat() {
         officeRefs?: readonly ChatOfficeRef[];
         // Wave 3 C6: 放宽为 string —— 编排模式条可传 'template:<id>' 等。
         orchestrationMode?: string;
+        // PM1 (round8): /plan 计划模式 —— 本次 run 只读 + 计划产出。
+        planMode?: boolean;
       },
     ) => {
       clearError();
@@ -358,9 +362,13 @@ export function Chat() {
       const orchestrationMode = options?.orchestrationMode;
       if (!currentSessionId) {
         const sessionId = await createSession();
-        await sendMessage(content, sessionId, officeRefs, orchestrationMode);
+        await sendMessage(content, sessionId, officeRefs, orchestrationMode, {
+          planMode: options?.planMode,
+        });
       } else {
-        await sendMessage(content, undefined, officeRefs, orchestrationMode);
+        await sendMessage(content, undefined, officeRefs, orchestrationMode, {
+          planMode: options?.planMode,
+        });
       }
     },
     [clearError, currentSessionId, createSession, sendMessage],
@@ -524,6 +532,22 @@ export function Chat() {
     ],
   );
 
+  // RV3 (round8): 只重跑失败任务 —— 调 rerun-failed 拿 planOverride
+  // （done 子任务带 preset_output 回放），经 chatStream 重发全新 run。
+  // 注：handleCancelRun 本分支已有（:373），不重复引入。
+  const handleRerunFailed = async (runId: string) => {
+    if (!currentSessionId) return;
+    try {
+      const res = await orchRunClient.rerunFailed(runId);
+      const sid = res.session_id ?? currentSessionId;
+      await sendMessage(res.goal, sid, undefined, 'force_multi', {
+        planOverride: res.plan_override,
+      });
+    } catch {
+      toast.error('重跑失败任务请求失败（run 未终态或无失败任务）');
+    }
+  };
+
   // 顶层错误：渲染整页 ErrorState，提供"关闭"清除错误后回到聊天
   if (error) {
     return (
@@ -586,6 +610,45 @@ export function Chat() {
             onFork={handleFork}
             onEditResend={handleStartEditResend}
           />
+        )}
+        {/* PM2 (round8): 计划批准条 —— /plan run 完成后出现;批准即衔接执行 */}
+        {planApprovalFor != null && planApprovalFor === currentSessionId && (
+          <div className="px-4 pb-2" data-testid="plan-approval-bar">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded border border-primary/40 bg-primary/5">
+              <span className="text-xs text-text-secondary">
+                计划已生成 —— 批准后将严格按上述计划执行
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  data-testid="plan-approve"
+                  className="px-2 py-1 text-xs rounded bg-primary text-bg-inv font-medium"
+                  onClick={() => {
+                    const sid = planApprovalFor;
+                    clearPlanApproval();
+                    if (sid) {
+                      void sendMessage(
+                        '请严格按上述计划执行，不要重新规划。',
+                        sid,
+                        undefined,
+                        'force_single',
+                      );
+                    }
+                  }}
+                >
+                  按计划执行
+                </button>
+                <button
+                  type="button"
+                  data-testid="plan-dismiss"
+                  className="px-2 py-1 text-xs rounded border border-border text-text-secondary"
+                  onClick={() => clearPlanApproval()}
+                >
+                  忽略
+                </button>
+              </div>
+            </div>
+          </div>
         )}
         {/* 编排计划确认卡 (Fix #2): 未派发时在主对话区域显示,方便用户查看和确认 */}
         {taskBoard && !taskBoard.dispatchedAt && (
@@ -673,6 +736,7 @@ export function Chat() {
         // cancelRun（未派发时后端置 cancelled + dispatcher.cancel() 阻止
         // 自动派发）+ 清空 taskBoard。
         onCancelExecution={(runId) => void handleCancelRun(runId)}
+        onRerunFailed={(runId) => void handleRerunFailed(runId)}
       />
     </div>
   );
