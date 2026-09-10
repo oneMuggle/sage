@@ -97,3 +97,30 @@ def test_no_match_and_validation(codebase):
 def test_tokenizer_splits_camel_and_snake():
     assert _tokenize("killProcessTree") == ["kill", "process", "tree"]
     assert "checkpoint" in _tokenize("save_checkpoint")
+
+
+def test_js_ts_symbols_discovered_and_ranked(tmp_path):
+    """F-3 (round5 批次 F): JS/TS 定义走行级提取, 与 Python 符号合并且命中。"""
+    (tmp_path / "service.ts").write_text(
+        "export function createCheckpointService() {\n"
+        "  return {}\n"
+        "}\n"
+        "export interface CheckpointOptions {\n"
+        "  keepCount: number\n"
+        "}\n"
+        "export const reloadCheckpoints = async () => {\n"
+        "  return true\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "plain.py").write_text("def unrelated_helper():\n    pass\n", encoding="utf-8")
+
+    tool = SymbolSearchTool(policy=ToolPolicy(workspace_root=str(tmp_path)))
+    result = tool.execute(query="checkpoint")
+    assert result.success is True
+    names = [m["name"] for m in result.content["matches"]]
+    assert "createCheckpointService" in names
+    assert "CheckpointOptions" in names
+    assert "reloadCheckpoints" in names
+    assert all("service.ts" in m["path"] for m in result.content["matches"])
+    assert "unrelated_helper" not in names
