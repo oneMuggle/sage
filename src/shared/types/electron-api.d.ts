@@ -157,10 +157,7 @@ export interface JournalElectronApiBridge {
   parseTemplate: (filePath: string) => Promise<JournalParseTemplateResponse>;
   listSpecs: () => Promise<JournalListSpecsResponse>;
   getSpec: (specId: string) => Promise<JournalGetSpecResponse>;
-  validate: (args: {
-    spec_id?: string;
-    file_path?: string;
-  }) => Promise<JournalValidateResponse>;
+  validate: (args: { spec_id?: string; file_path?: string }) => Promise<JournalValidateResponse>;
   fillFromContent: (req: JournalFillFromContentRequest) => Promise<JournalFillFromContentResponse>;
 }
 

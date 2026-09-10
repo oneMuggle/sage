@@ -44,10 +44,7 @@ export const journalApi = {
     }
   },
 
-  async validate(args: {
-    spec_id?: string;
-    file_path?: string;
-  }): Promise<JournalValidateResponse> {
+  async validate(args: { spec_id?: string; file_path?: string }): Promise<JournalValidateResponse> {
     try {
       return await invoke<JournalValidateResponse>('office_journal_validate', args);
     } catch (error) {
@@ -55,17 +52,16 @@ export const journalApi = {
     }
   },
 
-  async fillFromContent(req: JournalFillFromContentRequest): Promise<JournalFillFromContentResponse> {
+  async fillFromContent(
+    req: JournalFillFromContentRequest,
+  ): Promise<JournalFillFromContentResponse> {
     try {
-      return await invoke<JournalFillFromContentResponse>(
-        'office_journal_fill_from_content',
-        {
-          spec_id: req.spec_id,
-          workspace_path: req.workspace_path,
-          content: req.content,
-          output_filename: req.output_filename,
-        },
-      );
+      return await invoke<JournalFillFromContentResponse>('office_journal_fill_from_content', {
+        spec_id: req.spec_id,
+        workspace_path: req.workspace_path,
+        content: req.content,
+        output_filename: req.output_filename,
+      });
     } catch (error) {
       throw handleApiError(error);
     }

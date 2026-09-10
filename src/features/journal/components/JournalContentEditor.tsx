@@ -34,7 +34,9 @@ export function JournalContentEditor({ content, onChange, disabled }: JournalCon
         <input
           type="text"
           value={content.sections.keywords ?? ''}
-          onChange={(e) => onChange({ sections: { ...content.sections, keywords: e.target.value } })}
+          onChange={(e) =>
+            onChange({ sections: { ...content.sections, keywords: e.target.value } })
+          }
           disabled={disabled}
           className="w-full rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
         />

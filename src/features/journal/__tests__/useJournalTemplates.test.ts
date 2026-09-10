@@ -17,7 +17,9 @@ vi.mock('../../../shared/api/journalApi', () => ({
 interface FakeWindow {
   electronAPI?: {
     office: {
-      pickOfficeFile: (kind: string) => Promise<{ path: string; name: string; sizeBytes: number } | null>;
+      pickOfficeFile: (
+        kind: string,
+      ) => Promise<{ path: string; name: string; sizeBytes: number } | null>;
     };
   };
 }

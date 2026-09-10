@@ -38,7 +38,10 @@ export function JournalSpecCard({ spec }: JournalSpecCardProps) {
           <ul className="mt-1 list-disc pl-5 text-xs text-slate-600">
             {spec.headings.map((h, idx) => (
               <li key={`${h.keyword}-${idx}`}>
-                {h.keyword} <span className="text-slate-400">(L{h.level} · {h.expected_pt}pt)</span>
+                {h.keyword}{' '}
+                <span className="text-slate-400">
+                  (L{h.level} · {h.expected_pt}pt)
+                </span>
               </li>
             ))}
           </ul>

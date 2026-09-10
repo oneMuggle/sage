@@ -49,7 +49,10 @@ export interface UseJournalTemplatesReturn {
   /** Validate a saved paper file against the active spec (or pass spec_id separately). */
   validateFile: (filePath: string, specId?: string) => Promise<JournalValidateResponse | null>;
   /** Fill a docx from the active spec + current content draft. */
-  fillFromContent: (workspacePath: string, outputFilename: string) => Promise<JournalFillFromContentResponse | null>;
+  fillFromContent: (
+    workspacePath: string,
+    outputFilename: string,
+  ) => Promise<JournalFillFromContentResponse | null>;
   setContent: (patch: Partial<JournalContentDraft>) => void;
   reset: () => void;
 }

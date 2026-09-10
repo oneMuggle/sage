@@ -47,9 +47,7 @@ export function JournalValidationReport({
               [{SEVERITY_LABEL[v.severity]}] {v.rule_id} · {v.location}
             </div>
             <div>{v.message}</div>
-            {v.suggestion && (
-              <div className="mt-1 italic text-slate-600">建议: {v.suggestion}</div>
-            )}
+            {v.suggestion && <div className="mt-1 italic text-slate-600">建议: {v.suggestion}</div>}
           </li>
         ))}
       </ul>

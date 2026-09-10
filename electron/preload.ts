@@ -229,7 +229,10 @@ const electronAPI = {
     validate: (args: { spec_id?: string; file_path?: string }) =>
       ipcRenderer.invoke('office_journal_validate', args) as Promise<JournalValidateResponse>,
     fillFromContent: (req: JournalFillFromContentRequest) =>
-      ipcRenderer.invoke('office_journal_fill_from_content', req) as Promise<JournalFillFromContentResponse>,
+      ipcRenderer.invoke(
+        'office_journal_fill_from_content',
+        req,
+      ) as Promise<JournalFillFromContentResponse>,
   } satisfies JournalElectronApiBridge,
 
   updates: {

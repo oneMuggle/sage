@@ -58,9 +58,7 @@ describe('JournalValidationReport', () => {
       />,
     );
     expect(screen.getByText(/\[错误\] BODY_PT_OUT_OF_RANGE · p\.5/)).toBeTruthy();
-    expect(
-      screen.getByText('正文段落字号 9pt 超出期刊范围 [10, 12]'),
-    ).toBeTruthy();
+    expect(screen.getByText('正文段落字号 9pt 超出期刊范围 [10, 12]')).toBeTruthy();
     expect(screen.getByText('建议: 调整为 10.5pt')).toBeTruthy();
 
     expect(screen.getByText(/\[警告\] HEADING_H1_MISSING · doc/)).toBeTruthy();
@@ -68,9 +66,7 @@ describe('JournalValidationReport', () => {
   });
 
   it('renders info-severity violations with their label', () => {
-    render(
-      <JournalValidationReport violations={info} errorCount={0} warningCount={0} />,
-    );
+    render(<JournalValidationReport violations={info} errorCount={0} warningCount={0} />);
     expect(screen.getByText(/\[提示\] CITATION_STYLE_OK · doc/)).toBeTruthy();
   });
 });
