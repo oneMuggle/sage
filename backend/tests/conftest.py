@@ -113,6 +113,9 @@ def setup_test_db(request):
     # UserProfileStore 单例同样绑定全局 Database, 必须随临时库重置
     from backend.memory.user_profile import reset_user_profile
 
+    # SkillAuditLog 单例同理（Round 3 技能审计台账）
+    from backend.skills.audit import reset_skill_audit_log
+
     # SkillLifecycleStore 单例同理（技能归档策展状态）
     from backend.skills.lifecycle import reset_lifecycle_store
 
@@ -131,6 +134,7 @@ def setup_test_db(request):
     reset_user_profile()
     reset_usage_store()
     reset_lifecycle_store()
+    reset_skill_audit_log()
     reset_message_search_index()
     # MemoryExtractionQueue 单例绑定全局事件循环，必须随测试重置
     # （取消残留 worker，避免跨测试泄漏 + "task was destroyed" 警告）

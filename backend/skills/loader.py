@@ -61,6 +61,22 @@ class SkillLoader:
         logger.info("Skill written to %s", target_file)
         return target_file
 
+    def read(self, name: str) -> Optional[str]:
+        """读取技能的 SKILL.md 全文 (Round 3 审计/回滚用)。
+
+        Returns:
+            SKILL.md 全文；技能不存在返回 None。
+
+        Raises:
+            ValueError: ``name`` 含路径分隔符等非法字符。
+        """
+        if not name or "/" in name or "\\" in name or name in (".", ".."):
+            raise ValueError(f"Invalid skill name: {name!r}")
+        skill_file = self._resolve_skills_dir() / name / "SKILL.md"
+        if not skill_file.is_file():
+            return None
+        return skill_file.read_text(encoding="utf-8")
+
     def _resolve_skills_dir(self) -> Path:
         """Resolve the skills directory.
 
