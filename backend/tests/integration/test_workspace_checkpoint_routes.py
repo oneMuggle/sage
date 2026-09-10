@@ -105,6 +105,14 @@ async def test_create_list_restore_roundtrip(
     assert restored.status_code == 200
     assert restored.json()["restored"] >= 1
     assert "v1" in (workspace / "app.py").read_text(encoding="utf-8")
+    # C-3: restore 前自动为当前状态留底
+    pre_id = restored.json()["pre_restore_checkpoint_id"]
+    assert pre_id
+    listing2 = await client.get(
+        f"/api/v1/sessions/{bound_session}/workspace/checkpoints"
+    )
+    ids = [e["checkpoint_id"] for e in listing2.json()["checkpoints"]]
+    assert pre_id in ids
 
 
 @pytest.mark.asyncio()

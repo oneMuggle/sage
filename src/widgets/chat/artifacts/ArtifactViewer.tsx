@@ -99,6 +99,14 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             title={artifact.name}
             className="w-full h-full min-h-[24rem] rounded border border-border"
           />
+        ) : content.kind === 'docx' || content.kind === 'xlsx' || content.kind === 'pptx' ? (
+          // C-2 (round5 批次 C): office 三件套——后端已 html.escape 全转义,
+          // 此处受控渲染预览片段; 白底容器保证 dark 模式下文字可读
+          <div
+            data-testid="office-preview"
+            className="office-preview bg-white text-black text-sm rounded border border-border p-3 [&_h2]:text-base [&_h2]:font-bold [&_h2]:my-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:my-2 [&_p]:my-1 [&_table]:border-collapse [&_table]:w-full [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-0.5 [&_td]:align-top"
+            dangerouslySetInnerHTML={{ __html: content.html ?? '' }}
+          />
         ) : content.kind === 'code' || content.kind === 'json' ? (
           <pre className="whitespace-pre-wrap text-xs font-mono bg-bg-hover p-2 rounded">{content.content}</pre>
         ) : content.kind === 'csv' ? (

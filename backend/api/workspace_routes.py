@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from typing import List, Optional
 
@@ -24,6 +25,8 @@ from backend.office.workspace_errors import (
     WorkspaceSessionNotFoundError,
 )
 from backend.office.workspace_search import WorkspaceSearchResult, search_workspace_files
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions/{session_id}/workspace", tags=["workspace"])
 
@@ -339,6 +342,8 @@ class WorkspaceCheckpointRestoreResponse(BaseModel):
         extra = "forbid"
     checkpoint_id: str
     restored: int
+    # C-3 (round5 批次 C): restore 前自动为当前状态留底; 创建失败为 None
+    pre_restore_checkpoint_id: Optional[str] = None
 
 
 def _checkpoint_tool_error(result: object) -> HTTPException:
@@ -401,13 +406,35 @@ def create_workspace_checkpoint(session_id: str) -> WorkspaceCheckpointCreateRes
 def restore_workspace_checkpoint(
     session_id: str, request: WorkspaceCheckpointRestoreRequest
 ) -> WorkspaceCheckpointRestoreResponse:
-    """覆盖恢复指定快照到工作区（U2'，confirm 对话框代审批，语义只覆盖不删除）。"""
+    """覆盖恢复指定快照到工作区（U2'，confirm 对话框代审批，语义只覆盖不删除）。
+
+    C-3 (round5 批次 C): restore 前自动为**当前状态**创建留底快照——恢复
+    本身是覆盖操作，留底使误恢复可再撤销（RETENTION_COUNT=10 淘汰最旧，
+    留底恰好替换之，符合期望）。留底失败不阻断恢复（fail-open 只记日志）。
+    """
     from backend.domain.tool_policy import ToolPolicy
-    from backend.tools.checkpoint_tool import CheckpointRestoreTool
+    from backend.tools.checkpoint_tool import CheckpointCreateTool, CheckpointRestoreTool
 
     if not _valid_checkpoint_id(request.checkpoint_id):
         raise _error(400, "invalid_checkpoint_id", "checkpoint_id 格式非法")
     root = _bound_workspace_or_raise(_connection(), session_id)
+
+    pre_restore_id: Optional[str] = None
+    try:
+        pre = CheckpointCreateTool(ToolPolicy(workspace_root=root)).execute()
+        if pre.success:
+            pre_content = pre.content if isinstance(pre.content, dict) else {}
+            pre_restore_id = str(pre_content.get("checkpoint_id", "")) or None
+            logger.info(
+                "[C-3] restore 留底: session=%s pre=%s",
+                session_id,
+                pre_restore_id,
+            )
+        else:
+            logger.warning("[C-3] restore 留底失败(继续恢复): %s", pre.error)
+    except Exception as pre_err:  # noqa: BLE001 — 留底失败不阻断恢复
+        logger.warning("[C-3] restore 留底异常(继续恢复): %s", pre_err)
+
     result = CheckpointRestoreTool(ToolPolicy(workspace_root=root)).execute(
         checkpoint_id=request.checkpoint_id
     )
@@ -420,6 +447,7 @@ def restore_workspace_checkpoint(
     return WorkspaceCheckpointRestoreResponse(
         checkpoint_id=str(content.get("checkpoint_id", request.checkpoint_id)),
         restored=int(content.get("restored", 0)),
+        pre_restore_checkpoint_id=pre_restore_id,
     )
 
 
