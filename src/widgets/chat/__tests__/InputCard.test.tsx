@@ -183,3 +183,33 @@ describe('InputCard', () => {
     expect(counter.className).toContain('text-error');
   });
 });
+
+// ============================================================================
+// RT8 (round7): Esc 中断 —— isLoading 时 Esc 触发 onInterrupt
+// ============================================================================
+
+describe('InputCard — Esc interrupts while streaming (RT8)', () => {
+  it('calls onInterrupt on Escape while isLoading', () => {
+    const onInterrupt = vi.fn();
+    render(<InputCard value="x" onChange={vi.fn()} onSubmit={vi.fn()} isLoading onInterrupt={onInterrupt} />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.keyDown(textarea, { key: 'Escape' });
+    expect(onInterrupt).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onInterrupt on Escape when not loading', () => {
+    const onInterrupt = vi.fn();
+    render(<InputCard value="x" onChange={vi.fn()} onSubmit={vi.fn()} onInterrupt={onInterrupt} />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.keyDown(textarea, { key: 'Escape' });
+    expect(onInterrupt).not.toHaveBeenCalled();
+  });
+
+  it('still submits on Enter while isLoading', () => {
+    const onSubmit = vi.fn();
+    render(<InputCard value="x" onChange={vi.fn()} onSubmit={onSubmit} isLoading />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+});
