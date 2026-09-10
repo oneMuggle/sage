@@ -117,33 +117,16 @@ def _endpoint_has_required_api_key(
 
 _SUPPORTED_PROTOCOLS = frozenset({"anthropic", "gemini", "ollama", "openai-compatible"})
 
-_PROVIDER_TYPES: Optional[Dict[str, Any]] = None
 
+def resolve_model_from_settings() -> Optional[str]:  # noqa: PLR0911
+    """Resolve the selected model, falling back to the endpoint's discovered model.
 
-def _provider_types() -> Dict[str, Any]:
-    """Load provider classes lazily so importing the factory stays cheap."""
-    global _PROVIDER_TYPES
-    if _PROVIDER_TYPES is None:
-        from backend.adapters.out.llm.anthropic import AnthropicProvider
-        from backend.adapters.out.llm.gemini import GeminiProvider
-        from backend.adapters.out.llm.ollama import OllamaProvider
-        from backend.adapters.out.llm.openai import OpenAIProvider
+    The endpoint and model are resolved together so callers cannot submit a
+    model selected from another endpoint. Unknown protocols fail closed rather
+    than being treated as OpenAI-compatible.
 
-        _PROVIDER_TYPES = {
-            "anthropic": AnthropicProvider,
-            "gemini": GeminiProvider,
-            "ollama": OllamaProvider,
-            "openai-compatible": OpenAIProvider,
-        }
-    return _PROVIDER_TYPES
-
-
-def resolve_provider_and_model_from_settings() -> Optional[tuple[Any, str]]:  # noqa: PLR0911
-    """Resolve the selected provider and the exact model it should receive.
-
-    The endpoint and model are resolved together so callers cannot construct a
-    client from one endpoint and submit a model selected from another. Unknown
-    protocols fail closed rather than being treated as OpenAI-compatible.
+    L3 (P8): 原 "构造 ProviderClient 再取 model" 的实现已删除（该家族未接
+    入生产装配），本函数直接解析模型名；协议校验退化为白名单成员检查。
     """
     try:
         from backend.data.settings_canonicalizer import to_camel
@@ -159,6 +142,12 @@ def resolve_provider_and_model_from_settings() -> Optional[tuple[Any, str]]:  # 
         selections = settings.get("modelSelections") or {}
         selection = selections.get("chatModel") if isinstance(selections, dict) else None
         selection = selection if isinstance(selection, dict) else {}
+        # 无 endpointId 的纯 modelId 选择 (注入/测试场景) 直接采纳,
+        # 不要求 endpoints 存在 (原 resolve_model_from_settings 的语义)。
+        if not selection.get("endpointId"):
+            model = selection.get("modelId")
+            if isinstance(model, str) and model.strip():
+                return model.strip()
         endpoint_id = selection.get("endpointId")
         endpoint = next(
             (ep for ep in endpoints if isinstance(ep, dict) and endpoint_id and ep.get("id") == endpoint_id),
@@ -181,8 +170,9 @@ def resolve_provider_and_model_from_settings() -> Optional[tuple[Any, str]]:  # 
             return None
 
         protocol = endpoint.get("protocol") or "openai-compatible"
-        provider_type = _provider_types().get(protocol)
-        if provider_type is None or not _endpoint_has_required_api_key(endpoint, protocol=protocol):
+        if protocol not in _SUPPORTED_PROTOCOLS or not _endpoint_has_required_api_key(
+            endpoint, protocol=protocol
+        ):
             return None
         discovered = endpoint.get("discoveredModels") or []
         discovered_model = (
@@ -195,49 +185,10 @@ def resolve_provider_and_model_from_settings() -> Optional[tuple[Any, str]]:  # 
         model = selection.get("modelId") or discovered_model
         if not isinstance(model, str) or not model.strip():
             return None
-        provider = provider_type(
-            api_key=endpoint.get("apiKey") or "", base_url=endpoint["baseUrl"]
-        )
-        return provider, model.strip()
-    except Exception as exc:
-        logger.warning("llm_factory: failed to resolve ProviderClient: %s", exc)
-        return None
-
-
-def resolve_model_from_settings() -> Optional[str]:
-    """Return the selected model, or its endpoint's discovered fallback."""
-    try:
-        from backend.data.settings_canonicalizer import to_camel
-        from backend.data.settings_repo import SettingsRepository
-
-        raw = SettingsRepository().get_json("app_settings")
-        if not isinstance(raw, dict):
-            return None
-        settings = to_camel(raw)
-        selections = settings.get("modelSelections") or {}
-        selection = selections.get("chatModel") if isinstance(selections, dict) else None
-        if isinstance(selection, dict):
-            model = selection.get("modelId")
-            # A model without an endpoint is retained for injected/test callers;
-            # endpoint-backed selections must be resolved atomically below.
-            if not selection.get("endpointId") and isinstance(model, str) and model.strip():
-                return model.strip()
+        return model.strip()
     except Exception as exc:
         logger.warning("llm_factory: failed to resolve selected model: %s", exc)
         return None
-
-    resolved = resolve_provider_and_model_from_settings()
-    return resolved[1] if resolved is not None else None
-
-
-def build_provider_client_from_settings(model: Optional[str] = None) -> Optional[Any]:
-    """Build the settings-selected A2 ``ProviderClient``, or ``None``.
-
-    ``model`` is retained for source compatibility; provider construction and
-    model resolution intentionally share the same resolver.
-    """
-    resolved = resolve_provider_and_model_from_settings()
-    return resolved[0] if resolved is not None else None
 
 
 def build_llm_client_from_settings() -> Optional[Any]:
