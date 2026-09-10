@@ -10,6 +10,9 @@ export interface ProviderInstanceConfig {
   createdAt: string;
   updatedAt: string;
   config: GithubConfig | GiteeConfig | GitlabConfig | GenericHttpConfig;
+  /** Internal flag set by ProviderStore.encryptSensitive when the config.token
+   *  has been encrypted via Electron safeStorage. Not part of user-facing schema. */
+  _tokenEncrypted?: boolean;
 }
 
 export interface GithubConfig {
@@ -43,14 +46,22 @@ export interface GenericHttpConfig {
   requireArtifactSignature: true;
 }
 
-export const isGithubConfig = (c: any): c is GithubConfig =>
-  typeof c?.owner === 'string' && typeof c?.repo === 'string';
+export const isGithubConfig = (c: unknown): c is GithubConfig => {
+  const obj = c as Record<string, unknown> | null | undefined;
+  return typeof obj?.owner === 'string' && typeof obj?.repo === 'string';
+};
 
-export const isGiteeConfig = (c: any): c is GiteeConfig =>
-  typeof c?.token === 'string' && typeof c?.owner === 'string';
+export const isGiteeConfig = (c: unknown): c is GiteeConfig => {
+  const obj = c as Record<string, unknown> | null | undefined;
+  return typeof obj?.token === 'string' && typeof obj?.owner === 'string';
+};
 
-export const isGitlabConfig = (c: any): c is GitlabConfig =>
-  typeof c?.baseUrl === 'string' && typeof c?.token === 'string';
+export const isGitlabConfig = (c: unknown): c is GitlabConfig => {
+  const obj = c as Record<string, unknown> | null | undefined;
+  return typeof obj?.baseUrl === 'string' && typeof obj?.token === 'string';
+};
 
-export const isGenericHttpConfig = (c: any): c is GenericHttpConfig =>
-  typeof c?.manifestUrl === 'string' && typeof c?.publicKey === 'string';
+export const isGenericHttpConfig = (c: unknown): c is GenericHttpConfig => {
+  const obj = c as Record<string, unknown> | null | undefined;
+  return typeof obj?.manifestUrl === 'string' && typeof obj?.publicKey === 'string';
+};

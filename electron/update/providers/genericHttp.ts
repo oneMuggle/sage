@@ -71,8 +71,8 @@ export function createGenericHttpProvider(config: {
       try {
         const res = await fetch(cfg.manifestUrl, { signal: opts?.signal, method: 'HEAD' });
         return { ok: res.ok, latencyMs: Date.now() - start };
-      } catch (e: any) {
-        return { ok: false, latencyMs: Date.now() - start, error: e.message };
+      } catch (e: unknown) {
+        return { ok: false, latencyMs: Date.now() - start, error: e instanceof Error ? e.message : String(e) };
       }
     },
   };

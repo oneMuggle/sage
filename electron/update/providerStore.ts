@@ -65,22 +65,36 @@ export class ProviderStore {
 
   private encryptSensitive(cfg: ProviderInstanceConfig): ProviderInstanceConfig {
     if (safeStorage.isEncryptionAvailable()) {
-      const c = { ...cfg } as any;
-      if (SENSITIVE_TYPES.includes(cfg.type) && c.config.token) {
-        c.config.token = safeStorage.encryptString(c.config.token).toString('base64');
-        c._tokenEncrypted = true;
+      const c: ProviderInstanceConfig = { ...cfg };
+      if (SENSITIVE_TYPES.includes(cfg.type)) {
+        // Sensitive provider configs carry `token` at runtime; narrow the union
+        // structurally so we can read/overwrite it without `as any`.
+        const tokenCfg = c.config as { token?: string };
+        if (tokenCfg.token) {
+          c.config = {
+            ...c.config,
+            token: safeStorage.encryptString(tokenCfg.token).toString('base64'),
+          } as ProviderInstanceConfig['config'];
+          c._tokenEncrypted = true;
+        }
       }
       return c;
     }
     // Linux 降级：明文 + 路径 600 + 启动 warn 一次
-    (cfg as any)._tokenEncrypted = false;
-    return cfg;
+    const plain: ProviderInstanceConfig = { ...cfg, _tokenEncrypted: false };
+    return plain;
   }
 
   private decryptSensitive(cfg: ProviderInstanceConfig): ProviderInstanceConfig {
-    if ((cfg as any)._tokenEncrypted && safeStorage.isEncryptionAvailable()) {
-      const c = { ...cfg } as any;
-      if (c.config.token) c.config.token = safeStorage.decryptString(Buffer.from(c.config.token, 'base64'));
+    if (cfg._tokenEncrypted && safeStorage.isEncryptionAvailable()) {
+      const c: ProviderInstanceConfig = { ...cfg };
+      const tokenCfg = c.config as { token?: string };
+      if (tokenCfg.token) {
+        c.config = {
+          ...c.config,
+          token: safeStorage.decryptString(Buffer.from(tokenCfg.token, 'base64')),
+        } as ProviderInstanceConfig['config'];
+      }
       return c;
     }
     return cfg;

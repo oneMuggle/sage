@@ -326,6 +326,7 @@ export class UpdateManager {
    */
   private async performProviderDownload(
     updateOverride: CheckedUpdate | undefined,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _releaseNotesOverride: string | undefined,
   ): Promise<void> {
     if (!this.activeProvider) {
