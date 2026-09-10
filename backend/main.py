@@ -411,6 +411,20 @@ async def lifespan(app: FastAPI):
     app.state.wake_scheduler.start()
     logger.info("WakeScheduler 已初始化并启动（A4 Suspend-Resume，tick=15s）")
 
+    # Round 6 (Telegram 网关 MVP): 配置了 TELEGRAM_BOT_TOKEN 才启动长轮询
+    # 后台线程；未配置零开销。白名单见 gateway/telegram.py 模块文档。
+    try:
+        from backend.gateway.telegram import get_telegram_gateway
+
+        _tg_gateway = get_telegram_gateway()
+        if _tg_gateway is not None:
+            _tg_gateway.start_polling()
+            app.state.telegram_gateway = _tg_gateway
+            logger.info("Telegram 网关已启动（长轮询，白名单 %d 个 chat）",
+                        len(_tg_gateway.config.allowed_chat_ids))
+    except Exception as exc:  # noqa: BLE001 — 网关失败不阻塞后端启动
+        logger.warning("Telegram 网关启动失败（忽略）: %s", exc)
+
     # M1 工具安全加固: 全局审批闸口 — agent 循环 await 审批, 路由解析应答
     from backend.services.permission_gate import init_permission_gate
 
@@ -516,6 +530,11 @@ async def lifespan(app: FastAPI):
     yield
 
     # 关闭时清理
+    # Round 6: 停 Telegram 轮询线程（daemon 兜底，显式停更干净）
+    _tg = getattr(app.state, "telegram_gateway", None)
+    if _tg is not None:
+        with suppress(Exception):
+            _tg.stop_polling()
     _shutdown_bash_sessions()
     _shutdown_browser_sessions()
     _shutdown_repl_cleanups()
@@ -669,6 +688,9 @@ API_MODE = os.environ.get("API_MODE", "legacy").lower()
 app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/v1/theme")
 app.include_router(office_router, prefix="/api/v1")
+from backend.api.gateway_routes import router as gateway_router
+
+app.include_router(gateway_router, prefix="/api/v1")
 register_office_exception_handlers(app)
 app.include_router(workspace_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
