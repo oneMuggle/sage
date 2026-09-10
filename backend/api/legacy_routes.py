@@ -154,6 +154,18 @@ class SessionUpdate(BaseModel):
     is_pinned: Optional[bool] = None
 
 
+#: PM1 (round8): 计划模式 system 指令 —— 只读调研 + 结构化计划产出；
+#: 执行被权限门（per-run READ_ONLY）与指令双重约束，批准后由前端衔接。
+_PLAN_MODE_DIRECTIVE = (
+
+    "\n\n【计划模式】当前为计划模式：你只能做只读调研（读文件/搜索/列目录等），"
+    "不能写文件、执行命令或出网修改任何状态。请基于调研输出一份结构化执行计划，"
+    "格式：\n## 目标\n## 分步计划\n（每步：做什么 / 涉及哪些文件或命令 / 预期结果）\n"
+    "## 验收标准\n## 风险与注意\n计划要具体到可直接执行。用户批准计划后，"
+    "你将在后续消息中被要求严格按计划执行——本轮不要尝试执行任何计划步骤。"
+)
+
+
 class ChatRequest(BaseModel):
     session_id: str
     message: str
@@ -209,6 +221,10 @@ class ChatRequest(BaseModel):
     # 拆解，直接用存储计划建 dispatcher；run_id 复用 resume 返回的 new_run_id。
     plan_override: Optional[List[Dict[str, Any]]] = None
     run_id: Optional[str] = None
+
+    # PM1 (round8): 单 agent 计划模式 —— 本次 run 只读（权限执行器 override
+    # READ_ONLY）+ 计划指令 system 块；DONE 后前端出批准条，批准后普通执行。
+    plan_mode: bool = False
 
 
 class MessageResponse(BaseModel):
@@ -1941,6 +1957,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     return
 
             agent = SageAgent(agent_id=data.agent_id or "primary")
+            # PM1 (round8): 计划模式 per-run 只读门 —— 实例级 enforcer 注入
+            # （run_loop 对非空 permission_enforcer 直接复用），override 为
+            # READ_ONLY；全局 settings 的 permission_mode 不动。失败降级为
+            # 仅指令约束（门禁是纵深防御的第二层，缺一层不阻塞）。
+            if data.plan_mode:
+                try:
+                    from backend.tools.permissions import PermissionMode
+
+                    plan_enforcer = agent._build_permission_enforcer()
+                    plan_enforcer.force_mode(PermissionMode.READ_ONLY)
+                    agent.permission_enforcer = plan_enforcer
+                except Exception as pm_exc:  # noqa: BLE001 — 降级不阻塞
+                    logger.warning("计划模式只读门注入失败（仅指令约束）: %s", pm_exc)
             # P0 cancellation: register the primary before any blocking await.
             _ACTIVE_STREAMS[stream_id] = {
                 "agent": agent,
@@ -1954,6 +1983,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             system_content = build_system_base()
 
+            # PM1 (round8): 单 agent 计划模式 —— 只读调研 + 计划产出指令；
+            # 与编排互斥（计划模式在主对话内调研，不派子代理），批准后由
+            # 前端经普通消息衔接执行。
+            if data.plan_mode:
+                system_content += _PLAN_MODE_DIRECTIVE
+
             # ===== Multi-Agent Orchestration (spec 2026-08-11) =====
             # tool-toggle 门: 语义判定（独立轻量 LLM 二分类）决定 mode。
             # single → 不注册 dispatch_subagents 工具、不跑 decompose_request
@@ -1965,7 +2000,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             )
 
             # A10 (2026-08-14): plan_override 非空 → 视为 force_multi，跳过语义判定。
-            if data.plan_override:
+            if data.plan_mode:
+                # PM1: 计划模式与编排互斥 —— 主对话内只读调研。
+                mode = "single"
+            elif data.plan_override:
                 mode = "multi"
             else:
                 try:
