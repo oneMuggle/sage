@@ -23,9 +23,9 @@ from pydantic import BaseModel
 
 from backend.api.error_contract import error_json
 from backend.api.legacy_routes import (
-    _run_db_sync,
     SessionCreate,
     SessionUpdate,
+    _run_db_sync,
     get_session_repo,
     router,
 )
