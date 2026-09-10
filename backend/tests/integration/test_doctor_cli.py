@@ -99,7 +99,7 @@ class TestDoctorCLIJsonMode:
         data = json.loads(result.stdout)
         assert isinstance(data["checks"], list)
         # 2026-09-05: 15→16 (加 network)
-        assert len(data["checks"]) == 17
+        assert len(data["checks"]) == 18
 
     def test_json_check_entry_shape(self):
         result = _run_doctor("--json")
@@ -116,7 +116,7 @@ class TestDoctorCLIJsonMode:
         data = json.loads(result.stdout)
         summary = data["summary"]
         # 2026-09-05: 15→16 (加 network)
-        assert summary["critical"] + summary["warn"] + summary["info"] == 17
+        assert summary["critical"] + summary["warn"] + summary["info"] == 18
 
     def test_json_python_version_format(self):
         result = _run_doctor("--json")
@@ -177,7 +177,7 @@ class TestDoctorCLIExitCodes:
         assert text_result.returncode == json_result.returncode
         assert "总计:" in text_result.stdout
         # 2026-09-05: 15→16 (加 network)
-        assert data["summary"]["critical"] + data["summary"]["warn"] + data["summary"]["info"] == 17
+        assert data["summary"]["critical"] + data["summary"]["warn"] + data["summary"]["info"] == 18
 
 
 class TestDoctorCLIHelp:
