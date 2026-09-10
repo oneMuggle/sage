@@ -59,6 +59,21 @@ def run_loop_accepts_session_id(agent: Any) -> bool:
     return func_accepts_kwarg(agent.run_loop, "session_id")
 
 
+def run_lane_accepts_backoff(fn: Any) -> bool:
+    """探测（可能被 mock.patch 包装的）``run_lane_with_retry`` 是否接受
+    ``backoff_secs`` kwarg（RT10 兼容层）。
+
+    ``mock.patch(target, side_effect=fake)`` 产出的 MagicMock 的
+    ``inspect.signature`` 恒为 ``(*args, **kwargs)``——直接探测会误判为
+    接受任意 kwarg，真实调用仍会落进三参 ``fake`` 的 TypeError。这里
+    穿透到 ``side_effect`` 真实函数探测；``side_effect`` 是返回值列表等
+    不可调用对象时按原对象探测（Mock 本身吞任意 kwarg，无害）。
+    """
+    probe = getattr(fn, "side_effect", None)
+    target = probe if callable(probe) else fn
+    return func_accepts_kwarg(target, "backoff_secs")
+
+
 def extract_json_payload(text: str) -> Optional[Dict[str, Any]]:
     """从 LLM 输出文本提取 JSON object；三种形态依次尝试，失败返回 None。
 
@@ -171,6 +186,16 @@ class SubagentRunner:
         if schema is not None:
             user_content += _SCHEMA_DIRECTIVE + json.dumps(
                 schema, ensure_ascii=False
+            )
+        # RT9 (round7): 重试带失败上下文 —— executor 在 lane 重试时写入
+        # task.parameters["retry_hint"]；缺省（首次执行）无该键，prompt
+        # 与旧版逐字一致。
+        retry_hint = task.parameters.get("retry_hint")
+        if isinstance(retry_hint, dict) and retry_hint.get("last_error"):
+            user_content = (
+                f"【重试 · 第 {retry_hint.get('attempt', '?')} 次】上次执行失败："
+                f"{retry_hint.get('last_error')}\n"
+                "请调整方法，避免重蹈覆辙。\n\n" + user_content
             )
 
         child = SageAgent(agent_id=agent_id, policy=policy)
@@ -343,6 +368,7 @@ async def run_lane_with_retry(
     executor: LaneExecutor,
     lane: Lane,
     agent_id: Optional[str],
+    backoff_secs: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     """执行 lane 并在 executor 返回 ``retrying`` 时循环再调（retry 语义）。
 
@@ -350,8 +376,25 @@ async def run_lane_with_retry(
     ``{"status": "retrying"}``——重试由调用方**再调 execute_lane 触发**（lane
     调度器模型，非循环内自动重跑）。本 helper 封装该循环；retry_count 累积在
     lane.metadata，max_retries 耗尽后 executor 返回 failed 终态。
+
+    RT10 (round7): ``backoff_secs`` 非空时按 ``RecoveryPolicy.retry_backoff_secs``
+    在重试前退避（索引按 retry_count-1 取，越界取末位）——该字段自 2026-08
+    声明以来一直无消费者，重试是立即连发。退避计入任务 wall-clock 超时预算
+    （O2 的 wait_for 包裹整个 _run_subagent），不会失控。
     """
     result = await executor.execute_lane(lane, agent_id)
     while result.get("status") == "retrying":
+        if backoff_secs:
+            attempt = result.get("retry_count") or len(backoff_secs)
+            try:
+                index = max(0, int(attempt) - 1)
+            except (TypeError, ValueError):
+                index = 0
+            delay = backoff_secs[min(index, len(backoff_secs) - 1)]
+            if delay > 0:
+                logger.info(
+                    "lane %s 第 %s 次重试前退避 %ds", lane.lane_id, attempt, delay
+                )
+                await asyncio.sleep(delay)
         result = await executor.execute_lane(lane, agent_id)
     return result

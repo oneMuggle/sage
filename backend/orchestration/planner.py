@@ -465,40 +465,11 @@ Output format — return ONLY valid JSON, no markdown fences, no extra text:
         }
         return [task], "Simple single-task decomposition (fallback)"
 
-    async def refine_plan(
-        self,
-        plan: Plan,
-        feedback: str,
-    ) -> Plan:
-        """
-        Refine an existing plan based on feedback.
-
-        Args:
-            plan: Existing plan to refine
-            feedback: User feedback or new requirements
-
-        Returns:
-            Updated Plan
-        """
-        # TODO: Implement plan refinement with LLM
-        # For now, return the original plan
-        return plan
-
-    def get_plan_status(self, plan_id: str) -> Dict[str, Any]:
-        """
-        Get status of a plan.
-
-        Args:
-            plan_id: Plan ID to query
-
-        Returns:
-            Dict with plan status information
-        """
-        return {
-            "plan_id": plan_id,
-            "status": "unknown",
-            "message": "Plan status tracking not yet implemented",
-        }
+    # RT11 (round7): refine_plan / get_plan_status 死桩已删除 —— 两者自
+    # 2026-08 落地以来零调用方（refine_plan 是 TODO 桩、get_plan_status
+    # 恒返回 "not yet implemented"），继续暴露只会误导调用方以为 re-plan
+    # 可用。失败后的再规划由 conductor system prompt 的失败处理指令承担
+    # （见 legacy_routes 计划块）。
 
     def validate_task_graph(self, tasks: List[Task]) -> bool:
         """
