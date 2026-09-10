@@ -13,7 +13,8 @@ from typing import Any, Dict, List, Optional
 
 from backend.domain.memory import MemoryContext
 from backend.memory import ConsolidationPipeline, MemoryManager
-from backend.memory.embedder import HashEmbedder
+from backend.memory.embedder_factory import create_embedder
+from backend.memory.manager import classify_memory_type
 from backend.memory.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,10 @@ class MemoryAdapter:
         self.consolidation = ConsolidationPipeline(
             summary_store=getattr(memory_manager, "summary_store", None)
         )
-        self.embedder = HashEmbedder(dimensions=256)
+        # E9-1 (P9): 嵌入器工厂 —— 缺省 HashEmbedder (零依赖);
+        # SAGE_EMBEDDER=onnx 且模型文件就位时升级为语义嵌入 (512 维,
+        # 独立向量表 memories_vec_512, 与 256 维 Hash 向量互不混用)。
+        self.embedder = create_embedder()
         # 用户画像（USER.md 概念）: 缺省惰性取全局单例,失败时降级为 None
         self.user_profile = user_profile
         if self.user_profile is None:
@@ -67,7 +71,14 @@ class MemoryAdapter:
         try:
             db = getattr(memory_manager.episodic, "db", None)
             if db is not None and hasattr(db, "get_connection"):
-                self.vector_store = VectorStore(db, self.embedder)
+                table_name = (
+                    "memories_vec"
+                    if self.embedder.dimensions == 256
+                    else f"memories_vec_{self.embedder.dimensions}"
+                )
+                self.vector_store = VectorStore(
+                    db, self.embedder, table_name=table_name
+                )
                 logger.info("VectorStore 已初始化（sqlite-vec 向量检索）")
         except (AttributeError, TypeError):
             # 测试中使用 Mock MemoryManager 时可能没有 episodic 属性
