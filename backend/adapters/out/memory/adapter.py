@@ -88,8 +88,34 @@ class MemoryAdapter:
             pass
         if self.vector_store is None:
             logger.debug("VectorStore 未初始化：无可用 Database 实例")
-        else:
+
+    def reconfigure(self, embedder) -> None:
+        """B1 (P11): 热重载嵌入器并按新维度重建向量虚拟表。
+
+        Hash(256) 与 Onnx(512) 维度不同、各用独立表 —— 重配置后旧表的
+        向量不迁移 (嵌入语义变更后旧向量无迁移价值), 新写入进新表。
+        """
+        self.embedder = embedder
+        table_name = (
+            "memories_vec"
+            if embedder.dimensions == 256
+            else f"memories_vec_{embedder.dimensions}"
+        )
+        try:
+            db = getattr(self.memory_manager.episodic, "db", None)
+        except AttributeError:
+            db = None
+        if db is not None and hasattr(db, "get_connection"):
+            self.vector_store = VectorStore(db, embedder, table_name=table_name)
+            logger.info(
+                "MemoryAdapter 已重配置: embedder=%s table=%s dims=%s",
+                type(embedder).__name__,
+                table_name,
+                embedder.dimensions,
+            )
             self._maybe_start_backfill()
+        else:
+            logger.warning("MemoryAdapter 重配置: 无可用 db, 向量栈未重建")
 
     def _maybe_start_backfill(self) -> None:
         """存量记忆缺向量时启动一次性后台回填（守护线程，不阻塞启动）。

@@ -47,6 +47,9 @@ class SettingsRepository:
             # round5 批次 D-1: 主模型重试耗尽后的降级模型 (model id, 缺省 = 不降级)。
             # 读取口径见 legacy_routes producer llm_config 构建
             "fallback_model",
+            # P11: 记忆检索嵌入器模式 ("onnx"/"hash")。
+            # 读取口径见 backend/memory/embedder_factory._preferred_mode_from_settings
+            "embedding_mode",
         }
     )
 
