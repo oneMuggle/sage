@@ -21,6 +21,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.exceptions import AgentError, ToolCallError
 from backend.core.legacy.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
+from backend.core.legacy.context_first_aid import (
+    estimate_messages_tokens,
+    first_aid_compact,
+    run_ctx_budget_tokens,
+)
 from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
@@ -64,6 +69,11 @@ MAX_CONSECUTIVE_UNANSWERED_QUESTIONS = 3
 #: 与 ``agents/profiles.py`` 的 dataclass 默认、``data/database.py``
 #: 的 DB 列默认保持一致，避免降级路径静默砍半预算。
 DEFAULT_MAX_ITERATIONS = 10
+
+#: RT2 (round7): 上下文溢出急救压缩的最大重试次数。第 1 次用常规压缩
+#: （保留最近 6 条），第 2 次用激进压缩（保留最近 2 条）；仍溢出则按
+#: 原错误面终止——同一请求盲目重试必然复现，压缩是唯一出路。
+_MAX_FIRST_AID_ATTEMPTS = 2
 from backend.tools.bash_validation import validate_bash
 from backend.tools.context import current_tool_context
 from backend.tools.permissions import (
@@ -847,6 +857,20 @@ class SageAgent:
                     )
                     return
 
+                # RT2 (round7): 迭代边界高水位预防 —— 估算 token 超预算时先
+                # 机械压缩（透明治理，仅日志），避免请求撑爆窗口后才被动急救。
+                # env SAGE_RUN_CTX_BUDGET_TOKENS=0 可关闭。
+                _ctx_budget = run_ctx_budget_tokens()
+                if _ctx_budget > 0 and estimate_messages_tokens(messages) > _ctx_budget:
+                    _before, _after = first_aid_compact(messages)
+                    logger.info(
+                        "run_loop 迭代 %s 高水位压缩：估算 token %d → %d (预算 %d)",
+                        i,
+                        _before,
+                        _after,
+                        _ctx_budget,
+                    )
+
                 yield AgentEvent(state=AgentState.THINKING, iteration=i, agent_id=self.agent_id)
 
                 # Pass available tools to LLM so it can call them
@@ -859,57 +883,89 @@ class SageAgent:
                 # 或首个增量前请求失败）时自动回退非流式 chat(),行为与旧版完全
                 # 一致;首个增量之后失败无法安全重放,按原错误面终止。
                 response: Optional[LLMResponse] = None
-                if self._should_stream(self.llm_client):
-                    saw_content_delta = False
-                    stream_reasoning_parts: List[str] = []
+                # RT2 (round7): 溢出急救环 —— CONTEXT_OVERFLOW 时就地机械压缩
+                # messages 后重试（最多 _MAX_FIRST_AID_ATTEMPTS 次：常规 → 激进），
+                # 仍溢出按原错误面终止。重试对生成端透明：压缩标记直接嵌在被截断
+                # 的消息里，模型可自察上下文被治理过。
+                _first_aid_attempts = 0
+                while True:
                     try:
-                        async for evt_kind, payload in self.llm_client.chat_stream_events(
-                            messages, tools=available_tools or None
-                        ):
-                            if evt_kind == "content_delta":
-                                saw_content_delta = True
+                        if self._should_stream(self.llm_client):
+                            saw_content_delta = False
+                            stream_reasoning_parts: List[str] = []
+                            try:
+                                async for evt_kind, payload in self.llm_client.chat_stream_events(
+                                    messages, tools=available_tools or None
+                                ):
+                                    if evt_kind == "content_delta":
+                                        saw_content_delta = True
+                                        yield AgentEvent(
+                                            state=AgentState.CONTENT_DELTA,
+                                            iteration=i,
+                                            content=payload,
+                                            agent_id=self.agent_id,
+                                        )
+                                    elif evt_kind == "reasoning_delta":
+                                        # 汇总后在流收尾统一发一条 REASONING（producer
+                                        # 会再做 reasoning_delta 切块,拆成多事件会重复）
+                                        stream_reasoning_parts.append(payload)
+                                    elif evt_kind == "response":
+                                        response = payload
+                            except LLMError as stream_err:
+                                if saw_content_delta:
+                                    # RT2: 首个增量之后失败无法安全重放（重试会重复
+                                    # 下发内容）——打标记让外层急救环跳过本次溢出重试。
+                                    stream_err._saw_content_delta = True  # type: ignore[attr-defined]
+                                    raise
+                                logger.warning(
+                                    "流式 LLM 调用失败(首个增量前),回退非流式: %s", stream_err
+                                )
+                                # 标记该 client 实例,本次 run_loop 后续迭代直接走非流式
+                                with contextlib.suppress(AttributeError):  # 测试替身可能没有该属性
+                                    self.llm_client.stream_unsupported = True
+                                response = None
+                            if response is not None and stream_reasoning_parts:
                                 yield AgentEvent(
-                                    state=AgentState.CONTENT_DELTA,
+                                    state=AgentState.REASONING,
                                     iteration=i,
-                                    content=payload,
+                                    reasoning="".join(stream_reasoning_parts),
                                     agent_id=self.agent_id,
                                 )
-                            elif evt_kind == "reasoning_delta":
-                                # 汇总后在流收尾统一发一条 REASONING（producer
-                                # 会再做 reasoning_delta 切块,拆成多事件会重复）
-                                stream_reasoning_parts.append(payload)
-                            elif evt_kind == "response":
-                                response = payload
-                    except LLMError as stream_err:
-                        if saw_content_delta:
-                            raise
-                        logger.warning(
-                            "流式 LLM 调用失败(首个增量前),回退非流式: %s", stream_err
-                        )
-                        # 标记该 client 实例,本次 run_loop 后续迭代直接走非流式
-                        with contextlib.suppress(AttributeError):  # 测试替身可能没有该属性
-                            self.llm_client.stream_unsupported = True
-                        response = None
-                    if response is not None and stream_reasoning_parts:
-                        yield AgentEvent(
-                            state=AgentState.REASONING,
-                            iteration=i,
-                            reasoning="".join(stream_reasoning_parts),
-                            agent_id=self.agent_id,
-                        )
-                if response is None:
-                    response = await self.llm_client.chat(
-                        messages, tools=available_tools or None
-                    )
-                    # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
-                    # 这允许前端展示 LLM 的思考/推理过程
-                    if response.reasoning_content:
-                        yield AgentEvent(
-                            state=AgentState.REASONING,
-                            iteration=i,
-                            reasoning=response.reasoning_content,
-                            agent_id=self.agent_id,
-                        )
+                        if response is None:
+                            response = await self.llm_client.chat(
+                                messages, tools=available_tools or None
+                            )
+                            # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
+                            # 这允许前端展示 LLM 的思考/推理过程
+                            if response.reasoning_content:
+                                yield AgentEvent(
+                                    state=AgentState.REASONING,
+                                    iteration=i,
+                                    reasoning=response.reasoning_content,
+                                    agent_id=self.agent_id,
+                                )
+                        break
+                    except LLMError as overflow_err:
+                        if (
+                            overflow_err.type is LLMErrorType.CONTEXT_OVERFLOW
+                            and _first_aid_attempts < _MAX_FIRST_AID_ATTEMPTS
+                            and not getattr(overflow_err, "_saw_content_delta", False)
+                        ):
+                            _first_aid_attempts += 1
+                            _keep_recent = 6 if _first_aid_attempts == 1 else 2
+                            _before, _after = first_aid_compact(
+                                messages, keep_recent=_keep_recent
+                            )
+                            logger.warning(
+                                "run_loop 上下文溢出，第 %d 次急救压缩后重试："
+                                "估算 token %d → %d (iteration %s)",
+                                _first_aid_attempts,
+                                _before,
+                                _after,
+                                i,
+                            )
+                            continue
+                        raise
 
                 if not response.tool_calls:
                     messages.append(

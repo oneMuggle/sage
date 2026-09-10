@@ -77,7 +77,7 @@ export function ContextMeter({ sessionId, refreshKey = 0 }: ContextMeterProps) {
     `上下文约 ${formatTokens(used)} / ${formatTokens(windowTokens)} tokens (${Math.round(pct * 100)}%)`,
     usage.last_model ? `模型: ${usage.last_model}` : null,
     cached > 0 ? `其中缓存命中 ${formatTokens(cached)}` : null,
-    '达到阈值后会自动压缩历史',
+    '历史达到压缩阈值后，下次发送前自动压缩（摘要替代丢弃）；运行中超限会自动压缩早期工具结果并重试',
   ]
     .filter(Boolean)
     .join('\n');
