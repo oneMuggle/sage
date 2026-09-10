@@ -161,19 +161,19 @@ def test_edit_replace_all_replaces_every_occurrence(tmp_path, tool):
     assert "foo" not in text
 
 
-def test_edit_whitespace_mismatch_is_not_a_match(tmp_path, tool):
-    """精确匹配含空白：old_string 多出文件没有的空白即失配，提示锁定差异行。"""
+def test_edit_whitespace_mismatch_falls_back_to_trim_match(tmp_path, tool):
+    """F-1 (round5 批次 F): old_string 行尾空白差异 → 精确失配后走行级
+    trim 容错兜底，命中即替换并标记 fuzzy_matched（旧行为是直接失败）。"""
     # Arrange（文件行尾无空格）
     path = _write(tmp_path, "ws.txt", "value = 1\n")
 
-    # Act（old_string 行尾多了 3 个空格 → 子串失配）
+    # Act（old_string 行尾多了 3 个空格 → 精确失配, trim 容错命中）
     result = tool.execute(file_path=path, old_string="value = 1   ", new_string="value = 2")
 
     # Assert
-    assert result.success is False
-    assert "未在文件中找到" in result.error
-    assert "疑似空白差异" in result.error
-    assert "第 1 行" in result.error
+    assert result.success is True
+    assert result.content["fuzzy_matched"] is True
+    assert (tmp_path / "ws.txt").read_text(encoding="utf-8") == "value = 2\n"
 
 
 def test_edit_not_found_error_offers_nearest_line_hint(tmp_path, tool):
