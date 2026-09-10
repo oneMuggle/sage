@@ -57,24 +57,32 @@ def test_task_exception_does_not_kill_worker():
 
 
 def test_queue_full_drops_oldest_gracefully():
-    """队列满时新任务被丢弃 (返回 False), 不阻塞调用方。"""
+    """队列满时新任务被丢弃 (返回 False), 不阻塞调用方。
+
+    用 blocker 卡住 worker 保证确定性: worker 执行 blocker 期间被
+    threading.Event 挂起, 主线程持续入队直到队列真正满 (1000),
+    此后任何 enqueue 都应被拒绝。
+    """
     release = threading.Event()
-    blocked = threading.Event()
+    started = threading.Event()
 
     def blocker():
-        blocked.set()
-        release.wait(timeout=5)
+        started.set()
+        release.wait(timeout=10)
 
     # 独占 worker
     enqueue(blocker)
-    assert blocked.wait(timeout=5)
+    assert started.wait(timeout=5)
 
-    # 灌满队列
+    # worker 被挂起, 持续入队直到队列满
     accepted = 0
-    for _ in range(1000):
+    for _ in range(1200):
         if enqueue(lambda: None):
             accepted += 1
+        else:
+            break
 
-    assert accepted == 1000
+    assert accepted == 1000, f"accepted={accepted}"
     assert enqueue(lambda: None) is False  # 队列满 → 丢弃
+    release.set()
     release.set()
