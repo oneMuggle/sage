@@ -457,6 +457,9 @@ export interface ChatConfig {
   // Wave 3 (2026-08-14): resume 恢复流 —— plan_override 逐字恢复（跳过 LLM 拆解）。
   planOverride?: TaskPlanItem[];
   runId?: string;
+  // PM1 (round8): 单 agent 计划模式 —— 本次 run 只读 + 计划产出指令，
+  // 完成后前端出批准条（与 orchestrationMode 互斥，后端强制 single）。
+  planMode?: boolean;
 }
 
 // ==================== Memory 类型定义 ====================

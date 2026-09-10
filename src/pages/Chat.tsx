@@ -58,6 +58,8 @@ export function Chat() {
     streamingToolCalls, // 右侧面板 Progress: 实时流式工具调用
     taskBoard, // Multi-Agent Orchestration: 编排任务板
     clearTaskBoard, // Wave 3: 取消执行后清空任务板
+    planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
+    clearPlanApproval, // PM2: 清除批准状态
   } = useChat();
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
 
@@ -317,6 +319,8 @@ export function Chat() {
         officeRefs?: readonly ChatOfficeRef[];
         // Wave 3 C6: 放宽为 string —— 编排模式条可传 'template:<id>' 等。
         orchestrationMode?: string;
+        // PM1 (round8): /plan 计划模式 —— 本次 run 只读 + 计划产出。
+        planMode?: boolean;
       },
     ) => {
       clearError();
@@ -324,9 +328,13 @@ export function Chat() {
       const orchestrationMode = options?.orchestrationMode;
       if (!currentSessionId) {
         const sessionId = await createSession();
-        await sendMessage(content, sessionId, officeRefs, orchestrationMode);
+        await sendMessage(content, sessionId, officeRefs, orchestrationMode, {
+          planMode: options?.planMode,
+        });
       } else {
-        await sendMessage(content, undefined, officeRefs, orchestrationMode);
+        await sendMessage(content, undefined, officeRefs, orchestrationMode, {
+          planMode: options?.planMode,
+        });
       }
     },
     [clearError, currentSessionId, createSession, sendMessage],
@@ -569,6 +577,45 @@ export function Chat() {
             onFork={handleFork}
             onEditResend={handleStartEditResend}
           />
+        )}
+        {/* PM2 (round8): 计划批准条 —— /plan run 完成后出现;批准即衔接执行 */}
+        {planApprovalFor != null && planApprovalFor === currentSessionId && (
+          <div className="px-4 pb-2" data-testid="plan-approval-bar">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded border border-primary/40 bg-primary/5">
+              <span className="text-xs text-text-secondary">
+                计划已生成 —— 批准后将严格按上述计划执行
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  data-testid="plan-approve"
+                  className="px-2 py-1 text-xs rounded bg-primary text-bg-inv font-medium"
+                  onClick={() => {
+                    const sid = planApprovalFor;
+                    clearPlanApproval();
+                    if (sid) {
+                      void sendMessage(
+                        '请严格按上述计划执行，不要重新规划。',
+                        sid,
+                        undefined,
+                        'force_single',
+                      );
+                    }
+                  }}
+                >
+                  按计划执行
+                </button>
+                <button
+                  type="button"
+                  data-testid="plan-dismiss"
+                  className="px-2 py-1 text-xs rounded border border-border text-text-secondary"
+                  onClick={() => clearPlanApproval()}
+                >
+                  忽略
+                </button>
+              </div>
+            </div>
+          </div>
         )}
         {/* 编排计划确认卡 (Fix #2): 未派发时在主对话区域显示,方便用户查看和确认 */}
         {taskBoard && !taskBoard.dispatchedAt && (

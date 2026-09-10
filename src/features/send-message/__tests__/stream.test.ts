@@ -79,6 +79,8 @@ describe('chatApi.chatStream (PR-6)', () => {
       // Wave 3 C2 (2026-08-14): resume 透传字段, 缺省 null
       plan_override: null,
       run_id: null,
+      // PM1 (round8): 计划模式, 缺省 null
+      plan_mode: null,
     });
     // 2) listen 订阅 chat-stream-{id} (从 {streamId} 对象解构得到)
     expect(listenMock).toHaveBeenCalledWith(`chat-stream-${streamId}`, expect.any(Function));

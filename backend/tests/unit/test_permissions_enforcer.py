@@ -560,3 +560,27 @@ def test_path_boundary_office_delete_outside_workspace_asks(tmp_path, tmp_path_f
 
     inside = enforcer.check("office_delete", {"file_path": str(workspace / "a.xlsx")})
     assert inside.allowed is True
+
+
+# ============================================================================
+# PM1 (round8): force_mode —— 实例级模式覆盖（计划模式 per-run 只读）
+# ============================================================================
+
+
+def test_force_mode_overrides_instance_without_touching_settings():
+    """force_mode 只改本实例；READ_ONLY 下写类工具被拒、读类放行。"""
+    from backend.tools.permissions import PermissionEnforcer, PermissionMode, validate_bash
+
+    enforcer = PermissionEnforcer(
+        mode=PermissionMode.WORKSPACE_WRITE, rules=(), bash_validator=validate_bash
+    )
+    assert enforcer.mode is not PermissionMode.READ_ONLY
+
+    enforcer.force_mode(PermissionMode.READ_ONLY)
+    assert enforcer.mode is PermissionMode.READ_ONLY
+
+    write_decision = enforcer.check("write_file", {"path": "a.txt", "content": "x"})
+    assert write_decision.allowed is False
+
+    read_decision = enforcer.check("read_file", {"path": "a.txt"})
+    assert read_decision.allowed is True

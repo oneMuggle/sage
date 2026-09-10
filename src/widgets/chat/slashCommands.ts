@@ -31,8 +31,9 @@ export interface SlashCommand {
    * - 'skill': 作为 SKILL.md skill 执行,返回内容作为用户消息发送
    * - 'compact': 调用后端压缩当前会话上下文 (M4, 真实 action 而非提示词)
    * - 'learn': 触发 Background Review 当前会话,产生技能草案候选 (Task 12)
+   * - 'plan': PM2 (round8) 计划模式 —— 剩余文本以 planMode 发送
    */
-  mode: 'prompt' | 'clear' | 'help' | 'skill' | 'compact' | 'learn';
+  mode: 'prompt' | 'clear' | 'help' | 'skill' | 'compact' | 'learn' | 'plan';
   /** 'skill' 模式下需要执行的 SKILL.md 名称（不含 /）。 */
   skillName?: string;
 }
@@ -110,6 +111,13 @@ export const slashCommands: SlashCommand[] = [
     description: '强制单 agent 回答，跳过编排',
     icon: UserRound,
     mode: 'prompt',
+  },
+  {
+    name: 'plan',
+    label: '计划模式',
+    description: '只读调研并输出执行计划，批准后执行（用法：/plan 目标）',
+    icon: FileText,
+    mode: 'plan',
   },
 ];
 
