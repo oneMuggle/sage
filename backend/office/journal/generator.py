@@ -43,11 +43,11 @@ from backend.office.journal.persistence import (
 from backend.office.path_safety import resolve_within
 
 
-def _ensure_content_shape(spec: JournalSpec, content: JournalContent) -> None:
+def _validate_content_shape(spec: JournalSpec, content: JournalContent) -> None:
     """校验 content 的必填字段（abstract / keywords）非空。
 
     与 JournalSpec.validate_content 逻辑对齐，但 generator 入口显式调用
-    以保证 structured_fill 和未来的 llm_generate 路径都经过校验。
+    以保证 structured_fill 和 llm_generate 路径都经过校验。
     """
     if not content.abstract.strip():
         raise JournalContentShapeError("content.abstract 不能为空")
@@ -171,7 +171,7 @@ def generate_structured(
     5. 原子 rename 到最终路径；
     6. 登记 SQLite。
     """
-    _ensure_content_shape(spec, content)
+    _validate_content_shape(spec, content)
     layout = _layout_paths(workspace)
 
     # 先写临时名，成功后 os.replace 到最终 output_filename
@@ -220,4 +220,78 @@ def generate_structured(
     return record_generation(workspace, record)
 
 
-__all__ = ["generate_structured"]
+import json as _json
+
+
+async def generate_article(
+    spec: JournalSpec,
+    user_request: str,
+    *,
+    llm_proxy,
+    workspace: Path,
+    output_filename: str,
+    max_rounds: int = 2,
+) -> JournalGenerationRecord:
+    """LLM 自纠生成模式。
+
+    最多 max_rounds 轮，每轮用上轮 validator 反馈注入 prompt 修正。
+    最终一轮通过 _validate_content_shape 后调用 generate_structured 生成 docx。
+
+    行为约束：
+    - output_filename 仅用于最终落盘文件名；轮间不落盘 docx，避免文件名冲突；
+    - 所有轮 LLM 返回的 content 在最后一轮通过 generate_structured 的
+      _validate_content_shape 校验（abstract + keywords 非空）；
+    - 若所有 max_rounds 轮均未通过校验，最后一次 LLM 返回的 content 仍会
+      交给 generate_structured；其 _validate_content_shape 失败将抛
+      JournalContentShapeError（YAGNI：不内置多轮 fallback）。
+    """
+    system_prompt = (
+        "你是一位资深中文论文作者，请根据以下期刊模板规范生成论文内容。\n"
+        f"期刊规范（JournalSpec JSON）:\n{spec.model_dump_json(indent=2)}\n\n"
+        "返回严格符合以下 JSON schema：\n"
+        '{"title": str, "abstract": str, "sections": {keyword: str}, '
+        '"references": [str], "citations": [str]}'
+    )
+
+    last_content: dict = {}
+    for round_idx in range(max_rounds):
+        user_prompt = (
+            f"用户请求: {user_request}\n\n"
+            f"请生成论文内容，必须严格匹配 spec 中的 {len(spec.headings)} 个章节: "
+            f"{', '.join(h.keyword for h in spec.headings)}"
+        )
+        if round_idx > 0 and last_content:
+            # 把上一轮的校验反馈注入 prompt
+            try:
+                content_model = JournalContent.model_validate(last_content)
+                _validate_content_shape(spec, content_model)
+            except Exception as exc:
+                user_prompt += f"\n\n上一轮问题: {exc}\n请按规范修正。"
+            else:
+                # 形状 OK，退出循环
+                break
+
+        result = await llm_proxy.generate(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
+        last_content = _json.loads(result) if isinstance(result, str) else dict(result)
+
+    content = JournalContent.model_validate(last_content)
+    inner_rec = generate_structured(spec, content, workspace, output_filename)
+    # inner_rec.mode == "structured_fill"（generate_structured 硬编码）；
+    # 覆写为 llm_generate 以反映实际生成路径。
+    final_rec = JournalGenerationRecord(
+        gen_id=inner_rec.gen_id,
+        spec_id=inner_rec.spec_id,
+        output_path=inner_rec.output_path,
+        mode="llm_generate",
+        created_at=inner_rec.created_at,
+        llm_model=inner_rec.llm_model,
+        bytes_written=inner_rec.bytes_written,
+        extra=inner_rec.extra,
+    )
+    return record_generation(workspace, final_rec)
+
+
+__all__ = ["generate_structured", "generate_article"]
