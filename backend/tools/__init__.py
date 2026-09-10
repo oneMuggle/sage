@@ -63,6 +63,7 @@ from .repl_tool import ReplTool
 from .runtime_exec import RuntimeExecTool
 from .runtime_probe import RuntimeProbeTool
 from .search_tools import GlobSearchTool, GrepSearchTool
+from .session_search_tool import SessionSearchTool
 from .skill import SkillHotLoader
 from .skill_save_tool import SkillSaveTool
 from .skill_tool import SkillTool
@@ -138,6 +139,8 @@ def register_all_tools(
         registry.register(HttpDownloadTool(policy=policy, network_policy=network_policy))
     registry.register(CalculatorTool(policy=policy))
     registry.register(MemorySearchTool(policy=policy))
+    # Round 2 (session_search): 跨会话对话原文检索（READ 级）
+    registry.register(SessionSearchTool(policy=policy))
     registry.register(MemorySaveTool(policy=policy))
     registry.register(OfficeListTool(policy=policy))
     registry.register(OfficeReadTool(policy=policy))
@@ -268,6 +271,7 @@ __all__ = [
     "HttpDownloadTool",
     "CalculatorTool",
     "MemorySearchTool",
+    "SessionSearchTool",
     "MemorySaveTool",
     "OfficeListTool",
     "OfficeReadTool",

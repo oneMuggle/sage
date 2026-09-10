@@ -104,6 +104,9 @@ def setup_test_db(request):
     # A4: WakeStore 单例绑定全局 Database，必须随临时库一起重置，
     # 否则下一个用例拿到持有已关闭连接的旧 store。
     from backend.application.services.wake_store import reset_wake_store
+
+    # MessageSearchIndex 单例绑定全局 Database（Round 2 session_search）
+    from backend.data.message_search import reset_message_search_index
     from backend.main import app
     from backend.memory.registry import reset_memory_manager
 
@@ -128,6 +131,7 @@ def setup_test_db(request):
     reset_user_profile()
     reset_usage_store()
     reset_lifecycle_store()
+    reset_message_search_index()
     # MemoryExtractionQueue 单例绑定全局事件循环，必须随测试重置
     # （取消残留 worker，避免跨测试泄漏 + "task was destroyed" 警告）
     from backend.memory.async_extractor import reset_memory_extraction_queue

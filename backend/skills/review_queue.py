@@ -317,6 +317,31 @@ class ReviewQueue:
 
         # generate_draft is async; run it in a one-shot event loop
         # from the sync worker thread.
+
+        # Round 2 (审阅触发升级): 低阈值入队的边缘回合先过 LLM 初筛 ——
+        # 对标 hermes background review 的判断力，同时保留 Sage 的
+        # 人工审批闸口（初筛只决定"要不要起稿"）。显式触发
+        # (explicit_learn) 不初筛 —— 用户主动要求学习，照旧直接起稿。
+        if (
+            enriched_context.get("needs_screening")
+            and event.trigger_type != "explicit_learn"
+        ):
+            screen = getattr(self.review_service, "should_generate", None)
+            if callable(screen):
+                keep, reason = asyncio.run(screen(enriched_context))
+                if not keep:
+                    logger.info(
+                        "初筛跳过起稿 (event=%s, trigger=%s): %s",
+                        event.id,
+                        event.trigger_type,
+                        reason,
+                    )
+                    return
+            else:
+                # 注入的 review_service 未实现初筛（旧测试替身）——
+                # 保持旧行为直接起稿，宁可多审不漏审。
+                logger.debug("review_service 无 should_generate，跳过初筛")
+
         draft = asyncio.run(
             self.review_service.generate_draft(
                 trigger_type=event.trigger_type,

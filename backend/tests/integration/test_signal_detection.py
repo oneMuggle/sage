@@ -146,8 +146,8 @@ class TestComplexTurnSignalDetection:
         )
         assert trigger_type == "complex_turn"
 
-    def test_no_review_when_few_tool_calls(self):
-        """When <4 tool calls, no review is enqueued."""
+    def test_few_tool_calls_enqueue_with_screening(self):
+        """Round 2: 2~3 次工具调用 → 入队且带 needs_screening=True（LLM 初筛）。"""
         from backend.application.services.chat_service import ChatService
         from backend.domain.message import Message, Role, ToolCall
 
@@ -160,11 +160,67 @@ class TestComplexTurnSignalDetection:
         mock_metrics = MagicMock()
         mock_events = MagicMock()
 
-        # Only 2 tool calls (below threshold)
+        # 2 tool calls (入队阈值 ≥2, 低于 nudge 阈值 4 → 需初筛)
         tool_calls = [
             ToolCall(name="read", args={"path": "/a"}),
             ToolCall(name="read", args={"path": "/b"}),
         ]
+        mock_llm.chat.return_value = Message(
+            role=Role.ASSISTANT,
+            content="Done",
+            tool_calls=tool_calls,
+        )
+        mock_tools.list_tools.return_value = []
+        mock_storage.get_messages.return_value = []
+
+        with patch(
+            "backend.skills.review_queue.get_review_queue",
+            return_value=mock_review_queue,
+        ):
+            service = ChatService(
+                llm=mock_llm,
+                tools=mock_tools,
+                skills=mock_skills,
+                storage=mock_storage,
+                metrics=mock_metrics,
+                events=mock_events,
+            )
+
+            with patch.object(
+                service, "_execute_tool_calls", new_callable=AsyncMock
+            ) as mock_exec:
+                mock_exec.return_value = False
+
+                asyncio.run(
+                    service._run_turn_inner(
+                        session_id="test-session",
+                        user_message=Message(role=Role.USER, content="Simple task"),
+                        span=MagicMock(),
+                    )
+                )
+
+        # Round 2: 边缘回合仍入队, 但带初筛标记
+        mock_review_queue.enqueue.assert_called_once()
+        call_kwargs = mock_review_queue.enqueue.call_args
+        context = call_kwargs.kwargs.get("context", {})
+        assert context.get("needs_screening") is True
+
+    def test_no_review_when_single_tool_call(self):
+        """When <2 tool calls (Round 2 入队阈值), no review is enqueued."""
+        from backend.application.services.chat_service import ChatService
+        from backend.domain.message import Message, Role, ToolCall
+
+        mock_review_queue = Mock()
+
+        mock_llm = AsyncMock()
+        mock_tools = MagicMock()
+        mock_skills = MagicMock()
+        mock_storage = AsyncMock()
+        mock_metrics = MagicMock()
+        mock_events = MagicMock()
+
+        # Only 1 tool call (below Round 2 enqueue threshold)
+        tool_calls = [ToolCall(name="read", args={"path": "/a"})]
         mock_llm.chat.return_value = Message(
             role=Role.ASSISTANT,
             content="Done",

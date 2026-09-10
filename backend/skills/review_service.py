@@ -17,7 +17,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from string import Template
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from backend.domain.message import Message
 
@@ -158,6 +158,56 @@ class ReviewService:
     # ------------------------------------------------------------------ #
     # Public API
     # ------------------------------------------------------------------ #
+
+    async def should_generate(
+        self, context: Dict[str, Any]
+    ) -> Tuple[bool, str]:
+        """LLM 初筛：这轮对话是否值得沉淀为可复用技能（Round 2）。
+
+        对标 hermes background review fork 的判断力，但保留 Sage 的
+        人工审批哲学 —— 初筛只决定"要不要起稿"，批准闸口不变。
+        用于低阈值入队的边缘回合（工具调用 2~3 次），过滤噪音，
+        避免"每次都起稿"的审批疲劳。
+
+        Returns:
+            (should_generate, reason) 二元组。
+            LLM 不可用 / 输出不可解析 → (False, ...) —— 宁缺勿滥：
+            初筛与起稿同样依赖 LLM，供应商故障时不可能起稿成功。
+
+        Raises:
+            Exception: LLM provider 异常照常上抛（worker 侧捕获计失败）。
+        """
+        prompt = (
+            "以下是一轮 AI 助手对话的上下文（用户请求 + 工具调用序列）。"
+            "请判断：这轮对话是否展示了一个**值得沉淀为可复用技能**的流程？\n"
+            "判定标准（需同时满足）：\n"
+            "1. 有可复用的步骤结构（不是一次性闲聊或简单问答）；\n"
+            "2. 用户可能以相似方式再次提出（同类任务可复用）；\n"
+            "3. 不是单次工具调用的平凡查询。\n\n"
+            '只输出 JSON：{"save_skill": true/false, "reason": "一句话理由"}\n\n'
+            "对话上下文:\n"
+            + json.dumps(context, ensure_ascii=False, indent=2)
+        )
+        turn = await self.llm_provider.complete(
+            model=self._model,
+            messages=[
+                Message(role="system", content="你是一个技能策展人。请输出 JSON。"),
+                Message(role="user", content=prompt),
+            ],
+        )
+        if not turn.text:
+            return False, "LLM 返回空响应"
+        try:
+            text = turn.text.strip()
+            start, end = text.find("{"), text.rfind("}")
+            if start == -1 or end <= start:
+                return False, "初筛输出不可解析"
+            parsed = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return False, "初筛输出非 JSON"
+        if isinstance(parsed, dict) and parsed.get("save_skill") is True:
+            return True, str(parsed.get("reason", ""))
+        return False, str(parsed.get("reason", "无充分证据")) if isinstance(parsed, dict) else "无充分证据"
 
     async def generate_draft(
         self, trigger_type: str, context: Dict[str, Any]
