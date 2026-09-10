@@ -19,7 +19,7 @@ from typing import Callable, List, Optional
 # Guarded by __name__ == "__main__" so pytest imports don't emit noise.
 _startup_t0: float = time.monotonic() if __name__ == "__main__" else 0.0
 if __name__ == "__main__":
-    print(
+    print(  # noqa: T201
         f"[sage-startup] t=0.0s module load begin (pid={os.getpid()})",
         file=sys.stderr,
         flush=True,
@@ -282,7 +282,7 @@ async def lifespan(app: FastAPI):
     app.state.db = db
     if __name__ == "__main__":
         _elapsed_db = time.monotonic() - _startup_t0
-        print(
+        print(  # noqa: T201
             f"[sage-startup] t={_elapsed_db:.1f}s db.init_db() complete",
             file=sys.stderr,
             flush=True,
@@ -657,7 +657,7 @@ async def lifespan(app: FastAPI):
 
     if __name__ == "__main__":
         _elapsed_lifespan = time.monotonic() - _startup_t0
-        print(
+        print(  # noqa: T201
             f"[sage-startup] t={_elapsed_lifespan:.1f}s lifespan startup complete (before yield)",
             file=sys.stderr,
             flush=True,
@@ -912,7 +912,7 @@ async def health_check():
 # lifespan(). Elapsed time isolates slow imports from slow init.
 if __name__ == "__main__":
     _elapsed_imports = time.monotonic() - _startup_t0
-    print(
+    print(  # noqa: T201
         f"[sage-startup] t={_elapsed_imports:.1f}s all module imports complete",
         file=sys.stderr,
         flush=True,
@@ -925,7 +925,7 @@ if __name__ == "__main__":
     from backend.utils.logging import setup_logging
 
     _elapsed_entry = time.monotonic() - _startup_t0
-    print(
+    print(  # noqa: T201
         f"[sage-startup] t={_elapsed_entry:.1f}s entering __main__",
         file=sys.stderr,
         flush=True,
@@ -951,7 +951,7 @@ if __name__ == "__main__":
         logging.getLogger(_name).setLevel(logging.INFO)
 
     _elapsed_serve = time.monotonic() - _startup_t0
-    print(
+    print(  # noqa: T201
         f"[sage-startup] t={_elapsed_serve:.1f}s calling uvicorn.run() on :{port}",
         file=sys.stderr,
         flush=True,
