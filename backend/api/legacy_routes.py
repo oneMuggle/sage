@@ -26,7 +26,7 @@ import time
 import uuid
 from typing import Any, Dict, Optional, Set, Union
 
-from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, StrictBool
 
@@ -34,8 +34,6 @@ from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegist
 from backend.api.orch_routes import router as orch_routes_router
 from backend.api.settings_models import LegacySettingsPayload, model_dump_compat
 from backend.chat.compaction import (
-    MIN_COMPACT_MESSAGE_COUNT,
-    CompactionError,
     compact_messages,
     should_compact,
 )
@@ -49,11 +47,9 @@ from backend.data.artifact_repo import (  # S7: 产物事件 → 活跃流推送
 )
 from backend.data.database import get_database
 from backend.data.session_repo import (
-    ForkSourceNotFoundError,
     Message as DbMessage,
     MessageRepository,
     SessionRepository,
-    fork_session as fork_session_core,
 )
 from backend.memory import get_memory_manager
 from backend.memory.summary import (
@@ -111,7 +107,6 @@ router = APIRouter()
 # 的 dict)。若 decorator 定义在 database.py,本文件 34 个带 body 模型的
 # handler(ChatRequest 等)会报 PydanticUndefinedAnnotation。orch_routes.py
 # 因此也保留同构的本地定义,共用同一把 _SQLITE_LOCK。
-from backend.api.error_contract import error_json
 from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与文档语义保留
     _SQLITE_LOCK,
     make_with_db_lock,
@@ -820,158 +815,7 @@ async def _extract_legacy_chat_memory(
 _compact_in_progress: Set[str] = set()
 
 
-@router.post("/sessions/{session_id}/compact", response_model=dict)
-async def compact_session(session_id: str):
-    """手动压缩会话上下文（M4，对应前端 /compact slash action）。
-
-    - 200 + ``{"ok": true, "compacted": true, "before", "after", "removed"}``
-    - 200 + ``{"ok": true, "compacted": false, "reason", ...}`` — 低于压缩
-      地板（消息数 < 12 或 token 未达阈值），DB 不动
-    - 404 — 会话不存在
-    - 409 + ``{"ok": false, "error": "compact_in_progress"}`` — 同会话压缩
-      正在进行（重复触发）
-    - 502 + ``{"ok": false, "error"}`` — 无 LLM 配置 / 摘要失败 / 落盘失败，
-      DB 不动（落盘走单事务，失败整体回滚）
-    """
-    session_repo = SessionRepository()
-    if session_repo.get(session_id) is None:
-        raise HTTPException(status_code=404, detail="会话不存在")
-
-    message_repo = MessageRepository()
-    messages = message_repo.get_by_session(session_id, limit=100000)
-    before = len(messages)
-
-    if not should_compact(messages):
-        reason = (
-            "below_message_floor"
-            if before < MIN_COMPACT_MESSAGE_COUNT
-            else "below_token_threshold"
-        )
-        return {
-            "ok": True,
-            "compacted": False,
-            "reason": reason,
-            "before": before,
-            "after": before,
-            "removed": 0,
-        }
-
-    if session_id in _compact_in_progress:
-        return error_json(
-            409, "compact_in_progress", "该会话正在压缩中，请勿重复触发"
-        )
-
-    llm_complete = _build_compaction_llm_callable()
-    if llm_complete is None:
-        return error_json(
-            502, "llm_not_configured", "没有可用的 LLM 配置，无法生成压缩摘要"
-        )
-
-    _compact_in_progress.add(session_id)
-    try:
-        try:
-            new_messages, removed_count = await compact_messages(messages, llm_complete)
-        except CompactionError as exc:
-            logger.warning(
-                "[M4] compact session=%s 失败(DB 未改动): %s", _safe_log_field(session_id), exc
-            )
-            return error_json(502, "compaction_failed", str(exc))
-
-        try:
-            after = _persist_compaction(session_id, messages, new_messages, removed_count)
-        except Exception as exc:
-            # 单事务已回滚——DB 保持压缩前状态（CRITICAL-1 的核心保证）。
-            logger.warning(
-                "[M4] compact session=%s 落盘失败(事务已回滚, DB 未改动): %s",
-                _safe_log_field(session_id),
-                exc,
-            )
-            return error_json(
-                502, "persist_failed", "压缩结果落盘失败，数据库未改动"
-            )
-    finally:
-        _compact_in_progress.discard(session_id)
-
-    logger.info(
-        "[M4] compact session=%s 完成: before=%s after=%s removed=%s",
-        _safe_log_field(session_id),
-        before,
-        after,
-        removed_count,
-    )
-    return {"ok": True, "compacted": True, "before": before, "after": after, "removed": removed_count}
-
-
-class ForkSessionRequest(BaseModel):
-    """POST /sessions/{session_id}/fork 请求体。"""
-
-    at_message_id: Optional[str] = None
-    title: Optional[str] = None
-    # U5' (对标增强第五轮批次 A): 开区间截断——复制 at_message_id 之前的
-    # 消息（不含本身）。编辑重发据此分叉出"被编辑消息之前"的前缀。
-    before_message: bool = False
-
-
-@router.post("/sessions/{session_id}/fork", response_model=dict)
-@with_db_lock
-def fork_session(session_id: str, data: ForkSessionRequest):
-    """从当前会话分叉出新会话（M4）。
-
-    复制 ``at_message_id`` 及之前的全部消息（省略时复制全部）到新会话，
-    消息获得新 id 但保留顺序 / 角色 / 内容 / 时间戳。新会话写入
-    ``fork_root=<源 id>`` 与 ``forked_at_message_id``。
-
-    刻意采用**全量前缀复制**而非计划文档最初的 copy-on-write 设计：
-    桌面级会话只有数百条消息，复制更简单安全（详见 docs/plans/2026-07-29_session-compact-fork-m4.md）。
-
-    - 200 + 新会话 JSON（含 fork_root / forked_at_message_id）
-    - 404 + 结构化 detail — 源会话或分叉点消息不存在
-    """
-    try:
-        forked = fork_session_core(
-            SessionRepository(),
-            MessageRepository(),
-            session_id,
-            at_message_id=data.at_message_id,
-            title=data.title,
-            before_message=data.before_message,
-        )
-    except ForkSourceNotFoundError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail={"type": f"{exc.kind}_not_found", "message": str(exc)},
-        ) from exc
-    return forked.to_dict()
-
-
 # ==================== 消息 API ====================
-
-
-@router.post("/messages/{message_id}/delete")
-@with_db_lock
-def delete_message(message_id: str):
-    """删除单条消息（物理删除，非软删）。
-
-    对应 Tauri command ``delete_message`` (PR-2):
-    - 现有消息 → 200 + ``{"deleted": true}``
-    - 不存在消息 → 404 + 结构化 detail (前端可分类处理)
-    - 重复删除 → 第二次 404 (幂等性)
-
-    注: 选 POST 而非 DELETE 是为了与项目其他 `/<resource>/<id>/delete` 路由
-    (sessions/{id}/delete) 保持一致; 真正的 RESTful DELETE 在 v2 改造时再做。
-    """
-    from backend.data.session_repo import MessageRepository
-
-    deleted = MessageRepository().delete(message_id)
-    if not deleted:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "type": "message_not_found",
-                "message": f"message {message_id} not found",
-            },
-        )
-    return {"deleted": True}
 
 
 # ==================== Agent API (PR-3) ====================
@@ -2902,15 +2746,6 @@ def interrupt(data: Optional[InterruptRequest] = Body(default=None)):
 # ==================== 消息 API ====================
 
 
-@router.get("/sessions/{session_id}/messages", response_model=List[dict])
-@with_db_lock
-def get_messages(session_id: str, limit: int = 100, offset: int = 0):
-    """获取会话消息"""
-    repo = MessageRepository()
-    messages = repo.get_by_session(session_id, limit=limit, offset=offset)
-    return [m.to_dict() for m in messages]
-
-
 # ==================== 进化系统 API ====================
 
 
@@ -3203,63 +3038,6 @@ class MemorySaveRequest(BaseModel):
 
 class MemoryDeleteRequest(BaseModel):
     id: str
-
-
-def _snippet_around(content: str, needle: str, window: int = 80) -> str:
-    """取命中点前后 ``window`` 字符的摘录（前后越界截断，中间不省略号——
-    前端按单行截断展示）。多命中取第一处。"""
-    lowered = content.lower()
-    idx = lowered.find(needle.lower())
-    if idx < 0:
-        return content[: window * 2]
-    start = max(0, idx - window)
-    end = min(len(content), idx + len(needle) + window)
-    return content[start:end]
-
-
-@router.get("/search/messages")
-@with_db_lock
-def search_messages(
-    q: str = Query(min_length=2, max_length=200),
-    session_id: Optional[str] = None,
-    limit: int = Query(default=20, ge=1, le=50),
-):
-    """跨会话消息全文搜索（F12，round5 批次 B）。
-
-    LIKE 子串匹配（通配符转义，转义符用 ``!`` ——反斜杠在部分驱动/书写
-    环境下不是稳定的单字符 ESCAPE），仅 user/assistant 行（tool/system 无
-    检索价值）；新→旧排序；取 limit+1 条探测 has_more，避免 COUNT 双查。
-    """
-    needle = q.replace("!", "!!").replace("%", "!%").replace("_", "!_")
-    pattern = f"%{needle}%"
-    conn = get_database().get_connection()
-    sql = """
-        SELECT m.id, m.session_id, m.role, m.content, m.created_at, s.title
-        FROM messages m
-        JOIN sessions s ON s.id = m.session_id
-        WHERE m.role IN ('user', 'assistant') AND m.content LIKE ? ESCAPE '!'
-    """
-    params: List[Any] = [pattern]
-    if session_id:
-        sql += " AND m.session_id = ?"
-        params.append(session_id)
-    sql += " ORDER BY m.created_at DESC LIMIT ?"
-    params.append(limit + 1)
-    rows = conn.execute(sql, params).fetchall()
-
-    has_more = len(rows) > limit
-    results = [
-        {
-            "message_id": row["id"],
-            "session_id": row["session_id"],
-            "session_title": row["title"],
-            "role": row["role"],
-            "snippet": _snippet_around(row["content"] or "", q),
-            "created_at": row["created_at"],
-        }
-        for row in rows[:limit]
-    ]
-    return {"results": results, "has_more": has_more}
 
 
 @router.get("/memory/search")
