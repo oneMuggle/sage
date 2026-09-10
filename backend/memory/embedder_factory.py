@@ -54,7 +54,7 @@ def onnx_model_ready(model_dir: str) -> bool:
     return (base / "model.onnx").is_file() and (base / "tokenizer.json").is_file()
 
 
-def create_embedder() -> HashEmbedder | OnnxEmbedder:
+def create_embedder() -> Any:  # 返回 HashEmbedder 或 OnnxEmbedder
     """按配置创建嵌入器; ONNX 不可用时降级 HashEmbedder。
 
     Returns:
