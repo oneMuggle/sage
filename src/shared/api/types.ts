@@ -1421,3 +1421,86 @@ export interface OfficeTemplateInstantiateResult {
   /** Placeholder names the template still contains after the fill. */
   unfilled_placeholders: string[];
 }
+
+// ==================== Journal template types (Task 7, 2026-09-10) ====================
+
+/**
+ * Journal template subsystem (Task 7, 2026-09-10).
+ * Mirrors backend/office/journal/models.py: JournalSpec, JournalViolation, etc.
+ */
+
+/** Single chapter heading extracted from a .docx template. */
+export interface JournalSpecHeading {
+  keyword: string;
+  level: number;
+  expected_pt: number;
+}
+
+/** Parsed journal template — body font/size/spacing/margins + heading roster + citation style. */
+export interface JournalSpec {
+  spec_id: string;
+  template_filename: string;
+  body_pt: number;
+  heading_pt: number;
+  line_spacing: number;
+  margins_cm: number;
+  headings: JournalSpecHeading[];
+  citation_style: string;
+}
+
+/** One rule violation emitted by the 6-rule validator. */
+export interface JournalViolation {
+  rule_id: string;
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  location: string;
+  suggestion: string;
+}
+
+/** POST /api/v1/office/journal/parse-template response. */
+export interface JournalParseTemplateResponse {
+  spec: JournalSpec;
+}
+
+/** GET /api/v1/office/journal/specs response. */
+export interface JournalListSpecsResponse {
+  specs: JournalSpec[];
+}
+
+/** GET /api/v1/office/journal/specs/{spec_id} response. */
+export interface JournalGetSpecResponse {
+  spec: JournalSpec;
+}
+
+/** POST /api/v1/office/journal/validate response. */
+export interface JournalValidateResponse {
+  spec_id: string;
+  violations: JournalViolation[];
+  error_count: number;
+  warning_count: number;
+}
+
+/** One section's text, keyed by the heading keyword. */
+export interface JournalContentSection {
+  [keyword: string]: string;
+}
+
+/** POST /api/v1/office/journal/fill-from-content request body. */
+export interface JournalFillFromContentRequest {
+  spec_id: string;
+  workspace_path: string;
+  content: {
+    title: string;
+    abstract: string;
+    sections: JournalContentSection;
+    references: string[];
+  };
+  output_filename: string;
+}
+
+/** POST /api/v1/office/journal/fill-from-content response. */
+export interface JournalFillFromContentResponse {
+  spec_id: string;
+  output_path: string;
+  generation_id: string;
+}
