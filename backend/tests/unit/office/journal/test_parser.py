@@ -10,7 +10,6 @@ from backend.office.journal.errors import JournalParseError
 from backend.office.journal.models import CitationStyle
 from backend.office.journal.parser import parse_journal_spec
 
-
 FIXTURE_DIR = (
     Path(__file__).resolve().parent.parent.parent.parent / "fixtures" / "journal"
 )

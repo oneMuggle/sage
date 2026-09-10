@@ -33,7 +33,6 @@ from backend.office.journal.models import (
 )
 from backend.office.journal.pandoc_adapter import convert_doc_to_docx
 
-
 _PT_TO_CN: Dict[float, str] = {
     42.0: "初号",
     36.0: "小初",
@@ -121,7 +120,7 @@ def _style_line_spacing(style) -> float:
     if isinstance(pf.line_spacing_rule, WD_LINE_SPACING):
         # 倍数（1.0/1.5/2.0）
         return float(pf.line_spacing)
-    if isinstance(pf.line_spacing, (int, float)):
+    if isinstance(pf.line_spacing, (int, float)):  # noqa: UP038 - 兼容 Py3.8
         return float(pf.line_spacing)
     return 0.0
 
@@ -171,7 +170,7 @@ def _detect_citation_style(doc: Document) -> CitationStyle:
     full = "\n".join(p.text for p in doc.paragraphs)
     if not full.strip():
         return CitationStyle.UNKNOWN
-    # numeric [1] / [1,2]
+    # numeric style — bracket-N / bracket-N-M
     if re.search(r"\[\d+(?:,\s*\d+)*\]", full):
         return CitationStyle.NUMERIC
     # author_year like "张三等，2020" 或 "(Smith, 2020)"
@@ -189,7 +188,7 @@ def _resolve_input(input_path: Path, cache_dir: Optional[Path]) -> Path:
     suffix = input_path.suffix.lower()
     if suffix == ".doc":
         try:
-            return convert_doc_to_docx(input_path, cache_dir=cache_dir or Path("."))
+            return convert_doc_to_docx(input_path, cache_dir=cache_dir or Path())
         except JournalPandocError as exc:
             raise JournalParseError(f"pandoc 转换失败: {exc}") from exc
     if suffix == ".docx":
