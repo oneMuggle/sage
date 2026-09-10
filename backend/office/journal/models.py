@@ -65,7 +65,7 @@ class JournalSpec(BaseModel):
     page_size: str = "A4"
     extra: Dict[str, Any] = Field(default_factory=dict)
 
-    def validate_content(self, content: "JournalContent") -> None:
+    def validate_content(self, content: JournalContent) -> None:
         """校验 content 形状是否可用于 fill。缺 abstract/任何 keyword 标题 → 抛 JournalContentShapeError。"""
         if not content.abstract:
             raise JournalContentShapeError("content.abstract 不能为空")

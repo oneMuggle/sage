@@ -78,5 +78,6 @@ def test_journal_generation_record_epoch_ms():
         mode="structured_fill",
         created_at=1736486400000,  # 2025-01-10 12:00:00Z
     )
-    dt = datetime.fromtimestamp(rec.created_at / 1000, tz=timezone.utc)
-    assert dt.year == 2025 and dt.month == 1
+    dt = datetime.fromtimestamp(rec.created_at / 1000, tz=timezone.utc)  # noqa: UP017 — Python 3.10 兼容
+    assert dt.year == 2025
+    assert dt.month == 1
