@@ -142,3 +142,23 @@ def test_apply_patch_diagnostics_on_success(ws):
     assert result.success is True
     assert len(result.content["diagnostics"]) == 1
     assert result.content["diagnostics"][0]["path"].endswith("a.py")
+
+
+def test_json_syntax_error_reported(tmp_path):
+    """F-2 (round5 批次 F): .json 写坏 → JSONDecodeError 诊断（行号+列号）。"""
+    p = tmp_path / "config.json"
+    p.write_text('{"a": 1,\n"b": }', encoding="utf-8")
+    content: dict = {"path": str(p)}
+    result = attach_diagnostics(content, str(p))
+    assert result is not None
+    issue = result["diagnostics"][0]
+    assert "JSON 语法错误" in issue["message"]
+    assert issue["line"] == 2
+
+
+def test_json_valid_no_diagnostics(tmp_path):
+    p = tmp_path / "ok.json"
+    p.write_text('{"a": 1}', encoding="utf-8")
+    content: dict = {"path": str(p)}
+    result = attach_diagnostics(content, str(p))
+    assert result == {"path": str(p)}

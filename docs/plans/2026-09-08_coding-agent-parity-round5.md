@@ -186,3 +186,27 @@ bash 跑测试非零退出时，LLM 只能从 30KiB 截断文本里自己找失�
 - 索引构建同步执行（工具自身就是显式调用，首问全量索引属预期行为），单文件 256KB 读取上限。
 
 **测试**：deep link 解析单测；close-to-tray IPC 单测；workspace_index 枚举/分块/余弦检索/增量单测（embedding 用假向量函数注入，不发网络）。
+
+## 2.5 批次 F 详细设计（2026-09-10 增补，本次实施）
+
+> 基线：origin/main `c53c1b64`（含并行会话的 round7 批次 A）；分支 `feat-parity-r5-batch-f`。主题：**编辑成功率与代码理解补强**。
+
+### F-1 edit_file 行级容错匹配（P1，工作量 M）
+
+`old_string` 逐字符精确匹配是编辑失败的最大来源——模型给的片段常带缩进/行尾差异，一次失败即浪费一整轮 LLM。精确匹配 0 命中时新增**行级 trim 容错**兜底：
+
+- `_resolve_fuzzy_range`：文件行与 old_string 行各自 strip 后做连续窗口匹配；命中恰好 1 处 → 定位字符区间（`splitlines(keepends=True)` 累加偏移，保留 CRLF/其余原文不动）；0 处或多处 → 维持原错误语义；
+- 替换块行尾跟随文件风格（文件含 CRLF 且 new_string 无 → 归一为 CRLF）；
+- `replace_all` 不走容错（语义复杂）；响应 content 加 `fuzzy_matched: true` 供诊断。
+
+**测试**：缩进差异命中、CRLF 保留、多处 fuzzy 拒绝、精确匹配优先、new_string 行尾归一。
+
+### F-2 JSON 写后语法校验（P2，工作量 S）
+
+`write_diagnostics.attach_diagnostics` 现仅覆盖 Python AST。`.json` 写入后加 `json.loads` 校验（stdlib 零依赖），语法错误随工具结果回喂。
+**测试**：合法/非法 JSON 各一。
+
+### F-3 symbol_search 扩展 JS/TS（P2，工作量 M）
+
+`symbol_search` 现仅 Python AST。v1 加 JS/TS/JSX/TSX 的正则级定义提取（`function name(`、`class name`、`const name = (`/`= =>`、`interface/type name`），与 Python 符号合并入既有倒排索引；非 Python 文件不走 AST。
+**测试**：TS/JS 样例文件的符号发现与查询命中。
