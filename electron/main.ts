@@ -1916,22 +1916,57 @@ app.whenReady().then(async () => {
   }
   const ready = await waitForBackend();
   if (!ready) {
+    // ── Diagnostic: log backend process state at timeout ────────────────
+    // Differentiate "backend crashed" (exitCode != null) from "backend
+    // still running but slow" (exitCode === null). Critical for Win7
+    // startup investigation (alpha.19-win7 2026-09-10).
+    const procState = backendProc
+      ? { pid: backendProc.pid, exitCode: backendProc.exitCode, signalCode: backendProc.signalCode }
+      : { pid: null, exitCode: null, signalCode: null };
+    const backendGenState = currentBackend
+      ? { pid: currentBackend.pid, generation: currentBackend.generation }
+      : null;
     logger.error('main: backend health timeout', {
       url: BACKEND_HEALTH,
       timeoutMs: BACKEND_HEALTH_TIMEOUT_MS,
+      backendProc: procState,
+      currentBackend: backendGenState,
     });
+
+    // ── Auto-retry once ─────────────────────────────────────────────────
+    // Some Win7 machines need >90s for the full module import chain
+    // (jieba + 50+ deps). The backend IS starting (second-run logs show
+    // encrypted secrets) but takes longer than the first timeout allows.
+    // Give it one more timeout period before showing the dialog.
+    logger.info('main: auto-retrying backend health check (Win7 slow-startup allowance)');
+    const autoRetryReady = await waitForBackend();
+    if (autoRetryReady) {
+      logger.info('main: backend ready after auto-retry');
+      createMainWindow();
+      buildApplicationMenu();
+      void updateManager
+        ?.onAppStartup(() => mainWindow, BACKEND_URL)
+        .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
+      return;
+    }
+
     // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
     // User can open logs, retry the health check, or quit.
     // alpha.18-win7 2026-09-10: include the first stderr lines we captured
     // so the dialog shows the real Python error instead of a generic "is
     // conda installed?" hint. If the buffer is empty (e.g. backend is hung
     // without printing anything), fall back to the legacy hint.
+    // alpha.19-win7 2026-09-10: include backend process state so the user
+    // (and support logs) can differentiate crashed vs still-starting.
     const stderrSnippet = getBackendStartupStderrSnippet();
+    const procStateLine = backendProc
+      ? `\n\n后端进程状态: pid=${backendProc.pid}, exitCode=${backendProc.exitCode}, signalCode=${backendProc.signalCode}`
+      : '\n\n后端进程状态: 进程不存在 (backendProc=null)';
     const baseDetail = stderrSnippet
-      ? `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。\n\n后端最近一次输出:\n${stderrSnippet}`
-      : `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。`;
+      ? `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。${procStateLine}\n\n后端最近一次输出:\n${stderrSnippet}`
+      : `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。${procStateLine}`;
     const choice = await showStartupFailureDialog({
-      reason: `后端服务在 ${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)} 秒内未响应`,
+      reason: `后端服务在 ${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)} 秒内未响应 (已自动重试一次)`,
       detail: baseDetail,
     });
     if (choice === 'retry') {
