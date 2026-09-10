@@ -15,8 +15,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-import type { EndpointsTabProps } from './components';
 import { invoke } from '../../shared/api/desktopInvoke';
+
+import type { EndpointsTabProps } from './components';
 import { SettingRow, Toggle } from './components';
 
 export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
