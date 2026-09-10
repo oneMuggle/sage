@@ -54,4 +54,12 @@ export const orchRunClient = {
   confirmRun(runId: string): Promise<{ ok: boolean }> {
     return invoke<{ ok: boolean }>('orchestration_confirm_run', { run_id: runId });
   },
+  // RV2 (round8): 构造"只重跑失败任务"的计划覆盖 —— done 子任务带
+  // preset_output（结果回放，不重新执行），失败子任务原样重建。
+  // 409 = run 未终态 / 无失败任务 / 无计划。
+  rerunFailed(
+    runId: string,
+  ): Promise<{ session_id: string | null; goal: string; plan_override: TaskPlanItem[] }> {
+    return invoke('orchestration_rerun_failed', { run_id: runId });
+  },
 };

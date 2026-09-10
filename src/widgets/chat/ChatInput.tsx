@@ -22,6 +22,8 @@ interface ChatInputProps {
   onSend: (
     message: string,
     options?: {
+      /** PM1 (round8): 计划模式 —— 只读调研 + 计划产出（/plan 命令）。 */
+      planMode?: boolean;
       knowledgeRefs?: { id: string; title: string }[];
       attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
       images?: { name: string; size: number; type: string; dataUrl?: string }[];
@@ -338,6 +340,16 @@ function ChatInputInner({
             onSend(prompt);
             setValue('');
           });
+        return;
+      }
+
+      // PM2 (round8): /plan 计划模式 —— 以 planMode 立即发送剩余文本；
+      // run 完成后 Chat 页出批准条，批准后普通消息衔接执行。
+      if (cmd.mode === 'plan') {
+        if (isLoading || disabled) return;
+        const goal = value.trim().replace(new RegExp('^/plan', 'i'), '').trim();
+        setValue('');
+        if (goal) onSend(goal, { planMode: true });
         return;
       }
 

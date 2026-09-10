@@ -161,6 +161,8 @@ export const chatApi = {
       // Wave 3 A10 (2026-08-14): resume plan_override / run_id 透传。
       plan_override: config?.planOverride ?? null,
       run_id: config?.runId ?? null,
+      // PM1 (round8): 计划模式 —— 只读调研 + 计划产出。
+      plan_mode: config?.planMode ?? null,
     });
     const eventName = `chat-stream-${streamId}`;
 
