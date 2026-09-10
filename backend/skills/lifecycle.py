@@ -120,6 +120,18 @@ class SkillLifecycleStore:
             conn.commit()
         except Exception as exc:  # noqa: BLE001 - best-effort 契约
             logger.warning(f"Skill lifecycle persist failed for {name!r}: {exc}")
+            return
+        # Round 3: 归档/恢复动作进审计台账（append-only, best-effort）
+        try:
+            from backend.skills.audit import get_skill_audit_log
+
+            get_skill_audit_log().record(
+                name,
+                "archive" if archived else "restore",
+                actor="system",
+            )
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.warning(f"Skill audit hook failed for {name!r}: {exc}")
 
     def get_archived_names(self) -> Set[str]:
         """所有已归档技能名集合（批量左连接用，一次查询）。best-effort，失败空集。"""

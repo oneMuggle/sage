@@ -3096,6 +3096,19 @@ def approve_skill_draft(draft_id: str):
         ) from exc
 
     draft_store.update_status(draft_id, "approved")
+    # Round 3: 审批创建动作进审计台账（append-only, best-effort）
+    try:
+        from backend.skills.audit import get_skill_audit_log
+
+        get_skill_audit_log().record(
+            draft.name,
+            "create",
+            actor="user",
+            after_content=draft.content,
+            source=f"draft:{draft_id}",
+        )
+    except Exception as exc:  # noqa: BLE001 — 审计为旁路
+        logger.warning("Skill audit hook (create) failed: %s", exc)
     try:
         reload_result = _get_skill_adapter().rescan_skill_mds()
     except Exception as exc:  # noqa: BLE001 — approval succeeds even if reload fails
@@ -3133,6 +3146,85 @@ def reject_skill_draft(draft_id: str):
 
     draft_store.update_status(draft_id, "rejected")
     return {"status": "rejected", "draft_id": draft_id}
+
+
+# ---------------------------------------------------------------------------
+# Round 3 (skill audit + rollback, 对标 hermes curator):
+# 技能变更审计台账查询 + 单条一键回滚。
+# ---------------------------------------------------------------------------
+
+
+@router.get("/skills/{name}/audit")
+def list_skill_audit(name: str, limit: int = 50):
+    """List audit entries for a skill (append-only ledger).
+
+    - 200 + ``{"skill_name": ..., "entries": [...]}``
+    """
+    from backend.skills.audit import get_skill_audit_log
+
+    entries = get_skill_audit_log().list_entries(name, limit=max(1, min(limit, 200)))
+    return {"skill_name": name, "entries": entries}
+
+
+@router.post("/skills/{name}/rollback")
+@with_db_lock
+def rollback_skill(name: str):
+    """Rollback a skill to its latest recorded previous content.
+
+    - 200 + ``{"status": "rolled_back", "skill_name": ...}``
+    - 404 — skill does not exist on disk
+    - 409 — no rollback snapshot recorded for this skill
+    - 400 — invalid skill name
+    """
+    from backend.skills.audit import get_skill_audit_log
+    from backend.skills.loader import get_skill_loader
+
+    loader = get_skill_loader()
+    try:
+        current = loader.read(name)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_skill_name", "message": "Invalid skill name"},
+        ) from exc
+    if current is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "skill_not_found", "message": "Skill not found"},
+        )
+
+    snapshot = get_skill_audit_log().latest_before_snapshot(name)
+    if snapshot is None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "no_rollback_snapshot",
+                "message": "No previous content recorded for this skill",
+            },
+        )
+
+    try:
+        loader.write(name, snapshot, overwrite=True)
+    except (OSError, ValueError) as exc:
+        logger.error(
+            "Skill rollback write failed: name=%s error_type=%s",
+            _safe_log_field(name),
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "skill_write_failed", "message": "Failed to write skill"},
+        ) from exc
+
+    get_skill_audit_log().record(
+        name,
+        "rollback",
+        actor="user",
+        before_content=current,
+        after_content=snapshot,
+    )
+    logger.info("Skill rolled back: %s", _safe_log_field(name))
+    return {"status": "rolled_back", "skill_name": name}
 
 
 def _draft_to_dict(draft) -> dict:
