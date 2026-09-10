@@ -21,12 +21,48 @@
 import difflib
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .base import BaseTool, ToolResult, ToolSchema
 from .file_tool import MAX_WRITE_SIZE_BYTES, _contains_binary_marker, detect_bom_encoding
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_fuzzy_range(
+    original: str, old_string: str
+) -> Tuple[Optional[Tuple[int, int, str]], int]:
+    """F-1 (round5 批次 F): 行级 trim 容错定位（精确匹配 0 命中后的兜底）。
+
+    文件行与 old_string 行各自 strip 后做连续窗口匹配；命中恰好统计并返回
+    ``(字符区间, 命中次数)``——区间为 ``(start, end, trailing_eol)``：
+    end 含命中末行的行尾符，``trailing_eol`` 是该行尾（"\r\n" 或 "\n"），
+    调用方在 new_string 缺尾行尾时补齐，防止与后续原文粘连。
+    """
+    raw_lines = original.splitlines(keepends=True)
+    old_lines = [line.strip() for line in old_string.splitlines()]
+    if not old_lines:
+        return None, 0
+    stripped = [line.strip() for line in raw_lines]
+    m = len(old_lines)
+    hits: List[int] = []
+    for i in range(len(stripped) - m + 1):
+        if stripped[i : i + m] == old_lines:
+            hits.append(i)
+    if not hits:
+        return None, 0
+    first = hits[0]
+    last = first + m - 1
+    start = sum(len(line) for line in raw_lines[:first])
+    last_line = raw_lines[last]
+    if last_line.endswith("\r\n"):
+        trailing_eol = "\r\n"
+    elif last_line.endswith("\n"):
+        trailing_eol = "\n"
+    else:
+        trailing_eol = ""
+    end = start + sum(len(line) for line in raw_lines[first : last + 1])
+    return (start, end, trailing_eol), len(hits)
 
 
 def _not_found_hint(text: str, old_string: str) -> str:
@@ -255,11 +291,35 @@ class EditTool(BaseTool):
             return ToolResult(success=False, error=f"文件解码失败（{encoding}）: {exc}")
 
         match_count, match_error = _resolve_matches(original, old_string, replace_all)
+        fuzzy_result: Optional[Tuple[int, int, str]] = None
+        fuzzy_hits = 0
+        if match_error is not None and not replace_all:
+            # F-1 (round5 批次 F): 精确匹配 0 命中 → 行级 trim 容错兜底。
+            # 命中恰好 1 处才替换（多处/未命中维持原错误语义）。
+            fuzzy_result, fuzzy_hits = _resolve_fuzzy_range(original, old_string)
+            if fuzzy_result is not None and fuzzy_hits == 1:
+                match_error = None
+                match_count = 1
         if match_error is not None:
             return match_error
 
         replacements = match_count if replace_all else 1
-        if replace_all:
+        if fuzzy_result is not None:
+            start, end, trailing_eol = fuzzy_result
+            insert_new = new_string
+            if "\r\n" in original and "\r\n" not in insert_new:
+                # 替换块行尾跟随文件 CRLF 风格
+                insert_new = insert_new.replace("\r\n", "\n").replace("\n", "\r\n")
+            if (
+                trailing_eol
+                and insert_new
+                and not insert_new.endswith(("\n", "\r\n"))
+            ):
+                # 命中区间含文件末行行尾——new_string 非空且缺尾行尾时补齐
+                # 防粘连；纯删除（空）不补，连行尾一起删才是完整删行语义
+                insert_new += trailing_eol
+            updated = original[:start] + insert_new + original[end:]
+        elif replace_all:
             updated = original.replace(old_string, new_string)
         else:
             updated = original.replace(old_string, new_string, 1)
@@ -285,6 +345,7 @@ class EditTool(BaseTool):
             content=attach_diagnostics(
                 {
                     "path": str(target.resolve()),
+                    "fuzzy_matched": fuzzy_result is not None,
                     "replacements": replacements,
                     "lines_removed": _count_logical_lines(old_string) * replacements,
                     "lines_added": _count_logical_lines(new_string) * replacements,

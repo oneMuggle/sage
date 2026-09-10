@@ -20,17 +20,21 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
 
 #: 参与诊断的扩展名（其余语言无零依赖检查器，跳过）
-_DIAGNOSABLE_SUFFIXES = frozenset({".py", ".pyw"})
+_DIAGNOSABLE_SUFFIXES = frozenset({".py", ".pyw", ".json"})
 
 
 def _syntax_check(path: Path) -> Optional[Dict[str, Any]]:
-    """对 Python 文件做语法检查；返回诊断 dict 或 None（无问题/不适用）。
+    """对 Python/JSON 文件做语法检查；返回诊断 dict 或 None（无问题/不适用）。
 
-    非 ``.py``/``.pyw`` 后缀直接跳过 —— 调用方（attach_diagnostics 与
-    apply_patch 逐文件收集）都依赖这一语义，无需各自再判。
+    F-2 (round5 批次 F): ``.json`` 走 stdlib ``json.loads``——配置/manifest
+    类文件写坏 JSON 是高频错误，LLM 立即看到行号即可修正。非白名单后缀
+    直接跳过 —— 调用方（attach_diagnostics 与 apply_patch 逐文件收集）都
+    依赖这一语义，无需各自再判。
     """
     if path.suffix.lower() not in _DIAGNOSABLE_SUFFIXES:
         return None
+    if path.suffix.lower() == ".json":
+        return _json_check(path)
     try:
         source = path.read_bytes()
     except OSError as exc:
@@ -48,6 +52,31 @@ def _syntax_check(path: Path) -> Optional[Dict[str, Any]]:
             "message": f"语法错误: {exc.msg}",
             "line": exc.lineno,
             "offset": exc.offset,
+        }
+    return None
+
+
+def _json_check(path: Path) -> Optional[Dict[str, Any]]:
+    """JSON 语法检查（stdlib json, 零依赖）。"""
+    import json
+
+    try:
+        source = path.read_bytes()
+    except OSError as exc:
+        logger.warning("post-write diagnostics: 读取 %s 失败: %s", path, exc)
+        return None
+    try:
+        text = source.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    try:
+        json.loads(text)
+    except json.JSONDecodeError as exc:
+        return {
+            "severity": "error",
+            "message": f"JSON 语法错误: {exc.msg}",
+            "line": exc.lineno,
+            "offset": exc.colno,
         }
     return None
 

@@ -94,6 +94,61 @@ def _iter_python_files(root: Path):
                 yield Path(current_dir) / file_name
 
 
+def _iter_indexable_files(root: Path):
+    """F-3 (round5 批次 F): Python + JS/TS 全量枚举。"""
+    for current_dir, dir_names, file_names in os.walk(root):
+        dir_names[:] = [d for d in dir_names if d not in EXCLUDED_DIRS and not d.startswith(".")]
+        for file_name in sorted(file_names):
+            if file_name.endswith((".py", ".pyw", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs")):
+                yield Path(current_dir) / file_name
+
+
+# F-3: JS/TS 顶层定义提取（行级正则, v1 覆盖常见形态; 不追求完整语法）。
+_JS_FUNCTION_RE = re.compile(
+    r"^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s+([A-Za-z_$][\w$]*)"
+)
+_JS_CLASS_RE = re.compile(
+    r"^\s*(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)"
+)
+_JS_CONST_ARROW_RE = re.compile(
+    r"^\s*(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*"
+    r"(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>"
+)
+_JS_INTERFACE_TYPE_RE = re.compile(
+    r"^\s*(?:export\s+)?(interface|type)\s+([A-Za-z_$][\w$]*)"
+)
+
+
+def _extract_js_symbols(source: str, rel_path: str) -> List[_Symbol]:
+    """JS/TS 行级正则提取（顶层 function/class/const 箭头/interface/type）。"""
+    symbols: List[_Symbol] = []
+    for lineno, line in enumerate(source.splitlines(), start=1):
+        m = _JS_FUNCTION_RE.match(line)
+        if m:
+            symbols.append(_Symbol(m.group(1), "function", rel_path, lineno, _tokenize(m.group(1))))
+            continue
+        m = _JS_CLASS_RE.match(line)
+        if m:
+            symbols.append(_Symbol(m.group(1), "class", rel_path, lineno, _tokenize(m.group(1))))
+            continue
+        m = _JS_CONST_ARROW_RE.match(line)
+        if m:
+            symbols.append(_Symbol(m.group(1), "function", rel_path, lineno, _tokenize(m.group(1))))
+            continue
+        m = _JS_INTERFACE_TYPE_RE.match(line)
+        if m:
+            kind = "interface" if m.group(1) == "interface" else "type"
+            symbols.append(_Symbol(m.group(2), kind, rel_path, lineno, _tokenize(m.group(2))))
+    return symbols
+
+
+def _extract_symbols_for(path: Path, source: str, rel_path: str) -> List[_Symbol]:
+    """按扩展名分派：Python 走 AST, JS/TS 走行级正则。"""
+    if path.suffix in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"):
+        return _extract_js_symbols(source, rel_path)
+    return _extract_symbols(source, rel_path)
+
+
 class SymbolSearchTool(BaseTool):
     """在工作区 Python 代码中按名称/概念搜索类与函数定义。"""
 
@@ -103,7 +158,7 @@ class SymbolSearchTool(BaseTool):
         return ToolSchema(
             name="symbol_search",
             description=(
-                "按名称或概念搜索工作区 Python 代码的类/函数/方法定义"
+                "按名称或概念搜索工作区 Python/JS/TS 代码的类/函数/方法/接口定义"
                 "（如搜 'checkpoint' 找快照相关实现，搜 'kill process' "
                 "匹配 kill_process_tree）。比 grep 精准 —— 只返回定义处，"
                 "不含调用与注释噪音。返回限定定义文件与行号。"
@@ -138,7 +193,7 @@ class SymbolSearchTool(BaseTool):
 
         symbols: List[_Symbol] = []
         scanned = 0
-        for file_path in _iter_python_files(root_path):
+        for file_path in _iter_indexable_files(root_path):
             if scanned >= MAX_INDEX_FILES:
                 break
             try:
@@ -149,7 +204,7 @@ class SymbolSearchTool(BaseTool):
                 continue
             scanned += 1
             rel_path = file_path.relative_to(root_path).as_posix()
-            symbols.extend(_extract_symbols(source, rel_path))
+            symbols.extend(_extract_symbols_for(file_path, source, rel_path))
 
         # 打分：精确名 > 前缀 > 子串 > 分词 AND 命中数
         scored: List[tuple] = []
