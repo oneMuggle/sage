@@ -245,6 +245,11 @@ class SageAgent:
         # 置位; 工具执行以 task 竞争该事件, 中断先到即取消当前工具。
         self._interrupt_event: Optional[asyncio.Event] = None
         self._current_session_id: Optional[str] = None
+        # RT5 (round7): 单 agent steering —— 运行中注入的用户补充消息。
+        # run_loop 每轮迭代顶部排空（迭代边界语义，与中断检查同位）；
+        # _run_loop_active 为 False 时 inject 拒绝（调用方回退排队语义）。
+        self._pending_user_messages: deque = deque()
+        self._run_loop_active = False
         # L7: 每-run 工具调用数守卫的配置来源（register_all_tools 透传同一
         # policy;此处自留一份供 run_loop 读 max_tool_calls_per_run）。
         self.tool_policy = policy or ToolPolicy()
@@ -778,6 +783,10 @@ class SageAgent:
         self._consecutive_unanswered = 0
         # L12-lite: 本轮 run 的中断事件 (fresh, 绑定当前事件循环)
         self._interrupt_event = asyncio.Event()
+        # RT5: run 活跃窗口 —— steering 注入仅在窗口内被接受；
+        # 残留的未消费消息（上一 run 中断遗留）在此丢弃，不跨 run 泄漏。
+        self._pending_user_messages.clear()
+        self._run_loop_active = True
         # L7: 每-run 工具调用计数（跨迭代累计,超 ToolPolicy.max_tool_calls_per_run 终止）
         tool_calls_used = 0
 
@@ -856,6 +865,15 @@ class SageAgent:
                         agent_id=self.agent_id,
                     )
                     return
+
+                # RT5: 迭代边界排空 steering —— 用户运行中补充的指示以
+                # user 消息进入本轮 LLM 调用（与编排链 O1 边界投递同语义）。
+                _steer_messages = self._drain_pending_user_messages()
+                if _steer_messages:
+                    messages.extend(_steer_messages)
+                    logger.info(
+                        "run_loop 迭代 %s 注入 %d 条用户补充消息", i, len(_steer_messages)
+                    )
 
                 # RT2 (round7): 迭代边界高水位预防 —— 估算 token 超预算时先
                 # 机械压缩（透明治理，仅日志），避免请求撑爆窗口后才被动急救。
@@ -1400,6 +1418,9 @@ class SageAgent:
                 agent_id=self.agent_id,
             )
         finally:
+            # RT5: 收窄 steering 注入窗口；残留消息一并丢弃。
+            self._run_loop_active = False
+            self._pending_user_messages.clear()
             # 恢复 agent 实例的原始 LLM client / config(不污染跨请求状态);
             # 动态新建的 client 一并关闭, 防止 httpx 连接泄漏。
             await self._restore_llm_after_dynamic(
@@ -1617,6 +1638,37 @@ class SageAgent:
     def reset_interrupt(self):
         """重置中断状态"""
         self._interrupted = False
+
+    def inject_user_message(self, content: str) -> bool:
+        """RT5 (round7): 运行中向当前 run 注入用户补充消息（steering）。
+
+        消息在**下一迭代边界**以 ``【用户补充】`` 前缀的 user 消息进入
+        LLM 上下文——与编排链 O1 的边界投递同语义。run 未活跃时返回
+        False（调用方回退排队语义）；队列排空发生在 run_loop 内，
+        ``deque.append`` 跨线程投递是 GIL 原子操作，尽力而为语义与
+        interrupt() 一致。
+        """
+        text = (content or "").strip()
+        if not text or not self._run_loop_active:
+            return False
+        self._pending_user_messages.append(text)
+        logger.info("steering: 已接收用户补充消息 (%d 字符)，下一迭代边界生效", len(text))
+        return True
+
+    def _drain_pending_user_messages(self) -> List[Dict[str, Any]]:
+        """排空待注入消息并组装为 user 消息列表（run_loop 迭代顶部调用）。"""
+        drained: List[Dict[str, Any]] = []
+        try:
+            while self._pending_user_messages:
+                drained.append(
+                    {
+                        "role": "user",
+                        "content": f"【用户补充】{self._pending_user_messages.popleft()}",
+                    }
+                )
+        except Exception:  # noqa: BLE001 — steering 是增强，绝不杀死 run
+            logger.warning("steering: 排空待注入消息失败", exc_info=True)
+        return drained
 
     def clear_cache(self) -> None:
         """清空查询缓存"""

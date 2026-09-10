@@ -196,6 +196,14 @@ function InputCardInner({
     // U20: Emacs bindings take precedence over plain Enter handling but not
     // over the slash menu (which owns Arrow/Enter/Escape while open).
     if (handleEmacsKeyDown(e)) return;
+    // RT8 (round7): Esc 中断 —— 流式运行中按 Esc 触发 onInterrupt（对齐
+    // Claude Code 的 Esc 即断）。slash 菜单打开时 Escape 优先归菜单（上方
+    // 分支已 return），不会误触。
+    if (e.key === 'Escape' && isLoading) {
+      e.preventDefault();
+      onInterrupt?.();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       // Skip during IME composition: the user is confirming a candidate
       // word (e.g. 拼音 / 仮名 / 한글), not sending the message. The native
