@@ -89,6 +89,21 @@ from backend.tools.permissions import (
 logger = logging.getLogger(__name__)
 
 
+def _tool_signature(tc: Any) -> str:
+    """B2 复读守卫: 规范化工具调用签名为 "工具名:排序参数JSON"。
+
+    参数解析失败时退化为原始字符串 —— 签名只用于重复检测，永不抛异常。
+    """
+    raw = tc.arguments if isinstance(tc.arguments, str) else "{}"
+    try:
+        canonical = json.dumps(
+            json.loads(raw), sort_keys=True, ensure_ascii=False
+        )
+    except (json.JSONDecodeError, TypeError, ValueError):
+        canonical = str(raw)
+    return f"{tc.name}:{canonical}"
+
+
 class QueryCache:
     """
     简单内存缓存
@@ -809,6 +824,24 @@ class SageAgent:
         self._run_loop_active = True
         # L7: 每-run 工具调用计数（跨迭代累计,超 ToolPolicy.max_tool_calls_per_run 终止）
         tool_calls_used = 0
+        # B1 空响应守卫配置（对标 hermes turn_empty_response）
+        try:
+            empty_response_max = int(os.getenv("SAGE_EMPTY_RESPONSE_MAX_RETRIES", "2"))
+        except ValueError:
+            empty_response_max = 2
+        empty_response_retries = 0
+        # B2 工具复读守卫配置与状态（对标 hermes repetition_guard）:
+        # 相同 (工具名, 规范化参数) 签名重复出现 → 软限注入提醒, 硬限拦截执行。
+        try:
+            repeat_soft = int(os.getenv("SAGE_TOOL_REPEAT_SOFT_LIMIT", "3"))
+        except ValueError:
+            repeat_soft = 3
+        try:
+            repeat_hard = int(os.getenv("SAGE_TOOL_REPEAT_HARD_LIMIT", "5"))
+        except ValueError:
+            repeat_hard = 5
+        tool_sig_counts: Dict[str, int] = {}
+        repeat_nudged: set = set()
 
         # 阶段 1: max_iterations 默认从 profile 读, 否则兜底 DEFAULT_MAX_ITERATIONS
         effective_max_iterations = (
@@ -1005,6 +1038,44 @@ class SageAgent:
                             continue
                         raise
 
+                # B1 空响应守卫: 模型既无工具调用又返回空白内容时, 注入 system
+                # 提示后重试（最多 empty_response_max 次, <=0 = 关闭保持旧行为）;
+                # 耗尽后 DONE + 兜底文案（不 FAILED, 前端有可见反馈而非报错）。
+                # 流式路径安全: 空响应本就无 CONTENT_DELTA 下发, 重试不会重复输出。
+                if (
+                    not response.tool_calls
+                    and empty_response_max > 0
+                    and not (response.content or "").strip()
+                ):
+                    if empty_response_retries < empty_response_max:
+                        empty_response_retries += 1
+                        logger.warning(
+                            "run_loop 检测到空响应 (iteration %s)，注入提示后重试 (%d/%d)",
+                            i,
+                            empty_response_retries,
+                            empty_response_max,
+                        )
+                        messages.append(
+                            {
+                                "role": "system",
+                                "content": "上一次响应内容为空。请直接给出完整回复；"
+                                "若任务无法继续，请说明原因。",
+                            }
+                        )
+                        continue
+                    logger.warning(
+                        "run_loop 空响应重试耗尽 (%d 次)，以兜底文案结束", empty_response_max
+                    )
+                    fallback = "（模型连续返回空响应，已停止重试。请重试或换个问法。）"
+                    messages.append({"role": "assistant", "content": fallback})
+                    yield AgentEvent(
+                        state=AgentState.DONE,
+                        iteration=i,
+                        content=fallback,
+                        agent_id=self.agent_id,
+                    )
+                    return
+
                 if not response.tool_calls:
                     messages.append(
                         {
@@ -1019,6 +1090,31 @@ class SageAgent:
                         agent_id=self.agent_id,
                     )
                     return
+
+                # B2 复读计数: 统计本次响应中各工具调用签名的累计出现次数。
+                # 达软限（且未提醒过）注入 system 提醒 —— 提醒在 assistant
+                # 工具调用消息**之前**落盘, 工具结果仍直接跟随其 assistant
+                # 消息, 不违反 OpenAI 兼容端点的消息次序约束。
+                nudge_needed = False
+                for tc_sig_target in response.tool_calls:
+                    sig = _tool_signature(tc_sig_target)
+                    tool_sig_counts[sig] = tool_sig_counts.get(sig, 0) + 1
+                    if (
+                        repeat_soft > 0
+                        and tool_sig_counts[sig] >= repeat_soft
+                        and sig not in repeat_nudged
+                    ):
+                        repeat_nudged.add(sig)
+                        nudge_needed = True
+                if nudge_needed:
+                    messages.append(
+                        {
+                            "role": "system",
+                            "content": "检测到对相同工具以相同参数的重复调用。若结果"
+                            "不符合预期，请调整参数、换用其他工具，或基于已有信息"
+                            "直接作答；重复调用将被拦截。",
+                        }
+                    )
 
                 messages.append(
                     {
@@ -1143,6 +1239,40 @@ class SageAgent:
                             agent_id=self.agent_id,
                         )
                         return
+
+                    # B2 复读硬限拦截: 相同签名已达硬限时不执行, 返回合成错误
+                    # tool result 引导模型换路（与参数解析失败同一事件面:
+                    # 无 ACTING, 仅 OBSERVING is_error）。并行只读批次不拦截
+                    # （零副作用且受 run 级工具预算约束）。
+                    if repeat_hard > 0:
+                        sig = _tool_signature(tc)
+                        if tool_sig_counts.get(sig, 0) >= repeat_hard:
+                            repeat_content = (
+                                f"[拦截] 工具 {tc.name} 以相同参数重复调用已达 "
+                                f"{repeat_hard} 次，已停止执行。请调整参数、换用"
+                                "其他工具，或基于已有信息直接回答。"
+                            )
+                            yield AgentEvent(
+                                state=AgentState.OBSERVING,
+                                iteration=i,
+                                tool_call=ToolCallRequest(
+                                    id=tc.id, name=tc.name, arguments={}
+                                ),
+                                tool_result=ToolCallResult(
+                                    tool_call_id=tc.id,
+                                    content=repeat_content,
+                                    is_error=True,
+                                ),
+                                agent_id=self.agent_id,
+                            )
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tc.id,
+                                    "content": repeat_content,
+                                }
+                            )
+                            continue
 
                     # L7: 参数解析失败回传 LLM——此前静默变 {}，LLM 无从得知
                     # 参数错了会原样重犯。现在作为 is_error 工具结果回传，LLM

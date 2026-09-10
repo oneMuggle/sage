@@ -6,7 +6,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
+import threading
 from typing import List, Optional
 
 from backend.domain.memory import MemoryContext
@@ -48,10 +51,12 @@ class MemoryAdapter:
         self.consolidation = ConsolidationPipeline(
             summary_store=getattr(memory_manager, "summary_store", None)
         )
-        # E9-1 (P9): 嵌入器工厂 —— 缺省 HashEmbedder (零依赖);
-        # SAGE_EMBEDDER=onnx 且模型文件就位时升级为语义嵌入 (512 维,
-        # 独立向量表 memories_vec_512, 与 256 维 Hash 向量互不混用)。
+        # E9-1 (P9) + Round 1: 嵌入器工厂 —— 缺省 HashEmbedder (零依赖);
+        # SAGE_EMBEDDER=onnx 且模型文件就位时升级为 ONNX 语义嵌入 (512 维);
+        # SAGE_EMBEDDER=model 且端点配置时升级为 HTTP 语义嵌入 (ModelEmbedder)。
         self.embedder = create_embedder()
+        # Round 1: 向量回填线程一次性标志（防重入）
+        self._backfill_started = False
         # 用户画像（USER.md 概念）: 缺省惰性取全局单例,失败时降级为 None
         self.user_profile = user_profile
         if self.user_profile is None:
@@ -83,6 +88,40 @@ class MemoryAdapter:
             pass
         if self.vector_store is None:
             logger.debug("VectorStore 未初始化：无可用 Database 实例")
+        else:
+            self._maybe_start_backfill()
+
+    def _maybe_start_backfill(self) -> None:
+        """存量记忆缺向量时启动一次性后台回填（守护线程，不阻塞启动）。
+
+        触发条件：向量表条目数 < 主表（episodic+semantic）行数 —— 维度
+        重建后或语义 Embedder 首次启用后必然成立。上限
+        SAGE_VEC_BACKFILL_MAX（默认 500 条/次），剩余留给下次启动。
+        """
+        if self._backfill_started or self.vector_store is None:
+            return
+        try:
+            if self.vector_store.pending_backfill_count() <= 0:
+                return
+        except Exception as e:  # noqa: BLE001 — 回填探测失败不影响主流程
+            logger.debug(f"回填探测失败，跳过: {e}")
+            return
+        self._backfill_started = True
+        try:
+            max_backfill = int(os.getenv("SAGE_VEC_BACKFILL_MAX", "500"))
+        except ValueError:
+            max_backfill = 500
+
+        def _run_backfill() -> None:
+            try:
+                self.vector_store.backfill_from_tables(limit=max_backfill)
+            except Exception as e:  # noqa: BLE001 — best-effort
+                logger.warning(f"向量回填线程异常: {e}")
+
+        threading.Thread(
+            target=_run_backfill, name="memory-vec-backfill", daemon=True
+        ).start()
+        logger.info("检测到存量记忆缺向量，已启动后台回填（上限 %d 条）", max_backfill)
 
     async def retrieve(self, query: str, session_id: str, limit: int = 5) -> MemoryContext:
         """检索相关记忆
@@ -110,10 +149,16 @@ class MemoryAdapter:
         keyword_items = keyword_results.get("episodic", []) + keyword_results.get("semantic", [])
 
         # 2. 向量检索（VectorStore,批次三 step 5 起按 session 隔离）
+        # Round 1: 语义 Embedder 的 encode 含 HTTP/ONNX 推理 —— 挪线程执行器,
+        # 避免阻塞事件循环（test_event_loop_blocking 500ms 延迟门禁）。
         vector_items: List[dict] = []
         if self.vector_store is not None:
-            vec_results = self.vector_store.search(
-                query, top_k=limit, session_id=session_id
+            loop = asyncio.get_running_loop()
+            vec_results = await loop.run_in_executor(
+                None,
+                lambda: self.vector_store.search(
+                    query, top_k=limit, session_id=session_id
+                ),
             )
             for vr in vec_results:
                 mem_id = vr["memory_id"]
@@ -211,9 +256,14 @@ class MemoryAdapter:
         )
 
         # 向量化存储（仅持久层记忆:工作记忆合成 id 不入向量库）
+        # Round 1: 同 retrieve(), encode 含 HTTP/ONNX 推理, 挪线程执行器。
         if self.vector_store is not None and memory_id and memory_type in ("episodic", "semantic"):
-            self.vector_store.add(
-                memory_id, content, memory_type=memory_type, session_id=session_id
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.vector_store.add(
+                    memory_id, content, memory_type=memory_type, session_id=session_id
+                ),
             )
 
         return memory_id or ""

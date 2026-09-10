@@ -488,27 +488,20 @@ class PreferenceLearningTask(BaseEvolutionTask):
         self.config = config or {}
 
     async def run_async(self):
-        """执行偏好学习"""
+        """执行偏好学习
+
+        双路分析（对标 hermes-agent: 偏好应语义化理解而非关键词匹配）:
+        1. 关键词路（零依赖兜底）: LIKE 扫描显式反馈关键词 → 规则映射
+        2. LLM 路（配置了端点时）: 近 7 天用户消息采样 → LLM 抽取有明确
+           证据的稳定偏好 JSON → 覆盖关键词基线
+        持久化不变: semantic 记忆 + preferences 表 + evolution_log 审计。
+        """
         logger.info("开始执行偏好学习任务...")
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        # 1. 获取近期反馈消息（包含反馈关键词的用户消息）
-        feedback_keywords = [
-            "反馈",
-            "评分",
-            "喜欢",
-            "不喜欢",
-            "太短",
-            "太长",
-            "详细",
-            "简单",
-            "好",
-            "差",
-        ]
-        "%" + "%".join(feedback_keywords) + "%"
-
+        # 1a. 关键词路: 获取近期反馈消息（包含反馈关键词的用户消息）
         cursor.execute("""
             SELECT id, session_id, content, created_at
             FROM messages
@@ -528,14 +521,31 @@ class PreferenceLearningTask(BaseEvolutionTask):
         """)
 
         feedback_messages = cursor.fetchall()
-        logger.info(f"找到 {len(feedback_messages)} 条反馈消息")
+        logger.info(f"找到 {len(feedback_messages)} 条关键词反馈消息")
 
-        if not feedback_messages:
-            logger.info("没有发现新的反馈，跳过")
-            return 0
+        # 1b. LLM 路: 近 7 天用户消息采样（不受关键词预过滤, 语义化理解）
+        llm = self._resolve_llm()
+        llm_preferences: Dict[str, str] = {}
+        if llm is not None:
+            recent_messages = self._fetch_recent_user_messages(cursor)
+            llm_preferences = await self._analyze_preferences_with_llm(
+                llm, recent_messages
+            )
+            if llm_preferences:
+                logger.info(f"LLM 偏好抽取命中 {len(llm_preferences)} 个维度")
+        else:
+            logger.debug("LLM 不可用，偏好学习仅走关键词路径")
 
-        # 2. 分析偏好模式
+        # 2. 分析偏好模式: 关键词基线 + LLM 结果覆盖
         preferences = self._analyze_preferences(feedback_messages)
+        preferences.update(llm_preferences)
+
+        # 证据门槛: 关键词与 LLM 采样均无信号时不落库 ——
+        # _analyze_preferences 恒返回默认基线, 无证据也写入会每天
+        # 生成一条无信息量的"用户偏好总结"（语义记忆噪音）。
+        if not feedback_messages and not llm_preferences:
+            logger.info("没有发现新的反馈（关键词与 LLM 采样均无信号），跳过")
+            return 0
 
         if not preferences:
             logger.info("无法分析出明确偏好")
@@ -627,6 +637,145 @@ class PreferenceLearningTask(BaseEvolutionTask):
                     preferences["detail_level"] = pref
 
         return preferences
+
+    def _resolve_llm(self):
+        """解析偏好学习用的 LLM 客户端（注入优先，settings 兜底）
+
+        与 orchestration/llm_factory 同模式: 调用方可注入客户端（测试/
+        编排链），缺省从 app_settings 解析用户配置的端点。不可用返回
+        None —— 偏好学习降级为纯关键词路径，绝不抛异常。
+        """
+        if self.llm is not None:
+            return self.llm
+        try:
+            from backend.core.legacy.llm_client import LLMClient, LLMConfig
+            from backend.orchestration.llm_factory import load_llm_config_from_settings
+
+            cfg = load_llm_config_from_settings()
+            if cfg is None:
+                return None
+            return LLMClient(LLMConfig(**cfg))
+        except Exception as exc:  # noqa: BLE001 — 降级路径, 不拖垮定时任务
+            logger.warning(f"偏好学习 LLM 客户端解析失败，降级关键词路径: {exc}")
+            return None
+
+    def _fetch_recent_user_messages(self, cursor, days: int = 7):
+        """取近 N 天用户消息采样（LLM 路输入, 不做关键词预过滤）"""
+        try:
+            sample_limit = int(self.config.get("llm_sample_limit", 100))
+        except (TypeError, ValueError):
+            sample_limit = 100
+        cursor.execute(
+            """
+            SELECT id, session_id, content, created_at
+            FROM messages
+            WHERE role = 'user'
+              AND created_at >= ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (int(time.time()) - days * 86400, sample_limit),
+        )
+        return cursor.fetchall()
+
+    async def _analyze_preferences_with_llm(
+        self, llm, recent_messages: List[dict]
+    ) -> Dict[str, str]:
+        """LLM 抽取稳定偏好（只输出有明确证据的维度，宽容解析）
+
+        Returns:
+            形如 {"response_length": "short", ...} 的偏好字典；
+            LLM 失败 / 输出不可解析 / 无证据时返回 {}。
+        """
+        if llm is None or not recent_messages:
+            return {}
+
+        # 消息截断: 单条 200 字符足够表达偏好, 控制提示词体积
+        # （recent_messages 为 sqlite3.Row 或 dict, 统一用下标访问）
+        lines = []
+        for msg in recent_messages:
+            try:
+                content = msg["content"]
+            except (KeyError, IndexError, TypeError):
+                continue
+            if content:
+                lines.append(f"- {content[:200]}")
+        if not lines:
+            return {}
+
+        prompt = (
+            "以下是用户最近与 AI 助手的对话消息采样。请从中提取用户的稳定偏好，"
+            "只关注以下三个维度（取值约定）:\n"
+            "- response_length: short / medium / long / detailed（用户对回复长度的要求）\n"
+            "- tone: friendly / professional / humorous / formal（用户期望的语气）\n"
+            "- detail_level: brief / medium / comprehensive（用户期望的详细程度）\n\n"
+            "严格要求:\n"
+            "1. 只输出用户**明确表达过**的偏好（例如『回答简短点』『正式一些』）；\n"
+            "2. 没有证据的维度直接省略，不要猜测；\n"
+            '3. 只输出 JSON 对象，无其他文字。示例: {"response_length": "short"}\n\n'
+            "用户消息采样:\n" + "\n".join(lines)
+        )
+
+        try:
+            # 兼容 LLMPort 风格（Message 对象）与简单 chat() 接口 ——
+            # 与 MemoryExtractor._extract_with_llm 同一适配模式
+            try:
+                from backend.domain.message import Message
+
+                response_msg = await llm.chat(
+                    messages=[Message(role="user", content=prompt)]
+                )
+                content = (
+                    response_msg.content
+                    if hasattr(response_msg, "content")
+                    else str(response_msg)
+                )
+            except (ImportError, TypeError, AttributeError):
+                response = await llm.chat(
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                content = (
+                    response if isinstance(response, str) else response.get("content", "")
+                )
+        except Exception as exc:  # noqa: BLE001 — LLM 故障降级, 不抛出
+            logger.warning(f"偏好学习 LLM 调用失败，忽略本轮 LLM 信号: {exc}")
+            return {}
+
+        return self._parse_preference_json(content if isinstance(content, str) else "")
+
+    def _parse_preference_json(self, raw: str) -> Dict[str, str]:
+        """宽容解析 LLM 输出的偏好 JSON（容忍代码围栏与多余文字）"""
+        import json
+
+        if not raw:
+            return {}
+        text = raw.strip()
+        # 剥离 ```json ... ``` 围栏
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.lower().startswith("json"):
+                text = text[4:]
+        # 截取首个 { 到末个 } 之间
+        start, end = text.find("{"), text.rfind("}")
+        if start == -1 or end <= start:
+            return {}
+        try:
+            data = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        allowed = {
+            "response_length": {"short", "medium", "long", "detailed"},
+            "tone": {"friendly", "professional", "humorous", "formal"},
+            "detail_level": {"brief", "medium", "comprehensive"},
+        }
+        result: Dict[str, str] = {}
+        for key, allowed_values in allowed.items():
+            value = data.get(key)
+            if isinstance(value, str) and value.lower() in allowed_values:
+                result[key] = value.lower()
+        return result
 
     async def _log_evolution(
         self,
