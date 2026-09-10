@@ -234,3 +234,17 @@ bash 跑测试非零退出时，LLM 只能从 30KiB 截断文本里自己找失�
 
 `symbol_search` 现仅 Python AST。v1 加 JS/TS/JSX/TSX 的正则级定义提取（`function name(`、`class name`、`const name = (`/`= =>`、`interface/type name`），与 Python 符号合并入既有倒排索引；非 Python 文件不走 AST。
 **测试**：TS/JS 样例文件的符号发现与查询命中。
+
+## 2.6 批次 G 详细设计（2026-09-10 增补，本次实施）
+
+> 基线：origin/main `2b10ab0d`（批次 F）；分支 `feat-parity-r5-batch-g`。主题：**批次 D/F 的覆盖收口**。
+
+### G-1 后台 bash 输出的 test_failures（P3→S）
+
+D-3 只挂了前台 `_run_foreground`；后台 shell（`run_in_background` 的测试进程）经 `BashOutputTool`/`KillShellTool` 读取增量，未解析。在两者拿到 payload 后（exit_code 非零时）同款挂 `test_failures`。
+
+### G-2 apply_patch 行级容错匹配（P2，工作量 M）
+
+apply_patch 与 edit_file 同源（`_resolve_matches`），同样受"缩进/行尾差异即失败"之苦。`_validate_plan` 精确 0 命中且非 replace_all 时，复用 `edit_tool._resolve_fuzzy_range`（strip 窗口匹配 + 行尾补齐规则），命中恰 1 处才容错替换；`_PlannedEdit` 加 fuzzy 标记透出。多文件原子性不变（校验阶段内存推演）。
+
+**测试**：apply_patch 单文件缩进差异容错命中 / 多处拒绝 / 原子性回归；后台 output 解析用例。
