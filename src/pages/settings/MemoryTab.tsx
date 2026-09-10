@@ -13,15 +13,99 @@
  *   写死展示既不准也无用。
  */
 
+import { useCallback, useEffect, useState } from 'react';
+
+import { invoke } from '../../shared/api/desktopInvoke';
+
 import type { EndpointsTabProps } from './components';
 import { SettingRow, Toggle } from './components';
 
 export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
+  const [embedderStatus, setEmbedderStatus] = useState<{
+    type: string;
+    dimensions: number;
+    table: string | null;
+    model_dir: string;
+    model_ready: boolean;
+    semantic: boolean;
+  } | null>(null);
+  const [selecting, setSelecting] = useState(false);
+
+  const loadEmbedderStatus = useCallback(async () => {
+    try {
+      const status = await invoke<{
+        type: string;
+        dimensions: number;
+        table: string | null;
+        model_dir: string;
+        model_ready: boolean;
+        semantic: boolean;
+      }>('embedder_get_status');
+      setEmbedderStatus(status);
+    } catch {
+      setEmbedderStatus(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadEmbedderStatus();
+  }, [loadEmbedderStatus]);
+
+  const selectEmbedder = useCallback(
+    async (mode: 'onnx' | 'hash') => {
+      setSelecting(true);
+      try {
+        await invoke('embedder_select', { mode });
+        await loadEmbedderStatus();
+      } catch {
+        // 静默——状态刷新会反映真实情况
+      } finally {
+        setSelecting(false);
+      }
+    },
+    [],
+  );
+
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">记忆管理</h3>
-        <SettingRow
+        <h3 className="text-sm font-semibold text-text mb-3">语义嵌入 (检索增强)</h3>
+        {embedderStatus ? (
+          <div className="space-y-2 text-xs text-text-secondary">
+            <p>
+              当前嵌入器: {embedderStatus.type} · {embedderStatus.dimensions} 维 ·{' '}
+              {embedderStatus.semantic ? '语义匹配' : '字面匹配'} · 表{' '}
+              {embedderStatus.table ?? '-'}
+            </p>
+            <p>
+              模型目录: {embedderStatus.model_dir} · 模型文件:
+              {embedderStatus.model_ready ? '已就绪' : '未就绪'}
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-text-secondary">嵌入器状态加载中…</p>
+        )}
+        <div className="flex gap-2 mt-3">
+          <button
+            type="button"
+            disabled={selecting}
+            onClick={() => void selectEmbedder('onnx')}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            启用语义嵌入
+          </button>
+          <button
+            type="button"
+            disabled={selecting}
+            onClick={() => void selectEmbedder('hash')}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            切回字面匹配
+          </button>
+        </div>
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">记忆管理</h3>        <SettingRow
           label="本地存储"
           desc="记忆数据存储在本地 SQLite 数据库中，具体路径由 SAGE_DB_PATH 环境变量与运行模式决定"
         >

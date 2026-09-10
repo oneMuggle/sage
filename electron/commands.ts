@@ -31,6 +31,16 @@ function normalizeWorkspaceSearchLimit(value: unknown): number {
 }
 
 export const COMMAND_ROUTES: Record<string, CommandRoute> = {
+  // B1 (P11): 记忆嵌入器状态 / 切换
+  embedder_get_status: {
+    method: 'GET',
+    path: () => '/api/v1/memory/embedder/status',
+  },
+  embedder_select: {
+    method: 'POST',
+    path: () => '/api/v1/memory/embedder/select',
+    body: (args) => ({ mode: args.mode }),
+  },
   // orchestration run control
   orchestration_get_run_snapshot: {
     method: 'GET',
