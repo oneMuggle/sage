@@ -29,22 +29,25 @@ class VectorStore:
         >>> results = store.search("火锅", top_k=5)
     """
 
-    def __init__(self, db: Any, embedder: Embedder) -> None:
+    def __init__(self, db: Any, embedder: Embedder, table_name: str = "memories_vec") -> None:
         """初始化向量存储
 
         Args:
             db: Database 实例（共享 SQLite 连接）
             embedder: 文本向量化器
+            table_name: 虚拟表名。不同嵌入器维度不兼容, 各用独立表
+                (Hash=256 → memories_vec; Onnx=512 → memories_vec_512)。
         """
         self._db = db
         self._embedder = embedder
         self.dimensions = embedder.dimensions
+        self.table_name = table_name
         self._init_table()
 
     def _init_table(self) -> None:
         """初始化 sqlite-vec 虚拟表
 
-        加载 sqlite-vec 扩展并创建 memories_vec 虚拟表。
+        加载 sqlite-vec 扩展并创建虚拟表 (表名见 self.table_name)。
         表结构：embedding (float32 向量) + memory_id + memory_type。
         """
         conn = self._db.get_connection()
@@ -60,7 +63,7 @@ class VectorStore:
         # 创建虚拟表
         try:
             conn.execute(f"""
-                CREATE VIRTUAL TABLE IF NOT EXISTS memories_vec USING vec0(
+                CREATE VIRTUAL TABLE IF NOT EXISTS {self.table_name} USING vec0(
                     embedding FLOAT[{self.dimensions}],
                     memory_id TEXT,
                     memory_type TEXT,
@@ -94,7 +97,7 @@ class VectorStore:
         try:
             # 先删除已有的同 ID 条目（幂等）
             conn.execute(
-                "DELETE FROM memories_vec WHERE memory_id = ?",
+                f"DELETE FROM {self.table_name} WHERE memory_id = ?",
                 (memory_id,),
             )
 
@@ -104,7 +107,7 @@ class VectorStore:
             # 插入新条目（使用 memory_id 的哈希作为 rowid）
             rowid = abs(hash(memory_id)) % (2**31)
             conn.execute(
-                """INSERT INTO memories_vec (rowid, embedding, memory_id, memory_type, session_id)
+                f"""INSERT INTO {self.table_name} (rowid, embedding, memory_id, memory_type, session_id)
                    VALUES (?, ?, ?, ?, ?)""",
                 (rowid, vec_bytes, memory_id, memory_type, session_id),
             )
@@ -141,7 +144,7 @@ class VectorStore:
 
             sql_parts = [
                 "SELECT memory_id, memory_type, session_id, distance",
-                "FROM memories_vec",
+                f"FROM {self.table_name}",
                 "WHERE embedding MATCH ?",
             ]
             params: List[Any] = [query_vec]
@@ -184,7 +187,7 @@ class VectorStore:
         conn = self._db.get_connection()
         try:
             cursor = conn.execute(
-                "DELETE FROM memories_vec WHERE memory_id = ?",
+                f"DELETE FROM {self.table_name} WHERE memory_id = ?",
                 (memory_id,),
             )
             conn.commit()
@@ -197,7 +200,7 @@ class VectorStore:
         """获取向量总数"""
         conn = self._db.get_connection()
         try:
-            row = conn.execute("SELECT COUNT(*) FROM memories_vec").fetchone()
+            row = conn.execute(f"SELECT COUNT(*) FROM {self.table_name}").fetchone()
             return row[0] if row else 0
         except Exception:
             return 0
@@ -216,16 +219,25 @@ def prune_orphan_vectors(db: Any) -> int:
     """
     try:
         conn = db.get_connection()
-        cursor = conn.execute(
-            "DELETE FROM memories_vec WHERE memory_id NOT IN ("
-            "SELECT id FROM memories_episodic "
-            "UNION SELECT id FROM memories_semantic)"
-        )
+        tables = [
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type = 'table' AND name LIKE 'memories_vec%'"
+            ).fetchall()
+        ]
+        total = 0
+        for table in tables:
+            cursor = conn.execute(
+                f"DELETE FROM {table} WHERE memory_id NOT IN ("
+                "SELECT id FROM memories_episodic "
+                "UNION SELECT id FROM memories_semantic)"
+            )
+            total += cursor.rowcount
         conn.commit()
-        deleted = cursor.rowcount
-        if deleted:
-            logger.info(f"清理孤儿向量: {deleted} 条")
-        return deleted
+        if total:
+            logger.info(f"清理孤儿向量: {total} 条")
+        return total
     except Exception as e:  # noqa: BLE001 — 对账失败不拖垮调用方
         logger.warning(f"孤儿向量清理失败 (补偿式, 可下次重试): {e}")
         return 0
