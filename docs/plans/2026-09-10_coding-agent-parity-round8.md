@@ -58,9 +58,12 @@
 - **RV4**：round7 文档 §9 交付号回填（main #571/#574/#576；win7 #592）。
 - 测试：新增 `test_orch_rerun_failed.py` 6 例（preset 短路不派子代理 + histories 回放对 + 上游 preset 放行下游 + 无 marker 行为不变 + 端点 override 构建/无失败 409/未知 404）；前端 `TaskTreeSection.rerun.test.tsx` 3 例（终态失败显示并回调 / 进行中隐藏 / 无失败隐藏）；dispatcher 回归（skip/timeout）与编排相关面全绿；ruff / tsc / eslint 全过。
 
-## 6. 批次 B 实施与验证记录
+## 6. 批次 B 实施与验证记录（2026-09-10）
 
-（实施后回填）
+- **PM1 后端**：`ChatRequest.plan_mode: bool = False`；producer 三处接线——① `system_content` 追加 `_PLAN_MODE_DIRECTIVE`（只读调研 + 结构化计划模板"目标/分步计划/验收标准/风险"）；② agent 实例注入只读门：`_build_permission_enforcer()` 产物经新增 `PermissionEnforcer.force_mode(READ_ONLY)` 后赋 `agent.permission_enforcer`（run_loop 对注入实例直接复用；全局 settings 不动；注入失败降级为仅指令约束）；③ 计划模式与编排互斥（`data.plan_mode → mode="single"`，主对话内调研不派子代理）。
+- **PM2 前端**：`ChatConfig.planMode` → chatApi body `plan_mode`；`/plan` slash 命令（新 mode='plan'，立即发送剩余文本，isLoading/disabled 守卫）；Chat.tsx `planApprovalFor` 会话键控批准条——planMode run 自然完成后出现（"按计划执行"= 清批准态 + `force_single` 发送执行指令；"忽略"= 仅清除）。
+- 实现期事故：/plan 剥前缀的正则经 JSON→Python 双层转义把 `\b` 写成了真实退格控制字符（`\x08`），前缀剥不掉——改为无反斜杠的 `new RegExp('^/plan','i')` + trim（测试实证）。
+- 测试：`test_permissions_enforcer.py` +1（force_mode 实例覆盖：写拒读放行、settings 不动）；`test_chat_plan_mode.py` 2 例（plan_mode 默认 False / 指令内容）；前端 `ChatInput.plan.test.tsx` 3 例（带目标发送 planMode=true / 空目标不发送 / isLoading 拦截）——后端 99 passed、前端 slash 三文件 13 passed；ruff / tsc / eslint 全过；全仓收集零错误。
 
 ## 7. 交付记录
 
