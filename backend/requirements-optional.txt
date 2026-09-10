@@ -1,0 +1,15 @@
+# P9 可选依赖 — 语义嵌入 (E9-1)
+#
+# 安装: pip install -r backend/requirements-optional.txt
+# 启用: 环境变量 SAGE_EMBEDDER=onnx
+#       模型目录 SAGE_EMBEDDING_MODEL_DIR (或缺省 userData/models/bge-small-zh-v1.5)
+#       内含 model.onnx + tokenizer.json (bge-small-zh-v1.5, 512 维, MIT)
+#
+# 未安装/未配置时, embedder_factory.create_embedder() 自动降级
+# HashEmbedder(256) —— 记忆系统不中断, 仅检索保持字面 n-gram 匹配。
+#
+# 注意: Hash(256) 与 Onnx(512) 向量维度不兼容, 各用独立 sqlite-vec 虚拟表
+# (memories_vec / memories_vec_512), 切换嵌入器不会交叉污染已有向量。
+
+onnxruntime>=1.16.0
+tokenizers>=0.15.0

@@ -19,8 +19,8 @@ from backend.memory.embedder import (
     EmbedderError,
     HashEmbedder,
     ModelEmbedder,
-    create_embedder,
 )
+from backend.memory.embedder_factory import create_embedder
 
 pytestmark = pytest.mark.unit
 
@@ -85,20 +85,28 @@ class TestCreateEmbedder:
         monkeypatch.setenv("EMBED_BASE_URL", "http://mock:9999/v1")
         assert isinstance(create_embedder(), HashEmbedder)
 
-    def test_model_when_endpoint_configured(self, monkeypatch):
-        monkeypatch.delenv("SAGE_EMBEDDER", raising=False)
-        monkeypatch.delenv("LLM_BASE_URL", raising=False)
+    def test_model_optin_with_endpoint(self, monkeypatch):
+        """SAGE_EMBEDDER=model + 端点配置 → ModelEmbedder"""
+        monkeypatch.setenv("SAGE_EMBEDDER", "model")
         monkeypatch.setenv("EMBED_BASE_URL", "http://mock:9999/v1")
         monkeypatch.setenv("EMBED_MODEL", "mock-embed")
         embedder = create_embedder()
         assert isinstance(embedder, ModelEmbedder)
 
     def test_hash_fallback_when_unconfigured(self, monkeypatch):
+        """缺省（无 SAGE_EMBEDDER）→ HashEmbedder（与 E951 opt-in 约定一致）"""
         for var in ("SAGE_EMBEDDER", "EMBED_BASE_URL", "LLM_BASE_URL", "EMBED_MODEL"):
             monkeypatch.delenv(var, raising=False)
         embedder = create_embedder()
         assert isinstance(embedder, HashEmbedder)
         assert embedder.dimensions == 256
+
+    def test_endpoint_alone_does_not_activate(self, monkeypatch):
+        """仅配置端点但未显式 SAGE_EMBEDDER=model → 保持 HashEmbedder"""
+        monkeypatch.delenv("SAGE_EMBEDDER", raising=False)
+        monkeypatch.setenv("EMBED_BASE_URL", "http://mock:9999/v1")
+        monkeypatch.setenv("EMBED_MODEL", "mock-embed")
+        assert isinstance(create_embedder(), HashEmbedder)
 
     def test_model_requested_but_unconfigured_falls_back(self, monkeypatch):
         monkeypatch.setenv("SAGE_EMBEDDER", "model")

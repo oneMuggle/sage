@@ -14,7 +14,7 @@ from typing import List, Optional
 
 from backend.domain.memory import MemoryContext
 from backend.memory import ConsolidationPipeline, MemoryManager
-from backend.memory.embedder import create_embedder
+from backend.memory.embedder_factory import create_embedder
 from backend.memory.manager import classify_memory_type
 from backend.memory.vector_store import VectorStore
 
@@ -51,11 +51,11 @@ class MemoryAdapter:
         self.consolidation = ConsolidationPipeline(
             summary_store=getattr(memory_manager, "summary_store", None)
         )
-        # 语义向量优先（EMBED_* 已配置 → ModelEmbedder），未配置回退 HashEmbedder。
-        # 对标 hermes-agent: 记忆向量检索需要真实语义（HashEmbedder 的字符
-        # n-gram 哈希无法理解"高兴"≈"开心"）。
+        # E9-1 (P9) + Round 1: 嵌入器工厂 —— 缺省 HashEmbedder (零依赖);
+        # SAGE_EMBEDDER=onnx 且模型文件就位时升级为 ONNX 语义嵌入 (512 维);
+        # SAGE_EMBEDDER=model 且端点配置时升级为 HTTP 语义嵌入 (ModelEmbedder)。
         self.embedder = create_embedder()
-        # 回填线程一次性标志（防重入）
+        # Round 1: 向量回填线程一次性标志（防重入）
         self._backfill_started = False
         # 用户画像（USER.md 概念）: 缺省惰性取全局单例,失败时降级为 None
         self.user_profile = user_profile
@@ -74,7 +74,14 @@ class MemoryAdapter:
         try:
             db = getattr(memory_manager.episodic, "db", None)
             if db is not None and hasattr(db, "get_connection"):
-                self.vector_store = VectorStore(db, self.embedder)
+                table_name = (
+                    "memories_vec"
+                    if self.embedder.dimensions == 256
+                    else f"memories_vec_{self.embedder.dimensions}"
+                )
+                self.vector_store = VectorStore(
+                    db, self.embedder, table_name=table_name
+                )
                 logger.info("VectorStore 已初始化（sqlite-vec 向量检索）")
         except (AttributeError, TypeError):
             # 测试中使用 Mock MemoryManager 时可能没有 episodic 属性
@@ -87,15 +94,14 @@ class MemoryAdapter:
     def _maybe_start_backfill(self) -> None:
         """存量记忆缺向量时启动一次性后台回填（守护线程，不阻塞启动）。
 
-        触发条件：向量表条目数 < 主表（episodic+semantic）行数 —— 维度迁移
-        重建后或 ModelEmbedder 首次启用后必然成立。上限
+        触发条件：向量表条目数 < 主表（episodic+semantic）行数 —— 维度
+        重建后或语义 Embedder 首次启用后必然成立。上限
         SAGE_VEC_BACKFILL_MAX（默认 500 条/次），剩余留给下次启动。
         """
         if self._backfill_started or self.vector_store is None:
             return
         try:
-            store = self.vector_store
-            if store.pending_backfill_count() <= 0:
+            if self.vector_store.pending_backfill_count() <= 0:
                 return
         except Exception as e:  # noqa: BLE001 — 回填探测失败不影响主流程
             logger.debug(f"回填探测失败，跳过: {e}")
@@ -108,7 +114,7 @@ class MemoryAdapter:
 
         def _run_backfill() -> None:
             try:
-                store.backfill_from_tables(limit=max_backfill)
+                self.vector_store.backfill_from_tables(limit=max_backfill)
             except Exception as e:  # noqa: BLE001 — best-effort
                 logger.warning(f"向量回填线程异常: {e}")
 
@@ -143,7 +149,7 @@ class MemoryAdapter:
         keyword_items = keyword_results.get("episodic", []) + keyword_results.get("semantic", [])
 
         # 2. 向量检索（VectorStore,批次三 step 5 起按 session 隔离）
-        # ModelEmbedder 接入后 encode 含 HTTP 调用 —— 挪到线程执行器,
+        # Round 1: 语义 Embedder 的 encode 含 HTTP/ONNX 推理 —— 挪线程执行器,
         # 避免阻塞事件循环（test_event_loop_blocking 500ms 延迟门禁）。
         vector_items: List[dict] = []
         if self.vector_store is not None:
@@ -250,7 +256,7 @@ class MemoryAdapter:
         )
 
         # 向量化存储（仅持久层记忆:工作记忆合成 id 不入向量库）
-        # 同 retrieve(): encode 含 HTTP, 挪线程执行器防阻塞事件循环。
+        # Round 1: 同 retrieve(), encode 含 HTTP/ONNX 推理, 挪线程执行器。
         if self.vector_store is not None and memory_id and memory_type in ("episodic", "semantic"):
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
