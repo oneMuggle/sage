@@ -22,7 +22,7 @@
 - `backend/office/journal/validator.py`：`validate_document(spec, doc)` 依次跑 7 个 `check_*` 函数返回 `List[JournalViolation]`
 - 7 类规则：`check_body_font` / `check_heading_font` / `check_body_size` / `check_line_spacing` / `check_margins` / `check_headings` / `check_citations`
 - 容差：字体同族别名（`parser._FONT_FAMILY_ALIASES`）、字号 ±0.5pt、页边距 ±0.3cm
-- 测试覆盖：`tests/unit/office/journal/test_validator.py`（5）+ fixture-driven bad template 用例
+- 测试覆盖：`tests/unit/office/journal/test_validator.py`（3）+ fixture-driven bad template 用例
 
 ## N4 generator（structured-fill）（2026-09-10 落地）
 

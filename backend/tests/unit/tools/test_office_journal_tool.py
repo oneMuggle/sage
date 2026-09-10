@@ -3,8 +3,8 @@
 
 覆盖范围：
 - 4 个工具的 schema 形态与 risk/requires_tool_context 元数据
-- parse_template：缺 file_path → file_path_required；越界 → blocked；OK → spec dict
-- fill_from_content：缺 content → content_required；shape 非法 → content_shape_invalid；
+- parse_template：缺 file_path → content_shape_invalid；越界 → blocked；OK → spec dict
+- fill_from_content：缺 content → content_shape_invalid；shape 非法 → content_shape_invalid；
   缺绑定 → workspace_not_bound
 - validate：缺 file_path / spec_id → 错误；workspace_not_bound；正常返回 violations
 - generate_article：缺 user_request / workspace_not_bound；adapter 不可用 → 错；
@@ -186,7 +186,7 @@ def test_validate_metadata():
 def test_parse_template_missing_file_path():
     r = _tool_parse().execute(file_path="")
     assert r.success is False
-    assert "file_path_required" in r.error
+    assert "content_shape_invalid" in r.error
 
 
 def test_parse_template_unsupported_extension(tmp_path: Path):
@@ -194,7 +194,7 @@ def test_parse_template_unsupported_extension(tmp_path: Path):
     bad.write_text("hello")
     r = _tool_parse().execute(file_path=str(bad))
     assert r.success is False
-    assert "unsupported_file_type" in r.error
+    assert "parse_failed" in r.error
 
 
 def test_parse_template_happy_path(tmp_path: Path):
@@ -221,7 +221,7 @@ def test_fill_from_content_requires_content(tmp_path: Path):
     try:
         r = _tool_fill().execute(content=None)
         assert r.success is False
-        assert "content_required" in r.error
+        assert "content_shape_invalid" in r.error
     finally:
         reset_tool_context(token)
 
@@ -274,7 +274,7 @@ def test_fill_from_content_happy_path(tmp_path: Path):
 def test_validate_missing_file_path():
     r = _tool_validate().execute(file_path="")
     assert r.success is False
-    assert "file_path_required" in r.error
+    assert "content_shape_invalid" in r.error
 
 
 def test_validate_no_workspace_binding():
@@ -315,7 +315,7 @@ def test_generate_article_missing_user_request(tmp_path: Path):
     try:
         r = _tool_generate().execute(user_request="")
         assert r.success is False
-        assert "user_request_required" in r.error
+        assert "content_shape_invalid" in r.error
     finally:
         reset_tool_context(token)
 
@@ -357,7 +357,7 @@ def test_generate_article_happy_path(tmp_path: Path):
 
 
 def test_generate_article_adapter_unavailable(tmp_path: Path):
-    """adapter 工厂抛异常时 → llm_adapter_unavailable 错误（不静默死锁）。"""
+    """adapter 工厂抛异常时 → parse_failed 错误（不静默死锁）。"""
     ws = _setup_workspace(tmp_path)
     import shutil
 
@@ -377,6 +377,6 @@ def test_generate_article_adapter_unavailable(tmp_path: Path):
                 spec_id=spec_id,
             )
         assert r.success is False
-        assert "llm_adapter_unavailable" in r.error
+        assert "parse_failed" in r.error
     finally:
         reset_tool_context(token)

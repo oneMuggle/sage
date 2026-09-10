@@ -245,10 +245,7 @@ def create_default_agents() -> List[AgentProfile]:
                 # 2026-09-10: journal template subsystem — 写作 agent 的核心
                 # 责任是把研究素材按期刊模板沉淀成可投搞稿件；模板解析/填充/
                 # 生成/校验四件套缺一不可。
-                "office_journal_parse_template",
-                "office_journal_fill_from_content",
-                "office_journal_generate_article",
-                "office_journal_validate",
+                *JOURNAL_TOOLS,
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),

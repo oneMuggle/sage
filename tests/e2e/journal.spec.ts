@@ -36,13 +36,18 @@ interface MockSpecHeading {
 
 interface MockSpec {
   spec_id: string;
+  template_sha256: string;
   template_filename: string;
+  font_body: { family: string; ascii_family?: string; eastasia?: string };
+  font_heading: { family: string; ascii_family?: string; eastasia?: string };
   body_pt: number;
   heading_pt: number;
   line_spacing: number;
   margins_cm: number;
   headings: MockSpecHeading[];
   citation_style: string;
+  page_size: string;
+  extra: Record<string, unknown>;
 }
 
 interface MockViolation {
@@ -55,6 +60,7 @@ interface MockViolation {
 
 interface MockValidateResponse {
   spec_id: string;
+  file_path: string;
   violations: MockViolation[];
   error_count: number;
   warning_count: number;
@@ -63,7 +69,8 @@ interface MockValidateResponse {
 interface MockFillResponse {
   spec_id: string;
   output_path: string;
-  generation_id: string;
+  gen_id: string;
+  bytes_written: number;
 }
 
 interface MockState {
@@ -85,7 +92,10 @@ interface JournalTestWindow extends Window {
 
 const SIMPLE_SPEC: MockSpec = {
   spec_id: 'spec_fixture_simple',
+  template_sha256: 'abc123fixture',
   template_filename: 'simple_chinese_template.docx',
+  font_body: { family: 'SimSun', eastasia: 'SimSun' },
+  font_heading: { family: 'SimHei', eastasia: 'SimHei' },
   body_pt: 12,
   heading_pt: 14,
   line_spacing: 1.5,
@@ -97,6 +107,8 @@ const SIMPLE_SPEC: MockSpec = {
     { keyword: '参考文献', level: 1, expected_pt: 14 },
   ],
   citation_style: 'numeric',
+  page_size: 'A4',
+  extra: {},
 };
 
 const BAD_VIOLATIONS: MockViolation[] = [
@@ -125,6 +137,7 @@ const BAD_VIOLATIONS: MockViolation[] = [
 
 const VALIDATE_RESPONSE: MockValidateResponse = {
   spec_id: SIMPLE_SPEC.spec_id,
+  file_path: FIXTURE_BAD,
   violations: BAD_VIOLATIONS,
   error_count: 2,
   warning_count: 1,
@@ -133,7 +146,8 @@ const VALIDATE_RESPONSE: MockValidateResponse = {
 const FILL_RESPONSE: MockFillResponse = {
   spec_id: SIMPLE_SPEC.spec_id,
   output_path: '/tmp/journal-fixture.docx',
-  generation_id: 'gen_fixture_001',
+  gen_id: 'gen_fixture_001',
+  bytes_written: 12345,
 };
 
 // ---- mock installation ----
@@ -231,9 +245,7 @@ test.describe('Journal template panel — E2E tier-1 (N8)', () => {
     expect(spec.headings[0]).toEqual({ keyword: '摘要', level: 1, expected_pt: 14 });
 
     // Audit: parseCalls recorded exactly once with the right file_path.
-    const calls = await page.evaluate(
-      () => (window as unknown as JournalTestWindow).__mockState,
-    );
+    const calls = await page.evaluate(() => (window as unknown as JournalTestWindow).__mockState);
     expect(calls.parseCalls.length).toBe(1);
     expect(calls.parseCalls[0].file_path).toBe(FIXTURE_SIMPLE);
   });
@@ -274,15 +286,13 @@ test.describe('Journal template panel — E2E tier-1 (N8)', () => {
     expect(firstError.suggestion.length).toBeGreaterThan(0);
 
     // Audit: validateCalls recorded exactly once.
-    const calls = await page.evaluate(
-      () => (window as unknown as JournalTestWindow).__mockState,
-    );
+    const calls = await page.evaluate(() => (window as unknown as JournalTestWindow).__mockState);
     expect(calls.validateCalls.length).toBe(1);
     expect(calls.validateCalls[0].spec_id).toBe(SIMPLE_SPEC.spec_id);
     expect(calls.validateCalls[0].file_path).toBe(FIXTURE_BAD);
   });
 
-  test('fillFromContent round-trip returns output_path + generation_id and records the call', async ({
+  test('fillFromContent round-trip returns output_path + gen_id and records the call', async ({
     page,
   }) => {
     await installJournalMock(page);
@@ -310,12 +320,10 @@ test.describe('Journal template panel — E2E tier-1 (N8)', () => {
     const resp = result as MockFillResponse;
     expect(resp.spec_id).toBe(SIMPLE_SPEC.spec_id);
     expect(resp.output_path).toMatch(/journal-fixture\.docx$/);
-    expect(resp.generation_id).toBe('gen_fixture_001');
+    expect(resp.gen_id).toBe('gen_fixture_001');
 
     // Audit: fillCalls recorded exactly once with the request payload.
-    const calls = await page.evaluate(
-      () => (window as unknown as JournalTestWindow).__mockState,
-    );
+    const calls = await page.evaluate(() => (window as unknown as JournalTestWindow).__mockState);
     expect(calls.fillCalls.length).toBe(1);
     const fillReq = calls.fillCalls[0];
     expect(fillReq.spec_id).toBe(SIMPLE_SPEC.spec_id);

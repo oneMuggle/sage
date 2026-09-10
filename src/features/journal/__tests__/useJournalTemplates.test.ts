@@ -26,13 +26,18 @@ interface FakeWindow {
 
 const stubSpec = {
   spec_id: 'spec_001',
+  template_sha256: 'abc123',
   template_filename: 'simple.docx',
+  font_body: { family: 'SimSun' },
+  font_heading: { family: 'SimHei' },
   body_pt: 12,
   heading_pt: 14,
   line_spacing: 1.5,
   margins_cm: 2.5,
   headings: [{ keyword: '引言', level: 1, expected_pt: 14 }],
   citation_style: 'gb-t-7714',
+  page_size: 'A4',
+  extra: {},
 };
 
 beforeEach(() => {
@@ -57,7 +62,7 @@ describe('useJournalTemplates', () => {
     const picked = { path: '/abs/simple.docx', name: 'simple.docx', sizeBytes: 1024 };
     const pickMock = (window as unknown as FakeWindow).electronAPI!.office.pickOfficeFile;
     (pickMock as ReturnType<typeof vi.fn>).mockResolvedValue(picked);
-    vi.mocked(journalApi.parseTemplate).mockResolvedValue({ spec: stubSpec });
+    vi.mocked(journalApi.parseTemplate).mockResolvedValue({ spec: stubSpec, cached: false });
 
     const { result } = renderHook(() => useJournalTemplates());
     await act(async () => {

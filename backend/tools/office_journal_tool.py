@@ -120,7 +120,7 @@ class OfficeJournalParseTemplateTool(BaseTool):
 
     def execute(self, file_path: Optional[str] = None, **kwargs: Any) -> ToolResult:
         if not isinstance(file_path, str) or not file_path.strip():
-            return ToolResult(success=False, error="file_path_required")
+            return ToolResult(success=False, error="content_shape_invalid")
         # 路径围栏：file_path 必须在绑定 workspace 内（policy.workspace_root）
         blocked = self._enforce_workspace(file_path)
         if blocked is not None:
@@ -129,7 +129,7 @@ class OfficeJournalParseTemplateTool(BaseTool):
         if p.suffix.lower() not in {".doc", ".docx"}:
             return ToolResult(
                 success=False,
-                error="unsupported_file_type: 仅支持 .doc / .docx",
+                error="parse_failed: 仅支持 .doc / .docx",
             )
         try:
             spec = parse_journal_spec(p)
@@ -212,7 +212,7 @@ class OfficeJournalFillFromContentTool(BaseTool):
         **kwargs: Any,
     ) -> ToolResult:
         if not isinstance(content, dict):
-            return ToolResult(success=False, error="content_required")
+            return ToolResult(success=False, error="content_shape_invalid")
         try:
             journal_content = JournalContent.model_validate(content)
         except Exception as exc:  # noqa: BLE001
@@ -235,9 +235,10 @@ class OfficeJournalFillFromContentTool(BaseTool):
         try:
             record = generate_structured(spec, journal_content, workspace, filename)
         except JournalError as exc:
-            return ToolResult(success=False, error=f"fill_failed: {exc}")
+            error_code = "file_exists" if "exists" in str(exc).lower() else "output_path_invalid"
+            return ToolResult(success=False, error=f"{error_code}: {exc}")
         except Exception as exc:  # noqa: BLE001
-            return ToolResult(success=False, error=f"fill_failed: {exc}")
+            return ToolResult(success=False, error=f"output_path_invalid: {exc}")
         return ToolResult(
             success=True,
             content={
@@ -299,7 +300,7 @@ class OfficeJournalGenerateArticleTool(BaseTool):
         **kwargs: Any,
     ) -> ToolResult:
         if not isinstance(user_request, str) or not user_request.strip():
-            return ToolResult(success=False, error="user_request_required")
+            return ToolResult(success=False, error="content_shape_invalid")
         ctx = current_tool_context()
         workspace = _resolve_active_workspace(ctx)
         if workspace is None:
@@ -317,57 +318,39 @@ class OfficeJournalGenerateArticleTool(BaseTool):
         except Exception as exc:  # noqa: BLE001
             return ToolResult(
                 success=False,
-                error=f"llm_adapter_unavailable: {exc}",
+                error=f"parse_failed: LLM adapter unavailable — {exc}",
             )
 
         # 同步/异步协调：sync execute() 内调用 asyncio.run()/loop.run_until_complete；
         # 从已经运行的事件循环里调用（async chat loop）会失败并返清晰错误，
         # 不静默死锁。
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                return ToolResult(
-                    success=False,
-                    error=(
-                        "generate_article must be called from the synchronous "
-                        "tool loop, not an asyncio loop. Invoke via the LLM "
-                        "tool dispatcher."
-                    ),
-                )
-            record = loop.run_until_complete(
+            asyncio.get_running_loop()
+            # 如果到达这里，说明已在 asyncio 事件循环内 — 不允许。
+            return ToolResult(
+                success=False,
+                error=(
+                    "output_path_invalid: generate_article must be called from the "
+                    "synchronous tool loop, not an asyncio loop. Invoke via the LLM "
+                    "tool dispatcher."
+                ),
+            )
+        except RuntimeError:
+            # 无运行中的事件循环 → 用 asyncio.run 创建新循环
+            pass
+        try:
+            record = asyncio.run(
                 generate_article(
-                    spec,
-                    user_request=user_request,
-                    llm_proxy=adapter,
-                    workspace=workspace,
-                    output_filename=filename,
+                    spec, user_request=user_request, llm_proxy=adapter,
+                    workspace=workspace, output_filename=filename,
                     max_rounds=max(1, int(max_rounds)),
                 )
             )
-        except RuntimeError as exc:
-            # 无事件循环 → 用 asyncio.run
-            if "no current event loop" in str(exc).lower() or "There is no current event loop" in str(exc):
-                try:
-                    record = asyncio.run(
-                        generate_article(
-                            spec,
-                            user_request=user_request,
-                            llm_proxy=adapter,
-                            workspace=workspace,
-                            output_filename=filename,
-                            max_rounds=max(1, int(max_rounds)),
-                        )
-                    )
-                except JournalError as exc2:
-                    return ToolResult(success=False, error=f"generation_failed: {exc2}")
-                except Exception as exc2:  # noqa: BLE001
-                    return ToolResult(success=False, error=f"generation_failed: {exc2}")
-            else:
-                return ToolResult(success=False, error=f"generation_failed: {exc}")
         except JournalError as exc:
-            return ToolResult(success=False, error=f"generation_failed: {exc}")
+            error_code = "file_exists" if "exists" in str(exc).lower() else "output_path_invalid"
+            return ToolResult(success=False, error=f"{error_code}: {exc}")
         except Exception as exc:  # noqa: BLE001
-            return ToolResult(success=False, error=f"generation_failed: {exc}")
+            return ToolResult(success=False, error=f"output_path_invalid: {exc}")
 
         return ToolResult(
             success=True,
@@ -431,7 +414,7 @@ class OfficeJournalValidateTool(BaseTool):
         **kwargs: Any,
     ) -> ToolResult:
         if not isinstance(file_path, str) or not file_path.strip():
-            return ToolResult(success=False, error="file_path_required")
+            return ToolResult(success=False, error="content_shape_invalid")
         # 路径围栏：被校验 docx 必须落在绑定工作区内
         blocked = self._enforce_workspace(file_path)
         if blocked is not None:
@@ -440,7 +423,7 @@ class OfficeJournalValidateTool(BaseTool):
         if not p.is_file():
             return ToolResult(
                 success=False,
-                error=f"file_not_found: {p}",
+                error=f"parse_failed: file not found — {p}",
             )
         ctx = current_tool_context()
         workspace = _resolve_active_workspace(ctx)
@@ -453,11 +436,11 @@ class OfficeJournalValidateTool(BaseTool):
         try:
             doc = Document(str(p))
         except Exception as exc:  # noqa: BLE001
-            return ToolResult(success=False, error=f"open_failed: {exc}")
+            return ToolResult(success=False, error=f"parse_failed: {exc}")
         try:
             violations = validate_document(doc, spec)
         except Exception as exc:  # noqa: BLE001
-            return ToolResult(success=False, error=f"validate_failed: {exc}")
+            return ToolResult(success=False, error=f"parse_failed: {exc}")
         return ToolResult(
             success=True,
             content={

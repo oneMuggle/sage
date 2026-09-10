@@ -5,12 +5,17 @@ import { JournalSpecCard } from '../components/JournalSpecCard';
 
 const stubSpec = {
   spec_id: 'spec_001',
+  template_sha256: 'abc123',
   template_filename: 'cell-press.docx',
+  font_body: { family: 'Times New Roman' },
+  font_heading: { family: 'Arial' },
   body_pt: 10.5,
   heading_pt: 13,
   line_spacing: 1.15,
   margins_cm: 2.0,
   citation_style: 'cell-numeric',
+  page_size: 'A4',
+  extra: {},
   headings: [
     { keyword: 'Introduction', level: 1, expected_pt: 13 },
     { keyword: 'Results', level: 1, expected_pt: 13 },

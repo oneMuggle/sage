@@ -287,7 +287,7 @@ async def generate_article(
         output_path=inner_rec.output_path,
         mode="llm_generate",
         created_at=inner_rec.created_at,
-        llm_model=inner_rec.llm_model,
+        llm_model=getattr(llm_proxy, 'model', None) or inner_rec.llm_model,
         bytes_written=inner_rec.bytes_written,
         extra=inner_rec.extra,
     )
