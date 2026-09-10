@@ -114,6 +114,20 @@
 - **RT8 Esc**：`InputCard.handleKeyDown` 在 emacs 绑定之后加 Escape→`onInterrupt`（isLoading 时）；slash 菜单打开时 Escape 优先归菜单（原分支 return），不误触。
 - 测试：新增 `test_chat_steer.py` 9 例（agent 注入窗口/边界消费/跨 run 泄漏 + 端点 200/404/409/400）；`test_chat_stream_registry.py` +5 例（busy 拒绝/终态放行/挂起不占位/跨会话无碍/无 session 不检查）；前端 `ChatInput.steer.test.tsx` 3 例（运行中 Enter 可发送/停止按钮/Esc 空拦截）+ `InputCard.test.tsx` +3 例（Esc 中断/非加载不触发/加载中 Enter 照常）。后端 36 用例回归面全绿（含既有 interrupt/registry/streaming 回归），前端 25 passed；ruff / tsc / eslint 全过。
 
-## 8. 批次 C 实施与验证记录
+## 8. 批次 C 实施与验证记录（2026-09-10）
 
-（实施后回填）
+- **RT9 重试带失败上下文**：`executor.execute_lane` 读 `lane.metadata` 的 `retry_count`/`last_error`，重试时写 `task.parameters["retry_hint"]`（`contextlib.suppress(AttributeError)` 兼容不可写测试桩；hint 截 2000 字符）；`SubagentRunner.__call__` 组装 prompt 时前置 `【重试 · 第 N 次】上次执行失败：…请调整方法，避免重蹈覆辙`。选 `task.parameters` 载体而非改 `agent_runner` 调用签名——测试桩零感知。首次执行 prompt 与旧版逐字一致。
+- **RT10 backoff 消费**：`run_lane_with_retry` 增 `backoff_secs` 可选参（索引按 `retry_count-1` 取、越界取末位，`asyncio.sleep` 退避，受 O2 wall-clock 超时整体约束）；dispatcher 把 `RecoveryPolicy.retry_backoff_secs` 传入两处重试环调用；`models.py` 默认退避 `[30,120,600]`（当年无人消费的占位值）→ `[5,15,30]`（桌面交互体感）。reviewer 路径不传 backoff，行为不变。
+- **RT11 死桩处置 + conductor 失败指令**：删除 `Planner.refine_plan`/`get_plan_status`（零调用方；refine_plan 是 TODO 桩、get_plan_status 恒返回 not yet implemented——与 round6 D2 plan_write 退役同逻辑，留删除注释防复活）；conductor 计划块追加失败处理指令（读失败原因 → 可修复的改 goal/换 agent 重派新任务，不可行的在汇总说明，勿原样重派）。
+- 测试：新增 `test_retry_resilience.py` 7 例（runner 前置 hint / 无 hint prompt 不变 / executor 写 hint / backoff 生效·无 backoff 不 sleep / 默认退避档位 / 死桩已删）；编排回归面（executor/planner/runner/dispatcher 超时与跳过）49 passed——14 个 executor error 与 round6 记录的本地基线完全一致（Windows 本地环境问题，CI 为准）；ruff 全过。
+- CI 实证修正：dispatch 调用点直传 `backoff_secs` 会炸掉全部 `(executor, lane, agent_id)` 三参测试桩。且 `mock.patch(target, side_effect=fake)` 产出的 MagicMock 的 `inspect.signature` 恒为 `(*args, **kwargs)`——首次兼容（直接 `func_accepts_kwarg` 探测）被 CI 二次实证击穿，kwarg 照样落进三参 fake 的 TypeError。最终方案 `run_lane_accepts_backoff()`：穿透 `side_effect` 真实函数探测（`side_effect` 为返回值列表等不可调用对象时按原对象探测，Mock 吞任意 kwarg 无害）。修复后 dispatcher/review/router 全部桩密集测试文件 62 passed + CI 失败的 review_event 集成用例本地复现转绿。
+
+## 9. 交付记录
+
+（各批次 PR 号与双分支交付号于交付后回填）
+
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A | PR #571 | 待回填 |
+| B | 待回填 | 待回填 |
+| C | 待回填 | 待回填 |
