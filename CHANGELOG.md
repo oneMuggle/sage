@@ -175,6 +175,16 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Changed
 - chore(release): bump version to 0.4.9-alpha.37
 
+## [v0.4.9-alpha.40] - 2026-09-10
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**启动诊断 + 自动重试** (#586, port of release/win7 #585): 部分慢启动机器 (Win7 重灾区) 在 90s 健康检查超时内未响应 `python -m backend.main → uvicorn.run()`. 后端 ``[backend/main.py]`` 加 6 个 \`[sage-startup]\` stderr checkpoint (模块级 import 完成 / \`__main__\` 进入 / \`db.init_db()\` 完成 / \`lifespan\` 完成 / \`uvicorn.run()\` 调用), 由 \`__name__ == "__main__"\` 守护 (pytest 不触发). Electron `[electron/main.ts]` 在第一次 90s 超时后自动重试一次 (再等 90s), 日志记录 \`backendProc\` 状态 (pid/exitCode/signalCode) + \`currentBackend\` 代际, 对话框 detail 显示后端进程状态区分 crashed vs still-starting.
+
+### Fixed
+- fix(electron): startup diagnostics + auto-retry (port from win7 PR #585) (#586)
+
+### Changed
+- chore(release): bump version to 0.4.9-alpha.40
+
 ## [Unreleased]
 
 ### Added
