@@ -239,7 +239,6 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_fill_pdf_form",
                 "office_analyze_word_template",
                 "office_fill_word_template",
-                "office_analyze",
                 # 2026-09-10: journal template subsystem — 写作 agent 的核心
                 # 责任是把研究素材按期刊模板沉淀成可投搞稿件；模板解析/填充/
                 # 生成/校验四件套缺一不可。
@@ -402,8 +401,6 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     # 2026-09 Parity Batch-1: PDF 三类 + Word 模板两件（与 writer.tools 同步）。
     "office_read_pdf", "office_generate_pdf", "office_read_pdf_form",
     "office_fill_pdf_form", "office_analyze_word_template", "office_fill_word_template",
-    # 2026-09 Parity Batch-2: office_analyze（本地数据分析，同步 writer.tools）。
-    "office_analyze",
     # 2026-09-10: journal template 4 件套（与 writer.tools 同步）。
     "office_journal_parse_template", "office_journal_fill_from_content",
     "office_journal_generate_article", "office_journal_validate",
