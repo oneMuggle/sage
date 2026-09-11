@@ -237,6 +237,7 @@ class TestBuiltinToolDeclarations:
             "write_file": RiskClass.WRITE_LOCAL,
             "list_dir": RiskClass.READ,
             "bash": RiskClass.EXEC,
+            "execute_code": RiskClass.EXEC,  # Round 8: 子进程 RPC，权限面与 bash 等同
             "web_search": RiskClass.EXTERNAL,
             "web_fetch": RiskClass.EXTERNAL,
             "http_download": RiskClass.EXTERNAL,

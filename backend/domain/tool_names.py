@@ -125,7 +125,8 @@ SKILL_TOOLS = ("skill", "skill_save")
 # 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 用户提问
 ORCH_TOOLS = ("agent", "todo_write", "structured_output", "ask_user_question")
 
-SANDBOX_TOOLS = ("calculator", "repl")
+# Round 8: execute_code —— 子进程 RPC 工具调用（EXEC 级权限面与 bash 等同）
+SANDBOX_TOOLS = ("calculator", "repl", "execute_code")
 
 #: 全部静态注册的内置工具名（排序去重）。新增内置工具时把名字加进对应
 #: 分组即可；tests/unit/test_tool_names.py 会对照 register_all_tools 的
