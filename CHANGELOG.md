@@ -18,6 +18,20 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+## [v0.4.9-alpha.24-win7] - 2026-09-11
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 同步 main PR #584 期刊模板子系统 (8-PR 系列 N1–N8):把 .docx 期刊模板解析为结构化 `JournalSpec`、起草结构化稿件、按 spec 校验、把素材填入模板生成可投搞稿件。8 个 backend 模块 (`backend/office/journal/{models,parser,validator,generator,persistence,llm_adapter,pandoc_adapter,errors}.py`)、4 个 office 路由、`OfficeJournalTool` 注册到 writer profile,前端 `src/features/journal/{JournalPanel, components/*, useJournalTemplates, index}`、`tests/e2e/journal.spec.ts` Playwright journey、文档 `docs/technical/55-journal-template-subsystem.md` + `docs/user-manual/13-journal-template-panel.md`。手动 port 而非 merge commit:剔除 main-only 的 7 个 office routes + `OfficeAnalyzeTool` + `OfficeEditPreviewDialog` + FTS backfill (PR #561/564/569 batch-2/3/round-2/3 依赖),保留 win7 现有 Pydantic v1 兼容;profile whitelist 删 orphan `office_analyze`。
+
+### Added
+- **feat(win7): cherry-pick PR #584 journal template subsystem (#625)** — 8 backend 模块 + 4 路由 + `OfficeJournalTool` + 8 前端组件 + 5 IPC commands + E2E journal Playwright + docs/technical/55 + docs/user-manual/13 + docs/technical/54 对标追踪
+- **feat(office): journal 4 路由 + tool** — `POST /office/journal/parse-template` / `GET /office/journal/specs` / `GET /office/journal/specs/{spec_id}` / `POST /office/journal/validate` / `POST /office/journal/fill-from-content`
+
+### Fixed
+- **fix(office): ruff CI failures** — `persistence.py` F821 lambda-exc closure 改 `len(exc.errors())` (v1/v2 双兼容);`models.py` PEP 604 `str | bytes` → `typing.Union`;`profiles.py` 删 orphan `office_analyze` 引用以满足 `test_profile_seeds_within_known_names`;`preload.ts` 删 5 个 unused Office 类型导入
+
+### Changed
+- **chore(release): bump version to 0.4.9-alpha.24-win7**
+
 ## [v0.4.9-alpha.23-win7] - 2026-09-10
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS **启动诊断 + 自动重试** (port of release/win7 #585): 部分 Win7 机器首启 >90s 超时,后端 `backend/main.py` 加 6 个 `[sage-startup]` stderr checkpoint(`__name__=='__main__'` 守护),Electron `electron/main.ts` 第一次超时后自动重试一次 (再等 90s) + 日志 backendProc 状态;对话框 detail 显示 pid/exitCode/signalCode 便于诊断。本批累积同期未单独 changelog 的 win7 适配:PR #568 (alpha.19 HMAC fallback 路径)/ #580 (alpha.21 flat-split-bg 图标)/ #583 (alpha.22 圆角蒙版 transparent bg) — 同列于此便于追踪。
