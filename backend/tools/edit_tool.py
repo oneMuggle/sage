@@ -62,7 +62,8 @@ def _resolve_fuzzy_range(
     else:
         trailing_eol = ""
     end = start + sum(len(line) for line in raw_lines[first : last + 1])
-    return (start, end, trailing_eol), len(hits)
+    # H-3 (round5 批次 H): 附命中起始行号（1-based）供结果透明化
+    return (start, end, trailing_eol, first + 1), len(hits)
 
 
 def _not_found_hint(text: str, old_string: str) -> str:
@@ -291,7 +292,7 @@ class EditTool(BaseTool):
             return ToolResult(success=False, error=f"文件解码失败（{encoding}）: {exc}")
 
         match_count, match_error = _resolve_matches(original, old_string, replace_all)
-        fuzzy_result: Optional[Tuple[int, int, str]] = None
+        fuzzy_result: Optional[Tuple[int, int, str, int]] = None
         fuzzy_hits = 0
         if match_error is not None and not replace_all:
             # F-1 (round5 批次 F): 精确匹配 0 命中 → 行级 trim 容错兜底。
@@ -304,8 +305,9 @@ class EditTool(BaseTool):
             return match_error
 
         replacements = match_count if replace_all else 1
+        fuzzy_line: Optional[int] = None
         if fuzzy_result is not None:
-            start, end, trailing_eol = fuzzy_result
+            start, end, trailing_eol, fuzzy_line = fuzzy_result
             insert_new = new_string
             if "\r\n" in original and "\r\n" not in insert_new:
                 # 替换块行尾跟随文件 CRLF 风格
@@ -346,6 +348,8 @@ class EditTool(BaseTool):
                 {
                     "path": str(target.resolve()),
                     "fuzzy_matched": fuzzy_result is not None,
+                    # H-3 (round5 批次 H): 容错命中的起始行号（1-based）
+                    "fuzzy_line": fuzzy_line,
                     "replacements": replacements,
                     "lines_removed": _count_logical_lines(old_string) * replacements,
                     "lines_added": _count_logical_lines(new_string) * replacements,
