@@ -352,3 +352,78 @@ def test_extract_error_message_redacts_non_string_message() -> None:
     assert isinstance(err_msg, str)
     assert "sk-abc123def456ghi789jkl012" not in err_msg
     assert "***REDACTED:openai_key***" in err_msg
+
+
+# ---------------------------------------------------------------------------
+# T7: body truncation + size caps
+# ---------------------------------------------------------------------------
+
+MAX_BODY_BYTES = 512 * 1024
+MAX_RECORD_BYTES = 1 * 1024 * 1024
+
+
+def _large_record(body_size: int) -> TraceRecord:
+    return TraceRecord(
+        trace_id="t-big",
+        ts=datetime.now(timezone.utc),  # noqa: UP017
+        endpoint="/api/v1/chat/completions",
+        upstream_url="https://x/v1/chat/completions",
+        upstream_method="POST",
+        request_headers={},
+        request_body=b"x" * body_size,
+        response_status=200,
+        response_headers={},
+        response_body=b'{"choices":[]}',
+        response_streamed=False,
+        duration_ms=10,
+    )
+
+
+def test_body_truncated_marker_when_exceeds_512kb() -> None:
+    rec = _large_record(MAX_BODY_BYTES + 100)
+    out = export_to_zip_bytes(
+        records=[rec], include_prompts=False, include_hostname=False,
+        app_version="x", config_snapshot="",
+    )
+    zf = _read_zip(out)
+    line = zf.read("trace.jsonl").decode("utf-8").strip()
+    obj = json.loads(line)
+    assert obj["request"]["body_truncated"] is True
+    assert obj["request"]["body_bytes"] > MAX_BODY_BYTES
+
+
+def test_record_body_dropped_when_exceeds_1mb() -> None:
+    rec = TraceRecord(
+        trace_id="t-huge",
+        ts=datetime.now(timezone.utc),  # noqa: UP017
+        endpoint="/api/v1/chat/completions",
+        upstream_url="https://x/v1/chat/completions",
+        upstream_method="POST",
+        request_headers={},
+        request_body=b"x" * (MAX_RECORD_BYTES + 1000),
+        response_status=200,
+        response_headers={},
+        response_body=b"y" * (MAX_RECORD_BYTES + 1000),
+        response_streamed=False,
+        duration_ms=10,
+    )
+    out = export_to_zip_bytes(
+        records=[rec], include_prompts=False, include_hostname=False,
+        app_version="x", config_snapshot="",
+    )
+    zf = _read_zip(out)
+    line = zf.read("trace.jsonl").decode("utf-8").strip()
+    obj = json.loads(line)
+    # 整条 record 超 1MB → body 字段全 null,headers 与 status 保留
+    assert obj["request"]["body_json"] is None
+    assert obj["response"]["body_text"] is None
+    assert obj["response"]["status"] == 200
+
+
+def test_total_zip_under_5mb_with_50_max_records() -> None:
+    records = [_large_record(50 * 1024) for _ in range(50)]  # 每条 50KB,总 ≈ 2.5MB
+    out = export_to_zip_bytes(
+        records=records, include_prompts=False, include_hostname=False,
+        app_version="x", config_snapshot="",
+    )
+    assert len(out) <= 5 * 1024 * 1024, f"zip too large: {len(out)} bytes"
