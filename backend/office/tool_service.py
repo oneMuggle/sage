@@ -798,6 +798,8 @@ def _coerce_word_request(
         title=title,
         paragraphs=paragraphs,
         tables=tables,
+        # Round 8 修复：受管路径此前丢弃 images（直通路径却支持）——对齐。
+        images=content.get("images") or [],
         # Round 7 FormatSpec：受管路径与直通路径同样透传版式规范（None 零变化）
         format_spec=content.get("format_spec"),
     )

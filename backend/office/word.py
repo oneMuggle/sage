@@ -30,6 +30,7 @@ These omissions are intentional per plan §1.3 "non-goals".
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from pathlib import Path
@@ -561,6 +562,96 @@ def _apply_paragraph_run_style(para, spec) -> int:
     return len(para.runs)
 
 
+def _partition_images(images: List[Any], n_paragraphs: int) -> Tuple[List[Any], List[Any]]:
+    """把插图分为（行内, 文末）两组（Round 8）。
+
+    ``after_paragraph`` 指向合法段落下标的进行内组；None 或越界（钳末尾
+    语义）的进文末组，保持批次 2.1 的追加行为。
+    """
+    inline: List[Any] = []
+    trailing: List[Any] = []
+    for image in images or []:
+        pos = getattr(image, "after_paragraph", None)
+        if pos is None or pos >= n_paragraphs:
+            trailing.append(image)
+        else:
+            inline.append(image)
+    return inline, trailing
+
+
+def _add_inline_image(
+    doc: Document,
+    image: Any,
+    figure_no: int,
+    output_path: Path,
+    workspace_path: Optional[str],
+    trailing: bool = False,
+) -> None:
+    """写入一张插图；带题注时图居中并在下方追加 "图N　caption" 题注。
+
+    无题注的文末插图走 ``doc.add_picture`` 原路径（渲染与批次 2.1 逐字节
+    一致）；其余（行内插图 / 带题注）用居中段落承载。
+    """
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Inches
+
+    from .charts import image_bytes_to_stream, resolve_image_payload
+    from .word_layout import add_caption
+
+    search_dirs = [output_path.parent]
+    if workspace_path:
+        search_dirs.insert(0, Path(workspace_path))
+    payload = resolve_image_payload(image.source, search_dirs=search_dirs)
+    width = Inches(image.width_inches) if image.width_inches else None
+    height = Inches(image.height_inches) if image.height_inches else None
+    stream = image_bytes_to_stream(payload)
+
+    if trailing and not image.caption:
+        doc.add_picture(stream, width=width, height=height)
+        return
+    paragraph = doc.add_paragraph()
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    paragraph.add_run().add_picture(stream, width=width, height=height)
+    if image.caption:
+        add_caption(doc, image.caption, kind="figure", number=figure_no)
+
+
+def _style_table(doc: Document, table: Any, table_spec: Any) -> None:
+    """Round 8 表格排版：三线表 / 显式网格 / 表头重复 / 固定列宽 / 合并。
+
+    ``style`` 为 None 时不触碰表样式（与历史行为一致）。列宽长度与列数
+    不一致直接抛错（外层统一包成 OfficeGenerateError），不做静默截断。
+    """
+    from .word_layout import (
+        apply_cell_merges,
+        apply_three_line_table,
+        enable_header_repeat,
+        set_fixed_column_widths,
+    )
+
+    if table_spec.style == "three_line":
+        apply_three_line_table(table)
+    elif table_spec.style == "grid":
+        with contextlib.suppress(KeyError):
+            table.style = doc.styles["Table Grid"]
+    if table_spec.header_repeat and table_spec.rows:
+        enable_header_repeat(table)
+    if table_spec.column_widths_cm:
+        n_cols = len(table_spec.headers)
+        if len(table_spec.column_widths_cm) != n_cols:
+            raise ValueError(
+                f"column_widths_cm 长度 {len(table_spec.column_widths_cm)} 与列数 {n_cols} 不一致"
+            )
+        set_fixed_column_widths(table, table_spec.column_widths_cm)
+    if table_spec.merges:
+        apply_cell_merges(
+            table,
+            table_spec.merges,
+            n_rows=1 + len(table_spec.rows),
+            n_cols=len(table_spec.headers),
+        )
+
+
 def generate_docx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .docx file from structured Pydantic input.
 
@@ -596,20 +687,39 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # None 时不触碰文档，行为与历史版本一致；样式补丁需在写正文之前
         # 完成，add_heading/add_paragraph 才能继承补丁后的样式定义。
         if req.format_spec is not None:
-            from .word_layout import apply_format_spec
+            from .word_layout import apply_format_spec, heading_number_prefix
 
             apply_format_spec(doc, req.format_spec)
 
         # Title
         doc.add_heading(req.title, level=0)
-        # Body paragraphs
-        for para in req.paragraphs:
-            if para.heading == "h1":
-                created = doc.add_heading(para.text, level=1)
-            elif para.heading == "h2":
-                created = doc.add_heading(para.text, level=2)
-            elif para.heading == "h3":
-                created = doc.add_heading(para.text, level=3)
+
+        # ── Round 8：行内插图 / 题注编号 / 多级标题编号 ──────────────────
+        # after_paragraph 命中 paragraphs 下标的图行内插入；None 或越界的
+        # 图保持文末追加（批次 2.1 既有行为，含左对齐渲染零变化）。
+        figure_no = 0
+        table_no = 0
+        heading_counters = [0, 0, 0]
+        numbering = bool(req.format_spec.numbering) if req.format_spec else False
+        inline_images, trailing_images = _partition_images(
+            req.images, len(req.paragraphs)
+        )
+        images_by_position: Dict[int, List[Any]] = {}
+        for image in inline_images:
+            images_by_position.setdefault(image.after_paragraph, []).append(image)
+
+        # Body paragraphs（段落写完后插入锚定在其后的行内插图）
+        for pi, para in enumerate(req.paragraphs):
+            if para.heading in ("h1", "h2", "h3"):
+                level = int(para.heading[1])
+                text = para.text
+                if numbering:
+                    text = (
+                        heading_number_prefix(heading_counters, level)
+                        + " "
+                        + text
+                    )
+                created = doc.add_heading(text, level=level)
             elif para.style == "bullet":
                 # ★ 新增：bullet 列表
                 created = doc.add_paragraph(para.text, style="List Bullet")
@@ -620,8 +730,17 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                 created = doc.add_paragraph(para.text)
             # 批次 2.3：可选段落级样式（无样式字段时零改动）
             _apply_paragraph_run_style(created, para)
+            for image in images_by_position.get(pi, []):
+                if image.caption:
+                    figure_no += 1
+                _add_inline_image(doc, image, figure_no, output_path, req.workspace_path)
         # Tables
         for table_spec in req.tables:
+            if table_spec.caption:
+                table_no += 1
+                from .word_layout import add_caption as _add_caption
+
+                _add_caption(doc, table_spec.caption, kind="table", number=table_no)
             table = doc.add_table(rows=1 + len(table_spec.rows), cols=len(table_spec.headers))
             # Header row
             for ci, header in enumerate(table_spec.headers):
@@ -631,21 +750,14 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                 for ci, cell in enumerate(row):
                     if ci < len(table_spec.headers):
                         table.cell(ri + 1, ci).text = cell
-        # 批次 2.1：可选插图，按顺序追加在正文之后。
-        images = list(getattr(req, "images", None) or [])
-        if images:
-            from .charts import image_bytes_to_stream, resolve_image_payload
-
-            search_dirs = [output_path.parent]
-            if req.workspace_path:
-                search_dirs.insert(0, Path(req.workspace_path))
-            from docx.shared import Inches
-
-            for image in images:
-                payload = resolve_image_payload(image.source, search_dirs=search_dirs)
-                width = Inches(image.width_inches) if image.width_inches else None
-                height = Inches(image.height_inches) if image.height_inches else None
-                doc.add_picture(image_bytes_to_stream(payload), width=width, height=height)
+            _style_table(doc, table, table_spec)
+        # 文末插图（批次 2.1 既有行为：按顺序追加在正文之后）
+        for image in trailing_images:
+            if image.caption:
+                figure_no += 1
+            _add_inline_image(
+                doc, image, figure_no, output_path, req.workspace_path, trailing=True
+            )
         doc.save(str(output_path))
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate DOCX: {exc}", file_path=output_path) from exc

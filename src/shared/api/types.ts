@@ -1196,11 +1196,35 @@ export interface WordFormatSpec {
   title?: WordHeadingStyleSpec;
   header?: WordHeaderFooterSpec;
   footer?: WordHeaderFooterSpec;
+  // Round 8：多级标题自动编号（h1/h2/h3 → 1 / 1.1 / 1.1.1 文本前缀）
+  numbering?: boolean;
+}
+
+// Word 插图（Round 8）：支持行内放置与题注自动编号。
+// Backend counterpart: WordImageSpec in backend/office/models.py。
+export interface WordImageSpec {
+  source: string;
+  width_inches?: number;
+  height_inches?: number;
+  caption?: string;
+  after_paragraph?: number;
+}
+
+export interface WordCellMergeSpec {
+  min_row: number;
+  max_row: number;
+  min_col: number;
+  max_col: number;
 }
 
 export interface WordTableSpec {
   headers: string[];
   rows: string[][];
+  caption?: string;
+  style?: 'grid' | 'three_line';
+  header_repeat?: boolean;
+  column_widths_cm?: number[];
+  merges?: WordCellMergeSpec[];
 }
 
 export interface OfficeWordGenerateRequest {
@@ -1209,6 +1233,7 @@ export interface OfficeWordGenerateRequest {
   title: string;
   paragraphs?: WordParagraphSpec[];
   tables?: WordTableSpec[];
+  images?: WordImageSpec[];
   font_family?: string;
   ascii_font?: string;
   format_spec?: WordFormatSpec;

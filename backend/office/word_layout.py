@@ -22,7 +22,7 @@ LibreOffice 打开即渲染（fldSimple 自带占位 run，无需打开后手动
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from docx import Document
 from docx.enum.section import WD_ORIENT
@@ -207,3 +207,122 @@ def apply_format_spec(doc: Document, spec: Optional[WordFormatSpec]) -> None:
         _apply_header(doc, spec.header)
     if spec.footer is not None:
         _apply_footer(doc, spec.footer)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 表格排版（Round 8）：三线表 / 表头跨页重复 / 固定列宽 / 合并单元格
+#
+# 风格说明：与 Round 7 样式补丁同理，直接操作 oxml——python-docx 的
+# Table 对象不暴露 borders/tblHeader 等接口。
+# 边框粗细单位：w:sz 为 1/8 磅（1.5pt = 12，0.75pt = 6）。
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _border_element(tag: str, *, val: str, sz: Optional[str] = None) -> Any:
+    """构造单个 w:top/bottom/left/right/insideH/insideV 边框元素。"""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    el = OxmlElement(f"w:{tag}")
+    el.set(qn("w:val"), val)
+    el.set(qn("w:sz"), sz or "0")
+    el.set(qn("w:space"), "0")
+    if val == "single":
+        el.set(qn("w:color"), "000000")
+    return el
+
+
+def apply_three_line_table(table: Any) -> None:
+    """学术三线表：顶/底线 1.5pt，表头下边线 0.75pt，其余无框线。
+
+    覆盖顺序：先清既有 tblBorders（幂等），再写表级边框，最后给表头行
+    每个单元格写 tcBorders bottom（单元格边框优先于表级 insideH 生效）。
+    """
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    tbl_pr = table._tbl.tblPr
+    existing = tbl_pr.find(qn("w:tblBorders"))
+    if existing is not None:
+        tbl_pr.remove(existing)
+    borders = OxmlElement("w:tblBorders")
+    borders.append(_border_element("top", val="single", sz="12"))
+    borders.append(_border_element("bottom", val="single", sz="12"))
+    for edge in ("left", "right", "insideH", "insideV"):
+        borders.append(_border_element(edge, val="none"))
+    tbl_pr.append(borders)
+
+    if not table.rows:
+        return
+    for cell in table.rows[0].cells:
+        tc_pr = cell._tc.get_or_add_tcPr()
+        tc_borders = OxmlElement("w:tcBorders")
+        tc_borders.append(_border_element("bottom", val="single", sz="6"))
+        tc_pr.append(tc_borders)
+
+
+def enable_header_repeat(table: Any) -> None:
+    """表头跨页重复：首行 trPr 追加 w:tblHeader（Word 标准排版标记）。"""
+    from docx.oxml import OxmlElement
+
+    tr_pr = table.rows[0]._tr.get_or_add_trPr()
+    tr_pr.append(OxmlElement("w:tblHeader"))
+
+
+def set_fixed_column_widths(table: Any, widths_cm: Any) -> None:
+    """固定布局 + 逐行设置列宽（厘米）。
+
+    Word 对列宽的解析以 tcW 为准（tblLayout fixed 关闭自动伸缩），
+    python-docx 的 ``cell.width`` 写的正是 tcW，故逐行全量设置。
+    """
+    from docx.shared import Cm
+
+    table.autofit = False
+    for row in table.rows:
+        for idx, cell in enumerate(row.cells):
+            if idx < len(widths_cm):
+                cell.width = Cm(widths_cm[idx])
+
+
+def apply_cell_merges(table: Any, merges: Any, *, n_rows: int, n_cols: int) -> None:
+    """应用合并区域；越界抛 OfficeGenerateError（进生成失败通路而非静默）。"""
+    from .errors import OfficeGenerateError
+
+    for merge in merges:
+        if (
+            merge.min_row > merge.max_row
+            or merge.min_col > merge.max_col
+            or merge.max_row >= n_rows
+            or merge.max_col >= n_cols
+        ):
+            raise OfficeGenerateError(
+                f"cell merge out of range: rows {merge.min_row}-{merge.max_row}, "
+                f"cols {merge.min_col}-{merge.max_col} (table {n_rows}x{n_cols})"
+            )
+        anchor = table.cell(merge.min_row, merge.min_col)
+        other = table.cell(merge.max_row, merge.max_col)
+        anchor.merge(other)
+
+
+def add_caption(doc: Document, text: str, *, kind: str, number: int) -> None:
+    """追加居中题注段落（"图N　caption" / "表N　caption"，9pt 小五）。
+
+    ``kind``: "figure"（图，题注在图下方）/ "table"（表，题注在表上方）——
+    位置由调用方的插入顺序决定，本函数只负责段落样式与编号文本。
+    """
+    paragraph = doc.add_paragraph()
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = paragraph.add_run(f"{'图' if kind == 'figure' else '表'}{number}　{text}")
+    run.font.size = Pt(9)
+
+
+def heading_number_prefix(counters: Any, level: int) -> str:
+    """推进 h1/h2/h3 计数器并返回 "N" / "N.M" / "N.M.K" 前缀。
+
+    ``counters`` 为长度 3 的可变列表；高级别出现时重置下级计数
+    （h2 变化 → h3 归零），与常规文档编号规则一致。
+    """
+    counters[level - 1] += 1
+    for idx in range(level, 3):
+        counters[idx] = 0
+    return ".".join(str(counters[i]) for i in range(level))
