@@ -45,6 +45,10 @@ INPUT_SCHEMA: Dict[str, Any] = {
                         "type": "string",
                         "description": "可选：要追问的已完成子任务 task_id（本 run 内）。设置后 goal 作为追问消息发给同一子代理上下文，而非开新任务",
                     },
+                    "retry_of": {
+                        "type": "string",
+                        "description": "可选：要重派的已失败/被取消子任务 task_id（本 run 内）。新任务继承源任务的 scratch 工作现场与失败原因，适合修正方法后重做",
+                    },
                 },
                 "required": ["agent_id", "goal", "task_id"],
             },
@@ -59,6 +63,7 @@ _TOOL_DESCRIPTION = (
     "结果聚合返回。agent_id 必须是已启用的角色（如 researcher / writer）。"
     "task_id 必须回传 task_plan 中的计划编号（t1..tN）。"
     "对已完成的子任务需要补充要求/追问时，传 followup_of=<已完成 task_id> 继续同一上下文。"
+    "对失败/被取消的子任务需要修正方法后重做时，传 retry_of=<失败 task_id> 新任务会继承其工作现场与失败原因。"
 )
 
 
