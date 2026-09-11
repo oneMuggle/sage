@@ -117,6 +117,9 @@ def setup_test_db(request):
     # SkillAuditLog 单例同理（Round 3 技能审计台账）
     from backend.skills.audit import reset_skill_audit_log
 
+    # SkillDraftStore 单例绑定全局 DB 路径（无 reset 会缓存旧 tmp 库）
+    from backend.skills.draft_store import reset_skill_draft_store
+
     # SkillLifecycleStore 单例同理（技能归档策展状态）
     from backend.skills.lifecycle import reset_lifecycle_store
 
@@ -145,6 +148,7 @@ def setup_test_db(request):
     reset_usage_store()
     reset_lifecycle_store()
     reset_skill_audit_log()
+    reset_skill_draft_store()
     reset_message_search_index()
     # MemoryExtractionQueue 单例绑定全局事件循环，必须随测试重置
     # （取消残留 worker，避免跨测试泄漏 + "task was destroyed" 警告）

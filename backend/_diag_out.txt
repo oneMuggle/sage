@@ -1,0 +1,18 @@
+DIAG stype: merge
+DIAG text head: {"name": "deploy-all", "description": "merge", "when_to_use"
+Traceback (most recent call last):
+  File "E:\ProgrammingData\electron\sage\.worktrees\feat-consolidation-draft-round9\backend\_diag3.py", line 21, in <module>
+    asyncio.run(
+  File "D:\programmingSoftware\Anaconda3\envs\sage-backend\Lib\asyncio\runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "D:\programmingSoftware\Anaconda3\envs\sage-backend\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\programmingSoftware\Anaconda3\envs\sage-backend\Lib\asyncio\base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "E:\ProgrammingData\electron\sage\.worktrees\feat-consolidation-draft-round9\backend\..\backend\skills\consolidator.py", line 210, in draft_from_suggestion
+    len(text), repr(text[:80]), file=sys.stderr, flush=True,
+                                     ^^^
+NameError: name 'sys' is not defined. Did you mean: '_sys'?
