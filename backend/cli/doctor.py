@@ -363,6 +363,8 @@ def _import_all_checks() -> None:
         "runtime_env",
         # L15(2026-09-06) — API Key 静态加密状态(SecretBox scheme / 加密覆盖率)。
         "secret_storage",
+        # CA3(round9) — .sage/agents/*.md 档案文件结构体检。
+        "agents_files",
     ):
         importlib.import_module(f"{pkg}.{mod_name}")
 

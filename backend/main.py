@@ -440,6 +440,26 @@ async def lifespan(app: FastAPI):
     # （改名/拼写漂移）时告警。仅告警不剔除：未注册名对 LLM 本就不可见，
     # 剔除会误伤引用 MCP 等动态工具的自定义 profile。
     validate_profile_tools()
+    # CA1 (round9): .sage/agents/*.md 档案文件导入 —— 文件即真相（有差异才
+    # upsert；enabled 开关保留 DB 现值）。失败仅告警，绝不阻塞启动。
+    try:
+        from backend.agents.agents_files import import_agents_from_files
+
+        _agents_import = import_agents_from_files()
+        if _agents_import["imported"]:
+            logger.info(
+                "agents-files: 启动导入 %d 个档案（%s）",
+                len(_agents_import["imported"]),
+                ", ".join(_agents_import["imported"]),
+            )
+        if _agents_import["errors"]:
+            logger.warning(
+                "agents-files: %d 个档案文件解析失败: %s",
+                len(_agents_import["errors"]),
+                "; ".join(_agents_import["errors"]),
+            )
+    except Exception as agents_files_exc:  # noqa: BLE001 — 增强面降级
+        logger.warning("agents-files: 启动导入失败（忽略）: %s", agents_files_exc)
 
     # I2: chat 流注册表 — 拆分 /chat/stream 为 create + attach,避免 LLM 被调两次
     app.state.streams = StreamRegistry()
