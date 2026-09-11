@@ -31,6 +31,7 @@ from backend.office.apply_update import (
     OfficeDocUpdateResult,
     apply_doc_update,
 )
+from backend.office.bibtex import parse_bibtex
 from backend.office.diff_preview import (
     DiffPreviewResult,
     OfficeExportPdfRequest,
@@ -59,6 +60,8 @@ from backend.office.journal.persistence import (
 )
 from backend.office.journal.validator import validate_document
 from backend.office.models import (
+    BibTeXParseRequest,
+    BibTeXParseResponse,
     OfficeDeleteResponse,
     OfficeDocStatus,
     OfficeDocType,
@@ -544,6 +547,17 @@ def generate_word_endpoint(req: OfficeWordGenerateRequest) -> dict:
         "filename": output_path.name,
         "file_size_bytes": output_path.stat().st_size,
     }
+
+
+@router.post("/word/parse-bibtex")
+def parse_bibtex_endpoint(req: BibTeXParseRequest) -> BibTeXParseResponse:
+    """解析 BibTeX 文本为结构化参考文献（Round 9 引用体系）。
+
+    纯文本解析，零落盘/零外发；条目可直接传入 /word/generate 的
+    ``references``。解析失败由全局 OfficeParseError → 422 信封处理。
+    """
+    references = parse_bibtex(req.text)
+    return BibTeXParseResponse(count=len(references), references=references)
 
 
 @router.post("/excel/generate")

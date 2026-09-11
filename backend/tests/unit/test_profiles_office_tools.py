@@ -60,6 +60,8 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
     # (pandas 本地数据分析), 13 → 14 件。
     # 2026-09-10: primary 经 *JOURNAL_TOOLS 继承 journal 模板 4 件,
     # 14 → 18 件（按字母序插在 office_generate_pdf 与 office_list 之间）。
+    # 2026-09-11 Round 9: primary 白名单补 office_parse_bibtex, 18 → 19 件
+    # （按字母序插在 office_list 与 office_read 之间）。
     assert visible == [
         "office_analyze",
         "office_analyze_word_template",
@@ -74,6 +76,7 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
         "office_journal_parse_template",
         "office_journal_validate",
         "office_list",
+        "office_parse_bibtex",
         "office_read",
         "office_read_pdf",
         "office_read_pdf_form",
@@ -92,6 +95,8 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
     # 2026-09-10: writer 白名单补 journal 模板 4 件
     # （仍不给 office_delete）, 13 → 17 件（按字母序插在
     # office_generate_pdf 与 office_list 之间）。
+    # 2026-09-11 Round 9: writer 白名单补 office_parse_bibtex, 17 → 18 件
+    # （仍不给 office_delete）。
     assert visible == [
         "office_analyze",
         "office_analyze_word_template",
@@ -105,6 +110,7 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
         "office_journal_parse_template",
         "office_journal_validate",
         "office_list",
+        "office_parse_bibtex",
         "office_read",
         "office_read_pdf",
         "office_read_pdf_form",
@@ -131,12 +137,15 @@ def test_list_and_read_hidden_without_workspace_binding(registry):
     office_analyze 是读类工具(同 office_read_pdf) → 隐藏。
     """
     visible = _visible_office_tools(registry, None, _profile("primary").tools)
+    # 2026-09-11 Round 9: office_parse_bibtex 是纯文本解析（不触工作区），
+    # requires_tool_context=False → 未绑定也可见。
     assert visible == [
         "office_create",
         "office_delete",
         "office_fill_pdf_form",
         "office_fill_word_template",
         "office_generate_pdf",
+        "office_parse_bibtex",
         "office_update",
     ]
 

@@ -70,6 +70,8 @@ OFFICE_TOOLS = (
     "office_analyze_word_template",
     "office_fill_word_template",
     "office_analyze",
+    # 2026-09-11 Round 9 引用体系：BibTeX 解析（READ，纯文本、无工作区依赖）
+    "office_parse_bibtex",
 )
 
 # 本地开发环境助手（2026-09-04）：只读探测/诊断两件 + 审批后执行一件。

@@ -802,6 +802,9 @@ def _coerce_word_request(
         images=content.get("images") or [],
         # Round 7 FormatSpec：受管路径与直通路径同样透传版式规范（None 零变化）
         format_spec=content.get("format_spec"),
+        # Round 9 引用体系：结构化文献 + 引用样式随 content 透传
+        references=content.get("references") or [],
+        citation_style=content.get("citation_style") or "gbt7714",
     )
 
 
