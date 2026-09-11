@@ -89,6 +89,7 @@ import { ProviderStore } from './update/providerStore';
 import { ProviderRegistry } from './update/providers/registry';
 import { registerProviderIpc } from './update/providerIpc';
 import { createGenericHttpProvider } from './update/providers/genericHttp';
+import { createGithubReleasesProvider } from './update/providers/github';
 import { ENABLE_UPDATE_PROVIDERS_UI } from './update/featureFlag';
 import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backendLauncher';
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
@@ -1468,7 +1469,15 @@ async function registerIpcHandlers(): Promise<void> {
         config: cfg.config as any,
       }),
     );
-    // Phase 3 will add github/gitee/gitlab registrations here
+    providerRegistry.register('github', (cfg) =>
+      createGithubReleasesProvider({
+        id: cfg.id,
+        displayName: cfg.displayName,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        config: cfg.config as any,
+      }),
+    );
+    // Phase 3 will add gitee/gitlab registrations here
     updateManager = new UpdateManager({ providerStore, providerRegistry });
     await updateManager.init();
 
