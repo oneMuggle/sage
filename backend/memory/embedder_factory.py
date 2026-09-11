@@ -18,10 +18,11 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Optional
 
 from backend.memory.embedder import (
     BGE_SMALL_ZH_DIMENSIONS,
+    Embedder,
     HashEmbedder,
     OnnxEmbedder,
 )
@@ -55,14 +56,39 @@ def onnx_model_ready(model_dir: str) -> bool:
     return (base / "model.onnx").is_file() and (base / "tokenizer.json").is_file()
 
 
-def create_embedder() -> Any:  # 返回 HashEmbedder 或 OnnxEmbedder
-    """按配置创建嵌入器; ONNX 不可用时降级 HashEmbedder。
+def _preferred_mode_from_settings() -> str:
+    """读 settings 持久化的嵌入器偏好 (embedding.mode)；无则空串。
+
+    settings 不可用时静默返回空串 (调用方回退 env / hash)。
+    """
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get("embedding_mode")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip().lower()
+    except Exception:  # noqa: BLE001 — settings 缺失属正常路径
+        pass
+    return ""
+
+
+def create_embedder(preferred_mode: Optional[str] = None) -> Embedder:
+    """按配置创建嵌入器; ONNX/HTTP 端点不可用时降级 HashEmbedder。
+
+    偏好解析顺序: preferred_mode 参数 (API 显式切换) > settings
+    (embedding.mode) > SAGE_EMBEDDER 环境变量 > hash (缺省)。
 
     Returns:
         Embedder 实例。``embedder.dimensions`` 同时决定向量虚拟表
         (调用方据维度选择表名, 见 MemoryAdapter 装配)。
     """
-    if os.environ.get("SAGE_EMBEDDER", "").strip().lower() == "onnx":
+    choice = (preferred_mode or "").strip().lower()
+    if not choice:
+        choice = _preferred_mode_from_settings()
+    if not choice:
+        choice = os.environ.get("SAGE_EMBEDDER", "").strip().lower()
+
+    if choice == "onnx":
         model_dir = onnx_model_dir()
         if not onnx_model_ready(model_dir):
             logger.warning(

@@ -82,6 +82,7 @@ import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
+import { registerModelDownloadIpc } from './modelDownloadIpc';
 import { registerUpdateIpc } from './updateIpc';
 import { UpdateManager } from './updateManager';
 import { ProviderStore } from './update/providerStore';
@@ -1479,6 +1480,16 @@ async function registerIpcHandlers(): Promise<void> {
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
   registerLogIpc(ipcMain, (sender) => isTrustedRenderer(sender));
+
+  // B2 (P11): 嵌入模型下载 IPC —— model.onnx/tokenizer.json 单文件直下,
+  // sha256 校验 + .part 原子 rename; 进度经 models:embedder:progress 推送。
+  registerModelDownloadIpc(ipcMain, {
+    modelsBaseDir: () => {
+      const base = process.env.SAGE_USER_DATA_DIR || process.cwd();
+      return join(base, 'models');
+    },
+    getWindow: () => mainWindow,
+  });
   // Lazy-init UpdateManager inside registerIpcHandlers (after app.whenReady)
   // to avoid constructing managers before the app is ready.
   // Task 1.9: wire pluggable provider system (ProviderStore + Registry + IPC).

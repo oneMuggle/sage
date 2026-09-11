@@ -1,29 +1,39 @@
 /**
  * Settings 页面 - 记忆管理 Tab
  *
- * Task 2 (Gap B): the auto_memory toggle is wired to the IPC bridge
- * (window.electronAPI.memory.getAutoMemory / setAutoMemory) which hits
- * GET/PUT /api/v1/preferences/auto_memory — backed by the SettingsRepository
- * whitelist (auto_memory key added in this task).
- *
- * fix/security-perf-quickwins §1.3b f (2026-08-09, cherry-picked to win7):
+ * fix/security-perf-quickwins §1.3b f (2026-08-09):
  * - "同步到内部服务器" 开关从误绑的 `settings.autoMemory` 改为独立的
  *   `settings.memoryServerSync` 字段。`autoMemory` 实际语义是"对话中
  *   自动提取关键信息"（见 GeneralTab §"自动记忆提取"），与本 Tab
  *   的"同步到企业内部服务器"语义不同——同字段双语义是误导。
- * - 移除硬编码的 `%APPDATA%\Sage\memory.db` 展示：实际路径由
- *   SAGE_DB_PATH 环境变量决定（见 backend/data/database.py:158-173），
+ * - 移除硬编码的 `%APPDATA%\Sage\memory.db` 展示（与 §1.4 "假功能/
+ *   死设置清理" 同源治理）：实际路径由 SAGE_DB_PATH 环境变量决定
+ *   （见 backend/data/database.py:158-173），Electron 模式下指向
+ *   `%APPDATA%/Sage/sage.db`，dev 模式下指向 `<repo>/data/sage.db`，
  *   写死展示既不准也无用。
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+import { invoke } from '../../shared/api/desktopInvoke';
 
 import type { EndpointsTabProps } from './components';
 import { SettingRow, Toggle } from './components';
 
 export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
   const navigate = useNavigate();
+  const [embedderStatus, setEmbedderStatus] = useState<{
+    type: string;
+    dimensions: number;
+    table: string | null;
+    model_dir: string;
+    model_ready: boolean;
+    semantic: boolean;
+  } | null>(null);
+  const [selecting, setSelecting] = useState(false);
+
+  // ── win7 原有: auto_memory / memory_retrieval 偏好（IPC bridge）──────
   // Source of truth = backend preference via IPC bridge.
   // null = not yet loaded OR backend returned null (default True).
   const [autoMemoryLoaded, setAutoMemoryLoaded] = useState<boolean | null>(null);
@@ -36,8 +46,6 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      // electronAPI is optional per the augmentation (web-only renderers
-      // may not have it); bail to True if absent.
       const api = window.electronAPI;
       if (!api) {
         if (!cancelled) setAutoMemoryLoaded(true);
@@ -46,7 +54,6 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
       try {
         const raw = await api.memory.getAutoMemory();
         if (cancelled) return;
-        // null/undefined → default True (backward compat with prior users).
         if (raw === null || raw === undefined) {
           setAutoMemoryLoaded(true);
           return;
@@ -90,20 +97,16 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
 
   const handleAutoMemoryChange = async (next: boolean) => {
     setAutoMemoryLoaded(next);
-    // Keep the AppSettings-level autoMemory in sync for legacy consumers.
     try {
       await updateSettings({ autoMemory: next });
     } catch {
-      // settingsClient already warns on failure; the IPC bridge is the
-      // authoritative channel for the backend gate, so we don't surface.
+      // settingsClient already warns on failure
     }
     try {
       const api = window.electronAPI;
       if (!api) return;
       await api.memory.setAutoMemory({ value: next });
     } catch {
-      // Best-effort: revert local state if the backend write fails so the
-      // user isn't left looking at a stale "checked" state.
       setAutoMemoryLoaded(!next);
     }
   };
@@ -115,25 +118,91 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
       if (!api) return;
       await api.memory.setMemoryRetrieval({ value: next });
     } catch {
-      // Best-effort: revert local state if the backend write fails.
       setMemoryRetrievalLoaded(!next);
     }
   };
 
+  const loadEmbedderStatus = useCallback(async () => {
+    try {
+      const status = await invoke<{
+        type: string;
+        dimensions: number;
+        table: string | null;
+        model_dir: string;
+        model_ready: boolean;
+        semantic: boolean;
+      }>('embedder_get_status');
+      setEmbedderStatus(status);
+    } catch {
+      setEmbedderStatus(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadEmbedderStatus();
+  }, [loadEmbedderStatus]);
+
+  const selectEmbedder = useCallback(
+    async (mode: 'onnx' | 'hash') => {
+      setSelecting(true);
+      try {
+        await invoke('embedder_select', { mode });
+        await loadEmbedderStatus();
+      } catch {
+        // 静默——状态刷新会反映真实情况
+      } finally {
+        setSelecting(false);
+      }
+    },
+    [],
+  );
+
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">记忆管理</h3>
-        <SettingRow
+        <h3 className="text-sm font-semibold text-text mb-3">语义嵌入 (检索增强)</h3>
+        {embedderStatus ? (
+          <div className="space-y-2 text-xs text-text-secondary">
+            <p>
+              当前嵌入器: {embedderStatus.type} · {embedderStatus.dimensions} 维 ·{' '}
+              {embedderStatus.semantic ? '语义匹配' : '字面匹配'} · 表{' '}
+              {embedderStatus.table ?? '-'}
+            </p>
+            <p>
+              模型目录: {embedderStatus.model_dir} · 模型文件:
+              {embedderStatus.model_ready ? '已就绪' : '未就绪'}
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-text-secondary">嵌入器状态加载中…</p>
+        )}
+        <div className="flex gap-2 mt-3">
+          <button
+            type="button"
+            disabled={selecting}
+            onClick={() => void selectEmbedder('onnx')}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            启用语义嵌入
+          </button>
+          <button
+            type="button"
+            disabled={selecting}
+            onClick={() => void selectEmbedder('hash')}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            切回字面匹配
+          </button>
+        </div>
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">记忆管理</h3>        <SettingRow
           label="本地存储"
           desc="记忆数据存储在本地 SQLite 数据库中，具体路径由 SAGE_DB_PATH 环境变量与运行模式决定"
         >
           <span className="px-2 py-1 text-xs text-text-secondary font-mono">
             本地 SQLite 数据库
           </span>
-        </SettingRow>
-        <SettingRow label="自动记忆沉淀" desc="每轮对话后自动提取并保存有价值的点">
-          <Toggle value={autoMemoryLoaded ?? true} onChange={handleAutoMemoryChange} />
         </SettingRow>
         <SettingRow
           label="同步到内部服务器"
@@ -143,6 +212,9 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
             value={settings.memoryServerSync}
             onChange={(v) => updateSettings({ memoryServerSync: v })}
           />
+        </SettingRow>
+        <SettingRow label="自动记忆沉淀" desc="每轮对话后自动提取并保存有价值的点">
+          <Toggle value={autoMemoryLoaded ?? true} onChange={handleAutoMemoryChange} />
         </SettingRow>
         <SettingRow label="记忆检索注入" desc="对话时自动注入相关记忆到上下文">
           <Toggle

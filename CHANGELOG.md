@@ -18,6 +18,21 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+## [v0.4.9-alpha.27-win7] - 2026-09-11
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #611 第十一批:嵌入器运行时切换/模型下载/设置页卡片 + A/B 权重变体。`backend/memory/embedder_factory.py` 加 `Embedder` 协议到 import block (Ruff F821 fix, follow-up from initial PR #623 attempt), `backend/adapters/out/memory/adapter.py` 加 `os` 导入支持 backfill, `electron/modelDownloadIpc.ts` 170 行新文件 (download progress events), `src/pages/settings/MemoryTab.tsx` 87 行嵌入器管理 UI + 卡片, `backend/api/embedder_routes.py` 73 行新 endpoints (list/select/download 嵌入器), `backend/main.py` 注册路由。Win7 独有:MemoryTab 补 `useNavigate` 导入 (frontend TS build 失败),`auto_memory`/`retrieval` 开关移植 (writer profile 默认值对齐 main)。73 unit + 4 integration test 引用;symspell 不变。
+
+### Added
+- **feat(win7): cherry-pick main #611 第十一批 (#623)** — `backend/memory/embedder_factory.py` runtime 切换;`backend/api/embedder_routes.py` 73 行 (list/select/download);`electron/modelDownloadIpc.ts` 170 行 (download progress events);`src/pages/settings/MemoryTab.tsx` 87 行 (嵌入器管理卡片 + 切换 UI)
+
+### Fixed
+- **fix(win7): add Embedder import to embedder_factory.py (Ruff F821)** — `create_embedder()` 返回 `Embedder` 协议但未 import,Ruff CI 红 → 1 行 import 加
+- **fix(win7): MemoryTab 补 useNavigate 导入 + auto_memory/retrieval 开关移植** — frontend TS build 红 → `import { useNavigate }` 加
+- **fix(win7): adapter 补 os 导入** — backfill path 用到 `os.path` 缺 import → 1 行加
+
+### Changed
+- **chore(release): bump version to 0.4.9-alpha.27-win7**
+
 ## [v0.4.9-alpha.24-win7] - 2026-09-11
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 同步 main PR #584 期刊模板子系统 (8-PR 系列 N1–N8):把 .docx 期刊模板解析为结构化 `JournalSpec`、起草结构化稿件、按 spec 校验、把素材填入模板生成可投搞稿件。8 个 backend 模块 (`backend/office/journal/{models,parser,validator,generator,persistence,llm_adapter,pandoc_adapter,errors}.py`)、4 个 office 路由、`OfficeJournalTool` 注册到 writer profile,前端 `src/features/journal/{JournalPanel, components/*, useJournalTemplates, index}`、`tests/e2e/journal.spec.ts` Playwright journey、文档 `docs/technical/55-journal-template-subsystem.md` + `docs/user-manual/13-journal-template-panel.md`。手动 port 而非 merge commit:剔除 main-only 的 7 个 office routes + `OfficeAnalyzeTool` + `OfficeEditPreviewDialog` + FTS backfill (PR #561/564/569 batch-2/3/round-2/3 依赖),保留 win7 现有 Pydantic v1 兼容;profile whitelist 删 orphan `office_analyze`。

@@ -9,6 +9,8 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
+import os
+import threading
 from typing import Any, Dict, List, Optional
 
 from backend.domain.memory import MemoryContext
@@ -85,6 +87,66 @@ class MemoryAdapter:
         if self.vector_store is None:
             logger.debug("VectorStore 未初始化：无可用 Database 实例")
 
+    def reconfigure(self, embedder) -> None:
+        """B1 (P11): 热重载嵌入器并按新维度重建向量虚拟表。
+
+        Hash(256) 与 Onnx(512) 维度不同、各用独立表 —— 重配置后旧表的
+        向量不迁移 (嵌入语义变更后旧向量无迁移价值), 新写入进新表。
+        """
+        self.embedder = embedder
+        table_name = (
+            "memories_vec"
+            if embedder.dimensions == 256
+            else f"memories_vec_{embedder.dimensions}"
+        )
+        try:
+            db = getattr(self.memory_manager.episodic, "db", None)
+        except AttributeError:
+            db = None
+        if db is not None and hasattr(db, "get_connection"):
+            self.vector_store = VectorStore(db, embedder, table_name=table_name)
+            logger.info(
+                "MemoryAdapter 已重配置: embedder=%s table=%s dims=%s",
+                type(embedder).__name__,
+                table_name,
+                embedder.dimensions,
+            )
+            self._maybe_start_backfill()
+        else:
+            logger.warning("MemoryAdapter 重配置: 无可用 db, 向量栈未重建")
+
+    def _maybe_start_backfill(self) -> None:
+        """存量记忆缺向量时启动一次性后台回填（守护线程，不阻塞启动）。
+
+        触发条件：向量表条目数 < 主表（episodic+semantic）行数 —— 维度
+        重建后或语义 Embedder 首次启用后必然成立。上限
+        SAGE_VEC_BACKFILL_MAX（默认 500 条/次），剩余留给下次启动。
+        """
+        if self._backfill_started or self.vector_store is None:
+            return
+        try:
+            if self.vector_store.pending_backfill_count() <= 0:
+                return
+        except Exception as e:  # noqa: BLE001 — 回填探测失败不影响主流程
+            logger.debug(f"回填探测失败，跳过: {e}")
+            return
+        self._backfill_started = True
+        try:
+            max_backfill = int(os.getenv("SAGE_VEC_BACKFILL_MAX", "500"))
+        except ValueError:
+            max_backfill = 500
+
+        def _run_backfill() -> None:
+            try:
+                self.vector_store.backfill_from_tables(limit=max_backfill)
+            except Exception as e:  # noqa: BLE001 — best-effort
+                logger.warning(f"向量回填线程异常: {e}")
+
+        threading.Thread(
+            target=_run_backfill, name="memory-vec-backfill", daemon=True
+        ).start()
+        logger.info("检测到存量记忆缺向量，已启动后台回填（上限 %d 条）", max_backfill)
+
     async def retrieve(self, query: str, session_id: str, limit: int = 5) -> MemoryContext:
         """检索相关记忆
 
@@ -128,23 +190,38 @@ class MemoryAdapter:
         # 3. RRF 融合两路结果 (T1, P10): 权重按嵌入器能力重配 ——
         #    语义嵌入 (Onnx, 512 维) 向量路是真语义相似度, 权重压过关键词;
         #    字面哈希 (Hash, 256 维) 与关键词路高度重叠, 关键词路更可靠。
-        weights = [0.3, 0.7] if getattr(self.embedder, "is_semantic", False) else [0.6, 0.4]
+        base_weights = (
+            [0.3, 0.7]
+            if getattr(self.embedder, "is_semantic", False)
+            else [0.6, 0.4]
+        )
+        # B4 (P11): A/B 权重变体 —— 按 query 稳定 hash 二分。
+        # A = 嵌入器类型基线权重; B = 均权对照, 离线对比两组召回质量。
+        import hashlib as _hl
+
+        variant = (
+            "A"
+            if int(_hl.md5(query.encode("utf-8")).hexdigest()[:8], 16) % 2 == 0
+            else "B"
+        )
+        if variant == "A":
+            weights = list(base_weights)
+        else:
+            mid = (base_weights[0] + base_weights[1]) / 2
+            weights = [mid, mid]
         fused = reciprocal_rank_fusion(
             [keyword_items, vector_items],
             weights=weights,
             k=60,
         )
 
-        # T3 (P10): 检索命中率观测埋点 (结构化日志, 供命中率/召回质量分析)
         logger.info(
-            "[retrieval] q_len=%s keyword_hits=%s vector_hits=%s fused=%s "
-            "semantic_embedder=%s weights=%s",
-            len(query),
+            "[retrieval] variant=%s weights=%s keyword_hits=%s vector_hits=%s fused=%s",
+            variant,
+            weights,
             len(keyword_items),
             len(vector_items),
             len(fused),
-            getattr(self.embedder, "is_semantic", False),
-            weights,
         )
 
         # 4. 分层：用户画像（始终注入）+ 高重要性 → core，其余 → episodic/semantic
