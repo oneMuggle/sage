@@ -7,12 +7,15 @@
 """
 from __future__ import annotations
 
+import io as _io
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel  # pydantic v1 兼容
 
+from backend.services.llm_trace.exporter import export_to_zip_bytes
 from backend.services.llm_trace.recorder import LlmTraceRecorder
 
 logger = logging.getLogger(__name__)
@@ -43,4 +46,41 @@ def get_preview() -> PreviewResponse:
         oldestTs=snap[0].ts.isoformat().replace("+00:00", "Z"),
         newestTs=snap[-1].ts.isoformat().replace("+00:00", "Z"),
         sampleUrls=sample_urls,
+    )
+
+
+def _get_app_version() -> str:
+    try:
+        from backend import __version__  # type: ignore
+        return __version__
+    except Exception:
+        return "unknown"
+
+
+def _get_config_snapshot() -> str:
+    try:
+        from backend.config import get_config_yaml_text  # type: ignore
+        return get_config_yaml_text()
+    except Exception:
+        return ""
+
+
+@router.post("/export")
+def post_export(
+    include_prompts: bool = Query(default=False),
+    include_hostname: bool = Query(default=False),
+) -> StreamingResponse:
+    """生成诊断包 zip,直接 stream bytes 给调用方(不在后端落临时文件)。"""
+    records = LlmTraceRecorder.snapshot()
+    zip_bytes = export_to_zip_bytes(
+        records=records,
+        include_prompts=include_prompts,
+        include_hostname=include_hostname,
+        app_version=_get_app_version(),
+        config_snapshot=_get_config_snapshot(),
+    )
+    return StreamingResponse(
+        _io.BytesIO(zip_bytes),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="diagnostic.zip"'},
     )
