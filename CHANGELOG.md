@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **Word 引用体系(Round 9)**: 结构化文献条目(references,9 类文献)+ 确定性 GB/T 7714-2015 格式化(J/M/D/C/R/EB/OL 等类型码、>3 作者截断"等/et al")+ APA 简表;段落 citations 按 key 回链自动生成文中上标 [N](首现编号、连续合并 [1-3])与文末参考文献节(悬挂缩进/样式可配);BibTeX 解析(REST /office/word/parse-bibtex + office_parse_bibtex 工具,零第三方依赖)
 - **Word 内容元素(Round 8)**: word generate 插图支持行内放置(after_paragraph)与题注自动编号("图N");表格支持题注("表N")/学术三线表/表头跨页重复/固定列宽/合并单元格;多级标题自动编号(1/1.1/1.1.1,format_spec.numbering);修复受管路径丢弃 images 的缺口
 - **Word 版式引擎 FormatSpec(Round 7)**: word generate 新增可选 `format_spec`——页边距/纸张/方向、正文(字号/行距/首行缩进/段距/对齐)、Title 与标题样式覆盖(字号/加粗/颜色/间距)、页眉文本、页脚页码域;"版式即配置",格式要求由确定性代码注入而非 prompt 口头约定;不传时行为零变化
 - **PDF 全链路**: 中文生成修复(CID 字体)、文本/表格/表单读取、生成、AcroForm 填写、PDF→Word(文本级)、Office→PDF 导出(检测本机 LibreOffice/Word)

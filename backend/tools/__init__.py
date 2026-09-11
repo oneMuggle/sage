@@ -42,6 +42,7 @@ from .memory_tool import MemorySaveTool, MemorySearchTool
 from .network_config import load_network_policy
 from .office_analyze_tool import OfficeAnalyzeTool
 from .office_archive_tool import OfficeArchiveTool
+from .office_bibtex_tool import OfficeBibTexTool
 from .office_create_tool import OfficeCreateTool
 from .office_delete_tool import OfficeDeleteTool
 from .office_journal_tool import (
@@ -194,6 +195,8 @@ def register_all_tools(
     registry.register(OfficeJournalFillFromContentTool(policy=policy))
     registry.register(OfficeJournalGenerateArticleTool(policy=policy))
     registry.register(OfficeJournalValidateTool(policy=policy))
+    # Round 9 引用体系: office_parse_bibtex（READ，BibTeX → ReferenceSpec）
+    registry.register(OfficeBibTexTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -305,6 +308,7 @@ __all__ = [
     "OfficeAnalyzeWordTemplateTool",
     "OfficeFillWordTemplateTool",
     "OfficeAnalyzeTool",
+    "OfficeBibTexTool",
     "OfficeJournalParseTemplateTool",
     "OfficeJournalFillFromContentTool",
     "OfficeJournalGenerateArticleTool",

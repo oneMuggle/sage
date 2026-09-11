@@ -112,7 +112,7 @@ def set_doc_default_font(doc: Document, ascii_name: str, ea_name: str) -> None:
         _patch_style_rfonts(style, ascii_name, ea_name)
     _patch_linked_character_styles(doc, ascii_name, ea_name)
 
-from .errors import OfficeFileNotFoundError, OfficeParseError
+from .errors import OfficeFileNotFoundError, OfficeGenerateError, OfficeParseError
 from .models import (
     OfficeDocStatus,
     OfficeDocType,
@@ -653,6 +653,67 @@ def _style_table(doc: Document, table: Any, table_spec: Any) -> None:
         )
 
 
+def _resolve_references(
+    references: List[Any],
+    cite_numbers: Dict[str, int],
+    *,
+    file_path: Path,
+) -> List[Any]:
+    """校验 references/citations 一致性并按编号排序（Round 9）。
+
+    - citations 引用了未定义 key → 报错（key 列表进消息）；
+    - 有文中引用时，未被引用的条目 → 报错（顺序编码制文末表只列被引
+      条目；完全不带 citations 时则全部条目入表——支持"只要文献表"的
+      生成需求）；
+    - 输出按编号升序；无引用时保持请求顺序。
+    """
+    if not references:
+        return []
+    ref_keys = {ref.key for ref in references}
+    missing = sorted(set(cite_numbers) - ref_keys)
+    if missing:
+        raise OfficeGenerateError(
+            f"citations 引用了未定义的 references key: {missing}",
+            file_path=file_path,
+        )
+    if cite_numbers:
+        uncited = sorted(ref_keys - set(cite_numbers))
+        if uncited:
+            raise OfficeGenerateError(
+                f"references 存在未被引用的条目: {uncited}",
+                file_path=file_path,
+            )
+    return sorted(references, key=lambda r: cite_numbers.get(r.key, 10**9))
+
+
+def _add_bibliography(
+    doc: Document,
+    refs: List[Any],
+    style: str,
+    cite_numbers: Dict[str, int],
+    bib_spec: Any,
+) -> None:
+    """文末参考文献节：heading + 悬挂缩进条目（"[N] 文本"，默认五号）。"""
+    from docx.shared import Cm, Pt
+
+    from .references import format_reference
+
+    heading_text = getattr(bib_spec, "heading_text", None) or "参考文献"
+    doc.add_heading(heading_text, level=1)
+    font_size = getattr(bib_spec, "font_size_pt", None) or 10.5
+    hanging = getattr(bib_spec, "hanging_indent_cm", None)
+    hanging = 0.74 if hanging is None else hanging
+    for idx, ref in enumerate(refs, start=1):
+        # 有文中引用时用首现编号；否则按请求顺序连续编号（"只要文献表"）
+        number = cite_numbers.get(ref.key) or idx
+        para = doc.add_paragraph(f"[{number}] {format_reference(ref, style)}")
+        if hanging:
+            para.paragraph_format.left_indent = Cm(hanging)
+            para.paragraph_format.first_line_indent = Cm(-hanging)
+        for run in para.runs:
+            run.font.size = Pt(font_size)
+
+
 def generate_docx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .docx file from structured Pydantic input.
 
@@ -695,6 +756,26 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # Title
         doc.add_heading(req.title, level=0)
 
+        # ── Round 9 引用：首现编号 + 文中上标标记 + 文末参考文献节 ────────
+        # 编号 = citations key 在正文中的首次出现顺序；标记连续编号合并
+        # （[1-3]）。references 与 citations 的一致性在此确定性校验。
+        cite_numbers: Dict[str, int] = {}
+        for para in req.paragraphs:
+            if para.citations and para.heading:
+                raise OfficeGenerateError(
+                    f"标题段落不支持 citations: {para.text[:50]!r}",
+                    file_path=output_path,
+                )
+            for key in para.citations:
+                if key and key not in cite_numbers:
+                    cite_numbers[key] = len(cite_numbers) + 1
+        bib_spec = (
+            req.format_spec.bibliography if req.format_spec is not None else None
+        )
+        ordered_refs = _resolve_references(
+            req.references, cite_numbers, file_path=output_path
+        )
+
         # ── Round 8：行内插图 / 题注编号 / 多级标题编号 ──────────────────
         # after_paragraph 命中 paragraphs 下标的图行内插入；None 或越界的
         # 图保持文末追加（批次 2.1 既有行为，含左对齐渲染零变化）。
@@ -731,6 +812,14 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                 created = doc.add_paragraph(para.text)
             # 批次 2.3：可选段落级样式（无样式字段时零改动）
             _apply_paragraph_run_style(created, para)
+            # Round 9：文中引用上标标记（仅非标题段落，标题已在预检拒绝）
+            if para.citations and not para.heading:
+                from .references import compact_citation_marker
+
+                numbers = [cite_numbers[k] for k in para.citations if k in cite_numbers]
+                if numbers:
+                    marker = created.add_run(compact_citation_marker(numbers))
+                    marker.font.superscript = True
             for image in images_by_position.get(pi, []):
                 if getattr(image, "caption", None):
                     figure_no += 1
@@ -759,6 +848,10 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
             _add_inline_image(
                 doc, image, figure_no, output_path, req.workspace_path, trailing=True
             )
+        # Round 9：文末参考文献节（带 references 时生成；heading 不参与
+        # 多级标题编号——编号只作用于 req.paragraphs 的显式标题）
+        if ordered_refs:
+            _add_bibliography(doc, ordered_refs, req.citation_style, cite_numbers, bib_spec)
         doc.save(str(output_path))
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate DOCX: {exc}", file_path=output_path) from exc

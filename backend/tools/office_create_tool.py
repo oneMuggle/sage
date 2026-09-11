@@ -272,7 +272,13 @@ class OfficeCreateTool(BaseTool):
                             "Structured content as a JSON object, keyed by "
                             "doc_type: word → {title, format_spec?:{page?, "
                             "body?, headings?, title?, header?, footer?, "
-                            "numbering?} 版式规范, paragraphs:[{text, "
+                            "numbering?, bibliography?} 版式规范, "
+                            "references?:[{key, ref_type, title, authors[], "
+                            "year?, source?, volume?, issue?, pages?, "
+                            "publisher?, address?, url?, doi?, "
+                            "access_date?, language?}] 结构化文献, "
+                            "citation_style?:'gbt7714'|'apa', "
+                            "paragraphs:[{text, citations?:[key], "
                             "heading?, font_size?, bold?, italic?, color?, "
                             "align?}], tables:[{headers, rows[], caption?, "
                             "style?, header_repeat?, column_widths_cm?, "
@@ -489,7 +495,80 @@ class OfficeCreateTool(BaseTool):
                                             "文本前缀；标题文本不要再手写编号"
                                         ),
                                     },
+                                    "bibliography": {
+                                        "type": "object",
+                                        "description": (
+                                            "文末参考文献节样式（Round 9）；"
+                                            "不传时用默认（标题'参考文献'、"
+                                            "五号、悬挂缩进 0.74cm）"
+                                        ),
+                                        "properties": {
+                                            "heading_text": {"type": "string"},
+                                            "font_size_pt": {"type": "number"},
+                                            "hanging_indent_cm": {"type": "number"},
+                                        },
+                                    },
                                 },
+                            },
+                            "references": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "key": {
+                                            "type": "string",
+                                            "description": "唯一 key，段落 citations 用它回链",
+                                        },
+                                        "ref_type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "journal",
+                                                "book",
+                                                "thesis",
+                                                "conference",
+                                                "report",
+                                                "webpage",
+                                                "patent",
+                                                "standard",
+                                                "newspaper",
+                                            ],
+                                        },
+                                        "title": {"type": "string"},
+                                        "authors": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                        "year": {"type": "string"},
+                                        "source": {
+                                            "type": "string",
+                                            "description": "刊名/会议名/机构/报纸名",
+                                        },
+                                        "volume": {"type": "string"},
+                                        "issue": {"type": "string"},
+                                        "pages": {"type": "string"},
+                                        "publisher": {"type": "string"},
+                                        "address": {"type": "string"},
+                                        "url": {"type": "string"},
+                                        "doi": {"type": "string"},
+                                        "access_date": {"type": "string"},
+                                        "language": {
+                                            "type": "string",
+                                            "enum": ["zh", "en"],
+                                        },
+                                    },
+                                    "required": ["key", "title"],
+                                },
+                                "description": (
+                                    "结构化参考文献（Round 9）：配合段落 "
+                                    "citations 自动生成文中 [N] 上标与文末"
+                                    "参考文献表（GB/T 7714-2015 或 APA）。"
+                                    "全部条目必须被至少一处引用。"
+                                ),
+                            },
+                            "citation_style": {
+                                "type": "string",
+                                "enum": ["gbt7714", "apa"],
+                                "description": "参考文献格式，默认 gbt7714",
                             },
                             "paragraphs": {
                                 "type": "array",
@@ -497,6 +576,16 @@ class OfficeCreateTool(BaseTool):
                                     "type": "object",
                                     "properties": {
                                         "text": {"type": "string"},
+                                        "citations": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": (
+                                                "文中引用的 references key 列表"
+                                                "（Round 9）：段落尾部生成上标"
+                                                "[N] 标记（连续编号合并 [1-3]），"
+                                                "编号=全文首现顺序；标题段落不支持"
+                                            ),
+                                        },
                                         "heading": {
                                             "type": ["string", "null"],
                                             "description": "'h1'/'h2'/'h3' 或 null",

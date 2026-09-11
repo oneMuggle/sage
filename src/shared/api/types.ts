@@ -1148,6 +1148,8 @@ export interface WordParagraphSpec {
   heading?: 'h1' | 'h2' | 'h3';
   style?: 'bullet' | 'numbered';
   text: string;
+  // Round 9：文中引用（references 条目 key；段落尾部上标 [N]，首现编号）
+  citations?: string[];
 }
 
 // Word 版式规范（Round 7 FormatSpec —— "版式即配置"）。
@@ -1198,6 +1200,8 @@ export interface WordFormatSpec {
   footer?: WordHeaderFooterSpec;
   // Round 8：多级标题自动编号（h1/h2/h3 → 1 / 1.1 / 1.1.1 文本前缀）
   numbering?: boolean;
+  // Round 9：文末参考文献节样式（缺省：'参考文献' / 五号 / 悬挂缩进 0.74cm）
+  bibliography?: BibliographySpec;
 }
 
 // Word 插图（Round 8）：支持行内放置与题注自动编号。
@@ -1208,6 +1212,43 @@ export interface WordImageSpec {
   height_inches?: number;
   caption?: string;
   after_paragraph?: number;
+}
+
+// 结构化参考文献（Round 9 引用体系）。
+// Backend counterpart: ReferenceSpec in backend/office/models.py。
+export type ReferenceType =
+  | 'journal'
+  | 'book'
+  | 'thesis'
+  | 'conference'
+  | 'report'
+  | 'webpage'
+  | 'patent'
+  | 'standard'
+  | 'newspaper';
+
+export interface ReferenceSpec {
+  key: string;
+  ref_type?: ReferenceType;
+  title: string;
+  authors?: string[];
+  year?: string;
+  source?: string;
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  publisher?: string;
+  address?: string;
+  url?: string;
+  doi?: string;
+  access_date?: string;
+  language?: 'zh' | 'en';
+}
+
+export interface BibliographySpec {
+  heading_text?: string;
+  font_size_pt?: number;
+  hanging_indent_cm?: number;
 }
 
 export interface WordCellMergeSpec {
@@ -1237,6 +1278,9 @@ export interface OfficeWordGenerateRequest {
   font_family?: string;
   ascii_font?: string;
   format_spec?: WordFormatSpec;
+  // Round 9 引用体系：结构化文献 + 引用样式
+  references?: ReferenceSpec[];
+  citation_style?: 'gbt7714' | 'apa';
 }
 
 export interface ExcelSheetSpec {

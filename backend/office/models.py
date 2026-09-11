@@ -355,6 +355,89 @@ class WordParagraphSpec(BaseModel):
         description="字体颜色，6 位 RGB 十六进制（如 'FF0000'，可带 #）",
     )
     align: Optional[Literal["left", "center", "right", "justify"]] = None
+    # Round 9：文中引用（references 条目的 key 列表）。渲染为段落尾部
+    # 上标标记（"[1]" / 连续编号合并 "[1-3]"），编号=全文首次出现顺序。
+    citations: _constrained_list(str, max_length=10) = Field(default_factory=list)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 参考文献引用（Round 9）：结构化条目 + 确定性 GB/T 7714-2015 格式化。
+# 模型仅 pydantic（维持 canary 前提）；格式化在 references.py（零 docx）。
+# 简化范围：顺序编码制常用条目形状；不覆盖译者/版次/丛书等边角。
+# ──────────────────────────────────────────────────────────────────────
+
+ReferenceType = Literal[
+    "journal",
+    "book",
+    "thesis",
+    "conference",
+    "report",
+    "webpage",
+    "patent",
+    "standard",
+    "newspaper",
+]
+
+
+class ReferenceSpec(BaseModel):
+    """一条结构化参考文献（引用引擎的输入单元）。
+
+    ``key`` 供 ``paragraphs[].citations`` 回链；格式化所需字段按
+    ``ref_type`` 选用（如 journal 用 source/volume/issue/pages，
+    book 用 address/publisher）。``language`` 缺省时按 title 是否含
+    CJK 自动判定（影响"等/et al"截断词）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=1, max_length=100)
+    ref_type: ReferenceType = "journal"
+    title: str = Field(min_length=1, max_length=500)
+    authors: _constrained_list(str, max_length=50) = Field(default_factory=list)
+    year: Optional[str] = Field(default=None, max_length=20)
+    source: Optional[str] = Field(
+        default=None, max_length=300, description="刊名/会议名/机构/报纸名"
+    )
+    volume: Optional[str] = Field(default=None, max_length=30)
+    issue: Optional[str] = Field(default=None, max_length=30)
+    pages: Optional[str] = Field(default=None, max_length=50)
+    publisher: Optional[str] = Field(default=None, max_length=300)
+    address: Optional[str] = Field(default=None, max_length=300)
+    url: Optional[str] = Field(default=None, max_length=2000)
+    doi: Optional[str] = Field(default=None, max_length=200)
+    access_date: Optional[str] = Field(
+        default=None, max_length=30, description="电子资源引用日期，如 2026-09-11"
+    )
+    language: Optional[Literal["zh", "en"]] = Field(
+        default=None, description="缺省按 title CJK 自动判定"
+    )
+
+
+class BibliographySpec(BaseModel):
+    """文末参考文献节样式（Round 9）。全字段可选。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    heading_text: str = Field(default="参考文献", max_length=50)
+    font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
+    hanging_indent_cm: Optional[float] = Field(default=None, ge=0.0, le=5.0)
+
+
+class BibTeXParseRequest(BaseModel):
+    """POST /api/v1/office/word/parse-bibtex（Round 9）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=2_000_000, description=".bib 文件内容")
+
+
+class BibTeXParseResponse(BaseModel):
+    """BibTeX 解析结果（Round 9）。条目可直接传入 word generate references。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    count: int = Field(ge=0)
+    references: _constrained_list(ReferenceSpec, max_length=200)
 
 
 class WordCellMergeSpec(BaseModel):
@@ -485,6 +568,9 @@ class WordFormatSpec(BaseModel):
     footer: Optional[WordHeaderFooterSpec] = None
     # Round 8：多级标题自动编号（h1/h2/h3 计数器，字面 "N.M.K" 文本前缀）。
     numbering: bool = Field(default=False, description="为 h1/h2/h3 生成 1 / 1.1 / 1.1.1 编号前缀")
+    # Round 9：文末参考文献节样式。None 时仍生成参考文献节（默认样式），
+    # 仅当请求不带 references 时该子项才完全不生效。
+    bibliography: Optional[BibliographySpec] = None
 
 
 class OfficeWordGenerateRequest(BaseModel):
@@ -508,6 +594,13 @@ class OfficeWordGenerateRequest(BaseModel):
     format_spec: Optional[WordFormatSpec] = Field(
         default=None,
         description="版式规范；None 保持默认版式（行为与历史版本一致）",
+    )
+    # Round 9：结构化参考文献 + 文中引用标记。带 references 时文末自动
+    # 生成参考文献节；paragraphs[].citations 按 key 回链，编号=首现顺序。
+    references: _constrained_list(ReferenceSpec, max_length=200) = Field(default_factory=list)
+    citation_style: Literal["gbt7714", "apa"] = Field(
+        default="gbt7714",
+        description="参考文献格式；gbt7714=GB/T 7714-2015 顺序编码制",
     )
     font_family: Optional[str] = Field(
         default=None,

@@ -217,6 +217,10 @@ def create_default_agents() -> List[AgentProfile]:
                 "生成正式 docx 报告时用 office_create，并把用户明示的硬性格式要求"
                 "（页边距/字号/行距/首行缩进/页眉页脚/页码/标题样式）映射进 "
                 "content.format_spec —— 版式由引擎确定性保证，不要只写在正文里。"
+                "论文/报告需要引用时：把结构化文献条目放进 content.references，"
+                "在段落 citations 里用条目 key 回链（引擎自动生成文中上标 [N] "
+                "与文末参考文献表，GB/T 7714 或 APA）；用户给 .bib 文件时先用 "
+                "office_parse_bibtex 解析，标题文本不要手写 [N] 编号。"
             ),
             # PR-1 (office CRUD 接线) + PR-2 (archive/restore):
             # 写作 agent 现在可生成/编辑/还原 Office 文档 (report / 操作手册
@@ -669,6 +673,10 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "传 output_path 另存。\n"
     "- 数据分析：office_analyze 用 pandas 做本地数据分析"
     "（describe/计数/聚合/相关性，可生成分析报告 xlsx）——数据不出本机。\n"
+    "- 引用与参考文献（Round 9）：用户给 .bib 时先 office_parse_bibtex 解析；"
+    "结构化条目放 office_create 的 content.references，段落 citations 用条目 "
+    "key 回链——引擎自动生成文中上标 [N]（首现编号、连续合并）与文末参考"
+    "文献表（citation_style 可选 gbt7714/apa），标题文本不要手写编号。\n"
     "- 批次3：Word 批注（读取/添加文档批注）；模板库（内置周报/会议纪要等"
     "模板，或工作区 office/templates/ 自定义模板）；创建/更新成功后会自动"
     "回读摘要（self_check），请核对摘要是否符合意图。"
