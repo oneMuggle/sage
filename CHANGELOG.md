@@ -33,6 +33,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Excel 编辑后公式缓存值丢失的提示缺失
 - 死参数 `OfficePptGenerateRequest.template` 移除;快照目录无保留策略(技术债 L3)
 
+## [v0.4.9-alpha.41] - 2026-09-11
+
+> 🔌 **可插拔更新源系统** — Phase 1–4 完整闭环。方案 `docs/superpowers/specs/2026-09-10-pluggable-update-providers-design.md`;技术文档 `docs/technical/56-update-providers.md`;用户手册 `docs/user-manual/14-update-providers.md`。
+
+### Added(update-providers)
+- **Provider 抽象层** (`UpdateProvider` 接口 + `ProviderRegistry` + `ProviderStore`):更新源从硬编码 url 切换到「注册表 + 用户可配 provider 列表」;支持 generic-http / github / gitee / gitlab 4 种内置类型
+- **Provider 安全存储**:`electron-store` 持久化 provider 配置,token 经 Electron `safeStorage`(OS keychain 后端)加密后落盘;preload IPC bridge 仅暴露白名单方法
+- **GitHub Releases provider** (#616):`/repos/{owner}/{repo}/releases/latest` + `/releases?per_page=10`;pre-release 通过 `pickNewestPrerelease` 选最新 `published_at`
+- **Gitee Releases provider** (#617):Gitee API v5 + `?access_token=` query,镜像 GitHub 选版策略
+- **GitLab Releases provider** (#618):API v4 + `PRIVATE-TOKEN` header + `upcoming_release=true` flag
+- **Feature flag 全开** (#619,`ENABLE_UPDATE_PROVIDERS_UI`):Phase 3 默认 ON,`SAGE_EXPERIMENTAL_PROVIDERS=0` 紧急回滚 escape hatch
+- **E2E 闭环** (#620,Playwright hermetic journey):`providers-manager.e2e.ts`(列表→新增→编辑→测试→删除 6 步)
+- **Provider UI** (Phase 2 PR #613,已合并):`ProvidersManager` 设置面板;列表/新增/编辑/删除/设为默认/测试连接 6 个交互;按 `channelMap` 决定 stable/beta/alpha 是否预发布通过
+- **技术文档** (#621)`docs/technical/56-update-providers.md` + **用户手册** (#621)`docs/user-manual/14-update-providers.md`
+
+### Changed(update-providers)
+- UpdateManager 重构:从单一 updater 切换到「active provider + builtin generic-http fallback」;存量用户无感
+- preload bridge 暴露 6 个 provider 方法(白名单 + 类型守卫):`providers.list / add / update / remove / setDefault / test`
+
+### Fixed(update-providers)
+- 安全:token 全部经 `safeStorage.encryptString` 加密,文件权限 0o600
+- 多 provider 冲突:同 `isDefault=true` 时 UI 显示警告并要求二选一
+
 ## Release Tier Definitions
 
 | Tier | Tag Format | Audience | Channel |
