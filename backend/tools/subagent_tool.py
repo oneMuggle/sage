@@ -100,11 +100,15 @@ class CollectSubagentsTool(BaseTool):
                         "type": "integer",
                         "description": "可选：本次最长等待秒数（默认 600）；超时后后台任务继续运行，可再次 collect",
                     },
+                    "wait": {
+                        "type": "boolean",
+                        "description": "可选：false = 不等待，立即返回各子任务当前状态与结果预览快照（默认 true = 等待全部完成）",
+                    },
                 },
             },
         )
 
-    async def execute_async(self, **kwargs: Any) -> ToolResult:
+    async def execute_async(self, **kwargs: Any) -> ToolResult:  # noqa: PLR0911 — 三态出口语义清晰
         wait = getattr(self._dispatcher, "wait_background", None)
         if not callable(wait):
             return ToolResult(success=False, error="当前 dispatcher 不支持 collect")
@@ -114,6 +118,12 @@ class CollectSubagentsTool(BaseTool):
             timeout = float(timeout_raw) if timeout_raw is not None else None
         except (TypeError, ValueError):
             timeout = None
+        # BD3 (round13): 非阻塞快照形态 —— 立即返回当前状态，不等待。
+        if kwargs.get("wait") is False:
+            snapshot = getattr(self._dispatcher, "background_snapshot", None)
+            if not callable(snapshot):
+                return ToolResult(success=False, error="当前 dispatcher 不支持快照")
+            return ToolResult(success=True, content=snapshot())
         try:
             aggregated = await wait(timeout)
             return ToolResult(success=True, content=aggregated)
