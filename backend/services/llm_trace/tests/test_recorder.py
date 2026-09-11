@@ -100,3 +100,23 @@ def test_clear_empties_buffer():
 
 def test_count_returns_zero_when_empty():
     assert LlmTraceRecorder.count() == 0
+
+
+def test_append_redacts_request_body_secrets_before_storage():
+    LlmTraceRecorder.append(TraceRecord(
+        trace_id="r-1", ts=datetime.now(timezone.utc),  # noqa: UP017
+        endpoint="/api/v1/chat/completions",
+        upstream_url="https://internal-llm.example/v1/chat/completions",
+        upstream_method="POST",
+        request_headers={"Authorization": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"},
+        request_body=b'{"messages":[{"role":"user","content":"hi"}],"password":"secret123"}',
+        response_status=200, response_headers={}, response_body=b"{}",
+        response_streamed=False, duration_ms=10,
+    ))
+    snap = LlmTraceRecorder.snapshot()
+    rec = snap[0]
+    assert "eyJhbGciOiJIUzI1NiJ9" not in rec.request_headers["Authorization"]
+    assert "***REDACTED:" in rec.request_headers["Authorization"]  # 来自 redactor
+    # body 第一层不脱敏(留到 exporter 写盘前),仅验证 headers 脱敏已生效
+    # body 的 redactor invariant 由 T4 的 test_invariant_password_secret_does_not_leak_through_export 覆盖
+
