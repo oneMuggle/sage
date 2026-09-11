@@ -37,4 +37,8 @@ round10 的 `retry_of` 与 round12 的 `collect` 交付后，交界处仍有两�
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A（重派与收集的韧性补全） | PR #653（squash 324d9cbc） | PR #654（cherry-win7-r13，squash 205ca972） |
+
+win7 对齐说明：零冲突落位；py3.8 纪律照旧；本地 ruff 全过 + resilience 4 例绿后由 CI（含 py3.8 job）终验，squash merge（#654）。
