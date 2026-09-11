@@ -2102,7 +2102,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 from backend.orchestration.planner import Planner
                 from backend.orchestration.task_registry import TaskRegistry
                 from backend.orchestration.team_registry import TeamRegistry
-                from backend.tools.subagent_tool import DispatchSubagentsTool
+                from backend.tools.subagent_tool import (
+                    CollectSubagentsTool,
+                    DispatchSubagentsTool,
+                )
 
                 if data.plan_override:
                     # A10 (2026-08-14): override 路径 —— items 自带 task_id，
@@ -2210,11 +2213,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             agent.interrupt()
                             dispatcher.cancel()
                     agent.tool_registry.register(DispatchSubagentsTool(dispatcher))
+                    # BD (round12): 后台派发的收集侧工具（与 dispatch 配对）。
+                    agent.tool_registry.register(CollectSubagentsTool(dispatcher))
                     if (
                         agent.profile is not None
                         and agent.profile.get("tools") is not None
                     ):
                         agent.profile["tools"].append("dispatch_subagents")
+                        # BD (round12): collect 与 dispatch 成对加入白名单。
+                        agent.profile["tools"].append("collect_subagents")
                     # O4 (2026-09-08): observe_subagents 注册 —— conductor 主动
                     # 轮询子任务进度的只读工具（此前类已实现但从未接线，生产
                     # 不可用）。快照通道未装配时降级不注册，不阻塞编排。
