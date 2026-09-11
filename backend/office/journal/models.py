@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 try:  # Pydantic v2 (main, Python 3.10+)
     from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -220,7 +220,7 @@ def parse_obj(model_cls: type, data: Any) -> BaseModel:
     return model_cls.parse_obj(data)  # type: ignore[no-any-return]
 
 
-def parse_raw(model_cls: type, data: str | bytes) -> BaseModel:
+def parse_raw(model_cls: type, data: Union[str, bytes]) -> BaseModel:
     """Pydantic v1/v2 双兼容:从 JSON 字符串创建模型实例。
 
     - v2: cls.model_validate_json(data)
