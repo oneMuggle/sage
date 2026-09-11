@@ -96,11 +96,6 @@ class LlmTraceRecorder:
         _global_recorder.append(redacted)
 
     @classmethod
-    def _append_raw(cls, record: TraceRecord) -> None:
-        """跳过 redactor,仅给 exporter 双层脱敏的内层用(暂不需要,留接口)。"""
-        _global_recorder.append(record)
-
-    @classmethod
     def snapshot(cls) -> List[TraceRecord]:
         return _global_recorder.snapshot()
 

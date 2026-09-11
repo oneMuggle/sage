@@ -4,7 +4,7 @@
  * Tests cover:
  * - Button disabled while export is in progress (busy state)
  * - Success message shows "已导出到 <path>" when result.ok = true
- * - Error messages for each error code: dialog_cancelled, recorder_empty,
+ * - Error messages for each error code: dialog_cancelled,
  *   backend_unreachable, zip_generation_failed, write_failed
  * - Null guard when electronAPI.diagnostic is undefined
  */
@@ -63,7 +63,6 @@ describe('ExportButton', () => {
 
   it.each([
     ['dialog_cancelled', /已取消/],
-    ['recorder_empty', /尚未记录/],
     ['backend_unreachable', /无法连接/],
     ['zip_generation_failed', /诊断包生成失败/],
     ['write_failed', /无法写入/],
@@ -101,7 +100,9 @@ describe('ExportButton', () => {
     fireEvent.click(screen.getByTestId('diagnostic-export-btn'));
 
     await waitFor(() =>
-      expect(screen.getByTestId('diagnostic-message')).toHaveTextContent(/导出异常.*network timeout/),
+      expect(screen.getByTestId('diagnostic-message')).toHaveTextContent(
+        /导出异常.*network timeout/,
+      ),
     );
   });
 

@@ -7,7 +7,6 @@ export interface ExportButtonProps {
 
 const ERROR_MESSAGES: Record<string, string> = {
   dialog_cancelled: '已取消',
-  recorder_empty: '尚未记录任何 LLM 调用',
   backend_unreachable: '无法连接 Sage 后端,请确认应用已启动',
   zip_generation_failed: '诊断包生成失败,请查看后端日志',
   write_failed: '无法写入文件,请检查路径权限和磁盘空间',
