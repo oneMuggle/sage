@@ -179,6 +179,35 @@ export interface ProviderConfigSummary {
   config: Record<string, unknown>;
 }
 
+/**
+ * Task 10 (2026-09-11): Diagnostic export bridge for LLM trace bundles.
+ *
+ * - exportBundle: opens a native save dialog and writes a zip archive
+ *   containing LLM request/response traces + system metadata. Returns
+ *   { ok: true, path } on success or { ok: false, code, error } on failure.
+ * - preview: returns a summary of the trace dataset (count, timestamp range,
+ *   sample URLs, format version) without triggering export.
+ *
+ * Backed by `diagnostic:export` and `diagnostic:preview` IPC channels
+ * wired in electron/main.ts.
+ */
+export interface DiagnosticElectronApiBridge {
+  exportBundle: (opts: {
+    includePrompts: boolean;
+    includeHostname: boolean;
+  }) => Promise<
+    | { ok: true; path: string }
+    | { ok: false; code: string; error: string }
+  >;
+  preview: () => Promise<{
+    count: number;
+    oldestTs: string | null;
+    newestTs: string | null;
+    sampleUrls: string[];
+    version: string;
+  }>;
+}
+
 export interface ProvidersElectronApiBridge {
   list: () => Promise<ProviderConfigSummary[]>;
   get: (id: string) => Promise<ProviderConfigSummary | null>;
@@ -230,6 +259,22 @@ export interface ElectronAPI {
   journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;
   providers: ProvidersElectronApiBridge;
+  /**
+  /**
+   * Task 10 (2026-09-11): Diagnostic export bridge for LLM trace bundles.
+   * Two methods — exportBundle (native save dialog → zip) and preview
+   * (summary stats without export). IPC channels: diagnostic:export,
+   * diagnostic:preview.
+   */
+  diagnostic?: DiagnosticElectronApiBridge;
+  /**
+   * Memory IPC bridge (Gap B + Gap D). Surfaced via `electron/preload.ts`
+   * which delegates to `sage:invoke` IPC commands defined in
+   * `electron/commands.ts`. Backend wiring lives in
+   * `backend/memory/lifecycle.py` (auto_memory gate) and the existing
+   * `/api/v1/memory/*` endpoints (T1 wired the IPC routes).
+   */
+  memory: MemoryElectronApiBridge;
   /**
    * Phase 6 (2026-06-27): Native folder picker (used by LLM Wiki and Office).
    * Returns absolute path string, or null if user cancelled.
