@@ -1140,13 +1140,29 @@ class SkillConsolidationTask(BaseEvolutionTask):
             if ok:
                 recorded += 1
 
+        # Round 9: merge/revise 建议自动生成草稿（pending，走既有审批面）
+        drafts_created = 0
+        try:
+            from backend.skills.consolidator import collect_skill_docs
+
+            skill_docs = collect_skill_docs(
+                sorted({n for s in suggestions for n in s.get("skill_names", [])})
+            )
+            from backend.skills.draft_store import get_skill_draft_store as _gds
+
+            drafts_created = await service.generate_drafts(
+                suggestions, skill_docs, _gds(), source="consolidation_cron"
+            )
+        except Exception as exc:  # noqa: BLE001 — 草稿生成失败不影响台账记录
+            logger.warning("巡检草稿生成失败: %s", exc)
+
         await self._log_evolution(
             evolution_type="skill_consolidation",
             description=f"技能巡检完成: {len(skills)} 个技能, {recorded} 条建议",
             status="success",
         )
-        logger.info(f"技能巡检完成: {recorded} 条建议")
-        return recorded
+        logger.info(f"技能巡检完成: {recorded} 条建议, {drafts_created} 个草稿")
+        return recorded + drafts_created
 
     async def _log_evolution(
         self, evolution_type: str, description: str, status: str, error_message: str = None

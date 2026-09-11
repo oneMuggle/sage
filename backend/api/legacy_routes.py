@@ -3334,13 +3334,21 @@ def rollback_skill(name: str):
 
 
 @router.post("/skills/consolidation/scan")
-async def scan_skill_consolidation():
+async def scan_skill_consolidation(auto_draft: bool = True):
     """Run an LLM consolidation scan over active skills.
 
-    - 200 + ``{"suggestions": [...], "scanned": N}``
+    - 200 + ``{"suggestions": [...], "scanned": N, "drafts_created": M}``
     - 503 — LLM provider 未装配（巡检不可用）
+
+    Round 9: merge/revise 建议自动生成 SkillDraft（pending，进既有审批面，
+    落盘仍需人工批准）；archive 建议仅提示（已有可逆 archive 流程）。
+    ``auto_draft=false`` 退回仅建议模式。
     """
-    from backend.skills.consolidator import get_consolidation_service
+    from backend.skills.consolidator import (
+        collect_active_skills,
+        collect_skill_docs,
+        get_consolidation_service,
+    )
     from backend.skills.lifecycle import get_lifecycle_store
 
     service = get_consolidation_service()
@@ -3352,8 +3360,6 @@ async def scan_skill_consolidation():
                 "message": "LLM provider not configured; consolidation scan unavailable",
             },
         )
-
-    from backend.skills.consolidator import collect_active_skills
 
     store = get_lifecycle_store()
     pinned = store.get_pinned_names()
@@ -3372,7 +3378,25 @@ async def scan_skill_consolidation():
             after_content=json.dumps(suggestion, ensure_ascii=False),
             source="consolidation_scan",
         )
-    return {"suggestions": suggestions, "scanned": len(skills)}
+
+    drafts_created = 0
+    if auto_draft and suggestions:
+        from backend.skills.draft_store import get_skill_draft_store
+
+        skill_docs = collect_skill_docs(
+            sorted({n for s in suggestions for n in s.get("skill_names", [])})
+        )
+        drafts_created = await service.generate_drafts(
+            suggestions,
+            skill_docs,
+            get_skill_draft_store(),
+            source="consolidation_scan",
+        )
+    return {
+        "suggestions": suggestions,
+        "scanned": len(skills),
+        "drafts_created": drafts_created,
+    }
 
 
 @router.get("/skills/consolidation/suggestions")

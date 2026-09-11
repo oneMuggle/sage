@@ -134,6 +134,152 @@ class ConsolidationService:
         return result
 
 
+    async def draft_from_suggestion(  # noqa: PLR0911 — 守卫链逐条 return
+        self,
+        suggestion: Dict[str, Any],
+        skill_docs: Dict[str, str],
+    ) -> Optional[Dict[str, Any]]:
+        """把 merge/revise 建议生成为技能草稿 JSON（Round 9）。
+
+        archive 建议 / LLM 输出不可解析 / 校验失败 → None。
+        """
+        stype = suggestion.get("type")
+        if stype not in ("merge", "revise"):
+            return None
+        names = [n for n in suggestion.get("skill_names", []) if n in skill_docs]
+        if not names:
+            return None
+
+        if stype == "merge":
+            instruction = (
+                "以下是若干个功能重叠的技能（SKILL.md 全文）。请把它们合并为"
+                "**一个**新技能：保留各技能的可复用步骤，合并触发场景。\n"
+                '只输出 JSON：{"name": "新技能名(小写连字符)", '
+                '"description": "不超过80字", "when_to_use": "至少30字的触发场景", '
+                '"content": "完整 SKILL.md(含 frontmatter, 内容含 '
+                '## 步骤/## 触发条件/## 示例)"}\n\n'
+            )
+        else:
+            instruction = (
+                "以下技能的描述/触发条件写得含糊，值得修订。请产出修订后的"
+                "**同名**技能：仅改进 description/when_to_use 的清晰度与"
+                "正文的可执行性，不改技能用途。\n"
+                '只输出 JSON：{"name": "同名", '
+                '"description": "不超过80字", "when_to_use": "至少30字", '
+                '"content": "修订后完整 SKILL.md"}\n\n'
+            )
+
+        docs_text = "".join(
+            f"\n\n==== 技能: {n} ====\n{skill_docs[n]}" for n in names
+        )
+        prompt = instruction + docs_text
+
+        from backend.domain.message import Message
+        from backend.skills.review_service import ReviewService
+
+        try:
+            turn = await self.llm_provider.complete(
+                model=self._model,
+                messages=[
+                    Message(role="system", content="你是一个技能策展人。请输出 JSON。"),
+                    Message(role="user", content=prompt),
+                ],
+            )
+        except Exception as exc:  # noqa: BLE001 — 单条草稿失败跳过
+            logger.warning("草稿生成 LLM 调用失败: %s", exc)
+            return None
+        text = (getattr(turn, "text", None) or "").strip()
+        if not text:
+            return None
+
+        brace_start, brace_end = text.find("{"), text.rfind("}")
+        if brace_start == -1 or brace_end <= brace_start:
+            logger.warning("巡检草稿输出无 JSON 对象")
+            return None
+        try:
+            parsed = json.loads(text[brace_start : brace_end + 1])
+        except json.JSONDecodeError:
+            logger.warning("巡检草稿输出不可解析为 JSON")
+            return None
+        if not isinstance(parsed, dict):
+            return None
+
+        try:
+            ReviewService._validate_skill_name(parsed.get("name", ""))
+            ReviewService._validate_skill_schema(parsed)
+        except (ValueError, KeyError) as exc:
+            logger.warning("巡检草稿校验失败 (%s): %s", stype, exc)
+            return None
+        return {
+            "name": parsed["name"],
+            "description": parsed["description"],
+            "when_to_use": parsed["when_to_use"],
+            "content": parsed["content"],
+        }
+
+    async def generate_drafts(
+        self,
+        suggestions: List[Dict[str, Any]],
+        skill_docs: Dict[str, str],
+        draft_store: Any,
+        source: str = "consolidation_scan",
+    ) -> int:
+        """逐条生成草稿并入库（pending，走既有审批面）。返回入库数。"""
+        import time as _time
+        import uuid as _uuid
+
+        from backend.skills.review_service import SkillDraft
+
+        created = 0
+        for suggestion in suggestions:
+            draft_fields = await self.draft_from_suggestion(suggestion, skill_docs)
+            if draft_fields is None:
+                continue
+            try:
+                draft_store.insert(
+                    SkillDraft(
+                        id=str(_uuid.uuid4()),
+                        name=draft_fields["name"],
+                        description=draft_fields["description"],
+                        when_to_use=draft_fields["when_to_use"],
+                        content=draft_fields["content"],
+                        trigger_type="consolidation",
+                        source_session_id="",
+                        source_context={
+                            "consolidation": True,
+                            "suggestion": suggestion,
+                            "source": source,
+                        },
+                        status="pending",
+                        created_at=int(_time.time() * 1000),
+                    )
+                )
+                created += 1
+            except Exception as exc:  # noqa: BLE001 — 单条失败跳过
+                logger.warning("巡检草稿入库失败: %s", exc)
+        return created
+
+
+def collect_skill_docs(names: List[str]) -> Dict[str, str]:
+    """读取指定技能的 SKILL.md 全文（草稿合并/修订输入）。缺失跳过。"""
+    try:
+        from backend.skills.loader import get_skill_loader
+
+        loader = get_skill_loader()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("skill loader 获取失败: %s", exc)
+        return {}
+    docs: Dict[str, str] = {}
+    for name in names:
+        try:
+            content = loader.read(name)
+        except Exception:  # noqa: BLE001 — 单个读取失败跳过
+            content = None
+        if content:
+            docs[name] = content
+    return docs
+
+
 def collect_active_skills() -> List[Dict[str, Any]]:
     """收集 active（未归档）技能的巡检输入清单。
 
