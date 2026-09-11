@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **Word 内容元素(Round 8)**: word generate 插图支持行内放置(after_paragraph)与题注自动编号("图N");表格支持题注("表N")/学术三线表/表头跨页重复/固定列宽/合并单元格;多级标题自动编号(1/1.1/1.1.1,format_spec.numbering);修复受管路径丢弃 images 的缺口
 - **Word 版式引擎 FormatSpec(Round 7)**: word generate 新增可选 `format_spec`——页边距/纸张/方向、正文(字号/行距/首行缩进/段距/对齐)、Title 与标题样式覆盖(字号/加粗/颜色/间距)、页眉文本、页脚页码域;"版式即配置",格式要求由确定性代码注入而非 prompt 口头约定;不传时行为零变化
 - **PDF 全链路**: 中文生成修复(CID 字体)、文本/表格/表单读取、生成、AcroForm 填写、PDF→Word(文本级)、Office→PDF 导出(检测本机 LibreOffice/Word)
 - **PDF/模板 LLM 工具 6 件**: office_read_pdf / office_generate_pdf / office_read_pdf_form / office_fill_pdf_form / office_analyze_word_template / office_fill_word_template

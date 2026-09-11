@@ -271,11 +271,14 @@ class OfficeCreateTool(BaseTool):
                         "description": (
                             "Structured content as a JSON object, keyed by "
                             "doc_type: word → {title, format_spec?:{page?, "
-                            "body?, headings?, title?, header?, footer?} "
-                            "版式规范, paragraphs:[{text, "
+                            "body?, headings?, title?, header?, footer?, "
+                            "numbering?} 版式规范, paragraphs:[{text, "
                             "heading?, font_size?, bold?, italic?, color?, "
-                            "align?}], tables:[{headers, rows[]}], images?:"
-                            "[{source, width_inches?, height_inches?}]}; "
+                            "align?}], tables:[{headers, rows[], caption?, "
+                            "style?, header_repeat?, column_widths_cm?, "
+                            "merges?}], images?:"
+                            "[{source, width_inches?, height_inches?, "
+                            "caption?, after_paragraph?}]}; "
                             "excel → {sheets:[{name, headers[], rows[], "
                             "column_widths?}], charts?:[{sheet?, type, anchor, "
                             "data_ref, title?}]}; ppt → {slides:[{title, "
@@ -478,6 +481,14 @@ class OfficeCreateTool(BaseTool):
                                             "page_number": {"type": "boolean"},
                                         },
                                     },
+                                    "numbering": {
+                                        "type": "boolean",
+                                        "description": (
+                                            "多级标题自动编号（Round 8）：为 "
+                                            "h1/h2/h3 生成 1 / 1.1 / 1.1.1 "
+                                            "文本前缀；标题文本不要再手写编号"
+                                        ),
+                                    },
                                 },
                             },
                             "paragraphs": {
@@ -523,11 +534,27 @@ class OfficeCreateTool(BaseTool):
                                         },
                                         "width_inches": {"type": "number"},
                                         "height_inches": {"type": "number"},
+                                        "caption": {
+                                            "type": "string",
+                                            "description": (
+                                                "图题注文本；非空时在图下方生成"
+                                                "居中题注并自动编号（图1/图2…）"
+                                            ),
+                                        },
+                                        "after_paragraph": {
+                                            "type": "integer",
+                                            "description": (
+                                                "行内插图：插入到 paragraphs 该"
+                                                "下标（0-based）之后；不传=文末"
+                                                "追加（旧行为）"
+                                            ),
+                                        },
                                     },
                                     "required": ["source"],
                                 },
                                 "description": (
-                                    "word 插图列表，按顺序追加在正文之后（批次2）。"
+                                    "word 插图列表（批次2文末追加；Round 8 起"
+                                    "支持 after_paragraph 行内放置与题注编号）。"
                                 ),
                             },
                             "tables": {
@@ -544,6 +571,54 @@ class OfficeCreateTool(BaseTool):
                                             "items": {
                                                 "type": "array",
                                                 "items": {"type": "string"},
+                                            },
+                                        },
+                                        "caption": {
+                                            "type": "string",
+                                            "description": (
+                                                "表题注文本；非空时在表上方生成"
+                                                "居中题注并自动编号（表1/表2…）"
+                                            ),
+                                        },
+                                        "style": {
+                                            "type": "string",
+                                            "enum": ["grid", "three_line"],
+                                            "description": (
+                                                "'three_line'=学术三线表；"
+                                                "'grid'=全网格；不传=默认无框"
+                                            ),
+                                        },
+                                        "header_repeat": {
+                                            "type": "boolean",
+                                            "description": "表头跨页重复",
+                                        },
+                                        "column_widths_cm": {
+                                            "type": "array",
+                                            "items": {"type": "number"},
+                                            "description": (
+                                                "各列列宽（厘米），长度须等于列数"
+                                            ),
+                                        },
+                                        "merges": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "min_row": {"type": "integer"},
+                                                    "max_row": {"type": "integer"},
+                                                    "min_col": {"type": "integer"},
+                                                    "max_col": {"type": "integer"},
+                                                },
+                                                "required": [
+                                                    "min_row",
+                                                    "max_row",
+                                                    "min_col",
+                                                    "max_col",
+                                                ],
+                                                "description": (
+                                                    "合并区域（0-based 含端点；"
+                                                    "被合并的非左上角单元格请传空字符串）"
+                                                ),
                                             },
                                         },
                                     },

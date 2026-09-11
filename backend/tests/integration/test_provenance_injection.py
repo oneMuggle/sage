@@ -70,7 +70,13 @@ def _make_draft():
 
 def test_approve_injects_provenance_frontmatter(client, monkeypatch, tmp_path):
     """审批落盘的 SKILL.md frontmatter 含 metadata.provenance=agent-created"""
+    from backend.skills.draft_store import reset_skill_draft_store
     from backend.skills.loader import get_skill_loader, reset_skill_loader
+
+    # 单例可能被同 worker 先行测试缓存到其临时 db_path（表已不在）——
+    # 与 reset_skill_loader 同理，先重置再绑定当前测试的数据库。
+    # xdist loadfile 分配变化时该隐患即显现（no such table: skill_drafts）。
+    reset_skill_draft_store()
 
     _patch_plain_fs_loader(monkeypatch, tmp_path / "skills")
     reset_skill_loader()

@@ -290,6 +290,20 @@ class ImageSourceSpec(BaseModel):
     height_inches: Optional[float] = Field(default=None, gt=0, le=24)
 
 
+class WordImageSpec(ImageSourceSpec):
+    """Word 文档插图（Round 8）：在 ImageSourceSpec 基础上支持行内放置与题注。
+
+    ``after_paragraph`` 为 ``paragraphs`` 的 0-based 下标，图片插入到该段落
+    之后；None = 文末追加（Round 7 之前的既有行为）。越界在生成期钳到末尾。
+    ``caption`` 非空时生成居中题注（"图N　caption"），图号全文独立计数。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    caption: Optional[str] = Field(default=None, max_length=200)
+    after_paragraph: Optional[int] = Field(default=None, ge=0)
+
+
 class PptSlideSpec(BaseModel):
     """One slide to generate in a PPT."""
 
@@ -343,13 +357,40 @@ class WordParagraphSpec(BaseModel):
     align: Optional[Literal["left", "center", "right", "justify"]] = None
 
 
+class WordCellMergeSpec(BaseModel):
+    """表格合并区域（Round 8）：0-based 含端点矩形（与 rows/headers 下标
+    心智模型一致，区别于 ExcelCellRange 的 1-based）。生成期校验越界。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_row: int = Field(ge=0)
+    max_row: int = Field(ge=0)
+    min_col: int = Field(ge=0)
+    max_col: int = Field(ge=0)
+
+
 class WordTableSpec(BaseModel):
-    """One table in a generated Word document."""
+    """One table in a generated Word document.
+
+    Round 8 新增：表题注（自动 "表N　caption"）、三线表样式、表头跨页
+    重复、列宽、合并单元格；全部可选，None/false 保持既有默认网格行为。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     headers: _constrained_list(str, min_length=1, max_length=50)
     rows: _constrained_list(_constrained_list(str), max_length=1000) = Field(default_factory=list)
+    caption: Optional[str] = Field(default=None, max_length=200)
+    style: Optional[Literal["grid", "three_line"]] = Field(
+        default=None,
+        description="None/'grid' = 默认网格；'three_line' = 学术三线表",
+    )
+    header_repeat: bool = Field(default=False, description="表头跨页重复")
+    column_widths_cm: Optional[_constrained_list(float, max_length=50)] = Field(
+        default=None,
+        description="各列列宽（厘米）；None 不设置，长度须等于列数",
+    )
+    merges: _constrained_list(WordCellMergeSpec, max_length=200) = Field(default_factory=list)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -442,6 +483,8 @@ class WordFormatSpec(BaseModel):
     title: Optional[WordHeadingStyleSpec] = None
     header: Optional[WordHeaderFooterSpec] = None
     footer: Optional[WordHeaderFooterSpec] = None
+    # Round 8：多级标题自动编号（h1/h2/h3 计数器，字面 "N.M.K" 文本前缀）。
+    numbering: bool = Field(default=False, description="为 h1/h2/h3 生成 1 / 1.1 / 1.1.1 编号前缀")
 
 
 class OfficeWordGenerateRequest(BaseModel):
@@ -454,15 +497,18 @@ class OfficeWordGenerateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     paragraphs: _constrained_list(WordParagraphSpec, max_length=5000) = Field(default_factory=list)
     tables: _constrained_list(WordTableSpec, max_length=100) = Field(default_factory=list)
-    # 批次 2.1：可选插图，按顺序追加在正文段落/表格之后。
-    images: _constrained_list(ImageSourceSpec, max_length=20) = Field(default_factory=list)
+    # 批次 2.1：可选插图。Round 8 起为 WordImageSpec——支持行内放置
+    # （after_paragraph）与题注（caption）；旧 payload（仅 source/宽高）兼容。
+    # Union 子类在前：dict 输入由 WordImageSpec 承接（新字段生效），
+    # 既有调用方构造的 ImageSourceSpec 父类实例也继续被接受。
+    images: _constrained_list(Union[WordImageSpec, ImageSourceSpec], max_length=20) = Field(
+        default_factory=list
+    )
     # Round 7 FormatSpec：显式版式（页边距/正文/标题/页眉页脚）。
     format_spec: Optional[WordFormatSpec] = Field(
         default=None,
         description="版式规范；None 保持默认版式（行为与历史版本一致）",
     )
-    # 批次 2.1：可选插图，按顺序追加在正文段落/表格之后。
-    images: _constrained_list(ImageSourceSpec, max_length=20) = Field(default_factory=list)
     font_family: Optional[str] = Field(
         default=None,
         description="中文正文字体名（如'宋体'/'微软雅黑'/'等线'），默认宋体",
