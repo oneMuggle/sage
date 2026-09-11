@@ -376,6 +376,28 @@ class ChatDispatcher:
         )
         return self._bg_task
 
+    def background_snapshot(self) -> Dict[str, Any]:
+        """BD3 (round13): 非阻塞快照 —— 各子任务当前状态与结果预览。
+
+        status: none（从未后台派发）/ running（在飞）/ completed（已终态）。
+        """
+        if self._bg_task is None:
+            status = "none"
+        elif self._bg_task.done():
+            status = "completed"
+        else:
+            status = "running"
+        tasks = [
+            {
+                "task_id": s.task_id,
+                "status": s.status,
+                "output_preview": self._preview(s),
+                "error": (s.error[:200] if s.error else None),
+            }
+            for s in self._states.values()
+        ]
+        return {"status": status, "tasks": tasks}
+
     async def wait_background(self, timeout: Optional[float] = None) -> str:
         """等待后台派发完成，返回聚合 markdown。
 
@@ -486,17 +508,18 @@ class ChatDispatcher:
                     followup_of,
                     task_id,
                 )
-            # RD2 (round10): 重派原语 —— 源任务须本 run 内已终态失败/被取消。
-            # 无效（不存在/done/自指）降级普通新任务（与无效 followup_of 同款
-            # 降级路径）。与 followup_of 互斥时 retry_of 优先：重派不建依赖
-            # （源是 failed，建依赖会被 build_waves 级联判死）。
+            # RD2/RD13 (round10/13): 重派原语 —— 源任务须本 run 内存在、非
+            # 自身、且未 done（done 用 followup_of 续聊）。同批场景下源在
+            # 解析时可能尚未执行（queued/running 也接受），失败原因由
+            # _apply_retry_inheritance 在执行期读取。无效（不存在/done/自指）
+            # 降级普通新任务（与无效 followup_of 同款降级路径）。
             retry_of_raw = raw.get("retry_of")
             state.retry_of = (
                 retry_of_raw
                 if isinstance(retry_of_raw, str)
                 and retry_of_raw != task_id
                 and retry_of_raw in self._states
-                and self._states[retry_of_raw].status in ("failed", "cancelled")
+                and self._states[retry_of_raw].status != "done"
                 else None
             )
             if retry_of_raw is not None and state.retry_of is None:
@@ -659,6 +682,15 @@ class ChatDispatcher:
                 and state.parent_task_id not in deps_by_id[state.task_id]
             ):
                 deps_by_id[state.task_id].append(state.parent_task_id)
+
+        # RD13 (round13): 重派任务剥离指向重派源的依赖 —— 源在同批先行失败
+        # 时，波间闭包会把依赖它的重派任务连带判死（blocked_by_failed:），
+        # 重派语义要求其独立执行（其余依赖保留波次语义）。
+        for state in states:
+            if state.retry_of and state.retry_of in deps_by_id.get(state.task_id, []):
+                deps_by_id[state.task_id] = [
+                    dep for dep in deps_by_id[state.task_id] if dep != state.retry_of
+                ]
 
         try:
             waves = build_waves([s.task_id for s in states], deps_by_id)
