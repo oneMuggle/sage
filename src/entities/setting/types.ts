@@ -94,7 +94,10 @@ export interface OrchSettings {
   // "ask" = 风险工具逐次审批（子代理审批请求转发前端弹窗）;
   // "auto" = 非危险工具自动批准（破坏性/可疑命令/工作区越界仍转人工）。
   // 与后端 ``OrchSettings.subagent_approval_mode`` camelCase 对齐。
-  subagentApprovalMode: 'ask' | 'auto'; // 'ask'
+  subagentApprovalMode: 'ask' | 'auto';
+  // BU4 (round11/14): run 级 token 预算（该 run 首次派发起，本 session 累计
+  // total_tokens 上限）。0 = 关闭。超限后剩余任务收口、后续派发被拒。
+  runTokenBudget: number; // 0 // 'ask'
 }
 
 /** All application settings */
@@ -166,6 +169,7 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   maxSubagentIterations: 6,
   worktreeIsolation: false,
   subagentApprovalMode: 'ask',
+  runTokenBudget: 0,
 };
 
 /** Sensible defaults for all settings */
