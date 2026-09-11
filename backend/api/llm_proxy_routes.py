@@ -709,6 +709,7 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
     # 非流式路径：也需要强制 Accept-Encoding: identity，避免上游返回压缩响应
     # 导致 httpx 自动解压时出错（Error -3 while decompressing data: incorrect header check）
     non_streaming_headers = {**fwd_headers, "Accept-Encoding": "identity"}
+    response_body = b""
     try:
         async with _client_for_resolved_address(resolved_address) as client, client.stream(
             method=request.method,
@@ -719,7 +720,42 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
             if upstream_resp.is_success:
                 response_body = await _read_response_body_limited(upstream_resp)
             else:
-                response_body = b""
+                try:
+                    response_body = await _read_response_body_limited(upstream_resp)
+                except ValueError:
+                    # Preserve the existing 502 response-body limit behavior while
+                    # still recording the failed upstream call before it propagates.
+                    _safe_record_trace(TraceRecord(
+                        trace_id=_trace_id,
+                        ts=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+
+                        endpoint=_trace_endpoint,
+                        upstream_url=upstream_url,
+                        upstream_method=_trace_method,
+                        request_headers=_trace_req_headers,
+                        request_body=_trace_req_body,
+                        response_status=upstream_resp.status_code,
+                        response_headers=dict(upstream_resp.headers),
+                        response_body=b"",
+                        response_streamed=False,
+                        duration_ms=int((_time.monotonic() - _trace_start_monotonic) * 1000),
+                        error_class=f"upstream_{upstream_resp.status_code}",
+                    ))
+                    raise
+                _safe_record_trace(TraceRecord(
+                    trace_id=_trace_id,
+                    ts=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+
+                    endpoint=_trace_endpoint,
+                    upstream_url=upstream_url,
+                    upstream_method=_trace_method,
+                    request_headers=_trace_req_headers,
+                    request_body=_trace_req_body,
+                    response_status=upstream_resp.status_code,
+                    response_headers=dict(upstream_resp.headers),
+                    response_body=response_body,
+                    response_streamed=False,
+                    duration_ms=int((_time.monotonic() - _trace_start_monotonic) * 1000),
+                    error_class=f"upstream_{upstream_resp.status_code}",
+                ))
     except ValueError as exc:
         if str(exc) == "response exceeds configured limit":
             raise HTTPException(
@@ -947,10 +983,29 @@ async def _proxy_streaming(
 
         if not upstream_resp.is_success:
             # 上游 4xx/5xx:还没 yield 任何 chunk,可以直接抛 HTTPException 把
-            # 错误体交给 FastAPI(调用方拿到的还是 JSON,不是 SSE)。
+            # 错误体交给 FastAPI(调用方拿到的还是 JSON,不是 SSE)。先完整读取并
+            # 记录错误响应,再关闭请求上下文,避免诊断 trace 丢失响应体。
+            response_body = b""
             try:
-                await _read_response_body_limited(upstream_resp)
+                response_body = await _read_response_body_limited(upstream_resp)
             except ValueError as exc:
+                _safe_record_trace(TraceRecord(
+                    trace_id=trace_id,
+                    ts=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+
+                    endpoint=trace_endpoint,
+                    upstream_url=upstream_url,
+                    upstream_method=method,
+                    request_headers=dict(trace_req_headers) if trace_req_headers else {},
+                    request_body=trace_req_body or b"",
+                    response_status=upstream_resp.status_code,
+                    response_headers=dict(upstream_resp.headers),
+                    response_body=b"",
+                    response_streamed=True,
+                    duration_ms=int((_time.monotonic() - trace_start_monotonic) * 1000)
+                    if trace_start_monotonic
+                    else 0,
+                    error_class=f"upstream_{upstream_resp.status_code}",
+                ))
                 raise HTTPException(
                     status_code=502,
                     detail={
@@ -958,6 +1013,24 @@ async def _proxy_streaming(
                         "message": _SAFE_UPSTREAM_MESSAGES["response_body_too_large"],
                     },
                 ) from exc
+            else:
+                _safe_record_trace(TraceRecord(
+                    trace_id=trace_id,
+                    ts=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+
+                    endpoint=trace_endpoint,
+                    upstream_url=upstream_url,
+                    upstream_method=method,
+                    request_headers=dict(trace_req_headers) if trace_req_headers else {},
+                    request_body=trace_req_body or b"",
+                    response_status=upstream_resp.status_code,
+                    response_headers=dict(upstream_resp.headers),
+                    response_body=response_body,
+                    response_streamed=True,
+                    duration_ms=int((_time.monotonic() - trace_start_monotonic) * 1000)
+                    if trace_start_monotonic
+                    else 0,
+                    error_class=f"upstream_{upstream_resp.status_code}",
+                ))
             finally:
                 await req_ctx.__aexit__(None, None, None)
                 await client.__aexit__(None, None, None)

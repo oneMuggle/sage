@@ -8,10 +8,8 @@
    401 状态码、"Invalid API key" 错误消息,
    且本地 Authorization 已脱敏
 
-注意: 当前代理层在 upstream 返回 4xx/5xx 时不走 trace 记录路径
-(只记录 2xx 成功调用)。因此本测试手动 seed 一条 401 TraceRecord,
-模拟"代理已记录此错误调用"的状态,聚焦验证诊断导出管道的正确性。
-代理层的 error-path 自动记录是后续任务。
+注意:代理层在 upstream 返回 4xx/5xx 时会记录 trace,本测试验证代理调用本身产出
+诊断记录,再验证诊断导出管道的正确性。
 
 遵循项目现有 e2e/integration 测试风格:
 - 使用 conftest.py 的 ``client`` fixture(httpx.AsyncClient + ASGITransport)
@@ -24,13 +22,12 @@ import io
 import json
 import socket
 import zipfile
-from datetime import datetime, timezone
 
 import pytest
 import respx
 from httpx import Response
 
-from backend.services.llm_trace.recorder import LlmTraceRecorder, TraceRecord
+from backend.services.llm_trace.recorder import LlmTraceRecorder
 
 pytestmark = [pytest.mark.e2e]
 
@@ -93,39 +90,18 @@ async def test_diagnostic_401_journey(client):
 
     assert resp.status_code == 401, f"proxy should forward 401, got {resp.status_code}"
 
-    # ── Step 3: seed 一条 401 TraceRecord ──
-    # 当前代理层仅在 2xx 成功路径调用 _safe_record_trace;
-    # 401/5xx 错误路径尚未接入 trace 记录(后续任务)。
-    # 这里手动 seed 模拟"代理已记录此错误调用"的状态,
-    # 聚焦验证诊断导出管道(zip 生成 / 字段保留 / 脱敏)的正确性。
-    LlmTraceRecorder.append(TraceRecord(
-        trace_id="e2e-401-journey",
-        ts=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+
-        endpoint="/api/v1/llm/v1/chat/completions",
-        upstream_url=f"{UPSTREAM}{CHAT_PATH}",
-        upstream_method="POST",
-        # 注意: X-Sage-Local-Authorization 被代理层剥离,不会到达上游,
-        # 因此 trace 中不会出现(与 test_llm_proxy_routes.py 行为一致)。
-        # 只记录转给上游的 headers。
-        request_headers={
-            "Authorization": "Bearer sk-fake-key-12345",
-            "Content-Type": "application/json",
-        },
-        request_body=b'{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"hi"}]}',
-        response_status=401,
-        response_headers={"content-type": "application/json"},
-        response_body=json.dumps(error_body).encode("utf-8"),
-        response_streamed=False,
-        duration_ms=120,
-        error_class="upstream_401",
-    ))
+    # ── Step 3: 验证 recorder 自动记录了 401 调用 ──
+    # 代理层在 upstream 返回 4xx/5xx 时自动调用 _safe_record_trace,
+    # 无需手动 seed。验证 recorder 中至少有 1 条记录。
+    records = LlmTraceRecorder.snapshot()
+    assert len(records) >= 1, "proxy should auto-record 401 trace"
 
     # ── Step 4: 导出诊断包 ──
     export_resp = await client.post("/api/v1/diagnostic/export")
     assert export_resp.status_code == 200
     assert export_resp.headers["content-type"].startswith("application/zip")
 
-    # ── Step 5: 解 zip 并断言 ──
+    # ── Step 4: 解 zip 并断言 ──
     zf = zipfile.ZipFile(io.BytesIO(export_resp.content))
     names = zf.namelist()
     assert "trace.jsonl" in names, f"trace.jsonl missing from zip: {names}"
