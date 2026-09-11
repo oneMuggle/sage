@@ -159,6 +159,9 @@ class ChatTaskState:
     # L2 (2026-08-23): followup_of 已携带但无法建立父依赖（不存在/未完成/自指）
     # → 降级为普通新任务并置位，聚合时对 conductor 显式提示不含续聊上下文。
     followup_degraded: bool = False
+    # RD2 (round10): 重派原语 —— 本任务重派自哪个已失败/被取消的任务（继承
+    # 其 scratch 现场 + error 注入 retry_hint）。None = 普通任务/降级。
+    retry_of: Optional[str] = None
     # live-events P0: 派发本次批次的 conductor 工具调用 ID —— 前端聊天流内
     # 把 subagent_event 实时步骤关联到 "Delegate <goal>" 卡片的关联键。
     parent_tool_call_id: Optional[str] = None
@@ -444,6 +447,25 @@ class ChatDispatcher:
                     followup_of,
                     task_id,
                 )
+            # RD2 (round10): 重派原语 —— 源任务须本 run 内已终态失败/被取消。
+            # 无效（不存在/done/自指）降级普通新任务（与无效 followup_of 同款
+            # 降级路径）。与 followup_of 互斥时 retry_of 优先：重派不建依赖
+            # （源是 failed，建依赖会被 build_waves 级联判死）。
+            retry_of_raw = raw.get("retry_of")
+            state.retry_of = (
+                retry_of_raw
+                if isinstance(retry_of_raw, str)
+                and retry_of_raw != task_id
+                and retry_of_raw in self._states
+                and self._states[retry_of_raw].status in ("failed", "cancelled")
+                else None
+            )
+            if retry_of_raw is not None and state.retry_of is None:
+                logger.warning(
+                    "无效 retry_of=%r，任务 %s 降级为普通新任务",
+                    retry_of_raw,
+                    task_id,
+                )
             self._states[state.task_id] = state
             states.append(state)
             self._emit_task_status(state)  # queued
@@ -702,6 +724,7 @@ class ChatDispatcher:
             "scratch_dir": str(scratch_dir),
             "workspace_dir": str(workspace_dir) if workspace_dir else None,
         }
+        self._apply_retry_inheritance(state, parameters)
         if state.parent_task_id is not None:
             parameters["history"] = self._histories.get(state.parent_task_id, [])
         if state.output_schema is not None:
@@ -824,6 +847,36 @@ class ChatDispatcher:
             if isinstance(messages, list):
                 self._histories[state.task_id] = list(messages)
         return result_payload["output"]
+
+    def _apply_retry_inheritance(
+        self, state: ChatTaskState, parameters: Dict[str, Any]
+    ) -> None:
+        """RD2 (round10): 重派继承（就地改 parameters）。
+
+        源任务 scratch 现场延续（避免重派=从零再来）+ error 注入 retry_hint
+        （RT9 消费端前置"【重试 · 第 N 次】上次执行失败…"进子代理 prompt）。
+        非 retry 任务（state.retry_of 为空）无操作。
+        """
+        if not state.retry_of:
+            return
+        src_state = self._states.get(state.retry_of)
+        src_task = self.task_registry.get_task(f"task-{state.retry_of}")
+        src_scratch = (
+            src_task.parameters.get("scratch_dir") if src_task is not None else None
+        )
+        if isinstance(src_scratch, str) and src_scratch:
+            parameters["scratch_dir"] = src_scratch
+        parameters["retry_hint"] = {
+            "attempt": (src_state.retry_count if src_state is not None else 0) + 1,
+            "last_error": str(
+                (src_state.error if src_state is not None else None) or "unknown"
+            )[:2000],
+        }
+        logger.info(
+            "任务 %s 为 %s 的重派（继承 scratch 现场 + 失败原因）",
+            state.task_id,
+            state.retry_of,
+        )
 
     async def _create_worktree_for(self, state: ChatTaskState) -> Optional[Path]:
         """按配置为任务创建 worktree；任何不可用情况都回落 scratch。
