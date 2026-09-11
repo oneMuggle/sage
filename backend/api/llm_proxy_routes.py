@@ -825,9 +825,9 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
     # 6. 透传响应(过滤 hop-by-hop 响应头)
     resp_headers = _filter_response_headers(upstream_resp.headers)
 
-    # LLM trace tee — 非流式路径在拿到 response_body 后写 recorder。失败
-    # 路径已经在上方 try/except 转成 HTTPException 直接抛,这里只覆盖成功
-    # 调用(2xx);调用方拿到的 response body 字节与未改前完全一致。
+    # LLM trace tee — 非流式路径在拿到 response_body 后写 recorder。
+    # 错误路径(4xx/5xx)已在上方 async with 内记录(含 error_class),
+    # 这里只覆盖成功调用(2xx);调用方拿到的 response body 字节与未改前完全一致。
     _safe_record_trace(TraceRecord(
         trace_id=_trace_id,
         ts=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+

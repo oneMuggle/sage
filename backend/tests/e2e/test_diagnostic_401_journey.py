@@ -101,7 +101,7 @@ async def test_diagnostic_401_journey(client):
     assert export_resp.status_code == 200
     assert export_resp.headers["content-type"].startswith("application/zip")
 
-    # ── Step 4: 解 zip 并断言 ──
+    # ── Step 5: 解 zip 并断言 ──
     zf = zipfile.ZipFile(io.BytesIO(export_resp.content))
     names = zf.namelist()
     assert "trace.jsonl" in names, f"trace.jsonl missing from zip: {names}"
