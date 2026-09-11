@@ -22,6 +22,7 @@ from typing import Optional
 
 from backend.memory.embedder import (
     BGE_SMALL_ZH_DIMENSIONS,
+    Embedder,
     HashEmbedder,
     OnnxEmbedder,
 )
