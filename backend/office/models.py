@@ -440,6 +440,8 @@ class BibTeXParseResponse(BaseModel):
     references: _constrained_list(ReferenceSpec, max_length=200)
 
 
+
+
 class WordCellMergeSpec(BaseModel):
     """表格合并区域（Round 8）：0-based 含端点矩形（与 rows/headers 下标
     心智模型一致，区别于 ExcelCellRange 的 1-based）。生成期校验越界。"""
@@ -1036,3 +1038,49 @@ class PdfFormFillResult(BaseModel):
     filename: str
     file_size_bytes: int
     filled_count: int
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Word 格式 Linter（Round 10）：对照 FormatSpec 校验任意 .docx。
+# 规则与生成器对偶——spec 未提供的项不产生规则（None = 不检查）。
+# ──────────────────────────────────────────────────────────────────────
+
+
+class WordLintIssue(BaseModel):
+    """单条格式违规。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: str = Field(
+        min_length=1, max_length=80,
+        description="规则标识，如 page/margins、caption/sequence",
+    )
+    severity: Literal["error", "warning"]
+    message: str = Field(min_length=1, max_length=1000, description="含实测值 vs 期望值")
+    fix_hint: str = Field(default="", max_length=1000, description="中文修复建议")
+
+
+class WordLintResult(BaseModel):
+    """Linter 汇总结果。``ok`` = 无 error 级违规。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    issue_count: int = Field(ge=0)
+    error_count: int = Field(ge=0)
+    warning_count: int = Field(ge=0)
+    checked_rules: _constrained_list(str, max_length=100) = Field(default_factory=list)
+    issues: _constrained_list(WordLintIssue, max_length=500) = Field(default_factory=list)
+
+
+class WordLintRequest(BaseModel):
+    """POST /api/v1/office/word/lint。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str = Field(min_length=1, max_length=2000, description="待校验 .docx 路径")
+    format_spec: WordFormatSpec
+    max_size_bytes: int = Field(
+        default=50 * 1024 * 1024, ge=1024, description="Reject files larger than this"
+    )
