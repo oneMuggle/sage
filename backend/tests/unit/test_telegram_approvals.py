@@ -1,4 +1,9 @@
-"""Telegram 审批转发与命令测试（Round 10）"""
+"""Telegram 审批转发与命令测试（Round 10 / 12 补充命令）
+
+gate 替身通过 monkeypatch fixture 注入 —— 断言失败也会自动恢复
+_global_gate，杜绝跨文件污染（此前手动 MonkeyPatch 在失败路径
+不 undo，曾污染 test_agent_tool_loop 的 get_permission_gate）。
+"""
 
 from __future__ import annotations
 
@@ -24,6 +29,8 @@ class FakeTransport:
 
 
 class FakeGate:
+    """与 ApprovalGate 同接口的最小替身（补 request —— 老版污染源已修）"""
+
     def __init__(self):
         self.requests: list = []
         self.answers: list = []
@@ -44,6 +51,10 @@ class FakeGate:
                 self.requests.pop(i)
                 return True
         return False
+
+    async def request(self, req, timeout=None):
+        self.answers.append((req.request_id, True))
+        return SimpleNamespace(approved=True, remember=False, answered_by="test")
 
 
 def _req(rid: str, tool: str = "bash", risk: str = "destructive"):
@@ -71,171 +82,120 @@ def tmp_db(monkeypatch):
     db.close()
 
 
-def _make(tmp_db, gate):
+@pytest.fixture()
+def gateway(tmp_db, monkeypatch):
+    """网关 + 已注入 FakeGate 的全局闸口（自动恢复）"""
+    import backend.services.permission_gate as pg
+
+    gate = FakeGate()
+    monkeypatch.setattr(pg, "_global_gate", gate)
     config = TelegramConfig(
         bot_token="tok", allowed_chat_ids=["111"], poll_timeout_seconds=0
     )
-    return TelegramGateway(
+    gw = TelegramGateway(
         config=config,
         transport=FakeTransport(),
         llm_factory=lambda sid: None,
         db=tmp_db,
     )
+    return gw, gate
 
 
 class TestApprovalForwarding:
-    def test_new_pending_forwarded_once(self, tmp_db):
-        import backend.services.permission_gate as pg
-
-        gate = FakeGate()
+    def test_new_pending_forwarded_once(self, gateway):
+        gw, gate = gateway
         gate.requests.append(_req("aaaabbbb-1111-2222-3333-444444444444"))
-        monkey = pytest.MonkeyPatch()
-        monkey.setattr(pg, "_global_gate", gate)
-        gateway = _make(tmp_db, gate)
-        gateway.transport.updates = []  # 无消息也触发转发
-        gateway.poll_once()
-        gateway.poll_once()
-        sent = [t for _, t in gateway.transport.sent]
+        gw.transport.updates = []  # 无消息也触发转发
+        gw.poll_once()
+        gw.poll_once()
+        sent = [t for _, t in gw.transport.sent]
         assert sum("待审批" in t for t in sent) == 1  # 去重
         assert "/approve aaaabbbb" in sent[0]
 
 
 class TestApprovalCommands:
-    def test_approve_command_resolves_gate(self, tmp_db):
-        import backend.services.permission_gate as pg
-
-        gate = FakeGate()
+    def test_approve_command_resolves_gate(self, gateway):
+        gw, gate = gateway
         gate.requests.append(_req("aaaabbbb-1111-2222-3333-444444444444"))
-        monkey = pytest.MonkeyPatch()
-        monkey.setattr(pg, "_global_gate", gate)
-        try:
-            gateway = _make(tmp_db, gate)
-            reply = gateway.handle_update(
-                {"message": {"chat": {"id": 111}, "text": "/approve aaaabbbb"}}
-            )
-            assert reply is not None
-            assert "已批准" in reply
-            assert gate.answers == [("aaaabbbb-1111-2222-3333-444444444444", True)]
-        finally:
-            monkey.undo()
+        reply = gw.handle_update(
+            {"message": {"chat": {"id": 111}, "text": "/approve aaaabbbb"}}
+        )
+        assert reply is not None
+        assert "已批准" in reply
+        assert gate.answers == [("aaaabbbb-1111-2222-3333-444444444444", True)]
 
-    def test_deny_command(self, tmp_db):
-        import backend.services.permission_gate as pg
-
-        gate = FakeGate()
+    def test_deny_command(self, gateway):
+        gw, gate = gateway
         gate.requests.append(_req("ccccdddd-1111-2222-3333-444444444444", tool="rm"))
-        monkey = pytest.MonkeyPatch()
-        monkey.setattr(pg, "_global_gate", gate)
-        try:
-            gateway = _make(tmp_db, gate)
-            reply = gateway.handle_update(
-                {"message": {"chat": {"id": 111}, "text": "/deny ccccdddd"}}
-            )
-            assert "已拒绝" in reply
-            assert gate.answers == [("ccccdddd-1111-2222-3333-444444444444", False)]
-        finally:
-            monkey.undo()
+        reply = gw.handle_update(
+            {"message": {"chat": {"id": 111}, "text": "/deny ccccdddd"}}
+        )
+        assert "已拒绝" in reply
+        assert gate.answers == [("ccccdddd-1111-2222-3333-444444444444", False)]
 
-    def test_unknown_short_id(self, tmp_db):
-        import backend.services.permission_gate as pg
+    def test_unknown_short_id(self, gateway):
+        gw, _ = gateway
+        reply = gw.handle_update(
+            {"message": {"chat": {"id": 111}, "text": "/approve zzzzzzzz"}}
+        )
+        assert "未找到" in reply
 
-        gate = FakeGate()
-        monkey = pytest.MonkeyPatch()
-        monkey.setattr(pg, "_global_gate", gate)
-        try:
-            gateway = _make(tmp_db, gate)
-            reply = gateway.handle_update(
-                {"message": {"chat": {"id": 111}, "text": "/approve zzzzzzzz"}}
-            )
-            assert "未找到" in reply
-        finally:
-            monkey.undo()
-
-    def test_pending_listing(self, tmp_db):
-        import backend.services.permission_gate as pg
-
-        gate = FakeGate()
+    def test_pending_listing(self, gateway):
+        gw, gate = gateway
         gate.requests.append(_req("aaaabbbb-1111-2222-3333-444444444444"))
-        monkey = pytest.MonkeyPatch()
-        monkey.setattr(pg, "_global_gate", gate)
-        try:
-            gateway = _make(tmp_db, gate)
-            reply = gateway.handle_update(
-                {"message": {"chat": {"id": 111}, "text": "/pending"}}
-            )
-            assert "待审批" in reply
-            assert "aaaabbbb" in reply
-            assert "bash" in reply
-        finally:
-            monkey.undo()
+        reply = gw.handle_update(
+            {"message": {"chat": {"id": 111}, "text": "/pending"}}
+        )
+        assert "待审批" in reply
+        assert "aaaabbbb" in reply
+        assert "bash" in reply
 
-    def test_command_bypasses_llm(self, tmp_db):
+    def test_command_bypasses_llm(self, gateway):
         """审批命令不进 LLM 对话（llm_factory 不被调用）"""
-        import backend.services.permission_gate as pg
-
-        gate = FakeGate()
-        gate.requests.append(_req("aaaabbbb-1111-2222-3333-444444444444"))
         llm_called = {"n": 0}
+        gw, gate = gateway
+        gate.requests.append(_req("aaaabbbb-1111-2222-3333-444444444444"))
 
         def factory(sid):
             llm_called["n"] += 1
 
-        config = TelegramConfig(
-            bot_token="tok", allowed_chat_ids=["111"], poll_timeout_seconds=0
-        )
-        gateway = TelegramGateway(
-            config=config,
-            transport=FakeTransport(),
-            llm_factory=factory,
-            db=tmp_db,
-        )
-        monkey = pytest.MonkeyPatch()
-        monkey.setattr(pg, "_global_gate", gate)
-        try:
-            gateway.handle_update(
-                {"message": {"chat": {"id": 111}, "text": "/pending"}}
-            )
-        finally:
-            monkey.undo()
+        gw._llm_factory = factory
+        gw.handle_update({"message": {"chat": {"id": 111}, "text": "/pending"}})
         assert llm_called["n"] == 0
 
 
 class TestRound12Commands:
-    def test_reset_rebinds_session(self, tmp_db):
+    def test_reset_rebinds_session(self, gateway):
         """/reset 解绑并新建会话 —— 新消息进新会话"""
-        gateway = _make(tmp_db, FakeGate())
-        gateway.handle_update({"message": {"chat": {"id": 111}, "text": "第一条"}})
-        old_row = tmp_db.get_connection().execute(
+        gw, _ = gateway
+        gw.handle_update({"message": {"chat": {"id": 111}, "text": "第一条"}})
+        old_row = gw._conn().execute(
             "SELECT session_id FROM telegram_chats WHERE chat_id = '111'"
         ).fetchone()
         old_sid = old_row[0]
 
-        reply = gateway.handle_update(
-            {"message": {"chat": {"id": 111}, "text": "/reset"}}
-        )
+        reply = gw.handle_update({"message": {"chat": {"id": 111}, "text": "/reset"}})
         assert "会话已重置" in reply
-        new_row = tmp_db.get_connection().execute(
+        new_row = gw._conn().execute(
             "SELECT session_id FROM telegram_chats WHERE chat_id = '111'"
         ).fetchone()
         assert new_row[0] != old_sid
-        # 后续消息进新会话
-        gateway.handle_update({"message": {"chat": {"id": 111}, "text": "第二条"}})
-        old_count = tmp_db.get_connection().execute(
+
+        gw.handle_update({"message": {"chat": {"id": 111}, "text": "第二条"}})
+        old_count = gw._conn().execute(
             "SELECT COUNT(*) FROM messages WHERE session_id = ?", (old_sid,)
         ).fetchone()[0]
         assert old_count == 2  # 旧会话不再增长（首条 user+assistant）
 
-    def test_help_lists_commands(self, tmp_db):
-        gateway = _make(tmp_db, FakeGate())
-        reply = gateway.handle_update(
-            {"message": {"chat": {"id": 111}, "text": "/help"}}
-        )
+    def test_help_lists_commands(self, gateway):
+        gw, _ = gateway
+        reply = gw.handle_update({"message": {"chat": {"id": 111}, "text": "/help"}})
         assert "/approve" in reply
         assert "/reset" in reply
 
-    def test_unknown_command_shows_help_hint(self, tmp_db):
-        gateway = _make(tmp_db, FakeGate())
-        reply = gateway.handle_update(
+    def test_unknown_command_shows_help_hint(self, gateway):
+        gw, _ = gateway
+        reply = gw.handle_update(
             {"message": {"chat": {"id": 111}, "text": "/frobnicate"}}
         )
         assert "未知命令" in reply
