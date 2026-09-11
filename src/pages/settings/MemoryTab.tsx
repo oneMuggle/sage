@@ -1,18 +1,15 @@
 /**
  * Settings 页面 - 记忆管理 Tab
  *
- * Task 2 (Gap B): the auto_memory toggle is wired to the IPC bridge
- * (window.electronAPI.memory.getAutoMemory / setAutoMemory) which hits
- * GET/PUT /api/v1/preferences/auto_memory — backed by the SettingsRepository
- * whitelist (auto_memory key added in this task).
- *
- * fix/security-perf-quickwins §1.3b f (2026-08-09, cherry-picked to win7):
+ * fix/security-perf-quickwins §1.3b f (2026-08-09):
  * - "同步到内部服务器" 开关从误绑的 `settings.autoMemory` 改为独立的
  *   `settings.memoryServerSync` 字段。`autoMemory` 实际语义是"对话中
  *   自动提取关键信息"（见 GeneralTab §"自动记忆提取"），与本 Tab
  *   的"同步到企业内部服务器"语义不同——同字段双语义是误导。
- * - 移除硬编码的 `%APPDATA%\Sage\memory.db` 展示：实际路径由
- *   SAGE_DB_PATH 环境变量决定（见 backend/data/database.py:158-173），
+ * - 移除硬编码的 `%APPDATA%\Sage\memory.db` 展示（与 §1.4 "假功能/
+ *   死设置清理" 同源治理）：实际路径由 SAGE_DB_PATH 环境变量决定
+ *   （见 backend/data/database.py:158-173），Electron 模式下指向
+ *   `%APPDATA%/Sage/sage.db`，dev 模式下指向 `<repo>/data/sage.db`，
  *   写死展示既不准也无用。
  */
 
@@ -25,6 +22,7 @@ import type { EndpointsTabProps } from './components';
 import { SettingRow, Toggle } from './components';
 
 export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
+  const navigate = useNavigate();
   const [embedderStatus, setEmbedderStatus] = useState<{
     type: string;
     dimensions: number;
@@ -34,6 +32,95 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
     semantic: boolean;
   } | null>(null);
   const [selecting, setSelecting] = useState(false);
+
+  // ── win7 原有: auto_memory / memory_retrieval 偏好（IPC bridge）──────
+  // Source of truth = backend preference via IPC bridge.
+  // null = not yet loaded OR backend returned null (default True).
+  const [autoMemoryLoaded, setAutoMemoryLoaded] = useState<boolean | null>(null);
+  // Important-2: the "记忆检索注入" toggle drives its OWN preference
+  // (memory_retrieval) — independent of auto_memory. Before this fix both
+  // toggles shared autoMemoryLoaded + handleAutoMemoryChange, so flipping
+  // one flipped the other.
+  const [memoryRetrievalLoaded, setMemoryRetrievalLoaded] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const api = window.electronAPI;
+      if (!api) {
+        if (!cancelled) setAutoMemoryLoaded(true);
+        return;
+      }
+      try {
+        const raw = await api.memory.getAutoMemory();
+        if (cancelled) return;
+        if (raw === null || raw === undefined) {
+          setAutoMemoryLoaded(true);
+          return;
+        }
+        setAutoMemoryLoaded(String(raw).toLowerCase() === 'true');
+      } catch {
+        if (!cancelled) setAutoMemoryLoaded(true);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const api = window.electronAPI;
+      if (!api) {
+        if (!cancelled) setMemoryRetrievalLoaded(true);
+        return;
+      }
+      try {
+        const raw = await api.memory.getMemoryRetrieval();
+        if (cancelled) return;
+        if (raw === null || raw === undefined) {
+          setMemoryRetrievalLoaded(true);
+          return;
+        }
+        setMemoryRetrievalLoaded(String(raw).toLowerCase() === 'true');
+      } catch {
+        if (!cancelled) setMemoryRetrievalLoaded(true);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleAutoMemoryChange = async (next: boolean) => {
+    setAutoMemoryLoaded(next);
+    try {
+      await updateSettings({ autoMemory: next });
+    } catch {
+      // settingsClient already warns on failure
+    }
+    try {
+      const api = window.electronAPI;
+      if (!api) return;
+      await api.memory.setAutoMemory({ value: next });
+    } catch {
+      setAutoMemoryLoaded(!next);
+    }
+  };
+
+  const handleMemoryRetrievalChange = async (next: boolean) => {
+    setMemoryRetrievalLoaded(next);
+    try {
+      const api = window.electronAPI;
+      if (!api) return;
+      await api.memory.setMemoryRetrieval({ value: next });
+    } catch {
+      setMemoryRetrievalLoaded(!next);
+    }
+  };
 
   const loadEmbedderStatus = useCallback(async () => {
     try {
@@ -117,9 +204,6 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
             本地 SQLite 数据库
           </span>
         </SettingRow>
-        <SettingRow label="自动记忆沉淀" desc="每轮对话后自动提取并保存有价值的点">
-          <Toggle value={autoMemoryLoaded ?? true} onChange={handleAutoMemoryChange} />
-        </SettingRow>
         <SettingRow
           label="同步到内部服务器"
           desc="联网时将记忆增量同步到企业内部服务器（功能规划中，后端尚未接线）"
@@ -128,6 +212,9 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
             value={settings.memoryServerSync}
             onChange={(v) => updateSettings({ memoryServerSync: v })}
           />
+        </SettingRow>
+        <SettingRow label="自动记忆沉淀" desc="每轮对话后自动提取并保存有价值的点">
+          <Toggle value={autoMemoryLoaded ?? true} onChange={handleAutoMemoryChange} />
         </SettingRow>
         <SettingRow label="记忆检索注入" desc="对话时自动注入相关记忆到上下文">
           <Toggle
