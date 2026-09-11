@@ -73,7 +73,7 @@ diagnostic-<app-version>-<timestamp>.zip
 
 | # | Pattern | 示例 |
 |---|---|---|
-| 1 | Bearer token | `Authorization: Bearer sk-xxx` → `Bearer ***REDACTED***` |
+| 1 | Bearer token | `Authorization: Bearer sk-xxx` → `Bearer ***REDACTED:bearer***` |
 | 2 | JWT | `ey...` 格式 |
 | 3 | API key 通用 | `api_key=xxx` / `apikey=xxx` |
 | 4 | password | `password=xxx` |
@@ -81,7 +81,7 @@ diagnostic-<app-version>-<timestamp>.zip
 | 6 | Basic auth | `Basic xxx` |
 | 7 | OpenAI-style | `sk-xxx` / `sk-proj-xxx` |
 | 8 | JSON 敏感字段名 | `{"token": "xxx"}` → `{"token": "***REDACTED***"}` |
-| 9 | X-Sage-Local-Authorization | 本地 auth token 强制剥离 |
+| 9 | X-Sage-Local-Authorization | proxy 转发前由 `PROXY_INTERNAL_HEADERS` 剥离,recorder 看不到(非 redactor 职责) |
 | 10 | URL 中嵌入的 key | `?api_key=xxx` → `?api_key=***REDACTED***` |
 
 **双层防御**:
@@ -183,8 +183,7 @@ backend/services/llm_trace/
     └── test_tee.py
 
 backend/api/
-├── diagnostic_preview.py   # GET /api/v1/diagnostic/preview
-└── diagnostic_export.py    # POST /api/v1/diagnostic/export
+└── diagnostic_routes.py    # GET /preview + POST /export
 
 backend/tests/
 ├── integration/test_llm_proxy_routes.py   # 含 trace 记录集成测试
