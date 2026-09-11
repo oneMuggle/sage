@@ -26,6 +26,7 @@ from .codebase_search_tool import CodebaseSearchTool
 from .commit_message_tool import GitCommitMessageTool
 from .download_tool import HttpDownloadTool
 from .edit_tool import EditTool
+from .execute_code_tool import ExecuteCodeTool
 from .file_summary_tool import FileSummaryTool
 from .file_tool import ListDirTool, ReadFileTool, WriteFileTool
 from .git_tool import (
@@ -147,6 +148,8 @@ def register_all_tools(
     registry.register(MemorySearchTool(policy=policy))
     # Round 2 (session_search): 跨会话对话原文检索（READ 级）
     registry.register(SessionSearchTool(policy=policy))
+    # Round 8 (execute_code): 零上下文 RPC 工具调用（EXEC 级，与 bash 同权限面）
+    registry.register(ExecuteCodeTool(registry=registry, policy=policy))
     registry.register(MemorySaveTool(policy=policy))
     registry.register(OfficeListTool(policy=policy))
     registry.register(OfficeReadTool(policy=policy))
@@ -286,6 +289,7 @@ __all__ = [
     "CalculatorTool",
     "MemorySearchTool",
     "SessionSearchTool",
+    "ExecuteCodeTool",
     "MemorySaveTool",
     "OfficeListTool",
     "OfficeReadTool",
