@@ -1074,3 +1074,80 @@ async def test_tls_certificate_error_returns_structured_detail(client):
     body_text = resp.text
     assert "sk-" not in body_text
     assert "Bearer " not in body_text
+
+
+# ── LLM trace diagnostic: upstream error recording ──
+
+from backend.services.llm_trace.recorder import LlmTraceRecorder
+
+
+@pytest.fixture(autouse=True)
+def _clean_recorder():
+    """每个测试前后清空 recorder,防止跨测试泄漏。"""
+    LlmTraceRecorder.clear()
+    yield
+    LlmTraceRecorder.clear()
+
+
+@pytest.mark.asyncio()
+async def test_non_streaming_upstream_401_records_trace(client):
+    """非流式上游 401 应在 raise HTTPException 前记录 TraceRecord。"""
+    error_body = {"error": {"message": "Invalid API key"}}
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        mock.get("/v1/models").mock(return_value=Response(401, json=error_body))
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={
+                "X-LLM-Provider-Url": UPSTREAM,
+                "Authorization": "Bearer sk-test-key-12345",
+            },
+        )
+
+    # HTTP 响应仍是 401
+    assert resp.status_code == 401
+
+    # recorder 应自动记录了 1 条
+    records = LlmTraceRecorder.snapshot()
+    assert len(records) == 1, f"expected 1 trace record, got {len(records)}"
+
+    rec = records[0]
+    assert rec.response_status == 401
+    assert rec.error_class == "upstream_401"
+    assert rec.upstream_url == f"{UPSTREAM}/v1/models"
+    assert rec.upstream_method == "GET"
+    assert rec.response_streamed is False
+    # response body 应包含上游返回的 JSON(受 MAX_RESPONSE_BODY_BYTES 限制)
+    assert b"Invalid API key" in rec.response_body
+    # request headers 应包含转发的 Authorization(已脱敏)
+    assert "authorization" in {k.lower() for k in rec.request_headers}
+
+
+@pytest.mark.asyncio()
+async def test_streaming_upstream_500_records_trace(client):
+    """流式上游 5xx(在 chunk 前)应在关闭资源前记录 TraceRecord。"""
+    error_body = {"error": {"message": "Internal server error"}}
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        mock.get("/v1/models").mock(return_value=Response(500, json=error_body))
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models?stream=true",
+            headers={
+                "X-LLM-Provider-Url": UPSTREAM,
+                "Authorization": "Bearer sk-stream-key-67890",
+            },
+        )
+
+    # HTTP 响应应是 500(不是 200 截断)
+    assert resp.status_code == 500
+
+    # recorder 应自动记录了 1 条
+    records = LlmTraceRecorder.snapshot()
+    assert len(records) == 1, f"expected 1 trace record, got {len(records)}"
+
+    rec = records[0]
+    assert rec.response_status == 500
+    assert rec.error_class == "upstream_500"
+    assert rec.upstream_url == f"{UPSTREAM}/v1/models?stream=true"
+    assert rec.upstream_method == "GET"
+    assert rec.response_streamed is True  # 流式路径标记
+    # response body 应包含上游返回的 JSON
+    assert b"Internal server error" in rec.response_body
