@@ -457,6 +457,16 @@ class KillShellTool(BaseTool):
                 success=False,
                 error=f"未知 shell_id: {shell_id}（会话不存在或已被 kill_shell 结束）",
             )
+        # H-4 (round5 批次 H): 被终止的后台测试进程——残余输出往往正是
+        # 失败信息最全的时刻，同 G-1 挂 test_failures
+        if payload.get("exit_code") not in (0, None):
+            from backend.tools.test_output_parser import parse_test_failures
+
+            test_failures = parse_test_failures(
+                str(payload.get("stdout", "")), str(payload.get("stderr", ""))
+            )
+            if test_failures is not None:
+                payload["test_failures"] = test_failures
         return ToolResult(success=True, content=payload)
 
 
