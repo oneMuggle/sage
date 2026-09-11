@@ -18,6 +18,7 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import type { WindowControlsBridge } from '../src/shared/api/windowControlsClient';
 import type {
+  DiagnosticElectronApiBridge,
   ImportResult,
   JournalElectronApiBridge,
   ProvidersElectronApiBridge,
@@ -372,6 +373,34 @@ const electronAPI = {
         error?: string;
       }>,
   } satisfies ProvidersElectronApiBridge,
+
+  /**
+   * Task 10 (2026-09-11): Diagnostic export bridge for LLM trace bundles.
+   *
+   * - exportBundle: opens native save dialog, writes a zip archive with
+   *   LLM request/response traces + system metadata. Resolves to
+   *   { ok: true, path } on success or { ok: false, code, error } on failure.
+   * - preview: returns a summary of the trace dataset (count, timestamp
+   *   range, sample URLs, format version) without triggering export.
+   *
+   * Backed by `diagnostic:export` and `diagnostic:preview` IPC channels
+   * registered in electron/main.ts.
+   */
+  diagnostic: {
+    exportBundle: (opts: { includePrompts: boolean; includeHostname: boolean }) =>
+      ipcRenderer.invoke('diagnostic:export', opts) as Promise<
+        | { ok: true; path: string }
+        | { ok: false; code: string; error: string }
+      >,
+    preview: () =>
+      ipcRenderer.invoke('diagnostic:preview') as Promise<{
+        count: number;
+        oldestTs: string | null;
+        newestTs: string | null;
+        sampleUrls: string[];
+        version: string;
+      }>,
+  } satisfies DiagnosticElectronApiBridge,
 
   /**
    * T13 (2026-07-02): Log management bridge — Diagnostics card on Settings page.
