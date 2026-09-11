@@ -28,7 +28,7 @@ import time
 import uuid
 import weakref
 from datetime import datetime, timedelta, timezone
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from sage_core import LLMError, Message, Role, ToolCall
 from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
@@ -77,6 +77,11 @@ SKILL_NUDGE_SUFFIX = (
 # （LLM 不可用则跳过，宁缺勿滥）；≥4 次的复杂回合照旧直达起稿。
 # 用户可见的 SKILL_NUDGE 维持 ≥4 不变。审批闸口不变。
 REVIEW_ENQUEUE_TOOL_CALL_THRESHOLD = 2
+
+# Round 14: hex 路径空响应守卫 —— 无工具调用且 content 空白时注入
+# system 提示重试（与 legacy run_loop 的 B1 守卫同语义对齐）；
+# 重试耗尽保留原空响应（不 FAILED，不阻塞单轮）。
+_EMPTY_RESPONSE_MAX_RETRIES = 1
 
 # OTel tracer（P3.3：用于在 span 上记录关键属性）
 _tracer = get_tracer("chat_service")
@@ -396,6 +401,13 @@ class ChatService:
         span.set_attribute("llm.duration_ms", int(duration * 1000))
         span.set_attribute("response.has_tool_calls", bool(response.tool_calls))
 
+        # Round 14: 空响应守卫（与 legacy B1 同语义）—— 空白回复先重试
+        if (not response.tool_calls) and (not (response.content or "").strip()):
+            retried = await self._retry_empty_response(history, llm_tools)
+            if retried is not None:
+                response = retried
+                span.set_attribute("response.empty_retried", True)
+
         # 4) 执行模型发起的 tool_calls（PG2.9：单轮执行；不触发二次 LLM）
         budget_exceeded = False
         if response.tool_calls:
@@ -684,6 +696,35 @@ class ChatService:
     # ------------------------------------------------------------------ #
     # 内部辅助：执行 tool_calls
     # ------------------------------------------------------------------ #
+
+    async def _retry_empty_response(
+        self, history: List[Message], llm_tools: Optional[List[Dict[str, Any]]]
+    ) -> Optional[Message]:
+        """空响应重试：注入 system 提示后再试至多 N 次（Round 14）。
+
+        Returns:
+            首个非空响应；重试耗尽仍为空 → None（调用方保留原空响应，
+            行为退化为旧版，不 FAILED）。
+        """
+        retry_history = list(history) + [
+            Message(
+                role=Role.SYSTEM,
+                content="上一次响应内容为空。请直接给出完整回复；"
+                "若任务无法继续，请说明原因。",
+            )
+        ]
+        for attempt in range(_EMPTY_RESPONSE_MAX_RETRIES):
+            logger.warning(
+                "hex 空响应重试（第 %d/%d 次）", attempt + 1, _EMPTY_RESPONSE_MAX_RETRIES
+            )
+            try:
+                response = await self.llm.chat(retry_history, tools=llm_tools)
+            except Exception as exc:  # noqa: BLE001 — 重试失败即放弃（保留原响应）
+                logger.warning("hex 空响应重试失败: %s", exc)
+                return None
+            if (response.tool_calls) or (response.content or "").strip():
+                return response
+        return None
 
     async def _execute_tool_calls(
         self,
