@@ -45,4 +45,8 @@ Sage 的子代理档案（AgentProfile）是**纯数据库资产**：默认种�
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A（子代理档案文件化） | PR #614（squash f6bcc4f3） | PR #624（cherry-win7-r9，squash 53c81d6a） |
+
+win7 对齐说明：doctor 检查计数 win7 基线为 16（win7 线无 network 检查），加 agents_files 后为 17（main 线 18）——两线断言各自修正；本地 ruff 全过 + doctor 单测绿后由 CI py3.8 job 终验，squash merge（#624）。
