@@ -33,6 +33,11 @@ SCHEMA_VERSION = "1"
 REDACTOR_VERSION = "1"
 APP_VERSION_DEFAULT = "unknown"
 
+# T7 体积策略常量
+MAX_BODY_BYTES = 512 * 1024       # 单 body > 512KB → 截断
+MAX_RECORD_BYTES = 1 * 1024 * 1024  # 单条 record > 1MB → 丢弃所有 body
+MAX_TOTAL_BYTES = 5 * 1024 * 1024   # 总 zip > 5MB → raise
+
 
 def _build_manifest(
     trace_count: int,
@@ -151,6 +156,8 @@ def export_to_zip_bytes(
         zf.writestr("trace.jsonl", "\n".join(trace_lines).encode("utf-8"))
         # 5. README
         zf.writestr("README.txt", _README_TEMPLATE)
+    if buf.tell() > MAX_TOTAL_BYTES:
+        raise ValueError(f"zip too large: {buf.tell()} > {MAX_TOTAL_BYTES}")
     return buf.getvalue()
 
 
@@ -164,27 +171,48 @@ def _serialize_record(rec: TraceRecord, *, include_prompts: bool) -> str:
         rec.response_body, include_prompts=False,
     )
 
-    # --- request body 序列化 ---
-    req_body_text: Optional[str] = None
-    req_encoding: str = "utf-8"
-    if isinstance(req_body_obj, str):
-        req_body_text = req_body_obj
-    elif isinstance(req_body_obj, (dict, list)):
-        req_body_text = json.dumps(req_body_obj, ensure_ascii=False)
-    elif req_body_err == "binary":
-        req_body_text = base64.b64encode(rec.request_body).decode("ascii")
-        req_encoding = "base64"
+    # --- T7 体积策略 ---
+    rec_size = len(rec.request_body) + len(rec.response_body)
 
-    # --- response body 序列化 ---
-    resp_body_text: Optional[str] = None
-    resp_encoding: str = "utf-8"
-    if isinstance(resp_body_obj, str):
-        resp_body_text = resp_body_obj
-    elif isinstance(resp_body_obj, (dict, list)):
-        resp_body_text = json.dumps(resp_body_obj, ensure_ascii=False)
-    elif resp_body_err == "binary":
-        resp_body_text = base64.b64encode(rec.response_body).decode("ascii")
-        resp_encoding = "base64"
+    if rec_size > MAX_RECORD_BYTES:
+        # 整条 record > 1MB → body 全丢弃,headers + status 保留
+        req_body_text: Optional[str] = None
+        req_encoding: str = "utf-8"
+        resp_body_text: Optional[str] = None
+        resp_encoding: str = "utf-8"
+        req_truncated = True
+        resp_truncated = True
+    else:
+        # --- request body 序列化 ---
+        req_body_text = None
+        req_encoding = "utf-8"
+        if isinstance(req_body_obj, str):
+            req_body_text = req_body_obj
+        elif isinstance(req_body_obj, (dict, list)):
+            req_body_text = json.dumps(req_body_obj, ensure_ascii=False)
+        elif req_body_err == "binary":
+            req_body_text = base64.b64encode(rec.request_body).decode("ascii")
+            req_encoding = "base64"
+
+        # --- response body 序列化 ---
+        resp_body_text = None
+        resp_encoding = "utf-8"
+        if isinstance(resp_body_obj, str):
+            resp_body_text = resp_body_obj
+        elif isinstance(resp_body_obj, (dict, list)):
+            resp_body_text = json.dumps(resp_body_obj, ensure_ascii=False)
+        elif resp_body_err == "binary":
+            resp_body_text = base64.b64encode(rec.response_body).decode("ascii")
+            resp_encoding = "base64"
+
+        # --- 单 body > 512KB → 截断 ---
+        req_truncated = len(rec.request_body) > MAX_BODY_BYTES
+        if req_truncated and req_body_text is not None:
+            req_body_text = req_body_text[:MAX_BODY_BYTES]
+
+        resp_truncated = len(rec.response_body) > MAX_BODY_BYTES
+        if resp_truncated and resp_body_text is not None:
+            resp_body_text = resp_body_text[:MAX_BODY_BYTES]
 
     obj = {
         "trace_id": rec.trace_id,
@@ -198,7 +226,7 @@ def _serialize_record(rec: TraceRecord, *, include_prompts: bool) -> str:
             "body_json": req_body_text,
             "body_parse_error": req_body_err,
             "body_encoding": req_encoding,
-            "body_truncated": False,  # T7 实现截断
+            "body_truncated": req_truncated,
         },
         "response": {
             "status": rec.response_status,
@@ -207,7 +235,7 @@ def _serialize_record(rec: TraceRecord, *, include_prompts: bool) -> str:
             "body_bytes": len(rec.response_body),
             "body_text": resp_body_text,
             "body_b64": (resp_body_text if resp_encoding == "base64" else None),
-            "body_truncated": False,  # T7 实现截断
+            "body_truncated": resp_truncated,
             "body_encoding": resp_encoding,
             "error": _extract_error_message(rec.response_body, rec.response_status),
         },
