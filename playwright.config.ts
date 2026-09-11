@@ -58,5 +58,52 @@ export default defineConfig({
         baseURL: 'http://localhost:1420',
       },
     },
+    // Tier-based Electron E2E projects (Tier 1: stub; Tier 2: live).
+    // Stub projects DO need the top-level Vite dev server (Electron loads
+    // the renderer from http://localhost:1420 in dev mode — main.ts:73,642).
+    // The Python stub backend is a separate Node-side server spun up by
+    // launchElectronWithStub() on a random port (SAGE_BACKEND_URL), and
+    // lives alongside Vite on 1420 — not in place of it.
+    // Live projects spawn the real sage-backend via per-project webServer.
+    {
+      name: 'electron-stub-smoke',
+      testDir: './tests/electron/tiers/stub/smoke',
+      timeout: 60_000,
+      retries: process.env.CI ? 1 : 0,
+      outputDir: './tests/electron/tiers/stub/smoke/test-results',
+    },
+    {
+      name: 'electron-stub-deep',
+      testDir: './tests/electron/tiers/stub/deep',
+      timeout: 120_000,
+      retries: process.env.CI ? 1 : 0,
+      outputDir: './tests/electron/tiers/stub/deep/test-results',
+    },
+    {
+      name: 'electron-live-boot',
+      testDir: './tests/electron/tiers/live/boot-smoke',
+      timeout: 60_000,
+      retries: 0,
+      outputDir: './tests/electron/tiers/live/boot-smoke/test-results',
+    },
+    {
+      name: 'electron-live-deep',
+      testDir: './tests/electron/tiers/live/deep',
+      timeout: 180_000, // 3 min for LLM API calls (R24)
+      retries: 0,
+      outputDir: './tests/electron/tiers/live/deep/test-results',
+    },
+    // Journal template E2E tier-1 (Task 8, 2026-09-10): hermetic IPC mock
+    // against `office_journal_*` commands. Spec lives in tests/e2e/journal.spec.ts;
+    // `testMatch` scopes it so the existing `e2e` project (which sweeps
+    // all *.spec.ts under tests/e2e/) does not double-run it.
+    {
+      name: 'journal-e2e',
+      testDir: './tests/e2e',
+      testMatch: /journal\.spec\.ts$/,
+      use: {
+        baseURL: 'http://localhost:1420',
+      },
+    },
   ],
 });

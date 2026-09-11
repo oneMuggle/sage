@@ -17,6 +17,7 @@ from backend.domain.tool_names import (
     CODE_SEARCH_TOOLS,
     EXEC_TOOLS,
     GIT_TOOLS,
+    JOURNAL_TOOLS,
     MEMORY_TOOLS,
     OFFICE_TOOLS,
     PATCH_TOOLS,
@@ -105,6 +106,10 @@ _PRIMARY_SEED_TOOLS = (
     # PR-1 (office CRUD 闭环接线) + PR-2 (archive/restore): primary 代用户
     # 执行增/改/删/还原。office_* doc_id 模式走 session binding 守护。
     *OFFICE_TOOLS,
+    # 2026-09-10: journal template subsystem — primary 代用户解析 / 填写 /
+    # 生成 / 校验期刊模板成稿。fill/generate 是 WRITE_LOCAL；parse/validate
+    # 是 READ。doc_id/spec_id 模式都需工作区绑定。
+    *JOURNAL_TOOLS,
     # 2026-09-04: 本地开发环境助手 — 只拿探测+诊断（READ 类，coordinator
     # 安全）; runtime_exec 不放 primary（EXEC，与 PR #396 coordinator/executor
     # 边界一致 —— primary 不直接执行，由 coder 子代理委派）。
@@ -234,6 +239,10 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_fill_pdf_form",
                 "office_analyze_word_template",
                 "office_fill_word_template",
+                # 2026-09-10: journal template subsystem — 写作 agent 的核心
+                # 责任是把研究素材按期刊模板沉淀成可投搞稿件；模板解析/填充/
+                # 生成/校验四件套缺一不可。
+                *JOURNAL_TOOLS,
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -392,6 +401,9 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     # 2026-09 Parity Batch-1: PDF 三类 + Word 模板两件（与 writer.tools 同步）。
     "office_read_pdf", "office_generate_pdf", "office_read_pdf_form",
     "office_fill_pdf_form", "office_analyze_word_template", "office_fill_word_template",
+    # 2026-09-10: journal template 4 件套（与 writer.tools 同步）。
+    "office_journal_parse_template", "office_journal_fill_from_content",
+    "office_journal_generate_article", "office_journal_validate",
 ]
 
 

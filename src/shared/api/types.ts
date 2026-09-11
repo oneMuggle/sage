@@ -1187,3 +1187,309 @@ export interface OfficeSnapshotRestoreResponse {
   ok: boolean;
   summary: OfficeDocumentSummary;
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Update preview + PDF export (Office parity batch 2 — items 2.5 / 2.7)
+// Backend counterpart: backend/office/diff_preview.py (DiffPreviewChange /
+// DiffPreviewResult / OfficeUpdatePreviewRequest) and
+// backend/office/export_pdf.py (ExportPdfResult; OfficeExportPdfRequest
+// lives in the same module).
+// NOTE (round 2, R1): batch 2 shipped preview-only — there was no
+// page-level apply-update route and real updates went through the
+// chat-driven office_update tool. Round 2 adds POST
+// /office/doc/{doc_id}/update (types below), so the edit-preview dialog
+// now applies in-page after a successful preview.
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * One update op, passed through verbatim to the backend editor. Ops are
+ * plain dicts on the backend too (runtime-validated there) — see the op
+ * reference in backend/office/edit.py (e.g. word replace_text
+ * `{find, replace}`, excel set_cells `{sheet, cells:[{addr, value}]}`,
+ * ppt set_slide_title `{index, title}`).
+ */
+export interface OfficeUpdateOp {
+  op: string;
+  [key: string]: unknown;
+}
+
+/** Request of POST /office/update/preview — exactly one of file_path / doc_id. */
+export interface OfficeUpdatePreviewRequest {
+  workspace_path: string;
+  file_path?: string;
+  doc_id?: string;
+  ops: OfficeUpdateOp[];
+}
+
+/** One human-readable change entry in a preview (backend DiffPreviewChange). */
+export interface OfficeDiffPreviewChange {
+  op: string;
+  /** Where the change lands: 'Sheet!A1', 'slide[2]', 'table[0]'… */
+  target?: string | null;
+  /** Content before the op (snippet). */
+  before?: string | null;
+  /** Content after the op (snippet). */
+  after?: string | null;
+  /** One-line description when before/after don't tell the story. */
+  summary?: string | null;
+}
+
+/** Result of POST /office/update/preview (backend DiffPreviewResult). */
+export interface OfficeUpdatePreviewResult {
+  /** False when applying the ops to the preview copy failed. */
+  ok: boolean;
+  changes: OfficeDiffPreviewChange[];
+  /** True when the change list was capped server-side (MAX_CHANGES=200). */
+  truncated: boolean;
+  /** Why the real update would fail (set when ok=false). */
+  error?: string | null;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Update apply (Office parity round 2 — R1 close the edit-preview loop)
+// Route: POST /api/v1/office/doc/{doc_id}/update, body {ops} (same op
+// dicts the preview route takes). Errors: unknown doc → 404 JSON
+// {error_type, message, file_path}; invalid ops → 422 same shape (both
+// surface as thrown errors via handleApiError, never as ok=false).
+// ──────────────────────────────────────────────────────────────────────
+
+/** Request of POST /office/doc/{doc_id}/update. */
+export interface OfficeDocUpdateRequest {
+  doc_id: string;
+  ops: OfficeUpdateOp[];
+}
+
+/**
+ * Post-apply self-check report (backend re-reads the document and
+ * verifies the ops landed). `summary` is an opaque object — the UI
+ * renders the counts line from the updated OfficeDocumentSummary instead.
+ */
+export interface OfficeUpdateSelfCheck {
+  ok: boolean;
+  summary?: Record<string, unknown> | null;
+  error?: string | null;
+}
+
+/** Response of POST /office/doc/{doc_id}/update (backend OfficeDocUpdateResult). */
+export interface OfficeDocUpdateResponse {
+  ok: boolean;
+  /** Post-update document summary (status='edited', refreshed updated_at). */
+  summary: OfficeDocumentSummary;
+  self_check: OfficeUpdateSelfCheck;
+  /**
+   * Per-op outcomes from the backend editor (backend.office.edit) —
+   * `[{op, ok, ...}]`. Not rendered today; typed so the contract is
+   * visible at the call site.
+   */
+  results?: Record<string, unknown>[];
+}
+
+/** Request of POST /office/export-pdf. */
+export interface OfficeExportPdfRequest {
+  workspace_path: string;
+  file_path: string;
+}
+
+/**
+ * Result of POST /office/export-pdf (backend ExportPdfResult). `method`
+ * is null whenever ok=false; `output_path` is populated only on success
+ * (`<stem>.pdf` next to the source inside the workspace).
+ */
+export interface OfficeExportPdfResult {
+  ok: boolean;
+  method?: 'libreoffice' | 'word_com' | null;
+  output_path?: string | null;
+  error?: string | null;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Document template library (Office parity batch 3, item 3.2 — 从模板创建;
+// round 3 N2 extends it to excel/ppt). Backend counterpart: GET
+// /office/templates + POST /office/templates/instantiate in
+// backend/api/office_routes.py. Placeholder element shape follows the
+// list-endpoint contract (name/type/description) — narrower than the
+// analysis model `TemplatePlaceholder` (backend/office/models.py), which
+// carries location/index fields that the picker UI never needs.
+// ──────────────────────────────────────────────────────────────────────
+
+/** Placeholder kind (backend `TemplatePlaceholderType`). */
+export type OfficeTemplatePlaceholderType = 'text' | 'image' | 'table' | 'date' | 'rich_text';
+
+/** Where a template comes from (backend `source` discriminator). */
+export type OfficeTemplateSource = 'builtin' | 'workspace';
+
+/** One placeholder in a template (GET /office/templates element). */
+export interface OfficeTemplatePlaceholder {
+  name: string;
+  type: OfficeTemplatePlaceholderType;
+  description?: string;
+}
+
+/**
+ * One template entry. `id` is the instantiate key for builtin templates;
+ * workspace templates resolve by filename (`workspace_template`), with
+ * `id` mirroring the filename stem for list rendering.
+ *
+ * Round 3 N2: `doc_type` was widened from the batch-3 `'word'`-only
+ * literal to the OOXML trio — the backend list endpoint now also yields
+ * excel/ppt builtin + workspace templates and instantiate persists the
+ * matching document row for all three.
+ */
+export interface OfficeTemplateMeta {
+  id: string;
+  name: string;
+  description?: string;
+  doc_type: 'word' | 'excel' | 'ppt';
+  placeholders: OfficeTemplatePlaceholder[];
+  source: OfficeTemplateSource;
+  /** Workspace templates only — the source OOXML filename inside the workspace. */
+  filename?: string;
+}
+
+/** Response of GET /office/templates?workspace_path=… */
+export interface OfficeTemplateListResponse {
+  templates: OfficeTemplateMeta[];
+}
+
+/**
+ * Request of POST /office/templates/instantiate. Exactly one of
+ * `template_id` (builtin) / `workspace_template` (filename) is sent.
+ *
+ * NOTE: `data` / `images` keys are template placeholder names — user
+ * data, not JS identifiers — so the IPC route is declared `rawBody` and
+ * the camelToSnake translation never touches them (same reasoning as
+ * mcp_server_add's env map).
+ */
+export interface OfficeTemplateInstantiateRequest {
+  workspace_path: string;
+  template_id?: string;
+  workspace_template?: string;
+  filename: string;
+  data: Record<string, string>;
+  images?: Record<string, string>;
+}
+
+/**
+ * Result of POST /office/templates/instantiate — same shape for all
+ * doc types (word: backend `WordTemplateFillResult`,
+ * backend/office/models.py:551-557, which already carries `output_path`;
+ * round 3 N2: excel/ppt instantiate reuses the identical response shape).
+ * The backend persists a document row, so the result shows up in the
+ * document list after a refresh.
+ */
+export interface OfficeTemplateInstantiateResult {
+  output_path: string;
+  filename: string;
+  file_size_bytes: number;
+  filled_count: number;
+  /** Placeholder names the template still contains after the fill. */
+  unfilled_placeholders: string[];
+}
+
+// ==================== Journal template types (Task 7, 2026-09-10) ====================
+
+/**
+ * Journal template subsystem (Task 7, 2026-09-10).
+ * Mirrors backend/office/journal/models.py: JournalSpec, JournalViolation, etc.
+ */
+
+/** Font family descriptor — mirrors backend FontFamily Pydantic model. */
+export interface FontFamily {
+  family: string;
+  ascii_family?: string;
+  eastasia?: string;
+}
+
+/** Single chapter heading extracted from a .docx template. */
+export interface JournalSpecHeading {
+  keyword: string;
+  level: number;
+  expected_pt: number;
+}
+
+/** Parsed journal template — body font/size/spacing/margins + heading roster + citation style. */
+export interface JournalSpec {
+  spec_id: string;
+  template_sha256: string;
+  template_filename: string;
+  font_body: FontFamily;
+  font_heading: FontFamily;
+  body_pt: number;
+  heading_pt: number;
+  line_spacing: number;
+  margins_cm: number;
+  headings: JournalSpecHeading[];
+  citation_style: string;
+  page_size: string;
+  extra: Record<string, unknown>;
+}
+
+/** Summary view of a JournalSpec for list endpoints — headings are keyword strings only. */
+export interface JournalSpecSummary {
+  spec_id: string;
+  template_sha256: string;
+  template_filename: string;
+  headings: string[];
+  body_pt: number;
+}
+
+/** One rule violation emitted by the 6-rule validator. */
+export interface JournalViolation {
+  rule_id: string;
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  location: string;
+  suggestion: string;
+}
+
+/** POST /api/v1/office/journal/parse-template response. */
+export interface JournalParseTemplateResponse {
+  spec: JournalSpec;
+  cached: boolean;
+}
+
+/** GET /api/v1/office/journal/specs response. */
+export interface JournalListSpecsResponse {
+  specs: JournalSpecSummary[];
+}
+
+/** GET /api/v1/office/journal/specs/{spec_id} response. */
+export interface JournalGetSpecResponse {
+  spec: JournalSpec;
+}
+
+/** POST /api/v1/office/journal/validate response. */
+export interface JournalValidateResponse {
+  spec_id: string;
+  file_path: string;
+  violations: JournalViolation[];
+  error_count: number;
+  warning_count: number;
+}
+
+/** One section's text, keyed by the heading keyword. */
+export interface JournalContentSection {
+  [keyword: string]: string;
+}
+
+/** POST /api/v1/office/journal/fill-from-content request body. */
+export interface JournalFillFromContentRequest {
+  spec_id: string;
+  workspace_path: string;
+  content: {
+    title: string;
+    abstract: string;
+    sections: JournalContentSection;
+    references: string[];
+    citations?: string[];
+  };
+  output_filename: string;
+}
+
+/** POST /api/v1/office/journal/fill-from-content response. */
+export interface JournalFillFromContentResponse {
+  spec_id: string;
+  output_path: string;
+  gen_id: string;
+  bytes_written: number;
+}

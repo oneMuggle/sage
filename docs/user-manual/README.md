@@ -17,6 +17,7 @@
 | 09   | [侧边栏分组与会话排序](./09-sider.md)                    | 侧边栏分组 / 会话拖拽重排 / 折叠与持久化                                |
 | 10   | [sage doctor](./10-sage-doctor.md)                      | 一键环境体检 CLI：何时使用 / 文本与 JSON 模式 / 退出码 / 8 项检查结果速查 |
 | 12   | [本地开发环境助手](./12-local-development-assistant.md) | 设置 → 开发环境 Tab：自动发现 Python/Node.js 运行时 + 项目诊断 + 试跑代码片段 |
+| 13   | [期刊模板面板](./13-journal-template-panel.md) | Office 页面底部：模板规范抽取 / 论文格式校验 / 结构化填充生成符合期刊要求的 Word 文档 |
 
 ---
 

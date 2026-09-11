@@ -39,8 +39,13 @@ class OfficeError(Exception):
 class OfficeFileNotFoundError(OfficeError):
     """The requested file does not exist."""
 
-    def __init__(self, file_path: Path) -> None:
-        super().__init__(f"Office file not found: {file_path}", file_path=file_path)
+    def __init__(self, file_path: Path, message: Optional[str] = None) -> None:
+        # message 可覆盖默认文案（默认走基类自动拼装的 "Office file not found: ..."），
+        # 调用方常用来补一句业务上下文，例如 "journal spec not found: spec_xxx"。
+        if message is None:
+            super().__init__(f"Office file not found: {file_path}", file_path=file_path)
+        else:
+            super().__init__(message, file_path=file_path)
 
 
 class OfficePathError(OfficeError):
@@ -159,6 +164,15 @@ def office_error_to_http_status(error: OfficeError) -> int:  # noqa: PLR0911 —
 
     Used by the FastAPI exception handler in office_routes.py.
     """
+    # Lazy import to avoid circular dependency (journal.errors imports OfficeError)
+    from backend.office.journal.errors import (
+        JournalContentShapeError,
+        JournalGenerationError,
+        JournalPandocError,
+        JournalParseError,
+        JournalSpecNotFoundError,
+    )
+
     if isinstance(error, OfficeFileNotFoundError):
         return 404
     if isinstance(error, OfficePathError):
@@ -182,5 +196,16 @@ def office_error_to_http_status(error: OfficeError) -> int:  # noqa: PLR0911 —
     if isinstance(error, OfficePdfFormError):
         return 422
     if isinstance(error, _WRITE_FAILURE_ERRORS):
+        return 500
+    # JournalError 映射（保持与 OfficeError 一致的最优匹配）
+    if isinstance(error, JournalSpecNotFoundError):
+        return 404
+    if isinstance(error, JournalParseError):
+        return 422
+    if isinstance(error, JournalContentShapeError):
+        return 422
+    if isinstance(error, JournalPandocError):
+        return 500
+    if isinstance(error, JournalGenerationError):
         return 500
     return 500  # base OfficeError or unknown subclass
