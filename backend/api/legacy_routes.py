@@ -1035,6 +1035,38 @@ def create_agent(data: AgentCreate):
     return repo.get(data.id)
 
 
+@router.post("/agents/import-files")
+@with_db_lock
+def import_agents_files():
+    """CA1 (round9): 重扫 .sage/agents/*.md 导入档案。
+
+    - 200 + ``{ok, imported, unchanged, errors}``（语义见
+      ``backend.agents.agents_files.import_agents_from_files``）
+    - 解析失败的单文件计入 errors，绝不 5xx
+    """
+    from backend.agents.agents_files import import_agents_from_files
+
+    result = import_agents_from_files()
+    return {"ok": True, **result}
+
+
+@router.post("/agents/{agent_id}/export")
+@with_db_lock
+def export_agent_file(agent_id: str):
+    """CA2 (round9): 把 DB 档案导出为 .sage/agents/<agent_id>.md（覆盖写）。
+
+    - 200 + ``{ok, path}``
+    - 404 — agent 不存在
+    """
+    from backend.agents.agents_files import export_agent_to_file
+
+    try:
+        path = export_agent_to_file(agent_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail=f"agent {agent_id!r} not found")
+    return {"ok": True, "path": str(path)}
+
+
 # ==================== 技能 API (PR-7) ====================
 
 # 进程内单例缓存已搬到 ``backend.adapters.out.skill.inproc``（M2b 重构：
