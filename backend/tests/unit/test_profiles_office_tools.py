@@ -56,6 +56,10 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
     # 2026-09-09: PR-3 (office_archive) 给 primary 加了 archive, 测试同步更新。
     # 2026-09 Parity Batch-1: primary 经 *OFFICE_TOOLS 继承 PDF 三类 +
     # Word 模板两件, 测试同步更新。
+    # 2026-09 Parity Batch-2: primary 经 *OFFICE_TOOLS 继承 office_analyze
+    # (pandas 本地数据分析), 13 → 14 件。
+    # 2026-09-10: primary 经 *JOURNAL_TOOLS 继承 journal 模板 4 件,
+    # 14 → 18 件（按字母序插在 office_generate_pdf 与 office_list 之间）。
     assert visible == [
         "office_analyze_word_template",
         "office_archive",
@@ -64,6 +68,10 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
         "office_fill_pdf_form",
         "office_fill_word_template",
         "office_generate_pdf",
+        "office_journal_fill_from_content",
+        "office_journal_generate_article",
+        "office_journal_parse_template",
+        "office_journal_validate",
         "office_list",
         "office_read",
         "office_read_pdf",
@@ -78,6 +86,11 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
     # 2026-09-09: PR-3 (office_archive) 给 writer 加了 archive, 测试同步更新。
     # 2026-09 Parity Batch-1: writer 白名单补 PDF 三类 + Word 模板两件
     # （仍不给 office_delete）, 测试同步更新。
+    # 2026-09 Parity Batch-2: writer 白名单补 office_analyze
+    # （仍不给 office_delete）, 12 → 13 件。
+    # 2026-09-10: writer 白名单补 journal 模板 4 件
+    # （仍不给 office_delete）, 13 → 17 件（按字母序插在
+    # office_generate_pdf 与 office_list 之间）。
     assert visible == [
         "office_analyze_word_template",
         "office_archive",
@@ -85,6 +98,10 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
         "office_fill_pdf_form",
         "office_fill_word_template",
         "office_generate_pdf",
+        "office_journal_fill_from_content",
+        "office_journal_generate_article",
+        "office_journal_parse_template",
+        "office_journal_validate",
         "office_list",
         "office_read",
         "office_read_pdf",

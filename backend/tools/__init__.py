@@ -41,6 +41,12 @@ from .network_config import load_network_policy
 from .office_archive_tool import OfficeArchiveTool
 from .office_create_tool import OfficeCreateTool
 from .office_delete_tool import OfficeDeleteTool
+from .office_journal_tool import (
+    OfficeJournalFillFromContentTool,
+    OfficeJournalGenerateArticleTool,
+    OfficeJournalParseTemplateTool,
+    OfficeJournalValidateTool,
+)
 from .office_pdf_tool import (
     OfficeFillPdfFormTool,
     OfficeGeneratePdfTool,
@@ -165,6 +171,17 @@ def register_all_tools(
     registry.register(OfficeFillPdfFormTool(policy=policy))
     registry.register(OfficeAnalyzeWordTemplateTool(policy=policy))
     registry.register(OfficeFillWordTemplateTool(policy=policy))
+    # 2026-09-10 journal template subsystem: 期刊模板 4 件套
+    # （parse_template / fill_from_content / generate_article / validate）。
+    # parse/validate 是 READ（docx 解析与 6 类规则校验）；fill/generate 是
+    # WRITE_LOCAL（落盘 docx）。全部 requires_tool_context=True。
+    # 注: win7 尚未 cherry-pick office_analyze_tool (PR #561 Batch-2), 故
+    # OfficeAnalyzeTool 暂不在此处注册。win7 一旦 cherry-pick PR #561 时
+    # 再补回。
+    registry.register(OfficeJournalParseTemplateTool(policy=policy))
+    registry.register(OfficeJournalFillFromContentTool(policy=policy))
+    registry.register(OfficeJournalGenerateArticleTool(policy=policy))
+    registry.register(OfficeJournalValidateTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -269,6 +286,12 @@ __all__ = [
     "OfficeFillPdfFormTool",
     "OfficeAnalyzeWordTemplateTool",
     "OfficeFillWordTemplateTool",
+    # win7 尚未 cherry-pick office_analyze_tool (PR #561 Batch-2)
+    # "OfficeAnalyzeTool",
+    "OfficeJournalParseTemplateTool",
+    "OfficeJournalFillFromContentTool",
+    "OfficeJournalGenerateArticleTool",
+    "OfficeJournalValidateTool",
     "EditTool",
     "GlobSearchTool",
     "CodebaseSearchTool",

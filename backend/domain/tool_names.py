@@ -71,6 +71,16 @@ RUNTIME_PROBE_TOOLS = ("runtime_probe", "project_diagnose")
 RUNTIME_EXEC_TOOLS = ("runtime_exec",)
 RUNTIME_TOOLS = RUNTIME_PROBE_TOOLS + RUNTIME_EXEC_TOOLS
 
+# 2026-09-10 期刊模板子系统（journal template）：4 件套（parse / fill / generate / validate）。
+# parse 与 validate 是 READ；fill 与 generate 是 WRITE_LOCAL（落盘 docx）。
+# 全部 requires_tool_context=True（工作区绑定是路径围栏的根）。
+JOURNAL_TOOLS = (
+    "office_journal_parse_template",
+    "office_journal_fill_from_content",
+    "office_journal_generate_article",
+    "office_journal_validate",
+)
+
 # 一等 git 工具组（2026-09-06 对标增强 Phase-1）：读四件 READ 免审
 # （commit_message 为提交素材只读辅助），git_commit 为 WRITE_LOCAL 审批；
 # 只 commit 不 push。
@@ -131,6 +141,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(WEB_TOOLS)
         | set(MEMORY_TOOLS)
         | set(OFFICE_TOOLS)
+        | set(JOURNAL_TOOLS)
         | set(RUNTIME_TOOLS)
         | set(GIT_TOOLS)
         | set(CHECKPOINT_TOOLS)
@@ -151,6 +162,7 @@ __all__ = [
     "EXEC_TOOLS",
     "FILE_TOOLS",
     "GIT_TOOLS",
+    "JOURNAL_TOOLS",
     "MEMORY_TOOLS",
     "OFFICE_TOOLS",
     "ORCH_TOOLS",

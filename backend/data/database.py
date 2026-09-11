@@ -1061,6 +1061,13 @@ class Database:
                 "ADD COLUMN expected_task_revision INTEGER"
             )
 
+        # N2: journal 元数据表（office_journal_specs + office_journal_generations）。
+        # 通过延迟导入避免 backend.data ↔ backend.office.journal 包级循环。
+        # ensure_journal_tables 内部使用 get_database() → 复用同一加锁代理 + WAL 连接。
+        from backend.office.journal.persistence import ensure_journal_tables
+
+        ensure_journal_tables()
+
         conn.commit()
         logger.info("数据库初始化完成: %s", self.db_path)  # D4 (P6): 遗留 print 收敛到 logging
 
