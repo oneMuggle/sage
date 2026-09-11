@@ -308,6 +308,31 @@ class TelegramGateway:
                 f"回复 {self.stats.messages_replied} / 拒绝 {self.stats.rejected}"
             )
 
+        if cmd == "/reset":
+            # Round 12: 解绑当前 chat 的会话并新建（长对话治理）
+            self._conn().execute(
+                "DELETE FROM telegram_chats WHERE chat_id = ?",
+                (chat_id,),
+            )
+            self._conn().commit()
+            new_session = self._session_for_chat(chat_id)
+            return f"会话已重置（新会话 {new_session[:8]}…）。"
+
+        if cmd == "/help":
+            return (
+                "Sage 网关命令:\n"
+                "/pending — 查看待审批请求\n"
+                "/approve <短id> — 批准\n"
+                "/deny <短id> — 拒绝\n"
+                "/status — 网关统计\n"
+                "/reset — 重置本对话（全新上下文）\n"
+                "/help — 命令总览\n"
+                "其他文本直接与 Sage 对话。"
+            )
+
+        if cmd.startswith("/"):
+            return f"未知命令 {cmd}。发送 /help 查看命令总览。"
+
         return None  # 非网关命令 → 交给 LLM 对话
 
     def _forward_new_approvals(self) -> int:

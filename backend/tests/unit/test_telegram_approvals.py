@@ -198,3 +198,45 @@ class TestApprovalCommands:
         finally:
             monkey.undo()
         assert llm_called["n"] == 0
+
+
+class TestRound12Commands:
+    def test_reset_rebinds_session(self, tmp_db):
+        """/reset 解绑并新建会话 —— 新消息进新会话"""
+        gateway = _make(tmp_db, FakeGate())
+        gateway.handle_update({"message": {"chat": {"id": 111}, "text": "第一条"}})
+        old_row = tmp_db.get_connection().execute(
+            "SELECT session_id FROM telegram_chats WHERE chat_id = '111'"
+        ).fetchone()
+        old_sid = old_row[0]
+
+        reply = gateway.handle_update(
+            {"message": {"chat": {"id": 111}, "text": "/reset"}}
+        )
+        assert "会话已重置" in reply
+        new_row = tmp_db.get_connection().execute(
+            "SELECT session_id FROM telegram_chats WHERE chat_id = '111'"
+        ).fetchone()
+        assert new_row[0] != old_sid
+        # 后续消息进新会话
+        gateway.handle_update({"message": {"chat": {"id": 111}, "text": "第二条"}})
+        old_count = tmp_db.get_connection().execute(
+            "SELECT COUNT(*) FROM messages WHERE session_id = ?", (old_sid,)
+        ).fetchone()[0]
+        assert old_count == 2  # 旧会话不再增长（首条 user+assistant）
+
+    def test_help_lists_commands(self, tmp_db):
+        gateway = _make(tmp_db, FakeGate())
+        reply = gateway.handle_update(
+            {"message": {"chat": {"id": 111}, "text": "/help"}}
+        )
+        assert "/approve" in reply
+        assert "/reset" in reply
+
+    def test_unknown_command_shows_help_hint(self, tmp_db):
+        gateway = _make(tmp_db, FakeGate())
+        reply = gateway.handle_update(
+            {"message": {"chat": {"id": 111}, "text": "/frobnicate"}}
+        )
+        assert "未知命令" in reply
+        assert "/help" in reply
