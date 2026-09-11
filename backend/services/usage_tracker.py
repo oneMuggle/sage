@@ -218,6 +218,27 @@ class UsageTracker:
         except Exception as exc:  # noqa: BLE001 — fail-open 铁律
             logger.debug("usage_events 落库跳过: %s", exc)
 
+    def session_usage_since(self, session_id: str, since_ms: int) -> int:
+        """BU2 (round11): 自 since_ms 起，该会话累计 total_tokens。
+
+        编排 run 级预算守门的数据面（run 首次派发时间戳为窗口起点；串行
+        run 下等价于 run 用量）。DB 故障 fail-open 返 0 —— 预算是护栏，
+        绝不因记账读取失败杀死派发链路。
+        """
+        try:
+            from backend.data.database import _SQLITE_LOCK, get_database
+
+            with _SQLITE_LOCK:
+                row = get_database().get_connection().execute(
+                    "SELECT COALESCE(SUM(total_tokens), 0) AS total"
+                    " FROM usage_events WHERE session_id = ? AND created_at >= ?",
+                    (session_id, int(since_ms)),
+                ).fetchone()
+            return int(row["total"] or 0) if row else 0
+        except Exception as exc:  # noqa: BLE001 — fail-open（守门降级）
+            logger.warning("session_usage_since 读取失败（预算守门降级）: %s", exc)
+            return 0
+
     def last_request(self, session_id: str) -> Optional[Dict[str, Any]]:
         """U17: 该会话最近一次 LLM 请求的用量行。
 
