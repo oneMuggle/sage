@@ -256,6 +256,9 @@ class ChatDispatcher:
         # （_cancelled 随之置位收口剩余任务），dispatch 入口据此拒绝后续批次。
         self._budget_exceeded = False
         self._budget_limit = 0
+        # BD (round12): 后台派发句柄 —— 同一时刻至多一个在飞；collect 侧
+        # shield 等待，超时/取消不杀派发本身。
+        self._bg_task: Optional[asyncio.Task] = None
         # B3 (2026-09-09): 单任务跳过 —— task_id → skip 信号（cancel_task 置位）
         # 与 task_id → merged 取消事件（skip ∨ run 级取消，SubagentRunner 的
         # interrupt_event 消费）。_run_one 建档、finally 注销。
@@ -358,6 +361,31 @@ class ChatDispatcher:
                 }
         except Exception as exc:  # noqa: BLE001 — 读库失败降级，不阻塞派发
             logger.warning("计划权威索引构建失败 run=%s err=%s", self.run_id, exc)
+
+    def start_background_dispatch(
+        self, tasks: List[Dict[str, str]]
+    ) -> Optional[asyncio.Task]:
+        """BD (round12): 以后台任务启动派发，立即返回句柄（不阻塞）。
+
+        已有后台派发在飞（未终态）时返回 None —— conductor 应先 collect。
+        """
+        if self._bg_task is not None and not self._bg_task.done():
+            return None
+        self._bg_task = asyncio.create_task(
+            self.dispatch(tasks), name=f"bg-dispatch-{self.run_id}"
+        )
+        return self._bg_task
+
+    async def wait_background(self, timeout: Optional[float] = None) -> str:
+        """等待后台派发完成，返回聚合 markdown。
+
+        ``asyncio.shield`` 保证 collect 的超时/取消不会杀掉派发本身
+        （任务板照常推进，conductor 可再次 collect）。无在飞后台派发时
+        抛 RuntimeError。
+        """
+        if self._bg_task is None:
+            raise RuntimeError("no_background_dispatch: 尚无后台派发可收集")
+        return await asyncio.wait_for(asyncio.shield(self._bg_task), timeout)
 
     async def dispatch(self, tasks: List[Dict[str, str]]) -> str:
         """并行执行子任务，返回聚合 markdown（截断后进 conductor 上下文）。
