@@ -606,14 +606,15 @@ def _add_inline_image(
     height = Inches(image.height_inches) if image.height_inches else None
     stream = image_bytes_to_stream(payload)
 
-    if trailing and not image.caption:
+    if trailing and not getattr(image, "caption", None):
         doc.add_picture(stream, width=width, height=height)
         return
     paragraph = doc.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     paragraph.add_run().add_picture(stream, width=width, height=height)
-    if image.caption:
-        add_caption(doc, image.caption, kind="figure", number=figure_no)
+    caption = getattr(image, "caption", None)
+    if caption:
+        add_caption(doc, caption, kind="figure", number=figure_no)
 
 
 def _style_table(doc: Document, table: Any, table_spec: Any) -> None:
@@ -706,7 +707,7 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         )
         images_by_position: Dict[int, List[Any]] = {}
         for image in inline_images:
-            images_by_position.setdefault(image.after_paragraph, []).append(image)
+            images_by_position.setdefault(image.after_paragraph or 0, []).append(image)
 
         # Body paragraphs（段落写完后插入锚定在其后的行内插图）
         for pi, para in enumerate(req.paragraphs):
@@ -731,7 +732,7 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
             # 批次 2.3：可选段落级样式（无样式字段时零改动）
             _apply_paragraph_run_style(created, para)
             for image in images_by_position.get(pi, []):
-                if image.caption:
+                if getattr(image, "caption", None):
                     figure_no += 1
                 _add_inline_image(doc, image, figure_no, output_path, req.workspace_path)
         # Tables
@@ -753,7 +754,7 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
             _style_table(doc, table, table_spec)
         # 文末插图（批次 2.1 既有行为：按顺序追加在正文之后）
         for image in trailing_images:
-            if image.caption:
+            if getattr(image, "caption", None):
                 figure_no += 1
             _add_inline_image(
                 doc, image, figure_no, output_path, req.workspace_path, trailing=True

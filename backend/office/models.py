@@ -499,7 +499,11 @@ class OfficeWordGenerateRequest(BaseModel):
     tables: _constrained_list(WordTableSpec, max_length=100) = Field(default_factory=list)
     # 批次 2.1：可选插图。Round 8 起为 WordImageSpec——支持行内放置
     # （after_paragraph）与题注（caption）；旧 payload（仅 source/宽高）兼容。
-    images: _constrained_list(WordImageSpec, max_length=20) = Field(default_factory=list)
+    # Union 子类在前：dict 输入由 WordImageSpec 承接（新字段生效），
+    # 既有调用方构造的 ImageSourceSpec 父类实例也继续被接受。
+    images: _constrained_list(Union[WordImageSpec, ImageSourceSpec], max_length=20) = Field(
+        default_factory=list
+    )
     # Round 7 FormatSpec：显式版式（页边距/正文/标题/页眉页脚）。
     format_spec: Optional[WordFormatSpec] = Field(
         default=None,
