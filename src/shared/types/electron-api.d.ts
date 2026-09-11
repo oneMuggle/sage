@@ -201,6 +201,30 @@ export interface BackendRequest {
   timeoutMs?: number;
 }
 
+export interface ProviderConfigSummary {
+  id: string;
+  type: 'github' | 'gitee' | 'gitlab' | 'generic-http';
+  displayName: string;
+  enabled: boolean;
+  isDefault: boolean;
+  config: Record<string, unknown>;
+}
+
+export interface ProvidersElectronApiBridge {
+  list: () => Promise<ProviderConfigSummary[]>;
+  get: (id: string) => Promise<ProviderConfigSummary | null>;
+  add: (
+    cfg: Omit<ProviderConfigSummary, 'id'> & { config: Record<string, unknown> },
+  ) => Promise<{ id: string }>;
+  update: (
+    id: string,
+    patch: Partial<Omit<ProviderConfigSummary, 'id'>>,
+  ) => Promise<{ ok: boolean }>;
+  remove: (id: string) => Promise<{ ok: boolean }>;
+  setDefault: (id: string) => Promise<{ ok: boolean }>;
+  test: (id: string) => Promise<{ ok: boolean; latencyMs: number; error?: string }>;
+}
+
 export interface UpdateElectronApiBridge {
   check: () => Promise<CheckResult>;
   download: () => Promise<void>;
@@ -211,6 +235,10 @@ export interface UpdateElectronApiBridge {
   getConfig: () => Promise<UpdateConfig>;
   setChannel: (channel: UpdateChannel) => Promise<void>;
   onStateChanged: (handler: (payload: UpdateStateChangedEvent) => void) => UnlistenFn;
+  checkWith: (
+    providerId: string,
+    channel?: string,
+  ) => Promise<CheckResult | null>;
 }
 
 export interface ElectronAPI {
@@ -237,6 +265,7 @@ export interface ElectronAPI {
   office: OfficeElectronApiBridge;
   journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;
+  providers: ProvidersElectronApiBridge;
   /**
    * Memory IPC bridge (Gap B + Gap D). Surfaced via `electron/preload.ts`
    * which delegates to `sage:invoke` IPC commands defined in

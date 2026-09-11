@@ -84,6 +84,13 @@ import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
 import { registerUpdateIpc } from './updateIpc';
 import { UpdateManager } from './updateManager';
+import { ProviderStore } from './update/providerStore';
+import { ProviderRegistry } from './update/providers/registry';
+import { registerProviderIpc } from './update/providerIpc';
+import { createGenericHttpProvider } from './update/providers/genericHttp';
+import { createGithubReleasesProvider } from './update/providers/github';
+import { createGiteeReleasesProvider } from './update/providers/gitee';
+import { ENABLE_UPDATE_PROVIDERS_UI } from './update/featureFlag';
 import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backendLauncher';
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
 import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
@@ -261,6 +268,7 @@ let backendStartupStderrBuffer: string[] = [];
 const BACKEND_STARTUP_STDERR_BUFFER_LIMIT = 40;
 let updateManager: UpdateManager | null = null;
 let cleanupUpdateIpc: (() => void) | null = null;
+let cleanupProviderIpc: (() => void) | null = null;
 
 // PR-B: backend auto-restart state
 //
@@ -1006,7 +1014,7 @@ function createMainWindow(): void {
   });
 }
 
-function registerIpcHandlers(): void {
+async function registerIpcHandlers(): Promise<void> {
   ipcMain.handle(
     'sage:invoke',
     async (evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
@@ -1473,7 +1481,42 @@ function registerIpcHandlers(): void {
   registerLogIpc(ipcMain, (sender) => isTrustedRenderer(sender));
   // Lazy-init UpdateManager inside registerIpcHandlers (after app.whenReady)
   // to avoid constructing managers before the app is ready.
-  if (!updateManager) updateManager = new UpdateManager();
+  // Task 1.9: wire pluggable provider system (ProviderStore + Registry + IPC).
+  if (!updateManager) {
+    const providerStore = new ProviderStore();
+    const providerRegistry = new ProviderRegistry();
+    providerRegistry.register('generic-http', (cfg) =>
+      createGenericHttpProvider({
+        id: cfg.id,
+        displayName: cfg.displayName,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        config: cfg.config as any,
+      }),
+    );
+    providerRegistry.register('github', (cfg) =>
+      createGithubReleasesProvider({
+        id: cfg.id,
+        displayName: cfg.displayName,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        config: cfg.config as any,
+      }),
+    );
+providerRegistry.register('gitee', (cfg) =>
+      createGiteeReleasesProvider({
+        id: cfg.id,
+        displayName: cfg.displayName,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        config: cfg.config as any,
+      }),
+    );
+    // Phase 3 will add gitlab registration here
+    updateManager = new UpdateManager({ providerStore, providerRegistry });
+    await updateManager.init();
+
+    if (ENABLE_UPDATE_PROVIDERS_UI()) {
+      cleanupProviderIpc = registerProviderIpc(ipcMain, { providerStore, updateManager });
+    }
+  }
   cleanupUpdateIpc?.();
   cleanupUpdateIpc = registerUpdateIpc(ipcMain, updateManager, {
     isTrustedRenderer,
@@ -1958,7 +2001,7 @@ app.whenReady().then(async () => {
     }
   }
 
-  registerIpcHandlers();
+  await registerIpcHandlers();
   // Phase 4 lightweight smoke test path: skip backend spawn + health wait
   // (CI doesn't have the sage-backend conda env; main renderer still loads
   // and exposes window.electronAPI for IPC contract verification).
@@ -2137,6 +2180,8 @@ app.on('before-quit', () => {
   appIsQuitting = true;
   cleanupUpdateIpc?.();
   cleanupUpdateIpc = null;
+  cleanupProviderIpc?.();
+  cleanupProviderIpc = null;
   void shutdownBackend();
 });
 

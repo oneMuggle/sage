@@ -46,6 +46,9 @@
 | 49   | [本地开发环境助手](./49-local-development-assistant.md) | 运行时探测 + 项目诊断 + 安全执行：`backend/domain` + 3 tools + `/api/v1/runtime/*` + Electron IPC + Settings 开发环境 Tab + humanize 渲染 + doctor check |
 | 50   | [Wiki 完整性优化](./50-wiki-completeness-optimization.md) | 4 项补齐：持久化摄入队列（5 状态）/ Chrome Web Clipper（Manifest V3）/ Lint（6 规则）/ Review（5 确定性审核器 + blake2b 稳定 ID + Jaccard 0.6）|
 | 53   | [学术检索 skill 与 skill_save 工具](./53-academic-search-skill.md) | M1 `skill_save`（用户显式触发沉淀）+ O2 `AcademicSearchSkill` builtin + `academic_adapters` 注册表（CNKI adapter）→ 用户引导 LLM → 流程沉淀闭环 |
+| 54   | [Office 对标追踪基线](./54-office-parity-tracking.md) | 产品×能力对标矩阵（M365 Copilot/Claude/ChatGPT/Gemini/WPS AI）+ Sage 能力落地清单（PR 号索引）+ 维护约定；随 office 迭代/对标轮更新 |
+| 55   | [期刊模板子系统](./55-journal-template-subsystem.md) | N1–N8 完整闭环：模板表 + 字段语义 + 多步向导 + 状态机 + 预览/导出 + SKILL 引导 + 持久化 |
+| 56   | [可插拔更新源系统](./56-update-providers.md) | Phase 1–4 完整交付：4 平台 provider（generic-http/github/gitee/gitlab）+ ProviderRegistry/Store/IPC + safeStorage token 加密 + feature flag 全开 + E2E 闭环 |
 
 ---
 
