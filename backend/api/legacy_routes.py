@@ -77,7 +77,11 @@ from backend.scheduler import get_evolution_logs
 from backend.skills.draft_store import get_skill_draft_store
 from backend.skills.loader import get_skill_loader
 from backend.skills.review_queue import get_review_queue
-from backend.skills.skill_md.frontmatter import SkillMdParseError, parse as parse_skill_md
+from backend.skills.skill_md.frontmatter import (
+    SkillMdParseError,
+    dump as dump_skill_md,
+    parse as parse_skill_md,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -3136,9 +3140,27 @@ def approve_skill_draft(draft_id: str):
             },
         ) from exc
 
+    # Round 7: provenance frontmatter 注入 —— hermes 的 provenance 语义
+    # (agent-created / user-created)，审计与巡检都依赖这个标记区分来源。
+    content_to_write = draft.content
+    try:
+        meta, body = parse_skill_md(content_to_write)
+        metadata_field = meta.get("metadata")
+        if not isinstance(metadata_field, dict):
+            metadata_field = {}
+        metadata_field.setdefault("provenance", "agent-created")
+        meta["metadata"] = metadata_field
+        content_to_write = dump_skill_md(meta, body)
+    except (SkillMdParseError, TypeError, ValueError, UnicodeError) as exc:
+        logger.warning(
+            "provenance 注入失败，按原文落盘 (draft=%s): %s",
+            _safe_log_field(draft_id),
+            type(exc).__name__,
+        )
+
     try:
         skill_loader = get_skill_loader()
-        skill_loader.write(draft.name, draft.content, overwrite=False)
+        skill_loader.write(draft.name, content_to_write, overwrite=False)
     except FileExistsError as exc:
         logger.info(
             "Skill already exists; draft=%s remains pending",
@@ -3182,7 +3204,7 @@ def approve_skill_draft(draft_id: str):
             draft.name,
             "create",
             actor="user",
-            after_content=draft.content,
+            after_content=content_to_write,
             source=f"draft:{draft_id}",
         )
     except Exception as exc:  # noqa: BLE001 — 审计为旁路
@@ -3331,19 +3353,11 @@ async def scan_skill_consolidation():
             },
         )
 
-    adapter = _get_skill_adapter()
+    from backend.skills.consolidator import collect_active_skills
+
     store = get_lifecycle_store()
     pinned = store.get_pinned_names()
-    skills = [
-        {
-            "name": e.get("name", ""),
-            "description": e.get("description", ""),
-            "when_to_use": e.get("when_to_use", ""),
-            "usage_count": adapter.usage_count(e.get("name", "")),
-        }
-        for e in adapter.list_skills_extended()
-        if not e.get("archived")
-    ]
+    skills = collect_active_skills()
     suggestions = await service.scan(skills, pinned_names=sorted(pinned))
 
     # 建议落审计台账（append-only；每条建议一条 consolidation_note）
