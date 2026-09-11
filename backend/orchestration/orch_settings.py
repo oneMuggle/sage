@@ -23,6 +23,7 @@ _RAW_KEYS = {
     "scratchRoot": "scratch_root",
     "worktreeIsolation": "worktree_isolation",
     "subagentApprovalMode": "subagent_approval_mode",
+    "runTokenBudget": "run_token_budget",
 }
 
 
@@ -48,6 +49,10 @@ class OrchSettings:
     #: 卡死的子任务会占住并发信号量拖垮整个 run。超时经 asyncio.wait_for
     #: 取消内层协程（与 agent_tool 异步通路的 L12 根修同一语义）。
     subagent_task_timeout_s: int = 900
+    #: BU1 (round11): run 级 token 预算（该 run 首次派发起，本 session 累计
+    #: total_tokens 上限）。0 = 关闭（默认，保持现状）。触顶后剩余任务经
+    #: run 级取消通道收口，conductor 下一批派发被拒（budget_exceeded）。
+    run_token_budget: int = 0
 
 
 def load_orch_settings() -> OrchSettings:
