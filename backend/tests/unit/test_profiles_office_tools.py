@@ -62,6 +62,8 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
     # 14 → 18 件（按字母序插在 office_generate_pdf 与 office_list 之间）。
     # 2026-09-11 Round 9: primary 白名单补 office_parse_bibtex, 18 → 19 件
     # （按字母序插在 office_list 与 office_read 之间）。
+    # 2026-09-11 Round 10: primary 经 *OFFICE_TOOLS 继承 office_lint_word,
+    # 19 → 20 件（按字母序插在 office_journal_validate 与 office_list 之间）。
     assert visible == [
         "office_analyze",
         "office_analyze_word_template",
@@ -75,6 +77,7 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
         "office_journal_generate_article",
         "office_journal_parse_template",
         "office_journal_validate",
+        "office_lint_word",
         "office_list",
         "office_parse_bibtex",
         "office_read",
@@ -97,6 +100,8 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
     # office_generate_pdf 与 office_list 之间）。
     # 2026-09-11 Round 9: writer 白名单补 office_parse_bibtex, 17 → 18 件
     # （仍不给 office_delete）。
+    # 2026-09-11 Round 10: writer 白名单补 office_lint_word, 18 → 19 件
+    # （仍不给 office_delete）。
     assert visible == [
         "office_analyze",
         "office_analyze_word_template",
@@ -109,6 +114,7 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
         "office_journal_generate_article",
         "office_journal_parse_template",
         "office_journal_validate",
+        "office_lint_word",
         "office_list",
         "office_parse_bibtex",
         "office_read",

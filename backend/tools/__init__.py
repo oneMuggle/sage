@@ -51,6 +51,7 @@ from .office_journal_tool import (
     OfficeJournalParseTemplateTool,
     OfficeJournalValidateTool,
 )
+from .office_lint_tool import OfficeLintWordTool
 from .office_pdf_tool import (
     OfficeFillPdfFormTool,
     OfficeGeneratePdfTool,
@@ -197,6 +198,8 @@ def register_all_tools(
     registry.register(OfficeJournalValidateTool(policy=policy))
     # Round 9 引用体系: office_parse_bibtex（READ，BibTeX → ReferenceSpec）
     registry.register(OfficeBibTexTool(policy=policy))
+    # Round 10 格式 Linter: office_lint_word（READ，对照 FormatSpec 校验 docx）
+    registry.register(OfficeLintWordTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -309,6 +312,7 @@ __all__ = [
     "OfficeFillWordTemplateTool",
     "OfficeAnalyzeTool",
     "OfficeBibTexTool",
+    "OfficeLintWordTool",
     "OfficeJournalParseTemplateTool",
     "OfficeJournalFillFromContentTool",
     "OfficeJournalGenerateArticleTool",

@@ -87,6 +87,8 @@ from backend.office.models import (
     PdfReadRequest,
     PdfReadResult,
     TemplateLibraryResponse,
+    WordLintRequest,
+    WordLintResult,
     WordTemplateAnalysis,
     WordTemplateAnalyzeRequest,
     WordTemplateFillRequest,
@@ -111,6 +113,7 @@ from backend.office.storage import (
 )
 from backend.office.template_library import instantiate_template, list_templates
 from backend.office.word import generate_docx, read_docx
+from backend.office.word_lint import lint_docx
 from backend.office.word_template import analyze_word_template, fill_word_template
 
 if TYPE_CHECKING:
@@ -558,6 +561,18 @@ def parse_bibtex_endpoint(req: BibTeXParseRequest) -> BibTeXParseResponse:
     """
     references = parse_bibtex(req.text)
     return BibTeXParseResponse(count=len(references), references=references)
+
+
+@router.post("/word/lint")
+def lint_word_endpoint(req: WordLintRequest) -> WordLintResult:
+    """对照 FormatSpec 校验 .docx（Round 10 格式 Linter）。
+
+    纯回读；file_path 经工作区围栏（resolve_within）把守，5MB 上限与
+    读取端点一致。解析失败走全局 OfficeParseError → 422 信封。
+    """
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    _check_size_limit(file_path, req.max_size_bytes)
+    return lint_docx(file_path, req.format_spec)
 
 
 @router.post("/excel/generate")

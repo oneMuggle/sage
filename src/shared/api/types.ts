@@ -1268,6 +1268,25 @@ export interface WordTableSpec {
   merges?: WordCellMergeSpec[];
 }
 
+// Word 格式 Linter（Round 10）：对照 FormatSpec 校验 docx。
+// Backend counterpart: WordLintIssue / WordLintResult / WordLintRequest
+// in backend/office/models.py。
+export interface WordLintIssue {
+  rule_id: string;
+  severity: 'error' | 'warning';
+  message: string;
+  fix_hint?: string;
+}
+
+export interface WordLintResult {
+  ok: boolean;
+  issue_count: number;
+  error_count: number;
+  warning_count: number;
+  checked_rules: string[];
+  issues: WordLintIssue[];
+}
+
 export interface OfficeWordGenerateRequest {
   workspace_path: string;
   filename: string;

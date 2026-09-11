@@ -255,6 +255,8 @@ def create_default_agents() -> List[AgentProfile]:
                 *JOURNAL_TOOLS,
                 # Round 9 引用体系: BibTeX 解析（READ，纯文本、无工作区依赖）
                 "office_parse_bibtex",
+                # Round 10 格式 Linter: 对照 FormatSpec 校验 docx（READ）
+                "office_lint_word",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -420,6 +422,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "office_journal_generate_article", "office_journal_validate",
     # 2026-09-11 Round 9: BibTeX 解析（与 writer.tools 同步）。
     "office_parse_bibtex",
+    # 2026-09-11 Round 10: 格式 Linter（与 writer.tools 同步）。
+    "office_lint_word",
 ]
 
 
@@ -677,6 +681,8 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "传 output_path 另存。\n"
     "- 数据分析：office_analyze 用 pandas 做本地数据分析"
     "（describe/计数/聚合/相关性，可生成分析报告 xlsx）——数据不出本机。\n"
+    "- 格式自检（Round 10）：office_lint_word 对照格式规范校验 docx，"
+    "返回违规清单与修复建议——正式文档交付前建议跑一次。\n"
     "- 引用与参考文献（Round 9）：用户给 .bib 时先 office_parse_bibtex 解析；"
     "结构化条目放 office_create 的 content.references，段落 citations 用条目 "
     "key 回链——引擎自动生成文中上标 [N]（首现编号、连续合并）与文末参考"
