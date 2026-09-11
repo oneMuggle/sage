@@ -20,10 +20,6 @@ import type { WindowControlsBridge } from '../src/shared/api/windowControlsClien
 import type {
   ImportResult,
   JournalElectronApiBridge,
-  OfficeDocType,
-  OfficeElectronApiBridge,
-  OfficeManagedRef,
-  PickedOfficeFile,
   ProvidersElectronApiBridge,
   RescanResult,
   SkillsElectronApiBridge,
@@ -307,7 +303,10 @@ const electronAPI = {
     setChannel: (channel: UpdateChannel) =>
       ipcRenderer.invoke('update:set-channel', channel) as Promise<void>,
     checkWith: (providerId: string, channel?: string) =>
-      ipcRenderer.invoke('update:check-with', { providerId, channel }) as Promise<CheckResult | null>,
+      ipcRenderer.invoke('update:check-with', {
+        providerId,
+        channel,
+      }) as Promise<CheckResult | null>,
     onStateChanged: (handler: (payload: UpdateStateChangedEvent) => void): UnlistenFn => {
       const listener = (_event: IpcRendererEvent, payload: UpdateStateChangedEvent) =>
         handler(payload);
@@ -326,14 +325,17 @@ const electronAPI = {
    *   provider:remove, provider:set-default, provider:test
    */
   providers: {
-    list: () => ipcRenderer.invoke('provider:list') as Promise<Array<{
-      id: string;
-      type: 'github' | 'gitee' | 'gitlab' | 'generic-http';
-      displayName: string;
-      enabled: boolean;
-      isDefault: boolean;
-      config: Record<string, unknown>;
-    }>>,
+    list: () =>
+      ipcRenderer.invoke('provider:list') as Promise<
+        Array<{
+          id: string;
+          type: 'github' | 'gitee' | 'gitlab' | 'generic-http';
+          displayName: string;
+          enabled: boolean;
+          isDefault: boolean;
+          config: Record<string, unknown>;
+        }>
+      >,
     get: (id: string) =>
       ipcRenderer.invoke('provider:get', { id }) as Promise<{
         id: string;
@@ -350,13 +352,15 @@ const electronAPI = {
       isDefault: boolean;
       config: Record<string, unknown>;
     }) => ipcRenderer.invoke('provider:add', cfg) as Promise<{ id: string }>,
-    update: (id: string, patch: Partial<{
-      displayName: string;
-      enabled: boolean;
-      isDefault: boolean;
-      config: Record<string, unknown>;
-    }>) =>
-      ipcRenderer.invoke('provider:update', { id, patch }) as Promise<{ ok: boolean }>,
+    update: (
+      id: string,
+      patch: Partial<{
+        displayName: string;
+        enabled: boolean;
+        isDefault: boolean;
+        config: Record<string, unknown>;
+      }>,
+    ) => ipcRenderer.invoke('provider:update', { id, patch }) as Promise<{ ok: boolean }>,
     remove: (id: string) =>
       ipcRenderer.invoke('provider:remove', { id }) as Promise<{ ok: boolean }>,
     setDefault: (id: string) =>
