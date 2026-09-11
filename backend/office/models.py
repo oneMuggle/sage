@@ -352,6 +352,98 @@ class WordTableSpec(BaseModel):
     rows: _constrained_list(_constrained_list(str), max_length=1000) = Field(default_factory=list)
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Word 版式规范（Round 7 FormatSpec —— "版式即配置"）
+#
+# 设计约定：
+# - 所有字段 Optional，None = 该项不设置（生成器保持既有默认行为），
+#   保证不传 ``format_spec`` 时生成结果与历史版本逐字节等价；
+# - 模型只依赖 pydantic（不含 docx），维持
+#   ``scripts/verify-office-paths.py`` canary "models 仅依赖 pydantic"
+#   的前提；docx 侧的应用逻辑在 ``word_layout.py``；
+# - 长度/数值边界为合理性钳制（防 LLM 传 9999 磅字号），不是排版学约束。
+# ──────────────────────────────────────────────────────────────────────
+
+
+class WordPageMarginsSpec(BaseModel):
+    """页边距（厘米）。None 的边保持 Word 默认。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    top: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    bottom: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    left: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    right: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+
+
+class WordPageSetupSpec(BaseModel):
+    """页面设置：纸张/方向/页边距。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    size: Optional[Literal["A4", "letter"]] = Field(default=None)
+    orientation: Optional[Literal["portrait", "landscape"]] = Field(default=None)
+    margins_cm: Optional[WordPageMarginsSpec] = Field(default=None)
+
+
+class WordBodyStyleSpec(BaseModel):
+    """正文（Normal 样式）默认排版。行距为倍数（如 1.5 倍）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
+    line_spacing: Optional[float] = Field(default=None, ge=1.0, le=3.0)
+    first_line_indent_cm: Optional[float] = Field(default=None, ge=0.0, le=5.0)
+    space_after_pt: Optional[float] = Field(default=None, ge=0.0, le=48.0)
+    align: Optional[Literal["left", "center", "right", "justify"]] = None
+
+
+class WordHeadingStyleSpec(BaseModel):
+    """标题样式覆盖（作用于 Title / Heading 1-3 样式定义本身）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
+    bold: Optional[bool] = None
+    color: Optional[str] = Field(
+        default=None,
+        description="字体颜色，6 位 RGB 十六进制（如 '2F5496'，可带 #）",
+        pattern=r"^#?[0-9A-Fa-f]{6}$",
+        max_length=7,
+    )
+    align: Optional[Literal["left", "center", "right", "justify"]] = None
+    space_before_pt: Optional[float] = Field(default=None, ge=0.0, le=96.0)
+    space_after_pt: Optional[float] = Field(default=None, ge=0.0, le=96.0)
+
+
+class WordHeaderFooterSpec(BaseModel):
+    """页眉/页脚设置。``page_number`` 仅在 footer 上生效（居中 PAGE 域）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: Optional[str] = Field(default=None, max_length=200)
+    align: Optional[Literal["left", "center", "right", "justify"]] = None
+    page_number: bool = False
+
+
+class WordFormatSpec(BaseModel):
+    """Word 文档版式规范。
+
+    传入 ``generate_docx`` 后由 ``word_layout.apply_format_spec`` 以确定性
+    代码注入 styles.xml / document.xml —— 格式要求不再依赖 LLM 在 prompt
+    里"口头约定"。全字段可选，None 项不触碰。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    page: Optional[WordPageSetupSpec] = None
+    body: Optional[WordBodyStyleSpec] = None
+    headings: Optional[Dict[Literal["h1", "h2", "h3"], WordHeadingStyleSpec]] = None
+    title: Optional[WordHeadingStyleSpec] = None
+    header: Optional[WordHeaderFooterSpec] = None
+    footer: Optional[WordHeaderFooterSpec] = None
+
+
 class OfficeWordGenerateRequest(BaseModel):
     """POST /api/v1/office/word/generate."""
 
@@ -362,6 +454,13 @@ class OfficeWordGenerateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     paragraphs: _constrained_list(WordParagraphSpec, max_length=5000) = Field(default_factory=list)
     tables: _constrained_list(WordTableSpec, max_length=100) = Field(default_factory=list)
+    # 批次 2.1：可选插图，按顺序追加在正文段落/表格之后。
+    images: _constrained_list(ImageSourceSpec, max_length=20) = Field(default_factory=list)
+    # Round 7 FormatSpec：显式版式（页边距/正文/标题/页眉页脚）。
+    format_spec: Optional[WordFormatSpec] = Field(
+        default=None,
+        description="版式规范；None 保持默认版式（行为与历史版本一致）",
+    )
     # 批次 2.1：可选插图，按顺序追加在正文段落/表格之后。
     images: _constrained_list(ImageSourceSpec, max_length=20) = Field(default_factory=list)
     font_family: Optional[str] = Field(

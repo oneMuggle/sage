@@ -1150,6 +1150,54 @@ export interface WordParagraphSpec {
   text: string;
 }
 
+// Word 版式规范（Round 7 FormatSpec —— "版式即配置"）。
+// Backend counterpart: WordFormatSpec 系列模型 in backend/office/models.py。
+// 全字段可选，不传时生成器保持既有默认版式。
+export interface WordPageMarginsSpec {
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+}
+
+export interface WordPageSetupSpec {
+  size?: 'A4' | 'letter';
+  orientation?: 'portrait' | 'landscape';
+  margins_cm?: WordPageMarginsSpec;
+}
+
+export interface WordBodyStyleSpec {
+  font_size_pt?: number;
+  line_spacing?: number;
+  first_line_indent_cm?: number;
+  space_after_pt?: number;
+  align?: 'left' | 'center' | 'right' | 'justify';
+}
+
+export interface WordHeadingStyleSpec {
+  font_size_pt?: number;
+  bold?: boolean;
+  color?: string;
+  align?: 'left' | 'center' | 'right' | 'justify';
+  space_before_pt?: number;
+  space_after_pt?: number;
+}
+
+export interface WordHeaderFooterSpec {
+  text?: string;
+  align?: 'left' | 'center' | 'right' | 'justify';
+  page_number?: boolean;
+}
+
+export interface WordFormatSpec {
+  page?: WordPageSetupSpec;
+  body?: WordBodyStyleSpec;
+  headings?: Partial<Record<'h1' | 'h2' | 'h3', WordHeadingStyleSpec>>;
+  title?: WordHeadingStyleSpec;
+  header?: WordHeaderFooterSpec;
+  footer?: WordHeaderFooterSpec;
+}
+
 export interface WordTableSpec {
   headers: string[];
   rows: string[][];
@@ -1163,6 +1211,7 @@ export interface OfficeWordGenerateRequest {
   tables?: WordTableSpec[];
   font_family?: string;
   ascii_font?: string;
+  format_spec?: WordFormatSpec;
 }
 
 export interface ExcelSheetSpec {

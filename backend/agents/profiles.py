@@ -209,6 +209,9 @@ def create_default_agents() -> List[AgentProfile]:
             system_prompt=(
                 "你是一个专业的写作 Agent。负责把资料整理成结构清晰、可执行的 "
                 "学习资料、操作指南等 markdown 文档。产出文档请用 write_file 工具落盘。"
+                "生成正式 docx 报告时用 office_create，并把用户明示的硬性格式要求"
+                "（页边距/字号/行距/首行缩进/页眉页脚/页码/标题样式）映射进 "
+                "content.format_spec —— 版式由引擎确定性保证，不要只写在正文里。"
             ),
             # PR-1 (office CRUD 接线) + PR-2 (archive/restore):
             # 写作 agent 现在可生成/编辑/还原 Office 文档 (report / 操作手册

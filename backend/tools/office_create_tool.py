@@ -270,7 +270,9 @@ class OfficeCreateTool(BaseTool):
                         "type": "object",
                         "description": (
                             "Structured content as a JSON object, keyed by "
-                            "doc_type: word → {title, paragraphs:[{text, "
+                            "doc_type: word → {title, format_spec?:{page?, "
+                            "body?, headings?, title?, header?, footer?} "
+                            "版式规范, paragraphs:[{text, "
                             "heading?, font_size?, bold?, italic?, color?, "
                             "align?}], tables:[{headers, rows[]}], images?:"
                             "[{source, width_inches?, height_inches?}]}; "
@@ -286,6 +288,197 @@ class OfficeCreateTool(BaseTool):
                             "title": {
                                 "type": "string",
                                 "description": "word 文档标题。",
+                            },
+                            "format_spec": {
+                                "type": "object",
+                                "description": (
+                                    "word 可选版式规范（Round 7，版式即配置）："
+                                    "把用户的硬性格式要求（页边距/字号/行距/"
+                                    "页眉页脚/页码/标题样式）结构化传入，由"
+                                    "确定性代码注入文档。页边距与缩进单位厘米"
+                                    "，字号与段间距单位磅，行距为倍数（1.5=1.5倍"
+                                    "）。不传时保持默认版式。仅 word 支持。"
+                                ),
+                                "properties": {
+                                    "page": {
+                                        "type": "object",
+                                        "description": "页面设置（纸张/方向/页边距）。",
+                                        "properties": {
+                                            "size": {
+                                                "type": "string",
+                                                "enum": ["A4", "letter"],
+                                            },
+                                            "orientation": {
+                                                "type": "string",
+                                                "enum": ["portrait", "landscape"],
+                                            },
+                                            "margins_cm": {
+                                                "type": "object",
+                                                "description": (
+                                                    "页边距（厘米），如 "
+                                                    "上下 2.54 左右 3.17"
+                                                ),
+                                                "properties": {
+                                                    "top": {"type": "number"},
+                                                    "bottom": {"type": "number"},
+                                                    "left": {"type": "number"},
+                                                    "right": {"type": "number"},
+                                                },
+                                            },
+                                        },
+                                    },
+                                    "body": {
+                                        "type": "object",
+                                        "description": "正文（Normal 样式）默认排版。",
+                                        "properties": {
+                                            "font_size_pt": {
+                                                "type": "number",
+                                                "description": "正文字号（磅），如 12=小四",
+                                            },
+                                            "line_spacing": {
+                                                "type": "number",
+                                                "description": "行距倍数，如 1.5",
+                                            },
+                                            "first_line_indent_cm": {
+                                                "type": "number",
+                                                "description": "首行缩进（厘米），如 0.74=2字符",
+                                            },
+                                            "space_after_pt": {"type": "number"},
+                                            "align": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "left",
+                                                    "center",
+                                                    "right",
+                                                    "justify",
+                                                ],
+                                            },
+                                        },
+                                    },
+                                    "headings": {
+                                        "type": "object",
+                                        "description": (
+                                            "各级标题样式覆盖，键为 h1/h2/h3"
+                                        ),
+                                        "properties": {
+                                            "h1": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "font_size_pt": {"type": "number"},
+                                                    "bold": {"type": "boolean"},
+                                                    "color": {
+                                                        "type": "string",
+                                                        "description": (
+                                                            "6 位 RGB hex，如 '2F5496'"
+                                                        ),
+                                                    },
+                                                    "align": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "left",
+                                                            "center",
+                                                            "right",
+                                                            "justify",
+                                                        ],
+                                                    },
+                                                    "space_before_pt": {"type": "number"},
+                                                    "space_after_pt": {"type": "number"},
+                                                },
+                                            },
+                                            "h2": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "font_size_pt": {"type": "number"},
+                                                    "bold": {"type": "boolean"},
+                                                    "color": {"type": "string"},
+                                                    "align": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "left",
+                                                            "center",
+                                                            "right",
+                                                            "justify",
+                                                        ],
+                                                    },
+                                                    "space_before_pt": {"type": "number"},
+                                                    "space_after_pt": {"type": "number"},
+                                                },
+                                            },
+                                            "h3": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "font_size_pt": {"type": "number"},
+                                                    "bold": {"type": "boolean"},
+                                                    "color": {"type": "string"},
+                                                    "align": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "left",
+                                                            "center",
+                                                            "right",
+                                                            "justify",
+                                                        ],
+                                                    },
+                                                    "space_before_pt": {"type": "number"},
+                                                    "space_after_pt": {"type": "number"},
+                                                },
+                                            },
+                                        },
+                                    },
+                                    "title": {
+                                        "type": "object",
+                                        "description": "文档主标题样式（Title 样式）。",
+                                        "properties": {
+                                            "font_size_pt": {"type": "number"},
+                                            "bold": {"type": "boolean"},
+                                            "color": {"type": "string"},
+                                            "align": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "left",
+                                                    "center",
+                                                    "right",
+                                                    "justify",
+                                                ],
+                                            },
+                                            "space_before_pt": {"type": "number"},
+                                            "space_after_pt": {"type": "number"},
+                                        },
+                                    },
+                                    "header": {
+                                        "type": "object",
+                                        "description": "页眉。",
+                                        "properties": {
+                                            "text": {"type": "string"},
+                                            "align": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "left",
+                                                    "center",
+                                                    "right",
+                                                    "justify",
+                                                ],
+                                            },
+                                        },
+                                    },
+                                    "footer": {
+                                        "type": "object",
+                                        "description": "页脚；page_number=true 时居中插入页码域。",
+                                        "properties": {
+                                            "text": {"type": "string"},
+                                            "align": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "left",
+                                                    "center",
+                                                    "right",
+                                                    "justify",
+                                                ],
+                                            },
+                                            "page_number": {"type": "boolean"},
+                                        },
+                                    },
+                                },
                             },
                             "paragraphs": {
                                 "type": "array",
