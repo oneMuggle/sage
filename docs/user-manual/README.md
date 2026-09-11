@@ -19,6 +19,7 @@
 | 11   | [sage doctor CLI](./11-sage-doctor.md) | 安装/环境级 self-check：Win7 LTS、白屏、conda 错配一键诊断（退出码 0/1/2 + --json 机器可读） |
 | 12   | [本地开发环境助手](./12-local-development-assistant.md) | 设置 → 开发环境 Tab：自动发现 Python/Node.js 运行时 + 项目诊断 + 试跑代码片段 |
 | 13   | [期刊模板面板](./13-journal-template-panel.md) | Office 页面底部：模板规范抽取 / 论文格式校验 / 结构化填充生成符合期刊要求的 Word 文档 |
+| 14   | [可插拔更新源](./14-update-providers.md) | 设置 → 更新源 tab：添加 GitHub/Gitee/GitLab/自建 HTTP 源 + 设为默认 + 测试连接 + 删除；token 用 safeStorage 加密存储，IPC 返回自动 mask |
 
 ---
 

@@ -180,7 +180,7 @@ class ApplyPatchTool(BaseTool):
 
             replacements = match_count if replace_all else 1
             if fuzzy_range is not None:
-                start, end, trailing_eol = fuzzy_range
+                start, end, trailing_eol, _fuzzy_line = fuzzy_range
                 insert_new = new_string
                 if "\r\n" in planned_edit.updated and "\r\n" not in insert_new:
                     insert_new = insert_new.replace("\r\n", "\n").replace("\n", "\r\n")

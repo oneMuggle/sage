@@ -592,6 +592,14 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         ea_font = getattr(req, "font_family", None) or DEFAULT_EA_FONT
         set_doc_default_font(doc, ascii_font, ea_font)
 
+        # Round 7 FormatSpec：显式版式（页边距/正文/标题样式/页眉页脚）。
+        # None 时不触碰文档，行为与历史版本一致；样式补丁需在写正文之前
+        # 完成，add_heading/add_paragraph 才能继承补丁后的样式定义。
+        if req.format_spec is not None:
+            from .word_layout import apply_format_spec
+
+            apply_format_spec(doc, req.format_spec)
+
         # Title
         doc.add_heading(req.title, level=0)
         # Body paragraphs
