@@ -252,6 +252,10 @@ class ChatDispatcher:
         self._dispatched_plan_ids: Set[str] = set()
         # P2-9 (2026-08-14): 取消事件 —— cancel() 幂等 set；_run_one 开头检查。
         self._cancelled = asyncio.Event()
+        # BU2 (round11): run 级 token 预算守门状态 —— 触发一次即置位
+        # （_cancelled 随之置位收口剩余任务），dispatch 入口据此拒绝后续批次。
+        self._budget_exceeded = False
+        self._budget_limit = 0
         # B3 (2026-09-09): 单任务跳过 —— task_id → skip 信号（cancel_task 置位）
         # 与 task_id → merged 取消事件（skip ∨ run 级取消，SubagentRunner 的
         # interrupt_event 消费）。_run_one 建档、finally 注销。
@@ -370,6 +374,13 @@ class ChatDispatcher:
             聚合 markdown：每个子结果截断 MAX_SUBAGENT_RESULT_CHARS 后拼接；
             单任务失败以错误摘要参与聚合，其余任务继续（错误隔离）。
         """
+        # BU2 (round11): 预算触顶后拒绝后续批次 —— conductor 收到明确错误
+        # 可停止重试派发（错误文本随工具结果进上下文）。
+        if self._budget_exceeded:
+            raise ValueError(
+                f"budget_exceeded: 本 run token 预算（{self._budget_limit}）已耗尽，"
+                "派发被拒绝。请直接基于已有结果输出最终汇总。"
+            )
         # Wave 2 P1-4: 首次 dispatch 时间戳（放函数开头，resume 场景多轮
         # dispatch 只记第一次）。P1-5: 同步落库 dispatched_at —— update_plan
         # 据此返回 409（编辑生效窗口 = 首次派发前）。落库失败降级不阻塞。
@@ -594,6 +605,9 @@ class ChatDispatcher:
                 finally:
                     state.finished_at = time.time()
                     self._emit_task_status(state)
+                    # BU2 (round11): 每任务终态后预算守门 —— 超限置位
+                    # _cancelled，同批 queued 任务经既有 merged 守卫收口。
+                    self._check_run_budget()
 
         # P1 拓扑调度 (spec 2026-08-21): 依 depends_on 分波执行。
         # - 波内 asyncio.gather 全并行（信号量限流不变）
@@ -932,6 +946,35 @@ class ChatDispatcher:
             raise ValueError(f"task_id 路径穿越: {state.task_id!r}") from None
         return candidate
 
+    def _check_run_budget(self) -> None:
+        """BU2 (round11): 任务终态后预算守门 —— 超限触发 run 级取消。
+
+        预算键 ``OrchSettings.run_token_budget``（0 = 关闭）。用量窗口 =
+        首次派发时间戳起的本 session 累计 total_tokens（O3 使子代理用量
+        归因到同一 session）。只触发一次；usage 读取 fail-open 返 0，
+        守门降级绝不误触发。
+        """
+        budget = getattr(self.settings, "run_token_budget", 0)
+        if budget <= 0 or self._budget_exceeded:
+            return
+        if not self.session_id or not self._first_dispatch_at:
+            return
+        from backend.services.usage_tracker import UsageTracker
+
+        used = UsageTracker().session_usage_since(
+            self.session_id, int(self._first_dispatch_at * 1000)
+        )
+        if used > budget:
+            self._budget_exceeded = True
+            self._budget_limit = budget
+            logger.warning(
+                "run %s 触发 token 预算上限：已用 %d > 预算 %d，剩余任务停止派发",
+                self.run_id,
+                used,
+                budget,
+            )
+            self._cancelled.set()
+
     def _emit_task_status(self, state: ChatTaskState) -> None:
         """推 task_status 事件；队列满/关闭静默降级（进度尽力而为）。"""
         event: Dict[str, Any] = {
@@ -1175,6 +1218,13 @@ class ChatDispatcher:
                 + (f"（{failed} 失败）" if failed else "")
                 + (f"（{cancelled} 已取消）" if cancelled else "")
                 + "。\n\n"
+            )
+        # BU3 (round11): 预算触顶提示 —— 让 conductor 知道取消原因是预算
+        # 而非失败，直接基于已有结果汇总。
+        if self._budget_exceeded:
+            header += (
+                f"- ⚠ 已触发 run 级 token 预算上限（>{self._budget_limit} tokens），"
+                "剩余任务已停止派发。请基于以上已有结果直接给出最终汇总。\n"
             )
 
         blocks: List[str] = []
