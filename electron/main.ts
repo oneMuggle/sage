@@ -1484,7 +1484,7 @@ async function registerIpcHandlers(): Promise<void> {
         config: cfg.config as any,
       }),
     );
-providerRegistry.register('gitee', (cfg) =>
+    providerRegistry.register('gitee', (cfg) =>
       createGiteeReleasesProvider({
         id: cfg.id,
         displayName: cfg.displayName,
