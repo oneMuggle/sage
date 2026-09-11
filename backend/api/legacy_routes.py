@@ -3406,6 +3406,52 @@ async def scan_skill_consolidation(auto_draft: bool = True):
     }
 
 
+class ConsolidationAcceptRequest(BaseModel):
+    """``POST /skills/consolidation/accept`` 请求体（Round 15）。"""
+
+    skill_names: List[str]
+
+
+@router.post("/skills/consolidation/accept")
+@with_db_lock
+def accept_consolidation_archive(data: ConsolidationAcceptRequest):
+    """采纳 archive 类建议：批量归档指定技能（Round 15）。
+
+    - 200 + ``{"archived": [...], "skipped_pinned": [...], "missing": [...]}``
+    - 400 — skill_names 为空
+    pinned 技能自动跳过并在 skipped_pinned 报告（不会静默归档）。
+    merge/revise 类建议不走此端点（已有草稿审批面）。
+    """
+    from backend.skills.lifecycle import get_lifecycle_store
+
+    if not data.skill_names:
+        raise HTTPException(
+            status_code=400,
+            detail={"type": "empty_skill_names", "message": "skill_names is required"},
+        )
+    store = get_lifecycle_store()
+    adapter = _get_skill_adapter()
+    known = {e.get("name") for e in adapter.list_skills_extended()}
+    pinned = store.get_pinned_names()
+
+    archived: List[str] = []
+    skipped_pinned: List[str] = []
+    missing: List[str] = []
+    for name in data.skill_names:
+        if name not in known:
+            missing.append(name)
+        elif name in pinned:
+            skipped_pinned.append(name)
+        else:
+            store.set_archived(name, True)
+            archived.append(name)
+    return {
+        "archived": archived,
+        "skipped_pinned": skipped_pinned,
+        "missing": missing,
+    }
+
+
 @router.get("/skills/consolidation/suggestions")
 def list_consolidation_suggestions(limit: int = 50):
     """List recorded consolidation suggestions (from the audit ledger)."""
