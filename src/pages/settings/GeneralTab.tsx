@@ -482,6 +482,12 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
           value={settings.orch.maxSubagentIterations}
           onChange={(v) => updateSettings({ orch: { ...settings.orch, maxSubagentIterations: v } })}
         />
+        <NumberField
+          label="Run token 预算（tokens，0=不限）"
+          dataTestId="orch-run-token-budget"
+          value={settings.orch.runTokenBudget}
+          onChange={(v) => updateSettings({ orch: { ...settings.orch, runTokenBudget: v } })}
+        />
         <SettingRow
           label="子代理自动批准非危险工具"
           desc="编排子代理遇到需审批的工具时,自动放行非危险调用;破坏性/可疑命令与工作区越界仍弹窗确认"
