@@ -113,6 +113,8 @@ class TelegramGateway:
         self.db = db
         self.offset = 0
         self.stats = GatewayStats()
+        # Round 10: 已转发审批的去重集合（request_id 全量；进程内即可）
+        self._forwarded_approval_ids: set = set()
         self._ensure_table()
 
     # ------------------------------------------------------------------ #
@@ -190,10 +192,111 @@ class TelegramGateway:
             )
             return "unauthorized"
 
+        # Round 10: 审批命令（/approve /deny /pending）—— 远程批准 agent
+        # 的危险操作，网关真正可用于无人值守场景。命令不进 LLM 对话。
+        if text.startswith("/"):
+            reply = self._handle_command(text, chat_id)
+            if reply is not None:
+                self._reply_text(chat_id, reply)
+                return reply
+
         reply = self._chat(text, chat_id)
         self._reply_text(chat_id, reply)
         self.stats.messages_replied += 1
         return reply
+
+    # ------------------------------------------------------------------ #
+    # Round 10: 审批转发与命令
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _short_id(request_id: str) -> str:
+        """request_id 前 8 位（审批命令用短 id）"""
+        return request_id.replace("-", "")[:8]
+
+    def _resolve_pending(self, short_id: str) -> Optional[Any]:
+        """按短 id 前缀匹配挂起审批请求"""
+        from backend.services.permission_gate import get_permission_gate
+
+        gate = get_permission_gate()
+        if gate is None:
+            return None
+        for req in gate.pending():
+            if self._short_id(req.request_id) == short_id:
+                return req
+        return None
+
+    def _handle_command(  # noqa: PLR0911 — 命令分发逐条 return 可读性更好
+        self, text: str, chat_id: str
+    ) -> Optional[str]:
+        """处理 /approve /deny /pending /status 命令。
+
+        Returns:
+            回复文本；非命令（None）则继续走 LLM 对话。
+        """
+        from backend.services.permission_gate import get_permission_gate
+
+        parts = text.split()
+        cmd = parts[0].lower()
+
+        if cmd in ("/approve", "/deny"):
+            if len(parts) < 2:
+                return f"用法: {cmd} <短id>（见 /pending 列表）"
+            req = self._resolve_pending(parts[1])
+            if req is None:
+                return f"未找到挂起审批 {parts[1]}"
+            gate = get_permission_gate()
+            if gate is None or not gate.answer(req.request_id, approved=cmd == "/approve"):
+                return f"审批 {parts[1]} 已失效或已处理"
+            verb = "已批准" if cmd == "/approve" else "已拒绝"
+            logger.info("Telegram 审批: %s %s (by chat %s)", verb, req.request_id, chat_id[:8])
+            return f"{verb} {req.tool_name} [{self._short_id(req.request_id)}]"
+
+        if cmd == "/pending":
+            gate = get_permission_gate()
+            pending = gate.pending() if gate is not None else []
+            if not pending:
+                return "当前没有待审批请求。"
+            lines = [
+                f"[{self._short_id(r.request_id)}] {r.tool_name} — {r.risk}"
+                for r in pending
+            ]
+            return "待审批:\n" + "\n".join(lines)
+
+        if cmd == "/status":
+            return (
+                f"Sage 网关运行中。统计: 收到 {self.stats.updates_seen} / "
+                f"回复 {self.stats.messages_replied} / 拒绝 {self.stats.rejected}"
+            )
+
+        return None  # 非网关命令 → 交给 LLM 对话
+
+    def _forward_new_approvals(self) -> int:
+        """把新的挂起审批转发到白名单 chats（每 tick 调用，已转发去重）"""
+        from backend.services.permission_gate import get_permission_gate
+
+        gate = get_permission_gate()
+        if gate is None:
+            return 0
+        forwarded = 0
+        for req in gate.pending():
+            if req.request_id in self._forwarded_approval_ids:
+                continue
+            self._forwarded_approval_ids.add(req.request_id)
+            body = (
+                f"🔐 待审批 [{self._short_id(req.request_id)}]\n"
+                f"工具: {req.tool_name}\n风险: {req.risk}\n"
+                f"原因: {req.message}\n参数: {req.args_summary}\n\n"
+                f"回复 /approve {self._short_id(req.request_id)} 批准，"
+                f"/deny {self._short_id(req.request_id)} 拒绝"
+            )
+            for chat_id in self.config.allowed_chat_ids:
+                try:
+                    self._reply_text(chat_id, body)
+                    forwarded += 1
+                except Exception as exc:  # noqa: BLE001 — 单 chat 失败不中断
+                    logger.warning("审批转发失败 (chat=%s): %s", chat_id[:8], exc)
+        return forwarded
 
     def _chat(self, text: str, chat_id: str) -> str:
         """会话绑定 + 历史拼装 + LLM 单轮 + 消息落库"""
@@ -273,6 +376,11 @@ class TelegramGateway:
             except Exception as exc:  # noqa: BLE001 — 单条失败不中断轮询
                 self.stats.errors += 1
                 logger.warning("Telegram update 处理失败: %s", exc)
+        # Round 10: 转发新的挂起审批到白名单 chats
+        try:
+            self._forward_new_approvals()
+        except Exception as exc:  # noqa: BLE001 — 转发失败不中断轮询
+            logger.warning("审批转发失败: %s", exc)
         return len(updates)
 
     def start_polling(self, poll_interval_seconds: float = 3.0) -> None:
