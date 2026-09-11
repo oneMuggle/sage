@@ -1,6 +1,6 @@
 # LLM 调用诊断包导出
 
-> 面向开发者的技术 reference。用户操作指南见 `docs/user-manual/08-troubleshooting.md`。
+> 面向开发者的技术 reference。用户操作指南见 `docs/user-manual/15-diagnostic-export.md`。
 
 ## 用途
 
