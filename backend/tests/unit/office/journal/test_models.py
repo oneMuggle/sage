@@ -13,8 +13,8 @@ from backend.office.journal.models import (
     JournalGenerationRecord,
     JournalSpec,
     JournalViolation,
-    parse_obj,
     ViolationSeverity,
+    parse_obj,
 )
 
 

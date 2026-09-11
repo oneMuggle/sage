@@ -19,12 +19,7 @@ import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import type { WindowControlsBridge } from '../src/shared/api/windowControlsClient';
 import type {
   ImportResult,
-  ImportedOfficeFile,
   JournalElectronApiBridge,
-  OfficeDocType,
-  OfficeElectronApiBridge,
-  OfficeManagedRef,
-  PickedOfficeFile,
   RescanResult,
   SkillsElectronApiBridge,
   UpdateElectronApiBridge,

@@ -23,7 +23,13 @@ from typing import List, Optional
 
 from backend.data.database import get_database
 from backend.office.journal.errors import JournalSpecNotFoundError
-from backend.office.journal.models import JournalGenerationRecord, JournalSpec, parse_raw, to_jsonable, to_json_str
+from backend.office.journal.models import (
+    JournalGenerationRecord,
+    JournalSpec,
+    parse_raw,
+    to_json_str,
+    to_jsonable,
+)
 from backend.office.path_safety import is_within
 
 _LAYOUT_ROOT = Path("office") / "journal"
@@ -116,9 +122,8 @@ def load_spec(workspace: Path, spec_id: str) -> JournalSpec:
     try:
         return parse_raw(JournalSpec, data)
     except ValidationError as exc:
-        # Pydantic v1: exc.errors() → list, len() = error count
-        # Pydantic v2: exc.error_count() → int
-        count = getattr(exc, "error_count", lambda: len(exc.errors()))()
+        # Pydantic v1 & v2 都有 .errors() → list；len() 即错误数。
+        count = len(exc.errors())
         raise JournalSpecNotFoundError(
             f"spec_id={spec_id} (corrupt: {count} validation error(s))"
         ) from exc
