@@ -253,6 +253,8 @@ def create_default_agents() -> List[AgentProfile]:
                 # 责任是把研究素材按期刊模板沉淀成可投搞稿件；模板解析/填充/
                 # 生成/校验四件套缺一不可。
                 *JOURNAL_TOOLS,
+                # Round 9 引用体系: BibTeX 解析（READ，纯文本、无工作区依赖）
+                "office_parse_bibtex",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -416,6 +418,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     # 2026-09-10: journal template 4 件套（与 writer.tools 同步）。
     "office_journal_parse_template", "office_journal_fill_from_content",
     "office_journal_generate_article", "office_journal_validate",
+    # 2026-09-11 Round 9: BibTeX 解析（与 writer.tools 同步）。
+    "office_parse_bibtex",
 ]
 
 
