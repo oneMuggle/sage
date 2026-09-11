@@ -18,6 +18,16 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+## [v0.4.9-alpha.28-win7] - 2026-09-11
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #618 Phase 3 T3.3 GitLab release provider。`electron/update/providers/gitlab.ts` 145 行 (GitLab API v4 PRIVATE-TOKEN 鉴权 + 项目 ID URL-encode + upcoming_release prerelease 过滤 + assets.links 下载 + 401/404 错误本地化), `electron/update/__tests__/providers/gitlab.test.ts` 177 行 (7 测试:endpoint + token header / projectId encode / 自建 baseUrl / 401 凭证错 / 404 项目不存在 / 空数组 null / ping ok), `electron/main.ts` 注册 `providerRegistry.register('gitlab', ...)` 在 github/gitee 之后。同 main PR #629 已 cherry-pick 的 GitHub #616 + Gitee #617 一致风格。零新增依赖;7 vitest 全绿。
+
+### Added
+- **feat(win7): cherry-pick main #618 Phase 3 T3.3 (#632)** — GitLab Releases provider 支持 GitLab.com + 自建 GitLab + 私有部署;7 vitest tests 全绿
+
+### Changed
+- **chore(release): bump version to 0.4.9-alpha.28-win7**
+
 ## [v0.4.9-alpha.27-win7] - 2026-09-11
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #611 第十一批:嵌入器运行时切换/模型下载/设置页卡片 + A/B 权重变体。`backend/memory/embedder_factory.py` 加 `Embedder` 协议到 import block (Ruff F821 fix, follow-up from initial PR #623 attempt), `backend/adapters/out/memory/adapter.py` 加 `os` 导入支持 backfill, `electron/modelDownloadIpc.ts` 170 行新文件 (download progress events), `src/pages/settings/MemoryTab.tsx` 87 行嵌入器管理 UI + 卡片, `backend/api/embedder_routes.py` 73 行新 endpoints (list/select/download 嵌入器), `backend/main.py` 注册路由。Win7 独有:MemoryTab 补 `useNavigate` 导入 (frontend TS build 失败),`auto_memory`/`retrieval` 开关移植 (writer profile 默认值对齐 main)。73 unit + 4 integration test 引用;symspell 不变。
