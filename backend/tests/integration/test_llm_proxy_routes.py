@@ -15,6 +15,8 @@ import pytest
 import respx
 from httpx import Response
 
+from backend.services.llm_trace.recorder import LlmTraceRecorder
+
 pytestmark = [pytest.mark.integration]
 
 UPSTREAM = "http://upstream.example.com"
@@ -1077,8 +1079,6 @@ async def test_tls_certificate_error_returns_structured_detail(client):
 
 
 # ── LLM trace diagnostic: upstream error recording ──
-
-from backend.services.llm_trace.recorder import LlmTraceRecorder
 
 
 @pytest.fixture(autouse=True)
