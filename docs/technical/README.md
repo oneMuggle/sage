@@ -49,6 +49,7 @@
 | 54   | [Office 对标追踪基线](./54-office-parity-tracking.md) | 产品×能力对标矩阵（M365 Copilot/Claude/ChatGPT/Gemini/WPS AI）+ Sage 能力落地清单（PR 号索引）+ 维护约定；随 office 迭代/对标轮更新 |
 | 55   | [期刊模板子系统](./55-journal-template-subsystem.md) | N1–N8 完整闭环：模板表 + 字段语义 + 多步向导 + 状态机 + 预览/导出 + SKILL 引导 + 持久化 |
 | 56   | [可插拔更新源系统](./56-update-providers.md) | Phase 1–4 完整交付：4 平台 provider（generic-http/github/gitee/gitlab）+ ProviderRegistry/Store/IPC + safeStorage token 加密 + feature flag 全开 + E2E 闭环 |
+| 57   | [LLM 调用诊断包导出](./57-llm-trace-diagnostic-export.md) | 一键导出最近 50 次 LLM 调用为 zip（含 upstream_url / 状态码 / 脱敏 headers）供离线分析 + 10 类 pattern 双层防御 + 512KB body 截断 + Win7 零依赖兼容 |
 
 ---
 
