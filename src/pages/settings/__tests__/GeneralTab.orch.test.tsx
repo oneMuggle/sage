@@ -130,3 +130,36 @@ describe('GeneralTab 编排 section', () => {
     expect(mocks.updateSettings).not.toHaveBeenCalled();
   });
 });
+
+// ============================================================================
+// BU4 (round11/14): Run token 预算输入
+// ============================================================================
+
+describe('GeneralTab — Run token 预算 (BU4)', () => {
+  it('渲染 run token 预算输入（默认 0 = 不限）', () => {
+    renderTab();
+    const input = screen.getByTestId('orch-run-token-budget') as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.value).toBe('0');
+  });
+
+  it('修改后 updateSettings 保留其余 orch 键', () => {
+    const updateSettings = vi.fn();
+    vi.mocked(useSettings).mockReturnValue({
+      settings: { ...DEFAULT_SETTINGS, orch: { ...DEFAULT_SETTINGS.orch } },
+      isLoading: false,
+      updateSettings,
+      resetSettings: vi.fn(),
+    });
+    renderTab();
+
+    const input = screen.getByTestId('orch-run-token-budget') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '200000' } });
+    expect(updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({
+        runTokenBudget: 200000,
+        maxConcurrentSubagents: 4, // 保留其余键（部分更新契约）
+      }),
+    });
+  });
+});
