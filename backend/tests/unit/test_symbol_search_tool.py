@@ -124,3 +124,79 @@ def test_js_ts_symbols_discovered_and_ranked(tmp_path):
     assert "reloadCheckpoints" in names
     assert all("service.ts" in m["path"] for m in result.content["matches"])
     assert "unrelated_helper" not in names
+
+
+# ==================== H-1/H-2 (round5 批次 H): 持久化缓存 + 语言扩展 ====================
+
+
+def test_h1_incremental_second_query_uses_cache(tmp_path):
+    """H-1: 首扫建缓存；二次查询走缓存（reindexed=0）且结果一致。"""
+    (tmp_path / "svc.py").write_text("def make_tea():\n    pass\n", encoding="utf-8")
+    tool = SymbolSearchTool(policy=ToolPolicy(workspace_root=str(tmp_path)))
+
+    first = tool.execute(query="make_tea")
+    assert first.success is True
+    assert first.content["cached"] is True
+    assert first.content["scanned_files"] >= 1  # 首扫有重析
+
+    second = tool.execute(query="make_tea")
+    assert second.content["cached"] is True
+    assert second.content["scanned_files"] == 0  # 未变文件零重析
+    assert [m["name"] for m in second.content["matches"]] == ["make_tea"]
+
+
+def test_h1_reindexes_changed_file_and_cleans_gone(tmp_path):
+    (tmp_path / "svc.py").write_text("def make_tea():\n    pass\n", encoding="utf-8")
+    (tmp_path / "old.py").write_text("def make_coffee():\n    pass\n", encoding="utf-8")
+    tool = SymbolSearchTool(policy=ToolPolicy(workspace_root=str(tmp_path)))
+    tool.execute(query="make")
+
+    # 改 svc.py、删 old.py
+    (tmp_path / "svc.py").write_text("def make_latte():\n    pass\n", encoding="utf-8")
+    (tmp_path / "old.py").unlink()
+
+    second = tool.execute(query="make")
+    names = [m["name"] for m in second.content["matches"]]
+    assert "make_latte" in names
+    assert "make_coffee" not in names
+    assert second.content["scanned_files"] == 1  # 只重析了 svc.py
+
+
+def test_h2_go_rust_java_symbols_discovered(tmp_path):
+    (tmp_path / "server.go").write_text(
+        "package main\n"
+        "\n"
+        "func StartServer(port int) {\n"
+        "}\n"
+        "\n"
+        "type ServerConfig struct {\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "cache.rs").write_text(
+        "pub struct CacheStore;\n"
+        "\n"
+        "impl CacheStore {\n"
+        "}\n"
+        "\n"
+        "pub fn clear_cache() {\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "Repo.java").write_text(
+        "public class UserRepository {\n"
+        "    public User findById(long id) {\n"
+        "        return null;\n"
+        "    }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    tool = SymbolSearchTool(policy=ToolPolicy(workspace_root=str(tmp_path)))
+
+    go = tool.execute(query="startserver")
+    assert [m["name"] for m in go.content["matches"]] == ["StartServer"]
+    rs = tool.execute(query="clear_cache")
+    # 精确命中排第一（CacheStore 因分词部分命中 cache 也会出现）
+    assert rs.content["matches"][0]["name"] == "clear_cache"
+    java = tool.execute(query="findbyid")
+    assert [m["name"] for m in java.content["matches"]] == ["findById"]
