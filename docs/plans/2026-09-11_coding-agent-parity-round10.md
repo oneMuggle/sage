@@ -42,4 +42,8 @@ round7 之后，conductor 失败处理只剩"软机制"：system prompt 指令�
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A（失败任务机制级重派） | PR #636（squash ff9aaf4e） | PR #637（cherry-win7-r10，squash 93ef2a0d） |
+
+win7 对齐说明：零冲突落位；py38 job 首跑 `test_wiki_chat_stream` 403 flake（与本批改动无交集），rerun 后全绿，squash merge（#637）。
