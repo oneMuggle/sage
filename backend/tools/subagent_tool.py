@@ -15,7 +15,8 @@ multi 模式下拿到 ``task_plan`` 后，按计划调用本工具，把
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import asyncio
+from typing import Any, Dict, List, Optional
 
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 
@@ -52,7 +53,11 @@ INPUT_SCHEMA: Dict[str, Any] = {
                 },
                 "required": ["agent_id", "goal", "task_id"],
             },
-        }
+        },
+        "background": {
+            "type": "boolean",
+            "description": "可选：true = 后台派发，立即返回（任务板照常推进），稍后用 collect_subagents 获取聚合结果",
+        },
     },
     "required": ["tasks"],
 }
@@ -64,7 +69,70 @@ _TOOL_DESCRIPTION = (
     "task_id 必须回传 task_plan 中的计划编号（t1..tN）。"
     "对已完成的子任务需要补充要求/追问时，传 followup_of=<已完成 task_id> 继续同一上下文。"
     "对失败/被取消的子任务需要修正方法后重做时，传 retry_of=<失败 task_id> 新任务会继承其工作现场与失败原因。"
+    "需要在本批任务运行期间先做其他工作时，传 background=true 立即返回，"
+    "之后用 collect_subagents 获取聚合结果。"
 )
+
+
+class CollectSubagentsTool(BaseTool):
+    """等待后台派发完成并返回聚合结果（BD, round12）。
+
+    与 ``DispatchSubagentsTool(background=true)`` 配对：collect 超时只是
+    "本次没等到"，后台任务经 shield 继续运行，可再次 collect。
+    """
+
+    def __init__(self, dispatcher: Any) -> None:
+        super().__init__()
+        self._dispatcher = dispatcher
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="collect_subagents",
+            description=(
+                "等待后台派发的子 agent 全部完成，返回聚合结果。"
+                "与 dispatch_subagents(background=true) 配对使用；"
+                "没有进行中的后台派发时返回错误。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "timeout_secs": {
+                        "type": "integer",
+                        "description": "可选：本次最长等待秒数（默认 600）；超时后后台任务继续运行，可再次 collect",
+                    },
+                },
+            },
+        )
+
+    async def execute_async(self, **kwargs: Any) -> ToolResult:
+        wait = getattr(self._dispatcher, "wait_background", None)
+        if not callable(wait):
+            return ToolResult(success=False, error="当前 dispatcher 不支持 collect")
+        timeout_raw = kwargs.get("timeout_secs")
+        timeout: Optional[float] = None
+        try:
+            timeout = float(timeout_raw) if timeout_raw is not None else None
+        except (TypeError, ValueError):
+            timeout = None
+        try:
+            aggregated = await wait(timeout)
+            return ToolResult(success=True, content=aggregated)
+        except asyncio.TimeoutError:  # noqa: UP041 — py3.8 下 ≠ 内建 TimeoutError
+            return ToolResult(
+                success=False,
+                error=(
+                    "collect_timeout: 后台派发仍在运行（超过"
+                    f"{int(timeout) if timeout else 600}s）。任务板仍在推进，可稍后再次 collect_subagents。"
+                ),
+            )
+        except RuntimeError as exc:
+            return ToolResult(success=False, error=str(exc))
+        except Exception as exc:  # noqa: BLE001 — 错误回传 conductor 决策
+            return ToolResult(success=False, error=f"collect_subagents 失败: {exc}")
+
+    def execute(self, **kwargs: Any) -> ToolResult:
+        """同步调用不可行（需并发事件循环）。"""
+        return ToolResult(success=False, error="collect_subagents 仅支持异步调用（run_loop 内）")
 
 
 class DispatchSubagentsTool(BaseTool):
@@ -98,6 +166,33 @@ class DispatchSubagentsTool(BaseTool):
             notify = getattr(self._dispatcher, "notify_tool_call", None)
             if callable(notify):
                 notify(str(tool_call_id))
+        # BD (round12): 后台派发 —— 启动即返回，conductor 可先做其他工作，
+        # 再用 collect_subagents 取聚合结果。
+        if kwargs.get("background"):
+            started = getattr(self._dispatcher, "start_background_dispatch", None)
+            if not callable(started):
+                return ToolResult(success=False, error="当前 dispatcher 不支持后台派发")
+            bg_task = started(tasks)
+            if bg_task is None:
+                return ToolResult(
+                    success=False,
+                    error="background_dispatch_in_progress: 已有后台派发进行中，请先调用 collect_subagents",
+                )
+            task_ids = [
+                str(t.get("task_id"))
+                for t in tasks
+                if isinstance(t, dict) and t.get("task_id")
+            ]
+            return ToolResult(
+                success=True,
+                content={
+                    "status": "dispatched_background",
+                    "run_id": getattr(self._dispatcher, "run_id", None),
+                    "task_ids": task_ids,
+                    "note": "子任务已在后台执行；完成前可先做其他工作，"
+                    "调用 collect_subagents 获取聚合结果",
+                },
+            )
         try:
             aggregated = await self._dispatcher.dispatch(tasks)
             return ToolResult(success=True, content=aggregated)
