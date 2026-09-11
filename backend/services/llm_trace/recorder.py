@@ -73,6 +73,31 @@ class LlmTraceRecorder:
 
     @classmethod
     def append(cls, record: TraceRecord) -> None:
+        # 第一层脱敏(在 ring buffer 写入前完成,内存里也没有明文)
+        from backend.services.llm_trace.redactor import (  # 避免循环 import
+            redact_headers,
+            redact_url,
+        )
+        redacted = TraceRecord(
+            trace_id=record.trace_id,
+            ts=record.ts,
+            endpoint=record.endpoint,
+            upstream_url=redact_url(record.upstream_url),
+            upstream_method=record.upstream_method,
+            request_headers=redact_headers(record.request_headers),
+            request_body=record.request_body,  # body 暂不脱敏,在 exporter 写盘前再脱敏
+            response_status=record.response_status,
+            response_headers=redact_headers(record.response_headers),
+            response_body=record.response_body,  # 同上
+            response_streamed=record.response_streamed,
+            duration_ms=record.duration_ms,
+            error_class=record.error_class,
+        )
+        _global_recorder.append(redacted)
+
+    @classmethod
+    def _append_raw(cls, record: TraceRecord) -> None:
+        """跳过 redactor,仅给 exporter 双层脱敏的内层用(暂不需要,留接口)。"""
         _global_recorder.append(record)
 
     @classmethod
