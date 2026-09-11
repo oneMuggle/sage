@@ -91,6 +91,7 @@ import { registerProviderIpc } from './update/providerIpc';
 import { createGenericHttpProvider } from './update/providers/genericHttp';
 import { createGithubReleasesProvider } from './update/providers/github';
 import { createGiteeReleasesProvider } from './update/providers/gitee';
+import { createGitlabReleasesProvider } from './update/providers/gitlab';
 import { ENABLE_UPDATE_PROVIDERS_UI } from './update/featureFlag';
 import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backendLauncher';
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
@@ -1486,7 +1487,14 @@ providerRegistry.register('gitee', (cfg) =>
         config: cfg.config as any,
       }),
     );
-    // Phase 3 will add gitlab registration here
+    providerRegistry.register('gitlab', (cfg) =>
+      createGitlabReleasesProvider({
+        id: cfg.id,
+        displayName: cfg.displayName,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        config: cfg.config as any,
+      }),
+    );
     updateManager = new UpdateManager({ providerStore, providerRegistry });
     await updateManager.init();
 
