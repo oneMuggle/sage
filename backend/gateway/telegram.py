@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -26,6 +27,44 @@ TELEGRAM_API_BASE = "https://api.telegram.org"
 #: 单轮携带的最大历史消息数（控制 token 消耗）
 _MAX_HISTORY = 20
 
+
+
+def _history_budget(history: List[Any]) -> tuple:
+    """按 token 预算截断网关对话历史（Round 11, 对标 hermes 上下文治理）。
+
+    从最新往回累积估算 token（复用 context_first_aid 估算器），超出
+    ``SAGE_GW_HISTORY_TOKEN_BUDGET``（默认 4000，<=0 关闭仅条数上限）即停，
+    至少保留最近 2 条。被省略的早期消息数 >0 时由调用方在头部插入 system 说明。
+
+    Returns:
+        (kept_messages, omitted_count)
+    """
+    if not history:
+        return history, 0
+    try:
+        budget = int(os.getenv("SAGE_GW_HISTORY_TOKEN_BUDGET", "4000"))
+    except ValueError:
+        budget = 4000
+    if budget <= 0:
+        return history, 0
+
+    from backend.core.legacy.context_first_aid import estimate_messages_tokens
+
+    kept: List[Any] = []
+    for msg in reversed(history):
+        candidate = [
+            {"role": getattr(msg, "role", "user"), "content": getattr(msg, "content", "")}
+        ] + [
+            {"role": m.role, "content": m.content} for m in reversed(kept)
+        ]
+        if kept and estimate_messages_tokens(candidate) > budget:
+            break
+        kept.append(msg)
+    kept.reverse()
+    if len(kept) < 2 and len(history) >= 2:
+        kept = list(history[-2:])
+    omitted = len(history) - len(kept)
+    return kept, omitted
 
 class TelegramTransport:
     """Telegram Bot API HTTP 封装（可注入/可打桩）"""
@@ -314,6 +353,8 @@ class TelegramGateway:
         )
         repo.save(user_msg)
         history = repo.get_by_session(session_id, limit=_MAX_HISTORY)
+        kept, omitted = _history_budget(history)
+        history = kept
 
         client = self._resolve_llm(session_id)
         if client is None:
@@ -322,6 +363,14 @@ class TelegramGateway:
             import asyncio
 
             messages = [{"role": m.role, "content": m.content} for m in history]
+            if omitted > 0:
+                messages.insert(
+                    0,
+                    {
+                        "role": "system",
+                        "content": f"（早期 {omitted} 条对话已省略，仅保留最近内容。）",
+                    },
+                )
             try:
                 response = asyncio.run(client.chat(messages))
                 reply = (response.content or "").strip() or "（空响应，请重试。）"
