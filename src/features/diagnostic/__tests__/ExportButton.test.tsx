@@ -8,6 +8,7 @@
  *   backend_unreachable, zip_generation_failed, write_failed
  * - Null guard when electronAPI.diagnostic is undefined
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
