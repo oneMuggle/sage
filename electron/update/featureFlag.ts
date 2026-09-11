@@ -1,8 +1,16 @@
 // electron/update/featureFlag.ts
 import { app } from 'electron';
 
-export const ENABLE_UPDATE_PROVIDERS_UI = (): boolean =>
-  process.env.SAGE_EXPERIMENTAL_PROVIDERS === '1' || app.isPackaged === false;
+// Phase 3 T3.4 (2026-09): feature flag 全开. UI 默认启用; 仅在显式
+// SAGE_EXPERIMENTAL_PROVIDERS=0 时关闭（紧急回滚 escape hatch）。
+export const ENABLE_UPDATE_PROVIDERS_UI = (): boolean => {
+  if (process.env.SAGE_EXPERIMENTAL_PROVIDERS === '0') return false;
+  return true;
+};
+
+// Keep app import referenced for vitest env that does not stub electron;
+// otherwise unused-import lint will complain in strict mode.
+void app;
 
 export const BUILTIN_GENERIC_CONFIG = {
   id: '__builtin__',

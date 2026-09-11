@@ -22,7 +22,18 @@ describe('featureFlag', () => {
     delete process.env.SAGE_EXPERIMENTAL_PROVIDERS;
   });
 
-  it('EXPERIMENTAL env forces UI on', async () => {
+  it('default (env unset) is ON (Phase 3 T3.4: feature flag 全开)', async () => {
+    const m = await import('../../../electron/update/featureFlag');
+    expect(m.ENABLE_UPDATE_PROVIDERS_UI()).toBe(true);
+  });
+
+  it('EXPERIMENTAL env=0 forces UI off (escape hatch)', async () => {
+    process.env.SAGE_EXPERIMENTAL_PROVIDERS = '0';
+    const m = await import('../../../electron/update/featureFlag');
+    expect(m.ENABLE_UPDATE_PROVIDERS_UI()).toBe(false);
+  });
+
+  it('EXPERIMENTAL env=1 keeps UI on (explicit)', async () => {
     process.env.SAGE_EXPERIMENTAL_PROVIDERS = '1';
     const m = await import('../../../electron/update/featureFlag');
     expect(m.ENABLE_UPDATE_PROVIDERS_UI()).toBe(true);
