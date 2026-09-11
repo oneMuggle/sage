@@ -21,6 +21,7 @@ const defaultPreview = {
 };
 
 beforeEach(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (window as any).electronAPI = {
     diagnostic: {
       preview: vi.fn().mockResolvedValue(defaultPreview),
@@ -50,6 +51,7 @@ describe('DiagnosticCard', () => {
   });
 
   it('shows error state when preview fails', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).electronAPI.diagnostic.preview.mockRejectedValue(new Error('boom'));
 
     render(<DiagnosticCard />);
