@@ -5,8 +5,8 @@
  * - 选中模板命令 → 填充输入框（不发送）
  * - /prompt-save → promptApi.create 调用链
  */
-import { HelpCircle } from 'lucide-react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { HelpCircle } from 'lucide-react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
