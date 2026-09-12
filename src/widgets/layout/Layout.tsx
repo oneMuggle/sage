@@ -15,7 +15,6 @@ export function Layout() {
   );
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [peeking, setPeeking] = useState(false);
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -41,13 +40,6 @@ export function Layout() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
-
-  // Auto-hide peeking sidebar after mouse leaves
-  useEffect(() => {
-    if (!peeking) return;
-    const timeout = setTimeout(() => setPeeking(false), 300);
-    return () => clearTimeout(timeout);
-  }, [peeking]);
 
   return (
     <div className="flex h-screen bg-bg">
@@ -86,19 +78,12 @@ export function Layout() {
         </>
       ) : (
         <>
-          {/* Hover-peek sidebar (U2 from OpenWorker) */}
-          {collapsed && (
-            <div
-              className="fixed left-0 top-0 w-1 h-screen z-30"
-              onMouseEnter={() => setPeeking(true)}
-            />
-          )}
-
-          {/* Desktop sidebar */}
+          {/* P1-3.6 (UI 优化方案 2026-09-13): 折叠态 → 56px icon rail（Claude 风格）。
+               不再 translate-x-full 隐藏，而是始终保留窄栏在流中，
+               显示品牌 logo + 导航图标，会话列表/sections 隐藏。 */}
           <div
-            className={`transition-transform duration-200 ${
-              collapsed && !peeking ? '-translate-x-full' : 'translate-x-0'
-            } ${collapsed ? 'fixed z-40 shadow-lg' : 'relative'}`}
+            className={collapsed ? 'flex-shrink-0' : 'relative'}
+            style={collapsed ? { width: 56 } : undefined}
           >
             <ErrorBoundary fallback={(error, reset) => (
               <div className="w-64 p-4 text-error">
@@ -106,7 +91,7 @@ export function Layout() {
                 <button onClick={reset} className="ml-2 text-primary">重试</button>
               </div>
             )}>
-              <Sidebar width={collapsed ? undefined : width} />
+              <Sidebar width={collapsed ? 56 : width} collapsed={collapsed} />
             </ErrorBoundary>
           </div>
 
