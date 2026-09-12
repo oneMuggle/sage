@@ -13,8 +13,10 @@
  *   写死展示既不准也无用。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
+import { memoryApi } from '../../shared/api';
 import { invoke } from '../../shared/api/desktopInvoke';
 
 import type { EndpointsTabProps } from './components';
@@ -30,6 +32,21 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
     semantic: boolean;
   } | null>(null);
   const [selecting, setSelecting] = useState(false);
+  // R17-B: 记忆固化手动触发
+  const [consolidating, setConsolidating] = useState(false);
+  const [consolidationResult, setConsolidationResult] = useState<{
+    promoted: number;
+    decayed: number;
+    total: number;
+  } | null>(null);
+  // 卸载守卫:异步回调不触碰已卸载组件的 state(避免 "setState on unmounted" 警告)
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const loadEmbedderStatus = useCallback(async () => {
     try {
@@ -103,6 +120,46 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
             切回字面匹配
           </button>
         </div>
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">记忆固化</h3>
+        <p className="text-xs text-text-secondary mb-2">
+          每周日 04:30 自动执行：把访问频繁的短期记忆晋升为语义记忆，并衰减长期未访问的记忆。也可手动立即执行。
+        </p>
+        <SettingRow label="手动固化" desc="立即运行一次记忆固化任务（通常无需手动触发）">
+          <button
+            type="button"
+            data-testid="memory-consolidation-run"
+            disabled={consolidating}
+            onClick={() => {
+              setConsolidating(true);
+              setConsolidationResult(null);
+              void memoryApi
+                .runConsolidation()
+                .then((result) => {
+                  if (!mountedRef.current) return;
+                  setConsolidationResult(result);
+                  toast.success(`固化完成：晋升 ${result.promoted} 条，衰减 ${result.decayed} 条`);
+                })
+                .catch((err: unknown) => {
+                  if (!mountedRef.current) return;
+                  toast.error(`固化失败: ${err instanceof Error ? err.message : String(err)}`);
+                })
+                .finally(() => {
+                  if (mountedRef.current) setConsolidating(false);
+                });
+            }}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            {consolidating ? '固化中...' : '立即固化'}
+          </button>
+        </SettingRow>
+        {consolidationResult && (
+          <p className="text-xs text-text-secondary mt-2" data-testid="memory-consolidation-result">
+            上次手动固化：晋升 {consolidationResult.promoted} 条 · 衰减 {consolidationResult.decayed}{' '}
+            条 · 处理 {consolidationResult.total} 条
+          </p>
+        )}
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">记忆管理</h3>        <SettingRow

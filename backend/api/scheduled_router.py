@@ -163,4 +163,29 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return _task_to_dict(svc.get_task(task_id))
 
+    # ---------- evolution tasks(R17-B:固化/巡检等进化任务的手动触发面) ----------
+    # evolution job 注册在 APScheduler 的 "evolution/<name>" 下,不在 JSON 持久化的
+    # 用户任务表里,所以走不了上面的 /scheduled/tasks/{id}/run。
+
+    @router.get("/scheduled/evolution/tasks")
+    def list_evolution_tasks(svc: SchedulerService = Depends(service_dep)) -> Dict[str, Any]:
+        return {
+            "tasks": [
+                {"name": name, "job_id": f"evolution/{name}"}
+                for name in svc.get_evolution_task_names()
+            ]
+        }
+
+    @router.post("/scheduled/evolution/{name}/run")
+    def run_evolution_task(
+        name: str, svc: SchedulerService = Depends(service_dep)
+    ) -> Dict[str, Any]:
+        if name not in svc.get_evolution_task_names():
+            raise HTTPException(
+                status_code=404,
+                detail={"type": "task_not_found", "message": f"evolution task '{name}' not registered"},
+            )
+        result = svc.run_evolution_task_now(name)
+        return {"name": name, "ok": result is not None, "result": result or {}}
+
     return router
