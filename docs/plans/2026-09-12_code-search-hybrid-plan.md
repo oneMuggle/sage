@@ -18,8 +18,9 @@
   1. 向量路：现有余弦 top-N（N = limit*4 候选池）；
   2. 关键词路：query 规整为 FTS MATCH 语法（非字母数字拆词 + OR 连接，引号包原词组），
      FTS5 `bm25()` 排序取 top-N；FTS 不可用/查询空 → 跳过；
-  3. 融合：RRF（`score = Σ 1/(60 + rank)`）按 `(path, start_line)` 归并去重，
-     输出 top-limit，块文本以向量路结果为准（避免重复取行）。
+  3. 融合：加权 RRF（`score = Σ 1/(k_ch + rank)`，k_vector=60 / k_keyword=30——
+     精确标识符命中的置信度高于语义近邻，故关键词通道权重更大）按
+     `(path, start_line)` 归并去重，输出 top-limit，块文本以索引 content 为准。
 - 响应结构不变（path/start_line/content/score），`score` 为 RRF 分（原语义仅内部排序用）。
 
 ### 兼容
@@ -34,5 +35,5 @@
 - MATCH 语法规整：特殊字符不炸、CJK 单词串不被拆碎。
 
 ## 不做
-- BM25 权重调参、语义+关键词分数加权（RRF 常数固定 k=60）；
+- BM25 权重调参、语义+关键词分数线性加权（固定双常数加权 RRF）；
 - 向量库换型（仍是 sqlite blob + numpy 余弦）。

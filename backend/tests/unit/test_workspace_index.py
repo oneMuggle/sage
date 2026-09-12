@@ -196,3 +196,86 @@ def test_chunker_version_rebuild(index_env, monkeypatch):
     monkeypatch.setattr(wi, "_embed_texts", counting)
     info = wi._index_workspace(str(index_env), config)
     assert info["indexed"] > 0  # 版本不符 → 文件被重建（而非增量跳过）
+
+
+# ---------- v3: FTS5 关键词通道 + RRF 混合检索 ----------
+
+
+def _fts_count(db_path, where=""):
+    import sqlite3
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        return conn.execute(f"SELECT COUNT(*) FROM chunks_fts{where}").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_fts_rows_synced_with_index_and_gone_files(index_env, tmp_path):
+    config = {"base_url": "https://e.test", "api_key": "k", "model": "embed-1"}
+    info = wi._index_workspace(str(index_env), config)
+    db_path = wi._index_dir(str(index_env)) / "index.sqlite3"
+    assert _fts_count(db_path) == info["chunks"]
+
+    # 删除一个文件 → chunks 与 chunks_fts 同步清理
+    (index_env / "README.md").unlink()
+    wi._index_workspace(str(index_env), config)
+    assert _fts_count(db_path) == _fts_count(db_path)  # 无异常即同步（详细计数走 chunks）
+    import sqlite3
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        chunks_n = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        fts_n = conn.execute("SELECT COUNT(*) FROM chunks_fts").fetchone()[0]
+    finally:
+        conn.close()
+    assert chunks_n == fts_n
+
+
+def test_hybrid_ranking_boosts_exact_identifier(index_env, monkeypatch):
+    # 两个单块文件；向量全部退化为同一常量 → 向量路等分，顺序由插入序决定
+    (index_env / "alpha_decoy.py").write_text("plain filler text here\n", encoding="utf-8")
+    (index_env / "zeta_match.py").write_text("def zeta_token():\n    return 1\n", encoding="utf-8")
+
+    def flat_embed(config, texts):
+        # decoy/填充块与 query 同向（余弦 1.0，向量路霸榜）；
+        # zeta 块与 query 仅有 0.2 的弱相似（向量路垫底但 > 0 不被过滤）
+        out = []
+        for text in texts:
+            if text.startswith("def zeta_token"):
+                out.append([0.2, 0.98] + [0.0] * 14)
+            else:
+                out.append([1.0] + [0.0] * 15)
+        return out
+
+    monkeypatch.setattr(wi, "_embed_texts", flat_embed)
+    config = {"base_url": "https://e.test", "api_key": "k", "model": "embed-1"}
+    wi._index_workspace(str(index_env), config)
+
+    hits = wi._search_workspace(str(index_env), config, "zeta_token", limit=5)
+    assert hits, "应有检索结果"
+    # FTS 通道把精确标识符顶到第一（纯向量下它与 decoy 等分且排后）
+    assert hits[0]["path"].endswith("zeta_match.py")
+
+
+def test_fts_unavailable_falls_back_to_vector(index_env, monkeypatch):
+    config = {"base_url": "https://e.test", "api_key": "k", "model": "embed-1"}
+    wi._index_workspace(str(index_env), config)
+
+    # 查询侧 FTS 不可用 → 降级纯向量，不抛异常
+    monkeypatch.setattr(wi, "_ensure_fts", lambda conn: False)
+    hits = wi._search_workspace(str(index_env), config, "login 逻辑", limit=5)
+    assert isinstance(hits, list)
+    assert hits
+
+
+def test_fts_match_query_sanitized():
+    q = wi._fts_match_query("def parse_config(file)!  空格")
+    assert q is not None
+    assert "parse_config" in q
+    assert "!" not in q.replace('""', "")
+    # CJK 连续串不被拆碎
+    cjk = wi._fts_match_query("登录逻辑")
+    assert '"登录逻辑"' in cjk
+    # 全部为符号 → None
+    assert wi._fts_match_query("!!! ***") is None
