@@ -265,10 +265,10 @@ function ChatInputInner({
     // RT5 (round7): 运行中允许发送 —— onSend（useChat.sendMessage）按会话
     // 活跃流先走 steering 注入当前 run，失败回退队列；不再 UI 硬拦截。
     if (!value.trim()) return;
-    // R17-F: 附件通道尚未打通 —— knowledgeRefs/attachments/images 在
-    // Chat.handleSendMessage 处被丢弃（officeRefs 走 office_refs 通道
-    // 不受影响）。诚实提示而不是静默丢失（chat.hint 文案已同步修正）。
-    if (knowledgeRefs.length > 0 || files.length > 0 || images.length > 0) {
+    // R17-F→R23: 图片通道已打通（images data URL 直传后端）。仍被丢弃的
+    // 只有 files 与 knowledgeRefs（officeRefs 走 office_refs 通道不受影响
+    // ）—— 诚实提示而不是静默丢失。
+    if (files.length > 0 || knowledgeRefs.length > 0) {
       toast.warning(t('chat.attachment_not_sent'));
     }
     onSend(value.trim(), {
