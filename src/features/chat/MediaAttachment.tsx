@@ -1,7 +1,7 @@
 // src/features/chat/MediaAttachment.tsx
 import React, { useState, useEffect } from 'react';
 
-import { resolveMediaUrl } from '../../shared/api/mediaApi';
+import { fetchMediaBlobUrl, resolveMediaUrl, revokeMediaBlobUrl } from '../../shared/api/mediaApi';
 
 interface MediaAttachmentProps {
   /** API URL like /api/v1/media/{id} */
@@ -20,12 +20,40 @@ interface MediaAttachmentProps {
  */
 export const MediaAttachment: React.FC<MediaAttachmentProps> = ({ url, mimeType, caption }) => {
   const [zoomed, setZoomed] = useState(false);
-  const [resolvedUrl, setResolvedUrl] = useState<string>(url);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
-  // Resolve API URL to backend URL (dev: Vite proxy, prod: direct backend)
+  // R22-D1: Electron 下 <img src>/<audio src> 无法携带 local-auth Bearer 头
+  // → 生产中间件 401（媒体永远渲染失败）。改走 fetchMediaBlobUrl（IPC
+  // relay 注入 token）拿 blob: URL；纯浏览器 dev（无 bridge）回退直连
+  // URL（Vite proxy + dev 无鉴权）。
   useEffect(() => {
-    setResolvedUrl(resolveMediaUrl(url));
-  }, [url]);
+    let cancelled = false;
+    const mediaId = url.split('/').filter(Boolean).pop() ?? '';
+    const bridge = window.electronAPI?.backendRequest;
+    if (bridge && mediaId) {
+      fetchMediaBlobUrl(mediaId, mimeType)
+        .then((u) => {
+          if (!cancelled) setBlobUrl(u);
+        })
+        .catch(() => {
+          if (!cancelled) setBlobUrl(null);
+        });
+    } else {
+      setBlobUrl(null);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [url, mimeType]);
+
+  // 替换/卸载时释放 blob，避免内存泄漏
+  useEffect(() => {
+    return () => {
+      if (blobUrl) revokeMediaBlobUrl(blobUrl);
+    };
+  }, [blobUrl]);
+
+  const resolvedUrl = blobUrl ?? resolveMediaUrl(url);
 
   if (mimeType.startsWith('image/')) {
     return (

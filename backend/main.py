@@ -19,6 +19,12 @@ from typing import Callable
 # Guarded by __name__ == "__main__" so pytest imports don't emit noise.
 # Carried over from release/win7 PR #585; equally applicable to main.
 _startup_t0: float = time.monotonic() if __name__ == "__main__" else 0.0
+
+
+def _startup_mark(step: str) -> None:
+    """R22-D7: 启动逐步耗时埋点 —— 此前只有 4 个时点，db init 与
+    lifespan-complete 之间的 ~20 步串行初始化是耗时黑盒。"""
+    logger.info("[sage-startup] t=%.1fs %s complete", time.monotonic() - _startup_t0, step)
 if __name__ == "__main__":
     print(  # noqa: T201
         f"[sage-startup] t=0.0s module load begin (pid={os.getpid()})",
@@ -384,6 +390,7 @@ async def lifespan(app: FastAPI):
     scheduler_service.start()
     app.state.scheduler = scheduler_service
     logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
+    _startup_mark("scheduler")
 
     # PR-C §5.1: 把 5 个 evolution 任务挂到 lifespan,按 cron 自动跑
     # (memory_pruning / memory_consolidation / daily_summary /
@@ -439,6 +446,7 @@ async def lifespan(app: FastAPI):
     bootstrap_review_collaborators()
     get_review_queue().start()
     logger.info("ReviewQueue 协作对象已注入且 worker 已启动")
+    _startup_mark("review-queue")
 
     # A4 Suspend-Resume: wake 仓储 + 唤醒调度器 — tick 扫描到期 wake,
     # 在对应 session 注入新一轮对话恢复挂起的 agent。resumer 走
@@ -466,6 +474,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.wake_scheduler.start()
     logger.info("WakeScheduler 已初始化并启动（A4 Suspend-Resume，tick=15s）")
+    _startup_mark("wake-scheduler")
 
     # Round 6 (Telegram 网关 MVP): 配置了 TELEGRAM_BOT_TOKEN 才启动长轮询
     # 后台线程；未配置零开销。白名单见 gateway/telegram.py 模块文档。
@@ -478,6 +487,7 @@ async def lifespan(app: FastAPI):
             app.state.telegram_gateway = _tg_gateway
             logger.info("Telegram 网关已启动（长轮询，白名单 %d 个 chat）",
                         len(_tg_gateway.config.allowed_chat_ids))
+        _startup_mark("telegram-gateway")
     except Exception as exc:  # noqa: BLE001 — 网关失败不阻塞后端启动
         logger.warning("Telegram 网关启动失败（忽略）: %s", exc)
 
@@ -534,6 +544,7 @@ async def lifespan(app: FastAPI):
     )
     await app.state.heartbeat_monitor.start()
     logger.info("Multi-agent core 已装配（Planner + Router + HeartbeatMonitor 已启动）")
+    _startup_mark("multi-agent")
 
     # Phase 1 observability: SnapshotStore + EventHub + REST endpoints
     from backend.api import orch_run_control
