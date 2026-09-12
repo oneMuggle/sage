@@ -1287,6 +1287,25 @@ export interface WordLintResult {
   issues: WordLintIssue[];
 }
 
+// Word 格式自动修复（Round 12）：lint → repair → 复检闭环。
+// Backend counterpart: WordRepairResult / WordRepairRequest
+// in backend/office/models.py。
+export interface WordRepairResult {
+  ok: boolean;
+  repaired_rules: string[];
+  output_path: string;
+  overwrite: boolean;
+  remaining: WordLintResult;
+}
+
+export interface WordRepairRequest {
+  workspace_path: string;
+  file_path: string;
+  format_spec: WordFormatSpec;
+  overwrite?: boolean;
+  max_size_bytes?: number;
+}
+
 export interface OfficeWordGenerateRequest {
   workspace_path: string;
   filename: string;

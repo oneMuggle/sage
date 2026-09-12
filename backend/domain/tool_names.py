@@ -74,6 +74,8 @@ OFFICE_TOOLS = (
     "office_parse_bibtex",
     # 2026-09-11 Round 10 格式 Linter：对照 FormatSpec 校验 docx（READ）
     "office_lint_word",
+    # 2026-09-12 Round 12 自动修复：lint→修复→复检（WRITE_LOCAL）
+    "office_repair_word",
 )
 
 # 本地开发环境助手（2026-09-04）：只读探测/诊断两件 + 审批后执行一件。
