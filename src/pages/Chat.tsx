@@ -7,10 +7,11 @@ import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
 import { useChat } from '../features/send-message/useChat';
-import { sessionApi, learnApi, type ChatOfficeRef } from '../shared/api';
+import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
 import { orchRunClient } from '../shared/api/orchRunClient';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
+import type { Message as MessageType } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
@@ -70,6 +71,7 @@ export function Chat() {
     loadSessions,
     sessions,
     isLoading: storeLoading,
+    removeMessage,
   } = useStore();
 
   // L16 (round4 批次 A): run 级崩溃恢复横幅 —— 后端启动时把滞留 running
@@ -77,8 +79,7 @@ export function Chat() {
   // "重发最后一条消息"的恢复入口,而不是让用户对着侧栏灰点猜。
   const currentSession = sessions.find((s) => s.id === currentSessionId);
   const interruptedRun =
-    currentSession?.run_status === 'failed' &&
-    currentSession?.last_error === INTERRUPTED_RUN_ERROR;
+    currentSession?.run_status === 'failed' && currentSession?.last_error === INTERRUPTED_RUN_ERROR;
   const [dismissedInterrupts, setDismissedInterrupts] = useState<Set<string>>(new Set());
   const showInterruptBanner =
     currentSessionId != null && interruptedRun && !dismissedInterrupts.has(currentSessionId);
@@ -430,7 +431,9 @@ export function Chat() {
       toast.success(t('chat.learn_queued'));
       navigate('/skills?tab=drafts');
     } catch (e) {
-      toast.error(fill(t('chat.learn_failed'), { error: e instanceof Error ? e.message : String(e) }));
+      toast.error(
+        fill(t('chat.learn_failed'), { error: e instanceof Error ? e.message : String(e) }),
+      );
     }
   }, [currentSessionId, isLoading, navigate, t]);
 
@@ -466,6 +469,9 @@ export function Chat() {
     text: string;
     nonce: number;
   } | null>(null);
+  // P0-1: 引用到对话 —— 复用 editResendTarget 的 injectedDraft 通道把引用块
+  // 注入输入框（nonce 变化触发重放）。与编辑重发互斥时以编辑态优先。
+  const [quotedDraft, setQuotedDraft] = useState<{ text: string; nonce: number } | null>(null);
   // 传给 memo 组件的 props 引用需稳定: 内联箭头函数/对象字面量每次渲染
   // 都是新引用, 会击穿 React.memo (F1)。
   const cancelEditResend = useCallback(() => setEditResendTarget(null), []);
@@ -490,10 +496,7 @@ export function Chat() {
   }, []);
 
   const handleSendMessageWithEditResend = useCallback(
-    async (
-      content: string,
-      options?: Parameters<typeof handleSendMessage>[1],
-    ) => {
+    async (content: string, options?: Parameters<typeof handleSendMessage>[1]) => {
       if (!editResendTarget) {
         await handleSendMessage(content, options);
         return;
@@ -532,9 +535,86 @@ export function Chat() {
     ],
   );
 
+  // R18-A: 重新生成 —— 对 assistant 回答重跑一次。复用编辑重发的
+  // 非破坏性链路: 找到其前驱最近的 user 消息 → fork 截到该消息之前
+  // （beforeMessage 开区间）→ 切到 fork 会话原文重发。原会话保留,
+  // 可对比两次回答。失败提示,不降级重发（避免原会话出现重复轮次）。
+  const handleRegenerate = useCallback(
+    async (assistantMessageId: string) => {
+      if (!currentSessionId || isLoading) return;
+      const msgs = messagesRef.current;
+      const idx = msgs.findIndex((m) => m.id === assistantMessageId);
+      if (idx < 0) return;
+      let userIdx = -1;
+      for (let i = idx - 1; i >= 0; i--) {
+        if (msgs[i].role === 'user') {
+          userIdx = i;
+          break;
+        }
+      }
+      if (userIdx < 0) return;
+      const userMsg = msgs[userIdx];
+      try {
+        const forked = await sessionApi.fork(currentSessionId, userMsg.id, undefined, {
+          beforeMessage: true,
+        });
+        toast.success(t('chat.regenerate_forked'));
+        void loadSessions();
+        setCurrentSessionId(forked.id);
+        await sendMessage(userMsg.content, forked.id);
+      } catch (e) {
+        toast.error(
+          fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
+        );
+      }
+    },
+    [currentSessionId, isLoading, loadSessions, sendMessage, setCurrentSessionId, t],
+  );
+
+  // R17-B: 删除单条消息 —— messageApi.delete 落库后本地同步移除；
+  // 失败提示但不移动视图（历史保持可见）。
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      try {
+        await messageApi.delete(messageId);
+        removeMessage(messageId);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [removeMessage],
+  );
+
+  // P0-1: 引用到对话 —— 消息正文转 Markdown 引用块注入输入框。
+  const handleQuote = useCallback((message: MessageType) => {
+    const quoted = message.content
+      .split('\n')
+      .map((line) => `> ${line}`)
+      .join('\n');
+    setQuotedDraft({ text: `${quoted}\n\n`, nonce: Date.now() });
+  }, []);
+
+  // P0-1: 保存到记忆 —— 消息正文写入长期记忆（semantic，标注来源便于检索）。
+  const handleSaveToMemory = useCallback(
+    async (message: MessageType) => {
+      try {
+        await memoryApi.saveMemory(message.content, 'semantic', 5, ['来自对话']);
+        toast.success(t('chat.save_to_memory_success'));
+      } catch (e) {
+        toast.error(
+          fill(t('chat.save_to_memory_failed'), {
+            error: e instanceof Error ? e.message : String(e),
+          }),
+        );
+      }
+    },
+    [t],
+  );
+
+  // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
   // RV3 (round8): 只重跑失败任务 —— 调 rerun-failed 拿 planOverride
   // （done 子任务带 preset_output 回放），经 chatStream 重发全新 run。
-  // 注：handleCancelRun 本分支已有（:373），不重复引入。
+  // 注：handleCancelRun 本分支已有（:382），不重复引入。
   const handleRerunFailed = async (runId: string) => {
     if (!currentSessionId) return;
     try {
@@ -609,6 +689,10 @@ export function Chat() {
             streamingMessageId={streamingMessageId}
             onFork={handleFork}
             onEditResend={handleStartEditResend}
+            onRegenerate={handleRegenerate}
+            onDelete={handleDeleteMessage}
+            onQuote={handleQuote}
+            onSaveToMemory={handleSaveToMemory}
           />
         )}
         {/* PM2 (round8): 计划批准条 —— /plan run 完成后出现;批准即衔接执行 */}
@@ -717,7 +801,7 @@ export function Chat() {
         disabled={!hasConfig}
         placeholder="输入消息..."
         workspacePath={workspacePath}
-        injectedDraft={editResendTarget}
+        injectedDraft={editResendTarget ?? quotedDraft}
         editResendNotice={editResendNotice}
       />
 

@@ -60,14 +60,23 @@ const ADVANCED_FEATURE_BY_PATH: Record<string, string> = {
 
 interface SidebarProps {
   width?: number;
+  /** P1-3.6 (UI 优化方案 2026-09-13): 折叠态 → 56px icon rail。
+   *  仅渲染品牌 logo + 导航图标，隐藏会话列表/sections/文字标签。 */
+  collapsed?: boolean;
 }
 
-export function Sidebar({ width = 240 }: SidebarProps) {
+export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useI18n();
-  const { sessions, currentSessionId, setCurrentSessionId, loadSessions, deleteSession, updateSession } =
-    useStore();
+  const {
+    sessions,
+    currentSessionId,
+    setCurrentSessionId,
+    loadSessions,
+    deleteSession,
+    updateSession,
+  } = useStore();
   const { settings } = useSettings();
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const [connectionStatus, setConnectionStatus] = useState<
@@ -75,7 +84,11 @@ export function Sidebar({ width = 240 }: SidebarProps) {
   >('not-configured');
   const [latency, setLatency] = useState<number | null>(null);
 
-  const { order: sectionOrder, collapsed, toggleCollapsed } = useSiderSections(SECTION_KEYS);
+  const {
+    order: sectionOrder,
+    collapsed: collapsedSections,
+    toggleCollapsed,
+  } = useSiderSections(SECTION_KEYS);
   const { orderedItems, reorder } = useStoredSiderOrder({
     storageKey: SESSION_ORDER_KEY,
     items: sessions,
@@ -156,7 +169,7 @@ export function Sidebar({ width = 240 }: SidebarProps) {
   };
 
   const renderSection = (key: string) => {
-    const isCollapsed = collapsed.has(key);
+    const isCollapsed = collapsedSections.has(key);
 
     switch (key) {
       case 'conversations':
@@ -203,6 +216,61 @@ export function Sidebar({ width = 240 }: SidebarProps) {
         return null;
     }
   };
+
+  // P1-3.6 (UI 优化方案 2026-09-13): 折叠态 icon rail —— 仅渲染品牌 logo + 导航图标，
+  // 隐藏文字标签/会话列表/sections。宽度由 Layout 固定 56px。
+  if (collapsed) {
+    return (
+      <aside
+        data-testid="sidebar-rail"
+        style={{ width: `${width}px` }}
+        className="h-screen bg-surface border-r border-border flex flex-col items-center flex-shrink-0"
+      >
+        {/* 品牌 logo（无 wordmark） */}
+        <div className="h-12 flex items-center justify-center border-b border-border w-full">
+          <BrandLogo size="sm" />
+        </div>
+
+        {/* 导航图标（无文字标签） */}
+        <nav className="flex-1 py-2 flex flex-col items-center gap-1 overflow-y-auto w-full">
+          {navItems.map((item) => {
+            const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
+            if (featureKey && !unlockedByFeature[featureKey]) {
+              return null;
+            }
+
+            const isActive =
+              location.pathname === item.path ||
+              (item.path === '/chat' && location.pathname === '/');
+            const Icon = item.icon;
+
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                title={item.label}
+                className={clsx(
+                  'flex items-center justify-center w-10 h-10 rounded-radius-sm transition-colors',
+                  isActive ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-bg-hover',
+                )}
+              >
+                <Icon className="w-5 h-5" />
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* 底部状态：仅连接点 */}
+        <div className="pb-2 w-full flex justify-center">
+          <LiveDot
+            state={liveState}
+            workingTitle={latency != null ? `已连接 · 延迟 ${latency}ms` : '已连接'}
+            sleepingTitle="未配置端点"
+          />
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside

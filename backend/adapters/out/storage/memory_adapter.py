@@ -75,14 +75,23 @@ class MemoryStorageAdapter:
         return await _to_thread(self._sync_list_sessions)
 
     def _sync_list_sessions(self) -> List[Dict[str, Any]]:
-        return [
-            {
-                "id": sid,
-                "title": state.title,
-                "message_count": len(state.messages),
-            }
-            for sid, state in self._sessions.items()
-        ]
+        result = []
+        for sid, state in self._sessions.items():
+            # P0-4 (UI 优化方案 2026-09-13): 取最后一条 user/assistant 消息预览(截断 80 字符)
+            preview = None
+            for msg in reversed(state.messages):
+                if msg.role in ("user", "assistant"):
+                    preview = msg.content[:80] if msg.content else None
+                    break
+            result.append(
+                {
+                    "id": sid,
+                    "title": state.title,
+                    "message_count": len(state.messages),
+                    "last_message_preview": preview,
+                }
+            )
+        return result
 
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         return await _to_thread(self._sync_get_session, session_id)

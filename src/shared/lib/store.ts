@@ -30,6 +30,8 @@ export interface Session {
   last_error?: string | null;
   /** S1: 最近一次运行态迁移时间（epoch ms） */
   last_run_at?: number | null;
+  /** P0-4 (UI 优化方案 2026-09-13): 最后一条 user/assistant 消息预览(截断 80 字符) */
+  last_message_preview?: string | null;
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）
@@ -67,6 +69,7 @@ export interface Message {
   tool_call_id?: string;
   memory_applied?: number;
   reasoning_content?: string; // LLM 思考/推理过程
+  memory_refs?: { id: string; memory_type: string; preview: string }[];
 }
 
 // 状态接口
@@ -91,6 +94,8 @@ interface StoreState {
   addMessage: (message: Message) => void;
   /** PR-6: 用同一 id 的新对象替换某条消息 (流式 chat 结束时写回最终 content) */
   updateMessage: (id: string, patch: Partial<Message>) => void;
+  /** R17-B: 本地移除一条消息（配合 messageApi.delete 的删除入口） */
+  removeMessage: (id: string) => void;
   clearMessages: () => void;
 }
 
@@ -215,6 +220,13 @@ export const useStore = create<StoreState>((set, _get) => ({
   updateMessage: (id, patch) => {
     set((state) => ({
       messages: state.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    }));
+  },
+
+  // R17-B: 本地移除一条消息
+  removeMessage: (id) => {
+    set((state) => ({
+      messages: state.messages.filter((m) => m.id !== id),
     }));
   },
 

@@ -6,6 +6,7 @@ import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifac
 interface ArtifactRowProps {
   artifact: Artifact;
   onSelect: (artifact: Artifact) => void;
+  onDoubleClick?: (artifact: Artifact) => void;
 }
 
 const KIND_ICONS: Record<ArtifactKind, typeof File> = {
@@ -27,12 +28,13 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function ArtifactRow({ artifact, onSelect }: ArtifactRowProps) {
+export function ArtifactRow({ artifact, onSelect, onDoubleClick }: ArtifactRowProps) {
   const Icon = KIND_ICONS[artifact.kind] ?? File;
   return (
     <button
       className="w-full flex items-center gap-2 px-3 py-2 hover:bg-bg-hover rounded text-left transition-colors"
       onClick={() => onSelect(artifact)}
+      onDoubleClick={() => onDoubleClick?.(artifact)}
     >
       <Icon className="w-4 h-4 text-text-secondary shrink-0" />
       <div className="flex-1 min-w-0">

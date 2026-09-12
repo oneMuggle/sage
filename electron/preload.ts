@@ -480,6 +480,17 @@ const electronAPI = {
    * 从存储加载完成, 只读 store 会竞态漏拦截。
    */
   demoMode: process.argv.includes('--sage-demo-mode=1'),
+
+  /**
+   * P2-3.11 (2026-09-13): Artifacts 独立窗口。
+   * 双击 Artifact → 弹出独立 BrowserWindow 展示 HTML 内容。
+   * 仅支持 kind === 'html';其他类型返回 {ok:false, reason:'unsupported'}。
+   */
+  openArtifactWindow: (artifact: { id: string; name: string; kind: string; path: string }) =>
+    ipcRenderer.invoke('sage:artifact-window:open', artifact) as Promise<{
+      ok: boolean;
+      reason?: string;
+    }>,
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

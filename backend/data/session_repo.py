@@ -144,6 +144,25 @@ class SessionRepository:
 
         return [Session.from_row(row) for row in cursor.fetchall()]
 
+    def search(self, query: str, limit: int = 10) -> List[Session]:
+        """按标题模糊搜索会话（P1-3.7 全局搜索）。
+
+        使用 LIKE 匹配，不区分大小写。仅搜索未归档会话。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        pattern = f"%{query}%"
+        cursor.execute(
+            """
+            SELECT * FROM sessions
+            WHERE is_archived = 0 AND title LIKE ?
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (pattern, limit),
+        )
+        return [Session.from_row(row) for row in cursor.fetchall()]
+
     def update(self, session_id: str, **kwargs) -> bool:
         """更新会话"""
         conn = self.db.get_connection()

@@ -453,6 +453,96 @@ export const en: Record<TranslationKey, string> = {
   'office.snapshot.restoreFailed': 'Failed to restore',
   'office.snapshot.close': 'Close',
 
+  // ─── Office parity batch 2: rich preview rendering (item 2.6) ─────
+  'office.preview.headings': 'headings',
+  'office.preview.formulas': 'Formula view',
+  'office.preview.formulasNote': 'Cached values missing — showing formula text only',
+  'office.preview.rowsTruncated': '…{n} more rows hidden',
+  'office.preview.paragraphsTruncated': '…{n} more paragraphs hidden',
+  'office.preview.cellsTruncated': '…{n} more columns hidden',
+  'office.preview.sheetTab': 'Sheets',
+
+  // ─── Office parity batch 2: edit preview dialog (item 2.5) ─────
+  'office.edit.title': 'Edit Preview',
+  'office.edit.open': 'Edit Preview',
+  'office.edit.close': 'Close',
+  'office.edit.composeHint': 'Compose a simple edit and preview it (the document is not modified)',
+  'office.edit.wordFind': 'Find text',
+  'office.edit.wordFindPlaceholder': 'Text to replace…',
+  'office.edit.wordReplace': 'Replace with',
+  'office.edit.wordReplacePlaceholder': 'Replacement text (leave empty to delete)',
+  'office.edit.excelSheet': 'Sheet',
+  'office.edit.excelCell': 'Cell',
+  'office.edit.excelCellPlaceholder': 'e.g. B2',
+  'office.edit.excelValue': 'New value',
+  'office.edit.excelValuePlaceholder': 'Value written to the cell',
+  'office.edit.pptSlideNumber': 'Slide number',
+  'office.edit.pptTitle': 'New title',
+  'office.edit.preview': 'Preview changes',
+  'office.edit.previewing': 'Generating preview…',
+  'office.edit.changes': 'Change preview',
+  'office.edit.before': 'Before',
+  'office.edit.after': 'After',
+  'office.edit.truncated': 'Many changes — showing the first 200 only',
+  'office.edit.previewFailed': 'Preview failed',
+  'office.edit.rejected': 'This edit cannot be applied',
+  'office.edit.noChanges': 'No changes produced',
+  'office.edit.required': 'Please complete the edit fields',
+  // Round 2 (R1): in-page apply — secondary confirm after a successful
+  // preview + apply feedback + self-check summary line.
+  'office.edit.apply': 'Apply changes',
+  'office.edit.applying': 'Applying…',
+  'office.edit.applyHint': 'Look good? Applying writes the changes above to the document.',
+  'office.edit.applied': 'Edits applied',
+  'office.edit.applyFailed': 'Apply failed',
+  'office.edit.selfCheckOk': 'Self-check passed',
+  'office.edit.selfCheckFailed': 'Self-check failed',
+  'office.edit.selfCheckParagraphs': '{n} paragraphs',
+  'office.edit.selfCheckTables': '{n} tables',
+  'office.edit.selfCheckSheets': '{n} sheets',
+  'office.edit.selfCheckSlides': '{n} slides',
+  'office.edit.selfCheckPages': '{n} pages',
+
+  // ─── Office parity batch 2: export PDF (item 2.7) ─────
+  'office.export.pdf': 'Export PDF',
+  'office.export.exporting': 'Exporting…',
+  'office.export.success': 'PDF exported',
+  'office.export.failed': 'Export failed',
+  'office.export.noConverter': 'No local converter found (LibreOffice or MS Word required)',
+  'office.export.openFolder': 'Show in Folder',
+
+  // ─── Office parity batch 3: Word template library (item 3.2) ─────
+  'office.template.modeFreeform': 'Free-form',
+  'office.template.modeTemplate': 'From template',
+  'office.template.pickTitle': 'Pick a template',
+  'office.template.loading': 'Loading templates…',
+  'office.template.loadFailed': 'Failed to load templates',
+  'office.template.retry': 'Retry',
+  'office.template.empty': 'No templates available',
+  'office.template.source.builtin': 'Built-in',
+  'office.template.source.workspace': 'Workspace',
+  'office.template.hint.date': 'Date format YYYY-MM-DD',
+  'office.template.hint.rich':
+    'Supports {{ }} rich-text or table variables, as the template defines',
+  'office.template.hint.image': 'In-template image variables only; leave blank to skip',
+  'office.template.create': 'Create document',
+  'office.template.creating': 'Creating…',
+  'office.template.success': 'Created from template',
+  'office.template.failed': 'Creation failed',
+  'office.template.selectFirst': 'Pick a template first',
+  'office.template.unfilled': 'Unfilled placeholders',
+
+  // ─── Office parity round 3: batch archive/restore (item N5) + template extension (N2) ─────
+  'office.batch.archive': 'Archive selected',
+  'office.batch.restore': 'Restore selected',
+  'office.batch.start': 'Batch operation started…',
+  'office.batch.done': 'Batch complete: {n} items',
+  'office.batch.doneWithFailures': 'Batch complete: {n} succeeded, {m} failed',
+  'office.batch.failed': 'Batch operation failed',
+  'office.batch.selectAll': 'Select all',
+  'office.batch.selectedCount': '{n} selected',
+  'office.batch.selectRow': 'Select document',
+
   // ─── M6 生态扩展: 编排看板补充 i18n 键 ─────
   'orchestration.loading': 'Loading…',
   'orchestration.error': 'Error:',
@@ -528,9 +618,22 @@ export const en: Record<TranslationKey, string> = {
 
   // ─── U5' Edit & resend (parity round 5 batch A) ─────
   'chat.edit_resend': 'Edit & resend',
-  'chat.edit_resend_notice': 'Editing & resending: sending forks into a new session (original preserved)',
+  'chat.edit_resend_notice':
+    'Editing & resending: sending forks into a new session (original preserved)',
   'chat.edit_resend_cancel': 'Cancel editing',
   'chat.edit_resend_forked': 'Forked into a new session; edited message sent',
+
+  // ─── P0-1 Message action menu (UI optimization, 2026-09-12) ─────
+  'chat.more_actions': 'More actions',
+  'chat.regenerate': 'Regenerate',
+  'chat.regenerate_forked': 'Forked from the original question and regenerated',
+  'chat.regenerate_failed': 'Failed to regenerate: {message}',
+  'chat.delete_message': 'Delete this message',
+  'chat.delete_message_confirm': 'Delete this message?',
+  'chat.quote_to_chat': 'Quote to chat',
+  'chat.save_to_memory': 'Save to memory',
+  'chat.save_to_memory_success': 'Saved to memory',
+  'chat.save_to_memory_failed': 'Failed to save to memory: {error}',
 
   // ─── F12 Message full-text search (parity round 5 batch B) ─────
   'session.message_hits': '{count} message hits',
