@@ -1080,11 +1080,24 @@ export interface OfficeWordTableContent {
   rows: string[][];
 }
 
+export interface WordHeaderFooterContent {
+  // Round 15：read_docx 页眉/页脚提取（section 为 1-based 节号）。
+  // Backend counterpart: WordHeaderFooterContent in backend/office/models.py。
+  section: number;
+  header_text: string;
+  footer_text: string;
+  has_page_number_field: boolean;
+}
+
 export interface OfficeWordReadResult {
   summary: OfficeDocumentSummary;
   paragraphs: OfficeWordParagraphContent[];
   tables: OfficeWordTableContent[];
   images: number;
+  comments?: unknown[];
+  // Round 15：每节页眉/页脚与目录域 instr 列表
+  headers_footers?: WordHeaderFooterContent[];
+  toc_fields?: string[];
 }
 
 export interface OfficeExcelSheetContent {
