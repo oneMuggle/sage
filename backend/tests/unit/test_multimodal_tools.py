@@ -15,8 +15,8 @@ def test_tts_tool_schema():
 
 
 def test_tts_tool_risk():
-    from backend.tools.tts_tool import TextToSpeechTool
     from backend.domain.risk import RiskClass
+    from backend.tools.tts_tool import TextToSpeechTool
     tool = TextToSpeechTool()
     # Note: brief originally said RiskClass.WRITE (which doesn't exist);
     # WRITE_LOCAL is the correct semantic (writes audio to local media store)
@@ -33,8 +33,8 @@ def test_asr_tool_schema():
 
 
 def test_asr_tool_risk():
-    from backend.tools.asr_tool import SpeechToTextTool
     from backend.domain.risk import RiskClass
+    from backend.tools.asr_tool import SpeechToTextTool
     tool = SpeechToTextTool()
     assert tool.risk == RiskClass.READ
 
@@ -49,8 +49,8 @@ def test_image_gen_tool_schema():
 
 
 def test_image_gen_tool_risk():
-    from backend.tools.image_gen_tool import ImageGenerationTool
     from backend.domain.risk import RiskClass
+    from backend.tools.image_gen_tool import ImageGenerationTool
     tool = ImageGenerationTool()
     # WRITE does not exist; generated media is persisted locally.
     assert tool.risk == RiskClass.WRITE_LOCAL

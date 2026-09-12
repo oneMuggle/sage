@@ -29,9 +29,8 @@ async def upload_chat_attachment(file: UploadFile = File(...)) -> dict:
     """
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else ""
 
-    if file.content_type and file.content_type not in ALLOWED_AUDIO_TYPES:
-        if ext not in ALLOWED_AUDIO_EXTENSIONS:
-            return {"error": f"不支持的文件类型: {file.content_type}"}
+    if file.content_type and file.content_type not in ALLOWED_AUDIO_TYPES and ext not in ALLOWED_AUDIO_EXTENSIONS:
+        return {"error": f"不支持的文件类型: {file.content_type}"}
 
     content = await file.read()
     if len(content) > MAX_ATTACHMENT_SIZE:

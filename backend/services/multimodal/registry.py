@@ -33,9 +33,9 @@ class CapabilityRegistry:
 
 def register_all_capabilities() -> None:
     """注册所有多模态能力"""
-    from .tts import TTSCapability
     from .asr import ASRCapability
     from .image_gen import ImageGenCapability
+    from .tts import TTSCapability
 
     CapabilityRegistry.register(TTSCapability())
     CapabilityRegistry.register(ASRCapability())

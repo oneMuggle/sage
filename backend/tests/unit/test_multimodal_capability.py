@@ -40,8 +40,12 @@ def test_http_response_fields():
 
 
 def test_registry_register_and_get():
+    from backend.services.multimodal.capability import (
+        AICapability,
+        AIHttpRequest,
+        CapabilityKind,
+    )
     from backend.services.multimodal.registry import CapabilityRegistry
-    from backend.services.multimodal.capability import AICapability, CapabilityKind, CapabilityConfig, AIHttpRequest, AIHttpResponse
 
     class DummyCapability(AICapability):
         kind = CapabilityKind.TTS
@@ -98,7 +102,7 @@ def test_tts_parse_response_saves_file(tmp_path, monkeypatch):
     cap = TTSCapability()
     monkeypatch.setattr("backend.services.multimodal.tts.MediaStore",
                         lambda: MediaStore(root=tmp_path))
-    resp = AIHttpResponse(status_code=200, content=b'\xff\xfb\x90\x00' + b'\x00' * 50)
+    resp = AIHttpResponse(status_code=200, content=b"\xff\xfb\x90\x00" + b"\x00" * 50)
     ref = cap.parse_response(resp, text="Hello world test")
     assert ref.kind == MediaKind.AUDIO
     assert ref.source == "tts"
@@ -118,8 +122,8 @@ def test_tts_parse_response_error():
 
 
 def test_asr_build_request_from_file_content():
-    from backend.services.multimodal.capability import CapabilityConfig
     from backend.services.multimodal.asr import ASRCapability
+    from backend.services.multimodal.capability import CapabilityConfig
     cap = ASRCapability()
     config = CapabilityConfig(base_url="https://api.example.com", api_key="sk-test", model="whisper-1")
     req = cap.build_request(config, file_content=b"fake audio data", language="zh")
@@ -129,8 +133,8 @@ def test_asr_build_request_from_file_content():
 
 
 def test_asr_build_request_from_file_path(tmp_path):
-    from backend.services.multimodal.capability import CapabilityConfig
     from backend.services.multimodal.asr import ASRCapability
+    from backend.services.multimodal.capability import CapabilityConfig
     audio_file = tmp_path / "test.mp3"
     audio_file.write_bytes(b"fake audio data")
     cap = ASRCapability()
@@ -140,8 +144,8 @@ def test_asr_build_request_from_file_path(tmp_path):
 
 
 def test_asr_build_request_no_input_raises():
-    from backend.services.multimodal.capability import CapabilityConfig
     from backend.services.multimodal.asr import ASRCapability
+    from backend.services.multimodal.capability import CapabilityConfig
     cap = ASRCapability()
     config = CapabilityConfig(base_url="https://api.example.com", api_key="", model="whisper-1")
     with pytest.raises(ValueError, match="必须提供"):
@@ -149,12 +153,12 @@ def test_asr_build_request_no_input_raises():
 
 
 def test_asr_parse_response_success():
-    from backend.services.multimodal.capability import AIHttpResponse
     from backend.services.multimodal.asr import ASRCapability
+    from backend.services.multimodal.capability import AIHttpResponse
     cap = ASRCapability()
     resp = AIHttpResponse(
         status_code=200,
-        content='{"text": "你好世界", "language": "zh"}'.encode("utf-8"),
+        content='{"text": "你好世界", "language": "zh"}'.encode(),
         json={"text": "你好世界", "language": "zh"},
         content_type="application/json",
     )
@@ -164,10 +168,10 @@ def test_asr_parse_response_success():
 
 
 def test_asr_parse_response_error():
-    from backend.services.multimodal.capability import AIHttpResponse
     from backend.services.multimodal.asr import ASRCapability
+    from backend.services.multimodal.capability import AIHttpResponse
     cap = ASRCapability()
-    resp = AIHttpResponse(status_code=500, content=b'error')
+    resp = AIHttpResponse(status_code=500, content=b"error")
     with pytest.raises(ValueError, match="500"):
         cap.parse_response(resp)
 
@@ -175,8 +179,9 @@ def test_asr_parse_response_error():
 def test_asr_build_request_produces_multipart():
     """Verify that ASR request, when built by httpx, has content-type: multipart/form-data."""
     import httpx
-    from backend.services.multimodal.capability import CapabilityConfig
+
     from backend.services.multimodal.asr import ASRCapability
+    from backend.services.multimodal.capability import CapabilityConfig
     cap = ASRCapability()
     config = CapabilityConfig(base_url="https://api.example.com", api_key="sk-test", model="whisper-1")
     req = cap.build_request(config, file_content=b"fake audio data", language="zh")
@@ -223,11 +228,11 @@ def test_image_gen_parse_response_b64(tmp_path, monkeypatch):
     cap = ImageGenCapability()
     monkeypatch.setattr("backend.services.multimodal.image_gen.MediaStore",
                         lambda: MediaStore(root=tmp_path))
-    png_bytes = b'\x89PNG\r\n\x1a\n' + b'\x00' * 100
+    png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
     b64_data = base64.b64encode(png_bytes).decode()
     resp = AIHttpResponse(
         status_code=200,
-        content=b'{}',
+        content=b"{}",
         json={"data": [{"b64_json": b64_data, "revised_prompt": "a cute cat photo"}]},
         content_type="application/json",
     )
@@ -242,6 +247,6 @@ def test_image_gen_parse_response_error():
     from backend.services.multimodal.capability import AIHttpResponse
     from backend.services.multimodal.image_gen import ImageGenCapability
     cap = ImageGenCapability()
-    resp = AIHttpResponse(status_code=400, content=b'bad request')
+    resp = AIHttpResponse(status_code=400, content=b"bad request")
     with pytest.raises(ValueError, match="400"):
         cap.parse_response(resp)
