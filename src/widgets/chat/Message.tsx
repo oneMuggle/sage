@@ -440,7 +440,14 @@ function MessageComponent({
         </div>
 
         {/* Action buttons */}
-        {(canCopy || onFeedback || canFork || canEditResend || canDelete || canRegenerate || canQuote || canSaveToMemory) && (
+        {(canCopy ||
+          onFeedback ||
+          canFork ||
+          canEditResend ||
+          canDelete ||
+          canRegenerate ||
+          canQuote ||
+          canSaveToMemory) && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
             {onFeedback && (
               <>
