@@ -11,9 +11,11 @@ interface SkillListProps {
   onDelete?: (name: string) => void;
   // 生命周期：归档 / 取消归档回调 — 透传给 SkillCard
   onArchive?: (name: string, archived: boolean) => void;
+  // R17-A1 管理面：钉住 / 取消钉住回调 — 透传给 SkillCard
+  onPin?: (name: string, pinned: boolean) => void;
 }
 
-const SkillList: React.FC<SkillListProps> = ({ skills, onToggle, onDelete, onArchive }) => {
+const SkillList: React.FC<SkillListProps> = ({ skills, onToggle, onDelete, onArchive, onPin }) => {
   if (skills.length === 0) {
     return (
       <div className="text-center py-8">
@@ -40,6 +42,8 @@ const SkillList: React.FC<SkillListProps> = ({ skills, onToggle, onDelete, onArc
           onDelete={onDelete}
           lifecycle={skill.lifecycle}
           onArchive={onArchive}
+          pinned={skill.pinned}
+          onPin={onPin}
         />
       ))}
     </div>

@@ -21,6 +21,7 @@ import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
 import { SessionUsageBadge } from '../widgets/chat/SessionUsageBadge';
+import { ArchivesModal } from '../widgets/session';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
 function fill(template: string, vars: Record<string, string | number>): string {
@@ -123,6 +124,8 @@ export function Chat() {
   const wasAtBottomRef = useRef(true);
   const lastMsgLengthRef = useRef(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  // R17-A2: 压缩成功后 toast「查看归档」入口
+  const [archivesOpen, setArchivesOpen] = useState(false);
   const lastMsg = messages[messages.length - 1];
   const previousMessagesRef = useRef<typeof messages>([]);
 
@@ -356,6 +359,8 @@ export function Chat() {
             after: result.after,
             removed: result.removed,
           }),
+          // R17-A2: 被移除的前缀已归档，提供直达入口
+          { action: { label: '查看归档', onClick: () => setArchivesOpen(true) } },
         );
         await loadMessages(currentSessionId);
       } else if (result.ok) {
@@ -704,6 +709,13 @@ export function Chat() {
         // 自动派发）+ 清空 taskBoard。
         onCancelExecution={(runId) => void handleCancelRun(runId)}
         onRerunFailed={(runId) => void handleRerunFailed(runId)}
+      />
+
+      {/* R17-A2: 压缩谱系归档查看器（compact 成功 toast「查看归档」打开） */}
+      <ArchivesModal
+        isOpen={archivesOpen}
+        onClose={() => setArchivesOpen(false)}
+        sessionId={currentSessionId}
       />
     </div>
   );

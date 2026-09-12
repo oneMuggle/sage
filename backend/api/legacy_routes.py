@@ -1074,18 +1074,34 @@ def _get_skill_adapter():
     return get_singleton()
 
 
-def _skill_to_dict(ext: dict, enabled: bool, usage_count: int) -> dict:
+def _skill_to_dict(
+    ext: dict, enabled: bool, usage_count: int, pinned: Optional[bool] = None
+) -> dict:
     """把扩展 SkillSpec dict + 路由层 enabled/usage_count 序列化为响应 dict。
 
     ``ext`` 来自 ``InprocSkillAdapter.list_skills_extended()``,
     含 ``source / body / base_dir / version`` 等字段 (SKILL.md 时填充, builtin 时不存在)。
+
+    ``pinned`` 传 None 时不透出（Round 17 管理面：列表/单技能响应统一带 pin 态）。
 
     复制一份避免修改 adapter 返回的共享 dict (immutable-ish 风格)。
     """
     out = dict(ext)
     out["enabled"] = enabled
     out["usage_count"] = usage_count
+    if pinned is not None:
+        out["pinned"] = pinned
     return out
+
+
+def _get_pinned_names() -> Set[str]:
+    """lifecycle store 的 pin 集合（惰性导入，缺表时 best-effort 返回空集）。"""
+    try:
+        from backend.skills.lifecycle import get_lifecycle_store
+
+        return get_lifecycle_store().get_pinned_names()
+    except Exception:
+        return set()
 
 
 @router.get("/skills")
@@ -1093,8 +1109,14 @@ def _skill_to_dict(ext: dict, enabled: bool, usage_count: int) -> dict:
 def list_skills():
     """列出所有已注册技能 (含 disabled 与 usage_count + SKILL.md 扩展字段)。"""
     adapter = _get_skill_adapter()
+    pinned_names = _get_pinned_names()
     return [
-        _skill_to_dict(ext, adapter.is_enabled(ext["name"]), adapter.usage_count(ext["name"]))
+        _skill_to_dict(
+            ext,
+            adapter.is_enabled(ext["name"]),
+            adapter.usage_count(ext["name"]),
+            pinned=ext["name"] in pinned_names,
+        )
         for ext in adapter.list_skills_extended()
     ]
 
@@ -1123,7 +1145,9 @@ def toggle_skill(name: str, data: SkillToggle):
     # 返回完整 skill dict (与 list 接口一致) —— 用 list_skills_extended 拿带 source/body 的版本
     ext = next((e for e in adapter.list_skills_extended() if e["name"] == name), None)
     assert ext is not None  # set_enabled 已 guard
-    return _skill_to_dict(ext, adapter.is_enabled(name), adapter.usage_count(name))
+    return _skill_to_dict(
+        ext, adapter.is_enabled(name), adapter.usage_count(name), pinned=name in _get_pinned_names()
+    )
 
 
 class SkillArchive(BaseModel):
@@ -1165,7 +1189,9 @@ def archive_skill(name: str, data: SkillArchive):
     # 返回完整 skill dict（与 toggle 一致）—— lifecycle 已由 list_skills_extended 注入
     ext = next((e for e in adapter.list_skills_extended() if e["name"] == name), None)
     assert ext is not None  # set_archived 已 guard
-    return _skill_to_dict(ext, adapter.is_enabled(name), adapter.usage_count(name))
+    return _skill_to_dict(
+        ext, adapter.is_enabled(name), adapter.usage_count(name), pinned=name in _get_pinned_names()
+    )
 
 
 class SkillPinRequest(BaseModel):

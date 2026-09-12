@@ -104,3 +104,37 @@ class TestArchivePinGuard:
         client.post("/skills/p/pin", json={"pinned": False})
         resp = client.post("/skills/p/archive", json={"archived": True})
         assert resp.status_code == 200
+
+
+class TestPinnedSerialization:
+    def test_list_and_toggle_archive_expose_pinned(self, tmp_db, client, monkeypatch):
+        """R17-A1 管理面：GET /skills 与 toggle/archive 响应统一透出 pinned 字段"""
+        from unittest.mock import MagicMock
+
+        store = SkillLifecycleStore(db=tmp_db)
+        import backend.skills.lifecycle as lifecycle_mod
+
+        monkeypatch.setattr(lifecycle_mod, "get_lifecycle_store", lambda: store)
+        adapter = MagicMock()
+        adapter.list_skills_extended.return_value = [{"name": "p"}, {"name": "q"}]
+        adapter.is_enabled.return_value = True
+        adapter.usage_count.return_value = 0
+        monkeypatch.setattr(
+            "backend.api.legacy_routes._get_skill_adapter", lambda: adapter
+        )
+
+        store.set_pinned("p", True)
+
+        resp = client.get("/skills")
+        assert resp.status_code == 200
+        by_name = {s["name"]: s for s in resp.json()}
+        assert by_name["p"]["pinned"] is True
+        assert by_name["q"]["pinned"] is False
+
+        resp = client.post("/skills/p/toggle", json={"enabled": False})
+        assert resp.status_code == 200
+        assert resp.json()["pinned"] is True
+
+        resp = client.post("/skills/q/archive", json={"archived": True})
+        assert resp.status_code == 200
+        assert resp.json()["pinned"] is False

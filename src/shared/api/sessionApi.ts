@@ -3,7 +3,13 @@
  */
 
 import { invoke } from './desktopInvoke';
-import type { Message, Session, SessionCompactResult, SessionExportResult } from './types';
+import type {
+  Message,
+  Session,
+  SessionCompactResult,
+  SessionExportResult,
+  SessionLineage,
+} from './types';
 import { ApiException, handleApiError, isValidSessionId, withRetry } from './utils';
 
 export const sessionApi = {
@@ -102,6 +108,26 @@ export const sessionApi = {
     }
     try {
       return await invoke<SessionCompactResult>('session_compact', { sessionId });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * R17-A2: 查询压缩谱系（压缩前缀派生的归档会话，新→旧）。
+   *
+   * 与 compact 同理**不走 withRetry**：只读查询，失败由调用方 toast 即可。
+   */
+  async getLineage(sessionId: string): Promise<SessionLineage> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    try {
+      return await invoke<SessionLineage>('session_lineage', { sessionId });
     } catch (error) {
       throw handleApiError(error);
     }

@@ -133,6 +133,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/compact`,
   },
+  // R17-A2: 压缩谱系（归档会话列表，新→旧）。sessionApi.getLineage。
+  session_lineage: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/lineage`,
+  },
   session_fork: {
     method: 'POST',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/fork`,
@@ -444,6 +449,28 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   archive_skill: {
     method: 'POST',
     path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/archive`,
+  },
+  // R17-A1: 技能 pin / 固化巡检（consolidation）管理面。skillsApi.pinSkill 等。
+  // autoDraft 由 path builder 转 snake query；accept 的 body 走 camelToSnakeKeys。
+  pin_skill: {
+    method: 'POST',
+    path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/pin`,
+  },
+  skills_consolidation_scan: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/skills/consolidation/scan?auto_draft=${a?.autoDraft === false ? 'false' : 'true'}`,
+  },
+  skills_consolidation_suggestions: {
+    method: 'GET',
+    path: (a) => {
+      const limit = a?.limit != null ? `?limit=${encodeURIComponent(String(a.limit))}` : '';
+      return `/api/v1/skills/consolidation/suggestions${limit}`;
+    },
+  },
+  skills_consolidation_accept: {
+    method: 'POST',
+    path: () => '/api/v1/skills/consolidation/accept',
   },
 
   // Path B: list user-invocable SKILL.md slash command names.
