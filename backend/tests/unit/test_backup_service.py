@@ -106,4 +106,5 @@ def test_system_routes_backups_and_memory_export(tmp_path: Path, monkeypatch):
     body = res.json()
     assert body["app"] == "sage"
     assert body["version"] == 1
-    assert "episodic" in body and "semantic" in body
+    assert "episodic" in body
+    assert "semantic" in body
