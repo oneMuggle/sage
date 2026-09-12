@@ -8,7 +8,10 @@
 
 from __future__ import annotations
 
+from typing import List
+
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -110,3 +113,98 @@ def unbind_telegram_chat(chat_id: str):
             detail={"type": "bind_not_found", "message": "bind not found"},
         )
     return {"chat_id": chat_id, "unbound": True}
+
+
+# ---------------------------------------------------------------------------
+# Round 19: 网关配置读写（settings 持久化，前端设置卡入口）
+# ---------------------------------------------------------------------------
+
+
+def _mask_token(token: str) -> str:
+    if not token:
+        return ""
+    return "****" + token[-4:]
+
+
+def _read_telegram_settings() -> dict:
+    from backend.data.settings_repo import SettingsRepository
+
+    app_settings = SettingsRepository().get_json("app_settings") or {}
+    node = app_settings.get("telegram") if isinstance(app_settings, dict) else None
+    return node if isinstance(node, dict) else {}
+
+
+@router.get("/gateway/telegram/config")
+def get_telegram_config():
+    """当前网关配置（token 打码，只回尾 4 位）。
+
+    - 200 + ``{"configured": bool, "enabled": bool, "bot_token_masked": str,
+      "allowed_chat_ids": [...], "source": "settings"|"env"|"none"}``
+    """
+    import os
+
+
+    env_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+    node = _read_telegram_settings()
+    settings_token = str(node.get("bot_token") or "").strip()
+    if env_token:
+        source = "env"
+        token = env_token
+        enabled = True
+    elif settings_token and node.get("enabled") is not False:
+        source = "settings"
+        token = settings_token
+        enabled = True
+    else:
+        source = "none"
+        token = settings_token or env_token
+        enabled = False
+    raw_ids = node.get("allowed_chat_ids")
+    if env_token:
+        raw_ids = os.getenv("TELEGRAM_ALLOWED_CHAT_IDS") or []
+        raw_ids = raw_ids.split(",") if raw_ids else []
+    if isinstance(raw_ids, str):
+        raw_ids = raw_ids.split(",")
+    return {
+        "configured": bool(token),
+        "enabled": enabled,
+        "source": source,
+        "bot_token_masked": _mask_token(token),
+        "allowed_chat_ids": [str(c).strip() for c in raw_ids if str(c).strip()],
+    }
+
+
+class TelegramConfigUpdate(BaseModel):
+    """``PUT /gateway/telegram/config`` 请求体（Round 19）。
+
+    bot_token 传空串 = 清除（关闭网关）。
+    """
+
+    bot_token: str = ""
+    allowed_chat_ids: List[str] = []
+    enabled: bool = True
+
+
+@router.put("/gateway/telegram/config")
+def update_telegram_config(data: TelegramConfigUpdate):
+    """保存网关配置到 app_settings.telegram（settings 持久化）。
+
+    - 200 + ``{"saved": true, "restart_required": true}``
+      （轮询线程在 lifespan 启动时创建，改配置后需重启后端生效——
+      restart_required 提示前端）
+    """
+    from backend.data.settings_repo import SettingsRepository
+
+    repo = SettingsRepository()
+    app_settings = repo.get_json("app_settings") or {}
+    if not isinstance(app_settings, dict):
+        app_settings = {}
+    app_settings["telegram"] = {
+        "bot_token": data.bot_token.strip(),
+        "allowed_chat_ids": [
+            str(c).strip() for c in data.allowed_chat_ids if str(c).strip()
+        ],
+        "enabled": bool(data.enabled),
+    }
+    repo.set_json("app_settings", app_settings)
+    return {"saved": True, "restart_required": True}
