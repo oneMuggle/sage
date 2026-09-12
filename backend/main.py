@@ -264,6 +264,16 @@ async def lifespan(app: FastAPI):
     # The value is intentionally never logged or returned by the health endpoint.
     initialize_local_auth_token()
 
+    # R21-A: 应用待恢复备份（必须在 init_db 之前 —— 原子替换主库文件后
+    # 再建连接，避免旧 WAL 污染恢复出的库）。fail-safe，不阻塞启动。
+    try:
+        from backend.services.backup_service import apply_pending_restore
+
+        if apply_pending_restore():
+            logger.info("pending backup restore applied at startup")
+    except Exception:
+        logger.exception("apply_pending_restore failed (ignored)")
+
     # 启动时初始化
     db = Database()
     db.init_db()

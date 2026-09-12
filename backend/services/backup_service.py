@@ -133,3 +133,107 @@ def create_backup(reason: str = "manual", db_path: str | None = None) -> Dict[st
     except Exception:
         logger.exception("create_backup failed (reason=%s)", reason)
         return None
+
+
+# ==================== 恢复（R21-A） ====================
+
+#: 恢复标记文件名（位于 backups 目录旁，记录待应用的备份）
+RESTORE_MARKER = "restore-marker.json"
+
+
+def restore_backup(name: str, db_path: str | None = None) -> Dict[str, Any] | None:
+    """安排恢复指定备份（下次启动生效）。
+
+    桌面单进程无法在运行中安全换库 —— 采用"标记 + 启动应用"两段式：
+
+    1. 先做一次 ``pre-restore`` 安全备份（恢复失败时现有数据可回退）；
+    2. 把备份复制为 ``<db_path>.restore-pending``；
+    3. 写 restore-marker.json（备份名/时间）；下次启动
+       :func:`apply_pending_restore` 原子替换主库文件。
+
+    Returns:
+        {'ok': True, 'applied_at_startup': True, 'backup': name}；失败 None。
+    """
+    try:
+        if not _BACKUP_RE.match(name or ""):
+            logger.warning("restore_backup rejected invalid name: %r", name)
+            return None
+        if db_path is None:
+            db_path = Database().db_path
+        backup_dir = get_backup_dir(db_path)
+        src = backup_dir / name
+        if not src.is_file():
+            logger.warning("restore_backup: backup not found: %s", name)
+            return None
+
+        # 恢复前安全备份（fail-safe：失败不阻断恢复安排，但记日志）
+        safety = create_backup("manual", db_path=db_path)
+        if safety is None:
+            logger.error("pre-restore safety backup failed; aborting restore")
+            return None
+
+        pending = Path(str(db_path) + ".restore-pending")
+        tmp = backup_dir / f".restore-tmp-{name}"
+        data = src.read_bytes()
+        tmp.write_bytes(data)
+        tmp.replace(pending)
+
+        import json as _json
+
+        marker = backup_dir / RESTORE_MARKER
+        marker.write_text(
+            _json.dumps(
+                {
+                    "backup": name,
+                    "scheduled_at": int(time.time() * 1000),
+                    "safety_backup": safety["name"],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        logger.info("restore scheduled from %s (applies at next startup)", name)
+        return {"ok": True, "applied_at_startup": True, "backup": name}
+    except Exception:
+        logger.exception("restore_backup failed")
+        return None
+
+
+def apply_pending_restore(db_path: str | None = None) -> bool:
+    """启动早期应用待恢复备份（原子替换主库文件）。
+
+    由 main.lifespan 在 init_db 之前调用。任何失败都只记日志并清理
+    标记 —— 绝不阻塞启动。
+    """
+    try:
+        if db_path is None:
+            db_path = Database().db_path
+        backup_dir = get_backup_dir(db_path)
+        marker = backup_dir / RESTORE_MARKER
+        pending = Path(str(db_path) + ".restore-pending")
+        if not marker.is_file():
+            return False
+        import json as _json
+
+        info: Dict[str, Any] = {}
+        try:
+            info = _json.loads(marker.read_text(encoding="utf-8"))
+        except Exception:
+            logger.exception("restore marker unreadable; cleaning up")
+        if not pending.is_file():
+            # 半成品（复制失败过）—— 清理标记即可
+            marker.unlink(missing_ok=True)
+            return False
+        db = Path(db_path)
+        # 主库旁路文件（-wal/-shm）一并清理，避免旧 WAL 污染新库
+        for suffix in ("-wal", "-shm"):
+            side = Path(str(db_path) + suffix)
+            if side.exists():
+                side.unlink()
+        pending.replace(db)
+        marker.unlink(missing_ok=True)
+        logger.info("restore applied from %s (info=%s)", db.name, info)
+        return True
+    except Exception:
+        logger.exception("apply_pending_restore failed (ignored)")
+        return False

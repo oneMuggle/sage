@@ -117,6 +117,52 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
     }
   }, [loadBackups]);
 
+  // R21-A: 恢复备份（两步确认，下次启动生效）
+  const [restoringName, setRestoringName] = useState<string | null>(null);
+  const [restoreArmed, setRestoreArmed] = useState<string | null>(null);
+  const handleRestore = useCallback(
+    async (name: string) => {
+      if (restoreArmed !== name) {
+        setRestoreArmed(name);
+        return;
+      }
+      setRestoreArmed(null);
+      setRestoringName(name);
+      try {
+        await invoke('system_backup_restore', { name });
+        window.alert('恢复已安排：将在下次启动应用（已自动做恢复前安全备份）');
+      } catch {
+        window.alert('恢复失败，详见服务端日志');
+      } finally {
+        setRestoringName(null);
+      }
+    },
+    [restoreArmed],
+  );
+
+  // R21-B: 导入记忆 JSON
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importingMemory, setImportingMemory] = useState(false);
+  const handleImportMemoryFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImportingMemory(true);
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const res = await invoke<{ imported: number; skipped: number; failed: number }>(
+        'memory_import',
+        { payload },
+      );
+      window.alert(`导入完成：新增 ${res.imported} 条，跳过重复 ${res.skipped} 条，失败 ${res.failed} 条`);
+    } catch {
+      window.alert('导入失败：文件格式需为 Sage 导出的记忆 JSON');
+    } finally {
+      setImportingMemory(false);
+    }
+  }, []);
+
   const handleExportMemory = useCallback(async () => {
     setExportingMemory(true);
     try {
@@ -264,13 +310,50 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
         {backups.length > 0 && (
           <ul className="text-xs text-text-secondary space-y-1" data-testid="backup-list">
             {backups.slice(0, 5).map((b) => (
-              <li key={b.name} className="font-mono">
-                {b.name} · {(b.size_bytes / 1024 / 1024).toFixed(1)} MB ·{' '}
-                {new Date(b.created_at).toLocaleString()}
+              <li key={b.name} className="font-mono flex items-center gap-2">
+                <span className="flex-1 truncate">
+                  {b.name} · {(b.size_bytes / 1024 / 1024).toFixed(1)} MB ·{' '}
+                  {new Date(b.created_at).toLocaleString()}
+                </span>
+                <button
+                  type="button"
+                  data-testid={`restore-${b.name}`}
+                  disabled={restoringName !== null}
+                  onClick={() => void handleRestore(b.name)}
+                  className={`px-2 py-0.5 rounded border text-[11px] disabled:opacity-50 ${
+                    restoreArmed === b.name
+                      ? 'border-error text-error bg-error/5'
+                      : 'border-border hover:bg-bg-hover'
+                  }`}
+                >
+                  {restoreArmed === b.name
+                    ? '确认恢复（下次启动生效）'
+                    : restoringName === b.name
+                      ? '恢复中…'
+                      : '恢复'}
+                </button>
               </li>
             ))}
           </ul>
         )}
+        <div className="mt-2">
+          <button
+            type="button"
+            data-testid="import-memory"
+            disabled={importingMemory}
+            onClick={() => importInputRef.current?.click()}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            {importingMemory ? '导入中…' : '导入记忆 (JSON)'}
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => void handleImportMemoryFile(e)}
+          />
+        </div>
       </section>
     </div>
   );

@@ -292,6 +292,16 @@ class EpisodicMemory:
 
         conn.commit()
 
+    def exists_by_content(self, content: str) -> bool:
+        """R21-B: 导入去重 —— 精确匹配 content 的有效记忆是否已存在。"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT 1 FROM memories_episodic WHERE content = ? AND is_valid = 1 LIMIT 1",
+            (content,),
+        )
+        return cursor.fetchone() is not None
+
     def get_by_id(self, memory_id: str) -> Dict[str, Any] | None:
         """
         根据 ID 获取记忆
