@@ -19,6 +19,11 @@ class ASRCapability(AICapability):
     kind = CapabilityKind.ASR
     settings_slot = "asrModel"
 
+    #: 允许上传的音频扩展名（R22-D8: 防"任意本地文件经 ASR 通道出网"）
+    ALLOWED_EXTENSIONS = frozenset({".mp3", ".wav", ".ogg", ".webm", ".m4a", ".flac", ".aac"})
+    #: 上传字节上限（对齐聊天附件 25MB）
+    MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+
     def build_request(
         self,
         config: CapabilityConfig,
@@ -28,9 +33,23 @@ class ASRCapability(AICapability):
         language: str = None,
     ) -> AIHttpRequest:
         if file_path and not file_content:
-            file_content = Path(file_path).read_bytes()
-            filename = Path(file_path).name
+            path = Path(file_path)
+            if path.suffix.lower() not in self.ALLOWED_EXTENSIONS:
+                raise ValueError(
+                    f"不支持的音频扩展名: {path.suffix or '(无)'} —— "
+                    f"允许: {', '.join(sorted(self.ALLOWED_EXTENSIONS))}"
+                )
+            if path.stat().st_size > self.MAX_UPLOAD_BYTES:
+                raise ValueError(
+                    f"音频文件超过 {self.MAX_UPLOAD_BYTES // (1024 * 1024)}MB 上限"
+                )
+            file_content = path.read_bytes()
+            filename = path.name
         elif file_content:
+            if len(file_content) > self.MAX_UPLOAD_BYTES:
+                raise ValueError(
+                    f"音频数据超过 {self.MAX_UPLOAD_BYTES // (1024 * 1024)}MB 上限"
+                )
             filename = "upload.ogg"
         else:
             raise ValueError("必须提供 file_path 或 file_content")
