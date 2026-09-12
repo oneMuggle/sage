@@ -7,12 +7,11 @@ import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
 import { useChat } from '../features/send-message/useChat';
-import { sessionApi, learnApi, type ChatOfficeRef } from '../shared/api';
+import { sessionApi, learnApi, messageApi, type ChatOfficeRef } from '../shared/api';
 import { orchRunClient } from '../shared/api/orchRunClient';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
-import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
 import { ContextMeter } from '../widgets/chat/ContextMeter';
@@ -70,6 +69,7 @@ export function Chat() {
     loadSessions,
     sessions,
     isLoading: storeLoading,
+    removeMessage,
   } = useStore();
 
   // L16 (round4 批次 A): run 级崩溃恢复横幅 —— 后端启动时把滞留 running
@@ -410,6 +410,36 @@ export function Chat() {
     [currentSessionId, isLoading, loadSessions, setCurrentSessionId, t],
   );
 
+  // R17-C: 输入历史（最近优先、去重、截断 50 条）—— 供 InputCard
+  // 空输入 ↑ 回填上一条发送（兑现 shortcuts.ts 既有承诺）。
+  const inputHistory = useMemo(() => {
+    const seen = new Set<string>();
+    const history: string[] = [];
+    for (let i = messages.length - 1; i >= 0 && history.length < 50; i--) {
+      const m = messages[i];
+      if (m.role !== 'user' || !m.content.trim() || seen.has(m.content)) continue;
+      seen.add(m.content);
+      history.push(m.content);
+    }
+    return history;
+  }, [messages]);
+
+  // R17-B: 删除单条消息 —— messageApi.delete 落库后本地同步移除；
+  // 失败提示但不移动视图（历史保持可见）。
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      try {
+        await messageApi.delete(messageId);
+        removeMessage(messageId);
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : String(e),
+        );
+      }
+    },
+    [removeMessage],
+  );
+
   // U5' (对标增强第五轮批次 A): 编辑重发。
   // ① 点击 user 消息的编辑按钮 → 原文回填输入框 + 进入编辑态（editResendTarget）；
   // ② 用户改写后发送 → fork 当前会话（before_message 开区间截到该消息之前，
@@ -515,25 +545,9 @@ export function Chat() {
     }
   };
 
-  // 顶层错误：渲染整页 ErrorState，提供"关闭"清除错误后回到聊天
-  if (error) {
-    return (
-      <div className="flex-1 flex flex-col">
-        <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
-          <h2 className="text-sm font-semibold text-text">对话</h2>
-        </div>
-        <div className="flex-1 flex items-center justify-center p-4">
-          <ErrorState
-            title="对话出错"
-            message={error}
-            onRetry={clearError}
-            retryLabel="关闭并重试"
-          />
-        </div>
-      </div>
-    );
-  }
-
+  // R17-D: 顶层错误不再整页替换 —— 历史消息全部被顶掉、上下文丢失
+  // 是主流应用的反模式。改为在消息区下方渲染内联错误条，历史与输入框
+  // 保持可见可用，用户可"关闭"清除错误继续对话。
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* 页面头部 */}
@@ -565,6 +579,26 @@ export function Chat() {
         />
       )}
 
+      {/* R17-D: 顶层错误内联条 —— 保留历史可见（替代旧整页 ErrorState） */}
+      {error && (
+        <div
+          className="mx-4 mt-2 flex items-start justify-between gap-3 px-3 py-2 rounded border border-error/40 bg-error/5"
+          data-testid="chat-inline-error"
+        >
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-error">对话出错</p>
+            <p className="text-xs text-text-secondary break-all">{error}</p>
+          </div>
+          <button
+            type="button"
+            onClick={clearError}
+            className="text-xs px-2 py-1 rounded border border-border hover:bg-bg-hover shrink-0"
+          >
+            关闭
+          </button>
+        </div>
+      )}
+
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto relative">
         {isLoading && messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
@@ -576,6 +610,7 @@ export function Chat() {
             streamingMessageId={streamingMessageId}
             onFork={handleFork}
             onEditResend={handleStartEditResend}
+            onDelete={handleDeleteMessage}
           />
         )}
         {/* PM2 (round8): 计划批准条 —— /plan run 完成后出现;批准即衔接执行 */}
@@ -686,6 +721,8 @@ export function Chat() {
         workspacePath={workspacePath}
         injectedDraft={editResendTarget}
         editResendNotice={editResendNotice}
+        // R17-C: 输入历史（最近优先、去重）—— 空输入 ↑ 回填上一条发送
+        inputHistory={inputHistory}
       />
 
       {/* Artifacts Panel: 右侧抽屉（fixed 定位，叠加在页面右缘） */}

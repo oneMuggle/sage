@@ -1,5 +1,5 @@
 import { BookOpen, Clock, Image, Paperclip, Send, Square, X } from 'lucide-react';
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import type React from 'react';
 
 import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
@@ -106,6 +106,14 @@ export interface InputCardProps {
 
   // Footer hint
   hint?: string;
+
+  /**
+   * R17-C: 本会话已发送 user 消息（最近优先）。非空时，空输入按 ↑
+   * 回填上一条发送，继续 ↑/↓ 在历史中移动、↓ 到头清空退出；
+   * 用户手动编辑文本即退出历史导航。兑现 shortcuts.ts 中
+   * "↑（空输入时）编辑上一条发送过的消息" 的既有承诺。
+   */
+  inputHistory?: string[];
 }
 
 function InputCardInner({
@@ -145,6 +153,7 @@ function InputCardInner({
   atFileMenu,
   orchModeBar,
   hint,
+  inputHistory,
 }: InputCardProps) {
   const { t } = useI18n();
   const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0;
@@ -167,6 +176,42 @@ function InputCardInner({
     const next = Math.min(el.scrollHeight, 200);
     el.style.height = `${next}px`;
   }, [value, emacsRef]);
+
+  // R17-C: ↑/↓ 输入历史导航状态（ref 避免重渲染；仅空输入触发进入）
+  const historyIdxRef = useRef(-1);
+  const inHistoryRef = useRef(false);
+
+  const exitHistoryNav = () => {
+    inHistoryRef.current = false;
+    historyIdxRef.current = -1;
+  };
+
+  /** 返回 true 表示事件已被历史导航消费 */
+  const handleHistoryNav = (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    if (!inputHistory || inputHistory.length === 0 || showSlashMenu) return false;
+    if (e.key === 'ArrowUp') {
+      if (!inHistoryRef.current) {
+        if (value.trim()) return false; // 仅空输入触发（shortcuts.ts 承诺的口径）
+        inHistoryRef.current = true;
+        historyIdxRef.current = 0;
+      } else if (historyIdxRef.current < inputHistory.length - 1) {
+        historyIdxRef.current += 1;
+      }
+      onChange(inputHistory[historyIdxRef.current]);
+      return true;
+    }
+    if (e.key === 'ArrowDown' && inHistoryRef.current) {
+      if (historyIdxRef.current <= 0) {
+        exitHistoryNav();
+        onChange('');
+      } else {
+        historyIdxRef.current -= 1;
+        onChange(inputHistory[historyIdxRef.current]);
+      }
+      return true;
+    }
+    return false;
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showSlashMenu && slashCommands.length > 0 && !e.shiftKey) {
@@ -191,6 +236,11 @@ function InputCardInner({
         onSlashClose?.();
         return;
       }
+    }
+    // R17-C: 输入历史导航（slash 菜单打开时让位；Enter/输入照常）
+    if (handleHistoryNav(e)) {
+      e.preventDefault();
+      return;
     }
     // U20: Emacs bindings take precedence over plain Enter handling but not
     // over the slash menu (which owns Arrow/Enter/Escape while open).
@@ -322,7 +372,10 @@ function InputCardInner({
             <textarea
               ref={emacsRef}
               value={value}
-              onChange={(e) => onChange(e.target.value)}
+              onChange={(e) => {
+                exitHistoryNav();
+                onChange(e.target.value);
+              }}
               onKeyDown={handleKeyDown}
               onPaste={onPaste}
               placeholder={placeholder}

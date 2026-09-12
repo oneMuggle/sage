@@ -38,8 +38,12 @@ export const en: Record<TranslationKey, string> = {
   'chat.welcome': 'Welcome to Sage',
   'chat.welcome_sub': 'Start a new conversation',
   'chat.hint':
-    'Sage remembers your project context · Supports Markdown · Click Knowledge to attach documents',
+    'Sage remembers your project context · Supports Markdown · Type / for commands, @ to reference workspace files',
   'chat.memory_applied': 'memories applied',
+  'chat.attachment_not_sent': 'Note: attachments/images/knowledge docs are not sent with the message yet; only @-referenced files take effect',
+  'chat.memory_toggle': 'View memories used for this reply',
+  'chat.delete_message': 'Delete this message',
+  'chat.delete_message_confirm': 'Delete this message?',
   'chat.copy': 'Copy',
   'chat.copied': 'Copied',
   'chat.delete_confirm': 'Are you sure you want to delete this session?',

@@ -471,6 +471,32 @@ export function useChat() {
                 return;
               }
 
+              // R17-E: memory_used 事件 → 记忆召回展示。后端 L13 注入记忆
+              // 上下文后推送本次命中的结构化条目（id/类型/预览）；此前注入
+              // 完全静默，用户无法知道回答用了哪些记忆。写入 assistant
+              // 占位消息，Message 气泡内可展开查看。
+              if (evt.state === 'memory_used' && Array.isArray(evt.memories)) {
+                const refs = (evt.memories as {
+                  id?: string;
+                  memory_type?: string;
+                  preview?: string;
+                }[])
+                  .filter((m) => m && typeof m.id === 'string')
+                  .slice(0, 5)
+                  .map((m) => ({
+                    id: String(m.id),
+                    memory_type: String(m.memory_type ?? 'memory'),
+                    preview: String(m.preview ?? '').slice(0, 120),
+                  }));
+                if (refs.length > 0) {
+                  updateMessage(assistantId, {
+                    memory_refs: refs,
+                    memory_applied: refs.length,
+                  });
+                }
+                return;
+              }
+
               // Multi-Agent Orchestration: task_plan 事件 → 初始化编排任务板。
               // Fix #4 (2026-09-06): 同时更新消息占位符，告知用户计划已生成，
               // 需要向下滚动查看 PlanCard 并点击"开始执行"。

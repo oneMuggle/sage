@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
 import { importOfficeReference } from '../../features/office/importOfficeReference';
@@ -58,6 +59,11 @@ interface ChatInputProps {
   disabled?: boolean;
   placeholder?: string;
   /**
+   * R17-C: 本会话已发送 user 消息（最近优先），透传 InputCard 实现
+   * 空输入 ↑ 回填上一条发送的输入历史导航。
+   */
+  inputHistory?: string[];
+  /**
    * U5' (对标增强第五轮批次 A): 编辑重发——外部注入输入框内容。
    * `nonce` 变化时用 `text` 覆盖当前草稿（点击同一条消息两次也能重注入）。
    */
@@ -88,6 +94,7 @@ function ChatInputInner({
   workspacePath,
   injectedDraft,
   editResendNotice,
+  inputHistory,
 }: ChatInputProps) {
   const { t } = useI18n();
 
@@ -266,6 +273,12 @@ function ChatInputInner({
     // RT5 (round7): 运行中允许发送 —— onSend（useChat.sendMessage）按会话
     // 活跃流先走 steering 注入当前 run，失败回退队列；不再 UI 硬拦截。
     if (!value.trim()) return;
+    // R17-F: 附件通道尚未打通 —— knowledgeRefs/attachments/images 在
+    // Chat.handleSendMessage 处被丢弃（officeRefs 走 office_refs 通道
+    // 不受影响）。诚实提示而不是静默丢失（chat.hint 文案已同步修正）。
+    if (knowledgeRefs.length > 0 || files.length > 0 || images.length > 0) {
+      toast.warning(t('chat.attachment_not_sent'));
+    }
     onSend(value.trim(), {
       knowledgeRefs: knowledgeRefs.length > 0 ? knowledgeRefs : undefined,
       attachments: files.length > 0 ? files : undefined,
@@ -504,6 +517,7 @@ function ChatInputInner({
           />
         )
       }
+      inputHistory={inputHistory}
       orchModeBar={
         <div className="flex items-center gap-2 px-2 py-1 border-b border-border">
           <label className="text-xs text-text-tertiary">{t('chat.orchMode.label')}</label>

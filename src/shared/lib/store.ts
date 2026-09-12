@@ -57,6 +57,8 @@ export interface Message {
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   memory_applied?: number;
+  /** R17-E: 记忆召回明细（memory_used 流事件携带，可展开查看） */
+  memory_refs?: { id: string; memory_type: string; preview: string }[];
   reasoning_content?: string; // LLM 思考/推理过程
 }
 
@@ -82,6 +84,8 @@ interface StoreState {
   addMessage: (message: Message) => void;
   /** PR-6: 用同一 id 的新对象替换某条消息 (流式 chat 结束时写回最终 content) */
   updateMessage: (id: string, patch: Partial<Message>) => void;
+  /** R17-B: 本地移除一条消息（配合 messageApi.delete 的删除入口） */
+  removeMessage: (id: string) => void;
   clearMessages: () => void;
 }
 
@@ -206,6 +210,13 @@ export const useStore = create<StoreState>((set, _get) => ({
   updateMessage: (id, patch) => {
     set((state) => ({
       messages: state.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    }));
+  },
+
+  // R17-B: 本地移除一条消息
+  removeMessage: (id) => {
+    set((state) => ({
+      messages: state.messages.filter((m) => m.id !== id),
     }));
   },
 

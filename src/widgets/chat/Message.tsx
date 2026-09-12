@@ -1,5 +1,6 @@
 import {
   Copy,
+  Check,
   ThumbsUp,
   ThumbsDown,
   BookOpen,
@@ -10,6 +11,7 @@ import {
   Eye,
   EyeOff,
   Pencil,
+  BrainCircuit,
 } from 'lucide-react';
 import { memo } from 'react';
 import { useEffect, useState } from 'react';
@@ -21,6 +23,7 @@ import remarkMath from 'remark-math';
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
+import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 import { MermaidBlock } from './MermaidBlock';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
@@ -36,6 +39,8 @@ interface MessageProps {
   onFork?: (messageId: string) => void;
   /** U5': 编辑此条 user 消息并重发（分叉其前缀，原会话保留） */
   onEditResend?: (messageId: string) => void;
+  /** R17-B: 删除此条消息（两步确认，历史消息；流式中的消息不显示） */
+  onDelete?: (messageId: string) => void;
 }
 
 /** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
@@ -161,6 +166,7 @@ function MessageComponent({
   isStreaming,
   onFork,
   onEditResend,
+  onDelete,
 }: MessageProps) {
   const { t } = useI18n();
   const isUser = message.role === 'user';
@@ -171,9 +177,21 @@ function MessageComponent({
   const canFork = Boolean(onFork) && (isUser || isAssistant);
   // U5': 编辑重发只对 user 消息有意义（重写用户输入，而非模型回答）
   const canEditResend = Boolean(onEditResend) && isUser;
+  // R17-A: 复制按钮恒显 —— 此前被 onFeedback 门控劫持（调用方从不传
+  // onFeedback），主聊天没有任何复制入口。system/tool 行无复制语义。
+  const canCopy =
+    (isUser || isAssistant) && Boolean((message.content ?? '').trim()) && !isStreaming;
+  // R17-B: 删除仅对历史消息开放（流式中的占位消息不可删）
+  const canDelete = Boolean(onDelete) && (isUser || isAssistant) && !isStreaming;
+  const [copied, setCopied] = useState(false);
+  // R17-E: 记忆召回明细展开态
+  const [memoryExpanded, setMemoryExpanded] = useState(false);
+  const memoryRefs = message.memory_refs ?? [];
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   return (
@@ -389,8 +407,20 @@ function MessageComponent({
 
         {/* 底部信息 */}
         <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
-          {message.memory_applied && message.memory_applied > 0 && (
-            <span className="text-primary">{message.memory_applied} 条记忆已应用</span>
+          {message.memory_applied != null && message.memory_applied > 0 && (
+            <button
+              type="button"
+              onClick={() => setMemoryExpanded((v) => !v)}
+              className="inline-flex items-center gap-0.5 text-primary hover:underline"
+              title={t('chat.memory_toggle')}
+              data-testid="memory-used-toggle"
+            >
+              <BrainCircuit className="w-3 h-3" />
+              {message.memory_applied} {t('chat.memory_applied')}
+              <ChevronDown
+                className={`w-3 h-3 transition-transform ${memoryExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
           )}
           <span>
             {new Date(message.created_at).toLocaleTimeString([], {
@@ -400,18 +430,39 @@ function MessageComponent({
           </span>
         </div>
 
+        {/* R17-E: 记忆召回明细（memory_used 流事件携带，可展开） */}
+        {memoryExpanded && memoryRefs.length > 0 && (
+          <div
+            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-1"
+            data-testid="memory-used-list"
+          >
+            {memoryRefs.map((ref) => (
+              <div key={ref.id} className="flex items-start gap-1.5">
+                <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
+                  {ref.memory_type}
+                </span>
+                <span className="text-text-secondary break-all">{ref.preview}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Action buttons */}
-        {(onFeedback || canFork || canEditResend) && (
+        {(canCopy || onFeedback || canFork || canEditResend || canDelete) && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
+            {canCopy && (
+              <button
+                onClick={copyToClipboard}
+                className="p-1 rounded hover:bg-bg-hover"
+                title={t('chat.copy')}
+                aria-label={t('chat.copy')}
+                data-testid="copy-message"
+              >
+                {copied ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
+              </button>
+            )}
             {onFeedback && (
               <>
-                <button
-                  onClick={copyToClipboard}
-                  className="p-1 rounded hover:bg-bg-hover"
-                  title="复制"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
                 <button
                   onClick={() => onFeedback(message.id, 'up')}
                   className="p-1 rounded hover:bg-bg-hover"
@@ -449,6 +500,15 @@ function MessageComponent({
                 <GitBranch className="w-4 h-4" />
               </button>
             )}
+            {canDelete && (
+              <TwoStepDelete
+                data-testid="delete-message"
+                onConfirm={() => onDelete?.(message.id)}
+                label={t('chat.delete_message')}
+                armedLabel={t('chat.delete_message_confirm')}
+                className="p-1"
+              />
+            )}
           </div>
         )}
       </div>
@@ -466,6 +526,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.knowledgeRefs === next.knowledgeRefs &&
     prev.attachments === next.attachments &&
     prev.onFork === next.onFork &&
-    prev.onEditResend === next.onEditResend
+    prev.onEditResend === next.onEditResend &&
+    prev.onDelete === next.onDelete
   );
 });
