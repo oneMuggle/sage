@@ -741,12 +741,26 @@ class ExcelConditionalFormatSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    rule_type: Literal["data_bar", "color_scale", "duplicate"]
+    rule_type: Literal["data_bar", "color_scale", "duplicate", "icon_set"]
     range: str = Field(
         min_length=2,
         max_length=50,
         pattern=r"^[A-Za-z]{1,3}[0-9]+:[A-Za-z]{1,3}[0-9]+$",
         description="应用范围，A1 记法，如 'B2:B100'",
+    )
+    icon_style: Optional[Literal[
+        "3Arrows",
+        "3TrafficLights1",
+        "3Signs",
+        "3Symbols",
+        "4Arrows",
+        "4RedToBlack",
+        "4Rating",
+        "5Arrows",
+        "5Rating",
+    ]] = Field(
+        default="3Arrows",
+        description="icon_set 图标样式（Round 19）；其他规则类型忽略",
     )
     color: Optional[str] = Field(
         default=None,

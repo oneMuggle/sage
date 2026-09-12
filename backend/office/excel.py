@@ -466,7 +466,12 @@ def _apply_conditional_formats(writer, req) -> None:
     import logging
     import re
 
-    from openpyxl.formatting.rule import ColorScaleRule, DataBarRule, FormulaRule
+    from openpyxl.formatting.rule import (
+        ColorScaleRule,
+        DataBarRule,
+        FormulaRule,
+        IconSetRule,
+    )
     from openpyxl.styles import PatternFill
 
     logger_ = logging.getLogger(__name__)
@@ -498,6 +503,16 @@ def _apply_conditional_formats(writer, req) -> None:
                         start_color=(cfmt.min_color or "F8696B").lstrip("#"),
                         end_type="max",
                         end_color=(cfmt.max_color or "63BE7B").lstrip("#"),
+                    )
+                    ws.conditional_formatting.add(rng, rule)
+                elif cfmt.rule_type == "icon_set":
+                    style = cfmt.icon_style or "3Arrows"
+                    n_icons = int(style[0])
+                    step = 100 // n_icons
+                    rule = IconSetRule(
+                        icon_style=style,
+                        type="percent",
+                        values=[i * step for i in range(n_icons)],
                     )
                     ws.conditional_formatting.add(rng, rule)
                 elif cfmt.rule_type == "duplicate":
