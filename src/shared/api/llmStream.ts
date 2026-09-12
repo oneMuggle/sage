@@ -55,6 +55,8 @@ export interface TaskStatusEvent {
   output_preview: string | null;
   // P0-7 (2026-08-20): 重试次数 —— 后端 _emit_task_status 一直携带,此前前端未声明被静默丢弃。
   retry_count?: number;
+  // RD13+ (round15): 重派来源任务 ID —— retry_of 重派时携带，任务树渲染"重派"徽章。
+  retry_of?: string;
 }
 
 /** 进度可视化 P0-2 (2026-08-12): 整盘概览,与 types.ts TaskProgressEvent 同形。 */

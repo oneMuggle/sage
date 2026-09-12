@@ -252,6 +252,16 @@ export function TaskTreeSection({
                   已重试 ×{st?.retry_count}
                 </span>
               )}
+              {/* RD13+ (round15): 重派徽章 —— retry_of 重派的任务可追溯 */}
+              {st?.retry_of && (
+                <span
+                  data-testid={`task-tree-redeploy-${item.task_id}`}
+                  title={`重派自失败任务 ${st.retry_of}`}
+                  className="text-primary text-[10px] shrink-0"
+                >
+                  重派
+                </span>
+              )}
             </div>
             {/* live-events P0: 等待审批徽章（ApprovalDialog 之外的行内提示） */}
             {live?.waitingApproval && status === 'running' && (
