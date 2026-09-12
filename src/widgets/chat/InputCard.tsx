@@ -2,9 +2,9 @@ import { BookOpen, Clock, Image, Paperclip, Send, Square, X } from 'lucide-react
 import { memo, useEffect } from 'react';
 import type React from 'react';
 
+import { AttachmentUpload } from '../../features/send-message/AttachmentUpload';
 import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
 import { useI18n } from '../../shared/lib/i18n';
-import { AttachmentUpload } from '../../features/send-message/AttachmentUpload';
 
 import { FileAttachment } from './FileAttachment';
 import { KnowledgeChip } from './KnowledgeChip';

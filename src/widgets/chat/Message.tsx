@@ -18,10 +18,10 @@ import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 
+import { MediaAttachment } from '../../features/chat/MediaAttachment';
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
-import { MediaAttachment } from '../../features/chat/MediaAttachment';
 
 import { MermaidBlock } from './MermaidBlock';
 import { ShikiCodeBlock } from './ShikiCodeBlock';

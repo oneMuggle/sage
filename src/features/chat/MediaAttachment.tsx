@@ -1,5 +1,6 @@
 // src/features/chat/MediaAttachment.tsx
 import React, { useState, useEffect } from 'react';
+
 import { resolveMediaUrl } from '../../shared/api/mediaApi';
 
 interface MediaAttachmentProps {

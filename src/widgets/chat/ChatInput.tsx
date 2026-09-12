@@ -398,7 +398,7 @@ function ChatInputInner({
     apiUrl: string;
   }) => {
     // TODO: integrate with message sending (attach to next user message)
-    console.log('[ChatInput] Audio attachment uploaded:', attachment);
+    console.warn('[ChatInput] Audio attachment uploaded:', attachment);
   };
 
   const toggleKnowledgeRef = (doc: KnowledgeDocType) => {
