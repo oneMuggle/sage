@@ -391,6 +391,71 @@ def _apply_generate_charts(writer, req) -> int:
     return applied
 
 
+
+
+def _apply_sheet_formats(writer, req) -> None:
+    """Round 14：按 sheet 应用表头样式 / 冻结首行 / 自适应列宽 / 数字格式。
+
+    在 ``pd.ExcelWriter`` 上下文内、``_apply_sheet_column_widths`` 之后
+    调用（autofit 尊重已写入的显式列宽）。全字段可选——任一未启用时该
+    项零触碰，旧 payload 行为不变。
+    """
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    header_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    header_font = Font(bold=True)
+    center = Alignment(horizontal="center", vertical="center")
+
+    for sheet_spec in getattr(req, "sheets", None) or ():
+        name = sheet_spec.name[:31]
+        ws = writer.sheets.get(name)
+        if ws is None:
+            continue
+        headers = list(sheet_spec.headers or [])
+
+        if sheet_spec.header_style and headers:
+            for cell in ws[1]:
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = center
+
+        if sheet_spec.freeze_header:
+            ws.freeze_panes = "A2"
+
+        if sheet_spec.autofit_columns:
+            explicit = {
+                get_column_letter(i + 1)
+                for i in range(len(sheet_spec.column_widths or []))
+            }
+            for col_idx in range(1, ws.max_column + 1):
+                letter = get_column_letter(col_idx)
+                if letter in explicit:
+                    continue
+                longest = 0
+                for row in ws.iter_rows(min_col=col_idx, max_col=col_idx):
+                    for cell in row:
+                        if cell.value is None:
+                            continue
+                        text = str(cell.value)
+                        width = sum(2 if ord(ch) > 0x2E80 else 1 for ch in text)
+                        longest = max(longest, width)
+                if longest:
+                    ws.column_dimensions[letter].width = min(longest * 1.2 + 2, 60)
+
+        if sheet_spec.number_formats and headers:
+            fmt_by_col = {}
+            for col_idx, header in enumerate(headers, start=1):
+                fmt = sheet_spec.number_formats.get(header)
+                if fmt:
+                    fmt_by_col[col_idx] = fmt
+            for col_idx, fmt in fmt_by_col.items():
+                for row in ws.iter_rows(min_col=col_idx, max_col=col_idx, min_row=2):
+                    for cell in row:
+                        if cell.value is None or cell.data_type == "f":
+                            continue
+                        cell.number_format = fmt
+
 def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .xlsx file from structured Pydantic input.
 
@@ -494,6 +559,7 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
             # 批次 2.3：按 sheet 写入可选列宽；批次 2.1：挂载原生图表
             # （必须在 writer 保存前，图表才会随工作簿序列化）。
             _apply_sheet_column_widths(writer, req)
+            _apply_sheet_formats(writer, req)
             _apply_generate_charts(writer, req)
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate XLSX: {exc}", file_path=output_path) from exc

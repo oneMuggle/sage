@@ -738,6 +738,33 @@ class OfficeCreateTool(BaseTool):
                                                 "各列列宽（index 0 = A 列），如 [20, 12, 30]"
                                             ),
                                         },
+                                        "header_style": {
+                                            "type": "boolean",
+                                            "description": (
+                                                "表头行加粗 + 浅灰底 + 居中（Round 14）"
+                                            ),
+                                        },
+                                        "freeze_header": {
+                                            "type": "boolean",
+                                            "description": (
+                                                "冻结首行，滚动长表时表头保持可见（Round 14）"
+                                            ),
+                                        },
+                                        "autofit_columns": {
+                                            "type": "boolean",
+                                            "description": (
+                                                "按内容自适应列宽；显式 column_widths 的列"
+                                                "优先不被覆盖（Round 14）"
+                                            ),
+                                        },
+                                        "number_formats": {
+                                            "type": "object",
+                                            "description": (
+                                                "按列名映射 Excel 数字格式（Round 14），如 "
+                                                '{"金额": "#,##0.00", "占比": "0.0%"}；'
+                                                "未知列名忽略"
+                                            ),
+                                        },
                                     },
                                 },
                                 "description": "excel 工作表列表。",
