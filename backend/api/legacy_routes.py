@@ -1713,7 +1713,6 @@ async def chat(
         }
 
 
-@router.post("/chat/stream")
 def _build_memory_used_event(
     memory_manager: Any,
     query: str,
@@ -1760,6 +1759,7 @@ def _build_memory_used_event(
         return None
 
 
+@router.post("/chat/stream")
 async def chat_stream_create(data: ChatRequest, request: Request):
     """创建 chat 流 (I2)。
 
