@@ -331,4 +331,65 @@ describe('ChangesSection', () => {
     expect(screen.queryByTestId('checkpoint-toggle')).not.toBeInTheDocument();
     expect(screen.queryByTestId('create-checkpoint-button')).not.toBeInTheDocument();
   });
+
+  // ---- P1-3.8 分栏 diff 视图 ----
+
+  it('P1-3.8: 打开 diff 后默认 unified 视图,切换按钮可切换到 split 视图', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({ diff: TWO_HUNK_DIFF, truncated: false });
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+    // 打开文件 diff
+    await waitFor(() => expect(screen.getByText('src/app.ts')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('src/app.ts'));
+    // unified 视图默认显示:hunk 列表可见
+    await waitFor(() => expect(screen.getByTestId('revert-hunks-button')).toBeInTheDocument());
+    // split 视图未激活:SplitDiff 组件不在文档中
+    expect(screen.queryByTestId('split-diff')).not.toBeInTheDocument();
+
+    // 点击分栏切换
+    const toggle = screen.getByTestId('toggle-split-view');
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle);
+
+    // split 视图激活:SplitDiff 渲染;unified 的 hunk 列表消失
+    await waitFor(() => expect(screen.getByTestId('split-diff')).toBeInTheDocument());
+    expect(screen.queryByTestId('revert-hunks-button')).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+
+    // 再次点击切回 unified
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.getByTestId('revert-hunks-button')).toBeInTheDocument());
+    expect(screen.queryByTestId('split-diff')).not.toBeInTheDocument();
+  });
+
+  it('P1-3.8: 切换文件时 split 视图自动重置为 unified', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({ diff: TWO_HUNK_DIFF, truncated: false });
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('src/app.ts')).toBeInTheDocument());
+    // 打开第一个文件,切到 split
+    fireEvent.click(screen.getByText('src/app.ts'));
+    await waitFor(() => expect(screen.getByTestId('toggle-split-view')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('toggle-split-view'));
+    await waitFor(() => expect(screen.getByTestId('split-diff')).toBeInTheDocument());
+
+    // 返回 → 打开另一个文件 → split 应自动重置为 unified
+    fireEvent.click(screen.getByLabelText('返回变更列表'));
+    await waitFor(() => expect(screen.getByText('src/new.py')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('src/new.py'));
+    await waitFor(() => {
+      expect(screen.getByTestId('toggle-split-view')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('toggle-split-view')).toHaveAttribute('aria-pressed', 'false');
+    // 未激活 split-diff (该文件是新增,unified 视图显示"未跟踪文件:暂无 diff 内容"等文案)
+    expect(screen.queryByTestId('split-diff')).not.toBeInTheDocument();
+  });
 });

@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronRight,
+  Columns,
   GitBranch,
   History,
   RefreshCw,
@@ -32,6 +33,7 @@ import type { WorkspaceChanges, WorkspaceCheckpoint } from '../../../shared/api/
 import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
 import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
+import { SplitDiff } from './SplitDiff';
 import { splitDiffHunks } from './diffHunks';
 
 interface ChangesSectionProps {
@@ -74,6 +76,8 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
   // U19: 勾选待撤销的 hunk (0-based,与后端 revert-hunks 序号一致)
   const [selectedHunks, setSelectedHunks] = useState<Set<number>>(new Set());
   const [reverting, setReverting] = useState(false);
+  // P1-3.8: 分栏 (split) / 统一 (unified) diff 视图切换;默认 unified,保留 per-hunk 撤销
+  const [splitView, setSplitView] = useState(false);
   // U2': 检查点快照列表 / 折叠态 / 操作互斥;未绑定工作区时整个检查点区隐藏
   const [checkpoints, setCheckpoints] = useState<WorkspaceCheckpoint[] | null>(null);
   const [checkpointsOpen, setCheckpointsOpen] = useState(false);
@@ -127,6 +131,7 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
       setDiff(null);
       setDiffTruncated(false);
       setSelectedHunks(new Set());
+      setSplitView(false); // P1-3.8: 切换文件时重置为 unified 视图,避免 per-hunk 撤销 UI 错位
       if (path.endsWith('/')) return; // 目录条目不拉 diff
       setDiffLoading(true);
       workspaceApi
@@ -278,6 +283,21 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
           >
             <Undo2 className="w-4 h-4" />
           </button>
+          <button
+            className={
+              'p-1.5 rounded hover:bg-bg-hover transition-colors ' +
+              (splitView
+                ? 'text-primary bg-primary/10'
+                : 'text-text-secondary')
+            }
+            title={splitView ? '切换到统一 (unified) 视图' : '切换到分栏 (side-by-side) 视图'}
+            aria-label="切换分栏/统一视图"
+            aria-pressed={splitView}
+            data-testid="toggle-split-view"
+            onClick={() => setSplitView((v) => !v)}
+          >
+            <Columns className="w-4 h-4" />
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2">
           {diffLoading ? (
@@ -288,6 +308,15 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
             <div className="text-sm text-muted p-2">无法加载 diff</div>
           ) : diff.trim() === '' ? (
             <div className="text-sm text-muted p-2">未跟踪文件:暂无 diff 内容</div>
+          ) : splitView ? (
+            <>
+              {diffTruncated && (
+                <div className="text-xs text-amber-600 dark:text-amber-400 p-1">
+                  diff 过长,已截断显示前 64KiB
+                </div>
+              )}
+              <SplitDiff diff={diff} />
+            </>
           ) : (
             <>
               {diffTruncated && (
