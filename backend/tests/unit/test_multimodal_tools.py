@@ -21,3 +21,19 @@ def test_tts_tool_risk():
     # Note: brief originally said RiskClass.WRITE (which doesn't exist);
     # WRITE_LOCAL is the correct semantic (writes audio to local media store)
     assert tool.risk == RiskClass.WRITE_LOCAL
+
+
+# ── SpeechToTextTool ────────────────────────────────────────────
+
+def test_asr_tool_schema():
+    from backend.tools.asr_tool import SpeechToTextTool
+    tool = SpeechToTextTool()
+    assert tool.schema.name == "speech_to_text"
+    assert "file_path" in tool.schema.parameters["required"]
+
+
+def test_asr_tool_risk():
+    from backend.tools.asr_tool import SpeechToTextTool
+    from backend.domain.risk import RiskClass
+    tool = SpeechToTextTool()
+    assert tool.risk == RiskClass.READ
