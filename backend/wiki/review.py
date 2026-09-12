@@ -141,9 +141,9 @@ def _read_frontmatter(path: Path) -> tuple[dict[str, str], str]:
 
 def _rel(path: Path, root: Path) -> str:
     try:
-        return str(path.relative_to(root))
+        return path.relative_to(root).as_posix()
     except ValueError:
-        return str(path)
+        return path.as_posix()
 
 
 def _resolve_wikilink(target: str, wiki_dir: Path) -> Path | None:

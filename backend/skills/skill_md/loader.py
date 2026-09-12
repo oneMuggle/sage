@@ -125,15 +125,19 @@ def _has_symlink_component(path: Path) -> bool:
 def _read_no_follow(path: Path) -> bytes:
     """Read a regular file without following a final symlink.
 
-    Lexical parent checks are performed by callers; ``O_NOFOLLOW`` closes the
-    final-component replacement window on POSIX. Unsupported platforms fail
-    closed rather than falling back to ``Path.read_bytes``.
+    POSIX 用 ``O_NOFOLLOW`` + dirfd 逐级打开闭合 final-component 竞争窗口；
+    Windows 无 ``O_NOFOLLOW``，此前整条链路 fail-closed 导致内置/用户技能在
+    Windows 上集体失效。Windows 分支改为「组件 symlink 静态检查 + 受限读取」：
+    放弃 final-component 的 TOCTOU 硬化（symlink 创建在 Windows 需要管理员/
+    开发者模式权限，威胁模型显著弱于 POSIX），换取技能装载能力恢复。
     """
-    if _has_symlink_component(path) or not hasattr(os, "O_NOFOLLOW"):
+    if _has_symlink_component(path):
         raise OSError(f"refusing potentially symlinked path: {path}")
     absolute_path = path.absolute()
     if any(component in ("", ".", "..") for component in absolute_path.parts):
         raise OSError(f"refusing non-canonical path: {path}")
+    if os.name == "nt":
+        return path.read_bytes()
     directory_fd = os.open(os.sep, os.O_RDONLY | os.O_DIRECTORY)
     try:
         parts = absolute_path.parts[1:]
@@ -333,7 +337,9 @@ class SkillMdHotLoader:
                 logger.info("SkillMd scan: %d loaded, %d skipped", loaded, skipped)
         return loaded, skipped
 
-    def _load_from_path(self, path: Path, *, allow_existing: bool = False) -> bool:
+    def _load_from_path(
+        self, path: Path, *, allow_existing: bool = False
+    ) -> bool:
         """从单个 SKILL.md 路径加载, 返回 True 表示成功注册, False 表示跳过。"""
         if _has_symlink_component(path):
             return False

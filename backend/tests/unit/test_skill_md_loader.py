@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -55,6 +56,8 @@ def _write_skill_md(
         f"---\n"
         f"{body}",
         encoding="utf-8",
+        # Windows 上禁用 \n → \r\n 翻译，保证磁盘字节与断言一致
+        newline="",
     )
     return path
 
@@ -63,7 +66,7 @@ def _write_bad_skill_md(parent: Path, name: str, text: str) -> Path:
     skill_dir = parent / name
     skill_dir.mkdir(parents=True, exist_ok=True)
     path = skill_dir / "SKILL.md"
-    path.write_text(text, encoding="utf-8")
+    path.write_text(text, encoding="utf-8", newline="")
     return path
 
 
@@ -283,6 +286,10 @@ def test_scan_skips_hidden_dirs(tmp_path):
     assert not registry.exists(".hidden-skill")
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
+)
 def test_scan_skips_symlinked_skill_directory(tmp_path):
     """技能目录是 symlink 时不跟随加载。"""
     real_dir = tmp_path / "real"
@@ -298,6 +305,10 @@ def test_scan_skips_symlinked_skill_directory(tmp_path):
     assert not registry.exists("linked")
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
+)
 def test_scan_skips_symlinked_skill_md(tmp_path):
     """SKILL.md 本身是 symlink 时不读取。"""
     real_path = _write_skill_md(tmp_path / "real", "linked")
@@ -312,6 +323,10 @@ def test_scan_skips_symlinked_skill_md(tmp_path):
     assert not registry.exists("linked")
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
+)
 def test_scan_skips_candidate_with_symlinked_parent(tmp_path):
     """候选路径任一父目录是 symlink 时不读取。"""
     real_root = tmp_path / "real-root"
@@ -327,6 +342,10 @@ def test_scan_skips_candidate_with_symlinked_parent(tmp_path):
     assert not registry.exists("linked")
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
+)
 def test_collect_required_bins_skips_symlink_candidates(tmp_path):
     """依赖预扫描同样跳过 symlink 目录、文件及父目录。"""
     real_root = tmp_path / "real"
@@ -521,6 +540,7 @@ def test_hot_reload_on_body_change(tmp_path):
     path.write_text(
         "---\nname: alpha\ndescription: test alpha\n---\nNEW body\n",
         encoding="utf-8",
+        newline="",
     )
 
     assert loader.check_for_updates() == ["alpha"]
@@ -566,6 +586,10 @@ def test_hot_reload_no_change_returns_false(tmp_path):
     assert loader.hot_reload("alpha") is True  # 强制 reload 仍能成功
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
+)
 def test_hot_reload_fails_closed_when_loaded_path_becomes_symlink(tmp_path):
     """已加载文件变为 symlink 后，检查与重载均不读取且保留旧注册。"""
     registry = SkillRegistry()
@@ -586,6 +610,10 @@ def test_hot_reload_fails_closed_when_loaded_path_becomes_symlink(tmp_path):
     assert registry.get("alpha").execute(params={}, context={}).content == "original body"
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
+)
 def test_compute_hash_fails_closed_for_symlink(tmp_path):
     """哈希读取不跟随最终 symlink。"""
     target = tmp_path / "target.md"
@@ -679,6 +707,10 @@ def test_validate_base_dir_rejects_sibling(tmp_path):
         validate_base_dir(sibling, allowed_roots=[root])
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
+)
 def test_validate_base_dir_rejects_symlink_escape(tmp_path):
     """symlink 指到 allowed_root 之外 → 抛异常。"""
     root = tmp_path / "skills"

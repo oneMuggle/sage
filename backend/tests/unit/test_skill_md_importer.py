@@ -5,6 +5,7 @@ Mirrors test_skill_md_loader.py style: monkeypatch env, use tmp_path, no real fs
 
 from __future__ import annotations
 
+import os
 import textwrap
 from pathlib import Path
 from typing import List, Optional
@@ -14,6 +15,11 @@ import pytest
 
 from backend.skills.registry import SkillRegistry
 from backend.skills.skill_md.importer import SkillMdImporter, parse_file_from_bytes
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="skill 导入写盘在 Windows 按 safe_writer 设计 fail-closed（等待原生 reparse-safe handle）",
+)
 
 
 def _make_skill_md(name: str, description: str = "Test skill") -> bytes:

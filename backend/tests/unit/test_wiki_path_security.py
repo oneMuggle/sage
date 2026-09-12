@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,11 @@ from backend.api.wiki_routes import (
     write_file,
 )
 from backend.wiki.files import secure_open_file, secure_read_file, secure_write_file
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="wiki 安全用例依赖 POSIX symlink/no-follow 原语（Windows 无可靠等价）",
+)
 
 
 def _make_hardlink_or_skip(source: Path, target: Path) -> None:
