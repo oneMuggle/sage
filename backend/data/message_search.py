@@ -199,7 +199,8 @@ class MessageSearchIndex:
                 return []
             sql = (
                 f"SELECT message_id, session_id FROM {MESSAGES_FTS_TABLE} "
-                f"WHERE {MESSAGES_FTS_TABLE} MATCH ?"
+                f"WHERE {MESSAGES_FTS_TABLE} MATCH ? AND role IN "
+                "('user', 'assistant')"
             )
             params: List[Any] = [match_query]
             if session_id:
@@ -227,8 +228,13 @@ class MessageSearchIndex:
             tokens = [t for t in tokenize(query).split() if len(t.strip()) >= 2]
             if not tokens:
                 tokens = [query.strip()]
-            conditions = " OR ".join(["content LIKE ?"] * len(tokens))
-            params: List[Any] = [f"%{t}%" for t in tokens]
+            # 通配符转义（与 /search/messages 原 LIKE 路径同约定）
+            escaped = [
+                f"%{t.replace('!', '!!').replace('%', '!%').replace('_', '!_')}%"
+                for t in tokens
+            ]
+            conditions = " OR ".join(["content LIKE ? ESCAPE '!'" for _ in tokens])
+            params: List[Any] = escaped
             sql = (
                 "SELECT id, session_id FROM messages "
                 f"WHERE role != 'tool' AND ({conditions})"
