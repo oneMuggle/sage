@@ -121,6 +121,7 @@ from .models import (
     OfficeWordReadResult,
     WordCommentContent,
     WordCommentsResult,
+    WordHeaderFooterContent,
     WordParagraphContent,
     WordTableContent,
 )
@@ -241,6 +242,59 @@ def _count_images(doc: Document) -> int:
     return len(doc.inline_shapes)
 
 
+def _extract_headers_footers(doc: Document) -> List[WordHeaderFooterContent]:
+    """提取每节的页眉/页脚文本与页码域标记（Round 15）。
+
+    链接到前一节的节（is_linked_to_previous=True）文本取空串——实际
+    渲染继承前节，不重复报告。
+    """
+    result: List[WordHeaderFooterContent] = []
+    newline = chr(10)
+    for idx, section in enumerate(doc.sections, start=1):
+        if section.header.is_linked_to_previous:
+            header_text = ""
+        else:
+            header_text = newline.join(p.text for p in section.header.paragraphs)
+        footer_linked = section.footer.is_linked_to_previous
+        footer_text = ""
+        if not footer_linked:
+            footer_text = newline.join(p.text for p in section.footer.paragraphs)
+        has_page_field = any(
+            fld.get(qn("w:instr"), "").startswith("PAGE")
+            for p in ([] if footer_linked else section.footer.paragraphs)
+            for fld in p._p.findall(".//" + qn("w:fldSimple"))
+        )
+        if (
+            not header_text
+            and not footer_text
+            and not has_page_field
+            and section.header.is_linked_to_previous
+            and section.footer.is_linked_to_previous
+        ):
+            # 该节完全没有页眉/页脚信息（也未断开链接）——不产出空记录
+            continue
+        result.append(
+            WordHeaderFooterContent(
+                section=idx,
+                header_text=header_text,
+                footer_text=footer_text,
+                has_page_number_field=has_page_field,
+            )
+        )
+    return result
+
+
+def _extract_toc_fields(doc: Document) -> List[str]:
+    """收集正文中 instr 以 TOC 开头的域（Round 13 目录域的读取对偶）。"""
+    instrs: List[str] = []
+    for paragraph in doc.paragraphs:
+        for fld in paragraph._p.findall(".//" + qn("w:fldSimple")):
+            instr = fld.get(qn("w:instr")) or ""
+            if instr.startswith("TOC"):
+                instrs.append(instr)
+    return instrs
+
+
 def _build_docx_summary(
     file_path: Path,
     *,
@@ -341,6 +395,8 @@ def read_docx(
         tables=tables,
         images=images,
         comments=comments,
+        headers_footers=_extract_headers_footers(doc),
+        toc_fields=_extract_toc_fields(doc),
     )
 
 

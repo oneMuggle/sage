@@ -183,6 +183,17 @@ class WordCommentsResult(BaseModel):
     comments: List[WordCommentContent] = Field(default_factory=list)
 
 
+class WordHeaderFooterContent(BaseModel):
+    """单节的页眉/页脚提取结果（section 为 1-based 节号）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    section: int = Field(ge=1)
+    header_text: str = ""
+    footer_text: str = ""
+    has_page_number_field: bool = False
+
+
 class OfficeWordReadResult(BaseModel):
     """Result of POST /api/v1/office/word/read."""
 
@@ -196,6 +207,11 @@ class OfficeWordReadResult(BaseModel):
     # keeps payloads produced before this field existed valid under
     # ``extra="forbid"`` (old consumers may ignore the field entirely).
     comments: List[WordCommentContent] = Field(default_factory=list)
+    # Round 15：每节的页眉/页脚文本与页码域标记（生成器对偶——
+    # format_spec.header/footer 写入的元素读取侧可见）。
+    headers_footers: List[WordHeaderFooterContent] = Field(default_factory=list)
+    # Round 15：文档中的目录域 instr 列表。
+    toc_fields: List[str] = Field(default_factory=list)
 
 
 class ExcelSheetContent(BaseModel):
