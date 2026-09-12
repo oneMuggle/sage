@@ -19,6 +19,7 @@ from backend.domain.tool_names import (
     GIT_TOOLS,
     JOURNAL_TOOLS,
     MEMORY_TOOLS,
+    MULTIMODAL_TOOLS,
     OFFICE_TOOLS,
     PATCH_TOOLS,
     RUNTIME_EXEC_TOOLS,
@@ -120,6 +121,10 @@ _PRIMARY_SEED_TOOLS = (
     # git_commit / checkpoint_restore 为 WRITE_LOCAL（INTERACTIVE 先审批）。
     *GIT_TOOLS,
     *CHECKPOINT_TOOLS,
+    # 2026-09-12: 多模态工具（Task 9.1）—— TTS 文本转语音 / ASR 语音识别 /
+    # 图像生成三件套。全部 EXTERNAL（调用外部 API），primary 作为 coordinator
+    # 可直接调用以满足用户的多模态需求（语音播报、图片生成等）。
+    *MULTIMODAL_TOOLS,
     # D2 (2026-09-09): plan_write 退役移除 —— 无消费者半成品（存储无读取方、
     # 无 SSE、无 UI），与 todo_write + 编排计划三套重复；继续暴露只会误导
     # LLM 把计划写进无处可去的地方。
