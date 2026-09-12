@@ -11,6 +11,7 @@ import { invoke } from '../../shared/api/desktopInvoke';
 import { settingsClient } from '../../shared/api/settingsClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { DiagnosticsCard } from '../../widgets/settings/DiagnosticsCard';
+import { GatewayCard } from '../../widgets/settings/GatewayCard';
 import { HooksCard } from '../../widgets/settings/HooksCard';
 import { UsagePanel } from '../../widgets/settings/UsagePanel';
 
@@ -522,6 +523,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">诊断</h3>
         <DiagnosticsCard />
+        <GatewayCard />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">高级</h3>
