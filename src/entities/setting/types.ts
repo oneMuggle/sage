@@ -5,7 +5,7 @@ export const SETTINGS_VERSION = '4.0.0';
 export const SETTINGS_STORAGE_KEY = 'sage-settings';
 
 /** Model capability types */
-export type ModelCapability = 'chat' | 'vision' | 'embedding';
+export type ModelCapability = 'chat' | 'vision' | 'embedding' | 'tts' | 'asr' | 'image_gen';
 
 /** A model discovered from an endpoint's /v1/models */
 export interface DiscoveredModel {
@@ -69,6 +69,9 @@ export interface ModelSelections {
   chatModel: ModelSelection;
   visionModel: ModelSelection;
   embeddingModel: ModelSelection;
+  ttsModel: ModelSelection;
+  asrModel: ModelSelection;
+  imageGenModel: ModelSelection;
 }
 
 /** Wiki feature flags */
@@ -160,6 +163,9 @@ const DEFAULT_MODEL_SELECTIONS: ModelSelections = {
   chatModel: { ...DEFAULT_MODEL_SELECTION },
   visionModel: { ...DEFAULT_MODEL_SELECTION },
   embeddingModel: { ...DEFAULT_MODEL_SELECTION },
+  ttsModel: { ...DEFAULT_MODEL_SELECTION },
+  asrModel: { ...DEFAULT_MODEL_SELECTION },
+  imageGenModel: { ...DEFAULT_MODEL_SELECTION },
 };
 
 /** Sensible defaults for all settings */
@@ -315,6 +321,9 @@ export function withDemoSettingsDefaults(s: AppSettings): AppSettings {
       chatModel: chat.selection,
       visionModel: vision.selection,
       embeddingModel: embedding.selection,
+      ttsModel: s.modelSelections.ttsModel,
+      asrModel: s.modelSelections.asrModel,
+      imageGenModel: s.modelSelections.imageGenModel,
     },
   };
 }

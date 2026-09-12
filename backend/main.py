@@ -69,9 +69,11 @@ from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapt
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.artifact_routes import router as artifact_router
+from backend.api.chat_attachment_routes import router as chat_attachment_router
 from backend.api.chat_stream_registry import StreamRegistry
 
 # B1 (P11): 记忆嵌入器状态/切换 API
+from backend.api.diagnostic_routes import router as diagnostic_router
 from backend.api.embedder_routes import router as embedder_router
 from backend.api.export_routes import router as export_router
 from backend.api.hex_routes import router as hex_router
@@ -84,6 +86,7 @@ from backend.api.local_auth import (
     ownership_health_proof,
 )
 from backend.api.mcp_routes import router as mcp_router
+from backend.api.media_routes import router as media_router
 from backend.api.office_routes import (
     register_office_exception_handlers,
     router as office_router,
@@ -767,6 +770,13 @@ app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v
 
 # M3: MCP multi-server management (status / servers CRUD)
 app.include_router(mcp_router, prefix="/api/v1")
+
+# LLM trace diagnostic preview (settings page card)
+app.include_router(diagnostic_router, prefix="/api/v1")
+
+# Multimodal: media file serving + chat attachment upload
+app.include_router(media_router, prefix="/api/v1")
+app.include_router(chat_attachment_router, prefix="/api/v1")
 
 
 @app.get("/health/proof")
