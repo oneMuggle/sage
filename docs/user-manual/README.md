@@ -19,6 +19,7 @@
 | 12   | [本地开发环境助手](./12-local-development-assistant.md) | 设置 → 开发环境 Tab：自动发现 Python/Node.js 运行时 + 项目诊断 + 试跑代码片段 |
 | 13   | [期刊模板面板](./13-journal-template-panel.md) | Office 页面底部：模板规范抽取 / 论文格式校验 / 结构化填充生成符合期刊要求的 Word 文档 |
 | 14   | [可插拔更新源](./14-update-providers.md) | 设置 → 更新源 tab：添加 GitHub/Gitee/GitLab/自建 HTTP 源 + 设为默认 + 测试连接 + 删除；token 用 safeStorage 加密存储，IPC 返回自动 mask |
+| 15   | [出错时如何导出诊断包](./15-diagnostic-export.md) | 一键导出最近 50 次 LLM 调用为 zip 发给支持人员（托盘菜单 / 设置页入口 + 脱敏说明 + Win7 注意） |
 
 ---
 

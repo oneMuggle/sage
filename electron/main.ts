@@ -102,6 +102,11 @@ import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
 import { resolveSageDbPath, resolveSageUserDataDir } from './userDataPaths';
 import { mainWindow, setMainWindow } from './mainWindow';
+import {
+  initDiagnosticExport,
+  runDiagnosticExport,
+  runDiagnosticPreview,
+} from './diagnosticExport';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -1513,7 +1518,7 @@ async function registerIpcHandlers(): Promise<void> {
         config: cfg.config as any,
       }),
     );
-providerRegistry.register('gitee', (cfg) =>
+    providerRegistry.register('gitee', (cfg) =>
       createGiteeReleasesProvider({
         id: cfg.id,
         displayName: cfg.displayName,
@@ -1546,6 +1551,28 @@ providerRegistry.register('gitee', (cfg) =>
       mainWindow?.webContents.send('update:state-changed', payload);
     },
   });
+
+  // ─── T11: Diagnostic export IPC handlers ──────────────────────────────
+  // Renderer calls diagnostic:preview to show a summary of the trace dataset
+  // (count, timestamp range, sample URLs) before the user confirms export.
+  // diagnostic:export delegates to the shared runDiagnosticExport() which
+  // POSTs to the backend, shows a native save dialog, writes the zip, and
+  // reveals it in the file manager.
+  ipcMain.handle('diagnostic:preview', async (evt) => {
+    if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+    return runDiagnosticPreview();
+  });
+
+  ipcMain.handle(
+    'diagnostic:export',
+    async (
+      evt,
+      opts: { includePrompts: boolean; includeHostname: boolean },
+    ) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+      return runDiagnosticExport(opts);
+    },
+  );
 }
 
 /**
@@ -1849,6 +1876,12 @@ app.whenReady().then(async () => {
   // U12 (round4 批次 E): 系统托盘 + 全局快捷键唤起（Alt+Shift+S toggle）。
   // 内部全量降级:托盘/快捷键不可用只记日志,绝不阻断启动。
   setupTrayAndGlobalShortcut();
+  // T11: inject backend URL + auth token getter so both the IPC handler
+  // and the tray "导出诊断包…" menu can call the backend.
+  initDiagnosticExport({
+    backendUrl: BACKEND_URL,
+    getAuthToken: () => backendAuthToken,
+  });
   // Phase 4: pre-launch self-check (skippable via SAGE_DOCTOR_ON_START=false for CI).
   // fail-open by design: doctor never blocks the app from launching — its output
   // is captured into the NDJSON startup log so the user can diagnose degraded

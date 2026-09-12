@@ -43,8 +43,11 @@ import os
 import posixpath
 import socket
 import ssl
+import time as _time
+import uuid as _uuid
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from ipaddress import ip_address
 from typing import Dict, FrozenSet, List, Optional, Set
 from urllib.parse import urlparse
@@ -56,6 +59,7 @@ from fastapi.responses import StreamingResponse
 from httpcore._backends.auto import AutoBackend
 
 from backend.api.local_auth import get_local_auth_token
+from backend.services.llm_trace.recorder import LlmTraceRecorder, TraceRecord
 
 logger = logging.getLogger(__name__)
 
@@ -551,6 +555,19 @@ def _safe_url_for_log(provider_url: str, max_len: int = 80) -> str:
     return safe
 
 
+def _safe_record_trace(record: TraceRecord) -> None:
+    """Append a TraceRecord to the recorder; never let recorder errors break the proxy.
+
+    Defense in depth: a recorder failure must not surface as a 5xx to the LLM
+    caller. We log via ``logger.exception`` so operators can diagnose, then
+    swallow the exception.
+    """
+    try:
+        LlmTraceRecorder.append(record)
+    except Exception:
+        logger.exception("llm_trace: recorder.append failed (trace_id=%s)", record.trace_id)
+
+
 @router.api_route(
     "/llm/{path:path}",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
@@ -645,6 +662,17 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
         else None
     )
 
+    # LLM trace tee — 在拿到完整 request body 之后为这次调用分配 trace_id,
+    # 记录请求侧半成品(request_body / headers / upstream_url),等 response
+    # 回来再合并成完整 TraceRecord 写入 recorder。thread-local 不必要,因为
+    # proxy_to_llm 每次调用是一个独立 async stack,直接用局部变量即可。
+    _trace_id = str(_uuid.uuid4())
+    _trace_start_monotonic = _time.monotonic()
+    _trace_endpoint = request.url.path
+    _trace_method = request.method
+    _trace_req_headers = dict(fwd_headers)
+    _trace_req_body = body or b""
+
     # v2: 检测是否是 SSE/streaming 请求 — `LLMClient.chat_stream` 现在也走 proxy,
     # 需要把上游 chunked 响应原样回传给浏览器/调用方,不能一次性 read body。
     # 触发条件(任一):
@@ -666,12 +694,22 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
 
     if is_streaming:
         return await _proxy_streaming(
-            upstream_url, request.method, fwd_headers, body, resolved_address
+            upstream_url,
+            request.method,
+            fwd_headers,
+            body,
+            resolved_address,
+            trace_id=_trace_id,
+            trace_start_monotonic=_trace_start_monotonic,
+            trace_endpoint=_trace_endpoint,
+            trace_req_headers=_trace_req_headers,
+            trace_req_body=_trace_req_body,
         )
 
     # 非流式路径：也需要强制 Accept-Encoding: identity，避免上游返回压缩响应
     # 导致 httpx 自动解压时出错（Error -3 while decompressing data: incorrect header check）
     non_streaming_headers = {**fwd_headers, "Accept-Encoding": "identity"}
+    response_body = b""
     try:
         async with _client_for_resolved_address(resolved_address) as client, client.stream(
             method=request.method,
@@ -682,7 +720,42 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
             if upstream_resp.is_success:
                 response_body = await _read_response_body_limited(upstream_resp)
             else:
-                response_body = b""
+                try:
+                    response_body = await _read_response_body_limited(upstream_resp)
+                except ValueError:
+                    # Preserve the existing 502 response-body limit behavior while
+                    # still recording the failed upstream call before it propagates.
+                    _safe_record_trace(TraceRecord(
+                        trace_id=_trace_id,
+                        ts=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+
+                        endpoint=_trace_endpoint,
+                        upstream_url=upstream_url,
+                        upstream_method=_trace_method,
+                        request_headers=_trace_req_headers,
+                        request_body=_trace_req_body,
+                        response_status=upstream_resp.status_code,
+                        response_headers=dict(upstream_resp.headers),
+                        response_body=b"",
+                        response_streamed=False,
+                        duration_ms=int((_time.monotonic() - _trace_start_monotonic) * 1000),
+                        error_class=f"upstream_{upstream_resp.status_code}",
+                    ))
+                    raise
+                _safe_record_trace(TraceRecord(
+                    trace_id=_trace_id,
+                    ts=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+
+                    endpoint=_trace_endpoint,
+                    upstream_url=upstream_url,
+                    upstream_method=_trace_method,
+                    request_headers=_trace_req_headers,
+                    request_body=_trace_req_body,
+                    response_status=upstream_resp.status_code,
+                    response_headers=dict(upstream_resp.headers),
+                    response_body=response_body,
+                    response_streamed=False,
+                    duration_ms=int((_time.monotonic() - _trace_start_monotonic) * 1000),
+                    error_class=f"upstream_{upstream_resp.status_code}",
+                ))
     except ValueError as exc:
         if str(exc) == "response exceeds configured limit":
             raise HTTPException(
@@ -751,6 +824,26 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
 
     # 6. 透传响应(过滤 hop-by-hop 响应头)
     resp_headers = _filter_response_headers(upstream_resp.headers)
+
+    # LLM trace tee — 非流式路径在拿到 response_body 后写 recorder。
+    # 错误路径(4xx/5xx)已在上方 async with 内记录(含 error_class),
+    # 这里只覆盖成功调用(2xx);调用方拿到的 response body 字节与未改前完全一致。
+    _safe_record_trace(TraceRecord(
+        trace_id=_trace_id,
+        ts=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+
+        endpoint=_trace_endpoint,
+        upstream_url=upstream_url,
+        upstream_method=_trace_method,
+        request_headers=_trace_req_headers,
+        request_body=_trace_req_body,
+        response_status=upstream_resp.status_code,
+        response_headers=dict(upstream_resp.headers),
+        response_body=response_body,
+        response_streamed=False,
+        duration_ms=int((_time.monotonic() - _trace_start_monotonic) * 1000),
+        error_class=None,
+    ))
+
     return Response(
         content=response_body,
         status_code=upstream_resp.status_code,
@@ -764,6 +857,11 @@ async def _proxy_streaming(
     fwd_headers: Dict[str, str],
     body: Optional[bytes],
     resolved_address: Optional[str] = None,
+    trace_id: str = "",
+    trace_start_monotonic: float = 0.0,
+    trace_endpoint: str = "",
+    trace_req_headers: Optional[Dict[str, str]] = None,
+    trace_req_body: bytes = b"",
 ) -> StreamingResponse:
     """v2: SSE/chunked 流式透传。
 
@@ -781,6 +879,11 @@ async def _proxy_streaming(
         method: HTTP 方法(POST/GET 等)。
         fwd_headers: 已过滤 hop-by-hop 的转发头。
         body: POST/PUT/PATCH 的 request body;GET/DELETE 为 None。
+        trace_id: 调用方分配的 UUID,用于把 request 与 response 关联到同一条 trace。
+        trace_start_monotonic: 调用方的 ``time.monotonic()`` 起点,用于 duration_ms。
+        trace_endpoint: FastAPI 路由的 path(如 ``/api/v1/llm/v1/chat/completions``)。
+        trace_req_headers: 已过滤 hop-by-hop 的请求头快照(供 recorder 使用)。
+        trace_req_body: 完整 request body(供 recorder 使用)。
     """
     # 上游先建流,确认状态码 + 头信息可用,再交给 generator yield。
     # 若上游一上来就 4xx/5xx,直接抛对应 HTTPException 让 FastAPI 序列化 detail。
@@ -880,10 +983,29 @@ async def _proxy_streaming(
 
         if not upstream_resp.is_success:
             # 上游 4xx/5xx:还没 yield 任何 chunk,可以直接抛 HTTPException 把
-            # 错误体交给 FastAPI(调用方拿到的还是 JSON,不是 SSE)。
+            # 错误体交给 FastAPI(调用方拿到的还是 JSON,不是 SSE)。先完整读取并
+            # 记录错误响应,再关闭请求上下文,避免诊断 trace 丢失响应体。
+            response_body = b""
             try:
-                await _read_response_body_limited(upstream_resp)
+                response_body = await _read_response_body_limited(upstream_resp)
             except ValueError as exc:
+                _safe_record_trace(TraceRecord(
+                    trace_id=trace_id,
+                    ts=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+
+                    endpoint=trace_endpoint,
+                    upstream_url=upstream_url,
+                    upstream_method=method,
+                    request_headers=dict(trace_req_headers) if trace_req_headers else {},
+                    request_body=trace_req_body or b"",
+                    response_status=upstream_resp.status_code,
+                    response_headers=dict(upstream_resp.headers),
+                    response_body=b"",
+                    response_streamed=True,
+                    duration_ms=int((_time.monotonic() - trace_start_monotonic) * 1000)
+                    if trace_start_monotonic
+                    else 0,
+                    error_class=f"upstream_{upstream_resp.status_code}",
+                ))
                 raise HTTPException(
                     status_code=502,
                     detail={
@@ -891,6 +1013,24 @@ async def _proxy_streaming(
                         "message": _SAFE_UPSTREAM_MESSAGES["response_body_too_large"],
                     },
                 ) from exc
+            else:
+                _safe_record_trace(TraceRecord(
+                    trace_id=trace_id,
+                    ts=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+
+                    endpoint=trace_endpoint,
+                    upstream_url=upstream_url,
+                    upstream_method=method,
+                    request_headers=dict(trace_req_headers) if trace_req_headers else {},
+                    request_body=trace_req_body or b"",
+                    response_status=upstream_resp.status_code,
+                    response_headers=dict(upstream_resp.headers),
+                    response_body=response_body,
+                    response_streamed=True,
+                    duration_ms=int((_time.monotonic() - trace_start_monotonic) * 1000)
+                    if trace_start_monotonic
+                    else 0,
+                    error_class=f"upstream_{upstream_resp.status_code}",
+                ))
             finally:
                 await req_ctx.__aexit__(None, None, None)
                 await client.__aexit__(None, None, None)
@@ -909,6 +1049,13 @@ async def _proxy_streaming(
         async def stream_iter() -> AsyncIterator[bytes]:
             total_bytes = 0
             request_context_closed = False
+            # LLM trace tee — 流式响应在 generator 内逐 chunk 缓存,
+            # 整个流结束后(无论是正常 EOF 还是异常断开)统一写 recorder。
+            # 这样 downstream caller 拿到的 chunk 序列与未改前完全一致,
+            # 只是在旁路 copy 一份 bytes。
+            _streamed_chunks: List[bytes] = []
+            _streamed_status: Optional[int] = upstream_resp.status_code
+            _streamed_error: Optional[str] = None
             try:
                 # 用 aiter_raw 透传原始字节,把解压责任交给调用方。
                 async for chunk in upstream_resp.aiter_raw():
@@ -920,6 +1067,7 @@ async def _proxy_streaming(
                         )
                         break
                     if len(chunk) > remaining:
+                        _streamed_chunks.append(chunk[:remaining])
                         yield chunk[:remaining]
                         total_bytes += remaining
                         logger.warning(
@@ -929,6 +1077,7 @@ async def _proxy_streaming(
                         await req_ctx.__aexit__(None, None, None)
                         request_context_closed = True
                         break
+                    _streamed_chunks.append(chunk)
                     yield chunk
                     total_bytes += len(chunk)
                     if total_bytes >= MAX_RESPONSE_BODY_BYTES:
@@ -944,6 +1093,7 @@ async def _proxy_streaming(
                 # mid-stream failure cannot be rewritten as a second HTTP response.
                 # Record a structured teardown event and pass the exception through
                 # the context manager so the connection is released deterministically.
+                _streamed_error = type(exc).__name__
                 logger.warning(
                     "llm_proxy streaming upstream interrupted: %s",
                     _safe_url_for_log(upstream_url),
@@ -959,6 +1109,28 @@ async def _proxy_streaming(
                 if not request_context_closed:
                     await req_ctx.__aexit__(None, None, None)
                 await client.__aexit__(None, None, None)
+
+                # LLM trace tee — 流式响应已结束(EOF 或异常),把缓存的 chunks
+                # 拼成完整 response_body 写 recorder。try/except 保证 recorder
+                # 失败不会冒泡到 StreamingResponse(已发出的 headers 不能改)。
+                if trace_id:
+                    _safe_record_trace(TraceRecord(
+                        trace_id=trace_id,
+                        ts=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+
+                        endpoint=trace_endpoint,
+                        upstream_url=upstream_url,
+                        upstream_method=method,
+                        request_headers=dict(trace_req_headers) if trace_req_headers else {},
+                        request_body=trace_req_body or b"",
+                        response_status=_streamed_status,
+                        response_headers=dict(upstream_resp.headers),
+                        response_body=b"".join(_streamed_chunks),
+                        response_streamed=True,
+                        duration_ms=int((_time.monotonic() - trace_start_monotonic) * 1000)
+                        if trace_start_monotonic
+                        else 0,
+                        error_class=_streamed_error,
+                    ))
 
         return StreamingResponse(
             stream_iter(),
