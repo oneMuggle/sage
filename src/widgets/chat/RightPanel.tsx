@@ -5,10 +5,12 @@ import { memo, useState } from 'react';
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
+import { useConversationOutline } from '../../features/chat/useConversationOutline';
 import type { TaskBoard } from '../../features/send-message/useChat';
 import type { ToolCall } from '../../shared/lib/store';
 import { useResizablePanel } from '../../shared/lib/useResizablePanel';
 
+import { ConversationOutline } from './ConversationOutline';
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
 import { ArtifactsSection } from './artifacts/ArtifactsSection';
 import { ChangesSection } from './changes/ChangesSection';
@@ -31,12 +33,13 @@ interface RightPanelProps {
   onRerunFailed?: (runId: string) => void;
 }
 
-type Tab = 'progress' | 'artifacts' | 'changes';
+type Tab = 'progress' | 'artifacts' | 'changes' | 'outline';
 
 const TAB_LABELS: Record<Tab, string> = {
   progress: '进度',
   artifacts: '产物',
   changes: '变更',
+  outline: '目录',
 };
 
 interface PanelHeaderProps {
@@ -50,7 +53,7 @@ export function PanelHeader({ tab, onTabChange, onClose }: PanelHeaderProps) {
   if (tab !== undefined && onTabChange) {
     return (
       <div className="flex border-b border-border items-center">
-        {(['progress', 'changes', 'artifacts'] as Tab[]).map((t) => (
+        {(['progress', 'outline', 'changes', 'artifacts'] as Tab[]).map((t) => (
           <button
             key={t}
             className={
@@ -106,6 +109,7 @@ function RightPanelInner({
   const [tab, setTab] = useState<Tab>('progress');
   const [selected, setSelected] = useState<Artifact | null>(null);
   const { artifacts, loading, refresh } = useArtifacts(sessionId);
+  const { items: outlineItems, isLoading: outlineLoading } = useConversationOutline(sessionId);
   // P0-3 (UI 优化方案 2026-09-12): 面板宽度可调 —— 拖拽左边缘手柄，
   // 持久化到 localStorage（范围 280~600，默认 320）。
   const { width, onMouseDown: onResizeMouseDown } = useResizablePanel({
@@ -159,6 +163,8 @@ function RightPanelInner({
           />
         ) : tab === 'changes' ? (
           <ChangesSection sessionId={sessionId} />
+        ) : tab === 'outline' ? (
+          <ConversationOutline items={outlineItems} isLoading={outlineLoading} />
         ) : (
           <ArtifactsSection
             artifacts={artifacts}
