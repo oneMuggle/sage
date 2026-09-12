@@ -228,7 +228,7 @@ class ChatRequest(BaseModel):
 
     # PM1 (round8): 单 agent 计划模式 —— 本次 run 只读（权限执行器 override
     # READ_ONLY）+ 计划指令 system 块；DONE 后前端出批准条，批准后普通执行。
-    plan_mode: bool = False
+    plan_mode: Optional[bool] = False
 
 
 class MessageResponse(BaseModel):
