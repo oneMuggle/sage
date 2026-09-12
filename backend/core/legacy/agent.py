@@ -64,6 +64,7 @@ from backend.services.question_gate import (
 from backend.tools import ToolRegistry, register_all_tools
 from backend.tools.ask_user_tool import ASK_USER_QUESTION_TOOL_NAME, validate_ask_user_args
 from backend.tools.base import ToolResult
+from backend.tools.executor import TIMEOUT_EXCEPTIONS, tool_timeout_message
 
 #: M2b 审查加固: 连续未应答提问上限。超时软结果使循环继续, 若无此限,
 #: 被操纵/犯错的 LLM 可循环提问持续骚扰用户。超限后直接返回错误结果。
@@ -1185,11 +1186,33 @@ class SageAgent:
                             agent_id=self.agent_id,
                         )
 
+                    # 切片 A': 并行批次接入中心超时（与 hex InprocToolAdapter 同
+                    # policy.timeout_seconds / 同文案）—— 只读工具挂死不再拖死整轮。
+                    # wait_for 取消的只是 executor future 包装，残留线程无法强杀，
+                    # 但循环立即恢复；超时结果按错误观察事件落盘。
+                    parallel_timeout = getattr(
+                        self.tool_policy, "timeout_seconds", None
+                    )
+
+                    async def _run_one_with_timeout(tc_p, _timeout=parallel_timeout):
+                        fut = asyncio.get_running_loop().run_in_executor(
+                            None, functools.partial(_run_one, tc_p)
+                        )
+                        if _timeout and _timeout > 0:
+                            try:
+                                return await asyncio.wait_for(fut, timeout=_timeout)
+                            except TIMEOUT_EXCEPTIONS:
+                                logger.warning(
+                                    "并行只读批次工具超时: %s（%ss）",
+                                    tc_p.name,
+                                    _timeout,
+                                )
+                                return (tool_timeout_message(_timeout), True)
+                        return await fut
+
                     results_p = await asyncio.gather(
                         *(
-                            asyncio.get_running_loop().run_in_executor(
-                                None, functools.partial(_run_one, tc_p)
-                            )
+                            _run_one_with_timeout(tc_p)
                             for tc_p in response.tool_calls
                         )
                     )
