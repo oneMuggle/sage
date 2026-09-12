@@ -103,6 +103,7 @@ from backend.api.question_routes import router as question_router
 from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.system_routes import router as system_router
+from backend.api.prompt_routes import router as prompt_router
 from backend.api.theme_router import router as theme_router
 from backend.api.usage_routes import router as usage_router
 from backend.api.v1 import updates as updates_router_module
@@ -789,6 +790,8 @@ app.include_router(usage_router, prefix="/api/v1")
 app.include_router(export_router, prefix="/api/v1")
 # R19-C/D: 系统维护 (备份清单/手动备份/记忆导出, 与 API_MODE 无关)
 app.include_router(system_router, prefix="/api/v1")
+# R27-A: Prompt 模板库 CRUD (与 API_MODE 无关)
+app.include_router(prompt_router, prefix="/api/v1")
 # Artifacts 面板: /sessions/{id}/artifacts (list / content / reveal)
 app.include_router(artifact_router, prefix="/api/v1")
 

@@ -184,7 +184,32 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // R19: 数据安全 —— 备份清单/手动备份/记忆导出（system_routes，GET/POST
   // 均无业务 body，本机 token 由 fetch 桥统一注入）。
   // R25-D4: 查询会话活跃 chat 流（renderer 重载后 reattach）。null = 无活跃流。
-  chat_stream_active: {
+  // R27-A: Prompt 模板库 CRUD
+  prompts_list: {
+    method: 'GET',
+    path: () => '/api/v1/prompts/templates',
+  },
+  prompts_create: {
+    method: 'POST',
+    path: () => '/api/v1/prompts/templates',
+    body: (a) => ({ name: a.name, content: a.content, description: a.description ?? '' }),
+  },
+  prompts_update: {
+    method: 'PUT',
+    path: (a) => `/api/v1/prompts/templates/${encodeURIComponent(String(a.id))}`,
+    body: (a) => {
+      const body: Record<string, unknown> = {};
+      if (a.name != null) body.name = a.name;
+      if (a.content != null) body.content = a.content;
+      if (a.description != null) body.description = a.description;
+      return body;
+    },
+  },
+  prompts_delete: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/prompts/templates/${encodeURIComponent(String(a.id))}`,
+  },
+    chat_stream_active: {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/active?session_id=${encodeURIComponent(String(a.sessionId))}`,
   },

@@ -40,6 +40,9 @@ export const zh = {
   'chat.hint':
     'Sage 会记住你的项目信息，无需重复说明上下文 · 支持 Markdown 语法 · 输入 / 呼出命令，@ 引用工作区文件',
   'chat.memory_applied': '条记忆已应用',
+  'prompt.saved': '已存为提示词模板（/tpl- 开头可复用）',
+  'prompt.save_empty': '请在 /prompt-save 后输入要保存的提示词内容',
+  'prompt.save_failed': '模板保存失败',
   'wizard.title': '三步接入你的模型服务',
   'wizard.subtitle': '只需一次配置，之后 Sage 会记住你的端点',
   'wizard.step1': '选择协议',
