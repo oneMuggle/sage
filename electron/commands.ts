@@ -206,7 +206,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: () => '/api/v1/memory/import',
     // 信封即 body（后端 import_memory(payload) 直接收 dict）
-    body: (a) => a.payload,
+    body: (a) => a.payload as Record<string, unknown>,
   },
   workspace_search_files: {
     method: 'GET',
