@@ -2,8 +2,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GatewayCard } from '../GatewayCard';
 import { gatewayApi } from '../../../shared/api/gatewayApi';
+import { GatewayCard } from '../GatewayCard';
 
 vi.mock('../../../shared/api/gatewayApi', () => ({
   gatewayApi: {
