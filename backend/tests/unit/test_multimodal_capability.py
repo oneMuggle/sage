@@ -37,3 +37,28 @@ def test_http_response_fields():
     resp = AIHttpResponse(status_code=200, content=b"hello")
     assert resp.json is None
     assert resp.content_type == ""
+
+
+def test_registry_register_and_get():
+    from backend.services.multimodal.registry import CapabilityRegistry
+    from backend.services.multimodal.capability import AICapability, CapabilityKind, CapabilityConfig, AIHttpRequest, AIHttpResponse
+
+    class DummyCapability(AICapability):
+        kind = CapabilityKind.TTS
+        settings_slot = "ttsModel"
+        def build_request(self, config, **kw): return AIHttpRequest(url="http://x")
+        def parse_response(self, resp, **kw): return None
+
+    CapabilityRegistry.register(DummyCapability())
+    assert CapabilityRegistry.get(CapabilityKind.TTS) is not None
+    assert CapabilityKind.TTS in CapabilityRegistry.all_kinds()
+    # 清理
+    CapabilityRegistry._capabilities.pop(CapabilityKind.TTS, None)
+
+
+def test_registry_available_empty():
+    from backend.services.multimodal.registry import CapabilityRegistry
+    saved = CapabilityRegistry._capabilities.copy()
+    CapabilityRegistry._capabilities.clear()
+    assert CapabilityRegistry.available() == []
+    CapabilityRegistry._capabilities = saved
