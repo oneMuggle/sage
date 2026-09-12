@@ -14,6 +14,7 @@ import logging
 from typing import Any, Dict
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from backend.services import backup_service
 
@@ -35,6 +36,101 @@ def create_backup() -> Dict[str, Any]:
     if result is None:
         return {"ok": False, "error": "backup failed (see server log)"}
     return {"ok": True, "backup": result}
+
+
+@router.post("/system/backups/{name}/restore")
+def restore_backup(name: str) -> Dict[str, Any]:
+    """安排恢复指定备份（下次启动生效；恢复前自动做安全备份）。"""
+    from backend.services import backup_service
+
+    result = backup_service.restore_backup(name)
+    if result is None:
+        return JSONResponse(status_code=400, content={"error": f"备份不存在或恢复失败: {name}"})
+    return result
+
+
+@router.post("/memory/import")
+def import_memory(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """导入 R19 导出格式的记忆信封（{version, episodic, semantic}）。
+
+    - episodic 条目: {content, importance?, memory_type?, session_id?}
+    - semantic 条目: {content, summary?, tags?, session_id?}
+    - 去重：content 精确匹配已有记忆即跳过
+    - 单条失败不中断，返回 {imported, skipped, failed, errors[:10]}
+    """
+    import time as _time
+
+    if not isinstance(payload, dict) or payload.get("version") not in (1, "1"):
+        return JSONResponse(status_code=400, content={"error": "unsupported export version"})
+
+    from backend.memory.manager import MemoryManager
+
+    try:
+        mgr = MemoryManager()
+        episodic_repo = mgr.episodic
+        semantic_repo = mgr.semantic
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("memory import: manager init failed: %s", exc)
+        return JSONResponse(status_code=500, content={"error": "memory subsystem unavailable"})
+
+    imported = skipped = failed = 0
+    errors: list = []
+    for entry in payload.get("episodic") or []:
+        if not isinstance(entry, dict):
+            failed += 1
+            continue
+        content = str(entry.get("content") or "").strip()
+        if not content:
+            skipped += 1
+            continue
+        try:
+            if episodic_repo.exists_by_content(content):
+                skipped += 1
+                continue
+            episodic_repo.save(
+                content,
+                importance=int(entry.get("importance") or 5),
+                memory_type=str(entry.get("memory_type") or "conversation"),
+                session_id=entry.get("session_id") or None,
+            )
+            imported += 1
+        except Exception as exc:  # noqa: BLE001 — 单条失败不中断
+            failed += 1
+            if len(errors) < 10:
+                errors.append(f"episodic: {exc}")
+
+    for entry in payload.get("semantic") or []:
+        if not isinstance(entry, dict):
+            failed += 1
+            continue
+        content = str(entry.get("content") or "").strip()
+        if not content:
+            skipped += 1
+            continue
+        try:
+            if semantic_repo.exists_by_content(content):
+                skipped += 1
+                continue
+            tags = entry.get("tags")
+            semantic_repo.save(
+                content,
+                summary=entry.get("summary") or None,
+                tags=[str(t) for t in tags] if isinstance(tags, list) else None,
+                session_id=entry.get("session_id") or None,
+            )
+            imported += 1
+        except Exception as exc:  # noqa: BLE001
+            failed += 1
+            if len(errors) < 10:
+                errors.append(f"semantic: {exc}")
+
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "failed": failed,
+        "errors": errors,
+        "imported_at": int(_time.time() * 1000),
+    }
 
 
 @router.get("/memory/export")

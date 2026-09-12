@@ -78,7 +78,11 @@ describe('MemoryTab (fix/security-perf-quickwins §1.3b f)', () => {
 
     const inputs = container.querySelectorAll('input');
     for (const input of inputs) {
-      expect(input.getAttribute('value')).not.toContain('%APPDATA%');
+      // R21: file input（导入记忆）没有 value 属性 —— null 视为通过
+      const value = input.getAttribute('value');
+      if (value !== null) {
+        expect(value).not.toContain('%APPDATA%');
+      }
     }
   });
 });

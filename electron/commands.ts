@@ -196,6 +196,18 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'GET',
     path: () => '/api/v1/memory/export',
   },
+  // R21: 备份恢复（下次启动生效）+ 记忆导入
+  system_backup_restore: {
+    method: 'POST',
+    path: (a) => `/api/v1/system/backups/${encodeURIComponent(String(a.name))}/restore`,
+    body: () => ({}),
+  },
+  memory_import: {
+    method: 'POST',
+    path: () => '/api/v1/memory/import',
+    // 信封即 body（后端 import_memory(payload) 直接收 dict）
+    body: (a) => a.payload as Record<string, unknown>,
+  },
   workspace_search_files: {
     method: 'GET',
     path: (a) => {
