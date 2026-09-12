@@ -55,13 +55,18 @@ export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
         const data: unknown = await resp.json();
 
         if (!resp.ok) {
-          const obj = (typeof data === 'object' && data !== null) ? data as Record<string, unknown> : {};
-          const msg = typeof obj.error === 'string' ? obj.error
-            : typeof obj.detail === 'string' ? obj.detail
-            : `上传失败 (HTTP ${resp.status})`;
+          const obj =
+            typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
+          const msg =
+            typeof obj.error === 'string'
+              ? obj.error
+              : typeof obj.detail === 'string'
+                ? obj.detail
+                : `上传失败 (HTTP ${resp.status})`;
           errorMessage = msg;
         } else {
-          const obj = (typeof data === 'object' && data !== null) ? data as Record<string, unknown> : {};
+          const obj =
+            typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
           const mediaRef = obj.media_ref as Record<string, unknown> | undefined;
           const apiUrl = obj.api_url;
 
