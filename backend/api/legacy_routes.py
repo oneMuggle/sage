@@ -2955,6 +2955,17 @@ async def chat_stream_create(data: ChatRequest, request: Request):
     return {"streamId": stream_id}
 
 
+@router.get("/chat/stream/active")
+def get_active_chat_stream(session_id: str, request: Request):
+    """R25-D4: 查询会话当前活跃的 chat 流（renderer 重载后 reattach 用）。
+
+    Returns:
+        ``{"streamId": "<uuid>" | None}`` —— None 表示该会话没有活跃流。
+    """
+    registry: StreamRegistry = request.app.state.streams
+    return {"streamId": registry.find_active_by_session(session_id)}
+
+
 @router.get("/chat/stream/{stream_id}")
 async def chat_stream_attach(stream_id: str, request: Request):
     """attach 到已创建的 chat 流 (I2),NDJSON 推送事件。
