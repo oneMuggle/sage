@@ -632,6 +632,7 @@ class McpServerPool:
         name: str,
         enabled: Optional[bool] = None,
         timeout_seconds: Optional[float] = None,
+        disabled_tools: Optional[List[str]] = None,
     ) -> ServerRecord:
         """Merge-patch a server (enabled / timeout_seconds) and start/stop.
 
@@ -654,6 +655,10 @@ class McpServerPool:
                 timeout_seconds is not None
                 and float(timeout_seconds) != base.timeout_seconds
             )
+            tools_changed = (
+                disabled_tools is not None
+                and tuple(disabled_tools) != tuple(base.disabled_tools)
+            )
             new_config = validate_server_config(
                 name=base.name,
                 command=base.command,
@@ -663,6 +668,9 @@ class McpServerPool:
                 required=base.required,
                 timeout_seconds=(
                     base.timeout_seconds if timeout_seconds is None else timeout_seconds
+                ),
+                disabled_tools=(
+                    list(base.disabled_tools) if disabled_tools is None else disabled_tools
                 ),
             )
         upsert_user_server_config(new_config)
@@ -676,8 +684,10 @@ class McpServerPool:
                 record.set_state(ServerState.DISABLED)
             self._unregister_server_tools(name)
         elif record.state in (ServerState.DISABLED, ServerState.FAILED) or (
-            timeout_changed and record.state == ServerState.READY
+            (timeout_changed or tools_changed) and record.state == ServerState.READY
         ):
+            # 工具开关/超时变更都需要 re-discovery 刷新注册（工具集在
+            # discovery 时合成进 record.tool_specs）
             self.discover_one(name)
         return record
 
@@ -801,6 +811,16 @@ class McpServerPool:
             live = [ref() for ref in self._registries]
         return [r for r in live if r is not None]
 
+    def _tool_disabled(self, config: Any, spec: Dict[str, Any]) -> bool:
+        """R20-B: per-tool 开关 —— spec 原始名或 namespaced 名命中
+        config.disabled_tools 即视为禁用。"""
+        disabled = getattr(config, "disabled_tools", ()) or ()
+        if not disabled:
+            return False
+        raw = str(spec.get("name", ""))
+        namespaced = namespaced_tool_name(config.name, raw)
+        return raw in disabled or namespaced in disabled
+
     def register_tools_into(self, registry: Any) -> int:
         """Register all READY servers' tools into one registry. Returns count."""
 
@@ -811,6 +831,8 @@ class McpServerPool:
             ]
         for record in ready_records:
             for spec in record.tool_specs:
+                if self._tool_disabled(record.config, spec):
+                    continue
                 tool_name = namespaced_tool_name(record.config.name, spec["name"])
                 if registry.exists(tool_name):
                     # With mcp__<server>__<tool> namespacing collisions are
@@ -829,6 +851,8 @@ class McpServerPool:
 
         for registry in self._live_registries():
             for spec in record.tool_specs:
+                if self._tool_disabled(record.config, spec):
+                    continue
                 tool_name = namespaced_tool_name(record.config.name, spec["name"])
                 if registry.exists(tool_name):
                     logger.warning(
