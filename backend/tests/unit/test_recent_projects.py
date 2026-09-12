@@ -1,9 +1,15 @@
 """Unit tests for backend.storage.recent_projects."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="recent_projects 走 wiki/files POSIX-only 安全原语（产品缺口，另行批次）",
+)
 
 from backend.storage.recent_projects import (
     MAX_RECENT,

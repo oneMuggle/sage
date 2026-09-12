@@ -38,7 +38,9 @@ def temp_db():
     if callable(with_close):
         with contextlib.suppress(Exception):
             with_close()
-    os.unlink(tmp_path)
+    # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
+    with contextlib.suppress(PermissionError):
+        os.unlink(tmp_path)
 
 
 # ---- RT9: SubagentRunner 消费 retry_hint -------------------------------------
