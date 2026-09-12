@@ -146,6 +146,17 @@ def _write_sections(
             sections_to_write.append((h.keyword, text))
     if content.references:
         sections_to_write.append(("参考文献", "\n".join(content.references)))
+    elif getattr(content, "structured_references", None):
+        # Round 21：结构化文献——用 R9 引用引擎按 citation_style 格式化
+        # 并加 [N] 编号（未提供 structured_references 时行为零变化）。
+        from backend.office.references import format_reference
+
+        bib_lines = [
+            f"[{i}] {format_reference(ref, content.citation_style)}"
+            for i, ref in enumerate(content.structured_references, start=1)
+        ]
+        if bib_lines:
+            sections_to_write.append(("参考文献", "\n".join(bib_lines)))
 
     # 标题（Heading 1 for Title）
     body.append(_make_paragraph(content.title, "Heading1"))

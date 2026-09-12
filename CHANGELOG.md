@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **journal 接入引用引擎(Round 21)**: JournalContent 新增 structured_references(ReferenceSpec)+citation_style——fill_from_content 时用 R9 引擎按 GB/T 7714/APA 格式化并加 [N] 编号生成参考文献段;未提供时回退 references 纯文本(零变化)
 - **Excel 图标集条件格式(Round 19)**: conditional_formats 新增 icon_set 规则——9 种图标样式(3Arrows/3TrafficLights1/5Rating 等),阈值按百分比等分;icon_style 非法值模型层拒绝
 - **Excel 下拉数据验证(Round 18)**: ExcelSheetSpec 新增 data_validations(range+options 下拉列表/allow_blank/输入提示)——状态/分类列防手输错值;内联列表超 255 字符(Excel 硬限制)单条跳过不阻断;全部可选缺省零变化
 - **Excel 条件格式(Round 17)**: ExcelSheetSpec 新增 conditional_formats——data_bar 数据条/color_scale 双色色阶/duplicate 重复值高亮(COUNTIF+纯色),range A1 记法非法模型层拒绝、openpyxl 级失败单条跳过不阻断;全部可选缺省零变化

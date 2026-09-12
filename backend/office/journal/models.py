@@ -9,11 +9,12 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from backend.office.journal.errors import JournalContentShapeError
+from backend.office.models import ReferenceSpec
 
 
 class ViolationSeverity(str, Enum):
@@ -87,6 +88,11 @@ class JournalContent(BaseModel):
     abstract: str = Field(default="")
     sections: Dict[str, str] = Field(default_factory=dict)  # section_key → text
     references: List[str] = Field(default_factory=list)
+    # Round 21：结构化文献（可选）。提供时 fill 阶段用 R9 引用引擎
+    # （backend.office.references）按 citation_style 格式化生成带 [N]
+    # 编号的参考文献文本，优先于 references 纯文本。
+    structured_references: Optional[List[ReferenceSpec]] = None
+    citation_style: Literal["gbt7714", "apa"] = "gbt7714"
     citations: List[str] = Field(default_factory=list)
 
 

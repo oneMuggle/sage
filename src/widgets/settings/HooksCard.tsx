@@ -50,10 +50,22 @@ export function HooksCard(): JSX.Element | null {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // alive 守卫：卸载/环境拆除后不再 setState（否则悬挂 promise 在
+    // jsdom 销毁后触发 "window is not defined"，直接崩掉 vitest 进程）。
+    let alive = true;
     invoke<{ value: string | null }>('get_preference', { key: 'hooks' })
-      .then((resp) => setHooks(parseHooks(resp.value)))
-      .catch(() => setHooks([]))
-      .finally(() => setLoaded(true));
+      .then((resp) => {
+        if (alive) setHooks(parseHooks(resp.value));
+      })
+      .catch(() => {
+        if (alive) setHooks([]);
+      })
+      .finally(() => {
+        if (alive) setLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const save = (next: HookEntry[]): void => {
