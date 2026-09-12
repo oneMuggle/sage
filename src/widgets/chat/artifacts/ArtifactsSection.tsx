@@ -15,11 +15,33 @@ interface ArtifactsSectionProps {
 }
 
 export function ArtifactsSection({
-  artifacts, loading, sessionId, onRefresh, onSelect, onReveal,
+  artifacts,
+  loading,
+  sessionId,
+  onRefresh,
+  onSelect,
+  onReveal,
 }: ArtifactsSectionProps) {
   if (!sessionId) {
     return <div className="p-3 text-sm text-muted">请先选择会话</div>;
   }
+
+  // P2-3.11: 双击 Artifact → 弹出独立窗口 (仅 HTML 类型)
+  const handleDoubleClick = (artifact: Artifact) => {
+    if (!window.electronAPI?.openArtifactWindow) return;
+    // artifact.path 来自后端,格式: /abs/path/to/artifact.html
+    window.electronAPI
+      .openArtifactWindow({
+        id: artifact.id,
+        name: artifact.name,
+        kind: artifact.kind,
+        path: artifact.path,
+      })
+      .catch(() => {
+        // 静默失败:不支持的类型或 IPC 错误
+      });
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-end gap-1 px-2 py-1 border-b border-border">
@@ -47,7 +69,12 @@ export function ArtifactsSection({
         ) : (
           <div className="divide-y divide-border">
             {artifacts.map((a) => (
-              <ArtifactRow key={a.id} artifact={a} onSelect={onSelect} />
+              <ArtifactRow
+                key={a.id}
+                artifact={a}
+                onSelect={onSelect}
+                onDoubleClick={handleDoubleClick}
+              />
             ))}
           </div>
         )}

@@ -888,6 +888,11 @@ app.include_router(export_router, prefix="/api/v1")
 # Artifacts 面板: /sessions/{id}/artifacts (list / content / reveal)
 app.include_router(artifact_router, prefix="/api/v1")
 
+# P1-3.7 (UI 优化方案 2026-09-13): 全局搜索 /api/v1/search/global
+from backend.api.search_routes import router as search_router
+
+app.include_router(search_router, prefix="/api/v1")
+
 # Update system: /api/v1/updates/{latest, history, channels}
 app.include_router(updates_router_module.router, prefix="/api/v1")
 
