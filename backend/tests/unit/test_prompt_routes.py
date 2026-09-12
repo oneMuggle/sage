@@ -36,7 +36,7 @@ def client(monkeypatch):
     monkeypatch.setattr(prompt_routes, "SettingsRepository", _FakeRepo)
     app = FastAPI()
     app.include_router(router)
-    yield TestClient(app)
+    return TestClient(app)
 
 
 def test_create_and_list(client):
