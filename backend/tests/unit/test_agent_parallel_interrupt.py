@@ -10,8 +10,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from backend.core.legacy.agent import SageAgent
+from backend.core.legacy.agent_state import AgentState
 from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
 from backend.domain.risk import RiskClass
+from backend.domain.tool_policy import ToolPolicy
 
 pytestmark = pytest.mark.unit
 
@@ -246,3 +248,55 @@ async def test_no_interrupt_completes_normally():
         events.append(evt)
     assert events[-1].state.value == "done"
     assert tool.calls == 1
+
+
+# ---- 切片 A': 并行批次中心超时 ----
+
+
+@pytest.mark.asyncio()
+async def test_parallel_batch_tool_timeout_returns_error():
+    """批次内单工具超过 policy.timeout_seconds → tool_timeout 错误观察事件，
+    其余工具照常执行（与 hex InprocToolAdapter 同文案）。"""
+    from backend.domain.tool_policy import ToolPolicy
+
+    slow = _FakeTool("slow_reader", delay=2.0, content="太慢的结果")
+    fast = _FakeTool("fast_reader", content="快结果")
+    tools = {"slow_reader": slow, "fast_reader": fast}
+    round1 = LLMResponse(
+        content="",
+        tool_calls=_tool_calls(("slow_reader", "{}"), ("fast_reader", "{}")),
+    )
+    final = LLMResponse(content="done")
+    agent = _make_agent(tools, [round1, final])
+    agent.tool_policy = ToolPolicy(timeout_seconds=0.2)
+
+    events = []
+    async for evt in agent.run_loop([{"role": "user", "content": "x"}]):
+        events.append(evt)
+
+    observing = [e for e in events if e.state == AgentState.OBSERVING]
+    by_name = {e.tool_call.name: e.tool_result for e in observing}
+    assert by_name["slow_reader"].is_error is True
+    assert "tool_timeout" in by_name["slow_reader"].content
+    assert by_name["fast_reader"].is_error is False
+    assert by_name["fast_reader"].content == '"快结果"'
+    assert events[-1].state.value == "done"
+
+
+@pytest.mark.asyncio()
+async def test_parallel_batch_without_timeout_keeps_old_behavior():
+    """policy.timeout_seconds 为 0/None → 不施加超时（旧行为回退）。"""
+    slow = _FakeTool("slow_reader", delay=0.3, content="慢但完成")
+    tools = {"slow_reader": slow}
+    round1 = LLMResponse(content="", tool_calls=_tool_calls(("slow_reader", "{}")))
+    final = LLMResponse(content="done")
+    agent = _make_agent(tools, [round1, final])
+    agent.tool_policy = ToolPolicy(timeout_seconds=0)
+
+    events = []
+    async for evt in agent.run_loop([{"role": "user", "content": "x"}]):
+        events.append(evt)
+
+    observing = [e for e in events if e.state == AgentState.OBSERVING]
+    assert observing[0].tool_result.is_error is False
+    assert "慢但完成" in observing[0].tool_result.content

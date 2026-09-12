@@ -37,6 +37,7 @@ from sage_core.repositories import ToolPort  # noqa: F401  (structural typing ta
 
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools.bash_validation import validate_bash
+from backend.tools.executor import TIMEOUT_EXCEPTIONS, tool_timeout_message
 from backend.tools.permissions import (
     DEFAULT_PERMISSION_MODE,
     PermissionEnforcer,
@@ -127,13 +128,11 @@ class InprocToolAdapter:
                 asyncio.to_thread(tool.execute, **args),
                 timeout=self._policy.timeout_seconds,
             )
-        except (asyncio.TimeoutError, TimeoutError):  # noqa: UP041
-            # Python 3.10: asyncio.exceptions.TimeoutError ≠ builtin TimeoutError；
-            # 3.11+ 两者为同一类。兼容两个名称。
+        except TIMEOUT_EXCEPTIONS:
             return ToolResult(
                 success=False,
                 output="",
-                error=f"tool_timeout: exceeded {self._policy.timeout_seconds}s",
+                error=tool_timeout_message(self._policy.timeout_seconds),
                 metadata={
                     "timeout_seconds": self._policy.timeout_seconds,
                     "truncated": False,
