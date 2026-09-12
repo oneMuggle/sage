@@ -58,6 +58,7 @@ export function Chat() {
     streamingState, // P2: 当前流式状态
     streamingToolCalls, // 右侧面板 Progress: 实时流式工具调用
     taskBoard, // Multi-Agent Orchestration: 编排任务板
+    reattachActiveStream, // R25-D4: renderer 重载后重接后端仍在跑的流
     clearTaskBoard, // Wave 3: 取消执行后清空任务板
     planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
     clearPlanApproval, // PM2: 清除批准状态
@@ -73,6 +74,13 @@ export function Chat() {
     isLoading: storeLoading,
     removeMessage,
   } = useStore();
+
+  // R25-D4: 挂载/切会话时探测后端活跃流并重接 —— renderer 重载（升级、
+  // 崩溃恢复）后长任务输出不再丢失。内部有会话级去重守卫。
+  useEffect(() => {
+    if (!currentSessionId) return;
+    void reattachActiveStream(currentSessionId);
+  }, [currentSessionId, reattachActiveStream]);
 
   // L16 (round4 批次 A): run 级崩溃恢复横幅 —— 后端启动时把滞留 running
   // 的会话统一标记 failed(INTERRUPTED_RUN_ERROR);聊天页识别该终态后给出

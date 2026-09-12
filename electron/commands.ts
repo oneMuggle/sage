@@ -183,7 +183,12 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
   // R19: 数据安全 —— 备份清单/手动备份/记忆导出（system_routes，GET/POST
   // 均无业务 body，本机 token 由 fetch 桥统一注入）。
-  system_backups_list: {
+  // R25-D4: 查询会话活跃 chat 流（renderer 重载后 reattach）。null = 无活跃流。
+  chat_stream_active: {
+    method: 'GET',
+    path: (a) => `/api/v1/chat/stream/active?session_id=${encodeURIComponent(String(a.sessionId))}`,
+  },
+    system_backups_list: {
     method: 'GET',
     path: () => '/api/v1/system/backups',
   },

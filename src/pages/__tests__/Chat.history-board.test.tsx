@@ -150,6 +150,7 @@ describe('Chat — 历史任务板恢复（C1）', () => {
       error: null,
       clearError: vi.fn(),
       sendMessage: vi.fn(),
+    reattachActiveStream: vi.fn(),
       interrupt: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],

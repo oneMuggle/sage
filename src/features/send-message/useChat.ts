@@ -73,6 +73,9 @@ interface ActiveStreamHandle {
   finish: (() => void) | null;
 }
 
+// R25-D4: 本模块已 reattach 的会话（跨 hook 实例/StrictMode 双挂载去重）
+const reattachedSids = new Set<string>();
+
 export function useChat() {
   // S3 (2026-09-06) 多会话并行: "在流中"状态从 hook 级单布尔改为 **按会话**
   // 的 Set。跨会话互不阻塞（会话 A 流式中可直接在会话 B 发送 → 两条流后端
@@ -405,6 +408,10 @@ export function useChat() {
         // 流结束后刷新侧栏会话列表（获取自动生成的标题 + S1 落库的运行态徽章）
         // hex 路径无 NDJSON session_updated 事件，此处兜底刷新
         void useStore.getState().loadSessions();
+        // R25-D5: 消息对账 —— 网关/scheduler 等外部写库方不经本渲染进程，
+        // 流结束后以服务端为准刷新一次，消除"开着会话看不到新消息"的窗口
+        // （loadMessages 每次直查 get_messages，无缓存问题）。
+        void useStore.getState().loadMessages(sid);
         // U5 + S3: 流自然结束后发送**该会话**队列中的下一条(短暂让位,避免与
         // 收尾渲染竞争)。其它会话的队列不受影响。
         if (flushQueue) {
@@ -858,6 +865,112 @@ export function useChat() {
     [loadMessages],
   );
 
+  // R25-D4: reattach —— renderer 重载/切回会话时,后端仍在跑的 chat 流
+  // 通过 activeStream 查询 + listenStream 重新接上。BroadcastQueue 会把
+  // attach 前缓冲的事件重放给首个 subscriber,占位消息能追上完整内容。
+  // 精简事件面: content/reasoning 增量 + done/failed 终态 + 审批/提问
+  // 转发（编排任务板等复杂事件在 reattach 场景降级为 streaming meta 文案）。
+  const reattachActiveStream = useCallback(
+    async (sid: string) => {
+      if (!sid || activeSidsRef.current.has(sid)) return;
+      // 模块级守卫: React StrictMode 双挂载/重复调用时只接一次
+      // （Electron main 对重复 listen 早退,双 handler 会重复累积内容）
+      if (reattachedSids.has(sid)) return;
+      let streamId: string | null = null;
+      try {
+        streamId = await chatApi.activeStream(sid);
+      } catch {
+        return; // 查询失败静默（后端未起/演示模式）
+      }
+      if (!streamId) return;
+      reattachedSids.add(sid);
+
+      const assistantId = crypto.randomUUID();
+      addMessage({
+        id: assistantId,
+        session_id: sid,
+        role: 'assistant',
+        content: '',
+        created_at: Date.now(),
+      });
+      useChatStreamStore.getState().startStream(sid, assistantId, {
+        initialContent: '',
+      });
+      markStreamActive(sid, { streamId, cancel: null, finish: () => {} });
+
+      const finishReattach = (finalContent: string | null, errText?: string) => {
+        reattachedSids.delete(sid);
+        if (finalContent !== null) {
+          updateMessage(assistantId, { content: finalContent });
+        } else if (errText) {
+          updateMessage(assistantId, { content: `[错误] ${errText}` });
+        }
+        useChatStreamStore.getState().clearStream(sid, assistantId);
+        useChatStreamStore.getState().resetToolCalls(sid);
+        markStreamIdle(sid);
+        usePermissionState.getState().resolve(sid);
+        useQuestionState.getState().resolve(sid);
+        // R25-D5: 对账 —— producer 的 DONE 持久化是权威,重载服务端真值
+        void useStore.getState().loadMessages(sid);
+        void useStore.getState().loadSessions();
+      };
+
+      let acc = '';
+      let accReasoning = '';
+      try {
+        await chatApi.listenStream(streamId, {
+          onEvent: (evt) => {
+            if (evt.type === 'session_updated') {
+              void useStore.getState().loadSessions();
+              return;
+            }
+            if (evt.state === 'content_delta' && evt.content) {
+              acc += evt.content;
+              useChatStreamStore.getState().appendContent(sid, assistantId, acc);
+              return;
+            }
+            if (
+              (evt.state === 'reasoning_delta' || evt.state === 'reasoning') &&
+              evt.reasoning
+            ) {
+              accReasoning += evt.reasoning;
+              useChatStreamStore
+                .getState()
+                .appendReasoning(sid, assistantId, accReasoning);
+              return;
+            }
+            if (evt.state === 'permission_request' && evt.permission_request) {
+              usePermissionState.getState().setFromEvent(evt.permission_request, sid);
+              return;
+            }
+            if (evt.state === 'ask_user_question' && evt.user_question) {
+              useQuestionState.getState().setFromEvent(evt.user_question, sid);
+              return;
+            }
+            if (evt.state === 'done') {
+              const finalContent = evt.content ?? acc;
+              finishReattach(finalContent);
+              return;
+            }
+            if (evt.state === 'failed') {
+              finishReattach(null, evt.error ?? '流式失败');
+              return;
+            }
+            // 其余事件（工具/编排/产物）降级为 streaming meta 文案
+            useChatStreamStore.getState().setStreamingMeta(sid, assistantId, {
+              state: evt.state,
+            });
+          },
+          onError: (err) => finishReattach(null, err.message),
+          onDone: () => finishReattach(acc || null),
+        });
+      } catch {
+        finishReattach(null, '重新接上流失败');
+      }
+    },
+    [addMessage, updateMessage, markStreamActive, markStreamIdle],
+  );
+
   // Phase 6: /btw 补充消息
   const askBtw = useCallback(
     async (question: string) => {
@@ -967,5 +1080,6 @@ export function useChat() {
     planApprovalFor,
     /** PM2: 清除计划批准状态（批准执行或忽略时调用） */
     clearPlanApproval: useCallback(() => setPlanApprovalFor(null), []),
+    reattachActiveStream,
   };
 }

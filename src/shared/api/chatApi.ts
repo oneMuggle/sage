@@ -298,4 +298,120 @@ export const chatApi = {
 
     return { streamId, cancel };
   },
+
+  /**
+   * R25-D4: 查询会话当前活跃的 chat 流（renderer 重载/切回会话后 reattach 用）。
+   * 无活跃流返回 null。
+   */
+  async activeStream(sessionId: string): Promise<string | null> {
+    const res = await invoke<{ streamId: string | null }>('chat_stream_active', { sessionId });
+    return res.streamId ?? null;
+  },
+
+  /**
+   * R25-D4: 只监听既有流（不 create）—— renderer 重载后重新 attach 到
+   * 后端仍在跑的 chat 流。BroadcastQueue 会把 attach 之前缓冲的事件重放
+   * 给首个 subscriber，因此占位消息能追上完整内容。
+   * 返回 cancel()（unlisten + 停看门狗）。
+   */
+  async listenStream(
+    streamId: string,
+    handlers: {
+      onEvent: (event: AgentEvent) => void;
+      onError?: (error: Error) => void;
+      onDone?: () => void;
+    },
+  ): Promise<{ cancel: () => void }> {
+    const eventName = `chat-stream-${streamId}`;
+    let unlisten: UnlistenFn | null = null;
+    let settled = false;
+
+    const STREAM_WATCHDOG_SILENCE_MS = 180_000;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearWatchdog = (): void => {
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
+    };
+    const cancel = (): void => {
+      clearWatchdog();
+      if (unlisten) {
+        try {
+          unlisten();
+        } catch {
+          // ignore
+        }
+        unlisten = null;
+      }
+    };
+    const finishOnce = (cb: () => void): void => {
+      if (settled) return;
+      settled = true;
+      cancel();
+      try {
+        cb();
+      } catch {
+        // 用户回调抛错不外泄
+      }
+    };
+    const feedWatchdog = (): void => {
+      clearWatchdog();
+      watchdogTimer = setTimeout(() => {
+        if (settled) return;
+        clientLogger.error('listenStream: watchdog timeout, no events', {
+          streamId,
+          silenceMs: STREAM_WATCHDOG_SILENCE_MS,
+        });
+        finishOnce(() => {
+          if (handlers.onError) {
+            handlers.onError(
+              new Error(
+                `流式响应已 ${Math.round(STREAM_WATCHDOG_SILENCE_MS / 1000)} 秒无任何事件,已中断。`,
+              ),
+            );
+          }
+          handlers.onDone?.();
+        });
+      }, STREAM_WATCHDOG_SILENCE_MS);
+    };
+
+    try {
+      unlisten = await listen<AgentEvent>(eventName, (evt) => {
+        const payload = evt.payload;
+        feedWatchdog();
+        try {
+          handlers.onEvent(payload);
+        } catch (cbErr) {
+          if (handlers.onError) {
+            handlers.onError(cbErr instanceof Error ? cbErr : new Error(String(cbErr)));
+          }
+          finishOnce(() => handlers.onDone?.());
+          return;
+        }
+        if (payload.state === 'done' || payload.state === 'failed') {
+          if (payload.state === 'failed' && payload.error && handlers.onError) {
+            const errPayload = payload.error;
+            const errMsg =
+              typeof errPayload === 'string'
+                ? errPayload
+                : ((errPayload as { message?: string }).message ?? JSON.stringify(errPayload));
+            handlers.onError(new Error(errMsg));
+          }
+          finishOnce(() => handlers.onDone?.());
+        }
+      });
+    } catch (listenErr) {
+      const err = listenErr instanceof Error ? listenErr : new Error('订阅流式事件失败');
+      if (handlers.onError) handlers.onError(err);
+      throw new ApiException({
+        error: 'STREAM_LISTEN_FAILED',
+        message: err.message,
+        details: { streamId },
+      });
+    }
+
+    feedWatchdog();
+    return { cancel };
+  },
 };

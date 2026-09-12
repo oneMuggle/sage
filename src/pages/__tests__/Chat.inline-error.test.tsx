@@ -87,6 +87,7 @@ function baseChat(overrides: Record<string, unknown> = {}) {
     messages: [],
     loadMessages: vi.fn(),
     interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
     currentAgentId: null,
     streamingMessageId: null,
     iteration: 0,
