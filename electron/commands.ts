@@ -159,7 +159,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   export_session_markdown: {
     method: 'POST',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/export`,
-    body: (a) => ({ format: 'markdown' }),
+    body: () => ({ format: 'markdown' }),
   },
 
   // session workspace binding
