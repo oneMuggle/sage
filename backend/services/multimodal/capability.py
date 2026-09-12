@@ -37,6 +37,7 @@ class AIHttpRequest:
     headers: Dict[str, str] = field(default_factory=dict)
     body: Any = None       # JSON body
     data: Any = None       # FormData (multipart uploads, e.g. ASR)
+    files: Any = None      # For multipart file uploads (httpx files=)
     timeout: float = 60.0
 
 
@@ -73,6 +74,7 @@ class AICapability(ABC):
                 headers=req.headers,
                 json=req.body,
                 data=req.data,
+                files=req.files,
                 timeout=req.timeout,
             )
             is_json = raw.headers.get("content-type", "").startswith("application/json")

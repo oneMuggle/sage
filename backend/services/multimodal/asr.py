@@ -39,18 +39,15 @@ class ASRCapability(AICapability):
         if config.api_key:
             headers["Authorization"] = f"Bearer {config.api_key}"
 
-        fields = {"model": config.model}
+        files = {"file": (filename, file_content)}
+        data = {"model": config.model}
         if language:
-            fields["language"] = language
-
-        data = {
-            "file": (filename, file_content),
-            **{k: (None, v) for k, v in fields.items()},
-        }
+            data["language"] = language
 
         return AIHttpRequest(
             url=f"{config.base_url}/audio/transcriptions",
             headers=headers,
+            files=files,
             data=data,
         )
 

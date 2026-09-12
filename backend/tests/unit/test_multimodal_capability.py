@@ -170,3 +170,28 @@ def test_asr_parse_response_error():
     resp = AIHttpResponse(status_code=500, content=b'error')
     with pytest.raises(ValueError, match="500"):
         cap.parse_response(resp)
+
+
+def test_asr_build_request_produces_multipart():
+    """Verify that ASR request, when built by httpx, has content-type: multipart/form-data."""
+    import httpx
+    from backend.services.multimodal.capability import CapabilityConfig
+    from backend.services.multimodal.asr import ASRCapability
+    cap = ASRCapability()
+    config = CapabilityConfig(base_url="https://api.example.com", api_key="sk-test", model="whisper-1")
+    req = cap.build_request(config, file_content=b"fake audio data", language="zh")
+
+    # Build the actual httpx request to verify multipart encoding
+    client = httpx.Client()
+    try:
+        httpx_req = client.build_request(
+            method=req.method,
+            url=req.url,
+            headers=req.headers,
+            data=req.data,
+            files=req.files,
+        )
+        content_type = httpx_req.headers.get("content-type", "")
+        assert content_type.startswith("multipart/form-data")
+    finally:
+        client.close()
