@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { defaultRecommendations } from '../entities/welcome/recommendations';
+import { useSettings } from '../features/manage-settings/useSettings';
+import { OnboardingWizard } from '../features/onboarding/OnboardingWizard';
 import { useTypewriterPlaceholder } from '../features/welcome/useTypewriterPlaceholder';
 import { useI18n, type TranslationKey } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
@@ -42,6 +44,16 @@ export function Welcome() {
 
   const [prefill, setPrefill] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // R26: 首启向导 —— 尚无可用端点（缺 baseUrl 或必填 apiKey）时展示三步引导
+  const { settings: wizardSettings, isLoading: settingsLoading } = useSettings();
+  const [wizardDismissed, setWizardDismissed] = useState(false);
+  const needsOnboarding =
+    !settingsLoading &&
+    !wizardDismissed &&
+    wizardSettings.endpoints.every(
+      (e) => !e.baseUrl || (e.protocol !== 'ollama' && !e.apiKey),
+    );
 
   const handleRecommendationSelect = useCallback((rec: { prompt: string }) => {
     setPrefill(rec.prompt);
@@ -96,6 +108,10 @@ export function Welcome() {
           onSend={handleSubmit}
           disabled={submitting}
         />
+
+        {needsOnboarding && (
+          <OnboardingWizard onComplete={() => setWizardDismissed(true)} />
+        )}
 
         <AssistantRecommendations
           recommendations={defaultRecommendations}
