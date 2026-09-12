@@ -6,7 +6,7 @@ import logging
 import mimetypes
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Tuple
@@ -55,7 +55,7 @@ class MediaStore:
     ) -> MediaRef:
         """存储媒体文件，返回 MediaRef"""
         media_id = uuid.uuid4().hex[:12]
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         date_dir = f"{now:%Y}/{now:%m}/{now:%d}"
         (self.root / date_dir).mkdir(parents=True, exist_ok=True)
 
@@ -98,7 +98,7 @@ class MediaStore:
                 file_path=rel,
                 file_size=len(content),
                 created_at=datetime.fromtimestamp(
-                    f.stat().st_mtime, tz=UTC
+                    f.stat().st_mtime, tz=timezone.utc
                 ).isoformat(),
                 source="unknown",
             ), content
