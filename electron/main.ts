@@ -78,6 +78,7 @@ import {
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
 import { registerOfficeIpc } from './officeIpc';
+import { registerMediaIpc } from './mediaIpc';
 import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
@@ -1048,6 +1049,7 @@ async function registerIpcHandlers(): Promise<void> {
         headers?: Record<string, string>;
         body?: unknown;
         timeoutMs?: number;
+        responseType?: 'json' | 'arraybuffer';
       },
     ) => {
       if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
@@ -1101,6 +1103,10 @@ async function registerIpcHandlers(): Promise<void> {
         if (!response.ok) {
           const text = await response.text().catch(() => '');
           throw new Error(`Backend request failed: ${response.status} ${text}`);
+        }
+        // Support binary responses (e.g., media files) via responseType: 'arraybuffer'
+        if (request.responseType === 'arraybuffer') {
+          return response.arrayBuffer();
         }
         return response.json();
       } finally {
@@ -1448,6 +1454,20 @@ async function registerIpcHandlers(): Promise<void> {
       return handler(evt, ...args);
     });
   });
+
+  // Phase 2 (2026-09-12): Media IPC — multipart upload for chat attachments.
+  //   media:upload-attachment → FormData POST to /api/v1/chat/attachments
+  registerMediaIpc(
+    (channel, handler) => {
+      ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+        if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+        if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+        return handler(evt, ...args);
+      });
+    },
+    () => BACKEND_URL,
+    () => backendAuthToken ?? undefined,
+  );
 
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
