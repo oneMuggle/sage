@@ -47,7 +47,11 @@ MAX_CHUNKS = 20_000
 #: v2 语义分块：单个定义块超过该行数时内部再按滑窗切分
 SEMANTIC_MAX_LINES = 80
 #: 分块算法版本——与库内 meta.chunker_version 不符时全量重建
-CHUNKER_VERSION = "2"
+#: v3: 新增 chunks_fts 关键词通道（混合检索）
+CHUNKER_VERSION = "3"
+#: 加权 RRF：关键词精确命中的置信度高于语义近邻 → k 更小（贡献更大）
+RRF_K_VECTOR = 60
+RRF_K_KEYWORD = 30
 
 
 def _index_dir(workspace_root: str) -> Path:
@@ -77,7 +81,43 @@ def _connect(db_path: Path) -> sqlite3.Connection:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path)"
     )
+    _ensure_fts(conn)
     return conn
+
+
+def _ensure_fts(conn: sqlite3.Connection) -> bool:
+    """建 chunks_fts 虚表；sqlite 未编译 FTS5 时返回 False（降级纯向量）。"""
+    try:
+        conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5("
+            "path, start_line, content)"
+        )
+        return True
+    except sqlite3.OperationalError:
+        return False
+
+
+def _fts_insert(conn: sqlite3.Connection, path: str, start_line: int, content: str) -> None:
+    if not _ensure_fts(conn):
+        return
+    conn.execute(
+        "INSERT INTO chunks_fts (path, start_line, content) VALUES (?, ?, ?)",
+        (path, start_line, content),
+    )
+
+
+def _fts_delete_path(conn: sqlite3.Connection, path: str) -> None:
+    if not _ensure_fts(conn):
+        return
+    conn.execute("DELETE FROM chunks_fts WHERE path = ?", (path,))
+
+
+def _fts_match_query(query: str) -> Optional[str]:
+    """把自由文本规整为 FTS5 MATCH 语法（词间 OR；特殊字符剥离防语法炸）。"""
+    tokens = [t for t in re.split(r"[^0-9A-Za-z_\u4e00-\u9fff]+", query) if t]
+    if not tokens:
+        return None
+    return " OR ".join('"{}"'.format(t.replace('"', "")) for t in tokens[:12])
 
 
 def _iter_source_files(root: str) -> List[Path]:
@@ -305,8 +345,10 @@ def _index_workspace(root: str, config: Dict[str, str]) -> Dict[str, Any]:
         if (stored_dim is not None and int(stored_dim) != dim) or (
             stored_chunker is not None and stored_chunker != CHUNKER_VERSION
         ):
-            # chunker 版本变更（v1 滑窗 → v2 语义分块）同样全量重建
+            # chunker/检索版本变更（v1 滑窗 → v2 语义分块 → v3 FTS 混合）全量重建
             conn.execute("DELETE FROM chunks")
+            if _ensure_fts(conn):
+                conn.execute("DELETE FROM chunks_fts")
             conn.execute("DELETE FROM files")
         _meta_set(conn, "dim", str(dim))
         _meta_set(conn, "chunker_version", CHUNKER_VERSION)
@@ -352,6 +394,7 @@ def _index_workspace(root: str, config: Dict[str, str]) -> Dict[str, Any]:
                     "INSERT INTO chunks (path, start_line, content, vector) VALUES (?, ?, ?, ?)",
                     (rel, start_line, text, np.asarray(vector, dtype=np.float32).tobytes()),
                 )
+                _fts_insert(conn, rel, start_line, text)
             conn.execute(
                 "INSERT INTO files (path, mtime, size) VALUES (?, ?, ?) "
                 "ON CONFLICT(path) DO UPDATE SET mtime = excluded.mtime, size = excluded.size",
@@ -363,12 +406,30 @@ def _index_workspace(root: str, config: Dict[str, str]) -> Dict[str, Any]:
         gone = [p for p in known if p not in current]
         for rel in gone:
             conn.execute("DELETE FROM chunks WHERE path = ?", (rel,))
+            _fts_delete_path(conn, rel)
             conn.execute("DELETE FROM files WHERE path = ?", (rel,))
         conn.commit()
         chunk_count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
         return {"indexed": indexed, "chunks": chunk_count, "dim": dim}
     finally:
         conn.close()
+
+
+def _fts_candidates(
+    conn: sqlite3.Connection, match_query: str, pool: int
+) -> List[Tuple[str, int]]:
+    """FTS5 bm25 关键词路候选 [(path, start_line)]（不可用/无命中 → 空）。"""
+    if not _ensure_fts(conn) or not match_query:
+        return []
+    try:
+        rows = conn.execute(
+            "SELECT path, start_line FROM chunks_fts WHERE chunks_fts MATCH ? "
+            "ORDER BY bm25(chunks_fts) LIMIT ?",
+            (match_query, pool),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [(str(r[0]), int(r[1])) for r in rows]
 
 
 def _search_workspace(
@@ -391,19 +452,42 @@ def _search_workspace(
         norms = np.linalg.norm(matrix, axis=1) * np.linalg.norm(query_vector)
         norms[norms == 0] = 1e-9
         scores = (matrix @ query_vector) / norms
-        top = np.argsort(-scores)[:limit]
-        results: List[Dict[str, Any]] = []
-        for i in top:
+
+        pool = max(limit * 4, 16)
+        # 向量路候选（余弦序）
+        vec_ranked: List[Tuple[str, int, float]] = []
+        for i in np.argsort(-scores)[:pool]:
             if scores[i] <= 0:
                 continue
-            path, start_line, content, _ = rows[i]
-            snippet = content[:400]
+            path, start_line, _content, _ = rows[i]
+            vec_ranked.append((str(path), int(start_line), float(scores[i])))
+
+        # 关键词路候选（bm25 序）→ 加权 RRF 融合：
+        # 精确标识符命中（FTS）的置信度高于语义近邻，k 取更小使其可越过多级向量候选
+        contents = {(str(r[0]), int(r[1])): str(r[2]) for r in rows}
+        fused: Dict[Tuple[str, int], float] = {}
+        for rank, (path, start_line, _s) in enumerate(vec_ranked):
+            fused[(path, start_line)] = fused.get((path, start_line), 0.0) + 1.0 / (
+                RRF_K_VECTOR + rank + 1
+            )
+        match_query = _fts_match_query(query)
+        for rank, (path, start_line) in enumerate(_fts_candidates(conn, match_query, pool)):
+            fused[(path, start_line)] = fused.get((path, start_line), 0.0) + 1.0 / (
+                RRF_K_KEYWORD + rank + 1
+            )
+
+        ranked = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)[:limit]
+        results: List[Dict[str, Any]] = []
+        for (path, start_line), rrf in ranked:
+            content = contents.get((path, start_line), "")
+            if not content:
+                continue
             results.append(
                 {
                     "path": path,
-                    "start_line": int(start_line),
-                    "score": round(float(scores[i]), 4),
-                    "snippet": snippet,
+                    "start_line": start_line,
+                    "score": round(float(rrf), 6),
+                    "snippet": content[:400],
                 }
             )
         return results
