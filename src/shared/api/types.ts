@@ -1429,12 +1429,23 @@ export interface ExcelDataValidationSpec {
 }
 
 export interface ExcelConditionalFormatSpec {
-  rule_type: 'data_bar' | 'color_scale' | 'duplicate';
+  rule_type: 'data_bar' | 'color_scale' | 'duplicate' | 'icon_set';
   range: string;
   color?: string;
   min_color?: string;
   max_color?: string;
   fill_color?: string;
+  // Round 19：icon_set 图标样式（默认 3Arrows）
+  icon_style?:
+    | '3Arrows'
+    | '3TrafficLights1'
+    | '3Signs'
+    | '3Symbols'
+    | '4Arrows'
+    | '4RedToBlack'
+    | '4Rating'
+    | '5Arrows'
+    | '5Rating';
 }
 
 export interface OfficeExcelGenerateRequest {

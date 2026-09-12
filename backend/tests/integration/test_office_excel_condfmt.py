@@ -165,3 +165,56 @@ def test_office_create_tool_conditional_formats(tmp_path: Path) -> None:
     assert result.success, getattr(result, "error", None)
     ws = load_workbook(str(tmp_path / "tool.xlsx"))["预算"]
     assert ("B2:B3", "dataBar") in _cf_rules(ws)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Icon set (Round 19)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_icon_set_rule(tmp_path: Path) -> None:
+    _generate(
+        tmp_path,
+        [{
+            "name": "S",
+            "headers": ["任务", "进度"],
+            "rows": [["a", "10"], ["b", "90"]],
+            "conditional_formats": [{
+                "rule_type": "icon_set",
+                "range": "B2:B3",
+                "icon_style": "3TrafficLights1",
+            }],
+        }],
+    )
+    ws = load_workbook(str(tmp_path / "cf.xlsx"))["S"]
+    rules = _cf_rules(ws)
+    assert ("B2:B3", "iconSet") in rules
+
+
+def test_icon_set_invalid_style_rejected_at_model() -> None:
+    from pydantic import ValidationError
+
+    from backend.office.models import ExcelConditionalFormatSpec
+
+    with pytest.raises(ValidationError):
+        ExcelConditionalFormatSpec(
+            rule_type="icon_set",
+            range="B2:B3",
+            icon_style="7Smileys",
+        )
+
+
+def test_icon_set_default_style(tmp_path: Path) -> None:
+    path = _generate(
+        tmp_path,
+        [{
+            "name": "S",
+            "headers": ["进度"],
+            "rows": [["50"]],
+            "conditional_formats": [{"rule_type": "icon_set", "range": "B2:B2"}],
+        }],
+    )
+    ws = load_workbook(str(path))["S"]
+    for cf in ws.conditional_formatting:
+        for rule in cf.rules:
+            assert rule.iconSet.iconSet == "3Arrows"

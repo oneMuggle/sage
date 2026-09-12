@@ -776,7 +776,25 @@ class OfficeCreateTool(BaseTool):
                                                             "data_bar",
                                                             "color_scale",
                                                             "duplicate",
+                                                            "icon_set",
                                                         ],
+                                                    },
+                                                    "icon_style": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "3Arrows",
+                                                            "3TrafficLights1",
+                                                            "3Signs",
+                                                            "3Symbols",
+                                                            "4Arrows",
+                                                            "4RedToBlack",
+                                                            "4Rating",
+                                                            "5Arrows",
+                                                            "5Rating",
+                                                        ],
+                                                        "description": (
+                                                            "icon_set 图标样式（默认 3Arrows）"
+                                                        ),
                                                     },
                                                     "range": {
                                                         "type": "string",
