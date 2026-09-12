@@ -64,6 +64,7 @@ const baseSettings = {
   timezone: 'Asia/Shanghai',
   wiki: { useFolderPicker: true },
   orch: DEFAULT_ORCH_SETTINGS,
+  demoMode: false,
   version: '3.0.0',
 };
 
