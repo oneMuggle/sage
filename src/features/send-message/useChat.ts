@@ -357,8 +357,10 @@ export function useChat() {
         // 退回到 store streaming.content (向后兼容旧的非流式 done 事件)
         let finalContent = lastDoneContent ?? streamSnapshot?.content ?? '';
         const finalReasoning = streamSnapshot?.reasoning ?? '';
-        const finalToolCalls = selectSessionSlots(useChatStreamStore.getState(), sid)
-          .streamingToolCalls;
+        const finalToolCalls = selectSessionSlots(
+          useChatStreamStore.getState(),
+          sid,
+        ).streamingToolCalls;
         // MEDIUM-2: 若 LLM 没返回任何 content (后端只发 thinking 但没 done.content),
         // 占位符 '🤔 思考中…' 会留在 store。fallback 到错误文案让用户看到明确失败
         if (!finalContent && !finalReasoning && finalToolCalls.length === 0) {
@@ -449,10 +451,7 @@ export function useChat() {
               if (evt.state === 'permission_request' && evt.permission_request) {
                 usePermissionState.getState().setFromEvent(evt.permission_request, sid);
                 // S8: 后台会话卡在审批时用户看不到对话框 —— OS 通知提醒
-                maybeNotify(
-                  'approval',
-                  `${evt.permission_request.tool_name} 等待确认`,
-                );
+                maybeNotify('approval', `${evt.permission_request.tool_name} 等待确认`);
               }
 
               // M2 part B: ask_user_question 事件 → 写入 question store,
@@ -580,15 +579,15 @@ export function useChat() {
                     // agent 临时板之间允许后来者接管（轻量面,单派遣可视）。
                     if (!prev || prev.runId.startsWith('agent-')) {
                       return {
-                      runId,
-                      plan: [
-                        {
-                          task_id: taskId,
-                          agent_id: evt.agent_id ?? 'subagent',
-                          goal: evt.goal ?? '',
-                        },
-                      ],
-                      statuses: {},
+                        runId,
+                        plan: [
+                          {
+                            task_id: taskId,
+                            agent_id: evt.agent_id ?? 'subagent',
+                            goal: evt.goal ?? '',
+                          },
+                        ],
+                        statuses: {},
                         live: {
                           // 合成即并入首条事件（否则首条被吞,liveStep 缺失）
                           [taskId]: mergeLiveEvent(undefined, liveEvent),
@@ -612,9 +611,11 @@ export function useChat() {
               if (evt.state === 'approval_mode' && evt.run_id) {
                 const runId = evt.run_id;
                 const mode = evt.mode === 'auto' ? 'auto' : 'ask';
-                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) =>
-                  prev && prev.runId === runId ? { ...prev, approvalMode: mode } : prev,
-                );
+                useChatStreamStore
+                  .getState()
+                  .updateTaskBoard(sid, runId, (prev) =>
+                    prev && prev.runId === runId ? { ...prev, approvalMode: mode } : prev,
+                  );
                 return;
               }
 
@@ -675,8 +676,24 @@ export function useChat() {
                   let metadata = targetTc.metadata;
                   try {
                     const parsed = JSON.parse(tr.content);
-                    if (parsed && typeof parsed === 'object' && parsed.metadata) {
-                      metadata = parsed.metadata;
+                    if (parsed && typeof parsed === 'object') {
+                      // Extract existing metadata if present
+                      if (parsed.metadata) {
+                        metadata = parsed.metadata;
+                      }
+                      // Phase 3 (2026-09-12): extract multimodal tool output
+                      // TTS/image generation tools return media_ref/media_refs + api_url/api_urls
+                      if (!metadata) metadata = {};
+                      if (parsed.media_ref) {
+                        metadata.mediaRefs = [parsed.media_ref];
+                      } else if (parsed.media_refs && Array.isArray(parsed.media_refs)) {
+                        metadata.mediaRefs = parsed.media_refs;
+                      }
+                      if (parsed.api_url) {
+                        metadata.apiUrls = [parsed.api_url];
+                      } else if (parsed.api_urls && Array.isArray(parsed.api_urls)) {
+                        metadata.apiUrls = parsed.api_urls;
+                      }
                     }
                   } catch {
                     // Not JSON, ignore
@@ -755,7 +772,15 @@ export function useChat() {
         finishStream();
       }
     },
-    [currentSessionId, chatEndpoint, settings, addMessage, updateMessage, markStreamActive, markStreamIdle],
+    [
+      currentSessionId,
+      chatEndpoint,
+      settings,
+      addMessage,
+      updateMessage,
+      markStreamActive,
+      markStreamIdle,
+    ],
   );
   // U5: 队列 flush 用 ref 取最新 sendMessage(避免闭包捕获旧 isLoading)
   sendMessageRef.current = sendMessage;

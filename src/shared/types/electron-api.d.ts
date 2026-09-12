@@ -137,6 +137,21 @@ export interface OfficeElectronApiBridge {
 }
 
 /**
+ * Media bridge (Phase 2, 2026-09-12): multipart upload for chat attachments
+ * and binary media fetching for TTS/ASR/image generation.
+ */
+export interface MediaElectronApiBridge {
+  /** Upload audio file as multipart/form-data to /api/v1/chat/attachments */
+  uploadAttachment: (
+    buffer: ArrayBuffer,
+    filename: string,
+    contentType: string,
+  ) => Promise<{ media_ref: unknown; api_url: string }>;
+  /** Fetch media file as ArrayBuffer via sage:backend-request */
+  getMediaBlobUrl: (apiUrl: string) => Promise<ArrayBuffer>;
+}
+
+/**
  * Task 7 (2026-09-10): Journal template bridge for /journal side panel.
  *
  * - parseTemplate: POST /api/v1/office/journal/parse-template — parses a
@@ -168,6 +183,8 @@ export interface BackendRequest {
   body?: unknown;
   /** Optional bounded cancellation timeout for the main-process relay. */
   timeoutMs?: number;
+  /** Optional response type for binary data (default: 'json'). */
+  responseType?: 'json' | 'arraybuffer';
 }
 
 export interface ProviderConfigSummary {
@@ -195,10 +212,7 @@ export interface DiagnosticElectronApiBridge {
   exportBundle: (opts: {
     includePrompts: boolean;
     includeHostname: boolean;
-  }) => Promise<
-    | { ok: true; path: string }
-    | { ok: false; code: string; error: string }
-  >;
+  }) => Promise<{ ok: true; path: string } | { ok: false; code: string; error: string }>;
   preview: () => Promise<{
     count: number;
     oldestTs: string | null;
@@ -233,10 +247,7 @@ export interface UpdateElectronApiBridge {
   getConfig: () => Promise<UpdateConfig>;
   setChannel: (channel: UpdateChannel) => Promise<void>;
   onStateChanged: (handler: (payload: UpdateStateChangedEvent) => void) => UnlistenFn;
-  checkWith: (
-    providerId: string,
-    channel?: string,
-  ) => Promise<CheckResult | null>;
+  checkWith: (providerId: string, channel?: string) => Promise<CheckResult | null>;
 }
 
 export interface ElectronAPI {
@@ -256,6 +267,7 @@ export interface ElectronAPI {
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
   office: OfficeElectronApiBridge;
+  media: MediaElectronApiBridge;
   journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;
   providers: ProvidersElectronApiBridge;
