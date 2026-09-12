@@ -1,9 +1,10 @@
 // src/features/chat/__tests__/useConversationOutline.test.ts
 //
 // P2-3.10: 验证对话大纲 hook 的标题提取逻辑。
-import { describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
+import { useStore } from '../../../shared/lib/store';
 import { useConversationOutline } from '../useConversationOutline';
 
 // Mock store
@@ -11,13 +12,15 @@ vi.mock('../../../shared/lib/store', () => ({
   useStore: vi.fn(),
 }));
 
-import { useStore } from '../../../shared/lib/store';
-
-function mockMessages(messages: Array<{ id: string; session_id: string; role: string; content: string }>) {
-  (useStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector: (s: unknown) => unknown) => {
-    const state = { messages, isLoading: false };
-    return selector(state);
-  });
+function mockMessages(
+  messages: Array<{ id: string; session_id: string; role: string; content: string }>,
+) {
+  (useStore as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+    (selector: (s: unknown) => unknown) => {
+      const state = { messages, isLoading: false };
+      return selector(state);
+    },
+  );
 }
 
 describe('useConversationOutline', () => {

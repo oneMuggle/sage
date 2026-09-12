@@ -66,12 +66,16 @@ export function Layout() {
               mobileOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
           >
-            <ErrorBoundary fallback={(error, reset) => (
-              <div className="p-4 text-error">
-                Sidebar 错误: {error.message}
-                <button onClick={reset} className="ml-2 text-primary">重试</button>
-              </div>
-            )}>
+            <ErrorBoundary
+              fallback={(error, reset) => (
+                <div className="p-4 text-error">
+                  Sidebar 错误: {error.message}
+                  <button onClick={reset} className="ml-2 text-primary">
+                    重试
+                  </button>
+                </div>
+              )}
+            >
               <Sidebar />
             </ErrorBoundary>
           </div>
@@ -85,12 +89,16 @@ export function Layout() {
             className={collapsed ? 'flex-shrink-0' : 'relative'}
             style={collapsed ? { width: 56 } : undefined}
           >
-            <ErrorBoundary fallback={(error, reset) => (
-              <div className="w-64 p-4 text-error">
-                Sidebar 错误: {error.message}
-                <button onClick={reset} className="ml-2 text-primary">重试</button>
-              </div>
-            )}>
+            <ErrorBoundary
+              fallback={(error, reset) => (
+                <div className="w-64 p-4 text-error">
+                  Sidebar 错误: {error.message}
+                  <button onClick={reset} className="ml-2 text-primary">
+                    重试
+                  </button>
+                </div>
+              )}
+            >
               <Sidebar width={collapsed ? 56 : width} collapsed={collapsed} />
             </ErrorBoundary>
           </div>
@@ -102,12 +110,16 @@ export function Layout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <Titlebar />
         <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden">
-          <ErrorBoundary fallback={(error, reset) => (
-            <div className="flex items-center justify-center h-full text-error">
-              Page 错误: {error.message}
-              <button onClick={reset} className="ml-2 text-primary">重试</button>
-            </div>
-          )}>
+          <ErrorBoundary
+            fallback={(error, reset) => (
+              <div className="flex items-center justify-center h-full text-error">
+                Page 错误: {error.message}
+                <button onClick={reset} className="ml-2 text-primary">
+                  重试
+                </button>
+              </div>
+            )}
+          >
             <Outlet />
           </ErrorBoundary>
         </main>

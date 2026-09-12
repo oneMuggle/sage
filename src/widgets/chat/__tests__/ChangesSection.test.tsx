@@ -14,10 +14,20 @@ import { ChangesSection } from '../changes/ChangesSection';
 
 const mockGetChanges = vi.fn<() => Promise<WorkspaceChanges>>();
 const mockGetChangeDiff = vi.fn<(path?: string, staged?: boolean) => Promise<WorkspaceDiff>>();
-const mockRevertChanges = vi.fn<(...args: unknown[]) => Promise<{ reverted: string[]; errors: Array<{ path: string; error: string }> }>>();
+const mockRevertChanges =
+  vi.fn<
+    (
+      ...args: unknown[]
+    ) => Promise<{ reverted: string[]; errors: Array<{ path: string; error: string }> }>
+  >();
 const mockRevertHunks = vi.fn<(...args: unknown[]) => Promise<{ revertedHunks: number }>>();
 const mockListCheckpoints = vi.fn<(...args: unknown[]) => Promise<WorkspaceCheckpoint[]>>();
-const mockCreateCheckpoint = vi.fn<(...args: unknown[]) => Promise<{ checkpointId: string; files: number; skipped: string[]; bytes: number }>>();
+const mockCreateCheckpoint =
+  vi.fn<
+    (
+      ...args: unknown[]
+    ) => Promise<{ checkpointId: string; files: number; skipped: string[]; bytes: number }>
+  >();
 const mockRestoreCheckpoint = vi.fn<(...args: unknown[]) => Promise<{ restored: number }>>();
 
 vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
@@ -238,15 +248,30 @@ describe('ChangesSection', () => {
     });
   });
 
-  it('U2\': 检查点区默认收起，展开后创建快照并刷新列表', async () => {
+  it("U2': 检查点区默认收起，展开后创建快照并刷新列表", async () => {
     mockGetChanges.mockResolvedValue(sampleChanges);
     mockListCheckpoints
       .mockResolvedValueOnce([
-        { checkpointId: '20260908-120000-ab12cd', createdAt: '2026-09-08T12:00:00', bytes: 2048, files: 3 },
+        {
+          checkpointId: '20260908-120000-ab12cd',
+          createdAt: '2026-09-08T12:00:00',
+          bytes: 2048,
+          files: 3,
+        },
       ])
       .mockResolvedValue([
-        { checkpointId: '20260908-120000-ab12cd', createdAt: '2026-09-08T12:00:00', bytes: 2048, files: 3 },
-        { checkpointId: '20260908-130000-ef34ab', createdAt: '2026-09-08T13:00:00', bytes: 4096, files: 5 },
+        {
+          checkpointId: '20260908-120000-ab12cd',
+          createdAt: '2026-09-08T12:00:00',
+          bytes: 2048,
+          files: 3,
+        },
+        {
+          checkpointId: '20260908-130000-ef34ab',
+          createdAt: '2026-09-08T13:00:00',
+          bytes: 4096,
+          files: 5,
+        },
       ]);
     mockCreateCheckpoint.mockResolvedValue({
       checkpointId: '20260908-130000-ef34ab',
@@ -284,10 +309,15 @@ describe('ChangesSection', () => {
     });
   });
 
-  it('U2\': 恢复快照需 confirm，成功后刷新变更与快照列表', async () => {
+  it("U2': 恢复快照需 confirm，成功后刷新变更与快照列表", async () => {
     mockGetChanges.mockResolvedValue(sampleChanges);
     mockListCheckpoints.mockResolvedValue([
-      { checkpointId: '20260908-120000-ab12cd', createdAt: '2026-09-08T12:00:00', bytes: 2048, files: 3 },
+      {
+        checkpointId: '20260908-120000-ab12cd',
+        createdAt: '2026-09-08T12:00:00',
+        bytes: 2048,
+        files: 3,
+      },
     ]);
     mockRestoreCheckpoint.mockResolvedValue({ restored: 3 });
     vi.mocked(confirmDialog).mockClear();
@@ -318,7 +348,7 @@ describe('ChangesSection', () => {
     expect(confirmDialog).toHaveBeenCalled();
   });
 
-  it('U2\': 未绑定工作区时不渲染检查点区', async () => {
+  it("U2': 未绑定工作区时不渲染检查点区", async () => {
     mockGetChanges.mockRejectedValue(new Error('当前会话尚未绑定工作区'));
     render(
       <I18nProvider>

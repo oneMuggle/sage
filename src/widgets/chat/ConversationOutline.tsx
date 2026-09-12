@@ -21,9 +21,7 @@ interface ConversationOutlineProps {
 
 export function ConversationOutline({ items, isLoading }: ConversationOutlineProps) {
   if (isLoading) {
-    return (
-      <div className="p-3 text-sm text-muted">加载中…</div>
-    );
+    return <div className="p-3 text-sm text-muted">加载中…</div>;
   }
 
   if (items.length === 0) {
@@ -31,9 +29,7 @@ export function ConversationOutline({ items, isLoading }: ConversationOutlinePro
       <div className="p-3 text-sm text-muted flex flex-col items-center gap-2">
         <List className="w-8 h-8 opacity-30" />
         <div>暂无目录</div>
-        <div className="text-xs text-center">
-          对话中的 h2/h3 标题会自动生成目录
-        </div>
+        <div className="text-xs text-center">对话中的 h2/h3 标题会自动生成目录</div>
       </div>
     );
   }
@@ -46,9 +42,7 @@ export function ConversationOutline({ items, isLoading }: ConversationOutlinePro
           className={
             'w-full text-left px-3 py-1.5 hover:bg-bg-hover transition-colors ' +
             'text-sm truncate ' +
-            (item.level === 2
-              ? 'font-medium text-text'
-              : 'font-normal text-text-secondary pl-7')
+            (item.level === 2 ? 'font-medium text-text' : 'font-normal text-text-secondary pl-7')
           }
           title={item.text}
           data-testid={`outline-item-${index}`}

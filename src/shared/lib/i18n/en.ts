@@ -566,7 +566,8 @@ export const en: Record<TranslationKey, string> = {
   'office.template.source.builtin': 'Built-in',
   'office.template.source.workspace': 'Workspace',
   'office.template.hint.date': 'Date format YYYY-MM-DD',
-  'office.template.hint.rich': 'Supports {{ }} rich-text or table variables, as the template defines',
+  'office.template.hint.rich':
+    'Supports {{ }} rich-text or table variables, as the template defines',
   'office.template.hint.image': 'In-template image variables only; leave blank to skip',
   'office.template.create': 'Create document',
   'office.template.creating': 'Creating…',
@@ -671,7 +672,6 @@ export const en: Record<TranslationKey, string> = {
 
   // ─── P0-1 Message action menu (UI optimization, 2026-09-12) ─────
   'chat.more_actions': 'More actions',
-  'chat.regenerate': 'Regenerate',
   'chat.regenerate_failed': 'Failed to regenerate: {message}',
   'chat.quote_to_chat': 'Quote to chat',
   'chat.save_to_memory': 'Save to memory',

@@ -661,7 +661,6 @@ export const zh = {
 
   // ─── P0-1 消息级操作菜单 (UI 优化方案 2026-09-12) ─────
   'chat.more_actions': '更多操作',
-  'chat.regenerate': '重新生成',
   'chat.regenerate_failed': '重新生成失败：{message}',
   'chat.quote_to_chat': '引用到对话',
   'chat.save_to_memory': '保存到记忆',

@@ -188,7 +188,11 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
       return;
     setReverting(true);
     workspaceApi
-      .revertChangeHunks(sessionId, selectedPath, [...selectedHunks].sort((a, b) => a - b))
+      .revertChangeHunks(
+        sessionId,
+        selectedPath,
+        [...selectedHunks].sort((a, b) => a - b),
+      )
       .then((result) => {
         toast.success(`已撤销 ${result.revertedHunks} 个 hunk`);
         setSelectedHunks(new Set());
@@ -286,9 +290,7 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
           <button
             className={
               'p-1.5 rounded hover:bg-bg-hover transition-colors ' +
-              (splitView
-                ? 'text-primary bg-primary/10'
-                : 'text-text-secondary')
+              (splitView ? 'text-primary bg-primary/10' : 'text-text-secondary')
             }
             title={splitView ? '切换到统一 (unified) 视图' : '切换到分栏 (side-by-side) 视图'}
             aria-label="切换分栏/统一视图"
@@ -420,7 +422,10 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
                 <ChevronRight className="w-3.5 h-3.5" />
               )}
               <Archive className="w-3.5 h-3.5" />
-              <span>检查点{checkpoints !== null && checkpoints.length > 0 ? `（${checkpoints.length}）` : ''}</span>
+              <span>
+                检查点
+                {checkpoints !== null && checkpoints.length > 0 ? `（${checkpoints.length}）` : ''}
+              </span>
             </button>
             <span className="flex-1" />
             <button

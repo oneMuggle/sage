@@ -35,7 +35,14 @@ const FILE_CHANGE_TOOLS = new Set(['write_file', 'edit_file', 'apply_patch']);
 /** S4: completed ✓ 徽章的保鲜期 —— 超过后不再显示（避免整列表常亮绿勾）。 */
 const COMPLETED_FRESH_MS = 60_000;
 
-export function SessionItem({ session, isActive, onSelect, onDelete, onRename, messageHits }: SessionItemProps) {
+export function SessionItem({
+  session,
+  isActive,
+  onSelect,
+  onDelete,
+  onRename,
+  messageHits,
+}: SessionItemProps) {
   const { t } = useI18n();
   const [exporting, setExporting] = useState(false);
   // U4': inline 重命名态(标题位置换成输入框,Enter 提交 / Esc 取消)
@@ -49,22 +56,17 @@ export function SessionItem({ session, isActive, onSelect, onDelete, onRename, m
   // S7: 本次运行产物计数徽章
   const artifactCount = useArtifactEventsStore((s) => s.counts[session.id] ?? 0);
   // S4: 注意力点按会话聚合（旧实现是全局计数挂在"对话"导航上）
-  const hasPendingApproval = usePermissionState(
-    (s) => s.currentRequest?.session_id === session.id,
-  );
-  const hasPendingQuestion = useQuestionState(
-    (s) => s.currentQuestion?.session_id === session.id,
-  );
+  const hasPendingApproval = usePermissionState((s) => s.currentRequest?.session_id === session.id);
+  const hasPendingQuestion = useQuestionState((s) => s.currentQuestion?.session_id === session.id);
   // S9: 有启用的定时任务指向该会话 → ⏰ 标记
-  const hasCron = useScheduledTaskStore(
-    (s) => s.tasks.some((task) => task.session_id === session.id && task.enabled),
+  const hasCron = useScheduledTaskStore((s) =>
+    s.tasks.some((task) => task.session_id === session.id && task.enabled),
   );
 
   const isLive = slots.streaming != null;
   const dbStatus = session.run_status ?? 'idle';
   // 保鲜的 completed ✓：刚完成 60s 内显示，之后回归 idle 观感
-  const completedFresh =
-    !isLive && dbStatus === 'completed' && hasFreshRunAt(session.last_run_at);
+  const completedFresh = !isLive && dbStatus === 'completed' && hasFreshRunAt(session.last_run_at);
   const showCompletedTick = useExpireAfter(completedFresh, session.last_run_at, COMPLETED_FRESH_MS);
   const failed = !isLive && dbStatus === 'failed';
   const suspended = !isLive && dbStatus === 'suspended';

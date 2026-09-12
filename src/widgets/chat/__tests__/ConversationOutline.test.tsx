@@ -1,8 +1,8 @@
 // src/widgets/chat/__tests__/ConversationOutline.test.tsx
 //
 // P2-3.10: 验证对话目录组件的渲染逻辑。
-import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 
 import type { OutlineItem } from '../../../features/chat/useConversationOutline';
 import { ConversationOutline } from '../ConversationOutline';
@@ -20,9 +20,7 @@ describe('ConversationOutline', () => {
   });
 
   it('renders h2 items with font-medium', () => {
-    const items: OutlineItem[] = [
-      { text: '简介', messageId: 'm1', level: 2 },
-    ];
+    const items: OutlineItem[] = [{ text: '简介', messageId: 'm1', level: 2 }];
     render(<ConversationOutline items={items} isLoading={false} />);
     const button = screen.getByText('简介');
     expect(button).toBeInTheDocument();
@@ -31,9 +29,7 @@ describe('ConversationOutline', () => {
   });
 
   it('renders h3 items with indent and font-normal', () => {
-    const items: OutlineItem[] = [
-      { text: '背景', messageId: 'm1', level: 3 },
-    ];
+    const items: OutlineItem[] = [{ text: '背景', messageId: 'm1', level: 3 }];
     render(<ConversationOutline items={items} isLoading={false} />);
     const button = screen.getByText('背景');
     expect(button).toBeInTheDocument();
@@ -56,7 +52,11 @@ describe('ConversationOutline', () => {
 
   it('handles long titles with truncate', () => {
     const items: OutlineItem[] = [
-      { text: '这是一个非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常长的标题', messageId: 'm1', level: 2 },
+      {
+        text: '这是一个非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常非常长的标题',
+        messageId: 'm1',
+        level: 2,
+      },
     ];
     render(<ConversationOutline items={items} isLoading={false} />);
     const button = screen.getByText(/这是一个非常/);

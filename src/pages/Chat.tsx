@@ -79,8 +79,7 @@ export function Chat() {
   // "重发最后一条消息"的恢复入口,而不是让用户对着侧栏灰点猜。
   const currentSession = sessions.find((s) => s.id === currentSessionId);
   const interruptedRun =
-    currentSession?.run_status === 'failed' &&
-    currentSession?.last_error === INTERRUPTED_RUN_ERROR;
+    currentSession?.run_status === 'failed' && currentSession?.last_error === INTERRUPTED_RUN_ERROR;
   const [dismissedInterrupts, setDismissedInterrupts] = useState<Set<string>>(new Set());
   const showInterruptBanner =
     currentSessionId != null && interruptedRun && !dismissedInterrupts.has(currentSessionId);
@@ -454,10 +453,7 @@ export function Chat() {
   }, []);
 
   const handleSendMessageWithEditResend = useCallback(
-    async (
-      content: string,
-      options?: Parameters<typeof handleSendMessage>[1],
-    ) => {
+    async (content: string, options?: Parameters<typeof handleSendMessage>[1]) => {
       if (!editResendTarget) {
         await handleSendMessage(content, options);
         return;

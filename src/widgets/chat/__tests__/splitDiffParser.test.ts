@@ -23,18 +23,22 @@ describe('parseUnifiedDiff', () => {
     const rows = parseUnifiedDiff(diff);
     const contexts = rows.filter((r) => r.kind === 'context');
     expect(contexts).toHaveLength(3);
-    expect(contexts[0]).toMatchObject({ oldLine: 1, newLine: 1, oldText: 'first', newText: 'first' });
-    expect(contexts[2]).toMatchObject({ oldLine: 3, newLine: 3, oldText: 'third', newText: 'third' });
+    expect(contexts[0]).toMatchObject({
+      oldLine: 1,
+      newLine: 1,
+      oldText: 'first',
+      newText: 'first',
+    });
+    expect(contexts[2]).toMatchObject({
+      oldLine: 3,
+      newLine: 3,
+      oldText: 'third',
+      newText: 'third',
+    });
   });
 
   it('pairs one-to-one -/+ changes as modify rows', () => {
-    const diff = [
-      '@@ -1,2 +1,2 @@',
-      ' ctx',
-      '-old line',
-      '+new line',
-      ' ctx2',
-    ].join('\n');
+    const diff = ['@@ -1,2 +1,2 @@', ' ctx', '-old line', '+new line', ' ctx2'].join('\n');
     const rows = parseUnifiedDiff(diff);
     const modify = rows.find((r) => r.kind === 'modify');
     // ctx consumes old=1/new=1, so modify lands on old=2/new=2
@@ -48,13 +52,9 @@ describe('parseUnifiedDiff', () => {
   });
 
   it('emits unpaired removes as remove and unpaired adds as add', () => {
-    const diff = [
-      '@@ -1,3 +1,2 @@',
-      '-removed A',
-      '-removed B',
-      '+added only one',
-      ' ctx',
-    ].join('\n');
+    const diff = ['@@ -1,3 +1,2 @@', '-removed A', '-removed B', '+added only one', ' ctx'].join(
+      '\n',
+    );
     const rows = parseUnifiedDiff(diff);
     const removes = rows.filter((r) => r.kind === 'remove');
     const adds = rows.filter((r) => r.kind === 'add');
@@ -68,11 +68,7 @@ describe('parseUnifiedDiff', () => {
   });
 
   it('emits pure add (no paired remove) correctly', () => {
-    const diff = [
-      '@@ -1 +1,2 @@',
-      ' ctx',
-      '+only added',
-    ].join('\n');
+    const diff = ['@@ -1 +1,2 @@', ' ctx', '+only added'].join('\n');
     const rows = parseUnifiedDiff(diff);
     const adds = rows.filter((r) => r.kind === 'add');
     expect(adds).toHaveLength(1);

@@ -325,11 +325,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 ))}
               </Command.Group>
             )}
-            {(!globalResults.sessions?.length &&
+            {!globalResults.sessions?.length &&
               !globalResults.memories?.length &&
-              !globalResults.knowledge?.length) && (
-              <div className="py-6 text-center text-sm text-text-muted">无匹配结果</div>
-            )}
+              !globalResults.knowledge?.length && (
+                <div className="py-6 text-center text-sm text-text-muted">无匹配结果</div>
+              )}
           </>
         )}
       </Command.List>

@@ -15,7 +15,12 @@ interface ArtifactsSectionProps {
 }
 
 export function ArtifactsSection({
-  artifacts, loading, sessionId, onRefresh, onSelect, onReveal,
+  artifacts,
+  loading,
+  sessionId,
+  onRefresh,
+  onSelect,
+  onReveal,
 }: ArtifactsSectionProps) {
   if (!sessionId) {
     return <div className="p-3 text-sm text-muted">请先选择会话</div>;
@@ -25,14 +30,16 @@ export function ArtifactsSection({
   const handleDoubleClick = (artifact: Artifact) => {
     if (!window.electronAPI?.openArtifactWindow) return;
     // artifact.path 来自后端,格式: /abs/path/to/artifact.html
-    window.electronAPI.openArtifactWindow({
-      id: artifact.id,
-      name: artifact.name,
-      kind: artifact.kind,
-      path: artifact.path,
-    }).catch(() => {
-      // 静默失败:不支持的类型或 IPC 错误
-    });
+    window.electronAPI
+      .openArtifactWindow({
+        id: artifact.id,
+        name: artifact.name,
+        kind: artifact.kind,
+        path: artifact.path,
+      })
+      .catch(() => {
+        // 静默失败:不支持的类型或 IPC 错误
+      });
   };
 
   return (
@@ -62,7 +69,12 @@ export function ArtifactsSection({
         ) : (
           <div className="divide-y divide-border">
             {artifacts.map((a) => (
-              <ArtifactRow key={a.id} artifact={a} onSelect={onSelect} onDoubleClick={handleDoubleClick} />
+              <ArtifactRow
+                key={a.id}
+                artifact={a}
+                onSelect={onSelect}
+                onDoubleClick={handleDoubleClick}
+              />
             ))}
           </div>
         )}

@@ -572,7 +572,6 @@ function MessageComponent({
                 <Brain className="w-4 h-4" />
               </button>
             )}
-            )}
           </div>
         )}
       </div>

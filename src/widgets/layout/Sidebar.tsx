@@ -69,8 +69,14 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useI18n();
-  const { sessions, currentSessionId, setCurrentSessionId, loadSessions, deleteSession, updateSession } =
-    useStore();
+  const {
+    sessions,
+    currentSessionId,
+    setCurrentSessionId,
+    loadSessions,
+    deleteSession,
+    updateSession,
+  } = useStore();
   const { settings } = useSettings();
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const [connectionStatus, setConnectionStatus] = useState<
@@ -78,7 +84,11 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
   >('not-configured');
   const [latency, setLatency] = useState<number | null>(null);
 
-  const { order: sectionOrder, collapsed: collapsedSections, toggleCollapsed } = useSiderSections(SECTION_KEYS);
+  const {
+    order: sectionOrder,
+    collapsed: collapsedSections,
+    toggleCollapsed,
+  } = useSiderSections(SECTION_KEYS);
   const { orderedItems, reorder } = useStoredSiderOrder({
     storageKey: SESSION_ORDER_KEY,
     items: sessions,
@@ -247,9 +257,7 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
                 title={item.label}
                 className={clsx(
                   'flex items-center justify-center w-10 h-10 rounded-radius-sm transition-colors',
-                  isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-text-secondary hover:bg-bg-hover',
+                  isActive ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-bg-hover',
                 )}
               >
                 <Icon className="w-5 h-5" />
