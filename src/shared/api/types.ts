@@ -1232,6 +1232,14 @@ export interface WordHeaderFooterSpec {
   page_number?: boolean;
 }
 
+// 目录域设置（Round 13）：TOC 域由渲染器按标题样式生成（打开后更新域）。
+// Backend counterpart: WordTocSpec in backend/office/models.py。
+export interface WordTocSpec {
+  heading_text?: string;
+  levels?: string;
+  placeholder_text?: string;
+}
+
 export interface WordFormatSpec {
   page?: WordPageSetupSpec;
   body?: WordBodyStyleSpec;
@@ -1243,6 +1251,8 @@ export interface WordFormatSpec {
   numbering?: boolean;
   // Round 9：文末参考文献节样式（缺省：'参考文献' / 五号 / 悬挂缩进 0.74cm）
   bibliography?: BibliographySpec;
+  // Round 13：目录域（None = 不插入目录）
+  toc?: WordTocSpec;
 }
 
 // Word 插图（Round 8）：支持行内放置与题注自动编号。

@@ -756,6 +756,13 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # Title
         doc.add_heading(req.title, level=0)
 
+        # Round 13：目录域（标题之后、正文之前；分页使正文另起一页）。
+        # 目录标题为普通段落，不参与多级标题编号检查（Linter 对偶跳过）。
+        if req.format_spec is not None and req.format_spec.toc is not None:
+            from .word_layout import insert_toc_field
+
+            insert_toc_field(doc, req.format_spec.toc)
+
         # ── Round 9 引用：首现编号 + 文中上标标记 + 文末参考文献节 ────────
         # 编号 = citations key 在正文中的首次出现顺序；标记连续编号合并
         # （[1-3]）。references 与 citations 的一致性在此确定性校验。

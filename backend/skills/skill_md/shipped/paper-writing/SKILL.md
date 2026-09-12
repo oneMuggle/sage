@@ -4,7 +4,7 @@ description: 撰写期刊论文/学术论文的完整工作流——大纲确认
 license: Apache-2.0
 compatibility: 需要 Round 7-10 的 office 工具面（office_create 的 format_spec/references/citations、office_lint_word）
 when_to_use: 当用户要撰写期刊论文、学术论文、投稿稿件、毕业论文、课程论文的正文/摘要/参考文献,或用"写论文""帮我写论文""论文投稿""期刊投稿""毕业论文""课程论文""论文大纲""论文初稿"等表达时使用
-allowed-tools: write_file office_create office_parse_bibtex office_lint_word ask_user_question
+allowed-tools: write_file office_create office_parse_bibtex office_lint_word office_repair_word ask_user_question
 triggers: []
 ---
 
@@ -71,9 +71,12 @@ triggers: []
 
 ### 5. 自检与修复（交付前必做）
 
-调 `office_lint_word`（file_path=生成的文档，format_spec 与第 4 步一致），
-逐条向用户报告违规与修复建议；可修复项（如编号/题注错位）用重新生成
-或 `office_update` 修正后再复检，直到 `ok=true` 或用户接受。
+调 `office_lint_word`（file_path=生成的文档，format_spec 与第 4 步一致）。
+- 样式/编号/题注类违规 → `office_repair_word`（同 format_spec）自动修复
+  （默认写 -repaired.docx 新文件），修复后自动复检；
+- 引用类违规（citation/coverage）不可自动修——补齐缺失引用标记或核对
+  references 后重新生成；
+- 迭代直到 `ok=true` 或用户接受。
 
 ## 不做的事（YAGNI）
 
