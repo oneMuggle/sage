@@ -165,7 +165,13 @@ export function useChat() {
       sessionId?: string,
       officeRefs?: readonly ChatOfficeRef[],
       orchestrationMode?: ChatConfig['orchestrationMode'],
-      opts?: { planOverride?: TaskPlanItem[]; runId?: string; planMode?: boolean },
+      opts?: {
+        planOverride?: TaskPlanItem[];
+        runId?: string;
+        planMode?: boolean;
+        /** R23-D2: 聊天图片输入（base64 data URL，≤4 张/单张 5MiB） */
+        images?: string[];
+      },
     ) => {
       const sid = sessionId ?? currentSessionId;
       if (!sid) return;
@@ -784,6 +790,7 @@ export function useChat() {
           },
           config,
           officeRefs,
+          opts?.images,
         );
         // S3: 记入本会话句柄（cancel 用于同会话安全网取消 + interrupt 用）
         const handle = activeHandleRef.current.get(sid);

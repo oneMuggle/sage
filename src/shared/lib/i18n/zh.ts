@@ -40,7 +40,7 @@ export const zh = {
   'chat.hint':
     'Sage 会记住你的项目信息，无需重复说明上下文 · 支持 Markdown 语法 · 输入 / 呼出命令，@ 引用工作区文件',
   'chat.memory_applied': '条记忆已应用',
-  'chat.attachment_not_sent': '提示：附件/图片/知识文档暂不随消息发送（即将支持），仅 @ 引用的文件会生效',
+  'chat.attachment_not_sent': '提示：普通文件附件暂不随消息发送（即将支持）；图片可直接发送，@ 引用的文件会生效',
   'chat.memory_toggle': '查看本次引用的记忆',
   'chat.delete_message': '删除这条消息',
   'chat.delete_message_confirm': '确认删除这条消息？',

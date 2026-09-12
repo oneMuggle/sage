@@ -40,7 +40,7 @@ export const en: Record<TranslationKey, string> = {
   'chat.hint':
     'Sage remembers your project context · Supports Markdown · Type / for commands, @ to reference workspace files',
   'chat.memory_applied': 'memories applied',
-  'chat.attachment_not_sent': 'Note: attachments/images/knowledge docs are not sent with the message yet; only @-referenced files take effect',
+  'chat.attachment_not_sent': 'Note: regular file attachments are not sent yet; images are supported, and @-referenced files take effect',
   'chat.memory_toggle': 'View memories used for this reply',
   'chat.delete_message': 'Delete this message',
   'chat.delete_message_confirm': 'Delete this message?',

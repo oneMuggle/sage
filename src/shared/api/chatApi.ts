@@ -118,6 +118,8 @@ export const chatApi = {
     },
     config?: ChatConfig,
     officeRefs?: readonly ChatOfficeRef[],
+    /** R23-D2: 聊天图片输入（base64 data URL），后端限 4 张/单张 5MiB */
+    images?: string[],
   ): Promise<{ streamId: string; cancel: () => void }> {
     // 消息原文直传,理由同 chat()。
     if (!handlers || typeof handlers.onEvent !== 'function') {
@@ -163,6 +165,8 @@ export const chatApi = {
       run_id: config?.runId ?? null,
       // PM1 (round8): 计划模式 —— 只读调研 + 计划产出。
       plan_mode: config?.planMode ?? null,
+      // R23-D2: 聊天图片输入 —— 后端 ChatRequest.images（data URL 列表）
+      images: images ?? [],
     });
     const eventName = `chat-stream-${streamId}`;
 

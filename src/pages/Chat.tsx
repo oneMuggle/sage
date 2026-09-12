@@ -329,14 +329,31 @@ export function Chat() {
       clearError();
       const officeRefs = options?.officeRefs;
       const orchestrationMode = options?.orchestrationMode;
+      // R23-D2: 图片通道打通 —— data URL 直传后端 ChatRequest.images。
+      // 后端口径: ≤4 张、单张解码后 ≤5MiB；前端先行裁剪并提示。
+      const MAX_IMAGES = 4;
+      const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+      const dataUrls = (options?.images ?? [])
+        .map((img) => img.dataUrl)
+        .filter((d): d is string => Boolean(d));
+      const sized = dataUrls.filter((d) => (d.length * 3) / 4 <= MAX_IMAGE_BYTES);
+      if (sized.length < dataUrls.length) {
+        toast.warning('部分图片超过 5MiB 上限，已跳过');
+      }
+      const images = sized.slice(0, MAX_IMAGES);
+      if (sized.length > MAX_IMAGES) {
+        toast.warning(`最多发送 ${MAX_IMAGES} 张图片，已截取前 ${MAX_IMAGES} 张`);
+      }
       if (!currentSessionId) {
         const sessionId = await createSession();
         await sendMessage(content, sessionId, officeRefs, orchestrationMode, {
           planMode: options?.planMode,
+          images,
         });
       } else {
         await sendMessage(content, undefined, officeRefs, orchestrationMode, {
           planMode: options?.planMode,
+          images,
         });
       }
     },
