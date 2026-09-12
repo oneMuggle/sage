@@ -46,7 +46,10 @@ function cspInjectionPlugin(): Plugin {
         "base-uri 'none'",
         "form-action 'none'",
       ].join('; ');
-      return html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${csp}">`);
+      return html.replace(
+        '<head>',
+        `<head>\n    <meta http-equiv="Content-Security-Policy" content="${csp}">`,
+      );
     },
   };
 }
@@ -73,6 +76,14 @@ export default defineConfig({
     // Fail fast if the (potentially-overridden) port is taken; the worktree
     // helper writes a unique port into .env.local per worktree.
     strictPort: true,
+    // Proxy /api requests to backend in dev mode.
+    // Backend port can be overridden via PYTHON_BACKEND_PORT env var.
+    proxy: {
+      '/api': {
+        target: `http://127.0.0.1:${process.env.PYTHON_BACKEND_PORT ?? 8765}`,
+        changeOrigin: true,
+      },
+    },
     watch: {
       ignored: ['**/src-tauri/**', '**/archive/**', '**/dist-electron/**'],
     },
