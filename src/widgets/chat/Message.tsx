@@ -11,8 +11,9 @@ import {
   EyeOff,
   Pencil,
   RefreshCw,
-Check,
-BrainCircuit
+  Check,
+  BrainCircuit,
+  Quote,
 } from 'lucide-react';
 import { memo } from 'react';
 import { useEffect, useState } from 'react';
@@ -45,6 +46,10 @@ interface MessageProps {
   onRegenerate?: (messageId: string) => void;
   /** R17-B: 删除此条消息（两步确认，历史消息；流式中的消息不显示） */
   onDelete?: (messageId: string) => void;
+  /** P0-1: 引用此条消息到输入框 */
+  onQuote?: (message: MessageType) => void;
+  /** P0-1: 将此条消息内容保存到长期记忆 */
+  onSaveToMemory?: (message: MessageType) => void;
 }
 
 /** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
@@ -172,6 +177,8 @@ function MessageComponent({
   onEditResend,
   onRegenerate,
   onDelete,
+  onQuote,
+  onSaveToMemory,
 }: MessageProps) {
   const { t } = useI18n();
   const isUser = message.role === 'user';
@@ -190,6 +197,9 @@ function MessageComponent({
     (isUser || isAssistant) && Boolean((message.content ?? '').trim()) && !isStreaming;
   // R17-B: 删除仅对历史消息开放（流式中的占位消息不可删）
   const canDelete = Boolean(onDelete) && (isUser || isAssistant) && !isStreaming;
+  // P0-1: 引用/保存记忆对 user+assistant 均可
+  const canQuote = Boolean(onQuote) && (isUser || isAssistant);
+  const canSaveToMemory = Boolean(onSaveToMemory) && (isUser || isAssistant);
   const [copied, setCopied] = useState(false);
   // R17-E: 记忆召回明细展开态
   const [memoryExpanded, setMemoryExpanded] = useState(false);
@@ -468,7 +478,7 @@ function MessageComponent({
         )}
 
         {/* Action buttons */}
-        {(canCopy || onFeedback || canFork || canEditResend || canDelete || canRegenerate) && (
+        {(canCopy || onFeedback || canFork || canEditResend || canDelete || canRegenerate || canQuote || canSaveToMemory) && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
             {canCopy && (
               <button
@@ -540,6 +550,29 @@ function MessageComponent({
                 className="p-1"
               />
             )}
+            {canQuote && (
+              <button
+                onClick={() => onQuote?.(message)}
+                className="p-1 rounded hover:bg-bg-hover"
+                title={t('chat.quote_to_chat')}
+                aria-label={t('chat.quote_to_chat')}
+                data-testid="quote-message"
+              >
+                <Quote className="w-4 h-4" />
+              </button>
+            )}
+            {canSaveToMemory && (
+              <button
+                onClick={() => onSaveToMemory?.(message)}
+                className="p-1 rounded hover:bg-bg-hover"
+                title={t('chat.save_to_memory')}
+                aria-label={t('chat.save_to_memory')}
+                data-testid="save-to-memory"
+              >
+                <Brain className="w-4 h-4" />
+              </button>
+            )}
+            )}
           </div>
         )}
       </div>
@@ -559,6 +592,8 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.onFork === next.onFork &&
     prev.onEditResend === next.onEditResend &&
     prev.onRegenerate === next.onRegenerate &&
-    prev.onDelete === next.onDelete
+    prev.onDelete === next.onDelete &&
+    prev.onQuote === next.onQuote &&
+    prev.onSaveToMemory === next.onSaveToMemory
   );
 });

@@ -669,6 +669,15 @@ export const en: Record<TranslationKey, string> = {
   'chat.edit_resend_cancel': 'Cancel editing',
   'chat.edit_resend_forked': 'Forked into a new session; edited message sent',
 
+  // ─── P0-1 Message action menu (UI optimization, 2026-09-12) ─────
+  'chat.more_actions': 'More actions',
+  'chat.regenerate': 'Regenerate',
+  'chat.regenerate_failed': 'Failed to regenerate: {message}',
+  'chat.quote_to_chat': 'Quote to chat',
+  'chat.save_to_memory': 'Save to memory',
+  'chat.save_to_memory_success': 'Saved to memory',
+  'chat.save_to_memory_failed': 'Failed to save to memory: {error}',
+
   // ─── F12 Message full-text search (parity round 5 batch B) ─────
   'session.message_hits': '{count} message hits',
 };
