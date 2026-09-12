@@ -1218,7 +1218,8 @@ export interface OfficePptGenerateRequest {
 }
 
 export interface WordParagraphSpec {
-  heading?: 'h1' | 'h2' | 'h3';
+  // Round 20：heading 扩展到 h4/h5
+  heading?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5';
   style?: 'bullet' | 'numbered';
   text: string;
   // Round 9：文中引用（references 条目 key；段落尾部上标 [N]，首现编号）
@@ -1275,11 +1276,14 @@ export interface WordTocSpec {
 export interface WordFormatSpec {
   page?: WordPageSetupSpec;
   body?: WordBodyStyleSpec;
-  headings?: Partial<Record<'h1' | 'h2' | 'h3', WordHeadingStyleSpec>>;
+  // Round 20：headings 键扩展到 h4/h5
+  headings?: Partial<
+    Record<'h1' | 'h2' | 'h3' | 'h4' | 'h5', WordHeadingStyleSpec>
+  >;
   title?: WordHeadingStyleSpec;
   header?: WordHeaderFooterSpec;
   footer?: WordHeaderFooterSpec;
-  // Round 8：多级标题自动编号（h1/h2/h3 → 1 / 1.1 / 1.1.1 文本前缀）
+  // Round 8：多级标题自动编号（h1-h5 → 1 / 1.1 / 1.1.1 … 文本前缀）
   numbering?: boolean;
   // Round 9：文末参考文献节样式（缺省：'参考文献' / 五号 / 悬挂缩进 0.74cm）
   bibliography?: BibliographySpec;

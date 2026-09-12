@@ -844,7 +844,8 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # 图保持文末追加（批次 2.1 既有行为，含左对齐渲染零变化）。
         figure_no = 0
         table_no = 0
-        heading_counters = [0, 0, 0]
+        # Round 20：counters 扩到 5 级（h4/h5 编号）。
+        heading_counters = [0, 0, 0, 0, 0]
         numbering = bool(req.format_spec.numbering) if req.format_spec else False
         inline_images, trailing_images = _partition_images(
             req.images, len(req.paragraphs)
@@ -855,7 +856,7 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
 
         # Body paragraphs（段落写完后插入锚定在其后的行内插图）
         for pi, para in enumerate(req.paragraphs):
-            if para.heading in ("h1", "h2", "h3"):
+            if para.heading in ("h1", "h2", "h3", "h4", "h5"):
                 level = int(para.heading[1])
                 text = para.text
                 if numbering:

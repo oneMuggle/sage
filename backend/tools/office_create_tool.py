@@ -432,6 +432,46 @@ class OfficeCreateTool(BaseTool):
                                                     "space_after_pt": {"type": "number"},
                                                 },
                                             },
+                                            "h4": {
+                                                "type": "object",
+                                                "description": "四级标题样式（Round 20）",
+                                                "properties": {
+                                                    "font_size_pt": {"type": "number"},
+                                                    "bold": {"type": "boolean"},
+                                                    "color": {"type": "string"},
+                                                    "align": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "left",
+                                                            "center",
+                                                            "right",
+                                                            "justify",
+                                                        ],
+                                                    },
+                                                    "space_before_pt": {"type": "number"},
+                                                    "space_after_pt": {"type": "number"},
+                                                },
+                                            },
+                                            "h5": {
+                                                "type": "object",
+                                                "description": "五级标题样式（Round 20）",
+                                                "properties": {
+                                                    "font_size_pt": {"type": "number"},
+                                                    "bold": {"type": "boolean"},
+                                                    "color": {"type": "string"},
+                                                    "align": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "left",
+                                                            "center",
+                                                            "right",
+                                                            "justify",
+                                                        ],
+                                                    },
+                                                    "space_before_pt": {"type": "number"},
+                                                    "space_after_pt": {"type": "number"},
+                                                },
+                                            },
                                         },
                                     },
                                     "title": {
@@ -588,7 +628,10 @@ class OfficeCreateTool(BaseTool):
                                         },
                                         "heading": {
                                             "type": ["string", "null"],
-                                            "description": "'h1'/'h2'/'h3' 或 null",
+                                            "description": (
+                                                "'h1'/'h2'/'h3'/'h4'/'h5' 或 null"
+                                                "（Round 20 起支持 h4/h5）"
+                                            ),
                                         },
                                         "font_size": {
                                             "type": "number",

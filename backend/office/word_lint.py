@@ -35,7 +35,14 @@ from .models import (
 #: 尺寸类断言容差（cm）——docx 边距以 twips 存储存在取整误差
 _CM_TOLERANCE = 0.05
 
-_HEADING_STYLE_BY_LEVEL = {"h1": "Heading 1", "h2": "Heading 2", "h3": "Heading 3"}
+# Round 20：编号/样式检查覆盖 h1-h5。
+_HEADING_STYLE_BY_LEVEL = {
+    "h1": "Heading 1",
+    "h2": "Heading 2",
+    "h3": "Heading 3",
+    "h4": "Heading 4",
+    "h5": "Heading 5",
+}
 
 _HEADING_PREFIX_RE = re.compile(r"^(\d+(?:\.\d+)*)\s+")
 _FIGURE_CAPTION_RE = re.compile(r"^图(\d+)[　\s]")
@@ -203,16 +210,18 @@ def _check_header_footer(doc: Document, spec: WordFormatSpec, issues: List[WordL
 
 
 def _expected_heading_prefix(counters: List[int], level: int) -> str:
+    """与 word_layout.heading_number_prefix 同算法（跳级省略 0 段）。"""
     counters[level - 1] += 1
-    for idx in range(level, 3):
+    for idx in range(level, len(counters)):
         counters[idx] = 0
-    return ".".join(str(counters[i]) for i in range(level))
+    return ".".join(str(counters[i]) for i in range(level) if counters[i] != 0)
 
 
 def _check_numbering(
     doc: Document, issues: List[WordLintIssue], bib_heading: str
 ) -> None:
-    counters = [0, 0, 0]
+    # Round 20：counters 扩到 5 级（Heading 4/5 也纳入编号检查）。
+    counters = [0, 0, 0, 0, 0]
     for para in doc.paragraphs:
         style_name = para.style.name if para.style is not None else ""
         if style_name not in _HEADING_STYLE_BY_LEVEL.values():

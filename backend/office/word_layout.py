@@ -47,11 +47,13 @@ _ALIGN_MAP: Dict[str, int] = {
     "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
 }
 
-#: headings 键（h1/h2/h3）→ Word 内置样式名
+#: headings 键（h1-h5）→ Word 内置样式名（Round 20 扩展到 5 级）
 _HEADING_STYLE_NAMES: Dict[str, str] = {
     "h1": "Heading 1",
     "h2": "Heading 2",
     "h3": "Heading 3",
+    "h4": "Heading 4",
+    "h5": "Heading 5",
 }
 
 #: 颜色元素上需要清除的 theme 属性（优先级高于显式 w:val）
@@ -317,15 +319,16 @@ def add_caption(doc: Document, text: str, *, kind: str, number: int) -> None:
 
 
 def heading_number_prefix(counters: Any, level: int) -> str:
-    """推进 h1/h2/h3 计数器并返回 "N" / "N.M" / "N.M.K" 前缀。
+    """推进 h1-h5 计数器并返回编号前缀（"1" / "1.1" / "1.1.1" …）。
 
-    ``counters`` 为长度 3 的可变列表；高级别出现时重置下级计数
-    （h2 变化 → h3 归零），与常规文档编号规则一致。
+    ``counters`` 为可变列表（长度 = 支持的最大层级，当前 5）；高级别
+    出现时重置下级计数。**跳级时省略中间 0 段**（h1 后直接 h4 →
+    "1.1" 而非 "1.0.0.1"），生成器与 Linter 共用同一算法。
     """
     counters[level - 1] += 1
-    for idx in range(level, 3):
+    for idx in range(level, len(counters)):
         counters[idx] = 0
-    return ".".join(str(counters[i]) for i in range(level))
+    return ".".join(str(counters[i]) for i in range(level) if counters[i] != 0)
 
 
 def insert_toc_field(doc: Document, toc: Any) -> None:
