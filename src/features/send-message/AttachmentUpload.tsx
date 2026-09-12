@@ -4,7 +4,7 @@ import React, { useCallback, useRef, useState } from 'react';
 interface MediaRef {
   id: string;
   mime_type: string;
-  size_bytes: number;
+  file_size: number;
 }
 
 interface UploadResponse {
@@ -74,7 +74,7 @@ export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
             !mediaRef ||
             typeof mediaRef.id !== 'string' ||
             typeof mediaRef.mime_type !== 'string' ||
-            typeof mediaRef.size_bytes !== 'number' ||
+            typeof mediaRef.file_size !== 'number' ||
             typeof apiUrl !== 'string'
           ) {
             errorMessage = '上传响应格式无效';
@@ -83,7 +83,7 @@ export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
               media_ref: {
                 id: mediaRef.id,
                 mime_type: mediaRef.mime_type,
-                size_bytes: mediaRef.size_bytes,
+                file_size: mediaRef.file_size,
               },
               api_url: apiUrl,
             };
