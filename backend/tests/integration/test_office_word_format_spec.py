@@ -193,7 +193,7 @@ def test_footer_page_number_field(tmp_path: Path) -> None:
         {"body": {"font_size_pt": 0}},
         {"body": {"font_size_pt": 999}},
         {"page": {"margins_cm": {"top": -1}}},
-        {"headings": {"h4": {"font_size_pt": 12}}},
+        {"headings": {"h6": {"font_size_pt": 12}}},  # Round 20 起 h4 已合法
         {"title": {"color": "red"}},
     ],
 )

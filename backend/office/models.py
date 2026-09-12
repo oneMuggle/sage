@@ -352,11 +352,17 @@ class OfficePptGenerateRequest(BaseModel):
 
 
 class WordParagraphSpec(BaseModel):
-    """One paragraph in a generated Word document."""
+    """One paragraph in a generated Word document.
+
+    Round 20：heading 扩展到 h4/h5，并收紧为 Literal（非法层级在
+    模型层拒绝，而非生成期静默跳过）。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    heading: Optional[str] = Field(default=None, description="'h1' | 'h2' | 'h3' or None")
+    heading: Optional[Literal["h1", "h2", "h3", "h4", "h5"]] = Field(
+        default=None, description="'h1' | 'h2' | 'h3' | 'h4' | 'h5' or None"
+    )
     style: Optional[Literal["bullet", "numbered"]] = Field(
         default=None,
         description="'bullet' 或 'numbered' 列表样式（与 heading 二选一）",
@@ -614,12 +620,16 @@ class WordFormatSpec(BaseModel):
 
     page: Optional[WordPageSetupSpec] = None
     body: Optional[WordBodyStyleSpec] = None
-    headings: Optional[Dict[Literal["h1", "h2", "h3"], WordHeadingStyleSpec]] = None
+    # Round 20：headings 键扩展到 h4/h5（Heading 4/5 样式覆盖）。
+    headings: Optional[
+        Dict[Literal["h1", "h2", "h3", "h4", "h5"], WordHeadingStyleSpec]
+    ] = None
     title: Optional[WordHeadingStyleSpec] = None
     header: Optional[WordHeaderFooterSpec] = None
     footer: Optional[WordHeaderFooterSpec] = None
-    # Round 8：多级标题自动编号（h1/h2/h3 计数器，字面 "N.M.K" 文本前缀）。
-    numbering: bool = Field(default=False, description="为 h1/h2/h3 生成 1 / 1.1 / 1.1.1 编号前缀")
+    # Round 8：多级标题自动编号（h1-h5 计数器，字面 "N.M.K" 文本前缀）。
+    # Round 20：编号级别扩展到 5 级。
+    numbering: bool = Field(default=False, description="为 h1-h5 生成 1 / 1.1 / 1.1.1 … 编号前缀")
     # Round 9：文末参考文献节样式。None 时仍生成参考文献节（默认样式），
     # 仅当请求不带 references 时该子项才完全不生效。
     bibliography: Optional[BibliographySpec] = None
