@@ -1416,6 +1416,16 @@ export interface ExcelSheetSpec {
   number_formats?: Record<string, string>;
   // Round 17：条件格式（数据条/色阶/重复值高亮）
   conditional_formats?: ExcelConditionalFormatSpec[];
+  // Round 18：下拉数据验证（状态/分类列防手输错值）
+  data_validations?: ExcelDataValidationSpec[];
+}
+
+export interface ExcelDataValidationSpec {
+  range: string;
+  options: string[];
+  allow_blank?: boolean;
+  prompt_title?: string;
+  prompt?: string;
 }
 
 export interface ExcelConditionalFormatSpec {
