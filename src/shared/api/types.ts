@@ -266,6 +266,9 @@ export interface TaskStatusEvent {
   output_preview: string | null;
   // P0-7 (2026-08-20): 重试次数 —— 后端 _emit_task_status 一直携带,此前前端未声明被静默丢弃。
   retry_count?: number;
+  // RD13+ (round15): 重派来源任务 ID —— conductor 用 retry_of 重派时携带,
+  // 任务树据此渲染"重派"徽章（可追溯哪些任务是重做的）。普通任务无此键。
+  retry_of?: string;
   // live-events P0 (2026-09-06): 派发本批次的 conductor 工具调用 ID —— 聊天流内
   // 把子代理实时步骤关联到 "Delegate <goal>" 卡片的关联键。
   parent_tool_call_id?: string | null;

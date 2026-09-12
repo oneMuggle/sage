@@ -100,3 +100,39 @@ describe('TaskTreeSection — rerun failed button (RV3)', () => {
     expect(screen.queryByTestId('task-tree-rerun-failed')).toBeNull();
   });
 });
+
+// ============================================================================
+// RD13+ (round15): 重派徽章 —— retry_of 重派任务可追溯
+// ============================================================================
+
+describe('TaskTreeSection — 重派徽章 (RD13+)', () => {
+  it('retry_of 任务显示"重派"徽章', () => {
+    render(
+      <TaskTreeSection
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'done',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: null,
+              output_preview: null,
+              retry_count: 0,
+              retry_of: 't0',
+            },
+          } as TaskBoardState['statuses'],
+          progress: { total: 1, done: 1, running: 0, queued: 0, failed: 0, cancelled: 0 },
+        })}
+      />,
+    );
+    expect(screen.getByTestId('task-tree-redeploy-t1')).toBeInTheDocument();
+  });
+
+  it('普通任务不显示重派徽章', () => {
+    render(<TaskTreeSection board={makeBoard()} />);
+    expect(screen.queryByTestId('task-tree-redeploy-t1')).toBeNull();
+  });
+});
