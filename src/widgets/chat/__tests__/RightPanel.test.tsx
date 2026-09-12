@@ -38,6 +38,16 @@ describe('RightPanel', () => {
     fireEvent.click(screen.getByText('产物'));
     expect(screen.getByText(/暂无产物/)).toBeInTheDocument();
   });
+
+  // P0-3 (UI 优化方案 2026-09-12): 左边缘拖拽手柄存在 + 默认宽度 320px
+  it('renders resize handle with default width', () => {
+    render(<RightPanel {...props} />);
+    const handle = screen.getByTestId('right-panel-resize-handle');
+    expect(handle).toBeInTheDocument();
+    // 默认 320px (localStorage 无持久化值)
+    const aside = handle.parentElement;
+    expect(aside?.style.width).toBe('320px');
+  });
 });
 
 describe('RightPanel - close button', () => {

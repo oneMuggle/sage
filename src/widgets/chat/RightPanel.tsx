@@ -7,6 +7,7 @@ import { revealArtifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
 import type { TaskBoard } from '../../features/send-message/useChat';
 import type { ToolCall } from '../../shared/lib/store';
+import { useResizablePanel } from '../../shared/lib/useResizablePanel';
 
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
 import { ArtifactsSection } from './artifacts/ArtifactsSection';
@@ -105,15 +106,32 @@ function RightPanelInner({
   const [tab, setTab] = useState<Tab>('progress');
   const [selected, setSelected] = useState<Artifact | null>(null);
   const { artifacts, loading, refresh } = useArtifacts(sessionId);
+  // P0-3 (UI 优化方案 2026-09-12): 面板宽度可调 —— 拖拽左边缘手柄，
+  // 持久化到 localStorage（范围 280~600，默认 320）。
+  const { width, onMouseDown: onResizeMouseDown } = useResizablePanel({
+    storageKey: 'right-panel-width',
+    minWidth: 280,
+    maxWidth: 600,
+    defaultWidth: 320,
+    anchor: 'right',
+  });
 
   return (
     <aside
       className={
-        'fixed top-12 right-0 h-[calc(100vh-3rem)] w-80 bg-surface border-l border-border ' +
+        'fixed top-12 right-0 h-[calc(100vh-3rem)] bg-surface border-l border-border ' +
         'transform transition-transform duration-200 ease-in-out z-30 ' +
         (open ? 'translate-x-0' : 'translate-x-full')
       }
+      style={{ width: `${width}px` }}
     >
+      {/* P0-3: 左边缘拖拽手柄 —— 悬停时高亮 + cursor-col-resize 反馈 */}
+      <div
+        className="absolute top-0 left-0 h-full w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10"
+        onMouseDown={onResizeMouseDown}
+        aria-label="拖拽调整面板宽度"
+        data-testid="right-panel-resize-handle"
+      />
       {selected ? (
         <PanelHeader onClose={onToggle} />
       ) : (
