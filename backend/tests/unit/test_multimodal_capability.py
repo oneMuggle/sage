@@ -195,3 +195,53 @@ def test_asr_build_request_produces_multipart():
         assert content_type.startswith("multipart/form-data")
     finally:
         client.close()
+
+
+# ── Task 4.1: ImageGenCapability ──────────────────────────────────
+
+import base64
+
+
+def test_image_gen_build_request():
+    from backend.services.multimodal.capability import CapabilityConfig
+    from backend.services.multimodal.image_gen import ImageGenCapability
+    cap = ImageGenCapability()
+    config = CapabilityConfig(base_url="https://api.example.com", api_key="sk-test", model="dall-e-3")
+    req = cap.build_request(config, prompt="a cute cat", size="1024x1024", quality="standard")
+    assert req.url == "https://api.example.com/images/generations"
+    assert req.body["model"] == "dall-e-3"
+    assert req.body["prompt"] == "a cute cat"
+    assert req.body["response_format"] == "b64_json"
+    assert req.timeout == 120.0
+
+
+def test_image_gen_parse_response_b64(tmp_path, monkeypatch):
+    from backend.services.multimodal.capability import AIHttpResponse
+    from backend.services.multimodal.image_gen import ImageGenCapability
+    from backend.services.multimodal.media_store import MediaKind, MediaStore
+
+    cap = ImageGenCapability()
+    monkeypatch.setattr("backend.services.multimodal.image_gen.MediaStore",
+                        lambda: MediaStore(root=tmp_path))
+    png_bytes = b'\x89PNG\r\n\x1a\n' + b'\x00' * 100
+    b64_data = base64.b64encode(png_bytes).decode()
+    resp = AIHttpResponse(
+        status_code=200,
+        content=b'{}',
+        json={"data": [{"b64_json": b64_data, "revised_prompt": "a cute cat photo"}]},
+        content_type="application/json",
+    )
+    refs = cap.parse_response(resp, prompt="a cute cat")
+    assert len(refs) == 1
+    assert refs[0].kind == MediaKind.IMAGE
+    assert refs[0].source == "image_gen"
+    assert refs[0].metadata["prompt"] == "a cute cat"
+
+
+def test_image_gen_parse_response_error():
+    from backend.services.multimodal.capability import AIHttpResponse
+    from backend.services.multimodal.image_gen import ImageGenCapability
+    cap = ImageGenCapability()
+    resp = AIHttpResponse(status_code=400, content=b'bad request')
+    with pytest.raises(ValueError, match="400"):
+        cap.parse_response(resp)
