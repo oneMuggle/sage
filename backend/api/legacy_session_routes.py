@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -87,7 +87,7 @@ def list_sessions(
     return result
 
 
-def _batch_last_message_previews(session_ids: list[str]) -> dict[str, str]:
+def _batch_last_message_previews(session_ids: List[str]) -> Dict[str, str]:
     """批量取每个会话的最后一条 user/assistant 消息预览(截断 80 字符)。"""
     if not session_ids:
         return {}

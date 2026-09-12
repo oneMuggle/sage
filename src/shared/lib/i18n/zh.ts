@@ -130,7 +130,8 @@ export const zh = {
 
   // ─── 设置页 · MCP ─────────────────
   'settings.mcp.title': 'MCP 服务器',
-  'settings.mcp.desc': '管理外部 MCP 工具服务器（Model Context Protocol）。工具以 mcp__服务器__工具 前缀注册到智能体。',
+  'settings.mcp.desc':
+    '管理外部 MCP 工具服务器（Model Context Protocol）。工具以 mcp__服务器__工具 前缀注册到智能体。',
   'settings.mcp.refresh': '刷新',
   'settings.mcp.empty': '暂无 MCP 服务器',
   'settings.mcp.col.name': '名称',
@@ -530,8 +531,6 @@ export const zh = {
   'chat.regenerate_failed': '重新生成失败：{message}',
   'chat.delete_message': '删除这条消息',
   'chat.delete_message_confirm': '确认删除这条消息？',
-  'chat.copy': '复制',
-  'chat.copied': '已复制',
   'chat.quote_to_chat': '引用到对话',
   'chat.save_to_memory': '保存到记忆',
   'chat.save_to_memory_success': '已保存到记忆',

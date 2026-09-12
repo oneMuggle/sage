@@ -431,7 +431,9 @@ export function Chat() {
       toast.success(t('chat.learn_queued'));
       navigate('/skills?tab=drafts');
     } catch (e) {
-      toast.error(fill(t('chat.learn_failed'), { error: e instanceof Error ? e.message : String(e) }));
+      toast.error(
+        fill(t('chat.learn_failed'), { error: e instanceof Error ? e.message : String(e) }),
+      );
     }
   }, [currentSessionId, isLoading, navigate, t]);
 
@@ -610,22 +612,9 @@ export function Chat() {
   );
 
   // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
-  // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
-  // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
-  // M1：取消失败也照常清理，避免计划卡永久锁定 + unhandled rejection。
-  const handleCancelRun = async (runId: string) => {
-    try {
-      await orchRunClient.cancelRun(runId);
-    } catch {
-      // 409（run 已终态）等 → 前端照常清空计划卡（board 信息过时）
-    }
-    clearTaskBoard();
-  };
-
-
   // RV3 (round8): 只重跑失败任务 —— 调 rerun-failed 拿 planOverride
   // （done 子任务带 preset_output 回放），经 chatStream 重发全新 run。
-  // 注：handleCancelRun 本分支已有（:373），不重复引入。
+  // 注：handleCancelRun 本分支已有（:382），不重复引入。
   const handleRerunFailed = async (runId: string) => {
     if (!currentSessionId) return;
     try {

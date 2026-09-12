@@ -543,7 +543,6 @@ export const en: Record<TranslationKey, string> = {
   'office.batch.selectedCount': '{n} selected',
   'office.batch.selectRow': 'Select document',
 
-
   // ─── M6 生态扩展: 编排看板补充 i18n 键 ─────
   'orchestration.loading': 'Loading…',
   'orchestration.error': 'Error:',
@@ -619,7 +618,8 @@ export const en: Record<TranslationKey, string> = {
 
   // ─── U5' Edit & resend (parity round 5 batch A) ─────
   'chat.edit_resend': 'Edit & resend',
-  'chat.edit_resend_notice': 'Editing & resending: sending forks into a new session (original preserved)',
+  'chat.edit_resend_notice':
+    'Editing & resending: sending forks into a new session (original preserved)',
   'chat.edit_resend_cancel': 'Cancel editing',
   'chat.edit_resend_forked': 'Forked into a new session; edited message sent',
 
@@ -630,8 +630,6 @@ export const en: Record<TranslationKey, string> = {
   'chat.regenerate_failed': 'Failed to regenerate: {message}',
   'chat.delete_message': 'Delete this message',
   'chat.delete_message_confirm': 'Delete this message?',
-  'chat.copy': 'Copy',
-  'chat.copied': 'Copied',
   'chat.quote_to_chat': 'Quote to chat',
   'chat.save_to_memory': 'Save to memory',
   'chat.save_to_memory_success': 'Saved to memory',
