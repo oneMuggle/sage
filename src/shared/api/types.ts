@@ -1802,6 +1802,9 @@ export interface JournalFillFromContentRequest {
     sections: JournalContentSection;
     references: string[];
     citations?: string[];
+    // Round 21：结构化文献（fill 时用引用引擎格式化，优先于 references）
+    structured_references?: ReferenceSpec[];
+    citation_style?: 'gbt7714' | 'apa';
   };
   output_filename: string;
 }

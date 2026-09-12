@@ -124,3 +124,52 @@ def test_generate_structured_output_is_valid_docx(workspace):
     assert any("验证标题" in t for t in texts)
     assert any("验证摘要文字" in t for t in texts)
     assert any("验证；关键词" in t for t in texts)
+
+
+# --- Round 21: structured references → formatted bibliography ---
+
+
+def test_generate_structured_structured_references_formatted(workspace):
+    """structured_references 非空 → 文末参考文献用 [N] + GB/T 格式化。"""
+    from backend.office.models import ReferenceSpec
+
+    spec = parse_journal_spec(FIXTURE_DIR / "simple_chinese_template.docx")
+    content = JournalContent(
+        title="引用测试",
+        abstract="摘要",
+        sections={"keywords": "引用"},
+        structured_references=[
+            ReferenceSpec(
+                key="li2020",
+                ref_type="journal",
+                title="分布式系统综述",
+                authors=["李四", "王五"],
+                year="2020",
+                source="计算机学报",
+                volume="43",
+                issue="2",
+                pages="10-20",
+            )
+        ],
+    )
+    rec = generate_structured(spec, content, workspace, output_filename="ref.docx")
+    doc = Document(Path(rec.output_path))
+    texts = [p.text for p in doc.paragraphs]
+    assert "[1] 李四, 王五. 分布式系统综述[J]. 计算机学报, 2020, 43(2): 10-20." in texts
+
+
+def test_generate_structured_plain_references_unchanged(workspace):
+    """references 纯文本（无 structured_references）→ 原样写入（零变化）。"""
+    spec = parse_journal_spec(FIXTURE_DIR / "simple_chinese_template.docx")
+    content = JournalContent(
+        title="测试",
+        abstract="摘要",
+        sections={"keywords": "k"},
+        references=["原始文献一", "原始文献二"],
+    )
+    rec = generate_structured(spec, content, workspace, output_filename="plain.docx")
+    doc = Document(Path(rec.output_path))
+    joined = chr(10).join(p.text for p in doc.paragraphs)
+    assert "原始文献一" in joined
+    assert "原始文献二" in joined
+    assert "[1]" not in joined  # 纯文本模式无编号
