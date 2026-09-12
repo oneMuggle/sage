@@ -70,6 +70,8 @@ class ServerUpdateIn(BaseModel):
 
     enabled: Optional[bool] = None
     timeout_seconds: Optional[float] = Field(default=None, gt=0, le=600)
+    # R20-B: per-tool 级开关 —— 全量替换语义（传空数组 = 清空禁用清单）
+    disabled_tools: Optional[List[str]] = None
 
     class Config:
         extra = "forbid"
@@ -168,6 +170,7 @@ def update_mcp_server(name: str, payload: ServerUpdateIn) -> Dict[str, Any]:
             name,
             enabled=payload.enabled,
             timeout_seconds=payload.timeout_seconds,
+            disabled_tools=payload.disabled_tools,
         )
     except KeyError:
         raise HTTPException(status_code=404, detail=f"unknown MCP server: {name}")
