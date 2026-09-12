@@ -175,7 +175,32 @@ def _digest_word(file_path: str, workspace: str) -> str:
     # 批注概况附在摘要末尾（正文/表格之后，不受 budget 截断影响——
     # 批注是独立维度的事实，正文再长也不该把它挤掉）。
     lines.extend(_render_comment_overview(getattr(result, "comments", None) or []))
+    # Round 15 对偶：页眉/页脚/目录域概况（批注概况同款语义——独立维度，
+    # 不受 budget 截断）。读取结果缺该字段时 getattr 兜底为空。
+    lines.extend(_render_layout_overview(result))
     return "\n".join(lines)
+
+
+def _render_layout_overview(result) -> List[str]:
+    """页眉/页脚/目录域概况（Round 15 读取对偶）。
+
+    有任一信息才输出：每节一行 `页眉(第N节): …` / `页脚(第N节): …（含
+    页码域）`，目录域输出 instr。全部为空时返回空列表。
+    """
+    lines: List[str] = []
+    for hf in getattr(result, "headers_footers", None) or []:
+        if hf.header_text:
+            lines.append(f"页眉(第{hf.section}节): {hf.header_text}")
+        footer_bits = []
+        if hf.footer_text:
+            footer_bits.append(hf.footer_text)
+        if hf.has_page_number_field:
+            footer_bits.append("含页码域")
+        if footer_bits:
+            lines.append(f"页脚(第{hf.section}节): {' · '.join(footer_bits)}")
+    for instr in getattr(result, "toc_fields", None) or []:
+        lines.append(f"目录域: {instr}")
+    return lines
 
 
 def _fmt_num(value: float) -> str:
