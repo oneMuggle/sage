@@ -71,8 +71,47 @@ class TelegramConfig:
     poll_timeout_seconds: int = 25
 
     @classmethod
+    def load(cls) -> Optional[TelegramConfig]:
+        """双源配置（Round 19）: env 优先（部署覆盖），settings 兜底
+        （桌面用户无 env 配置习惯）。
+
+        - env: TELEGRAM_BOT_TOKEN / TELEGRAM_ALLOWED_CHAT_IDS
+        - settings: app_settings.telegram.{bot_token, allowed_chat_ids,
+          enabled}（经 SettingsRepository 持久化，前端设置卡可写）
+        - settings.enabled is False → 视为显式关闭（即使 env 有 token）
+        - 两者都无 → None（网关关闭）
+        """
+        import os
+
+        # kill-switch 最高优先: settings.enabled=False 视为显式关闭
+        # （部署覆盖与环境变量都不能越过用户的显式关闭）
+        node = cls._settings_node()
+        if node is not None and node.get("enabled") is False:
+            return None
+
+        token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+        raw_ids = (os.getenv("TELEGRAM_ALLOWED_CHAT_IDS") or "").strip()
+        if token:
+            allowed = [c.strip() for c in raw_ids.split(",") if c.strip()]
+            return cls(bot_token=token, allowed_chat_ids=allowed)
+
+        if node is None:
+            return None
+        token = str(node.get("bot_token") or "").strip()
+        if not token:
+            return None
+        raw_ids = node.get("allowed_chat_ids") or []
+        if isinstance(raw_ids, str):
+            raw_ids = raw_ids.split(",")
+        allowed = [c.strip() for c in raw_ids if str(c).strip()]
+        return cls(bot_token=token, allowed_chat_ids=allowed)
+
+    @classmethod
     def from_env(cls) -> Optional[TelegramConfig]:
-        """从环境变量构造；未配置 token 时返回 None（网关关闭）。"""
+        """从环境变量构造；未配置 token 时返回 None（网关关闭）。
+
+        兼容保留（Round 6 契约）；新调用方请用 ``load()``。
+        """
         import os
 
         token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
@@ -81,6 +120,20 @@ class TelegramConfig:
         raw_ids = (os.getenv("TELEGRAM_ALLOWED_CHAT_IDS") or "").strip()
         allowed = [c.strip() for c in raw_ids.split(",") if c.strip()]
         return cls(bot_token=token, allowed_chat_ids=allowed)
+
+    @staticmethod
+    def _settings_node() -> Optional[Dict[str, Any]]:
+        """读 app_settings.telegram 节点；无设置/无节点返回 None。"""
+        try:
+            from backend.data.settings_repo import SettingsRepository
+
+            app_settings = SettingsRepository().get_json("app_settings")
+        except Exception:  # noqa: BLE001 — 设置不可读视为未配置
+            return None
+        if not isinstance(app_settings, dict):
+            return None
+        node = app_settings.get("telegram")
+        return node if isinstance(node, dict) else None
 
     @property
     def enabled(self) -> bool:
@@ -186,7 +239,7 @@ def get_telegram_gateway() -> Optional[TelegramGateway]:
     """返回全局网关单例；未配置 token 时返回 None（网关关闭）"""
     global _gateway
     if _gateway is None:
-        config = TelegramConfig.from_env()
+        config = TelegramConfig.load()
         if config is None:
             return None
         _gateway = TelegramGateway(config)
