@@ -10,6 +10,8 @@ Tests the full pipeline:
 """
 
 import asyncio
+import contextlib
+import os
 
 import pytest
 
@@ -76,7 +78,6 @@ class TestPermissionSystem:
 
     def test_path_restrictions(self):
         """Path restrictions limit file access scope."""
-        import os
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -276,12 +277,10 @@ class TestRouter:
             assert decision.agent_id == "coder"
             assert decision.strategy_used == DispatchStrategy.CAPABILITY_BASED
         finally:
-            import os
 
-            try:
+            # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
+            with contextlib.suppress(PermissionError):
                 os.unlink(tmp_path)
-            except PermissionError:
-                pass  # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
 
 
 # ============================================================================
