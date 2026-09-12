@@ -5,7 +5,15 @@
 import type { ImportResult, RescanResult } from '../types/electron-api';
 
 import { invoke } from './desktopInvoke';
-import type { DeleteSkillResult, Skill, SkillExecuteRequest, SkillExecuteResult } from './types';
+import type {
+  ConsolidationAcceptResult,
+  ConsolidationScanResult,
+  ConsolidationSuggestion,
+  DeleteSkillResult,
+  Skill,
+  SkillExecuteRequest,
+  SkillExecuteResult,
+} from './types';
 import { handleApiError, withRetry } from './utils';
 
 export const skillsApi = {
@@ -127,6 +135,74 @@ export const skillsApi = {
           throw new Error('skills IPC bridge not available');
         }
         return await bridge.importSkills();
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 钉住 / 取消钉住技能（Round 17 管理面）。
+   * pin 后 archive 返回 409 `skill_pinned`、巡检不给出该技能的 archive 建议。
+   *
+   * Backend: POST /api/v1/skills/{name}/pin → `{name, pinned}`。
+   */
+  async pinSkill(name: string, pinned: boolean): Promise<{ name: string; pinned: boolean }> {
+    return withRetry(async () => {
+      try {
+        return await invoke<{ name: string; pinned: boolean }>('pin_skill', { name, pinned });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 固化巡检：扫描长期未用技能，生成 consolidation 建议（可选自动建 SkillDraft 草稿）。
+   *
+   * Backend: POST /api/v1/skills/consolidation/scan?auto_draft=N → `{suggestions, scanned, drafts_created}`。
+   * LLM 未装配时后端返回 503，由调用方 toast 引导。
+   */
+  async scanConsolidation(autoDraft = true): Promise<ConsolidationScanResult> {
+    return withRetry(async () => {
+      try {
+        return await invoke<ConsolidationScanResult>('skills_consolidation_scan', {
+          autoDraft,
+        });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 历史巡检建议列表（审计台账 action=consolidation_note，新→旧）。
+   *
+   * Backend: GET /api/v1/skills/consolidation/suggestions?limit=N。
+   */
+  async getConsolidationSuggestions(limit = 50): Promise<ConsolidationSuggestion[]> {
+    return withRetry(async () => {
+      try {
+        return await invoke<ConsolidationSuggestion[]>('skills_consolidation_suggestions', {
+          limit,
+        });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 采纳巡检建议：按技能名批量归档（已 pin 自动跳过、缺失名字回显 missing）。
+   *
+   * Backend: POST /api/v1/skills/consolidation/accept → `{archived, skipped_pinned, missing}`。
+   */
+  async acceptConsolidation(skillNames: string[]): Promise<ConsolidationAcceptResult> {
+    return withRetry(async () => {
+      try {
+        return await invoke<ConsolidationAcceptResult>('skills_consolidation_accept', {
+          skillNames,
+        });
       } catch (error) {
         throw handleApiError(error);
       }
