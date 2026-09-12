@@ -10,6 +10,7 @@ from backend.domain.network_policy import NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
 
 from .ask_user_tool import AskUserQuestionTool
+from .asr_tool import SpeechToTextTool
 from .base import BaseTool, ToolResult, ToolSchema
 from .bash_tool import BashOutputTool, BashTool, KillShellTool
 from .browser_tool import (
@@ -38,6 +39,7 @@ from .git_tool import (
     GitStashTool,
     GitStatusTool,
 )
+from .image_gen_tool import ImageGenerationTool
 from .memory_tool import MemorySaveTool, MemorySearchTool
 from .network_config import load_network_policy
 from .office_analyze_tool import OfficeAnalyzeTool
@@ -58,6 +60,7 @@ from .office_pdf_tool import (
     OfficeReadPdfFormTool,
     OfficeReadPdfTool,
 )
+from .office_repair_tool import OfficeRepairWordTool
 from .office_restore_tool import OfficeRestoreTool
 from .office_template_tool import (
     OfficeAnalyzeWordTemplateTool,
@@ -79,6 +82,7 @@ from .skill_tool import SkillTool
 from .structured_output_tool import StructuredOutputTool
 from .symbol_search_tool import SymbolSearchTool
 from .todo_tool import TodoWriteTool
+from .tts_tool import TextToSpeechTool
 from .web_tool import WebFetchTool, WebSearchTool
 
 
@@ -200,6 +204,8 @@ def register_all_tools(
     registry.register(OfficeBibTexTool(policy=policy))
     # Round 10 格式 Linter: office_lint_word（READ，对照 FormatSpec 校验 docx）
     registry.register(OfficeLintWordTool(policy=policy))
+    # Round 12 自动修复: office_repair_word（WRITE_LOCAL，lint→修复→复检）
+    registry.register(OfficeRepairWordTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -266,6 +272,11 @@ def register_all_tools(
     # Academic search skill: 显式触发技能沉淀（WRITE_LOCAL 写本地 SQLite）
     registry.register(SkillSaveTool(policy=policy))
 
+    # Multimodal tools: TTS / ASR / Image Generation
+    registry.register(TextToSpeechTool(policy=policy))
+    registry.register(SpeechToTextTool(policy=policy))
+    registry.register(ImageGenerationTool(policy=policy))
+
     # Register MCP tools (from external MCP servers like draw.io)
     try:
         from backend.mcp import register_mcp_tools
@@ -313,6 +324,7 @@ __all__ = [
     "OfficeAnalyzeTool",
     "OfficeBibTexTool",
     "OfficeLintWordTool",
+    "OfficeRepairWordTool",
     "OfficeJournalParseTemplateTool",
     "OfficeJournalFillFromContentTool",
     "OfficeJournalGenerateArticleTool",
@@ -351,5 +363,8 @@ __all__ = [
     "BrowserCloseTool",
     "SkillHotLoader",
     "SkillSaveTool",
+    "TextToSpeechTool",
+    "SpeechToTextTool",
+    "ImageGenerationTool",
     "register_all_tools",
 ]

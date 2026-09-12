@@ -20,6 +20,7 @@ import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
 import { SessionUsageBadge } from '../widgets/chat/SessionUsageBadge';
+import { ArchivesModal } from '../widgets/session';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
 function fill(template: string, vars: Record<string, string | number>): string {
@@ -123,6 +124,8 @@ export function Chat() {
   const wasAtBottomRef = useRef(true);
   const lastMsgLengthRef = useRef(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  // R17-A2: 压缩成功后 toast「查看归档」入口
+  const [archivesOpen, setArchivesOpen] = useState(false);
   const lastMsg = messages[messages.length - 1];
   const previousMessagesRef = useRef<typeof messages>([]);
 
@@ -356,6 +359,8 @@ export function Chat() {
             after: result.after,
             removed: result.removed,
           }),
+          // R17-A2: 被移除的前缀已归档，提供直达入口
+          { action: { label: '查看归档', onClick: () => setArchivesOpen(true) } },
         );
         await loadMessages(currentSessionId);
       } else if (result.ok) {
@@ -408,36 +413,6 @@ export function Chat() {
       }
     },
     [currentSessionId, isLoading, loadSessions, setCurrentSessionId, t],
-  );
-
-  // R17-C: 输入历史（最近优先、去重、截断 50 条）—— 供 InputCard
-  // 空输入 ↑ 回填上一条发送（兑现 shortcuts.ts 既有承诺）。
-  const inputHistory = useMemo(() => {
-    const seen = new Set<string>();
-    const history: string[] = [];
-    for (let i = messages.length - 1; i >= 0 && history.length < 50; i--) {
-      const m = messages[i];
-      if (m.role !== 'user' || !m.content.trim() || seen.has(m.content)) continue;
-      seen.add(m.content);
-      history.push(m.content);
-    }
-    return history;
-  }, [messages]);
-
-  // R17-B: 删除单条消息 —— messageApi.delete 落库后本地同步移除；
-  // 失败提示但不移动视图（历史保持可见）。
-  const handleDeleteMessage = useCallback(
-    async (messageId: string) => {
-      try {
-        await messageApi.delete(messageId);
-        removeMessage(messageId);
-      } catch (e) {
-        toast.error(
-          e instanceof Error ? e.message : String(e),
-        );
-      }
-    },
-    [removeMessage],
   );
 
   // U5' (对标增强第五轮批次 A): 编辑重发。
@@ -517,6 +492,56 @@ export function Chat() {
     ],
   );
 
+  // R18-A: 重新生成 —— 对 assistant 回答重跑一次。复用编辑重发的
+  // 非破坏性链路: 找到其前驱最近的 user 消息 → fork 截到该消息之前
+  // （beforeMessage 开区间）→ 切到 fork 会话原文重发。原会话保留,
+  // 可对比两次回答。失败提示,不降级重发（避免原会话出现重复轮次）。
+  const handleRegenerate = useCallback(
+    async (assistantMessageId: string) => {
+      if (!currentSessionId || isLoading) return;
+      const msgs = messagesRef.current;
+      const idx = msgs.findIndex((m) => m.id === assistantMessageId);
+      if (idx < 0) return;
+      let userIdx = -1;
+      for (let i = idx - 1; i >= 0; i--) {
+        if (msgs[i].role === 'user') {
+          userIdx = i;
+          break;
+        }
+      }
+      if (userIdx < 0) return;
+      const userMsg = msgs[userIdx];
+      try {
+        const forked = await sessionApi.fork(currentSessionId, userMsg.id, undefined, {
+          beforeMessage: true,
+        });
+        toast.success(t('chat.regenerate_forked'));
+        void loadSessions();
+        setCurrentSessionId(forked.id);
+        await sendMessage(userMsg.content, forked.id);
+      } catch (e) {
+        toast.error(
+          fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
+        );
+      }
+    },
+    [currentSessionId, isLoading, loadSessions, sendMessage, setCurrentSessionId, t],
+  );
+
+  // R17-B: 删除单条消息 —— messageApi.delete 落库后本地同步移除；
+  // 失败提示但不移动视图（历史保持可见）。
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      try {
+        await messageApi.delete(messageId);
+        removeMessage(messageId);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [removeMessage],
+  );
+
   // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
   // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
   // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
@@ -548,6 +573,7 @@ export function Chat() {
   // R17-D: 顶层错误不再整页替换 —— 历史消息全部被顶掉、上下文丢失
   // 是主流应用的反模式。改为在消息区下方渲染内联错误条，历史与输入框
   // 保持可见可用，用户可"关闭"清除错误继续对话。
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* 页面头部 */}
@@ -610,6 +636,7 @@ export function Chat() {
             streamingMessageId={streamingMessageId}
             onFork={handleFork}
             onEditResend={handleStartEditResend}
+            onRegenerate={handleRegenerate}
             onDelete={handleDeleteMessage}
           />
         )}
@@ -721,8 +748,6 @@ export function Chat() {
         workspacePath={workspacePath}
         injectedDraft={editResendTarget}
         editResendNotice={editResendNotice}
-        // R17-C: 输入历史（最近优先、去重）—— 空输入 ↑ 回填上一条发送
-        inputHistory={inputHistory}
       />
 
       {/* Artifacts Panel: 右侧抽屉（fixed 定位，叠加在页面右缘） */}
@@ -741,6 +766,13 @@ export function Chat() {
         // 自动派发）+ 清空 taskBoard。
         onCancelExecution={(runId) => void handleCancelRun(runId)}
         onRerunFailed={(runId) => void handleRerunFailed(runId)}
+      />
+
+      {/* R17-A2: 压缩谱系归档查看器（compact 成功 toast「查看归档」打开） */}
+      <ArchivesModal
+        isOpen={archivesOpen}
+        onClose={() => setArchivesOpen(false)}
+        sessionId={currentSessionId}
       />
     </div>
   );

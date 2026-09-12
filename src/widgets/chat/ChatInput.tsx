@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { memo, useCallback, useEffect, useState } from 'react';
 
 import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
 import { importOfficeReference } from '../../features/office/importOfficeReference';
@@ -59,11 +59,6 @@ interface ChatInputProps {
   disabled?: boolean;
   placeholder?: string;
   /**
-   * R17-C: 本会话已发送 user 消息（最近优先），透传 InputCard 实现
-   * 空输入 ↑ 回填上一条发送的输入历史导航。
-   */
-  inputHistory?: string[];
-  /**
    * U5' (对标增强第五轮批次 A): 编辑重发——外部注入输入框内容。
    * `nonce` 变化时用 `text` 覆盖当前草稿（点击同一条消息两次也能重注入）。
    */
@@ -94,7 +89,6 @@ function ChatInputInner({
   workspacePath,
   injectedDraft,
   editResendNotice,
-  inputHistory,
 }: ChatInputProps) {
   const { t } = useI18n();
 
@@ -136,9 +130,7 @@ function ChatInputInner({
       .list()
       .then((docs) => {
         if (cancelled) return;
-        setKnowledgeDocs(
-          docs.map((d) => ({ id: d.id, title: d.title, desc: d.description })),
-        );
+        setKnowledgeDocs(docs.map((d) => ({ id: d.id, title: d.title, desc: d.description })));
       })
       .catch(() => {
         if (!cancelled) setKnowledgeDocs([]);
@@ -407,6 +399,15 @@ function ChatInputInner({
     e.target.value = '';
   };
 
+  // Phase 4 (2026-09-12): audio attachment upload handler
+  const handleAudioAttachment = (attachment: {
+    mediaRef: { id: string; mime_type: string; file_size: number };
+    apiUrl: string;
+  }) => {
+    // TODO: integrate with message sending (attach to next user message)
+    console.warn('[ChatInput] Audio attachment uploaded:', attachment);
+  };
+
   const toggleKnowledgeRef = (doc: KnowledgeDocType) => {
     setKnowledgeRefs((prev) =>
       prev.find((r) => r.id === doc.id)
@@ -472,73 +473,73 @@ function ChatInputInner({
         </div>
       )}
       <InputCard
-      value={value}
-      onChange={handleChange}
-      onSubmit={handleSend}
-      placeholder={placeholder ?? t('chat.placeholder')}
-      disabled={disabled}
-      isLoading={isLoading}
-      onInterrupt={onInterrupt}
-      files={files}
-      images={images}
-      knowledgeRefs={knowledgeRefs}
-      officeRefs={officeRefs}
-      onRemoveFile={removeFile}
-      onRemoveImage={removeImage}
-      onRemoveKnowledge={(idx) => setKnowledgeRefs((prev) => prev.filter((_, i) => i !== idx))}
-      onRemoveOfficeRef={removeOfficeRef}
-      knowledgeDocs={knowledgeDocs}
-      showKnowledgeSelector={showKnowledgeSelector}
-      onToggleKnowledgeSelector={setShowKnowledgeSelector}
-      onToggleKnowledge={(docId) => {
-        const doc = knowledgeDocs.find((d) => d.id === docId);
-        if (doc) toggleKnowledgeRef(doc);
-      }}
-      onImageSelect={handleImageSelect}
-      onFileSelect={handleFileSelect}
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      onPaste={handlePaste}
-      isDragOver={isDragOver}
-      showSlashMenu={slashMenuOpen}
-      slashCommands={slashCommands}
-      slashSelectedIndex={slashSelectedIndex}
-      onSlashSelect={handleSlashSelect}
-      onSlashHighlight={setSlashSelectedIndex}
-      onSlashClose={() => setSlashMenuOpen(false)}
-      atFileMenu={
-        atQuery.query !== null && (
-          <AtFileMenu
-            query={atQuery.query}
-            onSelect={(selection) => {
-              void handleAtFileSelect(selection);
-            }}
-            onClose={handleAtFileClose}
-          />
-        )
-      }
-      inputHistory={inputHistory}
-      orchModeBar={
-        <div className="flex items-center gap-2 px-2 py-1 border-b border-border">
-          <label className="text-xs text-text-tertiary">{t('chat.orchMode.label')}</label>
-          <select
-            data-testid="orch-mode-select"
-            value={orchMode}
-            onChange={(e) => setOrchMode(e.target.value)}
-            className="px-2 py-0.5 text-xs border border-border rounded bg-bg text-text"
-          >
-            <option value="auto">{t('chat.orchMode.auto')}</option>
-            <option value="force_multi">{t('chat.orchMode.forceMulti')}</option>
-            <option value="template:research-write">
-              {t('chat.orchMode.templateResearchWrite')}
-            </option>
-            <option value="template:gather-analyze-report">
-              {t('chat.orchMode.templateGatherAnalyzeReport')}
-            </option>
-          </select>
-        </div>
-      }
-      hint={t('chat.hint')}
+        value={value}
+        onChange={handleChange}
+        onSubmit={handleSend}
+        placeholder={placeholder ?? t('chat.placeholder')}
+        disabled={disabled}
+        isLoading={isLoading}
+        onInterrupt={onInterrupt}
+        files={files}
+        images={images}
+        knowledgeRefs={knowledgeRefs}
+        officeRefs={officeRefs}
+        onRemoveFile={removeFile}
+        onRemoveImage={removeImage}
+        onRemoveKnowledge={(idx) => setKnowledgeRefs((prev) => prev.filter((_, i) => i !== idx))}
+        onRemoveOfficeRef={removeOfficeRef}
+        knowledgeDocs={knowledgeDocs}
+        showKnowledgeSelector={showKnowledgeSelector}
+        onToggleKnowledgeSelector={setShowKnowledgeSelector}
+        onToggleKnowledge={(docId) => {
+          const doc = knowledgeDocs.find((d) => d.id === docId);
+          if (doc) toggleKnowledgeRef(doc);
+        }}
+        onImageSelect={handleImageSelect}
+        onFileSelect={handleFileSelect}
+        onAudioAttachment={handleAudioAttachment}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onPaste={handlePaste}
+        isDragOver={isDragOver}
+        showSlashMenu={slashMenuOpen}
+        slashCommands={slashCommands}
+        slashSelectedIndex={slashSelectedIndex}
+        onSlashSelect={handleSlashSelect}
+        onSlashHighlight={setSlashSelectedIndex}
+        onSlashClose={() => setSlashMenuOpen(false)}
+        atFileMenu={
+          atQuery.query !== null && (
+            <AtFileMenu
+              query={atQuery.query}
+              onSelect={(selection) => {
+                void handleAtFileSelect(selection);
+              }}
+              onClose={handleAtFileClose}
+            />
+          )
+        }
+        orchModeBar={
+          <div className="flex items-center gap-2 px-2 py-1 border-b border-border">
+            <label className="text-xs text-text-tertiary">{t('chat.orchMode.label')}</label>
+            <select
+              data-testid="orch-mode-select"
+              value={orchMode}
+              onChange={(e) => setOrchMode(e.target.value)}
+              className="px-2 py-0.5 text-xs border border-border rounded bg-bg text-text"
+            >
+              <option value="auto">{t('chat.orchMode.auto')}</option>
+              <option value="force_multi">{t('chat.orchMode.forceMulti')}</option>
+              <option value="template:research-write">
+                {t('chat.orchMode.templateResearchWrite')}
+              </option>
+              <option value="template:gather-analyze-report">
+                {t('chat.orchMode.templateGatherAnalyzeReport')}
+              </option>
+            </select>
+          </div>
+        }
+        hint={t('chat.hint')}
       />
     </div>
   );

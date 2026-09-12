@@ -1,9 +1,13 @@
-import { RefreshCw, RotateCw, Upload } from 'lucide-react';
+import { RefreshCw, RotateCw, ScanSearch, Upload } from 'lucide-react';
 import React, { useCallback, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import { skillsApi, type Skill } from '../shared/api';
+import {
+  skillsApi,
+  type ConsolidationSuggestion,
+  type Skill,
+} from '../shared/api';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { RetryButton } from '../shared/ui/RetryButton';
@@ -19,6 +23,11 @@ const Skills: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [rescanLoading, setRescanLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+  // R17-A1 管理面：固化巡检（scan → 建议列表 → 逐条采纳）
+  const [scanLoading, setScanLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState<ConsolidationSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [acceptingNames, setAcceptingNames] = useState<string | null>(null);
 
   // Task 12 (2026-08-03): Read initial tab from URL search params.
   // Supports cross-page navigation (e.g. /learn in Chat → /skills?tab=drafts).
@@ -132,6 +141,66 @@ const Skills: React.FC = () => {
       // 失败: 回滚 + 提示
       setSkills(prev);
       toast.error(`归档操作失败: ${(error as Error).message}`);
+    }
+  };
+
+  // R17-A1 管理面：钉住 / 取消钉住 (optimistic + rollback + toast)
+  // pin 后后端拒绝归档（409 skill_pinned），巡检也不再给出该技能的 archive 建议
+  const handlePin = async (name: string, pinned: boolean) => {
+    const prev = skills;
+    setSkills((cur) => cur.map((s) => (s.name === name ? { ...s, pinned } : s)));
+    try {
+      await skillsApi.pinSkill(name, pinned);
+      toast.success(pinned ? `已钉住 ${name}` : `已取消钉住 ${name}`);
+    } catch (error) {
+      setSkills(prev);
+      toast.error(`钉住操作失败: ${(error as Error).message}`);
+    }
+  };
+
+  // R17-A1 管理面：固化巡检 — 扫描冷技能并拉取建议列表
+  const handleConsolidationScan = async () => {
+    setScanLoading(true);
+    try {
+      const result = await skillsApi.scanConsolidation(true);
+      const list = await skillsApi.getConsolidationSuggestions(50);
+      setSuggestions(list);
+      setShowSuggestions(true);
+      if (result.drafts_created > 0) {
+        toast.success(
+          `巡检完成：扫描 ${result.scanned} 个技能，${result.drafts_created} 条建议已生成草稿（待审批）`,
+        );
+      } else {
+        toast.success(`巡检完成：扫描 ${result.scanned} 个技能，${result.suggestions.length} 条建议`);
+      }
+    } catch (error) {
+      toast.error(`固化巡检失败: ${(error as Error).message}`);
+    } finally {
+      setScanLoading(false);
+    }
+  };
+
+  // R17-A1 管理面：采纳单条建议（按建议里的技能名批量归档）
+  const handleAcceptSuggestion = async (suggestion: ConsolidationSuggestion) => {
+    const key = suggestion.skill_names.join(',');
+    setAcceptingNames(key);
+    try {
+      const result = await skillsApi.acceptConsolidation(suggestion.skill_names);
+      if (result.skipped_pinned.length > 0) {
+        toast.info(`跳过已钉住: ${result.skipped_pinned.join(', ')}`);
+      }
+      if (result.archived.length > 0) {
+        toast.success(`已归档: ${result.archived.join(', ')}`);
+      }
+      if (result.archived.length === 0 && result.skipped_pinned.length === 0) {
+        toast.info('没有可归档的技能');
+      }
+      setSuggestions((cur) => cur.filter((s) => s !== suggestion));
+      await loadSkills();
+    } catch (error) {
+      toast.error(`采纳建议失败: ${(error as Error).message}`);
+    } finally {
+      setAcceptingNames(null);
     }
   };
 
@@ -309,7 +378,52 @@ const Skills: React.FC = () => {
               <p className="text-xs text-muted">总使用次数</p>
               <p className="text-xl font-bold font-mono text-success mt-1">{totalUsage}</p>
             </div>
+            <div className="flex-1 p-3.5 border border-border rounded-radius-sm bg-surface flex flex-col justify-between">
+              <p className="text-xs text-muted">固化巡检</p>
+              <button
+                type="button"
+                onClick={handleConsolidationScan}
+                disabled={scanLoading}
+                className="mt-1 px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text-secondary hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-start"
+              >
+                <ScanSearch className="w-3.5 h-3.5 inline mr-1" />
+                {scanLoading ? '巡检中...' : '扫描冷技能'}
+              </button>
+            </div>
           </div>
+
+          {/* R17-A1 巡检建议列表 */}
+          {showSuggestions && (
+            <details open className="mb-4 border border-border rounded-radius-sm bg-surface">
+              <summary className="px-3 py-2 text-sm text-text cursor-pointer select-none">
+                巡检建议（{suggestions.length}）
+              </summary>
+              <div className="px-3 pb-3 flex flex-col gap-2">
+                {suggestions.length === 0 && (
+                  <p className="text-xs text-muted">暂无建议 — 技能面干净或 LLM 未装配</p>
+                )}
+                {suggestions.map((s, i) => (
+                  <div
+                    key={`${s.created_at}-${i}`}
+                    className="flex items-center justify-between gap-3 p-2 rounded bg-bg-subtle"
+                  >
+                    <p className="text-xs text-text-secondary flex-1 truncate" title={JSON.stringify(s.suggestion)}>
+                      {s.skill_names.join(', ')}
+                      {typeof s.suggestion?.reason === 'string' ? ` — ${s.suggestion.reason}` : ''}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleAcceptSuggestion(s)}
+                      disabled={acceptingNames !== null}
+                      className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:text-text transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                    >
+                      {acceptingNames === s.skill_names.join(',') ? '采纳中...' : '采纳（归档）'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
 
           {/* 搜索框 */}
           <div className="mb-4">
@@ -328,6 +442,7 @@ const Skills: React.FC = () => {
             onToggle={handleToggle}
             onDelete={handleDelete}
             onArchive={handleArchive}
+            onPin={handlePin}
           />
         </TabsContent>
 

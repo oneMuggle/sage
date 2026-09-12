@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { DiagnosticCard } from '../../features/diagnostic';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { getDemoModeOverride, setDemoModeOverride } from '../../shared/api/demoRuntime';
 import { invoke } from '../../shared/api/desktopInvoke';
@@ -357,9 +358,7 @@ function CloseToTrayCard(): JSX.Element {
 
   const handleToggle = (v: boolean): void => {
     setEnabled(v);
-    window.electronAPI
-      ?.setCloseToTray?.(v)
-      .catch(() => undefined);
+    window.electronAPI?.setCloseToTray?.(v).catch(() => undefined);
   };
 
   return (
@@ -523,6 +522,10 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">诊断</h3>
         <DiagnosticsCard />
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">高级</h3>
+        <DiagnosticCard />
       </section>
     </div>
   );

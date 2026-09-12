@@ -1509,7 +1509,7 @@ class SageAgent:
                                             else:
                                                 output_value = result.content
                                             result_content = json.dumps(
-                                                output_value, ensure_ascii=False
+                                                output_value, ensure_ascii=False, default=str
                                             )
                                         else:
                                             result_content = result.error or "工具执行失败"

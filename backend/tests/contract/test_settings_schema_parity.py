@@ -99,13 +99,16 @@ def test_legal_wiki_keys_is_stable() -> None:
 
 
 def test_legal_model_selections_obj_keys_is_stable() -> None:
-    """LEGAL_MODEL_SELECTIONS_KEYS 是 modelSelections 对象 3 子字段."""
+    """LEGAL_MODEL_SELECTIONS_KEYS 是 modelSelections 对象 6 子字段."""
     assert (
         frozenset(
             {
                 "chatModel",
                 "visionModel",
                 "embeddingModel",
+                "ttsModel",
+                "asrModel",
+                "imageGenModel",
             }
         )
         == LEGAL_MODEL_SELECTIONS_KEYS

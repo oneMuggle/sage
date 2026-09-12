@@ -36,6 +36,23 @@ export interface SessionCompactResult {
   removed: number;
 }
 
+/** R17-A2: GET /sessions/{id}/lineage 归档条目（压缩前缀派生的归档会话） */
+export interface LineageArchive {
+  archive_session_id: string;
+  title: string;
+  message_count: number;
+  /** epoch ms；后端缺省时为 null */
+  archived_at: number | string | null;
+  /** 归档原因：compaction_prefix 等 */
+  reason?: string | null;
+}
+
+/** R17-A2: GET /sessions/{id}/lineage 响应（archives 新→旧） */
+export interface SessionLineage {
+  session_id: string;
+  archives: LineageArchive[];
+}
+
 /** U18: POST /sessions/{id}/export 响应（JSON 信封，html 为自包含文档文本） */
 export interface SessionExportResult {
   /** 自包含导出 HTML 全文（内联 CSS/JS/marked/highlight.js，离线可开） */
@@ -603,6 +620,30 @@ export interface Skill {
   dispatch?: SkillDispatch;
   // 生命周期态（curator）— active=近期在用 / stale=冷（含从未用）/ archived=用户归档
   lifecycle?: 'active' | 'stale' | 'archived';
+  // Round 17 管理面：钉住态（pin 后不可归档、巡检不给出 archive 建议）。
+  // 旧后端列表不透出该字段 — optional 向后兼容。
+  pinned?: boolean;
+}
+
+/** 巡检建议条目 — GET /skills/consolidation/suggestions（Round 17 管理面）。 */
+export interface ConsolidationSuggestion {
+  skill_names: string[];
+  suggestion: Record<string, unknown>;
+  created_at: number;
+}
+
+/** 固化巡检结果 — POST /skills/consolidation/scan。 */
+export interface ConsolidationScanResult {
+  suggestions: ConsolidationSuggestion[];
+  scanned: number;
+  drafts_created: number;
+}
+
+/** 巡检建议采纳结果 — POST /skills/consolidation/accept。 */
+export interface ConsolidationAcceptResult {
+  archived: string[];
+  skipped_pinned: string[];
+  missing: string[];
 }
 
 export interface SkillExecuteRequest {
@@ -1290,6 +1331,25 @@ export interface WordLintResult {
   warning_count: number;
   checked_rules: string[];
   issues: WordLintIssue[];
+}
+
+// Word 格式自动修复（Round 12）：lint → repair → 复检闭环。
+// Backend counterpart: WordRepairResult / WordRepairRequest
+// in backend/office/models.py。
+export interface WordRepairResult {
+  ok: boolean;
+  repaired_rules: string[];
+  output_path: string;
+  overwrite: boolean;
+  remaining: WordLintResult;
+}
+
+export interface WordRepairRequest {
+  workspace_path: string;
+  file_path: string;
+  format_spec: WordFormatSpec;
+  overwrite?: boolean;
+  max_size_bytes?: number;
 }
 
 export interface OfficeWordGenerateRequest {

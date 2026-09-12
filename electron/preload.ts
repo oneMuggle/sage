@@ -18,6 +18,7 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import type { WindowControlsBridge } from '../src/shared/api/windowControlsClient';
 import type {
+  DiagnosticElectronApiBridge,
   ImportResult,
   ImportedOfficeFile,
   JournalElectronApiBridge,
@@ -78,6 +79,7 @@ const electronAPI = {
     headers?: Record<string, string>;
     body?: unknown;
     timeoutMs?: number;
+    responseType?: 'json' | 'arraybuffer';
   }): Promise<T> {
     return ipcRenderer.invoke('sage:backend-request', request) as Promise<T>;
   },
@@ -210,6 +212,24 @@ const electronAPI = {
   } satisfies OfficeElectronApiBridge,
 
   /**
+   * Media bridge (Phase 2, 2026-09-12): multipart upload for chat attachments
+   * and binary media fetching for TTS/ASR/image generation.
+   */
+  media: {
+    uploadAttachment: (buffer: ArrayBuffer, filename: string, contentType: string) =>
+      ipcRenderer.invoke('media:upload-attachment', { buffer, filename, contentType }) as Promise<{
+        media_ref: unknown;
+        api_url: string;
+      }>,
+    getMediaBlobUrl: (apiUrl: string) =>
+      ipcRenderer.invoke('sage:backend-request', {
+        method: 'GET',
+        path: apiUrl,
+        responseType: 'arraybuffer',
+      }) as Promise<ArrayBuffer>,
+  },
+
+  /**
    * Journal template bridge (Task 7, 2026-09-10): parses .doc/.docx
    * journal templates into structured JournalSpec, lists saved specs,
    * fetches one by id, validates existing papers against a spec, and
@@ -249,7 +269,10 @@ const electronAPI = {
     setChannel: (channel: UpdateChannel) =>
       ipcRenderer.invoke('update:set-channel', channel) as Promise<void>,
     checkWith: (providerId: string, channel?: string) =>
-      ipcRenderer.invoke('update:check-with', { providerId, channel }) as Promise<CheckResult | null>,
+      ipcRenderer.invoke('update:check-with', {
+        providerId,
+        channel,
+      }) as Promise<CheckResult | null>,
     onStateChanged: (handler: (payload: UpdateStateChangedEvent) => void): UnlistenFn => {
       const listener = (_event: IpcRendererEvent, payload: UpdateStateChangedEvent) =>
         handler(payload);
@@ -268,14 +291,17 @@ const electronAPI = {
    *   provider:remove, provider:set-default, provider:test
    */
   providers: {
-    list: () => ipcRenderer.invoke('provider:list') as Promise<Array<{
-      id: string;
-      type: 'github' | 'gitee' | 'gitlab' | 'generic-http';
-      displayName: string;
-      enabled: boolean;
-      isDefault: boolean;
-      config: Record<string, unknown>;
-    }>>,
+    list: () =>
+      ipcRenderer.invoke('provider:list') as Promise<
+        Array<{
+          id: string;
+          type: 'github' | 'gitee' | 'gitlab' | 'generic-http';
+          displayName: string;
+          enabled: boolean;
+          isDefault: boolean;
+          config: Record<string, unknown>;
+        }>
+      >,
     get: (id: string) =>
       ipcRenderer.invoke('provider:get', { id }) as Promise<{
         id: string;
@@ -292,13 +318,15 @@ const electronAPI = {
       isDefault: boolean;
       config: Record<string, unknown>;
     }) => ipcRenderer.invoke('provider:add', cfg) as Promise<{ id: string }>,
-    update: (id: string, patch: Partial<{
-      displayName: string;
-      enabled: boolean;
-      isDefault: boolean;
-      config: Record<string, unknown>;
-    }>) =>
-      ipcRenderer.invoke('provider:update', { id, patch }) as Promise<{ ok: boolean }>,
+    update: (
+      id: string,
+      patch: Partial<{
+        displayName: string;
+        enabled: boolean;
+        isDefault: boolean;
+        config: Record<string, unknown>;
+      }>,
+    ) => ipcRenderer.invoke('provider:update', { id, patch }) as Promise<{ ok: boolean }>,
     remove: (id: string) =>
       ipcRenderer.invoke('provider:remove', { id }) as Promise<{ ok: boolean }>,
     setDefault: (id: string) =>
@@ -310,6 +338,33 @@ const electronAPI = {
         error?: string;
       }>,
   } satisfies ProvidersElectronApiBridge,
+
+  /**
+   * Task 10 (2026-09-11): Diagnostic export bridge for LLM trace bundles.
+   *
+   * - exportBundle: opens native save dialog, writes a zip archive with
+   *   LLM request/response traces + system metadata. Resolves to
+   *   { ok: true, path } on success or { ok: false, code, error } on failure.
+   * - preview: returns a summary of the trace dataset (count, timestamp
+   *   range, sample URLs, format version) without triggering export.
+   *
+   * Backed by `diagnostic:export` and `diagnostic:preview` IPC channels
+   * registered in electron/main.ts.
+   */
+  diagnostic: {
+    exportBundle: (opts: { includePrompts: boolean; includeHostname: boolean }) =>
+      ipcRenderer.invoke('diagnostic:export', opts) as Promise<
+        { ok: true; path: string } | { ok: false; code: string; error: string }
+      >,
+    preview: () =>
+      ipcRenderer.invoke('diagnostic:preview') as Promise<{
+        count: number;
+        oldestTs: string | null;
+        newestTs: string | null;
+        sampleUrls: string[];
+        version: string;
+      }>,
+  } satisfies DiagnosticElectronApiBridge,
 
   /**
    * T13 (2026-07-02): Log management bridge — Diagnostics card on Settings page.

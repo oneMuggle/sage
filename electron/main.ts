@@ -38,11 +38,7 @@ import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electr
 import { logger } from './logger';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
-import {
-  getCloseToTrayPath,
-  readCloseToTray,
-  writeCloseToTray,
-} from './closeToTray';
+import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
 logger.info('main: process started', {
   pid: process.pid,
   electronVer: process.versions.electron,
@@ -78,6 +74,7 @@ import {
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
 import { registerOfficeIpc } from './officeIpc';
+import { registerMediaIpc } from './mediaIpc';
 import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
@@ -102,6 +99,11 @@ import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
 import { resolveSageDbPath, resolveSageUserDataDir } from './userDataPaths';
 import { mainWindow, setMainWindow } from './mainWindow';
+import {
+  initDiagnosticExport,
+  runDiagnosticExport,
+  runDiagnosticPreview,
+} from './diagnosticExport';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -1043,6 +1045,7 @@ async function registerIpcHandlers(): Promise<void> {
         headers?: Record<string, string>;
         body?: unknown;
         timeoutMs?: number;
+        responseType?: 'json' | 'arraybuffer';
       },
     ) => {
       if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
@@ -1096,6 +1099,10 @@ async function registerIpcHandlers(): Promise<void> {
         if (!response.ok) {
           const text = await response.text().catch(() => '');
           throw new Error(`Backend request failed: ${response.status} ${text}`);
+        }
+        // Support binary responses (e.g., media files) via responseType: 'arraybuffer'
+        if (request.responseType === 'arraybuffer') {
+          return response.arrayBuffer();
         }
         return response.json();
       } finally {
@@ -1235,24 +1242,21 @@ async function registerIpcHandlers(): Promise<void> {
     return { enabled: closeToTrayEnabled };
   });
 
-  ipcMain.handle(
-    'sage:close-to-tray:set',
-    (evt, payload: { enabled: boolean }) => {
-      if (!isTrustedRenderer(evt.sender)) {
-        throw new Error('未授权的窗口请求');
-      }
-      closeToTrayEnabled = payload.enabled === true;
-      try {
-        writeCloseToTray(
-          getCloseToTrayPath(app.isPackaged, app.getPath('userData'), process.cwd()),
-          closeToTrayEnabled,
-        );
-      } catch (err) {
-        logger.warn('main: 写入 close-to-tray 偏好失败:', err);
-      }
-      return { ok: true, enabled: closeToTrayEnabled };
-    },
-  );
+  ipcMain.handle('sage:close-to-tray:set', (evt, payload: { enabled: boolean }) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      throw new Error('未授权的窗口请求');
+    }
+    closeToTrayEnabled = payload.enabled === true;
+    try {
+      writeCloseToTray(
+        getCloseToTrayPath(app.isPackaged, app.getPath('userData'), process.cwd()),
+        closeToTrayEnabled,
+      );
+    } catch (err) {
+      logger.warn('main: 写入 close-to-tray 偏好失败:', err);
+    }
+    return { ok: true, enabled: closeToTrayEnabled };
+  });
 
   ipcMain.handle('sage:demo-mode:set', (evt, payload: { demoMode: boolean }) => {
     if (!isTrustedRenderer(evt.sender)) {
@@ -1444,6 +1448,20 @@ async function registerIpcHandlers(): Promise<void> {
     });
   });
 
+  // Phase 2 (2026-09-12): Media IPC — multipart upload for chat attachments.
+  //   media:upload-attachment → FormData POST to /api/v1/chat/attachments
+  registerMediaIpc(
+    (channel, handler) => {
+      ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+        if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+        if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+        return handler(evt, ...args);
+      });
+    },
+    () => BACKEND_URL,
+    () => backendAuthToken ?? undefined,
+  );
+
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
   registerLogIpc(ipcMain, (sender) => isTrustedRenderer(sender));
@@ -1479,7 +1497,7 @@ async function registerIpcHandlers(): Promise<void> {
         config: cfg.config as any,
       }),
     );
-providerRegistry.register('gitee', (cfg) =>
+    providerRegistry.register('gitee', (cfg) =>
       createGiteeReleasesProvider({
         id: cfg.id,
         displayName: cfg.displayName,
@@ -1512,6 +1530,25 @@ providerRegistry.register('gitee', (cfg) =>
       mainWindow?.webContents.send('update:state-changed', payload);
     },
   });
+
+  // ─── T11: Diagnostic export IPC handlers ──────────────────────────────
+  // Renderer calls diagnostic:preview to show a summary of the trace dataset
+  // (count, timestamp range, sample URLs) before the user confirms export.
+  // diagnostic:export delegates to the shared runDiagnosticExport() which
+  // POSTs to the backend, shows a native save dialog, writes the zip, and
+  // reveals it in the file manager.
+  ipcMain.handle('diagnostic:preview', async (evt) => {
+    if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+    return runDiagnosticPreview();
+  });
+
+  ipcMain.handle(
+    'diagnostic:export',
+    async (evt, opts: { includePrompts: boolean; includeHostname: boolean }) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+      return runDiagnosticExport(opts);
+    },
+  );
 }
 
 /**
@@ -1815,6 +1852,12 @@ app.whenReady().then(async () => {
   // U12 (round4 批次 E): 系统托盘 + 全局快捷键唤起（Alt+Shift+S toggle）。
   // 内部全量降级:托盘/快捷键不可用只记日志,绝不阻断启动。
   setupTrayAndGlobalShortcut();
+  // T11: inject backend URL + auth token getter so both the IPC handler
+  // and the tray "导出诊断包…" menu can call the backend.
+  initDiagnosticExport({
+    backendUrl: BACKEND_URL,
+    getAuthToken: () => backendAuthToken,
+  });
   // Phase 4: pre-launch self-check (skippable via SAGE_DOCTOR_ON_START=false for CI).
   // fail-open by design: doctor never blocks the app from launching — its output
   // is captured into the NDJSON startup log so the user can diagnose degraded

@@ -74,6 +74,8 @@ OFFICE_TOOLS = (
     "office_parse_bibtex",
     # 2026-09-11 Round 10 格式 Linter：对照 FormatSpec 校验 docx（READ）
     "office_lint_word",
+    # 2026-09-12 Round 12 自动修复：lint→修复→复检（WRITE_LOCAL）
+    "office_repair_word",
 )
 
 # 本地开发环境助手（2026-09-04）：只读探测/诊断两件 + 审批后执行一件。
@@ -136,6 +138,10 @@ BROWSER_TOOLS = (
 # 启动期白名单校验防止 profile 漂移。
 SKILL_TOOLS = ("skill", "skill_save")
 
+# 多模态工具（2026-09-12 multimodal capabilities）：TTS 文本转语音 /
+# ASR 语音识别 / 图像生成。全部 EXTERNAL（调用外部 API），requires_tool_context=True。
+MULTIMODAL_TOOLS = ("text_to_speech", "speech_to_text", "generate_image")
+
 # 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 用户提问
 ORCH_TOOLS = ("agent", "todo_write", "structured_output", "ask_user_question")
 
@@ -162,6 +168,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(SYMBOL_TOOLS)
         | set(BROWSER_TOOLS)
         | set(SKILL_TOOLS)
+        | set(MULTIMODAL_TOOLS)
         | set(ORCH_TOOLS)
         | set(SANDBOX_TOOLS)
     )
@@ -177,6 +184,7 @@ __all__ = [
     "GIT_TOOLS",
     "JOURNAL_TOOLS",
     "MEMORY_TOOLS",
+    "MULTIMODAL_TOOLS",
     "OFFICE_TOOLS",
     "ORCH_TOOLS",
     "PATCH_TOOLS",

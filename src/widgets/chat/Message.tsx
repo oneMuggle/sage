@@ -1,6 +1,5 @@
 import {
   Copy,
-  Check,
   ThumbsUp,
   ThumbsDown,
   BookOpen,
@@ -11,7 +10,9 @@ import {
   Eye,
   EyeOff,
   Pencil,
-  BrainCircuit,
+  RefreshCw,
+Check,
+BrainCircuit
 } from 'lucide-react';
 import { memo } from 'react';
 import { useEffect, useState } from 'react';
@@ -20,9 +21,11 @@ import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 
+import { MediaAttachment } from '../../features/chat/MediaAttachment';
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
+
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 import { MermaidBlock } from './MermaidBlock';
@@ -39,6 +42,8 @@ interface MessageProps {
   onFork?: (messageId: string) => void;
   /** U5': 编辑此条 user 消息并重发（分叉其前缀，原会话保留） */
   onEditResend?: (messageId: string) => void;
+  /** R18-A: 重新生成此条 assistant 回答（fork 前缀 + 重发前驱 user 消息） */
+  onRegenerate?: (messageId: string) => void;
   /** R17-B: 删除此条消息（两步确认，历史消息；流式中的消息不显示） */
   onDelete?: (messageId: string) => void;
 }
@@ -166,6 +171,7 @@ function MessageComponent({
   isStreaming,
   onFork,
   onEditResend,
+  onRegenerate,
   onDelete,
 }: MessageProps) {
   const { t } = useI18n();
@@ -177,6 +183,8 @@ function MessageComponent({
   const canFork = Boolean(onFork) && (isUser || isAssistant);
   // U5': 编辑重发只对 user 消息有意义（重写用户输入，而非模型回答）
   const canEditResend = Boolean(onEditResend) && isUser;
+  // R18-A: 重新生成仅对 assistant 消息有意义（重跑回答，原会话保留）
+  const canRegenerate = Boolean(onRegenerate) && isAssistant && !isStreaming;
   // R17-A: 复制按钮恒显 —— 此前被 onFeedback 门控劫持（调用方从不传
   // onFeedback），主聊天没有任何复制入口。system/tool 行无复制语义。
   const canCopy =
@@ -281,6 +289,19 @@ function MessageComponent({
                         className="max-w-full rounded border border-border"
                         style={{ maxHeight: '400px', backgroundColor: '#ffffff' }}
                       />
+                    </div>
+                  )}
+                  {/* Phase 4 (2026-09-12): multimodal tool output (TTS/image generation) */}
+                  {tc.metadata?.mediaRefs && tc.metadata.mediaRefs.length > 0 && (
+                    <div className="px-2 pb-2">
+                      {tc.metadata.mediaRefs.map((ref, refIdx) => (
+                        <MediaAttachment
+                          key={ref.id || refIdx}
+                          url={ref.api_url ?? `/api/v1/media/${ref.id}`}
+                          mimeType={ref.mime_type}
+                          caption={`${ref.kind} — ${ref.source || tc.name}`}
+                        />
+                      ))}
                     </div>
                   )}
                 </div>
@@ -448,7 +469,7 @@ function MessageComponent({
         )}
 
         {/* Action buttons */}
-        {(canCopy || onFeedback || canFork || canEditResend || canDelete) && (
+        {(canCopy || onFeedback || canFork || canEditResend || canDelete || canRegenerate) && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
             {canCopy && (
               <button
@@ -478,6 +499,17 @@ function MessageComponent({
                   <ThumbsDown className="w-4 h-4" />
                 </button>
               </>
+            )}
+            {canRegenerate && (
+              <button
+                onClick={() => onRegenerate?.(message.id)}
+                className="p-1 rounded hover:bg-bg-hover"
+                title={t('chat.regenerate')}
+                aria-label={t('chat.regenerate')}
+                data-testid="regenerate-message"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
             )}
             {canEditResend && (
               <button
@@ -527,6 +559,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.attachments === next.attachments &&
     prev.onFork === next.onFork &&
     prev.onEditResend === next.onEditResend &&
+    prev.onRegenerate === next.onRegenerate &&
     prev.onDelete === next.onDelete
   );
 });

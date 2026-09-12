@@ -19,6 +19,7 @@ from backend.domain.tool_names import (
     GIT_TOOLS,
     JOURNAL_TOOLS,
     MEMORY_TOOLS,
+    MULTIMODAL_TOOLS,
     OFFICE_TOOLS,
     PATCH_TOOLS,
     RUNTIME_EXEC_TOOLS,
@@ -120,6 +121,10 @@ _PRIMARY_SEED_TOOLS = (
     # git_commit / checkpoint_restore 为 WRITE_LOCAL（INTERACTIVE 先审批）。
     *GIT_TOOLS,
     *CHECKPOINT_TOOLS,
+    # 2026-09-12: 多模态工具（Task 9.1）—— TTS 文本转语音 / ASR 语音识别 /
+    # 图像生成三件套。全部 EXTERNAL（调用外部 API），primary 作为 coordinator
+    # 可直接调用以满足用户的多模态需求（语音播报、图片生成等）。
+    *MULTIMODAL_TOOLS,
     # D2 (2026-09-09): plan_write 退役移除 —— 无消费者半成品（存储无读取方、
     # 无 SSE、无 UI），与 todo_write + 编排计划三套重复；继续暴露只会误导
     # LLM 把计划写进无处可去的地方。
@@ -257,6 +262,8 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_parse_bibtex",
                 # Round 10 格式 Linter: 对照 FormatSpec 校验 docx（READ）
                 "office_lint_word",
+                # Round 12 自动修复: lint→修复→复检（WRITE_LOCAL）
+                "office_repair_word",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -424,6 +431,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "office_parse_bibtex",
     # 2026-09-11 Round 10: 格式 Linter（与 writer.tools 同步）。
     "office_lint_word",
+    # 2026-09-12 Round 12: 自动修复（与 writer.tools 同步）。
+    "office_repair_word",
 ]
 
 
@@ -681,6 +690,9 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "传 output_path 另存。\n"
     "- 数据分析：office_analyze 用 pandas 做本地数据分析"
     "（describe/计数/聚合/相关性，可生成分析报告 xlsx）——数据不出本机。\n"
+    "- 格式修复（Round 12）：office_lint_word 查出的样式/编号/题注类违规，"
+    "可用 office_repair_word 自动修复（默认写 -repaired.docx 新文件，"
+    "overwrite=true 原地替换）——修复后自动复检。\n"
     "- 格式自检（Round 10）：office_lint_word 对照格式规范校验 docx，"
     "返回违规清单与修复建议——正式文档交付前建议跑一次。\n"
     "- 引用与参考文献（Round 9）：用户给 .bib 时先 office_parse_bibtex 解析；"

@@ -282,6 +282,18 @@ function inferCapabilities(modelId: string): ModelCapability[] {
   if (lower.includes('embed') || lower.includes('text-embedding') || lower.includes('vector')) {
     caps.push('embedding');
   }
+  // TTS
+  if (/tts|speech-|voice-/.test(lower)) {
+    caps.push('tts');
+  }
+  // ASR
+  if (/whisper|asr|transcri/.test(lower)) {
+    caps.push('asr');
+  }
+  // Image generation
+  if (/dall|image-gen|stable-diffusion|sdxl|flux/.test(lower)) {
+    caps.push('image_gen');
+  }
 
   return caps;
 }

@@ -617,6 +617,11 @@ export const en: Record<TranslationKey, string> = {
   // ─── Session export (U18 HTML session export) ──────
   'session.export_failed': 'Export failed: {message}',
   'session.export_html': 'Export as HTML',
+  'session.export_md': 'Export as Markdown',
+  'session.pin': 'Pin session',
+  'session.unpin': 'Unpin session',
+  'chat.regenerate': 'Regenerate',
+  'chat.regenerate_forked': 'Forked from the original question and regenerated',
   'session.export_html_exporting': 'Exporting…',
 
   // ─── Session status badges (S4/S5/S7/S9 multi-session parallel) ──────

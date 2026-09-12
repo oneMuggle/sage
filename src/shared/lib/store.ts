@@ -42,6 +42,15 @@ export interface ToolCall {
   metadata?: {
     imageData?: string; // base64 data URL for inline image display
     imageFormat?: string; // 'svg' | 'png'
+    // Phase 3 (2026-09-12): multimodal tool output (TTS/ASR/image generation)
+    mediaRefs?: Array<{
+      id: string;
+      kind: string;
+      mime_type: string;
+      api_url?: string;
+      source?: string;
+    }>;
+    apiUrls?: string[];
   };
 }
 

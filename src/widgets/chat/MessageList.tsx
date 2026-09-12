@@ -19,6 +19,8 @@ interface MessageListProps {
   onFork?: (messageId: string) => void;
   /** U5': 编辑重发回调（提供时 user 消息显示编辑按钮） */
   onEditResend?: (messageId: string) => void;
+  /** R18-A: 重新生成回调（提供时 assistant 消息显示重新生成按钮） */
+  onRegenerate?: (messageId: string) => void;
   /** R17-B: 消息删除回调（提供时历史消息显示两步确认删除按钮） */
   onDelete?: (messageId: string) => void;
 }
@@ -30,6 +32,7 @@ export function MessageList({
   streamingMessageId,
   onFork,
   onEditResend,
+  onRegenerate,
   onDelete,
 }: MessageListProps) {
   // U11: 只渲染最近 WINDOW_STEP 条, 更早的按需加载 —— 避免长会话全量
@@ -76,6 +79,7 @@ export function MessageList({
             isStreaming={message.id === streamingMessageId}
             onFork={onFork}
             onEditResend={onEditResend}
+            onRegenerate={onRegenerate}
             onDelete={onDelete}
           />
         ))}
