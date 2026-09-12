@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   HashRouter,
   Routes,
@@ -14,16 +14,26 @@ import { UpdateDialog } from './components/UpdateDialog';
 import { loadCurrentSessionId } from './entities/session/storage';
 import { useSettingsStore } from './features/manage-settings/settingsStore';
 import { onSessionNotifyClick } from './features/send-message/sessionNotify';
-import { Settings } from './pages';
-import { Agents } from './pages/Agents';
 import { Chat } from './pages/Chat';
-import { Knowledge } from './pages/Knowledge';
-import { Memory } from './pages/Memory';
-import { Office } from './pages/Office';
-import { Orchestration } from './pages/Orchestration';
-import { ScheduledTasks } from './pages/ScheduledTasks';
-import Skills from './pages/Skills';
 import { Welcome } from './pages/Welcome';
+
+// R24-D6: 路由级代码分割 —— 首屏只加载 Chat/Welcome，低频页面
+// (设置/记忆/智能体/技能/Office/知识库/编排/定时任务) 按需加载。
+// Electron file:// 下同样减少首屏解析/执行量。
+const Settings = lazy(() =>
+  import('./pages').then((m) => ({ default: m.Settings })),
+);
+const Agents = lazy(() => import('./pages/Agents').then((m) => ({ default: m.Agents })));
+const Knowledge = lazy(() => import('./pages/Knowledge').then((m) => ({ default: m.Knowledge })));
+const Memory = lazy(() => import('./pages/Memory').then((m) => ({ default: m.Memory })));
+const Office = lazy(() => import('./pages/Office').then((m) => ({ default: m.Office })));
+const Orchestration = lazy(() =>
+  import('./pages/Orchestration').then((m) => ({ default: m.Orchestration })),
+);
+const ScheduledTasks = lazy(() =>
+  import('./pages/ScheduledTasks').then((m) => ({ default: m.ScheduledTasks })),
+);
+const Skills = lazy(() => import('./pages/Skills').then((m) => ({ default: m.default })));
 import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
@@ -159,7 +169,14 @@ function App() {
         <AppStartupSettings />
         <SessionNotifyBridge />
         <Routes>
-          <Route path="/" element={<Layout />}>
+          <Route
+            path="/"
+            element={
+              <Suspense fallback={<div className="flex-1" />}>
+                <Layout />
+              </Suspense>
+            }
+          >
             <Route index element={<Navigate to="/chat" replace />} />
             <Route path="welcome" element={<Welcome />} />
             <Route path="chat" element={<ChatRoute />} />
