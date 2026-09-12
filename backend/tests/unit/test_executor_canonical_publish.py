@@ -49,7 +49,10 @@ def temp_db():
     db.init_db()
     yield db, tmp_path
     import os
-    os.unlink(tmp_path)
+    try:
+        os.unlink(tmp_path)
+    except PermissionError:
+        pass  # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
 
 
 @pytest.fixture()

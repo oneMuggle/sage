@@ -50,7 +50,10 @@ def test_fresh_database_does_not_create_legacy_skills_table():
             ).fetchone()
             assert row is None
     finally:
-        os.unlink(db_path)
+        try:
+            os.unlink(db_path)
+        except PermissionError:
+            pass  # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
 
 
 def test_init_db_preserves_existing_legacy_skills_table():
@@ -80,7 +83,10 @@ def test_init_db_preserves_existing_legacy_skills_table():
             assert table is not None
             assert row == ("legacy-1", "旧技能")
     finally:
-        os.unlink(db_path)
+        try:
+            os.unlink(db_path)
+        except PermissionError:
+            pass  # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
 
 
 # ------------------------------------------------------------------ #
@@ -99,7 +105,10 @@ def test_review_events_table_created():
             ).fetchone()
             assert row is not None, "review_events table not found"
     finally:
-        os.unlink(db_path)
+        try:
+            os.unlink(db_path)
+        except PermissionError:
+            pass  # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
 
 
 def test_skill_drafts_table_created():
@@ -113,7 +122,10 @@ def test_skill_drafts_table_created():
             ).fetchone()
             assert row is not None, "skill_drafts table not found"
     finally:
-        os.unlink(db_path)
+        try:
+            os.unlink(db_path)
+        except PermissionError:
+            pass  # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
 
 
 # ------------------------------------------------------------------ #
@@ -154,7 +166,10 @@ def test_review_events_columns():
         assert col_map["processed_at"]["notnull"] == 0
         assert col_map["error_message"]["notnull"] == 0
     finally:
-        os.unlink(db_path)
+        try:
+            os.unlink(db_path)
+        except PermissionError:
+            pass  # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
 
 
 # ------------------------------------------------------------------ #
@@ -211,7 +226,10 @@ def test_skill_drafts_columns():
         assert col_map["reviewed_at"]["notnull"] == 0
         assert col_map["reviewed_by_user_id"]["notnull"] == 0
     finally:
-        os.unlink(db_path)
+        try:
+            os.unlink(db_path)
+        except PermissionError:
+            pass  # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
 
 
 # ------------------------------------------------------------------ #
@@ -239,4 +257,7 @@ def test_init_db_idempotent():
                 ).fetchone()
                 assert row is not None, f"{table} missing after double init"
     finally:
-        os.unlink(db_path)
+        try:
+            os.unlink(db_path)
+        except PermissionError:
+            pass  # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收

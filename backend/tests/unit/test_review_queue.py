@@ -17,7 +17,10 @@ def db_path():
         path = f.name
     yield path
     if os.path.exists(path):
-        os.unlink(path)
+        try:
+            os.unlink(path)
+        except PermissionError:
+            pass  # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
 
 
 class TestEnqueueDequeue:

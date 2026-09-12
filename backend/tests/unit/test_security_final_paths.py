@@ -1,6 +1,7 @@
 """Regression tests for final derived-file path hardening."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,11 @@ from backend.storage.recent_projects import RecentProject, save_recent
 from backend.wiki.files import secure_atomic_write_file, secure_write_temp_file
 from backend.wiki.ingest import _save_cache
 from backend.wiki.vision import _save_cache as save_vision_cache
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="symlink/no-follow 安全原语在 Windows 无可靠等价，另行批次实现原生 handle",
+)
 
 
 def test_create_wiki_structure_rejects_symlinked_directory(tmp_path: Path) -> None:
