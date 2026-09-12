@@ -33,6 +33,9 @@ ALIASES: Dict[str, str] = {
     "chat_model": "chatModel",
     "vision_model": "visionModel",
     "embedding_model": "embeddingModel",
+    "tts_model": "ttsModel",
+    "asr_model": "asrModel",
+    "image_gen_model": "imageGenModel",
     # EndpointConfig 子层
     "base_url": "baseUrl",
     "api_key": "apiKey",
@@ -105,6 +108,9 @@ LEGAL_MODEL_SELECTIONS_KEYS: FrozenSet[str] = frozenset(
         "chatModel",
         "visionModel",
         "embeddingModel",
+        "ttsModel",
+        "asrModel",
+        "imageGenModel",
     }
 )
 # orch 段 (OrchSettings + scratchRoot). 前端 interface 只暴露 6 个数值;
