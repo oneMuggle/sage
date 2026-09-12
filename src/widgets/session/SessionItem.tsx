@@ -1,4 +1,4 @@
-import { AlertCircle, Check, Clock, GitBranch, Loader2, Paperclip, PauseCircle, Pencil, Pin, Download, Search } from 'lucide-react';
+import { AlertCircle, Check, Clock, FileText, GitBranch, Loader2, Paperclip, PauseCircle, Pencil, Pin, PinOff, Download, Search } from 'lucide-react';
 import { useEffect, useReducer, useRef, useState } from 'react';
 
 import { usePermissionState } from '../../entities/permission/permissionState';
@@ -9,8 +9,9 @@ import {
   selectSessionSlots,
   useChatStreamStore,
 } from '../../features/send-message/chatStreamStore';
-import { downloadHtmlFile, sessionApi } from '../../shared/api/sessionApi';
+import { downloadHtmlFile, downloadMarkdownFile, sessionApi } from '../../shared/api/sessionApi';
 import { useI18n } from '../../shared/lib/i18n';
+import { useStore } from '../../shared/lib/store';
 import type { Session } from '../../shared/lib/store';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
@@ -95,6 +96,41 @@ export function SessionItem({ session, isActive, onSelect, onDelete, onRename, m
       setExporting(false);
     }
   };
+  // R18-C: 导出 Markdown(轻量、可版本管理)
+  const [exportingMd, setExportingMd] = useState(false);
+  const handleExportMarkdown = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (exportingMd) return;
+    setExportingMd(true);
+    try {
+      const result = await sessionApi.exportMarkdown(session.id);
+      downloadMarkdownFile(result.html, result.filename);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      alert(t('session.export_failed').replace('{message}', message));
+    } finally {
+      setExportingMd(false);
+    }
+  };
+
+  // R18-B: 置顶/取消置顶 —— API 落库 + store 原地更新（避免整表 reload）
+  const updateSession = useStore((st) => st.updateSession);
+  const [pinning, setPinning] = useState(false);
+  const handleTogglePin = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (pinning) return;
+    setPinning(true);
+    try {
+      await sessionApi.setPinned(session.id, !session.is_pinned);
+      updateSession(session.id, { is_pinned: !session.is_pinned });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      alert(message);
+    } finally {
+      setPinning(false);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -316,6 +352,32 @@ export function SessionItem({ session, isActive, onSelect, onDelete, onRename, m
           aria-label={t('session.export_html')}
         >
           <Download className="w-4 h-4" />
+        </button>
+        {/* R18-C: Markdown 导出 —— 轻量文本,便于归档与版本管理 */}
+        <button
+          data-testid="export-session-md"
+          onClick={handleExportMarkdown}
+          disabled={exportingMd}
+          className="p-1 rounded hover:bg-primary/10 text-muted hover:text-primary disabled:opacity-50"
+          title={t('session.export_md')}
+          aria-label={t('session.export_md')}
+        >
+          <FileText className="w-4 h-4" />
+        </button>
+        {/* R18-B: 置顶切换 —— 置顶会话在侧栏置顶组中始终排在最前 */}
+        <button
+          data-testid="toggle-pin"
+          onClick={handleTogglePin}
+          disabled={pinning}
+          className={`p-1 rounded disabled:opacity-50 ${
+            session.is_pinned
+              ? 'text-primary hover:bg-primary/10'
+              : 'text-muted hover:bg-bg-hover hover:text-primary'
+          }`}
+          title={session.is_pinned ? t('session.unpin') : t('session.pin')}
+          aria-label={session.is_pinned ? t('session.unpin') : t('session.pin')}
+        >
+          {session.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
         </button>
         {/* U12: 两步式确认删除 — 不弹 modal，armed 后二次点击生效 */}
         <TwoStepDelete

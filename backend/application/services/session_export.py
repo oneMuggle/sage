@@ -249,3 +249,83 @@ def export_session_to_html(
         message_count=len(messages),
         theme=normalized_theme,
     )
+
+
+# ==================== Markdown 渲染(R18-C,纯函数) ====================
+
+
+_ROLE_LABELS = {"user": "用户", "assistant": "Sage", "system": "系统", "tool": "工具"}
+
+
+def render_export_markdown(payload: Dict[str, Any]) -> str:
+    """导出载荷 → Markdown 文本(纯函数,可独立测试)。
+
+    - 头部: 标题 + 元信息(导出时间/消息数/总 token/总成本)
+    - 正文: 每条消息一个 ``### <角色>`` 小节;工具消息折叠为摘要行,
+      assistant 的工具调用列为清单;空内容消息跳过
+    """
+    header = payload.get("header", {})
+    title = str(header.get("title") or "未命名会话")
+    stats = payload.get("stats", {})
+    lines: List[str] = [
+        f"# {title}",
+        "",
+        f"> 导出自 {APP_NAME} · {time.strftime('%Y-%m-%d %H:%M', time.localtime(max(0, int(header.get('created_at') or 0)) / 1000))}"
+        f" · {stats.get('user_messages', 0)} 问 / {stats.get('assistant_messages', 0)} 答"
+        f" · {stats.get('tool_calls', 0)} 次工具调用",
+        "",
+    ]
+    for entry in payload.get("entries", []):
+        role = str(entry.get("role") or "system")
+        content = str(entry.get("content") or "").strip()
+        tool_calls = entry.get("tool_calls") or []
+        if role == "tool":
+            # 工具结果行折叠 —— 保留可读性,不灌全文
+            if content:
+                lines.append(f"- ↳ 工具结果: {content[:120]}")
+            continue
+        if not content and not tool_calls:
+            continue
+        lines.append(f"### {_ROLE_LABELS.get(role, role)}")
+        lines.append("")
+        if content:
+            lines.append(content)
+            lines.append("")
+        for tc in tool_calls:
+            name = tc.get("name") or "tool"
+            lines.append(f"- 调用工具 `{name}`")
+        if tool_calls:
+            lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _build_markdown_filename(session: Session) -> str:
+    short_id = session.id.replace("-", "")[:8] or "session"
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(max(0, session.created_at) / 1000))
+    return f"{APP_NAME}-session-{short_id}-{stamp}.md"
+
+
+def export_session_to_markdown(
+    session_id: str,
+    session_repo: Optional[SessionRepository] = None,
+    message_repo: Optional[MessageRepository] = None,
+) -> SessionExport:
+    """导出完整会话为 Markdown(结构同 export_session_to_html)。"""
+    sess_repo = session_repo or SessionRepository()
+    msg_repo = message_repo or MessageRepository()
+
+    session = sess_repo.get(session_id)
+    if session is None:
+        raise SessionNotFoundError(session_id)
+
+    messages = msg_repo.get_by_session(session_id, limit=MAX_EXPORT_MESSAGES)
+    payload = build_session_payload(session, messages)
+    markdown_text = render_export_markdown(payload)
+
+    return SessionExport(
+        session_id=session_id,
+        filename=_build_markdown_filename(session),
+        html=markdown_text,
+        message_count=len(messages),
+        theme=DEFAULT_THEME,
+    )

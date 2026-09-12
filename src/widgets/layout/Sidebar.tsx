@@ -8,7 +8,7 @@ import {
   Sparkles,
   FileSpreadsheet,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -81,7 +81,13 @@ export function Sidebar({ width = 240 }: SidebarProps) {
     items: sessions,
     getId: (s) => s.id,
   });
-  const orderedSessionIds = orderedItems.map((s) => s.id);
+  // R18-B: 置顶分区 —— 置顶组稳定在前（组内保持手动拖拽顺序），未置顶在后。
+  const pinnedFirstItems = useMemo(() => {
+    const pinned = orderedItems.filter((it) => it.is_pinned);
+    if (pinned.length === 0) return orderedItems;
+    return [...pinned, ...orderedItems.filter((it) => !it.is_pinned)];
+  }, [orderedItems]);
+  const orderedSessionIds = pinnedFirstItems.map((s) => s.id);
 
   // U9: Live-Dot vs Attention-Badge 分离。
   // 待处理数 = 审批与提问两个串行卡点之和（后端单 agent 循环，各至多 1 项挂起），
@@ -162,7 +168,7 @@ export function Sidebar({ width = 240 }: SidebarProps) {
       case 'conversations':
         return (
           <ConversationsSection
-            sessions={orderedItems}
+            sessions={pinnedFirstItems}
             order={orderedSessionIds}
             currentSessionId={currentSessionId}
             collapsed={isCollapsed}

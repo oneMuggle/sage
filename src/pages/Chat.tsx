@@ -487,6 +487,42 @@ export function Chat() {
     ],
   );
 
+  // R18-A: 重新生成 —— 对 assistant 回答重跑一次。复用编辑重发的
+  // 非破坏性链路: 找到其前驱最近的 user 消息 → fork 截到该消息之前
+  // （beforeMessage 开区间）→ 切到 fork 会话原文重发。原会话保留,
+  // 可对比两次回答。失败提示,不降级重发（避免原会话出现重复轮次）。
+  const handleRegenerate = useCallback(
+    async (assistantMessageId: string) => {
+      if (!currentSessionId || isLoading) return;
+      const msgs = messagesRef.current;
+      const idx = msgs.findIndex((m) => m.id === assistantMessageId);
+      if (idx < 0) return;
+      let userIdx = -1;
+      for (let i = idx - 1; i >= 0; i--) {
+        if (msgs[i].role === 'user') {
+          userIdx = i;
+          break;
+        }
+      }
+      if (userIdx < 0) return;
+      const userMsg = msgs[userIdx];
+      try {
+        const forked = await sessionApi.fork(currentSessionId, userMsg.id, undefined, {
+          beforeMessage: true,
+        });
+        toast.success(t('chat.regenerate_forked'));
+        void loadSessions();
+        setCurrentSessionId(forked.id);
+        await sendMessage(userMsg.content, forked.id);
+      } catch (e) {
+        toast.error(
+          fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
+        );
+      }
+    },
+    [currentSessionId, isLoading, loadSessions, sendMessage, setCurrentSessionId, t],
+  );
+
   // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
   // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
   // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
@@ -576,6 +612,7 @@ export function Chat() {
             streamingMessageId={streamingMessageId}
             onFork={handleFork}
             onEditResend={handleStartEditResend}
+            onRegenerate={handleRegenerate}
           />
         )}
         {/* PM2 (round8): 计划批准条 —— /plan run 完成后出现;批准即衔接执行 */}

@@ -604,6 +604,11 @@ export const zh = {
   // ─── 会话导出 (U18 HTML 会话导出) ──────
   'session.export_failed': '导出失败：{message}',
   'session.export_html': '导出为 HTML',
+  'session.export_md': '导出为 Markdown',
+  'session.pin': '置顶会话',
+  'session.unpin': '取消置顶',
+  'chat.regenerate': '重新生成',
+  'chat.regenerate_forked': '已从原问题分叉新会话并重新生成',
   'session.export_html_exporting': '正在导出…',
 
   // ─── 会话状态徽章 (S4/S5/S7/S9 多会话并行) ──────
