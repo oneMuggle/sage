@@ -597,9 +597,9 @@ const FileDiff = ({ file }: { file: FileChange }) => (
 
 ### 阶段 2（第 2-3 周）：P1 选做
 
-- [ ] T2.1 Artifacts 实时预览（#12）⭐ 优先
-- [ ] T2.2 折叠态 icon rail（#2）
-- [ ] T2.3 全局搜索合并（#4）
+- [x] T2.1 Artifacts 实时预览（#12）⭐ 优先
+- [x] T2.2 折叠态 icon rail（#2）
+- [x] T2.3 全局搜索合并（#4）
 - [ ] T2.4 Diff 视图（#13）
 
 **验收**：
