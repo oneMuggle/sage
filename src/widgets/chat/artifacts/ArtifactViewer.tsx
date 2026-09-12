@@ -99,6 +99,16 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             title={artifact.name}
             className="w-full h-full min-h-[24rem] rounded border border-border"
           />
+        ) : content.kind === 'html' ? (
+          // P1-3.5 (UI 优化方案 2026-09-13): HTML 产物沙盒 iframe 渲染。
+          // sandbox="allow-scripts" 允许 JS 执行但阻止跨域/顶层导航/表单提交。
+          <iframe
+            srcDoc={content.content ?? ''}
+            sandbox="allow-scripts"
+            title={artifact.name}
+            className="w-full h-full min-h-[24rem] rounded border border-border bg-white"
+            data-testid="html-artifact-preview"
+          />
         ) : content.kind === 'docx' || content.kind === 'xlsx' || content.kind === 'pptx' ? (
           // C-2 (round5 批次 C): office 三件套——后端已 html.escape 全转义,
           // 此处受控渲染预览片段; 白底容器保证 dark 模式下文字可读
