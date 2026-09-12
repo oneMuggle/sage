@@ -37,3 +37,20 @@ def test_asr_tool_risk():
     from backend.domain.risk import RiskClass
     tool = SpeechToTextTool()
     assert tool.risk == RiskClass.READ
+
+
+# ── ImageGenerationTool ─────────────────────────────────────────
+
+def test_image_gen_tool_schema():
+    from backend.tools.image_gen_tool import ImageGenerationTool
+    tool = ImageGenerationTool()
+    assert tool.schema.name == "generate_image"
+    assert "prompt" in tool.schema.parameters["required"]
+
+
+def test_image_gen_tool_risk():
+    from backend.tools.image_gen_tool import ImageGenerationTool
+    from backend.domain.risk import RiskClass
+    tool = ImageGenerationTool()
+    # WRITE does not exist; generated media is persisted locally.
+    assert tool.risk == RiskClass.WRITE_LOCAL
