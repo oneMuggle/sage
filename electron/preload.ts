@@ -106,6 +106,7 @@ const electronAPI = {
     headers?: Record<string, string>;
     body?: unknown;
     timeoutMs?: number;
+    responseType?: 'json' | 'arraybuffer';
   }): Promise<T> {
     return ipcRenderer.invoke('sage:backend-request', request) as Promise<T>;
   },
@@ -265,6 +266,24 @@ const electronAPI = {
   } satisfies MemoryApi,
 
   /**
+   * Media bridge (Phase 2, 2026-09-12): multipart upload for chat attachments
+   * and binary media fetching for TTS/ASR/image generation.
+   */
+  media: {
+    uploadAttachment: (buffer: ArrayBuffer, filename: string, contentType: string) =>
+      ipcRenderer.invoke('media:upload-attachment', { buffer, filename, contentType }) as Promise<{
+        media_ref: unknown;
+        api_url: string;
+      }>,
+    getMediaBlobUrl: (apiUrl: string) =>
+      ipcRenderer.invoke('sage:backend-request', {
+        method: 'GET',
+        path: apiUrl,
+        responseType: 'arraybuffer',
+      }) as Promise<ArrayBuffer>,
+  },
+
+  /**
    * Journal template bridge (Task 7, 2026-09-10): parses .doc/.docx
    * journal templates into structured JournalSpec, lists saved specs,
    * fetches one by id, validates existing papers against a spec, and
@@ -389,8 +408,7 @@ const electronAPI = {
   diagnostic: {
     exportBundle: (opts: { includePrompts: boolean; includeHostname: boolean }) =>
       ipcRenderer.invoke('diagnostic:export', opts) as Promise<
-        | { ok: true; path: string }
-        | { ok: false; code: string; error: string }
+        { ok: true; path: string } | { ok: false; code: string; error: string }
       >,
     preview: () =>
       ipcRenderer.invoke('diagnostic:preview') as Promise<{
