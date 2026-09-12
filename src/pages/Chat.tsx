@@ -7,10 +7,11 @@ import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
 import { useChat } from '../features/send-message/useChat';
-import { sessionApi, learnApi, messageApi, type ChatOfficeRef } from '../shared/api';
+import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
 import { orchRunClient } from '../shared/api/orchRunClient';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
+import type { Message as MessageType } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
@@ -78,8 +79,7 @@ export function Chat() {
   // "重发最后一条消息"的恢复入口,而不是让用户对着侧栏灰点猜。
   const currentSession = sessions.find((s) => s.id === currentSessionId);
   const interruptedRun =
-    currentSession?.run_status === 'failed' &&
-    currentSession?.last_error === INTERRUPTED_RUN_ERROR;
+    currentSession?.run_status === 'failed' && currentSession?.last_error === INTERRUPTED_RUN_ERROR;
   const [dismissedInterrupts, setDismissedInterrupts] = useState<Set<string>>(new Set());
   const showInterruptBanner =
     currentSessionId != null && interruptedRun && !dismissedInterrupts.has(currentSessionId);
@@ -443,6 +443,9 @@ export function Chat() {
     text: string;
     nonce: number;
   } | null>(null);
+  // P0-1: 引用到对话 —— 复用 editResendTarget 的 injectedDraft 通道把引用块
+  // 注入输入框（nonce 变化触发重放）。与编辑重发互斥时以编辑态优先。
+  const [quotedDraft, setQuotedDraft] = useState<{ text: string; nonce: number } | null>(null);
   // 传给 memo 组件的 props 引用需稳定: 内联箭头函数/对象字面量每次渲染
   // 都是新引用, 会击穿 React.memo (F1)。
   const cancelEditResend = useCallback(() => setEditResendTarget(null), []);
@@ -467,10 +470,7 @@ export function Chat() {
   }, []);
 
   const handleSendMessageWithEditResend = useCallback(
-    async (
-      content: string,
-      options?: Parameters<typeof handleSendMessage>[1],
-    ) => {
+    async (content: string, options?: Parameters<typeof handleSendMessage>[1]) => {
       if (!editResendTarget) {
         await handleSendMessage(content, options);
         return;
@@ -557,6 +557,32 @@ export function Chat() {
       }
     },
     [removeMessage],
+  );
+
+  // P0-1: 引用到对话 —— 消息正文转 Markdown 引用块注入输入框。
+  const handleQuote = useCallback((message: MessageType) => {
+    const quoted = message.content
+      .split('\n')
+      .map((line) => `> ${line}`)
+      .join('\n');
+    setQuotedDraft({ text: `${quoted}\n\n`, nonce: Date.now() });
+  }, []);
+
+  // P0-1: 保存到记忆 —— 消息正文写入长期记忆（semantic，标注来源便于检索）。
+  const handleSaveToMemory = useCallback(
+    async (message: MessageType) => {
+      try {
+        await memoryApi.saveMemory(message.content, 'semantic', 5, ['来自对话']);
+        toast.success(t('chat.save_to_memory_success'));
+      } catch (e) {
+        toast.error(
+          fill(t('chat.save_to_memory_failed'), {
+            error: e instanceof Error ? e.message : String(e),
+          }),
+        );
+      }
+    },
+    [t],
   );
 
   // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
@@ -655,6 +681,8 @@ export function Chat() {
             onEditResend={handleStartEditResend}
             onRegenerate={handleRegenerate}
             onDelete={handleDeleteMessage}
+            onQuote={handleQuote}
+            onSaveToMemory={handleSaveToMemory}
           />
         )}
         {/* PM2 (round8): 计划批准条 —— /plan run 完成后出现;批准即衔接执行 */}
@@ -763,7 +791,7 @@ export function Chat() {
         disabled={!hasConfig}
         placeholder="输入消息..."
         workspacePath={workspacePath}
-        injectedDraft={editResendTarget}
+        injectedDraft={editResendTarget ?? quotedDraft}
         editResendNotice={editResendNotice}
       />
 

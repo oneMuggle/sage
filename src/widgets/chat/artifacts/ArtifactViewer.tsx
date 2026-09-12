@@ -20,17 +20,27 @@ function parseCsv(text: string): string[][] {
     const ch = text[i];
     if (quoted) {
       if (ch === '"') {
-        if (text[i + 1] === '"') { cell += '"'; i++; } else quoted = false;
+        if (text[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else quoted = false;
       } else cell += ch;
     } else if (ch === '"') quoted = true;
-    else if (ch === ',') { row.push(cell); cell = ''; }
-    else if (ch === '\n' || ch === '\r') {
+    else if (ch === ',') {
+      row.push(cell);
+      cell = '';
+    } else if (ch === '\n' || ch === '\r') {
       if (ch === '\r' && text[i + 1] === '\n') i++;
-      row.push(cell); rows.push(row); row = []; cell = '';
-    }
-    else cell += ch;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = '';
+    } else cell += ch;
   }
-  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  if (cell !== '' || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
   return rows.filter((r) => r.some((c) => c !== ''));
 }
 
@@ -42,11 +52,23 @@ function CsvPreview({ text }: { text: string }) {
     <div className="overflow-auto">
       <table className="text-xs border-collapse">
         <thead>
-          <tr>{head.map((c, i) => <th key={i} className="border px-2 py-1 bg-bg-hover">{c}</th>)}</tr>
+          <tr>
+            {head.map((c, i) => (
+              <th key={i} className="border px-2 py-1 bg-bg-hover">
+                {c}
+              </th>
+            ))}
+          </tr>
         </thead>
         <tbody>
           {body.slice(0, 500).map((r, i) => (
-            <tr key={i}>{r.map((c, j) => <td key={j} className="border px-2 py-1">{c}</td>)}</tr>
+            <tr key={i}>
+              {r.map((c, j) => (
+                <td key={j} className="border px-2 py-1">
+                  {c}
+                </td>
+              ))}
+            </tr>
           ))}
         </tbody>
       </table>
@@ -72,14 +94,18 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
         <button
           className="p-1.5 rounded hover:bg-bg-hover"
           title="复制路径"
-          onClick={() => { void navigator.clipboard?.writeText(artifact.path)?.catch(() => {}); }}
+          onClick={() => {
+            void navigator.clipboard?.writeText(artifact.path)?.catch(() => {});
+          }}
         >
           <Copy className="w-4 h-4" />
         </button>
         <button
           className="p-1.5 rounded hover:bg-bg-hover"
           title="在文件管理器中显示"
-          onClick={() => { revealArtifact(sessionId, artifact.id).catch(() => {}); }}
+          onClick={() => {
+            revealArtifact(sessionId, artifact.id).catch(() => {});
+          }}
         >
           <FolderOpen className="w-4 h-4" />
         </button>
@@ -99,6 +125,16 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             title={artifact.name}
             className="w-full h-full min-h-[24rem] rounded border border-border"
           />
+        ) : content.kind === 'html' ? (
+          // P1-3.5 (UI 优化方案 2026-09-13): HTML 产物沙盒 iframe 渲染。
+          // sandbox="allow-scripts" 允许 JS 执行但阻止跨域/顶层导航/表单提交。
+          <iframe
+            srcDoc={content.content ?? ''}
+            sandbox="allow-scripts"
+            title={artifact.name}
+            className="w-full h-full min-h-[24rem] rounded border border-border bg-white"
+            data-testid="html-artifact-preview"
+          />
         ) : content.kind === 'docx' || content.kind === 'xlsx' || content.kind === 'pptx' ? (
           // C-2 (round5 批次 C): office 三件套——后端已 html.escape 全转义,
           // 此处受控渲染预览片段; 白底容器保证 dark 模式下文字可读
@@ -108,7 +144,9 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             dangerouslySetInnerHTML={{ __html: content.html ?? '' }}
           />
         ) : content.kind === 'code' || content.kind === 'json' ? (
-          <pre className="whitespace-pre-wrap text-xs font-mono bg-bg-hover p-2 rounded">{content.content}</pre>
+          <pre className="whitespace-pre-wrap text-xs font-mono bg-bg-hover p-2 rounded">
+            {content.content}
+          </pre>
         ) : content.kind === 'csv' ? (
           <CsvPreview text={content.content ?? ''} />
         ) : (

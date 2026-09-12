@@ -659,6 +659,14 @@ export const zh = {
   'chat.edit_resend_cancel': '取消编辑',
   'chat.edit_resend_forked': '已分叉出新会话，改写内容已发送',
 
+  // ─── P0-1 消息级操作菜单 (UI 优化方案 2026-09-12) ─────
+  'chat.more_actions': '更多操作',
+  'chat.regenerate_failed': '重新生成失败：{message}',
+  'chat.quote_to_chat': '引用到对话',
+  'chat.save_to_memory': '保存到记忆',
+  'chat.save_to_memory_success': '已保存到记忆',
+  'chat.save_to_memory_failed': '保存到记忆失败：{error}',
+
   // ─── F12 消息全文搜索 (对标增强第五轮批次 B) ─────
   'session.message_hits': '消息内容命中 {count} 条',
 } as const;

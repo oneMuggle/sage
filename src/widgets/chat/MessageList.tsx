@@ -23,6 +23,10 @@ interface MessageListProps {
   onRegenerate?: (messageId: string) => void;
   /** R17-B: 消息删除回调（提供时历史消息显示两步确认删除按钮） */
   onDelete?: (messageId: string) => void;
+  /** P0-1: 引用到对话回调（提供时 user/assistant 消息显示"引用到对话"） */
+  onQuote?: (message: MessageType) => void;
+  /** P0-1: 保存此条消息到长期记忆（提供时 user/assistant 消息显示"保存到记忆"） */
+  onSaveToMemory?: (message: MessageType) => void;
 }
 
 export function MessageList({
@@ -34,6 +38,8 @@ export function MessageList({
   onEditResend,
   onRegenerate,
   onDelete,
+  onQuote,
+  onSaveToMemory,
 }: MessageListProps) {
   // U11: 只渲染最近 WINDOW_STEP 条, 更早的按需加载 —— 避免长会话全量
   // 重渲染(每条 Message 都可能含 ReactMarkdown/Shiki)。
@@ -81,6 +87,8 @@ export function MessageList({
             onEditResend={onEditResend}
             onRegenerate={onRegenerate}
             onDelete={onDelete}
+            onQuote={onQuote}
+            onSaveToMemory={onSaveToMemory}
           />
         ))}
       </div>

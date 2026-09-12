@@ -13,6 +13,7 @@ import { downloadHtmlFile, downloadMarkdownFile, sessionApi } from '../../shared
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 import type { Session } from '../../shared/lib/store';
+import { formatRelativeTime } from '../../shared/lib/utils';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 interface SessionItemProps {
@@ -34,7 +35,14 @@ const FILE_CHANGE_TOOLS = new Set(['write_file', 'edit_file', 'apply_patch']);
 /** S4: completed ✓ 徽章的保鲜期 —— 超过后不再显示（避免整列表常亮绿勾）。 */
 const COMPLETED_FRESH_MS = 60_000;
 
-export function SessionItem({ session, isActive, onSelect, onDelete, onRename, messageHits }: SessionItemProps) {
+export function SessionItem({
+  session,
+  isActive,
+  onSelect,
+  onDelete,
+  onRename,
+  messageHits,
+}: SessionItemProps) {
   const { t } = useI18n();
   const [exporting, setExporting] = useState(false);
   // U4': inline 重命名态(标题位置换成输入框,Enter 提交 / Esc 取消)
@@ -48,22 +56,17 @@ export function SessionItem({ session, isActive, onSelect, onDelete, onRename, m
   // S7: 本次运行产物计数徽章
   const artifactCount = useArtifactEventsStore((s) => s.counts[session.id] ?? 0);
   // S4: 注意力点按会话聚合（旧实现是全局计数挂在"对话"导航上）
-  const hasPendingApproval = usePermissionState(
-    (s) => s.currentRequest?.session_id === session.id,
-  );
-  const hasPendingQuestion = useQuestionState(
-    (s) => s.currentQuestion?.session_id === session.id,
-  );
+  const hasPendingApproval = usePermissionState((s) => s.currentRequest?.session_id === session.id);
+  const hasPendingQuestion = useQuestionState((s) => s.currentQuestion?.session_id === session.id);
   // S9: 有启用的定时任务指向该会话 → ⏰ 标记
-  const hasCron = useScheduledTaskStore(
-    (s) => s.tasks.some((task) => task.session_id === session.id && task.enabled),
+  const hasCron = useScheduledTaskStore((s) =>
+    s.tasks.some((task) => task.session_id === session.id && task.enabled),
   );
 
   const isLive = slots.streaming != null;
   const dbStatus = session.run_status ?? 'idle';
   // 保鲜的 completed ✓：刚完成 60s 内显示，之后回归 idle 观感
-  const completedFresh =
-    !isLive && dbStatus === 'completed' && hasFreshRunAt(session.last_run_at);
+  const completedFresh = !isLive && dbStatus === 'completed' && hasFreshRunAt(session.last_run_at);
   const showCompletedTick = useExpireAfter(completedFresh, session.last_run_at, COMPLETED_FRESH_MS);
   const failed = !isLive && dbStatus === 'failed';
   const suspended = !isLive && dbStatus === 'suspended';
@@ -322,7 +325,24 @@ export function SessionItem({ session, isActive, onSelect, onDelete, onRename, m
             </span>
           )}
         </p>
-        <p className="text-xs text-muted">{new Date(session.updated_at).toLocaleDateString()}</p>
+        <p className="text-xs text-muted truncate">
+          {/* P0-4 (UI 优化方案 2026-09-13): 元信息行 — 消息预览 + 相对时间 + 消息数 */}
+          {session.last_message_preview ? (
+            <span className="truncate">{session.last_message_preview}</span>
+          ) : (
+            <span>{formatRelativeTime(session.last_message_at ?? session.updated_at)}</span>
+          )}
+          <span className="mx-1 text-muted/50">·</span>
+          <span className="flex-shrink-0">
+            {formatRelativeTime(session.last_message_at ?? session.updated_at)}
+          </span>
+          {session.message_count > 0 && (
+            <>
+              <span className="mx-1 text-muted/50">·</span>
+              <span className="flex-shrink-0">{session.message_count} 条</span>
+            </>
+          )}
+        </p>
         {/* S5: mini 进度条 —— 编排 5 元组 / todo 完成度（仅运行中显示） */}
         {isLive && (progress != null || todoTotal > 0) && (
           <div className="mt-1 flex items-center gap-1.5" data-testid="session-progress">

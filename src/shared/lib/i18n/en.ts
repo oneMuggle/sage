@@ -566,7 +566,8 @@ export const en: Record<TranslationKey, string> = {
   'office.template.source.builtin': 'Built-in',
   'office.template.source.workspace': 'Workspace',
   'office.template.hint.date': 'Date format YYYY-MM-DD',
-  'office.template.hint.rich': 'Supports {{ }} rich-text or table variables, as the template defines',
+  'office.template.hint.rich':
+    'Supports {{ }} rich-text or table variables, as the template defines',
   'office.template.hint.image': 'In-template image variables only; leave blank to skip',
   'office.template.create': 'Create document',
   'office.template.creating': 'Creating…',
@@ -668,6 +669,14 @@ export const en: Record<TranslationKey, string> = {
     'Editing & resending: sending forks into a new session (original preserved)',
   'chat.edit_resend_cancel': 'Cancel editing',
   'chat.edit_resend_forked': 'Forked into a new session; edited message sent',
+
+  // ─── P0-1 Message action menu (UI optimization, 2026-09-12) ─────
+  'chat.more_actions': 'More actions',
+  'chat.regenerate_failed': 'Failed to regenerate: {message}',
+  'chat.quote_to_chat': 'Quote to chat',
+  'chat.save_to_memory': 'Save to memory',
+  'chat.save_to_memory_success': 'Saved to memory',
+  'chat.save_to_memory_failed': 'Failed to save to memory: {error}',
 
   // ─── F12 Message full-text search (parity round 5 batch B) ─────
   'session.message_hits': '{count} message hits',
