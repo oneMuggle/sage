@@ -25,7 +25,6 @@ import { MediaAttachment } from '../../features/chat/MediaAttachment';
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
-
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 import { MermaidBlock } from './MermaidBlock';
