@@ -108,7 +108,7 @@ describe('Sidebar — brand header (U-Brand)', () => {
     renderSidebarAt('/chat');
     // img 通过 a11y 名 "Sage 标志"（zh）或 "Sage logo"（en）查找
     const img = screen.getByRole('img', { name: /Sage/i });
-    expect(img).toHaveAttribute('src', '/sage.svg');
+    expect(img).toHaveAttribute('src', './sage.svg');
   });
 
   it('renders Sage wordmark from sidebar.brand translation', () => {

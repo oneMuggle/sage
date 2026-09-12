@@ -19,11 +19,11 @@ vi.mock('../../lib/i18n', () => ({
 }));
 
 describe('BrandLogo', () => {
-  it('renders an img pointing to /sage.svg with default alt', () => {
+  it('renders an img pointing to ./sage.svg with default alt', () => {
     render(<BrandLogo />);
     const img = screen.getByRole('img', { name: 'Sage 标志' });
     expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute('src', '/sage.svg');
+    expect(img).toHaveAttribute('src', './sage.svg');
   });
 
   it('passes custom testId through to the img (Welcome reuse)', () => {

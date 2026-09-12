@@ -25,7 +25,7 @@ describe('WelcomeHero', () => {
     const img = screen.getByTestId('welcome-avatar');
     expect(img).toBeInTheDocument();
     expect(img.tagName).toBe('IMG');
-    expect(img).toHaveAttribute('src', '/sage.svg');
+    expect(img).toHaveAttribute('src', './sage.svg');
     expect(img).toHaveAttribute('alt', 'brand.alt');
   });
 

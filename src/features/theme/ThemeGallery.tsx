@@ -41,7 +41,7 @@ export function ThemeGallery() {
                 {/* 封面图 */}
                 <div className="aspect-[3/2] bg-bg-subtle">
                   <ThemeCover
-                    src="/themes/covers/basic.svg"
+                    src="./themes/covers/basic.svg"
                     alt={preset.name}
                     gradientFrom={preset.colors.primary}
                     gradientTo={preset.colors.secondary}
