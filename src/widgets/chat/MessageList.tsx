@@ -21,6 +21,8 @@ interface MessageListProps {
   onEditResend?: (messageId: string) => void;
   /** R18-A: 重新生成回调（提供时 assistant 消息显示重新生成按钮） */
   onRegenerate?: (messageId: string) => void;
+  /** R17-B: 消息删除回调（提供时历史消息显示两步确认删除按钮） */
+  onDelete?: (messageId: string) => void;
 }
 
 export function MessageList({
@@ -31,6 +33,7 @@ export function MessageList({
   onFork,
   onEditResend,
   onRegenerate,
+  onDelete,
 }: MessageListProps) {
   // U11: 只渲染最近 WINDOW_STEP 条, 更早的按需加载 —— 避免长会话全量
   // 重渲染(每条 Message 都可能含 ReactMarkdown/Shiki)。
@@ -77,6 +80,7 @@ export function MessageList({
             onFork={onFork}
             onEditResend={onEditResend}
             onRegenerate={onRegenerate}
+            onDelete={onDelete}
           />
         ))}
       </div>

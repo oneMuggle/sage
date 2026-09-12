@@ -1739,6 +1739,52 @@ async def chat(
         }
 
 
+def _build_memory_used_event(
+    memory_manager: Any,
+    query: str,
+    session_id: str,
+) -> Optional[Dict[str, Any]]:
+    """R17-E: 构造 memory_used 流事件（记忆召回展示）。
+
+    用 ``MemoryManager.recall`` 取本次消息命中的结构化记忆条目（每类
+    top3，总体截断 5 条、preview 截 80 字），供前端消息气泡展示
+    "N 条记忆已应用"。任何失败返回 ``None``（事件属增强信息，绝不
+    影响对话主流程）。
+    """
+    if memory_manager is None:
+        return None
+    try:
+        recall_fn = getattr(memory_manager, "recall", None)
+        if not callable(recall_fn):
+            return None
+        hits = recall_fn(query=query, limit=3, session_id=session_id) or {}
+        memories: List[Dict[str, Any]] = []
+        for mem_type, entries in hits.items():
+            for entry_item in (entries or [])[:3]:
+                if not isinstance(entry_item, dict):
+                    continue
+                preview = str(entry_item.get("content", ""))[:80]
+                if not preview.strip():
+                    continue
+                memories.append(
+                    {
+                        "id": str(entry_item.get("id") or preview),
+                        "memory_type": str(entry_item.get("memory_type") or mem_type),
+                        "preview": preview,
+                    }
+                )
+        if not memories:
+            return None
+        return {
+            "state": "memory_used",
+            "session_id": session_id,
+            "memories": memories[:5],
+        }
+    except Exception as exc:  # noqa: BLE001 — 降级铁律
+        logger.debug(f"memory_used event build skipped: {exc}")
+        return None
+
+
 @router.post("/chat/stream")
 async def chat_stream_create(data: ChatRequest, request: Request):
     """创建 chat 流 (I2)。
@@ -2491,6 +2537,26 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"[REQ {request_id}] L13 memory context skipped: {l13_mem_err}"
                 )
             # ===== L13 记忆上下文注入 END =====
+
+            # ===== R17-E 记忆召回展示事件 BEGIN =====
+            # L13 注入是静默的 —— 用户无法知道回答用了哪些记忆。注入成功
+            # 后用 recall() 取结构化命中（top3），推送 memory_used 流事件；
+            # 前端 Message 气泡显示"N 条记忆已应用"并可展开查看明细。
+            # fail-safe：任何异常只跳过事件，绝不影响注入与对话主流程。
+            if dynamic_context_parts:
+                l13_evt = _build_memory_used_event(
+                    getattr(agent, "memory_manager", None),
+                    query=data.message,
+                    session_id=data.session_id,
+                )
+                if l13_evt is not None:
+                    try:
+                        entry.queue.put_nowait(l13_evt)
+                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                        logger.debug(
+                            f"[REQ {request_id}] memory_used event push failed, ignored"
+                        )
+            # ===== R17-E 记忆召回展示事件 END =====
 
             attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
 

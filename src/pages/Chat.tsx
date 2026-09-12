@@ -7,12 +7,11 @@ import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
 import { useChat } from '../features/send-message/useChat';
-import { sessionApi, learnApi, type ChatOfficeRef } from '../shared/api';
+import { sessionApi, learnApi, messageApi, type ChatOfficeRef } from '../shared/api';
 import { orchRunClient } from '../shared/api/orchRunClient';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
-import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
 import { ContextMeter } from '../widgets/chat/ContextMeter';
@@ -71,6 +70,7 @@ export function Chat() {
     loadSessions,
     sessions,
     isLoading: storeLoading,
+    removeMessage,
   } = useStore();
 
   // L16 (round4 批次 A): run 级崩溃恢复横幅 —— 后端启动时把滞留 running
@@ -528,6 +528,20 @@ export function Chat() {
     [currentSessionId, isLoading, loadSessions, sendMessage, setCurrentSessionId, t],
   );
 
+  // R17-B: 删除单条消息 —— messageApi.delete 落库后本地同步移除；
+  // 失败提示但不移动视图（历史保持可见）。
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      try {
+        await messageApi.delete(messageId);
+        removeMessage(messageId);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [removeMessage],
+  );
+
   // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
   // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
   // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
@@ -556,24 +570,9 @@ export function Chat() {
     }
   };
 
-  // 顶层错误：渲染整页 ErrorState，提供"关闭"清除错误后回到聊天
-  if (error) {
-    return (
-      <div className="flex-1 flex flex-col">
-        <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
-          <h2 className="text-sm font-semibold text-text">对话</h2>
-        </div>
-        <div className="flex-1 flex items-center justify-center p-4">
-          <ErrorState
-            title="对话出错"
-            message={error}
-            onRetry={clearError}
-            retryLabel="关闭并重试"
-          />
-        </div>
-      </div>
-    );
-  }
+  // R17-D: 顶层错误不再整页替换 —— 历史消息全部被顶掉、上下文丢失
+  // 是主流应用的反模式。改为在消息区下方渲染内联错误条，历史与输入框
+  // 保持可见可用，用户可"关闭"清除错误继续对话。
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -606,6 +605,26 @@ export function Chat() {
         />
       )}
 
+      {/* R17-D: 顶层错误内联条 —— 保留历史可见（替代旧整页 ErrorState） */}
+      {error && (
+        <div
+          className="mx-4 mt-2 flex items-start justify-between gap-3 px-3 py-2 rounded border border-error/40 bg-error/5"
+          data-testid="chat-inline-error"
+        >
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-error">对话出错</p>
+            <p className="text-xs text-text-secondary break-all">{error}</p>
+          </div>
+          <button
+            type="button"
+            onClick={clearError}
+            className="text-xs px-2 py-1 rounded border border-border hover:bg-bg-hover shrink-0"
+          >
+            关闭
+          </button>
+        </div>
+      )}
+
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto relative">
         {isLoading && messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
@@ -618,6 +637,7 @@ export function Chat() {
             onFork={handleFork}
             onEditResend={handleStartEditResend}
             onRegenerate={handleRegenerate}
+            onDelete={handleDeleteMessage}
           />
         )}
         {/* PM2 (round8): 计划批准条 —— /plan run 完成后出现;批准即衔接执行 */}

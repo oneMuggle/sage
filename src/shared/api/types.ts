@@ -170,7 +170,10 @@ export type AgentState =
   // live-events P1 (2026-09-06): run 级子代理审批模式切换回显(ask|auto)。
   | 'approval_mode'
   // S7 (2026-09-06): 工具落库产物后经活跃流推送的事件,载荷见 AgentEvent.artifact。
-  | 'artifact_created';
+  | 'artifact_created'
+  // R17-E: 记忆召回展示 —— L13 注入记忆上下文后推送本次命中条目,
+  // 载荷见 AgentEvent.memories。
+  | 'memory_used';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -445,6 +448,8 @@ export interface AgentEvent {
     size: number;
     created_at: number;
   };
+  // R17-E: memory_used 事件载荷（L13 记忆注入命中条目,气泡内可展开）。
+  memories?: { id: string; memory_type: string; preview: string }[];
 }
 
 // ==================== 错误类型定义 ====================

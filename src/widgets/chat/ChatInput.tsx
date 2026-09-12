@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
 import { importOfficeReference } from '../../features/office/importOfficeReference';
@@ -264,6 +265,12 @@ function ChatInputInner({
     // RT5 (round7): 运行中允许发送 —— onSend（useChat.sendMessage）按会话
     // 活跃流先走 steering 注入当前 run，失败回退队列；不再 UI 硬拦截。
     if (!value.trim()) return;
+    // R17-F: 附件通道尚未打通 —— knowledgeRefs/attachments/images 在
+    // Chat.handleSendMessage 处被丢弃（officeRefs 走 office_refs 通道
+    // 不受影响）。诚实提示而不是静默丢失（chat.hint 文案已同步修正）。
+    if (knowledgeRefs.length > 0 || files.length > 0 || images.length > 0) {
+      toast.warning(t('chat.attachment_not_sent'));
+    }
     onSend(value.trim(), {
       knowledgeRefs: knowledgeRefs.length > 0 ? knowledgeRefs : undefined,
       attachments: files.length > 0 ? files : undefined,
