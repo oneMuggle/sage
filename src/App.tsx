@@ -17,6 +17,14 @@ import { onSessionNotifyClick } from './features/send-message/sessionNotify';
 import { Chat } from './pages/Chat';
 import { Welcome } from './pages/Welcome';
 
+import { useStore } from './shared/lib/store';
+import { CommandPalette } from './widgets/command';
+import { Layout } from './widgets/layout';
+import { ApprovalDialog } from './widgets/permission';
+import { QuestionDialog } from './widgets/question';
+import { BackendStatusBanner } from './widgets/system/BackendStatusBanner';
+import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
+
 // R24-D6: 路由级代码分割 —— 首屏只加载 Chat/Welcome，低频页面
 // (设置/记忆/智能体/技能/Office/知识库/编排/定时任务) 按需加载。
 // Electron file:// 下同样减少首屏解析/执行量。
@@ -34,13 +42,6 @@ const ScheduledTasks = lazy(() =>
   import('./pages/ScheduledTasks').then((m) => ({ default: m.ScheduledTasks })),
 );
 const Skills = lazy(() => import('./pages/Skills').then((m) => ({ default: m.default })));
-import { useStore } from './shared/lib/store';
-import { CommandPalette } from './widgets/command';
-import { Layout } from './widgets/layout';
-import { ApprovalDialog } from './widgets/permission';
-import { QuestionDialog } from './widgets/question';
-import { BackendStatusBanner } from './widgets/system/BackendStatusBanner';
-import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
 
 // ChatRoute 内直接调用 hook 形式的 useStore setter 会引入条件调用问题,
 // 用 getState() 命令式写入更直白(与 App useEffect 里的用法一致)。
