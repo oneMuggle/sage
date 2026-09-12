@@ -181,6 +181,21 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace`,
   },
+  // R19: 数据安全 —— 备份清单/手动备份/记忆导出（system_routes，GET/POST
+  // 均无业务 body，本机 token 由 fetch 桥统一注入）。
+  system_backups_list: {
+    method: 'GET',
+    path: () => '/api/v1/system/backups',
+  },
+  system_backup_create: {
+    method: 'POST',
+    path: () => '/api/v1/system/backups',
+    body: () => ({}),
+  },
+  memory_export: {
+    method: 'GET',
+    path: () => '/api/v1/memory/export',
+  },
   workspace_search_files: {
     method: 'GET',
     path: (a) => {

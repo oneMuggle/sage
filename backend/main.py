@@ -96,6 +96,7 @@ from backend.api.permission_routes import router as permission_router
 from backend.api.question_routes import router as question_router
 from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
+from backend.api.system_routes import router as system_router
 from backend.api.theme_router import router as theme_router
 from backend.api.usage_routes import router as usage_router
 from backend.api.v1 import updates as updates_router_module
@@ -399,6 +400,35 @@ async def lifespan(app: FastAPI):
         len(_evo_registered),
         list(_evo_registered.keys()),
     )
+
+    # R19-B: SQLite 自动备份 —— 启动时后台线程备份一次（fail-safe, 不阻塞
+    # 启动）+ 每日 03:10 定时备份（独立于 evolution 任务, 只做整库在线复制）。
+    def _startup_backup() -> None:
+        from backend.services.backup_service import create_backup
+
+        try:
+            create_backup("startup")
+        except Exception:
+            logger.exception("startup backup failed (ignored)")
+
+    def _create_backup_daily() -> None:
+        from backend.services.backup_service import create_backup
+
+        try:
+            create_backup("daily")
+        except Exception:
+            logger.exception("daily backup failed (ignored)")
+
+    import threading as _threading
+
+    _threading.Thread(target=_startup_backup, name="startup-backup", daemon=True).start()
+    try:
+
+        scheduler_service.register_system_task(
+            "daily-backup", _create_backup_daily, "10 3 * * *"
+        )
+    except Exception:
+        logger.exception("daily backup job registration failed (ignored)")
 
     # PR-C §5.2: 把 ReviewService + SkillDraftStore 注入到全局 ReviewQueue,
     # 然后启动后台 worker。否则 hex/legacy 路径 enqueue 的 review_events
@@ -736,6 +766,8 @@ app.include_router(wiki_router, prefix="/api/v1")
 app.include_router(usage_router, prefix="/api/v1")
 # U18: HTML 会话导出 (POST /sessions/{id}/export, 与 API_MODE 无关)
 app.include_router(export_router, prefix="/api/v1")
+# R19-C/D: 系统维护 (备份清单/手动备份/记忆导出, 与 API_MODE 无关)
+app.include_router(system_router, prefix="/api/v1")
 # Artifacts 面板: /sessions/{id}/artifacts (list / content / reveal)
 app.include_router(artifact_router, prefix="/api/v1")
 
