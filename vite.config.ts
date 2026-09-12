@@ -46,7 +46,10 @@ function cspInjectionPlugin(): Plugin {
         "base-uri 'none'",
         "form-action 'none'",
       ].join('; ');
-      return html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${csp}">`);
+      return html.replace(
+        '<head>',
+        `<head>\n    <meta http-equiv="Content-Security-Policy" content="${csp}">`,
+      );
     },
   };
 }

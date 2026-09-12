@@ -38,11 +38,7 @@ import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electr
 import { logger } from './logger';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
-import {
-  getCloseToTrayPath,
-  readCloseToTray,
-  writeCloseToTray,
-} from './closeToTray';
+import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
 logger.info('main: process started', {
   pid: process.pid,
   electronVer: process.versions.electron,
@@ -1246,24 +1242,21 @@ async function registerIpcHandlers(): Promise<void> {
     return { enabled: closeToTrayEnabled };
   });
 
-  ipcMain.handle(
-    'sage:close-to-tray:set',
-    (evt, payload: { enabled: boolean }) => {
-      if (!isTrustedRenderer(evt.sender)) {
-        throw new Error('未授权的窗口请求');
-      }
-      closeToTrayEnabled = payload.enabled === true;
-      try {
-        writeCloseToTray(
-          getCloseToTrayPath(app.isPackaged, app.getPath('userData'), process.cwd()),
-          closeToTrayEnabled,
-        );
-      } catch (err) {
-        logger.warn('main: 写入 close-to-tray 偏好失败:', err);
-      }
-      return { ok: true, enabled: closeToTrayEnabled };
-    },
-  );
+  ipcMain.handle('sage:close-to-tray:set', (evt, payload: { enabled: boolean }) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      throw new Error('未授权的窗口请求');
+    }
+    closeToTrayEnabled = payload.enabled === true;
+    try {
+      writeCloseToTray(
+        getCloseToTrayPath(app.isPackaged, app.getPath('userData'), process.cwd()),
+        closeToTrayEnabled,
+      );
+    } catch (err) {
+      logger.warn('main: 写入 close-to-tray 偏好失败:', err);
+    }
+    return { ok: true, enabled: closeToTrayEnabled };
+  });
 
   ipcMain.handle('sage:demo-mode:set', (evt, payload: { demoMode: boolean }) => {
     if (!isTrustedRenderer(evt.sender)) {
@@ -1551,10 +1544,7 @@ async function registerIpcHandlers(): Promise<void> {
 
   ipcMain.handle(
     'diagnostic:export',
-    async (
-      evt,
-      opts: { includePrompts: boolean; includeHostname: boolean },
-    ) => {
+    async (evt, opts: { includePrompts: boolean; includeHostname: boolean }) => {
       if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
       return runDiagnosticExport(opts);
     },

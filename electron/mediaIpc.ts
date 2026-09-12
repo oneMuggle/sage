@@ -52,7 +52,9 @@ export function registerMediaIpc(
 
     // Construct FormData with the file buffer
     const formData = new FormData();
-    const blob = new Blob([payload.buffer], { type: payload.contentType || 'application/octet-stream' });
+    const blob = new Blob([payload.buffer], {
+      type: payload.contentType || 'application/octet-stream',
+    });
     formData.append('file', blob, payload.filename);
 
     // Build headers (auth token if available)
@@ -63,7 +65,11 @@ export function registerMediaIpc(
     // Don't set Content-Type — let FormData set multipart boundary
 
     const url = `${backendUrl}/api/v1/chat/attachments`;
-    logger.info('media:upload-attachment', { url, filename: payload.filename, size: payload.buffer.byteLength });
+    logger.info('media:upload-attachment', {
+      url,
+      filename: payload.filename,
+      size: payload.buffer.byteLength,
+    });
 
     const resp = await fetch(url, {
       method: 'POST',

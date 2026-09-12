@@ -81,7 +81,10 @@ export interface InputCardProps {
   onImageSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   // Phase 4 (2026-09-12): audio attachment upload callback
-  onAudioAttachment?: (attachment: { mediaRef: { id: string; mime_type: string; file_size: number }; apiUrl: string }) => void;
+  onAudioAttachment?: (attachment: {
+    mediaRef: { id: string; mime_type: string; file_size: number };
+    apiUrl: string;
+  }) => void;
 
   // Drag & drop
   onDrop?: (e: React.DragEvent) => void;

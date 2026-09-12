@@ -210,10 +210,7 @@ export interface DiagnosticElectronApiBridge {
   exportBundle: (opts: {
     includePrompts: boolean;
     includeHostname: boolean;
-  }) => Promise<
-    | { ok: true; path: string }
-    | { ok: false; code: string; error: string }
-  >;
+  }) => Promise<{ ok: true; path: string } | { ok: false; code: string; error: string }>;
   preview: () => Promise<{
     count: number;
     oldestTs: string | null;
@@ -248,10 +245,7 @@ export interface UpdateElectronApiBridge {
   getConfig: () => Promise<UpdateConfig>;
   setChannel: (channel: UpdateChannel) => Promise<void>;
   onStateChanged: (handler: (payload: UpdateStateChangedEvent) => void) => UnlistenFn;
-  checkWith: (
-    providerId: string,
-    channel?: string,
-  ) => Promise<CheckResult | null>;
+  checkWith: (providerId: string, channel?: string) => Promise<CheckResult | null>;
 }
 
 export interface ElectronAPI {

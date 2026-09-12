@@ -37,10 +37,7 @@ export function resolveMediaUrl(apiUrl: string): string {
  * Returns a blob: URL suitable for <img src> and <audio src>.
  * Works in both dev and prod.
  */
-export async function fetchMediaBlobUrl(
-  mediaId: string,
-  mimeType?: string,
-): Promise<string> {
+export async function fetchMediaBlobUrl(mediaId: string, mimeType?: string): Promise<string> {
   const bridge = window.electronAPI?.backendRequest;
   if (!bridge) {
     throw new Error('electronAPI.backendRequest not available');
