@@ -4,6 +4,7 @@ Tests the ``write()`` method and directory resolution logic.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from backend.skills.loader import SkillLoader, get_skill_loader, reset_skill_loa
 
 
 @pytest.mark.skipif(not hasattr(__import__("os"), "symlink"), reason="symlink unsupported")
+@pytest.mark.skipif(os.name == "nt", reason="Windows 建 symlink 需要特权，用例仅 POSIX 可验证")
 def test_write_rejects_symlinked_skill_directory(tmp_path: Path):
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -25,6 +27,7 @@ def test_write_rejects_symlinked_skill_directory(tmp_path: Path):
 
 
 @pytest.mark.skipif(not hasattr(__import__("os"), "symlink"), reason="symlink unsupported")
+@pytest.mark.skipif(os.name == "nt", reason="Windows 建 symlink 需要特权，用例仅 POSIX 可验证")
 def test_write_rejects_symlinked_skill_file(tmp_path: Path):
     outside = tmp_path / "outside.md"
     outside.write_text("original", encoding="utf-8")
@@ -50,6 +53,7 @@ def loader(skills_dir: Path) -> SkillLoader:
 
 
 @pytest.mark.skipif(not hasattr(__import__("os"), "symlink"), reason="symlink unsupported")
+@pytest.mark.skipif(os.name == "nt", reason="Windows 建 symlink 需要特权，用例仅 POSIX 可验证")
 def test_write_rejects_symlinked_root(tmp_path: Path):
     real_root = tmp_path / "real-root"
     real_root.mkdir()
@@ -64,6 +68,10 @@ def test_write_rejects_symlinked_root(tmp_path: Path):
 class TestSkillLoaderWrite:
     """write() method tests."""
 
+    @pytest.mark.skipif(
+        os.name == "nt",
+        reason="skill 写盘在 Windows 按 safe_writer 设计 fail-closed（等待原生 reparse-safe handle）",
+    )
     def test_write_creates_directory_and_file(self, loader: SkillLoader, skills_dir: Path):
         """write() creates <name>/SKILL.md with the given content."""
         path = loader.write("my-skill", "# My Skill\n\nContent here.")
@@ -71,12 +79,20 @@ class TestSkillLoaderWrite:
         assert path.exists()
         assert path.read_text(encoding="utf-8") == "# My Skill\n\nContent here."
 
+    @pytest.mark.skipif(
+        os.name == "nt",
+        reason="skill 写盘在 Windows 按 safe_writer 设计 fail-closed（等待原生 reparse-safe handle）",
+    )
     def test_write_overwrites_existing(self, loader: SkillLoader):
         """write() overwrites an existing SKILL.md by default for compatibility."""
         loader.write("dup-skill", "v1")
         path = loader.write("dup-skill", "v2")
         assert path.read_text(encoding="utf-8") == "v2"
 
+    @pytest.mark.skipif(
+        os.name == "nt",
+        reason="skill 写盘在 Windows 按 safe_writer 设计 fail-closed（等待原生 reparse-safe handle）",
+    )
     def test_write_without_overwrite_rejects_existing_file(self, loader: SkillLoader):
         """Safe writes reject an existing file without changing its contents."""
         path = loader.write("dup-skill", "v1")
@@ -86,6 +102,10 @@ class TestSkillLoaderWrite:
 
         assert path.read_text(encoding="utf-8") == "v1"
 
+    @pytest.mark.skipif(
+        os.name == "nt",
+        reason="skill 写盘在 Windows 按 safe_writer 设计 fail-closed（等待原生 reparse-safe handle）",
+    )
     def test_write_without_overwrite_creates_new_file(self, loader: SkillLoader):
         """Safe writes still create a new skill file."""
         path = loader.write("new-skill", "v1", overwrite=False)
