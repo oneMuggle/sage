@@ -34,6 +34,10 @@ from sage_core import LLMError, Message, Role, ToolCall
 from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
 
 from backend.application.services.wake_store import WakeStore
+from backend.chat.empty_response_guard import (
+    EMPTY_RESPONSE_SYSTEM_PROMPT,
+    empty_response_max_retries,
+)
 from backend.domain.wake import Wake, WakeKind, to_utc_iso
 
 # Optional memory types (for backward compatibility)
@@ -81,7 +85,8 @@ REVIEW_ENQUEUE_TOOL_CALL_THRESHOLD = 2
 # Round 14: hex 路径空响应守卫 —— 无工具调用且 content 空白时注入
 # system 提示重试（与 legacy run_loop 的 B1 守卫同语义对齐）；
 # 重试耗尽保留原空响应（不 FAILED，不阻塞单轮）。
-_EMPTY_RESPONSE_MAX_RETRIES = 1
+# 切片 B: 重试上限与提示文案收敛到 backend.chat.empty_response_guard 共享件，
+# 统一读 SAGE_EMPTY_RESPONSE_MAX_RETRIES（此前 hex 硬编码 1，legacy 默认 2）。
 
 # OTel tracer（P3.3：用于在 span 上记录关键属性）
 _tracer = get_tracer("chat_service")
@@ -702,21 +707,19 @@ class ChatService:
     ) -> Optional[Message]:
         """空响应重试：注入 system 提示后再试至多 N 次（Round 14）。
 
+        重试上限读 SAGE_EMPTY_RESPONSE_MAX_RETRIES（切片 B：与 legacy 统一，
+        默认 2，<=0 关闭守卫）。
+
         Returns:
             首个非空响应；重试耗尽仍为空 → None（调用方保留原空响应，
             行为退化为旧版，不 FAILED）。
         """
         retry_history = list(history) + [
-            Message(
-                role=Role.SYSTEM,
-                content="上一次响应内容为空。请直接给出完整回复；"
-                "若任务无法继续，请说明原因。",
-            )
+            Message(role=Role.SYSTEM, content=EMPTY_RESPONSE_SYSTEM_PROMPT)
         ]
-        for attempt in range(_EMPTY_RESPONSE_MAX_RETRIES):
-            logger.warning(
-                "hex 空响应重试（第 %d/%d 次）", attempt + 1, _EMPTY_RESPONSE_MAX_RETRIES
-            )
+        max_retries = empty_response_max_retries()
+        for attempt in range(max_retries):
+            logger.warning("hex 空响应重试（第 %d/%d 次）", attempt + 1, max_retries)
             try:
                 response = await self.llm.chat(retry_history, tools=llm_tools)
             except Exception as exc:  # noqa: BLE001 — 重试失败即放弃（保留原响应）
