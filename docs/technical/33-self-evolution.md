@@ -58,14 +58,21 @@
 | `SAGE_GW_HISTORY_TOKEN_BUDGET` | 4000 | 网关对话历史 token 预算（<=0 关闭） |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_ALLOWED_CHAT_IDS` | — | 网关启用 + 白名单（必需，缺一不启动） |
 
-## 剩余已知差距（Round 16 时点）
+## 剩余已知差距（Round 22 时点）
 
 1. **hex-legacy 双栈**：行为对齐进行中（空响应守卫已对齐），结构性
    收敛（单一循环实现）仍是大工程；
-2. **网关平台**：仅 Telegram；Discord/Slack 需 websocket 适配层；
-3. **curator LLM 巡检**：cron 每周一次 + 手动触发，无增量/事件驱动；
-4. **consolidation/pin 管理面**：REST 已有，前端设置卡未接入；
-5. **压缩谱系**：后端/谱系查询已有，前端「查看归档」入口未接。
+2. **网关平台**：BaseGateway 抽象基类（#663）与配置持久化（#682）已铺路，
+   Discord/Slack 适配仍未接入；
+3. **curator LLM 巡检**：cron 每周一次 + 手动触发（#681）；增量/事件驱动
+   仍未做。
+
+## 已收口差距（Round 17-18）
+
+- ~~consolidation/pin 管理面~~：技能 pin 钉住 + 固化巡检前端接入（#668 R17-A1）；
+- ~~压缩谱系「查看归档」入口~~：compact toast 直达归档弹窗（#668 R17-A2）；
+- **codebase_search 检索质量**：函数边界分块 v2（#686）→ FTS5+加权 RRF
+  混合检索（#693）→ end_line 透出/嵌入并行/单批重试（#696）。
 
 ## 集成验证记录（Round 16，2026-09-11）
 
