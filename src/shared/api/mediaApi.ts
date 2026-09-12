@@ -2,8 +2,6 @@
  * Media API helpers — URL resolution and blob fetching for multimodal content.
  */
 
-import { backendRequest } from './backendRequest';
-
 /**
  * Get the backend base URL for direct access (prod mode).
  * In dev mode, Vite proxy handles /api routes.

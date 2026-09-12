@@ -74,7 +74,7 @@ export function registerMediaIpc(
     const resp = await fetch(url, {
       method: 'POST',
       headers,
-      body: formData,
+      body: formData as unknown as import('node-fetch').BodyInit,
     });
 
     if (!resp.ok) {

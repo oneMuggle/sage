@@ -138,6 +138,7 @@ function InputCardInner({
   onToggleKnowledge,
   onImageSelect,
   onFileSelect,
+  onAudioAttachment,
   onDrop,
   onDragOver,
   onPaste,

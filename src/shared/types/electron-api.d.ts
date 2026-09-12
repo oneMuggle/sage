@@ -183,6 +183,8 @@ export interface BackendRequest {
   body?: unknown;
   /** Optional bounded cancellation timeout for the main-process relay. */
   timeoutMs?: number;
+  /** Optional response type for binary data (default: 'json'). */
+  responseType?: 'json' | 'arraybuffer';
 }
 
 export interface ProviderConfigSummary {
