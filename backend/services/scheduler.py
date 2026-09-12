@@ -263,6 +263,25 @@ class SchedulerService:
         self._evolution_tasks[name] = task
         logger.info("Evolution task registered: %s (%s)", name, expr)
 
+    def register_system_task(self, name: str, fn, cron_expr: str) -> None:
+        """注册一个系统维护任务（R19-B: SQLite 自动备份等）。
+
+        与 register_evolution_task 的区别：回调是任意可调用对象而非
+        BaseEvolutionTask，job_id 前缀 ``system/``。同样不写 JSON 持久化，
+        replace_existing 允许重启后重注册。
+        """
+        trigger = CronTrigger.from_crontab(cron_expr)
+        self._scheduler.add_job(
+            fn,
+            trigger=trigger,
+            id=f"system/{name}",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=600,
+        )
+        logger.info("System task registered: %s (%s)", name, cron_expr)
+
     def trigger_evolution_task(self, name: str) -> bool:
         """同步触发一个 evolution 任务(运维/手动用)。"""
         task = self._evolution_tasks.get(name)

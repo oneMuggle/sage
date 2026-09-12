@@ -66,6 +66,62 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
     [],
   );
 
+  // R19: 数据安全 —— 备份清单/手动备份/记忆导出
+  const [backups, setBackups] = useState<
+    { name: string; size_bytes: number; created_at: number }[]
+  >([]);
+  const [backingUp, setBackingUp] = useState(false);
+  const [exportingMemory, setExportingMemory] = useState(false);
+
+  const loadBackups = useCallback(async () => {
+    try {
+      const res = await invoke<{ backups: { name: string; size_bytes: number; created_at: number }[] }>(
+        'system_backups_list',
+      );
+      setBackups(res.backups ?? []);
+    } catch {
+      setBackups([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBackups();
+  }, [loadBackups]);
+
+  const handleBackupNow = useCallback(async () => {
+    setBackingUp(true);
+    try {
+      await invoke('system_backup_create');
+      await loadBackups();
+    } catch {
+      // 静默——列表不刷新即反映失败
+    } finally {
+      setBackingUp(false);
+    }
+  }, [loadBackups]);
+
+  const handleExportMemory = useCallback(async () => {
+    setExportingMemory(true);
+    try {
+      const data = await invoke<unknown>('memory_export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json;charset=utf-8',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `sage-memory-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch {
+      // 静默
+    } finally {
+      setExportingMemory(false);
+    }
+  }, []);
+
   return (
     <div className="space-y-6">
       <section>
@@ -122,6 +178,42 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
             onChange={(v) => updateSettings({ memoryServerSync: v })}
           />
         </SettingRow>
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">数据安全</h3>
+        <p className="text-xs text-text-secondary mb-2">
+          应用每日自动备份数据库（保留最近 7 份），也可手动立即备份；记忆支持导出为 JSON 文件。
+        </p>
+        <div className="flex gap-2 mb-3">
+          <button
+            type="button"
+            data-testid="backup-now"
+            disabled={backingUp}
+            onClick={() => void handleBackupNow()}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            {backingUp ? '备份中…' : '立即备份'}
+          </button>
+          <button
+            type="button"
+            data-testid="export-memory"
+            disabled={exportingMemory}
+            onClick={() => void handleExportMemory()}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            {exportingMemory ? '导出中…' : '导出记忆 (JSON)'}
+          </button>
+        </div>
+        {backups.length > 0 && (
+          <ul className="text-xs text-text-secondary space-y-1" data-testid="backup-list">
+            {backups.slice(0, 5).map((b) => (
+              <li key={b.name} className="font-mono">
+                {b.name} · {(b.size_bytes / 1024 / 1024).toFixed(1)} MB ·{' '}
+                {new Date(b.created_at).toLocaleString()}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );
