@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple  # noqa: UP035 — py3.8 纪律
@@ -43,6 +44,10 @@ MAX_FILES = 2000
 MAX_FILE_BYTES = 256 * 1024
 CHUNK_LINES = 40
 MAX_CHUNKS = 20_000
+#: v2 语义分块：单个定义块超过该行数时内部再按滑窗切分
+SEMANTIC_MAX_LINES = 80
+#: 分块算法版本——与库内 meta.chunker_version 不符时全量重建
+CHUNKER_VERSION = "2"
 
 
 def _index_dir(workspace_root: str) -> Path:
@@ -111,6 +116,112 @@ def chunk_file_lines(lines: List[str], chunk_lines: int = CHUNK_LINES) -> List[T
             break
         start += step
     return chunks
+
+
+# ---------- v2: 顶层定义边界分块 ----------
+
+#: 语言族 → 顶层定义起始行正则（无缩进才算，保守起步避免误报切碎正文）
+_SEMANTIC_BOUNDARY_RES: Dict[str, re.Pattern] = {
+    "py": re.compile(r"(?:async\s+def|def|class)\s"),
+    "js": re.compile(r"(?:export\s+)?(?:default\s+)?(?:abstract\s+)?(?:async\s+)?(?:function\s|class\s|interface\s|type\s|enum\s)"),
+    "go": re.compile(r"(?:func\s|type\s+\w+\s+(?:struct|interface)\b)"),
+    "rs": re.compile(r"(?:pub\s+)?(?:async\s+)?(?:fn\s|struct\s|trait\s|enum\s|impl\s)"),
+    "clike": re.compile(r"^(?:public|private|protected|internal|static|final|sealed|abstract)\s.*\b(?:class|interface|enum)\s"),
+    "rb": re.compile(r"(?:def\s|class\s)"),
+}
+
+#: 扩展名 → 语言族（不在表内的扩展回退 v1 滑窗）
+_EXT_LANG_FAMILY: Dict[str, str] = {
+    ".py": "py",
+    ".js": "js", ".jsx": "js", ".ts": "js", ".tsx": "js",
+    ".mjs": "js", ".cjs": "js",
+    ".go": "go",
+    ".rs": "rs",
+    ".java": "clike", ".cs": "clike",
+    ".rb": "rb",
+}
+
+
+def _semantic_boundaries(lines: List[str], family: str) -> List[int]:
+    """收集顶层定义的起始行下标（0-based）。装饰器行回溯并入定义。"""
+    regex = _SEMANTIC_BOUNDARY_RES[family]
+    bounds: List[int] = []
+    for idx, line in enumerate(lines):
+        if not line or line[0] in " \t)":
+            # 顶层定义不允许缩进；')' 开头的行是折行续体，跳过
+            continue
+        if not regex.search(line):
+            continue
+        if family == "clike" and not regex.match(line):
+            # clike 正则锚定行首修饰符,双保险
+            continue
+        # py 分支: 连续的顶层装饰器行并入定义起点
+        if family == "py":
+            start = idx
+            while (
+                start > 0
+                and lines[start - 1].startswith("@")
+                and not lines[start - 1][:1].isspace()
+            ):
+                start -= 1
+            bounds.append(start)
+        else:
+            bounds.append(idx)
+    return bounds
+
+
+def _sliding_slices(length: int, window: int, offset: int) -> List[Tuple[int, int]]:
+    """相对 [offset, length) 区间产出滑窗 (start, end) 切片，尾窗不重叠。"""
+    step = max(1, int(window * 0.75))
+    out: List[Tuple[int, int]] = []
+    start = offset
+    while start < length:
+        end = min(length, start + window)
+        out.append((start, end))
+        if end >= length:
+            break
+        start += step
+    return out
+
+
+def chunk_file_semantic(
+    lines: List[str], family: str, chunk_lines: int = CHUNK_LINES
+) -> List[Tuple[int, str]]:
+    """按顶层定义切块：定义块整块成 chunk，超长块内部滑窗，无定义回退滑窗。
+
+    返回 [(start_line_1based, text)]，与 ``chunk_file_lines`` 同形。
+    """
+    bounds = _semantic_boundaries(lines, family)
+    if not bounds:
+        return chunk_file_lines(lines, chunk_lines)
+
+    chunks: List[Tuple[int, str]] = []
+
+    def _emit(start: int, end: int) -> None:
+        for s, e in _sliding_slices(end, chunk_lines, start):
+            text = "\n".join(lines[s:e]).strip()
+            if text:
+                chunks.append((s + 1, text))
+
+    # 前导区（imports/模块注释）滑窗切块
+    _emit(0, bounds[0])
+    for i, bound in enumerate(bounds):
+        block_end = bounds[i + 1] if i + 1 < len(bounds) else len(lines)
+        if block_end - bound <= SEMANTIC_MAX_LINES:
+            text = "\n".join(lines[bound:block_end]).strip()
+            if text:
+                chunks.append((bound + 1, text))
+        else:
+            _emit(bound, block_end)
+    return chunks
+
+
+def chunk_file(path: Path, lines: List[str]) -> List[Tuple[int, str]]:
+    """按扩展名分派 v2 语义分块 / v1 滑窗。"""
+    family = _EXT_LANG_FAMILY.get(path.suffix.lower())
+    if family is None:
+        return chunk_file_lines(lines)
+    return chunk_file_semantic(lines, family)
 
 
 def load_embedding_config() -> Optional[Dict[str, str]]:
@@ -190,10 +301,15 @@ def _index_workspace(root: str, config: Dict[str, str]) -> Dict[str, Any]:
         # 先嵌入一个探针确定维度; 与库内 dim 不符 → 清库重建
         probe = _embed_texts(config, ["dim probe"])
         dim = len(probe[0])
-        if stored_dim is not None and int(stored_dim) != dim:
+        stored_chunker = _meta_get(conn, "chunker_version")
+        if (stored_dim is not None and int(stored_dim) != dim) or (
+            stored_chunker is not None and stored_chunker != CHUNKER_VERSION
+        ):
+            # chunker 版本变更（v1 滑窗 → v2 语义分块）同样全量重建
             conn.execute("DELETE FROM chunks")
             conn.execute("DELETE FROM files")
         _meta_set(conn, "dim", str(dim))
+        _meta_set(conn, "chunker_version", CHUNKER_VERSION)
 
         known: Dict[str, Tuple[float, int]] = {
             row[0]: (row[1], row[2])
@@ -212,7 +328,7 @@ def _index_workspace(root: str, config: Dict[str, str]) -> Dict[str, Any]:
                 lines = path.read_text(encoding="utf-8").splitlines()
             except (UnicodeDecodeError, OSError):
                 continue
-            chunks = chunk_file_lines(lines)
+            chunks = chunk_file(path, lines)
             if chunks:
                 to_index.append((path, chunks))
 

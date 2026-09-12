@@ -101,3 +101,98 @@ def test_dim_change_rebuilds(index_env, monkeypatch):
 def test_stats_before_index(index_env):
     stats = wi.workspace_index_stats(str(index_env))
     assert stats == {"indexed_files": 0, "chunks": 0}
+
+
+# ---------- v2: 顶层定义边界分块 ----------
+
+
+def test_semantic_chunks_align_to_defs():
+    src = "\n".join(
+        ["import os"]
+        + [f"line{i}" for i in range(5)]
+        + ["def alpha():", "    return 1"]
+        + [""] + [f"pad{i}" for i in range(3)]
+        + ["class Beta:", "    pass"]
+        + ["", "tail"]
+    )
+    lines = src.splitlines()
+    chunks = wi.chunk_file_semantic(lines, "py")
+
+    starts = [start for start, _ in chunks]
+    # alpha 与 Beta 的定义行各成一个 chunk（1-based 行号对齐）
+    alpha_line = next(i + 1 for i, ln in enumerate(lines) if ln.startswith("def alpha"))
+    beta_line = next(i + 1 for i, ln in enumerate(lines) if ln.startswith("class Beta"))
+    assert alpha_line in starts
+    assert beta_line in starts
+    # 每个定义块 chunk 以定义（或装饰器）开头
+    alpha_chunk = next(text for start, text in chunks if start == alpha_line)
+    assert alpha_chunk.startswith("def alpha")
+
+
+def test_semantic_decorator_attached_to_def():
+    src = ["@staticmethod", "@cache", "def gamma():", "    return 2"]
+    chunks = wi.chunk_file_semantic(src, "py")
+    assert len(chunks) == 1
+    start, text = chunks[0]
+    assert start == 1
+    assert text.startswith("@staticmethod")
+
+
+def test_semantic_long_function_splits():
+    body = ["def big():"] + [f"    x{i} = {i}" for i in range(120)]
+    chunks = wi.chunk_file_semantic(body, "py")
+    assert len(chunks) >= 2
+    assert chunks[0][0] == 1
+    # 覆盖到末尾（滑窗步进到收尾窗）
+    assert chunks[-1][1].strip()
+
+
+def test_semantic_fallback_without_defs():
+    lines = [f"plain {i}" for i in range(90)]
+    assert wi.chunk_file_semantic(lines, "py") == wi.chunk_file_lines(lines)
+
+
+def test_semantic_dispatch_by_ext(tmp_path):
+    py_file = tmp_path / "m.py"
+    md_file = tmp_path / "n.md"
+    py_lines = ["def a():", "    pass"]
+    md_lines = [f"doc {i}" for i in range(50)]
+    py_file.write_text("\n".join(py_lines), encoding="utf-8")
+    md_file.write_text("\n".join(md_lines), encoding="utf-8")
+
+    assert wi.chunk_file(py_file, py_lines) == [(1, "def a():\n    pass")]
+    assert wi.chunk_file(md_file, md_lines) == wi.chunk_file_lines(md_lines)
+
+
+def test_js_go_rs_boundaries():
+    js = ["import x from 'y';", "export function foo() {", "  return 1", "}"]
+    go = ["package m", "func Bar() {", "}"]
+    rs = ["pub fn baz() {}", "struct S;"]
+    assert wi.chunk_file_semantic(js, "js")[-1][1].startswith("export function foo")
+    assert wi.chunk_file_semantic(go, "go")[-1][1].startswith("func Bar")
+    assert len(wi.chunk_file_semantic(rs, "rs")) == 2
+
+
+def test_chunker_version_rebuild(index_env, monkeypatch):
+    config = {"base_url": "https://e.test", "api_key": "k", "model": "embed-1"}
+    wi._index_workspace(str(index_env), config)
+
+    # 篡改库内 chunker_version → 下次索引清库重建
+    import sqlite3
+
+    db_path = wi._index_dir(str(index_env)) / "index.sqlite3"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("UPDATE meta SET value = '1' WHERE key = 'chunker_version'")
+    conn.commit()
+    conn.close()
+
+    calls = {"n": 0}
+    real = wi._embed_texts
+
+    def counting(config, texts):
+        calls["n"] += len(texts)
+        return real(config, texts)
+
+    monkeypatch.setattr(wi, "_embed_texts", counting)
+    info = wi._index_workspace(str(index_env), config)
+    assert info["indexed"] > 0  # 版本不符 → 文件被重建（而非增量跳过）
