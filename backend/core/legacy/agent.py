@@ -18,6 +18,11 @@ from collections import deque
 from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
+from backend.chat.empty_response_guard import (
+    EMPTY_RESPONSE_FALLBACK_TEXT,
+    EMPTY_RESPONSE_SYSTEM_PROMPT,
+    empty_response_max_retries,
+)
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.exceptions import AgentError, ToolCallError
 from backend.core.legacy.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
@@ -825,10 +830,8 @@ class SageAgent:
         # L7: 每-run 工具调用计数（跨迭代累计,超 ToolPolicy.max_tool_calls_per_run 终止）
         tool_calls_used = 0
         # B1 空响应守卫配置（对标 hermes turn_empty_response）
-        try:
-            empty_response_max = int(os.getenv("SAGE_EMPTY_RESPONSE_MAX_RETRIES", "2"))
-        except ValueError:
-            empty_response_max = 2
+        # 切片 B: env 解析收敛到共享件 backend.chat.empty_response_guard
+        empty_response_max = empty_response_max_retries()
         empty_response_retries = 0
         # B2 工具复读守卫配置与状态（对标 hermes repetition_guard）:
         # 相同 (工具名, 规范化参数) 签名重复出现 → 软限注入提醒, 硬限拦截执行。
@@ -1058,15 +1061,14 @@ class SageAgent:
                         messages.append(
                             {
                                 "role": "system",
-                                "content": "上一次响应内容为空。请直接给出完整回复；"
-                                "若任务无法继续，请说明原因。",
+                                "content": EMPTY_RESPONSE_SYSTEM_PROMPT,
                             }
                         )
                         continue
                     logger.warning(
                         "run_loop 空响应重试耗尽 (%d 次)，以兜底文案结束", empty_response_max
                     )
-                    fallback = "（模型连续返回空响应，已停止重试。请重试或换个问法。）"
+                    fallback = EMPTY_RESPONSE_FALLBACK_TEXT
                     messages.append({"role": "assistant", "content": fallback})
                     yield AgentEvent(
                         state=AgentState.DONE,
