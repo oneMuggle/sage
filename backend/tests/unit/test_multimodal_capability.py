@@ -62,3 +62,53 @@ def test_registry_available_empty():
     CapabilityRegistry._capabilities.clear()
     assert CapabilityRegistry.available() == []
     CapabilityRegistry._capabilities = saved
+
+
+# ── Task 2.1: TTSCapability ──────────────────────────────────
+
+
+def test_tts_build_request():
+    from backend.services.multimodal.capability import CapabilityConfig
+    from backend.services.multimodal.tts import TTSCapability
+    cap = TTSCapability()
+    config = CapabilityConfig(base_url="https://api.example.com", api_key="sk-test", model="tts-1")
+    req = cap.build_request(config, text="Hello world", voice="alloy", speed=1.0)
+    assert req.url == "https://api.example.com/audio/speech"
+    assert req.headers["Authorization"] == "Bearer sk-test"
+    assert req.body["model"] == "tts-1"
+    assert req.body["input"] == "Hello world"
+    assert req.body["voice"] == "alloy"
+    assert req.timeout == 120.0
+
+
+def test_tts_build_request_no_api_key():
+    from backend.services.multimodal.capability import CapabilityConfig
+    from backend.services.multimodal.tts import TTSCapability
+    cap = TTSCapability()
+    config = CapabilityConfig(base_url="https://api.example.com", api_key="", model="tts-1")
+    req = cap.build_request(config, text="Hello")
+    assert "Authorization" not in req.headers
+
+
+def test_tts_parse_response_saves_file(tmp_path, monkeypatch):
+    from backend.services.multimodal.capability import AIHttpResponse
+    from backend.services.multimodal.media_store import MediaKind, MediaStore
+    from backend.services.multimodal.tts import TTSCapability
+
+    cap = TTSCapability()
+    monkeypatch.setattr("backend.services.multimodal.tts.MediaStore",
+                        lambda: MediaStore(root=tmp_path))
+    resp = AIHttpResponse(status_code=200, content=b'\xff\xfb\x90\x00' + b'\x00' * 50)
+    ref = cap.parse_response(resp, text="Hello world test")
+    assert ref.kind == MediaKind.AUDIO
+    assert ref.source == "tts"
+    assert ref.file_size == 54
+
+
+def test_tts_parse_response_error():
+    from backend.services.multimodal.capability import AIHttpResponse
+    from backend.services.multimodal.tts import TTSCapability
+    cap = TTSCapability()
+    resp = AIHttpResponse(status_code=401, content=b'{"error": "invalid key"}')
+    with pytest.raises(ValueError, match="401"):
+        cap.parse_response(resp)
