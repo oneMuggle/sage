@@ -9,11 +9,12 @@
  * 刻意不做的部分（避免改变用户预期，后续批次再评审）：
  * 关闭按钮仍然正常退出应用，不做"关闭即隐藏到托盘"。
  */
-import { app, BrowserWindow, globalShortcut, Menu, Tray } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, Menu, Tray } from 'electron';
 import { join } from 'path';
 
 import { logger } from './logger';
 import { mainWindow } from './mainWindow';
+import { runDiagnosticExport } from './diagnosticExport';
 
 let tray: Tray | null = null;
 
@@ -61,6 +62,32 @@ export function setupTrayAndGlobalShortcut(): void {
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: '显示 Sage', click: () => showMainWindow() },
+        {
+          label: '导出诊断包…',
+          click: async () => {
+            try {
+              const choice = await dialog.showMessageBox({
+                type: 'question',
+                buttons: ['不含 prompt', '含 prompt', '取消'],
+                defaultId: 0,
+                cancelId: 2,
+                title: '导出诊断包',
+                message: '将导出最近 50 次 LLM 调用为 zip 文件',
+                detail:
+                  '是否在导出中包含原始 prompt 内容（可能含业务敏感信息）？',
+              });
+              if (choice.response === 2) return;
+              await runDiagnosticExport({
+                includePrompts: choice.response === 1,
+                includeHostname: true,
+              });
+            } catch (err) {
+              logger.warn('tray: diagnostic export failed', {
+                err: err instanceof Error ? err.message : String(err),
+              });
+            }
+          },
+        },
         { type: 'separator' },
         { label: '退出', click: () => void app.quit() },
       ]),

@@ -72,6 +72,7 @@ from backend.api.artifact_routes import router as artifact_router
 from backend.api.chat_stream_registry import StreamRegistry
 
 # B1 (P11): 记忆嵌入器状态/切换 API
+from backend.api.diagnostic_routes import router as diagnostic_router
 from backend.api.embedder_routes import router as embedder_router
 from backend.api.export_routes import router as export_router
 from backend.api.hex_routes import router as hex_router
@@ -767,6 +768,9 @@ app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v
 
 # M3: MCP multi-server management (status / servers CRUD)
 app.include_router(mcp_router, prefix="/api/v1")
+
+# LLM trace diagnostic preview (settings page card)
+app.include_router(diagnostic_router, prefix="/api/v1")
 
 
 @app.get("/health/proof")
