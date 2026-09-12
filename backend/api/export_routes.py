@@ -26,6 +26,7 @@ from backend.application.services.session_export import (
     VALID_THEMES,
     SessionNotFoundError,
     export_session_to_html,
+    export_session_to_markdown,
 )
 
 router = APIRouter(tags=["export"])
@@ -37,6 +38,10 @@ class ExportSessionRequest(BaseModel):
     theme: str = Field(
         default=DEFAULT_THEME,
         description="导出主题: auto(跟随系统) / dark / light,非法值归一化为 auto",
+    )
+    format: str = Field(
+        default="html",
+        description="导出格式: html(默认,向后兼容) / markdown",
     )
 
     class Config:
@@ -62,9 +67,14 @@ def export_session(
     """
     request = body or ExportSessionRequest()
     theme = request.theme if request.theme in VALID_THEMES else DEFAULT_THEME
+    export_format = "markdown" if request.format == "markdown" else "html"
 
     try:
-        result = export_session_to_html(session_id, theme=theme)
+        if export_format == "markdown":
+            # R18-C: markdown 导出 —— theme 不适用,恒回 DEFAULT_THEME
+            result = export_session_to_markdown(session_id)
+        else:
+            result = export_session_to_html(session_id, theme=theme)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="会话不存在")
 

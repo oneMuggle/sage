@@ -159,6 +159,13 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/export`,
     body: (a) => ({ theme: a.theme ?? 'auto' }),
   },
+  // R18-C: Markdown 会话导出 —— 后端同一端点按 format 分派；body 只下发
+  // format（extra=forbid，sessionId 走路径参数）。
+  export_session_markdown: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/export`,
+    body: () => ({ format: 'markdown' }),
+  },
 
   // session workspace binding
   workspace_bind: {
@@ -247,7 +254,14 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   session_update: {
     method: 'PATCH',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}`,
-    body: (a) => ({ title: a.title }),
+    body: (a) => {
+      const body: Record<string, unknown> = {};
+      // R18-B: is_pinned 置顶开关（后端 SessionUpdateIn.is_pinned 已支持）
+      if (a.isPinned != null) body.is_pinned = a.isPinned;
+      // title 缺省不下发 —— PATCH 只更新显式传入的字段
+      if (a.title != null) body.title = a.title;
+      return body;
+    },
   },
 
   // F12 (对标增强第五轮批次 B): 跨会话消息全文搜索（侧栏搜索框数据源）

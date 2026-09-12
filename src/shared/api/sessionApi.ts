@@ -157,6 +157,29 @@ export const sessionApi = {
   },
 
   /**
+   * R18-B: 会话置顶/取消置顶。
+   *
+   * PATCH 幂等走 withRetry;后端 SessionUpdateIn.is_pinned 已支持,
+   * IPC body 增量下发（title 不动）。
+   */
+  async setPinned(sessionId: string, pinned: boolean): Promise<Session> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    return withRetry(async () => {
+      try {
+        return await invoke<Session>('session_update', { sessionId, isPinned: pinned });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
    * M4: 从会话分叉。复制 atMessageId 及之前的消息（缺省全部）到新会话。
    *
    * U5': `options.beforeMessage` 切换为**开区间**——复制 atMessageId 之前
@@ -209,6 +232,29 @@ export const sessionApi = {
     return withRetry(async () => {
       try {
         return await invoke<SessionExportResult>('export_session_html', { sessionId, theme });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * R18-C: 导出会话为 Markdown。
+   *
+   * 后端同一导出端点按 format=markdown 分派，返回 {markdown, filename}。
+   */
+  async exportMarkdown(sessionId: string): Promise<SessionExportResult> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    return withRetry(async () => {
+      try {
+        const res = await invoke<SessionExportResult>('export_session_markdown', { sessionId });
+        return res;
       } catch (error) {
         throw handleApiError(error);
       }
@@ -324,6 +370,19 @@ interface MessageSearchWire {
  * Electron 渲染进程里 blob: URL 下载走 session 的 will-download 流程，
  * 弹出系统保存对话框；纯浏览器环境直接进下载目录。
  */
+/** R18-C: 把导出 Markdown 文本作为文件下载（同 downloadHtmlFile 机制）。 */
+export function downloadMarkdownFile(markdown: string, filename: string): void {
+  const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 export function downloadHtmlFile(html: string, filename: string): void {
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);

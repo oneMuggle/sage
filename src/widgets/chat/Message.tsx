@@ -10,6 +10,7 @@ import {
   Eye,
   EyeOff,
   Pencil,
+  RefreshCw,
 } from 'lucide-react';
 import { memo } from 'react';
 import { useEffect, useState } from 'react';
@@ -37,6 +38,8 @@ interface MessageProps {
   onFork?: (messageId: string) => void;
   /** U5': 编辑此条 user 消息并重发（分叉其前缀，原会话保留） */
   onEditResend?: (messageId: string) => void;
+  /** R18-A: 重新生成此条 assistant 回答（fork 前缀 + 重发前驱 user 消息） */
+  onRegenerate?: (messageId: string) => void;
 }
 
 /** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
@@ -162,6 +165,7 @@ function MessageComponent({
   isStreaming,
   onFork,
   onEditResend,
+  onRegenerate,
 }: MessageProps) {
   const { t } = useI18n();
   const isUser = message.role === 'user';
@@ -172,6 +176,8 @@ function MessageComponent({
   const canFork = Boolean(onFork) && (isUser || isAssistant);
   // U5': 编辑重发只对 user 消息有意义（重写用户输入，而非模型回答）
   const canEditResend = Boolean(onEditResend) && isUser;
+  // R18-A: 重新生成仅对 assistant 消息有意义（重跑回答，原会话保留）
+  const canRegenerate = Boolean(onRegenerate) && isAssistant && !isStreaming;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content);
@@ -415,7 +421,7 @@ function MessageComponent({
         </div>
 
         {/* Action buttons */}
-        {(onFeedback || canFork || canEditResend) && (
+        {(onFeedback || canFork || canEditResend || canRegenerate) && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
             {onFeedback && (
               <>
@@ -441,6 +447,17 @@ function MessageComponent({
                   <ThumbsDown className="w-4 h-4" />
                 </button>
               </>
+            )}
+            {canRegenerate && (
+              <button
+                onClick={() => onRegenerate?.(message.id)}
+                className="p-1 rounded hover:bg-bg-hover"
+                title={t('chat.regenerate')}
+                aria-label={t('chat.regenerate')}
+                data-testid="regenerate-message"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
             )}
             {canEditResend && (
               <button
@@ -480,6 +497,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.knowledgeRefs === next.knowledgeRefs &&
     prev.attachments === next.attachments &&
     prev.onFork === next.onFork &&
-    prev.onEditResend === next.onEditResend
+    prev.onEditResend === next.onEditResend &&
+    prev.onRegenerate === next.onRegenerate
   );
 });
