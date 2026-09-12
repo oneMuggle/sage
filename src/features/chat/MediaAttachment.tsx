@@ -1,5 +1,6 @@
 // src/features/chat/MediaAttachment.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { resolveMediaUrl } from '../../shared/api/mediaApi';
 
 interface MediaAttachmentProps {
   /** API URL like /api/v1/media/{id} */
@@ -18,13 +19,19 @@ interface MediaAttachmentProps {
  */
 export const MediaAttachment: React.FC<MediaAttachmentProps> = ({ url, mimeType, caption }) => {
   const [zoomed, setZoomed] = useState(false);
+  const [resolvedUrl, setResolvedUrl] = useState<string>(url);
+
+  // Resolve API URL to backend URL (dev: Vite proxy, prod: direct backend)
+  useEffect(() => {
+    setResolvedUrl(resolveMediaUrl(url));
+  }, [url]);
 
   if (mimeType.startsWith('image/')) {
     return (
       <>
         <div className="my-2">
           <img
-            src={url}
+            src={resolvedUrl}
             alt={caption || 'Generated image'}
             className="max-w-sm rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
             onClick={() => setZoomed(true)}
@@ -37,7 +44,7 @@ export const MediaAttachment: React.FC<MediaAttachmentProps> = ({ url, mimeType,
             onClick={() => setZoomed(false)}
           >
             <img
-              src={url}
+              src={resolvedUrl}
               alt={caption || 'Generated image'}
               className="max-w-full max-h-full object-contain"
             />
@@ -50,7 +57,7 @@ export const MediaAttachment: React.FC<MediaAttachmentProps> = ({ url, mimeType,
   if (mimeType.startsWith('audio/')) {
     return (
       <div className="my-2">
-        <audio controls src={url} className="max-w-sm w-full">
+        <audio controls src={resolvedUrl} className="max-w-sm w-full">
           Your browser does not support audio playback.
         </audio>
         {caption && <p className="text-xs text-muted mt-1">{caption}</p>}
@@ -62,7 +69,7 @@ export const MediaAttachment: React.FC<MediaAttachmentProps> = ({ url, mimeType,
   return (
     <div className="my-2">
       <a
-        href={url}
+        href={resolvedUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="text-sm text-accent hover:underline"

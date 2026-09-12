@@ -21,6 +21,7 @@ import remarkMath from 'remark-math';
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
+import { MediaAttachment } from '../../features/chat/MediaAttachment';
 
 import { MermaidBlock } from './MermaidBlock';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
@@ -263,6 +264,19 @@ function MessageComponent({
                         className="max-w-full rounded border border-border"
                         style={{ maxHeight: '400px', backgroundColor: '#ffffff' }}
                       />
+                    </div>
+                  )}
+                  {/* Phase 4 (2026-09-12): multimodal tool output (TTS/image generation) */}
+                  {tc.metadata?.mediaRefs && tc.metadata.mediaRefs.length > 0 && (
+                    <div className="px-2 pb-2">
+                      {tc.metadata.mediaRefs.map((ref, refIdx) => (
+                        <MediaAttachment
+                          key={ref.id || refIdx}
+                          url={ref.api_url ?? `/api/v1/media/${ref.id}`}
+                          mimeType={ref.mime_type}
+                          caption={`${ref.kind} — ${ref.source || tc.name}`}
+                        />
+                      ))}
                     </div>
                   )}
                 </div>

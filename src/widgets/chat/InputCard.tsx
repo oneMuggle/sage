@@ -4,6 +4,7 @@ import type React from 'react';
 
 import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
 import { useI18n } from '../../shared/lib/i18n';
+import { AttachmentUpload } from '../../features/send-message/AttachmentUpload';
 
 import { FileAttachment } from './FileAttachment';
 import { KnowledgeChip } from './KnowledgeChip';
@@ -79,6 +80,8 @@ export interface InputCardProps {
   // File/image picker
   onImageSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  // Phase 4 (2026-09-12): audio attachment upload callback
+  onAudioAttachment?: (attachment: { mediaRef: { id: string; mime_type: string; file_size: number }; apiUrl: string }) => void;
 
   // Drag & drop
   onDrop?: (e: React.DragEvent) => void;
@@ -350,6 +353,13 @@ function InputCardInner({
               >
                 <Paperclip className="w-4 h-4" />
               </button>
+              {/* Phase 4 (2026-09-12): audio attachment upload */}
+              {onAudioAttachment && (
+                <AttachmentUpload
+                  onAttachmentUploaded={onAudioAttachment}
+                  onError={(msg) => console.error('[InputCard] Audio upload failed:', msg)}
+                />
+              )}
               {onToggleKnowledgeSelector && (
                 <button
                   type="button"

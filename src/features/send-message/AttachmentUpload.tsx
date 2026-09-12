@@ -22,7 +22,7 @@ const MAX_SIZE = 25 * 1024 * 1024;
 
 /**
  * Chat attachment upload button.
- * Uploads audio files to /api/v1/chat/attachments and returns MediaRef.
+ * Uploads audio files via Electron IPC (media:upload-attachment) or direct fetch fallback.
  */
 export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
   onAttachmentUploaded,
@@ -44,31 +44,17 @@ export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
       let errorMessage: string | null = null;
 
       try {
-        const formData = new FormData();
-        formData.append('file', file);
+        // Prefer Electron IPC bridge (desktop app)
+        if (window.electronAPI?.media?.uploadAttachment) {
+          const buffer = await file.arrayBuffer();
+          const response = await window.electronAPI.media.uploadAttachment(
+            buffer,
+            file.name,
+            file.type,
+          );
 
-        const resp = await fetch('/api/v1/chat/attachments', {
-          method: 'POST',
-          body: formData,
-        });
-
-        const data: unknown = await resp.json();
-
-        if (!resp.ok) {
-          const obj =
-            typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
-          const msg =
-            typeof obj.error === 'string'
-              ? obj.error
-              : typeof obj.detail === 'string'
-                ? obj.detail
-                : `上传失败 (HTTP ${resp.status})`;
-          errorMessage = msg;
-        } else {
-          const obj =
-            typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
-          const mediaRef = obj.media_ref as Record<string, unknown> | undefined;
-          const apiUrl = obj.api_url;
+          const mediaRef = response.media_ref as Record<string, unknown> | undefined;
+          const apiUrl = response.api_url;
 
           if (
             !mediaRef ||
@@ -87,6 +73,53 @@ export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
               },
               api_url: apiUrl,
             };
+          }
+        } else {
+          // Fallback: direct fetch (dev browser mode)
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const resp = await fetch('/api/v1/chat/attachments', {
+            method: 'POST',
+            body: formData,
+          });
+
+          const data: unknown = await resp.json();
+
+          if (!resp.ok) {
+            const obj =
+              typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
+            const msg =
+              typeof obj.error === 'string'
+                ? obj.error
+                : typeof obj.detail === 'string'
+                  ? obj.detail
+                  : `上传失败 (HTTP ${resp.status})`;
+            errorMessage = msg;
+          } else {
+            const obj =
+              typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
+            const mediaRef = obj.media_ref as Record<string, unknown> | undefined;
+            const apiUrl = obj.api_url;
+
+            if (
+              !mediaRef ||
+              typeof mediaRef.id !== 'string' ||
+              typeof mediaRef.mime_type !== 'string' ||
+              typeof mediaRef.file_size !== 'number' ||
+              typeof apiUrl !== 'string'
+            ) {
+              errorMessage = '上传响应格式无效';
+            } else {
+              result = {
+                media_ref: {
+                  id: mediaRef.id,
+                  mime_type: mediaRef.mime_type,
+                  file_size: mediaRef.file_size,
+                },
+                api_url: apiUrl,
+              };
+            }
           }
         }
       } catch (err) {

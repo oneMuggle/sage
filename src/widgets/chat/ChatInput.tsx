@@ -394,6 +394,15 @@ function ChatInputInner({
     e.target.value = '';
   };
 
+  // Phase 4 (2026-09-12): audio attachment upload handler
+  const handleAudioAttachment = (attachment: {
+    mediaRef: { id: string; mime_type: string; file_size: number };
+    apiUrl: string;
+  }) => {
+    // TODO: integrate with message sending (attach to next user message)
+    console.log('[ChatInput] Audio attachment uploaded:', attachment);
+  };
+
   const toggleKnowledgeRef = (doc: KnowledgeDocType) => {
     setKnowledgeRefs((prev) =>
       prev.find((r) => r.id === doc.id)
@@ -483,6 +492,7 @@ function ChatInputInner({
       }}
       onImageSelect={handleImageSelect}
       onFileSelect={handleFileSelect}
+      onAudioAttachment={handleAudioAttachment}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onPaste={handlePaste}
