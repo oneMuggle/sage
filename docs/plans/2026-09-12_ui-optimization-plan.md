@@ -600,7 +600,7 @@ const FileDiff = ({ file }: { file: FileChange }) => (
 - [x] T2.1 Artifacts 实时预览（#12）⭐ 优先
 - [x] T2.2 折叠态 icon rail（#2）
 - [x] T2.3 全局搜索合并（#4）
-- [ ] T2.4 Diff 视图（#13）
+- [x] T2.4 Diff 视图（#13）
 
 **验收**：
 - 至少完成 2 项
@@ -609,8 +609,8 @@ const FileDiff = ({ file }: { file: FileChange }) => (
 ### 阶段 3（第 4-6 周）：P2 选做
 
 - [ ] T3.1 Workspace / Project 切换器（#3）
-- [ ] T3.2 对话目录/大纲（#19）
-- [ ] T3.3 Artifacts 独立窗口（#11）⭐ 优先
+- [x] T3.2 对话目录/大纲（#19）
+- [x] T3.3 Artifacts 独立窗口（#11）⭐ 优先
 - [ ] T3.4 语音输入（#24）
 
 **验收**：

@@ -1401,6 +1401,37 @@ async function registerIpcHandlers(): Promise<void> {
     return image.toPNG().toString('base64');
   });
 
+  // P2-3.11 (2026-09-13): Artifacts 独立窗口。
+  // 双击 Artifact → 弹出独立 BrowserWindow 展示 HTML 内容。
+  // 仅支持 html 类型;其他类型返回 {ok:false}。
+  ipcMain.handle(
+    'sage:artifact-window:open',
+    (evt, artifact: { id: string; name: string; kind: string; path: string }) => {
+      if (!isTrustedRenderer(evt.sender)) return { ok: false, reason: 'untrusted' };
+      if (!artifact?.path || artifact.kind !== 'html') {
+        return { ok: false, reason: 'unsupported' };
+      }
+
+      const artifactWin = new BrowserWindow({
+        width: 1024,
+        height: 768,
+        title: `Artifact: ${artifact.name}`,
+        parent: getSenderWindow(evt) ?? undefined,
+        resizable: true,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: true,
+        },
+      });
+
+      // 加载 HTML 文件 (file:// 协议)
+      artifactWin.loadFile(artifact.path);
+
+      return { ok: true };
+    },
+  );
+
   // Folder picker for LLM Wiki project create/open (added 2026-06-27)
   ipcMain.handle(
     'sage:dialog:select-directory',

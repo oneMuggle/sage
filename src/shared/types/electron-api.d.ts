@@ -324,6 +324,17 @@ export interface ElectronAPI {
    */
   resetDemoMode?: () => Promise<{ ok: boolean; error?: string }>;
   setDemoMode?: (demoMode: boolean) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * P2-3.11 (2026-09-13): Artifacts 独立窗口。
+   * 双击 Artifact → 弹出独立 BrowserWindow 展示 HTML 内容。
+   * 仅支持 kind === 'html';其他类型返回 {ok:false, reason:'unsupported'}。
+   */
+  openArtifactWindow: (artifact: {
+    id: string;
+    name: string;
+    kind: string;
+    path: string;
+  }) => Promise<{ ok: boolean; reason?: string }>;
   /** E-2 (round5 批次 E): 关闭即隐藏到托盘偏好读写 */
   getCloseToTray?: () => Promise<{ enabled: boolean }>;
   setCloseToTray?: (enabled: boolean) => Promise<{ ok: boolean; enabled: boolean }>;
