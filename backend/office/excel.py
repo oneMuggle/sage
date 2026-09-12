@@ -518,6 +518,48 @@ def _apply_conditional_formats(writer, req) -> None:
                 )
 
 
+def _apply_data_validations(writer, req) -> None:
+    """Round 18：把 ExcelDataValidationSpec 写为下拉列表数据验证。
+
+    内联列表 formula1 总长（含引号逗号）超 255 字符（Excel 硬限制）时
+    该条跳过（warning），不阻断生成。
+    """
+    import logging
+
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    logger_ = logging.getLogger(__name__)
+    for sheet_spec in getattr(req, "sheets", None) or ():
+        ws = writer.sheets.get(sheet_spec.name[:31])
+        if ws is None:
+            continue
+        for dv_spec in getattr(sheet_spec, "data_validations", None) or ():
+            options = list(dv_spec.options or [])
+            if not options:
+                continue
+            formula = '"' + ",".join(options) + '"'
+            if len(formula) > 255:
+                logger_.warning(
+                    "data validation 选项总长超 255 字符，跳过: %s (%s)",
+                    dv_spec.range, sheet_spec.name,
+                )
+                continue
+            dv = DataValidation(
+                type="list",
+                formula1=formula,
+                allow_blank=dv_spec.allow_blank,
+                showDropDown=False,  # False = 显示下拉箭头（openpyxl 语义取反）
+            )
+            dv.error = "请从下拉列表中选择有效选项"
+            dv.errorTitle = "无效输入"
+            if dv_spec.prompt_title:
+                dv.promptTitle = dv_spec.prompt_title
+            if dv_spec.prompt:
+                dv.prompt = dv_spec.prompt
+            dv.add(dv_spec.range)
+            ws.add_data_validation(dv)
+
+
 def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .xlsx file from structured Pydantic input.
 
@@ -623,6 +665,7 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
             _apply_sheet_column_widths(writer, req)
             _apply_sheet_formats(writer, req)
             _apply_conditional_formats(writer, req)
+            _apply_data_validations(writer, req)
             _apply_generate_charts(writer, req)
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate XLSX: {exc}", file_path=output_path) from exc

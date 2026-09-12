@@ -703,6 +703,33 @@ class ExcelSheetSpec(BaseModel):
     conditional_formats: _constrained_list(ExcelConditionalFormatSpec, max_length=50) = Field(
         default_factory=list
     )
+    # Round 18：下拉数据验证（状态/分类列防手输错值），全部可选。
+    data_validations: _constrained_list(ExcelDataValidationSpec, max_length=20) = Field(
+        default_factory=list
+    )
+
+
+class ExcelDataValidationSpec(BaseModel):
+    """单条下拉数据验证规则（Round 18）。
+
+    内联列表 formula1 为 '"opt1,opt2,…"' 形式，总长超 255 字符（Excel
+    硬限制）时该条跳过（warning），不阻断生成。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    range: str = Field(
+        min_length=2,
+        max_length=50,
+        pattern=r"^[A-Za-z]{1,3}[0-9]+:[A-Za-z]{1,3}[0-9]+$",
+        description="应用范围，A1 记法，如 'B2:B100'",
+    )
+    options: _constrained_list(str, min_length=1, max_length=100) = Field(
+        description="下拉选项列表（每项 ≤50 字符）"
+    )
+    allow_blank: bool = Field(default=True, description="允许空值")
+    prompt_title: Optional[str] = Field(default=None, max_length=60)
+    prompt: Optional[str] = Field(default=None, max_length=200)
 
 
 class ExcelConditionalFormatSpec(BaseModel):

@@ -806,6 +806,35 @@ class OfficeCreateTool(BaseTool):
                                                 "color_scale 双色色阶/duplicate 重复值高亮"
                                             ),
                                         },
+                                        "data_validations": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "range": {
+                                                        "type": "string",
+                                                        "description": (
+                                                            "应用范围 A1 记法，如 'B2:B100'"
+                                                        ),
+                                                    },
+                                                    "options": {
+                                                        "type": "array",
+                                                        "items": {"type": "string"},
+                                                        "description": (
+                                                            "下拉选项列表（总长 ≤255 字符）"
+                                                        ),
+                                                    },
+                                                    "allow_blank": {"type": "boolean"},
+                                                    "prompt_title": {"type": "string"},
+                                                    "prompt": {"type": "string"},
+                                                },
+                                                "required": ["range", "options"],
+                                            },
+                                            "description": (
+                                                "下拉数据验证列表（Round 18）：状态/"
+                                                "分类列防手输错值"
+                                            ),
+                                        },
                                     },
                                 },
                                 "description": "excel 工作表列表。",
