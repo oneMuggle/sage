@@ -309,7 +309,6 @@ export function withDemoSettingsDefaults(s: AppSettings): AppSettings {
   const embedding = fillSelection(s.modelSelections.embeddingModel, vision.endpoints, 'bge-m3');
   return {
     ...s,
-    demoMode: true,
     endpoints: embedding.endpoints,
     modelSelections: {
       chatModel: chat.selection,
