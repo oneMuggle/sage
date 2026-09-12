@@ -188,7 +188,7 @@ def _serialize_record(rec: TraceRecord, *, include_prompts: bool) -> str:
         req_encoding = "utf-8"
         if isinstance(req_body_obj, str):
             req_body_text = req_body_obj
-        elif isinstance(req_body_obj, (dict, list)):
+        elif isinstance(req_body_obj, dict | list):
             req_body_text = json.dumps(req_body_obj, ensure_ascii=False)
         elif req_body_err == "binary":
             req_body_text = base64.b64encode(rec.request_body).decode("ascii")
@@ -199,7 +199,7 @@ def _serialize_record(rec: TraceRecord, *, include_prompts: bool) -> str:
         resp_encoding = "utf-8"
         if isinstance(resp_body_obj, str):
             resp_body_text = resp_body_obj
-        elif isinstance(resp_body_obj, (dict, list)):
+        elif isinstance(resp_body_obj, dict | list):
             resp_body_text = json.dumps(resp_body_obj, ensure_ascii=False)
         elif resp_body_err == "binary":
             resp_body_text = base64.b64encode(rec.response_body).decode("ascii")
