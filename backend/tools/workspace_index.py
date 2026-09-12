@@ -20,6 +20,7 @@ sqlite-vec（扩展加载在打包环境的可用性风险）。v1 规模上限
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 import sqlite3
@@ -27,6 +28,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple  # noqa: UP035 — py3.8 纪律
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 #: 源码扩展名白名单（v1：代码 + 文档；二进制/媒体不入索引）
 INDEXED_EXTS = frozenset(
@@ -289,25 +292,21 @@ def load_embedding_config() -> Optional[Dict[str, str]]:
     return None
 
 
-def _embed_texts(config: Dict[str, str], texts: List[str]) -> List[List[float]]:
-    """调用 OpenAI 兼容 /embeddings。测试可 monkeypatch 本函数注入假向量。"""
+def _embed_batch(
+    embed_config: Dict[str, str], batch: List[str], attempt: int = 0
+) -> List[List[float]]:
+    """嵌入单批；网络抖动/429 重试 1 次（1s 退避），二次失败抛出由调用方跳过。"""
+    import time
+
     import httpx
 
     from backend.wiki.embeddings import build_embed_request, parse_embed_response
 
-    embed_config = {
-        "base_url": config["base_url"],
-        "api_key": config["api_key"],
-        "model": config["model"],
-    }
-    vectors: List[List[float]] = []
-    # 分批（每批 32 条）避免超大请求体
-    for i in range(0, len(texts), 32):
-        batch = texts[i : i + 32]
-        request = build_embed_request(
-            type("C", (), {**embed_config, "dim": 0})(),  # 兼容 build_embed_request 的属性访问
-            batch,
-        )
+    request = build_embed_request(
+        type("C", (), {**embed_config, "dim": 0})(),  # 兼容 build_embed_request 的属性访问
+        batch,
+    )
+    try:
         response = httpx.post(
             request.url,
             json=request.body,
@@ -315,8 +314,56 @@ def _embed_texts(config: Dict[str, str], texts: List[str]) -> List[List[float]]:
             timeout=60.0,
         )
         response.raise_for_status()
-        vectors.extend(parse_embed_response(response.json()))
-    return vectors
+        # parse_embed_response 接收响应体字符串（v1 误传 .json() dict，真实端点必崩）
+        return parse_embed_response(response.text)
+    except Exception:
+        if attempt >= 1:
+            raise
+        time.sleep(1.0)
+        return _embed_batch(embed_config, batch, attempt + 1)
+
+
+def _embed_texts(config: Dict[str, str], texts: List[str]) -> List[List[float]]:
+    """调用 OpenAI 兼容 /embeddings，批间并行（保序）。测试可 monkeypatch 注入假向量。
+
+    并发度 SAGE_INDEX_EMBED_CONCURRENCY（默认 4，<=1 串行回退）；
+    单批重试后仍失败 → 该批以空向量占位（调用方落库前过滤空向量，与既有行为一致）。
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    embed_config = {
+        "base_url": config["base_url"],
+        "api_key": config["api_key"],
+        "model": config["model"],
+    }
+    batches = [texts[i : i + 32] for i in range(0, len(texts), 32)]
+    if not batches:
+        return []
+
+    try:
+        workers = max(1, int(os.environ.get("SAGE_INDEX_EMBED_CONCURRENCY", "4")))
+    except ValueError:
+        workers = 4
+
+    def _run(batch: List[str]) -> List[List[float]]:
+        try:
+            return _embed_batch(embed_config, batch)
+        except Exception:
+            logger.exception("embed batch failed (size=%d), skipped", len(batch))
+            return [[] for _ in batch]
+
+    if workers <= 1 or len(batches) == 1:
+        flat: List[List[float]] = []
+        for batch in batches:
+            flat.extend(_run(batch))
+        return flat
+
+    with ThreadPoolExecutor(max_workers=min(workers, len(batches))) as pool:
+        results = list(pool.map(_run, batches))  # pool.map 保批序
+    flat = []
+    for batch_vectors in results:
+        flat.extend(batch_vectors)
+    return flat
 
 
 def _meta_get(conn: sqlite3.Connection, key: str) -> Optional[str]:
@@ -486,6 +533,8 @@ def _search_workspace(
                 {
                     "path": path,
                     "start_line": start_line,
+                    # 闭区间行号范围：代理可据此直接 read_file(offset/limit) 精确定位
+                    "end_line": start_line + content.count("\n"),
                     "score": round(float(rrf), 6),
                     "snippet": content[:400],
                 }

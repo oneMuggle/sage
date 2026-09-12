@@ -279,3 +279,60 @@ def test_fts_match_query_sanitized():
     assert '"登录逻辑"' in cjk
     # 全部为符号 → None
     assert wi._fts_match_query("!!! ***") is None
+
+
+# ---------- 性能与可用性收尾（end_line / 并行嵌入 / 单批重试） ----------
+
+
+def test_search_results_include_end_line(index_env):
+    config = {"base_url": "https://e.test", "api_key": "k", "model": "embed-1"}
+    wi._index_workspace(str(index_env), config)
+
+    hits = wi._search_workspace(str(index_env), config, "login 逻辑", limit=5)
+    assert hits
+    assert all("end_line" in h for h in hits)
+    for h in hits:
+        line_count = h["snippet"].count("\n") + 1
+        # snippet 截断 400 字符不影响 end_line 计算（按完整 content 统计）
+        assert h["end_line"] >= h["start_line"] + line_count - 1
+
+
+def test_embed_texts_preserves_order_across_batches(tmp_path, monkeypatch):
+    # 不用 index_env fixture —— 它会把 _embed_texts 替换成 fake，这里要测真函数
+    monkeypatch.setenv("SAGE_USER_DATA_DIR", str(tmp_path / "sage-data"))
+    calls = []
+
+    def slow_embed_batch(embed_config, batch, attempt=0):
+        calls.append(len(batch))
+        # 每批向量含批次长度，用于验证按原批序拼接
+        return [[float(len(batch))] for _ in batch]
+
+    monkeypatch.setattr(wi, "_embed_batch", slow_embed_batch)
+    texts = [f"t{i}" for i in range(70)]  # 32 + 32 + 6 → 三批
+    vectors = wi._embed_texts({"base_url": "u", "api_key": "k", "model": "m"}, texts)
+    assert [v[0] for v in vectors] == [32.0] * 32 + [32.0] * 32 + [6.0] * 6
+    assert calls == [32, 32, 6]
+
+
+def test_embed_batch_retry_then_success(monkeypatch):
+    attempts = {"n": 0}
+
+    class FakeResponse:
+        status_code = 200
+
+        text = '{"data": [{"embedding": [1.0, 0.0]}, {"embedding": [1.0, 0.0]}]}'
+
+        def raise_for_status(self):
+            return None
+
+    def flaky_http(url, json=None, headers=None, timeout=None):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise RuntimeError("connection reset")
+        return FakeResponse()
+
+    monkeypatch.setattr("httpx.post", flaky_http)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    vectors = wi._embed_batch({"base_url": "u", "api_key": "k", "model": "m"}, ["a", "b"])
+    assert vectors == [[1.0, 0.0], [1.0, 0.0]]
+    assert attempts["n"] == 2
