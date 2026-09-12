@@ -675,8 +675,24 @@ export function useChat() {
                   let metadata = targetTc.metadata;
                   try {
                     const parsed = JSON.parse(tr.content);
-                    if (parsed && typeof parsed === 'object' && parsed.metadata) {
-                      metadata = parsed.metadata;
+                    if (parsed && typeof parsed === 'object') {
+                      // Extract existing metadata if present
+                      if (parsed.metadata) {
+                        metadata = parsed.metadata;
+                      }
+                      // Phase 3 (2026-09-12): extract multimodal tool output
+                      // TTS/image generation tools return media_ref/media_refs + api_url/api_urls
+                      if (!metadata) metadata = {};
+                      if (parsed.media_ref) {
+                        metadata.mediaRefs = [parsed.media_ref];
+                      } else if (parsed.media_refs && Array.isArray(parsed.media_refs)) {
+                        metadata.mediaRefs = parsed.media_refs;
+                      }
+                      if (parsed.api_url) {
+                        metadata.apiUrls = [parsed.api_url];
+                      } else if (parsed.api_urls && Array.isArray(parsed.api_urls)) {
+                        metadata.apiUrls = parsed.api_urls;
+                      }
                     }
                   } catch {
                     // Not JSON, ignore
