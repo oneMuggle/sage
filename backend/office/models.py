@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, conlist
+from pydantic import BaseModel, ConfigDict, Field, conlist, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -423,6 +423,40 @@ class BibliographySpec(BaseModel):
     hanging_indent_cm: Optional[float] = Field(default=None, ge=0.0, le=5.0)
 
 
+class WordTocSpec(BaseModel):
+    """目录域设置（Round 13）。
+
+    TOC 域由 Word/WPS/LibreOffice 按标题样式渲染（打开后更新域/F9 生成），
+    生成器只负责插入域与占位提示——与"标题编号交给引擎"同一思路。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    heading_text: str = Field(default="目录", max_length=50)
+    levels: str = Field(
+        default="1-3",
+        pattern=r"^[1-9]-[1-9]$",
+        description="收录标题级别范围，如 '1-3'（TOC \\o 开关）",
+    )
+    placeholder_text: str = Field(
+        default='（目录：在 Word 中按 F9 或右键"更新域"生成）',
+        max_length=200,
+        description="域未更新时的占位提示",
+    )
+
+    @field_validator("levels")
+    @classmethod
+    def _check_level_order(cls, value: str) -> str:
+        first, last = value.split("-")
+        if int(first) > int(last):
+            raise ValueError("levels 起始级别不能大于结束级别")
+        return value
+
+    def level_range(self) -> Tuple[int, int]:
+        first, last = self.levels.split("-")
+        return int(first), int(last)
+
+
 class BibTeXParseRequest(BaseModel):
     """POST /api/v1/office/word/parse-bibtex（Round 9）。"""
 
@@ -573,6 +607,8 @@ class WordFormatSpec(BaseModel):
     # Round 9：文末参考文献节样式。None 时仍生成参考文献节（默认样式），
     # 仅当请求不带 references 时该子项才完全不生效。
     bibliography: Optional[BibliographySpec] = None
+    # Round 13：目录域。None = 不插入目录。
+    toc: Optional[WordTocSpec] = None
 
 
 class OfficeWordGenerateRequest(BaseModel):

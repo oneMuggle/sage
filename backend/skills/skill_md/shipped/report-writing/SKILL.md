@@ -4,7 +4,7 @@ description: 撰写项目文档/工作报告/内部资料/技术报告的完整�
 license: Apache-2.0
 compatibility: 需要 Round 7-10 的 office 工具面（office_create 的 format_spec、office_lint_word、office_update 快照回滚）
 when_to_use: 当用户要撰写项目文档、项目总结、内部资料、需求文档、验收文档,或用"写报告""项目报告""阶段报告""写项目文档""项目文档""技术报告""内部资料""项目总结""验收文档"等表达时使用
-allowed-tools: write_file office_list office_read office_create office_update office_lint_word ask_user_question
+allowed-tools: write_file office_list office_read office_create office_update office_lint_word office_repair_word ask_user_question
 triggers: []
 ---
 
@@ -54,8 +54,11 @@ triggers: []
 
 ### 5. 自检与交付（交付前必做）
 
-调 `office_lint_word`（format_spec 与生成时一致），报告违规与修复建议；
-修复后复检至 `ok=true` 或用户接受。正式交付提醒用户：文档在工作区
+调 `office_lint_word`（format_spec 与生成时一致），报告违规与修复建议。
+- 样式/编号/题注类违规 → `office_repair_word` 自动修复（默认写
+  -repaired.docx 新文件；确认无误可 overwrite=true 原地替换），修复后
+  自动复检；
+- 复检至 `ok=true` 或用户接受。正式交付提醒用户：文档在工作区
 `office/word/` 受管目录下，可随时用 office_list / office_read 回看。
 
 ## 不做的事（YAGNI）

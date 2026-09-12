@@ -313,6 +313,19 @@ def lint_docx(path: Path, spec: WordFormatSpec) -> WordLintResult:
     if spec.header is not None or spec.footer is not None:
         checked.append("header_footer")
         _check_header_footer(doc, spec, issues)
+    if spec.toc is not None:
+        checked.append("toc")
+        found_toc = any(
+            fld.get(qn("w:instr"), "").startswith("TOC")
+            for p in doc.paragraphs
+            for fld in p._p.findall(_PAGE_FIELD_XPATH)
+        )
+        if not found_toc:
+            issues.append(_issue(
+                "toc/presence", "error",
+                "未检测到目录域（w:fldSimple instr=TOC…）",
+                "在标题后插入 TOC 域（或用 format_spec.toc 重新生成）",
+            ))
     if spec.numbering:
         checked.append("numbering")
         bib_heading = (
