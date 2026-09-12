@@ -1,8 +1,19 @@
 // src/features/send-message/AttachmentUpload.tsx
 import React, { useCallback, useRef, useState } from 'react';
 
+interface MediaRef {
+  id: string;
+  mime_type: string;
+  size_bytes: number;
+}
+
+interface UploadResponse {
+  media_ref: MediaRef;
+  api_url: string;
+}
+
 interface AttachmentUploadProps {
-  onAttachmentUploaded: (attachment: { mediaRef: any; apiUrl: string }) => void;
+  onAttachmentUploaded: (attachment: { mediaRef: MediaRef; apiUrl: string }) => void;
   onError?: (error: string) => void;
 }
 
@@ -10,7 +21,7 @@ const ACCEPTED_TYPES = 'audio/mpeg,audio/wav,audio/ogg,audio/webm,audio/mp4,audi
 const MAX_SIZE = 25 * 1024 * 1024;
 
 /**
- * Chat attachment upload button with drag-and-drop support.
+ * Chat attachment upload button.
  * Uploads audio files to /api/v1/chat/attachments and returns MediaRef.
  */
 export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
@@ -28,6 +39,10 @@ export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
       }
 
       setUploading(true);
+
+      let result: UploadResponse | null = null;
+      let errorMessage: string | null = null;
+
       try {
         const formData = new FormData();
         formData.append('file', file);
@@ -37,20 +52,51 @@ export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
           body: formData,
         });
 
-        const data = await resp.json();
-        if (data.error) {
-          onError?.(data.error);
-          return;
-        }
+        const data: unknown = await resp.json();
 
-        onAttachmentUploaded({
-          mediaRef: data.media_ref,
-          apiUrl: data.api_url,
-        });
+        if (!resp.ok) {
+          const obj = (typeof data === 'object' && data !== null) ? data as Record<string, unknown> : {};
+          const msg = typeof obj.error === 'string' ? obj.error
+            : typeof obj.detail === 'string' ? obj.detail
+            : `上传失败 (HTTP ${resp.status})`;
+          errorMessage = msg;
+        } else {
+          const obj = (typeof data === 'object' && data !== null) ? data as Record<string, unknown> : {};
+          const mediaRef = obj.media_ref as Record<string, unknown> | undefined;
+          const apiUrl = obj.api_url;
+
+          if (
+            !mediaRef ||
+            typeof mediaRef.id !== 'string' ||
+            typeof mediaRef.mime_type !== 'string' ||
+            typeof mediaRef.size_bytes !== 'number' ||
+            typeof apiUrl !== 'string'
+          ) {
+            errorMessage = '上传响应格式无效';
+          } else {
+            result = {
+              media_ref: {
+                id: mediaRef.id,
+                mime_type: mediaRef.mime_type,
+                size_bytes: mediaRef.size_bytes,
+              },
+              api_url: apiUrl,
+            };
+          }
+        }
       } catch (err) {
-        onError?.(`上传失败: ${err instanceof Error ? err.message : '未知错误'}`);
-      } finally {
-        setUploading(false);
+        errorMessage = `上传失败: ${err instanceof Error ? err.message : '未知错误'}`;
+      }
+
+      setUploading(false);
+
+      if (errorMessage) {
+        onError?.(errorMessage);
+      } else if (result) {
+        onAttachmentUploaded({
+          mediaRef: result.media_ref,
+          apiUrl: result.api_url,
+        });
       }
     },
     [onAttachmentUploaded, onError],
@@ -71,11 +117,7 @@ export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
         disabled={uploading}
         onClick={() => inputRef.current?.click()}
       >
-        {uploading ? (
-          <span className="animate-pulse">⏳</span>
-        ) : (
-          <span>📎</span>
-        )}
+        {uploading ? <span className="animate-pulse">⏳</span> : <span>📎</span>}
       </button>
       <input
         ref={inputRef}
