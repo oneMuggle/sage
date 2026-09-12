@@ -55,7 +55,7 @@ class MediaStore:
     ) -> MediaRef:
         """存储媒体文件，返回 MediaRef"""
         media_id = uuid.uuid4().hex[:12]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)  # noqa: UP017 — py3.10 compat (UTC is 3.11+)
         date_dir = f"{now:%Y}/{now:%m}/{now:%d}"
         (self.root / date_dir).mkdir(parents=True, exist_ok=True)
 
@@ -98,7 +98,7 @@ class MediaStore:
                 file_path=rel,
                 file_size=len(content),
                 created_at=datetime.fromtimestamp(
-                    f.stat().st_mtime, tz=timezone.utc
+                    f.stat().st_mtime, tz=timezone.utc  # noqa: UP017
                 ).isoformat(),
                 source="unknown",
             ), content
