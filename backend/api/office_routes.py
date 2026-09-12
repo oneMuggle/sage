@@ -89,6 +89,8 @@ from backend.office.models import (
     TemplateLibraryResponse,
     WordLintRequest,
     WordLintResult,
+    WordRepairRequest,
+    WordRepairResult,
     WordTemplateAnalysis,
     WordTemplateAnalyzeRequest,
     WordTemplateFillRequest,
@@ -114,6 +116,7 @@ from backend.office.storage import (
 from backend.office.template_library import instantiate_template, list_templates
 from backend.office.word import generate_docx, read_docx
 from backend.office.word_lint import lint_docx
+from backend.office.word_repair import repair_docx
 from backend.office.word_template import analyze_word_template, fill_word_template
 
 if TYPE_CHECKING:
@@ -573,6 +576,19 @@ def lint_word_endpoint(req: WordLintRequest) -> WordLintResult:
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
     _check_size_limit(file_path, req.max_size_bytes)
     return lint_docx(file_path, req.format_spec)
+
+
+@router.post("/word/repair")
+def repair_word_endpoint(req: WordRepairRequest) -> WordRepairResult:
+    """对照 FormatSpec 自动修复 .docx 可机械修复违规（Round 12）。
+
+    默认写 ``<stem>-repaired.docx`` 新文件；overwrite=true 时原子替换
+    原文件。修复后自动复检，remaining 携带未消除违规（如语义类
+    citation/coverage）。围栏与尺寸上限同 lint 端点。
+    """
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    _check_size_limit(file_path, req.max_size_bytes)
+    return repair_docx(file_path, req.format_spec, overwrite=req.overwrite)
 
 
 @router.post("/excel/generate")

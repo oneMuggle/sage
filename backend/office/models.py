@@ -1084,3 +1084,34 @@ class WordLintRequest(BaseModel):
     max_size_bytes: int = Field(
         default=50 * 1024 * 1024, ge=1024, description="Reject files larger than this"
     )
+
+
+class WordRepairResult(BaseModel):
+    """自动修复结果（Round 12）。``ok`` = 修复后复检无 error 级违规。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    repaired_rules: _constrained_list(str, max_length=100) = Field(
+        default_factory=list, description="本次修复的规则 rule_id 列表"
+    )
+    output_path: str = Field(min_length=1, max_length=2000, description="修复后文件路径")
+    overwrite: bool = Field(default=False, description="是否原地替换了原文件")
+    remaining: WordLintResult = Field(description="修复后的复检结果")
+
+
+class WordRepairRequest(BaseModel):
+    """POST /api/v1/office/word/repair。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str = Field(min_length=1, max_length=2000, description="待修复 .docx 路径")
+    format_spec: WordFormatSpec
+    overwrite: bool = Field(
+        default=False,
+        description="false（默认）= 修复结果写 <stem>-repaired.docx 新文件；true = 原地原子替换",
+    )
+    max_size_bytes: int = Field(
+        default=50 * 1024 * 1024, ge=1024, description="Reject files larger than this"
+    )

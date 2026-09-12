@@ -58,6 +58,7 @@ from .office_pdf_tool import (
     OfficeReadPdfFormTool,
     OfficeReadPdfTool,
 )
+from .office_repair_tool import OfficeRepairWordTool
 from .office_restore_tool import OfficeRestoreTool
 from .office_template_tool import (
     OfficeAnalyzeWordTemplateTool,
@@ -200,6 +201,8 @@ def register_all_tools(
     registry.register(OfficeBibTexTool(policy=policy))
     # Round 10 格式 Linter: office_lint_word（READ，对照 FormatSpec 校验 docx）
     registry.register(OfficeLintWordTool(policy=policy))
+    # Round 12 自动修复: office_repair_word（WRITE_LOCAL，lint→修复→复检）
+    registry.register(OfficeRepairWordTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -313,6 +316,7 @@ __all__ = [
     "OfficeAnalyzeTool",
     "OfficeBibTexTool",
     "OfficeLintWordTool",
+    "OfficeRepairWordTool",
     "OfficeJournalParseTemplateTool",
     "OfficeJournalFillFromContentTool",
     "OfficeJournalGenerateArticleTool",
