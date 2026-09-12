@@ -289,7 +289,8 @@ def test_search_results_include_end_line(index_env):
     wi._index_workspace(str(index_env), config)
 
     hits = wi._search_workspace(str(index_env), config, "login 逻辑", limit=5)
-    assert hits and all("end_line" in h for h in hits)
+    assert hits
+    assert all("end_line" in h for h in hits)
     for h in hits:
         line_count = h["snippet"].count("\n") + 1
         # snippet 截断 400 字符不影响 end_line 计算（按完整 content 统计）
