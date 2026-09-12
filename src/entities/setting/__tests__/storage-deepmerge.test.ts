@@ -30,6 +30,9 @@ const remoteClean: AppSettings = {
     chatModel: { endpointId: 'e1', modelId: 'm1' },
     visionModel: { endpointId: null, modelId: null },
     embeddingModel: { endpointId: null, modelId: null },
+    ttsModel: { endpointId: null, modelId: null },
+    asrModel: { endpointId: null, modelId: null },
+    imageGenModel: { endpointId: null, modelId: null },
   },
 };
 
@@ -108,6 +111,9 @@ describe('deepMerge', () => {
         chatModel: { endpointId: 'e1', modelId: 'm-LOCAL' },
         visionModel: { endpointId: null, modelId: null },
         embeddingModel: { endpointId: null, modelId: null },
+        ttsModel: { endpointId: null, modelId: null },
+        asrModel: { endpointId: null, modelId: null },
+        imageGenModel: { endpointId: null, modelId: null },
       },
     };
     const merged = deepMerge(local, remoteClean);

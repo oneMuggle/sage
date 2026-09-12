@@ -296,6 +296,7 @@ export interface ElectronAPI {
   updates: UpdateElectronApiBridge;
   providers: ProvidersElectronApiBridge;
   /**
+  /**
    * Task 10 (2026-09-11): Diagnostic export bridge for LLM trace bundles.
    * Two methods — exportBundle (native save dialog → zip) and preview
    * (summary stats without export). IPC channels: diagnostic:export,

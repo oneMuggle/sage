@@ -38,8 +38,17 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
   const chatModels = groupModels('chat');
   const visionModels = groupModels('vision');
   const embeddingModels = groupModels('embedding');
+  const ttsModels = groupModels('tts');
+  const asrModels = groupModels('asr');
+  const imageGenModels = groupModels('image_gen');
 
   const { chatModel, visionModel, embeddingModel } = settings.modelSelections;
+  const ttsModel = settings.modelSelections?.ttsModel || { endpointId: null, modelId: null };
+  const asrModel = settings.modelSelections?.asrModel || { endpointId: null, modelId: null };
+  const imageGenModel = settings.modelSelections?.imageGenModel || {
+    endpointId: null,
+    modelId: null,
+  };
 
   return (
     <div className="space-y-6">
@@ -79,6 +88,33 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
         value={embeddingModel}
         onChange={(v) =>
           updateSettings({ modelSelections: { ...settings.modelSelections, embeddingModel: v } })
+        }
+      />
+      <ModelSelector
+        label="语音合成 (TTS)"
+        desc="用于文本转语音（选填）"
+        groupedModels={ttsModels}
+        value={ttsModel}
+        onChange={(v) =>
+          updateSettings({ modelSelections: { ...settings.modelSelections, ttsModel: v } })
+        }
+      />
+      <ModelSelector
+        label="语音识别 (ASR)"
+        desc="用于语音转文字（选填）"
+        groupedModels={asrModels}
+        value={asrModel}
+        onChange={(v) =>
+          updateSettings({ modelSelections: { ...settings.modelSelections, asrModel: v } })
+        }
+      />
+      <ModelSelector
+        label="图像生成"
+        desc="用于文本生成图像（选填）"
+        groupedModels={imageGenModels}
+        value={imageGenModel}
+        onChange={(v) =>
+          updateSettings({ modelSelections: { ...settings.modelSelections, imageGenModel: v } })
         }
       />
 
