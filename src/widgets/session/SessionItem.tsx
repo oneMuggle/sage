@@ -13,6 +13,7 @@ import { downloadHtmlFile, downloadMarkdownFile, sessionApi } from '../../shared
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 import type { Session } from '../../shared/lib/store';
+import { formatRelativeTime } from '../../shared/lib/utils';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 interface SessionItemProps {
@@ -322,7 +323,24 @@ export function SessionItem({ session, isActive, onSelect, onDelete, onRename, m
             </span>
           )}
         </p>
-        <p className="text-xs text-muted">{new Date(session.updated_at).toLocaleDateString()}</p>
+        <p className="text-xs text-muted truncate">
+          {/* P0-4 (UI 优化方案 2026-09-13): 元信息行 — 消息预览 + 相对时间 + 消息数 */}
+          {session.last_message_preview ? (
+            <span className="truncate">{session.last_message_preview}</span>
+          ) : (
+            <span>{formatRelativeTime(session.last_message_at ?? session.updated_at)}</span>
+          )}
+          <span className="mx-1 text-muted/50">·</span>
+          <span className="flex-shrink-0">
+            {formatRelativeTime(session.last_message_at ?? session.updated_at)}
+          </span>
+          {session.message_count > 0 && (
+            <>
+              <span className="mx-1 text-muted/50">·</span>
+              <span className="flex-shrink-0">{session.message_count} 条</span>
+            </>
+          )}
+        </p>
         {/* S5: mini 进度条 —— 编排 5 元组 / todo 完成度（仅运行中显示） */}
         {isLive && (progress != null || todoTotal > 0) && (
           <div className="mt-1 flex items-center gap-1.5" data-testid="session-progress">

@@ -167,6 +167,9 @@ class SqliteStorageAdapter:
     def _sync_list_sessions(self) -> List[Dict[str, Any]]:
         with _SQLITE_LOCK:
             sessions = self._sessions.list(limit=1000, offset=0)
+        # P0-4 (UI 优化方案 2026-09-13): 批量查询每个会话的最后一条消息预览
+        # (最近一条 user/assistant 消息,截断 80 字符)。空会话 → preview 为 None。
+        previews = self._sync_last_message_previews([s.id for s in sessions])
         return [
             {
                 "id": s.id,
@@ -174,10 +177,40 @@ class SqliteStorageAdapter:
                 "message_count": s.message_count,
                 "created_at": s.created_at,
                 "updated_at": s.updated_at,
+                "last_message_at": s.last_message_at,
                 "is_pinned": bool(s.is_pinned),
+                "last_message_preview": previews.get(s.id),
             }
             for s in sessions
         ]
+
+    def _sync_last_message_previews(self, session_ids: List[str]) -> Dict[str, str]:
+        """批量获取每个会话的最后一条 user/assistant 消息预览(截断 80 字符)。"""
+        if not session_ids:
+            return {}
+        conn = self._sessions.db.get_connection()
+        cursor = conn.cursor()
+        placeholders = ",".join("?" for _ in session_ids)
+        # 内连接派生表取每个 session_id 的 MAX(created_at),再过滤 role
+        cursor.execute(
+            f"""
+            SELECT m.session_id,
+                   SUBSTR(m.content, 1, 80) AS preview
+            FROM messages m
+            INNER JOIN (
+                SELECT session_id, MAX(created_at) AS max_created
+                FROM messages
+                WHERE role IN ('user', 'assistant')
+                  AND session_id IN ({placeholders})
+                GROUP BY session_id
+            ) latest ON m.session_id = latest.session_id
+                    AND m.created_at = latest.max_created
+            WHERE m.role IN ('user', 'assistant')
+              AND m.session_id IN ({placeholders})
+            """,
+            list(session_ids) + list(session_ids),
+        )
+        return {row["session_id"]: row["preview"] for row in cursor.fetchall()}
 
     async def get_session(self, session_id: str) -> Dict[str, Any] | None:
         """按 ID 取单个会话;不存在返 ``None``。"""
