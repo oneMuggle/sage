@@ -651,7 +651,11 @@ class OfficeWordGenerateRequest(BaseModel):
 
 
 class ExcelSheetSpec(BaseModel):
-    """One sheet in a generated Excel workbook."""
+    """One sheet in a generated Excel workbook.
+
+    Round 14 新增四项格式控制（全部可选，缺省零变化）：表头样式 /
+    冻结首行 / 自适应列宽 / 按列名数字格式。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -662,6 +666,22 @@ class ExcelSheetSpec(BaseModel):
     column_widths: Optional[_constrained_list(float, max_length=200)] = Field(
         default=None,
         description="列宽列表，如 [20, 12, 30] 对应 A/B/C 列；None 不设置",
+    )
+    header_style: bool = Field(
+        default=False,
+        description="表头行加粗 + 浅灰底(D9D9D9) + 居中",
+    )
+    freeze_header: bool = Field(
+        default=False,
+        description="冻结首行（滚动长表时表头保持可见）",
+    )
+    autofit_columns: bool = Field(
+        default=False,
+        description="按内容自适应列宽（显式 column_widths 的列优先）",
+    )
+    number_formats: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="按列名映射 Excel 数字格式，如 {'金额': '#,##0.00'}；未知列名忽略",
     )
 
 

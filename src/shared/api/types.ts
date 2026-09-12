@@ -1376,6 +1376,12 @@ export interface ExcelSheetSpec {
   name: string;
   headers?: string[];
   rows?: string[][];
+  column_widths?: number[];
+  // Round 14：表头样式 / 冻结首行 / 自适应列宽 / 按列名数字格式
+  header_style?: boolean;
+  freeze_header?: boolean;
+  autofit_columns?: boolean;
+  number_formats?: Record<string, string>;
 }
 
 export interface OfficeExcelGenerateRequest {

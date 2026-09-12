@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **Excel 格式增强(Round 14)**: ExcelSheetSpec 新增 header_style(表头加粗+浅灰底+居中)/freeze_header(冻结首行)/autofit_columns(按内容自适应列宽,显式列宽优先,中文双宽计)/number_formats(按列名映射 Excel 数字格式,未知列忽略,公式单元格跳过)——全部可选,缺省零变化
 - **目录域(Round 13)**: format_spec.toc 在标题后插入 TOC 域(级别范围/占位提示可配,Word/WPS/LibreOffice 更新域生成目录)+分页;Linter 对偶新增 toc/presence 规则;paper-writing/report-writing 技能自检步骤接入 office_repair_word 自动修复
 - **格式自动修复(Round 12)**: repair_docx + POST /office/word/repair + office_repair_word 工具(WRITE_LOCAL)——对照 FormatSpec 自动修复样式/页面类违规(复用 word_layout 幂等应用)、标题编号与图/表题注重排;默认写 -repaired.docx 新文件(overwrite=true 原子替换);修复后自动复检,语义类违规(citation/coverage)保留报告
 - **写作技能(Round 11)**: 两个 shipped SKILL.md——paper-writing(期刊论文五步工作流:大纲确认→分章起草→BibTeX 解析/结构化引用→office_create 一次成形→office_lint_word 自检)与 report-writing(项目文档/报告:格式来源三选一/模板填充改道/术语表/图表题注三线表/office_update 修订+快照回滚);when_to_use 语义自动激活,零 Python 代码路径变更
