@@ -139,3 +139,49 @@ def test_schema_exposes_retry_of():
     assert "retry_of" in props
     assert "失败" in props["retry_of"]["description"]
     assert "retry_of" in _TOOL_DESCRIPTION
+
+
+# ============================================================================
+# RD13+ (round15): task_status 事件携带 retry_of —— 任务树"重派"徽章数据面
+# ============================================================================
+
+
+def _drain_events(queue):
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    return events
+
+
+@pytest.mark.asyncio()
+async def test_task_status_event_carries_retry_of(tmp_path, monkeypatch):
+    """重派任务的 task_status 事件携带 retry_of；普通任务不带。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(stream_id="s-r15", entry_queue=queue, run_id="orch-r15-1")
+    d._semaphore = asyncio.Semaphore(4)
+
+    calls = {"n": 0}
+
+    async def fake_run(state):
+        calls["n"] += 1
+        if state.task_id == "t1":
+            raise ValueError("boom")
+        state.status = "done"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+    await d.dispatch(
+        [{"task_id": "t2", "agent_id": "primary", "goal": "g2", "retry_of": "t1"}]
+    )
+
+    events = _drain_events(queue)
+    by_task = {}
+    for e in events:
+        if e.get("state") == "task_status":
+            by_task.setdefault(e["task_id"], []).append(e)
+
+    # t2（重派）的事件带 retry_of；t1（普通）不带
+    assert all("retry_of" not in e for e in by_task["t1"])
+    assert all(e.get("retry_of") == "t1" for e in by_task["t2"])

@@ -1049,6 +1049,10 @@ class ChatDispatcher:
             "output_preview": self._preview(state),
             "parent_tool_call_id": state.parent_tool_call_id,
         }
+        # RD13+ (round15): 重派任务向前端透出 retry_of —— 任务树可标注
+        # "重派"徽章（用户可追溯哪些任务是重做的）。None 时不带键。
+        if state.retry_of:
+            event["retry_of"] = state.retry_of
         try:
             self.entry_queue.put_nowait(event)
         except Exception:  # noqa: BLE001

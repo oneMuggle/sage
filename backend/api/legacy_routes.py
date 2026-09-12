@@ -2298,8 +2298,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         + "\n\n子任务失败时的处理方式：阅读该任务的失败原因文本，"
                         "判断是可修复错误（参数不当、依赖文件缺失、路径错误等）还是"
                         "不可行任务。可修复的，调整 goal 描述或改派更合适的 agent 重新"
-                        "派发该工作（可派发新任务）；不可行的，在最终汇总中说明原因。"
+                        "派发该工作（可派发新任务，或用 retry_of 重派并继承现场）；"
+                        "不可行的，在最终汇总中说明原因。"
                         "不要原样重派已经失败的同一任务。"
+                        # BD4 (round15): 后台工作流指引 —— background=true 派发后
+                        # 立即返回，期间可先做其他工作，再 collect_subagents 收取。
+                        + "\n\n当某些子任务耗时较长而你希望先推进其他工作时，可在 "
+                        "dispatch_subagents 传 background=true 后台派发（立即返回），"
+                        "期间执行你自己的其他工具调用，之后调用 collect_subagents "
+                        "获取聚合结果；collect 超时只表示还没跑完，任务板仍在推进，"
+                        "可再次 collect。"
                     )
                     # 计划先行：子 agent 跑之前先推 task_plan（可展示、可取消）
                     # Wave 2 P1-4: 首次 dispatch 前把 run + plan 落库,供 resume 端点重建。
