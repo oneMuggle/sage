@@ -456,6 +456,68 @@ def _apply_sheet_formats(writer, req) -> None:
                             continue
                         cell.number_format = fmt
 
+def _apply_conditional_formats(writer, req) -> None:
+    """Round 17：把 ExcelConditionalFormatSpec 写入对应 worksheet。
+
+    在 ``_apply_sheet_formats`` 之后调用。三种规则：data_bar（数据条）、
+    color_scale（双色色阶）、duplicate（COUNTIF 重复值高亮）。range 非法
+    或 openpyxl 拒绝时单条跳过（warning），不阻断生成。
+    """
+    import logging
+    import re
+
+    from openpyxl.formatting.rule import ColorScaleRule, DataBarRule, FormulaRule
+    from openpyxl.styles import PatternFill
+
+    logger_ = logging.getLogger(__name__)
+    cell_re = re.compile(r"^[A-Za-z]{1,3}[0-9]+$")
+
+    for sheet_spec in getattr(req, "sheets", None) or ():
+        ws = writer.sheets.get(sheet_spec.name[:31])
+        if ws is None:
+            continue
+        for cfmt in getattr(sheet_spec, "conditional_formats", None) or ():
+            rng = cfmt.range
+            cells = rng.split(":")
+            if len(cells) != 2 or not all(cell_re.match(c) for c in cells):
+                logger_.warning(
+                    "conditional format range 非法，跳过: %s (%s)", rng, sheet_spec.name
+                )
+                continue
+            try:
+                if cfmt.rule_type == "data_bar":
+                    rule = DataBarRule(
+                        start_type="min",
+                        end_type="max",
+                        color=(cfmt.color or "638EC6").lstrip("#"),
+                    )
+                    ws.conditional_formatting.add(rng, rule)
+                elif cfmt.rule_type == "color_scale":
+                    rule = ColorScaleRule(
+                        start_type="min",
+                        start_color=(cfmt.min_color or "F8696B").lstrip("#"),
+                        end_type="max",
+                        end_color=(cfmt.max_color or "63BE7B").lstrip("#"),
+                    )
+                    ws.conditional_formatting.add(rng, rule)
+                elif cfmt.rule_type == "duplicate":
+                    first_cell = rng.split(":")[0]
+                    fill = PatternFill(
+                        start_color=(cfmt.fill_color or "FFFF00").lstrip("#"),
+                        end_color=(cfmt.fill_color or "FFFF00").lstrip("#"),
+                        fill_type="solid",
+                    )
+                    rule = FormulaRule(
+                        formula=[f"COUNTIF({rng},{first_cell})>1"], fill=fill
+                    )
+                    ws.conditional_formatting.add(rng, rule)
+            except Exception as exc:  # noqa: BLE001 — 单条规则失败不阻断
+                logger_.warning(
+                    "conditional format 写入失败，跳过: %s (%s): %s",
+                    rng, sheet_spec.name, exc,
+                )
+
+
 def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .xlsx file from structured Pydantic input.
 
@@ -560,6 +622,7 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
             # （必须在 writer 保存前，图表才会随工作簿序列化）。
             _apply_sheet_column_widths(writer, req)
             _apply_sheet_formats(writer, req)
+            _apply_conditional_formats(writer, req)
             _apply_generate_charts(writer, req)
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate XLSX: {exc}", file_path=output_path) from exc
