@@ -8,16 +8,19 @@
 
 import { Copy, Check } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { createHighlighter, type Highlighter } from 'shiki';
 
 import { useI18n } from '../../shared/lib/i18n';
 
 /** 全局 highlighter 单例 */
-let highlighterPromise: Promise<Highlighter> | null = null;
+let highlighterPromise: Promise<import('shiki').Highlighter> | null = null;
 
-function getHighlighter(): Promise<Highlighter> {
+// R24-D6: shiki 静态 import 会把整包(~1MB)拖进主 chunk —— 即便聊天首屏
+// 一个代码块都没有。改动态 import(): 包体独立成 chunk, 首个代码块渲染
+// 时才加载；类型仍走 import('shiki') 静态类型引用。
+function getHighlighter(): Promise<import('shiki').Highlighter> {
   if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
+    highlighterPromise = import('shiki').then(({ createHighlighter }) =>
+      createHighlighter({
       themes: ['github-dark', 'github-light'],
       langs: [
         'javascript',
@@ -39,7 +42,8 @@ function getHighlighter(): Promise<Highlighter> {
         'dockerfile',
         'diff',
       ],
-    });
+      }),
+    );
   }
   return highlighterPromise;
 }
