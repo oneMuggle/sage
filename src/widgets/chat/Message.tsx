@@ -10,9 +10,6 @@ import {
   Eye,
   EyeOff,
   Pencil,
-  RefreshCw,
-  Check,
-  BrainCircuit,
   Quote,
 } from 'lucide-react';
 import { memo } from 'react';
@@ -200,10 +197,6 @@ function MessageComponent({
   // P0-1: 引用/保存记忆对 user+assistant 均可
   const canQuote = Boolean(onQuote) && (isUser || isAssistant);
   const canSaveToMemory = Boolean(onSaveToMemory) && (isUser || isAssistant);
-  const [copied, setCopied] = useState(false);
-  // R17-E: 记忆召回明细展开态
-  const [memoryExpanded, setMemoryExpanded] = useState(false);
-  const memoryRefs = message.memory_refs ?? [];
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content);
