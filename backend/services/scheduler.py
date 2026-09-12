@@ -271,6 +271,22 @@ class SchedulerService:
         self._fire_evolution(name, task)
         return True
 
+    def run_evolution_task_now(self, name: str) -> Optional[Dict[str, Any]]:
+        """同步运行一个 evolution 任务并返回其统计结果(手动触发 API 用, R17-B)。
+
+        与 trigger_evolution_task 的区别:任务返回值(如 MemoryConsolidationTask
+        的 {promoted, decayed, total})透传给调用方,而不是只进日志。
+        未注册返回 None;任务内部异常记日志后返回 None(与 _fire_evolution 语义一致)。
+        """
+        task = self._evolution_tasks.get(name)
+        if task is None:
+            return None
+        try:
+            return task.run()
+        except Exception:
+            logger.exception("Evolution task %s failed", name)
+            return None
+
     def get_evolution_task_names(self) -> List[str]:
         """已注册的 evolution 任务名列表。"""
         return list(self._evolution_tasks.keys())

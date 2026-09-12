@@ -431,6 +431,16 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/scheduled/tasks/${encodeURIComponent(String(a.id))}/run`,
   },
+  // R17-B: evolution 任务（固化/巡检等）手动触发面 —— APScheduler 侧 job，
+  // 不在 JSON 持久化的用户任务表里，走独立路由。
+  scheduled_evolution_tasks: {
+    method: 'GET',
+    path: () => '/api/v1/scheduled/evolution/tasks',
+  },
+  scheduled_evolution_run: {
+    method: 'POST',
+    path: (a) => `/api/v1/scheduled/evolution/${encodeURIComponent(String(a.name))}/run`,
+  },
 
   // custom CSS theme storage (themeCssClient)
   // Backend theme_router 挂在 /api/v1/theme (与其他 IPC 路由一致)

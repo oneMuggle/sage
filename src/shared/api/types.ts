@@ -560,6 +560,15 @@ export interface MemorySummariesListResponse {
   offset?: number;
 }
 
+/** R17-B: 记忆固化（evolution/memory_consolidation）任务统计 */
+export interface MemoryConsolidationResult {
+  /** 晋升为语义记忆的条数 */
+  promoted: number;
+  /** 衰减 importance 的条数 */
+  decayed: number;
+  total: number;
+}
+
 // ==================== Knowledge 类型定义 ====================
 
 export interface KnowledgeDoc {

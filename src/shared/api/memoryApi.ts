@@ -21,7 +21,12 @@
 
 import { isDemoMode } from './demoFlag';
 import { invoke } from './desktopInvoke';
-import type { Memory, MemoryListResponse, MemorySummariesListResponse } from './types';
+import type {
+  Memory,
+  MemoryConsolidationResult,
+  MemoryListResponse,
+  MemorySummariesListResponse,
+} from './types';
 import { ApiException, handleApiError, withRetry } from './utils';
 
 /** demo 记忆数据按需加载 (R2): 仅演示模式才拉取 demo 数据模块。 */
@@ -402,5 +407,35 @@ export const memoryApi = {
         throw handleApiError(error);
       }
     });
+  },
+
+  /**
+   * R17-B: 立即触发记忆固化（evolution/memory_consolidation）。
+   *
+   * 刻意**不走 withRetry**：手动触发的重任务是用户主动行为，失败后自动重跑
+   * 既是重复开销也违背"立即固化"的语义；失败原因由调用方 toast 引导。
+   * 返回任务统计 `{promoted, decayed, total}`；`ok=false` 表示任务执行失败
+   * （如 memory manager 未装配）。
+   */
+  async runConsolidation(): Promise<MemoryConsolidationResult> {
+    try {
+      const raw = await invoke<unknown>('scheduled_evolution_run', {
+        name: 'memory_consolidation',
+      });
+      const body = (raw ?? {}) as Record<string, unknown>;
+      if (body.ok === false) {
+        throw new Error(
+          typeof body.detail === 'string' ? body.detail : '记忆固化任务执行失败',
+        );
+      }
+      const result = (body.result ?? {}) as Record<string, unknown>;
+      return {
+        promoted: Number(result.promoted) || 0,
+        decayed: Number(result.decayed) || 0,
+        total: Number(result.total) || 0,
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
   },
 };
