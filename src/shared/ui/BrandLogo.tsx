@@ -46,7 +46,7 @@ export function BrandLogo({
 
   const img = (
     <img
-      src="/sage.svg"
+      src="./sage.svg"
       alt={resolvedAlt}
       data-testid={testId}
       className={clsx(SIZE_CLASSES[size], className)}
