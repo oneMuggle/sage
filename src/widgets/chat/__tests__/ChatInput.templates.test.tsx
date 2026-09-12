@@ -5,11 +5,12 @@
  * - 选中模板命令 → 填充输入框（不发送）
  * - /prompt-save → promptApi.create 调用链
  */
+import { HelpCircle } from 'lucide-react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { HelpCircle } from 'lucide-react';
-
+import { I18nProvider } from '../../../shared/lib/i18n';
+import { ChatInput } from '../ChatInput';
 import { mergePromptTemplates } from '../slashCommands';
 
 describe('mergePromptTemplates — R27-A 纯函数', () => {
@@ -42,9 +43,6 @@ describe('mergePromptTemplates — R27-A 纯函数', () => {
     expect(merged.map((c) => c.name)).toEqual(['help', 'tpl-b']);
   });
 });
-
-import { I18nProvider } from '../../../shared/lib/i18n';
-import { ChatInput } from '../ChatInput';
 
 const listMock = vi.fn();
 const createMock = vi.fn();
