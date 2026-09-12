@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **Excel 条件格式(Round 17)**: ExcelSheetSpec 新增 conditional_formats——data_bar 数据条/color_scale 双色色阶/duplicate 重复值高亮(COUNTIF+纯色),range A1 记法非法模型层拒绝、openpyxl 级失败单条跳过不阻断;全部可选缺省零变化
 - **@引用摘要带版式信息(Round 16)**: @docx 文件的摘要新增页眉/页脚/页码域/目录域概况(批注概况同款独立维度语义,不受截断)——LLM 在编辑回路可见 R7-13 的版式元素
 - **读取侧补齐(Round 15)**: read_docx 新增 headers_footers(每节页眉/页脚文本+页码域标记,linked 空节跳过)与 toc_fields(目录域 instr 列表)——R7-13 生成的页眉/页脚/目录在读取与编辑回路可见;前端 IPC 契约同步
 - **Excel 格式增强(Round 14)**: ExcelSheetSpec 新增 header_style(表头加粗+浅灰底+居中)/freeze_header(冻结首行)/autofit_columns(按内容自适应列宽,显式列宽优先,中文双宽计)/number_formats(按列名映射 Excel 数字格式,未知列忽略,公式单元格跳过)——全部可选,缺省零变化

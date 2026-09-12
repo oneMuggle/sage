@@ -699,6 +699,52 @@ class ExcelSheetSpec(BaseModel):
         default=None,
         description="按列名映射 Excel 数字格式，如 {'金额': '#,##0.00'}；未知列名忽略",
     )
+    # Round 17：条件格式（数据条/色阶/重复值高亮），全部可选。
+    conditional_formats: _constrained_list(ExcelConditionalFormatSpec, max_length=50) = Field(
+        default_factory=list
+    )
+
+
+class ExcelConditionalFormatSpec(BaseModel):
+    """单条条件格式规则（Round 17）。`rule_type` 三选一，各自可选项不同。
+
+    openpyxl 的 DataBar/ColorScale 由 min/max 端点着色；duplicate 用
+    COUNTIF 公式 + 纯色填充。range 为 A1 记法（如 "B2:B100"）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_type: Literal["data_bar", "color_scale", "duplicate"]
+    range: str = Field(
+        min_length=2,
+        max_length=50,
+        pattern=r"^[A-Za-z]{1,3}[0-9]+:[A-Za-z]{1,3}[0-9]+$",
+        description="应用范围，A1 记法，如 'B2:B100'",
+    )
+    color: Optional[str] = Field(
+        default=None,
+        description="data_bar 条形颜色，6 位 RGB hex（默认 638EC6）",
+        pattern=r"^#?[0-9A-Fa-f]{6}$",
+        max_length=7,
+    )
+    min_color: Optional[str] = Field(
+        default=None,
+        description="color_scale 最小值端颜色（默认 F8696B 红）",
+        pattern=r"^#?[0-9A-Fa-f]{6}$",
+        max_length=7,
+    )
+    max_color: Optional[str] = Field(
+        default=None,
+        description="color_scale 最大值端颜色（默认 63BE7B 绿）",
+        pattern=r"^#?[0-9A-Fa-f]{6}$",
+        max_length=7,
+    )
+    fill_color: Optional[str] = Field(
+        default=None,
+        description="duplicate 重复值填充色（默认 FFFF00 黄）",
+        pattern=r"^#?[0-9A-Fa-f]{6}$",
+        max_length=7,
+    )
 
 
 class ExcelCellRange(BaseModel):

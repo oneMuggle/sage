@@ -765,6 +765,47 @@ class OfficeCreateTool(BaseTool):
                                                 "未知列名忽略"
                                             ),
                                         },
+                                        "conditional_formats": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "rule_type": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "data_bar",
+                                                            "color_scale",
+                                                            "duplicate",
+                                                        ],
+                                                    },
+                                                    "range": {
+                                                        "type": "string",
+                                                        "description": (
+                                                            "应用范围 A1 记法，如 'B2:B100'"
+                                                        ),
+                                                    },
+                                                    "color": {
+                                                        "type": "string",
+                                                        "description": (
+                                                            "data_bar 条形颜色 6 位 RGB hex"
+                                                        ),
+                                                    },
+                                                    "min_color": {"type": "string"},
+                                                    "max_color": {"type": "string"},
+                                                    "fill_color": {
+                                                        "type": "string",
+                                                        "description": (
+                                                            "duplicate 重复值填充色"
+                                                        ),
+                                                    },
+                                                },
+                                                "required": ["rule_type", "range"],
+                                            },
+                                            "description": (
+                                                "条件格式列表（Round 17）：data_bar 数据条/"
+                                                "color_scale 双色色阶/duplicate 重复值高亮"
+                                            ),
+                                        },
                                     },
                                 },
                                 "description": "excel 工作表列表。",

@@ -1412,6 +1412,17 @@ export interface ExcelSheetSpec {
   freeze_header?: boolean;
   autofit_columns?: boolean;
   number_formats?: Record<string, string>;
+  // Round 17：条件格式（数据条/色阶/重复值高亮）
+  conditional_formats?: ExcelConditionalFormatSpec[];
+}
+
+export interface ExcelConditionalFormatSpec {
+  rule_type: 'data_bar' | 'color_scale' | 'duplicate';
+  range: string;
+  color?: string;
+  min_color?: string;
+  max_color?: string;
+  fill_color?: string;
 }
 
 export interface OfficeExcelGenerateRequest {
