@@ -112,3 +112,61 @@ def test_tts_parse_response_error():
     resp = AIHttpResponse(status_code=401, content=b'{"error": "invalid key"}')
     with pytest.raises(ValueError, match="401"):
         cap.parse_response(resp)
+
+
+# ── Task 3.1: ASRCapability ──────────────────────────────────
+
+
+def test_asr_build_request_from_file_content():
+    from backend.services.multimodal.capability import CapabilityConfig
+    from backend.services.multimodal.asr import ASRCapability
+    cap = ASRCapability()
+    config = CapabilityConfig(base_url="https://api.example.com", api_key="sk-test", model="whisper-1")
+    req = cap.build_request(config, file_content=b"fake audio data", language="zh")
+    assert req.url == "https://api.example.com/audio/transcriptions"
+    assert req.headers["Authorization"] == "Bearer sk-test"
+    assert req.data is not None
+
+
+def test_asr_build_request_from_file_path(tmp_path):
+    from backend.services.multimodal.capability import CapabilityConfig
+    from backend.services.multimodal.asr import ASRCapability
+    audio_file = tmp_path / "test.mp3"
+    audio_file.write_bytes(b"fake audio data")
+    cap = ASRCapability()
+    config = CapabilityConfig(base_url="https://api.example.com", api_key="", model="whisper-1")
+    req = cap.build_request(config, file_path=str(audio_file))
+    assert req.url == "https://api.example.com/audio/transcriptions"
+
+
+def test_asr_build_request_no_input_raises():
+    from backend.services.multimodal.capability import CapabilityConfig
+    from backend.services.multimodal.asr import ASRCapability
+    cap = ASRCapability()
+    config = CapabilityConfig(base_url="https://api.example.com", api_key="", model="whisper-1")
+    with pytest.raises(ValueError, match="必须提供"):
+        cap.build_request(config)
+
+
+def test_asr_parse_response_success():
+    from backend.services.multimodal.capability import AIHttpResponse
+    from backend.services.multimodal.asr import ASRCapability
+    cap = ASRCapability()
+    resp = AIHttpResponse(
+        status_code=200,
+        content='{"text": "你好世界", "language": "zh"}'.encode("utf-8"),
+        json={"text": "你好世界", "language": "zh"},
+        content_type="application/json",
+    )
+    result = cap.parse_response(resp)
+    assert result["text"] == "你好世界"
+    assert result["language"] == "zh"
+
+
+def test_asr_parse_response_error():
+    from backend.services.multimodal.capability import AIHttpResponse
+    from backend.services.multimodal.asr import ASRCapability
+    cap = ASRCapability()
+    resp = AIHttpResponse(status_code=500, content=b'error')
+    with pytest.raises(ValueError, match="500"):
+        cap.parse_response(resp)
