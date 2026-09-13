@@ -18,6 +18,12 @@
  * 目录在磁盘上消失时 open 返回 410 project_path_missing：该行标记"目录
  * 不存在"，仍可点击重试或移除。数据经 projectApi（invoke → IPC → 后端
  * /api/v1/projects），刷新走 store.loadSessions() 保证会话区即时同步。
+ *
+ * P5 拖拽登记：把文件夹拖到本分组内容区即登记（批量、不自动打开——
+ * 与 + 按钮的"登记即打开"区分，避免顺手拖拽打断当前工作流）。路径取
+ * Electron `File.path`（浏览器无此属性 → 静默忽略，与 OfficeFilePicker
+ * 同判据）；目录有效性由后端 validate_workspace 校验，零新增 IPC。
+ * 迁移注记：Electron ≥32 需改用 webUtils.getPathForFile。
  */
 
 import { AlertTriangle, ChevronDown, ChevronRight, Folder, Plus } from 'lucide-react';
@@ -71,6 +77,8 @@ export function ProjectSection({
   const [loadingSubIds, setLoadingSubIds] = useState<Set<string>>(new Set());
   // ===== P4: 子行会话删除 =====
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  // ===== P5: 区块局部拖拽登记 =====
+  const [dropActive, setDropActive] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -79,6 +87,33 @@ export function ProjectSection({
       toast.error(t('sider.project.open_failed').replace('{message}', errorMessage(err)));
     }
   }, [t]);
+
+  /** P5: 拖入文件夹 → 批量登记；逐条容错，成功才刷新清单。 */
+  const handleDropRegister = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setDropActive(false);
+      const files = Array.from(e.dataTransfer.files);
+      const paths = files
+        .map((f) => (f as File & { path?: string }).path)
+        .filter((p): p is string => typeof p === 'string' && p.length > 0);
+      if (paths.length === 0) return;
+      let registered = 0;
+      for (const path of paths) {
+        try {
+          await projectApi.register(path);
+          registered += 1;
+        } catch (err) {
+          toast.error(t('sider.project.add_failed').replace('{message}', errorMessage(err)));
+        }
+      }
+      if (registered > 0) {
+        toast.success(t('sider.project.drop_registered').replace('{count}', String(registered)));
+        await refresh();
+      }
+    },
+    [refresh, t],
+  );
 
   useEffect(() => {
     void refresh();
@@ -324,7 +359,29 @@ export function ProjectSection({
         </button>
       }
       render={() => (
-        <div className="flex flex-col">
+        <div
+          className={`flex flex-col rounded border ${
+            dropActive ? 'border-dashed border-primary bg-primary/5' : 'border-transparent'
+          }`}
+          data-testid="project-drop-zone"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDropActive(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            setDropActive(false);
+          }}
+          onDrop={(e) => void handleDropRegister(e)}
+        >
+          {dropActive && (
+            <div
+              className="px-3 py-2 text-xs text-primary text-center"
+              data-testid="project-drop-hint"
+            >
+              {t('sider.project.drop_hint')}
+            </div>
+          )}
           {projects.length === 0 ? (
             <div
               className="px-3 py-3 text-xs text-text-muted text-center"

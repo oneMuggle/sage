@@ -278,6 +278,8 @@ export const zh = {
   'sider.project.missing': '项目目录不存在或已被移动',
   'sider.project.session_count': '{count} 个会话',
   'sider.project.delete_session': '删除会话',
+  'sider.project.drop_hint': '松开以登记为项目',
+  'sider.project.drop_registered': '已登记 {count} 个项目',
   'sider.project.delete_session_failed': '删除会话失败：{message}',
   'sider.project.sessions_loading': '加载会话中…',
   'sider.project.sessions_empty': '项目内暂无会话',
