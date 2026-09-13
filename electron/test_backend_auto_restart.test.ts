@@ -113,7 +113,7 @@ describe('backend exit auto-restart logic (PR-B)', () => {
   it('emits backend:disconnected with attempt=1 on first call', () => {
     scheduleBackendRestart();
 
-    expect(mainWindow.webContents.send).toHaveBeenCalledWith('backend:disconnected', {
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith('sage:event:backend:disconnected', {
       attempt: 1,
     });
     expect(vi.getTimerCount()).toBe(1);
@@ -125,9 +125,9 @@ describe('backend exit auto-restart logic (PR-B)', () => {
     scheduleBackendRestart();
 
     const disconnectedCalls = mainWindow.webContents.send.mock.calls.filter(
-      ([channel]) => channel === 'backend:disconnected',
+      ([channel]) => channel === 'sage:event:backend:disconnected',
     );
-    expect(disconnectedCalls).toEqual([['backend:disconnected', { attempt: 1 }]]);
+    expect(disconnectedCalls).toEqual([['sage:event:backend:disconnected', { attempt: 1 }]]);
     expect(vi.getTimerCount()).toBe(1);
   });
 
@@ -147,13 +147,13 @@ describe('backend exit auto-restart logic (PR-B)', () => {
     scheduleBackendRestart();
 
     const disconnectedCalls = mainWindow.webContents.send.mock.calls.filter(
-      ([channel]) => channel === 'backend:disconnected',
+      ([channel]) => channel === 'sage:event:backend:disconnected',
     );
     expect(disconnectedCalls).toEqual([
-      ['backend:disconnected', { attempt: 1 }],
-      ['backend:disconnected', { attempt: 2 }],
-      ['backend:disconnected', { attempt: 3 }],
-      ['backend:disconnected', { attempt: -1 }],
+      ['sage:event:backend:disconnected', { attempt: 1 }],
+      ['sage:event:backend:disconnected', { attempt: 2 }],
+      ['sage:event:backend:disconnected', { attempt: 3 }],
+      ['sage:event:backend:disconnected', { attempt: -1 }],
     ]);
     // Exhausted state: no further timer armed. Locks the contract that
     // `restartCount >= MAX_RESTART_ATTEMPTS` early-returns before
