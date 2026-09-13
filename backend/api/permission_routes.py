@@ -74,6 +74,76 @@ class ApprovalAnswerBody(BaseModel):
         extra = "forbid"
 
 
+# ---- 对标 S3（2026-09-13）：权限三档 + 会话自动放行审计 -------------------
+
+#: 三档 → 既有 permission_mode 的映射（零后端语义改动）。
+#: careful=谨慎（写/执行/网络都问）、standard=标准（工作区内写不问）、
+#: auto=自动（只有破坏性命令仍经安全网审批）。
+PERMISSION_PRESETS: Dict[str, str] = {
+    "careful": "prompt",
+    "standard": "workspace_write",
+    "auto": "full_access",
+}
+_MODE_TO_PRESET: Dict[str, str] = {v: k for k, v in PERMISSION_PRESETS.items()}
+
+
+class PermissionPresetBody(BaseModel):
+    preset: str
+
+    class Config:
+        extra = "forbid"
+
+
+@router.get("/preset")
+def get_permission_preset() -> Dict[str, Any]:
+    """当前权限三档（由 permission_mode 反推；read_only 映射为 careful 并标记 custom）。"""
+    from backend.tools.permissions import DEFAULT_PERMISSION_MODE, SETTINGS_KEY_MODE
+
+    raw = SettingsRepository().get(SETTINGS_KEY_MODE) or DEFAULT_PERMISSION_MODE.value
+    mode = str(raw)
+    preset = _MODE_TO_PRESET.get(mode)
+    return {
+        "preset": preset or "careful",
+        "mode": mode,
+        "custom": preset is None,
+        "presets": PERMISSION_PRESETS,
+    }
+
+
+@router.post("/preset")
+def set_permission_preset(body: PermissionPresetBody, request: Request):
+    forbidden = forbidden_origin_response(request)
+    if forbidden is not None:
+        return forbidden
+    mode = PERMISSION_PRESETS.get(body.preset)
+    if mode is None:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": f"unknown preset: {body.preset}"},
+        )
+    from backend.tools.permissions import SETTINGS_KEY_MODE
+
+    SettingsRepository().set(SETTINGS_KEY_MODE, mode, category="permissions")
+    return {"ok": True, "preset": body.preset, "mode": mode}
+
+
+@router.get("/session/{session_id}/auto-approvals")
+def list_session_auto_approvals(
+    session_id: str, limit: int = 50, side_effect_only: bool = True
+) -> Dict[str, Any]:
+    """本会话未经确认即放行的工具调用（"已自动批准 N 次"数据源）。"""
+    from backend.services.auto_approval_ledger import get_auto_approval_ledger
+
+    ledger = get_auto_approval_ledger()
+    items = ledger.list(session_id, limit=min(max(limit, 1), 200), side_effect_only=side_effect_only)
+    return {
+        "session_id": session_id,
+        "count": ledger.count(session_id, side_effect_only=side_effect_only),
+        "total": ledger.count(session_id, side_effect_only=False),
+        "items": [i.to_dict() for i in items],
+    }
+
+
 def forbidden_origin_response(request: Request) -> Optional[JSONResponse]:
     """Origin 守卫：带 Origin 头且不在白名单 → 403 响应；否则 None（放行）。
 

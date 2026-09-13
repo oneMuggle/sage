@@ -10,6 +10,10 @@ import {
   GraduationCap,
   Network,
   UserRound,
+  Brain,
+  CalendarClock,
+  FileSpreadsheet,
+  BookText,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -33,12 +37,15 @@ export interface SlashCommand {
    * - 'learn': 触发 Background Review 当前会话,产生技能草案候选 (Task 12)
    * - 'plan': PM2 (round8) 计划模式 —— 剩余文本以 planMode 发送
    * - 'template': R27-A Prompt 模板 —— 选中即填充输入框（不发送）
+   * - 'navigate': 对标 S3 页面直达 —— 跳转到 `route`（/office /journal /schedule /wiki /memory）
    */
-  mode: 'prompt' | 'clear' | 'help' | 'skill' | 'compact' | 'learn' | 'plan' | 'template';
+  mode: 'prompt' | 'clear' | 'help' | 'skill' | 'compact' | 'learn' | 'plan' | 'template' | 'navigate';
   /** 'skill' 模式下需要执行的 SKILL.md 名称（不含 /）。 */
   skillName?: string;
   /** 'template' 模式下填充输入框的模板内容（{{变量}} 占位留给用户编辑）。 */
   content?: string;
+  /** 'navigate' 模式下的目标路由（含可选 query，如 `/knowledge?tab=wiki`）。 */
+  route?: string;
 }
 
 /** 所有可用的 slash 命令 */
@@ -128,6 +135,48 @@ export const slashCommands: SlashCommand[] = [
     description: '只读调研并输出执行计划，批准后执行（用法：/plan 目标）',
     icon: FileText,
     mode: 'plan',
+  },
+  // 对标 S3 (2026-09-13, 竞品对标 §2.2): 页面直达命令 —— 输入框即命令面板，
+  // 减少去侧边栏找入口的成本。仅跳转，不发消息。
+  {
+    name: 'office',
+    label: 'Office',
+    description: '打开 Office 文档工作台',
+    icon: FileSpreadsheet,
+    mode: 'navigate',
+    route: '/office',
+  },
+  {
+    name: 'journal',
+    label: '日志',
+    description: '打开 Office 工作台的日志面板',
+    icon: BookText,
+    mode: 'navigate',
+    route: '/office',
+  },
+  {
+    name: 'schedule',
+    label: '定时任务',
+    description: '打开定时任务管理',
+    icon: CalendarClock,
+    mode: 'navigate',
+    route: '/scheduled',
+  },
+  {
+    name: 'wiki',
+    label: 'Wiki',
+    description: '打开知识库（Wiki）',
+    icon: BookOpen,
+    mode: 'navigate',
+    route: '/knowledge',
+  },
+  {
+    name: 'memory',
+    label: '记忆',
+    description: '打开记忆管理页',
+    icon: Brain,
+    mode: 'navigate',
+    route: '/memory',
   },
 ];
 

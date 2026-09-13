@@ -1,7 +1,12 @@
 import { memo, useCallback, useEffect, useState } from 'react';
+import { useInRouterContext, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
+// 对标 S3: 直接从源文件导入（而非 barrel），既有 Chat 页面测试整体 mock 了
+// '../../features/chat'，走 barrel 会拿到 undefined。
+import { AtEntityMenu } from '../../features/chat/AtEntityMenu';
+import { parseEntityRefQuery } from '../../features/chat/entityRefs';
 import { importOfficeReference } from '../../features/office/importOfficeReference';
 import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { type AtFileSelection } from '../../shared/api/fileSearchClient';
@@ -20,6 +25,24 @@ import {
   type DynamicSlashSkill,
   type SlashCommand,
 } from './slashCommands';
+
+/**
+ * 对标 S3: 页面直达命令需要 navigate；ChatInput 的既有单测大多不包 Router，
+ * 因此在无 Router 上下文时退化为 window.location.hash 跳转（HashRouter 语义）。
+ * Hook 调用顺序恒定（useInRouterContext 先于条件分支），不违反 hooks 规则。
+ */
+function useOptionalNavigate(): (route: string) => void {
+  const inRouter = useInRouterContext();
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- inRouter 在组件生命周期内恒定
+  const navigate = inRouter ? useNavigate() : null;
+  return useCallback(
+    (route: string) => {
+      if (navigate) navigate(route);
+      else window.location.hash = `#${route}`;
+    },
+    [navigate],
+  );
+}
 
 interface ChatInputProps {
   onSend: (
@@ -164,6 +187,10 @@ function ChatInputInner({
   // Phase 6: @文件提及 + /btw 补充消息
   const btw = useBtwCommand();
   const atQuery = useAtFileQuery(value, cursorPos);
+  // 对标 S3: `@memory:xx` 等实体引用 —— 已进入实体模式时不再触发文件搜索，
+  // 由后端在发送时解析注入（backend/chat/entity_refs.py）。
+  const entityRef = parseEntityRefQuery(atQuery.query);
+  const navigate = useOptionalNavigate();
 
   // Fetch SKILL.md skills on mount. Filter to user-invocable ones for slash menu.
   // The full `description` from the SKILL.md frontmatter is passed through so the
@@ -228,6 +255,17 @@ function ChatInputInner({
         value.slice(0, atQuery.startIdx) + '@' + filePath + ' ' + value.slice(atQuery.endIdx);
       setValue(newValue);
       setCursorPos(atQuery.startIdx + 1 + filePath.length + 1);
+    },
+    [value, atQuery, setValue],
+  );
+
+  /** 对标 S3: 把 `@kind:` 前缀写入输入框（光标停在冒号后，等待用户输入查询）。 */
+  const insertEntityToken = useCallback(
+    (token: string) => {
+      if (atQuery.query === null) return;
+      const newValue = value.slice(0, atQuery.startIdx) + token + value.slice(atQuery.endIdx);
+      setValue(newValue);
+      setCursorPos(atQuery.startIdx + token.length);
     },
     [value, atQuery, setValue],
   );
@@ -323,6 +361,14 @@ function ChatInputInner({
       if (cmd.mode === 'clear') {
         setValue('');
         onClear?.();
+        return;
+      }
+
+      // 对标 S3: 页面直达 —— 只跳转，不发消息、不清空草稿之外的状态。
+      if (cmd.mode === 'navigate' && cmd.route) {
+        setValue('');
+        navigate(cmd.route);
+        toast.success(t('chat.nav.opened').replace('{page}', cmd.label));
         return;
       }
 
@@ -445,7 +491,20 @@ function ChatInputInner({
       setValue('');
       onSend(prompt);
     },
-    [value, onSend, onClear, onCompact, onLearn, slashCommands, isLoading, disabled, setValue, reloadPromptTemplates],
+    [
+      value,
+      onSend,
+      onClear,
+      onCompact,
+      onLearn,
+      slashCommands,
+      isLoading,
+      disabled,
+      setValue,
+      reloadPromptTemplates,
+      navigate,
+      t,
+    ],
   );
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -578,14 +637,18 @@ function ChatInputInner({
         onSlashHighlight={setSlashSelectedIndex}
         onSlashClose={() => setSlashMenuOpen(false)}
         atFileMenu={
-          atQuery.query !== null && (
-            <AtFileMenu
-              query={atQuery.query}
-              onSelect={(selection) => {
-                void handleAtFileSelect(selection);
-              }}
-              onClose={handleAtFileClose}
-            />
+          atQuery.query !== null &&
+          entityRef === null && (
+            <>
+              <AtEntityMenu query={atQuery.query} onSelect={(s) => insertEntityToken(s.token)} />
+              <AtFileMenu
+                query={atQuery.query}
+                onSelect={(selection) => {
+                  void handleAtFileSelect(selection);
+                }}
+                onClose={handleAtFileClose}
+              />
+            </>
           )
         }
         orchModeBar={

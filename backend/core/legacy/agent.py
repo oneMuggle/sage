@@ -1468,6 +1468,25 @@ class SageAgent:
                         # 执行器（deny/allow 规则 → 模式矩阵 → bash 风险升级）。
                         # 被拒 → 注入错误 ToolResult，循环正常继续（不抛异常）。
                         decision = enforcer.check(tc.name, args)
+                        # S3 (2026-09-13): 未经用户确认即放行 → 记入会话自动放行
+                        # 台账（顶栏"已自动批准 N 次" + 审计列表）。fail-safe。
+                        if decision.allowed and not decision.needs_approval:
+                            try:
+                                from backend.services.auto_approval_ledger import (
+                                    get_auto_approval_ledger,
+                                )
+                                from backend.tools.permissions import classify_tool
+
+                                get_auto_approval_ledger().record(
+                                    session_id=session_id,
+                                    tool_name=tc.name,
+                                    capability=classify_tool(tc.name).value,
+                                    mode=getattr(getattr(enforcer, "mode", None), "value", ""),
+                                    reason=decision.reason,
+                                    args=args,
+                                )
+                            except Exception:  # noqa: BLE001, S110
+                                pass
                         if decision.needs_approval:
                             # 先推 PERMISSION_REQUEST 事件给前端，再 await 审批闸口
                             approval_req = self._build_approval_request(tc.name, args, decision)

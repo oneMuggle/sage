@@ -517,6 +517,24 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // permission_request 流事件到达后,渲染进程弹出 ApprovalDialog;用户点
   // 批准/拒绝 → permissions_answer 应答。pending 端点用于断线重连后补拉。
   permissions_pending: { method: 'GET', path: () => '/api/v1/permissions/pending' },
+  // 对标 S3 (2026-09-13): 权限三档 + 会话自动放行审计
+  permissions_get_preset: { method: 'GET', path: () => '/api/v1/permissions/preset' },
+  permissions_set_preset: {
+    method: 'POST',
+    path: () => '/api/v1/permissions/preset',
+    body: (a) => ({ preset: a.preset }),
+  },
+  permissions_session_auto_approvals: {
+    method: 'GET',
+    path: (a) => {
+      const sid = encodeURIComponent(String(a?.sessionId ?? ''));
+      const params = new URLSearchParams({
+        limit: String((a?.limit as number) ?? 50),
+        side_effect_only: String(a?.sideEffectOnly === false ? 'false' : 'true'),
+      });
+      return `/api/v1/permissions/session/${sid}/auto-approvals?${params.toString()}`;
+    },
+  },
   permissions_answer: {
     method: 'POST',
     path: (a) => `/api/v1/permissions/${encodeURIComponent(String(a.requestId))}/answer`,
