@@ -27,7 +27,7 @@ import os
 import shutil
 import subprocess
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -386,3 +386,69 @@ def _secret_stats(data: Dict[str, Any]) -> Dict[str, int]:
                 if is_wrapped(ep["apiKey"]):
                     wrapped += 1
     return {"total": total, "wrapped": wrapped, "plaintext": total - wrapped}
+
+
+# ==================== search_config 静态加密(Round 3 K1) ====================
+
+#: search_config 里需要静态加密的 key 字段(→ account 映射)
+_SEARCH_KEY_FIELDS: List[Tuple[str, str]] = [
+    ("tavily_key", "search:tavily"),
+    ("zhipu_key", "search:zhipu"),
+]
+
+
+def wrap_search_config_json(raw: Optional[str]) -> Optional[str]:
+    """字符串层包装(preferences "search_config" 写侧): 明文 key 字段就地加密。
+
+    与 wrap_settings_json 同法: 解析失败 fail-open 原样返回; 已是 ``enc:``
+    前缀的值跳过(幂等); scheme=none 平台 encrypt_secret 原样返回(诚实降级)。
+    """
+    if raw is None:
+        return raw
+    try:
+        import json
+
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return raw
+    if not isinstance(data, dict):
+        return raw
+    for field, account in _SEARCH_KEY_FIELDS:
+        value = data.get(field)
+        if isinstance(value, str) and value and not is_wrapped(value):
+            try:
+                data[field] = encrypt_secret(value, account)
+            except Exception:
+                logger.warning(
+                    "SecretBox: encrypt failed for search_config.%s (kept plaintext)", field
+                )
+    return json.dumps(data, ensure_ascii=False)
+
+
+def unwrap_search_config_json(raw: Optional[str]) -> Optional[str]:
+    """字符串层解包(preferences "search_config" 读侧): key 字段就地解密。
+
+    单字段解密失败置空串(search_config._unwrap_secret 按未配置处理, 不投毒)。
+    """
+    if raw is None:
+        return raw
+    try:
+        import json
+
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return raw
+    if not isinstance(data, dict):
+        return raw
+    for field, _account in _SEARCH_KEY_FIELDS:
+        value = data.get(field)
+        if isinstance(value, str) and is_wrapped(value):
+            try:
+                data[field] = decrypt_secret(value)
+            except Exception:
+                logger.warning(
+                    "SecretBox: decrypt failed for search_config.%s (treated as unconfigured)",
+                    field,
+                )
+                data[field] = ""
+    return json.dumps(data, ensure_ascii=False)
