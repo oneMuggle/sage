@@ -2349,11 +2349,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         "不要原样重派已经失败的同一任务。"
                         # BD4 (round15): 后台工作流指引 —— background=true 派发后
                         # 立即返回，期间可先做其他工作，再 collect_subagents 收取。
+                        # BD5 (round16): 补充非阻塞快照与提前汇总策略。
                         + "\n\n当某些子任务耗时较长而你希望先推进其他工作时，可在 "
                         "dispatch_subagents 传 background=true 后台派发（立即返回），"
                         "期间执行你自己的其他工具调用，之后调用 collect_subagents "
                         "获取聚合结果；collect 超时只表示还没跑完，任务板仍在推进，"
                         "可再次 collect。"
+                        "collect 可传 wait=false 立即获取各子任务当前状态与结果"
+                        "预览快照——若已有信息足以支撑最终结论，可据此提前汇总，"
+                        "无需等待全部子任务完成。"
                     )
                     # 计划先行：子 agent 跑之前先推 task_plan（可展示、可取消）
                     # Wave 2 P1-4: 首次 dispatch 前把 run + plan 落库,供 resume 端点重建。

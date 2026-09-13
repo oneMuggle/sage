@@ -593,11 +593,19 @@ class ChatDispatcher:
                 # B3: run 级取消与单任务跳过共用该守卫，error 文案区分。
                 if merged_cancel.is_set():
                     state.status = "cancelled"
-                    state.error = (
-                        "cancelled by user"
-                        if self._cancelled.is_set()
-                        else "skipped by user"
-                    )
+                    # BU6 (round16): 归因细分 —— 预算触顶 / 用户取消 / 单任务跳过
+                    # 三者互斥。预算触顶经 _cancelled 传播收口，故须先判
+                    # _budget_exceeded（否则全部误归因为用户取消）；与 dispatch
+                    # 入口拒绝同前缀（budget_exceeded），任务树与排障可 grep。
+                    if self._budget_exceeded:
+                        state.error = (
+                            f"budget_exceeded: 本 run token 预算"
+                            f"（{self._budget_limit}）已耗尽"
+                        )
+                    elif self._cancelled.is_set():
+                        state.error = "cancelled by user"
+                    else:
+                        state.error = "skipped by user"
                     self._emit_task_status(state)
                     return
                 state.status = "running"

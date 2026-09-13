@@ -172,3 +172,59 @@ async def test_budget_not_exceeded_noop(tmp_path, monkeypatch):
     )
     assert d._budget_exceeded is False
     assert "token 预算上限" not in aggregated
+
+
+@pytest.mark.asyncio()
+async def test_budget_trip_error_attribution_on_queued_tasks(tmp_path, monkeypatch):
+    """BU6 (round16): 预算触顶收口的任务 error = budget_exceeded（非 cancelled by user）。
+
+    t1 触发预算（done 后守门置位 _cancelled），t2/t3 排队中被收口：
+    用户未取消 → 归因预算触顶；error 前缀与 dispatch 入口拒绝一致。
+    """
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s4",
+        entry_queue=queue,
+        run_id="orch-bu-4",
+        session_id="sess-bu",
+    )
+    d._semaphore = asyncio.Semaphore(1)  # 串行：t2/t3 排队
+    d.settings.run_token_budget = 100
+
+    async def fake_run(state):
+        if state.task_id == "t1":
+            _seed_usage("sess-bu", 500, int(time.time() * 1000))
+
+        state.status = "done"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch(
+        [
+            {"task_id": "t1", "agent_id": "primary", "goal": "g1"},
+            {"task_id": "t2", "agent_id": "primary", "goal": "g2"},
+            {"task_id": "t3", "agent_id": "primary", "goal": "g3"},
+        ]
+    )
+
+    assert d._budget_exceeded is True
+    assert d._states["t2"].error.startswith("budget_exceeded")
+    assert "预算" in d._states["t2"].error
+    assert d._states["t3"].error.startswith("budget_exceeded")
+    # 用户未按取消 —— 不得误归因为用户
+    assert "cancelled by user" not in (d._states["t2"].error or "")
+
+
+def test_background_guide_documents_snapshot_strategy():
+    """BD5 (round16): conductor 指令含 collect 非阻塞快照与提前汇总策略。"""
+    import inspect
+
+    from backend.api.legacy_routes import _PLAN_MODE_DIRECTIVE  # noqa: F401 — 常量面健全
+
+    src = inspect.getsource(
+        __import__("backend.api.legacy_routes", fromlist=["x"])
+    )
+    assert "wait=false" in src
+    assert "提前汇总" in src
+    # 预算触顶的聚合标注在 chat_dispatcher（round11 已覆盖），此处不重复
