@@ -1346,10 +1346,7 @@ async function registerIpcHandlers(): Promise<void> {
     }
   });
 
-  ipcMain.handle('sage:help:prefetch', (evt, filename: string) => {
-    if (!isTrustedRenderer(evt.sender)) {
-      throw new Error('未授权的窗口请求');
-    }
+  ipcMain.handle('sage:help:prefetch', () => {
     // Prefetch is a no-op for now; could implement caching in the future
     return Promise.resolve();
   });
