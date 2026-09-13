@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **journal generate 接入引用引擎(Round 25)**: generate_article 的 LLM prompt schema 新增 structured_references(结构化文献条目)——LLM 产出经 JournalContent 校验后走 R21 的 _write_sections 分支按 GB/T 7714 格式化加 [N] 编号;两轮自纠机制天然兜底次品条目
 - **Excel 打印设置(Round 23)**: ExcelSheetSpec 新增 print_setup——方向(横/纵)/缩放到 N 页宽(fitToWidth+fitToPage)/打印区域(A1 记法);全字段可选缺省零变化
 - **Pillow 图片管线(Round 22)**: resolve_image_payload 接入懒加载压缩——>8MB 的 JPEG/PNG 在 Pillow 可用时自动降采样(最长边 2000px,质量 85→65 阶梯)到阈值内;Pillow 为 requirements-optional 可选依赖,未安装时管线旁路行为零变化;不进 win7 bundle
 - **journal 接入引用引擎(Round 21)**: JournalContent 新增 structured_references(ReferenceSpec)+citation_style——fill_from_content 时用 R9 引擎按 GB/T 7714/APA 格式化并加 [N] 编号生成参考文献段;未提供时回退 references 纯文本(零变化)
