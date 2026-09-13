@@ -34,6 +34,7 @@ import {
   type TaskBoardState,
 } from './chatStreamStore';
 import { notifySession, shouldNotify } from './sessionNotify';
+import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 
 /**
  * 从 endpoint baseUrl 启发式推导 LLM provider 字符串。
@@ -256,12 +257,14 @@ export function useChat() {
       }
 
       // PR-6: 先占位 assistant message, 流式过程中累积 content
+      // 2026-09-13 P0: 哨兵值抽为 THINKING_PLACEHOLDER，Message 据此渲染
+      // shimmer 占位而非把占位文案当 markdown 静态文本。
       const assistantId = crypto.randomUUID();
       const assistantMessage: Message = {
         id: assistantId,
         session_id: sid,
         role: 'assistant',
-        content: '🤔 思考中…',
+        content: THINKING_PLACEHOLDER,
         created_at: Date.now(),
       };
       addMessage(assistantMessage);
@@ -269,7 +272,7 @@ export function useChat() {
       // taskBoard — 流式进度全部走 store,跨路由切换保留(2026-08-19)。
       // S2: 只重置本会话槽位,并行会话互不覆盖。
       useChatStreamStore.getState().startStream(sid, assistantId, {
-        initialContent: '🤔 思考中…',
+        initialContent: THINKING_PLACEHOLDER,
       });
 
       const config: ChatConfig = {
@@ -375,7 +378,7 @@ export function useChat() {
         if (!finalContent && !finalReasoning && finalToolCalls.length === 0) {
           finalContent = '[错误: 模型未返回任何内容]';
         } else if (
-          finalContent === '🤔 思考中…' &&
+          finalContent === THINKING_PLACEHOLDER &&
           !finalReasoning &&
           finalToolCalls.length === 0
         ) {

@@ -23,6 +23,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 
 import { MediaAttachment } from '../../features/chat/MediaAttachment';
+import { THINKING_PLACEHOLDER } from '../../features/send-message/thinkingPlaceholder';
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
@@ -60,6 +61,21 @@ function CodeBlock({ language, children }: { language?: string; children: string
   }
 
   return <ShikiCodeBlock language={language}>{children}</ShikiCodeBlock>;
+}
+
+/** ThinkingShimmer — 等待首 token 的 shimmer 占位（替代 "🤔 思考中…" 静态文本）。
+ *  两根相位错开的扫光条，animate-shimmer 见 index.css；reduced-motion 下
+ *  全局 media query 会把动画压到 0.01ms，自然退化为静态骨架。 */
+function ThinkingShimmer() {
+  return (
+    <div className="flex items-center gap-2 py-1" data-testid="thinking-shimmer">
+      <span className="h-2.5 w-44 rounded-full animate-shimmer" />
+      <span
+        className="h-2.5 w-24 rounded-full animate-shimmer"
+        style={{ animationDelay: '-0.8s' }}
+      />
+    </div>
+  );
 }
 
 /** ThinkingPanel - 可折叠的 LLM 思考过程展示面板
@@ -184,6 +200,11 @@ function MessageComponent({
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const isError = message.content?.startsWith('[错误') ?? false;
+  // 2026-09-13 P0: 首个 token 到达前 content 是哨兵占位值 — 渲染 shimmer
+  // 骨架而非把 "🤔 思考中…" 当 markdown 静态文本展示。agent 中间态文案
+  // (思考/调用工具) 会覆盖占位值，覆盖后自动回退 markdown 渲染。
+  const isThinkingPlaceholder =
+    isAssistant && isStreaming === true && message.content === THINKING_PLACEHOLDER;
   const toolCalls: ToolCall[] = message.tool_calls ?? [];
   // M4: 只有 user/assistant 消息可分叉（system/tool 行没有分叉语义）
   const canFork = Boolean(onFork) && (isUser || isAssistant);
@@ -332,8 +353,11 @@ function MessageComponent({
         >
           {/* Message content with Markdown */}
           {isAssistant ? (
-            <div className="max-w-none">
-              <ReactMarkdown
+            isThinkingPlaceholder ? (
+              <ThinkingShimmer />
+            ) : (
+              <div className="max-w-none">
+                <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeKatex]}
                 components={{
@@ -429,7 +453,16 @@ function MessageComponent({
               >
                 {message.content.replace(/<img\s+[^>]*src=["']data:[^"']*["'][^>]*\/?>/gi, '')}
               </ReactMarkdown>
-            </div>
+                {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
+                {isStreaming && (
+                  <span
+                    className="stream-cursor"
+                    aria-hidden="true"
+                    data-testid="stream-cursor"
+                  />
+                )}
+              </div>
+            )
           ) : (
             <p className="whitespace-pre-wrap">{message.content}</p>
           )}

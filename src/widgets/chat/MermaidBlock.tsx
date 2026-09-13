@@ -45,6 +45,16 @@ let renderSeq = 0;
 export function MermaidBlock({ code }: { code: string }) {
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  // 2026-09-13 P0: 主题响应式 — 此前 effect 依赖只有 [code]，会话中途切换
+  // 亮/暗主题时图表不跟随（下次 code 变化才重渲染）。观察 html class 变化
+  // (ThemeProvider 双轨切 .dark + data-theme) 触发重渲染。
+  const [theme, setTheme] = useState<'dark' | 'default'>(currentTheme);
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => setTheme(currentTheme()));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +65,7 @@ export function MermaidBlock({ code }: { code: string }) {
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: 'strict',
-          theme: currentTheme(),
+          theme,
           maxTextSize: 50000,
           maxEdges: 500,
         });
@@ -70,7 +80,7 @@ export function MermaidBlock({ code }: { code: string }) {
     return () => {
       cancelled = true;
     };
-  }, [code]);
+  }, [code, theme]);
 
   if (failed) {
     return (
@@ -86,11 +96,13 @@ export function MermaidBlock({ code }: { code: string }) {
     return <div data-testid="mermaid-loading" className="text-xs text-muted p-2">渲染图表…</div>;
   }
   return (
-    // mermaid SVG 自带配色，容器给白底保证 dark 模式下可读；strict 模式下
-    // 输出无脚本，dangerouslySetInnerHTML 安全
+    // mermaid SVG 自带配色：亮色 'default' 主题按白底设计 → 白底卡片；
+    // 暗色 'dark' 主题按暗底设计（浅色线条 + 透明背景）→ 跟随应用暗色
+    // 表面。此前恒为 bg-white，把 dark 配色的图钉在白底上导致对比度错乱。
+    // strict 模式下输出无脚本，dangerouslySetInnerHTML 安全。
     <div
       data-testid="mermaid-figure"
-      className="my-2 p-2 overflow-x-auto rounded border border-border bg-white"
+      className="my-2 p-2 overflow-x-auto rounded border border-border bg-white dark:bg-transparent [&_svg]:max-w-none"
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
