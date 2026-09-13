@@ -22,7 +22,7 @@ import { useStoredSiderOrder } from '../../shared/lib/dnd/useStoredSiderOrder';
 import { unlockFeature, useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
-import { AttnBadge, BrandLogo, LiveDot, type LiveState } from '../../shared/ui';
+import { AttnBadge, BrandLogo, LiveDot, Tooltip, type LiveState } from '../../shared/ui';
 import {
   ConversationsSection,
   CronJobSection,
@@ -251,17 +251,19 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
             const Icon = item.icon;
 
             return (
-              <Link
-                key={item.path}
-                to={item.path}
-                title={item.label}
-                className={clsx(
-                  'flex items-center justify-center w-10 h-10 rounded-radius-sm transition-colors',
-                  isActive ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-bg-hover',
-                )}
-              >
-                <Icon className="w-5 h-5" />
-              </Link>
+              // P1: 折叠 rail 图标用统一 Tooltip（radix）替代原生 title
+              <Tooltip key={item.path} content={item.label} side="right">
+                <Link
+                  to={item.path}
+                  aria-label={item.label}
+                  className={clsx(
+                    'flex items-center justify-center w-10 h-10 rounded-radius-sm transition-colors',
+                    isActive ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-bg-hover',
+                  )}
+                >
+                  <Icon className="w-5 h-5" />
+                </Link>
+              </Tooltip>
             );
           })}
         </nav>
