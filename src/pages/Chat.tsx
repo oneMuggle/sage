@@ -10,6 +10,7 @@ import { useChat } from '../features/send-message/useChat';
 import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
 import { orchRunClient } from '../shared/api/orchRunClient';
 import { useI18n } from '../shared/lib/i18n';
+import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useStore } from '../shared/lib/store';
 import type { Message as MessageType } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
@@ -63,7 +64,15 @@ export function Chat() {
     planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
     clearPlanApproval, // PM2: 清除批准状态
   } = useChat();
-  const [rightPanelOpen, setRightPanelOpen] = useState(false);
+  // P1 (UI 优化方案 2026-09-13): 开关状态持久化 —— 重启恢复上次的面板开合
+  const isMobile = useIsMobile();
+  const [rightPanelOpen, setRightPanelOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('right-panel-open') === '1';
+    } catch {
+      return false;
+    }
+  });
 
   const {
     currentSessionId,
@@ -461,7 +470,29 @@ export function Chat() {
     () => (editResendTarget ? { onCancel: cancelEditResend } : null),
     [cancelEditResend, editResendTarget],
   );
-  const handleToggleRightPanel = useCallback(() => setRightPanelOpen((v) => !v), []);
+  // P1: 开关落 localStorage（下次启动恢复）；所有切换入口统一走此回调
+  const handleToggleRightPanel = useCallback(() => {
+    setRightPanelOpen((v) => {
+      try {
+        localStorage.setItem('right-panel-open', v ? '0' : '1');
+      } catch {
+        // localStorage 不可用
+      }
+      return !v;
+    });
+  }, []);
+
+  // P1: Ctrl/Cmd+Shift+P 切换右面板（与 Tooltip 提示对应）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        handleToggleRightPanel();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handleToggleRightPanel]);
 
   // messages 每 token 换新引用, 直接进 deps 会击穿 memo —— 经 ref 读取,
   // 回调引用保持恒定 (F1)。
@@ -643,183 +674,192 @@ export function Chat() {
           >
             + 新对话
           </button>
-          <RightPanelToggle open={rightPanelOpen} onClick={() => setRightPanelOpen((v) => !v)} />
+          <RightPanelToggle open={rightPanelOpen} onClick={handleToggleRightPanel} />
         </div>
       </div>
 
-      {showInterruptBanner && (
-        <InterruptedRunBanner
-          onRetry={retryInterruptedRun}
-          onDismiss={() =>
-            setDismissedInterrupts((prev) => new Set(prev).add(currentSessionId ?? ''))
-          }
-        />
-      )}
-
-      {/* R17-D: 顶层错误内联条 —— 保留历史可见（替代旧整页 ErrorState） */}
-      {error && (
-        <div
-          className="mx-4 mt-2 flex items-start justify-between gap-3 px-3 py-2 rounded border border-error/40 bg-error/5"
-          data-testid="chat-inline-error"
-        >
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-error">对话出错</p>
-            <p className="text-xs text-text-secondary break-all">{error}</p>
-          </div>
-          <button
-            type="button"
-            onClick={clearError}
-            className="text-xs px-2 py-1 rounded border border-border hover:bg-bg-hover shrink-0"
-          >
-            关闭
-          </button>
-        </div>
-      )}
-
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto relative">
-        {isLoading && messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <LoadingState label="正在加载对话..." />
-          </div>
-        ) : (
-          <MessageList
-            messages={messages}
-            streamingMessageId={streamingMessageId}
-            onFork={handleFork}
-            onEditResend={handleStartEditResend}
-            onRegenerate={handleRegenerate}
-            onDelete={handleDeleteMessage}
-            onQuote={handleQuote}
-            onSaveToMemory={handleSaveToMemory}
-          />
-        )}
-        {/* PM2 (round8): 计划批准条 —— /plan run 完成后出现;批准即衔接执行 */}
-        {planApprovalFor != null && planApprovalFor === currentSessionId && (
-          <div className="px-4 pb-2" data-testid="plan-approval-bar">
-            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded border border-primary/40 bg-primary/5">
-              <span className="text-xs text-text-secondary">
-                计划已生成 —— 批准后将严格按上述计划执行
-              </span>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  data-testid="plan-approve"
-                  className="px-2 py-1 text-xs rounded bg-primary text-bg-inv font-medium"
-                  onClick={() => {
-                    const sid = planApprovalFor;
-                    clearPlanApproval();
-                    if (sid) {
-                      void sendMessage(
-                        '请严格按上述计划执行，不要重新规划。',
-                        sid,
-                        undefined,
-                        'force_single',
-                      );
-                    }
-                  }}
-                >
-                  按计划执行
-                </button>
-                <button
-                  type="button"
-                  data-testid="plan-dismiss"
-                  className="px-2 py-1 text-xs rounded border border-border text-text-secondary"
-                  onClick={() => clearPlanApproval()}
-                >
-                  忽略
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        {/* 编排计划确认卡 (Fix #2): 未派发时在主对话区域显示,方便用户查看和确认 */}
-        {taskBoard && !taskBoard.dispatchedAt && (
-          <div className="px-4 pb-2">
-            <PlanCard
-              runId={taskBoard.runId}
-              plan={taskBoard.plan}
-              locked={false}
-              needConfirm={true}
-              onCancel={() => void handleCancelRun(taskBoard.runId)}
+      {/* P1 (UI 优化方案 2026-09-13): 内容行 —— 右面板 push 模式参与 flex
+          布局（挤压主区成三栏，对齐 Claude artifacts）；窄屏回退 overlay。 */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0">
+          {showInterruptBanner && (
+            <InterruptedRunBanner
+              onRetry={retryInterruptedRun}
+              onDismiss={() =>
+                setDismissedInterrupts((prev) => new Set(prev).add(currentSessionId ?? ''))
+              }
             />
-          </div>
-        )}
-        {/* Task 2: sticky-bottom "跳到最新" 按钮 — 用户离开底部 + 流式进行中显示,
+          )}
+
+          {/* R17-D: 顶层错误内联条 —— 保留历史可见（替代旧整页 ErrorState） */}
+          {error && (
+            <div
+              className="mx-4 mt-2 flex items-start justify-between gap-3 px-3 py-2 rounded border border-error/40 bg-error/5"
+              data-testid="chat-inline-error"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-error">对话出错</p>
+                <p className="text-xs text-text-secondary break-all">{error}</p>
+              </div>
+              <button
+                type="button"
+                onClick={clearError}
+                className="text-xs px-2 py-1 rounded border border-border hover:bg-bg-hover shrink-0"
+              >
+                关闭
+              </button>
+            </div>
+          )}
+
+          <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto relative">
+            {isLoading && messages.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <LoadingState label="正在加载对话..." />
+              </div>
+            ) : (
+              <MessageList
+                messages={messages}
+                streamingMessageId={streamingMessageId}
+                onFork={handleFork}
+                onEditResend={handleStartEditResend}
+                onRegenerate={handleRegenerate}
+                onDelete={handleDeleteMessage}
+                onQuote={handleQuote}
+                onSaveToMemory={handleSaveToMemory}
+              />
+            )}
+            {/* PM2 (round8): 计划批准条 —— /plan run 完成后出现;批准即衔接执行 */}
+            {planApprovalFor != null && planApprovalFor === currentSessionId && (
+              <div className="px-4 pb-2" data-testid="plan-approval-bar">
+                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded border border-primary/40 bg-primary/5">
+                  <span className="text-xs text-text-secondary">
+                    计划已生成 —— 批准后将严格按上述计划执行
+                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      data-testid="plan-approve"
+                      className="px-2 py-1 text-xs rounded bg-primary text-bg-inv font-medium"
+                      onClick={() => {
+                        const sid = planApprovalFor;
+                        clearPlanApproval();
+                        if (sid) {
+                          void sendMessage(
+                            '请严格按上述计划执行，不要重新规划。',
+                            sid,
+                            undefined,
+                            'force_single',
+                          );
+                        }
+                      }}
+                    >
+                      按计划执行
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="plan-dismiss"
+                      className="px-2 py-1 text-xs rounded border border-border text-text-secondary"
+                      onClick={() => clearPlanApproval()}
+                    >
+                      忽略
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* 编排计划确认卡 (Fix #2): 未派发时在主对话区域显示,方便用户查看和确认 */}
+            {taskBoard && !taskBoard.dispatchedAt && (
+              <div className="px-4 pb-2">
+                <PlanCard
+                  runId={taskBoard.runId}
+                  plan={taskBoard.plan}
+                  locked={false}
+                  needConfirm={true}
+                  onCancel={() => void handleCancelRun(taskBoard.runId)}
+                />
+              </div>
+            )}
+            {/* Task 2: sticky-bottom "跳到最新" 按钮 — 用户离开底部 + 流式进行中显示,
             固定右下角,a11y ``aria-label="跳到最新"``。点击后 scrollTop=scrollHeight
             并把 wasAtBottomRef 重置。 */}
-        {showJumpToLatest && (
-          <button
-            type="button"
-            onClick={scrollToLatest}
-            aria-label="跳到最新"
-            className="absolute bottom-4 right-4 px-3 py-1.5 bg-primary text-text-inverse text-xs rounded-radius-sm shadow-md hover:bg-primary-hover transition-colors z-10"
-          >
-            跳到最新
-          </button>
-        )}
-      </div>
+            {showJumpToLatest && (
+              <button
+                type="button"
+                onClick={scrollToLatest}
+                aria-label="跳到最新"
+                className="absolute bottom-4 right-4 px-3 py-1.5 bg-primary text-text-inverse text-xs rounded-radius-sm shadow-md hover:bg-primary-hover transition-colors z-10"
+              >
+                跳到最新
+              </button>
+            )}
+          </div>
 
-      {/* 阶段 4 + P2: 流式处理时显示当前活跃 agent + 迭代轮次 + 阶段 */}
-      <ActiveAgentIndicator
-        agentId={currentAgentId}
-        iteration={iteration}
-        streamingState={streamingState}
-      />
+          {/* 阶段 4 + P2: 流式处理时显示当前活跃 agent + 迭代轮次 + 阶段 */}
+          <ActiveAgentIndicator
+            agentId={currentAgentId}
+            iteration={iteration}
+            streamingState={streamingState}
+          />
 
-      {/* live-events P0 (2026-09-06): 编排子代理实时执行面板 —— 派发后
+          {/* live-events P0 (2026-09-06): 编排子代理实时执行面板 —— 派发后
           conductor 阻塞在 dispatch_subagents 内,这里逐行展示每个子任务的
           实时步骤,消除"只能被动等待"的黑盒感。 */}
-      <SubagentLivePanel sessionId={currentSessionId} />
+          <SubagentLivePanel sessionId={currentSessionId} />
 
-      {showConfigWarning && (
-        <div
-          data-testid="config-warning"
-          className="px-4 py-2 bg-warning/10 border-t border-warning/40 text-warning text-xs flex items-center gap-2"
-        >
-          <span aria-hidden="true">⚠️</span>
-          <span>
-            未配置 API 端点或对话模型，
-            <button
-              type="button"
-              onClick={() => navigate('/settings')}
-              className="underline text-warning hover:text-warning/80 transition-colors"
+          {showConfigWarning && (
+            <div
+              data-testid="config-warning"
+              className="px-4 py-2 bg-warning/10 border-t border-warning/40 text-warning text-xs flex items-center gap-2"
             >
-              前往设置
-            </button>
-          </span>
+              <span aria-hidden="true">⚠️</span>
+              <span>
+                未配置 API 端点或对话模型，
+                <button
+                  type="button"
+                  onClick={() => navigate('/settings')}
+                  className="underline text-warning hover:text-warning/80 transition-colors"
+                >
+                  前往设置
+                </button>
+              </span>
+            </div>
+          )}
+
+          <ChatInput
+            onSend={handleSendMessageWithEditResend}
+            onInterrupt={interrupt}
+            onCompact={handleCompact}
+            onLearn={handleLearn}
+            isLoading={isLoading}
+            disabled={!hasConfig}
+            placeholder="输入消息..."
+            workspacePath={workspacePath}
+            injectedDraft={editResendTarget ?? quotedDraft}
+            editResendNotice={editResendNotice}
+          />
         </div>
-      )}
+        {/* /左列 */}
 
-      <ChatInput
-        onSend={handleSendMessageWithEditResend}
-        onInterrupt={interrupt}
-        onCompact={handleCompact}
-        onLearn={handleLearn}
-        isLoading={isLoading}
-        disabled={!hasConfig}
-        placeholder="输入消息..."
-        workspacePath={workspacePath}
-        injectedDraft={editResendTarget ?? quotedDraft}
-        editResendNotice={editResendNotice}
-      />
-
-      {/* Artifacts Panel: 右侧抽屉（fixed 定位，叠加在页面右缘） */}
-      <RightPanel
-        open={rightPanelOpen}
-        onToggle={handleToggleRightPanel}
-        iteration={iteration}
-        streamingState={streamingState}
-        // ?? [] 为防御:个别测试 mock useChat 时可能缺该字段;生产 hook 保证非空
-        toolCalls={streamingToolCalls ?? EMPTY_TOOL_CALLS}
-        isLoading={isLoading}
-        sessionId={currentSessionId}
-        taskBoard={taskBoard ?? null}
-        // C4+H1 (2026-08-15): 任意阶段取消都走 handleCancelRun ——
-        // cancelRun（未派发时后端置 cancelled + dispatcher.cancel() 阻止
-        // 自动派发）+ 清空 taskBoard。
-        onCancelExecution={(runId) => void handleCancelRun(runId)}
-        onRerunFailed={(runId) => void handleRerunFailed(runId)}
-      />
+        {/* Artifacts Panel: 桌面端 push（挤压主区），窄屏 overlay 回退 */}
+        <RightPanel
+          open={rightPanelOpen}
+          onToggle={handleToggleRightPanel}
+          variant={isMobile ? 'overlay' : 'push'}
+          iteration={iteration}
+          streamingState={streamingState}
+          // ?? [] 为防御:个别测试 mock useChat 时可能缺该字段;生产 hook 保证非空
+          toolCalls={streamingToolCalls ?? EMPTY_TOOL_CALLS}
+          isLoading={isLoading}
+          sessionId={currentSessionId}
+          taskBoard={taskBoard ?? null}
+          // C4+H1 (2026-08-15): 任意阶段取消都走 handleCancelRun ——
+          // cancelRun（未派发时后端置 cancelled + dispatcher.cancel() 阻止
+          // 自动派发）+ 清空 taskBoard。
+          onCancelExecution={(runId) => void handleCancelRun(runId)}
+          onRerunFailed={(runId) => void handleRerunFailed(runId)}
+        />
+      </div>
+      {/* /内容行 */}
 
       {/* R17-A2: 压缩谱系归档查看器（compact 成功 toast「查看归档」打开） */}
       <ArchivesModal
