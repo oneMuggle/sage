@@ -26,9 +26,7 @@ import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
 // R24-D6: 路由级代码分割 —— 首屏只加载 Chat/Welcome，低频页面
 // (设置/记忆/智能体/技能/Office/知识库/编排/定时任务) 按需加载。
 // Electron file:// 下同样减少首屏解析/执行量。
-const Settings = lazy(() =>
-  import('./pages').then((m) => ({ default: m.Settings })),
-);
+const Settings = lazy(() => import('./pages').then((m) => ({ default: m.Settings })));
 const Agents = lazy(() => import('./pages/Agents').then((m) => ({ default: m.Agents })));
 const Knowledge = lazy(() => import('./pages/Knowledge').then((m) => ({ default: m.Knowledge })));
 const Memory = lazy(() => import('./pages/Memory').then((m) => ({ default: m.Memory })));
@@ -40,6 +38,7 @@ const ScheduledTasks = lazy(() =>
   import('./pages/ScheduledTasks').then((m) => ({ default: m.ScheduledTasks })),
 );
 const Skills = lazy(() => import('./pages/Skills').then((m) => ({ default: m.default })));
+const Help = lazy(() => import('./pages/Help').then((m) => ({ default: m.Help })));
 
 // 批次三 step 6 (spec §4.3 line 150):
 // Memory 页"按会话查看摘要"或"来源会话跳转"以 /chat?session=<id> 深链形式进入。
@@ -106,16 +105,23 @@ function SessionNotifyBridge() {
 }
 
 function App() {
+  const navigate = useNavigate();
   const [commandOpen, setCommandOpen] = useState(false);
   // U18 (round4): 快捷键帮助覆盖层（非输入焦点下按 ? 打开）
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
 
-  // 全局快捷键 Ctrl+K / Cmd+K 打开命令面板
+  // 全局快捷键 Ctrl+K / Cmd+K 打开命令面板, F1 打开帮助中心
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setCommandOpen((prev) => !prev);
+        return;
+      }
+      // F1: 打开帮助中心
+      if (e.key === 'F1') {
+        e.preventDefault();
+        navigate('/help');
         return;
       }
       // U18: '?' = Shift+/，输入焦点内不劫持（用户可能真的想输入问号）
@@ -135,7 +141,7 @@ function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [navigate]);
 
   return (
     <HashRouter>
@@ -163,6 +169,7 @@ function App() {
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="scheduled" element={<ScheduledTasks />} />
             <Route path="orchestration" element={<Orchestration />} />
+            <Route path="help" element={<Help />} />
           </Route>
         </Routes>
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />

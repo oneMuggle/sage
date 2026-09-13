@@ -1332,6 +1332,41 @@ async function registerIpcHandlers(): Promise<void> {
     }
   });
 
+  // Help system IPC handlers (2026-09-13)
+  ipcMain.handle('sage:help:read-user-manual', (evt, filename: string) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      throw new Error('未授权的窗口请求');
+    }
+    try {
+      const filePath = path.join(__dirname, '..', 'docs', 'user-manual', filename);
+      return fs.readFileSync(filePath, 'utf-8');
+    } catch (err) {
+      logger.error('main: failed to read user manual', { filename, error: String(err) });
+      throw new Error(`无法读取帮助文档: ${filename}`);
+    }
+  });
+
+  ipcMain.handle('sage:help:prefetch', (evt, filename: string) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      throw new Error('未授权的窗口请求');
+    }
+    // Prefetch is a no-op for now; could implement caching in the future
+    return Promise.resolve();
+  });
+
+  ipcMain.handle('sage:changelog:read', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      throw new Error('未授权的窗口请求');
+    }
+    try {
+      const filePath = path.join(__dirname, '..', 'CHANGELOG.md');
+      return fs.readFileSync(filePath, 'utf-8');
+    } catch (err) {
+      logger.error('main: failed to read CHANGELOG', { error: String(err) });
+      throw new Error('无法读取更新日志');
+    }
+  });
+
   /** Helper: get the BrowserWindow that sent the IPC event. */
   function getSenderWindow(evt: Electron.IpcMainInvokeEvent): BrowserWindow | null {
     return BrowserWindow.fromWebContents(evt.sender);

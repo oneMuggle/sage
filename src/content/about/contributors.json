@@ -1,0 +1,15 @@
+{
+  "core": ["Sage Team"],
+  "contributors": [],
+  "specialThanks": [
+    "React",
+    "Electron",
+    "FastAPI",
+    "TypeScript",
+    "Python",
+    "Tailwind CSS",
+    "Vite",
+    "ChromaDB",
+    "SQLite"
+  ]
+}
