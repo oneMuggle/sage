@@ -713,6 +713,8 @@ class ExcelSheetSpec(BaseModel):
     conditional_formats: _constrained_list(ExcelConditionalFormatSpec, max_length=50) = Field(
         default_factory=list
     )
+    # Round 23：打印设置（方向/缩放/打印区域），全部可选。
+    print_setup: Optional[ExcelPrintSetupSpec] = None
     # Round 18：下拉数据验证（状态/分类列防手输错值），全部可选。
     data_validations: _constrained_list(ExcelDataValidationSpec, max_length=20) = Field(
         default_factory=list
@@ -795,6 +797,25 @@ class ExcelConditionalFormatSpec(BaseModel):
         description="duplicate 重复值填充色（默认 FFFF00 黄）",
         pattern=r"^#?[0-9A-Fa-f]{6}$",
         max_length=7,
+    )
+
+
+class ExcelPrintSetupSpec(BaseModel):
+    """打印设置（Round 23）。全字段可选，None = 不设置。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    orientation: Optional[Literal["portrait", "landscape"]] = Field(
+        default=None, description="纸张方向（默认纵向）"
+    )
+    fit_to_width: Optional[int] = Field(
+        default=None, ge=1, le=20, description="缩放到 N 页宽（1 = 单页宽）"
+    )
+    print_area: Optional[str] = Field(
+        default=None,
+        max_length=50,
+        pattern=r"^[A-Za-z]{1,3}[0-9]+:[A-Za-z]{1,3}[0-9]+$",
+        description="打印区域，A1 记法，如 'A1:F40'",
     )
 
 

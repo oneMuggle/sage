@@ -575,6 +575,36 @@ def _apply_data_validations(writer, req) -> None:
             ws.add_data_validation(dv)
 
 
+def _apply_print_setup(writer, req) -> None:
+    """Round 23：把 ExcelPrintSetupSpec 写入对应 worksheet。
+
+    在 ``_apply_conditional_formats`` 之后调用。方向 / fitToWidth /
+    打印区域逐项可选；openpyxl 拒绝时单条跳过（warning）不阻断。
+    """
+    import logging
+
+    logger_ = logging.getLogger(__name__)
+    for sheet_spec in getattr(req, "sheets", None) or ():
+        print_setup = getattr(sheet_spec, "print_setup", None)
+        if print_setup is None:
+            continue
+        ws = writer.sheets.get(sheet_spec.name[:31])
+        if ws is None:
+            continue
+        try:
+            if print_setup.orientation == "landscape":
+                ws.page_setup.orientation = "landscape"
+            elif print_setup.orientation == "portrait":
+                ws.page_setup.orientation = "portrait"
+            if print_setup.fit_to_width is not None:
+                ws.page_setup.fitToWidth = print_setup.fit_to_width
+                ws.sheet_properties.pageSetUpPr.fitToPage = True
+            if print_setup.print_area:
+                ws.print_area = print_setup.print_area
+        except Exception as exc:  # noqa: BLE001 — 单 sheet 失败不阻断
+            logger_.warning("打印设置写入失败，跳过: %s (%s)", exc, sheet_spec.name)
+
+
 def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .xlsx file from structured Pydantic input.
 
@@ -681,6 +711,7 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
             _apply_sheet_formats(writer, req)
             _apply_conditional_formats(writer, req)
             _apply_data_validations(writer, req)
+            _apply_print_setup(writer, req)
             _apply_generate_charts(writer, req)
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate XLSX: {exc}", file_path=output_path) from exc
