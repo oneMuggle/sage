@@ -33,6 +33,7 @@ import type {
 } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
+import { useTaskCenterStore } from '../task-center/taskCenterStore';
 
 export interface OfficeGenerateFormProps {
   workspacePath: string;
@@ -83,6 +84,9 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   const [busy, setBusy] = useState(false);
   // P2: busy 期已耗时（阶段文案 + 秒表，替代纯 disabled 反馈）
   const elapsed = useElapsedSeconds(busy);
+  // P4: 任务中心接线 —— 切走页面后全局胶囊仍可见
+  const registerTask = useTaskCenterStore((s) => s.registerTask);
+  const finishTask = useTaskCenterStore((s) => s.finishTask);
   const [result, setResult] = useState<GenerateResult | null>(null);
 
   // PPT
@@ -179,6 +183,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       return;
     }
     setBusy(true);
+    registerTask('office:generate', 'office', t('office.template.creating'));
     setResult(null);
     try {
       // Image placeholders never contribute text (office.template.hint.image);
@@ -215,6 +220,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.template.failed')}: ${msg}`);
     } finally {
+      finishTask('office:generate');
       setBusy(false);
     }
   };
@@ -232,6 +238,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       return;
     }
     setBusy(true);
+    registerTask('office:generate', 'office', t('office.generate.generating'));
     setResult(null);
     try {
       let out: { output_path: string; filename: string; file_size_bytes: number };
@@ -285,6 +292,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.generate.failed')}: ${msg}`);
     } finally {
+      finishTask('office:generate');
       setBusy(false);
     }
   };
