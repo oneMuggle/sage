@@ -148,3 +148,28 @@ cherry-pick 时注意：
 - P2 候选：项目行展开显示会话子列表（`GET /projects/{id}/sessions`
   已就绪）；命令面板接入（`projects_open`）；拖拽文件夹到侧栏登记；
   wiki 域 recent_projects 迁移统一。
+
+## 9. P2 落地记录（2026-09-13，feat/projects-p2）
+
+方案：`docs/plans/2026-09-13_projects-p2-plan.md`（含缓行项证据）。
+后端与 Electron commands **零改动**，全部复用 P1 面。
+
+- **行展开会话子列表**（ProjectSection）：chevron 展开懒加载
+  `listSessions`（≤20 条），轻量子行（title + formatRelativeTime），
+  刻意不复用 SessionItem（其订阅 5 个 store + 全套会话操作，嵌套过重）；
+  子行点击走 onOpenSession 与会话列表同入口；open/项目内新建成功后
+  自动刷新已展开的子列表；子列表按项目缓存，收起再展开不重复拉取。
+- **命令面板接入**（CommandPalette + commandItems）：打开面板即
+  `projectApi.list()` 渲染"项目"分组（前 8 个，name + path + 会话数），
+  回车 `open` → `loadSessions()` → 复用面板既有 handleOpenSession；
+  新增 `add-project` ActionCommand（FolderPlus：选目录 → register →
+  open → 进入新会话）；键盘 ⌘数字与 onSelect 两条路径的重复 if/else
+  收敛为单一 `runAction`。文案沿用该文件硬编码中文惯例（未接 i18n）。
+- **缓行**：拖拽登记（应用无全局 drop 面，OfficeFilePicker 的
+  `file.path` 模式可行但侧栏 drop 区成本高于收益）；wiki
+  recent_projects 统一（其喂 `wiki/project_authorization` 安全白名单、
+  search_routes 搜索默认域与 MCP，POSIX-only 原语在 Windows 上 skip
+  测试——迁移必须先在 SQLite 上复刻授权语义，独立批次）。
+- **win7 对齐**：ProjectSection/测试随 P1 新文件走；CommandPalette 在
+  win7 分支分歧大（-237 行），P2 对其改动按 main 结构走，cherry-pick
+  需按 win7 本地结构重放（局部小改）；commandItems 纯追加低风险。

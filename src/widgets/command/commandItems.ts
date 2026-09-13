@@ -4,6 +4,7 @@ import {
   BookOpen,
   Settings,
   Bot,
+  FolderPlus,
   Sparkles,
   Network,
   FileSpreadsheet,
@@ -57,5 +58,13 @@ export const actionCommands: ActionCommand[] = [
     label: '切换主题',
     description: '在亮色/暗色之间切换',
     icon: Sparkles,
+  },
+  // 项目模块 P2 (2026-09-13): 命令面板登记项目入口（与侧边栏 + 同一链路）
+  {
+    type: 'action',
+    id: 'add-project',
+    label: '添加项目',
+    description: '选择工作目录并登记为项目',
+    icon: FolderPlus,
   },
 ];

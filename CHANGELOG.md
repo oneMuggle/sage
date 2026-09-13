@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **归档视图批量操作**;前端纳入 PDF 全流程
 
 ### Added(projects)
+- **项目模块 P2**: 行展开会话子列表(chevron 懒加载项目内未归档会话 ≤20 条,轻量子行 title+相对时间,点击直达;open/新建后自动刷新子列表)+ 命令面板接入("项目"分组列出最近 8 个项目一键打开;新增"添加项目"操作命令走原生选目录;操作分派收敛为单一 runAction 消除键盘/点击双点 if/else)。后端零改动,复用 P1 端点(方案 docs/plans/2026-09-13_projects-p2-plan.md;拖拽登记与 wiki recent_projects 统一经评估缓行,依据见方案 §2)
 - **项目模块 P1**: 侧边栏"项目"占位落地为项目注册表(对标 Cursor Recent Workspaces)——登记工作目录(原生选目录,幂等去重),点击项目自动复用其最近活跃会话(无则新建并绑定,标题取项目名);行内 hover 项目内新建对话 + 两步确认移除(不动磁盘与会话);目录消失标记 ⚠ 并提示重选;归属判定复用 session_workspace_bindings 活跃绑定,fork/变更面板/检查点/SAGE.md 上下文等既有链路自动生效(技术文档 docs/technical/61-projects-module.md)
 
 ### Changed(office)
