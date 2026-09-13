@@ -1,6 +1,7 @@
 // src/features/chat/MediaAttachment.tsx
 import React, { useState, useEffect } from 'react';
 
+import { Lightbox } from '../../shared/ui';
 import { fetchMediaBlobUrl, resolveMediaUrl, revokeMediaBlobUrl } from '../../shared/api/mediaApi';
 
 interface MediaAttachmentProps {
@@ -14,13 +15,15 @@ interface MediaAttachmentProps {
 
 /**
  * Renders a media attachment in chat messages.
- * - image/* → <img> with click-to-zoom
+ * - image/* → <img> with click-to-zoom (统一 Lightbox: 缩放/平移/ESC)
  * - audio/* → <audio controls>
  * - fallback → download link
  */
 export const MediaAttachment: React.FC<MediaAttachmentProps> = ({ url, mimeType, caption }) => {
   const [zoomed, setZoomed] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  // P1: blob 拉取期间的加载骨架（Electron 走 IPC relay，可能有几百 ms 延迟）
+  const [resolving, setResolving] = useState(false);
 
   // R22-D1: Electron 下 <img src>/<audio src> 无法携带 local-auth Bearer 头
   // → 生产中间件 401（媒体永远渲染失败）。改走 fetchMediaBlobUrl（IPC
@@ -31,15 +34,20 @@ export const MediaAttachment: React.FC<MediaAttachmentProps> = ({ url, mimeType,
     const mediaId = url.split('/').filter(Boolean).pop() ?? '';
     const bridge = window.electronAPI?.backendRequest;
     if (bridge && mediaId) {
+      setResolving(true);
       fetchMediaBlobUrl(mediaId, mimeType)
         .then((u) => {
           if (!cancelled) setBlobUrl(u);
         })
         .catch(() => {
           if (!cancelled) setBlobUrl(null);
+        })
+        .finally(() => {
+          if (!cancelled) setResolving(false);
         });
     } else {
       setBlobUrl(null);
+      setResolving(false);
     }
     return () => {
       cancelled = true;
@@ -59,25 +67,24 @@ export const MediaAttachment: React.FC<MediaAttachmentProps> = ({ url, mimeType,
     return (
       <>
         <div className="my-2">
-          <img
-            src={resolvedUrl}
-            alt={caption || 'Generated image'}
-            className="max-w-sm rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-            onClick={() => setZoomed(true)}
-          />
-          {caption && <p className="text-xs text-muted mt-1">{caption}</p>}
-        </div>
-        {zoomed && (
-          <div
-            className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
-            onClick={() => setZoomed(false)}
-          >
+          {resolving && !blobUrl ? (
+            // P1: 加载骨架占位（此前 blob 拉取期无任何反馈）
+            <div
+              data-testid="media-attachment-skeleton"
+              className="w-64 h-40 rounded-lg bg-bg-subtle border border-border animate-pulse"
+            />
+          ) : (
             <img
               src={resolvedUrl}
               alt={caption || 'Generated image'}
-              className="max-w-full max-h-full object-contain"
+              className="max-w-sm rounded-lg cursor-zoom-in hover:opacity-90 transition-opacity"
+              onClick={() => setZoomed(true)}
             />
-          </div>
+          )}
+          {caption && <p className="text-xs text-muted mt-1">{caption}</p>}
+        </div>
+        {zoomed && (
+          <Lightbox src={resolvedUrl} alt={caption || 'Generated image'} onClose={() => setZoomed(false)} />
         )}
       </>
     );

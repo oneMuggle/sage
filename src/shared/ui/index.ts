@@ -20,3 +20,7 @@ export type { BrandLogoProps, BrandLogoSize } from './BrandLogo';
 
 // lazy 路由 chunk 加载期间的页面级骨架 fallback (Layout 内层 Suspense)
 export { PageSkeleton } from './PageSkeleton/PageSkeleton';
+
+// P1: 统一图片查看器（缩放/平移/ESC）— markdown 图片与工具产物媒体共用
+export { Lightbox } from './Lightbox/Lightbox';
+export type { LightboxProps } from './Lightbox/Lightbox';

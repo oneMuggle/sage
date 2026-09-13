@@ -30,6 +30,7 @@ import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 import { HtmlCodeBlock } from './HtmlCodeBlock';
+import { MarkdownImage } from './MarkdownImage';
 import { MermaidBlock } from './MermaidBlock';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
 
@@ -103,6 +104,10 @@ const markdownComponents = {
       return <HtmlCodeBlock code={content} />;
     }
     return <CodeBlock language={lang}>{content}</CodeBlock>;
+  },
+  // P1: 图片加载骨架 + 渐入 + 点击放大（Lightbox）
+  img({ src, alt }) {
+    return <MarkdownImage src={src} alt={alt} />;
   },
   pre({ children }: { children?: ReactNode }) {
     return <>{children}</>;
