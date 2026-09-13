@@ -48,6 +48,7 @@ export const zh = {
   'tplfill.no_vars': '该模板无需填写变量',
   'tplfill.cancel': '取消',
   'tplfill.confirm': '填入输入框',
+  'tplfill.clear_memory': '清除记忆（下次打开恢复空白）',
   'wizard.title': '三步接入你的模型服务',
   'wizard.subtitle': '只需一次配置，之后 Sage 会记住你的端点',
   'wizard.step1': '选择协议',

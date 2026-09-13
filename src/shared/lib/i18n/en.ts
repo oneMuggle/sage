@@ -48,6 +48,7 @@ export const en: Record<TranslationKey, string> = {
   'tplfill.no_vars': 'No variables to fill',
   'tplfill.cancel': 'Cancel',
   'tplfill.confirm': 'Insert into input',
+  'tplfill.clear_memory': 'Clear memory (blank next time)',
   'wizard.title': 'Connect your model service in 3 steps',
   'wizard.subtitle': 'Configure once — Sage remembers your endpoint',
   'wizard.step1': 'Protocol',
