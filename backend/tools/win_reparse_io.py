@@ -130,9 +130,7 @@ def _is_windows() -> bool:
 def _is_invalid_handle(handle) -> bool:
     """CreateFileW 失败返回 INVALID_HANDLE_VALUE；ctypes 可能给出
     18446744073709551615（无符号）或 -1（有符号），两者都要识别。"""
-    if handle is None:
-        return True
-    return handle == _INVALID_HANDLE_VALUE or handle == -1
+    return handle is None or handle in (_INVALID_HANDLE_VALUE, -1)
 
 
 def verify_no_reparse(path: str) -> bool:
@@ -253,15 +251,12 @@ def _open_single(path: str):
     handle_value = getattr(handle, "value", handle)
     if _is_invalid_handle(handle_value):
         error = ctypes.get_last_error()
-        print(f"DBG _open_single invalid: err={error} path={path}")
         if error in (_ERROR_FILE_NOT_FOUND, _ERROR_PATH_NOT_FOUND):
             raise FileNotFoundError(error, os.strerror(error), path)
         raise OSError(f"CreateFileW failed: {path}")
     info = _FileInfo()
     if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
-        err = ctypes.get_last_error()
         _kernel32.CloseHandle(handle)
-        print(f"DBG _open_single GetFileInfo failed: err={err} handle={handle!r} path={path}")
         raise OSError(f"GetFileInformationByHandle failed: {path}")
     _validate_info(info, path)
     return handle

@@ -75,6 +75,10 @@ def _read_bound_regular_file(path: Path) -> Tuple[bytes, Tuple[int, int], bytes]
         data, win_identity = read_file_bound_reparse_safe(str(path))
         return data, win_identity, hashlib.sha256(data).digest()
 
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    if nofollow is None:
+        raise OSError("安全读取需要 O_NOFOLLOW；当前平台不支持")
+
     path_stat = os.lstat(str(path))
     if not stat.S_ISREG(path_stat.st_mode):
         raise OSError("脚本不是普通文件")
