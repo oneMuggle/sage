@@ -94,6 +94,11 @@ class SettingsRepository:
             from backend.services.secret_box import unwrap_settings_json
 
             value = unwrap_settings_json(value)
+        # Round 3 K1: search_config 的 tavily_key/zhipu_key 字段级静态加密(同法)
+        if key == "search_config" and value is not None:
+            from backend.services.secret_box import unwrap_search_config_json
+
+            value = unwrap_search_config_json(value)
         return value
 
     def get_json(self, key: str) -> Optional[Any]:
@@ -120,6 +125,11 @@ class SettingsRepository:
             from backend.services.secret_box import wrap_settings_json
 
             value = wrap_settings_json(value)
+        # Round 3 K1: search_config 的明文 key 字段写侧自动包裹(幂等, 已 enc: 跳过)
+        if key == "search_config" and value is not None:
+            from backend.services.secret_box import wrap_search_config_json
+
+            value = wrap_search_config_json(value)
         now = int(time.time() * 1000)
         conn = self._conn()
         existing = conn.execute("SELECT key FROM preferences WHERE key = ?", (key,)).fetchone()
