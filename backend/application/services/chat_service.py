@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 import uuid
@@ -900,6 +901,34 @@ async def extract_and_store_memory(
     if not enabled or memory_port is None:
         return 0
     stored = 0
+    # 对标 S2：写入台账（best-effort）。前端据此在气泡下方显示
+    # "🧠 记住了：…" 并提供一键撤销；台账失败绝不影响写入主流程。
+    try:
+        from backend.memory.write_ledger import (
+            KIND_MEMORY,
+            KIND_PROFILE,
+            get_write_ledger,
+        )
+
+        ledger = get_write_ledger()
+    except Exception:  # noqa: BLE001 — 台账不可用不影响记忆写入
+        ledger = None
+        KIND_MEMORY = "memory"  # type: ignore[assignment]
+        KIND_PROFILE = "profile"  # type: ignore[assignment]
+
+    def _ledger_record(memory_id: Any, kind: str, fact: Dict[str, Any], memory_type: str) -> None:
+        if ledger is None or not memory_id:
+            return
+        with contextlib.suppress(Exception):
+            ledger.record(
+                memory_id=str(memory_id),
+                kind=kind,
+                content=str(fact.get("content", "")),
+                session_id=session_id,
+                category=str(fact.get("category", "fact")),
+                memory_type=memory_type,
+            )
+
     try:
         facts = await extractor.extract(
             user_message=user_text or "",
@@ -926,14 +955,16 @@ async def extract_and_store_memory(
                 )
                 if pid:
                     stored += 1
+                    _ledger_record(pid, KIND_PROFILE, fact, "profile")
             else:
-                await memory_port.store(
+                mid = await memory_port.store(
                     content=fact["content"],
                     session_id=session_id,
                     importance=fact.get("importance", 5),
                     tags=fact.get("tags", ["conversation"]),
                 )
                 stored += 1
+                _ledger_record(mid, KIND_MEMORY, fact, "auto")
         if stored:
             logger.debug(f"Extracted {stored} facts for session {session_id}")
     except Exception as e:

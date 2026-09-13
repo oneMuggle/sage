@@ -40,6 +40,14 @@ export const zh = {
   'chat.hint':
     'Sage 会记住你的项目信息，无需重复说明上下文 · 支持 Markdown 语法 · 输入 / 呼出命令，@ 引用工作区文件',
   'chat.memory_applied': '条记忆已应用',
+  // 对标 S2: 内联记忆写入提示 / 临时聊天
+  'chat.memory_saved': '🧠 记住了',
+  'chat.memory_saved_profile': '🧠 更新了关于你的画像',
+  'chat.memory_undo': '撤销',
+  'chat.memory_dismiss': '关闭提示',
+  'chat.temp_chat': '临时聊天',
+  'chat.temp_chat_on': '临时聊天：本会话不读取也不写入长期记忆',
+  'chat.temp_chat_off': '开启临时聊天（不读写记忆）',
   'prompt.saved': '已存为提示词模板（/tpl- 开头可复用）',
   'prompt.save_empty': '请在 /prompt-save 后输入要保存的提示词内容',
   'prompt.save_failed': '模板保存失败',

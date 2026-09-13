@@ -40,6 +40,14 @@ export const en: Record<TranslationKey, string> = {
   'chat.hint':
     'Sage remembers your project context · Supports Markdown · Type / for commands, @ to reference workspace files',
   'chat.memory_applied': 'memories applied',
+  // S2 parity: inline memory-write hints / temporary chat
+  'chat.memory_saved': '🧠 Memory updated',
+  'chat.memory_saved_profile': '🧠 Profile updated',
+  'chat.memory_undo': 'Undo',
+  'chat.memory_dismiss': 'Dismiss',
+  'chat.temp_chat': 'Temporary chat',
+  'chat.temp_chat_on': 'Temporary chat: memory is neither read nor written in this session',
+  'chat.temp_chat_off': 'Turn on temporary chat (no memory)',
   'prompt.saved': 'Saved as a prompt template (reusable via /tpl-)',
   'prompt.save_empty': 'Type the prompt content after /prompt-save',
   'prompt.save_failed': 'Failed to save template',

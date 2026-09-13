@@ -487,9 +487,46 @@ export interface ChatConfig {
   // PM1 (round8): 单 agent 计划模式 —— 本次 run 只读 + 计划产出指令，
   // 完成后前端出批准条（与 orchestrationMode 互斥，后端强制 single）。
   planMode?: boolean;
+  // 对标 S2 (2026-09-13): 临时聊天 —— 本轮不注入记忆也不做记忆提取。
+  memoryDisabled?: boolean;
 }
 
 // ==================== Memory 类型定义 ====================
+
+/** 对标 S2: 一次记忆写入（台账条目），用于聊天内联"记住了"提示 */
+export interface MemoryWriteRecord {
+  seq: number;
+  id: string;
+  kind: 'memory' | 'profile';
+  content: string;
+  category: string;
+  memory_type: string;
+  session_id: string;
+  created_at: number;
+}
+
+export interface MemoryWritesResponse {
+  items: MemoryWriteRecord[];
+  latest_seq: number;
+}
+
+/** 对标 S2: 用户画像条目（"关于我"卡片） */
+export interface UserProfileEntry {
+  id: string;
+  content: string;
+  category: string;
+  importance: number;
+  source: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface UserProfileResponse {
+  items: UserProfileEntry[];
+  categories: string[];
+  snapshot: string;
+  char_limit: number;
+}
 
 /**
  * 单条记忆记录。Task 2 起 ``layer`` / ``source`` 由后端 ``/memory/list`` 直接

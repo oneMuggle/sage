@@ -168,6 +168,8 @@ export function useChat() {
         planOverride?: TaskPlanItem[];
         runId?: string;
         planMode?: boolean;
+        /** 对标 S2: 临时聊天（本轮不读写长期记忆） */
+        memoryDisabled?: boolean;
         /** R23-D2: 聊天图片输入（base64 data URL，≤4 张/单张 5MiB） */
         images?: string[];
       },
@@ -293,6 +295,7 @@ export function useChat() {
         runId: opts?.runId,
         // PM1 (round8): 计划模式透传（本次 run 只读 + 计划指令）
         planMode: opts?.planMode,
+        memoryDisabled: opts?.memoryDisabled,
       };
 
       const appendContent = (next: string): void => {
