@@ -128,6 +128,21 @@ class CollectSubagentsTool(BaseTool):
             aggregated = await wait(timeout)
             return ToolResult(success=True, content=aggregated)
         except asyncio.TimeoutError:  # noqa: UP041 — py3.8 下 ≠ 内建 TimeoutError
+            # BD6 (round17): 超时不丢已完成结果 —— 返回部分聚合（已完成产出
+            # + 在跑清单），conductor 可据此提前汇总或稍后再次 collect 收全量。
+            partial = getattr(self._dispatcher, "partial_aggregate", None)
+            if callable(partial):
+                snap = partial()
+                note = (
+                    "collect_timeout: 后台派发仍在运行（超过"
+                    f"{int(timeout) if timeout else 600}s）。已返回完成部分"
+                    f"（{snap.get('done', 0)}/{snap.get('total', 0)}）；"
+                    "可稍后再次 collect_subagents 收取剩余结果，或据已完成部分提前汇总。"
+                )
+                return ToolResult(
+                    success=True,
+                    content={"status": "partial", **snap, "note": note},
+                )
             return ToolResult(
                 success=False,
                 error=(
