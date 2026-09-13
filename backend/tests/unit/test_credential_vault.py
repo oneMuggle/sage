@@ -224,10 +224,9 @@ class TestDownloadCredential:
 
     def test_cookie_attached_on_download(self, tmp_path, repo):
         save_credential(".example.com", _COOKIES, repo=repo)
-        with (
-            patch_vault_repo(repo),
-            respx.mock(base_url="https://www.example.com") as mock,
-        ):
+        with patch_vault_repo(repo), respx.mock(
+            base_url="https://www.example.com"
+        ) as mock:
             route = mock.get("/a.pdf").mock(
                 return_value=Response(200, content=b"%PDF-1.4 fake")
             )
