@@ -38,6 +38,9 @@ class SettingsRepository:
             # 网页访问 Round 1: 用户级代理 (JSON {"http": "", "https": ""}, 空 = 不启用)
             # 见 backend/tools/http_factory.py
             "web_proxy",
+            # 网页访问 Round 1: 网页访问行为配置 (JSON {"render_persistent": bool})
+            # 见 backend/tools/web_render.py
+            "web_access_config",
             # bash 工具运行参数: 超时/输出截断/后台会话上限 (JSON)
             # 见 backend/tools/bash_config.py
             "bash_config",

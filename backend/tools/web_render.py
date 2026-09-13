@@ -59,6 +59,33 @@ _SETTLE_STABLE_ROUNDS = 2
 #: 渲染实例空闲回收（秒）：超时后下次 acquire 重建，避免常驻占用
 RENDER_IDLE_TIMEOUT_SECONDS = 300.0
 
+#: 渲染池持久 profile 的保留目录名（web_access_config.render_persistent 开启时用）
+RENDER_PROFILE_NAME = "render-default"
+
+#: preferences 表的 key（web_access_config，需在 SettingsRepository.KEYS 白名单内）
+SETTINGS_KEY_WEB_ACCESS_CONFIG = "web_access_config"
+
+
+def _render_persistent_enabled() -> bool:
+    """读 ``web_access_config.render_persistent``；任何失败回退 False。
+
+    开启后渲染实例用持久 profile —— 需要登录态的 SPA（订阅源文献页）经
+    web_fetch 自动渲染即可读到登录后内容。空闲重建与持久 profile 兼容：
+    重建后 cookie 从磁盘 profile 重载。
+    """
+    try:
+        import json
+
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get(SETTINGS_KEY_WEB_ACCESS_CONFIG)
+        if not raw:
+            return False
+        parsed = json.loads(raw)
+        return bool(isinstance(parsed, dict) and parsed.get("render_persistent"))
+    except Exception:  # noqa: BLE001 — 配置失败按关闭处理（保持现状行为）
+        return False
+
 # ---------------------------------------------------------------------------
 # JS 壳判定（auto 模式，纯函数）
 # ---------------------------------------------------------------------------
@@ -190,7 +217,12 @@ class _RendererPool:
             if session is not None:
                 self._discard(session)
             try:
-                session = launch_browser(headless=True, browser_id=RENDER_POOL_ID)
+                session = launch_browser(
+                    headless=True,
+                    browser_id=RENDER_POOL_ID,
+                    persistent=_render_persistent_enabled(),
+                    profile_name=RENDER_PROFILE_NAME,
+                )
             except BrowserCDPError as exc:
                 raise RenderError(f"渲染浏览器启动失败: {exc}") from exc
             self._session = session

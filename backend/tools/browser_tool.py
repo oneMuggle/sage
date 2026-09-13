@@ -22,6 +22,7 @@ import base64
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlsplit
 
@@ -31,6 +32,7 @@ from .base import BaseTool, ToolResult, ToolSchema
 from .browser_cdp import (
     BrowserCDPError,
     BrowserSession,
+    browser_downloads_root,
     cdp_command,
     get_browser_manager,
     launch_browser,
@@ -218,7 +220,7 @@ def _wait_page_settled(session: BrowserSession, target_id: Optional[str]) -> Non
 
 
 class BrowserLaunchTool(BaseTool):
-    """启动一个受控浏览器实例（独立临时 profile，不影响用户浏览器）。"""
+    """启动一个受控浏览器实例（默认临时 profile，可选持久 profile）。"""
 
     risk = RiskClass.EXEC
     is_blocking = True
@@ -227,36 +229,80 @@ class BrowserLaunchTool(BaseTool):
         return ToolSchema(
             name="browser_launch",
             description=(
-                "启动一个受控浏览器实例（Chrome/Edge，独立临时配置目录）。"
-                "返回 browser_id，后续 browser_* 工具用它与浏览器交互。"
-                "headless 默认 true（无窗口）；需要可视化调试时传 false。"
+                "启动一个受控浏览器实例（Chrome/Edge）。默认独立临时配置目录，"
+                "关闭即清理；persistent=true 使用持久 profile（登录态跨会话"
+                "保留，适合先登录再抓取的场景）。返回 browser_id，后续 "
+                "browser_* 工具用它与浏览器交互。headless 默认 true（无窗口）；"
+                "需要可视化调试或手动登录时传 false。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "headless": {"type": "boolean", "description": "无头模式（默认 true）"},
+                    "persistent": {
+                        "type": "boolean",
+                        "description": "持久 profile，登录态跨会话保留（默认 false）",
+                    },
+                    "profile_name": {
+                        "type": "string",
+                        "description": "持久 profile 名称（默认 default）",
+                    },
                 },
                 "required": [],
             },
         )
 
-    def execute(self, headless: bool = True, **kwargs: Any) -> ToolResult:
+    def execute(
+        self,
+        headless: bool = True,
+        persistent: bool = False,
+        profile_name: str = "default",
+        **kwargs: Any,
+    ) -> ToolResult:
         if kwargs:
             return ToolResult(
                 success=False,
-                error=f"未知参数: {', '.join(sorted(kwargs))}（合法参数: headless）",
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: headless, persistent, profile_name）"
+                ),
             )
         try:
-            session = launch_browser(headless=bool(headless))
+            session = launch_browser(
+                headless=bool(headless),
+                persistent=bool(persistent),
+                profile_name=str(profile_name or "default"),
+            )
         except BrowserCDPError as exc:
             return _error(exc)
+
+        # 下载黑洞修复：把浏览器内触发的下载重定向到工作区（或数据目录），
+        # 否则文件落在临时 profile 目录，browser_close 时一并被删。
+        root = self._policy.workspace_root
+        download_dir = Path(root) / "downloads" if root else browser_downloads_root()
+        try:
+            download_dir.mkdir(parents=True, exist_ok=True)
+            cdp_command(
+                session,
+                "Browser.setDownloadBehavior",
+                {"behavior": "allow", "downloadPath": str(download_dir)},
+            )
+        except BrowserCDPError as exc:
+            logger.warning("setDownloadBehavior 失败（不影响启动）: %s", exc)
+
         return ToolResult(
             success=True,
             content={
                 "browser_id": session.browser_id,
                 "executable": session.executable,
                 "headless": session.headless,
-                "note": "用 browser_navigate 打开页面；browser_close 结束会话。",
+                "persistent": session.persistent,
+                "profile_dir": session.user_data_dir,
+                "download_dir": str(download_dir),
+                "note": (
+                    "用 browser_navigate 打开页面；browser_close 结束会话。"
+                    + ("持久 profile 关闭后登录态保留。" if session.persistent else "")
+                ),
             },
         )
 
@@ -495,12 +541,11 @@ class BrowserScreenshotTool(BaseTool):
         root = self._policy.workspace_root
         if not root:
             return ToolResult(success=False, error="browser_screenshot 需要绑定工作区（workspace）")
-        from pathlib import Path as _Path
 
         if path:
-            target = _Path(root) / path
+            target = Path(root) / path
         else:
-            target = _Path(root) / f"browser_screenshot_{time.strftime('%Y%m%d-%H%M%S')}.png"
+            target = Path(root) / f"browser_screenshot_{time.strftime('%Y%m%d-%H%M%S')}.png"
         blocked = self._enforce_workspace(str(target))
         if blocked is not None:
             return blocked
