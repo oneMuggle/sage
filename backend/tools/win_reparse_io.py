@@ -127,6 +127,14 @@ def _is_windows() -> bool:
     return os.name == "nt"
 
 
+def _is_invalid_handle(handle) -> bool:
+    """CreateFileW 失败返回 INVALID_HANDLE_VALUE；ctypes 可能给出
+    18446744073709551615（无符号）或 -1（有符号），两者都要识别。"""
+    if handle is None:
+        return True
+    return handle == _INVALID_HANDLE_VALUE or handle == -1
+
+
 def verify_no_reparse(path: str) -> bool:
     """对已存在的组件检查 FILE_ATTRIBUTE_REPARSE_POINT。
 
@@ -174,7 +182,7 @@ def _open_handle(
         path, desired, share, None, disposition, flags, None
     )
     handle_value = getattr(handle, "value", handle)
-    if handle_value in (None, _INVALID_HANDLE_VALUE):
+    if _is_invalid_handle(handle_value):
         error = ctypes.get_last_error()
         if error in (_ERROR_FILE_NOT_FOUND, _ERROR_PATH_NOT_FOUND):
             raise FileNotFoundError(error, os.strerror(error), path)
@@ -193,6 +201,83 @@ def _validate_info(info: _FileInfo, path: str) -> None:
         raise NotADirectoryError(f"refusing directory handle: {path}")
     if info.nNumberOfLinks != 1:
         raise OSError(f"refusing non-private file (links={info.nNumberOfLinks}): {path}")
+
+
+def read_file_bound_reparse_safe(path: str) -> tuple[bytes, tuple[int, int, int]]:
+    """读取整文件并返回 Windows 文件身份绑定（R32 切片 B）。
+
+    返回 ``(data, identity)``，identity =
+    ``(dwVolumeSerialNumber, nFileIndexHigh, nFileIndexLow)``，即 Windows
+    版的 ``(st_dev, st_ino)``。读取前后各开一次句柄比对身份——路径指向的
+    文件在读取期间被替换/篡改时抛 OSError。
+    """
+    return _read_with_double_open(path)
+
+
+def _file_identity(handle, path: str) -> tuple[int, int, int]:
+    info = _FileInfo()
+    if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
+        raise OSError(f"GetFileInformationByHandle failed: {path}")
+    return (
+        info.dwVolumeSerialNumber,
+        info.nFileIndexHigh,
+        info.nFileIndexLow,
+    )
+
+
+def _read_with_double_open(path: str) -> tuple[bytes, tuple[int, int, int]]:
+    first = _open_single(path)
+    identity_before = _file_identity(first, path)
+    data = _read_all(first, path)
+    identity_after = _file_identity(first, path)
+    if identity_before != identity_after:
+        raise OSError(f"脚本 inode 在读取期间发生变化: {path}")
+    identity_first = identity_before
+    _kernel32.CloseHandle(first)
+    # 重新打开验证路径→同一文件（读取期间未被替换）
+    second = _open_single(path)
+    try:
+        identity_second = _file_identity(second, path)
+    finally:
+        _kernel32.CloseHandle(second)
+    if identity_first != identity_second:
+        raise OSError(f"脚本路径在读取期间发生变化: {path}")
+    return data, identity_first
+
+
+def _open_single(path: str):
+    handle = _kernel32.CreateFileW(
+        path, _GENERIC_READ, _FILE_SHARE_READ, None, _OPEN_EXISTING,
+        _FILE_FLAG_OPEN_REPARSE_POINT, None,
+    )
+    handle_value = getattr(handle, "value", handle)
+    if _is_invalid_handle(handle_value):
+        error = ctypes.get_last_error()
+        print(f"DBG _open_single invalid: err={error} path={path}")
+        if error in (_ERROR_FILE_NOT_FOUND, _ERROR_PATH_NOT_FOUND):
+            raise FileNotFoundError(error, os.strerror(error), path)
+        raise OSError(f"CreateFileW failed: {path}")
+    info = _FileInfo()
+    if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
+        err = ctypes.get_last_error()
+        _kernel32.CloseHandle(handle)
+        print(f"DBG _open_single GetFileInfo failed: err={err} handle={handle!r} path={path}")
+        raise OSError(f"GetFileInformationByHandle failed: {path}")
+    _validate_info(info, path)
+    return handle
+
+
+def _read_all(handle, path: str) -> bytes:
+    chunks = []
+    while True:
+        buf = ctypes.create_string_buffer(1024 * 1024)
+        read_bytes = wintypes.DWORD(0)
+        if not _kernel32.ReadFile(handle, buf, 1024 * 1024, ctypes.byref(read_bytes), None):
+            raise OSError(f"ReadFile failed: {path}")
+        if read_bytes.value == 0:
+            break
+        chunks.append(buf.raw[: read_bytes.value])
+    return b"".join(chunks)
 
 
 def read_file_reparse_safe(path: str) -> bytes:

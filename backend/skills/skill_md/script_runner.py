@@ -67,9 +67,13 @@ def _read_bound_regular_file(path: Path) -> Tuple[bytes, Tuple[int, int], bytes]
     这里不回退到 ``Path.read_bytes``：没有 ``O_NOFOLLOW`` 的平台无法提供
     所需的路径到 fd 绑定保证，必须拒绝执行（尤其是 Windows）。
     """
-    nofollow = getattr(os, "O_NOFOLLOW", None)
-    if nofollow is None:
-        raise OSError("安全读取需要 O_NOFOLLOW；当前平台不支持")
+    if os.name == "nt":
+        # R32 切片 B：Windows 走原生 reparse-safe 绑定读取
+        # （卷序号 + 文件索引等价 (st_dev, st_ino)，消费方只做相等比较）。
+        from backend.tools.win_reparse_io import read_file_bound_reparse_safe
+
+        data, win_identity = read_file_bound_reparse_safe(str(path))
+        return data, win_identity, hashlib.sha256(data).digest()
 
     path_stat = os.lstat(str(path))
     if not stat.S_ISREG(path_stat.st_mode):
