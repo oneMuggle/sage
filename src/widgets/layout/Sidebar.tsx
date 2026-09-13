@@ -7,6 +7,7 @@ import {
   Network,
   Sparkles,
   FileSpreadsheet,
+  HelpCircle,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -42,6 +43,7 @@ const navItems = [
   { path: '/orchestration', label: '编排', icon: Network },
   { path: '/skills', label: '技能', icon: Sparkles },
   { path: '/office', label: 'Office', icon: FileSpreadsheet },
+  { path: '/help', label: '帮助', icon: HelpCircle },
   { path: '/settings', label: '设置', icon: Settings },
 ];
 
