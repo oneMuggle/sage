@@ -163,6 +163,16 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
     navigate('/welcome');
   };
 
+  // 会话切换统一入口（会话列表 onSelect 与项目模块 onOpenSession 共用）
+  const handleOpenSession = (id: string) => {
+    setCurrentSessionId(id);
+    if (location.pathname !== '/chat') {
+      // SPA navigation: avoid `window.location.href` which would
+      // trigger a full page reload and produce a visible flash.
+      navigate('/chat');
+    }
+  };
+
   // U4': 重命名——API 成功后原地更新 store(侧栏/聊天头部即时同步),不整表 reload
   const handleRenameSession = async (sessionId: string, title: string) => {
     try {
@@ -186,14 +196,7 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
             currentSessionId={currentSessionId}
             collapsed={isCollapsed}
             onToggleCollapsed={() => toggleCollapsed(key)}
-            onSelect={(id) => {
-              setCurrentSessionId(id);
-              if (location.pathname !== '/chat') {
-                // SPA navigation: avoid `window.location.href` which would
-                // trigger a full page reload and produce a visible flash.
-                navigate('/chat');
-              }
-            }}
+            onSelect={handleOpenSession}
             onDelete={(id) => deleteSession(id)}
             onNewSession={handleNewSession}
             onRename={handleRenameSession}
@@ -212,7 +215,11 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
         );
       case 'project':
         return (
-          <ProjectSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
+          <ProjectSection
+            collapsed={isCollapsed}
+            onToggleCollapsed={() => toggleCollapsed(key)}
+            onOpenSession={handleOpenSession}
+          />
         );
       case 'team':
         return (

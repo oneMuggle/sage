@@ -263,6 +263,17 @@ export const zh = {
   'sider.drag_handle': '拖拽排序',
   'sider.collapse': '折叠',
   'sider.expand': '展开',
+  // 项目模块 (P1, 2026-09-13)
+  'sider.project.add': '添加项目',
+  'sider.project.empty': '暂无项目，点击右上角 + 添加工作目录',
+  'sider.project.new_chat': '在此项目中新建对话',
+  'sider.project.remove': '从列表移除',
+  'sider.project.remove_confirm': '确认移除?',
+  'sider.project.missing': '项目目录不存在或已被移动',
+  'sider.project.session_count': '{count} 个会话',
+  'sider.project.add_failed': '添加项目失败：{message}',
+  'sider.project.open_failed': '打开项目失败：{message}',
+  'sider.project.remove_failed': '移除项目失败：{message}',
 
   // ─── 标题栏 ──────────────────────────
   'titlebar.minimize': '最小化',

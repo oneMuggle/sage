@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **office e2e**: 3 个 stub-deep 用例进 tier-1 PR 门禁
 - **归档视图批量操作**;前端纳入 PDF 全流程
 
+### Added(projects)
+- **项目模块 P1**: 侧边栏"项目"占位落地为项目注册表(对标 Cursor Recent Workspaces)——登记工作目录(原生选目录,幂等去重),点击项目自动复用其最近活跃会话(无则新建并绑定,标题取项目名);行内 hover 项目内新建对话 + 两步确认移除(不动磁盘与会话);目录消失标记 ⚠ 并提示重选;归属判定复用 session_workspace_bindings 活跃绑定,fork/变更面板/检查点/SAGE.md 上下文等既有链路自动生效(技术文档 docs/technical/61-projects-module.md)
+
 ### Changed(office)
 - Word @ 摘要从"每段第一句"改为全文结构化 markdown;Excel 摘要从固定 5 行改为自适应
 - office 工具面 7→16;writer 档位同步(除 office_delete 外全量)

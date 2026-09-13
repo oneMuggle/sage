@@ -181,6 +181,38 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace`,
   },
+
+  // 项目模块 P1 (2026-09-13): 最近项目注册表 + 项目内会话。
+  // open = "复用最近活跃会话或新建并绑定项目目录"（后端原子完成，返回
+  // { project, session, created }），前端拿到 session.id 后 setCurrent + 导航。
+  projects_list: {
+    method: 'GET',
+    path: () => '/api/v1/projects',
+  },
+  projects_register: {
+    method: 'POST',
+    path: () => '/api/v1/projects',
+    body: (a) => ({ path: a.path }),
+  },
+  projects_remove: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}`,
+  },
+  projects_open: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/open`,
+    body: () => ({}),
+  },
+  projects_create_session: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/sessions`,
+    body: () => ({}),
+  },
+  projects_list_sessions: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/sessions`,
+  },
+
   // R19: 数据安全 —— 备份清单/手动备份/记忆导出（system_routes，GET/POST
   // 均无业务 body，本机 token 由 fetch 桥统一注入）。
   // R25-D4: 查询会话活跃 chat 流（renderer 重载后 reattach）。null = 无活跃流。

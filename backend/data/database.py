@@ -656,6 +656,28 @@ class Database:
         )
         conn.commit()
 
+        # Projects registry (项目模块 P1, 2026-09-13). 用户在侧边栏显式
+        # 登记的项目目录清单（对标 Cursor Recent Workspaces / Claude Code
+        # 项目 → 会话归属）。行独立于会话存在：登记过的目录即使还没有
+        # 任何会话绑定也保留。path 存 validate_workspace 规范化后的绝对
+        # 路径并 UNIQUE —— 重复登记同一目录是幂等的（只刷新
+        # last_opened_at，不新增行）。会话与项目的归属关系不落在本表，
+        # 复用 session_workspace_bindings 的活跃绑定（workspace_path 相等）。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                last_opened_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_projects_recent "
+            "ON projects(last_opened_at DESC)"
+        )
+        conn.commit()
+
         # Office self-check history (round-3 Office parity, N4). Every
         # office write that produces a self_check readback (create / update
         # / apply / archive / restore / snapshot_restore) appends one audit

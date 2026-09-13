@@ -1,0 +1,173 @@
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import type { ProjectSummary } from '../../../shared/api/projectApi';
+import { I18nProvider } from '../../../shared/lib/i18n';
+
+import { ProjectSection } from './ProjectSection';
+
+const listMock = vi.fn();
+const registerMock = vi.fn();
+const removeMock = vi.fn();
+const openMock = vi.fn();
+const createSessionMock = vi.fn();
+const listSessionsMock = vi.fn();
+
+vi.mock('../../../shared/api/projectApi', () => ({
+  projectApi: {
+    list: (...args: unknown[]) => listMock(...args),
+    register: (...args: unknown[]) => registerMock(...args),
+    remove: (...args: unknown[]) => removeMock(...args),
+    open: (...args: unknown[]) => openMock(...args),
+    createSession: (...args: unknown[]) => createSessionMock(...args),
+    listSessions: (...args: unknown[]) => listSessionsMock(...args),
+  },
+}));
+
+const projects: ProjectSummary[] = [
+  {
+    id: 'p1',
+    path: 'C:\\work\\demo',
+    name: 'demo',
+    createdAt: 1,
+    lastOpenedAt: 10,
+    sessionCount: 2,
+    lastSessionId: 's1',
+  },
+  {
+    id: 'p2',
+    path: 'C:\\work\\empty',
+    name: 'empty',
+    createdAt: 2,
+    lastOpenedAt: 5,
+    sessionCount: 0,
+    lastSessionId: null,
+  },
+];
+
+const session = {
+  id: 's-new',
+  title: 'demo',
+  created_at: 1,
+  updated_at: 1,
+  last_message_at: null,
+  message_count: 0,
+  is_pinned: false,
+};
+
+const renderWithI18n = (ui: React.ReactNode) => render(<I18nProvider>{ui}</I18nProvider>);
+
+const baseProps = {
+  collapsed: false,
+  onToggleCollapsed: () => {},
+  onOpenSession: vi.fn(),
+};
+
+describe('ProjectSection', () => {
+  beforeEach(() => {
+    [listMock, registerMock, removeMock, openMock, createSessionMock, listSessionsMock].forEach(
+      (m) => m.mockReset(),
+    );
+    listMock.mockResolvedValue([]);
+  });
+
+  it('renders section label and empty state', async () => {
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    expect(screen.getByText('项目')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('project-empty')).toBeInTheDocument();
+    });
+  });
+
+  it('lists registered projects with name, path and session count', async () => {
+    listMock.mockResolvedValue(projects);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('project-row')).toHaveLength(2);
+    });
+    expect(screen.getByText('demo')).toBeInTheDocument();
+    expect(screen.getByText('C:\\work\\demo')).toBeInTheDocument();
+    // sessionCount=2 的项目显示计数徽标；0 不显示
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.queryByText('0')).not.toBeInTheDocument();
+  });
+
+  it('clicking a project row opens its session and notifies onOpenSession', async () => {
+    listMock.mockResolvedValue(projects);
+    openMock.mockResolvedValue({ project: projects[0], session, created: false });
+    const onOpenSession = vi.fn();
+    renderWithI18n(<ProjectSection {...baseProps} onOpenSession={onOpenSession} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    fireEvent.click(screen.getAllByTestId('project-row')[0]);
+
+    await waitFor(() => {
+      expect(openMock).toHaveBeenCalledWith('p1');
+      expect(onOpenSession).toHaveBeenCalledWith('s-new');
+    });
+  });
+
+  it('hover "+" creates a new bound session in the project', async () => {
+    listMock.mockResolvedValue(projects);
+    createSessionMock.mockResolvedValue({ project: projects[0], session });
+    renderWithI18n(<ProjectSection {...baseProps} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    fireEvent.click(screen.getAllByTestId('project-new-chat')[0]);
+
+    await waitFor(() => {
+      expect(createSessionMock).toHaveBeenCalledWith('p1');
+      expect(baseProps.onOpenSession).toHaveBeenCalledWith('s-new');
+    });
+  });
+
+  it('TwoStepDelete: second click removes the project from the list', async () => {
+    listMock.mockResolvedValue(projects);
+    removeMock.mockResolvedValue(true);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    const removeBtn = screen.getAllByTestId('project-remove')[0];
+    fireEvent.click(removeBtn); // 进入 armed
+    expect(removeMock).not.toHaveBeenCalled();
+    fireEvent.click(removeBtn); // 确认移除
+    await waitFor(() => {
+      expect(removeMock).toHaveBeenCalledWith('p1');
+    });
+  });
+
+  it('add button picks a directory via IPC then registers and opens it', async () => {
+    const selectDirectory = vi.fn().mockResolvedValue('C:\\work\\picked');
+    (window as unknown as { electronAPI: unknown }).electronAPI = { selectDirectory };
+    try {
+      registerMock.mockResolvedValue(projects[0]);
+      openMock.mockResolvedValue({ project: projects[0], session, created: true });
+      renderWithI18n(<ProjectSection {...baseProps} />);
+
+      await waitFor(() => screen.getByTestId('project-add-button'));
+      fireEvent.click(screen.getByTestId('project-add-button'));
+
+      await waitFor(() => {
+        expect(selectDirectory).toHaveBeenCalledWith({ intent: 'open' });
+        expect(registerMock).toHaveBeenCalledWith('C:\\work\\picked');
+        expect(openMock).toHaveBeenCalledWith('p1');
+        expect(baseProps.onOpenSession).toHaveBeenCalledWith('s-new');
+      });
+    } finally {
+      delete (window as unknown as { electronAPI?: unknown }).electronAPI;
+    }
+  });
+
+  it('marks a project as missing when open returns 410', async () => {
+    listMock.mockResolvedValue(projects);
+    openMock.mockRejectedValue(Object.assign(new Error('gone'), { status_code: 410 }));
+    renderWithI18n(<ProjectSection {...baseProps} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    fireEvent.click(screen.getAllByTestId('project-row')[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-missing-badge')).toBeInTheDocument();
+    });
+  });
+});
