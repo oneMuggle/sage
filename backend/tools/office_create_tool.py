@@ -896,6 +896,27 @@ class OfficeCreateTool(BaseTool):
                                                 "分类列防手输错值"
                                             ),
                                         },
+                                        "print_setup": {
+                                            "type": "object",
+                                            "description": (
+                                                "打印设置（Round 23）：方向/缩放到 N 页宽/"
+                                                "打印区域；全字段可选"
+                                            ),
+                                            "properties": {
+                                                "orientation": {
+                                                    "type": "string",
+                                                    "enum": ["portrait", "landscape"],
+                                                },
+                                                "fit_to_width": {
+                                                    "type": "integer",
+                                                    "description": "缩放到 N 页宽（1 = 单页宽）",
+                                                },
+                                                "print_area": {
+                                                    "type": "string",
+                                                    "description": "打印区域 A1 记法，如 'A1:F40'",
+                                                },
+                                            },
+                                        },
                                     },
                                 },
                                 "description": "excel 工作表列表。",

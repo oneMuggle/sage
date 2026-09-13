@@ -1422,6 +1422,14 @@ export interface ExcelSheetSpec {
   conditional_formats?: ExcelConditionalFormatSpec[];
   // Round 18：下拉数据验证（状态/分类列防手输错值）
   data_validations?: ExcelDataValidationSpec[];
+  // Round 23：打印设置（方向/缩放/打印区域）
+  print_setup?: ExcelPrintSetupSpec;
+}
+
+export interface ExcelPrintSetupSpec {
+  orientation?: 'portrait' | 'landscape';
+  fit_to_width?: number;
+  print_area?: string;
 }
 
 export interface ExcelDataValidationSpec {
