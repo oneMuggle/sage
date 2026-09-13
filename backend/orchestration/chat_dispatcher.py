@@ -1340,6 +1340,21 @@ class ChatDispatcher:
                 f"- ⚠ 已触发 run 级 token 预算上限（>{self._budget_limit} tokens），"
                 "剩余任务已停止派发。请基于以上已有结果直接给出最终汇总。\n"
             )
+        # BU8 (round19): 预算开启时头部展示消耗进度 —— conductor 判断"是否
+        # 提前汇总"与用户感知均有量化依据。fail-open（查询失败跳过该行）。
+        elif getattr(self.settings, "run_token_budget", 0) > 0 and self.session_id and self._first_dispatch_at:
+            try:
+                from backend.services.usage_tracker import UsageTracker
+
+                used = UsageTracker().session_usage_since(
+                    self.session_id, int(self._first_dispatch_at * 1000)
+                )
+                pct = min(100, used * 100 // self.settings.run_token_budget)
+                header += (
+                    f"- 已消耗 {used} / 预算 {self.settings.run_token_budget} tokens（{pct}%）。\n"
+                )
+            except Exception:  # noqa: BLE001 — 消耗行是增强信息，失败跳过
+                pass
 
         blocks: List[str] = []
         for state in states:
