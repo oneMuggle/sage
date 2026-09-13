@@ -409,6 +409,26 @@ class ChatDispatcher:
             raise RuntimeError("no_background_dispatch: 尚无后台派发可收集")
         return await asyncio.wait_for(asyncio.shield(self._bg_task), timeout)
 
+    def partial_aggregate(self) -> Dict[str, Any]:
+        """BD6 (round17): collect 超时时返回已完成部分聚合。
+
+        基于当前 ``_states`` 调既有 ``_aggregate``，外层标注 partial 语义：
+        conductor 拿到已完成产出后可决定提前汇总或继续等（再次 collect）。
+        无在飞后台派发时抛 RuntimeError。
+        """
+        if self._bg_task is None:
+            raise RuntimeError("no_background_dispatch: 尚无后台派发可收集")
+        states = list(self._states.values())
+        total = len(states)
+        done = sum(1 for s in states if s.status == "done")
+        aggregate = self._aggregate(states)
+        return {
+            "status": "partial",
+            "done": done,
+            "total": total,
+            "aggregate": aggregate,
+        }
+
     async def dispatch(self, tasks: List[Dict[str, str]]) -> str:
         """并行执行子任务，返回聚合 markdown（截断后进 conductor 上下文）。
 
