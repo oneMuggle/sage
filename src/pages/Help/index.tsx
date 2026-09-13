@@ -1,8 +1,11 @@
 import { useState } from 'react';
-import { HelpTab } from './HelpTab';
+
+import { HelpFooter } from '../../widgets/help/HelpFooter';
+
 import { AboutTab } from './AboutTab';
 import { ChangelogTab } from './ChangelogTab';
-import { HelpFooter } from '../../widgets/help/HelpFooter';
+import { HelpTab } from './HelpTab';
+
 
 type TabKey = 'help' | 'about' | 'changelog';
 

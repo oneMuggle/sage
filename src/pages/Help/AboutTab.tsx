@@ -1,6 +1,6 @@
-import { BrandLogo } from '../../shared/ui';
-import { VISION, PHILOSOPHY } from '../../content/about/vision';
 import contributors from '../../content/about/contributors.json';
+import { VISION, PHILOSOPHY } from '../../content/about/vision';
+import { BrandLogo } from '../../shared/ui';
 
 export function AboutTab() {
   return (
