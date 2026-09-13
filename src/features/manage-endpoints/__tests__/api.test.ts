@@ -10,7 +10,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchModels, testEndpointConnection } from '../api';
+import { fetchModels, fetchModelsByProtocol, testEndpointConnection } from '../api';
 
 const USER_BASE_URL = 'http://192.168.1.10:11434';
 const USER_API_KEY = 'sk-test-xyz';
@@ -456,5 +456,67 @@ describe('upstream error envelope → 中文友好提示', () => {
     expect(result.message).toContain('连接失败');
     // 兜底保留原 message
     expect(result.message).toContain('Failed to fetch');
+  });
+});
+
+
+describe('R33: 协议级模型发现 (anthropic / gemini / ollama)', () => {
+  it('anthropic: GET /v1/models 携带 x-api-key + anthropic-version，解析 data[].id', async () => {
+    mockFetch(async (url, init) => {
+      expect(url).toContain('/v1/models');
+      const headers = new Headers(init?.headers);
+      expect(headers.get('x-api-key')).toBe('sk-ant');
+      expect(headers.get('anthropic-version')).toBe('2023-06-01');
+      expect(headers.get('X-LLM-Provider-Url')).toBe(USER_BASE_URL);
+      return makeJsonResponse(200, {
+        data: [{ id: 'claude-sonnet-4' }, { id: 'claude-haiku-4' }],
+      });
+    });
+    const models = await fetchModelsByProtocol('anthropic', USER_BASE_URL, 'sk-ant');
+    expect(models.map((m) => m.id)).toEqual(['claude-sonnet-4', 'claude-haiku-4']);
+  });
+
+  it('gemini: GET /v1beta/models 携带 x-goog-api-key，name 剥离 models/ 前缀', async () => {
+    mockFetch(async (url, init) => {
+      expect(url).toContain('/v1beta/models');
+      const headers = new Headers(init?.headers);
+      expect(headers.get('x-goog-api-key')).toBe('goog-key');
+      return makeJsonResponse(200, {
+        models: [{ name: 'models/gemini-2.0-flash' }, { name: 'models/gemini-1.5-pro' }],
+      });
+    });
+    const models = await fetchModelsByProtocol('gemini', 'https://generativelanguage.googleapis.com', 'goog-key');
+    expect(models.map((m) => m.id)).toEqual(['gemini-2.0-flash', 'gemini-1.5-pro']);
+  });
+
+  it('ollama: GET /api/tags 无鉴权头，解析 models[].name', async () => {
+    mockFetch(async (url, init) => {
+      expect(url).toContain('/api/tags');
+      const headers = new Headers(init?.headers);
+      expect(headers.get('X-LLM-Provider-Url')).toBe('http://localhost:11434');
+      return makeJsonResponse(200, {
+        models: [{ name: 'llama3' }, { name: 'qwen2.5:7b' }],
+      });
+    });
+    const models = await fetchModelsByProtocol('ollama', 'http://localhost:11434', '');
+    expect(models.map((m) => m.id)).toEqual(['llama3', 'qwen2.5:7b']);
+  });
+
+  it('testEndpointConnection 非 openai 协议只做发现，不做对话连通测试', async () => {
+    mockFetch(async (url) => {
+      if (url.includes('/api/tags')) {
+        return makeJsonResponse(200, { models: [{ name: 'llama3' }] });
+      }
+      throw new Error('unexpected fetch: ' + url);
+    });
+    const result = await testEndpointConnection(
+      'http://localhost:11434',
+      '',
+      undefined,
+      'ollama',
+    );
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('该协议未做对话连通测试');
+    expect(result.discoveredModels?.[0]?.id).toBe('llama3');
   });
 });

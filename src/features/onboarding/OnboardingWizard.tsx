@@ -55,7 +55,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     setTesting(true);
     setTestResult(null);
     try {
-      const result = await testEndpointConnection(baseUrl.trim(), apiKey.trim());
+      const result = await testEndpointConnection(baseUrl.trim(), apiKey.trim(), undefined, protocol);
       setTestResult(result);
     } catch (error) {
       setTestResult({
@@ -214,7 +214,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
               onClick={() => setStep(2)}
               className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover disabled:opacity-50"
             >
-              {protocol === 'openai-compatible' ? t('wizard.next') : t('wizard.save_direct')}
+              {t('wizard.next')}
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -223,47 +223,41 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
 
       {step === 2 && (
         <div className="mt-3 space-y-2" data-testid="wizard-step-test">
-          {protocol === 'openai-compatible' ? (
-            <>
-              <button
-                type="button"
-                data-testid="wizard-test"
-                disabled={testing}
-                onClick={() => void handleTest()}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-radius-sm border border-border hover:bg-bg-hover disabled:opacity-50"
+          <button
+            type="button"
+            data-testid="wizard-test"
+            disabled={testing}
+            onClick={() => void handleTest()}
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-radius-sm border border-border hover:bg-bg-hover disabled:opacity-50"
+          >
+            {testing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {t('wizard.test')}
+          </button>
+          {testResult && (
+            <p
+              className={`text-xs ${testResult.success ? 'text-primary' : 'text-error'}`}
+              data-testid="wizard-test-result"
+            >
+              {testResult.message}
+            </p>
+          )}
+          {testResult?.success && (testResult.discoveredModels?.length ?? 0) > 0 && (
+            <label className="block text-xs text-text-secondary">
+              {t('wizard.pick_model')}
+              <select
+                data-testid="wizard-model"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="mt-1 w-full px-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text"
               >
-                {testing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {t('wizard.test')}
-              </button>
-              {testResult && (
-                <p
-                  className={`text-xs ${testResult.success ? 'text-primary' : 'text-error'}`}
-                  data-testid="wizard-test-result"
-                >
-                  {testResult.message}
-                </p>
-              )}
-              {testResult?.success && (testResult.discoveredModels?.length ?? 0) > 0 && (
-                <label className="block text-xs text-text-secondary">
-                  {t('wizard.pick_model')}
-                  <select
-                    data-testid="wizard-model"
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
-                    className="mt-1 w-full px-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text"
-                  >
-                    <option value="">{t('wizard.pick_model_hint')}</option>
-                    {testResult.discoveredModels!.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.id}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-            </>
-          ) : (
-            <p className="text-xs text-text-secondary">{t('wizard.skip_test_hint')}</p>
+                <option value="">{t('wizard.pick_model_hint')}</option>
+                {testResult.discoveredModels!.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.id}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
           <div className="flex gap-2">
             <button

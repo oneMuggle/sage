@@ -3,6 +3,7 @@ import {
   type DiscoveredModel,
   type ModelCapability,
 } from '../../entities/setting/types';
+import type { EndpointProtocol } from '../../entities/setting/types';
 import { backendRequest } from '../../shared/api/backendRequest';
 import { isDemoMode } from '../../shared/api/demoFlag';
 
@@ -147,6 +148,62 @@ export async function fetchModels(baseUrl: string, apiKey: string): Promise<Disc
 }
 
 /**
+ * R33: 按协议发现模型 —— anthropic/gemini/ollama 走各自的 /models 语义。
+ * 全部经本机后端 LLM 代理透传（X-LLM-Provider-Url 指定上游），自定义
+ * 鉴权头（x-api-key / anthropic-version / x-goog-api-key）会被代理原样
+ * 转发（_filter_request_headers 只剔除 hop-by-hop 与本地能力令牌）。
+ */
+export async function fetchModelsByProtocol(
+  protocol: EndpointProtocol,
+  baseUrl: string,
+  apiKey: string,
+): Promise<DiscoveredModel[]> {
+  if (protocol === 'openai-compatible') return fetchModels(baseUrl, apiKey);
+  const base = baseUrl.replace(/\/+$/, '');
+  if (isDemoMode()) return DEMO_ENDPOINT_MODELS.map((model) => ({ ...model }));
+
+  const toModels = (ids: string[]): DiscoveredModel[] =>
+    ids.map((id) => ({ id, capabilities: inferCapabilities(id), endpointId: '' }));
+
+  if (protocol === 'anthropic') {
+    const response = await backendRequest<{ data?: Array<{ id?: string }> }>({
+      path: `${LLM_PROXY_BASE}/v1/models`,
+      method: 'GET',
+      headers: {
+        'X-LLM-Provider-Url': base,
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+    });
+    return toModels((response.data ?? []).map((m) => String(m.id ?? '')).filter(Boolean));
+  }
+
+  if (protocol === 'gemini') {
+    const response = await backendRequest<{ models?: Array<{ name?: string }> }>({
+      path: `${LLM_PROXY_BASE}/v1beta/models`,
+      method: 'GET',
+      headers: {
+        'X-LLM-Provider-Url': base,
+        'x-goog-api-key': apiKey,
+      },
+    });
+    return toModels(
+      (response.models ?? [])
+        .map((m) => String(m.name ?? '').replace(/^models\//, ''))
+        .filter(Boolean),
+    );
+  }
+
+  // ollama
+  const response = await backendRequest<{ models?: Array<{ name?: string }> }>({
+    path: `${LLM_PROXY_BASE}/api/tags`,
+    method: 'GET',
+    headers: { 'X-LLM-Provider-Url': base },
+  });
+  return toModels((response.models ?? []).map((m) => String(m.name ?? '')).filter(Boolean));
+}
+
+/**
  * Test a chat completion call to verify the actual chat endpoint works.
  *
  * 同 ``fetchModels`` — 走本机后端代理,真实上游通过 ``X-LLM-Provider-Url`` 头传入。
@@ -190,6 +247,7 @@ export async function testEndpointConnection(
   baseUrl: string,
   apiKey: string,
   chatModel?: string,
+  protocol: EndpointProtocol = 'openai-compatible',
 ): Promise<ConnectionTestResult> {
   const start = Date.now();
   if (isDemoMode()) {
@@ -201,9 +259,19 @@ export async function testEndpointConnection(
     };
   }
   try {
-    // Step 1: Test /models endpoint
-    const models = await fetchModels(baseUrl, apiKey);
+    // Step 1: Test /models endpoint（R33: 按协议分发发现语义）
+    const models = await fetchModelsByProtocol(protocol, baseUrl, apiKey);
     const modelDiscovery = `发现 ${models.length} 个模型`;
+
+    // R33: 非 openai 协议只做模型发现（各家对话端点语义不同, 不做对话连通测试）
+    if (protocol !== 'openai-compatible') {
+      return {
+        success: true,
+        message: `连接成功 · ${modelDiscovery} · 该协议未做对话连通测试`,
+        latency: Date.now() - start,
+        discoveredModels: models,
+      };
+    }
 
     // Step 2: 选定 chat 测试模型
     // 优先用调用方传入的 chatModel, 但仅当它属于被测端点 (出现在 /v1/models 列表) 时;
