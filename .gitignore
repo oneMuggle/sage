@@ -153,3 +153,13 @@ data/orch_scratch/
 
 # SDD workspace (scratch for subagent-driven-development)
 .superpowers/
+
+# 本地调试草稿与崩溃转储（不进仓库）
+backend/_diag*.py
+backend/_diag*.txt
+*.stackdump
+ci*.log
+r[0-9]*-*.log
+
+# 本地 CI 复现用虚拟环境
+.venv-ci/
