@@ -312,12 +312,17 @@ def resolve_image_payload(source: str, *, search_dirs: Optional[List[Path]] = No
     路径解析顺序：绝对路径直接使用；相对路径依次尝试 ``search_dirs``
     （调用方按需传工作区根 / 文档所在目录）。命中即读，超限拒绝；
     全部未命中抛 ``ValueError("image_file_not_found: ...")``。
+
+    Round 22：命中后接入懒加载压缩管线——>8MB 的图片在 Pillow 可用时
+    自动降采样压缩到阈值内；未安装 Pillow 时原样返回（行为零变化）。
     """
     if not isinstance(source, str) or not source.strip():
         raise ValueError("image_source_required")
     text = source.strip()
     if text.startswith("data:"):
-        return decode_image_base64(text)
+        from .image_optimize import optimize_image_bytes
+
+        return optimize_image_bytes(decode_image_base64(text))
 
     candidates: List[Path] = []
     raw = Path(text)
@@ -331,7 +336,9 @@ def resolve_image_payload(source: str, *, search_dirs: Optional[List[Path]] = No
             payload = candidate.read_bytes()
             if len(payload) > MAX_IMAGE_BYTES:
                 raise ValueError(f"image_too_large: 图片超过 {MAX_IMAGE_BYTES} 字节上限")
-            return payload
+            from .image_optimize import optimize_image_bytes
+
+            return optimize_image_bytes(payload)
     raise ValueError(f"image_file_not_found: {text}")
 
 
