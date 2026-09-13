@@ -27,7 +27,10 @@ from backend.skills.skill_md.sandbox import SandboxPort, SandboxRequest, Sandbox
 from backend.skills.skill_md.script_runner import ScriptRunner
 from backend.skills.skill_md.skill import SkillMdDocument
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(os.name == "nt", reason="script_runner 读取/沙箱依赖 POSIX O_NOFOLLOW 与进程组（Windows 支持另行批次）"),
+]
 
 
 def _make_doc(name: str = "test-skill", base_dir: Optional[Path] = None) -> SkillMdDocument:

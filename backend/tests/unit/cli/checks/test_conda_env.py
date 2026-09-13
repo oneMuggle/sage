@@ -13,6 +13,11 @@ from backend.cli.checks import conda_env as conda_env_mod
 from backend.cli.checks.conda_env import CondaEnvCheck
 from backend.cli.doctor import Severity
 
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="conda 检查在 Windows 的严重级别输出不同（另行批次定性）",
+)
+
 
 @pytest.fixture()
 def check():

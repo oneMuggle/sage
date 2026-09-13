@@ -1,5 +1,6 @@
 """Security regressions for Vision ingest temporary-file handling."""
 
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -10,6 +11,11 @@ from backend.wiki.extract import MAX_FILE_BYTES
 from backend.wiki.ingest import IngestConfig
 from backend.wiki.vision import VisionConfig, VisionProvider
 from backend.wiki.vision_ingest import VisionIngestConfig, ingest_with_vision
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="vision ingest 安全读依赖 POSIX O_NOFOLLOW（Windows 支持另行批次）",
+)
 
 
 @pytest.fixture()
