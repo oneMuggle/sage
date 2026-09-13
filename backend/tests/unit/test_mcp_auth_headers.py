@@ -53,12 +53,16 @@ def _make_client_with_headers(headers: dict):
             return httpx.Response(
                 200,
                 headers={"content-type": "application/json", "Mcp-Session-Id": "sess-1"},
-                json={"jsonrpc": "2.0", "id": body["id"], "result": {}},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": body["id"],
+                    "result": {"serverInfo": {"name": "fake"}},
+                },
             )
         return httpx.Response(
             200,
             headers={"content-type": "application/json"},
-            json={"jsonrpc": "2.0", "id": body.get("id"), "result": {}},
+            json={"jsonrpc": "2.0", "id": body.get("id"), "result": {"ok": True}},
         )
 
     cfg = validate_server_config(
