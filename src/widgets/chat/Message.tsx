@@ -16,7 +16,7 @@ import {
   Quote,
 } from 'lucide-react';
 import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -106,7 +106,7 @@ const markdownComponents = {
     return <CodeBlock language={lang}>{content}</CodeBlock>;
   },
   // P1: 图片加载骨架 + 渐入 + 点击放大（Lightbox）
-  img({ src, alt }) {
+  img({ src, alt }: { src?: string; alt?: string }) {
     return <MarkdownImage src={src} alt={alt} />;
   },
   pre({ children }: { children?: ReactNode }) {
@@ -179,11 +179,16 @@ const liveMarkdownComponents: typeof markdownComponents = {
  */
 const MarkdownChunk = memo(
   function MarkdownChunk({ md, plainFences }: { md: string; plainFences?: boolean }) {
+    // Components 断言: 映射对象是模块级单例，handler 参数用窄化类型
+    // （react-markdown 的 ExtraProps 交叉类型过宽，直接标注反而失配）
+    const components = (
+      plainFences ? liveMarkdownComponents : markdownComponents
+    ) as Components;
     return (
       <ReactMarkdown
         remarkPlugins={MD_REMARK_PLUGINS}
         rehypePlugins={MD_REHYPE_PLUGINS}
-        components={plainFences ? liveMarkdownComponents : markdownComponents}
+        components={components}
       >
         {md}
       </ReactMarkdown>

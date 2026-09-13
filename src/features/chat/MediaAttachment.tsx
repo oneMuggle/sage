@@ -1,8 +1,8 @@
 // src/features/chat/MediaAttachment.tsx
 import React, { useState, useEffect } from 'react';
 
-import { Lightbox } from '../../shared/ui';
 import { fetchMediaBlobUrl, resolveMediaUrl, revokeMediaBlobUrl } from '../../shared/api/mediaApi';
+import { Lightbox } from '../../shared/ui';
 
 interface MediaAttachmentProps {
   /** API URL like /api/v1/media/{id} */

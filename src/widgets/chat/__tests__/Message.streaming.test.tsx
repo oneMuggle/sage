@@ -3,9 +3,9 @@
 import { render } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 
+import { THINKING_PLACEHOLDER } from '../../../features/send-message/thinkingPlaceholder';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Message as MessageType } from '../../../shared/lib/store';
-import { THINKING_PLACEHOLDER } from '../../../features/send-message/thinkingPlaceholder';
 import { Message } from '../Message';
 
 const base: MessageType = {

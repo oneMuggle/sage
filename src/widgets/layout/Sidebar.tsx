@@ -258,7 +258,9 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
                   aria-label={item.label}
                   className={clsx(
                     'flex items-center justify-center w-10 h-10 rounded-radius-sm transition-colors',
-                    isActive ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-bg-hover',
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-text-secondary hover:bg-bg-hover',
                   )}
                 >
                   <Icon className="w-5 h-5" />

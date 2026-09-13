@@ -2,7 +2,7 @@
  * P1 (UI 优化方案 2026-09-13): markdown 图片渲染 — 骨架/渐入/失败占位/Lightbox。
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { MarkdownImage } from '../MarkdownImage';
 
