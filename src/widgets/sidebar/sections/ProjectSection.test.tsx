@@ -170,4 +170,70 @@ describe('ProjectSection', () => {
       expect(screen.getByTestId('project-missing-badge')).toBeInTheDocument();
     });
   });
+
+  // ===== P2: 行展开会话子列表 =====
+
+  it('P2: 展开 chevron 懒加载会话子列表，子行点击切换会话', async () => {
+    listMock.mockResolvedValue(projects);
+    listSessionsMock.mockResolvedValue([
+      { ...session, id: 's1', title: 'first session', updated_at: Date.now() },
+      { ...session, id: 's2', title: 'second session', updated_at: Date.now() },
+    ]);
+    const onOpenSession = vi.fn();
+    renderWithI18n(<ProjectSection {...baseProps} onOpenSession={onOpenSession} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    expect(screen.queryByTestId('project-session-row')).not.toBeInTheDocument();
+
+    // 展开第一个项目
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => {
+      expect(listSessionsMock).toHaveBeenCalledWith('p1');
+      expect(screen.getAllByTestId('project-session-row')).toHaveLength(2);
+    });
+    expect(screen.getByText('first session')).toBeInTheDocument();
+
+    // 子行点击 → onOpenSession（不触发行点击的 open）
+    fireEvent.click(screen.getAllByTestId('project-session-row')[0]);
+    await waitFor(() => {
+      expect(onOpenSession).toHaveBeenCalledWith('s1');
+    });
+    expect(openMock).not.toHaveBeenCalled();
+  });
+
+  it('P2: 展开无会话的项目显示空态提示', async () => {
+    listMock.mockResolvedValue(projects);
+    listSessionsMock.mockResolvedValue([]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    fireEvent.click(screen.getAllByTestId('project-expand')[1]); // empty 项目
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-sessions-empty')).toBeInTheDocument();
+    });
+  });
+
+  it('P2: 再次点击 chevron 收起子列表', async () => {
+    listMock.mockResolvedValue(projects);
+    listSessionsMock.mockResolvedValue([{ ...session, id: 's1', title: 'first session' }]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('project-session-row').length).toBe(1);
+    });
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => {
+      expect(screen.queryByTestId('project-session-row')).not.toBeInTheDocument();
+    });
+    // 收起再展开不重复拉取（缓存命中）
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('project-session-row').length).toBe(1);
+    });
+    expect(listSessionsMock).toHaveBeenCalledTimes(1);
+  });
 });

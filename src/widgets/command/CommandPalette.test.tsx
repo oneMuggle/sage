@@ -2,6 +2,8 @@
  * P1-3.7 全局搜索合并：CommandPalette 在搜索词 >= 2 字符时切换到
  * 后端全局搜索结果（会话 / 记忆 / 知识库分组），< 2 字符时保持命令模式。
  *
+ * 项目模块 P2：新增"项目"分组（打开项目）与 add-project 操作命令。
+ *
  * backendRequest 被 mock，避免依赖 Electron IPC bridge。
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -16,6 +18,20 @@ import { CommandPalette } from './CommandPalette';
 const mockBackendRequest = vi.fn();
 vi.mock('../../shared/api/backendRequest', () => ({
   backendRequest: (...args: unknown[]) => mockBackendRequest(...args),
+}));
+
+const projectListMock = vi.fn();
+const projectOpenMock = vi.fn();
+const projectRegisterMock = vi.fn();
+vi.mock('../../shared/api/projectApi', () => ({
+  projectApi: {
+    list: (...args: unknown[]) => projectListMock(...args),
+    open: (...args: unknown[]) => projectOpenMock(...args),
+    register: (...args: unknown[]) => projectRegisterMock(...args),
+    remove: vi.fn(),
+    createSession: vi.fn(),
+    listSessions: vi.fn(),
+  },
 }));
 
 vi.mock('../../app/providers/useTheme', () => ({
@@ -48,6 +64,10 @@ describe('CommandPalette 全局搜索 (P1-3.7)', () => {
   beforeEach(() => {
     useStore.setState({ sessions: [], currentSessionId: null });
     mockBackendRequest.mockReset();
+    // P2: 面板打开即拉项目清单 —— 本组用例须给默认实现，否则 mock 返回
+    // undefined 使组件 effect 的 .then 链抛错（与本组断言无关的崩溃）。
+    projectListMock.mockReset();
+    projectListMock.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -107,5 +127,109 @@ describe('CommandPalette 全局搜索 (P1-3.7)', () => {
       expect(mockBackendRequest).toHaveBeenCalled();
     });
     expect(screen.queryByText('项目计划')).not.toBeInTheDocument();
+  });
+});
+
+describe('CommandPalette 项目模块 (P2)', () => {
+  const projects = [
+    {
+      id: 'p1',
+      path: 'C:\\work\\demo',
+      name: 'demo',
+      createdAt: 1,
+      lastOpenedAt: 10,
+      sessionCount: 2,
+      lastSessionId: 's1',
+    },
+  ];
+
+  beforeEach(() => {
+    useStore.setState({ sessions: [], currentSessionId: null });
+    mockBackendRequest.mockReset();
+    projectListMock.mockReset();
+    projectOpenMock.mockReset();
+    projectRegisterMock.mockReset();
+    projectListMock.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    delete (window as unknown as { electronAPI?: unknown }).electronAPI;
+  });
+
+  it('面板打开时渲染"项目"分组并列出项目名与路径', async () => {
+    projectListMock.mockResolvedValue(projects);
+    renderPalette();
+
+    await waitFor(() => {
+      expect(projectListMock).toHaveBeenCalled();
+      expect(screen.getByText('demo')).toBeInTheDocument();
+      expect(screen.getByText('C:\\work\\demo')).toBeInTheDocument();
+    });
+  });
+
+  it('选择项目条目 → projects_open → 切换到返回的会话', async () => {
+    projectListMock.mockResolvedValue(projects);
+    projectOpenMock.mockResolvedValue({
+      project: projects[0],
+      session: {
+        id: 's-opened',
+        title: 'demo',
+        created_at: 1,
+        updated_at: 1,
+        last_message_at: null,
+        message_count: 0,
+        is_pinned: false,
+      },
+      created: false,
+    });
+    renderPalette();
+
+    await waitFor(() => screen.getByText('demo'));
+    fireEvent.click(screen.getByText('demo'));
+
+    await waitFor(() => {
+      expect(projectOpenMock).toHaveBeenCalledWith('p1');
+      expect(useStore.getState().currentSessionId).toBe('s-opened');
+    });
+  });
+
+  it('项目清单加载失败静默降级为不显示分组', async () => {
+    projectListMock.mockRejectedValue(new Error('backend offline'));
+    renderPalette();
+
+    await waitFor(() => {
+      expect(projectListMock).toHaveBeenCalled();
+    });
+    expect(screen.queryByText('C:\\work\\demo')).not.toBeInTheDocument();
+  });
+
+  it('添加项目 action：选目录 → register → open → 进入新会话', async () => {
+    (window as unknown as { electronAPI: unknown }).electronAPI = {
+      selectDirectory: vi.fn().mockResolvedValue('C:\\work\\picked'),
+    };
+    projectRegisterMock.mockResolvedValue(projects[0]);
+    projectOpenMock.mockResolvedValue({
+      project: projects[0],
+      session: {
+        id: 's-new',
+        title: 'demo',
+        created_at: 1,
+        updated_at: 1,
+        last_message_at: null,
+        message_count: 0,
+        is_pinned: false,
+      },
+      created: true,
+    });
+    renderPalette();
+
+    fireEvent.click(screen.getByText('添加项目'));
+
+    await waitFor(() => {
+      expect(projectRegisterMock).toHaveBeenCalledWith('C:\\work\\picked');
+      expect(projectOpenMock).toHaveBeenCalledWith('p1');
+      expect(useStore.getState().currentSessionId).toBe('s-new');
+    });
   });
 });

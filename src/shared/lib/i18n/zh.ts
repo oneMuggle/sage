@@ -276,6 +276,8 @@ export const zh = {
   'sider.project.remove_confirm': '确认移除?',
   'sider.project.missing': '项目目录不存在或已被移动',
   'sider.project.session_count': '{count} 个会话',
+  'sider.project.sessions_loading': '加载会话中…',
+  'sider.project.sessions_empty': '项目内暂无会话',
   'sider.project.add_failed': '添加项目失败：{message}',
   'sider.project.open_failed': '打开项目失败：{message}',
   'sider.project.remove_failed': '移除项目失败：{message}',

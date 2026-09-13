@@ -1,9 +1,12 @@
 import { Command } from 'cmdk';
+import { Folder } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { useTheme } from '../../app/providers/useTheme';
 import { backendRequest } from '../../shared/api/backendRequest';
+import { projectApi, type ProjectSummary } from '../../shared/api/projectApi';
 import { useStore } from '../../shared/lib/store';
 
 import { actionCommands, navCommands } from './commandItems';
@@ -31,11 +34,12 @@ interface CommandPaletteProps {
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const navigate = useNavigate();
-  const { sessions, setCurrentSessionId, createSession } = useStore();
+  const { sessions, setCurrentSessionId, createSession, loadSessions } = useStore();
   const { resolved, setMode } = useTheme();
   const [search, setSearch] = useState('');
   const [globalResults, setGlobalResults] = useState<GlobalSearchResult | null>(null);
   const [searching, setSearching] = useState(false);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
   // 打开时重置搜索
@@ -43,6 +47,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     if (open) {
       setSearch('');
       setGlobalResults(null);
+      // 项目模块 P2: 打开面板即刷新项目清单（失败静默降级为不显示分组）
+      projectApi
+        .list()
+        .then(setProjects)
+        .catch(() => setProjects([]));
     }
   }, [open]);
 
@@ -115,6 +124,53 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     [setCurrentSessionId, navigate, onOpenChange],
   );
 
+  // 项目模块 P2: 打开项目（复用最近会话或新建并绑定）后进入会话
+  const handleOpenProject = useCallback(
+    async (project: ProjectSummary) => {
+      try {
+        const { session } = await projectApi.open(project.id);
+        await loadSessions();
+        handleOpenSession(session.id);
+      } catch (err) {
+        onOpenChange(false);
+        toast.error(`打开项目失败：${err instanceof Error ? err.message : String(err)}`);
+      }
+    },
+    [handleOpenSession, loadSessions, onOpenChange],
+  );
+
+  // 项目模块 P2: 登记项目（原生选目录 → register → open → 进入新会话）
+  const handleAddProject = useCallback(async () => {
+    const api = typeof window !== 'undefined' ? window.electronAPI : undefined;
+    if (!api) {
+      toast.error('添加项目失败：IPC 桥接不可用');
+      return;
+    }
+    try {
+      const picked = await api.selectDirectory({ intent: 'open' });
+      if (!picked) return; // 用户取消
+      const project = await projectApi.register(picked);
+      const { session } = await projectApi.open(project.id);
+      await loadSessions();
+      handleOpenSession(session.id);
+    } catch (err) {
+      toast.error(`添加项目失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [handleOpenSession, loadSessions]);
+
+  /**
+   * 项目模块 P2: 操作命令分派收敛 —— 键盘 ⌘数字 与 onSelect 两条路径
+   * 原先各自维护一份 if/else，新增 action 必须双点同步；统一走这里。
+   */
+  const runAction = useCallback(
+    (id: string) => {
+      if (id === 'new-chat') void handleNewChat();
+      else if (id === 'toggle-theme') handleToggleTheme();
+      else if (id === 'add-project') void handleAddProject();
+    },
+    [handleAddProject, handleNewChat, handleToggleTheme],
+  );
+
   // 最近会话（按时间排序，取前 8 个）
   const recentSessions = [...sessions]
     .sort((a, b) => (b.last_message_at ?? b.updated_at) - (a.last_message_at ?? a.updated_at))
@@ -138,9 +194,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         // 然后是操作命令
         const actionIndex = index - navCommands.length;
         if (actionIndex < actionCommands.length) {
-          const cmd = actionCommands[actionIndex];
-          if (cmd.id === 'new-chat') handleNewChat();
-          else if (cmd.id === 'toggle-theme') handleToggleTheme();
+          runAction(actionCommands[actionIndex].id);
           return;
         }
 
@@ -154,7 +208,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, recentSessions, handleNav, handleNewChat, handleToggleTheme, handleOpenSession]);
+  }, [open, recentSessions, handleNav, runAction, handleOpenSession]);
 
   return (
     <Command.Dialog
@@ -216,10 +270,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                   <Command.Item
                     key={cmd.id}
                     value={`${cmd.label} ${cmd.description}`}
-                    onSelect={() => {
-                      if (cmd.id === 'new-chat') handleNewChat();
-                      else if (cmd.id === 'toggle-theme') handleToggleTheme();
-                    }}
+                    onSelect={() => runAction(cmd.id)}
                     className="flex items-center gap-2.5 px-3 py-2 rounded-radius-sm text-sm text-text cursor-default select-none aria-selected:bg-primary/10 aria-selected:text-primary data-[disabled]:opacity-50 transition-colors"
                   >
                     <Icon className="w-4 h-4 text-text-muted" />
@@ -236,6 +287,31 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 );
               })}
             </Command.Group>
+
+            {/* 项目模块 P2: 最近项目（打开 = 复用最近会话或新建并绑定） */}
+            {projects.length > 0 && (
+              <Command.Group heading="项目" className="mb-1.5">
+                {projects.slice(0, 8).map((project) => (
+                  <Command.Item
+                    key={project.id}
+                    value={`project-${project.name}-${project.path}`}
+                    onSelect={() => void handleOpenProject(project)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-radius-sm text-sm text-text cursor-default select-none aria-selected:bg-primary/10 aria-selected:text-primary data-[disabled]:opacity-50 transition-colors"
+                  >
+                    <Folder className="w-4 h-4 text-text-muted shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate">{project.name}</div>
+                      <div className="text-xs text-text-muted truncate">{project.path}</div>
+                    </div>
+                    {project.sessionCount > 0 && (
+                      <span className="ml-auto text-xs text-text-muted">
+                        {project.sessionCount} 个会话
+                      </span>
+                    )}
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            )}
 
             {/* 最近会话 */}
             {recentSessions.length > 0 && (

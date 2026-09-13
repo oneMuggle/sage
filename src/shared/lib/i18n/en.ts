@@ -283,6 +283,8 @@ export const en: Record<TranslationKey, string> = {
   'sider.project.remove_confirm': 'Remove?',
   'sider.project.missing': 'Project folder is missing or has been moved',
   'sider.project.session_count': '{count} sessions',
+  'sider.project.sessions_loading': 'Loading sessions…',
+  'sider.project.sessions_empty': 'No sessions in this project yet',
   'sider.project.add_failed': 'Failed to add project: {message}',
   'sider.project.open_failed': 'Failed to open project: {message}',
   'sider.project.remove_failed': 'Failed to remove project: {message}',
