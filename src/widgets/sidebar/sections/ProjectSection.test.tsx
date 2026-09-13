@@ -313,4 +313,74 @@ describe('ProjectSection', () => {
       vi.useRealTimers();
     }
   });
+
+  // ===== P5: 区块局部拖拽登记 =====
+
+  it('P5: 拖入带 path 的文件 → 批量登记并刷新清单', async () => {
+    listMock.mockResolvedValue([]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getByTestId('project-drop-zone'));
+
+    const callsBefore = listMock.mock.calls.length;
+    fireEvent.drop(screen.getByTestId('project-drop-zone'), {
+      dataTransfer: {
+        files: [{ path: 'C:\\work\\a' }, { path: 'C:\\work\\b' }],
+      } as unknown as DataTransfer,
+    });
+
+    await waitFor(() => {
+      expect(registerMock).toHaveBeenCalledTimes(2);
+      expect(registerMock).toHaveBeenCalledWith('C:\\work\\a');
+      expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+  });
+
+  it('P5: 拖入无 path 的文件（浏览器语义）静默忽略', async () => {
+    listMock.mockResolvedValue([]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getByTestId('project-drop-zone'));
+
+    const callsBefore = registerMock.mock.calls.length;
+    fireEvent.drop(screen.getByTestId('project-drop-zone'), {
+      dataTransfer: { files: [{ name: 'x.txt' }] } as unknown as DataTransfer,
+    });
+
+    // 异步 handler 有机会执行后仍不应调用 register
+    await new Promise((r) => setTimeout(r, 50));
+    expect(registerMock.mock.calls.length).toBe(callsBefore);
+  });
+
+  it('P5: dragOver 显示提示、dragLeave 复位', async () => {
+    listMock.mockResolvedValue([]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    const zone = screen.getByTestId('project-drop-zone');
+
+    expect(screen.queryByTestId('project-drop-hint')).not.toBeInTheDocument();
+    fireEvent.dragOver(zone, { dataTransfer: { files: [] } });
+    expect(screen.getByTestId('project-drop-hint')).toBeInTheDocument();
+
+    fireEvent.dragLeave(zone, { dataTransfer: { files: [] } });
+    expect(screen.queryByTestId('project-drop-hint')).not.toBeInTheDocument();
+  });
+
+  it('P5: register 失败（非目录）时逐条提示且不刷新清单', async () => {
+    listMock.mockResolvedValue([]);
+    registerMock.mockRejectedValue(
+      new Error('Backend POST /api/v1/projects → 400: invalid_workspace_path'),
+    );
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getByTestId('project-drop-zone'));
+
+    const callsBefore = listMock.mock.calls.length;
+    fireEvent.drop(screen.getByTestId('project-drop-zone'), {
+      dataTransfer: { files: [{ path: 'C:\\not-a-dir' }] } as unknown as DataTransfer,
+    });
+
+    await waitFor(() => {
+      expect(registerMock).toHaveBeenCalledWith('C:\\not-a-dir');
+    });
+    // 全部失败：清单不刷新
+    await new Promise((r) => setTimeout(r, 50));
+    expect(listMock.mock.calls.length).toBe(callsBefore);
+  });
 });

@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **归档视图批量操作**;前端纳入 PDF 全流程
 
 ### Added(projects)
+- **项目模块 P5**: 侧栏项目区块局部拖拽登记——拖文件夹到项目分组即批量登记(拖拽不自动打开,与 + 按钮登记即打开区分;路径取 Electron File.path 与 OfficeFilePicker 同判据,目录有效性走既有 validate_workspace 校验,零新增 IPC;dragOver 高亮提示)(方案 docs/plans/2026-09-13_projects-p5-drag-plan.md;Electron>=32 需迁移 webUtils.getPathForFile,已留注记)
 - **项目模块 P4**: 项目子行就地删除会话(hover 两步确认,联动刷新子列表/计数/会话区)+ 项目清单自动刷新(订阅 store 会话数量变化,400ms 防抖重查后端聚合计数,消除跨区增删后的陈旧显示)(方案 docs/plans/2026-09-13_projects-p4-plan.md)
 - **项目模块 P3**: Chat 头部当前项目徽标——会话绑定工作区时在对话头部显示 Folder+项目名 chip(tooltip 完整路径),多项目并行不再迷路;名称优先匹配登记项目,历史绑定回退 basename,清单拉取失败静默降级;纯展示组件不依赖 provider(方案 docs/plans/2026-09-13_projects-p3-plan.md;拖拽排序经评估否决——与最近打开排序语义打架,依据见方案 §1)
 - **项目模块 P2**: 行展开会话子列表(chevron 懒加载项目内未归档会话 ≤20 条,轻量子行 title+相对时间,点击直达;open/新建后自动刷新子列表)+ 命令面板接入("项目"分组列出最近 8 个项目一键打开;新增"添加项目"操作命令走原生选目录;操作分派收敛为单一 runAction 消除键盘/点击双点 if/else)。后端零改动,复用 P1 端点(方案 docs/plans/2026-09-13_projects-p2-plan.md;拖拽登记与 wiki recent_projects 统一经评估缓行,依据见方案 §2)

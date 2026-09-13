@@ -200,3 +200,18 @@ cherry-pick 时注意：
   增删）→ 400ms 防抖 `refresh()` + 已展开项目子列表刷新。session_count
   保持后端聚合为唯一事实源，不本地推算。
 - **win7 对齐**：改动全部位于 P1/P2 新文件，纯追加；无后端/IPC 变更。
+
+## 12. P5 落地记录（2026-09-13，feat/projects-p5-drag）
+
+方案：`docs/plans/2026-09-13_projects-p5-drag-plan.md`。两轮缓行的拖拽
+登记以**区块局部方案**落地：只在"项目"分组内容区接收 drop，不触碰全
+局 drop 面（那是缓行的原因）。
+
+- 拖入文件夹 → 批量 `register`（路径取 Electron `File.path`，与
+  OfficeFilePicker 同判据；浏览器无 path 静默忽略）；目录有效性由后端
+  `validate_workspace` 校验（400 invalid_workspace_path），零新增 IPC；
+- 成功 N 个 toast 计数并刷新清单；失败逐条提示；**不自动打开**（区别
+  于 + 按钮的登记即打开——拖拽是顺手动作，静默导航会打断工作流）；
+- dragOver 高亮虚线框 + 提示文案，dragLeave/drop 复位；
+- 迁移注记：Electron ≥32 需将 `File.path` 迁到 `webUtils.getPathForFile`
+  （当前 21.4.4 与 win7 LTS 冻结版均支持 File.path，两端一致）。
