@@ -33,14 +33,20 @@ describe('skillsApi pin / consolidation (R17-A1)', () => {
     mockInvoke.mockResolvedValue({ suggestions: [], scanned: 7, drafts_created: 0 });
 
     await expect(skillsApi.scanConsolidation()).resolves.toMatchObject({ scanned: 7 });
-    expect(mockInvoke).toHaveBeenCalledWith('skills_consolidation_scan', { autoDraft: true });
+    expect(mockInvoke).toHaveBeenCalledWith('skills_consolidation_scan', {
+      autoDraft: true,
+      mode: 'full',
+    });
   });
 
   it('scanConsolidation forwards autoDraft=false', async () => {
     mockInvoke.mockResolvedValue({ suggestions: [], scanned: 7, drafts_created: 0 });
 
     await skillsApi.scanConsolidation(false);
-    expect(mockInvoke).toHaveBeenCalledWith('skills_consolidation_scan', { autoDraft: false });
+    expect(mockInvoke).toHaveBeenCalledWith('skills_consolidation_scan', {
+      autoDraft: false,
+      mode: 'full',
+    });
   });
 
   it('getConsolidationSuggestions defaults limit=50', async () => {

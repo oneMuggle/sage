@@ -112,6 +112,24 @@ class SkillAuditLog:
             logger.warning("skill audit 记录失败 (name=%s): %s", skill_name, exc)
             return False
 
+    def last_note_at(self, action: str = "consolidation_note") -> Optional[int]:
+        """最近一次指定 action 的台账时间戳（ms）；无记录返回 None。
+
+        巡检增量水位：每次 scan 都会写一条 consolidation_note，该值即
+        "上次巡检时点"（切片 R28）。
+        """
+        try:
+            self._ensure_table()
+            conn = self._conn()
+            row = conn.execute(
+                "SELECT MAX(created_at) FROM skill_audit_log WHERE action = ?",
+                (action,),
+            ).fetchone()
+            return int(row[0]) if row and row[0] is not None else None
+        except Exception as exc:  # noqa: BLE001 — 巡检为增强能力
+            logger.warning("skill audit: 读取水位失败: %s", exc)
+            return None
+
     def list_entries(
         self, skill_name: Optional[str] = None, limit: int = 50
     ) -> List[Dict[str, Any]]:

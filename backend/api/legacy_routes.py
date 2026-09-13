@@ -3456,20 +3456,26 @@ def rollback_skill(name: str):
 
 
 @router.post("/skills/consolidation/scan")
-async def scan_skill_consolidation(auto_draft: bool = True):
+async def scan_skill_consolidation(auto_draft: bool = True, mode: str = "full"):
     """Run an LLM consolidation scan over active skills.
 
-    - 200 + ``{"suggestions": [...], "scanned": N, "drafts_created": M}``
+    - 200 + ``{"suggestions": [...], "scanned": N, "drafts_created": M, "mode": ...}``
     - 503 — LLM provider 未装配（巡检不可用）
 
     Round 9: merge/revise 建议自动生成 SkillDraft（pending，进既有审批面，
     落盘仍需人工批准）；archive 建议仅提示（已有可逆 archive 流程）。
     ``auto_draft=false`` 退回仅建议模式。
+
+    R28 增量巡检：``mode=auto`` 时以上次巡检水位（台账最近一条
+    consolidation_note 的时间戳）为界，仅复审水位后有使用/台账事件的技能；
+    无水位（从未巡检）自动退化为全量。缺省 ``mode=full`` 行为不变。
     """
     from backend.skills.consolidator import (
         collect_active_skills,
+        collect_delta_names,
         collect_skill_docs,
         get_consolidation_service,
+        last_scan_watermark,
     )
     from backend.skills.lifecycle import get_lifecycle_store
 
@@ -3483,9 +3489,16 @@ async def scan_skill_consolidation(auto_draft: bool = True):
             },
         )
 
+    scan_mode = "auto" if mode == "auto" else "full"
+    candidate_names: Optional[Set[str]] = None
+    if scan_mode == "auto":
+        watermark = last_scan_watermark()
+        if watermark is not None:
+            candidate_names = collect_delta_names(watermark)
+
     store = get_lifecycle_store()
     pinned = store.get_pinned_names()
-    skills = collect_active_skills()
+    skills = collect_active_skills(names=candidate_names)
     suggestions = await service.scan(skills, pinned_names=sorted(pinned))
 
     # 建议落审计台账（append-only；每条建议一条 consolidation_note）
@@ -3518,6 +3531,7 @@ async def scan_skill_consolidation(auto_draft: bool = True):
         "suggestions": suggestions,
         "scanned": len(skills),
         "drafts_created": drafts_created,
+        "mode": scan_mode,
     }
 
 

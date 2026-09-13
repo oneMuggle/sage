@@ -159,19 +159,21 @@ const Skills: React.FC = () => {
   };
 
   // R17-A1 管理面：固化巡检 — 扫描冷技能并拉取建议列表
-  const handleConsolidationScan = async () => {
+  // R28: mode=auto 仅复审上次巡检水位后有使用/台账事件的技能（增量）
+  const handleConsolidationScan = async (mode: 'full' | 'auto' = 'full') => {
     setScanLoading(true);
     try {
-      const result = await skillsApi.scanConsolidation(true);
+      const result = await skillsApi.scanConsolidation(true, mode);
       const list = await skillsApi.getConsolidationSuggestions(50);
       setSuggestions(list);
       setShowSuggestions(true);
+      const label = mode === 'auto' ? '增量巡检' : '巡检';
       if (result.drafts_created > 0) {
         toast.success(
-          `巡检完成：扫描 ${result.scanned} 个技能，${result.drafts_created} 条建议已生成草稿（待审批）`,
+          `${label}完成：扫描 ${result.scanned} 个技能，${result.drafts_created} 条建议已生成草稿（待审批）`,
         );
       } else {
-        toast.success(`巡检完成：扫描 ${result.scanned} 个技能，${result.suggestions.length} 条建议`);
+        toast.success(`${label}完成：扫描 ${result.scanned} 个技能，${result.suggestions.length} 条建议`);
       }
     } catch (error) {
       toast.error(`固化巡检失败: ${(error as Error).message}`);
@@ -382,12 +384,20 @@ const Skills: React.FC = () => {
               <p className="text-xs text-muted">固化巡检</p>
               <button
                 type="button"
-                onClick={handleConsolidationScan}
+                onClick={() => void handleConsolidationScan('full')}
                 disabled={scanLoading}
                 className="mt-1 px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text-secondary hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-start"
               >
                 <ScanSearch className="w-3.5 h-3.5 inline mr-1" />
                 {scanLoading ? '巡检中...' : '扫描冷技能'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConsolidationScan('auto')}
+                disabled={scanLoading}
+                className="mt-1 px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text-secondary hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-start"
+              >
+                {scanLoading ? '巡检中...' : '增量巡检'}
               </button>
             </div>
           </div>

@@ -163,11 +163,15 @@ export const skillsApi = {
    * Backend: POST /api/v1/skills/consolidation/scan?auto_draft=N → `{suggestions, scanned, drafts_created}`。
    * LLM 未装配时后端返回 503，由调用方 toast 引导。
    */
-  async scanConsolidation(autoDraft = true): Promise<ConsolidationScanResult> {
+  async scanConsolidation(
+    autoDraft = true,
+    mode: 'full' | 'auto' = 'full',
+  ): Promise<ConsolidationScanResult> {
     return withRetry(async () => {
       try {
         return await invoke<ConsolidationScanResult>('skills_consolidation_scan', {
           autoDraft,
+          mode,
         });
       } catch (error) {
         throw handleApiError(error);
