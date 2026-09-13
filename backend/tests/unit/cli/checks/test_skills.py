@@ -30,6 +30,7 @@ def _write_skill(root: Path, directory: str, name: str = "") -> None:
 def test_no_skill_directory_is_info(monkeypatch, tmp_path):
     monkeypatch.setenv("SAGE_SKILLS_DIR", str(tmp_path / "missing"))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))  # Windows expanduser 读 USERPROFILE
     monkeypatch.chdir(tmp_path)
     result = skills.SkillsCheck().run()
     assert result.severity == Severity.INFO

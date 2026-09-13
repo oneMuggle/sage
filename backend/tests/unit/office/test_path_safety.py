@@ -252,6 +252,7 @@ def test_resolve_output_path_expands_home(monkeypatch, tmp_path):
     home = tmp_path / "fake-home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))  # Windows expanduser 读 USERPROFILE
     out = resolve_output_path("~/Desktop", OfficeDocType.PPT, "slides")
     assert out.parent == (home / "Desktop").resolve()
     assert out.name == "slides.pptx"

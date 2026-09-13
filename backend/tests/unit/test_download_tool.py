@@ -101,6 +101,10 @@ def test_download_requires_bound_workspace():
     assert "workspace_not_bound" in result.error
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="用例依赖 POSIX 绝对路径语义（/abs/... 在 Windows 非绝对）",
+)
 def test_download_rejects_absolute_filename(tmp_path):
     result = _tool(tmp_path).execute(url=f"{_BASE}/x.pdf", filename="/etc/passwd")
 
