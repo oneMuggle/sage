@@ -12,6 +12,7 @@ import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
 import { InputCard, type KnowledgeDocType } from './InputCard';
+import { extractTemplateVars, TemplateFillDialog } from './TemplateFillDialog';
 import {
   commandToPrompt,
   mergePromptTemplates,
@@ -143,10 +144,14 @@ function ChatInputInner({
   // Path B: dynamic SKILL.md slash command names fetched from the backend.
   // On fetch failure we silently fall back to an empty list (no slash skills).
   const [dynamicSlashCommands, setDynamicSlashCommands] = useState<DynamicSlashSkill[]>([]);
+
+
   // R27-A: 用户 Prompt 模板（映射为 tpl-* 命令，选中即填充输入框）
   const [promptTemplates, setPromptTemplates] = useState<
     { name: string; content: string; description?: string }[]
   >([]);
+  // R29: {{变量}} 填充对话框目标模板内容（null = 关闭）
+  const [fillTarget, setFillTarget] = useState<string | null>(null);
 
   // Task 7 (2026-07-26): managed Office refs attached via the @ menu.
   // Dedupe by docId (immutable state — every update is a new array).
@@ -369,10 +374,16 @@ function ChatInputInner({
         return;
       }
 
-      // R27-A: 模板 —— 选中即填充输入框（不发送），{{变量}} 占位留给用户编辑
+      // R27-A/R29: 模板 —— 选中后经 {{变量}} 填充对话框解析再回填输入框
+      //（无占位的模板直接填入）。
       if (cmd.mode === 'template' && cmd.content != null) {
         setSlashMenuOpen(false);
-        setValue(cmd.content);
+        // 无占位直接填入；含 {{变量}} 才走填充对话框
+        if (extractTemplateVars(cmd.content).length === 0) {
+          setValue(cmd.content);
+          return;
+        }
+        setFillTarget(cmd.content);
         return;
       }
 
@@ -599,6 +610,16 @@ function ChatInputInner({
         }
         hint={t('chat.hint')}
       />
+      {fillTarget != null && (
+        <TemplateFillDialog
+          content={fillTarget}
+          onConfirm={(resolved) => {
+            setValue(resolved);
+            setFillTarget(null);
+          }}
+          onCancel={() => setFillTarget(null)}
+        />
+      )}
     </div>
   );
 }
