@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -280,11 +280,15 @@ def collect_skill_docs(names: List[str]) -> Dict[str, str]:
     return docs
 
 
-def collect_active_skills() -> List[Dict[str, Any]]:
+def collect_active_skills(names: Optional[Set[str]] = None) -> List[Dict[str, Any]]:
     """收集 active（未归档）技能的巡检输入清单。
 
     经 InprocSkillAdapter（与 legacy_routes 同一技能面）惰性获取；
     适配器不可用（如测试环境无技能注册）返回 []。
+
+    ``names`` 传入时仅收集该集合内的技能（增量巡检候选清单，切片 R28）；
+    同时补齐 ``stale`` 字段 —— scan 的 prompt 读取 ``s.get("stale")``
+    标注疑似过时项，但历史实现从未填过该字段（恒缺失）。
     """
     try:
         from backend.api.legacy_routes import _get_skill_adapter
@@ -293,20 +297,72 @@ def collect_active_skills() -> List[Dict[str, Any]]:
     except Exception as exc:  # noqa: BLE001 — 巡检为增强能力
         logger.warning("技能清单获取失败: %s", exc)
         return []
+    try:
+        lifecycle = adapter.lifecycle_map()
+    except Exception as exc:  # noqa: BLE001 — 生命周期仅为增强标注
+        logger.warning("生命周期批量计算失败: %s", exc)
+        lifecycle = {}
     skills: List[Dict[str, Any]] = []
     for ext in adapter.list_skills_extended():
         if ext.get("archived"):
             continue
         name = ext.get("name", "")
+        if names is not None and name not in names:
+            continue
         skills.append(
             {
                 "name": name,
                 "description": ext.get("description", ""),
                 "when_to_use": ext.get("when_to_use", ""),
                 "usage_count": adapter.usage_count(name),
+                "stale": lifecycle.get(name) == "stale",
             }
         )
     return skills
+
+
+def last_scan_watermark() -> Optional[int]:
+    """上次固化巡检的水位（ms）：台账中最近一条 consolidation_note 的时间戳。
+
+    每次 scan（手动或 cron）都会写一条 consolidation_note，故该值即
+    "上次巡检时点"。无任何巡检历史返回 None（调用方应退化为全量）。
+    """
+    try:
+        from backend.data.database import get_database
+        from backend.skills.audit import SkillAuditLog
+
+        return SkillAuditLog(db=get_database()).last_note_at()
+    except Exception as exc:  # noqa: BLE001 — 巡检为增强能力
+        logger.warning("巡检水位读取失败: %s", exc)
+        return None
+
+
+def collect_delta_names(watermark_ms: int) -> Set[str]:
+    """水位之后发生过"值得复审"事件的技能名集合（增量巡检候选，切片 R28）。
+
+    两路来源（索引现成，均为 O(delta)）：
+    - ``skill_usage.last_used_at > 水位``：水位后被使用过
+    - ``skill_audit_log.created_at > 水位``：draft 批准/归档/恢复/回滚
+
+    盲区：未经 draft 审批的文件级新建不进台账 —— 由每周 cron 全量巡检兜底。
+    """
+    names: Set[str] = set()
+    try:
+        from backend.data.database import get_database
+
+        conn = get_database().get_connection()
+        rows = conn.execute(
+            "SELECT name FROM skill_usage WHERE last_used_at > ?", (watermark_ms,)
+        ).fetchall()
+        names.update(str(r[0]) for r in rows)
+        rows = conn.execute(
+            "SELECT DISTINCT skill_name FROM skill_audit_log WHERE created_at > ?",
+            (watermark_ms,),
+        ).fetchall()
+        names.update(str(r[0]) for r in rows)
+    except Exception as exc:  # noqa: BLE001 — 增量为增强能力，失败退化为全量
+        logger.warning("增量候选查询失败: %s", exc)
+    return names
 
 
 # ------------------------------------------------------------------ #

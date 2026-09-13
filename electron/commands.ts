@@ -582,7 +582,9 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   skills_consolidation_scan: {
     method: 'POST',
     path: (a) =>
-      `/api/v1/skills/consolidation/scan?auto_draft=${a?.autoDraft === false ? 'false' : 'true'}`,
+      `/api/v1/skills/consolidation/scan?auto_draft=${
+        a?.autoDraft === false ? 'false' : 'true'
+      }&mode=${a?.mode === 'auto' ? 'auto' : 'full'}`,
   },
   skills_consolidation_suggestions: {
     method: 'GET',

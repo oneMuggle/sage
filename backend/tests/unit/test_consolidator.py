@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from backend.skills import consolidator
 from backend.skills.consolidator import ConsolidationService
 from backend.skills.review_service import ReviewService
 
@@ -95,3 +96,85 @@ class TestFactory:
         got = ConsolidationService.from_review_service(svc_review)
         assert got is not None
         assert got.llm_provider is svc_review.llm_provider
+
+
+# ---------- R28: 增量巡检（水位 + delta 候选 + names 过滤 + stale 字段） ----------
+
+
+def _fake_adapter(monkeypatch, skills, lifecycle=None):
+    """打桩 legacy_routes._get_skill_adapter：固定技能清单 + 生命周期映射。"""
+    from types import SimpleNamespace
+
+    adapter = SimpleNamespace()
+    adapter.list_skills_extended = lambda: [dict(s) for s in skills]
+    adapter.usage_count = lambda name: next(
+        (s.get("usage_count", 0) for s in skills if s["name"] == name), 0
+    )
+    adapter.lifecycle_map = lambda: lifecycle or {}
+    import backend.api.legacy_routes as routes_mod
+
+    monkeypatch.setattr(routes_mod, "_get_skill_adapter", lambda: adapter)
+    return adapter
+
+
+def test_collect_active_skills_filters_by_names(monkeypatch):
+    skills = [
+        {"name": "a", "description": "A", "when_to_use": "", "usage_count": 1},
+        {"name": "b", "description": "B", "when_to_use": "", "usage_count": 2},
+    ]
+    _fake_adapter(monkeypatch, skills)
+
+    all_skills = consolidator.collect_active_skills()
+    assert {s["name"] for s in all_skills} == {"a", "b"}
+
+    delta = consolidator.collect_active_skills(names={"b"})
+    assert [s["name"] for s in delta] == ["b"]
+
+
+def test_collect_active_skills_fills_stale_field(monkeypatch):
+    skills = [{"name": "old", "description": "O", "when_to_use": "", "usage_count": 0}]
+    _fake_adapter(monkeypatch, skills, lifecycle={"old": "stale"})
+
+    out = consolidator.collect_active_skills()
+    assert out[0]["stale"] is True
+
+
+def test_last_scan_watermark_none_without_history(monkeypatch, tmp_path):
+    from backend.data.database import Database
+    from backend.skills import consolidator as cons
+
+    db = Database(str(tmp_path / "t.db"))
+    db.init_db()
+    monkeypatch.setattr(
+        "backend.data.database.get_database", lambda: db
+    )
+    assert cons.last_scan_watermark() is None
+    db.close()
+
+
+def test_collect_delta_names_union_of_usage_and_audit(monkeypatch, tmp_path):
+    import time
+
+    from backend.data.database import Database
+    from backend.skills import consolidator as cons
+    from backend.skills.audit import SkillAuditLog
+
+    db = Database(str(tmp_path / "t.db"))
+    db.init_db()
+    monkeypatch.setattr("backend.data.database.get_database", lambda: db)
+
+    watermark = int(time.time() * 1000) - 1000
+    conn = db.get_connection()
+    conn.execute(
+        "INSERT INTO skill_usage (name, use_count, last_used_at) VALUES (?, ?, ?)",
+        ("used-skill", 1, watermark + 500),
+    )
+    conn.commit()
+    SkillAuditLog(db=db).record(
+        "archived-skill", "archive", actor="user", source="manual"
+    )
+
+    delta = cons.collect_delta_names(watermark)
+    assert "used-skill" in delta
+    assert "archived-skill" in delta
+    db.close()
