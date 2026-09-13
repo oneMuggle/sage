@@ -131,6 +131,19 @@ const electronAPI = {
   } satisfies WindowControlsBridge,
 
   /**
+   * P8 (2026-09-14): 嵌入模型下载桥 —— 委托 main 进程 ipcMain.handle
+   * (models:embedder:download / cancel)；进度经 models:embedder:progress
+   * 事件（sage:event: 前缀）由 api.listen 订阅。payload 缺省时使用内置
+   * EMBEDDER_MODEL_MANIFEST。
+   */
+  modelDownload: {
+    download: (
+      payload?: { baseUrl?: string; dirName?: string; files?: { name: string; sha256: string }[] },
+    ) => ipcRenderer.invoke('models:embedder:download', payload ?? {}),
+    cancel: (dirName: string) => ipcRenderer.invoke('models:embedder:cancel', dirName),
+  },
+
+  /**
    * Phase 6 (2026-06-27): Native folder picker for LLM Wiki.
    * Returns absolute path string, or null if user cancelled.
    */

@@ -68,6 +68,37 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
     void loadEmbedderStatus();
   }, [loadEmbedderStatus]);
 
+  // P8 (2026-09-14): 语义模型下载 —— 订阅 models:embedder:progress
+  // （#755 已修 sage:event: 前缀），完成/失败即刷新嵌入器状态。
+  const [modelDownload, setModelDownload] = useState<{ stage: string; file?: string } | null>(
+    null,
+  );
+  const [downloadingModel, setDownloadingModel] = useState(false);
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    let cancelled = false;
+    const offs: Array<() => void> = [];
+    void window.electronAPI
+      .listen<{ stage: string; file?: string }>('models:embedder:progress', (p) => {
+        if (cancelled) return;
+        setModelDownload({ stage: p.stage, file: p.file });
+        if (p.stage === 'complete') {
+          setDownloadingModel(false);
+          void loadEmbedderStatus();
+        } else if (p.stage === 'error') {
+          setDownloadingModel(false);
+        }
+      })
+      .then((off) => {
+        if (cancelled) off();
+        else offs.push(off);
+      });
+    return () => {
+      cancelled = true;
+      offs.forEach((off) => off());
+    };
+  }, [loadEmbedderStatus]);
+
   const selectEmbedder = useCallback(
     async (mode: 'onnx' | 'hash') => {
       setSelecting(true);
@@ -82,6 +113,29 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
     },
     [],
   );
+
+  // P8: 语义模型下载（触发 models:embedder:download；进度见上方 listen）
+  const handleDownloadModel = useCallback(async () => {
+    const api = window.electronAPI?.modelDownload;
+    if (!api) {
+      toast.error('当前环境不支持模型下载');
+      return;
+    }
+    setDownloadingModel(true);
+    try {
+      const res = await api.download();
+      if (res.ok) {
+        toast.success('语义模型下载完成，可启用语义嵌入');
+        await loadEmbedderStatus();
+      } else {
+        toast.error(`模型下载失败: ${res.error ?? '未知错误'}`);
+      }
+    } catch (err) {
+      toast.error(`模型下载失败: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setDownloadingModel(false);
+    }
+  }, [loadEmbedderStatus]);
 
   // R19: 数据安全 —— 备份清单/手动备份/记忆导出
   const [backups, setBackups] = useState<
@@ -200,6 +254,37 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
               模型目录: {embedderStatus.model_dir} · 模型文件:
               {embedderStatus.model_ready ? '已就绪' : '未就绪'}
             </p>
+            {/* P8: ONNX 模型未就绪时提供一键下载（内置清单，sha256 校验） */}
+            {embedderStatus.model_ready === false && (
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  type="button"
+                  data-testid="embedder-model-download"
+                  disabled={downloadingModel}
+                  onClick={() => void handleDownloadModel()}
+                  className="px-3 py-1.5 rounded-radius-sm bg-primary text-text-inverse text-xs font-medium hover:bg-primary-hover disabled:opacity-50"
+                >
+                  {downloadingModel ? '下载中…' : '下载语义模型（约 90 MB）'}
+                </button>
+                {downloadingModel && modelDownload?.file && (
+                  <span className="text-[10px] text-muted tabular-nums">{modelDownload.file}</span>
+                )}
+                {downloadingModel && (
+                  <button
+                    type="button"
+                    data-testid="embedder-model-cancel"
+                    onClick={() => {
+                      void window.electronAPI?.modelDownload
+                        ?.cancel('bge-small-zh-v1.5')
+                        .catch(() => undefined);
+                    }}
+                    className="text-[10px] text-muted hover:text-text underline"
+                  >
+                    取消
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-xs text-text-secondary">嵌入器状态加载中…</p>
