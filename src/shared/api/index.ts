@@ -10,6 +10,7 @@ export { chatApi } from './chatApi';
 export { knowledgeApi } from './knowledgeApi';
 export { learnApi } from './learnApi';
 export { memoryApi } from './memoryApi';
+export { permissionApi } from './permissionApi';
 export { messageApi } from './messageApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';

@@ -416,7 +416,7 @@ export const memoryApi = {
     limit: number = 20,
   ): Promise<MemoryWritesResponse> {
     const empty: MemoryWritesResponse = { items: [], latest_seq: afterSeq };
-    if (!sessionId || isDemoMode()) return empty;
+    if (!sessionId) return empty;
     try {
       const raw = await invoke<unknown>('get_recent_memory_writes', {
         sessionId,
@@ -462,7 +462,6 @@ export const memoryApi = {
 
   async getUserProfile(): Promise<UserProfileResponse> {
     const empty: UserProfileResponse = { items: [], categories: [], snapshot: '', char_limit: 0 };
-    if (isDemoMode()) return empty;
     try {
       const raw = await invoke<unknown>('get_user_profile', {});
       if (!isRecord(raw)) return empty;

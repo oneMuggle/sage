@@ -1,5 +1,7 @@
 import { clsx } from 'clsx';
 import {
+  ChevronDown,
+  ChevronRight,
   MessageSquare,
   Settings,
   Brain,
@@ -35,17 +37,32 @@ import {
 const SECTION_KEYS = ['conversations', 'cron', 'project', 'team'] as const;
 const SESSION_ORDER_KEY = 'sage:sider:order:v1';
 
-// 导航项配置
-const navItems = [
+// 导航项配置。
+// 对标 S3 (2026-09-13, 竞品对标 §2.2 导航收敛): 一级只保留高频 4 项，
+// 其余归入可折叠「更多」分组（默认展开，折叠状态本地持久化；当前路由命中
+// 「更多」内条目时强制展开）。路由与渐进披露（U10）规则不变。
+const primaryNavItems = [
   { path: '/chat', label: '对话', icon: MessageSquare },
   { path: '/memory', label: '记忆', icon: Brain },
   { path: '/knowledge', label: '知识库', icon: BookOpen },
-  { path: '/orchestration', label: '编排', icon: Network },
-  { path: '/skills', label: '技能', icon: Sparkles },
-  { path: '/office', label: 'Office', icon: FileSpreadsheet },
-  { path: '/help', label: '帮助', icon: HelpCircle },
   { path: '/settings', label: '设置', icon: Settings },
 ];
+const moreNavItems = [
+  { path: '/office', label: 'Office', icon: FileSpreadsheet },
+  { path: '/skills', label: '技能', icon: Sparkles },
+  { path: '/orchestration', label: '编排', icon: Network },
+  { path: '/help', label: '帮助', icon: HelpCircle },
+];
+const navItems = [...primaryNavItems, ...moreNavItems];
+const MORE_OPEN_KEY = 'sage:sider:more-open:v1';
+
+function readMoreOpen(): boolean {
+  try {
+    return localStorage.getItem(MORE_OPEN_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
 
 /**
  * 渐进式功能披露 (U10)：高级入口路径 → feature key 映射。
@@ -81,6 +98,20 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
   } = useStore();
   const { settings } = useSettings();
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
+  const [moreOpen, setMoreOpen] = useState<boolean>(readMoreOpen);
+  const moreActive = moreNavItems.some((item) => item.path === location.pathname);
+  const moreExpanded = moreOpen || moreActive;
+  const toggleMore = () => {
+    setMoreOpen((prev) => {
+      const next = !(prev || moreActive);
+      try {
+        localStorage.setItem(MORE_OPEN_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
   const [connectionStatus, setConnectionStatus] = useState<
     'connected' | 'not-configured' | 'error'
   >('not-configured');
@@ -286,7 +317,7 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
 
       {/* 导航列表 */}
       <nav className="flex-1 py-2 px-2 overflow-y-auto">
-        {navItems.map((item) => {
+        {primaryNavItems.map((item) => {
           // 渐进式功能披露 (U10)：高级入口未解锁前不渲染。
           const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
           if (featureKey && !unlockedByFeature[featureKey]) {
@@ -313,6 +344,51 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
             </Link>
           );
         })}
+
+        {/* 对标 S3: 「更多」分组 —— 次高频入口收敛，减少一级导航噪音 */}
+        {moreNavItems.some((item) => {
+          const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
+          return !featureKey || unlockedByFeature[featureKey];
+        }) && (
+          <div className="mt-1" data-testid="sidebar-more-group">
+            <button
+              type="button"
+              onClick={toggleMore}
+              aria-expanded={moreExpanded}
+              data-testid="sidebar-more-toggle"
+              className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[11px] uppercase tracking-wide text-text-tertiary hover:text-text-secondary"
+            >
+              {moreExpanded ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronRight className="w-3 h-3" />
+              )}
+              <span>{t('sidebar.more')}</span>
+            </button>
+            {moreExpanded &&
+              moreNavItems.map((item) => {
+                const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
+                if (featureKey && !unlockedByFeature[featureKey]) return null;
+                const isActive = location.pathname === item.path;
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={clsx(
+                      'flex items-center gap-2.5 px-3 py-2 rounded-radius-sm transition-colors text-sm font-medium',
+                      isActive
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-text-secondary hover:bg-bg-hover',
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+          </div>
+        )}
 
         {/* 可折叠分组 */}
         {sectionOrder.map((key) => (
