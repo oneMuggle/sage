@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { ProjectSummary } from '../../../shared/api/projectApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
+import { useStore } from '../../../shared/lib/store';
 
 import { ProjectSection } from './ProjectSection';
 
@@ -12,6 +13,7 @@ const removeMock = vi.fn();
 const openMock = vi.fn();
 const createSessionMock = vi.fn();
 const listSessionsMock = vi.fn();
+const deleteSessionMock = vi.fn();
 
 vi.mock('../../../shared/api/projectApi', () => ({
   projectApi: {
@@ -21,6 +23,12 @@ vi.mock('../../../shared/api/projectApi', () => ({
     open: (...args: unknown[]) => openMock(...args),
     createSession: (...args: unknown[]) => createSessionMock(...args),
     listSessions: (...args: unknown[]) => listSessionsMock(...args),
+  },
+}));
+
+vi.mock('../../../shared/api/sessionApi', () => ({
+  sessionApi: {
+    delete: (...args: unknown[]) => deleteSessionMock(...args),
   },
 }));
 
@@ -65,9 +73,15 @@ const baseProps = {
 
 describe('ProjectSection', () => {
   beforeEach(() => {
-    [listMock, registerMock, removeMock, openMock, createSessionMock, listSessionsMock].forEach(
-      (m) => m.mockReset(),
-    );
+    [
+      listMock,
+      registerMock,
+      removeMock,
+      openMock,
+      createSessionMock,
+      listSessionsMock,
+      deleteSessionMock,
+    ].forEach((m) => m.mockReset());
     listMock.mockResolvedValue([]);
   });
 
@@ -235,5 +249,68 @@ describe('ProjectSection', () => {
       expect(screen.getAllByTestId('project-session-row').length).toBe(1);
     });
     expect(listSessionsMock).toHaveBeenCalledTimes(1);
+  });
+
+  // ===== P4: 子行会话删除 + 会话数量联动刷新 =====
+
+  it('P4: 子行删除两步确认后调用 sessionApi.delete 并刷新清单/子列表', async () => {
+    listMock.mockResolvedValue(projects);
+    listSessionsMock.mockResolvedValue([{ ...session, id: 's1', title: 'first session' }]);
+    deleteSessionMock.mockResolvedValue(undefined);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getAllByTestId('project-session-row'));
+
+    const callsBefore = listMock.mock.calls.length;
+    const delBtn = screen.getAllByTestId('project-session-delete')[0];
+    fireEvent.click(delBtn); // armed
+    expect(deleteSessionMock).not.toHaveBeenCalled();
+    fireEvent.click(delBtn); // 确认
+    await waitFor(() => {
+      expect(deleteSessionMock).toHaveBeenCalledWith('s1');
+      // 删除联动刷新项目清单（计数）与子列表
+      expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore);
+      expect(listSessionsMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('P4: 子行删除失败时保留子列表并提示', async () => {
+    listMock.mockResolvedValue(projects);
+    listSessionsMock.mockResolvedValue([{ ...session, id: 's1', title: 'first session' }]);
+    deleteSessionMock.mockRejectedValue(new Error('backend offline'));
+    renderWithI18n(<ProjectSection {...baseProps} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getAllByTestId('project-session-row'));
+
+    const delBtn = screen.getAllByTestId('project-session-delete')[0];
+    fireEvent.click(delBtn);
+    fireEvent.click(delBtn);
+    await waitFor(() => {
+      expect(deleteSessionMock).toHaveBeenCalledWith('s1');
+    });
+    // 失败不收起子列表
+    expect(screen.getAllByTestId('project-session-row').length).toBe(1);
+  });
+
+  it('P4: store 会话数量变化触发项目清单防抖刷新', async () => {
+    vi.useFakeTimers();
+    try {
+      listMock.mockResolvedValue([]);
+      renderWithI18n(<ProjectSection {...baseProps} />);
+      await vi.advanceTimersByTimeAsync(0);
+      const initialCalls = listMock.mock.calls.length;
+      expect(initialCalls).toBeGreaterThan(0);
+
+      useStore.setState({ sessions: [{ ...session, id: 'sx', title: 'x' }] });
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(listMock.mock.calls.length).toBeGreaterThan(initialCalls);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
