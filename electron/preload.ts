@@ -437,6 +437,23 @@ const electronAPI = {
       ok: boolean;
       reason?: string;
     }>,
+
+  /**
+   * Help system API (2026-09-13): 读取用户手册文档。
+   */
+  helpAPI: {
+    readUserManual: (filename: string): Promise<string> =>
+      ipcRenderer.invoke('sage:help:read-user-manual', filename) as Promise<string>,
+    prefetch: (filename: string): Promise<void> =>
+      ipcRenderer.invoke('sage:help:prefetch', filename) as Promise<void>,
+  },
+
+  /**
+   * Changelog API (2026-09-13): 读取 CHANGELOG.md。
+   */
+  changelogAPI: {
+    read: (): Promise<string> => ipcRenderer.invoke('sage:changelog:read') as Promise<string>,
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
