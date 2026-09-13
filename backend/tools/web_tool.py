@@ -6,11 +6,9 @@ Web 工具 - 网络搜索和网页获取
 from __future__ import annotations
 
 import ipaddress
-import re
-from html import unescape
 from ipaddress import IPv4Address, IPv6Address
 from typing import Any, Dict, Optional, Set, Union
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -18,6 +16,8 @@ from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools.network_config import load_network_policy
+from backend.tools.search_config import load_search_config
+from backend.tools.search_engines import SearchEngine, resolve_engine_chain
 from backend.wiki.html_extract import decode_html, extract
 
 from . import web_render
@@ -41,7 +41,13 @@ _DEFAULT_HEADERS: Dict[str, str] = {
 
 
 class WebSearchTool(BaseTool):
-    """网络搜索工具"""
+    """网络搜索工具（多引擎链，方案 2026-09-13 §2.2）。
+
+    沿 ``search_config.engine_order`` 逐个引擎尝试：首个返回非空结果的引擎
+    胜出（content 附 ``engine`` 字段）；全部引擎无结果 → 空结果 + note（W3：
+    绝不伪造）；全部引擎异常 → ``success=False``。配置每次现读 —— 用户改
+    设置立即生效，不必重开会话。
+    """
 
     # A1: 出网调用 — 最严门禁（只读模式禁止，交互模式询问）
     risk = RiskClass.EXTERNAL
@@ -56,7 +62,10 @@ class WebSearchTool(BaseTool):
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
             name="web_search",
-            description="搜索网络信息。返回搜索结果列表。",
+            description=(
+                "搜索网络信息。返回搜索结果列表。默认引擎链 Bing → DuckDuckGo，"
+                "可在设置中接入 Tavily/智谱等 API 引擎与调整顺序。"
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -75,92 +84,43 @@ class WebSearchTool(BaseTool):
             query: 搜索查询
             limit: 返回结果数量
         """
+        engine_errors = []
+        saw_completed = False
         try:
-            # 使用 DuckDuckGo HTML 搜索
-            url = "https://html.duckduckgo.com/html/"
-            params = {"q": query}
-
-            response = self.client.get(url, params=params)
-            response.raise_for_status()
-
-            # 解析搜索结果
-            results = self._parse_results(response.text, limit, query)
-
-            content: Dict[str, Any] = {"query": query, "results": results}
-            if not results:
-                # W3：解析为空是合法状态 —— 明示无结果，绝不返回伪造占位
-                # 条目（那会被模型当真实结果引用，成为幻觉源）。
-                content["note"] = "搜索源未返回可解析结果（可能被限流），请勿编造结果"
-            return ToolResult(success=True, content=content)
-
-        except httpx.HTTPError as e:
-            return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
+            for engine in resolve_engine_chain(load_search_config()):
+                try:
+                    results = engine.search(query, limit, client=self.client)
+                except Exception as engine_exc:  # noqa: BLE001 — 单引擎失败降级下一引擎
+                    engine_errors.append(f"{engine.name}: {engine_exc}")
+                    continue
+                if results:
+                    content: Dict[str, Any] = {
+                        "query": query,
+                        "engine": engine.name,
+                        "results": results,
+                    }
+                    return ToolResult(success=True, content=content)
+                saw_completed = True
+                engine_errors.append(f"{engine.name}: 无可解析结果（可能被限流）")
         except Exception as e:
             return ToolResult(success=False, error=f"搜索失败: {str(e)}")
 
-    #: DDG html 版结果标题锚点；attrs 里取 href（属性顺序不固定）
-    _RESULT_ANCHOR_RE = re.compile(
-        r"<a\s([^>]*class=\"[^\"]*result__a[^\"]*\"[^>]*)>(.*?)</a>",
-        re.IGNORECASE | re.DOTALL,
-    )
-    #: 结果摘要锚点（与标题锚点同序出现，按下标配对）
-    _SNIPPET_ANCHOR_RE = re.compile(
-        r"<a\s[^>]*class=\"[^\"]*result__snippet[^\"]*\"[^>]*>(.*?)</a>",
-        re.IGNORECASE | re.DOTALL,
-    )
-    _HREF_ATTR_RE = re.compile(r"href=\"([^\"]*)\"", re.IGNORECASE)
-
-    def _parse_results(self, html: str, limit: int, query: str) -> list:
-        """
-        解析 DuckDuckGo HTML 搜索结果（标题 / 真实 URL / 摘要）
-
-        Args:
-            html: DDG html 版响应
-            limit: 限制数量
-            query: 搜索查询（保留参数兼容旧签名；解析为空返回空列表）
-
-        Returns:
-            结果列表（可能为空 —— 调用方负责无结果语义）
-        """
-        results = []
-        for attrs, inner in self._RESULT_ANCHOR_RE.findall(html):
-            if len(results) >= limit:
-                break
-            href_match = self._HREF_ATTR_RE.search(attrs)
-            results.append(
-                {
-                    "title": self._clean_html(inner),
-                    "url": self._resolve_result_url(href_match.group(1) if href_match else ""),
-                    "snippet": "",
-                }
-            )
-        for index, inner in enumerate(self._SNIPPET_ANCHOR_RE.findall(html)):
-            if index >= len(results):
-                break
-            results[index]["snippet"] = self._clean_html(inner)
-        return results
-
-    def _resolve_result_url(self, raw_href: str) -> str:
-        """还原结果真实 URL。
-
-        DDG html 版把外链包在 ``//duckduckgo.com/l/?uddg=<urlencoded>``
-        跳转里（W3：此前解析器拿不到 URL 就是这个原因）；其余形态
-        （测试 fixture 的相对 href 等）原样返回。
-        """
-        href = unescape(raw_href or "").strip()
-        if not href or "uddg=" not in href:
-            return href
-        target = href if "//" in href else "https:" + href
-        try:
-            values = parse_qs(urlparse(target).query).get("uddg", [])
-        except ValueError:
-            return ""
-        return values[0] if values else ""
+        if saw_completed:
+            # W3：至少一个引擎正常完成但无结果 —— 搜索本身成功，明示无结果，
+            # 绝不返回伪造占位条目（那会被模型当真实结果引用，成为幻觉源）。
+            content = {
+                "query": query,
+                "results": [],
+                "note": "搜索源未返回可解析结果（可能被限流），请勿编造结果",
+            }
+            if engine_errors:
+                content["engine_errors"] = engine_errors
+            return ToolResult(success=True, content=content)
+        return ToolResult(success=False, error="搜索失败: " + "; ".join(engine_errors))
 
     def _clean_html(self, text: str) -> str:
-        """清理 HTML 标签并解码实体"""
-        clean = re.sub(r"<[^>]+>", "", text)
-        return unescape(clean).strip()
+        """兼容保留：清理 HTML 标签并解码实体（解析实现已迁入 search_engines）。"""
+        return SearchEngine._clean_html(text)
 
 
 class WebFetchTool(BaseTool):

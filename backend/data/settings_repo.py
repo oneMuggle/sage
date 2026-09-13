@@ -32,6 +32,9 @@ class SettingsRepository:
             # 内网 Web 访问: 网络模式 + host 白名单 (JSON)
             # 见 backend/tools/network_config.py
             "network_policy",
+            # 网页访问 Round 1: 搜索引擎链 + 可选 API 引擎 key (JSON, key 值可为 enc: 包裹)
+            # 见 backend/tools/search_config.py
+            "search_config",
             # bash 工具运行参数: 超时/输出截断/后台会话上限 (JSON)
             # 见 backend/tools/bash_config.py
             "bash_config",
