@@ -88,5 +88,7 @@ def test_custom_headers_sent_on_every_request():
 def test_session_header_not_overridden_by_custom_headers():
     client, seen = _make_client_with_headers({"Mcp-Session-Id": "evil"})
     client.start()
-    # 会话头仍为传输真实值（自定义头不覆盖必需头）
-    assert seen.requests[0].get("mcp-session-id") == "sess-1"
+    # initialize 请求尚无会话（会话来自 initialize 响应）→ 此时自定义头
+    # 'evil' 出现属正常；tools/list 起真实会话头必须后置覆盖。
+    client.list_tools()
+    assert seen.requests[1].get("mcp-session-id") == "sess-1"
