@@ -105,47 +105,17 @@ function SessionNotifyBridge() {
 }
 
 function App() {
-  const navigate = useNavigate();
   const [commandOpen, setCommandOpen] = useState(false);
   // U18 (round4): 快捷键帮助覆盖层（非输入焦点下按 ? 打开）
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
 
-  // 全局快捷键 Ctrl+K / Cmd+K 打开命令面板, F1 打开帮助中心
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setCommandOpen((prev) => !prev);
-        return;
-      }
-      // F1: 打开帮助中心
-      if (e.key === 'F1') {
-        e.preventDefault();
-        navigate('/help');
-        return;
-      }
-      // U18: '?' = Shift+/，输入焦点内不劫持（用户可能真的想输入问号）
-      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const target = e.target as HTMLElement | null;
-        const tag = target?.tagName;
-        const isTextInput =
-          tag === 'INPUT' ||
-          tag === 'TEXTAREA' ||
-          tag === 'SELECT' ||
-          target?.isContentEditable === true;
-        if (!isTextInput) {
-          e.preventDefault();
-          setShortcutHelpOpen((prev) => !prev);
-        }
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [navigate]);
-
   return (
     <HashRouter>
       <NavHistoryProvider>
+        <AppKeyboardBridge
+          setCommandOpen={setCommandOpen}
+          setShortcutHelpOpen={setShortcutHelpOpen}
+        />
         <BackendStatusBanner />
         <AppStartupRestore />
         <SessionNotifyBridge />
@@ -184,6 +154,52 @@ function App() {
       </NavHistoryProvider>
     </HashRouter>
   );
+}
+
+/**
+ * 全局快捷键监听：Ctrl/Cmd+K 打开命令面板，F1 跳转帮助中心，? 打开快捷键帮助。
+ * 必须在 Router 内部渲染（依赖 useNavigate）。
+ */
+function AppKeyboardBridge({
+  setCommandOpen,
+  setShortcutHelpOpen,
+}: {
+  setCommandOpen: (v: boolean | ((p: boolean) => boolean)) => void;
+  setShortcutHelpOpen: (v: boolean | ((p: boolean) => boolean)) => void;
+}) {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandOpen((prev) => !prev);
+        return;
+      }
+      // F1: 打开帮助中心
+      if (e.key === 'F1') {
+        e.preventDefault();
+        navigate('/help');
+        return;
+      }
+      // U18: '?' = Shift+/，输入焦点内不劫持（用户可能真的想输入问号）
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement | null;
+        const tag = target?.tagName;
+        const isTextInput =
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'SELECT' ||
+          target?.isContentEditable === true;
+        if (!isTextInput) {
+          e.preventDefault();
+          setShortcutHelpOpen((prev) => !prev);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [navigate, setCommandOpen, setShortcutHelpOpen]);
+  return null;
 }
 
 export default App;
