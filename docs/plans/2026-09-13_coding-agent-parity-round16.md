@@ -33,4 +33,8 @@
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A（预算语义收口与后台策略补全） | PR #717（squash f3ad9efc） | PR #719（cherry-win7-r16，squash e42313d4） |
+
+win7 对齐说明：零冲突落位；py3.8 纪律照旧；本地 budget/skip/background 回归 18 例绿 + ruff 全过后由 CI（含 py3.8 job）终验，squash merge（#719）。
