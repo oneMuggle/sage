@@ -249,9 +249,9 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   prompts_import: {
     method: 'POST',
     path: () => '/api/v1/prompts/templates/import',
-    body: (a) => a.payload,
+    body: (a) => a.payload as Record<string, unknown>,
   },
-    chat_stream_active: {
+  chat_stream_active: {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/active?session_id=${encodeURIComponent(String(a.sessionId))}`,
   },
