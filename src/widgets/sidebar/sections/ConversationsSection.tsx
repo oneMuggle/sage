@@ -5,7 +5,13 @@ import { sessionApi } from '../../../shared/api/sessionApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import type { Session } from '../../../shared/lib/store';
 import { SortableSessionList } from '../../session/SortableSessionList';
+import { VirtualSessionList } from '../../session/VirtualSessionList';
 import { SiderSection } from '../SiderSection';
+
+/** P1 (UI 优化方案 2026-09-13): 超过该数量的会话列表切换虚拟化渲染 ——
+ *  全量 DOM 渲染在数百会话时拖慢侧栏。虚拟化分支不支持拖拽排序（列表
+ *  超阈值时手动排序价值有限），搜索过滤后低于阈值自动回到可拖拽列表。 */
+const VIRTUALIZE_THRESHOLD = 120;
 
 interface ConversationsSectionProps {
   sessions: Session[];
@@ -118,6 +124,17 @@ export function ConversationsSection({
             <div className="px-3 py-4 text-xs text-text-muted text-center">
               {t('sidebar.no_match')}
             </div>
+          ) : displaySessions.length > VIRTUALIZE_THRESHOLD ? (
+            <VirtualSessionList
+              sessions={displaySessions}
+              order={order}
+              currentSessionId={currentSessionId}
+              onSelect={onSelect}
+              onDelete={onDelete}
+              onRename={onRename}
+              messageHitsBySession={messageHits}
+              maxHeight="50vh"
+            />
           ) : (
             <SortableSessionList
               sessions={displaySessions}
