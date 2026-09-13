@@ -393,7 +393,22 @@ def secure_atomic_write_file(root: Path, target: Path, content: str) -> None:
     The temporary pathname is private (0600) and is verified immediately
     before rename.  POSIX platforms without the directory-fd/no-follow
     primitives are rejected rather than falling back to pathname writes.
+
+    R32 Windows 分支：reparse-safe 原语 + MoveFileExW 原子替换（替换的是
+    链接本身而非链接目标，无内容泄漏）。其余 secure_* 仍 POSIX-only。
     """
+    if os.name == "nt":
+        from backend.tools.win_reparse_io import (
+            replace_file,
+            write_file_reparse_safe,
+        )
+
+        abs_target = (root / target).absolute()
+        abs_target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = abs_target.parent / f".{abs_target.name}.{secrets.token_hex(16)}.tmp"
+        write_file_reparse_safe(str(tmp), content.encode("utf-8"), overwrite=False)
+        replace_file(str(tmp), str(abs_target))
+        return
     nofollow = _require_posix_safety()
     parts = _relative_parts(root, target)
     root_fd, parent_fd = _open_parent(root, parts, nofollow, create_missing=True)
@@ -619,7 +634,14 @@ def secure_list_directory(root: Path, target: Path) -> Tuple[Tuple[str, bool], .
 
 
 def secure_read_text(root: Path, target: Path, encoding: str = "utf-8") -> str:
-    """Decode content obtained from :func:`secure_read_file`."""
+    """Decode content obtained from :func:`secure_read_file`.
+
+    R32 Windows 分支：reparse-safe 原语读取（其余 secure_* 仍 POSIX-only）。
+    """
+    if os.name == "nt":
+        from backend.tools.win_reparse_io import read_file_reparse_safe
+
+        return read_file_reparse_safe(str((root / target).absolute())).decode(encoding)
     return secure_read_file(root, target).decode(encoding)
 
 

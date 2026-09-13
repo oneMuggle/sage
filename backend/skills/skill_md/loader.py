@@ -137,7 +137,11 @@ def _read_no_follow(path: Path) -> bytes:
     if any(component in ("", ".", "..") for component in absolute_path.parts):
         raise OSError(f"refusing non-canonical path: {path}")
     if os.name == "nt":
-        return path.read_bytes()
+        # R32: 原生 reparse-safe 读取（CreateFileW + OPEN_REPARSE_POINT +
+        # 属性/链接数复核），取代 #722 时期的静态检查 + read_bytes。
+        from backend.tools.win_reparse_io import read_file_reparse_safe
+
+        return read_file_reparse_safe(str(absolute_path))
     directory_fd = os.open(os.sep, os.O_RDONLY | os.O_DIRECTORY)
     try:
         parts = absolute_path.parts[1:]
