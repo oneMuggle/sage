@@ -197,6 +197,11 @@ jobs:
       - name: Pytest unit (Windows baseline)
         shell: bash -el {0}
         timeout-minutes: 40
+        env:
+          # Windows runner 默认 cp1252 stdout：pytest 输出里的替换字符会让
+          # conda run 自身崩掉（UnicodeEncodeError），强制 UTF-8
+          PYTHONUTF8: "1"
+          PYTHONIOENCODING: utf-8
         run: |
           conda run -n sage-backend bash -c "cd backend && pytest tests/unit -q -n auto --dist loadfile --tb=line --no-cov"
 
