@@ -2,13 +2,14 @@ import { useState, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
+
+import faq from '../../content/help/faq.md?raw';
+import gettingStarted from '../../content/help/getting-started.md?raw';
+import troubleshooting from '../../content/help/troubleshooting.md?raw';
 import { HelpSidebar } from '../../widgets/help/HelpSidebar';
 import type { HelpItem } from '../../widgets/help/HelpSidebar';
 
 // Import built-in help content
-import gettingStarted from '../../content/help/getting-started.md?raw';
-import faq from '../../content/help/faq.md?raw';
-import troubleshooting from '../../content/help/troubleshooting.md?raw';
 
 const BUILTIN_CONTENT: Record<string, string> = {
   'getting-started': gettingStarted,
