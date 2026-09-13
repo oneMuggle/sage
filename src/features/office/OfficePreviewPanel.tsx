@@ -30,6 +30,7 @@ import { FileDown, FileSpreadsheet, FileText, FileType, Pencil, Presentation } f
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+
 import { officeApi } from '../../shared/api/officeApi';
 import type {
   OfficeDocType,
@@ -40,6 +41,7 @@ import type {
   OfficeWordReadResult,
 } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
+import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
 
 export type OfficePreviewData =
   | { docType: 'ppt'; data: OfficePptReadResult }
@@ -97,6 +99,8 @@ function isEditableDocType(docType: OfficeDocType): boolean {
 export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: OfficePreviewPanelProps) {
   const { t } = useI18n();
   const [exporting, setExporting] = useState(false);
+  // P2: 导出已耗时（spinner + 秒表，统一按钮 busy 规范）
+  const elapsed = useElapsedSeconds(exporting);
 
   if (!preview) {
     return (
@@ -202,8 +206,23 @@ export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: Of
               data-testid="office-export-pdf-button"
               aria-label={t('office.export.pdf')}
             >
-              <FileDown className="w-3.5 h-3.5" />
-              {exporting ? t('office.export.exporting') : t('office.export.pdf')}
+              {exporting ? (
+                <>
+                  {/* P2: spinner + 已耗时（统一按钮 busy 规范） */}
+                  <span
+                    className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"
+                    aria-hidden
+                  />
+                  <span className="tabular-nums">
+                    {t('office.export.exporting')} · {elapsed}s
+                  </span>
+                </>
+              ) : (
+                <>
+                  <FileDown className="w-3.5 h-3.5" />
+                  {t('office.export.pdf')}
+                </>
+              )}
             </button>
           </div>
         )}
