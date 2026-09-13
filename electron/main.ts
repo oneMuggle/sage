@@ -1304,8 +1304,8 @@ async function registerIpcHandlers(): Promise<void> {
       throw new Error('未授权的窗口请求');
     }
     try {
-      const filePath = path.join(__dirname, '..', 'docs', 'user-manual', filename);
-      return fs.readFileSync(filePath, 'utf-8');
+      const filePath = join(__dirname, '..', 'docs', 'user-manual', filename);
+      return readFileSync(filePath, 'utf-8');
     } catch (err) {
       logger.error('main: failed to read user manual', { filename, error: String(err) });
       throw new Error(`无法读取帮助文档: ${filename}`);
@@ -1325,8 +1325,8 @@ async function registerIpcHandlers(): Promise<void> {
       throw new Error('未授权的窗口请求');
     }
     try {
-      const filePath = path.join(__dirname, '..', 'CHANGELOG.md');
-      return fs.readFileSync(filePath, 'utf-8');
+      const filePath = join(__dirname, '..', 'CHANGELOG.md');
+      return readFileSync(filePath, 'utf-8');
     } catch (err) {
       logger.error('main: failed to read CHANGELOG', { error: String(err) });
       throw new Error('无法读取更新日志');
