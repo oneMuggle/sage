@@ -91,3 +91,44 @@ async def test_generate_article_two_rounds_with_self_correction(workspace):
     )
     assert rec.mode == "llm_generate"
     assert len(mock.calls) == 2  # 跑了两轮
+
+
+@pytest.mark.asyncio()
+async def test_generate_article_structured_references_formatted(workspace):
+    """Round 25：LLM 返回 structured_references → 参考文献 [N] 格式化。"""
+    spec = parse_journal_spec(FIXTURE_DIR / "simple_chinese_template.docx")
+    content_round1 = {
+        "title": "引用论文",
+        "abstract": "摘要内容",
+        "sections": {"keywords": "引用；测试"},
+        "references": [],
+        "citations": [],
+        "structured_references": [
+            {
+                "key": "wang2021",
+                "ref_type": "journal",
+                "title": "大模型对齐研究",
+                "authors": ["王五", "赵六"],
+                "year": "2021",
+                "source": "人工智能学报",
+                "volume": "44",
+                "issue": "3",
+                "pages": "55-66",
+            }
+        ],
+    }
+    mock = MockLLMProxy([content_round1])
+    rec = await generate_article(
+        spec,
+        user_request="写一篇带引用的测试论文",
+        llm_proxy=mock,
+        workspace=workspace,
+        output_filename="cited.docx",
+        max_rounds=2,
+    )
+    assert rec.mode == "llm_generate"
+    from docx import Document
+
+    doc = Document(Path(rec.output_path))
+    joined = chr(10).join(p.text for p in doc.paragraphs)
+    assert "[1] 王五, 赵六. 大模型对齐研究[J]. 人工智能学报, 2021, 44(3): 55-66." in joined

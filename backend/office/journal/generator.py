@@ -261,7 +261,14 @@ async def generate_article(
         f"期刊规范（JournalSpec JSON）:\n{spec.model_dump_json(indent=2)}\n\n"
         "返回严格符合以下 JSON schema：\n"
         '{"title": str, "abstract": str, "sections": {keyword: str}, '
-        '"references": [str], "citations": [str]}'
+        '"references": [str], "citations": [str], '
+        '"structured_references": [{"key": str, "ref_type": str, '
+        '"title": str, "authors": [str], "year": str, "source": str, '
+        '"volume": str, "issue": str, "pages": str}]}\n\n'
+        "structured_references（可选但推荐）：为真实文献尽量产出结构化条目"
+        "（key 唯一；ref_type ∈ journal/book/thesis/conference/report/"
+        "webpage/patent/standard/newspaper）。引擎会按 GB/T 7714 格式化并"
+        "自动加 [N] 编号写入参考文献——参考文献段文本不要手写编号。\n"
     )
 
     last_content: dict = {}
