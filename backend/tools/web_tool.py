@@ -6,18 +6,19 @@ Web 工具 - 网络搜索和网页获取
 from __future__ import annotations
 
 import ipaddress
-import re
-from html import unescape
 from ipaddress import IPv4Address, IPv6Address
 from typing import Any, Dict, Optional, Set, Union
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
 from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
+from backend.tools.http_factory import build_client
 from backend.tools.network_config import load_network_policy
+from backend.tools.search_config import load_search_config
+from backend.tools.search_engines import SearchEngine, resolve_engine_chain
 from backend.wiki.html_extract import decode_html, extract
 
 from . import web_render
@@ -41,14 +42,22 @@ _DEFAULT_HEADERS: Dict[str, str] = {
 
 
 class WebSearchTool(BaseTool):
-    """网络搜索工具"""
+    """网络搜索工具（多引擎链，方案 2026-09-13 §2.2）。
+
+    沿 ``search_config.engine_order`` 逐个引擎尝试：首个返回非空结果的引擎
+    胜出（content 附 ``engine`` 字段）；全部引擎无结果 → 空结果 + note（W3：
+    绝不伪造）；全部引擎异常 → ``success=False``。配置每次现读 —— 用户改
+    设置立即生效，不必重开会话。
+    """
 
     # A1: 出网调用 — 最严门禁（只读模式禁止，交互模式询问）
     risk = RiskClass.EXTERNAL
 
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)
-        self.client = httpx.Client(
+        # 兼容保留的常驻 client（UA 头测试引用）；execute 走逐调用现建，
+        # 代理等配置改动即时生效。
+        self.client = build_client(
             timeout=30.0,
             headers=_DEFAULT_HEADERS,
         )
@@ -56,7 +65,10 @@ class WebSearchTool(BaseTool):
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
             name="web_search",
-            description="搜索网络信息。返回搜索结果列表。",
+            description=(
+                "搜索网络信息。返回搜索结果列表。默认引擎链 Bing → DuckDuckGo，"
+                "可在设置中接入 Tavily/智谱等 API 引擎与调整顺序。"
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -75,92 +87,48 @@ class WebSearchTool(BaseTool):
             query: 搜索查询
             limit: 返回结果数量
         """
+        engine_errors = []
+        saw_completed = False
         try:
-            # 使用 DuckDuckGo HTML 搜索
-            url = "https://html.duckduckgo.com/html/"
-            params = {"q": query}
-
-            response = self.client.get(url, params=params)
-            response.raise_for_status()
-
-            # 解析搜索结果
-            results = self._parse_results(response.text, limit, query)
-
-            content: Dict[str, Any] = {"query": query, "results": results}
-            if not results:
-                # W3：解析为空是合法状态 —— 明示无结果，绝不返回伪造占位
-                # 条目（那会被模型当真实结果引用，成为幻觉源）。
-                content["note"] = "搜索源未返回可解析结果（可能被限流），请勿编造结果"
-            return ToolResult(success=True, content=content)
-
-        except httpx.HTTPError as e:
-            return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
+            with build_client(
+                timeout=30.0,
+                headers=_DEFAULT_HEADERS,
+                trust_env=not self._policy.subagent_only,
+            ) as client:
+                for engine in resolve_engine_chain(load_search_config()):
+                    try:
+                        results = engine.search(query, limit, client=client)
+                    except Exception as engine_exc:  # noqa: BLE001 — 单引擎失败降级下一引擎
+                        engine_errors.append(f"{engine.name}: {engine_exc}")
+                        continue
+                    if results:
+                        content: Dict[str, Any] = {
+                            "query": query,
+                            "engine": engine.name,
+                            "results": results,
+                        }
+                        return ToolResult(success=True, content=content)
+                    saw_completed = True
+                    engine_errors.append(f"{engine.name}: 无可解析结果（可能被限流）")
         except Exception as e:
             return ToolResult(success=False, error=f"搜索失败: {str(e)}")
 
-    #: DDG html 版结果标题锚点；attrs 里取 href（属性顺序不固定）
-    _RESULT_ANCHOR_RE = re.compile(
-        r"<a\s([^>]*class=\"[^\"]*result__a[^\"]*\"[^>]*)>(.*?)</a>",
-        re.IGNORECASE | re.DOTALL,
-    )
-    #: 结果摘要锚点（与标题锚点同序出现，按下标配对）
-    _SNIPPET_ANCHOR_RE = re.compile(
-        r"<a\s[^>]*class=\"[^\"]*result__snippet[^\"]*\"[^>]*>(.*?)</a>",
-        re.IGNORECASE | re.DOTALL,
-    )
-    _HREF_ATTR_RE = re.compile(r"href=\"([^\"]*)\"", re.IGNORECASE)
-
-    def _parse_results(self, html: str, limit: int, query: str) -> list:
-        """
-        解析 DuckDuckGo HTML 搜索结果（标题 / 真实 URL / 摘要）
-
-        Args:
-            html: DDG html 版响应
-            limit: 限制数量
-            query: 搜索查询（保留参数兼容旧签名；解析为空返回空列表）
-
-        Returns:
-            结果列表（可能为空 —— 调用方负责无结果语义）
-        """
-        results = []
-        for attrs, inner in self._RESULT_ANCHOR_RE.findall(html):
-            if len(results) >= limit:
-                break
-            href_match = self._HREF_ATTR_RE.search(attrs)
-            results.append(
-                {
-                    "title": self._clean_html(inner),
-                    "url": self._resolve_result_url(href_match.group(1) if href_match else ""),
-                    "snippet": "",
-                }
-            )
-        for index, inner in enumerate(self._SNIPPET_ANCHOR_RE.findall(html)):
-            if index >= len(results):
-                break
-            results[index]["snippet"] = self._clean_html(inner)
-        return results
-
-    def _resolve_result_url(self, raw_href: str) -> str:
-        """还原结果真实 URL。
-
-        DDG html 版把外链包在 ``//duckduckgo.com/l/?uddg=<urlencoded>``
-        跳转里（W3：此前解析器拿不到 URL 就是这个原因）；其余形态
-        （测试 fixture 的相对 href 等）原样返回。
-        """
-        href = unescape(raw_href or "").strip()
-        if not href or "uddg=" not in href:
-            return href
-        target = href if "//" in href else "https:" + href
-        try:
-            values = parse_qs(urlparse(target).query).get("uddg", [])
-        except ValueError:
-            return ""
-        return values[0] if values else ""
+        if saw_completed:
+            # W3：至少一个引擎正常完成但无结果 —— 搜索本身成功，明示无结果，
+            # 绝不返回伪造占位条目（那会被模型当真实结果引用，成为幻觉源）。
+            content = {
+                "query": query,
+                "results": [],
+                "note": "搜索源未返回可解析结果（可能被限流），请勿编造结果",
+            }
+            if engine_errors:
+                content["engine_errors"] = engine_errors
+            return ToolResult(success=True, content=content)
+        return ToolResult(success=False, error="搜索失败: " + "; ".join(engine_errors))
 
     def _clean_html(self, text: str) -> str:
-        """清理 HTML 标签并解码实体"""
-        clean = re.sub(r"<[^>]+>", "", text)
-        return unescape(clean).strip()
+        """兼容保留：清理 HTML 标签并解码实体（解析实现已迁入 search_engines）。"""
+        return SearchEngine._clean_html(text)
 
 
 class WebFetchTool(BaseTool):
@@ -193,7 +161,9 @@ class WebFetchTool(BaseTool):
         # None 表示"每次 execute 现读 settings"——用户改白名单立即生效，不必
         # 重开会话。显式传入则固定（测试注入用）。
         self._network_policy = network_policy
-        self.client = httpx.Client(
+        # 兼容保留的常驻 client；实际请求走 _get_with_redirects 的逐跳现建
+        # client（代理/网络策略/TLS 豁免均按当前配置即时生效）。
+        self.client = build_client(
             timeout=30.0,
             follow_redirects=False,
             trust_env=not self._policy.subagent_only,
@@ -251,6 +221,8 @@ class WebFetchTool(BaseTool):
                 "raw 返回未处理的原始 HTML。"
                 "SPA/JS 动态页自动经受控 headless 浏览器渲染后取正文"
                 "（render=auto 默认；always 强制渲染；never 仅静态 HTML）。"
+                "credential_domain 可携带 browser_cookies 导出的登录态"
+                "（仅附加到同域请求，跨域重定向自动剥离）。"
                 "渲染分支内部会启动受控 headless 浏览器，不单独走启动审批。"
             ),
             parameters={
@@ -271,6 +243,20 @@ class WebFetchTool(BaseTool):
                         "type": "integer",
                         "description": "正文最大长度 (默认 10000)",
                     },
+                    "credential_domain": {
+                        "type": "string",
+                        "description": (
+                            "browser_cookies 导出的凭据档案 domain"
+                            "（如 .cnki.net），附加登录态 cookie"
+                        ),
+                    },
+                    "wait_for": {
+                        "type": "string",
+                        "description": (
+                            "CSS 选择器：渲染分支等它出现再取值（默认空 = "
+                            "readyState+正文稳定即返回）"
+                        ),
+                    },
                 },
                 "required": ["url"],
             },
@@ -282,6 +268,8 @@ class WebFetchTool(BaseTool):
         mode: str = "text",
         max_length: int = 10000,
         render: str = "auto",
+        credential_domain: str = "",
+        wait_for: str = "",
         **kwargs,
     ) -> ToolResult:
         """获取网页并按 ``mode`` 抽取。
@@ -291,6 +279,8 @@ class WebFetchTool(BaseTool):
             mode:       ``text`` / ``links`` / ``tables`` / ``raw``
             max_length: 正文最大长度
             render:     ``auto``（默认，检出 JS 壳自动渲染）/ ``always`` / ``never``
+            credential_domain: browser_cookies 档案 domain，附加登录态 cookie
+            wait_for:   渲染分支等待出现的 CSS 选择器（R2）
         """
         if mode not in self.VALID_MODES:
             return ToolResult(
@@ -304,6 +294,30 @@ class WebFetchTool(BaseTool):
             )
         if not url.startswith(("http://", "https://")):
             return ToolResult(success=False, error="无效的 URL，必须以 http:// 或 https:// 开头")
+
+        cookie_header: Optional[str] = None
+        if credential_domain.strip():
+            from .credential_vault import cookie_domain_matches, cookie_header_for
+
+            credential_domain = credential_domain.strip()
+            cookie_header = cookie_header_for(credential_domain)
+            if cookie_header is None:
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_not_found: 无 {credential_domain!r} 的凭据档案"
+                        "（先 browser_cookies action=export 导出）"
+                    ),
+                )
+            target_host = urlparse(url).hostname or ""
+            if not cookie_domain_matches(target_host, credential_domain):
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_domain_mismatch: 目标 host {target_host!r} "
+                        f"不在凭据域 {credential_domain!r} 内（档案域按 cookie 归属）"
+                    ),
+                )
 
         network_policy = self._effective_network_policy()
         url_error = self._validate_target_url(url)
@@ -322,12 +336,16 @@ class WebFetchTool(BaseTool):
                 return ToolResult(success=False, error=validation_error)
 
         try:
-            response, final_url = self._get_with_redirects(url, network_policy, gated_by_whitelist)
+            response, final_url, credential_note = self._get_with_redirects(
+                url, network_policy, gated_by_whitelist, cookie_header, credential_domain.strip()
+            )
             response.raise_for_status()
             content = self._render(final_url, response, mode, max_length)
+            if credential_note:
+                content["note"] = credential_note
             if self._should_render(render, response, content, max_length):
                 content = self._render_dynamic(
-                    final_url, network_policy, mode, max_length, content
+                    final_url, network_policy, mode, max_length, content, wait_for
                 )
             return ToolResult(success=True, content=content)
         except httpx.HTTPError as e:
@@ -359,8 +377,11 @@ class WebFetchTool(BaseTool):
         url: str,
         network_policy: NetworkPolicy,
         gated_by_whitelist: bool,
+        cookie_header: Optional[str] = None,
+        credential_domain: str = "",
     ) -> tuple:
         current_url = url
+        credential_stripped = False
         for redirect_count in range(self._MAX_REDIRECTS + 1):
             url_error = self._validate_target_url(current_url)
             if url_error:
@@ -373,7 +394,21 @@ class WebFetchTool(BaseTool):
                 if validation_error:
                     raise ValueError(validation_error)
 
-            with httpx.Client(
+            # 登录态 cookie 只附加到档案域命中的 hop；跨域重定向（如订阅源
+            # 302 到第三方 SSO/广告域）静默剥离，防止凭据外带。
+            hop_headers: Dict[str, str] = {"Accept-Encoding": "identity"}
+            credential_applied = False
+            if cookie_header:
+                from .credential_vault import cookie_domain_matches
+
+                hostname = urlparse(current_url).hostname or ""
+                if cookie_domain_matches(hostname, credential_domain):
+                    hop_headers["Cookie"] = cookie_header
+                    credential_applied = True
+                elif redirect_count > 0:
+                    credential_stripped = True
+
+            with build_client(
                 timeout=30.0,
                 follow_redirects=False,
                 verify=not network_policy.allows_insecure_tls(current_url),
@@ -390,7 +425,7 @@ class WebFetchTool(BaseTool):
                 request = client.build_request(
                     "GET",
                     current_url,
-                    headers={"Accept-Encoding": "identity"},
+                    headers=hop_headers,
                 )
                 response = client.send(request, stream=True)
                 try:
@@ -427,7 +462,12 @@ class WebFetchTool(BaseTool):
                 finally:
                     response.close()
                 response = buffered_response
-            return response, current_url
+            credential_note = (
+                "credential_stripped: 重定向跨出凭据域，登录态 cookie 已剥离"
+                if credential_stripped and not credential_applied
+                else None
+            )
+            return response, current_url, credential_note
 
         raise ValueError("redirect_limit_exceeded: 重定向次数超限")
 
@@ -490,19 +530,22 @@ class WebFetchTool(BaseTool):
         mode: str,
         max_length: int,
         static_content: Dict[str, Any],
+        wait_for: str = "",
     ) -> Dict[str, Any]:
         """JS 壳命中后的渲染降级：headless 取渲染后正文（W1）。
 
         渲染失败抛 ``RenderError``（execute 单独捕获，不吞成通用失败）。
+        渲染分支自 R1 起经 outerHTML 复用 html_extract，links/tables 与
+        静态分支同构 —— 静态壳的残缺值被渲染值整体替换。
         """
-        rendered = web_render.render_page(url, network_policy)
+        rendered = web_render.render_page(url, network_policy, wait_for=wait_for)
         content = dict(static_content)  # 保留 status_code / content_type / encoding / mode
-        # 渲染结果仅正文：丢弃静态抽取的 links/tables（对应 shell 的残缺值）
-        content.pop("links", None)
-        content.pop("tables", None)
         content.update(rendered)
         content["content"] = str(rendered.get("content", ""))[:max_length]
-        if mode in ("links", "tables"):
-            # 渲染结果目前仅正文；links/tables 需渲染后 outerHTML（方案 W6 backlog）
-            content["note"] = "渲染页暂不支持 links/tables 抽取，仅返回正文"
+        if mode == "links":
+            content["links"] = list(rendered.get("links") or [])[: self._policy.max_result_items]
+        elif mode == "tables":
+            content["tables"] = list(rendered.get("tables") or [])[
+                : self._policy.max_result_items
+            ]
         return content

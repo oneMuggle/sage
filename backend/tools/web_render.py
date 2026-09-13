@@ -41,6 +41,9 @@ RENDER_POOL_ID = RESERVED_BROWSER_ID
 #: 渲染正文上限（字符，对齐 browser_tool.SNAPSHOT_TEXT_CAP）
 RENDER_TEXT_CAP = 30 * 1024
 
+#: 渲染后 outerHTML 抽取上限（字节）——喂给 html_extract 产出 links/tables（R1）
+RENDER_HTML_CAP = 512 * 1024
+
 #: readyState 就绪轮询窗口（navigate 后等待上限）
 READY_TIMEOUT_SECONDS = 10.0
 
@@ -56,8 +59,44 @@ _SETTLE_POLL_INTERVAL = 0.4
 #: 判定"正文已稳定"所需的连续相同读数轮数
 _SETTLE_STABLE_ROUNDS = 2
 
+#: 懒加载触底滚动的最大轮数（R3）
+_LAZY_SCROLL_MAX_ROUNDS = 3
+
+#: 懒加载判定"到底了"所需的连续相同 scrollHeight 轮数
+_LAZY_SCROLL_STABLE_ROUNDS = 2
+
+#: 懒加载滚动轮间等待
+_LAZY_SCROLL_PAUSE_SECONDS = 0.4
+
 #: 渲染实例空闲回收（秒）：超时后下次 acquire 重建，避免常驻占用
 RENDER_IDLE_TIMEOUT_SECONDS = 300.0
+
+#: 渲染池持久 profile 的保留目录名（web_access_config.render_persistent 开启时用）
+RENDER_PROFILE_NAME = "render-default"
+
+#: preferences 表的 key（web_access_config，需在 SettingsRepository.KEYS 白名单内）
+SETTINGS_KEY_WEB_ACCESS_CONFIG = "web_access_config"
+
+
+def _render_persistent_enabled() -> bool:
+    """读 ``web_access_config.render_persistent``；任何失败回退 False。
+
+    开启后渲染实例用持久 profile —— 需要登录态的 SPA（订阅源文献页）经
+    web_fetch 自动渲染即可读到登录后内容。空闲重建与持久 profile 兼容：
+    重建后 cookie 从磁盘 profile 重载。
+    """
+    try:
+        import json
+
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get(SETTINGS_KEY_WEB_ACCESS_CONFIG)
+        if not raw:
+            return False
+        parsed = json.loads(raw)
+        return bool(isinstance(parsed, dict) and parsed.get("render_persistent"))
+    except Exception:  # noqa: BLE001 — 配置失败按关闭处理（保持现状行为）
+        return False
 
 # ---------------------------------------------------------------------------
 # JS 壳判定（auto 模式，纯函数）
@@ -104,12 +143,17 @@ class RenderError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
-def wait_page_ready(session: BrowserSession, target_id: Optional[str]) -> None:
-    """navigate 后等页面可用：readyState 达标 + 正文长度连续稳定。
+def wait_page_ready(
+    session: BrowserSession, target_id: Optional[str], wait_for: str = ""
+) -> None:
+    """navigate 后等页面可用：readyState 达标 → (可选)等 wait_for → 正文稳定。
 
     SPA 的 hydrate 发生在 readyState=complete 之后，只等 readyState 会拿到
     半空页面 —— 达标后再等 innerText 长度连续 ``_SETTLE_STABLE_ROUNDS`` 轮
     不变（上限 ``_SETTLE_MAX_SECONDS``）。
+
+    ``wait_for``（R2）为 CSS 选择器：readyState 达标后轮询其出现，上限
+    READY_TIMEOUT_SECONDS；超时不失败（半截内容好过没有），继续走 settle。
 
     BrowserCDPError（导航引发的上下文销毁）直接返回 —— 交给后续调用自查。
     """
@@ -122,6 +166,20 @@ def wait_page_ready(session: BrowserSession, target_id: Optional[str]) -> None:
         if state in ("complete", "interactive"):
             break
         time.sleep(_READY_POLL_INTERVAL)
+
+    if wait_for.strip():
+        selector = json.dumps(wait_for.strip())
+        deadline = time.monotonic() + READY_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            try:
+                found = _evaluate_json(
+                    session, f"!!document.querySelector({selector})", target_id
+                )
+            except BrowserCDPError:
+                return
+            if found:
+                break
+            time.sleep(_READY_POLL_INTERVAL)
 
     settle_deadline = time.monotonic() + _SETTLE_MAX_SECONDS
     last_length = -1
@@ -160,6 +218,37 @@ def _evaluate_json(session: BrowserSession, expression: str, target_id: Optional
     return (result.get("result") or {}).get("value")
 
 
+def _scroll_for_lazy_load(session: BrowserSession, target_id: Optional[str]) -> None:
+    """触底滚动触发懒加载（R3）：最多 ``_LAZY_SCROLL_MAX_ROUNDS`` 轮，
+    scrollHeight 连续 ``_LAZY_SCROLL_STABLE_ROUNDS`` 轮不变即提前结束。
+
+    纯 Runtime.evaluate 实现（滚到底读 scrollHeight），兼容 CDP 短连接
+    架构 —— 不依赖事件帧。滚动失败静默返回（不影响已渲染内容）。
+    """
+    expression = (
+        "(function(){"
+        "window.scrollTo(0,document.body?document.body.scrollHeight:0);"
+        "return document.body?document.body.scrollHeight:0;"
+        "})()"
+    )
+    last_height = -1
+    stable_rounds = 0
+    for _ in range(_LAZY_SCROLL_MAX_ROUNDS):
+        try:
+            height = _evaluate_json(session, expression, target_id)
+        except BrowserCDPError:
+            return
+        if isinstance(height, int):
+            if height == last_height:
+                stable_rounds += 1
+                if stable_rounds >= _LAZY_SCROLL_STABLE_ROUNDS:
+                    return
+            else:
+                stable_rounds = 0
+            last_height = height
+        time.sleep(_LAZY_SCROLL_PAUSE_SECONDS)
+
+
 # ---------------------------------------------------------------------------
 # 渲染实例池与渲染入口
 # ---------------------------------------------------------------------------
@@ -190,7 +279,12 @@ class _RendererPool:
             if session is not None:
                 self._discard(session)
             try:
-                session = launch_browser(headless=True, browser_id=RENDER_POOL_ID)
+                session = launch_browser(
+                    headless=True,
+                    browser_id=RENDER_POOL_ID,
+                    persistent=_render_persistent_enabled(),
+                    profile_name=RENDER_PROFILE_NAME,
+                )
             except BrowserCDPError as exc:
                 raise RenderError(f"渲染浏览器启动失败: {exc}") from exc
             self._session = session
@@ -219,8 +313,13 @@ def get_renderer_pool() -> _RendererPool:
     return _pool
 
 
-def render_page(url: str, network_policy: Any) -> Dict[str, Any]:
+def render_page(url: str, network_policy: Any, wait_for: str = "") -> Dict[str, Any]:
     """headless 渲染 ``url``，返回与 web_fetch._render 可拼接的 content 片段。
+
+    渲染完成后取 ``document.documentElement.outerHTML``（上限
+    RENDER_HTML_CAP）复用 ``html_extract.extract`` 产出 title/text/links/
+    tables —— 与静态分支同一抽取器、同一产出结构（R1，关闭 W6 backlog）。
+    页面无 HTML 返回时回退 innerText 路径（兼容旧读取形态）。
 
     Raises:
         RenderError: 门禁拒绝 / 浏览器不可用 / 导航失败 / 页面读取异常。
@@ -239,10 +338,11 @@ def render_page(url: str, network_policy: Any) -> Dict[str, Any]:
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
         if result.get("errorText"):
             raise RenderError(f"渲染导航失败: {result['errorText']}")
-        wait_page_ready(session, target_id)
+        wait_page_ready(session, target_id, wait_for=wait_for)
+        _scroll_for_lazy_load(session, target_id)
         expression = (
             "JSON.stringify({url:location.href,title:document.title,"
-            f"text:(document.body&&document.body.innerText||'').slice(0,{RENDER_TEXT_CAP})}})"
+            f"html:document.documentElement.outerHTML.slice(0,{RENDER_HTML_CAP})}})"
         )
         info = _evaluate_json(session, expression, target_id)
     except BrowserCDPError as exc:
@@ -262,17 +362,36 @@ def render_page(url: str, network_policy: Any) -> Dict[str, Any]:
             page = json.loads(info)
         except ValueError:
             raise RenderError("渲染结果解析失败（页面返回异常）") from None
-    text = page.get("text") or ""
+    html = page.get("html") or ""
+    final_url = page.get("url", url)
+    if html:
+        from backend.wiki.html_extract import extract
+
+        extracted = extract(html, final_url)
+        title = extracted.title or page.get("title", "")
+        content_text = extracted.text
+        links = extracted.links
+        tables = extracted.tables
+        truncated = len(html) >= RENDER_HTML_CAP
+    else:
+        title = page.get("title", "")
+        content_text = page.get("text") or ""
+        links = []
+        tables = []
+        truncated = len(content_text) >= RENDER_TEXT_CAP
     return {
-        "url": page.get("url", url),
-        "title": page.get("title", ""),
-        "content": text,
+        "url": final_url,
+        "title": title,
+        "content": content_text,
+        "links": links,
+        "tables": tables,
         "rendered": True,
-        "truncated": len(text) >= RENDER_TEXT_CAP,
+        "truncated": truncated,
     }
 
 
 __all__ = [
+    "RENDER_HTML_CAP",
     "RENDER_IDLE_TIMEOUT_SECONDS",
     "RENDER_POOL_ID",
     "RENDER_TEXT_CAP",
