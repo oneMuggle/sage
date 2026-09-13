@@ -87,7 +87,7 @@ describe('ChatInput — R27-A 模板联动', () => {
     createMock.mockResolvedValue({ id: 'pt-1', name: 'x', content: 'x' });
   });
 
-  it('选中模板命令填充输入框且不发送', async () => {
+  it('选中含变量模板先弹填充对话框，确认后回填输入框且不发送', async () => {
     listMock.mockResolvedValue([{ name: '周报模板', content: '写周报：{{内容}}' }]);
     const onSend = vi.fn();
     renderWithI18n(<ChatInput onSend={onSend} />);
@@ -98,8 +98,31 @@ describe('ChatInput — R27-A 模板联动', () => {
     });
     fireEvent.mouseDown(screen.getByRole('button', { name: /tpl-周报模板/ }));
 
+    // R29: 含 {{变量}} → 弹填充对话框
+    await waitFor(() => expect(screen.getByTestId('tpl-fill-dialog')).toBeInTheDocument());
+    fireEvent.change(screen.getByTestId('tplfill-input-内容'), {
+      target: { value: '本周进展' },
+    });
+    fireEvent.click(screen.getByTestId('tplfill-confirm'));
+
     const input = screen.getByPlaceholderText(/输入消息/) as HTMLInputElement;
-    expect(input.value).toBe('写周报：{{内容}}');
+    await waitFor(() => expect(input.value).toBe('写周报：本周进展'));
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('无变量模板选中后直接填入输入框', async () => {
+    listMock.mockResolvedValue([{ name: '直接用', content: '直接可用的提示词' }]);
+    const onSend = vi.fn();
+    renderWithI18n(<ChatInput onSend={onSend} />);
+
+    await waitFor(() => expect(listMock).toHaveBeenCalled());
+    fireEvent.change(screen.getByPlaceholderText(/输入消息/), {
+      target: { value: '/tpl-直接用' },
+    });
+    fireEvent.mouseDown(screen.getByRole('button', { name: /tpl-直接用/ }));
+
+    const input = screen.getByPlaceholderText(/输入消息/) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe('直接可用的提示词'));
     expect(onSend).not.toHaveBeenCalled();
   });
 
