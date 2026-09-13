@@ -15,6 +15,7 @@ import pytest
 import respx
 from httpx import Response
 
+from backend.tools import web_cache
 from backend.tools.search_config import (
     DEFAULT_ENGINE_ORDER,
     SETTINGS_KEY_SEARCH_CONFIG,
@@ -37,6 +38,14 @@ pytestmark = [pytest.mark.unit]
 def _force_test_secret_scheme(monkeypatch):
     """enc: 加解密走确定性 test 方案（base64），保证 CI 可复现。"""
     monkeypatch.setenv("SAGE_SECRET_SCHEME", "test")
+
+
+@pytest.fixture(autouse=True)
+def _clean_search_cache():
+    """Q1 查询缓存是模块级进程内存 —— 用例间清空，防跨用例命中污染。"""
+    web_cache.clear()
+    yield
+    web_cache.clear()
 
 
 def _b64url(raw: str) -> str:

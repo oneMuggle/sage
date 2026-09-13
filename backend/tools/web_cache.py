@@ -25,6 +25,9 @@ from typing import Any, Dict, Optional, Tuple
 #: 缓存存活时长（秒）
 CACHE_TTL_SECONDS = 15 * 60
 
+#: 搜索结果存活时长（秒）：时效敏感，短于网页正文缓存（Round 3 Q1）
+SEARCH_CACHE_TTL_SECONDS = 5 * 60
+
 #: 最大条目数（超出淘汰最久未用）
 CACHE_MAX_ENTRIES = 50
 
@@ -45,16 +48,21 @@ def _key(url: str, mode: str) -> str:
     return normalize_url(url) + "\x00" + (mode or "")
 
 
-def get(url: str, mode: str) -> Optional[Dict[str, Any]]:
-    """取缓存；未命中/过期返回 ``None``。命中即刷新 LRU 位次。"""
+def get(url: str, mode: str, ttl_seconds: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    """取缓存；未命中/过期返回 ``None``。命中即刷新 LRU 位次。
+
+    ``ttl_seconds`` 缺省用 CACHE_TTL_SECONDS；搜索等时效敏感调用方可传
+    更短 TTL（如 SEARCH_CACHE_TTL_SECONDS）——键空间互不重叠时可各用各的。
+    """
     key = _key(url, mode)
+    ttl = CACHE_TTL_SECONDS if ttl_seconds is None else ttl_seconds
     now = time.monotonic()
     with _lock:
         entry = _cache.get(key)
         if entry is None:
             return None
         stored_at, payload = entry
-        if now - stored_at > CACHE_TTL_SECONDS:
+        if now - stored_at > ttl:
             del _cache[key]
             return None
         _cache.move_to_end(key)
@@ -87,6 +95,7 @@ def size() -> int:
 __all__ = [
     "CACHE_MAX_ENTRIES",
     "CACHE_TTL_SECONDS",
+    "SEARCH_CACHE_TTL_SECONDS",
     "clear",
     "get",
     "normalize_url",

@@ -199,3 +199,59 @@ class TestDpapiReal:
         stored = encrypt_secret("sk-dpapi-real", "ep-dpapi")
         assert stored.startswith("enc:dpapi:v1:")
         assert decrypt_secret(stored) == "sk-dpapi-real"
+
+
+# ==================== search_config 静态加密(Round 3 K1) ====================
+
+
+def _search_config(tavily: str = "tvly-key-1", zhipu: str = "") -> dict:
+    cfg: dict = {"order": ["tavily", "ddg"]}
+    if tavily:
+        cfg["tavily_key"] = tavily
+    if zhipu:
+        cfg["zhipu_key"] = zhipu
+    return cfg
+
+
+class TestSearchConfigWrap:
+    def test_wrap_unwrap_roundtrip(self):
+        wrapped = secret_box.wrap_search_config_json(json.dumps(_search_config()))
+        data = json.loads(wrapped)
+        assert data["tavily_key"].startswith("enc:test:v1:")
+        unwrapped = json.loads(secret_box.unwrap_search_config_json(wrapped))
+        assert unwrapped["tavily_key"] == "tvly-key-1"
+        assert unwrapped["order"] == ["tavily", "ddg"]  # 非 key 字段不动
+
+    def test_wrap_idempotent_on_enc_prefix(self):
+        once = secret_box.wrap_search_config_json(json.dumps(_search_config()))
+        twice = secret_box.wrap_search_config_json(once)
+        assert twice == once
+
+    def test_unwrap_corrupted_clears_key(self):
+        wrapped = secret_box.wrap_search_config_json(json.dumps(_search_config()))
+        data = json.loads(wrapped)
+        data["tavily_key"] = "enc:test:v1:###not-base64###"
+        unwrapped = json.loads(secret_box.unwrap_search_config_json(json.dumps(data)))
+        assert unwrapped["tavily_key"] == ""
+
+    def test_invalid_json_passthrough(self):
+        assert secret_box.wrap_search_config_json("not json") == "not json"
+        assert secret_box.unwrap_search_config_json("[1,2]") == "[1,2]"
+
+    def test_empty_key_fields_untouched(self):
+        raw = json.dumps({"order": ["bing"], "tavily_key": ""})
+        wrapped = secret_box.wrap_search_config_json(raw)
+        assert json.loads(wrapped)["tavily_key"] == ""
+
+    def test_settings_repo_throat_level(self):
+        repo = SettingsRepository()
+        repo.set("search_config", json.dumps(_search_config()), category="general")
+
+        row = repo._conn().execute(
+            "SELECT value FROM preferences WHERE key = ?", ("search_config",)
+        ).fetchone()
+        assert "tvly-key-1" not in row["value"]  # 落库是密文
+        assert "enc:test:v1:" in row["value"]
+
+        data = json.loads(repo.get("search_config"))
+        assert data["tavily_key"] == "tvly-key-1"  # 读侧透明解密

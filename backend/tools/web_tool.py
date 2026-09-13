@@ -87,19 +87,36 @@ class WebSearchTool(BaseTool):
                 "properties": {
                     "query": {"type": "string", "description": "搜索查询"},
                     "limit": {"type": "integer", "description": "返回结果数量 (默认 5)"},
+                    "refresh": {
+                        "type": "boolean",
+                        "description": "跳过缓存强制搜索（默认 false；5 分钟内同 query+limit 命中缓存）",
+                    },
                 },
                 "required": ["query"],
             },
         )
 
-    def execute(self, query: str, limit: int = 5, **kwargs) -> ToolResult:
+    def execute(self, query: str, limit: int = 5, refresh: bool = False, **kwargs) -> ToolResult:
         """
         执行搜索
 
         Args:
             query: 搜索查询
             limit: 返回结果数量
+            refresh: 跳过缓存强制搜索（Q1，默认 false；5 分钟内同 query+limit 命中）
         """
+        # Q1：查询缓存——仅缓存"成功且非空"结果；键含 limit（不同截断互不干扰）
+        cache_key = "search://" + (query or "").strip()
+        cache_mode = f"limit={int(limit)}"
+        if not refresh:
+            from .web_cache import SEARCH_CACHE_TTL_SECONDS, get as _cache_get
+
+            cached = _cache_get(cache_key, cache_mode, ttl_seconds=SEARCH_CACHE_TTL_SECONDS)
+            if cached is not None:
+                content: Dict[str, Any] = dict(cached)
+                content["cached"] = True
+                return ToolResult(success=True, content=content)
+
         engine_errors = []
         saw_completed = False
         try:
@@ -115,11 +132,15 @@ class WebSearchTool(BaseTool):
                         engine_errors.append(f"{engine.name}: {engine_exc}")
                         continue
                     if results:
-                        content: Dict[str, Any] = {
+                        content = {
                             "query": query,
                             "engine": engine.name,
                             "results": results,
                         }
+                        from .web_cache import put as _cache_put
+
+                        # TTL 在 get 侧按 SEARCH_CACHE_TTL_SECONDS 生效
+                        _cache_put(cache_key, cache_mode, content)
                         return ToolResult(success=True, content=content)
                     saw_completed = True
                     engine_errors.append(f"{engine.name}: 无可解析结果（可能被限流）")
