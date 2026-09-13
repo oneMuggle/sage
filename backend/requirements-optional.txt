@@ -13,3 +13,10 @@
 
 onnxruntime>=1.16.0
 tokenizers>=0.15.0
+
+# R22 可选依赖 — Pillow 图片压缩管线（image_optimize.py 懒加载）
+#
+# 安装后嵌入 >8MB 的 JPEG/PNG 自动降采样压缩到 8MB 内；
+# 未安装时管线完全旁路（图片原样嵌入，>10MB 仍被上层拒绝）。
+# 不进 requirements.txt / bundled（Win7/py38 bundle 不带 Pillow）。
+Pillow>=10.0
