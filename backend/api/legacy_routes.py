@@ -2466,6 +2466,27 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
 
+            # ===== S3 实体引用 (@memory:/@wiki:/@skill:/@agent:) BEGIN =====
+            # 对标 S3（统一入口）：把消息里的实体引用解析为 <references> 块，
+            # 并入尾部 dynamic system（易变上下文，保前缀缓存）。同步 I/O
+            # 走附件线程池；任何失败静默省略，绝不阻断聊天。
+            try:
+                from backend.chat import entity_refs as _entity_refs
+                from backend.chat.executors import ATTACHMENT_EXECUTOR
+
+                if _entity_refs.extract_entity_refs(data.message):
+                    refs_block = await asyncio.get_running_loop().run_in_executor(
+                        ATTACHMENT_EXECUTOR,
+                        _entity_refs.process,
+                        data.message,
+                        data.session_id,
+                    )
+                    if refs_block:
+                        dynamic_context_parts.append(refs_block)
+            except Exception as refs_err:  # noqa: BLE001
+                logger.debug(f"[REQ {request_id}] entity refs skipped: {refs_err}")
+            # ===== S3 实体引用 END =====
+
             # G6 (2026-09-06): 图片附件校验提前（多模态 user 消息在下方
             # 历史组装后转换,与 L1 历史接线共用 build_request_messages 流程）
             if data.images:

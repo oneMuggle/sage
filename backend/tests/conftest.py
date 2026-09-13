@@ -135,6 +135,9 @@ def setup_test_db(request):
     # MemoryWriteLedger 进程内台账（对标 S2）：跨用例清空，避免撤销/列表串味
     from backend.memory.write_ledger import reset_write_ledger
 
+    # 会话自动放行台账（对标 S3）：进程内，跨用例清空
+    from backend.services.auto_approval_ledger import reset_auto_approval_ledger
+
     # SkillLifecycleStore 单例同理（技能归档策展状态）
     from backend.skills.lifecycle import reset_lifecycle_store
 
@@ -152,6 +155,7 @@ def setup_test_db(request):
     reset_wake_store()
     reset_user_profile()
     reset_write_ledger()
+    reset_auto_approval_ledger()
     reset_usage_store()
     reset_lifecycle_store()
     # §1.3a (§1.3a-batch3 主分支同步已合并): PRAGMA foreign_keys=ON,
