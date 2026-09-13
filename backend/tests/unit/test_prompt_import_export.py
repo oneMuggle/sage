@@ -35,7 +35,7 @@ def client(monkeypatch):
     monkeypatch.setattr(prompt_routes, "SettingsRepository", _FakeRepo)
     app = FastAPI()
     app.include_router(router)
-    yield TestClient(app)
+    return TestClient(app)
 
 
 def test_export_envelope_shape(client):
