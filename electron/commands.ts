@@ -742,6 +742,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   office_word_generate: { method: 'POST', path: () => '/api/v1/office/word/generate' },
   office_excel_generate: { method: 'POST', path: () => '/api/v1/office/excel/generate' },
   office_pdf_generate: { method: 'POST', path: () => '/api/v1/office/pdf/generate' },
+  // P7 (2026-09-14): office 长任务进度轮询（任务不存在时后端返回 active:false）。
+  office_get_progress: {
+    method: 'GET',
+    path: (a) => `/api/v1/office/progress/${encodeURIComponent(String(a.taskId))}`,
+  },
   // Office parity batch 1 (item 1.7): archive/restore + snapshot lifecycle.
   // Backend service layer lives in backend/office/tool_service.py:601-716
   // (archive / restore) and backend/office/storage.py:316-360 (snapshots);

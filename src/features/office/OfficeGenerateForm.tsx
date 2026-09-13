@@ -35,6 +35,8 @@ import { useI18n } from '../../shared/lib/i18n';
 import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
 import { useTaskCenterStore } from '../task-center/taskCenterStore';
 
+import { pollOfficeProgress } from './officeProgress';
+
 export interface OfficeGenerateFormProps {
   workspacePath: string;
   /**
@@ -183,6 +185,14 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       return;
     }
     setBusy(true);
+    // P7: 带进度追踪的任务 id —— 后端在阶段边界 report，前端 500ms 轮询
+    const taskId = crypto.randomUUID();
+    const stopPoll = pollOfficeProgress(taskId, (p) =>
+      useTaskCenterStore.getState().updateTask('office:generate', {
+        phase: p.stage ?? undefined,
+        percent: p.percent,
+      }),
+    );
     registerTask('office:generate', 'office', t('office.template.creating'));
     setResult(null);
     try {
@@ -201,6 +211,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
           : { template_id: selectedTemplate.id }),
         filename: filename.trim(),
         data,
+        task_id: taskId,
       });
       setResult({
         path: out.output_path,
@@ -220,6 +231,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.template.failed')}: ${msg}`);
     } finally {
+      stopPoll();
       finishTask('office:generate');
       setBusy(false);
     }
@@ -238,6 +250,14 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       return;
     }
     setBusy(true);
+    // P7: 带进度追踪的任务 id（同 instantiate）
+    const taskId = crypto.randomUUID();
+    const stopPoll = pollOfficeProgress(taskId, (p) =>
+      useTaskCenterStore.getState().updateTask('office:generate', {
+        phase: p.stage ?? undefined,
+        percent: p.percent,
+      }),
+    );
     registerTask('office:generate', 'office', t('office.generate.generating'));
     setResult(null);
     try {
@@ -251,6 +271,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
           workspace_path: workspacePath,
           filename,
           slides: [{ title: pptTitle, bullets }],
+          task_id: taskId,
         });
       } else if (docType === 'word') {
         out = await officeApi.generateWord({
@@ -258,6 +279,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
           filename,
           title: wordTitle,
           paragraphs: [{ text: wordBody }],
+          task_id: taskId,
         });
       } else if (docType === 'pdf') {
         const paragraphs = pdfParagraphs
@@ -269,6 +291,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
           filename,
           pages: [{ title: pdfTitle.trim() || null, paragraphs }],
           page_size: pdfPageSize,
+          task_id: taskId,
         });
       } else {
         const headers = sheetHeaders
@@ -280,6 +303,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
           workspace_path: workspacePath,
           filename,
           sheets: [{ name: sheetName, headers, rows }],
+          task_id: taskId,
         });
       }
       setResult({ path: out.output_path, sizeBytes: out.file_size_bytes });
@@ -292,6 +316,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.generate.failed')}: ${msg}`);
     } finally {
+      stopPoll();
       finishTask('office:generate');
       setBusy(false);
     }

@@ -342,6 +342,9 @@ class OfficePptGenerateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
+    task_id: Optional[str] = Field(default=None, max_length=100)
+
     workspace_path: str
     filename: str = Field(
         min_length=1,
@@ -642,6 +645,9 @@ class OfficeWordGenerateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
+    task_id: Optional[str] = Field(default=None, max_length=100)
+
     workspace_path: str
     filename: str = Field(min_length=1, max_length=200)
     title: str = Field(min_length=1, max_length=200)
@@ -853,6 +859,9 @@ class OfficeExcelGenerateRequest(BaseModel):
     """POST /api/v1/office/excel/generate."""
 
     model_config = ConfigDict(extra="forbid")
+
+    # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
+    task_id: Optional[str] = Field(default=None, max_length=100)
 
     workspace_path: str
     filename: str = Field(min_length=1, max_length=200)
@@ -1084,6 +1093,9 @@ class OfficeTemplateInstantiateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
+    task_id: Optional[str] = Field(default=None, max_length=100)
+
     workspace_path: str
     template_id: Optional[str] = Field(
         default=None, description="builtin 模板 id，如 'weekly_report'（word）、'budget_sheet'（excel）、'kickoff_deck'（ppt）"
@@ -1156,6 +1168,9 @@ class PdfGenerateRequest(BaseModel):
     """Request to generate a PDF."""
 
     model_config = ConfigDict(extra="forbid")
+
+    # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
+    task_id: Optional[str] = Field(default=None, max_length=100)
 
     workspace_path: str
     filename: str
