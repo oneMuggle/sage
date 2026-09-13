@@ -9,6 +9,10 @@
  *   models:embedder:download  → { baseUrl, dirName, files: [{name, sha256}] }
  *   models:embedder:cancel    → dirName
  *   models:embedder:progress  → {dirName, stage, file?, bytes?, error?} (事件)
+ *
+ * P5 (2026-09-14): 进度事件通道补 `sage:event:` 前缀 —— preload 的 listen
+ * shim 只在 `sage:event:<event>` 上注册（与 #733 修复的 backend:* 同族
+ * 问题），裸通道的进度事件永远到不了渲染端。
  */
 import { createHash } from 'crypto';
 import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, statSync, unlinkSync } from 'fs';
@@ -133,7 +137,7 @@ export function registerModelDownloadIpc(
 
       const emit = (extra: Record<string, unknown>): void => {
         if (win && !win.isDestroyed()) {
-          win.webContents.send('models:embedder:progress', { dirName, ...extra });
+          win.webContents.send('sage:event:models:embedder:progress', { dirName, ...extra });
         }
       };
 
