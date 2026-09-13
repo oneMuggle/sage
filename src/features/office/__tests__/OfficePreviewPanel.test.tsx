@@ -251,10 +251,14 @@ describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
     renderPanel(WORD_PREVIEW);
     fireEvent.click(screen.getByTestId('office-export-pdf-button'));
     await waitFor(() => {
-      expect(mockExportPdf).toHaveBeenCalledWith({
-        workspace_path: '/tmp/ws',
-        file_path: '/tmp/ws/office/word/doc-word/report.docx',
-      });
+      // P7: payload 携带 task_id（uuid，仅断言字段存在）
+      expect(mockExportPdf).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspace_path: '/tmp/ws',
+          file_path: '/tmp/ws/office/word/doc-word/report.docx',
+          task_id: expect.any(String),
+        }),
+      );
     });
     await waitFor(() => {
       expect(toastMock.success).toHaveBeenCalledWith(

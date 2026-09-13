@@ -59,6 +59,7 @@ from backend.office.journal.persistence import (
     save_spec,
 )
 from backend.office.journal.validator import validate_document
+from backend.office import progress as office_progress
 from backend.office.models import (
     BibTeXParseRequest,
     BibTeXParseResponse,
@@ -526,12 +527,15 @@ def generate_ppt_endpoint(req: OfficePptGenerateRequest) -> dict:
     CRITICAL FIX: now also calls save_document() to persist the generated
     document in the office_documents table so it appears in the list API.
     """
-    output_path = generate_ppt(req)
-    _build_summary_for_generated(
-        file_path=output_path,
-        doc_type=OfficeDocType.PPT,
-        workspace_path=req.workspace_path,
-    )
+    with office_progress.track(req.task_id, "生成 PPT") as prog:
+        prog.report("生成文档", 30)
+        output_path = generate_ppt(req)
+        prog.report("登记文档", 90)
+        _build_summary_for_generated(
+            file_path=output_path,
+            doc_type=OfficeDocType.PPT,
+            workspace_path=req.workspace_path,
+        )
     return {
         "output_path": str(output_path),
         "filename": output_path.name,
@@ -542,12 +546,15 @@ def generate_ppt_endpoint(req: OfficePptGenerateRequest) -> dict:
 @router.post("/word/generate")
 def generate_word_endpoint(req: OfficeWordGenerateRequest) -> dict:
     """Generate a .docx file from structured input."""
-    output_path = generate_docx(req)
-    _build_summary_for_generated(
-        file_path=output_path,
-        doc_type=OfficeDocType.WORD,
-        workspace_path=req.workspace_path,
-    )
+    with office_progress.track(req.task_id, "生成 Word") as prog:
+        prog.report("生成文档", 30)
+        output_path = generate_docx(req)
+        prog.report("登记文档", 90)
+        _build_summary_for_generated(
+            file_path=output_path,
+            doc_type=OfficeDocType.WORD,
+            workspace_path=req.workspace_path,
+        )
     return {
         "output_path": str(output_path),
         "filename": output_path.name,
@@ -594,12 +601,15 @@ def repair_word_endpoint(req: WordRepairRequest) -> WordRepairResult:
 @router.post("/excel/generate")
 def generate_excel_endpoint(req: OfficeExcelGenerateRequest) -> dict:
     """Generate a .xlsx file from structured input."""
-    output_path = generate_xlsx(req)
-    _build_summary_for_generated(
-        file_path=output_path,
-        doc_type=OfficeDocType.EXCEL,
-        workspace_path=req.workspace_path,
-    )
+    with office_progress.track(req.task_id, "生成 Excel") as prog:
+        prog.report("生成文档", 30)
+        output_path = generate_xlsx(req)
+        prog.report("登记文档", 90)
+        _build_summary_for_generated(
+            file_path=output_path,
+            doc_type=OfficeDocType.EXCEL,
+            workspace_path=req.workspace_path,
+        )
     return {
         "output_path": str(output_path),
         "filename": output_path.name,
@@ -661,7 +671,11 @@ def generate_pdf_endpoint(req: PdfGenerateRequest) -> PdfGenerateResult:
 
     Service function handles workspace validation and output path safety.
     """
-    return generate_pdf(req)
+    with office_progress.track(req.task_id, "生成 PDF") as prog:
+        prog.report("生成文档", 40)
+        result = generate_pdf(req)
+        prog.report("完成", 95)
+    return result
 
 
 @router.post("/pdf/read-form", response_model=PdfFormReadResult)
@@ -723,7 +737,24 @@ def export_pdf_endpoint(req: OfficeExportPdfRequest):
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
     from backend.office import export_pdf
 
-    return export_pdf.export_to_pdf(file_path, Path(req.workspace_path).resolve())
+    with office_progress.track(req.task_id, "导出 PDF") as prog:
+        prog.report("转换 PDF", 30)
+        result = export_pdf.export_to_pdf(file_path, Path(req.workspace_path).resolve())
+        prog.report("完成", 95)
+    return result
+
+
+@router.get("/progress/{task_id}")
+def get_progress_endpoint(task_id: str):
+    """P7: 查询 office 长任务进度（前端 500ms 轮询）。
+
+    任务不存在（未开始 / 已结束）时返回 ``active: false`` 而非 404 ——
+    轮询方把 active=false 视为任务完成信号，无需异常处理。
+    """
+    snap = office_progress.snapshot(task_id)
+    if snap is None:
+        return {"active": False, "stage": None, "percent": None, "title": None}
+    return {"active": True, **snap}
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -756,22 +787,25 @@ def instantiate_template_endpoint(
     in GET /documents — doc_type derived from the output extension so excel/
     ppt templates land in the right list.
     """
-    result = instantiate_template(
-        req.workspace_path,
-        template_id=req.template_id,
-        workspace_template=req.workspace_template,
-        filename=req.filename,
-        data=req.data,
-        images=req.images,
-    )
-    output_path = Path(result.output_path)
-    ext = output_path.suffix.lstrip(".").lower()
-    doc_type = {"docx": OfficeDocType.WORD, "xlsx": OfficeDocType.EXCEL, "pptx": OfficeDocType.PPT}.get(ext, OfficeDocType.WORD)
-    _build_summary_for_generated(
-        file_path=output_path,
-        doc_type=doc_type,
-        workspace_path=req.workspace_path,
-    )
+    with office_progress.track(req.task_id, "模板实例化") as prog:
+        prog.report("填充模板", 30)
+        result = instantiate_template(
+            req.workspace_path,
+            template_id=req.template_id,
+            workspace_template=req.workspace_template,
+            filename=req.filename,
+            data=req.data,
+            images=req.images,
+        )
+        prog.report("登记文档", 90)
+        output_path = Path(result.output_path)
+        ext = output_path.suffix.lstrip(".").lower()
+        doc_type = {"docx": OfficeDocType.WORD, "xlsx": OfficeDocType.EXCEL, "pptx": OfficeDocType.PPT}.get(ext, OfficeDocType.WORD)
+        _build_summary_for_generated(
+            file_path=output_path,
+            doc_type=doc_type,
+            workspace_path=req.workspace_path,
+        )
     return result
 
 

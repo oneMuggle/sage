@@ -1171,6 +1171,8 @@ export interface PdfPageSpec {
 export type PdfPageSize = 'A4' | 'Letter' | 'Legal';
 
 export interface OfficePdfGenerateRequest {
+  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
+  task_id?: string;
   workspace_path: string;
   filename: string;
   pages: PdfPageSpec[];
@@ -1212,6 +1214,8 @@ export interface PptSlideSpec {
 }
 
 export interface OfficePptGenerateRequest {
+  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
+  task_id?: string;
   workspace_path: string;
   filename: string;
   slides: PptSlideSpec[];
@@ -1394,6 +1398,8 @@ export interface WordRepairRequest {
 }
 
 export interface OfficeWordGenerateRequest {
+  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
+  task_id?: string;
   workspace_path: string;
   filename: string;
   title: string;
@@ -1461,6 +1467,8 @@ export interface ExcelConditionalFormatSpec {
 }
 
 export interface OfficeExcelGenerateRequest {
+  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
+  task_id?: string;
   workspace_path: string;
   filename: string;
   sheets: ExcelSheetSpec[];
@@ -1614,6 +1622,8 @@ export interface OfficeDocUpdateResponse {
 
 /** Request of POST /office/export-pdf. */
 export interface OfficeExportPdfRequest {
+  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
+  task_id?: string;
   workspace_path: string;
   file_path: string;
 }
@@ -1689,6 +1699,8 @@ export interface OfficeTemplateListResponse {
  * mcp_server_add's env map).
  */
 export interface OfficeTemplateInstantiateRequest {
+  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
+  task_id?: string;
   workspace_path: string;
   template_id?: string;
   workspace_template?: string;

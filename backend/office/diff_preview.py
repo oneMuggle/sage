@@ -143,6 +143,9 @@ class OfficeExportPdfRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
+    task_id: Optional[str] = Field(default=None, max_length=100)
+
     workspace_path: str = Field(description="Absolute path to the workspace dir")
     file_path: str = Field(description="Absolute path to the document inside the workspace")
 

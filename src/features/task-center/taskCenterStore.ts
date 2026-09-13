@@ -18,12 +18,14 @@ export interface TaskCenterEntry {
   title: string;
   startedAt: number;
   phase?: string;
+  /** P7: 后端上报的百分比（0-100；无百分比通道的任务为空） */
+  percent?: number | null;
 }
 
 interface TaskCenterState {
   tasks: Record<string, TaskCenterEntry>;
   registerTask: (id: string, kind: TaskKind, title: string, phase?: string) => void;
-  updateTask: (id: string, patch: { title?: string; phase?: string }) => void;
+  updateTask: (id: string, patch: { title?: string; phase?: string; percent?: number | null }) => void;
   finishTask: (id: string) => void;
 }
 

@@ -238,6 +238,7 @@ export const officeApi = {
         workspacePath: req.workspace_path,
         filename: req.filename,
         slides: req.slides,
+        task_id: req.task_id,
       });
     } catch (error) {
       throw handleApiError(error);
@@ -259,6 +260,7 @@ export const officeApi = {
         title: req.title,
         paragraphs: req.paragraphs,
         tables: req.tables,
+        task_id: req.task_id,
       });
     } catch (error) {
       throw handleApiError(error);
@@ -278,6 +280,7 @@ export const officeApi = {
         workspacePath: req.workspace_path,
         filename: req.filename,
         sheets: req.sheets,
+        task_id: req.task_id,
       });
     } catch (error) {
       throw handleApiError(error);
@@ -298,6 +301,7 @@ export const officeApi = {
         pages: req.pages,
         pageSize: req.page_size,
         orientation: req.orientation,
+        task_id: req.task_id,
       });
     } catch (error) {
       throw handleApiError(error);
@@ -375,6 +379,7 @@ export const officeApi = {
       return await invoke<OfficeExportPdfResult>('office_export_pdf', {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
+        task_id: req.task_id,
       });
     } catch (error) {
       throw handleApiError(error);
@@ -426,7 +431,24 @@ export const officeApi = {
         filename: req.filename,
         data: req.data,
         images: req.images,
+        task_id: req.task_id,
       });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P7: 轮询 office 长任务进度（生成/导出期间的阶段 + 百分比）。
+   *
+   * 任务不存在（未开始/已结束）时后端返回 `active: false` 而非 404，
+   * 轮询方据此判定完成，无需异常处理。
+   */
+  async getOfficeProgress(
+    taskId: string,
+  ): Promise<{ active: boolean; stage: string | null; percent: number | null }> {
+    try {
+      return await invoke('office_get_progress', { taskId });
     } catch (error) {
       throw handleApiError(error);
     }

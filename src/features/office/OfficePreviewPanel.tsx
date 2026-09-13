@@ -31,6 +31,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 
+import { useTaskCenterStore } from '../../features/task-center/taskCenterStore';
 import { officeApi } from '../../shared/api/officeApi';
 import type {
   OfficeDocType,
@@ -42,6 +43,8 @@ import type {
 } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
+
+import { pollOfficeProgress } from './officeProgress';
 
 export type OfficePreviewData =
   | { docType: 'ppt'; data: OfficePptReadResult }
@@ -129,8 +132,21 @@ export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: Of
       summary.generated_filename,
     ].join('/');
     setExporting(true);
+    // P7: 进度追踪任务 id + 轮询（同 OfficeGenerateForm）
+    const taskId = crypto.randomUUID();
+    const stopPoll = pollOfficeProgress(taskId, (p) =>
+      useTaskCenterStore.getState().updateTask('office:export', {
+        phase: p.stage ?? undefined,
+        percent: p.percent,
+      }),
+    );
+    useTaskCenterStore.getState().registerTask('office:export', 'office', '导出 PDF');
     try {
-      const res = await officeApi.exportPdf({ workspace_path: ws, file_path: managedPath });
+      const res = await officeApi.exportPdf({
+        workspace_path: ws,
+        file_path: managedPath,
+        task_id: taskId,
+      });
       if (res.ok && res.output_path) {
         toast.success(t('office.export.success'), {
           description: res.output_path,
@@ -169,6 +185,8 @@ export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: Of
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.export.failed')}: ${msg}`);
     } finally {
+      stopPoll();
+      useTaskCenterStore.getState().finishTask('office:export');
       setExporting(false);
     }
   };

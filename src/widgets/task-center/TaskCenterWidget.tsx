@@ -24,6 +24,8 @@ interface Entry {
   title: string;
   startedAt: number | null;
   route: string | null;
+  /** P7: 后端百分比（有则替代已耗时显示） */
+  percent?: number | null;
 }
 
 export function TaskCenterWidget() {
@@ -78,6 +80,7 @@ export function TaskCenterWidget() {
       title: task.title,
       startedAt: task.startedAt,
       route: task.kind === 'office' ? '/office' : task.kind === 'wiki' ? '/knowledge' : null,
+      percent: task.percent ?? null,
     }));
     return [...registryEntries, ...chatEntries];
     // streamStartsRef 为 ref 不入 deps：条目在 effect 之后读取即可拿到首见时间
@@ -113,11 +116,16 @@ export function TaskCenterWidget() {
             >
               <Loader2 className="w-3.5 h-3.5 text-primary shrink-0 animate-spin" aria-hidden />
               <span className="truncate flex-1">{entry.title}</span>
-              {entry.startedAt != null && (
+              {entry.percent != null ? (
+                // P7: 有百分比通道时显示进度百分比
+                <span className="text-[10px] text-primary tabular-nums shrink-0">
+                  {Math.round(entry.percent)}%
+                </span>
+              ) : entry.startedAt != null ? (
                 <span className="text-[10px] text-muted tabular-nums shrink-0">
                   {Math.max(0, Math.floor((now - entry.startedAt) / 1000))}s
                 </span>
-              )}
+              ) : null}
             </button>
           ))}
         </div>
