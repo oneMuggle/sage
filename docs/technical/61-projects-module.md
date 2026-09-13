@@ -173,3 +173,18 @@ cherry-pick 时注意：
 - **win7 对齐**：ProjectSection/测试随 P1 新文件走；CommandPalette 在
   win7 分支分歧大（-237 行），P2 对其改动按 main 结构走，cherry-pick
   需按 win7 本地结构重放（局部小改）；commandItems 纯追加低风险。
+
+## 10. P3 落地记录（2026-09-13，feat/projects-p3）
+
+方案：`docs/plans/2026-09-13_projects-p3-plan.md`。
+
+- **Chat 头部当前项目徽标**（新组件 `src/widgets/chat/ProjectBadge.tsx`，
+  Chat.tsx 头部 1 行插入）：绑定工作区时显示 Folder + 项目名 chip，
+  tooltip 为完整路径；名称优先精确匹配已登记项目，未登记历史绑定回退
+  `basename(path)`；清单拉取失败静默降级。组件纯展示、不依赖 provider
+  （workspacePath 由 Chat 既有 `useCurrentWorkspace()` 透传）。
+- **否决/缓行**：项目清单拖拽排序否决——清单语义是最近打开排序
+  （last_opened_at），手动排序与 recency 打架，负价值；拖拽登记继续
+  缓行（同 §9）。
+- **win7 对齐**：组件与测试纯新增；Chat.tsx 仅 1 行 JSX 插入（该文件
+  在 win7 分支分歧大，机械重放）；无 IPC/后端/依赖变更。

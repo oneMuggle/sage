@@ -18,6 +18,7 @@ import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
 import { ContextMeter } from '../widgets/chat/ContextMeter';
 import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from '../widgets/chat/InterruptedRunBanner';
+import { ProjectBadge } from '../widgets/chat/ProjectBadge';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
@@ -662,6 +663,8 @@ export function Chat() {
       <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
         <div className="flex items-center gap-4 min-w-0">
           <h2 className="text-sm font-semibold text-text shrink-0">对话</h2>
+          {/* 项目模块 P3: 当前会话绑定的项目标识（无绑定不渲染） */}
+          <ProjectBadge workspacePath={workspacePath} />
           {/* U8: 会话级模型切换(G5 收尾) · U14: 会话用量徽章 · U17: 上下文占用 */}
           <SessionModelPicker sessionId={currentSessionId} />
           <SessionUsageBadge sessionId={currentSessionId} />
