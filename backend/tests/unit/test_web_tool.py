@@ -10,10 +10,18 @@ from httpx import Response
 
 from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
-from backend.tools import web_render
+from backend.tools import web_cache, web_render
 from backend.tools.web_tool import WebFetchTool, WebSearchTool
 
 pytestmark = [pytest.mark.unit]
+
+
+@pytest.fixture(autouse=True)
+def _clean_web_cache():
+    """C1 缓存是模块级进程内存 —— 用例间清空，防止跨用例命中污染请求断言。"""
+    web_cache.clear()
+    yield
+    web_cache.clear()
 
 
 # ---------- WebSearchTool ----------

@@ -28,10 +28,12 @@ from .web_render import RenderError
 # 浏览器级默认请求头。
 # 缺 User-Agent 的请求会被很多站点（小说站 / 学术站 / 论坛）按 bot 拒 403;
 # Accept-Language 让国内站点返回中文页,避免西文 fallback 误判。
+# UA 版本保持"现代"（U1, Round 2）：过旧版本号本身是廉价 bot 信号；
+# 注意它与 httpx 的 TLS 指纹解耦,硬风控站点仍走 browser 通道。
 _DEFAULT_HEADERS: Dict[str, str] = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
     ),
     "Accept": (
         "text/html,application/xhtml+xml,application/xml;q=0.9,"
@@ -39,6 +41,17 @@ _DEFAULT_HEADERS: Dict[str, str] = {
     ),
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
 }
+
+#: 常见反爬拒绝状态码 → 路由指引文案（G1, Round 2）。
+#: 出路顺序即成本顺序：真浏览器通道（真实 Chrome 指纹）> 代理 > 换搜索源。
+_ANTIBOT_GUIDANCE = (
+    "（该站点疑似反爬/风控拦截。出路：① 经 coder 用 browser_launch + "
+    "browser_navigate 真浏览器通道；② 设置 → 网络中配置代理后重试；"
+    "③ 搜索场景可更换搜索引擎或 API 引擎源）"
+)
+
+#: 触发 G1 指引的拒绝状态码
+_ANTIBOT_STATUS_CODES = frozenset({403, 429, 503})
 
 
 class WebSearchTool(BaseTool):
@@ -124,7 +137,11 @@ class WebSearchTool(BaseTool):
             if engine_errors:
                 content["engine_errors"] = engine_errors
             return ToolResult(success=True, content=content)
-        return ToolResult(success=False, error="搜索失败: " + "; ".join(engine_errors))
+        failure = "搜索失败: " + "; ".join(engine_errors)
+        if any(code in failure for code in ("403", "429", "503")):
+            # G1：拒绝类失败 → 指引代理 / API 引擎出路
+            failure += _ANTIBOT_GUIDANCE
+        return ToolResult(success=False, error=failure)
 
     def _clean_html(self, text: str) -> str:
         """兼容保留：清理 HTML 标签并解码实体（解析实现已迁入 search_engines）。"""
@@ -151,6 +168,9 @@ class WebFetchTool(BaseTool):
 
     #: 网页响应体硬上限，避免 max_length 事后截断导致无限缓冲
     _MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+
+    #: C1：uncapped 抽取长度（缓存存全文，返回前按本次 max_length 裁剪）
+    _UNCAPPED_LENGTH = 10 ** 9
 
     def __init__(
         self,
@@ -257,6 +277,10 @@ class WebFetchTool(BaseTool):
                             "readyState+正文稳定即返回）"
                         ),
                     },
+                    "refresh": {
+                        "type": "boolean",
+                        "description": "跳过缓存强制抓取（默认 false；15 分钟内同 URL 同 mode 命中缓存）",
+                    },
                 },
                 "required": ["url"],
             },
@@ -270,6 +294,7 @@ class WebFetchTool(BaseTool):
         render: str = "auto",
         credential_domain: str = "",
         wait_for: str = "",
+        refresh: bool = False,
         **kwargs,
     ) -> ToolResult:
         """获取网页并按 ``mode`` 抽取。
@@ -281,6 +306,7 @@ class WebFetchTool(BaseTool):
             render:     ``auto``（默认，检出 JS 壳自动渲染）/ ``always`` / ``never``
             credential_domain: browser_cookies 档案 domain，附加登录态 cookie
             wait_for:   渲染分支等待出现的 CSS 选择器（R2）
+            refresh:    跳过缓存强制抓取（C1，默认 false）
         """
         if mode not in self.VALID_MODES:
             return ToolResult(
@@ -294,6 +320,19 @@ class WebFetchTool(BaseTool):
             )
         if not url.startswith(("http://", "https://")):
             return ToolResult(success=False, error="无效的 URL，必须以 http:// 或 https:// 开头")
+
+        # C1：TTL 缓存。credential_domain（登录态时效）与 raw（原始 HTML）
+        # 不参与缓存；命中即返回，cached 标记明示。
+        use_cache = not refresh and mode != "raw" and not credential_domain.strip()
+        if use_cache:
+            from .web_cache import get as _cache_get
+
+            cached = _cache_get(url, mode)
+            if cached is not None:
+                content = dict(cached)
+                content["content"] = str(content.get("content", ""))[:max_length]
+                content["cached"] = True
+                return ToolResult(success=True, content=content)
 
         cookie_header: Optional[str] = None
         if credential_domain.strip():
@@ -340,14 +379,36 @@ class WebFetchTool(BaseTool):
                 url, network_policy, gated_by_whitelist, cookie_header, credential_domain.strip()
             )
             response.raise_for_status()
-            content = self._render(final_url, response, mode, max_length)
+            # C1：以 uncapped 抽取（缓存存全文，返回前统一裁剪）——
+            # 不同 max_length 的请求可共享同一份缓存
+            content = self._render(final_url, response, mode, self._UNCAPPED_LENGTH)
             if credential_note:
                 content["note"] = credential_note
             if self._should_render(render, response, content, max_length):
                 content = self._render_dynamic(
-                    final_url, network_policy, mode, max_length, content, wait_for
+                    final_url, network_policy, mode, self._UNCAPPED_LENGTH, content, wait_for
                 )
+            if use_cache:
+                # 剥离易变 note / cached 标记后存全文副本
+                from .web_cache import put as _cache_put
+
+                storable = {
+                    key_: value
+                    for key_, value in content.items()
+                    if key_ not in ("note", "cached")
+                }
+                _cache_put(url, mode, storable)
+            content["content"] = str(content.get("content", ""))[:max_length]
             return ToolResult(success=True, content=content)
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code if e.response is not None else 0
+            if status in _ANTIBOT_STATUS_CODES:
+                # G1：反爬拒绝 → 明示出路（browser 通道 / 代理 / 换源），不吞成通用失败
+                return ToolResult(
+                    success=False,
+                    error=f"http_{status}: 站点拒绝访问（状态码 {status}）{_ANTIBOT_GUIDANCE}",
+                )
+            return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
         except httpx.HTTPError as e:
             return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
         except RenderError as e:
