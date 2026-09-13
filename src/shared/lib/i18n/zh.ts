@@ -386,6 +386,8 @@ export const zh = {
   'codeBlock.copied': '已复制',
   'codeBlock.toggleWrap': '切换自动换行',
   'codeBlock.expandLines': '展开全部 {n} 行',
+  'taskCenter.activeCount': '{n} 项进行中',
+  'taskCenter.chatFallback': '后台会话生成中',
 
   // ─── M2 AskUserQuestion ───────────
   'question.title': '助手需要您的回答',

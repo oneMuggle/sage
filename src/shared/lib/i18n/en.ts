@@ -393,6 +393,8 @@ export const en: Record<TranslationKey, string> = {
   'codeBlock.copied': 'Copied',
   'codeBlock.toggleWrap': 'Toggle word wrap',
   'codeBlock.expandLines': 'Expand all {n} lines',
+  'taskCenter.activeCount': '{n} running',
+  'taskCenter.chatFallback': 'Background session generating',
 
   // ─── M2 AskUserQuestion ───────────
   'question.title': 'The assistant needs your answer',
