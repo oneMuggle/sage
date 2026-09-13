@@ -380,6 +380,8 @@ export const zh = {
   'permission.diff': '将写入的变更',
   'codeBlock.copy': '复制',
   'codeBlock.copied': '已复制',
+  'codeBlock.toggleWrap': '切换自动换行',
+  'codeBlock.expandLines': '展开全部 {n} 行',
 
   // ─── M2 AskUserQuestion ───────────
   'question.title': '助手需要您的回答',

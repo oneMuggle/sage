@@ -387,6 +387,8 @@ export const en: Record<TranslationKey, string> = {
   'permission.diff': 'Proposed changes',
   'codeBlock.copy': 'Copy',
   'codeBlock.copied': 'Copied',
+  'codeBlock.toggleWrap': 'Toggle word wrap',
+  'codeBlock.expandLines': 'Expand all {n} lines',
 
   // ─── M2 AskUserQuestion ───────────
   'question.title': 'The assistant needs your answer',
