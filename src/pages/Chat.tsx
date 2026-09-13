@@ -19,6 +19,7 @@ import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from 
 import { ContextMeter } from '../widgets/chat/ContextMeter';
 import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from '../widgets/chat/InterruptedRunBanner';
 import { MemoryWriteHints } from '../widgets/chat/MemoryWriteHints';
+import { PermissionModeSwitch } from '../widgets/chat/PermissionModeSwitch';
 import { ProjectBadge } from '../widgets/chat/ProjectBadge';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
@@ -678,6 +679,8 @@ export function Chat() {
           <ContextMeter sessionId={currentSessionId} />
         </div>
         <div className="flex items-center gap-2">
+          {/* 对标 S3: 权限三档一键切换 + 本会话自动放行计数 */}
+          <PermissionModeSwitch sessionId={currentSessionId} />
           {currentSessionId && (
             <button
               type="button"

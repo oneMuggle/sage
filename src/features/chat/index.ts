@@ -1,5 +1,7 @@
 // src/features/chat/index.ts
 export { AtFileMenu } from './AtFileMenu';
+export { AtEntityMenu } from './AtEntityMenu';
+export { getEntityKindSuggestions, parseEntityRefQuery } from './entityRefs';
 export { useAtFileQuery } from './useAtFileQuery';
 export { useBtwCommand } from './useBtwCommand';
 export { BtwOverlay } from './BtwOverlay';
