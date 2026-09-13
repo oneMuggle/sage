@@ -61,6 +61,15 @@ triggers: []
 - 复检至 `ok=true` 或用户接受。正式交付提醒用户：文档在工作区
 `office/word/` 受管目录下，可随时用 office_list / office_read 回看。
 
+## Excel 附表与打印（可选）
+
+台账/预算等 xlsx 附表：表头样式、冻结首行、自适应列宽、数字格式、
+数据条/色阶/重复值高亮、下拉选项（data_validations）、打印设置
+（横向/缩放单页宽/打印区域）——跟 Sage 说需求即可。
+嵌入照片/扫描件 >8MB 时，本机装有 Pillow 会自动压缩到阈值内
+（`pip install -r backend/requirements-optional.txt`）；未安装则
+>10MB 的图会被拒绝，请先手工压缩。
+
 ## 不做的事（YAGNI）
 
 - ❌ 不替用户编造项目数据（进度/指标一律来自用户材料，缺失就问）
