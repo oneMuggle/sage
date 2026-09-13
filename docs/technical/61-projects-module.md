@@ -188,3 +188,15 @@ cherry-pick 时注意：
   缓行（同 §9）。
 - **win7 对齐**：组件与测试纯新增；Chat.tsx 仅 1 行 JSX 插入（该文件
   在 win7 分支分歧大，机械重放）；无 IPC/后端/依赖变更。
+
+## 11. P4 落地记录（2026-09-13，feat/projects-p4）
+
+方案：`docs/plans/2026-09-13_projects-p4-plan.md`。纯前端收尾批次。
+
+- **子行会话删除**：子行 hover 显现 TwoStepDelete（两步防误触）→
+  `sessionApi.delete` → 联动刷新子列表 / 项目清单 / 会话区 store；
+  失败 toast 且不收起子列表。
+- **清单自动刷新**：订阅 store `sessions` 长度变化（任意来源的会话
+  增删）→ 400ms 防抖 `refresh()` + 已展开项目子列表刷新。session_count
+  保持后端聚合为唯一事实源，不本地推算。
+- **win7 对齐**：改动全部位于 P1/P2 新文件，纯追加；无后端/IPC 变更。
