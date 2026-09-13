@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import ast
 import importlib
+import os
 from pathlib import Path
+
+import pytest
 
 from backend.cli.checks import skills
 from backend.cli.doctor import Severity
@@ -20,6 +23,10 @@ def _write_skill(root: Path, directory: str, name: str = "") -> None:
     )
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="技能根目录发现在 Windows 语义不同（另行批次定性）",
+)
 def test_no_skill_directory_is_info(monkeypatch, tmp_path):
     monkeypatch.setenv("SAGE_SKILLS_DIR", str(tmp_path / "missing"))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))

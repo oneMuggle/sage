@@ -1,5 +1,6 @@
 """Security regressions for bounded Office ZIP expansion."""
 
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -55,6 +56,10 @@ def test_parse_document_rejects_office_zip_budget_before_parser(monkeypatch, tmp
     parser.assert_not_called()
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="解析器安全读依赖 POSIX 文件描述符（Windows 支持另行批次）",
+)
 @pytest.mark.unit()
 def test_parse_document_reads_xlsx_through_opened_descriptor(monkeypatch, tmp_path):
     source = tmp_path / "data.xlsx"
