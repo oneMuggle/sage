@@ -633,6 +633,7 @@ class McpServerPool:
         enabled: Optional[bool] = None,
         timeout_seconds: Optional[float] = None,
         disabled_tools: Optional[List[str]] = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> ServerRecord:
         """Merge-patch a server (enabled / timeout_seconds) and start/stop.
 
@@ -659,6 +660,9 @@ class McpServerPool:
                 disabled_tools is not None
                 and tuple(disabled_tools) != tuple(base.disabled_tools)
             )
+            headers_changed = (
+                headers is not None and dict(headers) != dict(base.headers)
+            )
             new_config = validate_server_config(
                 name=base.name,
                 command=base.command,
@@ -672,6 +676,7 @@ class McpServerPool:
                 disabled_tools=(
                     list(base.disabled_tools) if disabled_tools is None else disabled_tools
                 ),
+                headers=dict(base.headers) if headers is None else headers,
             )
         upsert_user_server_config(new_config)
 
@@ -684,10 +689,11 @@ class McpServerPool:
                 record.set_state(ServerState.DISABLED)
             self._unregister_server_tools(name)
         elif record.state in (ServerState.DISABLED, ServerState.FAILED) or (
-            (timeout_changed or tools_changed) and record.state == ServerState.READY
+            (timeout_changed or tools_changed or headers_changed)
+            and record.state == ServerState.READY
         ):
-            # 工具开关/超时变更都需要 re-discovery 刷新注册（工具集在
-            # discovery 时合成进 record.tool_specs）
+            # 工具开关/超时/鉴权头变更都需要 re-discovery 刷新（客户端构造
+            # 时烘焙 headers；工具集在 discovery 时合成进 record.tool_specs）
             self.discover_one(name)
         return record
 

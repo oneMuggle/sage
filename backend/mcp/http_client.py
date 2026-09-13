@@ -146,6 +146,11 @@ class HttpClientMcpClient:
         }
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
+        # R34: 自定义鉴权头（如 Authorization: Bearer <PAT>）—— 配置即合并，
+        # 每次请求携带；不覆盖传输自身必需的会话头。
+        for h_key, h_value in (getattr(self._config, "headers", None) or {}).items():
+            if isinstance(h_key, str) and isinstance(h_value, str):
+                headers[h_key] = h_value
 
         client = self._client
         owned = False
