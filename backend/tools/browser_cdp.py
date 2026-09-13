@@ -132,6 +132,8 @@ class BrowserSession:
     process: subprocess.Popen
     port: int
     ws_path: str
+    #: 持久 profile（登录态跨会话保留）；False = 临时目录，终止时删除
+    persistent: bool = False
 
     def is_alive(self) -> bool:
         return self.process.poll() is None
@@ -196,7 +198,12 @@ class BrowserSessionManager:
 
 
 def _terminate_session(session: BrowserSession) -> None:
-    """终止浏览器进程 + 尽力清理临时目录（任何失败静默记日志）。"""
+    """终止浏览器进程 + 尽力清理临时目录（任何失败静默记日志）。
+
+    持久 profile（session.persistent）只关进程不删目录 —— 登录态跨会话
+    保留的前提；启动失败路径同样经由本函数，持久目录即使启动失败也不删
+    （里面可能有用户既有登录态）。
+    """
     try:
         session.process.terminate()
         try:
@@ -205,7 +212,37 @@ def _terminate_session(session: BrowserSession) -> None:
             session.process.kill()
     except OSError as exc:
         logger.warning("browser terminate 失败: %s", exc)
+    if getattr(session, "persistent", False):
+        return
     shutil.rmtree(session.user_data_dir, ignore_errors=True)
+
+
+def _profiles_root() -> Path:
+    """持久 profile 根目录。
+
+    跟随 ``SAGE_DB_PATH`` 的数据根（packaged 模式 = %APPDATA%/Sage，与
+    Database 同一数据目录）；无该环境变量时退回项目 ``data/`` 目录。
+    """
+    env_path = os.environ.get("SAGE_DB_PATH")
+    if env_path:
+        root = Path(env_path).parent / "browser-profiles"
+    else:
+        base_dir = Path(__file__).parent.parent.parent
+        root = base_dir / "data" / "browser-profiles"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def browser_downloads_root() -> Path:
+    """浏览器内触发下载的兜底落盘目录（未绑定工作区时）。"""
+    env_path = os.environ.get("SAGE_DB_PATH")
+    if env_path:
+        root = Path(env_path).parent / "browser-downloads"
+    else:
+        base_dir = Path(__file__).parent.parent.parent
+        root = base_dir / "data" / "browser-downloads"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 _manager: Optional[BrowserSessionManager] = None
@@ -218,15 +255,49 @@ def get_browser_manager() -> BrowserSessionManager:
     return _manager
 
 
+def _build_launch_command(
+    executable: str, headless: bool, user_data_dir: str, proxy_flag: str = ""
+) -> List[str]:
+    """构造浏览器启动命令（纯函数便于单测）。
+
+    ``proxy_flag`` 非空时追加 ``--proxy-server=``（用户级代理配置，见
+    http_factory.browser_proxy_flag）——否则浏览器通道绕过代理，代理用户
+    经 headless 渲染访问被墙站点依旧不通。
+    """
+    command = [
+        executable,
+        "--remote-debugging-port=0",
+        f"--user-data-dir={user_data_dir}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--window-size=1440,900",
+    ]
+    if proxy_flag:
+        command.append(f"--proxy-server={proxy_flag}")
+    command.append("about:blank")
+    if headless:
+        # Chrome 109+（Win7 末代版本）起支持 new headless
+        command.insert(1, "--headless=new")
+    return command
+
+
 def launch_browser(
-    headless: bool = True, browser_id: Optional[str] = None
+    headless: bool = True,
+    browser_id: Optional[str] = None,
+    persistent: bool = False,
+    profile_name: str = "default",
 ) -> BrowserSession:
     """启动浏览器实例并完成 DevToolsActivePort 握手。
 
     Args:
-        headless:   无头模式（web_fetch 渲染池恒为 True）。
-        browser_id: 显式指定会话 id（web_fetch 渲染池传保留 id
-                    RESERVED_BROWSER_ID）；缺省生成随机 id。
+        headless:     无头模式（web_fetch 渲染池恒为 True）。
+        browser_id:   显式指定会话 id（web_fetch 渲染池传保留 id
+                      RESERVED_BROWSER_ID）；缺省生成随机 id。
+        persistent:   使用持久 profile（``_profiles_root()/<profile_name>``，
+                      登录态跨会话保留）；False = 一次性临时目录。
+        profile_name: 持久 profile 目录名（净化为安全 basename）。
 
     Raises:
         BrowserCDPError: 找不到浏览器 / 启动超时 / 实例数超限。
@@ -237,21 +308,19 @@ def launch_browser(
             "未找到 Chrome/Edge 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH 指定可执行文件路径"
         )
 
-    user_data_dir = tempfile.mkdtemp(prefix="sage_browser_")
-    command = [
-        executable,
-        "--remote-debugging-port=0",
-        f"--user-data-dir={user_data_dir}",
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-extensions",
-        "--disable-background-networking",
-        "--window-size=1440,900",
-        "about:blank",
-    ]
-    if headless:
-        # Chrome 109+（Win7 末代版本）起支持 new headless
-        command.insert(1, "--headless=new")
+    if persistent:
+        from .download_tool import sanitize_filename
+
+        profile_dir = _profiles_root() / sanitize_filename(profile_name or "default")
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        user_data_dir = str(profile_dir)
+    else:
+        user_data_dir = tempfile.mkdtemp(prefix="sage_browser_")
+    from .http_factory import browser_proxy_flag
+
+    command = _build_launch_command(
+        executable, headless, user_data_dir, browser_proxy_flag()
+    )
 
     try:
         process = subprocess.Popen(  # noqa: S603 — 可执行文件来自受控发现逻辑
@@ -261,14 +330,16 @@ def launch_browser(
             stdin=subprocess.DEVNULL,
         )
     except OSError as exc:
-        shutil.rmtree(user_data_dir, ignore_errors=True)
+        if not persistent:
+            shutil.rmtree(user_data_dir, ignore_errors=True)
         raise BrowserCDPError(f"浏览器启动失败: {exc}")
 
     deadline = time.monotonic() + LAUNCH_TIMEOUT_SECONDS
     port_file = Path(user_data_dir) / "DevToolsActivePort"
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            shutil.rmtree(user_data_dir, ignore_errors=True)
+            if not persistent:
+                shutil.rmtree(user_data_dir, ignore_errors=True)
             raise BrowserCDPError(
                 f"浏览器进程提前退出（退出码 {process.returncode}）——可尝试 headless=false 排查"
             )
@@ -288,13 +359,16 @@ def launch_browser(
                     process=process,
                     port=port,
                     ws_path=ws_path,
+                    persistent=persistent,
                 )
                 get_browser_manager().register(session)
                 return session
         time.sleep(_LAUNCH_POLL_INTERVAL)
 
     _terminate_session(
-        BrowserSession("", executable, headless, user_data_dir, process, 0, "")
+        BrowserSession(
+            "", executable, headless, user_data_dir, process, 0, "", persistent=persistent
+        )
     )
     raise BrowserCDPError(
         f"等待 DevToolsActivePort 超时（{LAUNCH_TIMEOUT_SECONDS:.0f} 秒）——浏览器可能未完成启动"
@@ -388,7 +462,11 @@ def cdp_command(
     """
     connection = _CDPConnection(session)
     try:
-        if method.startswith("Target.") and method not in ("Target.attachToTarget",):
+        # 浏览器级方法不带 sessionId（Target.* 自身即浏览器级；Browser.* 如
+        # setDownloadBehavior 走浏览器作用域，attach 页面反而可能报错）。
+        if method.startswith(("Target.", "Browser.")) and method not in (
+            "Target.attachToTarget",
+        ):
             return connection.command(method, params)
         resolved_target = ensure_page_target(session, target_id)
         attached = connection.command(
@@ -410,6 +488,7 @@ __all__ = [
     "LAUNCH_TIMEOUT_SECONDS",
     "MAX_BROWSER_SESSIONS",
     "RESERVED_BROWSER_ID",
+    "browser_downloads_root",
     "cdp_command",
     "discover_browser_executable",
     "ensure_page_target",

@@ -1,0 +1,325 @@
+# ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容，保留 typing 注解
+"""cookie 桥单元测试（方案 2026-09-13 批次 4）。
+
+覆盖：credential_vault 存取/加密/域匹配、WebFetchTool 与 HttpDownloadTool
+的 credential_domain 接线（含跨域剥离）、BrowserCookiesTool 的
+export/list/delete。
+"""
+
+import json
+from types import SimpleNamespace
+
+import pytest
+import respx
+from httpx import Response
+
+from backend.domain.tool_policy import ToolPolicy
+from backend.tools import browser_tool
+from backend.tools.browser_cdp import BrowserSession, BrowserSessionManager
+from backend.tools.browser_tool import BrowserCookiesTool
+from backend.tools.credential_vault import (
+    SETTINGS_KEY_CREDENTIAL_VAULT,
+    cookie_domain_matches,
+    cookie_header_for,
+    delete_credential,
+    list_credentials,
+    load_credential,
+    save_credential,
+)
+from backend.tools.download_tool import HttpDownloadTool
+from backend.tools.web_tool import WebFetchTool
+
+pytestmark = [pytest.mark.unit]
+
+_COOKIES = [
+    {"name": "SID", "value": "s3cret", "domain": ".example.com", "path": "/"},
+    {"name": "AUTH", "value": "token1", "domain": ".example.com", "path": "/"},
+]
+
+
+@pytest.fixture(autouse=True)
+def _force_test_secret_scheme(monkeypatch):
+    """enc: 加解密走确定性 test 方案（base64），保证 CI 可复现。"""
+    monkeypatch.setenv("SAGE_SECRET_SCHEME", "test")
+
+
+class _MemRepo:
+    """内存版 SettingsRepository（只实现 vault 相关语义）。"""
+
+    def __init__(self):
+        self.data = {}
+
+    def get(self, key):
+        return self.data.get(key)
+
+    def set(self, key, value, value_type="string", category="general"):
+        self.data[key] = value
+
+
+@pytest.fixture()
+def repo():
+    return _MemRepo()
+
+
+# ---------- credential_vault ----------
+
+
+class TestCredentialVault:
+    def test_save_load_roundtrip(self, repo):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        assert SETTINGS_KEY_CREDENTIAL_VAULT in repo.data
+        raw = json.loads(repo.data[SETTINGS_KEY_CREDENTIAL_VAULT])
+        assert raw[".example.com"]["cookies_enc"].startswith("enc:")  # 静态加密落库
+        cookies = load_credential(".example.com", repo=repo)
+        assert cookies == _COOKIES
+
+    def test_cookie_header_joins_pairs(self, repo):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        header = cookie_header_for(".example.com", repo=repo)
+        assert header == "SID=s3cret; AUTH=token1"
+
+    def test_missing_archive_returns_none(self, repo):
+        assert load_credential(".other.com", repo=repo) is None
+        assert cookie_header_for(".other.com", repo=repo) is None
+
+    def test_corrupt_archive_returns_none(self, repo):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        raw = json.loads(repo.data[SETTINGS_KEY_CREDENTIAL_VAULT])
+        raw[".example.com"]["cookies_enc"] = "enc:test:v1:!!!"
+        repo.data[SETTINGS_KEY_CREDENTIAL_VAULT] = json.dumps(raw)
+        assert load_credential(".example.com", repo=repo) is None
+
+    def test_delete(self, repo):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        assert delete_credential(".example.com", repo=repo) is True
+        assert delete_credential(".example.com", repo=repo) is False
+        assert load_credential(".example.com", repo=repo) is None
+
+    def test_list_is_masked(self, repo):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        entries = list_credentials(repo=repo)
+        assert entries[0]["domain"] == ".example.com"
+        assert entries[0]["cookie_names"] == ["SID", "AUTH"]
+        assert "s3cret" not in json.dumps(entries)  # 值不回显
+
+    def test_save_rejects_empty(self, repo):
+        with pytest.raises(ValueError, match="domain 与 cookies"):
+            save_credential(".example.com", [], repo=repo)
+        with pytest.raises(ValueError, match="domain 与 cookies"):
+            save_credential("", _COOKIES, repo=repo)
+
+
+class TestCookieDomainMatches:
+    @pytest.mark.parametrize(
+        ("hostname", "domain", "expected"),
+        [
+            ("www.example.com", ".example.com", True),
+            ("example.com", ".example.com", True),
+            ("example.com", "example.com", True),
+            ("a.b.example.com", ".example.com", True),
+            ("evilc.example.com.evil.net", ".example.com", False),
+            ("evilexample.com", ".example.com", False),
+            ("other.com", ".example.com", False),
+            ("", ".example.com", False),
+        ],
+    )
+    def test_cases(self, hostname, domain, expected):
+        assert cookie_domain_matches(hostname, domain) is expected
+
+
+# ---------- WebFetchTool credential_domain ----------
+
+
+def _fetch_tool():
+    return WebFetchTool()
+
+
+class TestWebFetchCredential:
+    def test_credential_not_found(self):
+        result = _fetch_tool().execute(
+            url="https://www.example.com/paper", credential_domain=".example.com"
+        )
+        assert result.success is False
+        assert "credential_not_found" in result.error
+
+    def test_credential_domain_mismatch(self, repo):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        with patch_vault_repo(repo):
+            result = _fetch_tool().execute(
+                url="https://other.org/paper", credential_domain=".example.com"
+            )
+        assert result.success is False
+        assert "credential_domain_mismatch" in result.error
+
+    def test_cookie_attached_on_matched_hop(self, repo):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        with patch_vault_repo(repo), respx.mock(base_url="https://www.example.com") as mock:
+            route = mock.get("/paper").mock(
+                return_value=Response(
+                    200,
+                    text="<html>订阅内容</html>",
+                    headers={"content-type": "text/html; charset=utf-8"},
+                )
+            )
+            result = _fetch_tool().execute(
+                url="https://www.example.com/paper", credential_domain=".example.com"
+            )
+
+        assert result.success is True
+        request = route.calls.last.request
+        assert request.headers["Cookie"] == "SID=s3cret; AUTH=token1"
+
+    def test_cookie_stripped_on_cross_domain_redirect(self, repo):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        with patch_vault_repo(repo), respx.mock(assert_all_called=False) as mock:
+            first = mock.get("https://www.example.com/paper").mock(
+                return_value=Response(302, headers={"location": "https://ads.other.net/final"})
+            )
+            second = mock.get("https://ads.other.net/final").mock(
+                return_value=Response(
+                    200,
+                    text="<html>第三方页</html>",
+                    headers={"content-type": "text/html; charset=utf-8"},
+                )
+            )
+            result = _fetch_tool().execute(
+                url="https://www.example.com/paper", credential_domain=".example.com"
+            )
+
+        assert result.success is True
+        # 跨域 hop 不携带凭据 cookie
+        final_request = second.calls.last.request
+        assert "Cookie" not in final_request.headers
+        assert first.calls.last.request.headers["Cookie"] == "SID=s3cret; AUTH=token1"
+        assert "credential_stripped" in (result.content.get("note") or "")
+
+    def test_no_credential_no_cookie_header(self):
+        with respx.mock(base_url="https://www.example.com", assert_all_called=False) as mock:
+            route = mock.get("/open").mock(
+                return_value=Response(
+                    200,
+                    text="<html>公开页</html>",
+                    headers={"content-type": "text/html; charset=utf-8"},
+                )
+            )
+            result = _fetch_tool().execute(url="https://www.example.com/open")
+
+        assert result.success is True
+        assert "Cookie" not in route.calls.last.request.headers
+
+
+# ---------- HttpDownloadTool credential_domain ----------
+
+
+class TestDownloadCredential:
+    def _tool(self, tmp_path):
+        return HttpDownloadTool(policy=ToolPolicy(workspace_root=str(tmp_path)))
+
+    def test_credential_not_found(self, tmp_path):
+        result = self._tool(tmp_path).execute(
+            url="https://www.example.com/a.pdf", credential_domain=".example.com"
+        )
+        assert result.success is False
+        assert "credential_not_found" in result.error
+
+    def test_cookie_attached_on_download(self, tmp_path, repo):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        with patch_vault_repo(repo), respx.mock(
+            base_url="https://www.example.com"
+        ) as mock:
+            route = mock.get("/a.pdf").mock(
+                return_value=Response(200, content=b"%PDF-1.4 fake")
+            )
+            result = self._tool(tmp_path).execute(
+                url="https://www.example.com/a.pdf", credential_domain=".example.com"
+            )
+
+        assert result.success is True
+        assert route.calls.last.request.headers["Cookie"] == "SID=s3cret; AUTH=token1"
+        assert (tmp_path / "a.pdf").read_bytes() == b"%PDF-1.4 fake"
+
+
+# ---------- BrowserCookiesTool ----------
+
+
+def _fake_session():
+    process = SimpleNamespace(
+        poll=lambda: None, terminate=lambda: None, kill=lambda: None, wait=lambda timeout=None: None
+    )
+    return BrowserSession(
+        browser_id="b1",
+        executable="fake-browser",
+        headless=True,
+        user_data_dir="/tmp/unused",
+        process=process,
+        port=1,
+        ws_path="/devtools/browser/x",
+    )
+
+
+class TestBrowserCookiesTool:
+    def test_export_saves_grouped_and_masked(self, repo, monkeypatch):
+        manager = BrowserSessionManager()
+        manager.register(_fake_session())
+        monkeypatch.setattr(browser_tool, "get_browser_manager", lambda: manager)
+
+        def _fake_cdp(session_, method, params=None, target_id=None):
+            assert method == "Network.getCookies"
+            return {
+                "cookies": [
+                    {"name": "SID", "value": "s3cret", "domain": ".example.com"},
+                    {"name": "TRACK", "value": "t", "domain": ".tracker.net"},
+                ]
+            }
+
+        monkeypatch.setattr(browser_tool, "cdp_command", _fake_cdp)
+        with patch_vault_repo(repo):
+            result = BrowserCookiesTool().execute(action="export")
+
+        assert result.success is True
+        saved = {item["domain"]: item for item in result.content["saved"]}
+        assert set(saved) == {".example.com", ".tracker.net"}
+        assert sorted(saved[".example.com"]["cookie_names"]) == ["SID"]
+        assert "s3cret" not in json.dumps(result.content)  # 脱敏：值不回显
+        # 密文落库
+        raw = json.loads(repo.data[SETTINGS_KEY_CREDENTIAL_VAULT])
+        assert raw[".example.com"]["cookies_enc"].startswith("enc:")
+
+    def test_export_no_cookies(self, repo, monkeypatch):
+        manager = BrowserSessionManager()
+        manager.register(_fake_session())
+        monkeypatch.setattr(browser_tool, "get_browser_manager", lambda: manager)
+        monkeypatch.setattr(browser_tool, "cdp_command", lambda *a, **kw: {"cookies": []})
+        with patch_vault_repo(repo):
+            result = BrowserCookiesTool().execute(action="export")
+        assert result.success is False
+        assert "no_cookies" in result.error
+
+    def test_list_and_delete(self, repo, monkeypatch):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        with patch_vault_repo(repo):
+            listed = BrowserCookiesTool().execute(action="list")
+            assert listed.success is True
+            assert listed.content["credentials"][0]["domain"] == ".example.com"
+
+            deleted = BrowserCookiesTool().execute(action="delete", domain=".example.com")
+            assert deleted.success is True
+            again = BrowserCookiesTool().execute(action="delete", domain=".example.com")
+            assert again.success is False
+            assert "credential_not_found" in again.error
+
+    def test_invalid_action(self):
+        result = BrowserCookiesTool().execute(action="steal")
+        assert result.success is False
+
+
+# ---------- 测试辅助 ----------
+
+
+def patch_vault_repo(repo):
+    """把 credential_vault 的默认 SettingsRepository 指到内存 repo。"""
+    import unittest.mock
+
+    return unittest.mock.patch(
+        "backend.data.settings_repo.SettingsRepository", return_value=repo
+    )

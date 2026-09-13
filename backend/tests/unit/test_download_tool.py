@@ -1,5 +1,6 @@
 """http_download 单元测试：流式落盘 + 大小上限 + 路径边界 + 文件名净化。"""
 
+import os
 from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
@@ -104,7 +105,12 @@ def test_download_rejects_absolute_filename(tmp_path):
     result = _tool(tmp_path).execute(url=f"{_BASE}/x.pdf", filename="/etc/passwd")
 
     assert result.success is False
-    assert "filename_must_be_relative" in result.error
+    if os.name == "nt":
+        # Windows 上 "/etc/passwd" 无盘符不算绝对路径，落进工作区边界拒绝；
+        # 两条路径都是安全拒绝，语义等价。
+        assert "path_outside_workspace" in result.error
+    else:
+        assert "filename_must_be_relative" in result.error
 
 
 def test_download_rejects_filename_escaping_workspace(tmp_path):

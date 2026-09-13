@@ -235,7 +235,7 @@ def test_renderer_pool_reuses_live_session(monkeypatch):
     pool = web_render._RendererPool()
     created = []
 
-    def _fake_launch(headless, browser_id=None):
+    def _fake_launch(headless, browser_id=None, **kwargs):
         assert headless is True
         assert browser_id == RENDER_POOL_ID  # 保留 id，用户实例解析不受干扰
         session = _FakePoolSession()
@@ -260,7 +260,7 @@ def test_renderer_pool_rebuilds_after_idle_timeout(monkeypatch):
     monkeypatch.setattr(web_render, "time", clock)
     created = []
 
-    def _fake_launch(headless, browser_id=None):
+    def _fake_launch(headless, browser_id=None, **kwargs):
         session = _FakePoolSession()
         created.append(session)
         return session

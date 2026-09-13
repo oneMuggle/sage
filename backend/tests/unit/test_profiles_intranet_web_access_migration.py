@@ -73,6 +73,7 @@ def test_default_seed_coder_uses_current_tool_names():
         "browser_snapshot",
         "browser_interact",
         "browser_screenshot",
+        "browser_cookies",
         "browser_close",
     ]
 

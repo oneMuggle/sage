@@ -22,6 +22,7 @@ import base64
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlsplit
 
@@ -31,6 +32,7 @@ from .base import BaseTool, ToolResult, ToolSchema
 from .browser_cdp import (
     BrowserCDPError,
     BrowserSession,
+    browser_downloads_root,
     cdp_command,
     get_browser_manager,
     launch_browser,
@@ -203,13 +205,16 @@ def _validate_action_args(action: str, selector: str, text: str, value: str) -> 
     return None
 
 
-def _wait_page_settled(session: BrowserSession, target_id: Optional[str]) -> None:
+def _wait_page_settled(
+    session: BrowserSession, target_id: Optional[str], wait_for: str = ""
+) -> None:
     """navigate 后等页面可用（readyState + 正文稳定，见 web_render.wait_page_ready）。
 
     SPA 的 hydrate 发生在 readyState=complete 之后 —— 只等 readyState 会
     拿到半空页面，稳定等待逻辑统一收口在 web_render（渲染分支共用，W2）。
+    ``wait_for``（R2）为 CSS 选择器：出现才继续（超时不失败）。
     """
-    wait_page_ready(session, target_id)
+    wait_page_ready(session, target_id, wait_for=wait_for)
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +223,7 @@ def _wait_page_settled(session: BrowserSession, target_id: Optional[str]) -> Non
 
 
 class BrowserLaunchTool(BaseTool):
-    """启动一个受控浏览器实例（独立临时 profile，不影响用户浏览器）。"""
+    """启动一个受控浏览器实例（默认临时 profile，可选持久 profile）。"""
 
     risk = RiskClass.EXEC
     is_blocking = True
@@ -227,36 +232,80 @@ class BrowserLaunchTool(BaseTool):
         return ToolSchema(
             name="browser_launch",
             description=(
-                "启动一个受控浏览器实例（Chrome/Edge，独立临时配置目录）。"
-                "返回 browser_id，后续 browser_* 工具用它与浏览器交互。"
-                "headless 默认 true（无窗口）；需要可视化调试时传 false。"
+                "启动一个受控浏览器实例（Chrome/Edge）。默认独立临时配置目录，"
+                "关闭即清理；persistent=true 使用持久 profile（登录态跨会话"
+                "保留，适合先登录再抓取的场景）。返回 browser_id，后续 "
+                "browser_* 工具用它与浏览器交互。headless 默认 true（无窗口）；"
+                "需要可视化调试或手动登录时传 false。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "headless": {"type": "boolean", "description": "无头模式（默认 true）"},
+                    "persistent": {
+                        "type": "boolean",
+                        "description": "持久 profile，登录态跨会话保留（默认 false）",
+                    },
+                    "profile_name": {
+                        "type": "string",
+                        "description": "持久 profile 名称（默认 default）",
+                    },
                 },
                 "required": [],
             },
         )
 
-    def execute(self, headless: bool = True, **kwargs: Any) -> ToolResult:
+    def execute(
+        self,
+        headless: bool = True,
+        persistent: bool = False,
+        profile_name: str = "default",
+        **kwargs: Any,
+    ) -> ToolResult:
         if kwargs:
             return ToolResult(
                 success=False,
-                error=f"未知参数: {', '.join(sorted(kwargs))}（合法参数: headless）",
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: headless, persistent, profile_name）"
+                ),
             )
         try:
-            session = launch_browser(headless=bool(headless))
+            session = launch_browser(
+                headless=bool(headless),
+                persistent=bool(persistent),
+                profile_name=str(profile_name or "default"),
+            )
         except BrowserCDPError as exc:
             return _error(exc)
+
+        # 下载黑洞修复：把浏览器内触发的下载重定向到工作区（或数据目录），
+        # 否则文件落在临时 profile 目录，browser_close 时一并被删。
+        root = self._policy.workspace_root
+        download_dir = Path(root) / "downloads" if root else browser_downloads_root()
+        try:
+            download_dir.mkdir(parents=True, exist_ok=True)
+            cdp_command(
+                session,
+                "Browser.setDownloadBehavior",
+                {"behavior": "allow", "downloadPath": str(download_dir)},
+            )
+        except BrowserCDPError as exc:
+            logger.warning("setDownloadBehavior 失败（不影响启动）: %s", exc)
+
         return ToolResult(
             success=True,
             content={
                 "browser_id": session.browser_id,
                 "executable": session.executable,
                 "headless": session.headless,
-                "note": "用 browser_navigate 打开页面；browser_close 结束会话。",
+                "persistent": session.persistent,
+                "profile_dir": session.user_data_dir,
+                "download_dir": str(download_dir),
+                "note": (
+                    "用 browser_navigate 打开页面；browser_close 结束会话。"
+                    + ("持久 profile 关闭后登录态保留。" if session.persistent else "")
+                ),
             },
         )
 
@@ -282,18 +331,30 @@ class BrowserNavigateTool(BaseTool):
                     "url": {"type": "string", "description": "目标 URL"},
                     "browser_id": {"type": "string", "description": "browser_launch 返回的 id（单实例可省略）"},
                     "new_tab": {"type": "boolean", "description": "在新标签页打开（默认 false，用当前页）"},
+                    "wait_for": {
+                        "type": "string",
+                        "description": "CSS 选择器：等它出现再返回（默认空 = 就绪+稳定即返回）",
+                    },
                 },
                 "required": ["url"],
             },
         )
 
     def execute(  # noqa: PLR0911 — 每个拒绝路径独立 return，扁平比提取辅助函数更直读
-        self, url: str = "", browser_id: str = "", new_tab: bool = False, **kwargs: Any
+        self,
+        url: str = "",
+        browser_id: str = "",
+        new_tab: bool = False,
+        wait_for: str = "",
+        **kwargs: Any,
     ) -> ToolResult:
         if kwargs:
             return ToolResult(
                 success=False,
-                error=f"未知参数: {', '.join(sorted(kwargs))}（合法参数: url, browser_id, new_tab）",
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: url, browser_id, new_tab, wait_for）"
+                ),
             )
         scheme_error = validate_url(url)
         if scheme_error is not None:
@@ -314,7 +375,7 @@ class BrowserNavigateTool(BaseTool):
                 ).get("targetId")
                 if not created:
                     return ToolResult(success=False, error="新标签页创建失败")
-                _wait_page_settled(session, created)
+                _wait_page_settled(session, created, wait_for)
                 info = _evaluate_json(
                     session,
                     "JSON.stringify({url:location.href,title:document.title})",
@@ -324,7 +385,7 @@ class BrowserNavigateTool(BaseTool):
                 result = cdp_command(session, "Page.navigate", {"url": url.strip()})
                 if result.get("errorText"):
                     return ToolResult(success=False, error=f"导航失败: {result['errorText']}")
-                _wait_page_settled(session, None)
+                _wait_page_settled(session, None, wait_for)
                 info = _evaluate_json(
                     session,
                     "JSON.stringify({url:location.href,title:document.title})",
@@ -495,12 +556,11 @@ class BrowserScreenshotTool(BaseTool):
         root = self._policy.workspace_root
         if not root:
             return ToolResult(success=False, error="browser_screenshot 需要绑定工作区（workspace）")
-        from pathlib import Path as _Path
 
         if path:
-            target = _Path(root) / path
+            target = Path(root) / path
         else:
-            target = _Path(root) / f"browser_screenshot_{time.strftime('%Y%m%d-%H%M%S')}.png"
+            target = Path(root) / f"browser_screenshot_{time.strftime('%Y%m%d-%H%M%S')}.png"
         blocked = self._enforce_workspace(str(target))
         if blocked is not None:
             return blocked
@@ -580,9 +640,124 @@ class BrowserCloseTool(BaseTool):
         )
 
 
+class BrowserCookiesTool(BaseTool):
+    """导出/管理站点 cookie 凭据档案（cookie 桥，方案 2026-09-13 §2.5）。
+
+    导出当前页面 cookie domain 的 cookie，经 SecretBox 加密落档案；之后
+    ``web_fetch`` / ``http_download`` 用 ``credential_domain`` 引用，登录墙
+    后的资源（订阅源文献 PDF）即可达。返回结果恒为脱敏预览（只有名字）。
+    """
+
+    risk = RiskClass.WRITE_LOCAL
+    is_blocking = True
+
+    _VALID_ACTIONS = ("export", "list", "delete")
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="browser_cookies",
+            description=(
+                "站点 cookie 凭据档案。action=export：把当前浏览器页面的 "
+                "cookie（按其 domain）加密存入凭据档案，供 web_fetch / "
+                "http_download 用 credential_domain 参数引用（先登录后导出，"
+                "即可抓登录墙后的资源）；action=list：列出档案（脱敏）；"
+                "action=delete：删除某 domain 的档案。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "description": "export | list | delete"},
+                    "domain": {
+                        "type": "string",
+                        "description": "delete 用的档案 domain（如 .cnki.net）",
+                    },
+                    "browser_id": {"type": "string", "description": "单实例可省略"},
+                },
+                "required": ["action"],
+            },
+        )
+
+    def execute(  # noqa: PLR0911 — 每个拒绝/动作路径独立 return，扁平更直读
+        self, action: str = "", domain: str = "", browser_id: str = "", **kwargs: Any
+    ) -> ToolResult:
+        if kwargs:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: action, domain, browser_id）"
+                ),
+            )
+        if action not in self._VALID_ACTIONS:
+            return ToolResult(
+                success=False, error=f"action 必须是 {', '.join(self._VALID_ACTIONS)}"
+            )
+
+        if action == "list":
+            from .credential_vault import list_credentials
+
+            return ToolResult(success=True, content={"credentials": list_credentials()})
+
+        if action == "delete":
+            from .credential_vault import delete_credential
+
+            if not domain.strip():
+                return ToolResult(success=False, error="delete 需要 domain")
+            deleted = delete_credential(domain)
+            if not deleted:
+                return ToolResult(
+                    success=False, error=f"credential_not_found: 无 {domain!r} 的档案"
+                )
+            return ToolResult(success=True, content={"deleted": domain.strip().lower()})
+
+        # 余下分支：action == "export"
+        try:
+            session = _resolve_session(browser_id or None)
+            result = cdp_command(session, "Network.getCookies", {})
+        except BrowserCDPError as exc:
+            return _error(exc)
+        raw_cookies = result.get("cookies") or []
+        if not raw_cookies:
+            return ToolResult(
+                success=False, error="no_cookies: 当前页面没有可导出的 cookie（先登录？）"
+            )
+        # 当前页 cookie 按 domain 分组存档（一个页面可能带多 domain 的 cookie）
+        from .credential_vault import save_credential
+
+        by_domain: Dict[str, list] = {}
+        for item in raw_cookies:
+            if not isinstance(item, dict) or not item.get("name"):
+                continue
+            cookie_domain = str(item.get("domain") or "").lower()
+            if not cookie_domain:
+                continue
+            by_domain.setdefault(cookie_domain, []).append(item)
+        saved = []
+        for cookie_domain, cookies in sorted(by_domain.items()):
+            save_credential(cookie_domain, cookies)
+            saved.append(
+                {
+                    "domain": cookie_domain,
+                    "cookie_names": [str(c.get("name")) for c in cookies],
+                    "count": len(cookies),
+                }
+            )
+        return ToolResult(
+            success=True,
+            content={
+                "saved": saved,
+                "note": (
+                    "cookie 已加密存档（值不回显）。web_fetch / http_download "
+                    "传 credential_domain=<上述 domain> 即可携带登录态。"
+                ),
+            },
+        )
+
+
 __all__ = [
     "BROWSER_TOOL_NAMES",
     "BrowserCloseTool",
+    "BrowserCookiesTool",
     "BrowserInteractTool",
     "BrowserLaunchTool",
     "BrowserNavigateTool",
@@ -598,5 +773,6 @@ BROWSER_TOOL_NAMES = (
     "browser_snapshot",
     "browser_interact",
     "browser_screenshot",
+    "browser_cookies",
     "browser_close",
 )
