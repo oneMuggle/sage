@@ -256,6 +256,8 @@ class ChatDispatcher:
         # （_cancelled 随之置位收口剩余任务），dispatch 入口据此拒绝后续批次。
         self._budget_exceeded = False
         self._budget_limit = 0
+        # BU7 (round18): 80% 预警一次性标志。
+        self._budget_warned = False
         # BD (round12): 后台派发句柄 —— 同一时刻至多一个在飞；collect 侧
         # shield 等待，超时/取消不杀派发本身。
         self._bg_task: Optional[asyncio.Task] = None
@@ -380,6 +382,9 @@ class ChatDispatcher:
         """BD3 (round13): 非阻塞快照 —— 各子任务当前状态与结果预览。
 
         status: none（从未后台派发）/ running（在飞）/ completed（已终态）。
+        BD7 (round18): 增 ``aggregate``（当前部分聚合 markdown，与超时
+        partial 载荷同源）与 ``budget_exceeded`` 标志 —— conductor 在
+        wait=false 快照上即可见"已完成什么/是否触顶"。
         """
         if self._bg_task is None:
             status = "none"
@@ -396,7 +401,12 @@ class ChatDispatcher:
             }
             for s in self._states.values()
         ]
-        return {"status": status, "tasks": tasks}
+        snapshot: Dict[str, Any] = {"status": status, "tasks": tasks}
+        # BD7: 聚合预览 —— 仅在已有后台派发时提供（none 态无 states 可聚合）。
+        if self._bg_task is not None:
+            snapshot["aggregate"] = self._aggregate(list(self._states.values()))
+        snapshot["budget_exceeded"] = self._budget_exceeded
+        return snapshot
 
     async def wait_background(self, timeout: Optional[float] = None) -> str:
         """等待后台派发完成，返回聚合 markdown。
@@ -1041,6 +1051,8 @@ class ChatDispatcher:
         首次派发时间戳起的本 session 累计 total_tokens（O3 使子代理用量
         归因到同一 session）。只触发一次；usage 读取 fail-open 返 0，
         守门降级绝不误触发。
+        BU7 (round18): 80% 跨越点一次性预警（WARNING 日志），提前暴露
+        "即将触顶"，用户/排障可感知；不改变守门行为。
         """
         budget = getattr(self.settings, "run_token_budget", 0)
         if budget <= 0 or self._budget_exceeded:
@@ -1062,6 +1074,16 @@ class ChatDispatcher:
                 budget,
             )
             self._cancelled.set()
+        elif used >= budget * 4 // 5:
+            # BU7: 80% 预警 —— 一次性（_budget_warned 防重复刷日志），不改变守门行为。
+            if not self._budget_warned:
+                self._budget_warned = True
+                logger.warning(
+                    "run %s 接近 token 预算上限：已用 %d / 预算 %d（≥80%%）",
+                    self.run_id,
+                    used,
+                    budget,
+                )
 
     def _emit_task_status(self, state: ChatTaskState) -> None:
         """推 task_status 事件；队列满/关闭静默降级（进度尽力而为）。"""
