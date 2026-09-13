@@ -8,6 +8,7 @@ export type {
   KnowledgeDocType,
 } from './InputCard';
 export { MessageList } from './MessageList';
+export { MemoryWriteHints } from './MemoryWriteHints';
 export { Message } from './Message';
 export { ActiveAgentIndicator } from './ActiveAgentIndicator';
 export { SubagentLivePanel } from './SubagentLivePanel';

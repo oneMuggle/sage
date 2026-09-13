@@ -141,6 +141,8 @@ export const chatApi = {
       run_id: config?.runId ?? null,
       // PM1 (round8): 计划模式 —— 只读调研 + 计划产出。
       plan_mode: config?.planMode ?? null,
+      // 对标 S2: 临时聊天 → memory_mode='off'（缺省 'on'）
+      memory_mode: config?.memoryDisabled ? 'off' : 'on',
     });
     const eventName = `chat-stream-${streamId}`;
 

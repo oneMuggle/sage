@@ -317,6 +317,39 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     },
   },
   delete_memory: { method: 'POST', path: () => '/api/v1/memory/delete' },
+  // 对标 S2 (2026-09-13): 记忆写入台账（内联"记住了"提示 + 撤销）
+  get_recent_memory_writes: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams({
+        session_id: String(a?.sessionId ?? ''),
+        after_seq: String((a?.afterSeq as number) ?? 0),
+        limit: String((a?.limit as number) ?? 20),
+      });
+      return `/api/v1/memory/recent-writes?${params.toString()}`;
+    },
+  },
+  undo_memory_write: {
+    method: 'POST',
+    path: () => '/api/v1/memory/undo-write',
+    body: (a) => ({ session_id: a.sessionId, id: a.id }),
+  },
+  // 对标 S2: 用户画像 CRUD（"关于我"可编辑卡片）
+  get_user_profile: { method: 'GET', path: () => '/api/v1/memory/profile' },
+  create_user_profile: {
+    method: 'POST',
+    path: () => '/api/v1/memory/profile',
+    body: (a) => ({ content: a.content, category: a.category, importance: a.importance }),
+  },
+  update_user_profile: {
+    method: 'PUT',
+    path: (a) => `/api/v1/memory/profile/${encodeURIComponent(String(a?.id ?? ''))}`,
+    body: (a) => ({ content: a.content, category: a.category, importance: a.importance }),
+  },
+  delete_user_profile: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/memory/profile/${encodeURIComponent(String(a?.id ?? ''))}`,
+  },
   // PR-C §5.4: front-end memoryApi.ts 调用 invoke('search_memory'|'save_memory'),
   // 但 commands.ts 没映射 → 前端 404。后端端点已存在 (legacy_routes.py:2479, :2490)。
   search_memory: {

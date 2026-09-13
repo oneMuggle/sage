@@ -166,7 +166,13 @@ export function useChat() {
       sessionId?: string,
       officeRefs?: readonly ChatOfficeRef[],
       orchestrationMode?: ChatConfig['orchestrationMode'],
-      opts?: { planOverride?: TaskPlanItem[]; runId?: string; planMode?: boolean },
+      opts?: {
+        planOverride?: TaskPlanItem[];
+        runId?: string;
+        planMode?: boolean;
+        /** 对标 S2: 临时聊天（本轮不读写长期记忆） */
+        memoryDisabled?: boolean;
+      },
     ) => {
       const sid = sessionId ?? currentSessionId;
       if (!sid) return;
@@ -287,6 +293,7 @@ export function useChat() {
         runId: opts?.runId,
         // PM1 (round8): 计划模式透传（本次 run 只读 + 计划指令）
         planMode: opts?.planMode,
+        memoryDisabled: opts?.memoryDisabled,
       };
 
       const appendContent = (next: string): void => {

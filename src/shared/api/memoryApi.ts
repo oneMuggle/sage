@@ -20,7 +20,15 @@
  */
 
 import { invoke } from './desktopInvoke';
-import type { Memory, MemoryListResponse, MemorySummariesListResponse } from './types';
+import type {
+  Memory,
+  MemoryListResponse,
+  MemorySummariesListResponse,
+  MemoryWriteRecord,
+  MemoryWritesResponse,
+  UserProfileEntry,
+  UserProfileResponse,
+} from './types';
 import { ApiException, handleApiError, withRetry } from './utils';
 
 const MEMORY_LAYERS = ['episodic', 'semantic', 'working', 'session_summary', 'all'] as const;
@@ -395,4 +403,129 @@ export const memoryApi = {
       }
     });
   },
+
+  // ---- 对标 S2 (2026-09-13): 写入台账 / 撤销 / 用户画像 ------------------
+
+  /**
+   * 本会话最近的记忆写入（游标增量）。失败静默返回空 —— 纯增强信息，
+   * 不重试、不打扰用户。
+   */
+  async getRecentWrites(
+    sessionId: string,
+    afterSeq: number = 0,
+    limit: number = 20,
+  ): Promise<MemoryWritesResponse> {
+    const empty: MemoryWritesResponse = { items: [], latest_seq: afterSeq };
+    if (!sessionId || isDemoMode()) return empty;
+    try {
+      const raw = await invoke<unknown>('get_recent_memory_writes', {
+        sessionId,
+        afterSeq: Math.max(0, Math.floor(afterSeq) || 0),
+        limit: Math.min(50, Math.max(1, Math.floor(limit) || 20)),
+      });
+      if (!isRecord(raw)) return empty;
+      const items = Array.isArray(raw.items)
+        ? (raw.items as unknown[]).filter(isRecord).map(
+            (r): MemoryWriteRecord => ({
+              seq: asNumber(r.seq, 0),
+              id: asOptionalString(r.id) ?? '',
+              kind: r.kind === 'profile' ? 'profile' : 'memory',
+              content: asOptionalString(r.content) ?? '',
+              category: asOptionalString(r.category) ?? 'fact',
+              memory_type: asOptionalString(r.memory_type) ?? 'auto',
+              session_id: asOptionalString(r.session_id) ?? sessionId,
+              created_at: asNumber(r.created_at, 0),
+            }),
+          )
+        : [];
+      return { items: items.filter((i) => i.id), latest_seq: asNumber(raw.latest_seq, afterSeq) };
+    } catch {
+      return empty;
+    }
+  },
+
+  /** 撤销一次刚发生的记忆写入（后端按台账 kind 路由到记忆层 / 画像库）。 */
+  async undoWrite(sessionId: string, id: string): Promise<void> {
+    if (!id || !sessionId) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的记忆写入 ID',
+        details: { sessionId, id },
+      });
+    }
+    try {
+      await invoke('undo_memory_write', { sessionId, id });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  async getUserProfile(): Promise<UserProfileResponse> {
+    const empty: UserProfileResponse = { items: [], categories: [], snapshot: '', char_limit: 0 };
+    if (isDemoMode()) return empty;
+    try {
+      const raw = await invoke<unknown>('get_user_profile', {});
+      if (!isRecord(raw)) return empty;
+      const items = Array.isArray(raw.items)
+        ? (raw.items as unknown[]).filter(isRecord).map(coerceProfileEntry)
+        : [];
+      return {
+        items: items.filter((i) => i.id),
+        categories: asStringArray(raw.categories),
+        snapshot: asOptionalString(raw.snapshot) ?? '',
+        char_limit: asNumber(raw.char_limit, 0),
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  async createUserProfile(
+    content: string,
+    category: string = 'preference',
+    importance: number = 5,
+  ): Promise<UserProfileEntry | null> {
+    try {
+      const raw = await invoke<unknown>('create_user_profile', {
+        content,
+        category,
+        importance: Math.min(10, Math.max(1, Math.round(Number(importance) || 5))),
+      });
+      return isRecord(raw) && isRecord(raw.item) ? coerceProfileEntry(raw.item) : null;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  async updateUserProfile(
+    id: string,
+    patch: { content?: string; category?: string; importance?: number },
+  ): Promise<UserProfileEntry | null> {
+    try {
+      const raw = await invoke<unknown>('update_user_profile', { id, ...patch });
+      return isRecord(raw) && isRecord(raw.item) ? coerceProfileEntry(raw.item) : null;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  async deleteUserProfile(id: string): Promise<void> {
+    try {
+      await invoke('delete_user_profile', { id });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
 };
+
+function coerceProfileEntry(r: Record<string, unknown>): UserProfileEntry {
+  return {
+    id: asOptionalString(r.id) ?? '',
+    content: asOptionalString(r.content) ?? '',
+    category: asOptionalString(r.category) ?? 'preference',
+    importance: asNumber(r.importance, 5),
+    source: asOptionalString(r.source) ?? 'manual',
+    created_at: asNumber(r.created_at, 0),
+    updated_at: asNumber(r.updated_at, 0),
+  };
+}
