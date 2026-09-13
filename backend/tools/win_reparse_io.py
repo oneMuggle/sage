@@ -42,7 +42,9 @@ _ERROR_ACCESS_DENIED = 5
 _ERROR_FILE_EXISTS = 80
 _ERROR_ALREADY_EXISTS = 183
 
-_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+_kernel32 = (
+    ctypes.WinDLL("kernel32", use_last_error=True) if os.name == "nt" else None
+)  # POSIX 上 WinDLL 不存在；公共函数在触碰 _kernel32 前均已早退
 
 
 def _configure(kernel32) -> None:
