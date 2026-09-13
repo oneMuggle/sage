@@ -68,10 +68,6 @@ def test_write_rejects_symlinked_root(tmp_path: Path):
 class TestSkillLoaderWrite:
     """write() method tests."""
 
-    @pytest.mark.skipif(
-        os.name == "nt",
-        reason="skill 写盘在 Windows 按 safe_writer 设计 fail-closed（等待原生 reparse-safe handle）",
-    )
     def test_write_creates_directory_and_file(self, loader: SkillLoader, skills_dir: Path):
         """write() creates <name>/SKILL.md with the given content."""
         path = loader.write("my-skill", "# My Skill\n\nContent here.")
@@ -79,20 +75,12 @@ class TestSkillLoaderWrite:
         assert path.exists()
         assert path.read_text(encoding="utf-8") == "# My Skill\n\nContent here."
 
-    @pytest.mark.skipif(
-        os.name == "nt",
-        reason="skill 写盘在 Windows 按 safe_writer 设计 fail-closed（等待原生 reparse-safe handle）",
-    )
     def test_write_overwrites_existing(self, loader: SkillLoader):
         """write() overwrites an existing SKILL.md by default for compatibility."""
         loader.write("dup-skill", "v1")
         path = loader.write("dup-skill", "v2")
         assert path.read_text(encoding="utf-8") == "v2"
 
-    @pytest.mark.skipif(
-        os.name == "nt",
-        reason="skill 写盘在 Windows 按 safe_writer 设计 fail-closed（等待原生 reparse-safe handle）",
-    )
     def test_write_without_overwrite_rejects_existing_file(self, loader: SkillLoader):
         """Safe writes reject an existing file without changing its contents."""
         path = loader.write("dup-skill", "v1")
@@ -102,10 +90,6 @@ class TestSkillLoaderWrite:
 
         assert path.read_text(encoding="utf-8") == "v1"
 
-    @pytest.mark.skipif(
-        os.name == "nt",
-        reason="skill 写盘在 Windows 按 safe_writer 设计 fail-closed（等待原生 reparse-safe handle）",
-    )
     def test_write_without_overwrite_creates_new_file(self, loader: SkillLoader):
         """Safe writes still create a new skill file."""
         path = loader.write("new-skill", "v1", overwrite=False)

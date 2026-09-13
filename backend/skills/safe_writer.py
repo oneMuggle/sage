@@ -109,32 +109,33 @@ def prepare_skill_write_path(skills_root: Path, name: str, *, overwrite: bool) -
 
 def _open_windows_skill_file(
     root: Path, name: str, content: SkillContent, *, overwrite: bool
-) -> None:
-    """拒绝使用无法证明 reparse point 安全性的 Windows 路径 API。
+) -> Path:
+    """R32：Windows 原生 reparse-safe 写入（CreateFileW +
+    FILE_FLAG_OPEN_REPARSE_POINT，逐组件属性检查），替换原 fail-closed。
 
-    ``lstat`` followed by ``os.open(str(path), ...)`` 仍有 TOCTOU 窗口：父目录
-    可以在检查后被 junction 替换。Windows Python 也没有可移植、等价于 POSIX
-    ``openat(O_NOFOLLOW)`` 的 ``dir_fd`` 语义。除非这里接入并验证原生 handle
-    实现，否则任何字符串路径写入都必须 fail-closed。
+    - ``name`` 必须是单一路径组件（含分隔符即视为越界，拒绝）；
+    - 父目录缺失时普通 mkdir（与 POSIX 分支 mkdir 非 secure 一致），
+      目录与文件的 no-reparse 校验由原语逐组件承担。
     """
-    del root, name, content, overwrite
-    raise OSError(
-        "Refusing skill write on Windows: no verified reparse-safe handle API"
-    )
+    if os.sep in name or "/" in name or name in ("", ".", ".."):
+        raise OSError(f"Refusing skill write outside skills root: {name!r}")
+    from backend.tools.win_reparse_io import write_file_reparse_safe
+
+    target = root / name / "SKILL.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    data = content.encode("utf-8") if isinstance(content, str) else content
+    write_file_reparse_safe(str(target), data, overwrite=overwrite)
+    return target
 
 
 def write_skill_file(
     skills_root: Path, name: str, content: SkillContent, *, overwrite: bool
 ) -> Path:
-    """写入技能文件；POSIX 使用目录 fd，Windows 无可靠方案时 fail-closed。"""
+    """写入技能文件；POSIX 使用目录 fd，Windows 使用原生 reparse-safe 原语。"""
     if os.name == "nt":
-        # Do this before prepare_skill_write_path: that helper creates directories
-        # using ordinary paths and must never be treated as a Windows security
-        # primitive. A future native handle implementation can replace this branch.
-        _open_windows_skill_file(
+        return _open_windows_skill_file(
             skills_root.expanduser(), name, content, overwrite=overwrite
         )
-        raise AssertionError("unreachable")  # pragma: no cover
 
     target = prepare_skill_write_path(skills_root, name, overwrite=overwrite)
     _open_posix_skill_file(skills_root.expanduser(), name, content, overwrite=overwrite)

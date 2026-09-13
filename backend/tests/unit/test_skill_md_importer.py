@@ -16,11 +16,6 @@ import pytest
 from backend.skills.registry import SkillRegistry
 from backend.skills.skill_md.importer import SkillMdImporter, parse_file_from_bytes
 
-pytestmark = pytest.mark.skipif(
-    os.name == "nt",
-    reason="skill 导入写盘在 Windows 按 safe_writer 设计 fail-closed（等待原生 reparse-safe handle）",
-)
-
 
 def _make_skill_md(name: str, description: str = "Test skill") -> bytes:
     """Generate a valid SKILL.md file content."""
@@ -76,7 +71,10 @@ async def test_import_files_rejects_symlinked_skill_directory(
 ) -> None:
     outside = tmp_path / "outside"
     outside.mkdir()
-    (skills_dir / "evil").symlink_to(outside, target_is_directory=True)
+    try:
+        (skills_dir / "evil").symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("当前环境无 symlink 特权")
 
     result = await SkillMdImporter(registry, skills_dir=skills_dir).import_files(
         [_make_named_upload("evil", _make_skill_md("evil"))]
@@ -93,7 +91,10 @@ async def test_import_files_rejects_symlinked_root(
     real_root = tmp_path / "real-root"
     real_root.mkdir()
     linked_root = tmp_path / "skills"
-    linked_root.symlink_to(real_root, target_is_directory=True)
+    try:
+        linked_root.symlink_to(real_root, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("当前环境无 symlink 特权")
 
     result = await SkillMdImporter(registry, skills_dir=linked_root).import_files(
         [_make_named_upload("evil", _make_skill_md("evil"))]
@@ -110,7 +111,10 @@ async def test_import_files_rejects_symlinked_skill_file(
     outside = tmp_path / "outside.md"
     outside.write_text("original", encoding="utf-8")
     (skills_dir / "evil").mkdir()
-    (skills_dir / "evil" / "SKILL.md").symlink_to(outside)
+    try:
+        (skills_dir / "evil" / "SKILL.md").symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("当前环境无 symlink 特权")
 
     result = await SkillMdImporter(registry, skills_dir=skills_dir).import_files(
         [_make_named_upload("evil", _make_skill_md("evil"))]
@@ -121,6 +125,10 @@ async def test_import_files_rejects_symlinked_skill_file(
     assert outside.read_text(encoding="utf-8") == "original"
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="回滚依赖 wiki/files secure_delete_path（POSIX-only），Windows 原语另行批次",
+)
 async def test_import_files_refreshes_bin_gating_between_batch_items(
     registry: SkillRegistry, skills_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -163,6 +171,10 @@ async def test_import_files_refreshes_bin_gating_between_batch_items(
 
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="回滚依赖 wiki/files secure_delete_path（POSIX-only），Windows 原语另行批次",
+)
 async def test_import_files_rolls_back_when_hash_fails_after_hot_reload(
     registry: SkillRegistry, skills_dir: Path
 ) -> None:
@@ -502,6 +514,10 @@ async def test_import_files_handles_write_permission_error(
     assert result["skipped"][0]["reason"] == "write_failed"
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="回滚依赖 wiki/files secure_delete_path（POSIX-only），Windows 原语另行批次",
+)
 async def test_import_files_cleans_partial_write_after_writer_error(
     registry: SkillRegistry, skills_dir: Path
 ) -> None:
@@ -730,7 +746,7 @@ async def test_import_files_accepts_bom_crlf_and_v2_fields(
         "when_to_use: Use this for v2 imports\r\n"
         "requires:\r\n"
         "  bins: [git]\r\n"
-        "os: [linux]\r\n"
+        "os: [linux, windows]\r\n"
         "always: true\r\n"
         "command-dispatch: tool\r\n"
         "license: MIT\r\n"
@@ -747,7 +763,7 @@ async def test_import_files_accepts_bom_crlf_and_v2_fields(
     assert skill is not None
     assert skill._doc.when_to_use == "Use this for v2 imports"
     assert skill._doc.requires.bins == ["git"]
-    assert skill._doc.os == ["linux"]
+    assert skill._doc.os == ["linux", "windows"]
     assert skill._doc.always is True
     assert skill._doc.dispatch.command_dispatch == "tool"
     assert skill._doc.compatibility == "Linux"
