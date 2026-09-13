@@ -32,6 +32,18 @@ class SettingsRepository:
             # 内网 Web 访问: 网络模式 + host 白名单 (JSON)
             # 见 backend/tools/network_config.py
             "network_policy",
+            # 网页访问 Round 1: 搜索引擎链 + 可选 API 引擎 key (JSON, key 值可为 enc: 包裹)
+            # 见 backend/tools/search_config.py
+            "search_config",
+            # 网页访问 Round 1: 用户级代理 (JSON {"http": "", "https": ""}, 空 = 不启用)
+            # 见 backend/tools/http_factory.py
+            "web_proxy",
+            # 网页访问 Round 1: 网页访问行为配置 (JSON {"render_persistent": bool})
+            # 见 backend/tools/web_render.py
+            "web_access_config",
+            # 网页访问 Round 1: 站点 cookie 凭据档案 (JSON, cookie 经 SecretBox 加密)
+            # 见 backend/tools/credential_vault.py
+            "browser_credential_vault",
             # bash 工具运行参数: 超时/输出截断/后台会话上限 (JSON)
             # 见 backend/tools/bash_config.py
             "bash_config",

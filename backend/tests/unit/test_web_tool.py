@@ -631,8 +631,9 @@ def test_web_fetch_auto_renders_spa_shell(monkeypatch):
     """auto：静态抽取命中 JS 壳 → 自动渲染并返回渲染正文。"""
     seen = {}
 
-    def _fake_render(url, network_policy):
+    def _fake_render(url, network_policy, wait_for=""):
         seen["url"] = url
+        seen["wait_for"] = wait_for
         return {
             "url": url,
             "title": "SPA 应用",
@@ -653,6 +654,7 @@ def test_web_fetch_auto_renders_spa_shell(monkeypatch):
     assert result.content["rendered"] is True
     assert "客户端渲染后" in result.content["content"]
     assert seen["url"] == "https://spa.example/"
+    assert seen["wait_for"] == ""
 
 
 def test_web_fetch_auto_skips_static_pages(monkeypatch):
@@ -720,7 +722,7 @@ def test_web_fetch_render_never_skips_shell(monkeypatch):
 def test_web_fetch_render_always_forces_rendering(monkeypatch):
     """render=always：静态正文充足的页面也强制渲染。"""
 
-    def _fake_render(url, network_policy):
+    def _fake_render(url, network_policy, wait_for=""):
         return {"url": url, "title": "渲染版", "content": "强制渲染正文", "rendered": True}
 
     monkeypatch.setattr(web_render, "render_page", _fake_render)
@@ -743,7 +745,7 @@ def test_web_fetch_render_always_forces_rendering(monkeypatch):
 def test_web_fetch_render_failure_reports_guidance(monkeypatch):
     """渲染失败独立语义：明确错误 + 手动路径指引，不吞成通用失败。"""
 
-    def _boom(url, network_policy):
+    def _boom(url, network_policy, wait_for=""):
         raise web_render.RenderError("JS 渲染失败: 浏览器不可用（可经 coder 用 browser_launch + browser_navigate 手动渲染，或 web_fetch render=never 取静态内容）")
 
     monkeypatch.setattr(web_render, "render_page", _boom)
@@ -761,11 +763,17 @@ def test_web_fetch_render_failure_reports_guidance(monkeypatch):
     assert "browser_launch" in result.error
 
 
-def test_web_fetch_render_links_mode_notes_limitation(monkeypatch):
-    """渲染分支暂不支持 links/tables —— 带说明而非静默缺失。"""
+def test_web_fetch_render_links_mode_returns_rendered_links(monkeypatch):
+    """R1（关闭 W6）：渲染页经 outerHTML 复用抽取器，links 来自渲染结果。"""
 
-    def _fake_render(url, network_policy):
-        return {"url": url, "title": "SPA", "content": "渲染正文", "rendered": True}
+    def _fake_render(url, network_policy, wait_for=""):
+        return {
+            "url": url,
+            "title": "SPA",
+            "content": "渲染正文",
+            "links": [{"text": "论文一", "url": "https://spa.example/p1"}],
+            "rendered": True,
+        }
 
     monkeypatch.setattr(web_render, "render_page", _fake_render)
     with respx.mock(base_url="https://spa.example", assert_all_called=False) as mock:
@@ -778,8 +786,9 @@ def test_web_fetch_render_links_mode_notes_limitation(monkeypatch):
         result = tool.execute(url="https://spa.example/l", mode="links")
 
     assert result.success is True
-    assert "note" in result.content
-    assert "links" not in result.content
+    assert result.content["links"] == [
+        {"text": "论文一", "url": "https://spa.example/p1"}
+    ]
 
 
 def test_web_fetch_rejects_unknown_render_mode():
