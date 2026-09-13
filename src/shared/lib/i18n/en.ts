@@ -270,6 +270,17 @@ export const en: Record<TranslationKey, string> = {
   'sider.drag_handle': 'Drag to reorder',
   'sider.collapse': 'Collapse',
   'sider.expand': 'Expand',
+  // Projects module (P1, 2026-09-13)
+  'sider.project.add': 'Add Project',
+  'sider.project.empty': 'No projects yet — click + to add a folder',
+  'sider.project.new_chat': 'New chat in this project',
+  'sider.project.remove': 'Remove from list',
+  'sider.project.remove_confirm': 'Remove?',
+  'sider.project.missing': 'Project folder is missing or has been moved',
+  'sider.project.session_count': '{count} sessions',
+  'sider.project.add_failed': 'Failed to add project: {message}',
+  'sider.project.open_failed': 'Failed to open project: {message}',
+  'sider.project.remove_failed': 'Failed to remove project: {message}',
 
   // ─── Titlebar ─────────────────────
   'titlebar.minimize': 'Minimize',

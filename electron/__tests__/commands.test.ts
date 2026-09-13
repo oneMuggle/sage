@@ -295,6 +295,32 @@ describe('COMMAND_ROUTES', () => {
     expect(path).toBe('/api/v1/sessions?limit=50&offset=10');
   });
 
+  // 项目模块 P1 (2026-09-13): 最近项目注册表 + 项目内会话
+  it('projects_* routes target /api/v1/projects with id path params', () => {
+    expect(COMMAND_ROUTES.projects_list.method).toBe('GET');
+    expect(COMMAND_ROUTES.projects_list.path({})).toBe('/api/v1/projects');
+
+    expect(COMMAND_ROUTES.projects_register.method).toBe('POST');
+    expect(COMMAND_ROUTES.projects_register.path({})).toBe('/api/v1/projects');
+    expect(COMMAND_ROUTES.projects_register.body?.({ path: 'C:\\w' })).toEqual({ path: 'C:\\w' });
+
+    expect(COMMAND_ROUTES.projects_remove.method).toBe('DELETE');
+    expect(COMMAND_ROUTES.projects_remove.path({ id: 'p/1' })).toBe('/api/v1/projects/p%2F1');
+
+    expect(COMMAND_ROUTES.projects_open.method).toBe('POST');
+    expect(COMMAND_ROUTES.projects_open.path({ id: 'p1' })).toBe('/api/v1/projects/p1/open');
+
+    expect(COMMAND_ROUTES.projects_create_session.method).toBe('POST');
+    expect(COMMAND_ROUTES.projects_create_session.path({ id: 'p1' })).toBe(
+      '/api/v1/projects/p1/sessions',
+    );
+
+    expect(COMMAND_ROUTES.projects_list_sessions.method).toBe('GET');
+    expect(COMMAND_ROUTES.projects_list_sessions.path({ id: 'p1' })).toBe(
+      '/api/v1/projects/p1/sessions',
+    );
+  });
+
   it('defaults list_sessions limit/offset to 100/0', () => {
     expect(COMMAND_ROUTES.list_sessions.path({})).toBe('/api/v1/sessions?limit=100&offset=0');
   });
