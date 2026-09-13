@@ -255,6 +255,19 @@ export interface ElectronAPI {
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
   invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T>;
   /**
+   * P8 (2026-09-14): 嵌入模型下载桥 —— models:embedder:download / cancel
+   * 原生 IPC；进度经 api.listen('models:embedder:progress') 订阅。
+   * payload 缺省时 main 使用内置 EMBEDDER_MODEL_MANIFEST。
+   */
+  modelDownload?: {
+    download: (payload?: {
+      baseUrl?: string;
+      dirName?: string;
+      files?: { name: string; sha256: string }[];
+    }) => Promise<{ ok: boolean; totalBytes?: number; error?: string }>;
+    cancel: (dirName: string) => Promise<{ ok: boolean }>;
+  };
+  /**
    * Streaming callers (wiki chat / wiki ingest) pass `options.streamId`
    * so the unlisten payload can abort the in-flight backend fetch via
    * the main process's `streamControllers` Map.
