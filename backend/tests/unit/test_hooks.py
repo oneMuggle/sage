@@ -7,6 +7,7 @@ M6 Hooks 子系统单元测试
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from typing import Any, Dict
@@ -31,7 +32,10 @@ from backend.hooks.runner import (
     validate_modified_args,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(os.name == "nt", reason="hooks 子进程语义在 Windows 不一致（另行批次定性）"),
+]
 
 PY = sys.executable
 

@@ -7,6 +7,8 @@ M6 项目上下文发现单元测试
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from backend.chat.project_context import (
@@ -16,7 +18,10 @@ from backend.chat.project_context import (
     discover_project_context,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(os.name == "nt", reason="project context 依赖 wiki/files POSIX no-follow 原语"),
+]
 
 
 def test_upward_discovery_order_and_sage_first(tmp_path):

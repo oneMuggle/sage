@@ -13,9 +13,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 import backend.tools.agent_tool as agent_tool_module
 from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
@@ -27,6 +30,11 @@ from backend.tools.agent_tool import (
     build_readonly_tool_registry,
 )
 from backend.tools.base import ToolResult
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="subagent 安全用例依赖 symlink 特权（WinError 1314）",
+)
 
 
 def _done_response(content: str) -> LLMResponse:

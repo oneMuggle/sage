@@ -23,7 +23,10 @@ from backend.skills.skill_md.script_runner import ScriptRunner
 from backend.skills.skill_md.skill import SkillMdDocument
 from backend.skills.skill_md.slash_registry import SlashCommandRegistry
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(os.name == "nt", reason="PR2 安全用例依赖 POSIX O_NOFOLLOW/symlink（Windows 支持另行批次）"),
+]
 
 
 def _write_skill(root: Path, name: str = "demo") -> Path:

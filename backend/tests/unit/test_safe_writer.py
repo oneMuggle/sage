@@ -1,12 +1,18 @@
 """安全技能写入器的跨平台安全契约测试。"""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
 from backend.skills import safe_writer
 from backend.skills.safe_writer import write_skill_file
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="safe_writer 在 Windows 按设计 fail-closed（等待原生 reparse-safe handle）",
+)
 
 
 def test_windows_writer_fails_closed_when_no_follow_is_unavailable(

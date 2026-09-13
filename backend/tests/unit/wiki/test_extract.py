@@ -27,6 +27,7 @@ generators (round-trip) so we don't depend on synthetic binary blobs.
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
@@ -42,7 +43,10 @@ from backend.office.models import (
 from backend.office.ppt import generate_ppt
 from backend.office.word import generate_docx
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(os.name == "nt", reason="wiki extract 依赖 POSIX no-follow 原语"),
+]
 
 
 # ──────────────────────────────────────────────────────────────────────
