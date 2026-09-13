@@ -18,6 +18,71 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+> 🔁 **从 main 同步（cherry-pick #729 / #767）**：以下 v0.5.0-beta.1 条目为主线内容；win7 分支版本号不随之升档。
+
+## [v0.5.0-beta.1] - 2026-09-13
+
+> 🚀 **升档 beta**：核心功能（对话 / 记忆 / Office / 技能 / MCP / 更新源）已稳定迭代并具备 CI + e2e 门禁，按 `docs/technical/30-release-tiers.md` 从 alpha 升至 beta。本版同时收口"Office 对标系列"与"对标主流 AI 应用 Sprint 1"。
+
+### Changed(narrative)
+- **README 重写**：首屏以能力矩阵（Office 全链路 / 持久记忆 / 编码代理 / 技能与 MCP / 知识库 / 远程网关 / 自演化 / 更新源）+ 三步快速开始呈现；移除"详细设计阶段"、T5.8 构建验证等过期内容；配置说明改为实际存在的 `.env` / `backend/config.yaml` / 应用内设置
+- **docs/01-overview 修订**：补充历史文档说明；技术栈表从 Tauri 更新为 Electron 21.4.4 + Python 3.11/3.8；产品定义与竞品对比表按 2026-09 现状重写（v1.0 → v1.1）
+
+### Fixed(hygiene)
+- 移除误提交的调试产物 `backend/_diag_out.txt`；`.gitignore` 新增 `backend/_diag*`、`*.stackdump`、`ci*.log`、`r[0-9]*-*.log`、`.venv-ci/`
+- CHANGELOG 中重复的"Word 格式 Linter(Round 10)"条目去重
+
+> 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
+
+### Added(office)
+- **journal generate 接入引用引擎(Round 25)**: generate_article 的 LLM prompt schema 新增 structured_references(结构化文献条目)——LLM 产出经 JournalContent 校验后走 R21 的 _write_sections 分支按 GB/T 7714 格式化加 [N] 编号;两轮自纠机制天然兜底次品条目
+- **Excel 打印设置(Round 23)**: ExcelSheetSpec 新增 print_setup——方向(横/纵)/缩放到 N 页宽(fitToWidth+fitToPage)/打印区域(A1 记法);全字段可选缺省零变化
+- **Pillow 图片管线(Round 22)**: resolve_image_payload 接入懒加载压缩——>8MB 的 JPEG/PNG 在 Pillow 可用时自动降采样(最长边 2000px,质量 85→65 阶梯)到阈值内;Pillow 为 requirements-optional 可选依赖,未安装时管线旁路行为零变化;不进 win7 bundle
+- **journal 接入引用引擎(Round 21)**: JournalContent 新增 structured_references(ReferenceSpec)+citation_style——fill_from_content 时用 R9 引擎按 GB/T 7714/APA 格式化并加 [N] 编号生成参考文献段;未提供时回退 references 纯文本(零变化)
+- **Excel 图标集条件格式(Round 19)**: conditional_formats 新增 icon_set 规则——9 种图标样式(3Arrows/3TrafficLights1/5Rating 等),阈值按百分比等分;icon_style 非法值模型层拒绝
+- **Excel 下拉数据验证(Round 18)**: ExcelSheetSpec 新增 data_validations(range+options 下拉列表/allow_blank/输入提示)——状态/分类列防手输错值;内联列表超 255 字符(Excel 硬限制)单条跳过不阻断;全部可选缺省零变化
+- **Excel 条件格式(Round 17)**: ExcelSheetSpec 新增 conditional_formats——data_bar 数据条/color_scale 双色色阶/duplicate 重复值高亮(COUNTIF+纯色),range A1 记法非法模型层拒绝、openpyxl 级失败单条跳过不阻断;全部可选缺省零变化
+- **@引用摘要带版式信息(Round 16)**: @docx 文件的摘要新增页眉/页脚/页码域/目录域概况(批注概况同款独立维度语义,不受截断)——LLM 在编辑回路可见 R7-13 的版式元素
+- **读取侧补齐(Round 15)**: read_docx 新增 headers_footers(每节页眉/页脚文本+页码域标记,linked 空节跳过)与 toc_fields(目录域 instr 列表)——R7-13 生成的页眉/页脚/目录在读取与编辑回路可见;前端 IPC 契约同步
+- **Excel 格式增强(Round 14)**: ExcelSheetSpec 新增 header_style(表头加粗+浅灰底+居中)/freeze_header(冻结首行)/autofit_columns(按内容自适应列宽,显式列宽优先,中文双宽计)/number_formats(按列名映射 Excel 数字格式,未知列忽略,公式单元格跳过)——全部可选,缺省零变化
+- **目录域(Round 13)**: format_spec.toc 在标题后插入 TOC 域(级别范围/占位提示可配,Word/WPS/LibreOffice 更新域生成目录)+分页;Linter 对偶新增 toc/presence 规则;paper-writing/report-writing 技能自检步骤接入 office_repair_word 自动修复
+- **格式自动修复(Round 12)**: repair_docx + POST /office/word/repair + office_repair_word 工具(WRITE_LOCAL)——对照 FormatSpec 自动修复样式/页面类违规(复用 word_layout 幂等应用)、标题编号与图/表题注重排;默认写 -repaired.docx 新文件(overwrite=true 原子替换);修复后自动复检,语义类违规(citation/coverage)保留报告
+- **写作技能(Round 11)**: 两个 shipped SKILL.md——paper-writing(期刊论文五步工作流:大纲确认→分章起草→BibTeX 解析/结构化引用→office_create 一次成形→office_lint_word 自检)与 report-writing(项目文档/报告:格式来源三选一/模板填充改道/术语表/图表题注三线表/office_update 修订+快照回滚);when_to_use 语义自动激活,零 Python 代码路径变更
+- **Word 格式 Linter(Round 10)**: POST /office/word/lint + office_lint_word 工具——对照 FormatSpec 校验任意 .docx(页边距/纸张/方向/正文字号行距缩进/标题样式/页眉/页码域/标题编号连续性/题注编号连续性/引用标记覆盖),违规输出 rule_id+严重级+实测 vs 期望+中文修复建议;spec 未提供的项不检查,与生成器对偶
+- **Word 引用体系(Round 9)**: 结构化文献条目(references,9 类文献)+ 确定性 GB/T 7714-2015 格式化(J/M/D/C/R/EB/OL 等类型码、>3 作者截断"等/et al")+ APA 简表;段落 citations 按 key 回链自动生成文中上标 [N](首现编号、连续合并 [1-3])与文末参考文献节(悬挂缩进/样式可配);BibTeX 解析(REST /office/word/parse-bibtex + office_parse_bibtex 工具,零第三方依赖)
+- **Word 内容元素(Round 8)**: word generate 插图支持行内放置(after_paragraph)与题注自动编号("图N");表格支持题注("表N")/学术三线表/表头跨页重复/固定列宽/合并单元格;多级标题自动编号(1/1.1/1.1.1,format_spec.numbering);修复受管路径丢弃 images 的缺口
+- **Word 版式引擎 FormatSpec(Round 7)**: word generate 新增可选 `format_spec`——页边距/纸张/方向、正文(字号/行距/首行缩进/段距/对齐)、Title 与标题样式覆盖(字号/加粗/颜色/间距)、页眉文本、页脚页码域;"版式即配置",格式要求由确定性代码注入而非 prompt 口头约定;不传时行为零变化
+- **PDF 全链路**: 中文生成修复(CID 字体)、文本/表格/表单读取、生成、AcroForm 填写、PDF→Word(文本级)、Office→PDF 导出(检测本机 LibreOffice/Word)
+- **PDF/模板 LLM 工具 6 件**: office_read_pdf / office_generate_pdf / office_read_pdf_form / office_fill_pdf_form / office_analyze_word_template / office_fill_word_template
+- **Excel 公式闭环**: 生成/编辑写公式、读取公式视图、formulas 引擎本地求值(main 通道)
+- **图表与图片**: Excel 原生图表、Word/PPT 插图、matplotlib 渲染管线(main 通道)
+- **office_analyze**: 本地数据分析(describe/计数/聚合/相关性)+ 分析报告 xlsx + 图表 artifact
+- **模板库**: 10 套内置中文模板(word×6/excel×2/ppt×2)+ 工作区用户模板 + 前端「从模板创建」
+- **编辑信任闭环**: 改前快照(10 份/100MB 保留)、dry_run 预览、diff 预览对话框一键应用、self_check 回读 + 验证历史表
+- **Word 批注**读/写(OOXML 层);富预览(标题层级/表格/分 sheet/公式视图)
+- **@ 注入升级**: Word 整段+表格+批注、Excel 自适应行+统计、PDF 支持
+- **office e2e**: 3 个 stub-deep 用例进 tier-1 PR 门禁
+- **归档视图批量操作**;前端纳入 PDF 全流程
+
+### Added(projects)
+- **项目模块 P6**: wiki 授权桥接 projects 注册表(recents ∪ registry 并集,约 24 个 wiki 端点门禁 fail-closed 语义不变;MCP 授权面同样并集;wiki open/create 双登记进侧栏清单;前置 #760 解除 POSIX-only 阻塞;全局搜索默认域明确不改,依据 docs/plans/2026-09-14_wiki-projects-bridge-plan.md)
+- **项目模块 P5**: 侧栏项目区块局部拖拽登记——拖文件夹到项目分组即批量登记(拖拽不自动打开,与 + 按钮登记即打开区分;路径取 Electron File.path 与 OfficeFilePicker 同判据,目录有效性走既有 validate_workspace 校验,零新增 IPC;dragOver 高亮提示)(方案 docs/plans/2026-09-13_projects-p5-drag-plan.md;Electron>=32 需迁移 webUtils.getPathForFile,已留注记)
+- **项目模块 P4**: 项目子行就地删除会话(hover 两步确认,联动刷新子列表/计数/会话区)+ 项目清单自动刷新(订阅 store 会话数量变化,400ms 防抖重查后端聚合计数,消除跨区增删后的陈旧显示)(方案 docs/plans/2026-09-13_projects-p4-plan.md)
+- **项目模块 P3**: Chat 头部当前项目徽标——会话绑定工作区时在对话头部显示 Folder+项目名 chip(tooltip 完整路径),多项目并行不再迷路;名称优先匹配登记项目,历史绑定回退 basename,清单拉取失败静默降级;纯展示组件不依赖 provider(方案 docs/plans/2026-09-13_projects-p3-plan.md;拖拽排序经评估否决——与最近打开排序语义打架,依据见方案 §1)
+- **项目模块 P2**: 行展开会话子列表(chevron 懒加载项目内未归档会话 ≤20 条,轻量子行 title+相对时间,点击直达;open/新建后自动刷新子列表)+ 命令面板接入("项目"分组列出最近 8 个项目一键打开;新增"添加项目"操作命令走原生选目录;操作分派收敛为单一 runAction 消除键盘/点击双点 if/else)。后端零改动,复用 P1 端点(方案 docs/plans/2026-09-13_projects-p2-plan.md;拖拽登记与 wiki recent_projects 统一经评估缓行,依据见方案 §2)
+- **项目模块 P1**: 侧边栏"项目"占位落地为项目注册表(对标 Cursor Recent Workspaces)——登记工作目录(原生选目录,幂等去重),点击项目自动复用其最近活跃会话(无则新建并绑定,标题取项目名);行内 hover 项目内新建对话 + 两步确认移除(不动磁盘与会话);目录消失标记 ⚠ 并提示重选;归属判定复用 session_workspace_bindings 活跃绑定,fork/变更面板/检查点/SAGE.md 上下文等既有链路自动生效(技术文档 docs/technical/61-projects-module.md)
+
+### Changed(office)
+- Word @ 摘要从"每段第一句"改为全文结构化 markdown;Excel 摘要从固定 5 行改为自适应
+- office 工具面 7→16;writer 档位同步(除 office_delete 外全量)
+- PPT 生成支持版式选择(替代硬编码几何)
+
+### Fixed(office)
+- PDF 生成中文输出为空白(base-14 字体无 CJK 字形)
+- Excel 编辑后公式缓存值丢失的提示缺失
+- 死参数 `OfficePptGenerateRequest.template` 移除;快照目录无保留策略(技术债 L3)
+
+
 ## [v0.4.9-alpha.31-win7] - 2026-09-14
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #777 帮助系统修复。`src/pages/Help/HelpTab.tsx` 移除链接 `target="_blank"` 改为应用内跳转 + 新增 5 个 markdown 帮助文档导入 (chat/memory/skills/office/orchestration), `src/pages/Help/AboutTab.tsx` `process.*` 改为 `typeof process !== 'undefined'` guard 返回 'N/A' 兜底 (修复 `process is not defined`), `src/pages/Help/ChangelogTab.tsx` + `HelpTab.tsx` 把 `window.changelogAPI/helpAPI` 改为 `window.electronAPI?.changelogAPI/helpAPI`, `src/shared/types/electron-api.d.ts` 新增两个 IPC bridge 类型, `electron/main.ts` 新增 `sage:changelog:read` IPC handler (dev 走 `__dirname/../../CHANGELOG.md`,packaged 走 `process.resourcesPath/CHANGELOG.md`), `electron-builder.yml` 把 `CHANGELOG.md` 加入 `extraResources` (packaged 时随包分发)。零冲突自动合并;Frontend TS + Electron build 双绿。
