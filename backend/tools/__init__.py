@@ -15,6 +15,7 @@ from .base import BaseTool, ToolResult, ToolSchema
 from .bash_tool import BashOutputTool, BashTool, KillShellTool
 from .browser_tool import (
     BrowserCloseTool,
+    BrowserCookiesTool,
     BrowserInteractTool,
     BrowserLaunchTool,
     BrowserNavigateTool,
@@ -268,6 +269,8 @@ def register_all_tools(
     registry.register(BrowserSnapshotTool(policy=policy))
     registry.register(BrowserInteractTool(policy=policy))
     registry.register(BrowserScreenshotTool(policy=policy))
+    # cookie 桥：导出/管理站点 cookie 凭据档案（WRITE_LOCAL，加密落库）
+    registry.register(BrowserCookiesTool(policy=policy))
     registry.register(BrowserCloseTool(policy=policy))
     # Academic search skill: 显式触发技能沉淀（WRITE_LOCAL 写本地 SQLite）
     registry.register(SkillSaveTool(policy=policy))

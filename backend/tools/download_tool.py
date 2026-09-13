@@ -18,7 +18,7 @@ import re
 import unicodedata
 from email.message import Message
 from pathlib import Path, PurePosixPath
-from typing import Optional
+from typing import Dict, Optional
 from urllib.parse import unquote, urljoin, urlparse
 
 import httpx
@@ -158,7 +158,8 @@ class HttpDownloadTool(BaseTool):
             description=(
                 "下载文件到工作区。适用于文献 PDF、资源站附件等。"
                 "filename 省略时从 URL 或 Content-Disposition 推断；"
-                "只接受工作区内的相对路径。"
+                "只接受工作区内的相对路径。credential_domain 可携带 "
+                "browser_cookies 导出的登录态（订阅源文献下载用）。"
             ),
             parameters={
                 "type": "object",
@@ -172,6 +173,13 @@ class HttpDownloadTool(BaseTool):
                         "type": "integer",
                         "description": f"大小上限 (默认 {MAX_DOWNLOAD_BYTES})",
                     },
+                    "credential_domain": {
+                        "type": "string",
+                        "description": (
+                            "browser_cookies 导出的凭据档案 domain"
+                            "（如 .cnki.net），附加登录态 cookie"
+                        ),
+                    },
                 },
                 "required": ["url"],
             },
@@ -182,6 +190,7 @@ class HttpDownloadTool(BaseTool):
         url: str,
         filename: Optional[str] = None,
         max_bytes: int = MAX_DOWNLOAD_BYTES,
+        credential_domain: str = "",
         **kwargs,
     ) -> ToolResult:
         """下载 ``url`` 到工作区。
@@ -194,6 +203,30 @@ class HttpDownloadTool(BaseTool):
         url_error = self._validate_target_url(url)
         if url_error:
             return ToolResult(success=False, error=url_error)
+
+        cookie_header: Optional[str] = None
+        if credential_domain.strip():
+            from backend.tools.credential_vault import cookie_domain_matches, cookie_header_for
+
+            credential_domain = credential_domain.strip()
+            cookie_header = cookie_header_for(credential_domain)
+            if cookie_header is None:
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_not_found: 无 {credential_domain!r} 的凭据档案"
+                        "（先 browser_cookies action=export 导出）"
+                    ),
+                )
+            target_host = urlparse(url).hostname or ""
+            if not cookie_domain_matches(target_host, credential_domain):
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_domain_mismatch: 目标 host {target_host!r} "
+                        f"不在凭据域 {credential_domain!r} 内（档案域按 cookie 归属）"
+                    ),
+                )
 
         root = self._policy.workspace_root
         if not root:
@@ -218,7 +251,15 @@ class HttpDownloadTool(BaseTool):
             return ToolResult(success=False, error=host_rejection)
 
         try:
-            return self._stream_to_disk(url, filename, max_bytes, Path(root), network_policy)
+            return self._stream_to_disk(
+                url,
+                filename,
+                max_bytes,
+                Path(root),
+                network_policy,
+                cookie_header,
+                credential_domain.strip(),
+            )
         except httpx.HTTPError as e:
             return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
         except Exception as e:
@@ -231,6 +272,8 @@ class HttpDownloadTool(BaseTool):
         max_bytes: int,
         root: Path,
         network_policy: NetworkPolicy,
+        cookie_header: Optional[str] = None,
+        credential_domain: str = "",
     ) -> ToolResult:
         """边下边写。返回成功或失败的 ``ToolResult``。"""
         current_url = url
@@ -245,13 +288,21 @@ class HttpDownloadTool(BaseTool):
             if host_rejection:
                 return ToolResult(success=False, error=host_rejection)
 
+            # 登录态 cookie 只附加到档案域命中的 hop（与 web_fetch 同口径）
+            hop_headers: Dict[str, str] = {}
+            if cookie_header:
+                from backend.tools.credential_vault import cookie_domain_matches
+
+                if cookie_domain_matches(parsed.hostname or "", credential_domain):
+                    hop_headers["Cookie"] = cookie_header
+
             with build_client(
                 timeout=self._policy.timeout_seconds,
                 follow_redirects=False,
                 verify=not network_policy.allows_insecure_tls(current_url),
                 trust_env=not self._policy.subagent_only,
             ) as client:
-                request = client.build_request("GET", current_url)
+                request = client.build_request("GET", current_url, headers=hop_headers)
                 response = client.send(request, stream=True)
                 if response.is_redirect:
                     if redirect_count >= _MAX_REDIRECTS:

@@ -221,6 +221,8 @@ class WebFetchTool(BaseTool):
                 "raw 返回未处理的原始 HTML。"
                 "SPA/JS 动态页自动经受控 headless 浏览器渲染后取正文"
                 "（render=auto 默认；always 强制渲染；never 仅静态 HTML）。"
+                "credential_domain 可携带 browser_cookies 导出的登录态"
+                "（仅附加到同域请求，跨域重定向自动剥离）。"
                 "渲染分支内部会启动受控 headless 浏览器，不单独走启动审批。"
             ),
             parameters={
@@ -241,6 +243,20 @@ class WebFetchTool(BaseTool):
                         "type": "integer",
                         "description": "正文最大长度 (默认 10000)",
                     },
+                    "credential_domain": {
+                        "type": "string",
+                        "description": (
+                            "browser_cookies 导出的凭据档案 domain"
+                            "（如 .cnki.net），附加登录态 cookie"
+                        ),
+                    },
+                    "wait_for": {
+                        "type": "string",
+                        "description": (
+                            "CSS 选择器：渲染分支等它出现再取值（默认空 = "
+                            "readyState+正文稳定即返回）"
+                        ),
+                    },
                 },
                 "required": ["url"],
             },
@@ -252,6 +268,8 @@ class WebFetchTool(BaseTool):
         mode: str = "text",
         max_length: int = 10000,
         render: str = "auto",
+        credential_domain: str = "",
+        wait_for: str = "",
         **kwargs,
     ) -> ToolResult:
         """获取网页并按 ``mode`` 抽取。
@@ -261,6 +279,8 @@ class WebFetchTool(BaseTool):
             mode:       ``text`` / ``links`` / ``tables`` / ``raw``
             max_length: 正文最大长度
             render:     ``auto``（默认，检出 JS 壳自动渲染）/ ``always`` / ``never``
+            credential_domain: browser_cookies 档案 domain，附加登录态 cookie
+            wait_for:   渲染分支等待出现的 CSS 选择器（R2）
         """
         if mode not in self.VALID_MODES:
             return ToolResult(
@@ -274,6 +294,30 @@ class WebFetchTool(BaseTool):
             )
         if not url.startswith(("http://", "https://")):
             return ToolResult(success=False, error="无效的 URL，必须以 http:// 或 https:// 开头")
+
+        cookie_header: Optional[str] = None
+        if credential_domain.strip():
+            from .credential_vault import cookie_domain_matches, cookie_header_for
+
+            credential_domain = credential_domain.strip()
+            cookie_header = cookie_header_for(credential_domain)
+            if cookie_header is None:
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_not_found: 无 {credential_domain!r} 的凭据档案"
+                        "（先 browser_cookies action=export 导出）"
+                    ),
+                )
+            target_host = urlparse(url).hostname or ""
+            if not cookie_domain_matches(target_host, credential_domain):
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_domain_mismatch: 目标 host {target_host!r} "
+                        f"不在凭据域 {credential_domain!r} 内（档案域按 cookie 归属）"
+                    ),
+                )
 
         network_policy = self._effective_network_policy()
         url_error = self._validate_target_url(url)
@@ -292,12 +336,16 @@ class WebFetchTool(BaseTool):
                 return ToolResult(success=False, error=validation_error)
 
         try:
-            response, final_url = self._get_with_redirects(url, network_policy, gated_by_whitelist)
+            response, final_url, credential_note = self._get_with_redirects(
+                url, network_policy, gated_by_whitelist, cookie_header, credential_domain.strip()
+            )
             response.raise_for_status()
             content = self._render(final_url, response, mode, max_length)
+            if credential_note:
+                content["note"] = credential_note
             if self._should_render(render, response, content, max_length):
                 content = self._render_dynamic(
-                    final_url, network_policy, mode, max_length, content
+                    final_url, network_policy, mode, max_length, content, wait_for
                 )
             return ToolResult(success=True, content=content)
         except httpx.HTTPError as e:
@@ -329,8 +377,11 @@ class WebFetchTool(BaseTool):
         url: str,
         network_policy: NetworkPolicy,
         gated_by_whitelist: bool,
+        cookie_header: Optional[str] = None,
+        credential_domain: str = "",
     ) -> tuple:
         current_url = url
+        credential_stripped = False
         for redirect_count in range(self._MAX_REDIRECTS + 1):
             url_error = self._validate_target_url(current_url)
             if url_error:
@@ -342,6 +393,20 @@ class WebFetchTool(BaseTool):
                 validation_error = self._validate_subagent_url(current_url)
                 if validation_error:
                     raise ValueError(validation_error)
+
+            # 登录态 cookie 只附加到档案域命中的 hop；跨域重定向（如订阅源
+            # 302 到第三方 SSO/广告域）静默剥离，防止凭据外带。
+            hop_headers: Dict[str, str] = {"Accept-Encoding": "identity"}
+            credential_applied = False
+            if cookie_header:
+                from .credential_vault import cookie_domain_matches
+
+                hostname = urlparse(current_url).hostname or ""
+                if cookie_domain_matches(hostname, credential_domain):
+                    hop_headers["Cookie"] = cookie_header
+                    credential_applied = True
+                elif redirect_count > 0:
+                    credential_stripped = True
 
             with build_client(
                 timeout=30.0,
@@ -360,7 +425,7 @@ class WebFetchTool(BaseTool):
                 request = client.build_request(
                     "GET",
                     current_url,
-                    headers={"Accept-Encoding": "identity"},
+                    headers=hop_headers,
                 )
                 response = client.send(request, stream=True)
                 try:
@@ -397,7 +462,12 @@ class WebFetchTool(BaseTool):
                 finally:
                     response.close()
                 response = buffered_response
-            return response, current_url
+            credential_note = (
+                "credential_stripped: 重定向跨出凭据域，登录态 cookie 已剥离"
+                if credential_stripped and not credential_applied
+                else None
+            )
+            return response, current_url, credential_note
 
         raise ValueError("redirect_limit_exceeded: 重定向次数超限")
 
@@ -460,19 +530,22 @@ class WebFetchTool(BaseTool):
         mode: str,
         max_length: int,
         static_content: Dict[str, Any],
+        wait_for: str = "",
     ) -> Dict[str, Any]:
         """JS 壳命中后的渲染降级：headless 取渲染后正文（W1）。
 
         渲染失败抛 ``RenderError``（execute 单独捕获，不吞成通用失败）。
+        渲染分支自 R1 起经 outerHTML 复用 html_extract，links/tables 与
+        静态分支同构 —— 静态壳的残缺值被渲染值整体替换。
         """
-        rendered = web_render.render_page(url, network_policy)
+        rendered = web_render.render_page(url, network_policy, wait_for=wait_for)
         content = dict(static_content)  # 保留 status_code / content_type / encoding / mode
-        # 渲染结果仅正文：丢弃静态抽取的 links/tables（对应 shell 的残缺值）
-        content.pop("links", None)
-        content.pop("tables", None)
         content.update(rendered)
         content["content"] = str(rendered.get("content", ""))[:max_length]
-        if mode in ("links", "tables"):
-            # 渲染结果目前仅正文；links/tables 需渲染后 outerHTML（方案 W6 backlog）
-            content["note"] = "渲染页暂不支持 links/tables 抽取，仅返回正文"
+        if mode == "links":
+            content["links"] = list(rendered.get("links") or [])[: self._policy.max_result_items]
+        elif mode == "tables":
+            content["tables"] = list(rendered.get("tables") or [])[
+                : self._policy.max_result_items
+            ]
         return content
