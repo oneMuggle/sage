@@ -14,6 +14,7 @@ vi.mock('../../shared/api', () => ({
 vi.mock('../../widgets/memory', () => ({
   MemoryBrowser: () => <div data-testid="memory-browser" />,
   NewMemoryModal: () => null,
+  UserProfileCard: () => null,
 }));
 
 vi.mock('../../shared/ui/ErrorState', () => ({

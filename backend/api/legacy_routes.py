@@ -239,6 +239,11 @@ class ChatRequest(BaseModel):
     # READ_ONLY）+ 计划指令 system 块；DONE 后前端出批准条，批准后普通执行。
     plan_mode: Optional[bool] = False
 
+    # 对标 S2（2026-09-13）：临时聊天（无记忆）模式。``"off"`` 时本轮
+    # 既不注入 L13 记忆上下文，也不做对话后记忆提取；与 ChatGPT
+    # "Temporary chat" / Claude 无记忆会话对齐。缺省 ``"on"``。
+    memory_mode: Optional[str] = "on"
+
 
 class MessageResponse(BaseModel):
     id: str
@@ -2406,6 +2411,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # build_request_messages(trailing_system=...) 注入到历史之后的
             # 尾部独立 system 消息,让"稳定 system + 追加式历史"保持缓存前缀。
             dynamic_context_parts: List[str] = []
+            # 对标 S2：临时聊天 —— 本轮跳过记忆注入 / 召回事件 / 事后提取。
+            memory_off = (data.memory_mode or "on") == "off"
             try:
                 from backend.chat.env_context import (
                     build_environment_block,
@@ -2439,7 +2446,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # L4': 记忆随会话演进,同属易变上下文 → 并入尾部 dynamic 块。
             try:
                 l13_memory_manager = getattr(agent, "memory_manager", None)
-                if l13_memory_manager is not None:
+                if l13_memory_manager is not None and not memory_off:
                     # win7 惯例 (PR A §1.2): get_context 背后的 episodic 查询
                     # 直连共享连接, 统一经 _run_db_sync 拿锁, 防跨事务冲突。
                     l13_memory = await _run_db_sync(
@@ -2751,7 +2758,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             logger.warning(
                                 f"[REQ {request_id}] lifecycle on_turn_complete failed: {exc}"
                             )
-                    else:
+                    elif not memory_off:
+                        # 对标 S2: 临时聊天（memory_mode='off'）不提取记忆
                         await _extract_legacy_chat_memory(
                             request_id, data.session_id, data.message, done_content
                         )
@@ -3320,6 +3328,164 @@ class MemoryDeleteRequest(BaseModel):
         if self.memory_id and self.id and self.memory_id != self.id:
             raise HTTPException(status_code=422, detail="memory id mismatch")
         return self.memory_id or self.id
+
+
+# ---- 对标 S2（2026-09-13）：记忆写入台账 / 撤销 / 用户画像 CRUD ---------
+
+
+class MemoryUndoWriteRequest(BaseModel):
+    session_id: str
+    id: str
+
+
+class UserProfileCreateRequest(BaseModel):
+    content: str
+    category: str = "preference"
+    importance: int = 5
+
+
+class UserProfileUpdateRequest(BaseModel):
+    content: Optional[str] = None
+    category: Optional[str] = None
+    importance: Optional[int] = None
+
+
+@router.get("/memory/recent-writes")
+def list_recent_memory_writes(session_id: str, after_seq: int = 0, limit: int = 20):
+    """本会话最近的记忆写入（对标 ChatGPT "Memory updated" 提示）。
+
+    进程内台账（``backend.memory.write_ledger``），``after_seq`` 为游标：
+    前端记住上次返回的 ``latest_seq``，下次只取增量。台账不可用时返回空。
+    """
+    try:
+        from backend.memory.write_ledger import get_write_ledger
+
+        ledger = get_write_ledger()
+        items = ledger.list_since(session_id, after_seq=after_seq, limit=min(max(limit, 1), 50))
+        return {
+            "items": [r.to_dict() for r in items],
+            "latest_seq": ledger.latest_seq(session_id),
+        }
+    except Exception as exc:  # noqa: BLE001 — 增强信息，绝不 500
+        logger.debug(f"recent memory writes skipped: {exc}")
+        return {"items": [], "latest_seq": int(after_seq or 0)}
+
+
+@router.post("/memory/undo-write")
+@with_db_lock
+def undo_memory_write(data: MemoryUndoWriteRequest):
+    """撤销一次刚刚发生的记忆写入（按台账 kind 路由到记忆层或画像库）。"""
+    from backend.memory.write_ledger import KIND_PROFILE, get_write_ledger
+
+    ledger = get_write_ledger()
+    rec = ledger.find(data.session_id, data.id)
+    deleted = False
+    try:
+        if rec is not None and rec.kind == KIND_PROFILE:
+            from backend.memory.user_profile import get_user_profile
+
+            deleted = get_user_profile().delete(data.id)
+        else:
+            mm = get_memory_manager()
+            for mtype in ("episodic", "semantic"):
+                if mm.delete_memory(data.id, mtype):
+                    deleted = True
+                    break
+            if not deleted and rec is None:
+                # 台账过期但可能是画像条目：兜底尝试画像库
+                from backend.memory.user_profile import get_user_profile
+
+                deleted = get_user_profile().delete(data.id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    if not deleted:
+        raise HTTPException(status_code=404, detail="记忆不存在或已被删除")
+    ledger.forget(data.session_id, data.id)
+    return {"status": "ok", "id": data.id, "kind": rec.kind if rec else "memory"}
+
+
+@router.get("/memory/profile")
+def list_user_profile():
+    """用户画像列表（"关于我"卡片数据源）。"""
+    try:
+        from backend.memory.user_profile import VALID_CATEGORIES, get_user_profile
+
+        store = get_user_profile()
+        return {
+            "items": store.list(),
+            "categories": list(VALID_CATEGORIES),
+            "snapshot": store.get_snapshot(),
+            "char_limit": store.char_limit,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/memory/profile")
+@with_db_lock
+def create_user_profile(data: UserProfileCreateRequest):
+    """新增画像条目；写入后立即刷新冻结快照，让下一轮对话生效。"""
+    try:
+        from backend.memory.user_profile import get_user_profile
+
+        store = get_user_profile()
+        pid = store.add(data.content, category=data.category, importance=data.importance)
+        if not pid:
+            raise HTTPException(status_code=409, detail="内容为空、与现有画像重复或被安全扫描拦截")
+        store.invalidate()
+        item = next((e for e in store.list() if e["id"] == pid), None)
+        return {"status": "ok", "item": item}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/memory/profile/{profile_id}")
+@with_db_lock
+def update_user_profile(profile_id: str, data: UserProfileUpdateRequest):
+    """编辑画像条目：删旧建新（复用 add 的去重 / 安全扫描 / 钳制）。"""
+    try:
+        from backend.memory.user_profile import get_user_profile
+
+        store = get_user_profile()
+        old = next((e for e in store.list() if e["id"] == profile_id), None)
+        if old is None:
+            raise HTTPException(status_code=404, detail="画像条目不存在")
+        content = (data.content if data.content is not None else old["content"]).strip()
+        category = data.category or old["category"]
+        importance = data.importance if data.importance is not None else old.get("importance", 5)
+        if not content:
+            raise HTTPException(status_code=400, detail="内容不能为空")
+        store.delete(profile_id)
+        pid = store.add(content, category=category, importance=importance)
+        if not pid:
+            # 新内容被拒（重复/安全）→ 回滚旧条目
+            store.add(old["content"], category=old["category"], importance=old.get("importance", 5))
+            store.invalidate()
+            raise HTTPException(status_code=409, detail="新内容与现有画像重复或被安全扫描拦截")
+        store.invalidate()
+        item = next((e for e in store.list() if e["id"] == pid), None)
+        return {"status": "ok", "item": item}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/memory/profile/{profile_id}")
+@with_db_lock
+def delete_user_profile(profile_id: str):
+    try:
+        from backend.memory.user_profile import get_user_profile
+
+        if not get_user_profile().delete(profile_id):
+            raise HTTPException(status_code=404, detail="画像条目不存在")
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/memory/search")

@@ -450,6 +450,37 @@ describe('memory IPC routes (PR-C §5.4)', () => {
     expect(url.searchParams.get('page')).toBe('2');
     expect(url.searchParams.get('page_size')).toBe('5');
   });
+
+  // 对标 S2 (2026-09-13): 记忆写入台账 / 撤销 / 用户画像 CRUD
+  it('builds get_recent_memory_writes as GET /api/v1/memory/recent-writes with cursor', () => {
+    const r = COMMAND_ROUTES.get_recent_memory_writes;
+    expect(r.method).toBe('GET');
+    const url = new URL(`http://x${r.path({ sessionId: 's1', afterSeq: 7, limit: 5 })}`);
+    expect(url.pathname).toBe('/api/v1/memory/recent-writes');
+    expect(url.searchParams.get('session_id')).toBe('s1');
+    expect(url.searchParams.get('after_seq')).toBe('7');
+    expect(url.searchParams.get('limit')).toBe('5');
+  });
+
+  it('builds undo_memory_write as POST /api/v1/memory/undo-write with snake_case body', () => {
+    const r = COMMAND_ROUTES.undo_memory_write;
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/memory/undo-write');
+    expect(r.body?.({ sessionId: 's1', id: 'm1' })).toEqual({ session_id: 's1', id: 'm1' });
+  });
+
+  it('maps user profile CRUD to /api/v1/memory/profile', () => {
+    expect(COMMAND_ROUTES.get_user_profile.method).toBe('GET');
+    expect(COMMAND_ROUTES.get_user_profile.path({})).toBe('/api/v1/memory/profile');
+    expect(COMMAND_ROUTES.create_user_profile.method).toBe('POST');
+    expect(COMMAND_ROUTES.create_user_profile.path({})).toBe('/api/v1/memory/profile');
+    expect(COMMAND_ROUTES.update_user_profile.method).toBe('PUT');
+    expect(COMMAND_ROUTES.update_user_profile.path({ id: 'a/b' })).toBe(
+      '/api/v1/memory/profile/a%2Fb',
+    );
+    expect(COMMAND_ROUTES.delete_user_profile.method).toBe('DELETE');
+    expect(COMMAND_ROUTES.delete_user_profile.path({ id: 'p1' })).toBe('/api/v1/memory/profile/p1');
+  });
 });
 
 describe('settings & preferences IPC routes', () => {

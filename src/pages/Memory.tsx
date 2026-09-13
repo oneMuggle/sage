@@ -20,6 +20,7 @@ import { useStore } from '../shared/lib/store';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { MemoryCard, type MemoryItem } from '../widgets/memory/MemoryCard';
 import { MemoryTabs, type MemoryTab } from '../widgets/memory/MemoryTabs';
+import { UserProfileCard } from '../widgets/memory';
 
 interface SessionInfo {
   id: string;
@@ -363,6 +364,9 @@ export function Memory() {
       )}
 
       <MemoryTabs active={tab} onChange={setTab} />
+
+      {/* 对标 S2 (2026-09-13): 可编辑的用户画像卡片 */}
+      <UserProfileCard />
 
       {showSearch && (
         <div className="flex gap-2 mb-4">
