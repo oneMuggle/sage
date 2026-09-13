@@ -11,6 +11,8 @@ export { knowledgeApi } from './knowledgeApi';
 export { learnApi } from './learnApi';
 export { memoryApi } from './memoryApi';
 export { messageApi } from './messageApi';
+export { promptApi } from './promptApi';
+export type { PromptTemplate } from './promptApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';
 export { skillDraftsApi } from './skillDraftsApi';

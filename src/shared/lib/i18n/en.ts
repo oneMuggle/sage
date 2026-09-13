@@ -40,6 +40,9 @@ export const en: Record<TranslationKey, string> = {
   'chat.hint':
     'Sage remembers your project context · Supports Markdown · Type / for commands, @ to reference workspace files',
   'chat.memory_applied': 'memories applied',
+  'prompt.saved': 'Saved as a prompt template (reusable via /tpl-)',
+  'prompt.save_empty': 'Type the prompt content after /prompt-save',
+  'prompt.save_failed': 'Failed to save template',
   'wizard.title': 'Connect your model service in 3 steps',
   'wizard.subtitle': 'Configure once — Sage remembers your endpoint',
   'wizard.step1': 'Protocol',

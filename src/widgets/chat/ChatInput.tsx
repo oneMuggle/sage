@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 
 import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
 import { importOfficeReference } from '../../features/office/importOfficeReference';
-import { knowledgeApi, skillsApi } from '../../shared/api';
+import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { type AtFileSelection } from '../../shared/api/fileSearchClient';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
@@ -14,6 +14,7 @@ import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 import { InputCard, type KnowledgeDocType } from './InputCard';
 import {
   commandToPrompt,
+  mergePromptTemplates,
   mergeSlashCommands,
   type DynamicSlashSkill,
   type SlashCommand,
@@ -142,6 +143,10 @@ function ChatInputInner({
   // Path B: dynamic SKILL.md slash command names fetched from the backend.
   // On fetch failure we silently fall back to an empty list (no slash skills).
   const [dynamicSlashCommands, setDynamicSlashCommands] = useState<DynamicSlashSkill[]>([]);
+  // R27-A: 用户 Prompt 模板（映射为 tpl-* 命令，选中即填充输入框）
+  const [promptTemplates, setPromptTemplates] = useState<
+    { name: string; content: string; description?: string }[]
+  >([]);
 
   // Task 7 (2026-07-26): managed Office refs attached via the @ menu.
   // Dedupe by docId (immutable state — every update is a new array).
@@ -173,6 +178,26 @@ function ChatInputInner({
       })
       .catch(() => setDynamicSlashCommands([]));
   }, []);
+
+  // R27-A: 载入用户 Prompt 模板（失败静默降级为无模板）。返回 reload 供
+  // /prompt-save 保存成功后刷新列表。
+  const reloadPromptTemplates = useCallback(() => {
+    return promptApi
+      .list()
+      .then((templates) =>
+        setPromptTemplates(
+          templates.map((t) => ({
+            name: t.name,
+            content: t.content,
+            description: t.description,
+          })),
+        ),
+      )
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    void reloadPromptTemplates();
+  }, [reloadPromptTemplates]);
 
   const {
     files,
@@ -324,6 +349,33 @@ function ChatInputInner({
         return;
       }
 
+      // R27-A: prompt-save —— 把命令后剩余文本存为模板（名称取前 24 字）
+      if (cmd.name === 'prompt-save') {
+        if (isLoading || disabled) return;
+        const body = value.replace(/^\/prompt-save\s*/i, '').trim();
+        setSlashMenuOpen(false);
+        if (!body) {
+          toast.error(t('prompt.save_empty'));
+          return;
+        }
+        promptApi
+          .create(body.slice(0, 24), body)
+          .then(() => {
+            toast.success(t('prompt.saved'));
+            setValue('');
+            void reloadPromptTemplates();
+          })
+          .catch(() => toast.error(t('prompt.save_failed')));
+        return;
+      }
+
+      // R27-A: 模板 —— 选中即填充输入框（不发送），{{变量}} 占位留给用户编辑
+      if (cmd.mode === 'template' && cmd.content != null) {
+        setSlashMenuOpen(false);
+        setValue(cmd.content);
+        return;
+      }
+
       // Path B: SKILL.md skill — invoke via execute API and send returned content.
       // On failure, fall back to prompt-style execution so the user can still
       // talk about the skill even if the executor is unavailable.
@@ -382,7 +434,7 @@ function ChatInputInner({
       setValue('');
       onSend(prompt);
     },
-    [value, onSend, onClear, onCompact, onLearn, slashCommands, isLoading, disabled, setValue],
+    [value, onSend, onClear, onCompact, onLearn, slashCommands, isLoading, disabled, setValue, reloadPromptTemplates],
   );
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -431,8 +483,14 @@ function ChatInputInner({
     // 检测 slash 命令
     if (newValue.startsWith('/')) {
       const query = newValue.slice(1).split(/\s/)[0] ?? '';
-      // Path B: merge static commands with dynamically loaded SKILL.md slash commands.
-      const merged = mergeSlashCommands(dynamicSlashCommands);
+      // Path B: merge static commands with dynamically loaded SKILL.md slash
+      // commands and user prompt templates (R27-A).
+      // 注意: 每次 keystroke 从完整源重算 —— slashCommands state 是过滤后的
+      // 菜单子集,不能作为合并基底（列表会随输入缩水）。
+      const merged = mergePromptTemplates(
+        mergeSlashCommands(dynamicSlashCommands),
+        promptTemplates,
+      );
       const lower = query.toLowerCase();
       const filtered = merged.filter(
         (cmd) => cmd.name.toLowerCase().includes(lower) || cmd.label.toLowerCase().includes(lower),
