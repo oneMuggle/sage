@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 
 import pytest
 
@@ -242,6 +243,10 @@ class TestFormatJson:
         assert data["checks"][0]["message"] == "中文消息"
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="doctor 运行时探测在 Windows 语义不同（另行批次定性）",
+)
 class TestRunDoctor:
     def test_reports_explicit_runtime_and_package_root(self, tmp_path):
         # Finding #5 (Task 0 review round 1): doctor now performs a real

@@ -4,6 +4,8 @@
 会话记忆、CUSTOM 白名单、风险覆盖、注册表集成。
 """
 
+import os
+
 import pytest
 
 from backend.adapters.out.permission.permission_engine import PermissionEngine
@@ -221,6 +223,10 @@ class TestInteractiveMode:
         assert decision.needs_user is False
         assert "not in the workspace" in decision.reason
 
+    @pytest.mark.skipif(
+        os.name == "nt",
+        reason="用例依赖 POSIX 绝对路径语义（/etc/... 在 Windows 非绝对）",
+    )
     def test_write_outside_workspace_hard_denied(self, tmp_path):
         """workspace 外的写入 → 硬拒绝（不询问）"""
         engine = PermissionEngine(tmp_path)
