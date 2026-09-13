@@ -78,6 +78,14 @@ triggers: []
   references 后重新生成；
 - 迭代直到 `ok=true` 或用户接受。
 
+## 数据表附表（可选）
+
+论文需要数据附表（问卷统计/实验数据）时，用 `office_create`（doc_type=excel）
+生成 xlsx：`header_style` 表头样式、`freeze_header` 冻结首行、
+`autofit_columns` 自适应列宽、`number_formats` 数字格式（金额/百分比）、
+`conditional_formats` 数据条/色阶、`data_validations` 下拉选项、
+`print_setup` 打印横向单页宽——跟 Sage 说需求即可，无需手写格式。
+
 ## 不做的事（YAGNI）
 
 - ❌ 不自动下载文献全文（联网检索走 academic-search 技能，人工确认入库）
