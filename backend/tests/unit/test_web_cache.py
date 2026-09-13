@@ -233,3 +233,86 @@ class TestWebFetchCache:
             _fetch_tool().execute(url="https://err.example/e")
 
         assert route.call_count == 2  # 负结果不缓存
+
+
+# ---------- Q1 web_search 查询缓存 ----------
+
+
+class _CountingEngine:
+    """可计数假引擎：验证缓存命中时引擎零调用。"""
+
+    name = "fake"
+
+    def __init__(self, results):
+        self.results = results
+        self.calls = 0
+
+    def search(self, query, limit, client):
+        self.calls += 1
+        return list(self.results)
+
+
+class TestWebSearchQueryCache:
+    def _tool_with_engine(self, monkeypatch, engine):
+        from backend.tools.search_config import SearchConfig
+
+        monkeypatch.setattr(
+            "backend.tools.web_tool.resolve_engine_chain", lambda config: [engine]
+        )
+        monkeypatch.setattr(
+            "backend.tools.web_tool.load_search_config",
+            lambda: SearchConfig(engine_order=("fake",)),
+        )
+
+    def test_second_search_hits_cache_engine_not_called(self, monkeypatch):
+        engine = _CountingEngine([{"title": "T", "url": "https://a", "snippet": "S"}])
+        self._tool_with_engine(monkeypatch, engine)
+
+        first = WebSearchTool().execute(query="python")
+        second = WebSearchTool().execute(query="python")
+
+        assert first.success is True
+        assert "cached" not in first.content
+        assert second.success is True
+        assert second.content["cached"] is True
+        assert second.content["results"] == first.content["results"]
+        assert engine.calls == 1  # 第二次零引擎调用
+
+    def test_different_limit_is_different_key(self, monkeypatch):
+        engine = _CountingEngine([{"title": "T", "url": "https://a", "snippet": "S"}])
+        self._tool_with_engine(monkeypatch, engine)
+
+        WebSearchTool().execute(query="q", limit=3)
+        WebSearchTool().execute(query="q", limit=5)
+
+        assert engine.calls == 2
+
+    def test_refresh_bypasses_cache(self, monkeypatch):
+        engine = _CountingEngine([{"title": "T", "url": "https://a", "snippet": "S"}])
+        self._tool_with_engine(monkeypatch, engine)
+
+        WebSearchTool().execute(query="q")
+        WebSearchTool().execute(query="q", refresh=True)
+
+        assert engine.calls == 2
+
+    def test_empty_results_not_cached(self, monkeypatch):
+        engine = _CountingEngine([])
+        self._tool_with_engine(monkeypatch, engine)
+
+        WebSearchTool().execute(query="q")
+        WebSearchTool().execute(query="q")
+
+        assert engine.calls == 2  # 空结果不缓存（负结果语义保持）
+
+    def test_search_ttl_expiry(self, monkeypatch):
+        clock = {"now": 0.0}
+        monkeypatch.setattr(web_cache.time, "monotonic", lambda: clock["now"])
+        engine = _CountingEngine([{"title": "T", "url": "https://a", "snippet": "S"}])
+        self._tool_with_engine(monkeypatch, engine)
+
+        WebSearchTool().execute(query="q")
+        clock["now"] += web_cache.SEARCH_CACHE_TTL_SECONDS + 1
+        WebSearchTool().execute(query="q")
+
+        assert engine.calls == 2  # 5 分钟 TTL 过期后重新出网
