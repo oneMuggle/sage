@@ -6,9 +6,17 @@
 - 目录排在文件前（按名字升序）
 """
 
+import os
+
+import pytest
+
 from backend.api.wiki_routes import list_directory_impl
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="list_directory 依赖 wiki/files POSIX no-follow 原语",
+)
 def test_list_directory_recursive_children(tmp_path):
     project = tmp_path / "wiki-project"
     wiki = project / "wiki"

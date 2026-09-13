@@ -58,6 +58,10 @@ class TestSqliteWritableCheck:
         assert result.severity == Severity.CRITICAL
         assert "不是目录" in result.message
 
+    @pytest.mark.skipif(
+        os.name == "nt",
+        reason="os.geteuid 为 POSIX-only（Windows 上按设计抛 AttributeError）",
+    )
     def test_critical_when_dir_not_writable(self, check, tmp_path):
         if os.geteuid() == 0:
             pytest.skip("root can write to read-only dirs; skip chmod test")
