@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **Pillow 图片管线(Round 22)**: resolve_image_payload 接入懒加载压缩——>8MB 的 JPEG/PNG 在 Pillow 可用时自动降采样(最长边 2000px,质量 85→65 阶梯)到阈值内;Pillow 为 requirements-optional 可选依赖,未安装时管线旁路行为零变化;不进 win7 bundle
 - **journal 接入引用引擎(Round 21)**: JournalContent 新增 structured_references(ReferenceSpec)+citation_style——fill_from_content 时用 R9 引擎按 GB/T 7714/APA 格式化并加 [N] 编号生成参考文献段;未提供时回退 references 纯文本(零变化)
 - **Excel 图标集条件格式(Round 19)**: conditional_formats 新增 icon_set 规则——9 种图标样式(3Arrows/3TrafficLights1/5Rating 等),阈值按百分比等分;icon_style 非法值模型层拒绝
 - **Excel 下拉数据验证(Round 18)**: ExcelSheetSpec 新增 data_validations(range+options 下拉列表/allow_blank/输入提示)——状态/分类列防手输错值;内联列表超 255 字符(Excel 硬限制)单条跳过不阻断;全部可选缺省零变化
