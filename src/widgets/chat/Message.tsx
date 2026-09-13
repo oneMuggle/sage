@@ -69,6 +69,28 @@ function CodeBlock({ language, children }: { language?: string; children: string
 const MD_REMARK_PLUGINS = [remarkGfm, remarkMath];
 const MD_REHYPE_PLUGINS = [rehypeKatex];
 
+const URL_SPLIT_RE = /(https?:\/\/[^\s<>()]+)/;
+
+/** P3: 用户消息纯文本中的 URL 自动链接化（assistant 走 markdown 已自带链接） */
+function renderTextWithLinks(text: string): ReactNode[] {
+  return text.split(URL_SPLIT_RE).map((part, i) =>
+    /^https?:\/\//.test(part) ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline break-all"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {part}
+      </a>
+    ) : (
+      part
+    ),
+  );
+}
+
 /** 流式未闭合围栏的降级代码渲染 — 纯文本 pre，不随 delta 重复触发 Shiki/mermaid */
 function PlainCodeBlock({ className, children }: { className?: string; children: unknown }) {
   const content = String(children).replace(/\n$/, '');
@@ -542,7 +564,7 @@ function MessageComponent({
               </div>
             )
           ) : (
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <p className="whitespace-pre-wrap">{renderTextWithLinks(message.content)}</p>
           )}
         </div>
 
