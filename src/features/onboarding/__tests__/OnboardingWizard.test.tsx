@@ -88,7 +88,14 @@ describe('OnboardingWizard — R26', () => {
 
     expect(screen.getByTestId('wizard-step-test')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('wizard-test'));
-    await waitFor(() => expect(testConnectionMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(testConnectionMock).toHaveBeenCalledWith(
+        'https://api.example.com/v1',
+        'sk-1',
+        undefined,
+        'openai-compatible',
+      ),
+    );
     expect(screen.getByTestId('wizard-test-result')).toHaveTextContent('发现 3 个模型');
 
     fireEvent.change(screen.getByTestId('wizard-model'), { target: { value: 'gpt-x' } });
@@ -106,7 +113,13 @@ describe('OnboardingWizard — R26', () => {
     });
   });
 
-  it('ollama 协议跳过密钥与测试，直接保存', async () => {
+  it('R33: ollama 协议免密钥，走协议级测试步后保存', async () => {
+    testConnectionMock.mockResolvedValue({
+      success: true,
+      message: '连接成功 · 发现 2 个模型 · 该协议未做对话连通测试',
+      latency: 3,
+      discoveredModels: [{ id: 'llama3' }, { id: 'qwen2.5' }],
+    });
     renderWizard();
     // 选 Ollama（第 4 个协议卡）
     fireEvent.click(screen.getByText('Ollama（本地）'));
@@ -116,9 +129,20 @@ describe('OnboardingWizard — R26', () => {
     fireEvent.change(screen.getByTestId('wizard-baseurl'), {
       target: { value: 'http://localhost:11434' },
     });
-    // 按钮文案是"直接保存"，点击后直接进入保存步（无测试按钮）
+    // R33: ollama 也走测试步（协议级 /api/tags 发现）
     fireEvent.click(screen.getByTestId('wizard-next-1'));
-    expect(screen.queryByTestId('wizard-test')).not.toBeInTheDocument();
+    expect(screen.getByTestId('wizard-test')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('wizard-test'));
+
+    await waitFor(() =>
+      expect(testConnectionMock).toHaveBeenCalledWith(
+        'http://localhost:11434',
+        '',
+        undefined,
+        'ollama',
+      ),
+    );
+    await waitFor(() => expect(screen.getByTestId('wizard-test-result')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('wizard-save'));
 
     await waitFor(() => expect(updateSettingsMock).toHaveBeenCalled());

@@ -79,6 +79,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
       ep.baseUrl,
       ep.apiKey,
       settings.modelSelections.chatModel.modelId ?? undefined,
+      ep.protocol,
     );
     setTestResult((prev) => ({ ...prev, [ep.id]: result }));
     setTestingId(null);
