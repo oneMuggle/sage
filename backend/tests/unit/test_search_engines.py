@@ -8,7 +8,6 @@ WebSearchTool 链式 fallback 语义（首个非空胜出 / 全空 W3 / 全挂�
 
 import base64
 import json
-import os
 from unittest.mock import patch
 
 import httpx
@@ -103,11 +102,10 @@ class TestBingEngine:
 
     def test_http_error_raises(self):
         engine = BingEngine()
-        with respx.mock(base_url="https://www.bing.com") as mock:
+        with respx.mock(base_url="https://www.bing.com") as mock, httpx.Client() as client:
             mock.get("/search").mock(return_value=Response(403, text="forbidden"))
-            with httpx.Client() as client:
-                with pytest.raises(httpx.HTTPError):
-                    engine.search("q", 5, client=client)
+            with pytest.raises(httpx.HTTPError):
+                engine.search("q", 5, client=client)
 
 
 # ---------- DuckDuckGoEngine（自 web_tool 原样迁入，回归锁） ----------
@@ -269,15 +267,14 @@ class TestWebSearchToolChain:
 
     def test_first_non_empty_engine_wins_and_records_name(self):
         config = SearchConfig(engine_order=("tavily", "ddg"), tavily_key="k")
-        with self._patch_config(config):
-            with respx.mock(base_url="https://api.tavily.com") as mock:
-                mock.post("/search").mock(
-                    return_value=Response(
-                        200,
-                        json={"results": [{"title": "T", "url": "https://a", "content": "C"}]},
-                    )
+        with self._patch_config(config), respx.mock(base_url="https://api.tavily.com") as mock:
+            mock.post("/search").mock(
+                return_value=Response(
+                    200,
+                    json={"results": [{"title": "T", "url": "https://a", "content": "C"}]},
                 )
-                result = WebSearchTool().execute(query="q")
+            )
+            result = WebSearchTool().execute(query="q")
 
         assert result.success is True
         assert result.content["engine"] == "tavily"
@@ -289,10 +286,11 @@ class TestWebSearchToolChain:
             '<a class="result__a" href="https://ddg.example">DDG 结果</a>\n'
             '<a class="result__snippet" href="x">S</a>'
         )
-        with self._patch_config(SearchConfig(engine_order=("bing", "ddg"))):
-            with respx.mock(base_url="https://html.duckduckgo.com") as mock:
-                mock.get("/html/").mock(return_value=Response(200, text=html))
-                result = WebSearchTool().execute(query="q")
+        with self._patch_config(
+            SearchConfig(engine_order=("bing", "ddg"))
+        ), respx.mock(base_url="https://html.duckduckgo.com") as mock:
+            mock.get("/html/").mock(return_value=Response(200, text=html))
+            result = WebSearchTool().execute(query="q")
 
         assert result.success is True
         assert result.content["engine"] == "ddg"
@@ -300,12 +298,13 @@ class TestWebSearchToolChain:
 
     def test_all_engines_empty_is_explicit_with_engine_errors(self):
         """全链正常完成但无结果 → W3 空结果 + note + 各引擎诊断（不伪造）。"""
-        with self._patch_config(SearchConfig(engine_order=("ddg",))):
-            with respx.mock(base_url="https://html.duckduckgo.com") as mock:
-                mock.get("/html/").mock(
-                    return_value=Response(200, text="<html><body>none</body></html>")
-                )
-                result = WebSearchTool().execute(query="q")
+        with self._patch_config(SearchConfig(engine_order=("ddg",))), respx.mock(
+            base_url="https://html.duckduckgo.com"
+        ) as mock:
+            mock.get("/html/").mock(
+                return_value=Response(200, text="<html><body>none</body></html>")
+            )
+            result = WebSearchTool().execute(query="q")
 
         assert result.success is True
         assert result.content["results"] == []
@@ -313,10 +312,11 @@ class TestWebSearchToolChain:
         assert any("ddg" in item for item in result.content["engine_errors"])
 
     def test_all_engines_errored_is_failure_with_combined_error(self):
-        with self._patch_config(SearchConfig(engine_order=("ddg",))):
-            with respx.mock(base_url="https://html.duckduckgo.com") as mock:
-                mock.get("/html/").mock(return_value=Response(500, text="down"))
-                result = WebSearchTool().execute(query="q")
+        with self._patch_config(SearchConfig(engine_order=("ddg",))), respx.mock(
+            base_url="https://html.duckduckgo.com"
+        ) as mock:
+            mock.get("/html/").mock(return_value=Response(500, text="down"))
+            result = WebSearchTool().execute(query="q")
 
         assert result.success is False
         assert "ddg" in result.error

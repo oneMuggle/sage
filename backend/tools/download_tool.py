@@ -26,6 +26,7 @@ import httpx
 from backend.domain.network_policy import NetworkPolicy
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
+from backend.tools.http_factory import build_client
 from backend.tools.network_config import load_network_policy
 
 from .base import BaseTool, ToolResult, ToolSchema
@@ -138,7 +139,9 @@ class HttpDownloadTool(BaseTool):
     ) -> None:
         super().__init__(policy=policy)
         self._network_policy = network_policy
-        self.client = httpx.Client(
+        # 兼容保留的常驻 client；实际请求走 _stream_to_disk 的逐跳现建 client
+        # （经 http_factory 注入用户代理配置）。
+        self.client = build_client(
             timeout=self._policy.timeout_seconds,
             follow_redirects=False,
             trust_env=not self._policy.subagent_only,
@@ -242,7 +245,7 @@ class HttpDownloadTool(BaseTool):
             if host_rejection:
                 return ToolResult(success=False, error=host_rejection)
 
-            with httpx.Client(
+            with build_client(
                 timeout=self._policy.timeout_seconds,
                 follow_redirects=False,
                 verify=not network_policy.allows_insecure_tls(current_url),

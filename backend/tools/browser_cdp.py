@@ -218,6 +218,34 @@ def get_browser_manager() -> BrowserSessionManager:
     return _manager
 
 
+def _build_launch_command(
+    executable: str, headless: bool, user_data_dir: str, proxy_flag: str = ""
+) -> List[str]:
+    """构造浏览器启动命令（纯函数便于单测）。
+
+    ``proxy_flag`` 非空时追加 ``--proxy-server=``（用户级代理配置，见
+    http_factory.browser_proxy_flag）——否则浏览器通道绕过代理，代理用户
+    经 headless 渲染访问被墙站点依旧不通。
+    """
+    command = [
+        executable,
+        "--remote-debugging-port=0",
+        f"--user-data-dir={user_data_dir}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--window-size=1440,900",
+    ]
+    if proxy_flag:
+        command.append(f"--proxy-server={proxy_flag}")
+    command.append("about:blank")
+    if headless:
+        # Chrome 109+（Win7 末代版本）起支持 new headless
+        command.insert(1, "--headless=new")
+    return command
+
+
 def launch_browser(
     headless: bool = True, browser_id: Optional[str] = None
 ) -> BrowserSession:
@@ -238,20 +266,11 @@ def launch_browser(
         )
 
     user_data_dir = tempfile.mkdtemp(prefix="sage_browser_")
-    command = [
-        executable,
-        "--remote-debugging-port=0",
-        f"--user-data-dir={user_data_dir}",
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-extensions",
-        "--disable-background-networking",
-        "--window-size=1440,900",
-        "about:blank",
-    ]
-    if headless:
-        # Chrome 109+（Win7 末代版本）起支持 new headless
-        command.insert(1, "--headless=new")
+    from .http_factory import browser_proxy_flag
+
+    command = _build_launch_command(
+        executable, headless, user_data_dir, browser_proxy_flag()
+    )
 
     try:
         process = subprocess.Popen(  # noqa: S603 — 可执行文件来自受控发现逻辑

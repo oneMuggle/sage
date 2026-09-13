@@ -15,6 +15,7 @@ import httpx
 from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
+from backend.tools.http_factory import build_client
 from backend.tools.network_config import load_network_policy
 from backend.tools.search_config import load_search_config
 from backend.tools.search_engines import SearchEngine, resolve_engine_chain
@@ -54,7 +55,9 @@ class WebSearchTool(BaseTool):
 
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)
-        self.client = httpx.Client(
+        # 兼容保留的常驻 client（UA 头测试引用）；execute 走逐调用现建，
+        # 代理等配置改动即时生效。
+        self.client = build_client(
             timeout=30.0,
             headers=_DEFAULT_HEADERS,
         )
@@ -87,21 +90,26 @@ class WebSearchTool(BaseTool):
         engine_errors = []
         saw_completed = False
         try:
-            for engine in resolve_engine_chain(load_search_config()):
-                try:
-                    results = engine.search(query, limit, client=self.client)
-                except Exception as engine_exc:  # noqa: BLE001 — 单引擎失败降级下一引擎
-                    engine_errors.append(f"{engine.name}: {engine_exc}")
-                    continue
-                if results:
-                    content: Dict[str, Any] = {
-                        "query": query,
-                        "engine": engine.name,
-                        "results": results,
-                    }
-                    return ToolResult(success=True, content=content)
-                saw_completed = True
-                engine_errors.append(f"{engine.name}: 无可解析结果（可能被限流）")
+            with build_client(
+                timeout=30.0,
+                headers=_DEFAULT_HEADERS,
+                trust_env=not self._policy.subagent_only,
+            ) as client:
+                for engine in resolve_engine_chain(load_search_config()):
+                    try:
+                        results = engine.search(query, limit, client=client)
+                    except Exception as engine_exc:  # noqa: BLE001 — 单引擎失败降级下一引擎
+                        engine_errors.append(f"{engine.name}: {engine_exc}")
+                        continue
+                    if results:
+                        content: Dict[str, Any] = {
+                            "query": query,
+                            "engine": engine.name,
+                            "results": results,
+                        }
+                        return ToolResult(success=True, content=content)
+                    saw_completed = True
+                    engine_errors.append(f"{engine.name}: 无可解析结果（可能被限流）")
         except Exception as e:
             return ToolResult(success=False, error=f"搜索失败: {str(e)}")
 
@@ -153,7 +161,9 @@ class WebFetchTool(BaseTool):
         # None 表示"每次 execute 现读 settings"——用户改白名单立即生效，不必
         # 重开会话。显式传入则固定（测试注入用）。
         self._network_policy = network_policy
-        self.client = httpx.Client(
+        # 兼容保留的常驻 client；实际请求走 _get_with_redirects 的逐跳现建
+        # client（代理/网络策略/TLS 豁免均按当前配置即时生效）。
+        self.client = build_client(
             timeout=30.0,
             follow_redirects=False,
             trust_env=not self._policy.subagent_only,
@@ -333,7 +343,7 @@ class WebFetchTool(BaseTool):
                 if validation_error:
                     raise ValueError(validation_error)
 
-            with httpx.Client(
+            with build_client(
                 timeout=30.0,
                 follow_redirects=False,
                 verify=not network_policy.allows_insecure_tls(current_url),
