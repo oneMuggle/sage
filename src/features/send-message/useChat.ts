@@ -9,11 +9,7 @@ import {
   ApiException,
   type ChatConfig,
   type ChatOfficeRef,
-  type SubagentLiveEvent,
   type TaskPlanItem,
-  type TaskProgressEvent,
-  type TaskReviewEvent,
-  type TaskStatusEvent,
 } from '../../shared/api';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import {
@@ -24,15 +20,14 @@ import {
 import { logger } from '../../shared/lib/logger';
 import { historyBudgetFor } from '../../shared/lib/modelWindows';
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
-import { bumpArtifactEvent } from '../artifacts/artifactEventsStore';
 import { useSettings } from '../manage-settings/useSettings';
 
 import {
-  mergeLiveEvent,
   selectSessionSlots,
   useChatStreamStore,
   type TaskBoardState,
 } from './chatStreamStore';
+import { applyOrchestrationEventToBoard } from './orchestrationEvents';
 import { notifySession, shouldNotify } from './sessionNotify';
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 
@@ -479,192 +474,11 @@ export function useChat() {
                 useQuestionState.getState().setFromEvent(evt.user_question, sid);
               }
 
-              // S7 (2026-09-06): 产物事件 → 计数 store。右侧产物面板与侧栏
-              // 徽章事件驱动刷新（此前只能手动刷新）。
-              if (evt.state === 'artifact_created' && evt.artifact) {
-                bumpArtifactEvent(sid);
-                return;
-              }
-
-              // R17-E: memory_used 事件 → 记忆召回展示。后端 L13 注入记忆
-              // 上下文后推送本次命中的结构化条目（id/类型/预览）；此前注入
-              // 完全静默，用户无法知道回答用了哪些记忆。写入 assistant
-              // 占位消息，Message 气泡内可展开查看。
-              if (evt.state === 'memory_used' && Array.isArray(evt.memories)) {
-                const refs = (evt.memories as {
-                  id?: string;
-                  memory_type?: string;
-                  preview?: string;
-                }[])
-                  .filter((m) => m && typeof m.id === 'string')
-                  .slice(0, 5)
-                  .map((m) => ({
-                    id: String(m.id),
-                    memory_type: String(m.memory_type ?? 'memory'),
-                    preview: String(m.preview ?? '').slice(0, 120),
-                  }));
-                if (refs.length > 0) {
-                  updateMessage(assistantId, {
-                    memory_refs: refs,
-                    memory_applied: refs.length,
-                  });
-                }
-                return;
-              }
-
-              // Multi-Agent Orchestration: task_plan 事件 → 初始化编排任务板。
-              // Fix #4 (2026-09-06): 同时更新消息占位符，告知用户计划已生成，
-              // 需要向下滚动查看 PlanCard 并点击"开始执行"。
-              if (evt.state === 'task_plan' && evt.run_id && evt.plan) {
-                useChatStreamStore.getState().setTaskBoard(sid, {
-                  runId: evt.run_id,
-                  plan: evt.plan,
-                  statuses: {},
-                  live: {},
-                });
-                // 更新消息内容，替代"🤔 思考中…"占位符
-                replaceContent('📋 编排计划已生成，请向下滚动查看计划并点击"开始执行"按钮确认');
-                return;
-              }
-              // Multi-Agent Orchestration: task_status 事件 → 按 run_id 匹配合并进任务板。
-              // 旧 run 的 task_status 直接忽略（prev 为 null 或 runId 不匹配都返回原值）。
-              // 后端 task_status 载荷含 TaskStatusEvent 全字段,故宽松 AgentEvent 可直接 cast。
-              // 进度可视化 P0-2 (2026-08-12): 同步重算 progress 5 元组,让
-              // ProgressSection 无需等待 task_progress 就能实时反映 done/queued。
-              if (evt.state === 'task_status' && evt.run_id && evt.task_id) {
-                // 闭包内 TS 不保留 evt 字段的 narrowing,先捕获为 const
-                const runId = evt.run_id;
-                const taskId = evt.task_id;
-                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) => {
-                  if (!prev || prev.runId !== runId) return prev;
-                  const nextStatuses = {
-                    ...prev.statuses,
-                    [taskId]: evt as TaskStatusEvent,
-                  };
-                  const counts = { done: 0, running: 0, queued: 0, failed: 0, cancelled: 0 };
-                  for (const st of Object.values(nextStatuses)) {
-                    if (st.status === 'done') counts.done++;
-                    else if (st.status === 'running') counts.running++;
-                    else if (st.status === 'queued') counts.queued++;
-                    else if (st.status === 'failed') counts.failed++;
-                    else if (st.status === 'cancelled') counts.cancelled++;
-                  }
-                  const total = Math.max(
-                    prev.progress?.total ?? 0,
-                    Object.keys(nextStatuses).length,
-                  );
-                  return {
-                    ...prev,
-                    statuses: nextStatuses,
-                    progress: { total, ...counts },
-                    // P1-5: 首个 task_status = 派发已开始,记录时间戳供
-                    // PlanCard 锁定（派发后 plan_update 后端返回 409）。
-                    dispatchedAt: prev.dispatchedAt ?? Date.now(),
-                  };
-                });
-                return;
-              }
-              // 进度可视化 P0-2 (2026-08-12): task_progress 整盘概览事件。
-              // 后端在 task_plan 之后立即推一次(total=N,全 queued),前端
-              // 据此初始化 progress;后续 task_status 触发时由上面 reducer
-              // 实时聚合覆盖,保持单一数据源。AgentEvent 在宽松字段下
-              // 5 元组都是 optional,运行时真有数据(后端 SSE 保证),此处
-              // 用 TaskProgressEvent 收紧类型避免反复 ?? 0 退化。
-              if (evt.state === 'task_progress' && evt.run_id) {
-                const runId = evt.run_id;
-                const tp = evt as TaskProgressEvent;
-                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) =>
-                  prev && prev.runId === runId
-                    ? {
-                        ...prev,
-                        progress: {
-                          total: tp.total ?? 0,
-                          done: tp.done ?? 0,
-                          running: tp.running ?? 0,
-                          queued: tp.queued ?? 0,
-                          failed: tp.failed ?? 0,
-                          cancelled: tp.cancelled ?? 0,
-                        },
-                      }
-                    : prev,
-                );
-                return;
-              }
-
-              // P0-6 (2026-08-20): task_review 事件 → 复核结论写入任务板，
-              // 由 TaskTreeSection 渲染横幅。不进消息气泡 ——
-              // agentStateMapping 对 task_review 返回 null 的既有行为保留。
-              if (evt.state === 'task_review' && evt.run_id) {
-                const runId = evt.run_id;
-                const review = evt as TaskReviewEvent;
-                useChatStreamStore
-                  .getState()
-                  .updateTaskBoard(sid, runId, (prev) =>
-                    prev && prev.runId === runId ? { ...prev, review } : prev,
-                  );
-                return;
-              }
-
-              // live-events P0 (2026-09-06): subagent_event 镜像 → 任务板
-              // live 态（行内实时步骤/审批徽章/最近事件环形缓冲）。
-              // 不进消息气泡 —— agentStateMapping 对该 state 返回 null。
-              if (evt.state === 'subagent_event' && evt.run_id && evt.task_id) {
-                const runId = evt.run_id;
-                const taskId = evt.task_id;
-                const liveEvent = evt as SubagentLiveEvent;
-                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) => {
-                  // live-events P2: ``agent`` 工具单次委派没有 task_plan ——
-                  // 首条事件到达时用事件自描述合成轻量任务板（run_id 形如
-                  // agent-*）。已有编排板（orch-*）不合并异 run 事件,防串扰。
-                  if (!prev || prev.runId !== runId) {
-                    // 编排板（orch-*）不可被 agent-* 事件替换;
-                    // agent 临时板之间允许后来者接管（轻量面,单派遣可视）。
-                    if (!prev || prev.runId.startsWith('agent-')) {
-                      return {
-                        runId,
-                        plan: [
-                          {
-                            task_id: taskId,
-                            agent_id: evt.agent_id ?? 'subagent',
-                            goal: evt.goal ?? '',
-                          },
-                        ],
-                        statuses: {},
-                        live: {
-                          // 合成即并入首条事件（否则首条被吞,liveStep 缺失）
-                          [taskId]: mergeLiveEvent(undefined, liveEvent),
-                        },
-                      };
-                    }
-                    return prev;
-                  }
-                  return {
-                    ...prev,
-                    live: {
-                      ...(prev.live ?? {}),
-                      [taskId]: mergeLiveEvent(prev.live?.[taskId], liveEvent),
-                    },
-                  };
-                });
-                return;
-              }
-              // live-events P1 (2026-09-06): approval_mode 切换回显 → 任务板
-              // 头部开关状态（后端 set_approval_mode 成功后推送）。
-              if (evt.state === 'approval_mode' && evt.run_id) {
-                const runId = evt.run_id;
-                const mode = evt.mode === 'auto' ? 'auto' : 'ask';
-                useChatStreamStore
-                  .getState()
-                  .updateTaskBoard(sid, runId, (prev) =>
-                    prev && prev.runId === runId ? { ...prev, approvalMode: mode } : prev,
-                  );
-                return;
-              }
-
-              // P1 todo 接线 (2026-08-21): todo_write 全量快照 → store。
-              // 不进消息气泡（agentStateMapping 对编排事件同类处理）。
-              if (evt.state === 'todo_snapshot' && Array.isArray(evt.todos)) {
-                useChatStreamStore.getState().setTodos(sid, evt.todos);
+              // R35: 编排/任务板事件（task_plan/status/progress/review、
+              // subagent_event、approval_mode、todo_snapshot、artifact_created）
+              // 抽取到 orchestrationEvents.applyOrchestrationEventToBoard，
+              // 主路径与重接路径共用（重接重放时任务板完整重建）。
+              if (applyOrchestrationEventToBoard(evt, sid)) {
                 return;
               }
 
@@ -872,7 +686,7 @@ export function useChat() {
   // 通过 activeStream 查询 + listenStream 重新接上。BroadcastQueue 会把
   // attach 前缓冲的事件重放给首个 subscriber,占位消息能追上完整内容。
   // 精简事件面: content/reasoning 增量 + done/failed 终态 + 审批/提问
-  // 转发（编排任务板等复杂事件在 reattach 场景降级为 streaming meta 文案）。
+  // 转发（R35: 编排任务板经 orchestrationEvents 在重放时完整重建）。
   const reattachActiveStream = useCallback(
     async (sid: string) => {
       if (!sid || activeSidsRef.current.has(sid)) return;
@@ -959,7 +773,12 @@ export function useChat() {
               finishReattach(null, evt.error ?? '流式失败');
               return;
             }
-            // 其余事件（工具/编排/产物）降级为 streaming meta 文案
+            // R35: 编排/任务板事件走共享应用器 —— 重放时任务板/live 态
+            // 完整重建（与主路径同一套 store 写入）。
+            if (applyOrchestrationEventToBoard(evt, sid)) {
+              return;
+            }
+            // 其余事件（工具 acting/observing 等）降级为 streaming meta 文案
             useChatStreamStore.getState().setStreamingMeta(sid, assistantId, {
               state: evt.state,
             });
