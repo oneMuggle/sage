@@ -81,6 +81,7 @@ describe('chatApi.chatStream (PR-6)', () => {
       run_id: null,
       // PM1 (round8): 计划模式, 缺省 null
       plan_mode: null,
+      memory_mode: 'on',
       // R23-D2: 聊天图片输入, 缺省空数组
       images: [],
     });

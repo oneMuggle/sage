@@ -114,6 +114,9 @@ def setup_test_db(request):
     # UserProfileStore 单例同样绑定全局 Database, 必须随临时库重置
     from backend.memory.user_profile import reset_user_profile
 
+    # MemoryWriteLedger 进程内台账（对标 S2）：跨用例清空，避免撤销/列表串味
+    from backend.memory.write_ledger import reset_write_ledger
+
     # SkillAuditLog 单例同理（Round 3 技能审计台账）
     from backend.skills.audit import reset_skill_audit_log
 
@@ -145,6 +148,7 @@ def setup_test_db(request):
     db_mod._db.init_db()
     reset_wake_store()
     reset_user_profile()
+    reset_write_ledger()
     reset_usage_store()
     reset_lifecycle_store()
     reset_skill_audit_log()

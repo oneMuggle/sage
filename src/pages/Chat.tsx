@@ -18,6 +18,7 @@ import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
 import { ContextMeter } from '../widgets/chat/ContextMeter';
 import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from '../widgets/chat/InterruptedRunBanner';
+import { MemoryWriteHints } from '../widgets/chat/MemoryWriteHints';
 import { ProjectBadge } from '../widgets/chat/ProjectBadge';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
@@ -74,6 +75,9 @@ export function Chat() {
       return false;
     }
   });
+  // 对标 S2 (2026-09-13): 临时聊天 —— 按会话记住开关；开启后本会话每轮
+  // 都以 memory_mode='off' 发送（不注入记忆、不提取记忆、不弹"记住了"）。
+  const [tempChatSessions, setTempChatSessions] = useState<ReadonlySet<string>>(() => new Set());
 
   const {
     currentSessionId,
@@ -113,6 +117,7 @@ export function Chat() {
   }, [currentSessionId, messages, sendMessage]);
 
   const { t } = useI18n();
+  const isTempChat = currentSessionId != null && tempChatSessions.has(currentSessionId);
   const { settings, isLoading: settingsLoading } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
@@ -366,16 +371,18 @@ export function Chat() {
         const sessionId = await createSession();
         await sendMessage(content, sessionId, officeRefs, orchestrationMode, {
           planMode: options?.planMode,
+          memoryDisabled: tempChatSessions.has(sessionId),
           images,
         });
       } else {
         await sendMessage(content, undefined, officeRefs, orchestrationMode, {
           planMode: options?.planMode,
+          memoryDisabled: tempChatSessions.has(currentSessionId),
           images,
         });
       }
     },
-    [clearError, currentSessionId, createSession, sendMessage],
+    [clearError, currentSessionId, createSession, sendMessage, tempChatSessions],
   );
 
   // M4: /compact slash action — 调后端压缩当前会话，成功后重载消息
@@ -671,6 +678,30 @@ export function Chat() {
           <ContextMeter sessionId={currentSessionId} />
         </div>
         <div className="flex items-center gap-2">
+          {currentSessionId && (
+            <button
+              type="button"
+              onClick={() =>
+                setTempChatSessions((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(currentSessionId)) next.delete(currentSessionId);
+                  else next.add(currentSessionId);
+                  return next;
+                })
+              }
+              aria-pressed={isTempChat}
+              title={isTempChat ? t('chat.temp_chat_on') : t('chat.temp_chat_off')}
+              data-testid="temp-chat-toggle"
+              className={`px-2 py-1 text-xs border rounded-radius-sm transition-colors ${
+                isTempChat
+                  ? 'border-warning text-warning bg-warning/10'
+                  : 'border-border hover:bg-bg-hover'
+              }`}
+            >
+              {isTempChat ? '🕶 ' : ''}
+              {t('chat.temp_chat')}
+            </button>
+          )}
           <button
             onClick={handleNewSession}
             className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-hover transition-colors"
@@ -731,6 +762,8 @@ export function Chat() {
                 onSaveToMemory={handleSaveToMemory}
               />
             )}
+            {/* 对标 S2: 内联记忆提示（"已记住"可撤销）；临时聊天不显示 */}
+            {!isTempChat && <MemoryWriteHints sessionId={currentSessionId} />}
             {/* PM2 (round8): 计划批准条 —— /plan run 完成后出现;批准即衔接执行 */}
             {planApprovalFor != null && planApprovalFor === currentSessionId && (
               <div className="px-4 pb-2" data-testid="plan-approval-bar">
