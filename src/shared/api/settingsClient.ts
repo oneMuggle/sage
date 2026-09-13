@@ -29,7 +29,12 @@ export type PreferenceKey =
   | 'permission_rules'
   | 'network_policy'
   | 'auto_checkpoint'
-  | 'fallback_model';
+  | 'fallback_model'
+  // 网页访问 Round 1-3: 搜索引擎链 / 用户级代理 / 行为配置 / 凭据档案
+  | 'search_config'
+  | 'web_proxy'
+  | 'web_access_config'
+  | 'browser_credential_vault';
 
 async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {
