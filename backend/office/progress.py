@@ -39,7 +39,7 @@ class _Reporter:
                 return
             entry["stage"] = stage
             # 百分比单调不回退，钳到 [0, 100]
-            entry["percent"] = max(entry["percent"], max(0, min(100, int(percent))))
+            entry["percent"] = max(entry["percent"], 0, min(100, int(percent)))
 
 
 @contextmanager

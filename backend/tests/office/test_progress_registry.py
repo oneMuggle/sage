@@ -42,9 +42,8 @@ def test_track_without_task_id_is_noop():
 
 
 def test_track_exception_still_cleans_up():
-    with pytest.raises(RuntimeError):
-        with track("t3", "会失败的任务"):
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError), track("t3", "会失败的任务"):
+        raise RuntimeError("boom")
     assert snapshot("t3") is None
 
 

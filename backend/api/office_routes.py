@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from backend.data.database import Database, get_database
+from backend.office import progress as office_progress
 from backend.office.apply_update import (
     OfficeDocUpdateRequest,
     OfficeDocUpdateResult,
@@ -59,7 +60,6 @@ from backend.office.journal.persistence import (
     save_spec,
 )
 from backend.office.journal.validator import validate_document
-from backend.office import progress as office_progress
 from backend.office.models import (
     BibTeXParseRequest,
     BibTeXParseResponse,
