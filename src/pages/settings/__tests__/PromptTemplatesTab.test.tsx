@@ -15,6 +15,7 @@ const listMock = vi.fn();
 const createMock = vi.fn();
 const updateMock = vi.fn();
 const removeMock = vi.fn();
+const exportTemplatesMock = vi.fn();
 
 vi.mock('../../../shared/api/promptApi', () => ({
   promptApi: {
@@ -22,6 +23,8 @@ vi.mock('../../../shared/api/promptApi', () => ({
     create: (...args: unknown[]) => createMock(...args),
     update: (...args: unknown[]) => updateMock(...args),
     remove: (...args: unknown[]) => removeMock(...args),
+    exportTemplates: () => exportTemplatesMock(),
+    importTemplates: vi.fn(),
   },
 }));
 
@@ -33,6 +36,12 @@ describe('PromptTemplatesTab — R27-B', () => {
     createMock.mockReset().mockResolvedValue({ id: 'pt-1' });
     updateMock.mockReset().mockResolvedValue({ id: 'pt-1' });
     removeMock.mockReset().mockResolvedValue(undefined);
+    exportTemplatesMock.mockReset().mockResolvedValue({
+      app: 'sage',
+      kind: 'prompt_templates',
+      version: 1,
+      templates: [],
+    });
   });
 
   it('空态提示', async () => {
@@ -122,6 +131,13 @@ describe('PromptTemplatesTab — R27-B', () => {
       expect(removeMock).toHaveBeenCalledWith('pt-1');
       expect(listMock).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('R30: 导出按钮调用 exportTemplates', async () => {
+    renderTab();
+    await waitFor(() => expect(screen.getByTestId('prompts-export')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('prompts-export'));
+    await waitFor(() => expect(exportTemplatesMock).toHaveBeenCalledTimes(1));
   });
 
   it('加载失败展示错误条', async () => {

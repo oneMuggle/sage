@@ -101,6 +101,75 @@ def update_template(template_id: str, body: PromptTemplateUpdate) -> Dict[str, A
     return JSONResponse(status_code=404, content={"error": f"模板不存在: {template_id}"})
 
 
+@router.get("/templates/export")
+def export_templates() -> Dict[str, Any]:
+    """R30: 导出全部模板（导入/迁移用，与 R19 记忆导出同模式）。"""
+    return {
+        "app": "sage",
+        "kind": "prompt_templates",
+        "version": 1,
+        "exported_at": int(time.time() * 1000),
+        "templates": _load(),
+    }
+
+
+class ImportEnvelope(BaseModel):
+    """POST /prompts/templates/import body —— 与 export 信封对称。"""
+
+    version: int = Field(default=1)
+    # 宽松类型：单条非法条目由导入循环跳过计数，而非整体 422
+    templates: List[Any] = Field(default_factory=list)
+
+
+@router.post("/templates/import")
+def import_templates(body: ImportEnvelope) -> Dict[str, Any]:
+    """导入模板信封：按 name 去重（同名跳过），单条非法跳过不中断。
+
+    返回 {imported, skipped, failed}；导入后总量受 100 条上限约束，
+    超出部分计入 skipped。
+    """
+    if body.version != 1:
+        return JSONResponse(status_code=400, content={"error": "unsupported import version"})
+
+    templates = _load()
+    existing_names = {t.get("name") for t in templates if isinstance(t, dict)}
+    now = int(time.time() * 1000)
+    imported = skipped = failed = 0
+    errors: List[str] = []
+    for entry in body.templates:
+        if not isinstance(entry, dict):
+            failed += 1
+            continue
+        name = str(entry.get("name") or "").strip()
+        content = str(entry.get("content") or "")
+        if not name or not content.strip():
+            skipped += 1
+            continue
+        if name in existing_names or len(templates) >= _MAX_TEMPLATES:
+            skipped += 1
+            continue
+        if len(content) > _MAX_CONTENT_LEN or len(name) > _MAX_NAME_LEN:
+            failed += 1
+            if len(errors) < 10:
+                errors.append(f"{name}: 长度超限")
+            continue
+        templates.append(
+            {
+                "id": f"pt-{now}-{len(templates)}",
+                "name": name,
+                "description": str(entry.get("description") or "").strip()[:300],
+                "content": content,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        existing_names.add(name)
+        imported += 1
+    if imported:
+        _save(templates)
+    return {"imported": imported, "skipped": skipped, "failed": failed, "errors": errors}
+
+
 @router.delete("/templates/{template_id}")
 def delete_template(template_id: str) -> Dict[str, Any]:
     templates = _load()

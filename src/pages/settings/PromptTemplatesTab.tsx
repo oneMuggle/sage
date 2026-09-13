@@ -7,7 +7,8 @@
  */
 
 import { Pencil, Plus, RefreshCw } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { Download, Upload } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { promptApi, type PromptTemplate } from '../../shared/api/promptApi';
 
@@ -78,6 +79,46 @@ export function PromptTemplatesTab() {
     }
   };
 
+  // R30: 模板导出（JSON 下载）
+  const handleExport = () => {
+    promptApi
+      .exportTemplates()
+      .then((envelope) => {
+        const blob = new Blob([JSON.stringify(envelope, null, 2)], {
+          type: 'application/json;charset=utf-8',
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `sage-prompt-templates-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      })
+      .catch(() => setError('导出失败'));
+  };
+
+  // R30: 模板导入（文件选择 → JSON 解析 → 报告）
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    try {
+      const envelope = JSON.parse(await file.text());
+      const res = await promptApi.importTemplates(envelope);
+      window.alert(`导入完成：新增 ${res.imported} 条，跳过 ${res.skipped} 条，失败 ${res.failed} 条`);
+      await load();
+    } catch {
+      setError('导入失败：文件需为 Sage 导出的模板 JSON');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -98,6 +139,32 @@ export function PromptTemplatesTab() {
           >
             <RefreshCw className="w-4 h-4" />
           </button>
+          <button
+            type="button"
+            data-testid="prompts-export"
+            onClick={handleExport}
+            className="p-1.5 rounded hover:bg-bg-hover text-muted"
+            title="导出模板 (JSON)"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            data-testid="prompts-import"
+            disabled={importing}
+            onClick={() => importInputRef.current?.click()}
+            className="p-1.5 rounded hover:bg-bg-hover text-muted disabled:opacity-50"
+            title="导入模板 (JSON)"
+          >
+            <Upload className="w-4 h-4" />
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => void handleImportFile(e)}
+          />
           <button
             type="button"
             data-testid="prompts-new"
