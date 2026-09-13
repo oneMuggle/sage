@@ -63,6 +63,15 @@ export function saveRememberedValues(
   }
 }
 
+/** R32: 清除该模板的变量记忆（下次打开恢复空白）。 */
+export function clearRememberedValues(content: string): void {
+  try {
+    window.localStorage.removeItem(tplStorageKey(content));
+  } catch {
+    // ignore
+  }
+}
+
 /** 用填写的值解析模板；留空的变量保留 {{占位}} 原样。 */
 export function resolveTemplate(
   content: string,
@@ -87,10 +96,16 @@ export function TemplateFillDialog({ content, onConfirm, onCancel }: TemplateFil
   const [values, setValues] = useState<Record<string, string>>(() =>
     loadRememberedValues(content),
   );
+  const hasMemory = Object.keys(values).length > 0;
 
   const handleConfirm = () => {
     saveRememberedValues(content, values);
     onConfirm(resolveTemplate(content, values));
+  };
+
+  const handleClearMemory = () => {
+    clearRememberedValues(content);
+    setValues({});
   };
 
   return (
@@ -120,7 +135,17 @@ export function TemplateFillDialog({ content, onConfirm, onCancel }: TemplateFil
         {vars.length === 0 && (
           <p className="text-xs text-text-secondary">{t('tplfill.no_vars')}</p>
         )}
-        <div className="flex gap-2 justify-end">
+        <div className="flex gap-2 justify-end items-center">
+          {hasMemory && (
+            <button
+              type="button"
+              data-testid="tplfill-clear-memory"
+              onClick={handleClearMemory}
+              className="mr-auto text-[11px] text-muted hover:text-error hover:underline"
+            >
+              {t('tplfill.clear_memory')}
+            </button>
+          )}
           <button
             type="button"
             onClick={onCancel}

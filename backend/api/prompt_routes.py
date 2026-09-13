@@ -119,23 +119,34 @@ class ImportEnvelope(BaseModel):
     version: int = Field(default=1)
     # 宽松类型：单条非法条目由导入循环跳过计数，而非整体 422
     templates: List[Any] = Field(default_factory=list)
+    # R32: 同名冲突处理 —— skip（默认，保留现有）/ overwrite（覆盖现有内容，
+    # 保留现有 id 使斜杠映射与变量记忆不断链）
+    conflict: str = Field(default="skip")
 
 
 @router.post("/templates/import")
 def import_templates(body: ImportEnvelope) -> Dict[str, Any]:
-    """导入模板信封：按 name 去重（同名跳过），单条非法跳过不中断。
+    """导入模板信封：同名冲突按 conflict 策略处理，单条非法跳过不中断。
 
-    返回 {imported, skipped, failed}；导入后总量受 100 条上限约束，
-    超出部分计入 skipped。
+    conflict=skip（默认）：同名跳过，响应带 conflicts=[同名清单] 供前端
+    发起覆盖导入；conflict=overwrite：同名模板以导入内容覆盖（保留现有
+    id —— 斜杠 tpl-<名称> 映射与变量记忆 key 不受影响）。
+    返回 {imported, skipped, failed, conflicts, errors}；导入后总量受
+    100 条上限约束，超出部分计入 skipped。
     """
     if body.version != 1:
         return JSONResponse(status_code=400, content={"error": "unsupported import version"})
+    overwrite = body.conflict == "overwrite"
 
     templates = _load()
-    existing_names = {t.get("name") for t in templates if isinstance(t, dict)}
+    existing_by_name: Dict[str, Dict[str, Any]] = {
+        t.get("name"): t for t in templates if isinstance(t, dict) and t.get("name")
+    }
     now = int(time.time() * 1000)
     imported = skipped = failed = 0
+    conflicts: List[str] = []
     errors: List[str] = []
+    changed = False
     for entry in body.templates:
         if not isinstance(entry, dict):
             failed += 1
@@ -145,7 +156,9 @@ def import_templates(body: ImportEnvelope) -> Dict[str, Any]:
         if not name or not content.strip():
             skipped += 1
             continue
-        if name in existing_names or len(templates) >= _MAX_TEMPLATES:
+        existing = existing_by_name.get(name)
+        if existing is not None and not overwrite:
+            conflicts.append(name)
             skipped += 1
             continue
         if len(content) > _MAX_CONTENT_LEN or len(name) > _MAX_NAME_LEN:
@@ -153,21 +166,37 @@ def import_templates(body: ImportEnvelope) -> Dict[str, Any]:
             if len(errors) < 10:
                 errors.append(f"{name}: 长度超限")
             continue
-        templates.append(
-            {
-                "id": f"pt-{now}-{len(templates)}",
-                "name": name,
-                "description": str(entry.get("description") or "").strip()[:300],
-                "content": content,
-                "created_at": now,
-                "updated_at": now,
-            }
-        )
-        existing_names.add(name)
+        if len(templates) >= _MAX_TEMPLATES and existing is None:
+            skipped += 1
+            continue
+        if existing is not None:
+            # 覆盖：保留现有 id（斜杠映射/变量记忆 key 不断链）
+            existing["content"] = content
+            existing["description"] = str(entry.get("description") or "").strip()[:300]
+            existing["updated_at"] = now
+        else:
+            templates.append(
+                {
+                    "id": f"pt-{now}-{len(templates)}",
+                    "name": name,
+                    "description": str(entry.get("description") or "").strip()[:300],
+                    "content": content,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            )
+        existing_by_name[name] = templates[-1] if existing is None else existing
         imported += 1
-    if imported:
+        changed = True
+    if changed:
         _save(templates)
-    return {"imported": imported, "skipped": skipped, "failed": failed, "errors": errors}
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "failed": failed,
+        "conflicts": conflicts,
+        "errors": errors,
+    }
 
 
 @router.delete("/templates/{template_id}")

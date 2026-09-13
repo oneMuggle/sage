@@ -94,3 +94,41 @@ def test_import_respects_cap(client):
     )
     assert res.json()["skipped"] == 1
     assert res.json()["imported"] == 0
+
+
+def test_import_conflict_skip_and_overwrite(client):
+    client.post("/prompts/templates", json={"name": "周报", "content": "旧内容", "description": "旧描述"})
+
+    envelope = {
+        "version": 1,
+        "templates": [{"name": "周报", "content": "新内容", "description": "新描述"}],
+    }
+
+    # skip（默认）：同名跳过 + conflicts 清单
+    res = client.post("/prompts/templates/import", json={**envelope, "conflict": "skip"})
+    body = res.json()
+    assert body["imported"] == 0
+    assert body["conflicts"] == ["周报"]
+
+    # skip 模式下现有内容未被覆盖
+    assert client.get("/prompts/templates").json()["templates"][0]["content"] == "旧内容"
+
+    # overwrite：同名覆盖（保留现有 id）
+    res = client.post("/prompts/templates/import", json={**envelope, "conflict": "overwrite"})
+    body = res.json()
+    assert body["imported"] == 1
+    assert body["conflicts"] == []
+    tpl = client.get("/prompts/templates").json()["templates"][0]
+    assert tpl["content"] == "新内容"
+    assert tpl["description"] == "新描述"
+    assert tpl["id"].startswith("pt-")  # id 不变（断链防护语义见实现注释）
+
+
+def test_import_conflict_invalid_conflict_value_defaults_to_skip(client):
+    client.post("/prompts/templates", json={"name": "周报", "content": "旧内容"})
+    res = client.post(
+        "/prompts/templates/import",
+        json={"version": 1, "templates": [{"name": "周报", "content": "新"}], "conflict": "bogus"},
+    )
+    body = res.json()
+    assert body["conflicts"] == ["周报"]

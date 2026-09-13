@@ -80,12 +80,20 @@ export const promptApi = {
     }
   },
 
-  /** R30: 导入模板信封（按 name 去重），返回报告。 */
+  /** R30: 导入模板信封，返回报告。R32: conflict=skip（默认，同名跳过并
+   * 返回 conflicts 清单）| overwrite（同名覆盖现有内容，保留现有 id）。 */
   async importTemplates(
     envelope: PromptTemplateEnvelope,
-  ): Promise<{ imported: number; skipped: number; failed: number; errors?: string[] }> {
+    conflict: 'skip' | 'overwrite' = 'skip',
+  ): Promise<{
+    imported: number;
+    skipped: number;
+    failed: number;
+    conflicts?: string[];
+    errors?: string[];
+  }> {
     try {
-      return await invoke('prompts_import', { payload: envelope });
+      return await invoke('prompts_import', { payload: { ...envelope, conflict } });
     } catch (error) {
       throw handleApiError(error);
     }

@@ -109,8 +109,27 @@ export function PromptTemplatesTab() {
     setImporting(true);
     try {
       const envelope = JSON.parse(await file.text());
-      const res = await promptApi.importTemplates(envelope);
-      window.alert(`导入完成：新增 ${res.imported} 条，跳过 ${res.skipped} 条，失败 ${res.failed} 条`);
+      const report = (r: {
+        imported: number;
+        skipped: number;
+        failed: number;
+      }) => `导入完成：新增 ${r.imported} 条，跳过 ${r.skipped} 条，失败 ${r.failed} 条`;
+      // R32 两阶段：先 skip 导入；有同名冲突时询问是否覆盖重导
+      const first = await promptApi.importTemplates(envelope, 'skip');
+      if (first.conflicts && first.conflicts.length > 0) {
+        const ok = window.confirm(
+          `发现 ${first.conflicts.length} 条同名模板（${first.conflicts.join('、')}）。是否用导入内容覆盖现有模板？`,
+        );
+        if (!ok) {
+          window.alert(report(first));
+          await load();
+          return;
+        }
+        const second = await promptApi.importTemplates(envelope, 'overwrite');
+        window.alert(report(second));
+      } else {
+        window.alert(report(first));
+      }
       await load();
     } catch {
       setError('导入失败：文件需为 Sage 导出的模板 JSON');
