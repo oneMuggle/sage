@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,10 @@ from backend.skills.skill_md.resources import (
 )
 from backend.skills.skill_md.validation import SkillMdSecurityError
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(os.name == "nt", reason="resources 安全读依赖 POSIX O_NOFOLLOW（Windows 支持另行批次）"),
+]
 
 
 def _patch_os_name(monkeypatch, name: str) -> None:

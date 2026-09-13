@@ -19,6 +19,7 @@ Contract:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import List, Tuple
 from unittest.mock import patch
@@ -34,7 +35,10 @@ from backend.tools.context import (
 )
 from backend.tools.wiki_tool import WikiAnswerTool, WikiSearchTool
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(os.name == "nt", reason="wiki tool 依赖 POSIX no-follow 原语"),
+]
 
 
 # ──────────────────────────────────────────────────────────────────────

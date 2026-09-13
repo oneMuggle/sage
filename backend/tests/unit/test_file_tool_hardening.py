@@ -21,7 +21,10 @@ from backend.tools.file_tool import (
     WriteFileTool,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(os.name == "nt", reason="file tool 加固用例依赖 POSIX O_NOFOLLOW"),
+]
 
 
 def _policy_with_root(root):

@@ -1,5 +1,6 @@
 """Regression tests for symlink-safe Wiki markdown traversal."""
 
+import os
 from pathlib import Path
 from typing import Tuple
 
@@ -8,6 +9,11 @@ import pytest
 from backend.wiki.chat import ChatConfig, _build_chat_context
 from backend.wiki.graph import build_graph
 from backend.wiki.search import search_wiki
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="递归 symlink 安全用例依赖 POSIX symlink 特权",
+)
 
 
 def _make_wiki_tree(tmp_path: Path) -> Tuple[Path, Path]:

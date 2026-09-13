@@ -1,11 +1,17 @@
 """Tests for Wiki vector stores, including Python 3.8-compatible paths."""
 
 import ast
+import os
 from pathlib import Path
 
 import pytest
 
 from backend.wiki.vectorstore import _cosine_similarity
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="wiki vectorstore 依赖 POSIX no-follow 原语",
+)
 
 
 @pytest.mark.unit()
