@@ -29,6 +29,7 @@ import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownCh
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
+import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MermaidBlock } from './MermaidBlock';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
 
@@ -96,6 +97,10 @@ const markdownComponents = {
     // U7': Mermaid 图表渲染（动态加载，失败回退源码展示）
     if (lang === 'mermaid') {
       return <MermaidBlock code={content} />;
+    }
+    // P1: HTML 代码块支持源码/预览切换（sandbox iframe）
+    if (lang === 'html') {
+      return <HtmlCodeBlock code={content} />;
     }
     return <CodeBlock language={lang}>{content}</CodeBlock>;
   },
