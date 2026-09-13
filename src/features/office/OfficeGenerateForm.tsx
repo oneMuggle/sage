@@ -23,6 +23,7 @@ import { FileSpreadsheet, FileText, FileType, LayoutTemplate, Presentation, Spar
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+
 import { officeApi } from '../../shared/api/officeApi';
 import type {
   OfficeDocType,
@@ -31,6 +32,8 @@ import type {
   PdfPageSize,
 } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
+import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
+import { useTaskCenterStore } from '../task-center/taskCenterStore';
 
 export interface OfficeGenerateFormProps {
   workspacePath: string;
@@ -79,6 +82,11 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   const [docType, setDocType] = useState<OfficeDocType>('ppt');
   const [filename, setFilename] = useState('my-document');
   const [busy, setBusy] = useState(false);
+  // P2: busy 期已耗时（阶段文案 + 秒表，替代纯 disabled 反馈）
+  const elapsed = useElapsedSeconds(busy);
+  // P4: 任务中心接线 —— 切走页面后全局胶囊仍可见
+  const registerTask = useTaskCenterStore((s) => s.registerTask);
+  const finishTask = useTaskCenterStore((s) => s.finishTask);
   const [result, setResult] = useState<GenerateResult | null>(null);
 
   // PPT
@@ -175,6 +183,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       return;
     }
     setBusy(true);
+    registerTask('office:generate', 'office', t('office.template.creating'));
     setResult(null);
     try {
       // Image placeholders never contribute text (office.template.hint.image);
@@ -211,6 +220,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.template.failed')}: ${msg}`);
     } finally {
+      finishTask('office:generate');
       setBusy(false);
     }
   };
@@ -228,6 +238,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       return;
     }
     setBusy(true);
+    registerTask('office:generate', 'office', t('office.generate.generating'));
     setResult(null);
     try {
       let out: { output_path: string; filename: string; file_size_bytes: number };
@@ -281,6 +292,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.generate.failed')}: ${msg}`);
     } finally {
+      finishTask('office:generate');
       setBusy(false);
     }
   };
@@ -638,16 +650,26 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
         type="button"
         onClick={() => void handleGenerate()}
         disabled={busy}
-        className="w-full px-4 py-2 bg-primary text-text-inverse rounded text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
+        className="w-full px-4 py-2 bg-primary text-text-inverse rounded text-sm font-medium hover:bg-primary-hover disabled:opacity-50 flex items-center justify-center gap-2"
         data-testid="office-generate-submit"
       >
-        {busy
-          ? templateModeActive
-            ? t('office.template.creating')
-            : t('office.generate.generating')
-          : templateModeActive
-            ? t('office.template.create')
-            : `${t('office.generate.button')} ${docType.toUpperCase()}`}
+        {busy ? (
+          <>
+            {/* P2: 按钮 busy 统一规范 —— spinner + 阶段文案 + 已耗时 */}
+            <span
+              className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"
+              aria-hidden
+            />
+            <span>
+              {templateModeActive ? t('office.template.creating') : t('office.generate.generating')}
+              <span className="tabular-nums opacity-80"> · {elapsed}s</span>
+            </span>
+          </>
+        ) : templateModeActive ? (
+          t('office.template.create')
+        ) : (
+          `${t('office.generate.button')} ${docType.toUpperCase()}`
+        )}
       </button>
 
       {result && (

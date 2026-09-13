@@ -5,6 +5,15 @@
 import { invoke } from './desktopInvoke';
 import { handleApiError, withRetry } from './utils';
 
+/** R30: 导入/导出信封（与后端 export/import 端点对称）。 */
+export interface PromptTemplateEnvelope {
+  app: string;
+  kind?: string;
+  version: number;
+  exported_at?: number;
+  templates: PromptTemplate[];
+}
+
 export interface PromptTemplate {
   id: string;
   name: string;
@@ -60,5 +69,25 @@ export const promptApi = {
   /** 删除模板。 */
   async remove(id: string): Promise<void> {
     await invoke('prompts_delete', { id });
+  },
+
+  /** R30: 导出模板信封（含 app/version/exported_at 元信息）。 */
+  async exportTemplates(): Promise<PromptTemplateEnvelope> {
+    try {
+      return await invoke<PromptTemplateEnvelope>('prompts_export');
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** R30: 导入模板信封（按 name 去重），返回报告。 */
+  async importTemplates(
+    envelope: PromptTemplateEnvelope,
+  ): Promise<{ imported: number; skipped: number; failed: number; errors?: string[] }> {
+    try {
+      return await invoke('prompts_import', { payload: envelope });
+    } catch (error) {
+      throw handleApiError(error);
+    }
   },
 };

@@ -276,6 +276,8 @@ export const zh = {
   'sider.project.remove_confirm': '确认移除?',
   'sider.project.missing': '项目目录不存在或已被移动',
   'sider.project.session_count': '{count} 个会话',
+  'sider.project.delete_session': '删除会话',
+  'sider.project.delete_session_failed': '删除会话失败：{message}',
   'sider.project.sessions_loading': '加载会话中…',
   'sider.project.sessions_empty': '项目内暂无会话',
   'sider.project.add_failed': '添加项目失败：{message}',
@@ -382,6 +384,10 @@ export const zh = {
   'permission.diff': '将写入的变更',
   'codeBlock.copy': '复制',
   'codeBlock.copied': '已复制',
+  'codeBlock.toggleWrap': '切换自动换行',
+  'codeBlock.expandLines': '展开全部 {n} 行',
+  'taskCenter.activeCount': '{n} 项进行中',
+  'taskCenter.chatFallback': '后台会话生成中',
 
   // ─── M2 AskUserQuestion ───────────
   'question.title': '助手需要您的回答',

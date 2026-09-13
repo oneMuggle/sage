@@ -231,6 +231,10 @@ def test_nonexistent_path_is_skipped(
     assert result.source == "python_module"
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows 无执行位语义（os.access X_OK 恒真），分类器行为不同",
+)
 def test_non_executable_file_is_skipped(
     tmp_path: Path,
     fake_exe: Path,

@@ -114,7 +114,8 @@ describe('OfficeDocumentList — gateway action callbacks', () => {
         <OfficeDocumentList documents={[]} loading={true} />
       </I18nProvider>,
     );
-    expect(screen.getByText(/加载中/)).toBeInTheDocument();
+    // P2: 加载态升级为骨架行（原为「加载中」纯文字）
+    expect(screen.getByTestId('office-doc-list-skeleton')).toBeInTheDocument();
 
     rerender(
       <I18nProvider defaultLocale="zh">

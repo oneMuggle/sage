@@ -283,6 +283,8 @@ export const en: Record<TranslationKey, string> = {
   'sider.project.remove_confirm': 'Remove?',
   'sider.project.missing': 'Project folder is missing or has been moved',
   'sider.project.session_count': '{count} sessions',
+  'sider.project.delete_session': 'Delete session',
+  'sider.project.delete_session_failed': 'Failed to delete session: {message}',
   'sider.project.sessions_loading': 'Loading sessions…',
   'sider.project.sessions_empty': 'No sessions in this project yet',
   'sider.project.add_failed': 'Failed to add project: {message}',
@@ -389,6 +391,10 @@ export const en: Record<TranslationKey, string> = {
   'permission.diff': 'Proposed changes',
   'codeBlock.copy': 'Copy',
   'codeBlock.copied': 'Copied',
+  'codeBlock.toggleWrap': 'Toggle word wrap',
+  'codeBlock.expandLines': 'Expand all {n} lines',
+  'taskCenter.activeCount': '{n} running',
+  'taskCenter.chatFallback': 'Background session generating',
 
   // ─── M2 AskUserQuestion ───────────
   'question.title': 'The assistant needs your answer',

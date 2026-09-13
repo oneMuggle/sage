@@ -1,6 +1,9 @@
 """http_download 单元测试：流式落盘 + 大小上限 + 路径边界 + 文件名净化。"""
 
+import os
+from contextlib import ExitStack
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -98,11 +101,20 @@ def test_download_requires_bound_workspace():
     assert "workspace_not_bound" in result.error
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="用例依赖 POSIX 绝对路径语义（/abs/... 在 Windows 非绝对）",
+)
 def test_download_rejects_absolute_filename(tmp_path):
     result = _tool(tmp_path).execute(url=f"{_BASE}/x.pdf", filename="/etc/passwd")
 
     assert result.success is False
-    assert "filename_must_be_relative" in result.error
+    if os.name == "nt":
+        # Windows 上 "/etc/passwd" 无盘符不算绝对路径，落进工作区边界拒绝；
+        # 两条路径都是安全拒绝，语义等价。
+        assert "path_outside_workspace" in result.error
+    else:
+        assert "filename_must_be_relative" in result.error
 
 
 def test_download_rejects_filename_escaping_workspace(tmp_path):
@@ -119,7 +131,65 @@ def test_download_honors_network_policy(tmp_path):
     assert "host_not_allowed" in result.error
 
 
-def test_download_offline_mode_rejects(tmp_path):
+def test_download_follows_relative_redirect_and_returns_final_url(tmp_path):
+    with respx.mock(assert_all_called=True) as mock:
+        mock.get(f"{_BASE}/start").mock(
+            return_value=Response(302, headers={"location": "/paper.pdf"})
+        )
+        mock.get(f"{_BASE}/paper.pdf").mock(return_value=Response(200, content=b"pdf"))
+        result = _tool(tmp_path).execute(url=f"{_BASE}/start")
+
+    assert result.success is True
+    assert result.content["url"] == f"{_BASE}/paper.pdf"
+    assert (tmp_path / "paper.pdf").read_bytes() == b"pdf"
+
+
+def test_download_rejects_redirect_to_non_whitelisted_host(tmp_path):
+    with respx.mock(assert_all_called=True) as mock:
+        mock.get(f"{_BASE}/start").mock(
+            return_value=Response(302, headers={"location": "https://evil.example.com/file"})
+        )
+        result = _tool(tmp_path).execute(url=f"{_BASE}/start")
+
+    assert result.success is False
+    assert "host_not_allowed" in result.error
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_download_sets_tls_verification_for_each_target(tmp_path, monkeypatch):
+    calls = []
+    original_client = httpx.Client
+
+    class RecordingClient(original_client):
+        def __init__(self, *args, **kwargs):
+            calls.append(kwargs.get("verify"))
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr("backend.tools.download_tool.httpx.Client", RecordingClient)
+    policy = NetworkPolicy(
+        mode=NetworkMode.INTRANET,
+        allowed_hosts=("*.example.internal",),
+        insecure_tls_hosts=("mirror.example.internal",),
+    )
+    with respx.mock(base_url=_BASE, assert_all_called=False) as mock:
+        mock.get("/paper.pdf").mock(return_value=Response(200, content=b"pdf"))
+        tool = HttpDownloadTool(
+            policy=ToolPolicy(workspace_root=str(tmp_path)), network_policy=policy
+        )
+        result = tool.execute(url=f"{_BASE}/paper.pdf")
+
+    assert result.success is True
+    assert calls[-1] is False
+
+
+def test_download_rejects_malformed_ipv6_url(tmp_path):
+    result = _tool(tmp_path).execute(url="http://[bad")
+
+    assert result.success is False
+    assert "无效的 URL" in result.error
+
+
+def test_download_offline_rejects(tmp_path):
     tool = HttpDownloadTool(
         policy=ToolPolicy(workspace_root=str(tmp_path)),
         network_policy=NetworkPolicy(mode=NetworkMode.OFFLINE),
@@ -159,6 +229,38 @@ def test_download_does_not_overwrite_existing_file(tmp_path):
     # 冲突时落到带后缀的新名字，不覆盖原文件
     assert result.content["filename"] != "paper.pdf"
     assert Path(result.content["path"]).read_bytes() == b"new"
+
+
+def test_download_exclusive_race_preserves_existing_file(tmp_path):
+    target = tmp_path / "paper.pdf"
+    target.write_bytes(b"owner's file")
+    with respx.mock(base_url=_BASE, assert_all_called=False) as mock:
+        mock.get("/paper.pdf").mock(return_value=Response(200, content=b"new"))
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch("backend.tools.download_tool._unique_path", return_value=target)
+            )
+            stack.enter_context(
+                patch(
+                    "backend.tools.download_tool._open_exclusive",
+                    side_effect=FileExistsError("already exists"),
+                )
+            )
+            result = _tool(tmp_path).execute(url=f"{_BASE}/paper.pdf")
+
+    assert result.success is False
+    assert "下载失败" in result.error
+    assert target.read_bytes() == b"owner's file"
+
+
+def test_download_records_artifact_after_success(tmp_path):
+    with respx.mock(base_url=_BASE, assert_all_called=False) as mock:
+        mock.get("/artifact.bin").mock(return_value=Response(200, content=b"payload"))
+        with patch.object(HttpDownloadTool, "_record_artifact") as record:
+            result = _tool(tmp_path).execute(url=f"{_BASE}/artifact.bin")
+
+    assert result.success is True
+    record.assert_called_once_with(str(tmp_path / "artifact.bin"), 7)
 
 
 # ---------- 文件名净化 ----------

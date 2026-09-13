@@ -333,10 +333,13 @@ def test_wait_page_settled_delegates_to_web_render(stubbed, monkeypatch):
     """W2：就绪/稳定等待逻辑收口在 web_render，browser_tool 只留委派壳。"""
     seen = []
     monkeypatch.setattr(
-        browser_tool, "wait_page_ready", lambda session, target: seen.append((session, target))
+        browser_tool,
+        "wait_page_ready",
+        lambda session, target, wait_for="": seen.append((session, target, wait_for)),
     )
     browser_tool._wait_page_settled(stubbed.session, "t1")
-    assert seen == [(stubbed.session, "t1")]
+    browser_tool._wait_page_settled(stubbed.session, "t2", wait_for=".item")
+    assert seen == [(stubbed.session, "t1", ""), (stubbed.session, "t2", ".item")]
 
 
 def test_navigate_rejects_bad_scheme_and_reports_error_text(stubbed):

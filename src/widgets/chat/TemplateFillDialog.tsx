@@ -27,6 +27,42 @@ export function extractTemplateVars(content: string): string[] {
   return vars;
 }
 
+// R31: 变量记忆 —— 每个模板内容（按内容哈希）记住上次填写值，存 localStorage。
+// 键 = sage:tplfill:<djb2(content)>；读写失败静默降级（隐私模式等）。
+function tplStorageKey(content: string): string {
+  let hash = 5381;
+  for (let i = 0; i < content.length; i++) {
+    hash = ((hash << 5) + hash + content.charCodeAt(i)) | 0;
+  }
+  return `sage:tplfill:${hash >>> 0}`;
+}
+
+export function loadRememberedValues(content: string): Record<string, string> {
+  try {
+    const raw = window.localStorage.getItem(tplStorageKey(content));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveRememberedValues(
+  content: string,
+  values: Record<string, string>,
+): void {
+  try {
+    // 只记非空值 —— 清空输入=遗忘该变量
+    const filled = Object.fromEntries(
+      Object.entries(values).filter(([, v]) => v.trim() !== ''),
+    );
+    window.localStorage.setItem(tplStorageKey(content), JSON.stringify(filled));
+  } catch {
+    // ignore — localStorage 不可用时静默
+  }
+}
+
 /** 用填写的值解析模板；留空的变量保留 {{占位}} 原样。 */
 export function resolveTemplate(
   content: string,
@@ -48,9 +84,12 @@ interface TemplateFillDialogProps {
 export function TemplateFillDialog({ content, onConfirm, onCancel }: TemplateFillDialogProps) {
   const { t } = useI18n();
   const vars = extractTemplateVars(content);
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    loadRememberedValues(content),
+  );
 
   const handleConfirm = () => {
+    saveRememberedValues(content, values);
     onConfirm(resolveTemplate(content, values));
   };
 

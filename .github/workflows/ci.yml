@@ -158,6 +158,53 @@ jobs:
           flags: backend
           fail_ci_if_error: false
 
+  # ========== Backend: Windows 本地 unit 基线（非阻塞信号） ==========
+  # 产品主平台是 Windows 桌面（Electron + win7 LTS），而上面两个 Backend job
+  # 都只跑 ubuntu。本 job 在 windows-latest 上跑 unit 套件，长期锁定
+  # #712/#715/#722 治理后的 Windows 基线（POSIX-only 簇已 skipif(nt)）。
+  # continue-on-error：信号不阻塞 PR；红 了说明有新的 Windows 回归。
+  backend-windows-unit:
+    name: Backend unit (Windows, non-blocking)
+    if: |
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
+    runs-on: windows-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: backend/environment.yml
+          python-version: '3.11'
+          activate-environment: sage-backend
+          channels: conda-forge
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install backend deps
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend pip install -r backend/requirements.txt
+
+      - name: Pytest unit (Windows baseline)
+        shell: bash -el {0}
+        timeout-minutes: 40
+        env:
+          # Windows runner 默认 cp1252 stdout：pytest 输出里的替换字符会让
+          # conda run 自身崩掉（UnicodeEncodeError），强制 UTF-8
+          PYTHONUTF8: "1"
+          PYTHONIOENCODING: utf-8
+        run: |
+          conda run -n sage-backend bash -c "cd backend && pytest tests/unit -q -n auto --dist loadfile --tb=line --no-cov"
+
   # ========== Dependency audit: read-only npm + Python reports ==========
   # This job intentionally does not mutate package manifests or fix findings.
   # Critical/high findings are enforced by the final gate after reports upload.

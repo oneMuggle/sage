@@ -69,6 +69,28 @@ function CodeBlock({ language, children }: { language?: string; children: string
 const MD_REMARK_PLUGINS = [remarkGfm, remarkMath];
 const MD_REHYPE_PLUGINS = [rehypeKatex];
 
+const URL_SPLIT_RE = /(https?:\/\/[^\s<>()]+)/;
+
+/** P3: 用户消息纯文本中的 URL 自动链接化（assistant 走 markdown 已自带链接） */
+function renderTextWithLinks(text: string): ReactNode[] {
+  return text.split(URL_SPLIT_RE).map((part, i) =>
+    /^https?:\/\//.test(part) ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline break-all"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {part}
+      </a>
+    ) : (
+      part
+    ),
+  );
+}
+
 /** 流式未闭合围栏的降级代码渲染 — 纯文本 pre，不随 delta 重复触发 Shiki/mermaid */
 function PlainCodeBlock({ className, children }: { className?: string; children: unknown }) {
   const content = String(children).replace(/\n$/, '');
@@ -114,14 +136,16 @@ const markdownComponents = {
   },
   table({ children }: { children?: ReactNode }) {
     return (
-      <div className="overflow-x-auto my-3">
+      // P2: 长表格纵向限高滚动 + 表头粘性（此前只能横向滚动，数十行的表
+      // 把整条消息拉得极长）
+      <div className="overflow-x-auto my-3 max-h-80 overflow-y-auto">
         <table className="min-w-full text-xs border-collapse border border-border">{children}</table>
       </div>
     );
   },
   th({ children }: { children?: ReactNode }) {
     return (
-      <th className="border border-border px-3 py-1.5 bg-bg-subtle font-semibold text-left">
+      <th className="border border-border px-3 py-1.5 bg-bg-subtle font-semibold text-left sticky top-0 z-[1]">
         {children}
       </th>
     );
@@ -140,6 +164,20 @@ const markdownComponents = {
   },
   li({ children }: { children?: ReactNode }) {
     return <li className="mb-0.5">{children}</li>;
+  },
+  // P2: GFM 任务列表 checkbox 主题化（默认渲染无样式反馈）
+  input({ type, checked, disabled }: { type?: string; checked?: boolean; disabled?: boolean }) {
+    if (type === 'checkbox') {
+      return (
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          className="mr-1.5 w-3.5 h-3.5 align-middle accent-primary"
+        />
+      );
+    }
+    return <input type={type} checked={checked} disabled={disabled} />;
   },
   a({ href, children }: { href?: string; children?: ReactNode }) {
     return (
@@ -508,7 +546,9 @@ function MessageComponent({
             isThinkingPlaceholder ? (
               <ThinkingShimmer />
             ) : (
-              <div className="max-w-none">
+              <div className="max-w-none max-w-3xl mx-auto w-full">
+                {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
+                    长文不再一行拉满；表格/代码块仍在容器内滚动 */}
                 {chunks.stable.map((md, i) => (
                   <MarkdownChunk key={i} md={md} />
                 ))}
@@ -524,7 +564,7 @@ function MessageComponent({
               </div>
             )
           ) : (
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <p className="whitespace-pre-wrap">{renderTextWithLinks(message.content)}</p>
           )}
         </div>
 

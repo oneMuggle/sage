@@ -176,7 +176,18 @@ export function OfficeDocumentList({
   };
 
   if (loading) {
-    return <div className="text-sm text-muted p-4 text-center">{t('common.loading')}</div>;
+    // P2: 加载态从纯文字升级为骨架行（对齐 LoadingState skeleton 约定）
+    return (
+      <div className="p-3 space-y-2" data-testid="office-doc-list-skeleton">
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="h-10 rounded bg-line animate-pulse"
+            style={{ width: `${100 - i * 7}%` }}
+          />
+        ))}
+      </div>
+    );
   }
   if (documents.length === 0) {
     return (

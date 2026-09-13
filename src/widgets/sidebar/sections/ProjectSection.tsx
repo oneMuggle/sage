@@ -21,11 +21,12 @@
  */
 
 import { AlertTriangle, ChevronDown, ChevronRight, Folder, Plus } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { InvokeError } from '../../../shared/api/desktopInvoke';
 import { projectApi, type ProjectSummary } from '../../../shared/api/projectApi';
+import { sessionApi } from '../../../shared/api/sessionApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import { useStore, type Session } from '../../../shared/lib/store';
 import { formatRelativeTime } from '../../../shared/lib/utils';
@@ -49,6 +50,9 @@ function isPathMissingError(err: unknown): boolean {
   return (err as InvokeError)?.status_code === 410;
 }
 
+/** P4: 会话数量变化触发的项目清单刷新防抖（ms）——吞掉连续增删的抖动 */
+const PROJECT_REFRESH_DEBOUNCE_MS = 400;
+
 export function ProjectSection({
   collapsed,
   onToggleCollapsed,
@@ -65,6 +69,8 @@ export function ProjectSection({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [subSessions, setSubSessions] = useState<Record<string, Session[]>>({});
   const [loadingSubIds, setLoadingSubIds] = useState<Set<string>>(new Set());
+  // ===== P4: 子行会话删除 =====
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -107,6 +113,21 @@ export function ProjectSection({
     },
     [t],
   );
+
+  // P4: 任意来源的会话增删（会话区删除、对话产生新会话等）→ 防抖刷新
+  // 项目清单与已展开子列表。session_count 是后端聚合查询，单一事实源
+  // 不本地推算；以 store sessions 长度变化为触发信号。
+  const sessionsCount = useStore((s) => s.sessions.length);
+  const prevSessionsCountRef = useRef(sessionsCount);
+  useEffect(() => {
+    if (prevSessionsCountRef.current === sessionsCount) return;
+    prevSessionsCountRef.current = sessionsCount;
+    const timer = setTimeout(() => {
+      void refresh();
+      expandedIds.forEach((id) => void refreshSubSessions(id));
+    }, PROJECT_REFRESH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [sessionsCount, expandedIds, refresh, refreshSubSessions]);
 
   /** P2: 展开/收起；首次展开时懒加载。 */
   const toggleExpand = useCallback(
@@ -209,6 +230,26 @@ export function ProjectSection({
     [clearMissing, refresh, t],
   );
 
+  // P4: 子行会话删除 —— 两步确认后删除会话，联动刷新子列表/清单/会话区
+  const handleDeleteSessionInProject = useCallback(
+    async (project: ProjectSummary, sessionId: string) => {
+      setDeletingSessionId(sessionId);
+      try {
+        await sessionApi.delete(sessionId);
+        await loadSessions();
+        await refresh();
+        if (expandedIds.has(project.id)) await refreshSubSessions(project.id);
+      } catch (err) {
+        toast.error(
+          t('sider.project.delete_session_failed').replace('{message}', errorMessage(err)),
+        );
+      } finally {
+        setDeletingSessionId(null);
+      }
+    },
+    [expandedIds, loadSessions, refresh, refreshSubSessions, t],
+  );
+
   const renderSubSessions = (project: ProjectSummary) => {
     if (!expandedIds.has(project.id)) return null;
     const sessions = subSessions[project.id];
@@ -239,16 +280,25 @@ export function ProjectSection({
             onOpenSession(session.id);
           }
         }}
-        className="flex items-center gap-2 ml-5 mr-1.5 px-2 py-1 rounded cursor-pointer hover:bg-bg-hover"
+        className="group/sub flex items-center gap-2 ml-5 mr-1.5 px-2 py-1 rounded cursor-pointer hover:bg-bg-hover"
         title={session.title}
       >
         <MessageDot />
         <span className="flex-1 min-w-0 text-xs text-text-secondary truncate">
           {session.title || t('sidebar.new_chat')}
         </span>
-        <span className="shrink-0 text-[10px] text-muted tabular-nums">
+        <span className="shrink-0 text-[10px] text-muted tabular-nums group-hover/sub:hidden">
           {formatRelativeTime(session.updated_at)}
         </span>
+        <div className="hidden group-hover/sub:flex items-center">
+          <TwoStepDelete
+            data-testid="project-session-delete"
+            label={t('sider.project.delete_session')}
+            disabled={deletingSessionId === session.id}
+            onConfirm={() => void handleDeleteSessionInProject(project, session.id)}
+            className="!h-5 !w-5 !px-1 [&>svg]:!h-3 [&>svg]:!w-3"
+          />
+        </div>
       </div>
     ));
   };

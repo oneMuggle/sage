@@ -241,7 +241,17 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/prompts/templates/${encodeURIComponent(String(a.id))}`,
   },
-    chat_stream_active: {
+  // R30: 模板导入/导出（导出无 body；导入信封即 body）
+  prompts_export: {
+    method: 'GET',
+    path: () => '/api/v1/prompts/templates/export',
+  },
+  prompts_import: {
+    method: 'POST',
+    path: () => '/api/v1/prompts/templates/import',
+    body: (a) => a.payload as Record<string, unknown>,
+  },
+  chat_stream_active: {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/active?session_id=${encodeURIComponent(String(a.sessionId))}`,
   },

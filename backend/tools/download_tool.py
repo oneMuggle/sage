@@ -1,4 +1,4 @@
-# ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容，保留 typing 注解
+# ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容，保留 typing 注解
 """http_download —— 流式下载文件到工作区。
 
 与 ``bash`` + ``curl`` 的区别：走 EXTERNAL 风险类而非 EXEC，落盘路径受工作区
@@ -13,18 +13,20 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import unicodedata
 from email.message import Message
 from pathlib import Path, PurePosixPath
-from typing import Optional
-from urllib.parse import unquote, urlparse
+from typing import Dict, Optional
+from urllib.parse import unquote, urljoin, urlparse
 
 import httpx
 
 from backend.domain.network_policy import NetworkPolicy
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
+from backend.tools.http_factory import build_client
 from backend.tools.network_config import load_network_policy
 
 from .base import BaseTool, ToolResult, ToolSchema
@@ -44,6 +46,9 @@ _FALLBACK_NAME = "download.bin"
 
 #: 文件名长度上限，给冲突后缀留余量（Windows MAX_PATH 与 ext4 255 字节都够）
 _MAX_NAME_CHARS = 120
+
+#: 手动跟随重定向的最大跳数
+_MAX_REDIRECTS = 5
 
 
 def sanitize_filename(name: Optional[str]) -> str:
@@ -100,6 +105,27 @@ def _unique_path(directory: Path, filename: str) -> Path:
     raise OSError(f"无法为 {filename!r} 找到可用文件名（同名文件过多）")
 
 
+def _open_exclusive(directory: Path, filename: str):
+    """Open a new regular file without following a symlink."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if os.name == "nt":
+        # Windows 无 O_NOFOLLOW，但 O_CREAT|O_EXCL 映射 CreateFile(CREATE_NEW)：
+        # 名字已被文件/符号链接占用时在目录项层面直接失败，不跟随链接，与
+        # POSIX 侧同一条"拒绝竞争目录项"语义。dir_fd 不可用，TOCTOU 收窄靠 O_EXCL。
+        return os.fdopen(
+            os.open(str(directory / filename), flags | getattr(os, "O_BINARY", 0)), "wb"
+        )
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if not nofollow:
+        raise OSError("下载写盘缺少可靠的 no-follow 原语")
+    directory_fd = os.open(str(directory), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | nofollow)
+    try:
+        fd = os.open(filename, flags | nofollow, 0o600, dir_fd=directory_fd)
+    finally:
+        os.close(directory_fd)
+    return os.fdopen(fd, "wb")
+
+
 class HttpDownloadTool(BaseTool):
     """http_download —— 流式下载到工作区。"""
 
@@ -113,9 +139,11 @@ class HttpDownloadTool(BaseTool):
     ) -> None:
         super().__init__(policy=policy)
         self._network_policy = network_policy
-        self.client = httpx.Client(
+        # 兼容保留的常驻 client；实际请求走 _stream_to_disk 的逐跳现建 client
+        # （经 http_factory 注入用户代理配置）。
+        self.client = build_client(
             timeout=self._policy.timeout_seconds,
-            follow_redirects=True,
+            follow_redirects=False,
             trust_env=not self._policy.subagent_only,
         )
 
@@ -130,7 +158,8 @@ class HttpDownloadTool(BaseTool):
             description=(
                 "下载文件到工作区。适用于文献 PDF、资源站附件等。"
                 "filename 省略时从 URL 或 Content-Disposition 推断；"
-                "只接受工作区内的相对路径。"
+                "只接受工作区内的相对路径。credential_domain 可携带 "
+                "browser_cookies 导出的登录态（订阅源文献下载用）。"
             ),
             parameters={
                 "type": "object",
@@ -144,6 +173,13 @@ class HttpDownloadTool(BaseTool):
                         "type": "integer",
                         "description": f"大小上限 (默认 {MAX_DOWNLOAD_BYTES})",
                     },
+                    "credential_domain": {
+                        "type": "string",
+                        "description": (
+                            "browser_cookies 导出的凭据档案 domain"
+                            "（如 .cnki.net），附加登录态 cookie"
+                        ),
+                    },
                 },
                 "required": ["url"],
             },
@@ -154,6 +190,7 @@ class HttpDownloadTool(BaseTool):
         url: str,
         filename: Optional[str] = None,
         max_bytes: int = MAX_DOWNLOAD_BYTES,
+        credential_domain: str = "",
         **kwargs,
     ) -> ToolResult:
         """下载 ``url`` 到工作区。
@@ -163,8 +200,33 @@ class HttpDownloadTool(BaseTool):
             filename:  工作区内相对文件名；``None`` 则自动推断
             max_bytes: 大小上限（声明值与实际字节双重校验）
         """
-        if not url.startswith(("http://", "https://")):
-            return ToolResult(success=False, error="无效的 URL，必须以 http:// 或 https:// 开头")
+        url_error = self._validate_target_url(url)
+        if url_error:
+            return ToolResult(success=False, error=url_error)
+
+        cookie_header: Optional[str] = None
+        if credential_domain.strip():
+            from backend.tools.credential_vault import cookie_domain_matches, cookie_header_for
+
+            credential_domain = credential_domain.strip()
+            cookie_header = cookie_header_for(credential_domain)
+            if cookie_header is None:
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_not_found: 无 {credential_domain!r} 的凭据档案"
+                        "（先 browser_cookies action=export 导出）"
+                    ),
+                )
+            target_host = urlparse(url).hostname or ""
+            if not cookie_domain_matches(target_host, credential_domain):
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_domain_mismatch: 目标 host {target_host!r} "
+                        f"不在凭据域 {credential_domain!r} 内（档案域按 cookie 归属）"
+                    ),
+                )
 
         root = self._policy.workspace_root
         if not root:
@@ -183,71 +245,151 @@ class HttpDownloadTool(BaseTool):
             if blocked is not None:
                 return blocked
 
-        host_rejection = self._effective_network_policy().check_host(url)
+        network_policy = self._effective_network_policy()
+        host_rejection = network_policy.check_host(url)
         if host_rejection:
             return ToolResult(success=False, error=host_rejection)
 
         try:
-            return self._stream_to_disk(url, filename, max_bytes, Path(root))
+            return self._stream_to_disk(
+                url,
+                filename,
+                max_bytes,
+                Path(root),
+                network_policy,
+                cookie_header,
+                credential_domain.strip(),
+            )
         except httpx.HTTPError as e:
             return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
         except Exception as e:
             return ToolResult(success=False, error=f"下载失败: {str(e)}")
 
-    def _stream_to_disk(
-        self, url: str, filename: Optional[str], max_bytes: int, root: Path
+    def _stream_to_disk(  # noqa: PLR0911 — 每个拒绝路径独立 return，保持下载流程直读
+        self,
+        url: str,
+        filename: Optional[str],
+        max_bytes: int,
+        root: Path,
+        network_policy: NetworkPolicy,
+        cookie_header: Optional[str] = None,
+        credential_domain: str = "",
     ) -> ToolResult:
         """边下边写。返回成功或失败的 ``ToolResult``。"""
-        with self.client.stream("GET", url) as response:
-            response.raise_for_status()
-
-            declared = response.headers.get("content-length", "")
-            if declared.isdigit() and int(declared) > max_bytes:
+        current_url = url
+        for redirect_count in range(_MAX_REDIRECTS + 1):
+            parsed = urlparse(current_url)
+            if parsed.scheme not in ("http", "https") or not parsed.hostname:
                 return ToolResult(
                     success=False,
-                    error=(
-                        f"content_length_exceeds_limit: 服务器声明 {declared} 字节，"
-                        f"超过上限 {max_bytes}"
-                    ),
+                    error="无效的 URL，必须包含 http:// 或 https:// 以及主机名",
                 )
+            host_rejection = network_policy.check_host(current_url)
+            if host_rejection:
+                return ToolResult(success=False, error=host_rejection)
 
-            name = sanitize_filename(filename) if filename else derive_filename(
-                url, response.headers.get("content-disposition")
+            # 登录态 cookie 只附加到档案域命中的 hop（与 web_fetch 同口径）
+            hop_headers: Dict[str, str] = {}
+            if cookie_header:
+                from backend.tools.credential_vault import cookie_domain_matches
+
+                if cookie_domain_matches(parsed.hostname or "", credential_domain):
+                    hop_headers["Cookie"] = cookie_header
+
+            with build_client(
+                timeout=self._policy.timeout_seconds,
+                follow_redirects=False,
+                verify=not network_policy.allows_insecure_tls(current_url),
+                trust_env=not self._policy.subagent_only,
+            ) as client:
+                request = client.build_request("GET", current_url, headers=hop_headers)
+                response = client.send(request, stream=True)
+                if response.is_redirect:
+                    if redirect_count >= _MAX_REDIRECTS:
+                        response.close()
+                        return ToolResult(
+                            success=False,
+                            error=f"redirect_limit_exceeded: 重定向次数超过 {_MAX_REDIRECTS} 次",
+                        )
+                    location = response.headers.get("location")
+                    response.close()
+                    if not location:
+                        return ToolResult(
+                            success=False, error="invalid_redirect: 重定向缺少 Location"
+                        )
+                    current_url = urljoin(current_url, location)
+                    continue
+
+                response.raise_for_status()
+
+                declared = response.headers.get("content-length", "")
+                if declared.isdigit() and int(declared) > max_bytes:
+                    response.close()
+                    return ToolResult(
+                        success=False,
+                        error=(
+                            f"content_length_exceeds_limit: 服务器声明 {declared} 字节，"
+                            f"超过上限 {max_bytes}"
+                        ),
+                    )
+
+                name = (
+                    sanitize_filename(filename)
+                    if filename
+                    else derive_filename(current_url, response.headers.get("content-disposition"))
+                )
+                root.mkdir(parents=True, exist_ok=True)
+                target = _unique_path(root, name)
+
+                written = 0
+                owns_target = False
+                try:
+                    with _open_exclusive(root, target.name) as handle:
+                        owns_target = True
+                        for chunk in response.iter_bytes(_CHUNK_BYTES):
+                            written += len(chunk)
+                            # Content-Length 是服务器说的，不可信；按实际字节兜底
+                            if written > max_bytes:
+                                raise _DownloadTooLarge(written)
+                            handle.write(chunk)
+                except _DownloadTooLarge as exc:
+                    if owns_target:
+                        target.unlink(missing_ok=True)
+                    return ToolResult(
+                        success=False,
+                        error=f"download_exceeds_limit: 实际接收 {exc.written} 字节，超过上限 {max_bytes}",
+                    )
+                except Exception:
+                    if owns_target:
+                        target.unlink(missing_ok=True)
+                    raise
+                finally:
+                    response.close()
+
+            self._record_artifact(str(target), written)
+            return ToolResult(
+                success=True,
+                content={
+                    "url": current_url,
+                    "path": str(target),
+                    "filename": target.name,
+                    "bytes_written": written,
+                    "content_type": response.headers.get("content-type", ""),
+                },
+                output=str(target),
             )
-            root.mkdir(parents=True, exist_ok=True)
-            target = _unique_path(root, name)
 
-            written = 0
-            try:
-                with open(target, "wb") as handle:  # noqa: PTH123 — ruff.toml 已忽略
-                    for chunk in response.iter_bytes(_CHUNK_BYTES):
-                        written += len(chunk)
-                        # Content-Length 是服务器说的，不可信；按实际字节兜底
-                        if written > max_bytes:
-                            raise _DownloadTooLarge(written)
-                        handle.write(chunk)
-            except _DownloadTooLarge as exc:
-                target.unlink(missing_ok=True)
-                return ToolResult(
-                    success=False,
-                    error=f"download_exceeds_limit: 实际接收 {exc.written} 字节，超过上限 {max_bytes}",
-                )
-            except Exception:
-                target.unlink(missing_ok=True)
-                raise
+        return ToolResult(success=False, error="redirect_limit_exceeded: 重定向次数超限")
 
-        self._record_artifact(str(target), written)
-        return ToolResult(
-            success=True,
-            content={
-                "url": url,
-                "path": str(target),
-                "filename": target.name,
-                "bytes_written": written,
-                "content_type": response.headers.get("content-type", ""),
-            },
-            output=str(target),
-        )
+    @staticmethod
+    def _validate_target_url(url: str) -> Optional[str]:
+        try:
+            parsed = urlparse(url)
+        except ValueError:
+            return "无效的 URL，必须包含 http:// 或 https:// 以及主机名"
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return "无效的 URL，必须包含 http:// 或 https:// 以及主机名"
+        return None
 
     @staticmethod
     def _record_artifact(path: str, size: int) -> None:

@@ -132,6 +132,7 @@ async def test_check_invalid_intent_returns_422(client, tmp_path):
 @pytest.mark.asyncio()
 async def test_check_expanduser(client, tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows expanduser 读 USERPROFILE
     fake = tmp_path / "home-wiki"
     fake.mkdir()
     (fake / "wiki").mkdir()
