@@ -194,3 +194,110 @@ describe('NetworkTab', () => {
     });
   });
 });
+
+// ==================== Round 4：代理 + 搜索引擎设置 ====================
+
+describe('NetworkTab proxy card (Round 4 F1)', () => {
+  beforeEach(() => {
+    mocks.getPreference.mockReset();
+    mocks.setPreference.mockReset();
+    mocks.getPreference.mockResolvedValue(null);
+    mocks.setPreference.mockResolvedValue(undefined);
+  });
+
+  function lastSaved(): [string, string] {
+    const calls = mocks.setPreference.mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    return [calls[calls.length - 1][0] as string, calls[calls.length - 1][1] as string];
+  }
+
+  it('saves proxy on blur', async () => {
+    renderTab();
+    const input = await screen.findByTestId('proxy-http-input');
+    fireEvent.change(input, { target: { value: 'http://127.0.0.1:7890' } });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalled());
+    const [key, value] = lastSaved();
+    expect(key).toBe('web_proxy');
+    expect(JSON.parse(value)).toEqual({ http: 'http://127.0.0.1:7890', https: '' });
+  });
+
+  it('rejects proxy without scheme and does not persist', async () => {
+    renderTab();
+    const input = await screen.findByTestId('proxy-http-input');
+    fireEvent.change(input, { target: { value: '127.0.0.1:7890' } });
+    fireEvent.blur(input);
+
+    expect(await screen.findByTestId('proxy-error')).toBeInTheDocument();
+    expect(mocks.setPreference).not.toHaveBeenCalled();
+  });
+
+  it('loads stored proxy values', async () => {
+    mocks.getPreference.mockImplementation(async (key: string) => {
+      if (key === 'web_proxy') {
+        return JSON.stringify({ http: 'http://p:8080', https: 'socks5://q:1080' });
+      }
+      return null;
+    });
+    renderTab();
+
+    expect(await screen.findByTestId('proxy-http-input')).toHaveValue('http://p:8080');
+    expect(screen.getByTestId('proxy-https-input')).toHaveValue('socks5://q:1080');
+  });
+});
+
+describe('NetworkTab search engine card (Round 4 F2)', () => {
+  beforeEach(() => {
+    mocks.getPreference.mockReset();
+    mocks.setPreference.mockReset();
+    mocks.getPreference.mockResolvedValue(null);
+    mocks.setPreference.mockResolvedValue(undefined);
+  });
+
+  function lastSaved(): [string, string] {
+    const calls = mocks.setPreference.mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    return [calls[calls.length - 1][0] as string, calls[calls.length - 1][1] as string];
+  }
+
+  it('changes preferred engine and persists order', async () => {
+    renderTab();
+    const select = await screen.findByTestId('search-first-engine');
+    expect(select).toHaveValue('bing');
+
+    fireEvent.change(select, { target: { value: 'tavily' } });
+
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalled());
+    const [key, value] = lastSaved();
+    expect(key).toBe('search_config');
+    const payload = JSON.parse(value);
+    expect(payload.order[0]).toBe('tavily');
+    expect(payload.order).toContain('bing');
+  });
+
+  it('saves tavily key on blur into search_config', async () => {
+    renderTab();
+    const keyInput = await screen.findByTestId('search-tavily-key');
+    fireEvent.change(keyInput, { target: { value: 'tvly-secret' } });
+    fireEvent.blur(keyInput);
+
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalled());
+    const [key, value] = lastSaved();
+    expect(key).toBe('search_config');
+    expect(JSON.parse(value).tavily_key).toBe('tvly-secret');
+  });
+
+  it('loads stored search config including keys', async () => {
+    mocks.getPreference.mockImplementation(async (key: string) => {
+      if (key === 'search_config') {
+        return JSON.stringify({ order: ['zhipu', 'bing'], zhipu_key: 'zp-stored' });
+      }
+      return null;
+    });
+    renderTab();
+
+    expect(await screen.findByTestId('search-first-engine')).toHaveValue('zhipu');
+    expect(screen.getByTestId('search-zhipu-key')).toHaveValue('zp-stored');
+  });
+});
