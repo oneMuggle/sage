@@ -14,6 +14,10 @@ import logging
 from collections.abc import Callable
 from typing import Any, Dict, Optional
 
+from backend.orchestration.acceptance import (
+    record_acceptance_event,
+    run_acceptance_checks,
+)
 from backend.orchestration.events import (
     EventProvenance,
     EventRecorder,
@@ -72,6 +76,7 @@ class LaneExecutor:
         interrupt_event: Optional[asyncio.Event] = None,
         run_event_sink: Optional[RunEventSink] = None,
         run_id: Optional[str] = None,
+        acceptance_enabled: bool = True,
     ) -> None:
         """
         Initialize LaneExecutor.
@@ -82,6 +87,8 @@ class LaneExecutor:
             event_recorder: EventRecorder for lifecycle events
             agent_runner: Optional async callable(task, agent_id) -> result
                 for actual task execution. If None, uses default runner.
+            acceptance_enabled: Run A4 acceptance checks after success.
+                Advisory only — never flips the lane outcome.
         """
         self.lane_registry = lane_registry
         self.task_registry = task_registry
@@ -90,6 +97,7 @@ class LaneExecutor:
         self.interrupt_event = interrupt_event
         self.run_event_sink = run_event_sink
         self.run_id = run_id
+        self.acceptance_enabled = acceptance_enabled
 
     async def execute_lane(  # noqa: PLR0911 — 7 returns: cancel/perm/fail/succeed/retry/abort/default
         self,
@@ -198,6 +206,11 @@ class LaneExecutor:
             # Update task status
             self.task_registry.mark_completed(task.task_id, result=result)
 
+            # Step 6.5 (A4): best-effort acceptance checks — advisory only.
+            # Never flips the lane outcome; failures are recorded, not raised.
+            with contextlib.suppress(Exception):
+                await self._run_acceptance(lane)
+
             return {
                 "status": "succeeded",
                 "lane_id": lane.lane_id,
@@ -211,6 +224,22 @@ class LaneExecutor:
             # Preserve structured error_code from LaneExecutionError
             error_code = exc.error_code if isinstance(exc, LaneExecutionError) else None
             return await self._handle_failure(lane, task, str(exc), error_code=error_code)
+
+    async def _run_acceptance(self, lane: Lane) -> None:
+        """Run A4 acceptance checks and record the result event (best-effort)."""
+        if not self.acceptance_enabled:
+            return
+        if lane.agent_id == "reviewer":
+            return  # reviewer 自检无意义，跳过
+        loop = asyncio.get_running_loop()
+        report = await loop.run_in_executor(
+            None,
+            lambda: run_acceptance_checks(
+                lane.worktree,
+                configured=(lane.metadata or {}).get("acceptance_checks"),
+            ),
+        )
+        record_acceptance_event(self.event_recorder, lane, report)
 
     async def _validate_permissions(self, lane: Lane) -> bool:
         """
@@ -472,6 +501,7 @@ class LaneExecutor:
         task_id: str,
         assertions: list,
         reviewer_id: str = "system",
+        verdict: Optional[str] = None,
     ) -> ReviewReport:
         """Build a `ReviewReport` v1 and emit a `lane.review.submitted` event.
 
@@ -485,6 +515,7 @@ class LaneExecutor:
             task_id: Task being reviewed.
             assertions: List of `Assertion` (M1).
             reviewer_id: Identity of the reviewer (defaults to "system").
+            verdict: Review verdict ("pass"/"fail"), recorded into the event.
 
         Returns:
             The constructed `ReviewReport` (already content-hashed and
@@ -523,6 +554,7 @@ class LaneExecutor:
                 "reviewer_id": reviewer_id,
                 "schema_version": report.schema_version,
                 "assertion_count": len(report.assertions),
+                "verdict": verdict,
             },
         )
         return report

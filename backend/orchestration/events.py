@@ -58,6 +58,9 @@ class LaneEvent(str, Enum):
     # Review (M2 — executor emits ReviewReport)
     REVIEW_SUBMITTED = "lane.review.submitted"
 
+    # Acceptance (A4 — acceptance checks ran after success)
+    ACCEPTANCE_COMPLETED = "lane.acceptance.completed"
+
 
 # Grouping constants — convenience sets for consumers that want to filter
 # by event category without enumerating each member.
