@@ -199,6 +199,14 @@ def _terminate_session(session: BrowserSession) -> None:
     保留的前提；启动失败路径同样经由本函数，持久目录即使启动失败也不删
     （里面可能有用户既有登录态）。
     """
+    # SN3：先停事件通道（常驻 WS 线程），再杀进程
+    try:
+        from .browser_events import stop_download_tracking
+
+        if session.browser_id:
+            stop_download_tracking(session.browser_id)
+    except Exception:  # noqa: BLE001 — 事件通道清理失败不阻断终止
+        logger.debug("停止下载事件通道失败", exc_info=True)
     try:
         session.process.terminate()
         try:

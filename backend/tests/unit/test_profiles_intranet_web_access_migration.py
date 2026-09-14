@@ -74,6 +74,7 @@ def test_default_seed_coder_uses_current_tool_names():
         "browser_interact",
         "browser_screenshot",
         "browser_cookies",
+        "browser_downloads",
         "browser_close",
     ]
 
@@ -264,7 +265,9 @@ def test_primary_system_prompt_legacy_two_step_chain_migration(monkeypatch):
     """
     stored = {
         "primary": {
-            "id": "primary", "enabled": True, "tools": [],
+            "id": "primary",
+            "enabled": True,
+            "tools": [],
             "system_prompt": profiles._PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION,
         },
     }
@@ -283,7 +286,9 @@ def test_primary_system_prompt_with_delegation_one_step_migration(monkeypatch):
     """
     stored = {
         "primary": {
-            "id": "primary", "enabled": True, "tools": [],
+            "id": "primary",
+            "enabled": True,
+            "tools": [],
             "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION,
         },
     }
@@ -299,7 +304,9 @@ def test_primary_system_prompt_already_fetch_direct_no_upsert(monkeypatch):
     """DB system_prompt 已是 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT → 0 upsert。"""
     stored = {
         "primary": {
-            "id": "primary", "enabled": True, "tools": [],
+            "id": "primary",
+            "enabled": True,
+            "tools": [],
             "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT,
         },
     }
@@ -320,7 +327,8 @@ def test_legacy_primary_plan_write_pruned(monkeypatch):
     """存量 DB primary 白名单含已退役的 plan_write → ensure_default_agents 清除。"""
     stored = {
         "primary": {
-            "id": "primary", "enabled": True,
+            "id": "primary",
+            "enabled": True,
             "tools": ["calculator", "read_file", "plan_write", "todo_write"],
         },
         "researcher": {"id": "researcher", "enabled": True, "tools": []},
