@@ -1,7 +1,7 @@
 # Sage 网页访问与文件下载能力分析及优化方案（Round 5 候选）
 
 - **日期**：2026-09-14
-- **状态**：方案完成，**B1 已实施**（分支 `feat/web-access-round5-b1`，基于 origin/main）；B2–B6 待排期
+- **状态**：方案完成，**B1 已实施**（分支 `feat/web-access-round5-b1`，基于 origin/main），**B2 已实施**（分支 `feat/web-access-round5-b2`，基于 B1）；B3–B6 待排期
 - **勘察范围**：`backend/tools/{web_tool,download_tool,browser_tool,browser_cdp,browser_ws,web_render,web_cache,credential_vault,http_factory,network_config}.py`、`backend/domain/network_policy.py`、`docs/plans/2026-09-*_web-access-*.md`（Round 1–4）
 - **方法**：只读代码勘察（附 `file:line`），对照 Round 1–4 已交付项，避免重复提案
 - **编号约定**：AB = 反爬；AU = 登录态；SN = 嗅探；DL = 下载稳定性/续传；X = 横切
@@ -232,12 +232,25 @@ vault 增 `kind: "cookie" | "header"`；`browser_cookies` 之外新增 `credenti
 
 双分支：所有改动文件在 main 与 origin/release/win7 上**同源**（`git diff` 为空，仅 `test_download_tool.py` 有 4 行 win7-only 差异），新模块 stdlib+httpx、`from __future__ import annotations` + `typing.*`，py3.8 `ast.parse(feature_version=(3,8))` 通过——cherry-pick 到 win7 预期零冲突。
 
+## 2.7 B2 实施记录（2026-09-14）
+
+| 项 | 落点 | 说明 |
+| --- | --- | --- |
+| AB1 自动升级链 | `web_tool.py` `_AntibotBlocked` / `looks_like_antibot_page` / `WebFetchTool._escalate` | 触发：`_get_with_redirects` 任一跳 403/429/503（先于 `raise_for_status` 返回未读体响应）或 2xx 但正文 ≤1200 字且命中 `_ANTIBOT_PAGE_MARKERS`；升级走 `render_page`，检查 `rendered_status` 与盾页特征后按 `mode` 组装结果（`escalated`/`escalated_from`）；`escalate=false`、`render="never"`、`mode="raw"` 不升级，直接返回 `_ANTIBOT_GUIDANCE` |
+| AB2 头拟真 | `http_factory._HEADER_TEMPLATE` / `_probe_chrome_major` / `chrome_major_version` / `default_headers()` | `DEFAULT_HEADERS` 改为惰性 dict 代理（首次访问才探测 Chrome，避免 import 期 I/O）；探测源：`discover_browser_executable()` 同目录的 `NNN.x.y.z` 版本目录（Windows），POSIX 回退 `--version`；探测值低于 `FALLBACK_CHROME_MAJOR=126` 则弃用（win7 Chrome 109 仍报 126，避免"老浏览器"被区别对待） |
+| AB4 去自动化痕迹 | `browser_cdp._build_launch_command` 新增两 flag；`STEALTH_SCRIPT` / `apply_stealth()`；`web_render._render_once` 导航前调用 | 仅覆盖三个最廉价的信号（webdriver / window.chrome / languages），不做 canvas/WebGL 指纹伪装；`apply_stealth` 吞 `BrowserCDPError` 返回 False；页面脚本新增从 `performance.getEntriesByType("navigation")[0].responseStatus` 取状态码 → `rendered_status` |
+| AB5 重试/限速 | `http_factory.parse_retry_after` / `HostRateLimiter` / `get_host_rate_limiter()` / `retrying_send` / `_RETRYABLE_STATUS`；`web_tool._RetryingClient` | web_fetch 逐跳 `retrying_send(stream=True)`；web_search 通过 `build_client(client_class=_RetryingClient)` 让引擎代码零改动获得重试；退避 `0.8·2^n + jitter`（≤8s），`Retry-After` ≤30s；状态码耗尽重试返回最后一个响应交上层处理（403/429 → 升级链）；`_sleep` 为模块级钩子供单测替换 |
+
+测试：`test_web_tool.py` +15（403/429/503/盾页升级、升级后仍盾页给指引、`escalate=false` / `render=never` / `raw` 不升级、links/tables 升级、5xx / 连接错误重试、429 `Retry-After` 后升级、请求头含 Sec-CH-UA / Sec-Fetch、web_search 引擎请求重试）、`test_http_factory.py` +15（头模板 / 版本探测与回退 / `parse_retry_after` 各格式与上限 / `retrying_send` 状态码与异常路径 / `HostRateLimiter` 令牌桶 / `client_class`）、`test_web_render.py` +4（stealth 注入顺序、`rendered_status`、注入失败不阻断）、`test_browser_tool.py` +4（启动 flag / stealth 脚本 / `apply_stealth`）；`test_web_cache.py` 的"失败不缓存"用例按 AB5 语义更新为 `2 × (1 + DEFAULT_FETCH_RETRIES)` 次真抓。
+
+双分支：改动文件 `http_factory.py` / `browser_cdp.py` / `web_render.py` / `web_tool.py` 在 main 与 win7 同源；无新依赖，py3.8 `ast.parse(feature_version=(3,8))` 通过。
+
 ## 3. 实施批次建议
 
 | 批次 | 内容 | 预估 | 双分支 |
 | --- | --- | --- | --- |
 | **B1（P0）** ✅ | DL1 重试/续传/`.part`/完整性 + DL3/SN1 魔数嗅探 + download 复用默认头 | 已交付 | main + win7（stdlib+httpx，零新依赖） |
-| **B2（P1）** | AB1 自动升级链 + AB2 头拟真 + AB4 去自动化痕迹 + AB5 重试/限速 | 1.5 天 | main + win7 |
+| **B2（P1）** ✅ | AB1 自动升级链 + AB2 头拟真 + AB4 去自动化痕迹 + AB5 重试/限速 | 已交付 | main + win7 |
 | **B3（P1）** | AU1 cookie 元数据/过期 + AU2 Set-Cookie 回写/登录墙检测 + AU4 header 凭据 | 1.5 天 | main + win7（settings KEYS 白名单需手工 cherry） |
 | **B4（P1）** | SN3 浏览器事件长连接 + `browser_downloads` + SN2 `mode=files` | 2 天 | main + win7 |
 | **B5（P2）** | DL2 后台任务/进度/取消 + AU3/AU5 自动刷新与渲染池互通 + AB6 连接复用 | 2–3 天 | main 优先（涉前端进度 UI） |

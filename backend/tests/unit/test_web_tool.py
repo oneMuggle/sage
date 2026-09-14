@@ -10,10 +10,19 @@ from httpx import Response
 
 from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
-from backend.tools import web_cache, web_render
-from backend.tools.web_tool import WebFetchTool, WebSearchTool
+from backend.tools import http_factory, web_cache, web_render
+from backend.tools.web_tool import WebFetchTool, WebSearchTool, looks_like_antibot_page
 
 pytestmark = [pytest.mark.unit]
+
+
+@pytest.fixture(autouse=True)
+def http_sleeps(monkeypatch):
+    """AB5 重试退避不真睡（自动装配）。"""
+    waits = []
+    monkeypatch.setattr(http_factory, "_sleep", waits.append)
+    http_factory.get_host_rate_limiter().reset()
+    return waits
 
 
 @pytest.fixture(autouse=True)
@@ -696,9 +705,7 @@ def test_web_fetch_auto_skips_when_max_length_below_shell_threshold(monkeypatch)
     monkeypatch.setattr(web_render, "render_page", _fail)
     with respx.mock(base_url="https://spa.example", assert_all_called=False) as mock:
         mock.get("/short").mock(
-            return_value=Response(
-                200, text=_SPA_SHELL, headers={"content-type": "text/html"}
-            )
+            return_value=Response(200, text=_SPA_SHELL, headers={"content-type": "text/html"})
         )
         tool = WebFetchTool(network_policy=_intranet("spa.example"))
         result = tool.execute(url="https://spa.example/short", max_length=100)
@@ -716,9 +723,7 @@ def test_web_fetch_render_never_skips_shell(monkeypatch):
     monkeypatch.setattr(web_render, "render_page", _fail)
     with respx.mock(base_url="https://spa.example", assert_all_called=False) as mock:
         mock.get("/n").mock(
-            return_value=Response(
-                200, text=_SPA_SHELL, headers={"content-type": "text/html"}
-            )
+            return_value=Response(200, text=_SPA_SHELL, headers={"content-type": "text/html"})
         )
         tool = WebFetchTool(network_policy=_intranet("spa.example"))
         result = tool.execute(url="https://spa.example/n", render="never")
@@ -754,14 +759,14 @@ def test_web_fetch_render_failure_reports_guidance(monkeypatch):
     """渲染失败独立语义：明确错误 + 手动路径指引，不吞成通用失败。"""
 
     def _boom(url, network_policy, wait_for=""):
-        raise web_render.RenderError("JS 渲染失败: 浏览器不可用（可经 coder 用 browser_launch + browser_navigate 手动渲染，或 web_fetch render=never 取静态内容）")
+        raise web_render.RenderError(
+            "JS 渲染失败: 浏览器不可用（可经 coder 用 browser_launch + browser_navigate 手动渲染，或 web_fetch render=never 取静态内容）"
+        )
 
     monkeypatch.setattr(web_render, "render_page", _boom)
     with respx.mock(base_url="https://spa.example", assert_all_called=False) as mock:
         mock.get("/f").mock(
-            return_value=Response(
-                200, text=_SPA_SHELL, headers={"content-type": "text/html"}
-            )
+            return_value=Response(200, text=_SPA_SHELL, headers={"content-type": "text/html"})
         )
         tool = WebFetchTool(network_policy=_intranet("spa.example"))
         result = tool.execute(url="https://spa.example/f")
@@ -786,17 +791,13 @@ def test_web_fetch_render_links_mode_returns_rendered_links(monkeypatch):
     monkeypatch.setattr(web_render, "render_page", _fake_render)
     with respx.mock(base_url="https://spa.example", assert_all_called=False) as mock:
         mock.get("/l").mock(
-            return_value=Response(
-                200, text=_SPA_SHELL, headers={"content-type": "text/html"}
-            )
+            return_value=Response(200, text=_SPA_SHELL, headers={"content-type": "text/html"})
         )
         tool = WebFetchTool(network_policy=_intranet("spa.example"))
         result = tool.execute(url="https://spa.example/l", mode="links")
 
     assert result.success is True
-    assert result.content["links"] == [
-        {"text": "论文一", "url": "https://spa.example/p1"}
-    ]
+    assert result.content["links"] == [{"text": "论文一", "url": "https://spa.example/p1"}]
 
 
 def test_web_fetch_rejects_unknown_render_mode():
@@ -885,7 +886,9 @@ def test_web_fetch_pdf_returns_binary_hint_not_garbage():
     with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
         mock.get("/paper.pdf").mock(
             return_value=Response(
-                200, content=body, headers={"content-type": "application/pdf", "content-length": str(len(body))}
+                200,
+                content=body,
+                headers={"content-type": "application/pdf", "content-length": str(len(body))},
             )
         )
         result = tool.execute(url="https://example.com/paper.pdf")
@@ -924,7 +927,11 @@ def test_web_fetch_binary_raw_mode_also_hints():
     tool = WebFetchTool()
     with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
         mock.get("/img.png").mock(
-            return_value=Response(200, content=b"\x89PNG\r\n\x1a\n" + b"\x00" * 16, headers={"content-type": "image/png"})
+            return_value=Response(
+                200,
+                content=b"\x89PNG\r\n\x1a\n" + b"\x00" * 16,
+                headers={"content-type": "image/png"},
+            )
         )
         result = tool.execute(url="https://example.com/img.png", mode="raw")
 
@@ -937,10 +944,14 @@ def test_web_fetch_json_and_plain_text_still_returned_as_text():
     tool = WebFetchTool()
     with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
         mock.get("/api.json").mock(
-            return_value=Response(200, content=b'{"ok": true}', headers={"content-type": "application/json"})
+            return_value=Response(
+                200, content=b'{"ok": true}', headers={"content-type": "application/json"}
+            )
         )
         mock.get("/notes.txt").mock(
-            return_value=Response(200, content=b"plain notes", headers={"content-type": "text/plain"})
+            return_value=Response(
+                200, content=b"plain notes", headers={"content-type": "text/plain"}
+            )
         )
         api = tool.execute(url="https://example.com/api.json")
         txt = tool.execute(url="https://example.com/notes.txt")
@@ -961,7 +972,9 @@ def test_web_fetch_binary_is_not_rendered():
 
     with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
         mock.get("/a.pdf").mock(
-            return_value=Response(200, content=b"%PDF-1.4 x", headers={"content-type": "application/pdf"})
+            return_value=Response(
+                200, content=b"%PDF-1.4 x", headers={"content-type": "application/pdf"}
+            )
         )
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(web_render, "render_page", fake_render)
@@ -969,3 +982,259 @@ def test_web_fetch_binary_is_not_rendered():
 
     assert result.content["kind"] == "binary"
     assert called["render"] is False
+
+
+# ---------- Round 5 B2：反爬韧性 ----------
+
+
+def _fetch_tool():
+    return WebFetchTool(network_policy=_intranet("example.com"))
+
+
+@pytest.mark.parametrize(
+    ("html", "text", "expected"),
+    [
+        (
+            "<html><title>Just a moment...</title><div id=cf-browser-verification>",
+            "Just a moment...",
+            True,
+        ),
+        ("<html>请完成安全验证 滑动验证</html>", "请完成安全验证", True),
+        ("<html><body>Access Denied</body></html>", "Access Denied", True),
+        (
+            "<html><body>" + "正常正文 " * 500 + "验证码</body></html>",
+            "正常正文 " * 500 + "验证码",
+            False,
+        ),
+        ("<html><body>hello world</body></html>", "hello world", False),
+    ],
+)
+def test_looks_like_antibot_page(html, text, expected):
+    assert looks_like_antibot_page(html, text) is expected
+
+
+def _install_fake_render(monkeypatch, result=None, error=None, calls=None):
+    calls = calls if calls is not None else []
+
+    def fake_render(url, network_policy, wait_for=""):
+        calls.append(url)
+        if error:
+            raise web_render.RenderError(error)
+        return result or {
+            "url": url,
+            "title": "渲染标题",
+            "content": "真浏览器拿到的正文 " * 20,
+            "links": [{"href": "https://example.com/a", "text": "a"}],
+            "tables": [],
+            "rendered": True,
+            "rendered_status": 200,
+        }
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    return calls
+
+
+def test_web_fetch_403_escalates_to_render(monkeypatch):
+    calls = _install_fake_render(monkeypatch)
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        route = mock.get("/blocked").mock(return_value=Response(403, text="forbidden"))
+        result = _fetch_tool().execute(url="https://example.com/blocked")
+
+    assert result.success is True, result.error
+    assert result.content["escalated"] == "render"
+    assert result.content["escalated_from"].startswith("http_403")
+    assert result.content["rendered"] is True
+    assert "真浏览器拿到的正文" in result.content["content"]
+    assert calls == ["https://example.com/blocked"]
+    assert route.call_count == 1  # 403 不在 AB5 重试集
+
+
+def test_web_fetch_antibot_shield_page_escalates(monkeypatch):
+    """200 + Cloudflare 盾页正文 → 同样升级。"""
+    calls = _install_fake_render(monkeypatch)
+    shield = "<html><head><title>Just a moment...</title></head><body><div id=cf-browser-verification></div></body></html>"
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/cf").mock(
+            return_value=Response(200, text=shield, headers={"content-type": "text/html"})
+        )
+        result = _fetch_tool().execute(url="https://example.com/cf")
+
+    assert result.success is True
+    assert result.content["escalated"] == "render"
+    assert "antibot_page" in result.content["escalated_from"]
+    assert calls == ["https://example.com/cf"]
+
+
+def test_web_fetch_escalation_links_mode(monkeypatch):
+    _install_fake_render(monkeypatch)
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/blocked").mock(return_value=Response(403))
+        result = _fetch_tool().execute(url="https://example.com/blocked", mode="links")
+
+    assert result.success is True
+    assert result.content["links"][0]["href"] == "https://example.com/a"
+
+
+def test_web_fetch_escalate_false_returns_guidance(monkeypatch):
+    calls = _install_fake_render(monkeypatch)
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/blocked").mock(return_value=Response(403))
+        result = _fetch_tool().execute(url="https://example.com/blocked", escalate=False)
+
+    assert result.success is False
+    assert "http_403" in result.error
+    assert "browser_launch" in result.error
+    assert calls == []
+
+
+def test_web_fetch_render_never_does_not_escalate(monkeypatch):
+    calls = _install_fake_render(monkeypatch)
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/blocked").mock(return_value=Response(403))
+        result = _fetch_tool().execute(url="https://example.com/blocked", render="never")
+
+    assert result.success is False
+    assert calls == []
+
+
+def test_web_fetch_escalation_still_blocked_reports_both(monkeypatch):
+    """渲染结果仍是盾页 / 拒绝状态 → 失败文案说明两条通道都被拦。"""
+    _install_fake_render(
+        monkeypatch,
+        result={
+            "url": "https://example.com/blocked",
+            "title": "",
+            "content": "Access Denied",
+            "links": [],
+            "tables": [],
+            "rendered": True,
+            "rendered_status": 403,
+        },
+    )
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/blocked").mock(return_value=Response(403))
+        result = _fetch_tool().execute(url="https://example.com/blocked")
+
+    assert result.success is False
+    assert "http_403" in result.error
+    assert "真浏览器通道同样被拦截" in result.error
+    assert "403" in result.error
+
+
+def test_web_fetch_escalation_render_failure_reports_guidance(monkeypatch):
+    _install_fake_render(monkeypatch, error="渲染浏览器启动失败: 找不到 Chrome")
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/blocked").mock(return_value=Response(429))
+        result = _fetch_tool().execute(url="https://example.com/blocked")
+
+    assert result.success is False
+    assert "http_429" in result.error
+    assert "找不到 Chrome" in result.error
+    assert "配置代理" in result.error
+
+
+def test_web_fetch_escalated_result_is_cached(monkeypatch):
+    calls = _install_fake_render(monkeypatch)
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/blocked").mock(return_value=Response(403))
+        tool = _fetch_tool()
+        first = tool.execute(url="https://example.com/blocked")
+        second = tool.execute(url="https://example.com/blocked")
+
+    assert first.success
+    assert second.success
+    assert second.content["cached"] is True
+    assert calls == ["https://example.com/blocked"]
+
+
+def test_web_fetch_retries_5xx_then_succeeds(http_sleeps):
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        route = mock.get("/flaky").mock(
+            side_effect=[
+                Response(502),
+                Response(
+                    200, text="<html><body>ok</body></html>", headers={"content-type": "text/html"}
+                ),
+            ]
+        )
+        result = _fetch_tool().execute(url="https://example.com/flaky")
+
+    assert result.success is True
+    assert route.call_count == 2
+    assert len(http_sleeps) == 1
+
+
+def test_web_fetch_retries_connect_error():
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        route = mock.get("/conn").mock(
+            side_effect=[
+                httpx.ConnectError("refused"),
+                Response(
+                    200, text="<html><body>ok</body></html>", headers={"content-type": "text/html"}
+                ),
+            ]
+        )
+        result = _fetch_tool().execute(url="https://example.com/conn")
+
+    assert result.success is True
+    assert route.call_count == 2
+
+
+def test_web_fetch_429_retry_after_then_escalates(monkeypatch, http_sleeps):
+    """429 先按 Retry-After 重试（AB5），仍 429 再升级（AB1）。"""
+    calls = _install_fake_render(monkeypatch)
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        route = mock.get("/rl").mock(return_value=Response(429, headers={"retry-after": "3"}))
+        result = _fetch_tool().execute(url="https://example.com/rl")
+
+    assert result.success is True
+    assert result.content["escalated"] == "render"
+    assert route.call_count == 1 + http_factory.DEFAULT_FETCH_RETRIES
+    assert http_sleeps[0] == 3.0
+    assert calls == ["https://example.com/rl"]
+
+
+def test_web_fetch_sends_client_hints_and_sec_fetch_headers():
+    seen = {}
+
+    def _capture(request):
+        seen.update({k.lower(): v for k, v in request.headers.items()})
+        return Response(
+            200, text="<html><body>ok</body></html>", headers={"content-type": "text/html"}
+        )
+
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/h").mock(side_effect=_capture)
+        _fetch_tool().execute(url="https://example.com/h")
+
+    major = http_factory.chrome_major_version()
+    assert f"Chrome/{major}." in seen["user-agent"]
+    assert f'v="{major}"' in seen["sec-ch-ua"]
+    assert seen["sec-ch-ua-mobile"] == "?0"
+    assert seen["sec-fetch-mode"] == "navigate"
+    assert seen["upgrade-insecure-requests"] == "1"
+
+
+def test_web_search_engine_requests_retry(monkeypatch):
+    """搜索链的 client 经 _RetryingClient：单引擎 503 先重试再降级。"""
+    from backend.tools import search_engines
+
+    with respx.mock(assert_all_called=False) as mock:
+        bing = mock.get(url__startswith="https://www.bing.com/search").mock(
+            side_effect=[Response(503), Response(200, text="<html></html>")]
+        )
+        mock.get(url__startswith="https://html.duckduckgo.com/html/").mock(
+            return_value=Response(200, text="<html></html>")
+        )
+        monkeypatch.setattr(
+            search_engines,
+            "resolve_engine_chain",
+            lambda cfg: [search_engines.BingEngine(), search_engines.DuckDuckGoEngine()],
+        )
+        import backend.tools.web_tool as wt
+
+        monkeypatch.setattr(wt, "resolve_engine_chain", search_engines.resolve_engine_chain)
+        result = WebSearchTool().execute(query="q", refresh=True)
+
+    assert bing.call_count == 2
+    assert result.success is True  # 空结果但完成

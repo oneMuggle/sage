@@ -117,9 +117,7 @@ def test_wait_page_ready_swallows_context_destroyed(fake_time, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _install_render(
-    monkeypatch, page_json: str, lengths: List[int] = None
-) -> List[Dict[str, Any]]:
+def _install_render(monkeypatch, page_json: str, lengths: List[int] = None) -> List[Dict[str, Any]]:
     """装配渲染链假体：实例池 + cdp_command + _evaluate_json，返回调用记录。"""
     lengths = lengths if lengths is not None else [0, 0, 0]
     calls: List[Dict[str, Any]] = []
@@ -132,7 +130,11 @@ def _install_render(
         calls.append({"method": method, "params": params or {}, "target": target_id})
         if method == "Target.createTarget":
             return {"targetId": "t-render"}
-        if method in ("Page.navigate", "Target.closeTarget"):
+        if method in (
+            "Page.navigate",
+            "Target.closeTarget",
+            "Page.addScriptToEvaluateOnNewDocument",
+        ):
             return {}
         raise AssertionError(f"unexpected method {method}")
 
@@ -182,7 +184,11 @@ def test_render_page_navigation_error_text(fake_time, monkeypatch):
     def _fake_cdp(session, method, params=None, target_id=None):
         if method == "Target.createTarget":
             return {"targetId": "t"}
-        if method in ("Page.navigate", "Target.closeTarget"):
+        if method in (
+            "Page.navigate",
+            "Target.closeTarget",
+            "Page.addScriptToEvaluateOnNewDocument",
+        ):
             return {"errorText": "ERR_CONNECTION_REFUSED"} if method == "Page.navigate" else {}
         raise AssertionError(method)
 
@@ -284,3 +290,57 @@ def test_reserved_id_excluded_from_user_instance_resolution():
     assert manager.get(None) is user  # 唯一用户实例照常免 id
 
     assert manager.get(RENDER_POOL_ID) is not None  # 显式指名仍可达
+
+
+# ---------- Round 5 B2：stealth 注入 + 渲染状态码 ----------
+
+
+def test_render_page_injects_stealth_before_navigation(fake_time, monkeypatch):
+    page_json = json.dumps(
+        {"url": "https://spa.example/", "title": "t", "text": "x", "status": 200}
+    )
+    calls = _install_render(monkeypatch, page_json, lengths=[5, 5, 5])
+
+    render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
+
+    methods = [call["method"] for call in calls]
+    stealth_index = methods.index("Page.addScriptToEvaluateOnNewDocument")
+    navigate_index = methods.index("Page.navigate")
+    assert stealth_index < navigate_index
+    stealth_call = calls[stealth_index]
+    assert stealth_call["target"] == "t-render"
+    assert "webdriver" in stealth_call["params"]["source"]
+
+
+def test_render_page_exposes_navigation_status(fake_time, monkeypatch):
+    page_json = json.dumps(
+        {"url": "https://spa.example/", "title": "Just a moment...", "text": "", "status": 403}
+    )
+    _install_render(monkeypatch, page_json, lengths=[0, 0, 0])
+
+    result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
+
+    assert result["rendered_status"] == 403
+
+
+def test_render_page_omits_status_when_unavailable(fake_time, monkeypatch):
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x", "status": 0})
+    _install_render(monkeypatch, page_json, lengths=[5, 5, 5])
+
+    result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
+
+    assert "rendered_status" not in result
+
+
+def test_render_page_survives_stealth_failure(fake_time, monkeypatch):
+    """stealth 注入失败（apply_stealth 返回 False）不阻断渲染。"""
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    calls = _install_render(monkeypatch, page_json, lengths=[5, 5, 5])
+    monkeypatch.setattr(
+        web_render, "apply_stealth", lambda session, target_id=None, command=None: False
+    )
+
+    result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
+
+    assert result["content"] == "x"
+    assert "Page.navigate" in [call["method"] for call in calls]
