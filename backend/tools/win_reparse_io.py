@@ -282,6 +282,32 @@ def _read_all(handle, path: str) -> bytes:
     return b"".join(chunks)
 
 
+def verify_regular_file_reparse_safe(path: str) -> None:
+    """句柄级校验：path 必须解析为非 reparse、非目录、单链接的普通文件。
+
+    打开自带 OPEN_REPARSE_POINT（绑定打开时刻的对象），校验在句柄上完成，
+    闭合"元数据 lstat 检查 → 后续打开"之间的 TOCTOU 窗口。失败抛 OSError。
+    """
+    if not _is_windows():
+        raise OSError("reparse-safe verify requires Windows")
+    if not verify_no_reparse(path):
+        raise OSError(f"refusing reparse component in path (no-follow check): {path}")
+    _configure(_kernel32)
+    # 目录预检：无 BACKUP_SEMANTICS 打开目录是 ACCESS_DENIED，
+    # 提前转成语义正确的 NotADirectoryError
+    value = _kernel32.GetFileAttributesW(path)
+    if value != 0xFFFFFFFF and value & _FILE_ATTRIBUTE_DIRECTORY:
+        raise NotADirectoryError(f"refusing directory handle: {path}")
+    handle = _open_handle(path, write=False, overwrite=False)
+    info = _FileInfo()
+    try:
+        if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
+            raise OSError(f"GetFileInformationByHandle failed: {path}")
+        _validate_info(info, path)
+    finally:
+        _kernel32.CloseHandle(handle)
+
+
 def read_file_reparse_safe(path: str) -> bytes:
     """读整文件（Windows reparse-safe）；非 Windows 或验证失败抛 OSError。"""
     if not _is_windows():
