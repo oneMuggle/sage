@@ -347,13 +347,16 @@ def heading_number_prefix(counters: Any, level: int) -> str:
     return ".".join(str(counters[i]) for i in range(level) if counters[i] != 0)
 
 
-def insert_toc_field(doc: Document, toc: Any) -> None:
+def insert_toc_field(doc: Document, toc: Any, headings: Any = None) -> None:
     """在文档当前末尾（生成流程中即标题之后）插入目录标题 + TOC 域 + 分页。
 
     - 目录标题用加粗居中普通段落（非 Heading 样式）——避免被目录域
       自我收录、也不参与多级标题编号检查（与参考文献节标题同理）；
-    - TOC 域为 w:fldSimple，instr 形如 'TOC 反斜杠o "1-3" 反斜杠h
-      反斜杠z 反斜杠u'，占位 run 提示用户在 Word/WPS 中更新域生成目录。
+    - TOC 域为 **fldChar 复杂域**（Word 原生目录形态）：begin + instrText
+      （'TOC \\o "1-N" \\h \\z \\u'）+ separate → 缓存结果 → end。缓存
+      结果为静态目录行（按 headings 逐行缩进，无页码——页码由渲染器
+      更新域时计算）；headings 为空时退化为占位提示行；
+    - 之后 add_page_break 使正文另起一页。
     """
     paragraph = doc.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -362,22 +365,44 @@ def insert_toc_field(doc: Document, toc: Any) -> None:
     run.font.size = Pt(16)
 
     first, last = toc.level_range()
-    if first == 1:
-        instr = 'TOC \\o "1-' + str(last) + '" \\h \\z \\u'
-    else:
-        instr = 'TOC \\o "' + str(first) + "-" + str(last) + '" \\h \\z \\u'
+    instr = f'TOC \\o "{first}-{last}" \\h \\z \\u'
 
-    toc_paragraph = doc.add_paragraph()
-    fld = OxmlElement("w:fldSimple")
-    fld.set(qn("w:instr"), instr)
-    placeholder = OxmlElement("w:r")
-    text = OxmlElement("w:t")
-    text.text = str(toc.placeholder_text)
-    placeholder.append(text)
-    fld.append(placeholder)
-    toc_paragraph._p.append(fld)
+    begin_paragraph = doc.add_paragraph()
+    _fld_char(begin_paragraph, "begin")
+    instr_el = OxmlElement("w:instrText")
+    instr_el.set(qn("xml:space"), "preserve")
+    instr_el.text = f" {instr} "
+    begin_paragraph._p.append(instr_el)
+    _fld_char(begin_paragraph, "separate")
+
+    entries = [
+        (level, text)
+        for level, text in (headings or [])
+        if first <= level <= last
+    ]
+    if entries:
+        for level, text in entries:
+            entry = doc.add_paragraph()
+            entry.paragraph_format.left_indent = Cm(0.74 * (level - 1))
+            entry_run = entry.add_run(str(text))
+            if level == (first or 1):
+                entry_run.bold = True
+    else:
+        entry = doc.add_paragraph(str(toc.placeholder_text))
+
+    end_paragraph = doc.add_paragraph()
+    _fld_char(end_paragraph, "end")
 
     doc.add_page_break()
+
+
+def _fld_char(paragraph, char_type: str) -> None:
+    """向段落追加 w:fldChar（begin/separate/end）。"""
+    fld = OxmlElement("w:fldChar")
+    fld.set(qn("w:fldCharType"), char_type)
+    run = OxmlElement("w:r")
+    run.append(fld)
+    paragraph._p.append(run)
 
 
 def apply_section_break(doc: Document, page: WordPageSetupSpec) -> None:
