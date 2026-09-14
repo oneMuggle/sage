@@ -91,6 +91,10 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   const finishTask = useTaskCenterStore((s) => s.finishTask);
   // A4b: word 生成成功后交付抽屉验收（lint + 预览 + 接受/打回）。
   const openDelivery = useTaskCenterStore((s) => s.openDelivery);
+  // P15: 可视化进度条 —— 从任务中心读百分比，生成期间显示细进度条
+  const taskPercent = useTaskCenterStore(
+    (s) => (busy ? s.tasks['office:generate']?.percent ?? null : null),
+  );
   const [result, setResult] = useState<GenerateResult | null>(null);
 
   // PPT
@@ -740,6 +744,19 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
           `${t('office.generate.button')} ${docType.toUpperCase()}`
         )}
       </button>
+
+      {/* P15: 生成期间的可视化进度条（百分比来自任务中心轮询） */}
+      {busy && taskPercent != null && (
+        <div
+          className="h-1 rounded-full bg-bg-subtle overflow-hidden"
+          data-testid="office-generate-progress-bar"
+        >
+          <div
+            className="h-full bg-primary rounded-full transition-[width] duration-500"
+            style={{ width: `${taskPercent}%` }}
+          />
+        </div>
+      )}
 
       {result && (
         <div className="text-xs text-muted bg-surface border border-border rounded p-2 space-y-1">
