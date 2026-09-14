@@ -142,7 +142,8 @@ def normalize_configured_checks(raw: Any) -> List[List[str]]:
 # ------------------------------------------------------------------
 
 
-def _decode_bytes(data: bytes | None) -> str:
+# win7 移植注：PEP 604 联合语法改 Optional（本分支 guardrail 禁 604/585 语法）。
+def _decode_bytes(data: Optional[bytes]) -> str:
     """子进程输出解码：先 UTF-8，失败回退 locale（命令输出编码未知）。"""
     if not data:
         return ""
