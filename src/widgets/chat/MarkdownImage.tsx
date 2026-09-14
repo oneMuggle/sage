@@ -67,9 +67,17 @@ export function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
       {status === 'error' ? (
         <span
           data-testid="markdown-image-error"
-          className="flex w-64 h-24 rounded bg-bg-subtle border border-border items-center justify-center text-xs text-muted"
+          className="flex w-64 h-24 rounded bg-bg-subtle border border-border items-center justify-center gap-2 text-xs text-muted"
         >
           图片加载失败
+          <button
+            type="button"
+            data-testid="markdown-image-retry"
+            onClick={() => setStatus('loading')}
+            className="px-2 py-0.5 rounded border border-border text-[11px] text-primary hover:bg-primary/10 transition-colors"
+          >
+            重试
+          </button>
         </span>
       ) : (
         <img
