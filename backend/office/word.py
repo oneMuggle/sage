@@ -285,12 +285,23 @@ def _extract_headers_footers(doc: Document) -> List[WordHeaderFooterContent]:
 
 
 def _extract_toc_fields(doc: Document) -> List[str]:
-    """收集正文中 instr 以 TOC 开头的域（Round 13 目录域的读取对偶）。"""
+    """收集正文中 instr 以 TOC 开头的域（Round 13 目录域的读取对偶）。
+
+    Round 29 起兼容两种载体：fldSimple（R13 形态）与 fldChar 复杂域的
+    instrText（R29 静态缓存回填形态）。
+    """
     instrs: List[str] = []
+    seen: set = set()
     for paragraph in doc.paragraphs:
         for fld in paragraph._p.findall(".//" + qn("w:fldSimple")):
             instr = fld.get(qn("w:instr")) or ""
-            if instr.startswith("TOC"):
+            if instr.startswith("TOC") and instr not in seen:
+                seen.add(instr)
+                instrs.append(instr)
+        for instr_el in paragraph._p.findall(".//" + qn("w:instrText")):
+            instr = (instr_el.text or "").strip()
+            if instr.startswith("TOC") and instr not in seen:
+                seen.add(instr)
                 instrs.append(instr)
     return instrs
 
