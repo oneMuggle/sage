@@ -42,6 +42,7 @@ from .models import (
     PdfReadResult,
 )
 from .path_safety import resolve_within
+from .progress import report_current
 from .storage import validate_workspace
 
 logger = logging.getLogger(__name__)
@@ -294,6 +295,7 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
         title_font = cjk_font or "Helvetica-Bold"
         body_font = cjk_font or "Helvetica"
 
+        total_pages = len(req.pages)
         for i, page_spec in enumerate(req.pages):
             if i > 0:
                 c.showPage()

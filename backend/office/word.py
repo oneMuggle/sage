@@ -784,6 +784,7 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
     from .errors import OfficeGenerateError
     from .models import OfficeDocType
     from .path_safety import managed_document_path, resolve_output_path
+    from .progress import report_current
     from .storage import validate_workspace
 
     if output_dir is not None:
@@ -862,7 +863,14 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         break_idx = 0
 
         # Body paragraphs（段落写完后插入锚定在其后的行内插图）
+        total_paras = max(1, len(req.paragraphs))
         for pi, para in enumerate(req.paragraphs):
+            # P12: 每 20 段上报一次（段落粒度太细，避免锁竞争开销）
+            if pi % 20 == 0:
+                report_current(
+                    f"生成正文 {pi + 1}/{total_paras}",
+                    50,
+                )
             # Round 26：写段落前命中 start_paragraph → 插入分节 + 新节页面设置
             while break_idx < len(pending_breaks) and pending_breaks[
                 break_idx

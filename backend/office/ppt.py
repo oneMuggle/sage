@@ -28,6 +28,7 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
+from .progress import report_current
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
@@ -329,7 +330,8 @@ def generate_ppt(req, output_dir: Optional[str] = None) -> Path:
         prs = Presentation()
         # Layout 6 is "Blank" — most flexible for any content
         blank_layout = prs.slide_layouts[6]
-        for spec in req.slides:
+        total_slides = len(req.slides)
+        for slide_idx, spec in enumerate(req.slides):
             # 批次 2.3：可选 layout 字段按模板版式名查找；未指定或模板里
             # 找不到对应版式时，保持既有 Blank + 文本框几何行为不变。
             layout = _resolve_slide_layout(prs, getattr(spec, "layout", None))

@@ -52,3 +52,28 @@ def test_report_unknown_task_is_noop():
     with track("t4", "x") as prog:
         prog.report("无中生有", 50)
     assert snapshot("t4") is None
+
+
+def test_report_current_contextvar_semantics():
+    """P12: service 层经 ContextVar 上报 —— track 内生效、外失效。"""
+    from backend.office.progress import report_current
+
+    with track("ctx-1", "生成 PPT") as prog:
+        report_current("生成幻灯片 1/3", 45)
+        snap = snapshot("ctx-1")
+        assert snap is not None
+        assert snap["stage"] == "生成幻灯片 1/3"
+        assert snap["percent"] == 45
+        # 单调不回退
+        report_current("乱序值", 10)
+        assert snapshot("ctx-1")["percent"] == 45
+        assert prog.task_id == "ctx-1"
+    # track 退出后 ContextVar 复位 → no-op
+    report_current("越界上报", 90)
+    assert snapshot("ctx-1") is None
+
+
+def test_report_current_without_task_is_noop():
+    # ContextVar 未设置（chat 工具等直接调用 service）时 no-op
+    report_current("不该生效", 50)
+    assert snapshot("no-such-task") is None
