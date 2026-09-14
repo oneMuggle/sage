@@ -375,6 +375,14 @@ export interface ElectronAPI {
    * settings 加载完成前即可命中拦截。
    */
   demoMode?: boolean;
+  /** 更新日志 API — 读取 CHANGELOG.md */
+  changelogAPI?: {
+    read: () => Promise<string>;
+  };
+  /** 帮助文档 API — 读取 user-manual markdown */
+  helpAPI?: {
+    readUserManual: (filename: string) => Promise<string>;
+  };
 }
 
 declare global {
