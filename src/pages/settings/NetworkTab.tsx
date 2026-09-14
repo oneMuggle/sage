@@ -86,6 +86,117 @@ function parsePolicy(raw: string | null): NetworkPolicyPayload {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Round 4 F1/F2：代理设置（web_proxy）与搜索引擎（search_config）
+// ---------------------------------------------------------------------------
+
+/** 与后端 http_factory.load_proxy_config 的 JSON 结构一致 */
+interface ProxyPayload {
+  http: string;
+  https: string;
+}
+
+const DEFAULT_PROXY: ProxyPayload = { http: '', https: '' };
+
+const PROXY_SCHEMES = ['http://', 'https://', 'socks5://'] as const;
+
+/** 与后端 browser_proxy_flag/browser_proxy 行为一致：空 = 不启用 */
+function parseProxy(raw: string | null): ProxyPayload {
+  if (!raw) return DEFAULT_PROXY;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return DEFAULT_PROXY;
+    const candidate = parsed as Partial<ProxyPayload>;
+    return {
+      http: typeof candidate.http === 'string' ? candidate.http.trim() : '',
+      https: typeof candidate.https === 'string' ? candidate.https.trim() : '',
+    };
+  } catch {
+    return DEFAULT_PROXY;
+  }
+}
+
+/** 校验代理 URL；空串 = 清除（合法）。返回 null 表示合法，否则 i18n key。 */
+function validateProxyUrl(raw: string): TranslationKey | null {
+  const value = raw.trim();
+  if (!value) return null;
+  if (!PROXY_SCHEMES.some((scheme) => value.startsWith(scheme))) {
+    return 'settings.network.proxy.error.scheme';
+  }
+  return null;
+}
+
+/** 与后端 SearchConfig 的 JSON 结构一致（order 之外的 key 字段 Round 3 起落库自动加密） */
+interface SearchConfigPayload {
+  order: string[];
+  tavily_key: string;
+  zhipu_key: string;
+}
+
+const SEARCH_ENGINES = ['bing', 'ddg', 'tavily', 'zhipu'] as const;
+const DEFAULT_SEARCH_ORDER = ['bing', 'ddg'];
+
+const DEFAULT_SEARCH_CONFIG: SearchConfigPayload = {
+  order: DEFAULT_SEARCH_ORDER,
+  tavily_key: '',
+  zhipu_key: '',
+};
+
+function parseSearchConfig(raw: string | null): SearchConfigPayload {
+  if (!raw) return DEFAULT_SEARCH_CONFIG;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return DEFAULT_SEARCH_CONFIG;
+    const candidate = parsed as Partial<SearchConfigPayload>;
+    const order = Array.isArray(candidate.order)
+      ? candidate.order.filter(
+          (e): e is (typeof SEARCH_ENGINES)[number] =>
+            (SEARCH_ENGINES as readonly string[]).includes(e),
+        )
+      : [];
+    return {
+      order: order.length > 0 ? order : [...DEFAULT_SEARCH_ORDER],
+      tavily_key: typeof candidate.tavily_key === 'string' ? candidate.tavily_key : '',
+      zhipu_key: typeof candidate.zhipu_key === 'string' ? candidate.zhipu_key : '',
+    };
+  } catch {
+    return DEFAULT_SEARCH_CONFIG;
+  }
+}
+
+interface KeyFieldEditorProps {
+  testId: string;
+  label: string;
+  value: string;
+  onSave: (value: string) => void;
+}
+
+function KeyFieldEditor({ testId, label, value, onSave }: KeyFieldEditorProps) {
+  const { t } = useI18n();
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <label htmlFor={testId} className="w-32 shrink-0 text-xs text-text">
+        {label}
+      </label>
+      <input
+        id={testId}
+        data-testid={testId}
+        type="password"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => onSave(draft.trim())}
+        placeholder={t('settings.network.search.key.placeholder')}
+        className="flex-1 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+      />
+    </div>
+  );
+}
+
 interface HostListEditorProps {
   testIdPrefix: string;
   label: string;
@@ -174,11 +285,20 @@ function HostListEditor({
 export function NetworkTab() {
   const { t } = useI18n();
   const [policy, setPolicy] = useState<NetworkPolicyPayload>(DEFAULT_POLICY);
+  const [proxy, setProxy] = useState<ProxyPayload>(DEFAULT_PROXY);
+  const [proxyError, setProxyError] = useState<TranslationKey | null>(null);
+  const [searchConfig, setSearchConfig] = useState<SearchConfigPayload>(DEFAULT_SEARCH_CONFIG);
 
   useEffect(() => {
     let cancelled = false;
     void settingsClient.getPreference('network_policy').then((raw) => {
       if (!cancelled) setPolicy(parsePolicy(raw));
+    });
+    void settingsClient.getPreference('web_proxy').then((raw) => {
+      if (!cancelled) setProxy(parseProxy(raw));
+    });
+    void settingsClient.getPreference('search_config').then((raw) => {
+      if (!cancelled) setSearchConfig(parseSearchConfig(raw));
     });
     return () => {
       cancelled = true;
@@ -236,6 +356,34 @@ export function NetworkTab() {
     });
   };
 
+  // ---- F1 代理：单字段 blur 保存；非法不落盘 ----
+  const saveProxy = (field: 'http' | 'https', raw: string): void => {
+    const value = raw.trim();
+    const rejection = validateProxyUrl(value);
+    setProxyError(rejection);
+    if (rejection) return;
+    const next = { ...proxy, [field]: value };
+    setProxy(next);
+    void settingsClient.setPreference('web_proxy', JSON.stringify(next), 'network');
+  };
+
+  // ---- F2 搜索引擎：首选引擎 + key 字段（后端落库自动加密） ----
+  const saveSearchConfig = (next: SearchConfigPayload): void => {
+    setSearchConfig(next);
+    const payload = {
+      order: next.order,
+      ...(next.tavily_key ? { tavily_key: next.tavily_key } : {}),
+      ...(next.zhipu_key ? { zhipu_key: next.zhipu_key } : {}),
+    };
+    void settingsClient.setPreference('search_config', JSON.stringify(payload), 'network');
+  };
+
+  const changeFirstEngine = (first: (typeof SEARCH_ENGINES)[number]): void => {
+    // 首选提前，其余保持默认/现有相对次序（与后端引擎链 fallback 语义一致）
+    const rest = searchConfig.order.filter((e) => e !== first);
+    saveSearchConfig({ ...searchConfig, order: [first, ...rest] });
+  };
+
   return (
     <div className="space-y-2">
       <SettingRow
@@ -286,6 +434,66 @@ export function NetworkTab() {
           />
         </>
       )}
+
+      {/* F1 抓取代理（Round 2 批次2 后端：web_proxy KV，逐调用现读即时生效） */}
+      <SettingRow label={t('settings.network.proxy')} desc={t('settings.network.proxy.hint')}>
+        <div className="flex flex-col gap-1 w-64" data-testid="proxy-fields">
+          <input
+            data-testid="proxy-http-input"
+            aria-label={t('settings.network.proxy.http')}
+            value={proxy.http}
+            onChange={(e) => setProxy({ ...proxy, http: e.target.value })}
+            onBlur={(e) => saveProxy('http', e.target.value)}
+            placeholder={t('settings.network.proxy.placeholder')}
+            className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+          />
+          <input
+            data-testid="proxy-https-input"
+            aria-label={t('settings.network.proxy.https')}
+            value={proxy.https}
+            onChange={(e) => setProxy({ ...proxy, https: e.target.value })}
+            onBlur={(e) => saveProxy('https', e.target.value)}
+            placeholder={t('settings.network.proxy.placeholder')}
+            className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+          />
+          {proxyError && (
+            <div data-testid="proxy-error" className="text-xs text-error">
+              {t(proxyError)}
+            </div>
+          )}
+        </div>
+      </SettingRow>
+
+      {/* F2 搜索引擎（Round 1 批次1 后端：search_config KV，key 落库自动加密） */}
+      <SettingRow label={t('settings.network.search')} desc={t('settings.network.search.hint')}>
+        <div className="flex flex-col gap-1 w-64" data-testid="search-fields">
+          <select
+            data-testid="search-first-engine"
+            aria-label={t('settings.network.search.first')}
+            value={searchConfig.order[0] ?? 'bing'}
+            onChange={(e) => changeFirstEngine(e.target.value as (typeof SEARCH_ENGINES)[number])}
+            className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+          >
+            {SEARCH_ENGINES.map((engine) => (
+              <option key={engine} value={engine}>
+                {t(`settings.network.search.engine.${engine}` as TranslationKey)}
+              </option>
+            ))}
+          </select>
+          <KeyFieldEditor
+            testId="search-tavily-key"
+            label={t('settings.network.search.tavily_key')}
+            value={searchConfig.tavily_key}
+            onSave={(value) => saveSearchConfig({ ...searchConfig, tavily_key: value })}
+          />
+          <KeyFieldEditor
+            testId="search-zhipu-key"
+            label={t('settings.network.search.zhipu_key')}
+            value={searchConfig.zhipu_key}
+            onSave={(value) => saveSearchConfig({ ...searchConfig, zhipu_key: value })}
+          />
+        </div>
+      </SettingRow>
     </div>
   );
 }
