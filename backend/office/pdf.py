@@ -37,6 +37,7 @@ from .models import (
     PdfReadResult,
 )
 from .path_safety import resolve_within
+from .progress import report_current
 from .storage import validate_workspace
 
 # PDF preflight limits — analogous to ``MAX_DOCX_*`` in ``word_template.py``.
@@ -223,7 +224,13 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
         title_font = cjk_font or "Helvetica-Bold"
         body_font = cjk_font or "Helvetica"
 
+        total_pages = len(req.pages)
         for i, page_spec in enumerate(req.pages):
+            # P12: 逐页进度上报（40→85 区间）
+            report_current(
+                f"生成页面 {i + 1}/{total_pages}",
+                40 + int(45 * (i + 1) / total_pages),
+            )
             if i > 0:
                 c.showPage()
 
