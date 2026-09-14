@@ -395,6 +395,9 @@ def render_page(url: str, network_policy: Any, wait_for: str = "") -> Dict[str, 
     }
     if isinstance(status, int) and status > 0:
         rendered["rendered_status"] = status
+    if html:
+        # SN2：渲染后 DOM 交给调用方做候选文件链接嗅探（web_tool 不把它回传给模型）
+        rendered["html"] = html
     return rendered
 
 

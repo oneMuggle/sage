@@ -1238,3 +1238,150 @@ def test_web_search_engine_requests_retry(monkeypatch):
 
     assert bing.call_count == 2
     assert result.success is True  # 空结果但完成
+
+
+# ---------- Round 5 B4 / SN2：web_fetch mode=files ----------
+
+_ARTICLE_HTML = (
+    """
+<html><head><title>Paper</title>
+<meta name="citation_pdf_url" content="https://example.com/content/1.pdf">
+</head><body>
+<p>Abstract text here, long enough to not be a shell. """
+    + "词 " * 300
+    + """</p>
+<a href="/download/1.zip">Supplementary data (ZIP)</a>
+<a href="/login?next=/1.pdf">Login to download</a>
+<iframe src="/viewer/1.pdf"></iframe>
+</body></html>
+"""
+)
+
+
+def test_web_fetch_files_mode_extracts_and_probes(monkeypatch):
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/article").mock(
+            return_value=Response(200, text=_ARTICLE_HTML, headers={"content-type": "text/html"})
+        )
+        pdf = mock.get("/content/1.pdf").mock(
+            return_value=Response(
+                200,
+                content=b"%PDF-1.7 " + b"x" * 100,
+                headers={"content-type": "application/pdf", "content-length": "109"},
+            )
+        )
+        mock.get("/download/1.zip").mock(
+            return_value=Response(
+                200,
+                text="<html><body>Please sign in</body></html>",
+                headers={"content-type": "text/html"},
+            )
+        )
+        mock.get("/viewer/1.pdf").mock(return_value=Response(404))
+        mock.get("/login").mock(
+            return_value=Response(
+                200, text="<html>login</html>", headers={"content-type": "text/html"}
+            )
+        )
+        result = _fetch_tool().execute(url="https://example.com/article", mode="files")
+
+    assert result.success is True, result.error
+    files = result.content["files"]
+    assert result.content["mode"] == "files"
+    by_url = {f["url"]: f for f in files}
+    top = files[0]
+    assert top["url"] == "https://example.com/content/1.pdf"
+    assert top["probe"] == "file"
+    assert top["detected_type"] == "pdf"
+    assert top["content_length"] == 109
+    assert by_url["https://example.com/download/1.zip"]["probe"] == "html"
+    assert by_url["https://example.com/viewer/1.pdf"]["probe"] == "error"
+    assert by_url["https://example.com/viewer/1.pdf"]["status_code"] == 404
+    assert pdf.call_count == 1
+    assert "http_download" in result.content["hint"]
+    assert result.content["title"] == "Paper"
+
+
+def test_web_fetch_files_mode_no_candidates_hint():
+    with respx.mock(base_url="https://example.com") as mock:
+        mock.get("/plain").mock(
+            return_value=Response(
+                200,
+                text="<html><body><p>"
+                + "正文 " * 300
+                + "</p><a href='/about'>About</a></body></html>",
+                headers={"content-type": "text/html"},
+            )
+        )
+        result = _fetch_tool().execute(url="https://example.com/plain", mode="files")
+
+    assert result.success is True
+    assert result.content["files"] == []
+    assert "render=always" in result.content["hint"]
+
+
+def test_web_fetch_files_mode_probe_respects_host_policy():
+    """候选指向白名单外主机时不探测（check_host 拒绝 → 保留候选但无 probe）。"""
+    html = (
+        "<html><body><p>"
+        + "正文 " * 300
+        + '</p><a href="https://evil.example.net/x.pdf">PDF</a></body></html>'
+    )
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get("https://example.com/p").mock(
+            return_value=Response(200, text=html, headers={"content-type": "text/html"})
+        )
+        foreign = mock.get("https://evil.example.net/x.pdf").mock(
+            return_value=Response(200, content=b"%PDF-1.4")
+        )
+        result = _fetch_tool().execute(url="https://example.com/p", mode="files")
+
+    assert result.success is True
+    assert result.content["files"][0]["url"] == "https://evil.example.net/x.pdf"
+    assert "probe" not in result.content["files"][0]
+    assert foreign.call_count == 0
+
+
+def test_web_fetch_files_mode_merges_rendered_candidates(monkeypatch):
+    """SPA 壳：渲染后 DOM 里的下载按钮与静态候选合并。"""
+    shell = '<html><head><script src="app.js"></script></head><body><div id="root"></div><a href="/static.pdf">s</a></body></html>'
+
+    def fake_render(url, network_policy, wait_for=""):
+        return {
+            "url": url,
+            "title": "SPA",
+            "content": "rendered " * 200,
+            "links": [],
+            "tables": [],
+            "rendered": True,
+            "truncated": False,
+            "html": '<html><body><a href="/dyn.pdf" download>Download PDF</a></body></html>',
+        }
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    monkeypatch.setattr(WebFetchTool, "_probe_file_url", lambda self, url, policy: None)
+    with respx.mock(base_url="https://example.com") as mock:
+        mock.get("/spa").mock(
+            return_value=Response(200, text=shell, headers={"content-type": "text/html"})
+        )
+        result = _fetch_tool().execute(url="https://example.com/spa", mode="files")
+
+    assert result.success is True
+    urls = [f["url"] for f in result.content["files"]]
+    assert "https://example.com/dyn.pdf" in urls
+    assert "https://example.com/static.pdf" in urls
+    assert urls[0] == "https://example.com/dyn.pdf"  # download 属性分更高
+    assert "html" not in result.content  # 渲染 HTML 不回传给模型
+
+
+def test_web_fetch_files_mode_binary_target_gives_binary_result():
+    with respx.mock(base_url="https://example.com") as mock:
+        mock.get("/direct.pdf").mock(
+            return_value=Response(
+                200, content=b"%PDF-1.4 abc", headers={"content-type": "application/pdf"}
+            )
+        )
+        result = _fetch_tool().execute(url="https://example.com/direct.pdf", mode="files")
+    assert result.success is True
+    assert result.content["kind"] == "binary"
+    assert "files" not in result.content

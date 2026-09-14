@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🌐 **网页访问能力优化 Round 5 批次 4：文件嗅探与浏览器下载跟踪**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.2 SN2/SN3）
+
+### Added(web-access)
+- **`web_fetch mode=files`（SN2，新模块 `backend/tools/file_links.py`）**：从静态或渲染后 DOM 抽取候选文件链接并打分——`<meta name=citation_pdf_url>` / `<link rel=alternate type=application/pdf>`（学术站标准位，最高分）、`<a href>` 文件后缀（pdf/zip/docx/xlsx/epub/csv/…）与 `download` 属性 / `type=application/pdf`、`<iframe|embed|object>`、`<meta http-equiv=refresh>`、「下载 / 全文 / PDF / attachment」锚文本；同 URL 去重合并 `sources`；对 top-5 候选做首块探测（不跟随重定向、逐个过 `check_host`）标 `probe=file|html|redirect|error` + `detected_type` / `content_type` / `content_length` / `suggested_filename`，`probe=html`（登录页 / 中转页）降权；SPA 壳自动渲染后把动态 DOM 候选与静态候选合并；结果 `files[]` 可直接喂 `http_download`
+- **浏览器下载跟踪（SN3，新模块 `backend/tools/browser_events.py` + 新工具 `browser_downloads`）**：`browser_launch` 后为会话建立一条常驻 CDP 事件 WS（守护线程），`Browser.setDownloadBehavior{eventsEnabled:true}` 订阅 `downloadWillBegin` / `downloadProgress`，落成线程安全的 `DownloadTracker`（url / 文件名 / 状态 / 字节 / 最终路径，完成时按 guid 或 suggestedFilename 解析落盘路径）；`browser_downloads(browser_id?, wait_for_complete, timeout)` 列出 / 阻塞等待全部完成，完成文件登记 artifact（只登记一次）；事件通道不可用时退化为下载目录列举（`.crdownload` = 进行中）并明示；`browser_close` / 后端退出时停通道
+
+### Changed(web-access)
+- `BROWSER_TOOLS` 新增 `browser_downloads`（READ）；coder 默认工具白名单经 `*BROWSER_TOOLS` 自动带上；`browser_launch` 结果新增 `download_tracking`
+
 > 🌐 **网页访问能力优化 Round 5 批次 3：登录态保持**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.4 AU1/AU2/AU4）
 
 ### Added(web-access)
