@@ -30,14 +30,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 from sage_core import ToolResult, ToolSpec
 from sage_core.repositories import ToolPort  # noqa: F401  (structural typing target)
 
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools.bash_validation import validate_bash
-from backend.tools.executor import TIMEOUT_EXCEPTIONS, tool_timeout_message
+from backend.tools.executor import (
+    TIMEOUT_EXCEPTIONS,
+    tool_timeout_message,
+    truncate_output as _truncate_output,
+)
 from backend.tools.permissions import (
     DEFAULT_PERMISSION_MODE,
     PermissionEnforcer,
@@ -150,7 +154,9 @@ class InprocToolAdapter:
         if output_value is None:
             output_value = raw.content
         output_str = "" if output_value is None else str(output_value)
-        truncated_output, truncation_meta = _truncate_output(output_str, self._policy)
+        truncated_output, truncation_meta = _truncate_output(
+            output_str, self._policy.max_output_bytes
+        )
 
         metadata: Optional[Dict[str, Any]] = None
         if truncation_meta:
@@ -200,19 +206,4 @@ class InprocToolAdapter:
         return None
 
 
-def _truncate_output(output: str, policy: ToolPolicy) -> Tuple[str, Dict[str, Any]]:
-    """按 ``policy.max_output_bytes``（utf-8 字节）截断 output。
 
-    Returns:
-        (截断后字符串, metadata dict)。未截断时返回 ``("", {})`` 之外的
-        (原字符串, {})，调用方可据此判定是否需要在 metadata 标 truncated。
-    """
-    raw_bytes = output.encode("utf-8")
-    if len(raw_bytes) <= policy.max_output_bytes:
-        return output, {}
-    truncated = raw_bytes[: policy.max_output_bytes].decode("utf-8", errors="replace")
-    return truncated, {
-        "truncated": True,
-        "original_bytes": len(raw_bytes),
-        "max_output_bytes": policy.max_output_bytes,
-    }
