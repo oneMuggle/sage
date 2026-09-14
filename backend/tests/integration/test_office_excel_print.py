@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from openpyxl import load_workbook
 
 from backend.office.excel import generate_xlsx
@@ -82,3 +83,27 @@ def test_office_create_tool_print_setup(tmp_path: Path) -> None:
     ws = load_workbook(str(tmp_path / "tool.xlsx"))["报表"]
     assert ws.page_setup.orientation == "landscape"
     assert ws.page_setup.fitToWidth == 1
+
+
+def test_title_rows_print_repeat(tmp_path: Path) -> None:
+    """Round 28：长表打印每页重复标题行。"""
+    _generate(
+        tmp_path,
+        [{
+            "name": "S",
+            "headers": ["名称"],
+            "rows": [["1"], ["2"]],
+            "print_setup": {"title_rows": "1:1"},
+        }],
+    )
+    ws = load_workbook(str(tmp_path / "ps.xlsx"))["S"]
+    assert ws.print_title_rows == "$1:$1"
+
+
+def test_title_rows_invalid_pattern_rejected() -> None:
+    from pydantic import ValidationError
+
+    from backend.office.models import ExcelPrintSetupSpec
+
+    with pytest.raises(ValidationError):
+        ExcelPrintSetupSpec(title_rows="abc")
