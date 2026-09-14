@@ -41,6 +41,9 @@ ALIASES: Dict[str, str] = {
     "api_key": "apiKey",
     "discovered_models": "discoveredModels",
     "last_discovered_at": "lastDiscoveredAt",
+    # 2026-09-14: local_model_path 历史残留 (win7 安装包迁移数据), 不翻译会导致
+    # validate_settings_shape 报 400 (field 不在 LEGAL_ENDPOINT_KEYS 白名单).
+    "local_model_path": "localModelPath",
     # ModelSelection 子层
     "endpoint_id": "endpointId",
     "model_id": "modelId",
