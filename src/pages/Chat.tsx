@@ -368,18 +368,42 @@ export function Chat() {
       if (sized.length > MAX_IMAGES) {
         toast.warning(`最多发送 ${MAX_IMAGES} 张图片，已截取前 ${MAX_IMAGES} 张`);
       }
+      // R37: txt/md 附件 → 上传并收集 media id（与图片通道并行）
+      const attachmentMediaIds: string[] = [];
+      for (const att of options?.attachments ?? []) {
+        if (!att.dataUrl) continue;
+        const ext = att.name.split('.').pop()?.toLowerCase() ?? '';
+        if (ext !== 'txt' && ext !== 'md') continue;
+        try {
+          const bytes = atob(att.dataUrl.split(',')[1] ?? '');
+          const buffer = new Uint8Array(bytes.length);
+          for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
+          const res = (await window.electronAPI?.media?.uploadAttachment?.(
+            buffer.buffer,
+            att.name,
+            att.type || 'text/plain',
+          )) as { media_ref?: { id?: string } } | undefined;
+          if (res?.media_ref?.id) attachmentMediaIds.push(res.media_ref.id);
+          else toast.warning(`附件上传失败: ${att.name}`);
+        } catch {
+          toast.warning(`附件上传失败: ${att.name}`);
+        }
+      }
+
       if (!currentSessionId) {
         const sessionId = await createSession();
         await sendMessage(content, sessionId, officeRefs, orchestrationMode, {
           planMode: options?.planMode,
           memoryDisabled: tempChatSessions.has(sessionId),
           images,
+          attachmentMediaIds,
         });
       } else {
         await sendMessage(content, undefined, officeRefs, orchestrationMode, {
           planMode: options?.planMode,
           memoryDisabled: tempChatSessions.has(currentSessionId),
           images,
+          attachmentMediaIds,
         });
       }
     },
