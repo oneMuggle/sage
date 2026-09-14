@@ -3,6 +3,8 @@ import { Outlet } from 'react-router-dom';
 
 import { ErrorBoundary } from '../../app/providers/ErrorBoundary';
 import { useResizableSidebar } from '../../shared/lib/useResizableSidebar';
+import { DeliveryDrawerHost } from '../task-center/DeliveryDrawerHost';
+import { TaskCenterWidget } from '../task-center/TaskCenterWidget';
 
 import { ResizeDivider } from './ResizeDivider';
 import { Sidebar } from './Sidebar';
@@ -124,6 +126,10 @@ export function Layout() {
           </ErrorBoundary>
         </main>
       </div>
+      {/* P4: 全局任务中心胶囊 —— 跨页面聚合 office/wiki 等长任务与后台聊天流 */}
+      <TaskCenterWidget />
+      {/* A4: 全局交付抽屉（lane / office 验收） */}
+      <DeliveryDrawerHost />
     </div>
   );
 }

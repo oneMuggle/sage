@@ -4,6 +4,22 @@
  * 键使用点分隔的命名空间: sidebar.new_chat, chat.title, settings.general ...
  */
 export const zh = {
+  // --- Task center: A1 states & actions (parity-s4) ---
+  'taskCenter.activeCount': '{n} 项进行中',
+  'taskCenter.cancel': '取消',
+  'taskCenter.chatFallback': '后台会话生成中',
+  'taskCenter.clearFinished': '清除已完成',
+  'taskCenter.goto': '前往处理',
+  'taskCenter.status.queued': '排队中',
+  'taskCenter.status.running': '运行中',
+  'taskCenter.status.awaiting_approval': '等待审批',
+  'taskCenter.status.paused': '已暂停',
+  'taskCenter.status.succeeded': '已完成',
+  'taskCenter.status.failed': '失败',
+  'taskCenter.status.cancelled': '已取消',
+  'taskCenter.laneFallback': '编排任务',
+  'taskCenter.finishedCount': '最近完成 {n} 项',
+  'taskCenter.cancelFailed': '取消失败，请重试',
   // ─── 侧边栏 ───────────────────────
   'sidebar.brand': 'Sage',
   'sidebar.nav.chat': '对话',
@@ -559,6 +575,26 @@ export const zh = {
   'office.batch.selectedCount': '已选 {n} 项',
   'office.batch.selectRow': '选择文档',
 
+  // ─── A4b Office 交付包验收 ─────
+  'office.delivery.title': '交付包验收',
+  'office.delivery.close': '关闭',
+  'office.delivery.awaiting': '待验收',
+  'office.delivery.archived': '已归档',
+  'office.delivery.lint': '格式检查',
+  'office.delivery.lintPass': '检查通过',
+  'office.delivery.lintFail': '存在格式问题',
+  'office.delivery.lintSkipped': '未指定格式规范，已跳过检查',
+  'office.delivery.lintFailed': '检查失败',
+  'office.delivery.retry': '重试',
+  'office.delivery.errors': '错误 {n}',
+  'office.delivery.warnings': '警告 {n}',
+  'office.delivery.rulesChecked': '已检查 {n} 条规则',
+  'office.delivery.moreIssues': '还有 {n} 条…',
+  'office.delivery.preview': '文档预览',
+  'office.delivery.previewFailed': '预览加载失败',
+  'office.delivery.accept': '接受归档',
+  'office.delivery.reject': '打回',
+
   // ─── M6 生态扩展: 编排看板补充 i18n 键 ─────
   'orchestration.loading': '加载中…',
   'orchestration.error': '错误:',
@@ -588,6 +624,32 @@ export const zh = {
   'orchestration.board.level.fresh': '新鲜',
   'orchestration.board.level.stale': '陈旧',
   'orchestration.board.level.dead': '失联',
+
+  // ─── A4 交付包验收抽屉 ─────
+  'orchestration.drawer.close': '关闭',
+  'orchestration.drawer.delivery': '交付包',
+  'orchestration.drawer.acceptancePending': '待验收',
+  'orchestration.drawer.accepted': '已接受',
+  'orchestration.drawer.rejected': '已打回',
+  'orchestration.drawer.worktree': '工作区',
+  'orchestration.drawer.noWorktree': '无隔离工作区',
+  'orchestration.drawer.checks': '验收检查',
+  'orchestration.drawer.checksEmpty': '暂无验收记录',
+  'orchestration.drawer.mergeBranch': '审计分支',
+  'orchestration.drawer.mergeCommit': '合并提交',
+  'orchestration.drawer.filesChanged': '变更文件（{n}）',
+  'orchestration.drawer.reasonPlaceholder': '验收意见（可选）…',
+  'orchestration.drawer.accept': '接受合并',
+  'orchestration.drawer.reject': '打回',
+  'orchestration.drawer.deciding': '处理中…',
+
+  // ─── A4 复核结论 + 产物摘要 ─────
+  'orchestration.drawer.review': '复核结论',
+  'orchestration.drawer.reviewPass': '复核通过',
+  'orchestration.drawer.reviewFail': '存在疑问',
+  'orchestration.drawer.reviewAssertions': '{n} 条断言',
+  'orchestration.drawer.diff': '产物摘要',
+  'orchestration.drawer.diffEmpty': '暂无产物摘要',
 
   // ─── 会话导出 (U18 HTML 会话导出) ──────
   'session.export_failed': '导出失败：{message}',
