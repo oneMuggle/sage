@@ -11,6 +11,7 @@ import { Download, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { promptApi, type PromptTemplate } from '../../shared/api/promptApi';
+import { tplStorageKey } from '../../widgets/chat/TemplateFillDialog';
 
 const MAX_NAME_LEN = 60;
 const MAX_CONTENT_LEN = 8000;
@@ -30,6 +31,8 @@ export function PromptTemplatesTab() {
   const [form, setForm] = useState<FormState | null>(null); // null = 列表态
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // R38: 记忆清除后触发重渲染（localStorage 不经过 React，需手动 tick）
+  const [, setMemoryTick] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -275,6 +278,36 @@ export function PromptTemplatesTab() {
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
+                  {(() => {
+                    // R38: 变量记忆展示/清除 —— 与填充对话框同键口径
+                    try {
+                      const raw = window.localStorage.getItem(tplStorageKey(tpl.content));
+                      const mem = raw ? (JSON.parse(raw) as Record<string, string>) : null;
+                      const entries = mem ? Object.entries(mem) : [];
+                      if (entries.length === 0) return null;
+                      return (
+                        <span
+                          className="text-[11px] text-text-secondary mr-1"
+                          data-testid={`prompts-memory-${tpl.id}`}
+                        >
+                          记忆 {entries.length} 项
+                          <button
+                            type="button"
+                            data-testid={`prompts-memory-clear-${tpl.id}`}
+                            onClick={() => {
+                              localStorage.removeItem(tplStorageKey(tpl.content));
+                              setMemoryTick((n) => n + 1);
+                            }}
+                            className="ml-1 text-error hover:underline"
+                          >
+                            清除
+                          </button>
+                        </span>
+                      );
+                    } catch {
+                      return null;
+                    }
+                  })()}
                   <button
                     type="button"
                     data-testid={`prompts-edit-${tpl.id}`}
