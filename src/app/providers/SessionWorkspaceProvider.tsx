@@ -115,6 +115,12 @@ export function SessionWorkspaceProvider({ children }: SessionWorkspaceProviderP
       .get(sessionId)
       .then((res) => {
         applyReady(myRequestId, res.binding);
+        // P13: 绑定的工作区同步登记到主进程 sage-file 注册表，
+        // 使 MarkdownImage 的 sage-file:// URL 可被校验放行。
+        const ws = res.binding?.workspacePath;
+        if (ws) {
+          void window.electronAPI?.sageFile?.registerRoot(ws).catch(() => undefined);
+        }
       })
       .catch((err: unknown) => {
         applyError(myRequestId, errorMessage(err));
