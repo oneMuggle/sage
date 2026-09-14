@@ -329,7 +329,7 @@ async def _read_response_body_limited(response: httpx.Response) -> bytes:
 
     chunks: List[bytes] = []
     size = 0
-    async for chunk in response.aiter_raw():
+    async for chunk in response.aiter_bytes():
         size += len(chunk)
         if size > MAX_RESPONSE_BODY_BYTES:
             raise ValueError("response exceeds configured limit")
