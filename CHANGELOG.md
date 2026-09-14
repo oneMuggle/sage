@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🌐 **网页访问能力优化 Round 5 批次 3：登录态保持**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.4 AU1/AU2/AU4）
+
+### Added(web-access)
+- **cookie 元数据与过期判定（AU1）**：`browser_cookies export` 保留 `expires` / `secure` / `httpOnly` / `sameSite`；附加时已过期 cookie 不发送、`secure` cookie 只发 https、按 path 匹配；档案全部过期 → `web_fetch` / `http_download` 返回 `credential_expired`（区别于 `credential_not_found`）并指引重新登录导出；`export` 结果与 `list` 显示最短剩余时效 `expires_in_seconds` / `expired`
+- **Set-Cookie 回写 + 登录墙检测（AU2）**：带凭据请求在命中域收到 `Set-Cookie` 自动合并回档案（续期 token 不丢，`Max-Age=0` 视为删除，第三方域 cookie 不混入），结果 `note` 标 `credential_refreshed`；带凭据却被 302 到 `login|signin|sso|passport|auth|cas|oauth` 类 URL、或最终页只有密码框而无正文 → 返回 `login_required`（不再把登录页当正文）；`http_download` 期望文件却收到含密码框的 HTML 也改报 `login_required`
+- **头部型凭据（AU4）**：`browser_cookies action=set_header domain= header_name= header_value= [ttl_seconds=]` 保存 `Authorization: Bearer …` / API key 自定义头（禁 Cookie / Host 等传输头、拒换行注入，值不回显，可选 TTL）；`credential_domain` 命中头部档案时随请求附带、跨域重定向同样剥离；`list` 显示 `kind` / `header_names`
+
 > 🌐 **网页访问能力优化 Round 5 批次 2：反爬访问**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.3 AB1/AB2/AB4/AB5）
 
 ### Added(web-access)

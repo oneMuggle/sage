@@ -382,8 +382,9 @@ class HttpDownloadTool(BaseTool):
                     "credential_domain": {
                         "type": "string",
                         "description": (
-                            "browser_cookies 导出的凭据档案 domain"
-                            "（如 .cnki.net），附加登录态 cookie"
+                            "凭据档案 domain（如 .cnki.net）：browser_cookies 导出的 cookie "
+                            "或 credential_set 设置的头部凭据，命中域自动附加、跨域剥离；"
+                            "过期报 credential_expired，被送到登录页报 login_required"
                         ),
                     },
                     "retries": {
@@ -437,20 +438,31 @@ class HttpDownloadTool(BaseTool):
         if url_error:
             return ToolResult(success=False, error=url_error)
 
-        cookie_header: Optional[str] = None
+        credential_headers: Optional[Dict[str, str]] = None
         if credential_domain.strip():
-            from backend.tools.credential_vault import cookie_domain_matches, cookie_header_for
+            from backend.tools.credential_vault import cookie_domain_matches, resolve_credential
 
             credential_domain = credential_domain.strip()
-            cookie_header = cookie_header_for(credential_domain)
-            if cookie_header is None:
+            resolution = resolve_credential(credential_domain, url=url)
+            if resolution.status == "expired":
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_expired: {credential_domain!r} 的凭据已全部过期"
+                        f"（{', '.join(resolution.expired_names[:5])}）。"
+                        "请在浏览器重新登录后 browser_cookies action=export，"
+                        "或 credential_set 重新设置头部凭据"
+                    ),
+                )
+            if not resolution.ok or not resolution.headers:
                 return ToolResult(
                     success=False,
                     error=(
                         f"credential_not_found: 无 {credential_domain!r} 的凭据档案"
-                        "（先 browser_cookies action=export 导出）"
+                        "（先 browser_cookies action=export 导出，或 credential_set 设置头部凭据）"
                     ),
                 )
+            credential_headers = resolution.headers
             target_host = urlparse(url).hostname or ""
             if not cookie_domain_matches(target_host, credential_domain):
                 return ToolResult(
@@ -506,7 +518,7 @@ class HttpDownloadTool(BaseTool):
             max_bytes=max_bytes,
             root=Path(root),
             network_policy=network_policy,
-            cookie_header=cookie_header,
+            credential_headers=credential_headers,
             credential_domain=credential_domain.strip(),
             resume=bool(resume),
             expected_sha256=expected_sha256,
@@ -602,6 +614,10 @@ class HttpDownloadTool(BaseTool):
                 ) as exc:
                     raise _RetryableError(f"{type(exc).__name__}: {exc}") from exc
 
+                # AU2：命中域响应带 Set-Cookie → 回写档案（续期不丢）
+                if "Cookie" in hop_headers and ctx.credential_domain:
+                    self._writeback_set_cookies(response, current_url, ctx.credential_domain)
+
                 if response.is_redirect:
                     if redirect_count >= _MAX_REDIRECTS:
                         response.close()
@@ -616,6 +632,20 @@ class HttpDownloadTool(BaseTool):
                             success=False, error="invalid_redirect: 重定向缺少 Location"
                         )
                     current_url = urljoin(current_url, location)
+                    # AU2：带凭据却被 302 到登录 / SSO 页 → login_required
+                    if ctx.credential_headers:
+                        from backend.tools.credential_vault import looks_like_login_url
+
+                        if looks_like_login_url(current_url) and not looks_like_login_url(ctx.url):
+                            return ToolResult(
+                                success=False,
+                                error=(
+                                    f"login_required: 携带 {ctx.credential_domain!r} 凭据下载仍被"
+                                    f"重定向到登录页 {current_url}。凭据可能已失效：请在浏览器重新"
+                                    "登录后 browser_cookies action=export 再试；或经 browser_launch + "
+                                    "browser_navigate 真浏览器通道点击下载"
+                                ),
+                            )
                     continue
 
                 status = response.status_code
@@ -650,6 +680,18 @@ class HttpDownloadTool(BaseTool):
 
         return ToolResult(success=False, error="redirect_limit_exceeded: 重定向次数超限")
 
+    @staticmethod
+    def _writeback_set_cookies(response: httpx.Response, url: str, credential_domain: str) -> None:
+        values = response.headers.get_list("set-cookie")
+        if not values:
+            return
+        from backend.tools.credential_vault import merge_set_cookies
+
+        try:
+            merge_set_cookies(credential_domain, values, url)
+        except Exception:  # noqa: BLE001 — 回写失败不影响下载
+            logger.debug("Set-Cookie 回写失败", exc_info=True)
+
     def _hop_headers(
         self, ctx: _DownloadContext, current_url: str, hostname: str
     ) -> Dict[str, str]:
@@ -659,12 +701,12 @@ class HttpDownloadTool(BaseTool):
         headers["Accept-Encoding"] = "identity"
         parsed = urlparse(current_url)
         headers["Referer"] = ctx.referer or f"{parsed.scheme}://{parsed.netloc}/"
-        # 登录态 cookie 只附加到档案域命中的 hop（与 web_fetch 同口径）
-        if ctx.cookie_header:
+        # 登录态凭据（cookie / 头部）只附加到档案域命中的 hop（与 web_fetch 同口径）
+        if ctx.credential_headers:
             from backend.tools.credential_vault import cookie_domain_matches
 
             if cookie_domain_matches(hostname, ctx.credential_domain):
-                headers["Cookie"] = ctx.cookie_header
+                headers.update(ctx.credential_headers)
         return headers
 
     # ------------------------------------------------------------------ consume
@@ -744,6 +786,24 @@ class HttpDownloadTool(BaseTool):
                 )
                 if sniffed.mismatch:
                     excerpt = content_sniff.html_excerpt(first_chunk)
+                    from backend.tools.credential_vault import looks_like_login_html
+
+                    if looks_like_login_html(first_chunk.decode("utf-8", "replace")):
+                        # AU2：拿到的是登录页（密码框）→ 语义更准的 login_required
+                        carried = (
+                            f"携带 {ctx.credential_domain!r} 凭据仍"
+                            if ctx.credential_headers
+                            else ""
+                        )
+                        return ToolResult(
+                            success=False,
+                            error=(
+                                f"login_required: 期望 {sniffed.expected} 文件，{carried}"
+                                f"收到登录页（含密码输入框）。页面摘要：{excerpt!r}。"
+                                "请在浏览器登录后 browser_cookies action=export，"
+                                "以 credential_domain 重试；或经浏览器通道点击下载"
+                            ),
+                        )
                     return ToolResult(
                         success=False,
                         error=(
@@ -920,7 +980,7 @@ class _DownloadContext:
         max_bytes: int,
         root: Path,
         network_policy: NetworkPolicy,
-        cookie_header: Optional[str],
+        credential_headers: Optional[Dict[str, str]],
         credential_domain: str,
         resume: bool,
         expected_sha256: str,
@@ -931,7 +991,7 @@ class _DownloadContext:
         self.max_bytes = max_bytes
         self.root = root
         self.network_policy = network_policy
-        self.cookie_header = cookie_header
+        self.credential_headers = credential_headers
         self.credential_domain = credential_domain
         self.resume = resume
         self.expected_sha256 = expected_sha256
