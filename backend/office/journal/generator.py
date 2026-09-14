@@ -15,11 +15,12 @@
 """
 from __future__ import annotations
 
+import logging
 import shutil
 import time
 import uuid
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 from docx import Document
 from docx.oxml import OxmlElement
@@ -34,8 +35,6 @@ from backend.office.journal.models import (
     JournalContent,
     JournalGenerationRecord,
     JournalSpec,
-    parse_obj,
-    to_json_str,
 )
 from backend.office.journal.persistence import (
     _layout_paths,
@@ -148,6 +147,17 @@ def _write_sections(
             sections_to_write.append((h.keyword, text))
     if content.references:
         sections_to_write.append(("参考文献", "\n".join(content.references)))
+    elif getattr(content, "structured_references", None):
+        # Round 21：结构化文献——用 R9 引用引擎按 citation_style 格式化
+        # 并加 [N] 编号（未提供 structured_references 时行为零变化）。
+        from backend.office.references import format_reference
+
+        bib_lines = [
+            f"[{i}] {format_reference(ref, content.citation_style)}"
+            for i, ref in enumerate(content.structured_references, start=1)
+        ]
+        if bib_lines:
+            sections_to_write.append(("参考文献", "\n".join(bib_lines)))
 
     # 标题（Heading 1 for Title）
     body.append(_make_paragraph(content.title, "Heading1"))
@@ -225,6 +235,58 @@ def generate_structured(
 import json as _json
 
 
+def _sanitize_structured_references(raw: Any) -> Tuple[List[Any], int]:
+    """逐条清洗 LLM 产出的 structured_references（Round 30 质量提升）。
+
+    合法条目保留；次品（缺 title / 字段非法 / key 重复）剔除并 warning，
+    key 冲突自动补唯一后缀。返回（合法条目, 剔除数）。
+    """
+
+    from backend.office.models import ReferenceSpec
+
+    kept: List[Any] = []
+    seen_keys: set = set()
+    dropped = 0
+    for item in raw or []:
+        try:
+            ref = ReferenceSpec.model_validate(item)
+        except Exception as exc:  # noqa: BLE001 — 次品条目剔除不阻断
+            logger.warning("structured_references 次品条目剔除: %s", exc)
+            dropped += 1
+            continue
+        key = ref.key
+        if key in seen_keys:
+            base, n = key, 2
+            while f"{base}-{n}" in seen_keys:
+                n += 1
+            key = f"{base}-{n}"
+            ref = ref.model_copy(update={"key": key})
+        seen_keys.add(key)
+        kept.append(ref)
+    return kept, dropped
+
+
+def _sanitize_structured_refs_inplace(content: dict) -> None:
+    """原地清洗 content["structured_references"]（Round 30）。
+
+    次品剔除 + key 去重；全为次品时移除该键（回退 references 纯文本）。
+    供 generate_article 自纠检查前与最终校验前调用。
+    """
+    raw = content.get("structured_references")
+    if raw is None:
+        return
+    kept, dropped = _sanitize_structured_references(raw)
+    if dropped:
+        logger.warning("structured_references 清洗剔除 %d 条次品", dropped)
+    if kept:
+        content["structured_references"] = [r.model_dump() for r in kept]
+    else:
+        content.pop("structured_references", None)
+
+
+logger = logging.getLogger(__name__)
+
+
 async def generate_article(
     spec: JournalSpec,
     user_request: str,
@@ -249,10 +311,17 @@ async def generate_article(
     """
     system_prompt = (
         "你是一位资深中文论文作者，请根据以下期刊模板规范生成论文内容。\n"
-        f"期刊规范（JournalSpec JSON）:\n{to_json_str(spec, indent=2)}\n\n"
+        f"期刊规范（JournalSpec JSON）:\n{spec.model_dump_json(indent=2)}\n\n"
         "返回严格符合以下 JSON schema：\n"
         '{"title": str, "abstract": str, "sections": {keyword: str}, '
-        '"references": [str], "citations": [str]}'
+        '"references": [str], "citations": [str], '
+        '"structured_references": [{"key": str, "ref_type": str, '
+        '"title": str, "authors": [str], "year": str, "source": str, '
+        '"volume": str, "issue": str, "pages": str}]}\n\n'
+        "structured_references（可选但推荐）：为真实文献尽量产出结构化条目"
+        "（key 唯一；ref_type ∈ journal/book/thesis/conference/report/"
+        "webpage/patent/standard/newspaper）。引擎会按 GB/T 7714 格式化并"
+        "自动加 [N] 编号写入参考文献——参考文献段文本不要手写编号。\n"
     )
 
     last_content: dict = {}
@@ -263,9 +332,12 @@ async def generate_article(
             f"{', '.join(h.keyword for h in spec.headings)}"
         )
         if round_idx > 0 and last_content:
+            # Round 30：先清洗结构化文献（原地修 dict），再校验——否则
+            # 次品条目会让自纠检查误报并耗尽重试轮次。
+            _sanitize_structured_refs_inplace(last_content)
             # 把上一轮的校验反馈注入 prompt
             try:
-                content_model = parse_obj(JournalContent, last_content)
+                content_model = JournalContent.model_validate(last_content)
                 _validate_content_shape(spec, content_model)
             except Exception as exc:
                 user_prompt += f"\n\n上一轮问题: {exc}\n请按规范修正。"
@@ -279,7 +351,11 @@ async def generate_article(
         )
         last_content = _json.loads(result) if isinstance(result, str) else dict(result)
 
-    content = parse_obj(JournalContent, last_content)
+    # Round 30：结构化文献逐条清洗——合法条目保留（key 冲突补唯一后缀），
+    # 次品剔除；全为次品时置空回退 references 纯文本通路（R21 语义）。
+    _sanitize_structured_refs_inplace(last_content)
+
+    content = JournalContent.model_validate(last_content)
     inner_rec = generate_structured(spec, content, workspace, output_filename)
     # inner_rec.mode == "structured_fill"（generate_structured 硬编码）；
     # 覆写为 llm_generate 以反映实际生成路径。
