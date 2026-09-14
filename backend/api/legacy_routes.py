@@ -2578,16 +2578,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
             try:
                 from backend.services.multimodal.media_store import (
-                    MEDIA_ROOT as R37_MEDIA_ROOT,
-                )
-                from backend.services.multimodal.media_store import (
-                    MediaKind as R37_MEDIA_KIND,
-                )
-                from backend.services.multimodal.media_store import (
-                    MediaStore as R37_MEDIA_STORE,
+                    MediaKind,
+                    MediaStore,
+                    MEDIA_ROOT,
                 )
 
-                r37_store = R37_MEDIA_STORE(root=R37_MEDIA_ROOT)
+                r37_store = MediaStore(root=MEDIA_ROOT)
                 for r37_mid in data.attachment_media_ids[:10]:
                     try:
                         _r37_loaded = r37_store.load(r37_mid)
@@ -2596,7 +2592,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     if _r37_loaded is None:
                         continue
                     _r37_ref, r37_bytes = _r37_loaded
-                    if _r37_ref.kind != R37_MEDIA_KIND.DOCUMENT:
+                    if _r37_ref.kind != MediaKind.DOCUMENT:
                         continue
                     try:
                         r37_text = r37_bytes.decode("utf-8")[:100_000]

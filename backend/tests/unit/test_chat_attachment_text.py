@@ -97,7 +97,7 @@ def client(monkeypatch):
 def test_upload_txt_returns_text_and_document_kind(client):
     res = client.post(
         "/chat/attachments",
-        files={"file": ("notes.md", "# 标题\n正文".encode("utf-8"), "text/markdown")},
+        files={"file": ("notes.md", "# 标题\n正文".encode(), "text/markdown")},
     )
     assert res.status_code == 200
     body = res.json()
