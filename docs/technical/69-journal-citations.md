@@ -35,3 +35,10 @@ R9 引擎按 citation_style 格式化并自动加 `[N]` 编号。
 十五轮：Word 侧全闭环 + Excel 格式/条件格式/下拉验证 + journal 引用
 打通。Round 22 候选：TOC 域更新收尾（headless/COM）、Pillow 图片管线、
 report-writing 技能提及 xlsx 附表能力。
+
+## 附：Round 30 质量提升（清洗降级）
+
+generate_article 的自纠检查与最终校验前先原地清洗
+structured_references（`_sanitize_structured_refs_inplace`）：次品剔除
+（缺 title / 字段非法）、key 去重（good1 → good1-2）；全为次品时移除
+该键回退 references 纯文本。清洗失败不阻断生成（logger.warning）。
