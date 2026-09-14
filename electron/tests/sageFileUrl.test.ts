@@ -1,6 +1,8 @@
 /**
- * P9: sage-file:// URL 解析与安全校验（fail-closed）。
- * 覆盖：扩展名白名单、绝对路径、realpath 工作区包含、符号链接逃逸阻断。
+ * P9/P13: sage-file:// URL 解析与安全校验（fail-closed）。
+ * P13 收紧：ws 参数改为 main 进程工作区注册表（第 2 参数）。
+ * 覆盖：扩展名白名单、绝对路径、realpath 工作区包含、符号链接逃逸阻断、
+ * 空注册表 fail-closed。
  */
 import { mkdtempSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -22,8 +24,12 @@ const wsRoot = (() => {
 
 const enc = encodeURIComponent;
 
-function urlFor(file: string, ws: string): string {
-  return `${SAGE_FILE_URL_PREFIX}${enc(file)}?ws=${enc(ws)}`;
+function urlFor(file: string): string {
+  return `${SAGE_FILE_URL_PREFIX}${enc(file)}`;
+}
+
+function roots(...dirs: string[]): ReadonlySet<string> {
+  return new Set(dirs.map((d) => realpathSync(d)));
 }
 
 describe('resolveSageFileUrl', () => {
@@ -41,31 +47,31 @@ describe('resolveSageFileUrl', () => {
     writeFileSync(outsidePath, 'outside');
   });
 
-  it('工作区内的图片解析为真实路径', () => {
-    const r = resolveSageFileUrl(urlFor(imgPath, wsRoot));
+  it('工作区注册表内的图片解析为真实路径', () => {
+    const r = resolveSageFileUrl(urlFor(imgPath), roots(wsRoot));
     expect(r).toMatchObject({ ok: true });
     if (r.ok) expect(r.path.toLowerCase()).toContain('sage-file-test-');
   });
 
   it('子目录图片允许', () => {
     const inner = join(wsRoot, 'sub', 'inner.png');
-    const r = resolveSageFileUrl(urlFor(inner, wsRoot));
+    const r = resolveSageFileUrl(urlFor(inner), roots(wsRoot));
     expect(r).toMatchObject({ ok: true });
   });
 
   it('拒绝工作区外的文件', () => {
-    const r = resolveSageFileUrl(urlFor(outsidePath, wsRoot));
-    expect(r).toMatchObject({ ok: false, reason: 'outside-workspace' });
+    const r = resolveSageFileUrl(urlFor(outsidePath), roots(wsRoot));
+    expect(r).toMatchObject({ ok: false, reason: 'outside-registered-workspace' });
   });
 
   it('拒绝非白名单扩展名（.html / .txt）', () => {
     const html = join(wsRoot, 'evil.html');
-    expect(resolveSageFileUrl(urlFor(html, wsRoot))).toMatchObject({
+    expect(resolveSageFileUrl(urlFor(html), roots(wsRoot))).toMatchObject({
       ok: false,
       reason: 'extension-not-allowed',
     });
     const txt = join(wsRoot, 'notes.txt');
-    expect(resolveSageFileUrl(urlFor(txt, wsRoot))).toMatchObject({
+    expect(resolveSageFileUrl(urlFor(txt), roots(wsRoot))).toMatchObject({
       ok: false,
       reason: 'extension-not-allowed',
     });
@@ -73,22 +79,21 @@ describe('resolveSageFileUrl', () => {
 
   it('拒绝 .. 逃逸与非绝对路径', () => {
     const escaped = join(wsRoot, 'sub', '..', '..', 'outside-of-ws.png');
-    const r = resolveSageFileUrl(urlFor(escaped, wsRoot));
-    // .. 逃逸后落到工作区外 → outside-workspace（或 not-found）
+    const r = resolveSageFileUrl(urlFor(escaped), roots(wsRoot));
     expect(r).toMatchObject({ ok: false });
-    expect(resolveSageFileUrl(urlFor('relative/pic.png', wsRoot))).toMatchObject({
+    expect(resolveSageFileUrl(urlFor('relative/pic.png'), roots(wsRoot))).toMatchObject({
       ok: false,
       reason: 'not-absolute',
     });
   });
 
-  it('缺少 ws 参数时拒绝（fail-closed）', () => {
-    const r = resolveSageFileUrl(`${SAGE_FILE_URL_PREFIX}${enc(imgPath)}`);
-    expect(r).toMatchObject({ ok: false, reason: 'missing-workspace' });
+  it('空注册表 fail-closed（全部拒绝）', () => {
+    const r = resolveSageFileUrl(urlFor(imgPath), new Set());
+    expect(r).toMatchObject({ ok: false, reason: 'no-registered-workspace' });
   });
 
   it('不存在的文件拒绝', () => {
-    const r = resolveSageFileUrl(urlFor(join(wsRoot, 'missing.png'), wsRoot));
+    const r = resolveSageFileUrl(urlFor(join(wsRoot, 'missing.png')), roots(wsRoot));
     expect(r).toMatchObject({ ok: false, reason: 'not-found' });
   });
 
@@ -100,7 +105,7 @@ describe('resolveSageFileUrl', () => {
       // Windows 无符号链接权限时跳过
       return;
     }
-    const r = resolveSageFileUrl(urlFor(link, wsRoot));
-    expect(r).toMatchObject({ ok: false, reason: 'outside-workspace' });
+    const r = resolveSageFileUrl(urlFor(link), roots(wsRoot));
+    expect(r).toMatchObject({ ok: false, reason: 'outside-registered-workspace' });
   });
 });

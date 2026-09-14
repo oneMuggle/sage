@@ -144,6 +144,15 @@ const electronAPI = {
   },
 
   /**
+   * P13 (2026-09-14): sage-file 工作区注册表 —— 渲染端绑定工作区时经此
+   * 登记，主进程校验后加入白名单。sage-file:// 协议据此判定文件可读性。
+   */
+  sageFile: {
+    registerRoot: (path: string) =>
+      ipcRenderer.invoke('sage-file:register-root', path) as Promise<boolean>,
+  },
+
+  /**
    * Phase 6 (2026-06-27): Native folder picker for LLM Wiki.
    * Returns absolute path string, or null if user cancelled.
    */
