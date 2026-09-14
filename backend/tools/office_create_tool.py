@@ -922,6 +922,18 @@ class OfficeCreateTool(BaseTool):
                                                         "（长表打印每页带表头）"
                                                     ),
                                                 },
+                                                "margins_cm": {
+                                                    "type": "object",
+                                                    "description": (
+                                                        "打印页边距（厘米，Round 31）"
+                                                    ),
+                                                    "properties": {
+                                                        "top": {"type": "number"},
+                                                        "bottom": {"type": "number"},
+                                                        "left": {"type": "number"},
+                                                        "right": {"type": "number"},
+                                                    },
+                                                },
                                             },
                                         },
                                     },

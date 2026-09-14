@@ -6,7 +6,7 @@
  * - 延迟加载 highlighter (首次渲染时初始化)
  */
 
-import { ArrowDown, Check, Copy, WrapText } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Copy, WrapText } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
@@ -173,6 +173,19 @@ export function ShikiCodeBlock({ language, children }: ShikiCodeBlockProps) {
           </button>
         )}
       </div>
+      {/* P18: 展开后底部收起按钮——长代码展开后可收回 */}
+      {!folded && lineCount > FOLD_THRESHOLD_LINES && (
+        <div className="flex justify-center py-1 border-t border-border">
+          <button
+            onClick={() => setFolded(true)}
+            data-testid="code-collapse"
+            className="flex items-center gap-1 px-3 py-0.5 rounded text-[11px] text-muted hover:text-text hover:bg-bg-hover transition-colors"
+          >
+            <ArrowUp className="w-3 h-3" />
+            {t('codeBlock.collapseLines')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

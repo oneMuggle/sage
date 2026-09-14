@@ -1506,6 +1506,13 @@ export interface ExcelPrintSetupSpec {
   print_area?: string;
   // Round 28：每页重复的标题行，如 '1:1'（长表打印每页带表头）
   title_rows?: string;
+  // Round 31：打印页边距（厘米）
+  margins_cm?: {
+    top?: number;
+    bottom?: number;
+    left?: number;
+    right?: number;
+  };
 }
 
 export interface ExcelDataValidationSpec {
