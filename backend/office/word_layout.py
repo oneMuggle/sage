@@ -86,7 +86,16 @@ def _hex_to_rgb(color: str) -> RGBColor:
 
 
 def _apply_page_setup(doc: Document, page: WordPageSetupSpec) -> None:
-    section = doc.sections[0]
+    """对文档第一节应用 page setup（format_spec.page 的调用入口）。"""
+    _apply_page_setup_to_section(doc.sections[0], page)
+
+
+def _apply_page_setup_to_section(section, page: WordPageSetupSpec) -> None:
+    """对任意节应用 page setup（Round 26 分节复用）。
+
+    仅给 orientation 未给 size 时，若实际宽高方向与期望不符则交换
+    （orientation 标志与宽高是独立属性，必须同步否则渲染仍为原方向）。
+    """
     width = None
     height = None
     if page.size == "A4":
@@ -98,10 +107,17 @@ def _apply_page_setup(doc: Document, page: WordPageSetupSpec) -> None:
             width, height = height, width
         section.page_width = width
         section.page_height = height
-    if page.orientation == "landscape":
-        section.orientation = WD_ORIENT.LANDSCAPE
-    elif page.orientation == "portrait":
-        section.orientation = WD_ORIENT.PORTRAIT
+    if page.orientation is not None:
+        want_landscape = page.orientation == "landscape"
+        is_landscape = section.page_width > section.page_height
+        if want_landscape != is_landscape:
+            section.page_width, section.page_height = (
+                section.page_height,
+                section.page_width,
+            )
+        section.orientation = (
+            WD_ORIENT.LANDSCAPE if want_landscape else WD_ORIENT.PORTRAIT
+        )
     if page.margins_cm is not None:
         margins = page.margins_cm
         if margins.top is not None:
@@ -362,3 +378,15 @@ def insert_toc_field(doc: Document, toc: Any) -> None:
     toc_paragraph._p.append(fld)
 
     doc.add_page_break()
+
+
+def apply_section_break(doc: Document, page: WordPageSetupSpec) -> None:
+    """插入 NEW_PAGE 分节并对新节应用 page setup（Round 26 横排分节）。
+
+    调用方（word.py body 循环）在写 start_paragraph 段落之前调用；
+    新节页面属性由 page_setup 决定（横排宽表/财务页场景）。
+    """
+    from docx.enum.section import WD_SECTION
+
+    new_section = doc.add_section(WD_SECTION.NEW_PAGE)
+    _apply_page_setup_to_section(new_section, page)

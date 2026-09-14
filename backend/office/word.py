@@ -854,8 +854,23 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         for image in inline_images:
             images_by_position.setdefault(image.after_paragraph or 0, []).append(image)
 
+        # ── Round 26：横排分节（section_breaks 按 start_paragraph 排序） ───
+        pending_breaks: List[Any] = sorted(
+            (req.format_spec.section_breaks if req.format_spec else []) or [],
+            key=lambda b: b.start_paragraph,
+        )
+        break_idx = 0
+
         # Body paragraphs（段落写完后插入锚定在其后的行内插图）
         for pi, para in enumerate(req.paragraphs):
+            # Round 26：写段落前命中 start_paragraph → 插入分节 + 新节页面设置
+            while break_idx < len(pending_breaks) and pending_breaks[
+                break_idx
+            ].start_paragraph == pi:
+                from .word_layout import apply_section_break
+
+                apply_section_break(doc, pending_breaks[break_idx].page_setup)
+                break_idx += 1
             if para.heading in ("h1", "h2", "h3", "h4", "h5"):
                 level = int(para.heading[1])
                 text = para.text
