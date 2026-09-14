@@ -165,3 +165,48 @@ class TestRepetitionGuard:
 
 def states_of(events):
     return [e.state for e in events]
+
+
+# ---------- R32 切片 A 延伸：串行内联中心超时 ----------
+
+
+@pytest.mark.asyncio()
+async def test_serial_inline_hanging_tool_times_out(tmp_path):
+    """挂死的内联工具 → 中心超时错误结果（事件循环不被阻塞）。"""
+    from unittest.mock import MagicMock
+
+    from backend.core.legacy.agent import SageAgent
+    from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
+
+    agent = SageAgent()
+    agent.tool_registry = MagicMock()
+
+    slow = MagicMock()
+    slow.is_blocking = False  # 显式关闭（MagicMock 自动属性恒真，会走阻塞分支）
+
+    def slow_execute(**kwargs):
+        import time as _t
+        _t.sleep(5)
+        return MagicMock(success=True, content="late", error=None)
+
+    slow.execute = slow_execute
+    slow.name = "slow-tool"
+    agent.tool_registry.get = lambda name: slow if name == "slow-tool" else None
+
+    client = MagicMock()
+    client.chat = AsyncMock(side_effect=[
+        LLMResponse(content="", tool_calls=[LLMToolCall(id="c1", name="slow-tool", arguments="{}")]),
+        LLMResponse(content="done"),
+    ])
+    agent.llm_client = client
+    agent.tool_policy = MagicMock(timeout_seconds=0.2)
+
+    events = []
+    async for evt in agent.run_loop([{"role": "user", "content": "x"}]):
+        events.append(evt)
+
+    observing = [e for e in events if e.state.value == "observing"]
+    assert observing, "应有观察事件"
+    assert "tool_timeout" in observing[-1].tool_result.content
+    assert observing[-1].tool_result.is_error is True
+    assert events[-1].state.value == "done"
