@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -156,28 +157,45 @@ class TestDoctorCLIJsonMode:
         assert expected.issubset(names)
 
 
+def _expected_exit_code(critical: int, warn: int) -> int:
+    if critical > 0:
+        return 2
+    if warn > 0:
+        return 1
+    return 0
+
+
 class TestDoctorCLIExitCodes:
     def test_default_exit_code_matches_severity(self):
         result = _run_doctor("--json")
         data = json.loads(result.stdout)
         summary = data["summary"]
-
-        expected_code = 0
-        if summary["critical"] > 0:
-            expected_code = 2
-        elif summary["warn"] > 0:
-            expected_code = 1
-
-        assert result.returncode == expected_code
+        assert result.returncode == _expected_exit_code(summary["critical"], summary["warn"])
 
     def test_text_and_json_agree_on_severity_counts(self):
+        # 2026-09-14 去 flaky: text / json 是两次独立子进程, 环境敏感的 check
+        # (backend_health / port_* / disk_space / network) 在两次之间可能翻转,
+        # 直接断言两次退出码相等会偶发 1 != 2. 改为: 每次运行的退出码必须与
+        # 它自己输出里的严重度统计自洽, 且两种模式的检查项总数一致.
         text_result = _run_doctor()
         json_result = _run_doctor("--json")
         data = json.loads(json_result.stdout)
-        assert text_result.returncode == json_result.returncode
         assert "总计:" in text_result.stdout
-        # 2026-09-05: 15→16 (加 network)
-        assert data["summary"]["critical"] + data["summary"]["warn"] + data["summary"]["info"] == 18
+
+        m = re.search(
+            r"总计: (\d+) 项检查 \(CRITICAL: (\d+), WARN: (\d+), INFO: (\d+)\)",
+            text_result.stdout,
+        )
+        assert m is not None, text_result.stdout
+        text_total, text_crit, text_warn, _text_info = (int(x) for x in m.groups())
+        assert text_result.returncode == _expected_exit_code(text_crit, text_warn)
+
+        summary = data["summary"]
+        json_total = summary["critical"] + summary["warn"] + summary["info"]
+        assert json_result.returncode == _expected_exit_code(summary["critical"], summary["warn"])
+
+        # 2026-09-05: 15→16 (加 network); 之后 17/18 —— 两种模式必须报同样多的检查项
+        assert text_total == json_total == 18
 
 
 class TestDoctorCLIHelp:
