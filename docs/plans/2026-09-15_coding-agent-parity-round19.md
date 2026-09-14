@@ -32,4 +32,8 @@
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A（聚合头部消耗可见性） | PR #770（squash 2a3c32d7） | PR #776（cherry-win7-r19，squash aa146168） |
+
+win7 对齐说明：零冲突落位；py3.8 纪律照旧；本地 ruff 全过 + bu8 2 例绿后由 CI（含 py3.8 job）终验，squash merge（#776）。
