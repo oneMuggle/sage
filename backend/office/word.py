@@ -285,12 +285,23 @@ def _extract_headers_footers(doc: Document) -> List[WordHeaderFooterContent]:
 
 
 def _extract_toc_fields(doc: Document) -> List[str]:
-    """收集正文中 instr 以 TOC 开头的域（Round 13 目录域的读取对偶）。"""
+    """收集正文中 instr 以 TOC 开头的域（Round 13 目录域的读取对偶）。
+
+    Round 29 起兼容两种载体：fldSimple（R13 形态）与 fldChar 复杂域的
+    instrText（R29 静态缓存回填形态）。
+    """
     instrs: List[str] = []
+    seen: set = set()
     for paragraph in doc.paragraphs:
         for fld in paragraph._p.findall(".//" + qn("w:fldSimple")):
             instr = fld.get(qn("w:instr")) or ""
-            if instr.startswith("TOC"):
+            if instr.startswith("TOC") and instr not in seen:
+                seen.add(instr)
+                instrs.append(instr)
+        for instr_el in paragraph._p.findall(".//" + qn("w:instrText")):
+            instr = (instr_el.text or "").strip()
+            if instr.startswith("TOC") and instr not in seen:
+                seen.add(instr)
                 instrs.append(instr)
     return instrs
 
@@ -813,12 +824,32 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # Title
         doc.add_heading(req.title, level=0)
 
-        # Round 13：目录域（标题之后、正文之前；分页使正文另起一页）。
+        # Round 13/29：目录域（标题之后、正文之前；分页使正文另起一页）。
         # 目录标题为普通段落，不参与多级标题编号检查（Linter 对偶跳过）。
+        # Round 29：预收集标题清单回填为 TOC 域的静态缓存——打开文档即见
+        # 目录；更新域后被渲染器重算替换。缓存行文本与正文标题的最终形态
+        # 一致（numbering 开启时含编号前缀，否则为纯标题文本）。
+        toc_headings: List[Tuple[int, str]] = []
         if req.format_spec is not None and req.format_spec.toc is not None:
             from .word_layout import insert_toc_field
 
-            insert_toc_field(doc, req.format_spec.toc)
+            numbering_on = bool(req.format_spec.numbering)
+            pre_counters = [0, 0, 0, 0, 0]
+            first_level, last_level = req.format_spec.toc.level_range()
+            for para in req.paragraphs:
+                if para.heading in ("h1", "h2", "h3", "h4", "h5"):
+                    level = int(para.heading[1])
+                    text = para.text
+                    if numbering_on:
+                        text = (
+                            heading_number_prefix(pre_counters, level)
+                            + " "
+                            + text
+                        )
+                    if first_level <= level <= last_level:
+                        toc_headings.append((level, text))
+
+            insert_toc_field(doc, req.format_spec.toc, toc_headings)
 
         # ── Round 9 引用：首现编号 + 文中上标标记 + 文末参考文献节 ────────
         # 编号 = citations key 在正文中的首次出现顺序；标记连续编号合并
