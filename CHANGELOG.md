@@ -59,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **TOC 静态缓存回填(Round 29)**: 目录域升级为 fldChar 复杂域——打开文档即见按文档标题生成的静态目录行(逐级缩进/levels 过滤),更新域后被真实带页码目录替换;Linter toc/presence 升级为双载体兼容检测
 - **Excel 打印标题行(Round 28)**: print_setup.title_rows('1:1')——长表打印每页重复表头(与 freeze_header 屏幕冻结互补);openpyxl 归一化为绝对引用 $1:$1
 - **Pillow 提升为 main 正式依赖(Round 27)**: requirements.txt 增加 Pillow>=10.0——图片压缩管线(R22)开箱生效,消除"装 optional 才生效"的割裂;requirements-optional 同步移除;win7 bundle 不受影响(bundled 列表本就不含)
 - **Word 横排分节(Round 26)**: format_spec.section_breaks——按 start_paragraph 插入 NEW_PAGE 分节并对新节应用 page_setup(横排/纸张/边距),宽表格/财务页场景;仅给 orientation 未给 size 时自动交换宽高;无 breaks 零变化
