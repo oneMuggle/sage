@@ -102,6 +102,8 @@ export function ShikiCodeBlock({ language, children }: ShikiCodeBlockProps) {
       {/* 头部栏 */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-[#282c34] rounded-t-md text-xs text-gray-300">
         <span className="font-mono">{language || 'text'}</span>
+        {/* P20: 行数徽章 */}
+        <span className="text-gray-500 text-[10px] ml-1">{lineCount} lines</span>
         <div className="flex items-center gap-1">
           {/* P2: 自动换行切换 —— 长行代码在宽屏上免横向滚动 */}
           <button
