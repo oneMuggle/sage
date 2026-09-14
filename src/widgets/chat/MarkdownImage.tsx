@@ -12,6 +12,8 @@
 import { useEffect, useState } from 'react';
 
 import { fetchMediaBlobUrl, revokeMediaBlobUrl } from '../../shared/api/mediaApi';
+import { buildLocalImageSrc } from '../../shared/lib/localImageSrc';
+import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 import { Lightbox } from '../../shared/ui';
 
 type LoadStatus = 'loading' | 'loaded' | 'error';
@@ -20,6 +22,8 @@ export function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  // P9: 工作区绑定（用于相对路径 → 绝对路径拼接）
+  const workspacePath = useCurrentWorkspace();
 
   const isLocalMedia = typeof src === 'string' && src.startsWith('/api/');
   useEffect(() => {
@@ -47,7 +51,8 @@ export function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
   }, [blobUrl]);
 
   if (!src) return null;
-  const resolved = blobUrl ?? src;
+  // P9: 本地路径转 sage-file:// URL（主进程校验工作区包含 + 扩展名白名单）
+  const resolved = buildLocalImageSrc(blobUrl ?? src, workspacePath) || src;
 
   return (
     <span className="relative inline-block align-top my-1">

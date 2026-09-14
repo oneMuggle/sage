@@ -38,6 +38,7 @@ import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electr
 import { logger } from './logger';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
+import { registerSageFileProtocol } from './sageFileProtocol';
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
 logger.info('main: process started', {
@@ -1940,6 +1941,10 @@ async function isPortReleased(port: number, timeoutMs: number): Promise<void> {
 app.whenReady().then(async () => {
   // Step 3: prune log files older than 7 days on every cold start
   cleanupOlderThan(7);
+  // P9 (2026-09-14): sage-file:// 协议 —— 工作区本地图片经白名单校验后
+  // 安全渲染（MarkdownImage 生成 sage-file://p/<enc>?ws=<enc> URL）。
+  // 必须在窗口加载页面前注册。
+  registerSageFileProtocol();
   // 2026-09-13: 启动屏 — 后端冷启动实测 50–65s（健康检查上限 90s），此前
   // 窗口创建排在 waitForBackend() 之后，用户双击图标后近一分钟无任何反馈。
   // CI 冒烟 (SAGE_SKIP_BACKEND) / 演示录屏 / SAGE_NO_SPLASH=1 时不显示。
