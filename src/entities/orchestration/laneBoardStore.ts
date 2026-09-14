@@ -7,7 +7,10 @@
 import { create } from 'zustand';
 
 import type { RunEvent } from '../../shared/api/orchEvents';
-import { orchestrationClient } from '../../shared/api/orchestrationClient';
+import {
+  orchestrationClient,
+  type LaneDecisionResult,
+} from '../../shared/api/orchestrationClient';
 import type {
   CreateLanesResponse,
   FreshnessSummaryInfo,
@@ -29,6 +32,17 @@ interface LaneBoardState {
   /** M5: planner decomposition → tasks + lanes, then refresh the board. */
   createLane: (goal: string, agent?: string) => Promise<CreateLanesResponse>;
   cancel: (laneId: string, reason?: string) => Promise<void>;
+  /**
+   * A4: delivery-package verdict — accept merges the retained worktree,
+   * reject archives it. Returns the full decision result (merged/warning)
+   * so the drawer can render the outcome; the updated lane is merged
+   * into state like cancel().
+   */
+  decide: (
+    laneId: string,
+    decision: 'accept' | 'reject',
+    reason?: string,
+  ) => Promise<LaneDecisionResult>;
   applyEvent: (event: LaneEvent) => void;
   /**
    * live-events P2 (2026-09-07): canonical RunEvent → lane 卡片状态投影。
@@ -152,6 +166,19 @@ export const useLaneBoardStore = create<LaneBoardState>((set, get) => ({
       set({
         lanes: get().lanes.map((l) => (l.lane_id === laneId ? updated : l)),
       });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error) });
+      throw error;
+    }
+  },
+
+  async decide(laneId: string, decision: 'accept' | 'reject', reason: string = '') {
+    try {
+      const result = await orchestrationClient.decideLane(laneId, decision, reason);
+      set({
+        lanes: get().lanes.map((l) => (l.lane_id === laneId ? result.lane : l)),
+      });
+      return result;
     } catch (error: unknown) {
       set({ error: getErrorMessage(error) });
       throw error;

@@ -142,6 +142,16 @@ def normalize_configured_checks(raw: Any) -> List[List[str]]:
 # ------------------------------------------------------------------
 
 
+def _decode_bytes(data: bytes | None) -> str:
+    """子进程输出解码：先 UTF-8，失败回退 locale（命令输出编码未知）。"""
+    if not data:
+        return ""
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data.decode(errors="replace")
+
+
 def _resolve_argv(argv: List[str]) -> Optional[List[str]]:
     """解析可执行文件；缺失返回 None（记 skip）；Windows 脚本经 cmd /c。"""
     target = shutil.which(argv[0])
@@ -173,8 +183,6 @@ def _run_command_check(
             resolved,
             cwd=str(cwd),
             capture_output=True,
-            text=True,
-            errors="replace",
             timeout=timeout_s,
             check=False,
         )
@@ -184,7 +192,9 @@ def _run_command_check(
         )
     except OSError as exc:
         return CheckResult(name=name, passed=False, summary=f"启动失败：{exc}")
-    tail = ((proc.stdout or "") + (proc.stderr or ""))[-OUTPUT_TAIL_CHARS:]
+    tail = (_decode_bytes(proc.stdout) + _decode_bytes(proc.stderr))[
+        -OUTPUT_TAIL_CHARS:
+    ]
     if proc.returncode == 0:
         return CheckResult(name=name, passed=True, summary=_brief(tail, "通过（rc=0）"))
     return CheckResult(
@@ -200,10 +210,11 @@ def _run_diff_stat(cwd: Path) -> CheckResult:
         )
     try:
         proc = subprocess.run(
-            ["git", "diff", "--stat"],
+            ["git", "-c", "core.quotepath=false", "diff", "--stat"],
             cwd=str(cwd),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             errors="replace",
             timeout=DIFF_TIMEOUT_S,
             check=False,
@@ -219,10 +230,11 @@ def _run_diff_stat(cwd: Path) -> CheckResult:
     untracked = 0
     try:
         st = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", "-c", "core.quotepath=false", "status", "--porcelain"],
             cwd=str(cwd),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             errors="replace",
             timeout=DIFF_TIMEOUT_S,
             check=False,

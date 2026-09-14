@@ -10,6 +10,8 @@
  */
 import { create } from 'zustand';
 
+import type { WordFormatSpec } from '../../shared/api/types';
+
 export type TaskKind = 'office' | 'wiki' | 'custom';
 
 export type TaskCenterStatus =
@@ -20,6 +22,26 @@ export type TaskCenterStatus =
   | 'succeeded'
   | 'failed'
   | 'cancelled';
+
+/**
+ * A4b: office 交付包引用 —— awaiting_approval 条目打开交付抽屉所需坐标。
+ * formatSpec 缺席表示生成时未带格式规范，抽屉内 lint 段如实展示跳过。
+ */
+export interface OfficeDeliveryRef {
+  workspacePath: string;
+  filePath: string;
+  formatSpec: WordFormatSpec | null;
+}
+
+/**
+ * A4: 全局交付抽屉状态 —— 由 DeliveryDrawerHost（Layout 挂载）渲染。
+ * lane 段复用 laneBoardStore 的 lane 行（open 时只记 id，读时解析，
+ * 决议后行更新自动透传）；office 段坐标记在条目的 deliveryRef。
+ */
+export type DeliveryDrawerState =
+  | { kind: 'lane'; laneId: string }
+  | { kind: 'office'; entryId: string }
+  | null;
 
 /** Terminal states stay visible until the user clears them. */
 export const TERMINAL_TASK_STATUSES: ReadonlySet<TaskCenterStatus> = new Set([
@@ -46,6 +68,8 @@ export interface TaskCenterEntry {
   sessionId?: string | null;
   /** A1: related backend run, for orchestration cancel. */
   runId?: string | null;
+  /** A4b: office 交付包坐标（awaiting_approval 条目打开抽屉用）。 */
+  deliveryRef?: OfficeDeliveryRef | null;
 }
 
 export interface TaskCenterPatch {
@@ -56,10 +80,15 @@ export interface TaskCenterPatch {
   error?: string | null;
   sessionId?: string | null;
   runId?: string | null;
+  deliveryRef?: OfficeDeliveryRef | null;
 }
 
 interface TaskCenterState {
   tasks: Record<string, TaskCenterEntry>;
+  /** A4: 当前打开的交付抽屉（null = 关闭）。 */
+  delivery: DeliveryDrawerState;
+  openDelivery: (next: Exclude<DeliveryDrawerState, null>) => void;
+  closeDelivery: () => void;
   registerTask: (id: string, kind: TaskKind, title: string, phase?: string) => void;
   updateTask: (id: string, patch: TaskCenterPatch) => void;
   /** Legacy semantic: drop the entry (existing callers unchanged). */
@@ -72,6 +101,9 @@ interface TaskCenterState {
 
 export const useTaskCenterStore = create<TaskCenterState>((set) => ({
   tasks: {},
+  delivery: null,
+  openDelivery: (next) => set({ delivery: next }),
+  closeDelivery: () => set({ delivery: null }),
   registerTask: (id, kind, title, phase) =>
     set((state) => {
       const existing = state.tasks[id];

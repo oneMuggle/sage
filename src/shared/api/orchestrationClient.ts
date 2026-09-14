@@ -6,6 +6,7 @@
  *   orchestration_get_lane        → GET    /api/v1/orchestration/lanes/{id}
  *   orchestration_list_lane_events → GET    /api/v1/orchestration/lanes/{id}/events
  *   orchestration_cancel_lane      → POST   /api/v1/orchestration/lanes/{id}/cancel
+ *   orchestration_lane_decision    → POST   /api/v1/orchestration/lanes/{id}/decision
  *   orchestration_create_lane      → POST   /api/v1/orchestration/lanes (M5)
  *
  * All methods throw on IPC failure; callers should wrap in try/catch and
@@ -32,6 +33,16 @@ export interface CreateLaneParams {
   agent?: string;
 }
 
+export interface LaneDecisionResult {
+  ok: boolean;
+  lane: Lane;
+  decision: 'accept' | 'reject';
+  merged: boolean;
+  already: boolean;
+  warning: string | null;
+  merge: Record<string, unknown> | null;
+}
+
 export const orchestrationClient = {
   async listLanes(params: ListLanesParams = {}): Promise<Lane[]> {
     return invoke<Lane[]>('orchestration_list_lanes', { params });
@@ -53,6 +64,19 @@ export const orchestrationClient = {
   async cancelLane(laneId: string, reason: string = 'user_cancelled'): Promise<Lane> {
     return invoke<Lane>('orchestration_cancel_lane', {
       lane_id: laneId,
+      reason,
+    });
+  },
+
+  /** A4: 交付包验收决议（accept 合并 / reject 打回）。 */
+  async decideLane(
+    laneId: string,
+    decision: 'accept' | 'reject',
+    reason: string = '',
+  ): Promise<LaneDecisionResult> {
+    return invoke<LaneDecisionResult>('orchestration_lane_decision', {
+      lane_id: laneId,
+      decision,
       reason,
     });
   },

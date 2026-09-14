@@ -89,6 +89,8 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   // P4: 任务中心接线 —— 切走页面后全局胶囊仍可见
   const registerTask = useTaskCenterStore((s) => s.registerTask);
   const finishTask = useTaskCenterStore((s) => s.finishTask);
+  // A4b: word 生成成功后交付抽屉验收（lint + 预览 + 接受/打回）。
+  const openDelivery = useTaskCenterStore((s) => s.openDelivery);
   const [result, setResult] = useState<GenerateResult | null>(null);
 
   // PPT
@@ -224,6 +226,10 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       if (onGenerated) {
         await onGenerated();
       }
+      // A4b: word 模板产物进交付验收（其余类型保持原 finally 清理）。
+      if (selectedTemplate.doc_type === 'word') {
+        openWordDelivery(out.output_path, out.filename);
+      }
       // Clear the form: blank placeholder fields + default filename.
       setTemplateData({});
       setFilename('my-document');
@@ -232,9 +238,31 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       toast.error(`${t('office.template.failed')}: ${msg}`);
     } finally {
       stopPoll();
-      finishTask('office:generate');
+      finishUnlessAwaiting();
       setBusy(false);
     }
+  };
+
+  /**
+   * A4b: word 产物交付验收 —— 条目切 awaiting_approval（携带交付坐标）
+   * 并打开交付抽屉。生成请求不带 format_spec（generateWord/instantiate
+   * 均未透传），lint 段由抽屉如实展示跳过。
+   */
+  const openWordDelivery = (outputPath: string, filename: string) => {
+    useTaskCenterStore.getState().updateTask('office:generate', {
+      title: filename,
+      phase: t('office.delivery.awaiting'),
+      status: 'awaiting_approval',
+      deliveryRef: { workspacePath, filePath: outputPath, formatSpec: null },
+    });
+    openDelivery({ kind: 'office', entryId: 'office:generate' });
+  };
+
+  /** A4b: 待验收条目保留（finally 不清理），其余沿用原语义。 */
+  const finishUnlessAwaiting = () => {
+    const entry = useTaskCenterStore.getState().tasks['office:generate'];
+    if (entry?.status === 'awaiting_approval') return;
+    finishTask('office:generate');
   };
 
   const handleGenerate = async () => {
@@ -312,12 +340,16 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       if (onGenerated) {
         await onGenerated();
       }
+      // A4b: word 自由创建产物进交付验收。
+      if (docType === 'word') {
+        openWordDelivery(out.output_path, out.filename);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.generate.failed')}: ${msg}`);
     } finally {
       stopPoll();
-      finishTask('office:generate');
+      finishUnlessAwaiting();
       setBusy(false);
     }
   };

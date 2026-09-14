@@ -61,6 +61,10 @@ class LaneEvent(str, Enum):
     # Acceptance (A4 — acceptance checks ran after success)
     ACCEPTANCE_COMPLETED = "lane.acceptance.completed"
 
+    # Decision (A4 — user verdict on the delivery package)
+    ACCEPTED = "lane.accepted"
+    REJECTED = "lane.rejected"
+
 
 # Grouping constants — convenience sets for consumers that want to filter
 # by event category without enumerating each member.

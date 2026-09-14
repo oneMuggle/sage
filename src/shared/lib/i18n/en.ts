@@ -703,6 +703,26 @@ export const en: Record<TranslationKey, string> = {
   'office.batch.selectedCount': '{n} selected',
   'office.batch.selectRow': 'Select document',
 
+  // ─── A4b Office delivery acceptance ─────
+  'office.delivery.title': 'Delivery acceptance',
+  'office.delivery.close': 'Close',
+  'office.delivery.awaiting': 'Pending acceptance',
+  'office.delivery.archived': 'Archived',
+  'office.delivery.lint': 'Format check',
+  'office.delivery.lintPass': 'Passed',
+  'office.delivery.lintFail': 'Format issues found',
+  'office.delivery.lintSkipped': 'No format spec given, check skipped',
+  'office.delivery.lintFailed': 'Check failed',
+  'office.delivery.retry': 'Retry',
+  'office.delivery.errors': '{n} errors',
+  'office.delivery.warnings': '{n} warnings',
+  'office.delivery.rulesChecked': '{n} rules checked',
+  'office.delivery.moreIssues': '{n} more…',
+  'office.delivery.preview': 'Document preview',
+  'office.delivery.previewFailed': 'Preview failed to load',
+  'office.delivery.accept': 'Accept & archive',
+  'office.delivery.reject': 'Reject',
+
   // ─── M6 生态扩展: 编排看板补充 i18n 键 ─────
   'orchestration.loading': 'Loading…',
   'orchestration.error': 'Error:',
@@ -730,6 +750,32 @@ export const en: Record<TranslationKey, string> = {
   'orchestration.board.level.fresh': 'fresh',
   'orchestration.board.level.stale': 'stale',
   'orchestration.board.level.dead': 'dead',
+
+  // ─── A4 delivery-package decision drawer ─────
+  'orchestration.drawer.close': 'Close',
+  'orchestration.drawer.delivery': 'Delivery package',
+  'orchestration.drawer.acceptancePending': 'Pending acceptance',
+  'orchestration.drawer.accepted': 'Accepted',
+  'orchestration.drawer.rejected': 'Rejected',
+  'orchestration.drawer.worktree': 'Worktree',
+  'orchestration.drawer.noWorktree': 'No isolated worktree',
+  'orchestration.drawer.checks': 'Acceptance checks',
+  'orchestration.drawer.checksEmpty': 'No acceptance record yet',
+  'orchestration.drawer.mergeBranch': 'Audit branch',
+  'orchestration.drawer.mergeCommit': 'Merge commit',
+  'orchestration.drawer.filesChanged': 'Changed files ({n})',
+  'orchestration.drawer.reasonPlaceholder': 'Review note (optional)…',
+  'orchestration.drawer.accept': 'Accept & merge',
+  'orchestration.drawer.reject': 'Reject',
+  'orchestration.drawer.deciding': 'Working…',
+
+  // ─── A4 review verdict + change summary ─────
+  'orchestration.drawer.review': 'Review verdict',
+  'orchestration.drawer.reviewPass': 'Review passed',
+  'orchestration.drawer.reviewFail': 'Review concerns',
+  'orchestration.drawer.reviewAssertions': '{n} assertions',
+  'orchestration.drawer.diff': 'Change summary',
+  'orchestration.drawer.diffEmpty': 'No change summary yet',
 
   // ─── Session export (U18 HTML session export) ──────
   'session.export_failed': 'Export failed: {message}',

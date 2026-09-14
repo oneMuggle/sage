@@ -40,6 +40,8 @@ import type {
   OfficeUpdatePreviewRequest,
   OfficeUpdatePreviewResult,
   OfficeWordGenerateRequest,
+  OfficeWordLintRequest,
+  OfficeWordLintResult,
   OfficeWordReadResult,
 } from './types';
 import { handleApiError, withRetry } from './utils';
@@ -281,6 +283,27 @@ export const officeApi = {
         filename: req.filename,
         sheets: req.sheets,
         task_id: req.task_id,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * A4b: lint a .docx against a WordFormatSpec (Round 10 linter).
+   *
+   * Read-only — no retry needed, but unlike generate* a retry would be
+   * harmless; kept retry-free for consistency with the read* methods.
+   * NOTE: backend WordLintRequest is extra="forbid" — only the four
+   * documented args are sent (maxSizeBytes omitted when undefined).
+   */
+  async lintWord(req: OfficeWordLintRequest): Promise<OfficeWordLintResult> {
+    try {
+      return await invoke<OfficeWordLintResult>('office_word_lint', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+        formatSpec: req.format_spec,
+        ...(req.max_size_bytes !== undefined ? { maxSizeBytes: req.max_size_bytes } : {}),
       });
     } catch (error) {
       throw handleApiError(error);

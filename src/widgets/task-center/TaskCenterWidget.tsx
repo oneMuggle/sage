@@ -28,9 +28,10 @@ import { cancelSessionStream } from '../../features/send-message/useChat';
 import {
   TERMINAL_TASK_STATUSES,
   useTaskCenterStore,
+  type OfficeDeliveryRef,
   type TaskCenterStatus,
 } from '../../features/task-center/taskCenterStore';
-import type { LaneStatus } from '../../shared/api/types';
+import type { Lane, LaneStatus } from '../../shared/api/types';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 
@@ -49,6 +50,14 @@ interface Entry {
   cancellable: boolean;
   sessionId?: string;
   laneId?: string;
+  /** A4b: office 交付包坐标（awaiting 条目开抽屉用）。 */
+  deliveryRef?: OfficeDeliveryRef | null;
+  /**
+   * A4: 点击直达交付抽屉（而非 route 跳转）。仅交付待验收项置位；
+   * blocked lane 等仍走原 route（其 awaiting 语义是等审批/输入，
+   * 非交付验收）。
+   */
+  opensDelivery?: boolean;
 }
 
 const STATUS_LABEL_KEYS: Readonly<Record<TaskCenterStatus, TranslationKey>> = {
@@ -81,6 +90,16 @@ function isLaneVisible(status: LaneStatus): boolean {
     status === 'blocked' ||
     status === 'failed'
   );
+}
+
+/**
+ * A4: 待验收 lane —— succeeded 且尚未决议（无 accepted_at/rejected_at）。
+ * 在胶囊中以 awaiting_approval 呈现，点击直达交付抽屉。
+ */
+function isLaneAwaitingDecision(lane: Lane): boolean {
+  if (lane.status !== 'succeeded') return false;
+  const meta = lane.metadata ?? {};
+  return typeof meta.accepted_at !== 'number' && typeof meta.rejected_at !== 'number';
 }
 
 function isLaneCancellable(status: LaneStatus): boolean {
@@ -116,6 +135,7 @@ export function TaskCenterWidget() {
 
   const registryTasks = useTaskCenterStore((s) => s.tasks);
   const clearFinished = useTaskCenterStore((s) => s.clearFinished);
+  const openDelivery = useTaskCenterStore((s) => s.openDelivery);
   const streamSessions = useChatStreamStore((s) => s.sessions);
   const lanes = useLaneBoardStore((s) => s.lanes);
   const cancelLane = useLaneBoardStore((s) => s.cancel);
@@ -161,6 +181,8 @@ export function TaskCenterWidget() {
       percent: task.percent ?? null,
       error: task.error ?? null,
       cancellable: false,
+      deliveryRef: task.deliveryRef ?? null,
+      opensDelivery: task.status === 'awaiting_approval' && task.deliveryRef != null,
     }));
     const chatEntries: Entry[] = activeStreamIds.map((id) => ({
       id: `chat:${id}`,
@@ -173,14 +195,14 @@ export function TaskCenterWidget() {
       sessionId: id,
     }));
     const laneEntries: Entry[] = lanes
-      .filter((lane) => isLaneVisible(lane.status))
+      .filter((lane) => isLaneVisible(lane.status) || isLaneAwaitingDecision(lane))
       .map((lane) => ({
         id: `lane:${lane.lane_id}`,
         source: 'lane',
         title: `${t('taskCenter.laneFallback')} ${lane.task_id}${
           lane.agent_id ? ` · ${lane.agent_id}` : ''
         }`,
-        status: LANE_STATUS_MAP[lane.status],
+        status: isLaneAwaitingDecision(lane) ? 'awaiting_approval' : LANE_STATUS_MAP[lane.status],
         // Lane timestamps are backend-epoch based; elapsed display stays off
         // for lanes until a shared relative-time helper lands (A4).
         startedAt: null,
@@ -188,6 +210,7 @@ export function TaskCenterWidget() {
         error: lane.error,
         cancellable: isLaneCancellable(lane.status),
         laneId: lane.lane_id,
+        opensDelivery: isLaneAwaitingDecision(lane),
       }));
     return [...registryEntries, ...chatEntries, ...laneEntries];
     // streamStartsRef is a ref and stays out of deps: entries read it after
@@ -228,6 +251,17 @@ export function TaskCenterWidget() {
 
   const handleNavigate = (entry: Entry): void => {
     setExpanded(false);
+    // A4: 交付待验收条目点击直达交付抽屉（其余仍走 route 跳转）。
+    if (entry.opensDelivery) {
+      if (entry.source === 'lane' && entry.laneId) {
+        openDelivery({ kind: 'lane', laneId: entry.laneId });
+        return;
+      }
+      if (entry.source === 'registry' && entry.deliveryRef) {
+        openDelivery({ kind: 'office', entryId: entry.id });
+        return;
+      }
+    }
     if (entry.route) navigate(entry.route);
   };
 
