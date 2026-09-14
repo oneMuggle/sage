@@ -33,6 +33,43 @@ def is_reparse_point(path: Path) -> bool:
     return bool(attributes & 0x0400)
 
 
+def _win_abspath(root: Path, target: Path, *, allow_root: bool = False) -> Path:
+    """W5 Windows 分支骨架：逃逸拒绝 + 逐组件 reparse 检查。
+
+    刻意不走 abspath/resolve —— 那会把 ``..`` 词法折叠成越界路径。
+    ``_relative_parts`` 先按 POSIX 同款契约拒绝越界/``..``/空段，再拼接
+    后做逐组件 reparse 检查（缺失组件放行，缺失错误由后续打开语义表达）。
+    """
+    from backend.tools.win_reparse_io import verify_no_reparse
+
+    if allow_root and Path(target) == Path(root):
+        absolute = Path(root)
+    else:
+        parts = _relative_parts(root, target)
+        absolute = root.joinpath(*parts)
+    if not verify_no_reparse(str(absolute)):
+        raise OSError(f"拒绝 reparse 组件: {absolute}")
+    return absolute
+
+
+def _win_remove_tree(absolute: Path) -> None:
+    """递归删除已验证目录；条目级 reparse/非 regular 一律拒绝。"""
+    for entry in os.scandir(absolute):
+        try:
+            entry_stat = entry.stat(follow_symlinks=False)
+        except OSError as exc:
+            raise OSError("拒绝删除不可核验的 Wiki 条目") from exc
+        if entry_stat.st_file_attributes & 0x400:
+            raise OSError("拒绝删除符号链接")
+        if stat.S_ISDIR(entry_stat.st_mode):
+            _win_remove_tree(Path(entry.path))
+        elif stat.S_ISREG(entry_stat.st_mode):
+            os.unlink(entry.path)
+        else:
+            raise OSError("拒绝删除非 regular Wiki 文件")
+    os.rmdir(absolute)  # noqa: PTH106 — reparse-safe 递归删除要求路径形式与条目校验一致
+
+
 def _relative_parts(root: Path, path: Path) -> Tuple[str, ...]:
     try:
         relative = path.relative_to(root)
@@ -137,6 +174,15 @@ def _write_bytes_fd(fd: int, content: bytes) -> None:
 
 def secure_ensure_directory(root: Path, target: Path) -> None:
     """Create/open a directory path through a no-follow directory-fd chain."""
+    if os.name == "nt":
+        absolute = _win_abspath(root, target, allow_root=True)
+        try:
+            absolute.mkdir(parents=True, exist_ok=True)
+        except FileExistsError as exc:
+            raise NotADirectoryError(str(absolute)) from exc
+        if not absolute.is_dir():
+            raise NotADirectoryError(root)
+        return
     nofollow = _require_posix_safety()
     if target == root:
         root_fd = os.open(str(root), _directory_flags() | nofollow)
@@ -157,6 +203,15 @@ def secure_ensure_directory(root: Path, target: Path) -> None:
 
 def secure_write_file(root: Path, target: Path, content: str) -> None:
     """Write via a stable POSIX directory-fd chain; unsupported platforms fail closed."""
+    if os.name == "nt":
+        from backend.tools.win_reparse_io import write_file_reparse_safe
+
+        absolute = _win_abspath(root, target)
+        absolute.parent.mkdir(parents=True, exist_ok=True)
+        # overwrite=True（CREATE_ALWAYS）+ 句柄复核：reparse/目录/多链接
+        # 一律拒绝（原语内 _validate_info），契约与 POSIX 分支对齐。
+        write_file_reparse_safe(str(absolute), content.encode("utf-8"), overwrite=True)
+        return
     nofollow = _require_posix_safety()
     parts = _relative_parts(root, target)
     root_fd, parent_fd = _open_parent(root, parts, nofollow, create_missing=True)
@@ -194,6 +249,21 @@ def secure_write_file(root: Path, target: Path, content: str) -> None:
 
 def secure_write_temp_file(root: Path, directory: Path, suffix: str, content: str) -> Path:
     """Create a random private temporary regular file inside ``directory``."""
+    if os.name == "nt":
+        from backend.tools.win_reparse_io import write_file_reparse_safe
+
+        directory_absolute = _win_abspath(root, directory)
+        directory_absolute.mkdir(parents=True, exist_ok=True)
+        for _ in range(10):
+            name = f".tmp-{secrets.token_hex(16)}{suffix}"
+            try:
+                write_file_reparse_safe(
+                    str(directory_absolute / name), content.encode("utf-8"), overwrite=False
+                )
+                return directory / name
+            except FileExistsError:
+                continue
+        raise OSError("无法创建安全临时文件")
     nofollow = _require_posix_safety()
     directory_parts = _relative_parts(root, directory)
     secure_ensure_directory(root, directory)
@@ -240,6 +310,20 @@ def secure_write_temp_file(root: Path, directory: Path, suffix: str, content: st
 
 def secure_create_temp_file(root: Path, directory: Path, suffix: str) -> Tuple[Path, int]:
     """Create a private regular temp file and retain its descriptor."""
+    if os.name == "nt":
+        from backend.tools.win_reparse_io import create_new_write_fd_reparse_safe
+
+        directory_absolute = _win_abspath(root, directory)
+        directory_absolute.mkdir(parents=True, exist_ok=True)
+        for _ in range(10):
+            name = f".tmp-{secrets.token_hex(16)}{suffix}"
+            try:
+                return directory / name, create_new_write_fd_reparse_safe(
+                    str(directory_absolute / name)
+                )
+            except FileExistsError:
+                continue
+        raise OSError("无法创建安全临时文件")
     nofollow = _require_posix_safety()
     directory_parts = _relative_parts(root, directory)
     secure_ensure_directory(root, directory)
@@ -269,6 +353,19 @@ def secure_create_temp_file(root: Path, directory: Path, suffix: str) -> Tuple[P
 
 def secure_write_temp_bytes(root: Path, directory: Path, suffix: str, content: bytes) -> Path:
     """Create a random private temporary file containing ``content`` bytes."""
+    if os.name == "nt":
+        from backend.tools.win_reparse_io import write_file_reparse_safe
+
+        directory_absolute = _win_abspath(root, directory)
+        directory_absolute.mkdir(parents=True, exist_ok=True)
+        for _ in range(10):
+            name = f".tmp-{secrets.token_hex(16)}{suffix}"
+            try:
+                write_file_reparse_safe(str(directory_absolute / name), content, overwrite=False)
+                return directory / name
+            except FileExistsError:
+                continue
+        raise OSError("无法创建安全临时文件")
     nofollow = _require_posix_safety()
     directory_parts = _relative_parts(root, directory)
     secure_ensure_directory(root, directory)
@@ -317,6 +414,27 @@ def secure_publish_held_temp(
     root: Path, temp: Path, target: Path, fd: int
 ) -> None:
     """Publish a held temp inode after verifying its dirfd pathname binding."""
+    if os.name == "nt":
+        temp_absolute = _win_abspath(root, temp)
+        target_absolute = _win_abspath(root, target)
+        if temp_absolute.parent != target_absolute.parent:
+            raise OSError("临时文件和目标必须位于同一目录")
+        held = os.fstat(fd)
+        if not stat.S_ISREG(held.st_mode):
+            raise OSError("拒绝发布非 regular 临时文件")
+        current = temp_absolute.lstat()
+        if (current.st_dev, current.st_ino) != (held.st_dev, held.st_ino):
+            raise OSError("临时文件在发布前发生变化")
+        try:
+            existing = target_absolute.lstat()
+        except FileNotFoundError:
+            existing = None
+        if existing is not None and (
+            (existing.st_file_attributes & 0x400) or not stat.S_ISREG(existing.st_mode)
+        ):
+            raise OSError("拒绝覆盖非 regular 文件")
+        os.replace(temp_absolute, target_absolute)  # noqa: PTH105 — MoveFileExW 原子替换语义
+        return
     nofollow = _require_posix_safety()
     temp_parts = _relative_parts(root, temp)
     target_parts = _relative_parts(root, target)
@@ -350,6 +468,21 @@ def secure_publish_held_temp(
 
 def secure_write_file_if_missing(root: Path, target: Path, content: str) -> bool:
     """Create a regular file once, without following a leaf link."""
+    if os.name == "nt":
+        from backend.tools.win_reparse_io import write_file_reparse_safe
+
+        absolute = _win_abspath(root, target)
+        absolute.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            write_file_reparse_safe(str(absolute), content.encode("utf-8"), overwrite=False)
+            return True
+        except FileExistsError:
+            existing = absolute.lstat()
+            if (existing.st_file_attributes & 0x400) or not stat.S_ISREG(existing.st_mode):
+                raise OSError("拒绝使用非 regular Wiki 文件")
+            if existing.st_nlink > 1:
+                raise OSError("拒绝使用多链接 Wiki 文件")
+            return False
     nofollow = _require_posix_safety()
     parts = _relative_parts(root, target)
     root_fd, parent_fd = _open_parent(root, parts, nofollow, create_missing=True)
@@ -477,6 +610,18 @@ def _remove_tree_at(parent_fd: int, name: str, nofollow: int) -> None:
 
 def secure_delete_path(root: Path, target: Path) -> None:
     """Delete a path through directory fds without following links."""
+    if os.name == "nt":
+        absolute = _win_abspath(root, target)
+        mode = absolute.lstat()
+        if stat.S_ISLNK(mode.st_mode) or (mode.st_file_attributes & 0x400):
+            raise OSError("拒绝删除符号链接")
+        if stat.S_ISREG(mode.st_mode):
+            absolute.unlink()
+        elif stat.S_ISDIR(mode.st_mode):
+            _win_remove_tree(absolute)
+        else:
+            raise OSError("拒绝删除非 regular Wiki 路径")
+        return
     nofollow = _require_posix_safety()
     parts = _relative_parts(root, target)
     root_fd, parent_fd = _open_parent(root, parts, nofollow, create_missing=False)
@@ -496,6 +641,28 @@ def secure_delete_path(root: Path, target: Path) -> None:
 
 def secure_rename_path(root: Path, old: Path, new: Path) -> None:
     """Rename regular files with directory fds; unsupported platforms fail closed."""
+    if os.name == "nt":
+        old_absolute = _win_abspath(root, old)
+        new_absolute = _win_abspath(root, new)
+        old_mode = old_absolute.lstat()
+        if (
+            stat.S_ISLNK(old_mode.st_mode)
+            or (old_mode.st_file_attributes & 0x400)
+            or not stat.S_ISREG(old_mode.st_mode)
+        ):
+            raise OSError("拒绝重命名非 regular Wiki 文件")
+        try:
+            new_mode = new_absolute.lstat()
+        except FileNotFoundError:
+            new_mode = None
+        if new_mode is not None and (
+            stat.S_ISLNK(new_mode.st_mode)
+            or (new_mode.st_file_attributes & 0x400)
+            or not stat.S_ISREG(new_mode.st_mode)
+        ):
+            raise OSError("拒绝覆盖非 regular Wiki 文件")
+        os.replace(old_absolute, new_absolute)  # noqa: PTH105 — MoveFileExW 原子替换语义
+        return
     nofollow = _require_posix_safety()
     old_parts = _relative_parts(root, old)
     new_parts = _relative_parts(root, new)
@@ -531,6 +698,10 @@ def secure_read_file(root: Path, target: Path) -> bytes:
     The returned bytes are read from the opened descriptor, not from a later
     pathname lookup.  Platforms without the required primitive fail closed.
     """
+    if os.name == "nt":
+        from backend.tools.win_reparse_io import read_file_reparse_safe
+
+        return read_file_reparse_safe(str(_win_abspath(root, target)))
     fd = secure_open_file(root, target)
     try:
         chunks = []
@@ -553,6 +724,18 @@ def secure_read_file_bounded(root: Path, target: Path, max_bytes: int) -> bytes:
     """
     if max_bytes < 0:
         raise ValueError("max_bytes must be non-negative")
+    if os.name == "nt":
+        from backend.tools.win_reparse_io import read_file_reparse_safe
+
+        absolute = _win_abspath(root, target)
+        # 尺寸预检 + 读后长度复核（Windows 无 held-fd 流式读，读整文件后
+        # 复核上界；wiki 文件体量小，内存上界可接受）。
+        if absolute.lstat().st_size > max_bytes:
+            raise ValueError("file exceeds configured read limit")
+        payload = read_file_reparse_safe(str(absolute))
+        if len(payload) > max_bytes:
+            raise ValueError("file exceeds configured read limit")
+        return payload
     fd = secure_open_file(root, target)
     try:
         size = os.fstat(fd).st_size
@@ -580,6 +763,10 @@ def secure_open_file(root: Path, target: Path) -> int:
     The caller owns the returned descriptor and must close it exactly once.
     All path components are resolved relative to no-follow directory fds.
     """
+    if os.name == "nt":
+        from backend.tools.win_reparse_io import open_read_fd_reparse_safe
+
+        return open_read_fd_reparse_safe(str(_win_abspath(root, target)))
     nofollow = _require_posix_safety()
     parts = _relative_parts(root, target)
     root_fd, parent_fd = _open_parent(root, parts, nofollow, create_missing=False)
@@ -608,6 +795,21 @@ def secure_list_directory(root: Path, target: Path) -> Tuple[Tuple[str, bool], .
     caller is given a pathname that it must reopen.  Symlinks, reparse-like
     entries, and non-regular/non-directory entries are omitted.
     """
+    if os.name == "nt":
+        absolute = _win_abspath(root, target, allow_root=True)
+        entries = []
+        for entry in os.scandir(absolute):
+            try:
+                entry_stat = entry.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            if entry_stat.st_file_attributes & 0x400:
+                continue  # symlink/junction/reparse 一律跳过
+            if stat.S_ISDIR(entry_stat.st_mode):
+                entries.append((entry.name, True))
+            elif stat.S_ISREG(entry_stat.st_mode):
+                entries.append((entry.name, False))
+        return tuple(entries)
     nofollow = _require_posix_safety()
     parts = _relative_parts(root, target) if target != root else ()
     root_fd = os.open(str(root), _directory_flags() | nofollow)
@@ -637,11 +839,12 @@ def secure_read_text(root: Path, target: Path, encoding: str = "utf-8") -> str:
     """Decode content obtained from :func:`secure_read_file`.
 
     R32 Windows 分支：reparse-safe 原语读取（其余 secure_* 仍 POSIX-only）。
+    W5：补 ``_win_abspath`` 逃逸拒绝（R32 版本未拒绝 ``..``，本批对齐契约）。
     """
     if os.name == "nt":
         from backend.tools.win_reparse_io import read_file_reparse_safe
 
-        return read_file_reparse_safe(str((root / target).absolute())).decode(encoding)
+        return read_file_reparse_safe(str(_win_abspath(root, target))).decode(encoding)
     return secure_read_file(root, target).decode(encoding)
 
 
@@ -675,6 +878,35 @@ def iter_wiki_markdown(project_root: Path) -> Iterator[Path]:
     Paths are only identifiers.  Callers must use ``secure_read_file`` or
     ``secure_read_text`` when opening a yielded path.
     """
+    if os.name == "nt":
+        from backend.tools.win_reparse_io import verify_no_reparse
+
+        root = Path(project_root)
+        wiki_root = root / "wiki"
+        if not verify_no_reparse(str(wiki_root)):
+            return
+        if not wiki_root.is_dir():
+            return
+        stack = [wiki_root]
+        while stack:
+            current = stack.pop()
+            try:
+                entries = list(os.scandir(current))
+            except OSError:
+                continue
+            for entry in entries:
+                try:
+                    entry_stat = entry.stat(follow_symlinks=False)
+                except OSError:
+                    continue  # 消失/被替换的条目不可信
+                if entry_stat.st_file_attributes & 0x400:
+                    continue  # symlink/junction/reparse 一律跳过
+                entry_path = Path(entry.path)
+                if stat.S_ISDIR(entry_stat.st_mode):
+                    stack.append(entry_path)
+                elif stat.S_ISREG(entry_stat.st_mode) and entry.name.endswith(".md"):
+                    yield entry_path
+        return
     _require_posix_safety()
     root = Path(project_root)
     root_fd = os.open(str(root), _directory_flags() | os.O_NOFOLLOW)

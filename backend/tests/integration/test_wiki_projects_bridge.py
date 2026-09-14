@@ -1,8 +1,10 @@
-"""Integration tests for the wiki ↔ projects registry bridge (P6)."""
+"""Integration tests for the wiki ↔ projects registry bridge (P6).
+
+W5 解锁 wiki/files Windows 分支后，端点级用例在 Windows 真实执行。
+"""
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from pathlib import Path
 from typing import AsyncIterator
@@ -16,17 +18,7 @@ from backend.data.database import Database
 from backend.data.project_repo import ProjectRepository
 from backend.main import app
 
-# wiki 的 open/create/list 端点在 Windows 上仍走 wiki/files.py 的
-# POSIX-only 原语（#760 只解锁了 recent_projects 存储，结构创建/读取
-# 未解锁）——本文件的端点级用例在 Windows 必然 500，与桥接逻辑无关。
-# 桥接本身的平台无关单测在 tests/unit/test_project_authorization.py。
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.skipif(
-        os.name == "nt",
-        reason="wiki open/create/list 走 wiki/files POSIX-only 原语（另行批次解锁）",
-    ),
-]
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture()

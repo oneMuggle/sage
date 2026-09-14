@@ -237,3 +237,13 @@ POSIX-only 阻塞（`test_recent_projects.py` 在 Windows 16/16），两轮
 - 规范化差异用现有 `_same_path`（normcase）吸收，双方向 resolve 后比较。
 - win7 对齐：`project_authorization.py` / `mcp_server.py` / `wiki_routes`
   三处均为小块追加；`project_repo.py` 为 P1 新文件；全部 py3.8 兼容。
+
+## 14. W5（2026-09-14，feat/wiki-files-win-unlock）
+
+wiki/files 全量 Windows 解锁（`docs/plans/2026-09-14_wiki-files-win-unlock-plan.md`）：
+其余 12 个 secure_* 补 reparse-safe Windows 分支（沿用 R32 原语），wiki
+create/open/list 在 Windows 恢复可用；顺带修复两个 R32 原语缺陷
+（CREATE_ALWAYS 先截断后复核绕过多链接契约、校验失败句柄泄漏）与
+secure_read_text 的 `..` 逃逸缺口。测试侧：path_security /
+security_final_paths / project_context / skill_md_importer /
+P6 桥接集成的 Windows skip 解除（symlink 夹具改能力探测）。
