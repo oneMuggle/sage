@@ -335,7 +335,7 @@ async def test_dispatch_no_review_when_total_tasks_unset():
 
 @pytest.mark.asyncio()
 async def test_worktree_isolation_wires_policy_and_cleans(monkeypatch, tmp_path):
-    """开启隔离时 task parameters 使用 worktree，任务结束后清理副本。"""
+    """开启隔离时 task parameters 使用 worktree；成功后留存待验收（A4）。"""
     from backend.orchestration import chat_dispatcher as module
 
     created = []
@@ -377,8 +377,13 @@ async def test_worktree_isolation_wires_policy_and_cleans(monkeypatch, tmp_path)
 
     assert created
     assert captured["parameters"]["workspace_dir"] == str(tmp_path / "orch_worktrees" / "orch-wt" / "t1")
-    assert removed == [tmp_path / "orch_worktrees" / "orch-wt" / "t1"]
-    assert dispatcher._worktree_dirs == []
+    # A4：成功 lane 留存 worktree 待验收（decision 路由负责合后清理），
+    # 不再任务结束即删；lane 打上 acceptance_pending 标记。
+    assert removed == []
+    assert dispatcher._worktree_dirs == [tmp_path / "orch_worktrees" / "orch-wt" / "t1"]
+    lane = dispatcher.lane_registry.get_lane("lane-t1")
+    assert lane is not None
+    assert lane.metadata["acceptance_pending"] is True
 
 
 @pytest.mark.asyncio()
@@ -459,10 +464,11 @@ async def test_worktree_create_async_exception_falls_back(monkeypatch, tmp_path)
 
 @pytest.mark.asyncio()
 async def test_worktree_cleanup_async_exception_keeps_result(monkeypatch, tmp_path):
-    """清理抛异常被吞 → 成功任务的文本结果不被覆盖。"""
+    """失败路径清理抛异常被吞 → 派发结果不受影响（A4：成功留存不清理）。"""
     from backend.orchestration import chat_dispatcher as module
 
     created = []
+    calls = []
 
     async def fake_is_git_repo(path):
         return path == tmp_path
@@ -473,10 +479,11 @@ async def test_worktree_cleanup_async_exception_keeps_result(monkeypatch, tmp_pa
         return True
 
     async def boom_remove(dest):
+        calls.append(dest)
         raise RuntimeError("cleanup failed")
 
     async def fake_run_lane(executor, lane, agent_id):
-        return {"status": "succeeded", "result": {"output": "完成结果"}}
+        return {"status": "failed", "error": "subtask boom"}
 
     monkeypatch.setattr(module, "run_lane_with_retry", fake_run_lane)
     monkeypatch.setattr(module, "get_database", lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})())
@@ -495,7 +502,8 @@ async def test_worktree_cleanup_async_exception_keeps_result(monkeypatch, tmp_pa
         [{"task_id": "t1", "agent_id": "primary", "goal": "g"}]
     )
 
-    assert "完成结果" in aggregated
+    assert isinstance(aggregated, str)
+    assert calls == [tmp_path / "orch_worktrees" / "orch-cleanup" / "t1"]
     assert dispatcher._worktree_dirs == []
 
 

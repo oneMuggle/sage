@@ -830,7 +830,10 @@ export type LaneEventType =
   | 'lane.stopped'
   | 'lane.commit.created'
   | 'lane.pr.opened'
-  | 'lane.merged';
+  | 'lane.merged'
+  | 'lane.acceptance.completed'
+  | 'lane.accepted'
+  | 'lane.rejected';
 
 export type EventProvenance = 'LiveLane' | 'Recovery' | 'Retry' | 'Heartbeat' | 'Manual';
 
@@ -1009,7 +1012,14 @@ export interface OfficeDocumentMetadata {
 
 export interface OfficeDocumentSummary {
   id: string;
-  workspace_path: string;
+  /**
+   * Binding's canonical absolute workspace directory.
+   * Backend strips this in `_serialize_summary` for LLM tool outputs
+   * (backend/office/tool_service.py:72-81); present in read-result summaries
+   * (OfficeExcelReadResult.summary etc.) which bypass that redactor.
+   * Marked optional so callers handle both shapes.
+   */
+  workspace_path?: string;
   doc_type: OfficeDocType;
   original_filename: string | null;
   generated_filename: string;
@@ -1156,6 +1166,107 @@ export interface WordParagraphSpec {
 export interface WordTableSpec {
   headers: string[];
   rows: string[][];
+}
+
+// win7 移植注：WordFormatSpec 系列属 main 预存类型（Round 7/9/13），
+// 本分支原无；A4b 交付抽屉（format_spec/lint）依赖，原文移植。
+export interface BibliographySpec {
+  heading_text?: string;
+  font_size_pt?: number;
+  hanging_indent_cm?: number;
+}
+
+// Word 版式规范（Round 7 FormatSpec —— “版式即配置”）。
+// Backend counterpart: WordFormatSpec 系列模型 in backend/office/models.py。
+// 全字段可选，不传时生成器保持既有默认版式。
+export interface WordPageMarginsSpec {
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+}
+
+export interface WordPageSetupSpec {
+  size?: 'A4' | 'letter';
+  orientation?: 'portrait' | 'landscape';
+  margins_cm?: WordPageMarginsSpec;
+}
+
+export interface WordBodyStyleSpec {
+  font_size_pt?: number;
+  line_spacing?: number;
+  first_line_indent_cm?: number;
+  space_after_pt?: number;
+  align?: 'left' | 'center' | 'right' | 'justify';
+}
+
+export interface WordHeadingStyleSpec {
+  font_size_pt?: number;
+  bold?: boolean;
+  color?: string;
+  align?: 'left' | 'center' | 'right' | 'justify';
+  space_before_pt?: number;
+  space_after_pt?: number;
+}
+
+export interface WordHeaderFooterSpec {
+  text?: string;
+  align?: 'left' | 'center' | 'right' | 'justify';
+  page_number?: boolean;
+}
+
+// 目录域设置（Round 13）：TOC 域由渲染器按标题样式生成（打开后更新域）。
+// Backend counterpart: WordTocSpec in backend/office/models.py。
+export interface WordTocSpec {
+  heading_text?: string;
+  levels?: string;
+  placeholder_text?: string;
+}
+
+export interface WordFormatSpec {
+  page?: WordPageSetupSpec;
+  body?: WordBodyStyleSpec;
+  // Round 20：headings 键扩展到 h4/h5
+  headings?: Partial<
+    Record<'h1' | 'h2' | 'h3' | 'h4' | 'h5', WordHeadingStyleSpec>
+  >;
+  title?: WordHeadingStyleSpec;
+  header?: WordHeaderFooterSpec;
+  footer?: WordHeaderFooterSpec;
+  // Round 8：多级标题自动编号（h1-h5 → 1 / 1.1 / 1.1.1 … 文本前缀）
+  numbering?: boolean;
+  // Round 9：文末参考文献节样式（缺省：'参考文献' / 五号 / 悬挂缩进 0.74cm）
+  bibliography?: BibliographySpec;
+  // Round 13：目录域（None = 不插入目录）
+  toc?: WordTocSpec;
+}
+
+/**
+ * A4b: Word lint (Round 10 linter) — backend counterpart:
+ * backend/office/models.py WordLintIssue / WordLintResult / WordLintRequest.
+ */
+export interface OfficeWordLintIssue {
+  rule_id: string;
+  severity: 'error' | 'warning';
+  message: string;
+  fix_hint: string;
+}
+
+export interface OfficeWordLintResult {
+  /** ok = no error-level issues. */
+  ok: boolean;
+  issue_count: number;
+  error_count: number;
+  warning_count: number;
+  checked_rules: string[];
+  issues: OfficeWordLintIssue[];
+}
+
+export interface OfficeWordLintRequest {
+  workspace_path: string;
+  file_path: string;
+  format_spec: WordFormatSpec;
+  max_size_bytes?: number;
 }
 
 export interface OfficeWordGenerateRequest {

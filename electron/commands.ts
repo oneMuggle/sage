@@ -555,6 +555,13 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}/cancel`,
   },
+  // A4: 交付包验收决议 —— POST /lanes/{id}/decision {decision, reason?}。
+  // body 显式构造（reason 透传后端审计）。
+  orchestration_lane_decision: {
+    method: 'POST',
+    path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}/decision`,
+    body: (a) => ({ decision: a.decision, reason: a.reason ?? '' }),
+  },
   // M5: planner-driven lane creation. Body {goal, agent?} — args are
   // auto camelToSnake'd by invokeBackend (both keys stay single-segment).
   orchestration_create_lane: {
@@ -615,6 +622,10 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   office_ppt_read: { method: 'POST', path: () => '/api/v1/office/ppt/read' },
   office_word_read: { method: 'POST', path: () => '/api/v1/office/word/read' },
   office_excel_read: { method: 'POST', path: () => '/api/v1/office/excel/read' },
+  // A4b: Word 交付包格式校验 —— POST /office/word/lint。
+  // NOTE: WordLintRequest is extra="forbid" — officeApi.lintWord must send
+  // ONLY workspacePath + filePath + formatSpec (+ optional maxSizeBytes).
+  office_word_lint: { method: 'POST', path: () => '/api/v1/office/word/lint' },
   // Office parity batch 1 (item 1.2): PDF read/generate.
   // Backend: backend/api/office_routes.py:495-508 (POST /pdf/read, POST /pdf/generate).
   // NOTE: PdfReadRequest is extra="forbid" — officeApi.readPdf must send

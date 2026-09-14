@@ -74,6 +74,49 @@ interface ActiveStreamHandle {
   finish: (() => void) | null;
 }
 
+// win7 移植注：R25-D4 的 reattachedSids 声明随冲突块带入，
+// 但其使用点属 main 预存逻辑、本分支无对应代码，故不引入。
+// A1 (parity-s4): module-level registry of live stream handles.
+// Handles used to live only in the hook ref, so a background session stream
+// could be watched but never cancelled after leaving the Chat page.
+// markStreamActive/markStreamIdle keep this map in sync; TaskCenterWidget
+// cancels any session stream via cancelSessionStream (frontend unlisten +
+// finishStream cleanup + backend interrupt, same path as MEDIUM-1).
+const activeStreamRegistry = new Map<string, ActiveStreamHandle>();
+
+/**
+ * Cancel a session stream from outside useChat (e.g. the task-center capsule).
+ * Returns true when a live frontend handle was found and torn down; when no
+ * handle exists (e.g. after a renderer reload) it still best-effort notifies
+ * the backend and returns false. Never throws.
+ */
+export async function cancelSessionStream(sid: string): Promise<boolean> {
+  const handle = activeStreamRegistry.get(sid);
+  if (!handle) {
+    try {
+      await chatApi.interrupt();
+    } catch {
+      /* best-effort only */
+    }
+    return false;
+  }
+  activeStreamRegistry.delete(sid);
+  try {
+    handle.cancel?.();
+  } catch {
+    /* ignore listener teardown errors */
+  }
+  try {
+    handle.finish?.();
+  } catch {
+    /* ignore finish errors */
+  }
+  chatApi.interrupt(handle.streamId ?? undefined).catch(() => {
+    /* Interrupt failures are non-critical */
+  });
+  return true;
+}
+
 export function useChat() {
   // S3 (2026-09-06) 多会话并行: "在流中"状态从 hook 级单布尔改为 **按会话**
   // 的 Set。跨会话互不阻塞（会话 A 流式中可直接在会话 B 发送 → 两条流后端
@@ -125,12 +168,14 @@ export function useChat() {
 
   const markStreamActive = useCallback((sid: string, handle: ActiveStreamHandle): void => {
     activeHandleRef.current.set(sid, handle);
+    activeStreamRegistry.set(sid, handle);
     activeSidsRef.current.add(sid);
     setActiveSids(new Set(activeSidsRef.current));
   }, []);
 
   const markStreamIdle = useCallback((sid: string): void => {
     activeHandleRef.current.delete(sid);
+    activeStreamRegistry.delete(sid);
     activeSidsRef.current.delete(sid);
     setActiveSids(new Set(activeSidsRef.current));
   }, []);

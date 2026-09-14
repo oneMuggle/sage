@@ -9,6 +9,7 @@ import { FileSpreadsheet, FileText, FileType, Presentation, Sparkles } from 'luc
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { useTaskCenterStore } from '../../features/task-center/taskCenterStore';
 import { officeApi } from '../../shared/api/officeApi';
 import type { OfficeDocType, PdfPageSize } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
@@ -29,6 +30,8 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   const [filename, setFilename] = useState('my-document');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ path: string; sizeBytes: number } | null>(null);
+  // A4b: word 生成成功后交付抽屉验收（lint + 预览 + 接受/打回）。
+  const openDelivery = useTaskCenterStore((s) => s.openDelivery);
 
   // PPT
   const [pptTitle, setPptTitle] = useState('Slide 1');
@@ -48,6 +51,23 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   const [pdfTitle, setPdfTitle] = useState('');
   const [pdfParagraphs, setPdfParagraphs] = useState('First paragraph of the document.');
   const [pdfPageSize, setPdfPageSize] = useState<PdfPageSize>('A4');
+
+  /**
+   * A4b: word 产物交付验收 —— 条目切 awaiting_approval（携带交付坐标）
+   * 并打开交付抽屉。win7 移植注：本分支表单无 P4 预注册，
+   * 先 registerTask（幂等）再 updateTask，否则条目不存在更新被丢弃。
+   */
+  const openWordDelivery = (outputPath: string, filename: string) => {
+    const store = useTaskCenterStore.getState();
+    store.registerTask('office:generate', 'office', filename);
+    store.updateTask('office:generate', {
+      title: filename,
+      phase: t('office.delivery.awaiting'),
+      status: 'awaiting_approval',
+      deliveryRef: { workspacePath, filePath: outputPath, formatSpec: null },
+    });
+    openDelivery({ kind: 'office', entryId: 'office:generate' });
+  };
 
   const handleGenerate = async () => {
     if (!filename.trim()) {
@@ -103,6 +123,10 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       // HIGH FIX: notify parent so it can refresh the document list.
       if (onGenerated) {
         await onGenerated();
+      }
+      // A4b: word 自由创建产物进交付验收。
+      if (docType === 'word') {
+        openWordDelivery(out.output_path, out.filename);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

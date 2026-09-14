@@ -90,6 +90,10 @@ SCRATCH_ROOT = "orch_scratch"
 #: 崩溃残留清扫（_sweep_stale_worktrees）共用，保证路径推导一致。
 WORKTREES_ROOT = "orch_worktrees"
 
+#: A4 留存 worktree 的过期天数 —— 超过后按崩溃残留清扫
+#: （_sweep_stale_worktrees 过期兜底；decision 路由对丢失 worktree 降级归档）。
+WORKTREE_RETAIN_DAYS = 7
+
 # 安全修复波 (2026-08-23): run_id 白名单 —— 客户端可控（ChatRequest.run_id /
 # plan_override 路径无格式校验），却拼进 worktree/scratch 路径并参与
 # ``shutil.rmtree``。不设白名单时 ``run_id="../../victim"`` 可路径穿越删除
@@ -283,23 +287,107 @@ class ChatDispatcher:
         self._sweep_stale_worktrees()
 
     def _sweep_stale_worktrees(self) -> None:
-        """删除本 run 的 ``<data_dir>/orch_worktrees/<run_id>`` 残留目录（若存在）。
+        """清扫 worktree 残留（A4 扩展：保护待验收留存 + 过期兜底）。
 
-        仅清本 run 自己的目录（其他并发 run 不受影响）。路径推导与
-        ``_create_worktree_for`` 一致。rmtree 后 best-effort ``git worktree
-        prune``（安全修复波 2026-08-23）—— 清掉主仓 ``.git/worktrees/`` 悬空
-        条目，否则同路径重建 worktree 会 rc=128 失败静默回落 scratch。任何
-        异常全吞降级 logger.debug。
+        - 本 run：逐 task 目录清扫，但 ``acceptance_pending`` 的 lane 跳过
+          （同 run_id 重建 dispatcher 时不误删待验收产物）；
+        - 其他 run：仅清 mtime 超过 ``WORKTREE_RETAIN_DAYS`` 的过期目录
+          （新鲜目录不动，并发 run 不受影响）。
+        路径推导与 ``_create_worktree_for`` 一致。任何异常全吞降级。
         """
         try:
             data_dir = Path(get_database().db_path).parent
-            stale_root = data_dir / WORKTREES_ROOT / self.run_id
-            if stale_root.exists():
-                shutil.rmtree(stale_root)
-                logger.debug("已清扫崩溃残留 worktree 根: %s", stale_root)
+            root = data_dir / WORKTREES_ROOT
+            swept_any = self._sweep_own_run(root) | self._sweep_expired_runs(root)
+            if swept_any:
                 self._prune_after_sweep()
         except Exception as exc:  # noqa: BLE001 — 清扫失败不阻塞派发
             logger.debug("worktree 残留清扫跳过 run=%s err=%s", self.run_id, exc)
+
+    def _sweep_own_run(self, root: Path) -> bool:
+        """清本 run 残留；返回是否清过东西。
+
+        无留存 task 时整体 rmtree（旧行为：空 run 根同样收走）；
+        有留存时逐 task 目录清扫，跳过 ``acceptance_pending`` 的 lane。
+        """
+        own = root / self.run_id
+        if not own.is_dir():
+            return False
+        try:
+            children = list(own.iterdir())
+        except OSError:
+            return False
+        pending = [
+            c
+            for c in children
+            if c.is_dir() and self._is_lane_acceptance_pending(c.name)
+        ]
+        if not pending:
+            try:
+                shutil.rmtree(own)
+                logger.debug("已清扫本 run 崩溃残留 run=%s", self.run_id)
+                return True
+            except OSError as exc:
+                logger.debug("本 run 清扫失败（忽略）：%s %s", own, exc)
+                return False
+        swept = False
+        for child in children:
+            if not child.is_dir():
+                # run 根下不应有散文件——旧行为整体 rmtree 会带走，保持一致。
+                try:
+                    child.unlink()
+                    swept = True
+                except OSError as exc:
+                    logger.debug("散文件清扫失败（忽略）：%s %s", child, exc)
+                continue
+            if child in pending:
+                logger.debug("跳过待验收留存目录：%s", child)
+                continue
+            try:
+                shutil.rmtree(child)
+                swept = True
+            except OSError as exc:
+                logger.debug("task 目录清扫失败（忽略）：%s %s", child, exc)
+        if swept:
+            logger.debug(
+                "已清扫本 run 非留存目录（保留 %d 个留存）", len(pending)
+            )
+        return swept
+
+    def _sweep_expired_runs(self, root: Path) -> bool:
+        """清其他 run 的过期目录（mtime > RETAIN_DAYS）；返回是否清过东西。"""
+        if not root.is_dir():
+            return False
+        now = time.time()
+        try:
+            children = list(root.iterdir())
+        except OSError:
+            return False
+        swept = False
+        for child in children:
+            if not child.is_dir() or child.name == self.run_id:
+                continue
+            try:
+                age_days = (now - child.stat().st_mtime) / 86400
+            except OSError:
+                continue
+            if age_days <= WORKTREE_RETAIN_DAYS:
+                continue
+            try:
+                shutil.rmtree(child)
+                swept = True
+                logger.debug("已清扫过期 worktree run=%s age=%.1fd", child.name, age_days)
+            except OSError as exc:
+                logger.debug("过期目录清扫失败（忽略）：%s %s", child, exc)
+        return swept
+
+    def _is_lane_acceptance_pending(self, task_id: str) -> bool:
+        """task 目录是否对应待验收 lane；查询失败按非留存处理（fail-open 清扫）。"""
+        try:
+            lane = self.lane_registry.get_lane(f"lane-{task_id}")
+        except Exception:  # noqa: BLE001 — 注册表异常不阻塞清扫
+            return False
+        return bool(lane is not None and (lane.metadata or {}).get("acceptance_pending"))
 
     def _prune_after_sweep(self) -> None:
         """rmtree 成功后清理 git worktree 管理元数据（best-effort，全吞降级）。"""
@@ -794,29 +882,69 @@ class ChatDispatcher:
                 try:
                     review = await self._run_review(aggregated)
                     aggregated = aggregated + review["block"]
+                    # A4：verdict 写回各子 lane + review lane 自身 metadata，
+                    # 交付抽屉经 listLanes 直接展示（review.submitted 事件只
+                    # 落在 review lane 下，子 lane 另无 run 关联可查）。
+                    self._stamp_review_verdict(
+                        states,
+                        review["verdict"],
+                        review["assertion_count"],
+                    )
                 except Exception as exc:  # noqa: BLE001 — 复核失败降级
                     logger.warning("编排复核失败，跳过验证: %s", exc)
         return aggregated
 
     async def _run_subagent(self, state: ChatTaskState) -> str:
-        """执行单个子任务，并在结束后清理该任务的临时 worktree。"""
+        """执行单个子任务；成功留存 worktree 待验收（A4），失败则清理。"""
         workspace_dir = await self._create_worktree_for(state)
+        succeeded = False
         try:
-            return await self._run_subagent_impl(state, workspace_dir)
+            out = await self._run_subagent_impl(state, workspace_dir)
+            succeeded = True
+            return out
         finally:
             if workspace_dir is not None:
-                from backend.orchestration.worktree import remove_worktree_async
+                if succeeded:
+                    await self._retain_worktree_for_acceptance(state, workspace_dir)
+                else:
+                    await self._remove_worktree_best_effort(state, workspace_dir)
 
-                try:
-                    await remove_worktree_async(workspace_dir)
-                except Exception as exc:  # noqa: BLE001 — 清理不得覆盖任务结果
-                    logger.warning(
-                        "子任务 %s worktree 清理异常（忽略）: %s",
-                        state.task_id,
-                        exc,
-                    )
-                if workspace_dir in self._worktree_dirs:
-                    self._worktree_dirs.remove(workspace_dir)
+    async def _remove_worktree_best_effort(
+        self, state: ChatTaskState, workspace_dir: Path
+    ) -> None:
+        """失败/异常路径的 worktree 清理（原 finally 逻辑，原样下沉）。"""
+        from backend.orchestration.worktree import remove_worktree_async
+
+        try:
+            await remove_worktree_async(workspace_dir)
+        except Exception as exc:  # noqa: BLE001 — 清理不得覆盖任务结果
+            logger.warning(
+                "子任务 %s worktree 清理异常（忽略）: %s",
+                state.task_id,
+                exc,
+            )
+        if workspace_dir in self._worktree_dirs:
+            self._worktree_dirs.remove(workspace_dir)
+
+    async def _retain_worktree_for_acceptance(
+        self, state: ChatTaskState, workspace_dir: Path
+    ) -> None:
+        """A4：成功 lane 的 worktree 留存待验收；标记失败则回落清理。"""
+        lane_id = f"lane-{state.task_id}"
+        try:
+            lane = self.lane_registry.get_lane(lane_id)
+            if lane is None:
+                raise LookupError(f"lane 缺失：{lane_id}")
+            lane.metadata["acceptance_pending"] = True
+            lane.metadata["acceptance_retained_at"] = int(time.time() * 1000)
+            if not self.lane_registry.update_lane(lane):
+                raise RuntimeError("update_lane 返回 False")
+            logger.info("子任务 %s worktree 已留存待验收：%s", state.task_id, workspace_dir)
+        except Exception as exc:  # noqa: BLE001 — 标记失败回落清理，防孤儿
+            logger.warning(
+                "子任务 %s 留存标记失败，回落清理 worktree：%s", state.task_id, exc
+            )
+            await self._remove_worktree_best_effort(state, workspace_dir)
 
     async def _run_subagent_impl(
         self, state: ChatTaskState, workspace_dir: Optional[Path]
@@ -1405,6 +1533,30 @@ class ChatDispatcher:
             max_chars=MAX_SUBAGENT_RESULT_CHARS,
             emit_review=self._emit_task_review,
         )
+
+    def _stamp_review_verdict(
+        self, states: List[ChatTaskState], verdict: str, assertion_count: int
+    ) -> None:
+        """A4：复核结论写回 lane metadata（best-effort，逐 lane 隔离失败）。
+
+        子 lane（``lane-<task_id>``）与 review lane 自身都写；lane 缺失
+        或更新失败只记 debug，不影响聚合返回（调用方 try 已兜底）。
+        """
+        lane_ids = [f"lane-{s.task_id}" for s in states]
+        lane_ids.append(f"lane-review-{self.run_id}")
+        for lane_id in lane_ids:
+            try:
+                lane = self.lane_registry.get_lane(lane_id)
+                if lane is None:
+                    continue
+                meta = dict(lane.metadata or {})
+                meta["review_verdict"] = verdict
+                meta["review_assertion_count"] = assertion_count
+                lane.metadata = meta
+                if not self.lane_registry.update_lane(lane):
+                    logger.debug("verdict 写回失败 lane=%s", lane_id)
+            except Exception as exc:  # noqa: BLE001 — 逐 lane 隔离
+                logger.debug("verdict 写回异常 lane=%s: %s", lane_id, exc)
 
     def _emit_task_review(
         self,

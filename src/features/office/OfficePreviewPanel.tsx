@@ -26,6 +26,19 @@ export type OfficePreviewData =
 
 export interface OfficePreviewPanelProps {
   preview: OfficePreviewData | null;
+  /**
+   * Workspace root — preferred over summary.workspace_path when building
+   * the managed path for the PDF-export call. Read-result summaries carry
+   * workspace_path, but the field is optional on the shared summary type.
+   * (win7 移植注：接口对齐 main；本分支面板实现暂不消费该字段。)
+   */
+  workspacePath?: string;
+  /**
+   * Item 2.5: opens the edit-preview dialog for the current document.
+   * Absent → no 编辑预览 button (e.g. pdf previews).
+   * (win7 移植注：接口对齐 main；本分支面板暂无编辑入口。)
+   */
+  onEditPreview?: () => void;
 }
 
 // Static lookup so Tailwind JIT sees full literal class names at build time
