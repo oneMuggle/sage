@@ -1231,6 +1231,23 @@ class ChatDispatcher:
         # "重派"徽章（用户可追溯哪些任务是重做的）。None 时不带键。
         if state.retry_of:
             event["retry_of"] = state.retry_of
+        # BU9 (round20): 终态任务附带动量消耗 —— 预算开启且归因就绪时查询
+        # session 窗口用量（fail-open 缺省不带键）；queued/running 不查询
+        # （减少 DB 次数，且进行中用量意义有限）。
+        if (
+            state.status in ("done", "failed", "cancelled")
+            and getattr(self.settings, "run_token_budget", 0) > 0
+            and self.session_id
+            and self._first_dispatch_at
+        ):
+            try:
+                from backend.services.usage_tracker import UsageTracker
+
+                event["used_tokens"] = UsageTracker().session_usage_since(
+                    self.session_id, int(self._first_dispatch_at * 1000)
+                )
+            except Exception:  # noqa: BLE001 — 增强字段，失败不带键
+                pass
         try:
             self.entry_queue.put_nowait(event)
         except Exception:  # noqa: BLE001
