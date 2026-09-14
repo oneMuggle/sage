@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -23,11 +22,6 @@ from backend.skills.skill_md.resources import (
     validate_resource_path,
 )
 from backend.skills.skill_md.validation import SkillMdSecurityError
-
-pytestmark = [
-    pytest.mark.unit,
-    pytest.mark.skipif(os.name == "nt", reason="resources 安全读依赖 POSIX O_NOFOLLOW（Windows 支持另行批次）"),
-]
 
 
 def _patch_os_name(monkeypatch, name: str) -> None:
@@ -343,7 +337,10 @@ def test_build_resource_index_skips_symlink_escape(tmp_path):
     outside = tmp_path / "secret.py"
     outside.write_text("print('secret')\n", encoding="utf-8")
     link = scripts / "linked.py"
-    link.symlink_to(outside)
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("当前环境无 symlink 特权（GitHub windows runner 有）")
 
     index = build_resource_index(base)
 
@@ -359,7 +356,10 @@ def test_build_resource_index_skips_symlink_inside_base(tmp_path):
     target = scripts / "real.py"
     target.write_text("print('real')\n", encoding="utf-8")
     link = scripts / "linked.py"
-    link.symlink_to(target)
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("当前环境无 symlink 特权（GitHub windows runner 有）")
 
     index = build_resource_index(base)
 
@@ -414,7 +414,10 @@ def test_validate_resource_path_rejects_symlink_escape(tmp_path):
     escape.write_text("secret\n", encoding="utf-8")
 
     link = base / "sneaky_link.py"
-    link.symlink_to(escape)
+    try:
+        link.symlink_to(escape)
+    except (OSError, NotImplementedError):
+        pytest.skip("当前环境无 symlink 特权（GitHub windows runner 有）")
 
     with pytest.raises(SkillMdSecurityError):
         validate_resource_path(link, base_dir=base)
@@ -568,7 +571,10 @@ def test_render_body_with_resources_rejects_symlink_even_if_indexed(tmp_path):
     outside = tmp_path.parent / "secret-resource.txt"
     outside.write_text("secret", encoding="utf-8")
     link = tmp_path / "references" / "link.txt"
-    link.symlink_to(outside)
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("当前环境无 symlink 特权（GitHub windows runner 有）")
     idx = ResourceIndex(references=(link,))
     with pytest.raises(SkillMdSecurityError):
         render_body_with_resources("{baseDir}/references/link.txt", tmp_path, idx)
