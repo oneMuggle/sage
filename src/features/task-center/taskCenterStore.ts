@@ -70,6 +70,8 @@ export interface TaskCenterEntry {
   runId?: string | null;
   /** A4b: office 交付包坐标（awaiting_approval 条目打开抽屉用）。 */
   deliveryRef?: OfficeDeliveryRef | null;
+  /** P11: 关联文档名（office 任务跳转 /office 后定位并高亮文档行）。 */
+  docName?: string | null;
 }
 
 export interface TaskCenterPatch {
@@ -89,7 +91,14 @@ interface TaskCenterState {
   delivery: DeliveryDrawerState;
   openDelivery: (next: Exclude<DeliveryDrawerState, null>) => void;
   closeDelivery: () => void;
-  registerTask: (id: string, kind: TaskKind, title: string, phase?: string) => void;
+  registerTask: (
+    id: string,
+    kind: TaskKind,
+    title: string,
+    phase?: string,
+    /** P11: 关联文档名（office 任务跳转后定位文档行）。 */
+    docName?: string,
+  ) => void;
   updateTask: (id: string, patch: TaskCenterPatch) => void;
   /** Legacy semantic: drop the entry (existing callers unchanged). */
   finishTask: (id: string) => void;
@@ -97,14 +106,24 @@ interface TaskCenterState {
   completeTask: (id: string, status: 'succeeded' | 'failed' | 'cancelled', error?: string) => void;
   removeTask: (id: string) => void;
   clearFinished: () => void;
+  /**
+   * P11: 待高亮的文档名（任务中心 office 条目点击跳转 /office 后，
+   * OfficeDocumentList 据此定位并高亮对应文档行；展示方消费后清除）。
+   */
+  pendingHighlight: { docName: string; at: number } | null;
+  setHighlight: (docName: string) => void;
+  clearHighlight: () => void;
 }
 
 export const useTaskCenterStore = create<TaskCenterState>((set) => ({
   tasks: {},
   delivery: null,
+  pendingHighlight: null,
+  setHighlight: (docName) => set({ pendingHighlight: { docName, at: Date.now() } }),
+  clearHighlight: () => set({ pendingHighlight: null }),
   openDelivery: (next) => set({ delivery: next }),
   closeDelivery: () => set({ delivery: null }),
-  registerTask: (id, kind, title, phase) =>
+  registerTask: (id, kind, title, phase, docName) =>
     set((state) => {
       const existing = state.tasks[id];
       // 幂等：同 id 重复注册不重置 startedAt（耗时从首次真正开始计）
@@ -112,14 +131,27 @@ export const useTaskCenterStore = create<TaskCenterState>((set) => ({
         return {
           tasks: {
             ...state.tasks,
-            [id]: { ...existing, title: title ?? existing.title, phase: phase ?? existing.phase },
+            [id]: {
+              ...existing,
+              title: title ?? existing.title,
+              phase: phase ?? existing.phase,
+              docName: docName ?? existing.docName,
+            },
           },
         };
       }
       return {
         tasks: {
           ...state.tasks,
-          [id]: { id, kind, title, startedAt: Date.now(), phase, status: 'running' },
+          [id]: {
+            id,
+            kind,
+            title,
+            startedAt: Date.now(),
+            phase,
+            docName: docName ?? null,
+            status: 'running',
+          },
         },
       };
     }),

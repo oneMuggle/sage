@@ -52,6 +52,8 @@ interface Entry {
   laneId?: string;
   /** A4b: office 交付包坐标（awaiting 条目开抽屉用）。 */
   deliveryRef?: OfficeDeliveryRef | null;
+  /** P11: 关联文档名（office 条目跳转后高亮文档行）。 */
+  docName?: string | null;
   /**
    * A4: 点击直达交付抽屉（而非 route 跳转）。仅交付待验收项置位；
    * blocked lane 等仍走原 route（其 awaiting 语义是等审批/输入，
@@ -136,6 +138,7 @@ export function TaskCenterWidget() {
   const registryTasks = useTaskCenterStore((s) => s.tasks);
   const clearFinished = useTaskCenterStore((s) => s.clearFinished);
   const openDelivery = useTaskCenterStore((s) => s.openDelivery);
+  const setHighlight = useTaskCenterStore((s) => s.setHighlight);
   const streamSessions = useChatStreamStore((s) => s.sessions);
   const lanes = useLaneBoardStore((s) => s.lanes);
   const cancelLane = useLaneBoardStore((s) => s.cancel);
@@ -261,6 +264,10 @@ export function TaskCenterWidget() {
         openDelivery({ kind: 'office', entryId: entry.id });
         return;
       }
+    }
+    // P11: office 任务带关联文档名 → 跳转后定位并高亮对应文档行。
+    if (entry.source === 'registry' && entry.route === '/office' && entry.docName) {
+      setHighlight(entry.docName);
     }
     if (entry.route) navigate(entry.route);
   };

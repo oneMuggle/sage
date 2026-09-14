@@ -195,7 +195,13 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
         percent: p.percent,
       }),
     );
-    registerTask('office:generate', 'office', t('office.template.creating'));
+    registerTask(
+      'office:generate',
+      'office',
+      t('office.template.creating'),
+      undefined,
+      filename.trim(),
+    );
     setResult(null);
     try {
       // Image placeholders never contribute text (office.template.hint.image);
@@ -286,7 +292,13 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
         percent: p.percent,
       }),
     );
-    registerTask('office:generate', 'office', t('office.generate.generating'));
+    registerTask(
+      'office:generate',
+      'office',
+      t('office.generate.generating'),
+      undefined,
+      filename.trim(),
+    );
     setResult(null);
     try {
       let out: { output_path: string; filename: string; file_size_bytes: number };

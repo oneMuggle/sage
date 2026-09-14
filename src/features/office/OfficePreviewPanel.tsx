@@ -140,7 +140,9 @@ export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: Of
         percent: p.percent,
       }),
     );
-    useTaskCenterStore.getState().registerTask('office:export', 'office', '导出 PDF');
+    useTaskCenterStore
+      .getState()
+      .registerTask('office:export', 'office', '导出 PDF', undefined, summary.generated_filename);
     try {
       const res = await officeApi.exportPdf({
         workspace_path: ws,
