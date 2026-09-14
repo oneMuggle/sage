@@ -247,3 +247,22 @@ create/open/list 在 Windows 恢复可用；顺带修复两个 R32 原语缺陷
 secure_read_text 的 `..` 逃逸缺口。测试侧：path_security /
 security_final_paths / project_context / skill_md_importer /
 P6 桥接集成的 Windows skip 解除（symlink 夹具改能力探测）。
+
+## 16. P8 落地记录（2026-09-15，feat/wiki-recents-sqlite-p8）
+
+方案：`docs/plans/2026-09-15_wiki-recents-sqlite-p8-plan.md`。双轨并行的
+recents 收口为**单一事实源**：`backend/storage/recent_projects.py` 重写为
+projects 注册表（SQLite）的只读投影适配器，公共 API 全保（load_recent /
+save_recent / record_recent / most_recent_parent / RecentProject /
+MAX_RECENT），全部消费方（wiki_routes / search_routes / mcp_server /
+project_authorization / chat.entity_refs）零改动。
+
+- **intent 语义**：projects 表新增可空 `intent` 列（幂等 ALTER）；P6 桥接
+  时"双来源并集"收敛为同表读取；NULL（侧栏登记）读侧映射 "open"；
+- **MAX_RECENT 语义**：投影截断而非注册表生命周期（表内保留 50，投影
+  LIMIT 10）；save_recent 窗口重写只删"上一窗口内且不在新清单"的行；
+- **一次性迁移**：`_ensure_legacy_import` 读旧 JSON → upsert（秒→毫秒）
+  → 改名 `.migrated` 备份；损坏/失败 fail-open；
+- **顺序确定性**：`_next_ms()` 单调毫秒（POSIX 版靠插入序，SQLite 需要
+  strictly-increasing 数值复现同秒语义）；
+- recent_projects 不再依赖 wiki/files 平台原语（平台差异面进一步收窄）。
