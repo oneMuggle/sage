@@ -29,7 +29,7 @@ import time
 import uuid
 import weakref
 from datetime import datetime, timedelta, timezone
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from sage_core import LLMError, Message, Role, ToolCall
 from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort

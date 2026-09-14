@@ -3784,21 +3784,6 @@ async def get_memories_by_turn(turn_id: str, request: Request):
     return {"memories": list(memories)}
 
 
-@router.get("/memory/profile")
-async def get_user_profile(request: Request):
-    """用户档案聚合：偏好（importance>=7）+ 决策 + 项目事实。"""
-    memory_port = _get_memory_port(request)
-    prefs = await memory_port.find_by_category("user_pref", limit=50)
-    decisions = await memory_port.find_by_category("decision", limit=20)
-    facts = await memory_port.find_by_category("project_fact", limit=50)
-    return {
-        "preferences": [m for m in prefs if m.get("importance", 0) >= 7],
-        "decisions": list(decisions),
-        "facts": list(facts),
-        "total_count": len(prefs) + len(decisions) + len(facts),
-    }
-
-
 @router.get("/memory/summary/{session_id}")
 async def get_session_summary(session_id: str, request: Request):
     """按会话聚合 task_summary 记忆（会话摘要 Tab）。"""

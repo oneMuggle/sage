@@ -138,39 +138,6 @@ async def test_find_by_category_excludes_invalid_memories():
 
 
 @pytest.mark.asyncio()
-async def test_profile_endpoint_empty(client):
-    resp = await client.get("/api/v1/memory/profile")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body == {"preferences": [], "decisions": [], "facts": [], "total_count": 0}
-
-
-@pytest.mark.asyncio()
-async def test_profile_endpoint_groups_by_category(client):
-    adapter = _adapter()
-    await adapter.store(
-        "用户偏好极简界面", importance=7, memory_category="user_pref", source_turn_id="t1",
-        session_id="s1",
-    )
-    await adapter.store(
-        "决定使用 React 重构", importance=6, memory_category="decision", source_turn_id="t2",
-        session_id="s1",
-    )
-    await adapter.store(
-        "项目使用 TypeScript", importance=7, memory_category="project_fact", source_turn_id="t3",
-        session_id="s1",
-    )
-
-    resp = await client.get("/api/v1/memory/profile")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert len(body["preferences"]) == 1
-    assert len(body["decisions"]) == 1
-    assert len(body["facts"]) == 1
-    assert body["total_count"] == 3
-
-
-@pytest.mark.asyncio()
 async def test_by_turn_endpoint_returns_memories(client):
     adapter = _adapter()
     await adapter.store(

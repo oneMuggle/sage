@@ -18,9 +18,9 @@ import { memoryApi } from '../shared/api';
 import type { Memory } from '../shared/api/types';
 import { useStore } from '../shared/lib/store';
 import { ErrorState } from '../shared/ui/ErrorState';
+import { UserProfileCard } from '../widgets/memory';
 import { MemoryCard, type MemoryItem } from '../widgets/memory/MemoryCard';
 import { MemoryTabs, type MemoryTab } from '../widgets/memory/MemoryTabs';
-import { UserProfileCard } from '../widgets/memory';
 
 interface SessionInfo {
   id: string;
