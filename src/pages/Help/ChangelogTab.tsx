@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { parseChangelog, generateSummary } from '../../lib/changelogParser';
+import { parseChangelog, generateSummary } from '../../shared/lib/changelogParser';
 
 export function ChangelogTab() {
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set(['current']));

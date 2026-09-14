@@ -10,7 +10,6 @@ import {
 } from 'react-router-dom';
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
-import { UpdateDialog } from './components/UpdateDialog';
 import { loadCurrentSessionId } from './entities/session/storage';
 import { useSettingsStore } from './features/manage-settings/settingsStore';
 import { onSessionNotifyClick } from './features/send-message/sessionNotify';
@@ -23,6 +22,7 @@ import { ApprovalDialog } from './widgets/permission';
 import { QuestionDialog } from './widgets/question';
 import { BackendStatusBanner } from './widgets/system/BackendStatusBanner';
 import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
+import { UpdateDialog } from './widgets/update/UpdateDialog';
 
 // R24-D6: 路由级代码分割 —— 首屏只加载 Chat/Welcome，低频页面
 // (设置/记忆/智能体/技能/Office/知识库/编排/定时任务) 按需加载。

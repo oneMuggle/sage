@@ -17,9 +17,9 @@ vi.mock('../../../shared/api/orchRunClient', () => ({
   },
 }));
 
-import { PlanCard } from '../../../components/PlanCard';
 import { orchRunClient } from '../../../shared/api/orchRunClient';
 import type { TaskPlanItem } from '../../../shared/api/types';
+import { PlanCard } from '../PlanCard';
 
 const basePlan: TaskPlanItem[] = [{ task_id: 't1', agent_id: 'primary', goal: 'original goal' }];
 

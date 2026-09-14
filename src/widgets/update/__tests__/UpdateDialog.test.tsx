@@ -2,12 +2,12 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { UpdateStateChangedEvent } from '../../../electron/updateIpc';
-import { I18nProvider } from '../../shared/lib/i18n';
-import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
+import type { UpdateStateChangedEvent } from '../../../../electron/updateIpc';
+import { I18nProvider } from '../../../shared/lib/i18n';
+import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
 import { UpdateDialog } from '../UpdateDialog';
 
-vi.mock('../../shared/ui/ConfirmDialog/confirmService', () => ({
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
   confirmDialog: mocks.confirmDialog,
 }));
 
