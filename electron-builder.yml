@@ -44,6 +44,9 @@ extraResources:
   # ci.yml "Verify packaged build-manifest.json" step).
   - from: "resources/build-manifest.json"
     to: "build-manifest.json"
+  # CHANGELOG.md — 更新日志，供帮助页面显示
+  - from: "CHANGELOG.md"
+    to: "CHANGELOG.md"
   # Python embedded runtime + backend code.
   # - main: bundled by scripts/bundle-python-main.ps1 (Python 3.11 + requirements.txt)
   # - release/win7: bundled by scripts/bundle-python.ps1 (Python 3.8 + requirements-py38.txt)

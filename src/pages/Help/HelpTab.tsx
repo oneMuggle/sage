@@ -3,8 +3,13 @@ import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 
+import chat from '../../content/help/chat.md?raw';
 import faq from '../../content/help/faq.md?raw';
 import gettingStarted from '../../content/help/getting-started.md?raw';
+import memory from '../../content/help/memory.md?raw';
+import office from '../../content/help/office.md?raw';
+import orchestration from '../../content/help/orchestration.md?raw';
+import skills from '../../content/help/skills.md?raw';
 import troubleshooting from '../../content/help/troubleshooting.md?raw';
 import { HelpSidebar } from '../../widgets/help/HelpSidebar';
 import type { HelpItem } from '../../widgets/help/HelpSidebar';
@@ -13,6 +18,11 @@ import type { HelpItem } from '../../widgets/help/HelpSidebar';
 
 const BUILTIN_CONTENT: Record<string, string> = {
   'getting-started': gettingStarted,
+  chat: chat,
+  memory: memory,
+  skills: skills,
+  office: office,
+  orchestration: orchestration,
   faq: faq,
   troubleshooting: troubleshooting,
 };
@@ -103,7 +113,7 @@ export function HelpTab() {
       // Load from user-manual via IPC
       setLoading(true);
       setError(null);
-      window.helpAPI
+      window.electronAPI?.helpAPI
         ?.readUserManual(item.filename)
         .then((loadedContent) => {
           setContent(loadedContent);
@@ -161,12 +171,7 @@ export function HelpTab() {
           ),
           li: ({ children }) => <li className="text-text">{children}</li>,
           a: ({ href, children }) => (
-            <a
-              href={href}
-              className="text-primary hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href={href} className="text-primary hover:underline">
               {children}
             </a>
           ),
