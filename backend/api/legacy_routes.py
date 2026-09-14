@@ -207,6 +207,10 @@ class ChatRequest(BaseModel):
     # legacy_routes 模块加载完毕时自动被 Pydantic v2 调用.
     office_refs: List[ChatOfficeRef] = Field(default_factory=list)
 
+    # R37: 聊天文本文档附件 —— 已上传媒体 id 列表（POST /chat/attachments
+    # 返回的 media_ref.id）。producer 按 id 读全文，注入上下文附件块。
+    attachment_media_ids: List[str] = Field(default_factory=list)
+
     # G6 (2026-09-06): 聊天图片输入 —— base64 data URL 列表（data:image/png;base64,...）。
     # 非空时 user 消息转 OpenAI 多模态 content（text + image_url 分段），
     # 依赖 llm_client._convert_messages 对 list 型 content 的原样透传。
@@ -2568,6 +2572,41 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             f"[REQ {request_id}] memory_used event push failed, ignored"
                         )
             # ===== R17-E 记忆召回展示事件 END =====
+
+            # ===== R37 文本文档附件注入 BEGIN =====
+            # 已上传文本文档（attachment_media_ids）按 id 读全文，截断后并入
+            # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
+            try:
+                from backend.services.multimodal.media_store import (
+                    MEDIA_ROOT,
+                    MediaKind,
+                    MediaStore,
+                )
+
+                r37_store = MediaStore(root=MEDIA_ROOT)
+                for r37_mid in data.attachment_media_ids[:10]:
+                    try:
+                        _r37_loaded = r37_store.load(r37_mid)
+                    except Exception:
+                        _r37_loaded = None
+                    if _r37_loaded is None:
+                        continue
+                    _r37_ref, r37_bytes = _r37_loaded
+                    if _r37_ref.kind != MediaKind.DOCUMENT:
+                        continue
+                    try:
+                        r37_text = r37_bytes.decode("utf-8")[:100_000]
+                    except UnicodeDecodeError:
+                        continue
+                    if not r37_text.strip():
+                        continue
+                    dynamic_context_parts.append(
+                        "<attached_document id=" + repr(r37_mid) + ">" + chr(10)
+                        + r37_text + chr(10) + "</attached_document>"
+                    )
+            except Exception as r37_att_err:
+                logger.debug(f"[REQ {request_id}] attachment media inject skipped: {r37_att_err}")
+            # ===== R37 文本文档附件注入 END =====
 
             attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
 
