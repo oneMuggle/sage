@@ -12,6 +12,22 @@ import { create } from 'zustand';
 
 export type TaskKind = 'office' | 'wiki' | 'custom';
 
+export type TaskCenterStatus =
+  | 'queued'
+  | 'running'
+  | 'awaiting_approval'
+  | 'paused'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
+
+/** Terminal states stay visible until the user clears them. */
+export const TERMINAL_TASK_STATUSES: ReadonlySet<TaskCenterStatus> = new Set([
+  'succeeded',
+  'failed',
+  'cancelled',
+]);
+
 export interface TaskCenterEntry {
   id: string;
   kind: TaskKind;
@@ -20,13 +36,38 @@ export interface TaskCenterEntry {
   phase?: string;
   /** P7: 后端上报的百分比（0-100；无百分比通道的任务为空） */
   percent?: number | null;
+  /** A1: status, defaults to running (same implicit P4 semantic). */
+  status: TaskCenterStatus;
+  /** A1: failure reason, shown when status is failed. */
+  error?: string | null;
+  /** A1: terminal timestamp, written by completeTask. */
+  finishedAt?: number | null;
+  /** A1: related session, for jump-back. */
+  sessionId?: string | null;
+  /** A1: related backend run, for orchestration cancel. */
+  runId?: string | null;
+}
+
+export interface TaskCenterPatch {
+  title?: string;
+  phase?: string;
+  percent?: number | null;
+  status?: TaskCenterStatus;
+  error?: string | null;
+  sessionId?: string | null;
+  runId?: string | null;
 }
 
 interface TaskCenterState {
   tasks: Record<string, TaskCenterEntry>;
   registerTask: (id: string, kind: TaskKind, title: string, phase?: string) => void;
-  updateTask: (id: string, patch: { title?: string; phase?: string; percent?: number | null }) => void;
+  updateTask: (id: string, patch: TaskCenterPatch) => void;
+  /** Legacy semantic: drop the entry (existing callers unchanged). */
   finishTask: (id: string) => void;
+  /** A1: mark terminal and keep (drives the recently-finished list). */
+  completeTask: (id: string, status: 'succeeded' | 'failed' | 'cancelled', error?: string) => void;
+  removeTask: (id: string) => void;
+  clearFinished: () => void;
 }
 
 export const useTaskCenterStore = create<TaskCenterState>((set) => ({
@@ -46,7 +87,7 @@ export const useTaskCenterStore = create<TaskCenterState>((set) => ({
       return {
         tasks: {
           ...state.tasks,
-          [id]: { id, kind, title, startedAt: Date.now(), phase },
+          [id]: { id, kind, title, startedAt: Date.now(), phase, status: 'running' },
         },
       };
     }),
@@ -61,6 +102,32 @@ export const useTaskCenterStore = create<TaskCenterState>((set) => ({
       if (!state.tasks[id]) return state;
       const next = { ...state.tasks };
       delete next[id];
+      return { tasks: next };
+    }),
+  completeTask: (id, status, error) =>
+    set((state) => {
+      const existing = state.tasks[id];
+      if (!existing) return state;
+      return {
+        tasks: {
+          ...state.tasks,
+          [id]: { ...existing, status, error: error ?? null, finishedAt: Date.now() },
+        },
+      };
+    }),
+  removeTask: (id) =>
+    set((state) => {
+      if (!state.tasks[id]) return state;
+      const next = { ...state.tasks };
+      delete next[id];
+      return { tasks: next };
+    }),
+  clearFinished: () =>
+    set((state) => {
+      const next: Record<string, TaskCenterEntry> = {};
+      for (const [id, task] of Object.entries(state.tasks)) {
+        if (!TERMINAL_TASK_STATUSES.has(task.status)) next[id] = task;
+      }
       return { tasks: next };
     }),
 }));

@@ -4,6 +4,20 @@
 import type { TranslationKey } from './zh';
 
 export const en: Record<TranslationKey, string> = {
+  // --- Task center: A1 states & actions (parity-s4) ---
+  'taskCenter.cancel': 'Cancel',
+  'taskCenter.clearFinished': 'Clear finished',
+  'taskCenter.goto': 'Open',
+  'taskCenter.status.queued': 'Queued',
+  'taskCenter.status.running': 'Running',
+  'taskCenter.status.awaiting_approval': 'Awaiting approval',
+  'taskCenter.status.paused': 'Paused',
+  'taskCenter.status.succeeded': 'Done',
+  'taskCenter.status.failed': 'Failed',
+  'taskCenter.status.cancelled': 'Cancelled',
+  'taskCenter.laneFallback': 'Orchestration task',
+  'taskCenter.finishedCount': '{n} recently finished',
+  'taskCenter.cancelFailed': 'Cancel failed, please retry',
   // ─── Sidebar ──────────────────────
   'sidebar.brand': 'Sage',
   'sidebar.nav.chat': 'Chat',

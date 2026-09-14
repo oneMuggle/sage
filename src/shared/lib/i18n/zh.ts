@@ -4,6 +4,20 @@
  * 键使用点分隔的命名空间: sidebar.new_chat, chat.title, settings.general ...
  */
 export const zh = {
+  // --- Task center: A1 states & actions (parity-s4) ---
+  'taskCenter.cancel': '取消',
+  'taskCenter.clearFinished': '清除已完成',
+  'taskCenter.goto': '前往处理',
+  'taskCenter.status.queued': '排队中',
+  'taskCenter.status.running': '运行中',
+  'taskCenter.status.awaiting_approval': '等待审批',
+  'taskCenter.status.paused': '已暂停',
+  'taskCenter.status.succeeded': '已完成',
+  'taskCenter.status.failed': '失败',
+  'taskCenter.status.cancelled': '已取消',
+  'taskCenter.laneFallback': '编排任务',
+  'taskCenter.finishedCount': '最近完成 {n} 项',
+  'taskCenter.cancelFailed': '取消失败，请重试',
   // ─── 侧边栏 ───────────────────────
   'sidebar.brand': 'Sage',
   'sidebar.nav.chat': '对话',
