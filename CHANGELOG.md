@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🌐 **网页访问能力优化 Round 5 批次 2：反爬访问**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.3 AB1/AB2/AB4/AB5）
+
+### Added(web-access)
+- **web_fetch 自动升级链（AB1）**：静态抓取遇 403/429/503 或正文命中反爬盾特征（Cloudflare "Just a moment" / "Attention Required" / Akamai / PerimeterX / DataDome / 验证码页等，仅在正文极短时判定）→ 自动改走 headless 渲染池重抓；成功结果标 `escalated="render"` + `escalated_from`（原状态码 / `antibot_page`），`links` / `tables` 模式同样从渲染 DOM 抽取；渲染后仍是盾页或非 2xx 则返回带三条出路（浏览器通道 / 登录态 / 代理）的指引；新增参数 `escalate=false`、`render="never"`、`mode="raw"` 均关闭升级
+- **出网请求头拟真（AB2）**：`http_factory.default_headers()` 追加 `Sec-CH-UA` / `Sec-CH-UA-Mobile` / `Sec-CH-UA-Platform` / `Sec-Fetch-Dest|Mode|Site|User` / `Upgrade-Insecure-Requests`；UA 与 Client Hints 的 Chrome 大版本改为从本地内置 Chrome 探测（版本目录名 / `--version`，缓存），探测失败或低于基线时回退 126——win7 分支 Chrome 109 与 UA 版本不一致的问题一并消除
+- **浏览器去自动化痕迹（AB4）**：Chrome 启动增加 `--disable-blink-features=AutomationControlled` / `--disable-infobars`；渲染池导航前经 `Page.addScriptToEvaluateOnNewDocument` 注入 stealth 脚本（`navigator.webdriver` → undefined、补 `window.chrome`、`navigator.languages`），注入失败不阻断渲染；渲染结果新增 `rendered_status`（页面导航响应码）
+- **出网重试 / 限速（AB5）**：`http_factory.retrying_send` 统一给 web_fetch 每一跳与 web_search 各引擎请求做指数退避重试（默认 2 次，可重试：连接 / 读写超时 / 协议错 / 408 / 425 / 429 / 5xx，`Retry-After` 上限 30s）；新增按主机令牌桶 `HostRateLimiter`（2 req/s，突发 4）避免对同一站点连发触发 429；`build_client(client_class=...)` 允许注入带重试的 Client 子类
+
 > 🌐 **网页访问能力优化 Round 5 批次 1：下载可靠性 + 内容嗅探**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.1 DL1/DL3 + §2.2 SN1）
 
 ### Added(web-access)

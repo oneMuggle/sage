@@ -48,7 +48,12 @@ def _install_render(monkeypatch, evaluate_results: List[Any]) -> List[Dict[str, 
         calls.append({"method": method, "params": params or {}, "target": target_id})
         if method == "Target.createTarget":
             return {"targetId": "t-render"}
-        if method in ("Page.navigate", "Target.closeTarget"):
+        if method in (
+            "Page.navigate",
+            "Target.closeTarget",
+            # AB4（Round 5 B2）：渲染前注入 stealth 脚本，假体放行即可
+            "Page.addScriptToEvaluateOnNewDocument",
+        ):
             return {}
         raise AssertionError(f"unexpected method {method}")
 
