@@ -9,8 +9,8 @@
 import { Download, Pencil, Plus, RefreshCw, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { tplStorageKey } from '../../widgets/chat/TemplateFillDialog';
 import { promptApi, type PromptTemplate } from '../../shared/api/promptApi';
+import { tplStorageKey } from '../../widgets/chat/TemplateFillDialog';
 
 const MAX_NAME_LEN = 60;
 const MAX_CONTENT_LEN = 8000;
