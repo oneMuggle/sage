@@ -1350,11 +1350,15 @@ async function registerIpcHandlers(): Promise<void> {
       throw new Error('未授权的窗口请求');
     }
     try {
-      const filePath = join(__dirname, '..', 'CHANGELOG.md');
+      const isPackaged = app.isPackaged;
+      const filePath = isPackaged
+        ? join(process.resourcesPath, 'CHANGELOG.md')
+        : join(__dirname, '..', '..', 'CHANGELOG.md');
+      logger.info('main: reading CHANGELOG', { isPackaged, filePath, __dirname });
       return readFileSync(filePath, 'utf-8');
     } catch (err) {
       logger.error('main: failed to read CHANGELOG', { error: String(err) });
-      throw new Error('无法读取更新日志');
+      throw new Error(`无法读取更新日志: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
 
