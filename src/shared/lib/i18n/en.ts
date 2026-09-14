@@ -459,6 +459,7 @@ export const en: Record<TranslationKey, string> = {
   'codeBlock.copied': 'Copied',
   'codeBlock.toggleWrap': 'Toggle word wrap',
   'codeBlock.expandLines': 'Expand all {n} lines',
+  'codeBlock.collapseLines': 'Collapse',
   'taskCenter.activeCount': '{n} running',
   'taskCenter.chatFallback': 'Background session generating',
 
