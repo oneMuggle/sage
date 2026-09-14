@@ -5,7 +5,6 @@ Mirrors test_skill_md_loader.py style: monkeypatch env, use tmp_path, no real fs
 
 from __future__ import annotations
 
-import os
 import textwrap
 from pathlib import Path
 from typing import List, Optional
@@ -125,10 +124,7 @@ async def test_import_files_rejects_symlinked_skill_file(
     assert outside.read_text(encoding="utf-8") == "original"
 
 
-@pytest.mark.skipif(
-    os.name == "nt",
-    reason="回滚依赖 wiki/files secure_delete_path（POSIX-only），Windows 原语另行批次",
-)
+# W5：secure_delete_path 已有 reparse-safe Windows 分支，移除平台 skip。
 async def test_import_files_refreshes_bin_gating_between_batch_items(
     registry: SkillRegistry, skills_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -171,10 +167,7 @@ async def test_import_files_refreshes_bin_gating_between_batch_items(
 
 
 
-@pytest.mark.skipif(
-    os.name == "nt",
-    reason="回滚依赖 wiki/files secure_delete_path（POSIX-only），Windows 原语另行批次",
-)
+# W5：secure_delete_path 已有 reparse-safe Windows 分支，移除平台 skip。
 async def test_import_files_rolls_back_when_hash_fails_after_hot_reload(
     registry: SkillRegistry, skills_dir: Path
 ) -> None:
@@ -514,10 +507,7 @@ async def test_import_files_handles_write_permission_error(
     assert result["skipped"][0]["reason"] == "write_failed"
 
 
-@pytest.mark.skipif(
-    os.name == "nt",
-    reason="回滚依赖 wiki/files secure_delete_path（POSIX-only），Windows 原语另行批次",
-)
+# W5：secure_delete_path 已有 reparse-safe Windows 分支，移除平台 skip。
 async def test_import_files_cleans_partial_write_after_writer_error(
     registry: SkillRegistry, skills_dir: Path
 ) -> None:

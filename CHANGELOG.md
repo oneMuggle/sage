@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **归档视图批量操作**;前端纳入 PDF 全流程
 
 ### Added(projects)
+- **项目模块 W5**: wiki/files 全量 Windows 解锁——其余 12 个 secure_* 补 reparse-safe 分支(沿用 R32 原语),Windows 上 wiki 项目 create/open/list 从 500 恢复可用;修复两个 R32 原语缺陷(CREATE_ALWAYS 先截断后复核绕过多链接拒绝契约、校验失败句柄泄漏锁死同 inode 文件)+ secure_read_text `..` 逃逸缺口;测试解锁 path_security/security_final_paths/project_context/skill_md 回滚/P6 桥接集成的 Windows skip(symlink 夹具改能力探测);本机全量 unit 5539 过零新增失败(方案 docs/plans/2026-09-14_wiki-files-win-unlock-plan.md §7)
 - **项目模块 P6**: wiki 授权桥接 projects 注册表(recents ∪ registry 并集,约 24 个 wiki 端点门禁 fail-closed 语义不变;MCP 授权面同样并集;wiki open/create 双登记进侧栏清单;前置 #760 解除 POSIX-only 阻塞;全局搜索默认域明确不改,依据 docs/plans/2026-09-14_wiki-projects-bridge-plan.md)
 - **项目模块 P5**: 侧栏项目区块局部拖拽登记——拖文件夹到项目分组即批量登记(拖拽不自动打开,与 + 按钮登记即打开区分;路径取 Electron File.path 与 OfficeFilePicker 同判据,目录有效性走既有 validate_workspace 校验,零新增 IPC;dragOver 高亮提示)(方案 docs/plans/2026-09-13_projects-p5-drag-plan.md;Electron>=32 需迁移 webUtils.getPathForFile,已留注记)
 - **项目模块 P4**: 项目子行就地删除会话(hover 两步确认,联动刷新子列表/计数/会话区)+ 项目清单自动刷新(订阅 store 会话数量变化,400ms 防抖重查后端聚合计数,消除跨区增删后的陈旧显示)(方案 docs/plans/2026-09-13_projects-p4-plan.md)

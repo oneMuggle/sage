@@ -7,8 +7,6 @@ M6 项目上下文发现单元测试
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from backend.chat.project_context import (
@@ -20,7 +18,8 @@ from backend.chat.project_context import (
 
 pytestmark = [
     pytest.mark.unit,
-    pytest.mark.skipif(os.name == "nt", reason="project context 依赖 wiki/files POSIX no-follow 原语"),
+    # W5：移除整模块 Windows skip —— project_context 走纯 pathlib 读侧，
+    # 从不 import wiki/files；个别 symlink 夹具用例已改能力探测 skip。
 ]
 
 
@@ -118,7 +117,10 @@ def test_symlink_escaping_workspace_is_refused(tmp_path):
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    (workspace / "SAGE.md").symlink_to(secret)
+    try:
+        (workspace / "SAGE.md").symlink_to(secret)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation not permitted (no SeCreateSymbolicLinkPrivilege)")
 
     ctx = discover_project_context(workspace)
 
@@ -132,7 +134,10 @@ def test_symlink_within_workspace_is_allowed(tmp_path):
     workspace.mkdir()
     real = workspace / "real-notes.md"
     real.write_text("legit project notes", encoding="utf-8")
-    (workspace / "SAGE.md").symlink_to(real)
+    try:
+        (workspace / "SAGE.md").symlink_to(real)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation not permitted (no SeCreateSymbolicLinkPrivilege)")
 
     ctx = discover_project_context(workspace)
 
