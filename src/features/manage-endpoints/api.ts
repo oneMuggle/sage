@@ -139,8 +139,20 @@ export async function fetchModels(baseUrl: string, apiKey: string): Promise<Disc
     method: 'GET',
     headers: proxyHeaders(baseUrl, apiKey),
   });
-  const data = response;
-  return data.data.map((m) => ({
+  // 防御性检查: 某些上游服务 (LM Studio 变体 / 自定义网关) 可能返回非标准格式,
+  // 缺少 data 字段或 data 不是数组。提前报错, 避免 data.data.map() 抛出
+  // TypeError, 让 _parseUpstreamError 漏斗给出可读提示。
+  if (!response || !Array.isArray(response.data)) {
+    throw new Error(
+      '端点返回格式无效: 期望 { data: [...] } 但收到 ' +
+        (response === null || response === undefined
+          ? '空响应'
+          : Array.isArray(response)
+            ? '裸数组 (缺少 data 包装)'
+            : JSON.stringify(response).slice(0, 120)),
+    );
+  }
+  return response.data.map((m) => ({
     id: m.id,
     capabilities: inferCapabilities(m.id),
     endpointId: '',
