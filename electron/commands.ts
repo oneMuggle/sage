@@ -168,6 +168,35 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace`,
   },
+
+  // 项目模块 P1 (cherry-win7 对齐): 最近项目注册表 + 项目内会话
+  projects_list: {
+    method: 'GET',
+    path: () => '/api/v1/projects',
+  },
+  projects_register: {
+    method: 'POST',
+    path: () => '/api/v1/projects',
+    body: (a) => ({ path: a.path }),
+  },
+  projects_remove: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}`,
+  },
+  projects_open: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/open`,
+    body: () => ({}),
+  },
+  projects_create_session: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/sessions`,
+    body: () => ({}),
+  },
+  projects_list_sessions: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/sessions`,
+  },
   workspace_search_files: {
     method: 'GET',
     path: (a) => {

@@ -11,6 +11,7 @@ export { knowledgeApi } from './knowledgeApi';
 export { learnApi } from './learnApi';
 export { memoryApi } from './memoryApi';
 export { permissionApi } from './permissionApi';
+export { projectApi } from './projectApi';
 export { messageApi } from './messageApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';
