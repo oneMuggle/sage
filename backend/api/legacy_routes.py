@@ -2578,9 +2578,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
             try:
                 from backend.services.multimodal.media_store import (
+                    MEDIA_ROOT,
                     MediaKind,
                     MediaStore,
-                    MEDIA_ROOT,
                 )
 
                 r37_store = MediaStore(root=MEDIA_ROOT)
