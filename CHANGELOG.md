@@ -18,6 +18,36 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+## [v0.4.9-alpha.31-win7] - 2026-09-14
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #777 帮助系统修复。`src/pages/Help/HelpTab.tsx` 移除链接 `target="_blank"` 改为应用内跳转 + 新增 5 个 markdown 帮助文档导入 (chat/memory/skills/office/orchestration), `src/pages/Help/AboutTab.tsx` `process.*` 改为 `typeof process !== 'undefined'` guard 返回 'N/A' 兜底 (修复 `process is not defined`), `src/pages/Help/ChangelogTab.tsx` + `HelpTab.tsx` 把 `window.changelogAPI/helpAPI` 改为 `window.electronAPI?.changelogAPI/helpAPI`, `src/shared/types/electron-api.d.ts` 新增两个 IPC bridge 类型, `electron/main.ts` 新增 `sage:changelog:read` IPC handler (dev 走 `__dirname/../../CHANGELOG.md`,packaged 走 `process.resourcesPath/CHANGELOG.md`), `electron-builder.yml` 把 `CHANGELOG.md` 加入 `extraResources` (packaged 时随包分发)。零冲突自动合并;Frontend TS + Electron build 双绿。
+
+### Fixed
+- **fix(win7): cherry-pick main #777 帮助系统修复** — 链接改为应用内跳转;8 个 builtin 帮助项全部补齐内容;About/Changelog 页面正常加载
+
+### Changed
+- **chore(release): bump version to 0.4.9-alpha.31-win7**
+
+## [v0.4.9-alpha.30-win7] - 2026-09-13
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #765 Round 3 `search_config` key 静态加密落库 + `web_search` 查询缓存。`backend/security/key_store.py` 新模块 (AES-256-GCM 静态加密 + Win7 Py3.8 兼容),`backend/api/search_routes.py` 加缓存命中检查。11 unit + 3 integration test 引用。
+
+### Added
+- **feat(win7): cherry-pick main #765 Round 3 search_config 加密落库 + web_search 缓存** — 密钥静态加密 + 查询缓存减少 LLM 重复请求
+
+### Changed
+- **chore(release): bump version to 0.4.9-alpha.30-win7**
+
+## [v0.4.9-alpha.29-win7] - 2026-09-12
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #759 Round 2 反爬路由指引 + UA 现代化 + `web_fetch` TTL 缓存。
+
+### Added
+- **feat(win7): cherry-pick main #759 Round 2 反爬路由 + UA + web_fetch 缓存**
+
+### Changed
+- **chore(release): bump version to 0.4.9-alpha.29-win7**
+
 ## [v0.4.9-alpha.28-win7] - 2026-09-11
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #618 Phase 3 T3.3 GitLab release provider。`electron/update/providers/gitlab.ts` 145 行 (GitLab API v4 PRIVATE-TOKEN 鉴权 + 项目 ID URL-encode + upcoming_release prerelease 过滤 + assets.links 下载 + 401/404 错误本地化), `electron/update/__tests__/providers/gitlab.test.ts` 177 行 (7 测试:endpoint + token header / projectId encode / 自建 baseUrl / 401 凭证错 / 404 项目不存在 / 空数组 null / ping ok), `electron/main.ts` 注册 `providerRegistry.register('gitlab', ...)` 在 github/gitee 之后。同 main PR #629 已 cherry-pick 的 GitHub #616 + Gitee #617 一致风格。零新增依赖;7 vitest 全绿。
