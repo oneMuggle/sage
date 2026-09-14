@@ -10,6 +10,12 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# 2026-09-14: 并发 enqueue 偶发丢事件（CI Windows: 5 线程 x 20 条只落 97 条）。
+# 根因: 每次 enqueue 新开连接、默认 busy timeout 5s, 慢盘 runner 上多写者
+# 竞争会抛 "database is locked", 而 enqueue 按设计 fail-open 吞掉该异常 →
+# 事件静默丢失。显式 timeout + 进程内写锁串行化, 让丢失不再可能。
+_DB_TIMEOUT_SECONDS = 30.0
+
 
 @dataclass
 class ReviewEvent:
@@ -35,6 +41,9 @@ class ReviewQueue:
         self.worker_thread: Optional[threading.Thread] = None
         self.running: bool = False
         self._wake: threading.Event = threading.Event()
+        # 进程内写锁: SQLite 同一时刻只允许一个写者, 与其让多个连接在
+        # busy-wait 里互相踩, 不如在 Python 层直接排队 (每次写都极短)。
+        self._write_lock: threading.Lock = threading.Lock()
         # Optional collaborators — wired by bootstrap_review_collaborators()
         # at lifespan startup (PR-C §5.2). Setter methods make the injection
         # idempotent + observable. When either is None, _process_event
@@ -42,6 +51,10 @@ class ReviewQueue:
         self.review_service: object = None  # ReviewService (late import)
         self.draft_store: object = None  # SkillDraftStore (late import)
         self._initialize_db()
+
+    def _connect(self) -> sqlite3.Connection:
+        """统一建连: 显式 busy timeout, 避免默认 5s 在慢盘上不够。"""
+        return sqlite3.connect(self.db_path, timeout=_DB_TIMEOUT_SECONDS)
 
     def set_review_service(self, review_service: object) -> None:
         """Inject the LLM-driven ReviewService.
@@ -83,7 +96,7 @@ class ReviewQueue:
 
     def _initialize_db(self) -> None:
         """Create the review_events table if it doesn't exist."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS review_events (
@@ -110,7 +123,7 @@ class ReviewQueue:
         blocking the caller (review is best-effort).
         """
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._write_lock, self._connect() as conn:
                 conn.execute(
                     """INSERT INTO review_events
                        (trigger_type, session_id, context, status, created_at)
@@ -140,7 +153,7 @@ class ReviewQueue:
         SELECT-and-UPDATE pattern (e.g. UPDATE ... RETURNING or a transaction
         with row-level locking).
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with self._write_lock, self._connect() as conn:
             cursor = conn.execute(
                 """SELECT id, trigger_type, session_id, context, status, created_at
                    FROM review_events
@@ -172,7 +185,7 @@ class ReviewQueue:
 
     def _mark_done(self, event_id: int) -> None:
         """Mark an event as successfully processed."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._write_lock, self._connect() as conn:
             conn.execute(
                 """UPDATE review_events
                    SET status = 'done', processed_at = ?
@@ -182,7 +195,7 @@ class ReviewQueue:
 
     def _mark_failed(self, event_id: int, error_message: str) -> None:
         """Mark an event as failed with an error message."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._write_lock, self._connect() as conn:
             conn.execute(
                 """UPDATE review_events
                    SET status = 'failed', processed_at = ?, error_message = ?
