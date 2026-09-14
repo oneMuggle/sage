@@ -603,6 +603,22 @@ def _apply_print_setup(writer, req) -> None:
                 ws.print_area = print_setup.print_area
             if getattr(print_setup, "title_rows", None):
                 ws.print_title_rows = print_setup.title_rows
+            # Round 31：打印页边距（厘米）——openpyxl 单位为英寸，需换算
+            margins = getattr(print_setup, "margins_cm", None)
+            if margins is not None:
+                from openpyxl.worksheet.page import PageMargins
+
+                def _cm_to_in(value):
+                    return None if value is None else value / 2.54
+
+                ws.page_margins = PageMargins(
+                    left=_cm_to_in(margins.left) or ws.page_margins.left,
+                    right=_cm_to_in(margins.right) or ws.page_margins.right,
+                    top=_cm_to_in(margins.top) or ws.page_margins.top,
+                    bottom=_cm_to_in(margins.bottom) or ws.page_margins.bottom,
+                    header=ws.page_margins.header,
+                    footer=ws.page_margins.footer,
+                )
         except Exception as exc:  # noqa: BLE001 — 单 sheet 失败不阻断
             logger_.warning("打印设置写入失败，跳过: %s (%s)", exc, sheet_spec.name)
 
