@@ -18,6 +18,13 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+## [v0.4.9-alpha.33-win7] - 2026-09-14
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 修复 LLM 代理响应编码错误。
+
+### Fixed
+- **LLM 代理响应编码**: `_read_response_body_limited()` 从 `aiter_raw()` 改为 `aiter_bytes()`，修复上游压缩响应（gzip/deflate）未解压导致前端 JSON 解析失败的问题。影响所有非流式 LLM 代理请求（如 `/v1/models` 列表查询）。
+
 ## [v0.4.9-alpha.32-win7] - 2026-09-14
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #794 — 安装包日志错误修复 (3 bugs)。
