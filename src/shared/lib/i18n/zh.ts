@@ -73,6 +73,8 @@ export const zh = {
   'chat.atEntity.agent': '智能体',
   'chat.atEntity.agent.desc': '@agent:名称 —— 引用该智能体的角色设定',
   'sidebar.more': '更多',
+  'chat.delete_message': '删除这条消息',
+  'chat.delete_message_confirm': '确认删除这条消息？',
   'chat.copy': '复制',
   'chat.copied': '已复制',
   'chat.delete_confirm': '确定要删除这个会话吗？',

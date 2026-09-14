@@ -73,6 +73,8 @@ export const en: Record<TranslationKey, string> = {
   'chat.atEntity.agent': 'Agent',
   'chat.atEntity.agent.desc': '@agent:name — reference this agent’s persona',
   'sidebar.more': 'More',
+  'chat.delete_message': 'Delete this message',
+  'chat.delete_message_confirm': 'Delete this message?',
   'chat.copy': 'Copy',
   'chat.copied': 'Copied',
   'chat.delete_confirm': 'Are you sure you want to delete this session?',

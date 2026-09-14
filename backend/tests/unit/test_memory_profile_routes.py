@@ -40,7 +40,7 @@ class TestUndoWrite:
     async def test_undo_memory(self, client):
         sid = SessionRepository().create(title="撤销测试").id
         mm = get_memory_manager()
-        mid = mm.memorize("用户喜欢火锅", "episodic", 5, [], session_id=sid)
+        mid = mm.memorize("用户喜欢火锅", "episodic", 5, [], metadata={"session_id": sid})
         get_write_ledger().record(memory_id=mid, kind=KIND_MEMORY, content="x", session_id=sid)
         r = await client.post(f"{BASE}/undo-write", json={"session_id": sid, "id": mid})
         assert r.status_code == 200
