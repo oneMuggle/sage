@@ -266,3 +266,19 @@ project_authorization / chat.entity_refs）零改动。
 - **顺序确定性**：`_next_ms()` 单调毫秒（POSIX 版靠插入序，SQLite 需要
   strictly-increasing 数值复现同秒语义）；
 - recent_projects 不再依赖 wiki/files 平台原语（平台差异面进一步收窄）。
+
+## 17. P9 落地记录（2026-09-15，feat/knowledge-scope-p9）
+
+方案：`docs/plans/2026-09-15_knowledge-scope-p9-plan.md`。P6 记录的
+"知识搜索默认域语义敏感"以**显式范围参数**方式落地（默认行为零变化）：
+
+- 后端 `GET /search/global` 新增可选 `knowledge_project`（wiki 项目根）：
+  经 `authorize_registered_project` 校验（recents ∪ 注册表 + `wiki/`
+  目录，未授权 403 / 非 wiki 404，与 wiki 域同契约——防止知识搜索变成
+  任意目录内容浏览器）；`_search_knowledge` 显式范围优先，缺省仍回退
+  recents[0]；
+- 前端 CommandPalette："知识范围"分组（默认 + 最近 wiki 项目 ≤5），选择
+  持久化 localStorage（`sage:knowledge-scope:v1`）且不关闭面板（调参非
+  导航）；搜索请求按范围携带 `knowledge_project`；
+- win7 对齐：search_routes / CommandPalette 小块追加；授权门禁复用 P6
+  桥接的 project_authorization；py3.8 兼容。

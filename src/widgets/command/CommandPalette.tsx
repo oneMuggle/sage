@@ -7,12 +7,16 @@ import { toast } from 'sonner';
 import { useTheme } from '../../app/providers/useTheme';
 import { backendRequest } from '../../shared/api/backendRequest';
 import { projectApi, type ProjectSummary } from '../../shared/api/projectApi';
+import { getRecentWikiProjects } from '../../shared/api-client/wiki';
 import { useStore } from '../../shared/lib/store';
 
 import { actionCommands, navCommands } from './commandItems';
 
 // ⌘1-9 快捷键跳转 (U6 from OpenWorker)
 const KEYBOARD_SHORTCUTS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+
+/** P9: 知识搜索范围 localStorage 键（'' 或未设置 = 默认最近打开） */
+const KNOWLEDGE_SCOPE_KEY = 'sage:knowledge-scope:v1';
 
 /** P1-3.7: 全局搜索返回类型（后端 /api/v1/search/global）。 */
 interface GlobalSearchResult {
@@ -42,6 +46,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const [globalResults, setGlobalResults] = useState<GlobalSearchResult | null>(null);
   const [searching, setSearching] = useState(false);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  // P9: 知识搜索范围（wiki 项目根目录；'' = 默认最近打开），localStorage 持久化
+  const [knowledgeScope, setKnowledgeScope] = useState<string>(
+    () => localStorage.getItem(KNOWLEDGE_SCOPE_KEY) ?? '',
+  );
+  const [wikiRecents, setWikiRecents] = useState<Array<{ path: string; name: string }>>([]);
   const abortRef = useRef<AbortController | null>(null);
 
   // 打开时重置搜索
@@ -54,6 +63,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         .list()
         .then(setProjects)
         .catch(() => setProjects([]));
+      // P9: 拉取最近 wiki 项目供"知识范围"分组（失败静默降级为不显示）
+      getRecentWikiProjects()
+        .then((recents) => setWikiRecents(recents.map((r) => ({ path: r.path, name: r.name }))))
+        .catch(() => setWikiRecents([]));
     }
   }, [open]);
 
@@ -73,6 +86,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       setSearching(true);
       try {
         const params = new URLSearchParams({ q: search, limit: '10' });
+        // P9: 显式知识范围（未设置时后端回退最近打开的项目）
+        if (knowledgeScope) {
+          params.set('knowledge_project', knowledgeScope);
+        }
         const result = await backendRequest<GlobalSearchResult>({
           path: `/api/v1/search/global?${params}`,
         });
@@ -95,7 +112,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [search]);
+  }, [search, knowledgeScope]);
 
   const handleNav = useCallback(
     (path: string) => {
@@ -141,6 +158,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     },
     [handleOpenSession, loadSessions, onOpenChange],
   );
+
+  // P9: 设置知识搜索范围（持久化 localStorage；选择是调参，不关闭面板）
+  const handleSetKnowledgeScope = useCallback((path: string) => {
+    setKnowledgeScope(path);
+    try {
+      localStorage.setItem(KNOWLEDGE_SCOPE_KEY, path);
+    } catch {
+      // localStorage 不可用时仅本次会话生效
+    }
+  }, []);
 
   // 项目模块 P2: 登记项目（原生选目录 → register → open → 进入新会话）
   const handleAddProject = useCallback(async () => {
@@ -311,6 +338,43 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                         {project.sessionCount} 个会话
                       </span>
                     )}
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            )}
+
+            {/* P9: 知识范围（作用于搜索模式的知识结果；选择不关闭面板） */}
+            {wikiRecents.length > 0 && (
+              <Command.Group heading="知识范围" className="mb-1.5">
+                <Command.Item
+                  value="knowledge-scope-default"
+                  onSelect={() => handleSetKnowledgeScope('')}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-radius-sm text-sm text-text cursor-default select-none aria-selected:bg-primary/10 aria-selected:text-primary data-[disabled]:opacity-50 transition-colors"
+                >
+                  <span className="w-4 shrink-0 text-center text-xs text-primary">
+                    {knowledgeScope === '' && '✓'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate">默认（最近打开）</div>
+                    <div className="text-xs text-text-muted truncate">
+                      知识搜索跟随最近打开的 wiki 项目
+                    </div>
+                  </div>
+                </Command.Item>
+                {wikiRecents.slice(0, 5).map((recent) => (
+                  <Command.Item
+                    key={recent.path}
+                    value={`knowledge-scope-${recent.path}`}
+                    onSelect={() => handleSetKnowledgeScope(recent.path)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-radius-sm text-sm text-text cursor-default select-none aria-selected:bg-primary/10 aria-selected:text-primary data-[disabled]:opacity-50 transition-colors"
+                  >
+                    <span className="w-4 shrink-0 text-center text-xs text-primary">
+                      {knowledgeScope === recent.path && '✓'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate">{recent.name || recent.path}</div>
+                      <div className="text-xs text-text-muted truncate">{recent.path}</div>
+                    </div>
                   </Command.Item>
                 ))}
               </Command.Group>
