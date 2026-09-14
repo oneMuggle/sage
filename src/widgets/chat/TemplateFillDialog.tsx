@@ -29,7 +29,7 @@ export function extractTemplateVars(content: string): string[] {
 
 // R31: 变量记忆 —— 每个模板内容（按内容哈希）记住上次填写值，存 localStorage。
 // 键 = sage:tplfill:<djb2(content)>；读写失败静默降级（隐私模式等）。
-function tplStorageKey(content: string): string {
+export function tplStorageKey(content: string): string {
   let hash = 5381;
   for (let i = 0; i < content.length; i++) {
     hash = ((hash << 5) + hash + content.charCodeAt(i)) | 0;
