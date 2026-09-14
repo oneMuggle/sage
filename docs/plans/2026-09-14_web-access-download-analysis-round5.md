@@ -1,7 +1,7 @@
 # Sage 网页访问与文件下载能力分析及优化方案（Round 5 候选）
 
 - **日期**：2026-09-14
-- **状态**：方案完成，**B1 已实施**（分支 `feat/web-access-round5-b1`，基于 origin/main），**B2 已实施**（分支 `feat/web-access-round5-b2`，基于 B1）；B3–B6 待排期
+- **状态**：方案完成，**B1 已实施**（分支 `feat/web-access-round5-b1`，基于 origin/main），**B2 已实施**（分支 `feat/web-access-round5-b2`，基于 B1），**B3 已实施**（分支 `feat/web-access-round5-b3`，基于 B2）；B4–B6 待排期
 - **勘察范围**：`backend/tools/{web_tool,download_tool,browser_tool,browser_cdp,browser_ws,web_render,web_cache,credential_vault,http_factory,network_config}.py`、`backend/domain/network_policy.py`、`docs/plans/2026-09-*_web-access-*.md`（Round 1–4）
 - **方法**：只读代码勘察（附 `file:line`），对照 Round 1–4 已交付项，避免重复提案
 - **编号约定**：AB = 反爬；AU = 登录态；SN = 嗅探；DL = 下载稳定性/续传；X = 横切
@@ -245,13 +245,28 @@ vault 增 `kind: "cookie" | "header"`；`browser_cookies` 之外新增 `credenti
 
 双分支：改动文件 `http_factory.py` / `browser_cdp.py` / `web_render.py` / `web_tool.py` 在 main 与 win7 同源；无新依赖，py3.8 `ast.parse(feature_version=(3,8))` 通过。
 
+## 2.8 B3 实施记录（2026-09-14）
+
+| 项 | 落点 | 说明 |
+| --- | --- | --- |
+| AU1 元数据/过期 | `credential_vault._clean_cookie` 保留 `expires`（epoch 秒，≤0 视为 session）/ `secure` / `httpOnly` / `sameSite`；`_split_cookies` → (可发送, 已过期)；`cookie_header_for(domain, repo, url, now)`；`cookie_path_matches`；`resolve_credential()` 统一入口返回 `CredentialResolution(status ∈ ok/not_found/expired, headers, expired_names, expires_in)` | web_tool / download_tool 的 `credential_domain` 解析改走 `resolve_credential`，全部过期 → `credential_expired`；`list_credentials` 增 `kind` / `expires_in_seconds` / `expired`；旧档案无 `kind` 字段按 cookie 处理（向后兼容） |
+| AU2 回写 | `parse_set_cookie`（stdlib 手写，Domain/Path/Max-Age/Expires/Secure/HttpOnly/SameSite）、`merge_set_cookies(domain, values, url)`；web_tool `_writeback_set_cookies`（`headers.get_list("set-cookie")`，仅凭据实际附加的 hop）；download_tool 同 | 归属域必须落在档案域内（第三方 cookie 不混入）；同名同 path 覆盖；`Max-Age≤0` / 过期 `Expires` 删除；档案清空则删条目；回写失败静默不影响本次请求；web_fetch 结果 `note` 追加 `credential_refreshed` |
+| AU2 登录墙 | `looks_like_login_url`（host 前缀 `login./sso./passport./auth./idp./accounts.` 或 path 片段 `login/signin/sso/passport/authenticate/authorize/oauth/cas/idp`）、`looks_like_login_html`（`<input type=password>`）；web_tool `_detect_login_wall`；download_tool 302 到登录 URL 即返回、首块 HTML 含密码框 → `login_required` | 仅在**携带凭据**时判定（无凭据的登录页就是普通页面）；密码框页面还需"登录类 URL 或去标签后 <250 词"，避免误伤带登录小组件的正文页；起始 URL 本身就是登录页不判定 |
+| AU4 头部凭据 | `save_header_credential(domain, headers, repo, ttl_seconds)`（`kind=header` / `headers_enc` / `expires_at`）；`BrowserCookiesTool action=set_header`（`header_name` / `header_value` / `ttl_seconds`） | 头名须合法 token 且不在 `Cookie/Host/Content-Length/Transfer-Encoding/Connection/Accept-Encoding` 内，头值拒 CR/LF；`resolve_credential` 对 header 档案返回原样头；`cookie_header_for` / `load_credential` 对 header 档案返回 `None`（cookie 视角接口语义不变）；web_tool / download_tool 用 `hop_headers.update(credential_headers)` 附加，跨域剥离逻辑与 cookie 共用 |
+
+> 未新增工具名（`credential_set` 并入 `browser_cookies action=set_header`），`tool_names.py` / profiles / win7 settings KEYS 白名单均无需改动 —— 方案 §3 预计的"settings KEYS 白名单需手工 cherry"不再成立。
+
+测试：`test_credential_vault.py` +38（元数据保留 / 过期不发 / 全过期 expired / secure+path 过滤 / path 匹配表 / 旧档案兼容 / list 时效 / web_fetch & http_download `credential_expired` / Set-Cookie 解析两组 / merge 更新-删除-忽略第三方 / 无档案 noop / web_fetch 回写 & 跨域不回写 / download 回写 / 登录 URL 判定 9 组 / 密码框判定 / web_fetch 302 登录页 & 密码框页 & 带登录小组件的正文页不误判 & 无凭据不判定 / download 302 SSO & 登录页代替 PDF / header 存取 / 非法头拒绝 / TTL 过期 / web_fetch 附头 + 跨域剥离 / download 附头 / header 过期 / `set_header` 存档脱敏 & 校验 / export 时效）。
+
+双分支：改动文件 `credential_vault.py` / `web_tool.py` / `download_tool.py` / `browser_tool.py` 在 main 与 win7 同源；stdlib only（`email.utils.parsedate_to_datetime`），py3.8 `ast.parse(feature_version=(3,8))` 通过。
+
 ## 3. 实施批次建议
 
 | 批次 | 内容 | 预估 | 双分支 |
 | --- | --- | --- | --- |
 | **B1（P0）** ✅ | DL1 重试/续传/`.part`/完整性 + DL3/SN1 魔数嗅探 + download 复用默认头 | 已交付 | main + win7（stdlib+httpx，零新依赖） |
 | **B2（P1）** ✅ | AB1 自动升级链 + AB2 头拟真 + AB4 去自动化痕迹 + AB5 重试/限速 | 已交付 | main + win7 |
-| **B3（P1）** | AU1 cookie 元数据/过期 + AU2 Set-Cookie 回写/登录墙检测 + AU4 header 凭据 | 1.5 天 | main + win7（settings KEYS 白名单需手工 cherry） |
+| **B3（P1）** ✅ | AU1 cookie 元数据/过期 + AU2 Set-Cookie 回写/登录墙检测 + AU4 header 凭据 | 已交付 | main + win7（未新增 settings key / 工具名，零手工 cherry） |
 | **B4（P1）** | SN3 浏览器事件长连接 + `browser_downloads` + SN2 `mode=files` | 2 天 | main + win7 |
 | **B5（P2）** | DL2 后台任务/进度/取消 + AU3/AU5 自动刷新与渲染池互通 + AB6 连接复用 | 2–3 天 | main 优先（涉前端进度 UI） |
 | **B6（P2，可选）** | AB3 HTTP/2 / curl_cffi 指纹伪装 | 0.5 天 | main only |

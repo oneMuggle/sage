@@ -97,6 +97,11 @@ def looks_like_antibot_page(html: str, extracted_text: str) -> bool:
     return bool(_ANTIBOT_MARKER_RE.search(text) or _ANTIBOT_MARKER_RE.search(sample))
 
 
+#: AU2 登录墙判定：密码框页面去标签后的词数上限（登录页几乎没有正文）
+_LOGIN_PAGE_MAX_WORDS = 250
+_TAG_RE = re.compile(r"<script\b.*?</script>|<style\b.*?</style>|<[^>]+>", re.I | re.S)
+
+
 class _AntibotBlocked(Exception):  # noqa: N818 — internal signal
     """内部信号：静态通道被反爬拦截（状态码或盾页），可尝试升级到渲染通道。"""
 
@@ -358,8 +363,10 @@ class WebFetchTool(BaseTool):
                     "credential_domain": {
                         "type": "string",
                         "description": (
-                            "browser_cookies 导出的凭据档案 domain"
-                            "（如 .cnki.net），附加登录态 cookie"
+                            "凭据档案 domain（如 .cnki.net）：browser_cookies 导出的 "
+                            "cookie 或 credential_set 设置的头部凭据（Bearer / API key），"
+                            "命中域自动附加、跨域剥离；过期报 credential_expired，"
+                            "被踢到登录页报 login_required"
                         ),
                     },
                     "wait_for": {
@@ -435,18 +442,28 @@ class WebFetchTool(BaseTool):
                 content["cached"] = True
                 return ToolResult(success=True, content=content)
 
-        cookie_header: Optional[str] = None
+        credential_headers: Optional[Dict[str, str]] = None
         if credential_domain.strip():
-            from .credential_vault import cookie_domain_matches, cookie_header_for
+            from .credential_vault import cookie_domain_matches, resolve_credential
 
             credential_domain = credential_domain.strip()
-            cookie_header = cookie_header_for(credential_domain)
-            if cookie_header is None:
+            resolution = resolve_credential(credential_domain, url=url)
+            if resolution.status == "expired":
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_expired: {credential_domain!r} 的凭据已全部过期"
+                        f"（{', '.join(resolution.expired_names[:5])}）。"
+                        "请在浏览器重新登录后 browser_cookies action=export，"
+                        "或 credential_set 重新设置头部凭据"
+                    ),
+                )
+            if not resolution.ok or not resolution.headers:
                 return ToolResult(
                     success=False,
                     error=(
                         f"credential_not_found: 无 {credential_domain!r} 的凭据档案"
-                        "（先 browser_cookies action=export 导出）"
+                        "（先 browser_cookies action=export 导出，或 credential_set 设置头部凭据）"
                     ),
                 )
             target_host = urlparse(url).hostname or ""
@@ -458,6 +475,7 @@ class WebFetchTool(BaseTool):
                         f"不在凭据域 {credential_domain!r} 内（档案域按 cookie 归属）"
                     ),
                 )
+            credential_headers = resolution.headers
 
         network_policy = self._effective_network_policy()
         url_error = self._validate_target_url(url)
@@ -482,13 +500,20 @@ class WebFetchTool(BaseTool):
                     url,
                     network_policy,
                     gated_by_whitelist,
-                    cookie_header,
+                    credential_headers,
                     credential_domain.strip(),
                 )
                 status = response.status_code
                 if status in _ANTIBOT_STATUS_CODES:
                     raise _AntibotBlocked(f"http_{status}: 站点拒绝访问（状态码 {status}）", status)
                 response.raise_for_status()
+                # AU2：带凭据却被送到登录页 → login_required（不当普通正文返回）
+                if credential_headers:
+                    login_error = self._detect_login_wall(
+                        url, final_url, response, credential_domain
+                    )
+                    if login_error:
+                        return ToolResult(success=False, error=login_error)
                 # C1：以 uncapped 抽取（缓存存全文，返回前统一裁剪）——
                 # 不同 max_length 的请求可共享同一份缓存
                 content = self._render(final_url, response, mode, self._UNCAPPED_LENGTH)
@@ -554,11 +579,12 @@ class WebFetchTool(BaseTool):
         url: str,
         network_policy: NetworkPolicy,
         gated_by_whitelist: bool,
-        cookie_header: Optional[str] = None,
+        credential_headers: Optional[Dict[str, str]] = None,
         credential_domain: str = "",
     ) -> tuple:
         current_url = url
         credential_stripped = False
+        refreshed_names: list = []
         for redirect_count in range(self._MAX_REDIRECTS + 1):
             url_error = self._validate_target_url(current_url)
             if url_error:
@@ -575,12 +601,12 @@ class WebFetchTool(BaseTool):
             # 302 到第三方 SSO/广告域）静默剥离，防止凭据外带。
             hop_headers: Dict[str, str] = {"Accept-Encoding": "identity"}
             credential_applied = False
-            if cookie_header:
+            if credential_headers:
                 from .credential_vault import cookie_domain_matches
 
                 hostname = urlparse(current_url).hostname or ""
                 if cookie_domain_matches(hostname, credential_domain):
-                    hop_headers["Cookie"] = cookie_header
+                    hop_headers.update(credential_headers)
                     credential_applied = True
                 elif redirect_count > 0:
                     credential_stripped = True
@@ -607,6 +633,11 @@ class WebFetchTool(BaseTool):
                 # AB5：连接错 / 超时 / 5xx / 429 重试 + Retry-After + 同 host 限速
                 response = retrying_send(client, request, stream=True)
                 try:
+                    # AU2：命中域的响应带 Set-Cookie → 合并回 cookie 档案（续期 token 不丢）
+                    if credential_applied and "Cookie" in credential_headers:
+                        refreshed_names.extend(
+                            self._writeback_set_cookies(response, current_url, credential_domain)
+                        )
                     if response.is_redirect:
                         location = response.headers.get("location")
                         if redirect_count >= self._MAX_REDIRECTS:
@@ -644,12 +675,15 @@ class WebFetchTool(BaseTool):
                 finally:
                     response.close()
                 response = buffered_response
-            credential_note = (
-                "credential_stripped: 重定向跨出凭据域，登录态 cookie 已剥离"
-                if credential_stripped and not credential_applied
-                else None
-            )
-            return response, current_url, credential_note
+            notes = []
+            if credential_stripped and not credential_applied:
+                notes.append("credential_stripped: 重定向跨出凭据域，登录态凭据已剥离")
+            if refreshed_names:
+                notes.append(
+                    "credential_refreshed: 服务器续期了 cookie，档案已回写"
+                    f"（{', '.join(sorted(set(refreshed_names))[:5])}）"
+                )
+            return response, current_url, ("；".join(notes) if notes else None)
 
         raise ValueError("redirect_limit_exceeded: 重定向次数超限")
 
@@ -717,6 +751,45 @@ class WebFetchTool(BaseTool):
             }
         )
         return result
+
+    @staticmethod
+    def _writeback_set_cookies(response: httpx.Response, url: str, credential_domain: str) -> list:
+        values = response.headers.get_list("set-cookie")
+        if not values:
+            return []
+        from .credential_vault import merge_set_cookies
+
+        try:
+            return merge_set_cookies(credential_domain, values, url)
+        except Exception:  # noqa: BLE001 — 回写失败不影响本次抓取
+            return []
+
+    def _detect_login_wall(
+        self, url: str, final_url: str, response: httpx.Response, credential_domain: str
+    ) -> Optional[str]:
+        """AU2：带凭据请求被送到登录页 → ``login_required`` 文案；否则 ``None``。"""
+        from .credential_vault import looks_like_login_html, looks_like_login_url
+
+        reason = ""
+        if final_url != url and looks_like_login_url(final_url) and not looks_like_login_url(url):
+            reason = f"重定向到登录页 {final_url}"
+        else:
+            content_type = response.headers.get("content-type", "")
+            if any(marker in content_type.lower() for marker in self._HTML_CONTENT_TYPES):
+                html_text, _ = decode_html(response.content, content_type)
+                # 密码框 + （登录类 URL 或 正文极短）才判定，避免误伤带登录小组件的正文页
+                if looks_like_login_html(html_text) and (
+                    looks_like_login_url(final_url)
+                    or len(_TAG_RE.sub(" ", html_text[:300_000]).split()) < _LOGIN_PAGE_MAX_WORDS
+                ):
+                    reason = "页面含密码输入框且无正文"
+        if not reason:
+            return None
+        return (
+            f"login_required: 携带 {credential_domain!r} 凭据访问仍被要求登录（{reason}）。"
+            "凭据可能已失效：请在浏览器重新登录后 browser_cookies action=export 再试；"
+            "或经 browser_launch + browser_navigate 真浏览器通道访问"
+        )
 
     def _is_antibot_page(self, response: httpx.Response, content: Dict[str, Any]) -> bool:
         """2xx 但正文是反爬盾页（Cloudflare 5 秒盾常以 200/503 + 验证页返回）。"""
