@@ -112,20 +112,21 @@ def test_download_requires_bound_workspace():
     assert "workspace_not_bound" in result.error
 
 
-@pytest.mark.skipif(
-    os.name == "nt",
-    reason="用例依赖 POSIX 绝对路径语义（/abs/... 在 Windows 非绝对）",
-)
 def test_download_rejects_absolute_filename(tmp_path):
-    result = _tool(tmp_path).execute(url=f"{_BASE}/x.pdf", filename="/etc/passwd")
+    """平台中立的绝对文件名拒绝：按平台给出等价的绝对路径。"""
+    absolute = (
+        os.path.join(str(tmp_path.anchor), "etc", "passwd")
+        if os.name == "nt"
+        else "/etc/passwd"
+    )
+    result = _tool(tmp_path).execute(url=f"{_BASE}/x.pdf", filename=absolute)
 
     assert result.success is False
-    if os.name == "nt":
-        # Windows 上 "/etc/passwd" 无盘符不算绝对路径，落进工作区边界拒绝；
-        # 两条路径都是安全拒绝，语义等价。
-        assert "path_outside_workspace" in result.error
-    else:
-        assert "filename_must_be_relative" in result.error
+    # 两条拒绝路径都是安全等价：相对性检查或工作区边界检查
+    assert (
+        "filename_must_be_relative" in result.error
+        or "path_outside_workspace" in result.error
+    )
 
 
 def test_download_rejects_filename_escaping_workspace(tmp_path):

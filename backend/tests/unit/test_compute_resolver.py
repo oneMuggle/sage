@@ -31,8 +31,8 @@ from backend.adapters.out.compute._resolver import (
 
 @pytest.fixture()
 def fake_exe(tmp_path: Path) -> Path:
-    """生成一个临时的"可执行"文件（chmod +x）。"""
-    p = tmp_path / "fake-exe"
+    """生成一个临时的"可执行"文件（chmod +x；nt 上按 PATHEXT 需带后缀）。"""
+    p = tmp_path / ("fake-exe.exe" if os.name == "nt" else "fake-exe")
     p.write_text("#!/bin/sh\necho mock\n")
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return p
@@ -41,7 +41,7 @@ def fake_exe(tmp_path: Path) -> Path:
 @pytest.fixture()
 def another_fake_exe(tmp_path: Path) -> Path:
     """第二个临时可执行文件（用于优先级测试）。"""
-    p = tmp_path / "another-exe"
+    p = tmp_path / ("another-exe.exe" if os.name == "nt" else "another-exe")
     p.write_text("#!/bin/sh\necho another\n")
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return p
@@ -231,10 +231,6 @@ def test_nonexistent_path_is_skipped(
     assert result.source == "python_module"
 
 
-@pytest.mark.skipif(
-    os.name == "nt",
-    reason="Windows 无执行位语义（os.access X_OK 恒真），分类器行为不同",
-)
 def test_non_executable_file_is_skipped(
     tmp_path: Path,
     fake_exe: Path,
