@@ -78,12 +78,12 @@ export function AboutTab() {
         </h2>
         <dl className="grid grid-cols-2 gap-4">
           <SystemInfoItem label="版本" value={__APP_VERSION__} />
-          <SystemInfoItem label="Electron" value={process.versions.electron} />
-          <SystemInfoItem label="Node.js" value={process.versions.node} />
+          <SystemInfoItem label="Electron" value={getElectronVersion()} />
+          <SystemInfoItem label="Node.js" value={getNodeVersion()} />
           <SystemInfoItem label="Python" value="3.10+" />
           <SystemInfoItem label="许可证" value="MIT" />
-          <SystemInfoItem label="架构" value={process.arch} />
-          <SystemInfoItem label="平台" value={process.platform} />
+          <SystemInfoItem label="架构" value={getArch()} />
+          <SystemInfoItem label="平台" value={getPlatform()} />
         </dl>
       </section>
     </div>
@@ -97,4 +97,39 @@ function SystemInfoItem({ label, value }: { label: string; value: string }) {
       <dd className="text-sm text-text">{value}</dd>
     </div>
   );
+}
+
+// Safe accessors for Node.js process object (not available in browser context)
+function getElectronVersion(): string {
+  try {
+    return typeof process !== 'undefined' && process.versions?.electron
+      ? process.versions.electron
+      : 'N/A';
+  } catch {
+    return 'N/A';
+  }
+}
+
+function getNodeVersion(): string {
+  try {
+    return typeof process !== 'undefined' && process.versions?.node ? process.versions.node : 'N/A';
+  } catch {
+    return 'N/A';
+  }
+}
+
+function getArch(): string {
+  try {
+    return typeof process !== 'undefined' && process.arch ? process.arch : 'N/A';
+  } catch {
+    return 'N/A';
+  }
+}
+
+function getPlatform(): string {
+  try {
+    return typeof process !== 'undefined' && process.platform ? process.platform : 'N/A';
+  } catch {
+    return 'N/A';
+  }
 }

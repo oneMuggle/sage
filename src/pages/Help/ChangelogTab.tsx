@@ -13,7 +13,7 @@ export function ChangelogTab() {
   } = useQuery({
     queryKey: ['changelog'],
     queryFn: async () => {
-      const content = await window.changelogAPI?.read();
+      const content = await window.electronAPI?.changelogAPI?.read();
       if (!content) throw new Error('无法读取更新日志');
       return content;
     },
