@@ -31,6 +31,8 @@ LEGACY_SESSION_ROUTES_PATH = (
 # 本 PR (M4 win7 移植) 把 compact_session 加入,并已把 fork_session 降级为 def
 # (与 main 当前状态一致 —— main 的 fork_session 在 §1.2 时已是 def)。
 # win7 另有 4 个 memory 相关 async handler(get_memories_by_turn 等),一并纳入。
+# NOTE (对标 S2 win7 同步): 旧版 get_user_profile 聚合端点已被 S2 的用户画像
+# CRUD 路由(同步 def)取代并移除,白名单与计数相应 -1 (10 → 9)。
 KEEP_ASYNC_HANDLERS = frozenset(
     {
         "compact_session",  # M4 manual compact,内调 LLM 摘要 (L1 后现居 legacy_session_routes)
@@ -41,7 +43,6 @@ KEEP_ASYNC_HANDLERS = frozenset(
         "chat_stream_create",  # SSE 流,内调 LLM 流
         "chat_stream_attach",  # SSE 续接,内调事件流
         "get_memories_by_turn",  # memory 查询 (win7 特有)
-        "get_user_profile",  # 用户画像 (win7 特有)
         "get_session_summary",  # 会话摘要 (win7 特有)
         "memory_events",  # memory 事件流 (win7 特有)
     }
@@ -141,8 +142,9 @@ def test_async_handler_count_matches_design():
 
     # win7: 原 11 个,compact_session 已拆至 legacy_session_routes (L1, P8)
     # 后剩 10 个; compact_session 在那里由 test_keep_async 的合并扫描覆盖。
-    assert len(async_endpoints) == 10, (
-        f"legacy_routes 应有 10 个 async def handler,实际 {len(async_endpoints)}:\n"
+    # 对标 S2 同步后旧版 get_user_profile 移除 → 9 个。
+    assert len(async_endpoints) == 9, (
+        f"legacy_routes 应有 9 个 async def handler,实际 {len(async_endpoints)}:\n"
         + "\n".join(f"  {f.name} (line {f.lineno})" for f in async_endpoints)
     )
 
@@ -159,8 +161,8 @@ def test_async_handlers_count_invariant_against_internal_helpers():
     async_endpoints = [
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
-    # 同样 10 个,跟 test_async_handler_count_matches_design 一致
-    assert len(async_endpoints) == 10
+    # 同样 9 个,跟 test_async_handler_count_matches_design 一致
+    assert len(async_endpoints) == 9
 
 
 if __name__ == "__main__":
