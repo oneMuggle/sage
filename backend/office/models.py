@@ -839,6 +839,12 @@ class ExcelPrintSetupSpec(BaseModel):
         pattern=r"^[A-Za-z]{1,3}[0-9]+:[A-Za-z]{1,3}[0-9]+$",
         description="打印区域，A1 记法，如 'A1:F40'",
     )
+    title_rows: Optional[str] = Field(
+        default=None,
+        max_length=20,
+        pattern=r"^\$?[0-9]+:\$?[0-9]+$",
+        description="每页重复的标题行，如 '1:1'（长表打印每页带表头）",
+    )
 
 
 class ExcelCellRange(BaseModel):

@@ -915,6 +915,13 @@ class OfficeCreateTool(BaseTool):
                                                     "type": "string",
                                                     "description": "打印区域 A1 记法，如 'A1:F40'",
                                                 },
+                                                "title_rows": {
+                                                    "type": "string",
+                                                    "description": (
+                                                        "每页重复的标题行，如 '1:1'"
+                                                        "（长表打印每页带表头）"
+                                                    ),
+                                                },
                                             },
                                         },
                                     },
