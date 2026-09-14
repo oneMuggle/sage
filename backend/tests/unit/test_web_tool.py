@@ -874,3 +874,98 @@ def test_web_search_client_uses_browser_user_agent():
     ua = tool.client.headers.get("User-Agent", "")
     assert ua.startswith("Mozilla/")
     assert "python-httpx" not in ua
+
+
+# ---------- Round 5 B1 / SN1：二进制感知 ----------
+
+
+def test_web_fetch_pdf_returns_binary_hint_not_garbage():
+    tool = WebFetchTool()
+    body = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj" + b"\x00" * 64
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/paper.pdf").mock(
+            return_value=Response(
+                200, content=body, headers={"content-type": "application/pdf", "content-length": str(len(body))}
+            )
+        )
+        result = tool.execute(url="https://example.com/paper.pdf")
+
+    assert result.success is True
+    assert result.content["kind"] == "binary"
+    assert result.content["detected_type"] == "pdf"
+    assert result.content["content_length"] == len(body)
+    assert result.content["suggested_filename"] == "paper.pdf"
+    assert result.content["content"] == ""
+    assert "http_download" in result.content["hint"]
+
+
+def test_web_fetch_octet_stream_with_disposition_suggests_filename():
+    tool = WebFetchTool()
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/dl?id=1").mock(
+            return_value=Response(
+                200,
+                content=b"PK\x03\x04" + b"\x00" * 32,
+                headers={
+                    "content-type": "application/octet-stream",
+                    "content-disposition": 'attachment; filename="report.docx"',
+                },
+            )
+        )
+        result = tool.execute(url="https://example.com/dl?id=1")
+
+    assert result.success is True
+    assert result.content["kind"] == "binary"
+    assert result.content["detected_type"] == "zip"
+    assert result.content["suggested_filename"] == "report.docx"
+
+
+def test_web_fetch_binary_raw_mode_also_hints():
+    tool = WebFetchTool()
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/img.png").mock(
+            return_value=Response(200, content=b"\x89PNG\r\n\x1a\n" + b"\x00" * 16, headers={"content-type": "image/png"})
+        )
+        result = tool.execute(url="https://example.com/img.png", mode="raw")
+
+    assert result.success is True
+    assert result.content["kind"] == "binary"
+    assert result.content["detected_type"] == "png"
+
+
+def test_web_fetch_json_and_plain_text_still_returned_as_text():
+    tool = WebFetchTool()
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/api.json").mock(
+            return_value=Response(200, content=b'{"ok": true}', headers={"content-type": "application/json"})
+        )
+        mock.get("/notes.txt").mock(
+            return_value=Response(200, content=b"plain notes", headers={"content-type": "text/plain"})
+        )
+        api = tool.execute(url="https://example.com/api.json")
+        txt = tool.execute(url="https://example.com/notes.txt")
+
+    assert api.content.get("kind") is None
+    assert api.content["content"] == '{"ok": true}'
+    assert txt.content["content"] == "plain notes"
+
+
+def test_web_fetch_binary_is_not_rendered():
+    """二进制结果不走 JS 渲染降级（即便 render=always）。"""
+    tool = WebFetchTool()
+    called = {"render": False}
+
+    def fake_render(*args, **kwargs):
+        called["render"] = True
+        return {"content": "should not happen"}
+
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/a.pdf").mock(
+            return_value=Response(200, content=b"%PDF-1.4 x", headers={"content-type": "application/pdf"})
+        )
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(web_render, "render_page", fake_render)
+            result = tool.execute(url="https://example.com/a.pdf", render="always")
+
+    assert result.content["kind"] == "binary"
+    assert called["render"] is False

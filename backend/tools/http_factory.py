@@ -27,6 +27,28 @@ logger = logging.getLogger(__name__)
 #: preferences 表的 key（需在 ``SettingsRepository.KEYS`` 白名单内）
 SETTINGS_KEY_WEB_PROXY = "web_proxy"
 
+#: 浏览器级默认请求头（Round 5 X1：三个出网工具共用，避免再出现"下载不发 UA"的漂移）。
+#: 缺 User-Agent 的请求会被很多站点（小说站 / 学术站 / 论坛 / 文献库）按 bot 拒 403;
+#: Accept-Language 让国内站点返回中文页,避免西文 fallback 误判。
+#: UA 版本保持"现代"（U1, Round 2）：过旧版本号本身是廉价 bot 信号；
+#: 注意它与 httpx 的 TLS 指纹解耦,硬风控站点仍走 browser 通道。
+DEFAULT_HEADERS: Dict[str, str] = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    ),
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "image/avif,image/webp,*/*;q=0.8"
+    ),
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+}
+
+
+def default_headers() -> Dict[str, str]:
+    """返回默认请求头的副本（调用方可安全修改）。"""
+    return dict(DEFAULT_HEADERS)
+
 
 def load_proxy_config(repo: Optional[Any] = None) -> Dict[str, str]:
     """读取代理配置；任何失败回退空配置（不启用代理）。
@@ -116,7 +138,9 @@ def browser_proxy_flag(config: Optional[Dict[str, str]] = None) -> str:
 
 
 __all__ = [
+    "DEFAULT_HEADERS",
     "SETTINGS_KEY_WEB_PROXY",
+    "default_headers",
     "browser_proxy_flag",
     "build_client",
     "build_proxy_mounts",
