@@ -2578,36 +2578,38 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
             try:
                 from backend.services.multimodal.media_store import (
-                    MEDIA_ROOT as _r37_media_root,
+                    MEDIA_ROOT as R37_MEDIA_ROOT,
                 )
                 from backend.services.multimodal.media_store import (
-                    MediaKind as _r37_media_kind,
+                    MediaKind as R37_MEDIA_KIND,
                 )
-                from backend.services.multimodal.media_store import MediaStore as _r37_store
+                from backend.services.multimodal.media_store import (
+                    MediaStore as R37_MEDIA_STORE,
+                )
 
-                _r37_store = _r37_store(root=_r37_media_root)
-                for _r37_mid in data.attachment_media_ids[:10]:
+                r37_store = R37_MEDIA_STORE(root=R37_MEDIA_ROOT)
+                for r37_mid in data.attachment_media_ids[:10]:
                     try:
-                        _r37_loaded = _r37_store.load(_r37_mid)
+                        _r37_loaded = r37_store.load(r37_mid)
                     except Exception:
                         _r37_loaded = None
                     if _r37_loaded is None:
                         continue
-                    _r37_ref, _r37_bytes = _r37_loaded
-                    if _r37_ref.kind != _r37_media_kind.DOCUMENT:
+                    _r37_ref, r37_bytes = _r37_loaded
+                    if _r37_ref.kind != R37_MEDIA_KIND.DOCUMENT:
                         continue
                     try:
-                        _r37_text = _r37_bytes.decode("utf-8")[:100_000]
+                        r37_text = r37_bytes.decode("utf-8")[:100_000]
                     except UnicodeDecodeError:
                         continue
-                    if not _r37_text.strip():
+                    if not r37_text.strip():
                         continue
                     dynamic_context_parts.append(
-                        "<attached_document id=" + repr(_r37_mid) + ">" + chr(10)
-                        + _r37_text + chr(10) + "</attached_document>"
+                        "<attached_document id=" + repr(r37_mid) + ">" + chr(10)
+                        + r37_text + chr(10) + "</attached_document>"
                     )
-            except Exception as _r37_att_err:
-                logger.debug(f"[REQ {request_id}] attachment media inject skipped: {_r37_att_err}")
+            except Exception as r37_att_err:
+                logger.debug(f"[REQ {request_id}] attachment media inject skipped: {r37_att_err}")
             # ===== R37 文本文档附件注入 END =====
 
             attachment_block = await resolve_attachments(data.message, data.workspace_path or "")

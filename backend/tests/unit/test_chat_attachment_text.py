@@ -131,7 +131,7 @@ def test_upload_unsupported_type_still_rejected(client):
 def test_get_text_endpoint_roundtrip(client):
     created = client.post(
         "/chat/attachments",
-        files={"file": ("doc.txt", "全文内容".encode("utf-8"), "text/plain")},
+        files={"file": ("doc.txt", "全文内容".encode(), "text/plain")},
     ).json()
     mid = created["media_ref"]["id"]
     res = client.get(f"/chat/attachments/{mid}/text")
