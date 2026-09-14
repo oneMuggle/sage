@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, conlist
+from pydantic import BaseModel, ConfigDict, Field, conlist, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +60,7 @@ class OfficeDocStatus(str, Enum):
 class OfficeDocumentMetadata(BaseModel):
     """Per-document metadata captured at read/generate time."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     page_count: Optional[int] = Field(
         default=None, description="Slide count (PPT) or page count (Word)"
@@ -76,9 +74,7 @@ class OfficeDocumentMetadata(BaseModel):
 class OfficeDocumentSummary(BaseModel):
     """Compact document record — used in list API and as a sub-field in read results."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     id: str = Field(description="UUIDv4 assigned by storage layer")
     workspace_path: str = Field(description="Absolute path to the user's workspace dir")
@@ -118,9 +114,7 @@ class OfficeDocumentSummary(BaseModel):
 class PptSlideContent(BaseModel):
     """One PPT slide's extracted content."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     index: int = Field(ge=0)
     title: Optional[str] = None
@@ -133,9 +127,7 @@ class PptSlideContent(BaseModel):
 class OfficePptReadResult(BaseModel):
     """Result of POST /api/v1/office/ppt/read."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     summary: OfficeDocumentSummary
     slides: List[PptSlideContent]
@@ -144,9 +136,7 @@ class OfficePptReadResult(BaseModel):
 class WordParagraphContent(BaseModel):
     """One Word paragraph."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     style: str = Field(description="Paragraph style name, e.g. 'Normal', 'Heading 1'")
     text: str
@@ -156,32 +146,78 @@ class WordParagraphContent(BaseModel):
 class WordTableContent(BaseModel):
     """One Word table."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     rows: List[List[str]]
+
+
+class WordCommentContent(BaseModel):
+    """One Word comment.
+
+    Moved here in round 2 — 批次 3.3 originally defined it in word.py because
+    models.py was owned by another agent at the time. ``id`` matches the
+    ``w:id`` of the ``w:commentRangeStart/End`` pair and ``w:commentReference``
+    in document.xml; ``anchor_text`` is the body text inside the anchored
+    range, falling back to the anchor's paragraph text when the range is empty.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(description="批注 id（w:comment/@w:id，十进制字符串）")
+    author: Optional[str] = Field(default=None, description="批注作者（w:author）")
+    date: Optional[str] = Field(default=None, description="ISO 8601 时间（w:date）")
+    text: str = Field(description="批注正文（w:comment 内各段文本）")
+    anchor_text: str = Field(default="", description="批注锚定的正文文本")
+
+
+class WordCommentsResult(BaseModel):
+    """Result of :func:`backend.office.word.read_docx_comments`.
+
+    Standalone envelope kept for the dedicated comments reader;
+    :class:`OfficeWordReadResult` embeds the same
+    :class:`WordCommentContent` items directly via its ``comments`` field.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    comments: List[WordCommentContent] = Field(default_factory=list)
+
+
+class WordHeaderFooterContent(BaseModel):
+    """单节的页眉/页脚提取结果（section 为 1-based 节号）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    section: int = Field(ge=1)
+    header_text: str = ""
+    footer_text: str = ""
+    has_page_number_field: bool = False
 
 
 class OfficeWordReadResult(BaseModel):
     """Result of POST /api/v1/office/word/read."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     summary: OfficeDocumentSummary
     paragraphs: List[WordParagraphContent]
     tables: List[WordTableContent]
     images: int = Field(ge=0, default=0)
+    # Round 2 (R3): comments merged into the read result. ``default_factory``
+    # keeps payloads produced before this field existed valid under
+    # ``extra="forbid"`` (old consumers may ignore the field entirely).
+    comments: List[WordCommentContent] = Field(default_factory=list)
+    # Round 15：每节的页眉/页脚文本与页码域标记（生成器对偶——
+    # format_spec.header/footer 写入的元素读取侧可见）。
+    headers_footers: List[WordHeaderFooterContent] = Field(default_factory=list)
+    # Round 15：文档中的目录域 instr 列表。
+    toc_fields: List[str] = Field(default_factory=list)
 
 
 class ExcelSheetContent(BaseModel):
     """One Excel sheet."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     rows: List[List[str]]
@@ -205,9 +241,7 @@ class ExcelSheetContent(BaseModel):
 class OfficeExcelReadResult(BaseModel):
     """Result of POST /api/v1/office/excel/read."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     summary: OfficeDocumentSummary
     sheets: List[ExcelSheetContent]
@@ -221,9 +255,7 @@ class OfficeExcelReadResult(BaseModel):
 class OfficeReadRequest(BaseModel):
     """Common shape for all three read endpoints."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     workspace_path: str = Field(description="Absolute path to the workspace dir")
     file_path: str = Field(description="Absolute path to the .pptx/.docx/.xlsx file to read")
@@ -249,24 +281,69 @@ class OfficeReadRequest(BaseModel):
 # ──────────────────────────────────────────────────────────────────────
 
 
+class PptLayoutName(str, Enum):
+    """批次 2.3：幻灯片版式（映射默认模板的 slide layout）。
+
+    不传（None）时保持既有行为：Blank layout + 手工文本框几何。
+    """
+
+    TITLE = "title"
+    TITLE_CONTENT = "title_content"
+    BLANK = "blank"
+
+
+class ImageSourceSpec(BaseModel):
+    """一张待嵌入图片的来源描述（Word 段落图片 / PPT slide 图片共用）。
+
+    ``source`` 二选一：``data:image/...`` base64 data URI 或工作区/本地
+    图片文件路径。解码后强制 ≤10MB（与 word_template._MAX_IMAGE_BYTES 对齐）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = Field(min_length=1, max_length=20_000_000)
+    width_inches: Optional[float] = Field(default=None, gt=0, le=24)
+    height_inches: Optional[float] = Field(default=None, gt=0, le=24)
+
+
+class WordImageSpec(ImageSourceSpec):
+    """Word 文档插图（Round 8）：在 ImageSourceSpec 基础上支持行内放置与题注。
+
+    ``after_paragraph`` 为 ``paragraphs`` 的 0-based 下标，图片插入到该段落
+    之后；None = 文末追加（Round 7 之前的既有行为）。越界在生成期钳到末尾。
+    ``caption`` 非空时生成居中题注（"图N　caption"），图号全文独立计数。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    caption: Optional[str] = Field(default=None, max_length=200)
+    after_paragraph: Optional[int] = Field(default=None, ge=0)
+
+
 class PptSlideSpec(BaseModel):
     """One slide to generate in a PPT."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=1, max_length=200)
     bullets: _constrained_list(str, max_length=20) = Field(default_factory=list)
     notes: Optional[str] = Field(default=None, max_length=2000)
+    # 批次 2.3：版式选择。None 保持既有 Blank+文本框行为不变。
+    layout: Optional[PptLayoutName] = Field(
+        default=None,
+        description="'title' | 'title_content' | 'blank'；模板中找不到对应版式时回退现有几何",
+    )
+    # 批次 2.1：可选插图（追加在文本之后）。
+    image: Optional[ImageSourceSpec] = None
 
 
 class OfficePptGenerateRequest(BaseModel):
     """POST /api/v1/office/ppt/generate."""
 
-    class Config:
+    model_config = ConfigDict(extra="forbid")
 
-        extra = "forbid"
+    # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
+    task_id: Optional[str] = Field(default=None, max_length=100)
 
     workspace_path: str
     filename: str = Field(
@@ -278,43 +355,339 @@ class OfficePptGenerateRequest(BaseModel):
 
 
 class WordParagraphSpec(BaseModel):
-    """One paragraph in a generated Word document."""
+    """One paragraph in a generated Word document.
 
-    class Config:
+    Round 20：heading 扩展到 h4/h5，并收紧为 Literal（非法层级在
+    模型层拒绝，而非生成期静默跳过）。
+    """
 
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
-    heading: Optional[str] = Field(default=None, description="'h1' | 'h2' | 'h3' or None")
+    heading: Optional[Literal["h1", "h2", "h3", "h4", "h5"]] = Field(
+        default=None, description="'h1' | 'h2' | 'h3' | 'h4' | 'h5' or None"
+    )
     style: Optional[Literal["bullet", "numbered"]] = Field(
         default=None,
         description="'bullet' 或 'numbered' 列表样式（与 heading 二选一）",
     )
     text: str = Field(min_length=1, max_length=10000)
+    # 批次 2.3 样式分级（round a）：作用于该段落全部 runs 的可选样式。
+    font_size: Optional[float] = Field(default=None, gt=0, le=400, description="磅值，如 12 / 14.5")
+    bold: Optional[bool] = None
+    italic: Optional[bool] = None
+    color: Optional[str] = Field(
+        default=None,
+        description="字体颜色，6 位 RGB 十六进制（如 'FF0000'，可带 #）",
+    )
+    align: Optional[Literal["left", "center", "right", "justify"]] = None
+    # Round 9：文中引用（references 条目的 key 列表）。渲染为段落尾部
+    # 上标标记（"[1]" / 连续编号合并 "[1-3]"），编号=全文首次出现顺序。
+    citations: _constrained_list(str, max_length=10) = Field(default_factory=list)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 参考文献引用（Round 9）：结构化条目 + 确定性 GB/T 7714-2015 格式化。
+# 模型仅 pydantic（维持 canary 前提）；格式化在 references.py（零 docx）。
+# 简化范围：顺序编码制常用条目形状；不覆盖译者/版次/丛书等边角。
+# ──────────────────────────────────────────────────────────────────────
+
+ReferenceType = Literal[
+    "journal",
+    "book",
+    "thesis",
+    "conference",
+    "report",
+    "webpage",
+    "patent",
+    "standard",
+    "newspaper",
+]
+
+
+class ReferenceSpec(BaseModel):
+    """一条结构化参考文献（引用引擎的输入单元）。
+
+    ``key`` 供 ``paragraphs[].citations`` 回链；格式化所需字段按
+    ``ref_type`` 选用（如 journal 用 source/volume/issue/pages，
+    book 用 address/publisher）。``language`` 缺省时按 title 是否含
+    CJK 自动判定（影响"等/et al"截断词）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=1, max_length=100)
+    ref_type: ReferenceType = "journal"
+    title: str = Field(min_length=1, max_length=500)
+    authors: _constrained_list(str, max_length=50) = Field(default_factory=list)
+    year: Optional[str] = Field(default=None, max_length=20)
+    source: Optional[str] = Field(
+        default=None, max_length=300, description="刊名/会议名/机构/报纸名"
+    )
+    volume: Optional[str] = Field(default=None, max_length=30)
+    issue: Optional[str] = Field(default=None, max_length=30)
+    pages: Optional[str] = Field(default=None, max_length=50)
+    publisher: Optional[str] = Field(default=None, max_length=300)
+    address: Optional[str] = Field(default=None, max_length=300)
+    url: Optional[str] = Field(default=None, max_length=2000)
+    doi: Optional[str] = Field(default=None, max_length=200)
+    access_date: Optional[str] = Field(
+        default=None, max_length=30, description="电子资源引用日期，如 2026-09-11"
+    )
+    language: Optional[Literal["zh", "en"]] = Field(
+        default=None, description="缺省按 title CJK 自动判定"
+    )
+
+
+class BibliographySpec(BaseModel):
+    """文末参考文献节样式（Round 9）。全字段可选。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    heading_text: str = Field(default="参考文献", max_length=50)
+    font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
+    hanging_indent_cm: Optional[float] = Field(default=None, ge=0.0, le=5.0)
+
+
+class WordTocSpec(BaseModel):
+    """目录域设置（Round 13）。
+
+    TOC 域由 Word/WPS/LibreOffice 按标题样式渲染（打开后更新域/F9 生成），
+    生成器只负责插入域与占位提示——与"标题编号交给引擎"同一思路。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    heading_text: str = Field(default="目录", max_length=50)
+    levels: str = Field(
+        default="1-3",
+        pattern=r"^[1-9]-[1-9]$",
+        description="收录标题级别范围，如 '1-3'（TOC \\o 开关）",
+    )
+    placeholder_text: str = Field(
+        default='（目录：在 Word 中按 F9 或右键"更新域"生成）',
+        max_length=200,
+        description="域未更新时的占位提示",
+    )
+
+    @field_validator("levels")
+    @classmethod
+    def _check_level_order(cls, value: str) -> str:
+        first, last = value.split("-")
+        if int(first) > int(last):
+            raise ValueError("levels 起始级别不能大于结束级别")
+        return value
+
+    def level_range(self) -> Tuple[int, int]:
+        first, last = self.levels.split("-")
+        return int(first), int(last)
+
+
+class BibTeXParseRequest(BaseModel):
+    """POST /api/v1/office/word/parse-bibtex（Round 9）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=2_000_000, description=".bib 文件内容")
+
+
+class BibTeXParseResponse(BaseModel):
+    """BibTeX 解析结果（Round 9）。条目可直接传入 word generate references。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    count: int = Field(ge=0)
+    references: _constrained_list(ReferenceSpec, max_length=200)
+
+
+
+
+class WordCellMergeSpec(BaseModel):
+    """表格合并区域（Round 8）：0-based 含端点矩形（与 rows/headers 下标
+    心智模型一致，区别于 ExcelCellRange 的 1-based）。生成期校验越界。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_row: int = Field(ge=0)
+    max_row: int = Field(ge=0)
+    min_col: int = Field(ge=0)
+    max_col: int = Field(ge=0)
 
 
 class WordTableSpec(BaseModel):
-    """One table in a generated Word document."""
+    """One table in a generated Word document.
 
-    class Config:
+    Round 8 新增：表题注（自动 "表N　caption"）、三线表样式、表头跨页
+    重复、列宽、合并单元格；全部可选，None/false 保持既有默认网格行为。
+    """
 
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     headers: _constrained_list(str, min_length=1, max_length=50)
     rows: _constrained_list(_constrained_list(str), max_length=1000) = Field(default_factory=list)
+    caption: Optional[str] = Field(default=None, max_length=200)
+    style: Optional[Literal["grid", "three_line"]] = Field(
+        default=None,
+        description="None/'grid' = 默认网格；'three_line' = 学术三线表",
+    )
+    header_repeat: bool = Field(default=False, description="表头跨页重复")
+    column_widths_cm: Optional[_constrained_list(float, max_length=50)] = Field(
+        default=None,
+        description="各列列宽（厘米）；None 不设置，长度须等于列数",
+    )
+    merges: _constrained_list(WordCellMergeSpec, max_length=200) = Field(default_factory=list)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Word 版式规范（Round 7 FormatSpec —— "版式即配置"）
+#
+# 设计约定：
+# - 所有字段 Optional，None = 该项不设置（生成器保持既有默认行为），
+#   保证不传 ``format_spec`` 时生成结果与历史版本逐字节等价；
+# - 模型只依赖 pydantic（不含 docx），维持
+#   ``scripts/verify-office-paths.py`` canary "models 仅依赖 pydantic"
+#   的前提；docx 侧的应用逻辑在 ``word_layout.py``；
+# - 长度/数值边界为合理性钳制（防 LLM 传 9999 磅字号），不是排版学约束。
+# ──────────────────────────────────────────────────────────────────────
+
+
+class WordPageMarginsSpec(BaseModel):
+    """页边距（厘米）。None 的边保持 Word 默认。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    top: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    bottom: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    left: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    right: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+
+
+class WordPageSetupSpec(BaseModel):
+    """页面设置：纸张/方向/页边距。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    size: Optional[Literal["A4", "letter"]] = Field(default=None)
+    orientation: Optional[Literal["portrait", "landscape"]] = Field(default=None)
+    margins_cm: Optional[WordPageMarginsSpec] = Field(default=None)
+
+
+class WordBodyStyleSpec(BaseModel):
+    """正文（Normal 样式）默认排版。行距为倍数（如 1.5 倍）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
+    line_spacing: Optional[float] = Field(default=None, ge=1.0, le=3.0)
+    first_line_indent_cm: Optional[float] = Field(default=None, ge=0.0, le=5.0)
+    space_after_pt: Optional[float] = Field(default=None, ge=0.0, le=48.0)
+    align: Optional[Literal["left", "center", "right", "justify"]] = None
+
+
+class WordHeadingStyleSpec(BaseModel):
+    """标题样式覆盖（作用于 Title / Heading 1-3 样式定义本身）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
+    bold: Optional[bool] = None
+    color: Optional[str] = Field(
+        default=None,
+        description="字体颜色，6 位 RGB 十六进制（如 '2F5496'，可带 #）",
+        pattern=r"^#?[0-9A-Fa-f]{6}$",
+        max_length=7,
+    )
+    align: Optional[Literal["left", "center", "right", "justify"]] = None
+    space_before_pt: Optional[float] = Field(default=None, ge=0.0, le=96.0)
+    space_after_pt: Optional[float] = Field(default=None, ge=0.0, le=96.0)
+
+
+class WordHeaderFooterSpec(BaseModel):
+    """页眉/页脚设置。``page_number`` 仅在 footer 上生效（居中 PAGE 域）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: Optional[str] = Field(default=None, max_length=200)
+    align: Optional[Literal["left", "center", "right", "justify"]] = None
+    page_number: bool = False
+
+
+class WordFormatSpec(BaseModel):
+    """Word 文档版式规范。
+
+    传入 ``generate_docx`` 后由 ``word_layout.apply_format_spec`` 以确定性
+    代码注入 styles.xml / document.xml —— 格式要求不再依赖 LLM 在 prompt
+    里"口头约定"。全字段可选，None 项不触碰。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    page: Optional[WordPageSetupSpec] = None
+    body: Optional[WordBodyStyleSpec] = None
+    # Round 20：headings 键扩展到 h4/h5（Heading 4/5 样式覆盖）。
+    headings: Optional[
+        Dict[Literal["h1", "h2", "h3", "h4", "h5"], WordHeadingStyleSpec]
+    ] = None
+    title: Optional[WordHeadingStyleSpec] = None
+    header: Optional[WordHeaderFooterSpec] = None
+    footer: Optional[WordHeaderFooterSpec] = None
+    # Round 8：多级标题自动编号（h1-h5 计数器，字面 "N.M.K" 文本前缀）。
+    # Round 20：编号级别扩展到 5 级。
+    numbering: bool = Field(default=False, description="为 h1-h5 生成 1 / 1.1 / 1.1.1 … 编号前缀")
+    # Round 9：文末参考文献节样式。None 时仍生成参考文献节（默认样式），
+    # 仅当请求不带 references 时该子项才完全不生效。
+    bibliography: Optional[BibliographySpec] = None
+    # Round 13：目录域。None = 不插入目录。
+    toc: Optional[WordTocSpec] = None
+    # Round 26：横排/分节。每个 break 在 start_paragraph（0-based）前
+    # 插入 NEW_PAGE 分节并对新节应用 page_setup；按列表顺序依次生效。
+    section_breaks: _constrained_list("WordSectionBreakSpec", max_length=20) = Field(
+        default_factory=list
+    )
+
+
+class WordSectionBreakSpec(BaseModel):
+    """分节设置（Round 26）：start_paragraph 前插入 NEW_PAGE 分节，
+    新节应用 page_setup（横排宽表/财务页场景）。复用 WordPageSetupSpec。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_paragraph: int = Field(ge=0, description="该 0-based 段落下标起进入新节")
+    page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
 
 
 class OfficeWordGenerateRequest(BaseModel):
     """POST /api/v1/office/word/generate."""
 
-    class Config:
+    model_config = ConfigDict(extra="forbid")
 
-        extra = "forbid"
+    # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
+    task_id: Optional[str] = Field(default=None, max_length=100)
 
     workspace_path: str
     filename: str = Field(min_length=1, max_length=200)
     title: str = Field(min_length=1, max_length=200)
     paragraphs: _constrained_list(WordParagraphSpec, max_length=5000) = Field(default_factory=list)
     tables: _constrained_list(WordTableSpec, max_length=100) = Field(default_factory=list)
+    # 批次 2.1：可选插图。Round 8 起为 WordImageSpec——支持行内放置
+    # （after_paragraph）与题注（caption）；旧 payload（仅 source/宽高）兼容。
+    # Union 子类在前：dict 输入由 WordImageSpec 承接（新字段生效），
+    # 既有调用方构造的 ImageSourceSpec 父类实例也继续被接受。
+    images: _constrained_list(Union[WordImageSpec, ImageSourceSpec], max_length=20) = Field(
+        default_factory=list
+    )
+    # Round 7 FormatSpec：显式版式（页边距/正文/标题/页眉页脚）。
+    format_spec: Optional[WordFormatSpec] = Field(
+        default=None,
+        description="版式规范；None 保持默认版式（行为与历史版本一致）",
+    )
+    # Round 9：结构化参考文献 + 文中引用标记。带 references 时文末自动
+    # 生成参考文献节；paragraphs[].citations 按 key 回链，编号=首现顺序。
+    references: _constrained_list(ReferenceSpec, max_length=200) = Field(default_factory=list)
+    citation_style: Literal["gbt7714", "apa"] = Field(
+        default="gbt7714",
+        description="参考文献格式；gbt7714=GB/T 7714-2015 顺序编码制",
+    )
     font_family: Optional[str] = Field(
         default=None,
         description="中文正文字体名（如'宋体'/'微软雅黑'/'等线'），默认宋体",
@@ -326,27 +699,218 @@ class OfficeWordGenerateRequest(BaseModel):
 
 
 class ExcelSheetSpec(BaseModel):
-    """One sheet in a generated Excel workbook."""
+    """One sheet in a generated Excel workbook.
 
-    class Config:
+    Round 14 新增四项格式控制（全部可选，缺省零变化）：表头样式 /
+    冻结首行 / 自适应列宽 / 按列名数字格式。
+    """
 
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=31, description="Excel sheet name max length")
     headers: _constrained_list(str, max_length=100) = Field(default_factory=list)
     rows: _constrained_list(_constrained_list(str), max_length=10000) = Field(default_factory=list)
+    # 批次 2.3：按列序号给出列宽（index 0 = A 列），单位为 Excel 字符宽度。
+    column_widths: Optional[_constrained_list(float, max_length=200)] = Field(
+        default=None,
+        description="列宽列表，如 [20, 12, 30] 对应 A/B/C 列；None 不设置",
+    )
+    header_style: bool = Field(
+        default=False,
+        description="表头行加粗 + 浅灰底(D9D9D9) + 居中",
+    )
+    freeze_header: bool = Field(
+        default=False,
+        description="冻结首行（滚动长表时表头保持可见）",
+    )
+    autofit_columns: bool = Field(
+        default=False,
+        description="按内容自适应列宽（显式 column_widths 的列优先）",
+    )
+    number_formats: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="按列名映射 Excel 数字格式，如 {'金额': '#,##0.00'}；未知列名忽略",
+    )
+    # Round 17：条件格式（数据条/色阶/重复值高亮），全部可选。
+    conditional_formats: _constrained_list(ExcelConditionalFormatSpec, max_length=50) = Field(
+        default_factory=list
+    )
+    # Round 23：打印设置（方向/缩放/打印区域），全部可选。
+    print_setup: Optional[ExcelPrintSetupSpec] = None
+    # Round 18：下拉数据验证（状态/分类列防手输错值），全部可选。
+    data_validations: _constrained_list(ExcelDataValidationSpec, max_length=20) = Field(
+        default_factory=list
+    )
+
+
+class ExcelDataValidationSpec(BaseModel):
+    """单条下拉数据验证规则（Round 18）。
+
+    内联列表 formula1 为 '"opt1,opt2,…"' 形式，总长超 255 字符（Excel
+    硬限制）时该条跳过（warning），不阻断生成。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    range: str = Field(
+        min_length=2,
+        max_length=50,
+        pattern=r"^[A-Za-z]{1,3}[0-9]+:[A-Za-z]{1,3}[0-9]+$",
+        description="应用范围，A1 记法，如 'B2:B100'",
+    )
+    options: _constrained_list(str, min_length=1, max_length=100) = Field(
+        description="下拉选项列表（每项 ≤50 字符）"
+    )
+    allow_blank: bool = Field(default=True, description="允许空值")
+    prompt_title: Optional[str] = Field(default=None, max_length=60)
+    prompt: Optional[str] = Field(default=None, max_length=200)
+
+
+class ExcelConditionalFormatSpec(BaseModel):
+    """单条条件格式规则（Round 17）。`rule_type` 三选一，各自可选项不同。
+
+    openpyxl 的 DataBar/ColorScale 由 min/max 端点着色；duplicate 用
+    COUNTIF 公式 + 纯色填充。range 为 A1 记法（如 "B2:B100"）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_type: Literal["data_bar", "color_scale", "duplicate", "icon_set"]
+    range: str = Field(
+        min_length=2,
+        max_length=50,
+        pattern=r"^[A-Za-z]{1,3}[0-9]+:[A-Za-z]{1,3}[0-9]+$",
+        description="应用范围，A1 记法，如 'B2:B100'",
+    )
+    icon_style: Optional[Literal[
+        "3Arrows",
+        "3TrafficLights1",
+        "3Signs",
+        "3Symbols",
+        "4Arrows",
+        "4RedToBlack",
+        "4Rating",
+        "5Arrows",
+        "5Rating",
+    ]] = Field(
+        default="3Arrows",
+        description="icon_set 图标样式（Round 19）；其他规则类型忽略",
+    )
+    color: Optional[str] = Field(
+        default=None,
+        description="data_bar 条形颜色，6 位 RGB hex（默认 638EC6）",
+        pattern=r"^#?[0-9A-Fa-f]{6}$",
+        max_length=7,
+    )
+    min_color: Optional[str] = Field(
+        default=None,
+        description="color_scale 最小值端颜色（默认 F8696B 红）",
+        pattern=r"^#?[0-9A-Fa-f]{6}$",
+        max_length=7,
+    )
+    max_color: Optional[str] = Field(
+        default=None,
+        description="color_scale 最大值端颜色（默认 63BE7B 绿）",
+        pattern=r"^#?[0-9A-Fa-f]{6}$",
+        max_length=7,
+    )
+    fill_color: Optional[str] = Field(
+        default=None,
+        description="duplicate 重复值填充色（默认 FFFF00 黄）",
+        pattern=r"^#?[0-9A-Fa-f]{6}$",
+        max_length=7,
+    )
+
+
+class ExcelPrintSetupSpec(BaseModel):
+    """打印设置（Round 23）。全字段可选，None = 不设置。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    orientation: Optional[Literal["portrait", "landscape"]] = Field(
+        default=None, description="纸张方向（默认纵向）"
+    )
+    fit_to_width: Optional[int] = Field(
+        default=None, ge=1, le=20, description="缩放到 N 页宽（1 = 单页宽）"
+    )
+    print_area: Optional[str] = Field(
+        default=None,
+        max_length=50,
+        pattern=r"^[A-Za-z]{1,3}[0-9]+:[A-Za-z]{1,3}[0-9]+$",
+        description="打印区域，A1 记法，如 'A1:F40'",
+    )
+
+
+class ExcelCellRange(BaseModel):
+    """openpyxl Reference 风格的矩形单元格区域（1-based，含端点）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_col: int = Field(ge=1, le=16384)
+    min_row: int = Field(ge=1, le=1048576)
+    max_col: int = Field(ge=1, le=16384)
+    max_row: int = Field(ge=1, le=1048576)
+
+
+class ExcelChartSpec(BaseModel):
+    """批次 2.1：生成 xlsx 时挂载的 Excel 原生图表（openpyxl Chart）。
+
+    ``sheet`` 缺省挂到第一个 sheet；``data_ref`` 指向图表数据矩形
+    （``titles_from_data=True`` 时首行/首列按 ``from_rows`` 解释为系列名）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    sheet: Optional[str] = Field(default=None, max_length=31)
+    type: Literal["line", "bar", "pie"]
+    anchor: str = Field(min_length=2, max_length=10, description="左上角锚点单元格，如 'A10'")
+    data_ref: ExcelCellRange
+    titles_from_data: bool = False
+    from_rows: bool = False
+    categories_ref: Optional[ExcelCellRange] = None
+    title: Optional[str] = Field(default=None, max_length=200)
 
 
 class OfficeExcelGenerateRequest(BaseModel):
     """POST /api/v1/office/excel/generate."""
 
-    class Config:
+    model_config = ConfigDict(extra="forbid")
 
-        extra = "forbid"
+    # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
+    task_id: Optional[str] = Field(default=None, max_length=100)
 
     workspace_path: str
     filename: str = Field(min_length=1, max_length=200)
     sheets: _constrained_list(ExcelSheetSpec, min_length=1, max_length=50)
+    # 批次 2.1：数据写完后统一挂载的原生图表。
+    charts: _constrained_list(ExcelChartSpec, max_length=20) = Field(default_factory=list)
+
+
+class ChartSeriesSpec(BaseModel):
+    """matplotlib 图表的一条数据系列。``x`` 可省略（bar/pie 用 labels 补位）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)
+    x: Optional[List[Union[str, float]]] = Field(
+        default=None,
+        description="横轴取值（数值或类别文本）；bar/pie 常省略",
+    )
+    y: _constrained_list(float, min_length=1, max_length=10000)
+
+
+class ChartSpec(BaseModel):
+    """批次 2.1：matplotlib 图表渲染规格（render_chart_png 输入）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["line", "bar", "hbar", "pie"]
+    title: Optional[str] = Field(default=None, max_length=200)
+    series: _constrained_list(ChartSeriesSpec, min_length=1, max_length=10)
+    labels: Optional[_constrained_list(str, max_length=10000)] = Field(
+        default=None,
+        description="类别标签（bar/hbar/pie 或 line 分类轴）；series 无 x 时必选",
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -357,9 +921,7 @@ class OfficeExcelGenerateRequest(BaseModel):
 class OfficeDocumentListResponse(BaseModel):
     """GET /api/v1/office/documents."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     documents: List[OfficeDocumentSummary]
     total: int = Field(ge=0)
@@ -368,9 +930,7 @@ class OfficeDocumentListResponse(BaseModel):
 class OfficeDeleteResponse(BaseModel):
     """DELETE /api/v1/office/documents/{id}."""
 
-    class Config:
-
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     id: str
     deleted: bool
@@ -434,8 +994,7 @@ class PlaceholderLocation(str, Enum):
 class TemplatePlaceholder(BaseModel):
     """One placeholder found in a Word template."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     raw_tag: str
@@ -451,8 +1010,7 @@ class TemplatePlaceholder(BaseModel):
 class WordTemplateAnalysis(BaseModel):
     """Result of analyzing a Word template."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     file_path: str
     placeholders: List[TemplatePlaceholder]
@@ -463,8 +1021,7 @@ class WordTemplateAnalysis(BaseModel):
 class WordTemplateAnalyzeRequest(BaseModel):
     """Request to analyze a Word template."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     workspace_path: str
     template_path: str
@@ -473,8 +1030,7 @@ class WordTemplateAnalyzeRequest(BaseModel):
 class WordTemplateFillRequest(BaseModel):
     """Request to fill a Word template with data."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     workspace_path: str
     template_path: str
@@ -486,14 +1042,97 @@ class WordTemplateFillRequest(BaseModel):
 class WordTemplateFillResult(BaseModel):
     """Result of filling a Word template."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     output_path: str
     filename: str
     file_size_bytes: int
     filled_count: int
     unfilled_placeholders: List[str]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Template library models (Office parity batch 3 — Item 3.2)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TemplateLibraryPlaceholder(BaseModel):
+    """One placeholder advertised by a template-library entry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    type: TemplatePlaceholderType
+    description: str = Field(default="", description="占位符用途说明（中文，展示给用户）")
+
+
+class TemplateLibraryEntry(BaseModel):
+    """One template in the library: builtin 中文办公模板 or workspace user template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(
+        description=(
+            "builtin: stable id matching ^[a-z0-9_]{1,64}$; "
+            "workspace: 'ws_'-prefixed sanitized filename stem"
+        )
+    )
+    name: str = Field(description="展示名称（中文）")
+    description: str = ""
+    doc_type: OfficeDocType = OfficeDocType.WORD
+    placeholders: List[TemplateLibraryPlaceholder] = Field(default_factory=list)
+    source: Literal["builtin", "workspace"]
+    filename: Optional[str] = Field(
+        default=None,
+        description=(
+            "workspace 模板专用：office/templates/ 下的文件名；"
+            "builtin 模板为 None（按 id 实例化）"
+        ),
+    )
+
+
+class TemplateLibraryResponse(BaseModel):
+    """GET /api/v1/office/templates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    templates: List[TemplateLibraryEntry]
+
+
+class OfficeTemplateInstantiateRequest(BaseModel):
+    """POST /api/v1/office/templates/instantiate.
+
+    ``template_id``（builtin）与 ``workspace_template``（office/templates/ 下的
+    文件名）二选一；同时给出报 400。round 3 N2 起 builtin 模板覆盖 word /
+    excel / ppt 三种 doc_type，输出文件名扩展名须与模板类型一致。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
+    task_id: Optional[str] = Field(default=None, max_length=100)
+
+    workspace_path: str
+    template_id: Optional[str] = Field(
+        default=None, description="builtin 模板 id，如 'weekly_report'（word）、'budget_sheet'（excel）、'kickoff_deck'（ppt）"
+    )
+    workspace_template: Optional[str] = Field(
+        default=None,
+        description=(
+            "workspace 模板文件名（office/templates/ 内，支持 .docx/.xlsx/.pptx；"
+            "省略扩展名时按 docx→xlsx→pptx 顺序匹配）"
+        ),
+    )
+    filename: str = Field(
+        min_length=1,
+        max_length=200,
+        description="输出文件名（缺扩展名时自动补全，须与模板 doc_type 一致：.docx/.xlsx/.pptx）",
+    )
+    data: Dict[str, Any] = Field(default_factory=dict)
+    images: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="占位符名 → 图片路径或 data:image URI（与 /word/fill-template 一致，≤10MB）",
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -504,8 +1143,7 @@ class WordTemplateFillResult(BaseModel):
 class PdfPageContent(BaseModel):
     """Content of one PDF page."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     page_number: int
     text: str
@@ -516,8 +1154,7 @@ class PdfPageContent(BaseModel):
 class PdfReadResult(BaseModel):
     """Result of reading a PDF file."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     summary: OfficeDocumentSummary
     pages: List[PdfPageContent]
@@ -527,8 +1164,7 @@ class PdfReadResult(BaseModel):
 class PdfReadRequest(BaseModel):
     """Request to read a PDF file."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     workspace_path: str
     file_path: str
@@ -537,8 +1173,7 @@ class PdfReadRequest(BaseModel):
 class PdfPageSpec(BaseModel):
     """One page in a generated PDF."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     title: Optional[str] = None
     paragraphs: List[str] = Field(default_factory=list)
@@ -548,8 +1183,10 @@ class PdfPageSpec(BaseModel):
 class PdfGenerateRequest(BaseModel):
     """Request to generate a PDF."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
+
+    # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
+    task_id: Optional[str] = Field(default=None, max_length=100)
 
     workspace_path: str
     filename: str
@@ -561,8 +1198,7 @@ class PdfGenerateRequest(BaseModel):
 class PdfGenerateResult(BaseModel):
     """Result of generating a PDF."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     output_path: str
     filename: str
@@ -573,8 +1209,7 @@ class PdfGenerateResult(BaseModel):
 class PdfFormField(BaseModel):
     """One PDF form field."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     type: str
@@ -587,8 +1222,7 @@ class PdfFormField(BaseModel):
 class PdfFormReadResult(BaseModel):
     """Result of reading PDF form fields."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     file_path: str
     fields: List[PdfFormField]
@@ -598,8 +1232,7 @@ class PdfFormReadResult(BaseModel):
 class PdfFormReadRequest(BaseModel):
     """Request to read PDF form fields."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     workspace_path: str
     file_path: str
@@ -608,8 +1241,7 @@ class PdfFormReadRequest(BaseModel):
 class PdfFormFillRequest(BaseModel):
     """Request to fill a PDF form."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     workspace_path: str
     template_path: str
@@ -621,10 +1253,86 @@ class PdfFormFillRequest(BaseModel):
 class PdfFormFillResult(BaseModel):
     """Result of filling a PDF form."""
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     output_path: str
     filename: str
     file_size_bytes: int
     filled_count: int
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Word 格式 Linter（Round 10）：对照 FormatSpec 校验任意 .docx。
+# 规则与生成器对偶——spec 未提供的项不产生规则（None = 不检查）。
+# ──────────────────────────────────────────────────────────────────────
+
+
+class WordLintIssue(BaseModel):
+    """单条格式违规。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: str = Field(
+        min_length=1, max_length=80,
+        description="规则标识，如 page/margins、caption/sequence",
+    )
+    severity: Literal["error", "warning"]
+    message: str = Field(min_length=1, max_length=1000, description="含实测值 vs 期望值")
+    fix_hint: str = Field(default="", max_length=1000, description="中文修复建议")
+
+
+class WordLintResult(BaseModel):
+    """Linter 汇总结果。``ok`` = 无 error 级违规。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    issue_count: int = Field(ge=0)
+    error_count: int = Field(ge=0)
+    warning_count: int = Field(ge=0)
+    checked_rules: _constrained_list(str, max_length=100) = Field(default_factory=list)
+    issues: _constrained_list(WordLintIssue, max_length=500) = Field(default_factory=list)
+
+
+class WordLintRequest(BaseModel):
+    """POST /api/v1/office/word/lint。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str = Field(min_length=1, max_length=2000, description="待校验 .docx 路径")
+    format_spec: WordFormatSpec
+    max_size_bytes: int = Field(
+        default=50 * 1024 * 1024, ge=1024, description="Reject files larger than this"
+    )
+
+
+class WordRepairResult(BaseModel):
+    """自动修复结果（Round 12）。``ok`` = 修复后复检无 error 级违规。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    repaired_rules: _constrained_list(str, max_length=100) = Field(
+        default_factory=list, description="本次修复的规则 rule_id 列表"
+    )
+    output_path: str = Field(min_length=1, max_length=2000, description="修复后文件路径")
+    overwrite: bool = Field(default=False, description="是否原地替换了原文件")
+    remaining: WordLintResult = Field(description="修复后的复检结果")
+
+
+class WordRepairRequest(BaseModel):
+    """POST /api/v1/office/word/repair。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str = Field(min_length=1, max_length=2000, description="待修复 .docx 路径")
+    format_spec: WordFormatSpec
+    overwrite: bool = Field(
+        default=False,
+        description="false（默认）= 修复结果写 <stem>-repaired.docx 新文件；true = 原地原子替换",
+    )
+    max_size_bytes: int = Field(
+        default=50 * 1024 * 1024, ge=1024, description="Reject files larger than this"
+    )
