@@ -34,6 +34,11 @@ vi.mock('../../shared/api/projectApi', () => ({
   },
 }));
 
+const getRecentWikiProjectsMock = vi.fn();
+vi.mock('../../shared/api-client/wiki', () => ({
+  getRecentWikiProjects: (...args: unknown[]) => getRecentWikiProjectsMock(...args),
+}));
+
 vi.mock('../../app/providers/useTheme', () => ({
   useTheme: () => ({ resolved: 'light', setMode: vi.fn() }),
 }));
@@ -68,6 +73,9 @@ describe('CommandPalette 全局搜索 (P1-3.7)', () => {
     // undefined 使组件 effect 的 .then 链抛错（与本组断言无关的崩溃）。
     projectListMock.mockReset();
     projectListMock.mockResolvedValue([]);
+    // P9: 同理，recents 拉取也须给默认空实现
+    getRecentWikiProjectsMock.mockReset();
+    getRecentWikiProjectsMock.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -276,6 +284,62 @@ describe('CommandPalette 项目模块 (P2)', () => {
     await waitFor(() => {
       expect(projectOpenMock).toHaveBeenCalledWith('p1');
       expect(useStore.getState().currentSessionId).toBe('s-opened');
+    });
+  });
+});
+
+describe('CommandPalette 知识范围 (P9)', () => {
+  beforeEach(() => {
+    useStore.setState({ sessions: [], currentSessionId: null });
+    mockBackendRequest.mockReset();
+    mockBackendRequest.mockResolvedValue({ sessions: [] });
+    getRecentWikiProjectsMock.mockReset();
+    getRecentWikiProjectsMock.mockResolvedValue([
+      { path: 'C:/work/wikia', name: 'wikia', opened_at: 1, intent: 'open' },
+    ]);
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('打开面板时渲染"知识范围"分组并列出最近 wiki 项目', async () => {
+    renderPalette();
+
+    await waitFor(() => {
+      expect(screen.getByText('知识范围')).toBeInTheDocument();
+      expect(screen.getByText('wikia')).toBeInTheDocument();
+    });
+  });
+
+  it('选择范围后持久化 localStorage，且搜索请求携带 knowledge_project', async () => {
+    renderPalette();
+
+    await waitFor(() => screen.getByText('wikia'));
+    fireEvent.click(screen.getByText('wikia'));
+    await waitFor(() => {
+      expect(localStorage.getItem('sage:knowledge-scope:v1')).toBe('C:/work/wikia');
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('输入命令或搜索...'), {
+      target: { value: 'zz' },
+    });
+    await waitFor(() => {
+      expect(mockBackendRequest).toHaveBeenCalledWith({
+        path: expect.stringContaining('knowledge_project=C%3A%2Fwork%2Fwikia'),
+      });
+    });
+  });
+
+  it('选择"默认（最近打开）"清空范围', async () => {
+    localStorage.setItem('sage:knowledge-scope:v1', 'C:/work/wikia');
+    renderPalette();
+
+    await waitFor(() => screen.getByText('默认（最近打开）'));
+    fireEvent.click(screen.getByText('默认（最近打开）'));
+    await waitFor(() => {
+      expect(localStorage.getItem('sage:knowledge-scope:v1')).toBe('');
     });
   });
 });

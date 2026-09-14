@@ -110,3 +110,69 @@ async def test_global_search_project_types_filter(client, tmp_path):
     body = resp.json()
     assert set(body.keys()) == {"projects"}
     assert len(body["projects"]) == 1
+
+
+# ===== P9: 知识搜索范围配置化（knowledge_project）=====
+
+
+def _seed_wiki_project(root, token: str) -> None:
+    """创建含唯一词页面的 wiki 项目并登记进 recents。"""
+    wiki = root / "wiki"
+    wiki.mkdir(parents=True)
+    content = f"# {token}\n\nunique-token-{token} 的正文内容。"
+    (wiki / f"note-{token}.md").write_text(content, encoding="utf-8")
+    from backend.storage.recent_projects import record_recent
+
+    record_recent(str(root), root.name, "open")
+
+
+@pytest.mark.asyncio()
+async def test_knowledge_project_scope_limits_results(client, tmp_path):
+    """显式范围=A 时，只命中 A 内的页面（即使 B 更新）。"""
+    project_a = tmp_path / "project-a"
+    project_b = tmp_path / "project-b"
+    _seed_wiki_project(project_a, "aaaa")
+    _seed_wiki_project(project_b, "bbbb")
+    # 让 B 成为"最近打开"（默认域），A 才是被范围指定的
+    record_b = await client.post(
+        "/api/v1/wiki/recent-projects/record",
+        json={"path": str(project_b), "name": "b", "intent": "open"},
+    )
+    assert record_b.status_code == 204
+
+    resp = await client.get(
+        "/api/v1/search/global",
+        params={"q": "unique-token-aaaa", "knowledge_project": str(project_a)},
+    )
+    assert resp.status_code == 200
+    knowledge = resp.json()["knowledge"]
+    assert knowledge, "范围内命中不应为空"
+    assert all("note-aaaa" in item["path"] for item in knowledge)
+
+
+@pytest.mark.asyncio()
+async def test_knowledge_project_unauthorized_returns_403(client, tmp_path):
+    """范围目录未登记/未打开 → 403（与 wiki 域授权契约一致）。"""
+    rogue = tmp_path / "rogue"
+    (rogue / "wiki").mkdir(parents=True)
+    resp = await client.get(
+        "/api/v1/search/global",
+        params={"q": "anything", "knowledge_project": str(rogue)},
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio()
+async def test_knowledge_project_without_wiki_dir_returns_404(client, tmp_path):
+    """范围目录存在但不是 wiki 项目（缺 wiki/）→ 404。"""
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    from backend.storage.recent_projects import record_recent
+
+    record_recent(str(plain), "plain", "open")
+
+    resp = await client.get(
+        "/api/v1/search/global",
+        params={"q": "anything", "knowledge_project": str(plain)},
+    )
+    assert resp.status_code == 404
