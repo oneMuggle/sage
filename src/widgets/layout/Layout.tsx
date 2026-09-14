@@ -34,7 +34,21 @@ export function Layout() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // R40: Ctrl+N 新建会话 / Ctrl+F 聚焦搜索
+  useEffect(() => {
+    const onQuickKeys = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (e.key === 'f') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('sage:focus-search'));
+      }
+    };
+    window.addEventListener('keydown', onQuickKeys);
+    return () => window.removeEventListener('keydown', onQuickKeys);
+  }, []);
+
   // Toggle collapse with keyboard shortcut (Ctrl+B / Cmd+B)
+  // R40: Ctrl+N 新建会话 / Ctrl+F 聚焦搜索框 —— 全局键盘快捷键补全
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'b') {

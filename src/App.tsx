@@ -133,6 +133,22 @@ function App() {
   // U18 (round4): 快捷键帮助覆盖层（非输入焦点下按 ? 打开）
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
 
+
+  // R40: Ctrl+N 新建会话 —— 全局快捷键（仅无 modifier 冲突时触发）
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        useStore.getState().createSession().then((id) => {
+          useStore.getState().setCurrentSessionId(id);
+          window.location.hash = '#/chat';
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   return (
     <HashRouter>
       <NavHistoryProvider>

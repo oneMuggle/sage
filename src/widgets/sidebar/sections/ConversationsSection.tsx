@@ -1,5 +1,5 @@
 import { MessageSquare, Plus, Search } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { sessionApi } from '../../../shared/api/sessionApi';
 import { useI18n } from '../../../shared/lib/i18n';
@@ -48,6 +48,14 @@ export function ConversationsSection({
   const [searchQuery, setSearchQuery] = useState('');
   // F12: 消息内容命中计数（≥2 字符时防抖搜索,会话 id → 命中条数）
   const [messageHits, setMessageHits] = useState<Map<string, number>>(new Map());
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  // R40: Ctrl+F 聚焦搜索框 —— 监听全局自定义事件
+  useEffect(() => {
+    const handler = () => searchInputRef.current?.focus();
+    window.addEventListener('sage:focus-search', handler);
+    return () => window.removeEventListener('sage:focus-search', handler);
+  }, []);
 
   const trimmedQuery = searchQuery.trim();
 
@@ -112,6 +120,7 @@ export function ConversationsSection({
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted pointer-events-none" />
             <input
               type="text"
+              ref={searchInputRef}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('sidebar.search_sessions')}
