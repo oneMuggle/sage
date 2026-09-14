@@ -15,32 +15,19 @@ import httpx
 from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
-from backend.tools.http_factory import build_client
+from backend.tools.http_factory import DEFAULT_HEADERS, build_client
 from backend.tools.network_config import load_network_policy
 from backend.tools.search_config import load_search_config
 from backend.tools.search_engines import SearchEngine, resolve_engine_chain
 from backend.wiki.html_extract import decode_html, extract
 
-from . import web_render
+from . import content_sniff, web_render
 from .base import BaseTool, ToolResult, ToolSchema
 from .web_render import RenderError
 
-# 浏览器级默认请求头。
-# 缺 User-Agent 的请求会被很多站点（小说站 / 学术站 / 论坛）按 bot 拒 403;
-# Accept-Language 让国内站点返回中文页,避免西文 fallback 误判。
-# UA 版本保持"现代"（U1, Round 2）：过旧版本号本身是廉价 bot 信号；
-# 注意它与 httpx 的 TLS 指纹解耦,硬风控站点仍走 browser 通道。
-_DEFAULT_HEADERS: Dict[str, str] = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-    ),
-    "Accept": (
-        "text/html,application/xhtml+xml,application/xml;q=0.9,"
-        "image/avif,image/webp,*/*;q=0.8"
-    ),
-    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-}
+# 浏览器级默认请求头 —— 自 Round 5 起定义在 http_factory（三个出网工具共用）；
+# 此处保留同名别名，兼容既有引用与测试。
+_DEFAULT_HEADERS: Dict[str, str] = DEFAULT_HEADERS
 
 #: 常见反爬拒绝状态码 → 路由指引文案（G1, Round 2）。
 #: 出路顺序即成本顺序：真浏览器通道（真实 Chrome 指纹）> 代理 > 换搜索源。
@@ -568,6 +555,12 @@ class WebFetchTool(BaseTool):
         }
 
         is_html = any(marker in content_type.lower() for marker in self._HTML_CONTENT_TYPES)
+        if not is_html and content_sniff.is_binary_payload(
+            response.content[: content_sniff.SNIFF_BYTES], content_type
+        ):
+            # SN1（Round 5）：二进制响应不以乱码正文返回，给结构化提示引导
+            # 模型改用 http_download。raw 模式同样适用——原始字节对模型无意义。
+            return self._binary_result(url, response, result)
         if mode == "raw" or not is_html:
             result["content"] = text[:max_length]
             return result
@@ -581,6 +574,39 @@ class WebFetchTool(BaseTool):
             result["tables"] = page.tables[: self._policy.max_result_items]
         return result
 
+    @staticmethod
+    def _binary_result(
+        url: str, response: httpx.Response, base: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """二进制响应的结构化结果（SN1）：不给正文，给类型 / 大小 / 建议文件名。"""
+        from .download_tool import derive_filename
+
+        head = response.content[: content_sniff.SNIFF_BYTES]
+        detected = content_sniff.detect_kind(head)
+        declared = response.headers.get("content-length", "")
+        length: Optional[int] = None
+        if declared.isdigit():
+            length = int(declared)
+        elif response.content:
+            length = len(response.content)
+        suggested = derive_filename(url, response.headers.get("content-disposition"))
+        result = dict(base)
+        result.update(
+            {
+                "kind": "binary",
+                "detected_type": detected,
+                "content_length": length,
+                "suggested_filename": suggested,
+                "content": "",
+                "hint": (
+                    f"该 URL 返回的是二进制文件（{detected}，Content-Type {result.get('content_type') or '未知'}），"
+                    f"不是网页。请改用 http_download 下载到工作区（建议文件名 {suggested!r}），"
+                    "再用对应工具读取内容。"
+                ),
+            }
+        )
+        return result
+
     def _should_render(
         self, render: str, response: httpx.Response, content: Dict[str, Any], max_length: int
     ) -> bool:
@@ -592,7 +618,7 @@ class WebFetchTool(BaseTool):
         """
         if render == "never":
             return False
-        if content.get("mode") == "raw":
+        if content.get("mode") == "raw" or content.get("kind") == "binary":
             return False
         content_type = response.headers.get("content-type", "")
         is_html = any(marker in content_type.lower() for marker in self._HTML_CONTENT_TYPES)

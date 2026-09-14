@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🌐 **网页访问能力优化 Round 5 批次 1：下载可靠性 + 内容嗅探**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.1 DL1/DL3 + §2.2 SN1）
+
+### Added(web-access)
+- **http_download 重试 + 退避**：连接错误 / 读写超时 / 协议错 / 5xx / 408 / 429 指数退避重试（默认 3 次，`retries` 可调，上限 6）；429/503 尊重 `Retry-After`（上限 60s）；401/403/404 不重试——403 附登录态 / 浏览器通道 / 代理三条出路指引
+- **http_download 断点续传**：写 `<name>.part` + 旁车 `<name>.part.json`（url / etag / last_modified / total / accept_ranges），成功后原子改名；中断且服务器支持 Range 时保留半成品，重试或再次调用同 URL 自动 `Range: bytes=N-` + `If-Range` 续传（206 追加 / 200 重下 / 416 长度相符视为完成）；`resume=false` 关闭
+- **http_download 完整性**：`Content-Length` 已知而实际字节不足 → `incomplete_download`（可续传则保留 .part）；`expected_sha256` 给定则校验、不符删除；结果新增 `resumed / attempts / elapsed_ms / total_bytes / sha256`
+- **http_download 请求头与超时**：复用出网默认 UA / Accept-Language（无 UA 请求被文献站 403 是常态）+ `Accept: */*` + `Accept-Encoding: identity`（保证长度可比）+ `Referer`（默认目标 origin，`referer` 可覆盖）；超时拆分为 connect 15s / read 按块 / write 30s / pool 10s
+- **魔数嗅探（新模块 `backend/tools/content_sniff.py`）**：`http_download` 落盘前读首块，期望 PDF/ZIP/Office/压缩包而实际是 HTML（登录页 / 验证码 / 反爬盾 / 错误页）→ 立即中止返回 `html_instead_of_file` + 页面摘要 + 路由指引，不落盘、不重试
+- **web_fetch 二进制感知**：PDF / 压缩包 / Office / 图片 / octet-stream 等二进制响应不再以乱码正文返回，改给 `kind=binary` 结构化结果（detected_type / content_length / suggested_filename / hint 引导改用 http_download）；二进制结果不进 JS 渲染降级
+
+### Changed(web-access)
+- 出网默认请求头常量迁至 `http_factory.DEFAULT_HEADERS` / `default_headers()`（web_tool 保留 `_DEFAULT_HEADERS` 别名），三个出网工具共用，避免再出现"下载不发 UA"的漂移
+
 ## [v0.5.0-beta.1] - 2026-09-13
 
 > 🚀 **升档 beta**：核心功能（对话 / 记忆 / Office / 技能 / MCP / 更新源）已稳定迭代并具备 CI + e2e 门禁，按 `docs/technical/30-release-tiers.md` 从 alpha 升至 beta。本版同时收口"Office 对标系列"与"对标主流 AI 应用 Sprint 1"。
