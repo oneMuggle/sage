@@ -150,6 +150,8 @@ const electronAPI = {
   sageFile: {
     registerRoot: (path: string) =>
       ipcRenderer.invoke('sage-file:register-root', path) as Promise<boolean>,
+    unregisterRoot: (path: string) =>
+      ipcRenderer.invoke('sage-file:unregister-root', path) as Promise<boolean>,
   },
 
   /**

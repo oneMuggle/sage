@@ -267,9 +267,10 @@ export interface ElectronAPI {
     }) => Promise<{ ok: boolean; totalBytes?: number; error?: string }>;
     cancel: (dirName: string) => Promise<{ ok: boolean }>;
   };
-  /** P13: sage-file 工作区注册表 —— 渲染端绑定工作区时登记到主进程白名单。 */
+  /** P13/P17: sage-file 工作区注册表 —— 渲染端绑定工作区时登记/注销到主进程白名单。 */
   sageFile?: {
     registerRoot: (path: string) => Promise<boolean>;
+    unregisterRoot: (path: string) => Promise<boolean>;
   };
   /**
    * Streaming callers (wiki chat / wiki ingest) pass `options.streamId`
