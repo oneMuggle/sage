@@ -536,7 +536,9 @@ def secure_atomic_write_file(root: Path, target: Path, content: str) -> None:
             write_file_reparse_safe,
         )
 
-        abs_target = (root / target).absolute()
+        # _win_abspath: 逃逸拒绝（.. / 越界）+ 逐组件 reparse 检查
+        # （symlink 化的缓存目录在此即被拒绝，秘密不得写入链接目标）。
+        abs_target = _win_abspath(root, target)
         abs_target.parent.mkdir(parents=True, exist_ok=True)
         tmp = abs_target.parent / f".{abs_target.name}.{secrets.token_hex(16)}.tmp"
         write_file_reparse_safe(str(tmp), content.encode("utf-8"), overwrite=False)

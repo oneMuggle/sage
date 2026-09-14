@@ -287,7 +287,7 @@ def read_file_reparse_safe(path: str) -> bytes:
     if not _is_windows():
         raise OSError("reparse-safe read requires Windows")
     if not verify_no_reparse(path):
-        raise OSError(f"refusing reparse component in path: {path}")
+        raise OSError(f"refusing reparse component in path (no-follow check): {path}")
     _configure(_kernel32)
     # 目录预检：无 BACKUP_SEMANTICS 时打开目录会得到 ACCESS_DENIED，
     # 提前转成语义正确的 NotADirectoryError
@@ -371,7 +371,7 @@ def write_file_reparse_safe(
     if not _is_windows():
         raise OSError("reparse-safe write requires Windows")
     if not verify_no_reparse(path):
-        raise OSError(f"refusing reparse component in path: {path}")
+        raise OSError(f"refusing reparse component in path (no-follow check): {path}")
     _configure(_kernel32)
     handle = None
     try:
@@ -435,7 +435,7 @@ def open_read_fd_reparse_safe(path: str) -> int:
     if not _is_windows():
         raise OSError("requires Windows")
     if not verify_no_reparse(path):
-        raise OSError(f"refusing reparse component in path: {path}")
+        raise OSError(f"refusing reparse component in path (no-follow check): {path}")
     _configure(_kernel32)
     attributes, _create, _final_path, _close = _configure(_kernel32)
     value = attributes(path)
@@ -462,7 +462,7 @@ def create_new_write_fd_reparse_safe(path: str) -> int:
     if not _is_windows():
         raise OSError("requires Windows")
     if not verify_no_reparse(path):
-        raise OSError(f"refusing reparse component in path: {path}")
+        raise OSError(f"refusing reparse component in path (no-follow check): {path}")
     _configure(_kernel32)
     handle = _open_handle(path, write=True, overwrite=False)
     info = _FileInfo()
