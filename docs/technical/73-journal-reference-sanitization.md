@@ -32,3 +32,8 @@ title / ref_type 拼错）会让整个 content 校验失败，触发两轮自纠
 
 TOC 真页码版（headless/COM，需求评审后立项）、Excel 打印扩展、
 Pillow 阈值配置化。
+
+---
+
+（Round 31 另见 feat-excel-print-margins 分支的打印页边距扩展——
+与本文件所述清洗机制相互独立。）

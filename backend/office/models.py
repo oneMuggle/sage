@@ -845,6 +845,19 @@ class ExcelPrintSetupSpec(BaseModel):
         pattern=r"^\$?[0-9]+:\$?[0-9]+$",
         description="每页重复的标题行，如 '1:1'（长表打印每页带表头）",
     )
+    # Round 31：打印页边距（厘米），全可选；None 用 Excel 默认。
+    margins_cm: Optional[ExcelPrintMarginsSpec] = None
+
+
+class ExcelPrintMarginsSpec(BaseModel):
+    """打印页边距（厘米，Round 31）。全字段可选。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    top: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    bottom: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    left: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    right: Optional[float] = Field(default=None, ge=0.0, le=10.0)
 
 
 class ExcelCellRange(BaseModel):
