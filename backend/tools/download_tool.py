@@ -18,7 +18,7 @@ import re
 import unicodedata
 from email.message import Message
 from pathlib import Path, PurePosixPath
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from urllib.parse import unquote, urljoin, urlparse
 
 import httpx
@@ -49,6 +49,9 @@ _MAX_NAME_CHARS = 120
 
 #: 手动跟随重定向的最大跳数
 _MAX_REDIRECTS = 5
+
+#: 断点续传的传输尝试预算（D1：首段 + 最多 2 次续传/重来）
+_MAX_TRANSFER_ATTEMPTS = 3
 
 
 def sanitize_filename(name: Optional[str]) -> str:
@@ -275,9 +278,17 @@ class HttpDownloadTool(BaseTool):
         cookie_header: Optional[str] = None,
         credential_domain: str = "",
     ) -> ToolResult:
-        """边下边写。返回成功或失败的 ``ToolResult``。"""
+        """边下边写；瞬态网络错误按 Range 断点续传（D1，预算 _MAX_TRANSFER_ATTEMPTS）。
+
+        返回成功或失败的 ``ToolResult``。
+        """
         current_url = url
-        for redirect_count in range(_MAX_REDIRECTS + 1):
+        target: Optional[Path] = None
+        written = 0
+        redirect_count = 0
+        attempts_used = 0
+
+        while True:
             parsed = urlparse(current_url)
             if parsed.scheme not in ("http", "https") or not parsed.hostname:
                 return ToolResult(
@@ -288,13 +299,16 @@ class HttpDownloadTool(BaseTool):
             if host_rejection:
                 return ToolResult(success=False, error=host_rejection)
 
-            # 登录态 cookie 只附加到档案域命中的 hop（与 web_fetch 同口径）
+            # 登录态 cookie 只附加到档案域命中的首跳（与 web_fetch 同口径）；
+            # 续传请求不携带登录态——会话时效语义，见方案 §6。
             hop_headers: Dict[str, str] = {}
-            if cookie_header:
+            if cookie_header and written == 0:
                 from backend.tools.credential_vault import cookie_domain_matches
 
                 if cookie_domain_matches(parsed.hostname or "", credential_domain):
                     hop_headers["Cookie"] = cookie_header
+            if written > 0:
+                hop_headers["Range"] = f"bytes={written}-"
 
             with build_client(
                 timeout=self._policy.timeout_seconds,
@@ -304,6 +318,7 @@ class HttpDownloadTool(BaseTool):
             ) as client:
                 request = client.build_request("GET", current_url, headers=hop_headers)
                 response = client.send(request, stream=True)
+
                 if response.is_redirect:
                     if redirect_count >= _MAX_REDIRECTS:
                         response.close()
@@ -318,12 +333,38 @@ class HttpDownloadTool(BaseTool):
                             success=False, error="invalid_redirect: 重定向缺少 Location"
                         )
                     current_url = urljoin(current_url, location)
+                    redirect_count += 1
                     continue
+
+                resuming = written > 0
+                transfer_start = written  # 本次传输的起点（续传 delta 计算用）
+                if resuming:
+                    # 续传必须 206 且起点匹配；否则服务器不支持 Range——
+                    # 丢弃本地半截文件，消耗一次预算后整段重来。
+                    content_range = response.headers.get("content-range", "")
+                    if (
+                        response.status_code != 206
+                        or not content_range.replace(" ", "").startswith(
+                            f"bytes{written}-"
+                        )
+                    ):
+                        response.close()
+                        if target is not None:
+                            target.unlink(missing_ok=True)
+                        written = 0
+                        target = None
+                        attempts_used += 1
+                        if attempts_used >= _MAX_TRANSFER_ATTEMPTS:
+                            return ToolResult(
+                                success=False,
+                                error="download_retry_exhausted: 服务器不支持断点续传，重试预算已耗尽",
+                            )
+                        continue
 
                 response.raise_for_status()
 
                 declared = response.headers.get("content-length", "")
-                if declared.isdigit() and int(declared) > max_bytes:
+                if declared.isdigit() and written + int(declared) > max_bytes:
                     response.close()
                     return ToolResult(
                         success=False,
@@ -333,19 +374,28 @@ class HttpDownloadTool(BaseTool):
                         ),
                     )
 
-                name = (
-                    sanitize_filename(filename)
-                    if filename
-                    else derive_filename(current_url, response.headers.get("content-disposition"))
-                )
-                root.mkdir(parents=True, exist_ok=True)
-                target = _unique_path(root, name)
+                if not resuming:
+                    name = (
+                        sanitize_filename(filename)
+                        if filename
+                        else derive_filename(
+                            current_url, response.headers.get("content-disposition")
+                        )
+                    )
+                    root.mkdir(parents=True, exist_ok=True)
+                    target = _unique_path(root, name)
 
-                written = 0
+                attempts_used += 1
                 owns_target = False
                 try:
-                    with _open_exclusive(root, target.name) as handle:
+                    if resuming and target is not None:
+                        # 续传：追加写本地半截文件（非独占——文件已是本会话产物）
+                        handle_ctx: Any = open(target, "ab")  # noqa: PTH123, SIM115
                         owns_target = True
+                    else:
+                        handle_ctx = _open_exclusive(root, target.name)
+                        owns_target = True
+                    with handle_ctx as handle:
                         for chunk in response.iter_bytes(_CHUNK_BYTES):
                             written += len(chunk)
                             # Content-Length 是服务器说的，不可信；按实际字节兜底
@@ -353,33 +403,57 @@ class HttpDownloadTool(BaseTool):
                                 raise _DownloadTooLarge(written)
                             handle.write(chunk)
                 except _DownloadTooLarge as exc:
-                    if owns_target:
+                    if owns_target and target is not None:
                         target.unlink(missing_ok=True)
                     return ToolResult(
                         success=False,
                         error=f"download_exceeds_limit: 实际接收 {exc.written} 字节，超过上限 {max_bytes}",
                     )
+                except httpx.TransportError:
+                    # D1：瞬态网络错误——保留半截文件供 Range 续传；预算耗尽才清理。
+                    # 凭据请求豁免续传：登录态可能已过期，错误拼接比失败更糟（§6）。
+                    if cookie_header is not None:
+                        if owns_target and target is not None:
+                            target.unlink(missing_ok=True)
+                        return ToolResult(
+                            success=False,
+                            error=(
+                                f"download_interrupted: 传输在 {written} 字节处中断"
+                                "（凭据下载不续传，请直接重试）"
+                            ),
+                        )
+                    if attempts_used >= _MAX_TRANSFER_ATTEMPTS:
+                        if owns_target and target is not None:
+                            target.unlink(missing_ok=True)
+                        return ToolResult(
+                            success=False,
+                            error=(
+                                f"download_retry_exhausted: 传输在 {written} 字节处中断，"
+                                f"重试预算（{_MAX_TRANSFER_ATTEMPTS} 次）已耗尽"
+                            ),
+                        )
+                    continue  # written > 0 → 下轮带 Range 续传
                 except Exception:
-                    if owns_target:
+                    if owns_target and target is not None:
                         target.unlink(missing_ok=True)
                     raise
                 finally:
                     response.close()
 
-            self._record_artifact(str(target), written)
-            return ToolResult(
-                success=True,
-                content={
-                    "url": current_url,
-                    "path": str(target),
-                    "filename": target.name,
-                    "bytes_written": written,
-                    "content_type": response.headers.get("content-type", ""),
-                },
-                output=str(target),
-            )
-
-        return ToolResult(success=False, error="redirect_limit_exceeded: 重定向次数超限")
+            if owns_target and target is not None:
+                self._record_artifact(str(target), written)
+                return ToolResult(
+                    success=True,
+                    content={
+                        "url": current_url,
+                        "path": str(target),
+                        "filename": target.name,
+                        "bytes_written": written,
+                        "resumed_bytes": (written - transfer_start) if resuming else 0,
+                        "content_type": response.headers.get("content-type", ""),
+                    },
+                    output=str(target),
+                )
 
     @staticmethod
     def _validate_target_url(url: str) -> Optional[str]:

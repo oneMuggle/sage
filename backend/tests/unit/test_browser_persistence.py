@@ -279,3 +279,23 @@ class TestRenderPersistentConfig:
             "backend.data.settings_repo.SettingsRepository", lambda: _Broken()
         )
         assert web_render._render_persistent_enabled() is False
+
+
+# ---------- B1 浏览器隐身微化（Round 5） ----------
+
+
+class TestLaunchStealthFlag:
+    def test_command_carries_automation_controlled_off(self):
+        from backend.tools.browser_cdp import _build_launch_command
+
+        command = _build_launch_command("/usr/bin/chrome", True, "/tmp/profile")
+        assert "--disable-blink-features=AutomationControlled" in command
+
+    def test_command_with_proxy_keeps_stealth_flag(self):
+        from backend.tools.browser_cdp import _build_launch_command
+
+        command = _build_launch_command(
+            "/usr/bin/chrome", True, "/tmp/profile", "http=http://p:8080"
+        )
+        assert "--disable-blink-features=AutomationControlled" in command
+        assert "--proxy-server=http=http://p:8080" in command

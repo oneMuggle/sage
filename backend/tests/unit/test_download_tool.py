@@ -12,6 +12,7 @@ from httpx import Response
 
 from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
+from backend.tools import download_tool
 from backend.tools.download_tool import (
     HttpDownloadTool,
     derive_filename,
@@ -299,3 +300,139 @@ def test_sanitize_filename_removes_nul_byte():
 
 def test_sanitize_filename_caps_length():
     assert len(sanitize_filename("L" * 300 + ".pdf")) == 120
+
+
+# ---------- 断点续传（Round 5 D1） ----------
+
+
+def test_resume_after_mid_stream_failure(tmp_path, monkeypatch):
+    """首段写入后瞬态断流 → Range 续传拼接完整文件。"""
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.headers.get("range"))
+        if request.headers.get("range") is None:
+            def gen():
+                yield b"AAABBB"
+                raise httpx.ReadError("connection reset")
+
+            return httpx.Response(200, content=gen())
+        return httpx.Response(
+            206,
+            content=b"CCC",
+            headers={"content-range": "bytes 6-8/9"},
+        )
+
+    monkeypatch.setattr(download_tool, "_CHUNK_BYTES", 2)
+    with respx.mock(base_url=_BASE) as mock:
+        mock.get("/big.bin").mock(side_effect=handler)
+        result = _tool(tmp_path).execute(url=f"{_BASE}/big.bin")
+
+    assert result.success is True
+    assert Path(result.content["path"]).read_bytes() == b"AAABBBCCC"
+    assert result.content["resumed_bytes"] == 3
+    assert calls[0] is None
+    assert calls[1] == "bytes=6-"
+
+
+def test_restart_when_server_ignores_range(tmp_path, monkeypatch):
+    """服务器不理会 Range（回 200 全量）→ 丢弃半截文件整段重来。"""
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.headers.get("range"))
+        if request.headers.get("range") is None:
+            if len(calls) == 1:
+                def gen():
+                    yield b"AAABBB"
+                    raise httpx.ReadError("connection reset")
+
+                return httpx.Response(200, content=gen())
+            return httpx.Response(200, content=b"AAABBBCCC")
+        return httpx.Response(200, content=b"AAABBBCCC")
+
+    monkeypatch.setattr(download_tool, "_CHUNK_BYTES", 2)
+    with respx.mock(base_url=_BASE) as mock:
+        mock.get("/big.bin").mock(side_effect=handler)
+        result = _tool(tmp_path).execute(url=f"{_BASE}/big.bin")
+
+    assert result.success is True
+    assert Path(result.content["path"]).read_bytes() == b"AAABBBCCC"
+    assert result.content["resumed_bytes"] == 0
+    assert len(calls) == 3  # 失败 → 续传尝试（服务器忽略 Range）→ 丢弃后整段重来
+
+
+def test_retry_budget_exhausted_cleans_partial(tmp_path, monkeypatch):
+    """每次都中途断流且预算耗尽 → 失败并清理半截文件。"""
+    def handler(request: httpx.Request) -> httpx.Response:
+        def gen():
+            yield b"PARTIAL"
+            raise httpx.ReadError("reset again")
+
+        return httpx.Response(200, content=gen())
+
+    monkeypatch.setattr(download_tool, "_CHUNK_BYTES", 2)
+    with respx.mock(base_url=_BASE) as mock:
+        mock.get("/big.bin").mock(side_effect=handler)
+        result = _tool(tmp_path).execute(url=f"{_BASE}/big.bin")
+
+    assert result.success is False
+    assert "download_retry_exhausted" in result.error
+    assert not (tmp_path / "big.bin").exists()
+
+
+def test_http_status_error_does_not_retry(tmp_path):
+    """4xx/5xx 属确定性失败——不进入续传重试。"""
+    with respx.mock(base_url=_BASE) as mock:
+        route = mock.get("/gone.bin").mock(return_value=Response(404, text="nope"))
+        result = _tool(tmp_path).execute(url=f"{_BASE}/gone.bin")
+
+    assert result.success is False
+    assert route.call_count == 1
+
+
+def test_credential_download_does_not_resume(tmp_path, monkeypatch):
+    """凭据下载不续传（登录态时效）——中断即失败，不拼错误数据。"""
+    import os
+    import unittest.mock
+
+    os.environ["SAGE_SECRET_SCHEME"] = "test"
+
+    from backend.tools.credential_vault import save_credential
+
+    class _Repo:
+        def __init__(self):
+            self.data = {}
+
+        def get(self, key):
+            return self.data.get(key)
+
+        def set(self, key, value, **kw):
+            self.data[key] = value
+
+    repo = _Repo()
+    save_credential(
+        ".example.internal",
+        [{"name": "SID", "value": "s", "domain": ".example.internal", "path": "/"}],
+        repo=repo,
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        def gen():
+            yield b"AAABBB"
+            raise httpx.ReadError("reset")
+
+        return httpx.Response(200, content=gen())
+
+    monkeypatch.setattr(download_tool, "_CHUNK_BYTES", 2)
+    with unittest.mock.patch(
+        "backend.data.settings_repo.SettingsRepository", return_value=repo
+    ), respx.mock(base_url=_BASE) as mock:
+        mock.get("/paper.pdf").mock(side_effect=handler)
+        result = _tool(tmp_path).execute(
+            url=f"{_BASE}/paper.pdf", credential_domain=".example.internal"
+        )
+
+    assert result.success is False
+    assert "download_interrupted" in result.error
+    assert not (tmp_path / "paper.pdf").exists()

@@ -272,6 +272,9 @@ def _build_launch_command(
         "--no-default-browser-check",
         "--disable-extensions",
         "--disable-background-networking",
+        # B1（Round 5）：收窄自动化自报暴露面——不加此 flag 时页面侧
+        # navigator.webdriver 恒为 true，部分反爬脚本以此一票否决。
+        "--disable-blink-features=AutomationControlled",
         "--window-size=1440,900",
     ]
     if proxy_flag:
