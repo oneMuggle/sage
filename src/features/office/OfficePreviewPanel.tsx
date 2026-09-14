@@ -104,6 +104,10 @@ export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: Of
   const [exporting, setExporting] = useState(false);
   // P2: 导出已耗时（spinner + 秒表，统一按钮 busy 规范）
   const elapsed = useElapsedSeconds(exporting);
+  // P16: 可视化进度条（百分比来自任务中心 store 轮询）
+  const taskPercent = useTaskCenterStore(
+    (s) => (exporting ? s.tasks['office:export']?.percent ?? null : null),
+  );
 
   if (!preview) {
     return (
@@ -247,6 +251,19 @@ export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: Of
           </div>
         )}
       </div>
+
+      {/* P16: 导出期间的可视化进度条（百分比来自任务中心轮询） */}
+      {exporting && taskPercent != null && (
+        <div
+          className="h-1 rounded-full bg-bg-subtle overflow-hidden"
+          data-testid="office-export-progress-bar"
+        >
+          <div
+            className="h-full bg-primary rounded-full transition-[width] duration-500"
+            style={{ width: `${taskPercent}%` }}
+          />
+        </div>
+      )}
 
       <div className="p-4 max-h-96 overflow-y-auto">
         {preview.docType === 'ppt' && <PptPreview data={preview.data} />}
