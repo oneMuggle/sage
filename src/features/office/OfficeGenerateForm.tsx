@@ -762,10 +762,11 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
         <div className="text-xs text-muted bg-surface border border-border rounded p-2 space-y-1">
           <div className="flex items-center gap-1.5 text-text">
             <span className="text-green-500" aria-hidden>✓</span>
-            <span className="font-medium">{result.path.split('/').pop() ?? result.path}</span>
+            <span className="font-medium">{result.path.split(/[\\/]/).pop() ?? result.path}</span>
           </div>
-          <div>
-            {t('office.generate.outputPath')} <code className="text-text">{result.path}</code>
+          <div className="flex items-center gap-1">
+            <span>{t('office.generate.outputPath')}</span>
+            <code className="text-text break-all">{result.path}</code>
           </div>
           <div>
             {t('office.generate.size')} {(result.sizeBytes / 1024).toFixed(1)} KB
