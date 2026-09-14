@@ -296,10 +296,16 @@ class ScriptRunner:
         )
 
     def _create_snapshot(self, script_path: Path, content: bytes) -> Path:
-        """原子创建 0700 临时目录和 0600 脚本快照，失败则不执行。"""
+        """原子创建 0700 临时目录和 0600 脚本快照，失败则不执行。
+
+        Windows：``os.fchmod`` 不存在、目录 ACL 与 POSIX 位模型不同 ——
+        mkdtemp 默认已为当前用户私有（%TEMP% 每用户目录），文件以 0600
+        等价创建后跳过位调整；快照目录本身每用户隔离，安全语义等价。
+        """
         snapshot_dir = Path(tempfile.mkdtemp(prefix="sage-skill-"))
         try:
-            snapshot_dir.chmod(stat.S_IRWXU)
+            if os.name == "posix":
+                snapshot_dir.chmod(stat.S_IRWXU)
             snapshot_path = snapshot_dir / script_path.name
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
             if hasattr(os, "O_BINARY"):
@@ -310,7 +316,8 @@ class ScriptRunner:
                     fd = -1
                     snapshot_file.write(content)
                     snapshot_file.flush()
-                    os.fchmod(snapshot_file.fileno(), stat.S_IRUSR | stat.S_IWUSR)
+                    if os.name == "posix":
+                        os.fchmod(snapshot_file.fileno(), stat.S_IRUSR | stat.S_IWUSR)
             finally:
                 if fd != -1:
                     os.close(fd)
