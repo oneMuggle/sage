@@ -676,6 +676,13 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_projects_recent "
             "ON projects(last_opened_at DESC)"
         )
+        # P8 (2026-09-15): wiki recents 迁移到注册表——intent 保存最近一次
+        # 登记意图（"create"|"open"），NULL = 非 wiki 来源（侧栏登记），
+        # 读侧映射为 "open"。幂等迁移，旧库/旧行兼容（NULL 允许）。
+        cursor.execute("PRAGMA table_info(projects)")
+        _projects_columns = {row["name"] for row in cursor.fetchall()}
+        if "intent" not in _projects_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN intent TEXT")
         conn.commit()
 
         # Office self-check history (round-3 Office parity, N4). Every

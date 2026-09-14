@@ -1,13 +1,12 @@
 """Regression tests for final derived-file path hardening."""
 
-import json
 import os
 from pathlib import Path
 
 import pytest
 
 from backend.api.wiki_routes import _create_wiki_structure
-from backend.storage.recent_projects import RecentProject, save_recent
+from backend.storage.recent_projects import RecentProject, load_recent, save_recent
 from backend.wiki.files import secure_atomic_write_file, secure_write_temp_file
 from backend.wiki.ingest import _save_cache
 from backend.wiki.vision import _save_cache as save_vision_cache
@@ -61,17 +60,22 @@ def test_atomic_write_does_not_use_fixed_symlink_temp(tmp_path: Path) -> None:
     assert outside.read_text(encoding="utf-8") == "keep"
 
 
-def test_recent_projects_keeps_payload_and_ignores_fixed_temp_symlink(
+def test_recent_projects_save_persists_and_ignores_stray_tmp(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """P8：recents 存储迁移到注册表（SQLite）——save_recent 不再写 JSON。
+
+    原"fixed temp symlink 不被跟随"攻击面随 JSON 弃用而消失；本用例改为
+    断言 save_recent 经注册表持久化，且不触碰工作目录中的杂散 tmp 文件。
+    """
     monkeypatch.setenv("SAGE_USER_DATA_DIR", str(tmp_path))
     outside = tmp_path / "outside.json"
     outside.write_text("keep", encoding="utf-8")
-    _symlink_or_skip(tmp_path / "recent-projects.json.tmp", outside)
+    (tmp_path / "recent-projects.json.tmp").write_text("stale", encoding="utf-8")
 
     save_recent([RecentProject(path="/p", name="p", opened_at=1.0, intent="open")])
 
-    assert json.loads((tmp_path / "recent-projects.json").read_text())[0]["path"] == "/p"
+    assert [item.path for item in load_recent()] == ["/p"]
     assert outside.read_text(encoding="utf-8") == "keep"
 
 
