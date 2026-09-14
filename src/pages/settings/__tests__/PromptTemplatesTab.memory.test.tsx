@@ -9,6 +9,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
+import { tplStorageKey } from '../../../widgets/chat/TemplateFillDialog';
 import { PromptTemplatesTab } from '../PromptTemplatesTab';
 
 const listMock = vi.fn();
@@ -25,8 +26,6 @@ vi.mock('../../../shared/api/promptApi', async () => {
     },
   };
 });
-
-import { tplStorageKey } from '../../../widgets/chat/TemplateFillDialog';
 
 const TPL = {
   id: 'pt-1',
