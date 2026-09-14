@@ -15,7 +15,7 @@ import {
   BrainCircuit,
   Quote,
 } from 'lucide-react';
-import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
@@ -255,11 +255,20 @@ function ThinkingShimmer() {
  */
 function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStreaming?: boolean }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  // P21: 流式期间自动滚动到底部，显示最新思考内容
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   // P1 fix: 当 isStreaming 变为 true 时自动展开 (useState 只读初始值,需 useEffect 同步)
   useEffect(() => {
     if (isStreaming) setIsExpanded(true);
   }, [isStreaming]);
+
+  // 流式期间 reasoning 增长时自动滚动到底部
+  useEffect(() => {
+    if (isStreaming && contentRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    }
+  }, [reasoning]);
 
   return (
     <div className="mb-2 border border-border/50 rounded-radius-sm overflow-hidden">
@@ -277,7 +286,10 @@ function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStream
         />
       </button>
       {isExpanded && (
-        <div className="px-3 py-2 bg-bg-subtle/50 border-t border-border/50 text-xs text-text-secondary leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap">
+        <div
+          ref={contentRef}
+          className="px-3 py-2 bg-bg-subtle/50 border-t border-border/50 text-xs text-text-secondary leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap"
+        >
           {reasoning}
         </div>
       )}
