@@ -97,3 +97,35 @@ class TestReparseComponentRefusal:
         target = link_dir / "SKILL.md"
         with pytest.raises(OSError, match="refusing"):
             win_reparse_io.write_file_reparse_safe(str(target), b"x", overwrite=False)
+
+
+class TestVerifyRegularFileReparseSafe:
+    def test_regular_file_passes(self, tmp_path):
+        p = _make_file(tmp_path, name="ok.txt", data=b"data")
+        win_reparse_io.verify_regular_file_reparse_safe(str(p))  # 不抛即通过
+
+    def test_missing_file_raises_file_not_found(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            win_reparse_io.verify_regular_file_reparse_safe(str(tmp_path / "nope.txt"))
+
+    def test_directory_raises_not_a_directory(self, tmp_path):
+        with pytest.raises(NotADirectoryError):
+            win_reparse_io.verify_regular_file_reparse_safe(str(tmp_path))
+
+    def test_hardlinked_file_refused(self, tmp_path):
+        """多链接文件拒绝（对齐单链接私有性契约）。"""
+        p = _make_file(tmp_path, name="linked.txt", data=b"data")
+        link = tmp_path / "hard.link"
+        try:
+            os.link(str(p), str(link))
+        except (OSError, NotImplementedError):
+            pytest.skip("当前环境不支持 hardlink")
+        with pytest.raises(OSError, match="non-private|refusing"):
+            win_reparse_io.verify_regular_file_reparse_safe(str(link))
+
+    def test_symlinked_leaf_refused(self, tmp_path):
+        real = _make_file(tmp_path, name="real.txt", data=b"secret")
+        link = tmp_path / "link.txt"
+        _symlink_or_skip(link, real)
+        with pytest.raises(OSError, match="refusing|no-follow"):
+            win_reparse_io.verify_regular_file_reparse_safe(str(link))
