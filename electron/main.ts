@@ -38,7 +38,7 @@ import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electr
 import { logger } from './logger';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
-import { registerSageFileProtocol, registerWorkspaceRoot } from './sageFileProtocol';
+import { registerSageFileProtocol, registerWorkspaceRoot, unregisterWorkspaceRoot } from './sageFileProtocol';
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
 logger.info('main: process started', {
@@ -1951,6 +1951,9 @@ app.whenReady().then(async () => {
   registerSageFileProtocol();
   ipcMain.handle('sage-file:register-root', (_evt, root: string) => {
     return registerWorkspaceRoot(String(root ?? ''));
+  });
+  ipcMain.handle('sage-file:unregister-root', (_evt, root: string) => {
+    return unregisterWorkspaceRoot(String(root ?? ''));
   });
   // 2026-09-13: 启动屏 — 后端冷启动实测 50–65s（健康检查上限 90s），此前
   // 窗口创建排在 waitForBackend() 之后，用户双击图标后近一分钟无任何反馈。

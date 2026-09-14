@@ -33,6 +33,25 @@ export function registerWorkspaceRoot(root: string): boolean {
   }
 }
 
+/**
+ * P17: 注销工作区根 —— 会话解绑/切换工作区时调用，移除不再需要的根。
+ * 防止旧工作区路径永久残留在白名单中（最小权限原则）。
+ * 返回 true 表示确实移除了一个根；false 表示该根不存在。
+ */
+export function unregisterWorkspaceRoot(root: string): boolean {
+  try {
+    const real = realpathSync.native(root);
+    return workspaceRoots.delete(real);
+  } catch {
+    return false;
+  }
+}
+
+/** 获取当前注册表快照（测试/诊断用）。 */
+export function getRegisteredRoots(): ReadonlySet<string> {
+  return workspaceRoots;
+}
+
 export function registerSageFileProtocol(): void {
   // 动态引入 electron：本模块被 main.ts 静态导入，而若干 electron 单测
   // 会以部分 mock 替换 'electron' —— 顶层静态引入会让这些测试在收集期
