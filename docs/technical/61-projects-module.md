@@ -215,3 +215,25 @@ cherry-pick 时注意：
 - dragOver 高亮虚线框 + 提示文案，dragLeave/drop 复位；
 - 迁移注记：Electron ≥32 需将 `File.path` 迁到 `webUtils.getPathForFile`
   （当前 21.4.4 与 win7 LTS 冻结版均支持 File.path，两端一致）。
+
+## 13. P6 落地记录（2026-09-14，feat/wiki-projects-bridge）
+
+方案：`docs/plans/2026-09-14_wiki-projects-bridge-plan.md`。前置变化：
+#760（R32 Windows reparse-safe 原语）解除了 recent_projects 的
+POSIX-only 阻塞（`test_recent_projects.py` 在 Windows 16/16），两轮
+缓行的 wiki 统一得以启动——本批为**最小加法桥接**，非存储迁移。
+
+- **授权桥接**：`authorize_registered_project`（约 24 个 wiki 端点的
+  唯一门禁）接受 recents ∪ projects 注册表并集（新增
+  `_projects_registry_paths()`：lazy import ProjectRepository，异常 →
+  空列表，fail-closed 语义不变）；
+- **MCP 对齐**：`_authorized_project_root` 的 registered 集合同样并集；
+- **写侧双登记**：wiki open/create 成功后 `register_quietly` 同步进
+  侧栏清单（容错，失败不影响 wiki 主流程）——两个域的"用户显式用作
+  Sage 工作目录"信任语义对齐；
+- **明确不改**：全局搜索 `_search_knowledge` 的 `recents[0].path`
+  默认域（改它=静默改变知识库搜索语义）；`GET /wiki/recent-projects`
+  响应结构；存储迁移（双轨稳定后再议）。
+- 规范化差异用现有 `_same_path`（normcase）吸收，双方向 resolve 后比较。
+- win7 对齐：`project_authorization.py` / `mcp_server.py` / `wiki_routes`
+  三处均为小块追加；`project_repo.py` 为 P1 新文件；全部 py3.8 兼容。
