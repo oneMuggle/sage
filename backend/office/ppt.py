@@ -28,7 +28,6 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
-from .progress import report_current
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
@@ -42,6 +41,7 @@ from .models import (
     PptSlideContent,
 )
 from .path_safety import managed_document_path, resolve_output_path, validate_supported_filename
+from .progress import report_current
 from .storage import validate_workspace
 
 logger = logging.getLogger(__name__)
@@ -363,6 +363,11 @@ def generate_ppt(req, output_dir: Optional[str] = None) -> Path:
             # Add speaker notes
             if spec.notes:
                 slide.notes_slide.notes_text_frame.text = spec.notes
+            # P12: 逐 slide 进度上报（30→85 区间，路由层负责前后边界）
+            report_current(
+                f"生成幻灯片 {slide_idx + 1}/{total_slides}",
+                30 + int(55 * (slide_idx + 1) / total_slides),
+            )
         prs.save(str(output_path))
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate PPTX: {exc}", file_path=output_path) from exc

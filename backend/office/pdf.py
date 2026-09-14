@@ -297,6 +297,11 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
 
         total_pages = len(req.pages)
         for i, page_spec in enumerate(req.pages):
+            # P12: 逐页进度上报（40→85 区间）
+            report_current(
+                f"生成页面 {i + 1}/{total_pages}",
+                40 + int(45 * (i + 1) / total_pages),
+            )
             if i > 0:
                 c.showPage()
 

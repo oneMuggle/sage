@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.office.progress import snapshot, track
+from backend.office.progress import report_current, snapshot, track
 
 
 def test_report_snapshot_lifecycle():
