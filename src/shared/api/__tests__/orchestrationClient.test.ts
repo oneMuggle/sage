@@ -41,6 +41,40 @@ describe('orchestrationClient', () => {
     expect(invokeMock).toHaveBeenCalledWith('orchestration_list_lanes', { params: {} });
   });
 
+  it('decideLane() invokes orchestration_lane_decision with decision + reason', async () => {
+    const fixture = {
+      ok: true,
+      lane: { lane_id: 'lane-1' },
+      decision: 'accept',
+      merged: true,
+      already: false,
+      warning: null,
+      merge: { code: 'merged' },
+    };
+    invokeMock.mockResolvedValueOnce(fixture);
+
+    const result = await orchestrationClient.decideLane('lane-1', 'accept', 'looks good');
+
+    expect(invokeMock).toHaveBeenCalledWith('orchestration_lane_decision', {
+      lane_id: 'lane-1',
+      decision: 'accept',
+      reason: 'looks good',
+    });
+    expect(result).toEqual(fixture);
+  });
+
+  it('decideLane() defaults reason to empty string', async () => {
+    invokeMock.mockResolvedValueOnce({ ok: true, decision: 'reject' });
+
+    await orchestrationClient.decideLane('lane-1', 'reject');
+
+    expect(invokeMock).toHaveBeenCalledWith('orchestration_lane_decision', {
+      lane_id: 'lane-1',
+      decision: 'reject',
+      reason: '',
+    });
+  });
+
   describe('getBoard (P2-5)', () => {
     const fixture = {
       schema_version: '1.0',

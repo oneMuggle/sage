@@ -87,6 +87,12 @@ test.describe('office template create → edit preview → apply (demo stub mode
     await expect(newRow).toHaveCount(1);
     await expect(newRow).toContainText('已生成');
 
+    // ── 2b. A4b: word 产物自动打开交付抽屉；断言出现后关闭 ────────
+    const deliveryDrawer = page.getByTestId('office-delivery-drawer');
+    await expect(deliveryDrawer).toBeVisible();
+    await deliveryDrawer.getByTestId('drawer-close').click();
+    await expect(deliveryDrawer).toBeHidden();
+
     // ── 3. Select → preview via the 历史版本 restore path ────────────
     await newRow.getByLabel('历史版本').click();
     const snapshotPanel = page.getByTestId('office-snapshot-panel');

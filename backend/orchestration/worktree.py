@@ -69,7 +69,16 @@ def remove_worktree(dest: Path) -> None:
         prune_ok = _run_git(["worktree", "prune"], cwd=dest)
         if not prune_ok:
             logger.debug("worktree prune 失败: %s", dest)
-        if not _run_git(["worktree", "remove", "--force", str(dest)], cwd=dest):
+        # remove 的 cwd 必须「在同一 repo 内、但不在 dest 自身内」：
+        # cwd=dest 在 Windows 上删目录会 Permission denied（进程锁 cwd），
+        # cwd 在 repo 外则 git 报 not a git repository。经主仓执行最稳。
+        from backend.orchestration.worktree_merge import find_main_repo
+
+        main = find_main_repo(dest)
+        if not _run_git(
+            ["worktree", "remove", "--force", str(dest)],
+            cwd=main if main is not None else dest.parent,
+        ):
             logger.warning("worktree 移除失败（将遗留目录）: %s", dest)
     except (OSError, RuntimeError, ValueError) as exc:
         logger.warning("worktree 移除异常（将遗留目录）: %s: %s", dest, exc)

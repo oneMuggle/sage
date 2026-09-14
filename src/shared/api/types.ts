@@ -892,7 +892,10 @@ export type LaneEventType =
   | 'lane.stopped'
   | 'lane.commit.created'
   | 'lane.pr.opened'
-  | 'lane.merged';
+  | 'lane.merged'
+  | 'lane.acceptance.completed'
+  | 'lane.accepted'
+  | 'lane.rejected';
 
 export type EventProvenance = 'LiveLane' | 'Recovery' | 'Retry' | 'Heartbeat' | 'Manual';
 
@@ -1431,6 +1434,34 @@ export interface WordRepairRequest {
   file_path: string;
   format_spec: WordFormatSpec;
   overwrite?: boolean;
+  max_size_bytes?: number;
+}
+
+/**
+ * A4b: Word lint (Round 10 linter) — backend counterpart:
+ * backend/office/models.py WordLintIssue / WordLintResult / WordLintRequest.
+ */
+export interface OfficeWordLintIssue {
+  rule_id: string;
+  severity: 'error' | 'warning';
+  message: string;
+  fix_hint: string;
+}
+
+export interface OfficeWordLintResult {
+  /** ok = no error-level issues. */
+  ok: boolean;
+  issue_count: number;
+  error_count: number;
+  warning_count: number;
+  checked_rules: string[];
+  issues: OfficeWordLintIssue[];
+}
+
+export interface OfficeWordLintRequest {
+  workspace_path: string;
+  file_path: string;
+  format_spec: WordFormatSpec;
   max_size_bytes?: number;
 }
 
