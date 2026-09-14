@@ -232,4 +232,50 @@ describe('CommandPalette 项目模块 (P2)', () => {
       expect(useStore.getState().currentSessionId).toBe('s-new');
     });
   });
+
+  // ===== P7: 搜索模式（>=2 字符）项目命中 =====
+
+  it('P7: 搜索词命中项目名时渲染项目分组，点击走 projects_open', async () => {
+    projectListMock.mockResolvedValue([]);
+    mockBackendRequest.mockResolvedValue({
+      projects: [{ id: 'p1', name: 'demo', path: 'C:\\work\\demo', session_count: 2 }],
+    });
+    projectOpenMock.mockResolvedValue({
+      project: {
+        id: 'p1',
+        path: 'C:\\work\\demo',
+        name: 'demo',
+        createdAt: 1,
+        lastOpenedAt: 1,
+        sessionCount: 2,
+        lastSessionId: null,
+      },
+      session: {
+        id: 's-opened',
+        title: 'demo',
+        created_at: 1,
+        updated_at: 1,
+        last_message_at: null,
+        message_count: 0,
+        is_pinned: false,
+      },
+      created: false,
+    });
+    renderPalette();
+
+    fireEvent.change(screen.getByPlaceholderText('输入命令或搜索...'), {
+      target: { value: 'demo' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('demo')).toBeInTheDocument();
+      expect(screen.getByText('C:\\work\\demo')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('demo'));
+    await waitFor(() => {
+      expect(projectOpenMock).toHaveBeenCalledWith('p1');
+      expect(useStore.getState().currentSessionId).toBe('s-opened');
+    });
+  });
 });

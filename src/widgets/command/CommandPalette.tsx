@@ -25,6 +25,8 @@ interface GlobalSearchResult {
     tags: string[];
   }>;
   knowledge?: Array<{ path: string; title: string; snippet: string }>;
+  /** P7: 项目模块接入全局搜索 */
+  projects?: Array<{ id: string; name: string; path: string; session_count: number }>;
 }
 
 interface CommandPaletteProps {
@@ -124,9 +126,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     [setCurrentSessionId, navigate, onOpenChange],
   );
 
-  // 项目模块 P2: 打开项目（复用最近会话或新建并绑定）后进入会话
+  // 项目模块 P2/P7: 打开项目（复用最近会话或新建并绑定）后进入会话。
+  // 只消费 id —— 命令模式清单与搜索命中两种来源共用。
   const handleOpenProject = useCallback(
-    async (project: ProjectSummary) => {
+    async (project: { id: string }) => {
       try {
         const { session } = await projectApi.open(project.id);
         await loadSessions();
@@ -401,9 +404,34 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 ))}
               </Command.Group>
             )}
+            {/* P7: 项目搜索命中（名称/路径片段 → 打开项目） */}
+            {globalResults.projects && globalResults.projects.length > 0 && (
+              <Command.Group heading="项目" className="mb-1.5">
+                {globalResults.projects.map((p) => (
+                  <Command.Item
+                    key={p.id}
+                    value={`search-project-${p.name}-${p.path}`}
+                    onSelect={() => void handleOpenProject(p)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-radius-sm text-sm text-text cursor-default select-none aria-selected:bg-primary/10 aria-selected:text-primary data-[disabled]:opacity-50 transition-colors"
+                  >
+                    <Folder className="w-4 h-4 text-text-muted shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate">{p.name}</div>
+                      <div className="text-xs text-text-muted truncate">{p.path}</div>
+                    </div>
+                    {p.session_count > 0 && (
+                      <span className="ml-auto text-xs text-text-muted">
+                        {p.session_count} 个会话
+                      </span>
+                    )}
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            )}
             {!globalResults.sessions?.length &&
               !globalResults.memories?.length &&
-              !globalResults.knowledge?.length && (
+              !globalResults.knowledge?.length &&
+              !globalResults.projects?.length && (
                 <div className="py-6 text-center text-sm text-text-muted">无匹配结果</div>
               )}
           </>
