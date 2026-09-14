@@ -111,7 +111,7 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
         setSelecting(false);
       }
     },
-    [],
+    [loadEmbedderStatus],
   );
 
   // P8: 语义模型下载（触发 models:embedder:download；进度见上方 listen）

@@ -25,9 +25,8 @@ vi.mock('electron', () => ({
 import { EMBEDDER_MODEL_MANIFEST, registerModelDownloadIpc } from '../modelDownloadIpc';
 
 const NIGHTLY = process.env.SAGE_NIGHTLY === '1';
-const d = NIGHTLY ? describe : describe.skip;
 
-describe('embedder download E2E (nightly, real network)', () => {
+describe.skipIf(!NIGHTLY)('embedder download E2E (nightly, real network)', () => {
   let modelsDir: string;
 
   const register = (): void => {
