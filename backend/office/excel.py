@@ -625,6 +625,7 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     from .errors import OfficeGenerateError
     from .models import OfficeDocType
     from .path_safety import managed_document_path, resolve_output_path
+    from .progress import report_current
     from .storage import validate_workspace
 
     if output_dir is not None:
@@ -665,11 +666,17 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
         # Build all DataFrames first so we can detect the all-empty case
         # before opening the writer (avoids writing a file with no sheets).
         sheet_specs: list[tuple[str, pd.DataFrame, bool]] = []
-        for sheet_spec in req.sheets:
+        total_sheets = len(req.sheets)
+        for sheet_idx, sheet_spec in enumerate(req.sheets):
             name = sheet_spec.name[:31]  # Excel 31-char sheet-name cap
             headers = sheet_spec.headers
             rows = sheet_spec.rows
 
+            # P12: 逐 sheet 进度上报
+            report_current(
+                f"生成工作表 {sheet_idx + 1}/{total_sheets}",
+                30 + int(50 * (sheet_idx + 1) / total_sheets),
+            )
             if headers or rows:
                 # Build DataFrame. With columns=headers, pandas enforces the
                 # column count and pads/truncates ragged rows with NaN. We
