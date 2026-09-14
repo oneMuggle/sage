@@ -232,6 +232,19 @@ def open_project(
     return project, session, True
 
 
+def register_quietly(path: str, now_ms: Optional[int] = None) -> Optional[Project]:
+    """容错登记：失败记日志返回 None，绝不抛（供跨域写侧联动使用）。
+
+    P6 桥接用——wiki open/create 成功后顺手把目录同步进侧栏项目清单；
+    注册表写入失败不应影响 wiki 主流程。
+    """
+    try:
+        return ProjectRepository().register(path, now_ms=now_ms)
+    except Exception as exc:  # noqa: BLE001 — 跨域联动失败只降级
+        logger.info("project register_quietly skipped for %s: %s", path, exc)
+        return None
+
+
 __all__ = [
     "DEFAULT_LIST_LIMIT",
     "PROJECT_SESSIONS_LIMIT",
@@ -240,4 +253,5 @@ __all__ = [
     "ProjectPathMissingError",
     "ProjectRepository",
     "open_project",
+    "register_quietly",
 ]
