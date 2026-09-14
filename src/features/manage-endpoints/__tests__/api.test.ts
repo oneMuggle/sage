@@ -502,10 +502,16 @@ describe('R33: 协议级模型发现 (anthropic / gemini / ollama)', () => {
     expect(models.map((m) => m.id)).toEqual(['llama3', 'qwen2.5:7b']);
   });
 
-  it('testEndpointConnection 非 openai 协议只做发现，不做对话连通测试', async () => {
-    mockFetch(async (url) => {
+  it('R36: testEndpointConnection 非 openai 协议也做对话级连通测试', async () => {
+    mockFetch(async (url, init) => {
       if (url.includes('/api/tags')) {
         return makeJsonResponse(200, { models: [{ name: 'llama3' }] });
+      }
+      if (url.includes('/api/chat')) {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        expect(body.model).toBe('llama3');
+        expect(body.stream).toBe(false);
+        return makeJsonResponse(200, { message: { content: 'pong' } });
       }
       throw new Error('unexpected fetch: ' + url);
     });
@@ -516,7 +522,7 @@ describe('R33: 协议级模型发现 (anthropic / gemini / ollama)', () => {
       'ollama',
     );
     expect(result.success).toBe(true);
-    expect(result.message).toContain('该协议未做对话连通测试');
+    expect(result.message).toContain('对话连通');
     expect(result.discoveredModels?.[0]?.id).toBe('llama3');
   });
 });
