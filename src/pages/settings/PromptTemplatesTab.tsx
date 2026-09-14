@@ -6,12 +6,11 @@
  * 斜杠面板（/tpl-<名称>）与该列表共享同一数据源，保存后重载即可见。
  */
 
-import { Pencil, Plus, RefreshCw } from 'lucide-react';
-import { Download, Upload } from 'lucide-react';
+import { Download, Pencil, Plus, RefreshCw, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { promptApi, type PromptTemplate } from '../../shared/api/promptApi';
 import { tplStorageKey } from '../../widgets/chat/TemplateFillDialog';
+import { promptApi, type PromptTemplate } from '../../shared/api/promptApi';
 
 const MAX_NAME_LEN = 60;
 const MAX_CONTENT_LEN = 8000;
