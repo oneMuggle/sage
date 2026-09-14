@@ -18,7 +18,14 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
-> 🔁 **从 main 同步（cherry-pick #729 / #767）**：以下 v0.5.0-beta.1 条目为主线内容；win7 分支版本号不随之升档。
+## [v0.4.9-alpha.32-win7] - 2026-09-14
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #794 — 安装包日志错误修复 (3 bugs)。
+
+### Fixed
+- **fetchModels 防御性检查**: 非标准 JSON 上游 (LM Studio 变体) 不再导致 `data.data.map()` TypeError
+- **settings_canonicalizer**: 新增 `local_model_path` → `localModelPath` alias，兼容旧数据迁移
+- **knowledgeApi 死代码清理**: 消除 `list_knowledge_docs` / `search_knowledge_docs` Unknown IPC command 错误日志；删除 4 个废弃组件
 
 ## [v0.5.0-beta.1] - 2026-09-13
 
