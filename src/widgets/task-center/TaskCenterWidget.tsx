@@ -108,6 +108,32 @@ function isLaneCancellable(status: LaneStatus): boolean {
   return status === 'created' || status === 'ready' || status === 'running' || status === 'blocked';
 }
 
+/**
+ * P19: 状态优先级排序 —— 最重要的任务排在展开列表顶部。
+ * 优先级：failed > awaiting_approval > running > paused > queued > succeeded > cancelled
+ */
+const STATUS_PRIORITY: Readonly<Record<TaskCenterStatus, number>> = {
+  failed: 0,
+  awaiting_approval: 1,
+  running: 2,
+  paused: 3,
+  queued: 4,
+  succeeded: 5,
+  cancelled: 6,
+};
+
+function sortEntries(entries: Entry[]): Entry[] {
+  return [...entries].sort((a, b) => {
+    const pa = STATUS_PRIORITY[a.status] ?? 99;
+    const pb = STATUS_PRIORITY[b.status] ?? 99;
+    if (pa !== pb) return pa - pb;
+    // 同优先级内按已耗时降序（越久排越前）
+    const ta = a.startedAt ?? 0;
+    const tb = b.startedAt ?? 0;
+    return ta - tb;
+  });
+}
+
 function StatusIcon({ status }: { status: TaskCenterStatus }) {
   const cls = 'w-3.5 h-3.5 shrink-0';
   switch (status) {
@@ -215,7 +241,7 @@ export function TaskCenterWidget() {
         laneId: lane.lane_id,
         opensDelivery: isLaneAwaitingDecision(lane),
       }));
-    return [...registryEntries, ...chatEntries, ...laneEntries];
+    return sortEntries([...registryEntries, ...chatEntries, ...laneEntries]);
     // streamStartsRef is a ref and stays out of deps: entries read it after
     // the maintenance effect above, so first-seen times are already present.
   }, [registryTasks, activeStreamIds, lanes, sessions, t]);
