@@ -24,14 +24,16 @@ async def test_global_search_empty_q_returns_422(client):
 
 
 @pytest.mark.asyncio()
-async def test_global_search_returns_all_three_keys(client):
+async def test_global_search_returns_all_four_keys(client):
     resp = await client.get("/api/v1/search/global", params={"q": "never-match-xyz"})
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body.keys()) == {"sessions", "memories", "knowledge"}
+    # P7: 项目模块接入全局搜索，默认含 projects 组
+    assert set(body.keys()) == {"sessions", "memories", "knowledge", "projects"}
     assert body["sessions"] == []
     assert isinstance(body["memories"], list)
     assert isinstance(body["knowledge"], list)
+    assert isinstance(body["projects"], list)
 
 
 @pytest.mark.asyncio()
@@ -65,3 +67,46 @@ async def test_global_search_respects_limit(client):
     resp = await client.get("/api/v1/search/global", params={"q": "限制测试", "limit": 2})
     assert resp.status_code == 200
     assert len(resp.json()["sessions"]) == 2
+
+
+# ===== P7: 项目模块接入全局搜索 =====
+
+
+@pytest.mark.asyncio()
+async def test_global_search_finds_registered_project(client, tmp_path):
+
+    from backend.data.project_repo import ProjectRepository
+
+    project_dir = tmp_path / "alpha-web"
+    project_dir.mkdir()
+    other_dir = tmp_path / "beta-cli"
+    other_dir.mkdir()
+    repo = ProjectRepository()
+    repo.register(str(project_dir), now_ms=5_000)
+    repo.register(str(other_dir), now_ms=4_000)
+
+    resp = await client.get("/api/v1/search/global", params={"q": "alpha"})
+    assert resp.status_code == 200
+    projects = resp.json()["projects"]
+    assert len(projects) == 1
+    assert projects[0]["name"] == "alpha-web"
+    assert projects[0]["path"] == str(project_dir.resolve())
+    assert projects[0]["session_count"] == 0
+    assert "id" in projects[0]
+
+
+@pytest.mark.asyncio()
+async def test_global_search_project_types_filter(client, tmp_path):
+    from backend.data.project_repo import ProjectRepository
+
+    project_dir = tmp_path / "solo"
+    project_dir.mkdir()
+    ProjectRepository().register(str(project_dir))
+
+    resp = await client.get(
+        "/api/v1/search/global", params={"q": "solo", "types": "project"}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body.keys()) == {"projects"}
+    assert len(body["projects"]) == 1

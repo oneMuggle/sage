@@ -1,7 +1,7 @@
 # backend/api/search_routes.py
 """全局搜索路由（P1-3.7 UI 优化方案 2026-09-13）。
 
-聚合会话 / 记忆 / 知识三类搜索结果为统一接口，供前端命令面板 (cmdk) 使用。
+聚合会话 / 记忆 / 知识 / 项目四类搜索结果为统一接口，供前端命令面板 (cmdk) 使用。
 """
 
 from __future__ import annotations
@@ -19,21 +19,22 @@ def global_search(
     limit: int = Query(10, ge=1, le=50, description="每类返回上限"),
     types: Optional[str] = Query(
         None,
-        description="逗号分隔的类型过滤: session,memory,knowledge (默认全部)",
+        description="逗号分隔的类型过滤: session,memory,knowledge,project (默认全部)",
     ),
 ) -> Dict[str, Any]:
-    """全局搜索: 聚合会话标题 / 记忆内容 / 知识库文档的模糊匹配结果。
+    """全局搜索: 聚合会话标题 / 记忆内容 / 知识库文档 / 登记项目的模糊匹配结果。
 
     返回格式:
     ```json
     {
       "sessions": [{"id": "...", "title": "...", "updated_at": 1726185600000}],
       "memories": [{"id": "...", "content": "...", "memory_type": "..."}],
-      "knowledge": [{"path": "...", "title": "...", "snippet": "..."}]
+      "knowledge": [{"path": "...", "title": "...", "snippet": "..."}],
+      "projects": [{"id": "...", "name": "...", "path": "...", "session_count": 2}]
     }
     ```
     """
-    wanted = set(types.split(",")) if types else {"session", "memory", "knowledge"}
+    wanted = set(types.split(",")) if types else {"session", "memory", "knowledge", "project"}
     results: Dict[str, List[Any]] = {}
 
     # ---- 会话搜索 ----
@@ -47,6 +48,10 @@ def global_search(
     # ---- 知识搜索 (wiki) ----
     if "knowledge" in wanted:
         results["knowledge"] = _search_knowledge(q, limit)
+
+    # ---- 项目搜索（P7, 项目模块）----
+    if "project" in wanted:
+        results["projects"] = _search_projects(q, limit)
 
     return results
 
@@ -91,6 +96,30 @@ def _search_memories(query: str, limit: int) -> List[Dict[str, Any]]:
         import logging
 
         logging.getLogger(__name__).warning("memory search failed: %s", e)
+        return []
+
+
+def _search_projects(query: str, limit: int) -> List[Dict[str, Any]]:
+    """登记项目搜索（P7）：name/path LIKE + 会话计数聚合。"""
+    try:
+        from backend.data.project_repo import ProjectRepository
+
+        repo = ProjectRepository()
+        projects = repo.search(query=query, limit=limit)
+        stats = repo.session_stats()
+        return [
+            {
+                "id": p.id,
+                "name": p.name,
+                "path": p.path,
+                "session_count": stats.get(p.path, (0, None))[0],
+            }
+            for p in projects
+        ]
+    except Exception as e:
+        import logging
+
+        logging.getLogger(__name__).warning("project search failed: %s", e)
         return []
 
 
