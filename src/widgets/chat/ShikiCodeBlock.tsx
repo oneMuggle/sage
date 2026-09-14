@@ -12,36 +12,51 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../shared/lib/i18n';
 
 /** 全局 highlighter 单例 */
-let highlighterPromise: Promise<import('shiki').Highlighter> | null = null;
+let highlighterPromise: Promise<import('shiki/core').HighlighterCore> | null = null;
 
 // R24-D6: shiki 静态 import 会把整包(~1MB)拖进主 chunk —— 即便聊天首屏
 // 一个代码块都没有。改动态 import(): 包体独立成 chunk, 首个代码块渲染
 // 时才加载；类型仍走 import('shiki') 静态类型引用。
-function getHighlighter(): Promise<import('shiki').Highlighter> {
+//
+// 续 R24-D6: 上一版 `import('shiki')` 拉的是 full bundle —— 它内部对全部
+// ~350 种语法做动态注册, Rollup 无法 tree-shake, 于是下面这 18 种声明形同
+// 虚设: 构建仍产出 70 个 grammar chunk / 4.7MB, 含 emacs-lisp(762KB)、
+// wolfram(262KB)、vue-vine(190KB) 等永远不会被加载的死重。
+//
+// 改走 shiki/core + 逐个精确 import: 只有下面显式列出的语法/主题会进产物,
+// 且每个仍是独立 chunk(按需加载语义不变)。新增语言 = 在 LANGS 里加一行。
+function getHighlighter(): Promise<import('shiki/core').HighlighterCore> {
   if (!highlighterPromise) {
-    highlighterPromise = import('shiki').then(({ createHighlighter }) =>
-      createHighlighter({
-      themes: ['github-dark', 'github-light'],
-      langs: [
-        'javascript',
-        'typescript',
-        'python',
-        'rust',
-        'go',
-        'java',
-        'cpp',
-        'c',
-        'html',
-        'css',
-        'json',
-        'yaml',
-        'toml',
-        'markdown',
-        'bash',
-        'sql',
-        'dockerfile',
-        'diff',
-      ],
+    highlighterPromise = Promise.all([
+      import('shiki/core'),
+      import('shiki/engine/oniguruma'),
+    ]).then(([{ createHighlighterCore }, { createOnigurumaEngine }]) =>
+      createHighlighterCore({
+        themes: [
+          import('@shikijs/themes/github-dark'),
+          import('@shikijs/themes/github-light'),
+        ],
+        langs: [
+          import('@shikijs/langs/javascript'),
+          import('@shikijs/langs/typescript'),
+          import('@shikijs/langs/python'),
+          import('@shikijs/langs/rust'),
+          import('@shikijs/langs/go'),
+          import('@shikijs/langs/java'),
+          import('@shikijs/langs/cpp'),
+          import('@shikijs/langs/c'),
+          import('@shikijs/langs/html'),
+          import('@shikijs/langs/css'),
+          import('@shikijs/langs/json'),
+          import('@shikijs/langs/yaml'),
+          import('@shikijs/langs/toml'),
+          import('@shikijs/langs/markdown'),
+          import('@shikijs/langs/bash'),
+          import('@shikijs/langs/sql'),
+          import('@shikijs/langs/docker'),
+          import('@shikijs/langs/diff'),
+        ],
+        engine: createOnigurumaEngine(import('shiki/wasm')),
       }),
     );
   }
