@@ -7,7 +7,24 @@ import importPlugin from 'eslint-plugin-import';
 import globals from 'globals';
 
 export default [
-  { ignores: ['dist', 'node_modules', 'src-tauri', 'coverage', '.claude', 'backend/**/export_assets', '*.config.{js,ts,mjs}'] },
+  {
+    ignores: [
+      'dist',
+      'node_modules',
+      'src-tauri',
+      'coverage',
+      '.claude',
+      // 仓库内嵌套的 git worktree（.gitignore 已忽略，ESLint 此前漏配）。
+      // 不忽略时 `npm run lint` 会把每个 worktree 的整份源码树重复扫一遍：
+      // 副本停留在各自分支的旧代码、且常缺 eslint 插件依赖，产生的
+      // "Definition for rule ... was not found" 全是假错误，会把主干的
+      // 真实告警彻底淹没（实测 1396 条里 1389 条来自 worktree 副本），
+      // 并让 lefthook pre-commit 的 lint 门禁失效。
+      '.worktrees/**',
+      'backend/**/export_assets',
+      '*.config.{js,ts,mjs}',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

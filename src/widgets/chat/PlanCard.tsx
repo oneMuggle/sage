@@ -1,4 +1,4 @@
-// src/components/PlanCard.tsx
+// src/widgets/chat/PlanCard.tsx
 /**
  * P1-5 计划卡（Wave 2 2026-08-14）—— 编排计划可交互编辑。
  *
@@ -18,9 +18,9 @@
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { InvokeError } from '../shared/api/desktopInvoke';
-import { orchRunClient } from '../shared/api/orchRunClient';
-import type { TaskPlanItem } from '../shared/api/types';
+import type { InvokeError } from '../../shared/api/desktopInvoke';
+import { orchRunClient } from '../../shared/api/orchRunClient';
+import type { TaskPlanItem } from '../../shared/api/types';
 
 interface PlanCardProps {
   runId: string;
