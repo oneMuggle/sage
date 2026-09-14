@@ -6,7 +6,7 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -291,15 +291,37 @@ class ReviewQueue:
         enriched_context = dict(event.context)
         enriched_context.setdefault("session_id", event.session_id)
 
+        # Repeated pattern 去重 (2026-09-14): 同一 (session, signature) 已有
+        # pending/approved 草稿 → 跳过, 避免重复起稿刷 reviewer. 只对
+        # repeated_pattern 触发器生效, 其他 trigger 不带 signature 字段.
+        ctx_signature = enriched_context.get("signature")
+        if (
+            ctx_signature
+            and event.trigger_type == "repeated_pattern"
+            and self._has_existing_draft_for_pattern(
+                event.session_id, ctx_signature
+            )
+        ):
+            logger.info(
+                "跳过重复起稿 (event=%s, session=%s, signature=%s): "
+                "已有 pending/approved 草稿",
+                event.id,
+                event.session_id,
+                ctx_signature,
+            )
+            return
+
         # fix/security-perf-quickwins (2026-08-09, §1.3a d): for explicit_learn
         # triggers the route only enqueues an empty messages=[] placeholder
         # (route-side keeps the API surface small; we don't want to ship N
         # message rows in the request body). Load the conversation history
         # here from MessageRepository so the LLM prompt template actually
-        # has something to summarize. Other trigger types (e.g. complex_turn)
-        # only need tool-call metadata, so we don't load messages for them.
+        # has something to summarize.
+        #
+        # 2026-09-14 扩展: ``repeated_pattern`` 同等待遇 —— sample_calls
+        # 信息密度低, 拉完整对话喂 LLM 起稿效果更好.
         if (
-            event.trigger_type == "explicit_learn"
+            event.trigger_type in ("explicit_learn", "repeated_pattern")
             and not enriched_context.get("messages")
         ):
             try:
@@ -364,6 +386,77 @@ class ReviewQueue:
 
         self.draft_store.insert(draft)
         logger.info("Created skill draft: %s (id=%s)", draft.name, draft.id)
+
+    def _has_existing_draft_for_pattern(
+        self,
+        session_id: str,
+        signature: str,
+        *,
+        conn: Any = None,
+    ) -> bool:
+        """检查同 (session_id, signature) 是否已有 pending/approved 草稿。
+
+        Used by ``_process_event`` to dedupe ``repeated_pattern`` events:
+        if a draft already exists for the same session+signature in
+        ``pending`` or ``approved`` status, skip re-generating and let
+        the existing draft flow through the human review surface.
+
+        best-effort:
+        - DB error → 返回 False (按"无重复"放行, 避免 dedup 故障阻塞主流程)
+        - 老 SQLite (< 3.38) 无 ``json_extract`` → 自动 fallback 到 Python 端
+          ``json.loads`` 过滤 (性能差但兼容)
+
+        Args:
+            session_id: 触发器的会话 ID。
+            signature: 工具调用签名 (e.g. ``"read:path"``)。
+            conn: 可选数据库连接 (测试用)。生产代码不传, 内部用
+                ``get_database().get_connection()``。
+
+        Returns:
+            True = 有匹配的 pending/approved 草稿, 应跳过起稿。
+        """
+        if not session_id or not signature:
+            return False
+        try:
+            if conn is None:
+                from backend.data.database import get_database
+
+                conn = get_database().get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM skill_drafts "
+                    "WHERE source_session_id = ? "
+                    "  AND json_extract(source_context, '$.signature') = ? "
+                    "  AND status IN ('pending', 'approved')",
+                    (session_id, signature),
+                ).fetchone()
+                return bool(row and row[0] > 0)
+            except sqlite3.OperationalError:
+                # 老 SQLite (< 3.38) 可能没有 json_extract —— 退化到 Python 端过滤
+                logger.debug(
+                    "json_extract 不可用, 退化到 Python 端 dedup 过滤"
+                )
+                rows = conn.execute(
+                    "SELECT source_context FROM skill_drafts "
+                    "WHERE source_session_id = ? "
+                    "  AND status IN ('pending', 'approved')",
+                    (session_id,),
+                ).fetchall()
+                import json as _json
+
+                for r in rows:
+                    # r[0] works for both tuple (tests) and sqlite3.Row (prod)
+                    raw = r[0]
+                    try:
+                        ctx = _json.loads(raw or "{}")
+                    except (ValueError, TypeError):
+                        continue
+                    if isinstance(ctx, dict) and ctx.get("signature") == signature:
+                        return True
+                return False
+        except Exception as exc:  # noqa: BLE001 - best-effort, 失败按"无重复"放行
+            logger.debug(f"Draft dedup check failed: {exc}")
+            return False
 
 
 # ------------------------------------------------------------------ #
