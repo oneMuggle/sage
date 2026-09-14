@@ -552,6 +552,26 @@ class Database:
         )
         conn.commit()
 
+        # Projects registry (项目模块 P1, cherry-win7 对齐)。用户在侧边栏
+        # 显式登记的项目目录清单（对标 Cursor Recent Workspaces）。行独立
+        # 于会话存在；path 存 validate_workspace 规范化后的绝对路径并
+        # UNIQUE —— 重复登记幂等。归属关系复用 session_workspace_bindings
+        # 活跃绑定（不落第二份）。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                last_opened_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_projects_recent "
+            "ON projects(last_opened_at DESC)"
+        )
+        conn.commit()
+
         # 进化日志表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS evolution_log (
