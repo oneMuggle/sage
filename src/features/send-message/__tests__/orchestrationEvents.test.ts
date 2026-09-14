@@ -5,9 +5,9 @@
  * 会话槽位：任务板建立/合并/进度聚合/复核/live 合成/approval_mode/
  * todo 快照/产物计数，以及跨 run 防串扰。
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { AgentEvent } from '../../shared/api/types';
+import type { AgentEvent } from '../../../shared/api/types';
 import {
   selectSessionSlots,
   useChatStreamStore,
@@ -58,7 +58,7 @@ describe('applyOrchestrationEventToBoard — R35', () => {
 
   it('task_status 合并状态并聚合进度', () => {
     applyOrchestrationEventToBoard(
-      evt({ state: 'task_plan', run_id: 'orch-2', plan: [{ task_id: 'a' }, { task_id: 'b' }] }),
+      evt({ state: 'task_plan', run_id: 'orch-2', plan: [{ task_id: 'a', agent_id: 'r', goal: 'GA' }, { task_id: 'b', agent_id: 'r', goal: 'GB' }] }),
       SID,
     );
     applyOrchestrationEventToBoard(
@@ -74,7 +74,7 @@ describe('applyOrchestrationEventToBoard — R35', () => {
 
   it('跨 run 的 task_status 不串扰', () => {
     applyOrchestrationEventToBoard(
-      evt({ state: 'task_plan', run_id: 'orch-3', plan: [{ task_id: 'x' }] }),
+      evt({ state: 'task_plan', run_id: 'orch-3', plan: [{ task_id: 'x', agent_id: 'r', goal: 'GX' }] }),
       SID,
     );
     applyOrchestrationEventToBoard(
@@ -87,7 +87,7 @@ describe('applyOrchestrationEventToBoard — R35', () => {
 
   it('task_progress 覆盖 5 元组', () => {
     applyOrchestrationEventToBoard(
-      evt({ state: 'task_plan', run_id: 'orch-4', plan: [{ task_id: 'x' }] }),
+      evt({ state: 'task_plan', run_id: 'orch-4', plan: [{ task_id: 'x', agent_id: 'r', goal: 'GX' }] }),
       SID,
     );
     applyOrchestrationEventToBoard(
@@ -122,7 +122,7 @@ describe('applyOrchestrationEventToBoard — R35', () => {
         task_id: 't1',
         agent_id: 'subagent',
         goal: '调研',
-        phase: 'acting',
+        phase: 'tool_call',
       }),
       sid,
     );
