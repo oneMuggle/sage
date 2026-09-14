@@ -601,6 +601,8 @@ def _apply_print_setup(writer, req) -> None:
                 ws.sheet_properties.pageSetUpPr.fitToPage = True
             if print_setup.print_area:
                 ws.print_area = print_setup.print_area
+            if getattr(print_setup, "title_rows", None):
+                ws.print_title_rows = print_setup.title_rows
         except Exception as exc:  # noqa: BLE001 — 单 sheet 失败不阻断
             logger_.warning("打印设置写入失败，跳过: %s (%s)", exc, sheet_spec.name)
 
