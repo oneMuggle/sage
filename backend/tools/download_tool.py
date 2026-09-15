@@ -454,6 +454,14 @@ class HttpDownloadTool(BaseTool):
                         "或 credential_set 重新设置头部凭据"
                     ),
                 )
+            if resolution.status == "insecure_scheme":
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_insecure_scheme: {credential_domain!r} 的头部凭据"
+                        "不附加到明文 http 请求（仅 https 或本地回环允许）"
+                    ),
+                )
             if not resolution.ok or not resolution.headers:
                 return ToolResult(
                     success=False,
