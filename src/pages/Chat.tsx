@@ -762,13 +762,27 @@ export function Chat() {
                 <p className="text-xs font-semibold text-error">对话出错</p>
                 <p className="text-xs text-text-secondary break-all">{error}</p>
               </div>
-              <button
-                type="button"
-                onClick={clearError}
-                className="text-xs px-2 py-1 rounded border border-border hover:bg-bg-hover shrink-0"
-              >
-                关闭
-              </button>
+              <div className="flex gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  data-testid="chat-error-retry"
+                  onClick={() => {
+                    clearError();
+                    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+                    if (lastUser) void sendMessage(lastUser.content);
+                  }}
+                  className="text-xs px-2 py-1 rounded bg-primary text-text-inverse hover:bg-primary-hover"
+                >
+                  重试
+                </button>
+                <button
+                  type="button"
+                  onClick={clearError}
+                  className="text-xs px-2 py-1 rounded border border-border hover:bg-bg-hover"
+                >
+                  关闭
+                </button>
+              </div>
             </div>
           )}
 
