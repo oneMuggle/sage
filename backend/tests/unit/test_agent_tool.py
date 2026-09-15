@@ -2,7 +2,8 @@
 M5 — AgentTool (in-loop sub-agent) unit tests.
 
 - mocked LLM sub-agent → answer returned + lane created SUCCEEDED
-- sub-agent tool whitelist is strictly read-only (no terminal/write/agent)
+- sub-agent tool whitelist is read-only + controlled browser channel
+  (no terminal/write_file/memory_save/agent)
 - sub-agent attempting terminal → registry rejects (tool not found), loop recovers
 - LLM failure → error ToolResult, caller (primary loop) continues
 - output cap (20_000 chars) enforced
@@ -93,7 +94,7 @@ class TestReadonlyWhitelist:
         assert workspace.is_dir()
 
     def test_whitelist_is_read_only(self):
-        """Registry exposes exactly the six read-only tools — nothing else."""
+        """Registry exposes exactly the read-only tools + browser channel — nothing else."""
         registry = build_readonly_tool_registry()
 
         names = set(registry.list_names())
@@ -105,6 +106,13 @@ class TestReadonlyWhitelist:
             "http_download",
             "memory_search",
             "calculator",
+            # Round 6 B2: 浏览器通道（受审批与网络模式门禁）
+            "browser_launch",
+            "browser_navigate",
+            "browser_snapshot",
+            "browser_interact",
+            "browser_cookies",
+            "browser_close",
         }
         # Never granted to sub-agents.
         for dangerous in ("terminal", "write_file", "memory_save", "agent", "office_read"):

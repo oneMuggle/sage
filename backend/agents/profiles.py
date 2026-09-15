@@ -185,7 +185,20 @@ def create_default_agents() -> List[AgentProfile]:
             # win7 保留 memory_save —— researcher 查到资料后必须能落地为记忆,
             # 否则下次 session 找不到（PR #396 knowledge persistence 闭环）。
             # main 上此字段缺, 属 PR-2..4 合并未覆盖的 win7 差异。
-            tools=["web_search", "web_fetch", "http_download", "memory_search", "memory_save"],
+            # Round 6 B2: 浏览器通道并入——登录态/动态页面场景委派可达
+            tools=[
+                "web_search",
+                "web_fetch",
+                "http_download",
+                "memory_search",
+                "memory_save",
+                "browser_launch",
+                "browser_navigate",
+                "browser_snapshot",
+                "browser_interact",
+                "browser_cookies",
+                "browser_close",
+            ],
             memory_access=["episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.5),
             max_iterations=8,
