@@ -57,6 +57,8 @@ export interface TaskStatusEvent {
   retry_count?: number;
   // RD13+ (round15): 重派来源任务 ID —— retry_of 重派时携带，任务树渲染"重派"徽章。
   retry_of?: string;
+  // BU9 (round20): 终态任务附带的 run 窗口累计用量（tokens）—— 预算开启时携带。
+  used_tokens?: number;
 }
 
 /** 进度可视化 P0-2 (2026-08-12): 整盘概览,与 types.ts TaskProgressEvent 同形。 */

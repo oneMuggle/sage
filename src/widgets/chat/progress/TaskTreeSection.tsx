@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
+import { useSettings } from '../../../features/manage-settings/useSettings';
 // TaskStatusValue 定义在 shared/api（Task 7 已 re-export），不从 useChat import
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue } from '../../../shared/api';
@@ -44,6 +45,9 @@ export function TaskTreeSection({
   onCancel,
   onRerunFailed,
 }: TaskTreeSectionProps) {
+  // BU9 (round20): run 级 token 预算 —— >0 时进度行展示消耗可见性。
+  // orch?.runTokenBudget 防御旧 mock/旧持久化数据缺 orch 键的场景。
+  const runTokenBudget = useSettings().settings.orch?.runTokenBudget ?? 0;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectTask = useRunControlStore((s) => s.selectTask);
   // B3 (2026-09-09): 单任务跳过 in-flight 集合 —— 防重复点击；终态由
@@ -114,6 +118,12 @@ export function TaskTreeSection({
   // 进度可视化 L2 修正 (2026-08-12): 全部完成时不再显示"等待结果中"，
   // 避免与下方 "完成 6/6" 自相矛盾。
   const allDone = doneCount + failed + cancelled === total && inFlight === 0;
+  // BU9 (round20): 终态任务携带的 run 窗口累计用量最大值（事件单调递增，
+  // 取最大即最新）—— 预算开启（>0）时进度行展示消耗。
+  const usedTokens = Math.max(
+    0,
+    ...Object.values(board.statuses).map((st) => st.used_tokens ?? 0),
+  );
 
   return (
     <div className="space-y-1" data-testid="task-tree">
@@ -126,6 +136,10 @@ export function TaskTreeSection({
           {inFlight > 0 && ` · ${inFlight} 个进行中`}
           {failed > 0 && <span className="text-error ml-1">({failed} 失败)</span>}
           {cancelled > 0 && <span className="text-text-secondary ml-1">({cancelled} 已取消)</span>}
+          {/* BU9 (round20): 预算开启时展示累计消耗 —— 数据源终态 task_status.used_tokens */}
+          {runTokenBudget > 0 && usedTokens > 0 && (
+            <span className="ml-1">（已消耗 {usedTokens.toLocaleString()} tokens）</span>
+          )}
         </div>
         {/* live-events P1 (2026-09-06): run 级子代理审批模式开关 —— auto =
             非危险工具自动批准（破坏性/可疑/边界升级仍弹审批）。仅活动 run
