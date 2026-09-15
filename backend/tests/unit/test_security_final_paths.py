@@ -1,6 +1,7 @@
 """Regression tests for final derived-file path hardening."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -11,13 +12,23 @@ from backend.wiki.files import secure_atomic_write_file, secure_write_temp_file
 from backend.wiki.ingest import _save_cache
 from backend.wiki.vision import _save_cache as save_vision_cache
 
+# W5：移除模块级 Windows skip —— secure_* 已有 reparse-safe Windows 分支。
+# symlink 夹具改能力探测 skip；0600 权限位断言仅 POSIX 有意义。
+
+
+def _symlink_or_skip(link: Path, target: Path, *, target_is_directory: bool = False) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=target_is_directory)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation not permitted (no SeCreateSymbolicLinkPrivilege)")
+
 
 def test_create_wiki_structure_rejects_symlinked_directory(tmp_path: Path) -> None:
     project = tmp_path / "project"
     outside = tmp_path / "outside"
     project.mkdir()
     outside.mkdir()
-    (project / "wiki").symlink_to(outside, target_is_directory=True)
+    _symlink_or_skip(project / "wiki", outside, target_is_directory=True)
 
     with pytest.raises(OSError, match=r"Not a directory|拒绝|no-follow|regular"):
         _create_wiki_structure(project)
@@ -30,7 +41,7 @@ def test_ingest_cache_rejects_symlinked_cache_directory(tmp_path: Path) -> None:
     outside = tmp_path / "outside"
     project.mkdir()
     outside.mkdir()
-    (project / ".llm-wiki").symlink_to(outside, target_is_directory=True)
+    _symlink_or_skip(project / ".llm-wiki", outside, target_is_directory=True)
 
     with pytest.raises(OSError, match=r"Not a directory|拒绝|no-follow|regular"):
         _save_cache(project, {})
@@ -42,7 +53,7 @@ def test_atomic_write_does_not_use_fixed_symlink_temp(tmp_path: Path) -> None:
     target = tmp_path / "recent-projects.json"
     outside = tmp_path / "outside.json"
     outside.write_text("keep", encoding="utf-8")
-    (tmp_path / "recent-projects.json.tmp").symlink_to(outside)
+    _symlink_or_skip(tmp_path / "recent-projects.json.tmp", outside)
 
     secure_atomic_write_file(tmp_path, target, "updated")
 
@@ -56,7 +67,7 @@ def test_recent_projects_keeps_payload_and_ignores_fixed_temp_symlink(
     monkeypatch.setenv("SAGE_USER_DATA_DIR", str(tmp_path))
     outside = tmp_path / "outside.json"
     outside.write_text("keep", encoding="utf-8")
-    (tmp_path / "recent-projects.json.tmp").symlink_to(outside)
+    _symlink_or_skip(tmp_path / "recent-projects.json.tmp", outside)
 
     save_recent([RecentProject(path="/p", name="p", opened_at=1.0, intent="open")])
 
@@ -69,7 +80,7 @@ def test_vision_cache_rejects_symlinked_cache_directory(tmp_path: Path) -> None:
     outside = tmp_path / "outside"
     project.mkdir()
     outside.mkdir()
-    (project / ".llm-wiki").symlink_to(outside, target_is_directory=True)
+    _symlink_or_skip(project / ".llm-wiki", outside, target_is_directory=True)
 
     with pytest.raises(OSError, match=r"Not a directory|拒绝|no-follow|regular"):
         save_vision_cache(project, {"hash": "caption"})
@@ -83,4 +94,8 @@ def test_research_temp_file_is_random_and_private(tmp_path: Path) -> None:
 
     assert result.parent == directory
     assert result.name != "research_fixed.md"
-    assert result.stat().st_mode & 0o777 == 0o600
+    # Windows NTFS 不表达 POSIX 权限位（st_mode 恒为可读写），仅 POSIX 断言 0600
+    if os.name != "nt":
+        assert result.stat().st_mode & 0o777 == 0o600
+    else:
+        assert result.is_file()
