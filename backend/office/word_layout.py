@@ -405,6 +405,46 @@ def _fld_char(paragraph, char_type: str) -> None:
     paragraph._p.append(run)
 
 
+def _write_hf_text(section, *, kind: str, spec: Any) -> None:
+    """向节的首页页眉/页脚写入 WordHeaderFooterSpec 内容。"""
+    part = section.first_page_header if kind == "header" else section.first_page_footer
+    if part.is_linked_to_previous:
+        part.is_linked_to_previous = False
+    target = part.paragraphs[0] if part.paragraphs else part.add_paragraph()
+    target.text = spec.text or ""
+
+
+def _write_page_number_field(section) -> None:
+    """向首页页脚写 PAGE 域（fldSimple 形态，与主页脚一致）。"""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    footer = section.first_page_footer
+    if footer.is_linked_to_previous:
+        footer.is_linked_to_previous = False
+    paragraph = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+    fld = OxmlElement("w:fldSimple")
+    fld.set(qn("w:instr"), "PAGE")
+    run = OxmlElement("w:r")
+    text = OxmlElement("w:t")
+    text.text = "1"
+    run.append(text)
+    fld.append(run)
+    paragraph._p.append(fld)
+
+
+def apply_first_page_different(doc: Document, header: Any, footer: Any) -> None:
+    """启用首页不同并为首页写独立页眉/页脚（Round 33）。"""
+    section = doc.sections[0]
+    section.different_first_page_header_footer = True
+    if header is not None:
+        _write_hf_text(section, kind="header", spec=header)
+    if footer is not None:
+        _write_hf_text(section, kind="footer", spec=footer)
+    if footer is not None and getattr(footer, "page_number", False):
+        _write_page_number_field(section)
+
+
 def apply_section_break(doc: Document, page: WordPageSetupSpec) -> None:
     """插入 NEW_PAGE 分节并对新节应用 page setup（Round 26 横排分节）。
 

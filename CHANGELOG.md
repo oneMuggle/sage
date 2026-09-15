@@ -59,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **Word 首页不同页眉页脚(Round 33)**: format_spec.first_page_different+first_page_header/first_page_footer——封面页独立页眉页脚(文本/PAGE 域),python-docx different_first_page_header_footer 原生开关
 - **Excel 打印页边距(Round 31)**: print_setup.margins_cm(上/下/左/右,厘米,openpyxl 英寸自动换算)——部分给定只动给定边;工具 schema + 前端契约同步
 - **journal 结构化文献清洗(Round 30)**: generate_article 自纠检查与最终校验前先原地清洗 structured_references——次品条目(缺 title/字段非法)剔除+warning、key 冲突自动补唯一后缀;全为次品时回退 references 纯文本;不再让单条次品拖垮整体校验
 - **TOC 静态缓存回填(Round 29)**: 目录域升级为 fldChar 复杂域——打开文档即见按文档标题生成的静态目录行(逐级缩进/levels 过滤),更新域后被真实带页码目录替换;Linter toc/presence 升级为双载体兼容检测

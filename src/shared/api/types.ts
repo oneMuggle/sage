@@ -1336,6 +1336,10 @@ export interface WordFormatSpec {
   bibliography?: BibliographySpec;
   // Round 13：目录域（None = 不插入目录）
   toc?: WordTocSpec;
+  // Round 33：首页不同页眉页脚（封面页场景）
+  first_page_different?: boolean;
+  first_page_header?: WordHeaderFooterSpec;
+  first_page_footer?: WordHeaderFooterSpec;
 }
 
 // Word 插图（Round 8）：支持行内放置与题注自动编号。

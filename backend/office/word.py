@@ -851,6 +851,18 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
 
             insert_toc_field(doc, req.format_spec.toc, toc_headings)
 
+        # ── Round 33：首页不同页眉页脚 ────────────────────────────────────
+        # 启用后首页使用独立的页眉/页脚（封面页场景）；正文从第 2 页起
+        # 使用 format_spec.header/footer 的通用内容。
+        if req.format_spec is not None and req.format_spec.first_page_different:
+            from .word_layout import apply_first_page_different
+
+            apply_first_page_different(
+                doc,
+                req.format_spec.first_page_header,
+                req.format_spec.first_page_footer,
+            )
+
         # ── Round 9 引用：首现编号 + 文中上标标记 + 文末参考文献节 ────────
         # 编号 = citations key 在正文中的首次出现顺序；标记连续编号合并
         # （[1-3]）。references 与 citations 的一致性在此确定性校验。
