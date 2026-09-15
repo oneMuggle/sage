@@ -38,7 +38,11 @@ import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electr
 import { logger } from './logger';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
-import { registerSageFileProtocol, registerWorkspaceRoot, unregisterWorkspaceRoot } from './sageFileProtocol';
+import {
+  registerSageFileProtocol,
+  registerWorkspaceRoot,
+  unregisterWorkspaceRoot,
+} from './sageFileProtocol';
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
 logger.info('main: process started', {
@@ -597,7 +601,7 @@ export function scheduleBackendRestart(): void {
     attempt: restartCount,
     delayMs: delay,
   });
-    mainWindow?.webContents.send('sage:event:backend:disconnected', { attempt: restartCount });
+  mainWindow?.webContents.send('sage:event:backend:disconnected', { attempt: restartCount });
   restartTimer = setTimeout(() => {
     restartTimer = null;
     if (appIsQuitting || backendProc || currentBackend || backendLifecycle !== 'idle') return;
@@ -689,7 +693,9 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
         // Task 0 review round 1, finding #6: tell the renderer the backend
         // is ready so BackendStatusBanner can clear the "starting…" state
         // (or never show it, if the spawn-to-ready window was sub-frame).
-        mainWindow?.webContents.send('sage:event:backend:ready', { generation: expectedBackend.generation });
+        mainWindow?.webContents.send('sage:event:backend:ready', {
+          generation: expectedBackend.generation,
+        });
         return true;
       }
     } catch {
@@ -1042,6 +1048,20 @@ async function registerIpcHandlers(): Promise<void> {
           lifecycle: backendLifecycle,
         });
         throw new BackendNotReadyError();
+      }
+      if (payload.cmd === 'wiki_chat_cancel') {
+        const id = payload.args?.stream_id;
+        const token = payload.args?.owner_token;
+        if (
+          typeof id === 'string' &&
+          wikiStreamOwners.get(id)?.token === token &&
+          wikiStreamOwners.get(id)?.sender === evt.sender.id
+        ) {
+          streamControllers.get(id)?.abort();
+          streamControllers.delete(id);
+          wikiStreamOwners.delete(id);
+        }
+        return { ok: true };
       }
       if (payload.cmd === 'wiki_chat_stream') {
         return startWikiChatStream(evt.sender, payload.args ?? {}, BACKEND_URL);
@@ -1672,12 +1692,22 @@ async function registerIpcHandlers(): Promise<void> {
  *   - The closure captures `webContents` and `backendUrl` cleanly, so
  *     the body of the async block doesn't have to thread them through.
  */
+const wikiStreamOwners = new Map<string, { token: string; sender: number }>();
+
 function startWikiChatStream(
   sender: Electron.WebContents,
   args: Record<string, unknown>,
   backendUrl: string,
 ): { streamId: string } {
-  const streamId = `wiki-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const streamId = args.stream_id;
+  if (typeof streamId !== 'string' || !/^wiki-chat-[a-zA-Z0-9-]{16,80}$/.test(streamId)) {
+    throw new Error('Invalid Wiki stream ID');
+  }
+  if (streamControllers.has(streamId)) throw new Error('Wiki stream ID already active');
+  const token = args.owner_token;
+  if (typeof token !== 'string' || !/^[a-zA-Z0-9-]{16,80}$/.test(token))
+    throw new Error('Invalid Wiki owner token');
+  wikiStreamOwners.set(streamId, { token, sender: sender.id });
   const controller = new AbortController();
   streamControllers.set(streamId, controller);
   const wc = BrowserWindow.fromWebContents(sender);
@@ -1685,8 +1715,7 @@ function startWikiChatStream(
     streamControllers.delete(streamId);
     throw new Error('No WebContents for invoke');
   }
-  // Fire-and-forget: relay runs in background. Return streamId NOW so
-  // the renderer can start subscribing to the per-id event channels.
+  // Listeners are ready before the renderer invokes this stream.
   (async () => {
     try {
       const res = await fetch(`${backendUrl}/api/v1/wiki/chat/stream`, {
@@ -1713,7 +1742,10 @@ function startWikiChatStream(
         wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, WIKI_STREAM_ERROR);
       }
     } finally {
-      streamControllers.delete(streamId);
+      if (streamControllers.get(streamId) === controller) {
+        streamControllers.delete(streamId);
+        wikiStreamOwners.delete(streamId);
+      }
     }
   })();
   return { streamId };
@@ -1958,7 +1990,11 @@ app.whenReady().then(async () => {
   // 2026-09-13: 启动屏 — 后端冷启动实测 50–65s（健康检查上限 90s），此前
   // 窗口创建排在 waitForBackend() 之后，用户双击图标后近一分钟无任何反馈。
   // CI 冒烟 (SAGE_SKIP_BACKEND) / 演示录屏 / SAGE_NO_SPLASH=1 时不显示。
-  if (!isDemoProcess() && process.env.SAGE_SKIP_BACKEND !== '1' && process.env.SAGE_NO_SPLASH !== '1') {
+  if (
+    !isDemoProcess() &&
+    process.env.SAGE_SKIP_BACKEND !== '1' &&
+    process.env.SAGE_NO_SPLASH !== '1'
+  ) {
     createSplashWindow();
   }
   // U12 (round4 批次 E): 系统托盘 + 全局快捷键唤起（Alt+Shift+S toggle）。

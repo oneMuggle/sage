@@ -212,6 +212,41 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/sessions`,
   },
+  // M3 项目上下文沉淀 (2026-09-15): 概览字段编辑 + 资料 CRUD + 保存回答。
+  // PATCH 用 model_fields_set 语义——只把前端实际改了/传了的字段写进 body,
+  // 没传的字段后端按"未出现"处理, 不清空现有值。
+  projects_update: {
+    method: 'PATCH',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}`,
+    body: (a) => {
+      const body: Record<string, unknown> = {};
+      if (a.description !== undefined) body.description = a.description;
+      if (a.instructions !== undefined) body.instructions = a.instructions;
+      return body;
+    },
+  },
+  projects_list_materials: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials`,
+  },
+  projects_add_material: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials`,
+    body: (a) => ({
+      content: a.content,
+      source_message_id: a.source_message_id ?? null,
+    }),
+  },
+  projects_remove_material: {
+    method: 'DELETE',
+    path: (a) =>
+      `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials/${encodeURIComponent(String(a.materialId))}`,
+  },
+  projects_save_answer: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials/save-answer`,
+    body: (a) => ({ message_id: a.message_id }),
+  },
 
   // R19: 数据安全 —— 备份清单/手动备份/记忆导出（system_routes，GET/POST
   // 均无业务 body，本机 token 由 fetch 桥统一注入）。
@@ -255,7 +290,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/active?session_id=${encodeURIComponent(String(a.sessionId))}`,
   },
-    system_backups_list: {
+  system_backups_list: {
     method: 'GET',
     path: () => '/api/v1/system/backups',
   },

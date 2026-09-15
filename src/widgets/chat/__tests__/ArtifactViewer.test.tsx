@@ -10,14 +10,24 @@ import { useArtifactContent } from '../../../features/artifacts/useArtifactConte
 import { ArtifactViewer } from '../artifacts/ArtifactViewer';
 
 const sample: Artifact = {
-  id: 'a1', session_id: 'sess_001', tool_call_id: null, path: '/tmp/test.md',
-  name: 'test.md', kind: 'markdown', size: 1024, created_at: 1,
+  id: 'a1',
+  session_id: 'sess_001',
+  tool_call_id: null,
+  path: '/tmp/test.md',
+  name: 'test.md',
+  kind: 'markdown',
+  size: 1024,
+  created_at: 1,
 };
+
+const baseReturn = { refresh: vi.fn() };
 
 describe('ArtifactViewer', () => {
   it('renders breadcrumb', () => {
     vi.mocked(useArtifactContent).mockReturnValue({
-      content: { ok: true, kind: 'markdown', content: '# Hello' }, loading: false,
+      content: { ok: true, kind: 'markdown', content: '# Hello' },
+      loading: false,
+      ...baseReturn,
     });
     render(<ArtifactViewer artifact={sample} sessionId="sess_001" onBack={() => {}} />);
     expect(screen.getByText(/产物/)).toBeInTheDocument();
@@ -25,7 +35,7 @@ describe('ArtifactViewer', () => {
   });
 
   it('calls onBack', () => {
-    vi.mocked(useArtifactContent).mockReturnValue({ content: null, loading: false });
+    vi.mocked(useArtifactContent).mockReturnValue({ content: null, loading: false, ...baseReturn });
     const onBack = vi.fn();
     render(<ArtifactViewer artifact={sample} sessionId="sess_001" onBack={onBack} />);
     fireEvent.click(screen.getByRole('button', { name: /返回/ }));
@@ -34,7 +44,9 @@ describe('ArtifactViewer', () => {
 
   it('renders markdown content', () => {
     vi.mocked(useArtifactContent).mockReturnValue({
-      content: { ok: true, kind: 'markdown', content: '# Title' }, loading: false,
+      content: { ok: true, kind: 'markdown', content: '# Title' },
+      loading: false,
+      ...baseReturn,
     });
     render(<ArtifactViewer artifact={sample} sessionId="sess_001" onBack={() => {}} />);
     expect(screen.getByText(/Title/)).toBeInTheDocument();
@@ -42,15 +54,25 @@ describe('ArtifactViewer', () => {
 
   it('renders image', () => {
     vi.mocked(useArtifactContent).mockReturnValue({
-      content: { ok: true, kind: 'image', data_url: 'data:image/png;base64,xxx' }, loading: false,
+      content: { ok: true, kind: 'image', data_url: 'data:image/png;base64,xxx' },
+      loading: false,
+      ...baseReturn,
     });
-    render(<ArtifactViewer artifact={{ ...sample, kind: 'image' }} sessionId="sess_001" onBack={() => {}} />);
+    render(
+      <ArtifactViewer
+        artifact={{ ...sample, kind: 'image' }}
+        sessionId="sess_001"
+        onBack={() => {}}
+      />,
+    );
     expect(screen.getByRole('img')).toHaveAttribute('src', 'data:image/png;base64,xxx');
   });
 
   it('shows error state', () => {
     vi.mocked(useArtifactContent).mockReturnValue({
-      content: { ok: false, error: 'File not found' }, loading: false,
+      content: { ok: false, error: 'File not found' },
+      loading: false,
+      ...baseReturn,
     });
     render(<ArtifactViewer artifact={sample} sessionId="sess_001" onBack={() => {}} />);
     expect(screen.getByText(/File not found/)).toBeInTheDocument();
@@ -58,10 +80,16 @@ describe('ArtifactViewer', () => {
 
   it('renders csv cells without trailing carriage return from CRLF input', () => {
     vi.mocked(useArtifactContent).mockReturnValue({
-      content: { ok: true, kind: 'csv', content: 'a,b\r\n1,2\r\n' }, loading: false,
+      content: { ok: true, kind: 'csv', content: 'a,b\r\n1,2\r\n' },
+      loading: false,
+      ...baseReturn,
     });
     const { container } = render(
-      <ArtifactViewer artifact={{ ...sample, kind: 'csv' }} sessionId="sess_001" onBack={() => {}} />,
+      <ArtifactViewer
+        artifact={{ ...sample, kind: 'csv' }}
+        sessionId="sess_001"
+        onBack={() => {}}
+      />,
     );
     expect(screen.getByText('2')).toBeInTheDocument();
     const cells = container.querySelectorAll('th, td');

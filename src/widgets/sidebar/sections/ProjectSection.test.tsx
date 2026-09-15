@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import type { ProjectSummary } from '../../../shared/api/projectApi';
+import type { ProjectMaterial, ProjectSummary } from '../../../shared/api/projectApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 
@@ -14,6 +14,12 @@ const openMock = vi.fn();
 const createSessionMock = vi.fn();
 const listSessionsMock = vi.fn();
 const deleteSessionMock = vi.fn();
+// ===== M3 测试夹具 =====
+const updateMock = vi.fn();
+const listMaterialsMock = vi.fn();
+const addMaterialMock = vi.fn();
+const removeMaterialMock = vi.fn();
+const saveAnswerAsMaterialMock = vi.fn();
 
 vi.mock('../../../shared/api/projectApi', () => ({
   projectApi: {
@@ -23,6 +29,11 @@ vi.mock('../../../shared/api/projectApi', () => ({
     open: (...args: unknown[]) => openMock(...args),
     createSession: (...args: unknown[]) => createSessionMock(...args),
     listSessions: (...args: unknown[]) => listSessionsMock(...args),
+    update: (...args: unknown[]) => updateMock(...args),
+    listMaterials: (...args: unknown[]) => listMaterialsMock(...args),
+    addMaterial: (...args: unknown[]) => addMaterialMock(...args),
+    removeMaterial: (...args: unknown[]) => removeMaterialMock(...args),
+    saveAnswerAsMaterial: (...args: unknown[]) => saveAnswerAsMaterialMock(...args),
   },
 }));
 
@@ -41,6 +52,8 @@ const projects: ProjectSummary[] = [
     lastOpenedAt: 10,
     sessionCount: 2,
     lastSessionId: 's1',
+    description: 'desc-p1',
+    instructions: 'instr-p1',
   },
   {
     id: 'p2',
@@ -50,6 +63,42 @@ const projects: ProjectSummary[] = [
     lastOpenedAt: 5,
     sessionCount: 0,
     lastSessionId: null,
+  },
+];
+
+const materialsFixture: ProjectMaterial[] = [
+  {
+    id: 'm1',
+    projectId: 'p1',
+    sourceMessageId: null,
+    contentHash: 'h1',
+    content: 'ready content body',
+    status: 'ready',
+    wikiPagePath: '/wiki/m1.md',
+    errorMessage: null,
+    createdAt: 100,
+  },
+  {
+    id: 'm2',
+    projectId: 'p1',
+    sourceMessageId: 'msg-42',
+    contentHash: 'h2',
+    content: 'pending body',
+    status: 'pending_index',
+    wikiPagePath: null,
+    errorMessage: null,
+    createdAt: 200,
+  },
+  {
+    id: 'm3',
+    projectId: 'p1',
+    sourceMessageId: null,
+    contentHash: 'h3',
+    content: 'failed body',
+    status: 'failed',
+    wikiPagePath: null,
+    errorMessage: 'index timeout',
+    createdAt: 300,
   },
 ];
 
@@ -81,8 +130,14 @@ describe('ProjectSection', () => {
       createSessionMock,
       listSessionsMock,
       deleteSessionMock,
+      updateMock,
+      listMaterialsMock,
+      addMaterialMock,
+      removeMaterialMock,
+      saveAnswerAsMaterialMock,
     ].forEach((m) => m.mockReset());
     listMock.mockResolvedValue([]);
+    listMaterialsMock.mockResolvedValue([]);
   });
 
   it('renders section label and empty state', async () => {
@@ -382,5 +437,291 @@ describe('ProjectSection', () => {
     // 全部失败：清单不刷新
     await new Promise((r) => setTimeout(r, 50));
     expect(listMock.mock.calls.length).toBe(callsBefore);
+  });
+
+  // ===== M3: 项目概览面板 (description/instructions) =====
+
+  it('M3: 展开项目 → 概览面板懒拉资料 + textarea 预填 description/instructions', async () => {
+    listMock.mockResolvedValue(projects);
+    listMaterialsMock.mockResolvedValue(materialsFixture);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    // 展开前资料/概览不渲染、不拉取
+    expect(screen.queryByTestId('project-materials-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('project-overview-panel')).not.toBeInTheDocument();
+    expect(listMaterialsMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => {
+      expect(screen.getByTestId('project-overview-panel')).toBeInTheDocument();
+      expect(screen.getByTestId('project-materials-panel')).toBeInTheDocument();
+      expect(listMaterialsMock).toHaveBeenCalledWith('p1');
+    });
+
+    // 预填项目元数据到 textarea
+    const desc = screen.getByTestId('project-overview-description') as HTMLTextAreaElement;
+    const instr = screen.getByTestId('project-overview-instructions') as HTMLTextAreaElement;
+    expect(desc.value).toBe('desc-p1');
+    expect(instr.value).toBe('instr-p1');
+
+    // 初始：草稿干净 → 保存按钮 disabled
+    expect(screen.getByTestId('project-overview-save')).toBeDisabled();
+  });
+
+  it('M3: 修改 description 后保存按钮可用 → 调用 update + 局部刷新清单', async () => {
+    listMock.mockResolvedValue(projects);
+    listMaterialsMock.mockResolvedValue([]);
+    const updated: ProjectSummary = {
+      ...projects[0],
+      description: 'updated desc',
+    };
+    updateMock.mockResolvedValue(updated);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getByTestId('project-overview-description'));
+
+    const desc = screen.getByTestId('project-overview-description');
+    fireEvent.change(desc, { target: { value: 'updated desc' } });
+    const saveBtn = screen.getByTestId('project-overview-save');
+    expect(saveBtn).not.toBeDisabled();
+
+    fireEvent.click(saveBtn);
+    await waitFor(() => {
+      expect(updateMock).toHaveBeenCalledWith('p1', {
+        description: 'updated desc',
+        instructions: 'instr-p1',
+      });
+    });
+  });
+
+  it('M3: 概览保存失败时 textarea 草稿保留不变（用户可重试）', async () => {
+    listMock.mockResolvedValue(projects);
+    listMaterialsMock.mockResolvedValue([]);
+    updateMock.mockRejectedValue(new Error('server boom'));
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getByTestId('project-overview-description'));
+
+    fireEvent.change(screen.getByTestId('project-overview-description'), {
+      target: { value: 'in-progress edit' },
+    });
+    fireEvent.click(screen.getByTestId('project-overview-save'));
+
+    await waitFor(() => {
+      expect(updateMock).toHaveBeenCalled();
+    });
+    // 草稿保留, button 仍可用（dirty 状态还在）
+    const desc = screen.getByTestId('project-overview-description') as HTMLTextAreaElement;
+    expect(desc.value).toBe('in-progress edit');
+    expect(screen.getByTestId('project-overview-save')).not.toBeDisabled();
+  });
+
+  // ===== M3: 资料管理面板 (CRUD + status badge) =====
+
+  it('M3: 资料面板按 wire status 渲染三个徽标 + ready 内容预览 + failed 错误', async () => {
+    listMock.mockResolvedValue(projects);
+    listMaterialsMock.mockResolvedValue(materialsFixture);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getAllByTestId('project-material-row'));
+
+    expect(screen.getAllByTestId('project-material-row')).toHaveLength(3);
+    expect(screen.getByTestId('project-material-status-ready')).toBeInTheDocument();
+    expect(screen.getByTestId('project-material-status-pending_index')).toBeInTheDocument();
+    expect(screen.getByTestId('project-material-status-failed')).toBeInTheDocument();
+    // ready 内容截断展示 + failed error 展示
+    expect(screen.getByText(/ready content body/)).toBeInTheDocument();
+    expect(screen.getByTestId('project-material-error')).toHaveTextContent('index timeout');
+  });
+
+  it('M3: 粘贴文本 → 点添加 → 调用 addMaterial 并刷新清单（输入框清空）', async () => {
+    listMock.mockResolvedValue(projects);
+    listMaterialsMock.mockResolvedValueOnce([]).mockResolvedValueOnce([materialsFixture[0]]);
+    addMaterialMock.mockResolvedValue(materialsFixture[0]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getByTestId('project-material-input'));
+
+    const input = screen.getByTestId('project-material-input');
+    fireEvent.change(input, { target: { value: '粘贴的资料文本' } });
+
+    const addBtn = screen.getByTestId('project-material-add');
+    expect(addBtn).not.toBeDisabled();
+    fireEvent.click(addBtn);
+
+    await waitFor(() => {
+      // addMaterial 调用只透传组件传入的字段，source_message_id 由 projectApi 在 invoke 时补 null
+      expect(addMaterialMock).toHaveBeenCalledWith('p1', {
+        content: '粘贴的资料文本',
+      });
+      expect(listMaterialsMock).toHaveBeenCalledTimes(2);
+    });
+    // 输入框已清空
+    expect((screen.getByTestId('project-material-input') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('M3: 空文本不允许添加（按钮 disabled）', async () => {
+    listMock.mockResolvedValue(projects);
+    listMaterialsMock.mockResolvedValue([]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getByTestId('project-material-input'));
+
+    const addBtn = screen.getByTestId('project-material-add');
+    // 仅含空白也视为空
+    fireEvent.change(screen.getByTestId('project-material-input'), { target: { value: '   ' } });
+    expect(addBtn).toBeDisabled();
+
+    // 空白不应触发 addMaterial 调用
+    fireEvent.click(addBtn);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(addMaterialMock).not.toHaveBeenCalled();
+  });
+
+  it('M3: 资料超 1 MiB → 拒绝添加（前端拦截，不发请求）', async () => {
+    listMock.mockResolvedValue(projects);
+    listMaterialsMock.mockResolvedValue([]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getByTestId('project-material-input'));
+
+    // 1 MiB + 1 字符
+    const oversized = 'x'.repeat(1_000_001);
+    fireEvent.change(screen.getByTestId('project-material-input'), {
+      target: { value: oversized },
+    });
+
+    const addBtn = screen.getByTestId('project-material-add');
+    expect(addBtn).not.toBeDisabled(); // disabled 仅基于空文本判定
+    fireEvent.click(addBtn);
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(addMaterialMock).not.toHaveBeenCalled();
+  });
+
+  it('M3: 资料删除按钮 → 调用 removeMaterial 并就地移除该行', async () => {
+    listMock.mockResolvedValue(projects);
+    listMaterialsMock.mockResolvedValue(materialsFixture);
+    removeMaterialMock.mockResolvedValue(true);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getAllByTestId('project-material-row'));
+
+    expect(screen.getAllByTestId('project-material-row')).toHaveLength(3);
+    fireEvent.click(screen.getAllByTestId('project-material-remove')[0]); // m1
+
+    await waitFor(() => {
+      expect(removeMaterialMock).toHaveBeenCalledWith('p1', 'm1');
+      expect(screen.getAllByTestId('project-material-row')).toHaveLength(2);
+    });
+  });
+
+  // ===== M3: 保存回答入口 =====
+
+  it('M3: 当前会话无 active → 保存回答按钮 disabled', async () => {
+    listMock.mockResolvedValue(projects);
+    listMaterialsMock.mockResolvedValue([]);
+    useStore.setState({ currentSessionId: null, messages: [] });
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getByTestId('project-save-answer'));
+
+    expect(screen.getByTestId('project-save-answer')).toBeDisabled();
+  });
+
+  it('M3: 有 active 会话 + 最后一条 assistant 消息 → 保存为资料', async () => {
+    listMock.mockResolvedValue(projects);
+    listMaterialsMock.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      materialsFixture[1], // pending
+    ]);
+    saveAnswerAsMaterialMock.mockResolvedValue(materialsFixture[1]);
+
+    useStore.setState({
+      currentSessionId: 's-active',
+      messages: [
+        { id: 'user-1', role: 'user', content: 'hi', createdAt: 1 } as never,
+        { id: 'asst-1', role: 'assistant', content: 'first', createdAt: 2 } as never,
+        { id: 'user-2', role: 'user', content: 'follow up', createdAt: 3 } as never,
+        { id: 'asst-2', role: 'assistant', content: 'final answer', createdAt: 4 } as never,
+      ],
+    });
+
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getByTestId('project-save-answer'));
+
+    const saveBtn = screen.getByTestId('project-save-answer');
+    expect(saveBtn).not.toBeDisabled();
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(saveAnswerAsMaterialMock).toHaveBeenCalledWith('p1', 'asst-2');
+      expect(listMaterialsMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('M3: 当前会话只有 user 消息 → 保存按钮点击给出"无 AI 回答"提示', async () => {
+    listMock.mockResolvedValue(projects);
+    listMaterialsMock.mockResolvedValue([]);
+    useStore.setState({
+      currentSessionId: 's-active',
+      messages: [{ id: 'u1', role: 'user', content: 'only user', createdAt: 1 } as never],
+    });
+
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getByTestId('project-save-answer'));
+
+    fireEvent.click(screen.getByTestId('project-save-answer'));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(saveAnswerAsMaterialMock).not.toHaveBeenCalled();
+  });
+
+  it('M3: 保存回答返回 403 (会话不属于该项目) → 不修改本地资料列表', async () => {
+    listMock.mockResolvedValue(projects);
+    listMaterialsMock.mockResolvedValue([]);
+    saveAnswerAsMaterialMock.mockRejectedValue(
+      Object.assign(new Error('mismatch'), { status_code: 403 }),
+    );
+
+    useStore.setState({
+      currentSessionId: 's-active',
+      messages: [{ id: 'asst-1', role: 'assistant', content: 'x', createdAt: 1 } as never],
+    });
+
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getByTestId('project-save-answer'));
+
+    fireEvent.click(screen.getByTestId('project-save-answer'));
+    await waitFor(() => {
+      expect(saveAnswerAsMaterialMock).toHaveBeenCalledWith('p1', 'asst-1');
+    });
+    // 失败 → 不触发 refreshMaterials（用 listMaterialsMock 调用次数判定）
+    await new Promise((r) => setTimeout(r, 50));
+    expect(listMaterialsMock).toHaveBeenCalledTimes(1); // 仅首次拉取
   });
 });

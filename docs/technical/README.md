@@ -50,6 +50,7 @@
 | 55   | [期刊模板子系统](./55-journal-template-subsystem.md) | N1–N8 完整闭环：模板表 + 字段语义 + 多步向导 + 状态机 + 预览/导出 + SKILL 引导 + 持久化 |
 | 56   | [可插拔更新源系统](./56-update-providers.md) | Phase 1–4 完整交付：4 平台 provider（generic-http/github/gitee/gitlab）+ ProviderRegistry/Store/IPC + safeStorage token 加密 + feature flag 全开 + E2E 闭环 |
 | 57   | [LLM 调用诊断包导出](./57-llm-trace-diagnostic-export.md) | 一键导出最近 50 次 LLM 调用为 zip（含 upstream_url / 状态码 / 脱敏 headers）供离线分析 + 10 类 pattern 双层防御 + 512KB body 截断 + Win7 零依赖兼容 |
+| 58   | [项目上下文沉淀 (M3)](./58-project-context-aggregation.md) | description/instructions 元数据 + project_materials 资料表 + context 注入 + save-answer 角色过滤（security MEDIUM fix）+ review HIGH #1/#2/#3 fix（artifact_routes + project_routes 17 个端点 `@with_db_lock` 串行化 + async/sync 双形态 + IntegrityError 防御）|
 
 ---
 

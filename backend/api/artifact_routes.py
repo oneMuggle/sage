@@ -3,14 +3,26 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+import hashlib
+from pathlib import Path
 
-from backend.data import artifact_reader, artifact_repo
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from backend.data import artifact_reader, artifact_repo, artifact_version_repo
+from backend.data.database import _SQLITE_LOCK, make_with_db_lock
 
 router = APIRouter(prefix="/sessions/{session_id}/artifacts", tags=["artifacts"])
 
 
+# review HIGH #3 fix: 用本地装饰器模式（参见 backend/api/legacy_routes.py 同样的
+# 做法, 23 处引用）。所有 SQL 读写统一串行化到进程级 _SQLITE_LOCK。
+def with_db_lock(func):
+    return make_with_db_lock(globals())(func)
+
+
 @router.get("")
+@with_db_lock
 def list_artifacts(session_id: str) -> dict:
     """列出指定 session 的所有产物。"""
     items = artifact_repo.list_artifacts(session_id)
@@ -18,6 +30,7 @@ def list_artifacts(session_id: str) -> dict:
 
 
 @router.get("/{artifact_id}/content")
+@with_db_lock
 def get_artifact_content(session_id: str, artifact_id: str) -> dict:
     """读取产物内容:文本返回 content,图片/PDF 返回 data_url,office 返回 HTML。
 
@@ -48,6 +61,7 @@ def get_artifact_content(session_id: str, artifact_id: str) -> dict:
 
 
 @router.post("/{artifact_id}/reveal")
+@with_db_lock
 def reveal_artifact(session_id: str, artifact_id: str) -> dict:
     """在系统文件管理器中显示产物。"""
     artifact = artifact_repo.get_artifact(artifact_id)
@@ -55,3 +69,124 @@ def reveal_artifact(session_id: str, artifact_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
     return artifact_reader.reveal_in_file_manager(artifact_id)
+
+
+# ==================== Version History (Phase 2 M2) ====================
+
+
+@router.get("/{artifact_id}/versions")
+@with_db_lock
+def list_artifact_versions(session_id: str, artifact_id: str) -> dict:
+    """列出指定产物的所有版本（元数据，不含内容）。"""
+    artifact = artifact_repo.get_artifact(artifact_id)
+    if artifact is None or artifact.session_id != session_id:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    versions = artifact_version_repo.list_versions(artifact_id)
+    return {"versions": versions}
+
+
+@router.get("/{artifact_id}/versions/{version_num}")
+@with_db_lock
+def get_artifact_version(session_id: str, artifact_id: str, version_num: int) -> dict:
+    """获取指定版本的完整内容。"""
+    artifact = artifact_repo.get_artifact(artifact_id)
+    if artifact is None or artifact.session_id != session_id:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    version = artifact_version_repo.get_version(artifact_id, version_num)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    return version
+
+
+class RestoreVersionRequest(BaseModel):
+    """恢复请求体"""
+    version_num: int
+    note: str = "restore"
+
+
+@router.post("/{artifact_id}/versions/restore")
+@with_db_lock
+async def restore_artifact_version(
+    session_id: str, artifact_id: str, req: RestoreVersionRequest
+) -> dict:
+    """恢复到指定版本（创建新版本，历史不删除）。
+
+    读取目标版本的快照内容，计算 hash，创建新版本。
+
+    review HIGH #1 fix: 持有 ``artifact_version_repo._get_lock(artifact_id)``
+    防止 restore 与并发 apply_edit 同时分配到同一 ``version_num``。
+    """
+    artifact = artifact_repo.get_artifact(artifact_id)
+    if artifact is None or artifact.session_id != session_id:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    # 获取目标版本内容（只读，不必持锁）
+    target_version = artifact_version_repo.get_version(artifact_id, req.version_num)
+    if target_version is None:
+        raise HTTPException(status_code=404, detail="Target version not found")
+
+    # 读取原文件确定 snapshot_dir
+    artifact_path = Path(artifact.path)
+    snapshot_dir = str(artifact_path.parent / ".snapshots")
+
+    # 创建新版本（内容来自目标版本）— 持锁防与 apply_edit 并发
+    content = target_version["content"]
+    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    lock = artifact_version_repo._get_lock(artifact_id)
+    async with lock:
+        new_version = artifact_version_repo.create_version(
+            artifact_id=artifact_id,
+            content=content,
+            content_hash=content_hash,
+            snapshot_dir=snapshot_dir,
+            note=req.note,
+        )
+
+    return {
+        "restored_from": req.version_num,
+        "new_version": new_version,
+    }
+
+
+class UpdateArtifactRequest(BaseModel):
+    """更新产物内容请求体（Phase 2 M2：apply edit）。"""
+    base_hash: str
+    content: str
+    note: str = "edit"
+
+
+@router.put("/{artifact_id}")
+@with_db_lock
+async def update_artifact_content(
+    session_id: str, artifact_id: str, req: UpdateArtifactRequest
+) -> dict:
+    """原子替换产物内容，创建新版本。
+
+    - 验证 base_hash 与当前文件匹配（乐观并发控制）
+    - 冲突 → 409 Conflict
+    - 超限/不存在 → 400/404
+    """
+    artifact = artifact_repo.get_artifact(artifact_id)
+    if artifact is None or artifact.session_id != session_id:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    try:
+        new_version = await artifact_version_repo.apply_edit(
+            artifact_id=artifact_id,
+            artifact_path=artifact.path,
+            base_hash=req.base_hash,
+            new_content=req.content,
+            note=req.note,
+        )
+    except artifact_version_repo.ConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return {"version": new_version}

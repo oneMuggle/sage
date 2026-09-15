@@ -8,7 +8,7 @@ import os
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import hnswlib
 import numpy as np
@@ -224,7 +224,9 @@ class HNSWVectorStore:
 
         return len(records_to_delete)
 
-    def search(self, query_vec: List[float], limit: int) -> List[SearchHit]:
+    def search(
+        self, query_vec: List[float], limit: int, allowed_paths: Optional[Set[str]] = None
+    ) -> List[SearchHit]:
         """搜索最相似的向量。
 
         Args:
@@ -242,7 +244,22 @@ class HNSWVectorStore:
 
         # 执行搜索
         query_array = np.array([query_vec], dtype=np.float32)
-        labels, distances = self.index.knn_query(query_array, k=min(limit, len(self.records)))
+        if allowed_paths is None:
+            labels, distances = self.index.knn_query(query_array, k=min(limit, len(self.records)))
+        else:
+            allowed_labels = {
+                label
+                for label, record_id in self.label_to_id.items()
+                if record_id in self.records and self.records[record_id].page_path in allowed_paths
+            }
+            if not allowed_labels:
+                return []
+            labels, distances = self.index.knn_query(
+                query_array,
+                k=min(limit, len(allowed_labels)),
+                filter=allowed_labels.__contains__,
+                num_threads=1,
+            )
 
         # 转换结果
         hits = []

@@ -43,25 +43,47 @@ def make_with_db_lock(target_globals):
     模块已从本模块 import 同一对象, 语义不变。FunctionType 会丢掉
     functools.wraps 挂上的 ``__wrapped__``/``__doc__``/``__dict__`` (FastAPI
     签名解析沿 ``__wrapped__`` 链), 因此重建后必须再 wraps 一次。
+
+    同时支持 ``async def`` handler —— 用 ``asyncio.iscoroutinefunction``
+    区分: sync handler 返回 sync wrapper, async handler 返回 async wrapper
+    (用 ``asyncio.Lock`` 替代 ``_SQLITE_LOCK``?—— 不, _SQLITE_LOCK 是
+    threading.RLock, run_in_threadpool 内仍需要它)。
     """
+    import asyncio
     import types
 
     lock = _SQLITE_LOCK
 
     def decorator(func):
+        if asyncio.iscoroutinefunction(func):
+
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                with lock:
+                    return await func(*args, **kwargs)
+
+            rebound = types.FunctionType(
+                async_wrapper.__code__,
+                target_globals,
+                async_wrapper.__name__,
+                async_wrapper.__defaults__,
+                async_wrapper.__closure__,
+            )
+            return functools.wraps(func)(rebound)
+
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def sync_wrapper(*args, **kwargs):
             with lock:
                 return func(*args, **kwargs)
 
         # 经闭包携带锁, 重绑 __globals__ 后不依赖目标模块的任何全局名;
         # target_globals 仅服务于 FastAPI 的注解解析。
         rebound = types.FunctionType(
-            wrapper.__code__,
+            sync_wrapper.__code__,
             target_globals,
-            wrapper.__name__,
-            wrapper.__defaults__,
-            wrapper.__closure__,
+            sync_wrapper.__name__,
+            sync_wrapper.__defaults__,
+            sync_wrapper.__closure__,
         )
         return functools.wraps(func)(rebound)
 
@@ -683,6 +705,41 @@ class Database:
         _projects_columns = {row["name"] for row in cursor.fetchall()}
         if "intent" not in _projects_columns:
             cursor.execute("ALTER TABLE projects ADD COLUMN intent TEXT")
+        # M3 (2026-09-15): 项目概览元数据——description 短描述、instructions
+        # 项目指令（注入 system prompt）。幂等迁移，旧行 NULL 允许。
+        if "description" not in _projects_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN description TEXT")
+        if "instructions" not in _projects_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN instructions TEXT")
+        conn.commit()
+
+        # M3 (2026-09-15): 项目资料表——用户显式添加的参考资料，注入 system
+        # prompt 供上下文使用。status 三态: pending_index (待索引) / ready
+        # (已索引可注入) / failed (索引失败)。content_hash 用于 project+hash
+        # 去重（同内容重复添加返回已有行）。source_message_id 可选，记录来源
+        # 消息（save-answer 场景）。wiki_page_path 指向索引后的 wiki 页面路径。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS project_materials (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                source_message_id TEXT,
+                content_hash TEXT NOT NULL,
+                content TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending_index',
+                wiki_page_path TEXT,
+                error_message TEXT,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_project_materials_project "
+            "ON project_materials(project_id, created_at DESC)"
+        )
+        cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_project_materials_dedup "
+            "ON project_materials(project_id, content_hash)"
+        )
         conn.commit()
 
         # Office self-check history (round-3 Office parity, N4). Every
@@ -760,6 +817,26 @@ class Database:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_artifacts_session
             ON artifacts(session_id, created_at DESC)
+        """)
+
+        # Phase 2 M2 (2026-09-15): 产物版本历史 —— 每次 AI 编辑或手动修改
+        # 生成一个快照，支持回滚到任意历史版本。快照内容存文件系统（避免
+        # SQLite 大文本性能问题），元数据存此表。单产物最多 100 版本。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS artifact_versions (
+                artifact_id TEXT NOT NULL,
+                version_num INTEGER NOT NULL,
+                content_hash TEXT NOT NULL,
+                snapshot_path TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                note TEXT,
+                PRIMARY KEY (artifact_id, version_num),
+                FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_artifact_versions_artifact
+            ON artifact_versions(artifact_id, version_num DESC)
         """)
 
         # B4 (2026-09-09): 会话 todo 清单持久化 —— todo_write 全量替换时

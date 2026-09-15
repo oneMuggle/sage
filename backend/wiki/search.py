@@ -3,7 +3,7 @@
 实现基于 token 的全文搜索，支持中文 bigram 分词，BM25-like 评分。
 """
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Set
 
 from .files import iter_wiki_markdown, secure_read_text
 from .models import SearchResponse, SearchResult
@@ -95,7 +95,12 @@ _STOP_WORDS = {
 }
 
 
-def search_wiki(project_root: Path, query: str, limit: int = 20) -> SearchResponse:
+def search_wiki(
+    project_root: Path,
+    query: str,
+    limit: int = 20,
+    allowed_paths: Optional[Set[str]] = None,
+) -> SearchResponse:
     """搜索 Wiki 页面。
 
     Args:
@@ -126,13 +131,16 @@ def search_wiki(project_root: Path, query: str, limit: int = 20) -> SearchRespon
         if md_file.name in ("index.md", "log.md", "schema.md"):
             continue
 
+        relative_path = str(md_file.relative_to(project_root)).replace("\\", "/")
+        if allowed_paths is not None and relative_path not in allowed_paths:
+            continue
+
         # 读取内容
         try:
             content = secure_read_text(project_root, md_file)
         except OSError:
             continue
         title = _extract_title(content)
-        relative_path = str(md_file.relative_to(project_root)).replace("\\", "/")
 
         # 计算得分
         score = 0.0

@@ -223,7 +223,8 @@ class WikiAnswerTool(BaseTool):
     Returns:
         ``{success: True, content: {messages: [...], citations: [...]}}``
         where ``messages`` is the list of chat messages the LLM should
-        consume and ``citations`` is the list of wiki paths used.
+        consume; ``sources`` contains structured retrieved evidence. ``citations``
+        remains empty because the tool does not generate an answer.
     """
 
     requires_tool_context = True
@@ -313,7 +314,8 @@ class WikiAnswerTool(BaseTool):
             success=True,
             content={
                 "messages": messages,
-                "citations": citations,
+                "citations": [],
+                "sources": citations,
             },
         )
 

@@ -2494,6 +2494,49 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug(f"[REQ {request_id}] M6 project context skipped: {m6_ctx_err}")
             # ===== M6 PROJECT CONTEXT END =====
 
+            # ===== M3 PROJECT OVERVIEW + MATERIALS BEGIN (2026-09-15) =====
+            # 项目元数据 (description + instructions) 与用户显式添加的资料。
+            # 优先级: 应用安全规则 > 项目指令 (此处注入) > 全局风格偏好。
+            # 资料标注"不得覆盖上方指令", 沿用 PER_FILE_CHAR_CAP / TOTAL_CHAR_CAP
+            # 预算裁剪, 详见 backend/chat/project_context.py。独立标记块, rebase 友好。
+            try:
+                from backend.chat.project_context import (
+                    build_project_materials_block,
+                    build_project_metadata_block,
+                )
+                from backend.data.project_material_repo import (
+                    ProjectMaterialRepository,
+                )
+                from backend.data.project_repo import ProjectRepository
+                from backend.office.session_workspace import get_workspace_binding
+
+                m3_binding = get_workspace_binding(
+                    get_database().get_connection(), data.session_id
+                )
+                if m3_binding is not None and m3_binding.workspace_path:
+                    m3_project = (
+                        ProjectRepository()
+                        .get_project_for_workspace(m3_binding.workspace_path)
+                    )
+                    metadata_block = build_project_metadata_block(m3_project)
+                    if metadata_block:
+                        system_content += "\n\n" + metadata_block
+                    if m3_project is not None:
+                        active_materials = (
+                            ProjectMaterialRepository()
+                            .get_active_materials_for_project(m3_project.id)
+                        )
+                        materials_block = build_project_materials_block(
+                            active_materials
+                        )
+                        if materials_block:
+                            system_content += "\n\n" + materials_block
+            except Exception as m3_ctx_err:
+                logger.debug(
+                    f"[REQ {request_id}] M3 project overview skipped: {m3_ctx_err}"
+                )
+            # ===== M3 PROJECT OVERVIEW + MATERIALS END =====
+
             # ===== L5 环境上下文 + 技能清单 BEGIN (对标增强第二轮批次 B) =====
             # 告知模型平台/日期/工作区/git 状态与可用技能（此前模型对工作区
             # 状态零感知、技能只能盲调 skill 工具发现）。内部全 fail-safe:
