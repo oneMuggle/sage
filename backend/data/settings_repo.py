@@ -20,6 +20,10 @@ class SettingsRepository:
             "app_settings",
             "theme_mode",
             "theme_preset",
+            "font_ui",
+            "font_code",
+            "font_size_ui",
+            "font_size_code",
             "current_session_id",
             # M1 工具安全加固: 权限模式 + 用户规则（见 backend/tools/permissions.py）
             "permission_mode",
