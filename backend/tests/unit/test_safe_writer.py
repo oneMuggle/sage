@@ -27,7 +27,7 @@ def test_overwrite_rejects_hardlink_without_modifying_outside(tmp_path: Path) ->
     outside.write_text("outside-secret", encoding="utf-8")
     target = target_dir / "SKILL.md"
     try:
-        target.hardlink_to(outside)
+        os.link(outside, target)  # py3.8: 无 Path.hardlink_to（3.10+）
     except (OSError, NotImplementedError):
         pytest.skip("hardlinks are not supported")
 

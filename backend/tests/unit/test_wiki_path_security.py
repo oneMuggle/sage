@@ -29,7 +29,7 @@ def _symlink_or_skip(link: Path, target: Path, *, target_is_directory: bool = Fa
 
 def _make_hardlink_or_skip(source: Path, target: Path) -> None:
     try:
-        target.hardlink_to(source)  # py>=3.10
+        target.hardlink_to(source)  # py>=3.10; py38: guarded (AttributeError fallback below)
     except AttributeError:
         try:
             os.link(source, target)  # py3.8（Path.link_to 之前的等价原语）

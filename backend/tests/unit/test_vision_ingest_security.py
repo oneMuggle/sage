@@ -129,7 +129,7 @@ def test_bounded_read_rejects_hardlink_to_outside(tmp_path: Path):
     linked = tmp_path / "source.md"
     outside.write_bytes(b"outside secret")
     try:
-        linked.hardlink_to(outside)
+        os.link(outside, linked)  # py3.8: 无 Path.hardlink_to（3.10+）
     except (OSError, NotImplementedError):
         pytest.skip("hardlinks are not supported")
 

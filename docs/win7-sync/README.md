@@ -39,7 +39,8 @@ xdist worker 崩溃，全部属于这些类别）。`check_py38_compat.py` 现�
 | `asyncio.to_thread` (3.9) | `AttributeError` —— 68 例 | `backend/compat/win7/asyncio_compat.py` 在 `backend/__init__` 注入（源码保持 main 原样） |
 | `with (a as x, b as y):` (PEP 617) | **SyntaxError，整个测试模块无法 collect** | `py38_compat_rewrite.py` → 嵌套 `with`；ruff 关闭 SIM117 |
 | `str.removesuffix/removeprefix` (3.9) | `AttributeError` | `endswith` + 切片 |
-| `Path.is_relative_to` (3.9) | `AttributeError` | `backend.office.path_safety.is_within` |
+| `Path.is_relative_to` (3.9) / `Path.hardlink_to` (3.10) | `AttributeError` | `backend.office.path_safety.is_within` / `os.link` |
+| 非交互 `sys.stderr` 全缓冲（3.9 起才行缓冲） | 子进程被 kill 前 `print` 输出丢失 | `execute_code_tool` bootstrap：`reconfigure(line_buffering=True)` + done 前 flush |
 | `Path.write_text(newline=)` / `Path.stat(follow_symlinks=)` (3.10) | `TypeError` | `path.open(newline="")` / `os.lstat` |
 | `isinstance(x, A \| B)` (3.10) | `TypeError: unsupported operand` | tuple |
 | `except TimeoutError` 包 `asyncio.wait_for` (3.11 起才是同一个类) | 超时**不被捕获** | `except (TimeoutError, asyncio.TimeoutError)` (`# noqa: UP041`) |

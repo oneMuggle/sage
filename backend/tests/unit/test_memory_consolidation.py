@@ -135,17 +135,30 @@ def test_save_compressed_persists_summary(manager: MemoryManager) -> None:
     assert found["importance"] == 6
 
 
-def test_consolidate_full_flow_succeeds(manager: MemoryManager) -> None:
-    """consolidate 走通完整流程（F2 修复）：工作记忆压缩为摘要存入情景记忆并返回
-    memory_id，而不是抛 TypeError。"""
+def test_consolidate_full_flow_persists_and_clears_session(
+    manager: MemoryManager,
+) -> None:
+    """consolidate 成功落库后只清空被压缩的 session（与 main 同源；
+    win7 旧版用例基于未按 session 隔离的 WorkingMemory，已失效）。"""
     pipe = ConsolidationPipeline()
-    # §1.3a: FK enforcement — parent session must exist.
+    # §1.3a: FK enforcement — both parent sessions must exist.
     ensure_session(manager.episodic.db, "abc")
-    manager.add_to_working("user", "hi")
-    manager.add_to_working("assistant", "hello")
+    ensure_session(manager.episodic.db, "other")
+    manager.add_to_working("user", "hi", session_id="abc")
+    manager.add_to_working("assistant", "hello", session_id="abc")
+    manager.add_to_working("user", "keep me", session_id="other")
+
     memory_id = pipe.consolidate(manager, session_id="abc")
-    assert memory_id
-    assert len(manager.working.messages) == 0
+
+    assert memory_id is not None
+    assert manager.working.get_context("abc") == []
+    assert [item["content"] for item in manager.working.get_context("other")] == [
+        "keep me"
+    ]
+    saved = manager.episodic.get_by_id(memory_id)
+    assert saved is not None
+    assert saved["session_id"] == "abc"
+    assert saved["memory_type"] == "summary"
     recent = manager.episodic.get_recent(limit=5)
     assert any(r["id"] == memory_id for r in recent)
 
