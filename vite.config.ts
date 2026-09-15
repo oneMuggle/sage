@@ -139,9 +139,11 @@ export default defineConfig({
     // agent worktrees contain full src copies; without this Vitest discovers
     // duplicate test files and runs each suite 7+ times with cross-environment
     // state pollution (see fix/security-perf-quickwins).
+    // 2026-09-15: also exclude .worktrees/** (project-root git worktrees).
     exclude: [
       '**/node_modules/**',
       '**/.claude/**',
+      '**/.worktrees/**',
       '**/dist/**',
       '**/dist-electron/**',
       'tests/electron/**',
