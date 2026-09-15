@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, List, Optional
+from typing import Any, List
 
 from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -282,8 +282,8 @@ async def compact_session(session_id: str):
 class ForkSessionRequest(BaseModel):
     """POST /sessions/{session_id}/fork 请求体。"""
 
-    at_message_id: Optional[str] = None
-    title: Optional[str] = None
+    at_message_id: str | None = None
+    title: str | None = None
     # U5' (对标增强第五轮批次 A): 开区间截断——复制 at_message_id 之前的
     # 消息（不含本身）。编辑重发据此分叉出"被编辑消息之前"的前缀。
     before_message: bool = False
@@ -373,7 +373,7 @@ def _snippet_around(content: str, needle: str, window: int = 80) -> str:
 @with_db_lock
 def search_messages(
     q: str = Query(min_length=2, max_length=200),
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     limit: int = Query(default=20, ge=1, le=50),
 ):
     """跨会话消息全文搜索（F12，round5 批次 B）。

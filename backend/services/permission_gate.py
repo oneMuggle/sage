@@ -30,7 +30,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ def _scrub_value(value: Any, depth: int) -> Any:
     return value
 
 
-def _resolve_preview_path(raw: str, workspace_root: Optional[str]) -> Optional[Path]:
+def _resolve_preview_path(raw: str, workspace_root: str | None) -> Path | None:
     """把工具参数里的路径解析为可读路径；相对路径挂在 workspace 下。"""
     if not isinstance(raw, str) or not raw.strip():
         return None
@@ -96,7 +96,7 @@ def _resolve_preview_path(raw: str, workspace_root: Optional[str]) -> Optional[P
     return path
 
 
-def _read_text_capped(path: Path) -> Optional[str]:
+def _read_text_capped(path: Path) -> str | None:
     """读取现文件内容（截到 ``_DIFF_READ_MAX_BYTES``）；不存在/不可读返回 None。"""
     try:
         if not path.is_file():
@@ -123,7 +123,7 @@ def _unified_diff(label: str, before: str, after: str) -> str:
 def _collect_diff_sections(
     tool_name: str,
     args: Dict[str, Any],
-    workspace_root: Optional[str],
+    workspace_root: str | None,
 ) -> List[str]:
     """按工具语义收集各文件的 diff 片段（只读，不落盘）。"""
     sections: List[str] = []
@@ -171,9 +171,9 @@ def _collect_diff_sections(
 
 def build_diff_preview(
     tool_name: str,
-    args: Optional[Dict[str, Any]],
-    workspace_root: Optional[str] = None,
-) -> Optional[str]:
+    args: Dict[str, Any] | None,
+    workspace_root: str | None = None,
+) -> str | None:
     """为写类工具生成将写入内容的 unified diff（U15 审批透明化）。
 
     - ``write_file``: 现文件（不存在视为空）vs ``args["content"]``
@@ -199,7 +199,7 @@ def build_diff_preview(
     return preview
 
 
-def summarize_tool_args(args: Optional[Dict[str, Any]]) -> str:
+def summarize_tool_args(args: Dict[str, Any] | None) -> str:
     """把工具参数压成可展示的 JSON 字符串。
 
     - 键名匹配 key/token/password/secret/credential/auth 的值 → ``"***"``，
@@ -269,7 +269,7 @@ class ApprovalRequest:
     risk: str
     message: str
     created_at: float
-    diff_preview: Optional[str] = None
+    diff_preview: str | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         """流事件 / REST 响应共用的 JSON 形态。"""
@@ -289,10 +289,10 @@ class ApprovalRequest:
     def create(
         cls,
         tool_name: str,
-        args: Optional[Dict[str, Any]],
+        args: Dict[str, Any] | None,
         risk: str,
         message: str,
-        workspace_root: Optional[str] = None,
+        workspace_root: str | None = None,
     ) -> ApprovalRequest:
         """工厂：生成 UUID + 时间戳 + 脱敏参数摘要 + 写类工具 diff 预览。"""
         return cls(
@@ -310,8 +310,8 @@ class ApprovalRequest:
 #: ``set_approval_context_resolver`` 注册（依赖反转）。services 层不得直接
 #: import orchestration（六边形 import 契约），故经此回调解耦；未注册时
 #: run/task 归属为空（主会话审批本就无编排归属）。
-ApprovalContextResolver = Callable[[str], Tuple[Optional[str], Optional[str]]]
-_approval_context_resolver: Optional[ApprovalContextResolver] = None
+ApprovalContextResolver = Callable[[str], Tuple[str | None, str | None]]
+_approval_context_resolver: ApprovalContextResolver | None = None
 
 
 def set_approval_context_resolver(resolver: ApprovalContextResolver) -> None:
@@ -365,9 +365,9 @@ class ApprovalGate:
                 ApprovalDecisionRepository,
             )
 
-            session_id: Optional[str] = None
-            run_id: Optional[str] = None
-            task_id: Optional[str] = None
+            session_id: str | None = None
+            run_id: str | None = None
+            task_id: str | None = None
             try:
                 from backend.tools.context import current_tool_context
 
@@ -419,7 +419,7 @@ class ApprovalGate:
         """当前所有挂起请求（快照，按注册顺序）。"""
         return [req for req, future in self._pending.values() if not future.done()]
 
-    def get_request(self, request_id: str) -> Optional[ApprovalRequest]:
+    def get_request(self, request_id: str) -> ApprovalRequest | None:
         """按 id 查挂起请求；未知返回 None。"""
         entry = self._pending.get(request_id)
         return entry[0] if entry is not None else None
@@ -433,7 +433,7 @@ class ApprovalGate:
 # 单例装配（与 backend.services.scheduler 相同模式）
 # ---------------------------------------------------------------------------
 
-_global_gate: Optional[ApprovalGate] = None
+_global_gate: ApprovalGate | None = None
 
 
 def init_permission_gate() -> ApprovalGate:
@@ -443,7 +443,7 @@ def init_permission_gate() -> ApprovalGate:
     return _global_gate
 
 
-def get_permission_gate() -> Optional[ApprovalGate]:
+def get_permission_gate() -> ApprovalGate | None:
     """取全局 gate；未初始化返回 None（调用方 default-deny）。"""
     return _global_gate
 

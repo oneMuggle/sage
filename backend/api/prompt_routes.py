@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -38,9 +38,9 @@ class PromptTemplateIn(BaseModel):
 class PromptTemplateUpdate(BaseModel):
     """PUT /prompts/templates/{id} body —— 部分更新，全字段可选。"""
 
-    name: Optional[str] = Field(default=None, min_length=1, max_length=_MAX_NAME_LEN)
-    content: Optional[str] = Field(default=None, min_length=1, max_length=_MAX_CONTENT_LEN)
-    description: Optional[str] = Field(default="", max_length=300)
+    name: str | None = Field(default=None, min_length=1, max_length=_MAX_NAME_LEN)
+    content: str | None = Field(default=None, min_length=1, max_length=_MAX_CONTENT_LEN)
+    description: str | None = Field(default="", max_length=300)
 
 
 def _load() -> List[Dict[str, Any]]:

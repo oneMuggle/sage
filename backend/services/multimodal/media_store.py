@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +52,8 @@ class MediaStore:
         content: bytes,
         kind: MediaKind,
         source: str,
-        metadata: Optional[dict] = None,
-        ext: Optional[str] = None,
+        metadata: dict | None = None,
+        ext: str | None = None,
     ) -> MediaRef:
         """存储媒体文件，返回 MediaRef"""
         media_id = uuid.uuid4().hex[:12]
@@ -83,7 +83,7 @@ class MediaStore:
             metadata=metadata or {},
         )
 
-    def load(self, media_id: str) -> Optional[Tuple[MediaRef, bytes]]:
+    def load(self, media_id: str) -> Tuple[MediaRef, bytes] | None:
         """根据 ID 加载媒体文件"""
         for f in self.root.rglob(f"{media_id}.*"):
             content = f.read_bytes()

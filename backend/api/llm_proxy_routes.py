@@ -49,7 +49,7 @@ from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from ipaddress import ip_address
-from typing import Dict, FrozenSet, List, Optional
+from typing import Dict, FrozenSet, List
 from urllib.parse import urlparse
 
 import httpcore
@@ -97,7 +97,7 @@ _DNS_EXECUTOR = ThreadPoolExecutor(
     max_workers=DNS_MAX_CONCURRENCY,
     thread_name_prefix="sage-dns",
 )
-_DNS_SEMAPHORE: Optional[asyncio.Semaphore] = None
+_DNS_SEMAPHORE: asyncio.Semaphore | None = None
 
 
 def _dns_executor() -> ThreadPoolExecutor:
@@ -428,7 +428,7 @@ def _is_tls_certificate_error(exc: BaseException) -> bool:
     ``ssl.SSLCertVerificationError`` (Py3.7+); 也有可能挂在 ``ssl.SSLError``
     但 message 含 "CERTIFICATE_VERIFY_FAILED".
     """
-    current: Optional[BaseException] = exc
+    current: BaseException | None = exc
     seen: set[int] = set()
     while current is not None and id(current) not in seen:
         seen.add(id(current))
@@ -510,7 +510,7 @@ def _is_local_capability_authorization(value: str, local_token: str) -> bool:
 
 
 def _filter_request_headers(
-    request: Request, local_token: Optional[str] = None
+    request: Request, local_token: str | None = None
 ) -> Dict[str, str]:
     """Copy request headers, excluding proxy internals and the local capability."""
     capability = local_token if local_token is not None else get_local_auth_token()
@@ -1051,8 +1051,8 @@ async def _proxy_streaming(
             # 这样 downstream caller 拿到的 chunk 序列与未改前完全一致,
             # 只是在旁路 copy 一份 bytes。
             _streamed_chunks: List[bytes] = []
-            _streamed_status: Optional[int] = upstream_resp.status_code
-            _streamed_error: Optional[str] = None
+            _streamed_status: int | None = upstream_resp.status_code
+            _streamed_error: str | None = None
             try:
                 # 用 aiter_bytes 透传透明解压后的字节 (2026-09-02 修复):
                 # 上游若无视 Accept-Encoding: identity 仍返回 gzip, aiter_raw

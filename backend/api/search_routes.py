@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Query
 
@@ -17,11 +17,11 @@ router = APIRouter(prefix="/search", tags=["search"])
 def global_search(
     q: str = Query(..., min_length=1, description="搜索关键词"),
     limit: int = Query(10, ge=1, le=50, description="每类返回上限"),
-    types: Optional[str] = Query(
+    types: str | None = Query(
         None,
         description="逗号分隔的类型过滤: session,memory,knowledge,project (默认全部)",
     ),
-    knowledge_project: Optional[str] = Query(
+    knowledge_project: str | None = Query(
         None,
         description=(
             "P9: 知识搜索范围（wiki 项目根目录绝对路径）。须为已登记/最近"
@@ -144,7 +144,7 @@ def _resolve_knowledge_scope(raw: str) -> Any:
 
 
 def _search_knowledge(
-    query: str, limit: int, project_path: Optional[Any] = None
+    query: str, limit: int, project_path: Any | None = None
 ) -> List[Dict[str, Any]]:
     """知识库文档搜索（复用 wiki search_wiki）。无活跃项目时返回空。
 

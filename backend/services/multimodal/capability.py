@@ -6,7 +6,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import httpx
 
@@ -46,7 +46,7 @@ class AIHttpResponse:
     """标准化的响应"""
     status_code: int
     content: bytes
-    json: Optional[Dict] = None
+    json: Dict | None = None
     content_type: str = ""
 
 
@@ -86,7 +86,7 @@ class AICapability(ABC):
             )
         return self.parse_response(resp, **kwargs)
 
-    def load_config(self) -> Optional[CapabilityConfig]:
+    def load_config(self) -> CapabilityConfig | None:
         """从 app_settings 读取本能力的端点配置"""
         from backend.data.settings_repo import SettingsRepository
         raw = SettingsRepository().get_json("app_settings")
