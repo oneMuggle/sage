@@ -137,9 +137,11 @@ const electronAPI = {
    * EMBEDDER_MODEL_MANIFEST。
    */
   modelDownload: {
-    download: (
-      payload?: { baseUrl?: string; dirName?: string; files?: { name: string; sha256: string }[] },
-    ) => ipcRenderer.invoke('models:embedder:download', payload ?? {}),
+    download: (payload?: {
+      baseUrl?: string;
+      dirName?: string;
+      files?: { name: string; sha256: string }[];
+    }) => ipcRenderer.invoke('models:embedder:download', payload ?? {}),
     cancel: (dirName: string) => ipcRenderer.invoke('models:embedder:cancel', dirName),
   },
 
