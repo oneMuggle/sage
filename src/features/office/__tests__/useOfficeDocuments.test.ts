@@ -335,3 +335,44 @@ describe('useOfficeDocuments — workspace entry sweep', () => {
     expect(mockSweepOrphanStaging).not.toHaveBeenCalled();
   });
 });
+
+describe('useOfficeDocuments — batch archive/restore (round-3 N5)', () => {
+  it('loops restoreDocument once per id, refetches once and reports per-item outcomes', async () => {
+    mockRestoreDocument.mockImplementation(async (id: string) => {
+      if (id === 'doc-b') throw new Error('restore blew up');
+      return { ok: true };
+    });
+
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+    await waitFor(() => expect(mockListDocuments).toHaveBeenCalledTimes(1));
+
+    let out: { succeeded: string[]; failed: string[] } | undefined;
+    await act(async () => {
+      out = await result.current.batchRestore(['doc-a', 'doc-b', 'doc-c']);
+    });
+
+    // Restore called N times — once per selected doc, sequentially.
+    expect(mockRestoreDocument).toHaveBeenCalledTimes(3);
+    expect(mockRestoreDocument).toHaveBeenNthCalledWith(1, 'doc-a');
+    expect(mockRestoreDocument).toHaveBeenNthCalledWith(2, 'doc-b');
+    expect(mockRestoreDocument).toHaveBeenNthCalledWith(3, 'doc-c');
+    // Failed ids are counted, not thrown.
+    expect(out).toEqual({ succeeded: ['doc-a', 'doc-c'], failed: ['doc-b'] });
+    // ONE refetch for the whole batch (initial list + post-batch refresh).
+    expect(mockListDocuments).toHaveBeenCalledTimes(2);
+  });
+
+  it('batchArchive follows the same loop contract when every item succeeds', async () => {
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+    await waitFor(() => expect(mockListDocuments).toHaveBeenCalledTimes(1));
+
+    let out: { succeeded: string[]; failed: string[] } | undefined;
+    await act(async () => {
+      out = await result.current.batchArchive(['doc-a', 'doc-b']);
+    });
+
+    expect(mockArchiveDocument).toHaveBeenCalledTimes(2);
+    expect(out).toEqual({ succeeded: ['doc-a', 'doc-b'], failed: [] });
+    expect(mockListDocuments).toHaveBeenCalledTimes(2);
+  });
+});
