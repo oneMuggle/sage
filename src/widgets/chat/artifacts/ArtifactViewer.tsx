@@ -144,7 +144,7 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             dangerouslySetInnerHTML={{ __html: content.html ?? '' }}
           />
         ) : content.kind === 'code' || content.kind === 'json' ? (
-          <pre className="whitespace-pre-wrap text-xs font-mono bg-bg-hover p-2 rounded">
+          <pre className="whitespace-pre-wrap text-code font-mono bg-bg-hover p-2 rounded">
             {content.content}
           </pre>
         ) : content.kind === 'csv' ? (
