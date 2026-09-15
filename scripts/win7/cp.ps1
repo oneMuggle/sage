@@ -1,8 +1,9 @@
-param([string[]]$Shas)
-foreach ($sha in $Shas) {
+param([string]$Shas)
+$list = $Shas -split "[,\s]+" | Where-Object { $_ }
+foreach ($sha in $list) {
   $out = git cherry-pick -x $sha 2>&1 | Out-String
   if ($LASTEXITCODE -ne 0) {
-    $files = git diff --name-only --diff-filter=U
+    $files = @(git diff --name-only --diff-filter=U)
     foreach ($f in $files) {
       git checkout --theirs -- $f 2>$null | Out-Null
       git add -- $f 2>$null | Out-Null
