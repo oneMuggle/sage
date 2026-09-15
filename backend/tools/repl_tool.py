@@ -342,8 +342,6 @@ class ReplTool(BaseTool):
         stdout_identity: Optional[Tuple[int, int]] = None
         stderr_identity: Optional[Tuple[int, int]] = None
         try:
-            if os.name == "nt" or not hasattr(os, "waitid"):
-                raise RuntimeError("REPL 平台不支持安全进程组回收")
             try:
                 verified = spawn_verified(
                     [sys.executable, "-I", script_path],
