@@ -704,6 +704,22 @@ class SageAgent:
         ``_tool_call_id``（dict 重建覆盖 LLM 可能注入的同名 key）, dispatcher
         给子任务标 parent_tool_call_id, 前端把子代理实时步骤挂到 Delegate 卡片。
         """
+        # 分发前校验 required 参数 — 避免 LLM 漏传时直接抛 TypeError
+        # (2026-09-15 office_read bug 修复)。校验失败返回 ToolResult 风格的错误对象,
+        # 让上层统一走 OBSERVING 事件流。
+        missing_error = self._validate_required_params(tool, args)
+        if missing_error is not None:
+            class _FailedResult:
+                success = False
+                content = None
+                error = missing_error
+                output = None
+
+                def to_dict(self) -> Dict[str, Any]:
+                    return {"success": False, "error": self.error}
+
+            return False, _FailedResult()
+
         if name == "agent":
             # live-events P2 (2026-09-07): 优先走 execute_async —— 子代理作为
             # 原生协程落在事件循环上：wait_for 超时/中断取消都能真正收口
@@ -1734,6 +1750,35 @@ class SageAgent:
 
     # ===== M6 HOOKS END =====
 
+    @staticmethod
+    def _validate_required_params(tool: Any, parameters: Dict[str, Any]) -> Optional[str]:
+        """校验 LLM 传入的参数是否满足工具 schema 的 required 约束。
+
+        2026-09-15 修: office_read 漏传 doc_id 直接抛 TypeError,
+        LLM 拿到的是 Python 异常堆栈而非友好错误。现在分发前校验
+        required 字段,缺失则返回明确错误消息。
+
+        Returns:
+            None 表示通过;否则返回错误消息字符串(调用方应直接返回失败)。
+        """
+        schema = getattr(tool, "schema", None)
+        if schema is None:
+            return None
+        params_schema = getattr(schema, "parameters", None)
+        if not isinstance(params_schema, dict):
+            return None
+        required = params_schema.get("required")
+        if not required:
+            return None
+        # required 应该是字符串列表
+        if not isinstance(required, list | tuple):
+            return None
+        missing = [name for name in required if name not in parameters]
+        if not missing:
+            return None
+        names = ", ".join(missing)
+        return f"工具 {tool.name} 缺少必需参数: {names}"
+
     def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
         执行工具
@@ -1763,6 +1808,11 @@ class SageAgent:
             tool = self.tool_registry.get(tool_name)
             if tool is None:
                 raise ToolCallError(tool_name, f"工具不存在: {tool_name}")
+
+            # 分发前校验 required 参数 — 避免 LLM 漏传时直接抛 TypeError
+            missing_error = self._validate_required_params(tool, parameters)
+            if missing_error is not None:
+                return {"success": False, "error": missing_error}
 
             result = tool.execute(**parameters)
             return result.to_dict()
