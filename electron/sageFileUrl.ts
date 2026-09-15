@@ -58,8 +58,17 @@ export function resolveSageFileUrl(
   let file: string;
   try {
     file = decodeURIComponent(encFile);
+    // P22: 防双重编码逃逸 —— 解码后再检查是否仍含编码字符
+    if (/%[0-9a-fA-F]{2}/.test(file)) {
+      file = decodeURIComponent(file);
+    }
   } catch {
     return { ok: false, reason: 'bad-encoding' };
+  }
+  // P22: 解码后路径中不允许出现 null byte 或控制字符
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f]/.test(file)) {
+    return { ok: false, reason: 'invalid-characters' };
   }
   if (!file || !isAbsolute(file)) {
     return { ok: false, reason: 'not-absolute' };
