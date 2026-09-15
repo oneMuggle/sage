@@ -14,7 +14,6 @@ Covers the new HTTP endpoints end-to-end through the route functions:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Set
 
 import pytest
 
@@ -78,7 +77,7 @@ def _seed_docx(workspace: Path, *, content: bytes = b"seed docx bytes") -> str:
     return doc_id
 
 
-def _list_ids(workspace: Path, *, include_archived: bool) -> Set[str]:
+def _list_ids(workspace: Path, *, include_archived: bool) -> set[str]:
     resp = list_documents_endpoint(
         workspace_path=str(workspace), include_archived=include_archived
     )

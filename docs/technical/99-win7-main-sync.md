@@ -9,7 +9,7 @@
 
 ## 已落地（Phase 0）
 - [x] worktree `chore/win7-main-sync` @ 8776/1431
-- [x] `backend/platform/win7/*` 骨架
+- [x] `backend/compat/win7/*` 骨架
 - [x] `scripts/win7/classify_diff.py` + `parity_report.py`
 - [x] `docs/win7-sync/*`
 

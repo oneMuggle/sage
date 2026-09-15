@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
 
 import pytest
 
@@ -29,7 +28,7 @@ def _make_plain_pdf(path: Path, text: str = "Plain PDF") -> Path:
     return path
 
 
-def _make_form_pdf(path: Path, field_names: Optional[List[str]] = None) -> Path:
+def _make_form_pdf(path: Path, field_names: list[str] | None = None) -> Path:
     """Create a PDF with AcroForm text fields using PyMuPDF's widget API."""
     import pymupdf
 

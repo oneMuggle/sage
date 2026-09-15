@@ -63,6 +63,13 @@ OFFICE_TOOLS = (
     "office_fill_pdf_form",
     "office_analyze_word_template",
     "office_fill_word_template",
+    "office_analyze",
+    # Round 9 引用体系：BibTeX 解析（READ）
+    "office_parse_bibtex",
+    # Round 10 格式 Linter（READ）
+    "office_lint_word",
+    # Round 12 自动修复（WRITE_LOCAL）
+    "office_repair_word",
 )
 
 # 本地开发环境助手（2026-09-04）：只读探测/诊断两件 + 审批后执行一件。

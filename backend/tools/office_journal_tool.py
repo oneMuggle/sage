@@ -31,7 +31,7 @@ from backend.office.journal.errors import (
 )
 from backend.office.journal.generator import generate_article, generate_structured
 from backend.office.journal.llm_adapter import get_default_journal_llm_adapter
-from backend.office.journal.models import JournalContent, JournalSpec, parse_obj, to_jsonable
+from backend.office.journal.models import JournalContent, JournalSpec
 from backend.office.journal.parser import parse_journal_spec
 from backend.office.journal.persistence import load_spec, save_spec
 from backend.office.journal.validator import validate_document
@@ -152,7 +152,7 @@ class OfficeJournalParseTemplateTool(BaseTool):
                 )
         return ToolResult(
             success=True,
-            content={"spec": to_jsonable(spec)},
+            content={"spec": spec.model_dump(mode="json")},
         )
 
 
@@ -214,7 +214,7 @@ class OfficeJournalFillFromContentTool(BaseTool):
         if not isinstance(content, dict):
             return ToolResult(success=False, error="content_shape_invalid")
         try:
-            journal_content = parse_obj(JournalContent, content)
+            journal_content = JournalContent.model_validate(content)
         except Exception as exc:  # noqa: BLE001
             return ToolResult(
                 success=False,
@@ -446,7 +446,7 @@ class OfficeJournalValidateTool(BaseTool):
             content={
                 "spec_id": spec.spec_id,
                 "file_path": str(p),
-                "violations": [to_jsonable(v) for v in violations],
+                "violations": [v.model_dump(mode="json") for v in violations],
                 "error_count": sum(1 for v in violations if v.severity.value == "error"),
                 "warning_count": sum(
                     1 for v in violations if v.severity.value == "warning"

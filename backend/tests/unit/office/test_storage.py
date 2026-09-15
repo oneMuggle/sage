@@ -347,7 +347,9 @@ def test_get_document_returns_none_for_missing_id(db_conn: sqlite3.Connection) -
 def test_get_document_roundtrips_nullable_fields(db_conn: sqlite3.Connection) -> None:
     """get_document round-trips derived_from + archived_at."""
     summary = _make_summary(doc_id="nullable-1")
-    summary = summary.copy(update={"derived_from": "parent", "archived_at": 1_700_000_000_000})
+    summary = summary.model_copy(
+        update={"derived_from": "parent", "archived_at": 1_700_000_000_000}
+    )
     save_document(db_conn, summary)
     loaded = get_document(db_conn, "nullable-1")
     assert loaded is not None
@@ -374,7 +376,7 @@ def test_list_documents_excludes_archived_by_default(db_conn: sqlite3.Connection
         doc_id="arch-1",
         workspace_path="/tmp/ws",
         status=OfficeDocStatus.PARSED,
-    ).copy(update={"archived_at": 1_700_000_000_000})
+    ).model_copy(update={"archived_at": 1_700_000_000_000})
     save_document(db_conn, archived)
 
     result = list_documents(db_conn, "/tmp/ws")
@@ -389,7 +391,7 @@ def test_list_documents_includes_archived_when_requested(db_conn: sqlite3.Connec
         doc_id="arch-2",
         workspace_path="/tmp/ws",
         status=OfficeDocStatus.PARSED,
-    ).copy(update={"archived_at": 1_700_000_000_000})
+    ).model_copy(update={"archived_at": 1_700_000_000_000})
     save_document(db_conn, archived)
 
     result = list_documents(db_conn, "/tmp/ws", include_archived=True)

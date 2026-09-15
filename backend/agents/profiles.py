@@ -3,10 +3,11 @@ Agent Profiles - Agent 角色定义和配置
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 # 工具名单一来源（防漂移）：种子白名单的工具名一律从这里组合，
 # 不写字面量 —— 历史两次漂移（terminal、file_read）见 tool_names 模块注释。
@@ -182,10 +183,19 @@ def create_default_agents() -> List[AgentProfile]:
             role="researcher",
             description="负责网络搜索和信息收集的 Agent",
             system_prompt="你是一个专业的研究 Agent。负责搜索信息、综合资料、生成研究报告。",
-            # win7 保留 memory_save —— researcher 查到资料后必须能落地为记忆,
-            # 否则下次 session 找不到（PR #396 knowledge persistence 闭环）。
-            # main 上此字段缺, 属 PR-2..4 合并未覆盖的 win7 差异。
-            tools=["web_search", "web_fetch", "http_download", "memory_search", "memory_save"],
+            # Round 6 B2: 浏览器通道并入——登录态/动态页面场景委派可达
+            tools=[
+                "web_search",
+                "web_fetch",
+                "http_download",
+                "memory_search",
+                "browser_launch",
+                "browser_navigate",
+                "browser_snapshot",
+                "browser_interact",
+                "browser_cookies",
+                "browser_close",
+            ],
             memory_access=["episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.5),
             max_iterations=8,
@@ -222,10 +232,14 @@ def create_default_agents() -> List[AgentProfile]:
             system_prompt=(
                 "你是一个专业的写作 Agent。负责把资料整理成结构清晰、可执行的 "
                 "学习资料、操作指南等 markdown 文档。产出文档请用 write_file 工具落盘。"
+                "生成正式 docx 报告时用 office_create，并把用户明示的硬性格式要求"
+                "（页边距/字号/行距/首行缩进/页眉页脚/页码/标题样式）映射进 "
+                "content.format_spec —— 版式由引擎确定性保证，不要只写在正文里。"
+                "论文/报告需要引用时：把结构化文献条目放进 content.references，"
+                "在段落 citations 里用条目 key 回链（引擎自动生成文中上标 [N] "
+                "与文末参考文献表，GB/T 7714 或 APA）；用户给 .bib 文件时先用 "
+                "office_parse_bibtex 解析，标题文本不要手写 [N] 编号。"
             ),
-# 2026-09-04: 写作 agent 此前只能产出 markdown; 加 Office 读写套件
-            # 让它能直接落 docx/xlsx/pptx。不给 delete —— 写作职责不含删档。
-            # PR-2: 补 office_restore —— 可恢复误改的 Office 文档。
             # PR-1 (office CRUD 接线) + PR-2 (archive/restore):
             # 写作 agent 现在可生成/编辑/还原 Office 文档 (report / 操作手册
             # 等适合 docx/xlsx/pptx 形态)。office_* 工具与 write_file 互补:
@@ -233,9 +247,17 @@ def create_default_agents() -> List[AgentProfile]:
             # office_restore 还原)。不给 office_delete —— 写作职责不含删档。
             # 2026-09 Parity Batch-1: 补 PDF 三类 + Word 模板两件（与
             # OFFICE_TOOLS 同步，除 office_delete 外全量继承）。
+            # 2026-09 Parity Batch-2: 补 office_analyze（本地数据分析，
+            # 仍不给 office_delete —— 批次 1 模式：writer = OFFICE_TOOLS
+            # 除 delete 外全量）。
             tools=[
-                "read_file", "write_file", "memory_search",
-                "office_list", "office_read", "office_create", "office_update",
+                "read_file",
+                "write_file",
+                "memory_search",
+                "office_list",
+                "office_read",
+                "office_create",
+                "office_update",
                 "office_restore",
                 "office_archive",
                 "office_read_pdf",
@@ -244,10 +266,17 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_fill_pdf_form",
                 "office_analyze_word_template",
                 "office_fill_word_template",
+                "office_analyze",
                 # 2026-09-10: journal template subsystem — 写作 agent 的核心
                 # 责任是把研究素材按期刊模板沉淀成可投搞稿件；模板解析/填充/
                 # 生成/校验四件套缺一不可。
                 *JOURNAL_TOOLS,
+                # Round 9 引用体系: BibTeX 解析（READ，纯文本、无工作区依赖）
+                "office_parse_bibtex",
+                # Round 10 格式 Linter: 对照 FormatSpec 校验 docx（READ）
+                "office_lint_word",
+                # Round 12 自动修复: lint→修复→复检（WRITE_LOCAL）
+                "office_repair_word",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -406,9 +435,17 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     # 2026-09 Parity Batch-1: PDF 三类 + Word 模板两件（与 writer.tools 同步）。
     "office_read_pdf", "office_generate_pdf", "office_read_pdf_form",
     "office_fill_pdf_form", "office_analyze_word_template", "office_fill_word_template",
+    # 2026-09 Parity Batch-2: office_analyze（本地数据分析，同步 writer.tools）。
+    "office_analyze",
     # 2026-09-10: journal template 4 件套（与 writer.tools 同步）。
     "office_journal_parse_template", "office_journal_fill_from_content",
     "office_journal_generate_article", "office_journal_validate",
+    # 2026-09-11 Round 9: BibTeX 解析（与 writer.tools 同步）。
+    "office_parse_bibtex",
+    # 2026-09-11 Round 10: 格式 Linter（与 writer.tools 同步）。
+    "office_lint_word",
+    # 2026-09-12 Round 12: 自动修复（与 writer.tools 同步）。
+    "office_repair_word",
 ]
 
 
@@ -628,7 +665,7 @@ def format_agents_for_prompt() -> str:
     return "\n\n你可以向用户介绍以下可用 Agent：\n" + "\n".join(lines)
 
 
-#: 默认 system prompt 的工具能力声明——明确告知 LLM 可调用的 Office 创建
+#: 默认 system prompt 的工具能力声明——明确告知 LLM 可调用的 Office CRUD
 #: 能力，避免其凭训练先验回复"没有创建本地文件的权限"（T6 Electron 实测
 #: 暴露）。工具/能力变化时手动维护，与 legacy_routes 的 DIAGRAM_TOOL_PROMPT
 #: 同模式。
@@ -643,6 +680,12 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "- 查看当前会话工作区里的文档：office_list；读取内容：office_read。\n"
     "- 修改已有文档（原地编辑，按 op 列表执行）：office_update"
     "（用 doc_id 或绝对路径 file_path 定位文件）。\n"
+    "  · 图表与图片（批次2）：可在 Word/PPT 插入图片（word content.images / "
+    "ppt slide.image，传工作区图片路径或 data:image/... base64，≤10MB；编辑期用 "
+    "add_image / add_picture op）、给 Excel 挂原生图表（office_update 的 add_chart "
+    "op 或 excel content.charts，line/bar/pie）、用 matplotlib 渲染统计图，以及 "
+    "set_paragraph_style / set_column_width / set_number_format / set_fill / "
+    "freeze_panes 等样式 op。\n"
     "- 删除文档（不可恢复）：office_delete（同样支持 doc_id / file_path）。\n"
     "- 归档文档（隐藏但不删）：office_archive；还原被归档文档：office_restore。"
     "office_update 改前会自动把旧版复制到 <managed_dir>/.snapshots/，可作为"
@@ -657,7 +700,23 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "- Word 模板（.docx 占位符）：先 office_analyze_word_template 列出 {{占位符}}"
     "（名称/类型/位置），再 office_fill_word_template 按 data 填充；图片占位符在 "
     "images 里传工作区图片路径或 data:image/... base64（≤10MB）；默认原地保存，"
-    "传 output_path 另存。"
+    "传 output_path 另存。\n"
+    "- 数据分析：office_analyze 用 pandas 做本地数据分析"
+    "（describe/计数/聚合/相关性，可生成分析报告 xlsx）——数据不出本机。\n"
+    "- 格式修复（Round 12）：office_lint_word 查出的样式/编号/题注类违规，"
+    "可用 office_repair_word 自动修复（默认写 -repaired.docx 新文件，"
+    "overwrite=true 原地替换）——修复后自动复检。\n"
+    "- 格式自检（Round 10）：office_lint_word 对照格式规范校验 docx，"
+    "返回违规清单与修复建议——正式文档交付前建议跑一次。\n"
+    "- 引用与参考文献（Round 9）：用户给 .bib 时先 office_parse_bibtex 解析；"
+    "结构化条目放 office_create 的 content.references，段落 citations 用条目 "
+    "key 回链——引擎自动生成文中上标 [N]（首现编号、连续合并）与文末参考"
+    "文献表（citation_style 可选 gbt7714/apa），标题文本不要手写编号。\n"
+    "- 批次3：Word 批注（读取/添加文档批注）；模板库（内置周报/会议纪要等"
+    "模板，或工作区 office/templates/ 自定义模板）；创建/更新成功后会自动"
+    "回读摘要（self_check），请核对摘要是否符合意图。"
+    "office_update 支持 dry_run=true 先预览变更清单（不落盘），"
+    "确认后再正式应用。"
 )
 
 

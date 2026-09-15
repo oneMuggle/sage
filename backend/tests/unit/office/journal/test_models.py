@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 
 import pytest
 
-from backend.api.settings_models import model_dump_compat
 from backend.office.journal.errors import JournalContentShapeError
 from backend.office.journal.models import (
     CitationStyle,
@@ -14,7 +13,6 @@ from backend.office.journal.models import (
     JournalSpec,
     JournalViolation,
     ViolationSeverity,
-    parse_obj,
 )
 
 
@@ -40,14 +38,8 @@ def _sample_spec() -> JournalSpec:
 
 def test_journal_spec_round_trip_dump():
     spec = _sample_spec()
-    # Pydantic v1 (.dict) keeps Enum members; v2 (model_dump mode='json')
-    # serialises them to strings. Force enum→str so the round-trip works
-    # on both v1 (win7) and v2 (main).
-    dumped = {
-        k: (v.value if hasattr(v, "value") else v)
-        for k, v in model_dump_compat(spec).items()
-    }
-    loaded = parse_obj(JournalSpec, dumped)
+    dumped = spec.model_dump(mode="json")
+    loaded = JournalSpec.model_validate(dumped)
     assert loaded == spec
 
 

@@ -23,6 +23,7 @@ so tests can use `:memory:` and production uses the real Database.get_connection
 """
 
 from __future__ import annotations
+from typing import Optional, Tuple
 
 import json
 import logging
@@ -112,7 +113,7 @@ def generate_document_dir(
 
 def _summary_to_row(summary: OfficeDocumentSummary) -> tuple:
     """Convert OfficeDocumentSummary to a DB row tuple."""
-    metadata_json = json.dumps(summary.metadata.dict())
+    metadata_json = json.dumps(summary.metadata.model_dump(mode="json"))
     return (
         summary.id,
         summary.workspace_path,
@@ -393,7 +394,7 @@ def _enforce_snapshot_retention(snapshot_dir: Path) -> None:
     edit that just succeeded (same contract as snapshot_pre_edit itself).
     """
     try:
-        entries: List[tuple[int, Path, int]] = []
+        entries: List[Tuple[int, Path, int]] = []
         for entry in snapshot_dir.iterdir():
             if not entry.is_file():
                 continue

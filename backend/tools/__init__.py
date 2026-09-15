@@ -41,7 +41,9 @@ from .git_tool import (
 from .image_gen_tool import ImageGenerationTool
 from .memory_tool import MemorySaveTool, MemorySearchTool
 from .network_config import load_network_policy
+from .office_analyze_tool import OfficeAnalyzeTool
 from .office_archive_tool import OfficeArchiveTool
+from .office_bibtex_tool import OfficeBibTexTool
 from .office_create_tool import OfficeCreateTool
 from .office_delete_tool import OfficeDeleteTool
 from .office_journal_tool import (
@@ -50,12 +52,14 @@ from .office_journal_tool import (
     OfficeJournalParseTemplateTool,
     OfficeJournalValidateTool,
 )
+from .office_lint_tool import OfficeLintWordTool
 from .office_pdf_tool import (
     OfficeFillPdfFormTool,
     OfficeGeneratePdfTool,
     OfficeReadPdfFormTool,
     OfficeReadPdfTool,
 )
+from .office_repair_tool import OfficeRepairWordTool
 from .office_restore_tool import OfficeRestoreTool
 from .office_template_tool import (
     OfficeAnalyzeWordTemplateTool,
@@ -175,17 +179,22 @@ def register_all_tools(
     registry.register(OfficeFillPdfFormTool(policy=policy))
     registry.register(OfficeAnalyzeWordTemplateTool(policy=policy))
     registry.register(OfficeFillWordTemplateTool(policy=policy))
+    # Office Parity Batch-2: office_analyze —— pandas 本地数据分析
+    registry.register(OfficeAnalyzeTool(policy=policy))
     # 2026-09-10 journal template subsystem: 期刊模板 4 件套
     # （parse_template / fill_from_content / generate_article / validate）。
     # parse/validate 是 READ（docx 解析与 6 类规则校验）；fill/generate 是
     # WRITE_LOCAL（落盘 docx）。全部 requires_tool_context=True。
-    # 注: win7 尚未 cherry-pick office_analyze_tool (PR #561 Batch-2), 故
-    # OfficeAnalyzeTool 暂不在此处注册。win7 一旦 cherry-pick PR #561 时
-    # 再补回。
     registry.register(OfficeJournalParseTemplateTool(policy=policy))
     registry.register(OfficeJournalFillFromContentTool(policy=policy))
     registry.register(OfficeJournalGenerateArticleTool(policy=policy))
     registry.register(OfficeJournalValidateTool(policy=policy))
+    # Round 9 引用体系: office_parse_bibtex（READ）
+    registry.register(OfficeBibTexTool(policy=policy))
+    # Round 10 格式 Linter: office_lint_word（READ）
+    registry.register(OfficeLintWordTool(policy=policy))
+    # Round 12 自动修复: office_repair_word（WRITE_LOCAL）
+    registry.register(OfficeRepairWordTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -297,8 +306,10 @@ __all__ = [
     "OfficeFillPdfFormTool",
     "OfficeAnalyzeWordTemplateTool",
     "OfficeFillWordTemplateTool",
-    # win7 尚未 cherry-pick office_analyze_tool (PR #561 Batch-2)
-    # "OfficeAnalyzeTool",
+    "OfficeAnalyzeTool",
+    "OfficeBibTexTool",
+    "OfficeLintWordTool",
+    "OfficeRepairWordTool",
     "OfficeJournalParseTemplateTool",
     "OfficeJournalFillFromContentTool",
     "OfficeJournalGenerateArticleTool",

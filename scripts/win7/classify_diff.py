@@ -9,7 +9,7 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 C_PATTERNS = [
     r"^backend/requirements", r"^backend/environment\.yml", r"^electron-builder",
     r"^\.github/workflows/release-win7", r"^scripts/bundle-python\.ps1",
-    r"^backend/platform/win7", r"^electron/platform",
+    r"^backend/compat/win7", r"^electron/platform",
 ]
 C_RE = re.compile("|".join(f"({p})" for p in C_PATTERNS))
 B_PATTERNS = [
@@ -53,7 +53,7 @@ def main():
     with out.open("w", newline="", encoding="utf-8") as fo:
         w = csv.writer(fo)
         w.writerow(["path", "class", "handler"])
-        handler_map = {"A": "cherry-pick 直通","B": "垫片适配 backend/platform/win7","C": "平台层收敛","D": "冻结隔离（不合流）"}
+        handler_map = {"A": "cherry-pick 直通","B": "垫片适配 backend/compat/win7","C": "平台层收敛","D": "冻结隔离（不合流）"}
         for p, c in sorted(rows):
             w.writerow([p, c, handler_map[c]])
     from collections import Counter

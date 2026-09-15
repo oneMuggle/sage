@@ -23,7 +23,6 @@ from backend.office.models import (
     WordParagraphSpec,
     WordTableSpec,
 )
-from backend.office.path_safety import is_within
 from backend.office.ppt import generate_ppt
 from backend.office.word import DEFAULT_ASCII_FONT, generate_docx
 
@@ -49,7 +48,7 @@ def test_generate_ppt_creates_file_with_slides(fixture_dir: Path) -> None:
     assert output_path.suffix == ".pptx"
     assert output_path.name == "my-deck.pptx"
     # The output path should be inside the workspace
-    assert is_within(fixture_dir.resolve(), output_path)
+    assert output_path.is_relative_to(fixture_dir.resolve())
 
 
 def test_generate_ppt_appends_pptx_extension_if_missing(fixture_dir: Path) -> None:
@@ -109,7 +108,7 @@ def test_generate_docx_creates_file_with_paragraphs(fixture_dir: Path) -> None:
     assert output_path.exists()
     assert output_path.suffix == ".docx"
     assert output_path.name == "my-report.docx"
-    assert is_within(fixture_dir.resolve(), output_path)
+    assert output_path.is_relative_to(fixture_dir.resolve())
 
 
 def test_generate_docx_with_table(fixture_dir: Path) -> None:
@@ -231,7 +230,7 @@ def test_generate_xlsx_creates_file_with_sheets(fixture_dir: Path) -> None:
     assert output_path.exists()
     assert output_path.suffix == ".xlsx"
     assert output_path.name == "my-data.xlsx"
-    assert is_within(fixture_dir.resolve(), output_path)
+    assert output_path.is_relative_to(fixture_dir.resolve())
 
 
 def test_generate_xlsx_appends_xlsx_extension_if_missing(fixture_dir: Path) -> None:

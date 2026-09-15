@@ -89,7 +89,8 @@ def test_tool_declares_write_local_and_no_context_requirement():
 def test_schema_has_no_workspace_path_parameter():
     props = _tool().schema.parameters["properties"]
     assert "workspace_path" not in props
-    assert set(props) == {"doc_id", "file_path", "ops"}
+    # dry_run: round-2 R4 只读预览开关（默认 false，不传即走正式编辑路径）
+    assert set(props) == {"doc_id", "file_path", "ops", "dry_run"}
 
 
 # ── 参数校验 ──────────────────────────────────────────────────────────

@@ -11,4 +11,4 @@ python scripts/win7/classify_diff.py
 python scripts/win7/parity_report.py
 ```
 
-平台层：`backend/platform/win7/pydantic_compat.py` + `win_compat.py`
+平台层：`backend/compat/win7/pydantic_compat.py` + `win_compat.py`
