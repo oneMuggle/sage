@@ -1771,7 +1771,7 @@ class SageAgent:
         if not required:
             return None
         # required 应该是字符串列表
-        if not isinstance(required, (list, tuple)):
+        if not isinstance(required, list | tuple):
             return None
         missing = [name for name in required if name not in parameters]
         if not missing:
