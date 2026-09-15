@@ -374,6 +374,61 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
 
+        # Model catalog state is independent of legacy model settings.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_entries (
+                provider TEXT NOT NULL, model_id TEXT NOT NULL,
+                source TEXT NOT NULL, pricing_scope TEXT NOT NULL,
+                data TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision > 0),
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(provider, model_id, source, pricing_scope)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_bindings (
+                endpoint_id TEXT NOT NULL, model_id TEXT NOT NULL,
+                provider TEXT NOT NULL, catalog_model_id TEXT NOT NULL,
+                pricing_scope TEXT NOT NULL, updated_at TEXT NOT NULL,
+                PRIMARY KEY(endpoint_id, model_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_probes (
+                endpoint_id TEXT NOT NULL, model_id TEXT NOT NULL,
+                data TEXT NOT NULL, effective_data TEXT NOT NULL,
+                PRIMARY KEY(endpoint_id, model_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_overrides (
+                endpoint_id TEXT NOT NULL, model_id TEXT NOT NULL,
+                data TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision > 0),
+                updated_at TEXT NOT NULL, PRIMARY KEY(endpoint_id, model_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_snapshots (
+                id TEXT PRIMARY KEY, source TEXT NOT NULL,
+                digest TEXT NOT NULL, created_at TEXT NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_snapshot_items (
+                id TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL,
+                candidate TEXT NOT NULL, base_revision INTEGER NOT NULL,
+                before_data TEXT, applied_before TEXT, applied_fields TEXT,
+                clear_fields TEXT NOT NULL DEFAULT '[]',
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN ('pending', 'applied', 'ignored')),
+                reviewed_at TEXT,
+                FOREIGN KEY(snapshot_id) REFERENCES model_catalog_snapshots(id)
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_model_catalog_snapshot_items_snapshot
+            ON model_catalog_snapshot_items(snapshot_id)
+        """)
+
         # 会话表
         # S1 (2026-09-06): run_status/last_error/last_run_at —— 会话级运行态
         # 持久化,侧边栏状态徽章数据源。idle=无运行;running/suspended=活跃流;
