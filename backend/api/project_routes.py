@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.data.database import get_database
+from backend.data.database import _SQLITE_LOCK, get_database, make_with_db_lock
 from backend.data.project_material_repo import (
     MAX_MATERIAL_CONTENT_CHARS,
     ProjectMaterial,
@@ -42,6 +42,12 @@ from backend.office.session_workspace import get_workspace_binding
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+
+# review HIGH #3 fix: 用本地装饰器模式（参见 backend/api/legacy_routes.py
+# 同样的做法, 23 处引用）。所有 SQL 读写统一串行化到进程级 _SQLITE_LOCK。
+def with_db_lock(func):
+    return make_with_db_lock(globals())(func)
 
 
 class ProjectRegisterRequest(BaseModel):
@@ -150,6 +156,7 @@ def _material_model(material: ProjectMaterial) -> ProjectMaterialModel:
 
 
 @router.get("", response_model=ProjectListResponse)
+@with_db_lock
 def list_projects() -> ProjectListResponse:
     repo = ProjectRepository()
     stats = repo.session_stats()
@@ -159,6 +166,7 @@ def list_projects() -> ProjectListResponse:
 
 
 @router.post("", response_model=ProjectModel)
+@with_db_lock
 def register_project(request: ProjectRegisterRequest) -> ProjectModel:
     try:
         project = ProjectRepository().register(request.path)
@@ -169,6 +177,7 @@ def register_project(request: ProjectRegisterRequest) -> ProjectModel:
 
 
 @router.patch("/{project_id}", response_model=ProjectModel)
+@with_db_lock
 def update_project(
     project_id: str, request: ProjectUpdateRequest
 ) -> ProjectModel:
@@ -190,6 +199,7 @@ def update_project(
 
 
 @router.get("/{project_id}/materials", response_model=ProjectMaterialsResponse)
+@with_db_lock
 def list_project_materials(project_id: str) -> ProjectMaterialsResponse:
     _get_project_or_404(project_id)
     materials = ProjectMaterialRepository().list_by_project(project_id)
@@ -203,6 +213,7 @@ def list_project_materials(project_id: str) -> ProjectMaterialsResponse:
     response_model=ProjectMaterialModel,
     status_code=201,
 )
+@with_db_lock
 def add_project_material(
     project_id: str, request: ProjectMaterialAddRequest
 ) -> ProjectMaterialModel:
@@ -222,6 +233,7 @@ def add_project_material(
     "/{project_id}/materials/{material_id}",
     response_model=MaterialMutationResponse,
 )
+@with_db_lock
 def remove_project_material(
     project_id: str, material_id: str
 ) -> MaterialMutationResponse:
@@ -240,14 +252,27 @@ def remove_project_material(
     response_model=ProjectMaterialModel,
     status_code=201,
 )
+@with_db_lock
 def save_answer_as_project_material(
     project_id: str, request: SaveAnswerRequest
 ) -> ProjectMaterialModel:
-    """把当前项目绑定会话中的可见回答保存为项目资料。"""
+    """把当前项目绑定会话中的可见回答保存为项目资料。
+
+    security MEDIUM fix: 仅允许 role == "assistant" 的消息——用户消息
+    (role=user) 内容可能携带 prompt injection 指令,不应直接进入项目
+    资料上下文(后续会被注入 LLM prompt)。
+    """
     project = _get_project_or_404(project_id)
     message = MessageRepository().get(request.message_id)
     if message is None:
         raise _error(404, "message_not_found", "消息不存在")
+    # security: 拒绝非 assistant 消息——避免 user-role 内容注入项目资料
+    if message.role != "assistant":
+        raise _error(
+            400,
+            "message_role_not_savable",
+            "仅可保存助手回答,用户消息不允许作为项目资料",
+        )
 
     binding = get_workspace_binding(
         get_database().get_connection(), message.session_id
@@ -267,6 +292,7 @@ def save_answer_as_project_material(
 
 
 @router.delete("/{project_id}", response_model=ProjectMutationResponse)
+@with_db_lock
 def remove_project(project_id: str) -> ProjectMutationResponse:
     removed = ProjectRepository().remove(project_id)
     if not removed:
@@ -275,6 +301,7 @@ def remove_project(project_id: str) -> ProjectMutationResponse:
 
 
 @router.post("/{project_id}/open", response_model=ProjectOpenResponse)
+@with_db_lock
 def open_project_route(project_id: str) -> ProjectOpenResponse:
     """打开项目：最近活跃会话优先，否则新建会话并绑定项目目录。
 
@@ -296,6 +323,7 @@ def open_project_route(project_id: str) -> ProjectOpenResponse:
 
 
 @router.get("/{project_id}/sessions", response_model=ProjectSessionsResponse)
+@with_db_lock
 def list_project_sessions(project_id: str) -> ProjectSessionsResponse:
     repo = ProjectRepository()
     project = repo.get(project_id)

@@ -21,6 +21,7 @@
 | 13   | [期刊模板面板](./13-journal-template-panel.md) | Office 页面底部：模板规范抽取 / 论文格式校验 / 结构化填充生成符合期刊要求的 Word 文档 |
 | 14   | [可插拔更新源](./14-update-providers.md) | 设置 → 更新源 tab：添加 GitHub/Gitee/GitLab/自建 HTTP 源 + 设为默认 + 测试连接 + 删除；token 用 safeStorage 加密存储，IPC 返回自动 mask |
 | 15   | [出错时如何导出诊断包](./15-diagnostic-export.md) | 一键导出最近 50 次 LLM 调用为 zip 发给支持人员（托盘菜单 / 设置页入口 + 脱敏说明 + Win7 注意） |
+| 16   | [项目上下文（description/instructions/资料）](./16-project-context.md) | 侧边栏项目区:项目说明 + 项目指令 + 资料管理(添加/删除/保存当前回答) + 三态 status 徽章 + 优先级链说明 + 跨会话保留上下文场景 |
 
 ---
 

@@ -43,25 +43,47 @@ def make_with_db_lock(target_globals):
     模块已从本模块 import 同一对象, 语义不变。FunctionType 会丢掉
     functools.wraps 挂上的 ``__wrapped__``/``__doc__``/``__dict__`` (FastAPI
     签名解析沿 ``__wrapped__`` 链), 因此重建后必须再 wraps 一次。
+
+    同时支持 ``async def`` handler —— 用 ``asyncio.iscoroutinefunction``
+    区分: sync handler 返回 sync wrapper, async handler 返回 async wrapper
+    (用 ``asyncio.Lock`` 替代 ``_SQLITE_LOCK``?—— 不, _SQLITE_LOCK 是
+    threading.RLock, run_in_threadpool 内仍需要它)。
     """
+    import asyncio
     import types
 
     lock = _SQLITE_LOCK
 
     def decorator(func):
+        if asyncio.iscoroutinefunction(func):
+
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                with lock:
+                    return await func(*args, **kwargs)
+
+            rebound = types.FunctionType(
+                async_wrapper.__code__,
+                target_globals,
+                async_wrapper.__name__,
+                async_wrapper.__defaults__,
+                async_wrapper.__closure__,
+            )
+            return functools.wraps(func)(rebound)
+
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def sync_wrapper(*args, **kwargs):
             with lock:
                 return func(*args, **kwargs)
 
         # 经闭包携带锁, 重绑 __globals__ 后不依赖目标模块的任何全局名;
         # target_globals 仅服务于 FastAPI 的注解解析。
         rebound = types.FunctionType(
-            wrapper.__code__,
+            sync_wrapper.__code__,
             target_globals,
-            wrapper.__name__,
-            wrapper.__defaults__,
-            wrapper.__closure__,
+            sync_wrapper.__name__,
+            sync_wrapper.__defaults__,
+            sync_wrapper.__closure__,
         )
         return functools.wraps(func)(rebound)
 

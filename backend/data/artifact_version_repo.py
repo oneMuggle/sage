@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import sqlite3
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -27,6 +29,13 @@ def create_version(
 
     快照写入 ``{snapshot_dir}/{artifact_id}_v{N}.txt``。
     单产物最多 MAX_VERSIONS_PER_ARTIFACT 个版本，超限抛 ValueError。
+
+    **并发约束 (review HIGH #2 fix):** caller 必须持有
+    ``_get_lock(artifact_id)`` 的锁,否则 ``MAX(version_num)+1`` 与
+    INSERT 会被并发调用穿透,导致 ``UNIQUE(artifact_id, version_num)``
+    IntegrityError。即使 caller 误用未持锁,本函数仍会把 IntegrityError
+    转为 ValueError 以避免污染 500 响应,但 caller 后续调用将看到错误
+    version_num 而不是干净的 +1。
     """
     db = get_database()
     conn = db.get_connection()
@@ -52,15 +61,27 @@ def create_version(
 
     # 插入版本记录
     created_at = int(time.time() * 1000)
-    conn.execute(
-        """
-        INSERT INTO artifact_versions
-            (artifact_id, version_num, content_hash, snapshot_path, created_at, note)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (artifact_id, new_version, content_hash, str(snapshot_path), created_at, note),
-    )
-    conn.commit()
+    try:
+        conn.execute(
+            """
+            INSERT INTO artifact_versions
+                (artifact_id, version_num, content_hash, snapshot_path, created_at, note)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (artifact_id, new_version, content_hash, str(snapshot_path), created_at, note),
+        )
+        conn.commit()
+    except sqlite3.IntegrityError as e:
+        # 防御性清理已写的临时快照文件
+        conn.rollback()
+        try:
+            snapshot_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise ValueError(
+            f"Artifact {artifact_id} version_num {new_version} 冲突: "
+            "caller 必须持有 _get_lock(artifact_id) 后调用"
+        ) from e
 
     return {
         "artifact_id": artifact_id,
@@ -163,9 +184,6 @@ def get_latest_version(artifact_id: str) -> Optional[Dict[str, Any]]:
 # ==================== Write Serialization ====================
 
 
-import asyncio
-
-
 _artifact_locks: Dict[str, asyncio.Lock] = {}
 
 
@@ -224,7 +242,7 @@ async def apply_edit(
         tmp_path.write_bytes(new_bytes)
         tmp_path.replace(path)
 
-        # 计算新 hash 并创建版本
+        # 计算新 hash 并创建版本（已持锁,caller-aware create_version 安全）
         new_hash = hashlib.sha256(new_bytes).hexdigest()
         snapshot_dir = str(path.parent / ".snapshots")
 
