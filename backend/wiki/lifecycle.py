@@ -2,7 +2,6 @@
 
 实现级联删除：删除 Source 时自动清理派生 Wiki 页、嵌入向量、死链。
 """
-
 import logging
 from pathlib import Path
 from typing import Dict, List, Tuple

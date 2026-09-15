@@ -1,6 +1,7 @@
 """Unit tests for PDF form (AcroForm) read and fill."""
 
 from __future__ import annotations
+from typing import List, Optional
 
 from pathlib import Path
 
@@ -28,7 +29,7 @@ def _make_plain_pdf(path: Path, text: str = "Plain PDF") -> Path:
     return path
 
 
-def _make_form_pdf(path: Path, field_names: list[str] | None = None) -> Path:
+def _make_form_pdf(path: Path, field_names: Optional[List[str]] = None) -> Path:
     """Create a PDF with AcroForm text fields using PyMuPDF's widget API."""
     import pymupdf
 

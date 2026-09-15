@@ -11,13 +11,14 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional, Set, Tuple
 
 import hashlib
 import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Iterable
 
 # 复用 lint 中的 wikilink 正则
 try:
@@ -141,9 +142,9 @@ def _read_frontmatter(path: Path) -> Tuple[Dict[str, str], str]:
 
 def _rel(path: Path, root: Path) -> str:
     try:
-        return str(path.relative_to(root))
+        return path.relative_to(root).as_posix()
     except ValueError:
-        return str(path)
+        return path.as_posix()
 
 
 def _resolve_wikilink(target: str, wiki_dir: Path) -> Optional[Path]:
@@ -201,11 +202,8 @@ class WikiReview:
         for md in self.wiki_dir.rglob("*.md"):
             stem = md.stem.lower()
             existing_targets.add(stem)
-            rel = _rel(md, self.wiki_dir).replace("\\", "/")
-            # py3.8 无 str.removesuffix（py3.9+）
-            if rel.endswith(".md"):
-                rel = rel[: -len(".md")]
-            existing_targets.add(rel.lower())
+            rel = _rel(md, self.wiki_dir)
+            existing_targets.add(rel.replace("\\", "/").removesuffix(".md").lower())
 
         items: List[ReviewItem] = []
         # target → 指向它的源文件列表

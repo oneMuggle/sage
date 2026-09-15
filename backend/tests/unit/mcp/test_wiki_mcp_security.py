@@ -1,12 +1,18 @@
 """MCP Wiki 路径安全回归测试。"""
 
 import json
+import os
 
 import pytest
 from fastapi import HTTPException
 
 from backend.wiki import mcp_server
 from backend.wiki.mcp_server import _wiki_files, _wiki_read, _wiki_status
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="wiki MCP 安全用例依赖 POSIX symlink/no-follow 原语",
+)
 
 
 @pytest.mark.asyncio()

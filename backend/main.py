@@ -98,6 +98,7 @@ from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
 from backend.api.usage_routes import router as usage_router
 from backend.api.v1 import updates as updates_router_module
+from backend.api.project_routes import router as project_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.application.services.chat_service import ChatService
@@ -881,6 +882,8 @@ from backend.api.orch_run_control import router as orch_run_router
 
 app.include_router(orch_run_router, prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
+# 项目模块 P1-P9（2026-09-13）：projects 注册表（wiki 授权桥接 / 全局搜索分组）
+app.include_router(project_router, prefix="/api/v1")
 # M6 生态扩展: 用量/成本面板 (内存态 tracker, 与 API_MODE 无关)
 app.include_router(usage_router, prefix="/api/v1")
 # U18: HTML 会话导出 (POST /sessions/{id}/export, 与 API_MODE 无关)

@@ -23,6 +23,7 @@ Coverage:
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import dataclasses
 import sqlite3
@@ -96,7 +97,7 @@ def _make_doc(
     *,
     doc_id: str,
     workspace_path: str,
-    archived_at: int | None = None,
+    archived_at: Optional[int] = None,
 ) -> OfficeDocumentSummary:
     """Helper: build an OfficeDocumentSummary for save_document."""
     return OfficeDocumentSummary(
