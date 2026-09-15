@@ -18,6 +18,22 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+## [v0.4.9-alpha.34-win7] - 2026-09-15
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 收口 7 commits：py3.8 后端 round 3 / Ruff lint 收口 / main 最大化对齐 B1-B6 / UI/Code 字体定制 / Windows bash 工具 + 工具 schema 校验。
+
+### Fixed
+- **Windows bash 工具** (#858): `spawn_verified` 在 Windows 走 `CREATE_NEW_PROCESS_GROUP` 建立独立进程组；`kill_process_tree` 走 `taskkill.exe /T /F` 递归终止进程树，taskkill 失败回退到 leader kill。修复 win7 安装包上 bash 工具报错 "平台不支持安全进程组回收" 的问题。
+- **工具 schema 校验** (#858): `execute_tool` / `_await_tool_execution` 分发前调用 `_validate_required_params` 读取 `tool.schema.parameters.required`，LLM 漏传 required 参数时返回友好错误而非 Python TypeError。修复 win7 安装包上 office_read 抛 "execute() missing 1 required positional argument: doc_id" 的问题。
+- **REPL pending cleanup** (#858): Windows `observed=None` 路径不再直接 return，改走 `kill_process_tree`，避免原 kill 失败的进程永远残留在 `_PENDING_CLEANUPS`。
+- **execute_code stderr buffering** (#850 round 3): py3.8 兼容路径，确保 stderr 不被吞
+- **hardlink_to**: py3.8 缺失 API 用 `os.link` 兜底
+- **Ruff 收口** (#850 round 3): py38 typing 回写产生的 I001/F811/F401 全部清零
+
+### Changed
+- **main 最大化对齐** (#850): B1-B6 + Phase 3 自动化（auto_sync + parity 分级守门 + win7-sync workflow），release/win7 与 main 差异 1937 → 226
+- **UI/Code 字体定制子系统** (#856): cherry-pick main PR #851
+
 ## [v0.4.9-alpha.33-win7] - 2026-09-14
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 修复 LLM 代理响应编码错误。
