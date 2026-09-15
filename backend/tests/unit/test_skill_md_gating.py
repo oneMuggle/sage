@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from backend.skills.skill_md.gating import (
@@ -17,7 +19,10 @@ from backend.skills.skill_md.gating import (
 )
 from backend.skills.skill_md.skill import RequiresSpec, SkillMdDocument
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(os.name == "nt", reason="skill gating 读取依赖 POSIX O_NOFOLLOW"),
+]
 
 
 # =====================================================================

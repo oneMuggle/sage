@@ -1,10 +1,14 @@
 // Markdown Preview - render markdown with code highlighting
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export function MarkdownPreview({ content }: { content: string }) {
   return (
     <div className="prose prose-sm max-w-none p-4 text-text-secondary">
       <ReactMarkdown
+        // P3: 补 remark-gfm —— 组件层早已映射 table/th/td，但插件缺失导致
+        // GFM 表格/任务列表/删除线语法根本不解析，映射是死代码
+        remarkPlugins={[remarkGfm]}
         components={{
           h1: ({ children }) => (
             <h1 className="text-2xl font-bold text-text mt-6 mb-3">{children}</h1>

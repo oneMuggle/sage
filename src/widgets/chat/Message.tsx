@@ -10,21 +10,27 @@ import {
   Eye,
   EyeOff,
   Pencil,
+  RefreshCw,
+  Check,
+  BrainCircuit,
   Quote,
 } from 'lucide-react';
-import { memo } from 'react';
-import { useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 
 import { MediaAttachment } from '../../features/chat/MediaAttachment';
+import { THINKING_PLACEHOLDER } from '../../features/send-message/thinkingPlaceholder';
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
+import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownChunks';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
+import { HtmlCodeBlock } from './HtmlCodeBlock';
+import { MarkdownImage } from './MarkdownImage';
 import { MermaidBlock } from './MermaidBlock';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
 
@@ -59,16 +65,210 @@ function CodeBlock({ language, children }: { language?: string; children: string
   return <ShikiCodeBlock language={language}>{children}</ShikiCodeBlock>;
 }
 
+/** markdown 插件集 — 模块级稳定引用，避免每次渲染重建数组 */
+const MD_REMARK_PLUGINS = [remarkGfm, remarkMath];
+const MD_REHYPE_PLUGINS = [rehypeKatex];
+
+const URL_SPLIT_RE = /(https?:\/\/[^\s<>()]+)/;
+
+/** P3: 用户消息纯文本中的 URL 自动链接化（assistant 走 markdown 已自带链接） */
+function renderTextWithLinks(text: string): ReactNode[] {
+  return text.split(URL_SPLIT_RE).map((part, i) =>
+    /^https?:\/\//.test(part) ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline break-all"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {part}
+      </a>
+    ) : (
+      part
+    ),
+  );
+}
+
+/** 流式未闭合围栏的降级代码渲染 — 纯文本 pre，不随 delta 重复触发 Shiki/mermaid */
+function PlainCodeBlock({ className, children }: { className?: string; children: unknown }) {
+  const content = String(children).replace(/\n$/, '');
+  if (!className && !content.includes('\n')) {
+    return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{content}</code>;
+  }
+  return (
+    <pre className="bg-[#282c34] text-gray-300 p-3 text-xs leading-relaxed overflow-x-auto rounded-md my-2">
+      <code>{content}</code>
+    </pre>
+  );
+}
+
+/** 自定义 component 映射 — 模块级单例（原先内联在 JSX 里，每次渲染重建整个映射对象） */
+const markdownComponents = {
+  code({ className, children }: { className?: string; children: unknown }) {
+    const match = /language-(\w+)/.exec(className || '');
+    const lang = match ? match[1] : undefined;
+    const content = String(children).replace(/\n$/, '');
+    // Inline code detection: no language class and short content
+    const isInlineCode = !className && !content.includes('\n');
+    if (isInlineCode || !lang) {
+      return (
+        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{content}</code>
+      );
+    }
+    // U7': Mermaid 图表渲染（动态加载，失败回退源码展示）
+    if (lang === 'mermaid') {
+      return <MermaidBlock code={content} />;
+    }
+    // P1: HTML 代码块支持源码/预览切换（sandbox iframe）
+    if (lang === 'html') {
+      return <HtmlCodeBlock code={content} />;
+    }
+    return <CodeBlock language={lang}>{content}</CodeBlock>;
+  },
+  // P1: 图片加载骨架 + 渐入 + 点击放大（Lightbox）
+  img({ src, alt }: { src?: string; alt?: string }) {
+    return <MarkdownImage src={src} alt={alt} />;
+  },
+  pre({ children }: { children?: ReactNode }) {
+    return <>{children}</>;
+  },
+  table({ children }: { children?: ReactNode }) {
+    return (
+      // P2: 长表格纵向限高滚动 + 表头粘性（此前只能横向滚动，数十行的表
+      // 把整条消息拉得极长）
+      <div className="overflow-x-auto my-3 max-h-80 overflow-y-auto">
+        <table className="min-w-full text-xs border-collapse border border-border">{children}</table>
+      </div>
+    );
+  },
+  th({ children }: { children?: ReactNode }) {
+    return (
+      <th className="border border-border px-3 py-1.5 bg-bg-subtle font-semibold text-left sticky top-0 z-[1]">
+        {children}
+      </th>
+    );
+  },
+  td({ children }: { children?: ReactNode }) {
+    return <td className="border border-border px-3 py-1.5">{children}</td>;
+  },
+  p({ children }: { children?: ReactNode }) {
+    return <p className="mb-2 last:mb-0">{children}</p>;
+  },
+  ul({ children }: { children?: ReactNode }) {
+    return <ul className="list-disc list-outside ml-5 mb-2">{children}</ul>;
+  },
+  ol({ children }: { children?: ReactNode }) {
+    return <ol className="list-decimal list-outside ml-5 mb-2">{children}</ol>;
+  },
+  li({ children }: { children?: ReactNode }) {
+    return <li className="mb-0.5">{children}</li>;
+  },
+  // P2: GFM 任务列表 checkbox 主题化（默认渲染无样式反馈）
+  input({ type, checked, disabled }: { type?: string; checked?: boolean; disabled?: boolean }) {
+    if (type === 'checkbox') {
+      return (
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          className="mr-1.5 w-3.5 h-3.5 align-middle accent-primary"
+        />
+      );
+    }
+    return <input type={type} checked={checked} disabled={disabled} />;
+  },
+  a({ href, children }: { href?: string; children?: ReactNode }) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+        {children}
+      </a>
+    );
+  },
+  blockquote({ children }: { children?: ReactNode }) {
+    return (
+      <blockquote className="border-l-4 border-border pl-3 py-1 my-2 text-muted italic">
+        {children}
+      </blockquote>
+    );
+  },
+  h1({ children }: { children?: ReactNode }) {
+    return <h1 className="text-lg font-bold mt-4 mb-2">{children}</h1>;
+  },
+  h2({ children }: { children?: ReactNode }) {
+    return <h2 className="text-base font-bold mt-3 mb-2">{children}</h2>;
+  },
+  h3({ children }: { children?: ReactNode }) {
+    return <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>;
+  },
+};
+
+/** 流式 live 尾块专用映射 — 未闭合围栏内的代码块降级纯文本 */
+const liveMarkdownComponents: typeof markdownComponents = {
+  ...markdownComponents,
+  code: PlainCodeBlock,
+};
+
+/**
+ * memo 化的 markdown 块渲染器 — P1 流式分块的关键。
+ * 比较器按字符串值相等跳过重解析（slice 出的新字符串实例也能命中），
+ * 已确定的稳定前缀块在每个 delta 到达时零成本跳过。
+ */
+const MarkdownChunk = memo(
+  function MarkdownChunk({ md, plainFences }: { md: string; plainFences?: boolean }) {
+    // Components 断言: 映射对象是模块级单例，handler 参数用窄化类型
+    // （react-markdown 的 ExtraProps 交叉类型过宽，直接标注反而失配）
+    const components = (
+      plainFences ? liveMarkdownComponents : markdownComponents
+    ) as Components;
+    return (
+      <ReactMarkdown
+        remarkPlugins={MD_REMARK_PLUGINS}
+        rehypePlugins={MD_REHYPE_PLUGINS}
+        components={components}
+      >
+        {md}
+      </ReactMarkdown>
+    );
+  },
+  (prev, next) => prev.md === next.md && prev.plainFences === next.plainFences,
+);
+
+/** ThinkingShimmer — 等待首 token 的 shimmer 占位（替代 "🤔 思考中…" 静态文本）。
+ *  两根相位错开的扫光条，animate-shimmer 见 index.css；reduced-motion 下
+ *  全局 media query 会把动画压到 0.01ms，自然退化为静态骨架。 */
+function ThinkingShimmer() {
+  return (
+    <div className="flex items-center gap-2 py-1" data-testid="thinking-shimmer">
+      <span className="h-2.5 w-44 rounded-full animate-shimmer" />
+      <span
+        className="h-2.5 w-24 rounded-full animate-shimmer"
+        style={{ animationDelay: '-0.8s' }}
+      />
+    </div>
+  );
+}
+
 /** ThinkingPanel - 可折叠的 LLM 思考过程展示面板
  *  P1: 流式 reasoning 时自动展开 (isStreaming=true)
  */
 function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStreaming?: boolean }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  // P21: 流式期间自动滚动到底部，显示最新思考内容
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   // P1 fix: 当 isStreaming 变为 true 时自动展开 (useState 只读初始值,需 useEffect 同步)
   useEffect(() => {
     if (isStreaming) setIsExpanded(true);
   }, [isStreaming]);
+
+  // 流式期间 reasoning 增长时自动滚动到底部
+  useEffect(() => {
+    if (isStreaming && contentRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    }
+  }, [reasoning]);
 
   return (
     <div className="mb-2 border border-border/50 rounded-radius-sm overflow-hidden">
@@ -86,7 +286,10 @@ function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStream
         />
       </button>
       {isExpanded && (
-        <div className="px-3 py-2 bg-bg-subtle/50 border-t border-border/50 text-xs text-text-secondary leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap">
+        <div
+          ref={contentRef}
+          className="px-3 py-2 bg-bg-subtle/50 border-t border-border/50 text-xs text-text-secondary leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap"
+        >
           {reasoning}
         </div>
       )}
@@ -181,6 +384,29 @@ function MessageComponent({
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const isError = message.content?.startsWith('[错误') ?? false;
+  // 2026-09-13 P0: 首个 token 到达前 content 是哨兵占位值 — 渲染 shimmer
+  // 骨架而非把 "🤔 思考中…" 当 markdown 静态文本展示。agent 中间态文案
+  // (思考/调用工具) 会覆盖占位值，覆盖后自动回退 markdown 渲染。
+  const isThinkingPlaceholder =
+    isAssistant && isStreaming === true && message.content === THINKING_PLACEHOLDER;
+  // P1 流式分块: 已确定前缀切稳定块（memo 化跳过重解析），只有 live 尾块
+  // 随 delta 全量 re-parse；非流式整体单块渲染，DOM 与旧实现一致。
+  const displayContent = useMemo(
+    () => message.content.replace(/<img\s+[^>]*src=["']data:[^"']*["'][^>]*\/?>/gi, ''),
+    [message.content],
+  );
+  const chunks = useMemo(
+    () =>
+      isStreaming === true
+        ? splitStableChunks(displayContent)
+        : { stable: [], live: displayContent },
+    [displayContent, isStreaming],
+  );
+  // 未闭合围栏: live 尾块里的半截代码降级纯文本，闭合后自动恢复高亮/mermaid
+  const unclosedFence = useMemo(
+    () => isStreaming === true && hasUnclosedFence(displayContent),
+    [displayContent, isStreaming],
+  );
   const toolCalls: ToolCall[] = message.tool_calls ?? [];
   // M4: 只有 user/assistant 消息可分叉（system/tool 行没有分叉语义）
   const canFork = Boolean(onFork) && (isUser || isAssistant);
@@ -197,14 +423,20 @@ function MessageComponent({
   // P0-1: 引用/保存记忆对 user+assistant 均可
   const canQuote = Boolean(onQuote) && (isUser || isAssistant);
   const canSaveToMemory = Boolean(onSaveToMemory) && (isUser || isAssistant);
+  const [copied, setCopied] = useState(false);
+  // R17-E: 记忆召回明细展开态
+  const [memoryExpanded, setMemoryExpanded] = useState(false);
+  const memoryRefs = message.memory_refs ?? [];
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   return (
     <div
-      data-turn-id={message.id}
+      data-testid={isAssistant ? 'chat-message-assistant' : undefined}
       className={`flex gap-3 mb-5 w-full animate-message-enter ${isUser ? 'flex-row-reverse' : ''}`}
     >
       {/* 头像 */}
@@ -323,113 +555,47 @@ function MessageComponent({
         >
           {/* Message content with Markdown */}
           {isAssistant ? (
-            <div className="max-w-none">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeKatex]}
-                components={{
-                  code({ className, children }) {
-                    const match = /language-(\w+)/.exec(className || '');
-                    const lang = match ? match[1] : undefined;
-                    const content = String(children).replace(/\n$/, '');
-                    // Inline code detection: no language class and short content
-                    const isInlineCode = !className && !content.includes('\n');
-                    if (isInlineCode) {
-                      return (
-                        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">
-                          {content}
-                        </code>
-                      );
-                    }
-                    if (!lang) {
-                      return (
-                        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">
-                          {content}
-                        </code>
-                      );
-                    }
-                    // U7': Mermaid 图表渲染（动态加载，失败回退源码展示）
-                    if (lang === 'mermaid') {
-                      return <MermaidBlock code={content} />;
-                    }
-                    return <CodeBlock language={lang}>{content}</CodeBlock>;
-                  },
-                  pre({ children }) {
-                    return <>{children}</>;
-                  },
-                  table({ children }) {
-                    return (
-                      <div className="overflow-x-auto my-3">
-                        <table className="min-w-full text-xs border-collapse border border-border">
-                          {children}
-                        </table>
-                      </div>
-                    );
-                  },
-                  th({ children }) {
-                    return (
-                      <th className="border border-border px-3 py-1.5 bg-bg-subtle font-semibold text-left">
-                        {children}
-                      </th>
-                    );
-                  },
-                  td({ children }) {
-                    return <td className="border border-border px-3 py-1.5">{children}</td>;
-                  },
-                  p({ children }) {
-                    return <p className="mb-2 last:mb-0">{children}</p>;
-                  },
-                  ul({ children }) {
-                    return <ul className="list-disc list-outside ml-5 mb-2">{children}</ul>;
-                  },
-                  ol({ children }) {
-                    return <ol className="list-decimal list-outside ml-5 mb-2">{children}</ol>;
-                  },
-                  li({ children }) {
-                    return <li className="mb-0.5">{children}</li>;
-                  },
-                  a({ href, children }) {
-                    return (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        {children}
-                      </a>
-                    );
-                  },
-                  blockquote({ children }) {
-                    return (
-                      <blockquote className="border-l-4 border-border pl-3 py-1 my-2 text-muted italic">
-                        {children}
-                      </blockquote>
-                    );
-                  },
-                  h1({ children }) {
-                    return <h1 className="text-lg font-bold mt-4 mb-2">{children}</h1>;
-                  },
-                  h2({ children }) {
-                    return <h2 className="text-base font-bold mt-3 mb-2">{children}</h2>;
-                  },
-                  h3({ children }) {
-                    return <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>;
-                  },
-                }}
-              >
-                {message.content.replace(/<img\s+[^>]*src=["']data:[^"']*["'][^>]*\/?>/gi, '')}
-              </ReactMarkdown>
-            </div>
+            isThinkingPlaceholder ? (
+              <ThinkingShimmer />
+            ) : (
+              <div className="max-w-none max-w-3xl mx-auto w-full">
+                {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
+                    长文不再一行拉满；表格/代码块仍在容器内滚动 */}
+                {chunks.stable.map((md, i) => (
+                  <MarkdownChunk key={i} md={md} />
+                ))}
+                <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
+                {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
+                {isStreaming && (
+                  <span
+                    className="stream-cursor"
+                    aria-hidden="true"
+                    data-testid="stream-cursor"
+                  />
+                )}
+              </div>
+            )
           ) : (
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <p className="whitespace-pre-wrap">{renderTextWithLinks(message.content)}</p>
           )}
         </div>
 
         {/* 底部信息 */}
         <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
-          {message.memory_applied && message.memory_applied > 0 && (
-            <span className="text-primary">{message.memory_applied} 条记忆已应用</span>
+          {message.memory_applied != null && message.memory_applied > 0 && (
+            <button
+              type="button"
+              onClick={() => setMemoryExpanded((v) => !v)}
+              className="inline-flex items-center gap-0.5 text-primary hover:underline"
+              title={t('chat.memory_toggle')}
+              data-testid="memory-used-toggle"
+            >
+              <BrainCircuit className="w-3 h-3" />
+              {message.memory_applied} {t('chat.memory_applied')}
+              <ChevronDown
+                className={`w-3 h-3 transition-transform ${memoryExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
           )}
           <span>
             {new Date(message.created_at).toLocaleTimeString([], {
@@ -439,25 +605,39 @@ function MessageComponent({
           </span>
         </div>
 
+        {/* R17-E: 记忆召回明细（memory_used 流事件携带，可展开） */}
+        {memoryExpanded && memoryRefs.length > 0 && (
+          <div
+            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-1"
+            data-testid="memory-used-list"
+          >
+            {memoryRefs.map((ref) => (
+              <div key={ref.id} className="flex items-start gap-1.5">
+                <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
+                  {ref.memory_type}
+                </span>
+                <span className="text-text-secondary break-all">{ref.preview}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Action buttons */}
-        {(canCopy ||
-          onFeedback ||
-          canFork ||
-          canEditResend ||
-          canDelete ||
-          canRegenerate ||
-          canQuote ||
-          canSaveToMemory) && (
+        {(canCopy || onFeedback || canFork || canEditResend || canDelete || canRegenerate || canQuote || canSaveToMemory) && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
+            {canCopy && (
+              <button
+                onClick={copyToClipboard}
+                className="p-1 rounded hover:bg-bg-hover"
+                title={t('chat.copy')}
+                aria-label={t('chat.copy')}
+                data-testid="copy-message"
+              >
+                {copied ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
+              </button>
+            )}
             {onFeedback && (
               <>
-                <button
-                  onClick={copyToClipboard}
-                  className="p-1 rounded hover:bg-bg-hover"
-                  title="复制"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
                 <button
                   onClick={() => onFeedback(message.id, 'up')}
                   className="p-1 rounded hover:bg-bg-hover"
@@ -473,6 +653,17 @@ function MessageComponent({
                   <ThumbsDown className="w-4 h-4" />
                 </button>
               </>
+            )}
+            {canRegenerate && (
+              <button
+                onClick={() => onRegenerate?.(message.id)}
+                className="p-1 rounded hover:bg-bg-hover"
+                title={t('chat.regenerate')}
+                aria-label={t('chat.regenerate')}
+                data-testid="regenerate-message"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
             )}
             {canEditResend && (
               <button

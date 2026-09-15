@@ -2,7 +2,8 @@
 M5 — AgentTool (in-loop sub-agent) unit tests.
 
 - mocked LLM sub-agent → answer returned + lane created SUCCEEDED
-- sub-agent tool whitelist is strictly read-only (no terminal/write/agent)
+- sub-agent tool whitelist is read-only + controlled browser channel
+  (no terminal/write_file/memory_save/agent)
 - sub-agent attempting terminal → registry rejects (tool not found), loop recovers
 - LLM failure → error ToolResult, caller (primary loop) continues
 - output cap (20_000 chars) enforced
@@ -13,9 +14,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 import backend.tools.agent_tool as agent_tool_module
 from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
@@ -27,6 +31,11 @@ from backend.tools.agent_tool import (
     build_readonly_tool_registry,
 )
 from backend.tools.base import ToolResult
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="subagent 安全用例依赖 symlink 特权（WinError 1314）",
+)
 
 
 def _done_response(content: str) -> LLMResponse:
@@ -93,7 +102,7 @@ class TestReadonlyWhitelist:
         assert workspace.is_dir()
 
     def test_whitelist_is_read_only(self):
-        """Registry exposes exactly the six read-only tools — nothing else."""
+        """Registry exposes exactly the read-only tools + browser channel — nothing else."""
         registry = build_readonly_tool_registry()
 
         names = set(registry.list_names())
@@ -105,6 +114,13 @@ class TestReadonlyWhitelist:
             "http_download",
             "memory_search",
             "calculator",
+            # Round 6 B2: 浏览器通道（受审批与网络模式门禁）
+            "browser_launch",
+            "browser_navigate",
+            "browser_snapshot",
+            "browser_interact",
+            "browser_cookies",
+            "browser_close",
         }
         # Never granted to sub-agents.
         for dangerous in ("terminal", "write_file", "memory_save", "agent", "office_read"):

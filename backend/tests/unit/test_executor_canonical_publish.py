@@ -6,10 +6,12 @@ RunEvent and publishes it, without breaking the legacy event_recorder flow.
 """
 
 from __future__ import annotations
+from typing import List, Optional
 
 import asyncio
+import contextlib
+import os
 import tempfile
-from typing import List, Optional
 
 import pytest
 
@@ -49,8 +51,9 @@ def temp_db():
     db = Database(db_path=tmp_path)
     db.init_db()
     yield db, tmp_path
-    import os
-    os.unlink(tmp_path)
+    # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
+    with contextlib.suppress(PermissionError):
+        os.unlink(tmp_path)
 
 
 @pytest.fixture()

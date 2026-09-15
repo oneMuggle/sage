@@ -1,3 +1,6 @@
+/* U7 (批次 C-2): LaTeX 公式 (KaTeX) 样式 */
+@import 'katex/dist/katex.min.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -366,6 +369,61 @@ body {
   animation: fade-enter 0.15s ease-out;
 }
 
+/* 路由页面进入动画（进入式：新页面 fade + 轻微上移，不做退出动画，
+   避免双页面同时驻留的布局跳动。Layout 按 location.pathname key 挂类） */
+@keyframes route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-route-enter {
+  animation: route-enter 0.18s ease-out;
+}
+
+/* 流式生成光标 — 生成期间跟随在内容尾部闪烁 */
+@keyframes cursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.stream-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  margin-top: 2px;
+  border-radius: 2px;
+  background: var(--color-primary);
+  animation: cursor-blink 1s steps(2, start) infinite;
+}
+
+/* 思考中 shimmer 扫光 — 等待首 token 的占位骨架（Message/ThinkingShimmer） */
+@keyframes shimmer-sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-muted) 25%,
+    var(--color-bg-hover) 45%,
+    var(--color-bg-muted) 65%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.6s linear infinite;
+}
+
 /* 尊重减少动画偏好 */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -375,6 +433,15 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* P21: markdown 分隔线（hr）与行内样式增强 */
+.max-w-none hr,
+.max-w-3xl hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1.5rem 0;
+}
+
 
 /* Shiki 代码块样式 */
 .shiki-code pre {

@@ -324,8 +324,12 @@ async def test_on_session_end_consolidates_and_emits(tmp_db_path):
     manager = _real_memory_manager(tmp_db_path)
     # §1.3a FK (#290): consolidate 会把压缩摘要写入 memories_episodic(session_id)。
     ensure_session(manager.episodic.db, "session-99")
+    # main 的 WorkingMemory 按 session_id 隔离：消息必须落在被 consolidate 的
+    # 会话下，否则 consolidate("session-99") 取不到上下文而 no-op。
     manager.add_to_working(
-        "user", "hello there this is a test message worth remembering"
+        "user",
+        "hello there this is a test message worth remembering",
+        session_id="session-99",
     )
 
     hooks = HookRegistry()
@@ -340,7 +344,7 @@ async def test_on_session_end_consolidates_and_emits(tmp_db_path):
     assert len(events) == 1
     assert events[0].session_id == "session-99"
     # consolidation ran: working memory cleared, episodic has a summary
-    assert len(manager.working.messages) == 0
+    assert manager.working.get_context("session-99") == []
     assert manager.episodic.count() >= 1
 
 

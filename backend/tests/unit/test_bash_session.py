@@ -14,6 +14,11 @@ from unittest.mock import Mock
 
 import pytest
 
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="bash session 依赖 POSIX 进程组（start_verified_process 在 Windows 按设计拒绝）",
+)
+
 from backend.tools.bash_session import (
     MAX_BACKGROUND_SESSIONS,
     BashSessionRegistry,
@@ -29,7 +34,13 @@ from backend.tools.subprocess_util import (
     start_bounded_output_collectors,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(
+        os.name == "nt",
+        reason="bash session 依赖 POSIX 进程组（start_verified_process 在 Windows 按设计拒绝）",
+    ),
+]
 
 READ_CAP = 30 * 1024
 

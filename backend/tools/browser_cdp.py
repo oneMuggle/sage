@@ -78,12 +78,7 @@ def _windows_candidates() -> List[Path]:
     chrome_rel = r"Google\Chrome\Application\chrome.exe"
     edge_rel = r"Microsoft\Edge\Application\msedge.exe"
     bases = [program_files, program_files_x86, local_appdata]
-    return [
-        Path(base) / rel
-        for base in bases
-        if base
-        for rel in (chrome_rel, edge_rel)
-    ]
+    return [Path(base) / rel for base in bases if base for rel in (chrome_rel, edge_rel)]
 
 
 def discover_browser_executable() -> Optional[str]:
@@ -273,6 +268,11 @@ def _build_launch_command(
         "--disable-extensions",
         "--disable-background-networking",
         "--window-size=1440,900",
+        # AB4（Round 5）：不向页面暴露自动化痕迹 —— 默认 Chrome 会把
+        # navigator.webdriver 置 true 并挂 "Chrome is being controlled" 提示，
+        # 是最廉价的 bot 信号。只做"不主动暴露"，不做验证码破解。
+        "--disable-blink-features=AutomationControlled",
+        "--disable-infobars",
     ]
     if proxy_flag:
         command.append(f"--proxy-server={proxy_flag}")
@@ -318,9 +318,7 @@ def launch_browser(
         user_data_dir = tempfile.mkdtemp(prefix="sage_browser_")
     from .http_factory import browser_proxy_flag
 
-    command = _build_launch_command(
-        executable, headless, user_data_dir, browser_proxy_flag()
-    )
+    command = _build_launch_command(executable, headless, user_data_dir, browser_proxy_flag())
 
     try:
         process = subprocess.Popen(  # noqa: S603 — 可执行文件来自受控发现逻辑
@@ -384,7 +382,9 @@ class _CDPConnection:
     """单次调用的短连接：握手、attach、命令、按 id 收响应。"""
 
     def __init__(self, session: BrowserSession) -> None:
-        self.sock = ws_connect("127.0.0.1", session.port, session.ws_path, timeout=CDP_TIMEOUT_SECONDS)
+        self.sock = ws_connect(
+            "127.0.0.1", session.port, session.ws_path, timeout=CDP_TIMEOUT_SECONDS
+        )
         self._next_id = 0
 
     def command(
@@ -407,9 +407,7 @@ class _CDPConnection:
                 continue  # 事件帧 —— 丢弃
             if "error" in data:
                 error = data["error"]
-                raise BrowserCDPError(
-                    f"CDP 错误 ({method}): {error.get('message', 'unknown')}"
-                )
+                raise BrowserCDPError(f"CDP 错误 ({method}): {error.get('message', 'unknown')}")
             return data.get("result") or {}
 
     def close(self) -> None:
@@ -422,11 +420,7 @@ def _list_page_targets(session: BrowserSession) -> List[Dict[str, Any]]:
         result = connection.command("Target.getTargets")
     finally:
         connection.close()
-    return [
-        info
-        for info in result.get("targetInfos", [])
-        if info.get("type") == "page"
-    ]
+    return [info for info in result.get("targetInfos", []) if info.get("type") == "page"]
 
 
 def ensure_page_target(session: BrowserSession, target_id: Optional[str] = None) -> str:
@@ -464,9 +458,7 @@ def cdp_command(
     try:
         # 浏览器级方法不带 sessionId（Target.* 自身即浏览器级；Browser.* 如
         # setDownloadBehavior 走浏览器作用域，attach 页面反而可能报错）。
-        if method.startswith(("Target.", "Browser.")) and method not in (
-            "Target.attachToTarget",
-        ):
+        if method.startswith(("Target.", "Browser.")) and method not in ("Target.attachToTarget",):
             return connection.command(method, params)
         resolved_target = ensure_page_target(session, target_id)
         attached = connection.command(
@@ -480,6 +472,46 @@ def cdp_command(
         connection.close()
 
 
+#: AB4 最小 stealth：只堵三项最廉价的自动化信号，不追求完整 stealth 库。
+#: 新 headless（--headless=new）下 navigator.webdriver 仍为 true，需在文档创建前覆写。
+STEALTH_SCRIPT = """
+(() => {
+  try {
+    Object.defineProperty(Navigator.prototype, 'webdriver', {get: () => undefined, configurable: true});
+  } catch (e) {}
+  try {
+    if (!window.chrome) { window.chrome = { runtime: {}, loadTimes() {}, csi() {}, app: {} }; }
+  } catch (e) {}
+  try {
+    if (!navigator.languages || navigator.languages.length === 0) {
+      Object.defineProperty(navigator, 'languages', {get: () => ['zh-CN', 'zh', 'en'], configurable: true});
+    }
+  } catch (e) {}
+})();
+"""
+
+
+def apply_stealth(
+    session: BrowserSession, target_id: Optional[str] = None, command: Any = None
+) -> bool:
+    """在目标页注入 ``STEALTH_SCRIPT``（新文档创建前执行）。失败返回 False，不抛。
+
+    ``command`` 可注入 ``cdp_command`` 同签名函数（调用方模块级补丁 / 测试假体）。
+    """
+    send = command or cdp_command
+    try:
+        send(
+            session,
+            "Page.addScriptToEvaluateOnNewDocument",
+            {"source": STEALTH_SCRIPT},
+            target_id=target_id,
+        )
+        return True
+    except BrowserCDPError as exc:
+        logger.debug("stealth 注入失败（忽略）: %s", exc)
+        return False
+
+
 __all__ = [
     "BrowserCDPError",
     "BrowserSession",
@@ -488,6 +520,8 @@ __all__ = [
     "LAUNCH_TIMEOUT_SECONDS",
     "MAX_BROWSER_SESSIONS",
     "RESERVED_BROWSER_ID",
+    "STEALTH_SCRIPT",
+    "apply_stealth",
     "browser_downloads_root",
     "cdp_command",
     "discover_browser_executable",

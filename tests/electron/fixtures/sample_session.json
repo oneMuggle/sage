@@ -1,0 +1,7 @@
+{
+  "id": "sess_sample_001",
+  "title": "Sample Session for E2E",
+  "created_at_ms": 1700000000000,
+  "updated_at_ms": 1700000000000,
+  "workspace_path": "/tmp/sample_workspace"
+}

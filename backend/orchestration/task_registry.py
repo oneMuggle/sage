@@ -9,6 +9,7 @@ Provides high-level operations for task management:
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import uuid
 from typing import Any, Dict, List, Optional, Union

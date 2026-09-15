@@ -17,87 +17,32 @@
 
 import { spawn } from 'node:child_process';
 
-/**
- * alpha.8 (2026-08-27): doctor 子进程环境白名单 — 防止宿主 shell 里
- * OPENAI_API_KEY/ANTHROPIC_API_KEY 等凭据通过 ``process.env`` 扩散到
- * 子进程 stdout/stderr 进而落到 NDJSON 日志。
- *
- * 设计：双层过滤：
- *   1. 显式 allowlist (POSIX/Win + Python + Sage 自有变量)
- *   2. 黑名单 regex (api[_]?key / secret / token / password / credential,
- *      大小写不敏感, 子串匹配)
- *
- * ``options.env`` 显式传入的 key 总被信任 (调用方必须保证它们无敏感值)。
- */
-const SAFE_ENV_ALLOWLIST = new Set([
-  // POSIX basics
-  'PATH',
-  'HOME',
-  'SHELL',
-  'USER',
-  'LOGNAME',
-  'LANG',
-  'LC_ALL',
-  'LC_CTYPE',
-  'TZ',
-  // Windows basics
-  'SYSTEMROOT',
-  'WINDIR',
-  'TEMP',
-  'TMP',
-  'USERPROFILE',
-  'APPDATA',
-  'LOCALAPPDATA',
-  'PATHEXT',
-  // Python runtime
-  'PYTHONPATH',
-  'PYTHONHOME',
-  'PYTHONIOENCODING',
-  'PYTHONUNBUFFERED',
-  'PYTHONDONTWRITEBYTECODE',
-  // Node / Electron
-  'NODE_ENV',
-  'ELECTRON_RUN_AS_NODE',
-  'ELECTRON_NO_ATTACH_CONSOLE',
-  // Sage internal — supervisor 通过 plan.env / plan.extraEnv 注入
-  'SAGE_BACKEND_CMD',
-  'SAGE_BACKEND_CWD',
-  'SAGE_BACKEND_ENV',
-  'SAGE_BACKEND_PORT',
-  'SAGE_DB_PATH',
-  'SAGE_USER_DATA_DIR',
-  'SAGE_DOCTOR_ON_START',
-  'SAGE_API_MODE',
-  'SAGE_PYTHON',
-  'SAGE_LOG_LEVEL',
-]);
-
-const SECRET_KEY_PATTERN = /api[_-]?key|secret|token|password|credential|private[_-]?key/i;
-
-export function filterProcessEnvForChild(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const out: NodeJS.ProcessEnv = {};
-  for (const [k, v] of Object.entries(env)) {
-    if (typeof v !== 'string') continue;
-    if (SECRET_KEY_PATTERN.test(k)) continue;
-    if (SAFE_ENV_ALLOWLIST.has(k)) {
-      out[k] = v;
-    }
-  }
-  return out;
-}
-
 export interface DoctorLaunchOptions {
-  pythonBin: string;
-  packageRoot: string;
-  cwd?: string;
-  env?: NodeJS.ProcessEnv;
   /**
-   * alpha.8 (2026-08-27): 后端 launcher plan 的 argv. 不提供时回退到
-   * ``['-m', 'backend.cli.doctor', '--json']`` (向后兼容老调用).
-   * 来自 BackendLaunchPlan.args 时已包含 conda run 前缀或 -m 主程序前缀,
-   * doctor 直接 spawn(command, args), 不再追加 -m.
+   * The python binary to invoke. For dev-conda / dev-SAGE_PYTHON this is
+   * `'conda'` / `'python3'` (i.e. the supervisor command), and the full argv
+   * lives in `args`. For legacy CI smoke callers passing just a python
+   * interpreter, doctor.ts fills in a default `-m backend.cli.doctor --json`.
+   */
+  pythonBin: string;
+  /**
+   * Full argv to pass after `pythonBin`. When omitted (legacy callers),
+   * doctor.ts defaults to `['-m', 'backend.cli.doctor', '--json']` so a
+   * bare `runDoctorCheck('python', '/path')` call still works.
    */
   args?: string[];
+  /** Filesystem root of the project (used for cwd fallback + PYTHONPATH fallback). */
+  packageRoot: string;
+  /** Subprocess cwd. Defaults to `packageRoot`. */
+  cwd?: string;
+  /**
+   * Subprocess env. PYTHONPATH handling:
+   *   - If supplied here, **kept verbatim** — packaged supervisor builds
+   *     `resourcesPath/backend:resourcesPath/sage-core` and must not be
+   *     clobbered (otherwise `import backend.cli.doctor` crashes).
+   *   - If omitted, falls back to `packageRoot` so legacy dev calls work.
+   */
+  env?: NodeJS.ProcessEnv;
 }
 
 export type DoctorStatus = 'ok' | 'warn' | 'critical' | 'timeout' | 'error';
@@ -125,13 +70,13 @@ export interface DoctorSummary {
   package_root?: string;
 }
 
-// 2026-09-08 (cherry from main PR #503): default raised from 5s → 20s to
-// match ``backend.cli.doctor._try_import_backend``'s own 20s probe budget.
-// Alpha9 doctor ran in <200ms, but alpha13+ adds heavy check expansion
-// (hooks/render, mcp, secret_box, web_fetch httpx probe, …) plus jieba
-// dict load via ``import backend.main``; on a packaged Win32 cold start
-// the full subprocess takes ~8-10s, so 5s was false-positive timeout noise.
-// The cap can still be tightened via ``SAGE_DOCTOR_TIMEOUT_MS`` for CI smoke.
+// 2026-09-08: default raised from 5s → 20s to match
+// ``backend.cli.doctor._try_import_backend``'s own 20s probe budget. Alpha9
+// doctor ran in <200ms, but alpha13+ adds heavy check expansion (hooks/render,
+// mcp, secret_box, web_fetch httpx probe, …) plus jieba dict load via
+// ``import backend.main``; on a packaged Win32 cold start the full subprocess
+// takes ~8-10s, so 5s was false-positive timeout noise. The cap can still be
+// tightened via ``SAGE_DOCTOR_TIMEOUT_MS`` for CI smoke paths.
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 function resolveTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
@@ -141,11 +86,6 @@ function resolveTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_TIMEOUT_MS;
   return parsed;
 }
-
-// Exported for unit tests (2026-09-08 cherry from main PR #503).
-// Use only from test files; runtime callers should let runDoctorCheck
-// apply the default.
-export const __testing__ = { resolveTimeoutMs };
 
 interface ParsedDoctorOutput {
   summary?: DoctorSummary['summary'];
@@ -173,9 +113,8 @@ function parseJsonOutput(stdout: string): ParsedDoctorOutput | undefined {
  *
  * The subprocess always runs with ``--json`` so we get a deterministic
  * payload; if JSON parsing fails we still return ``raw`` for the caller to
- * surface in logs. The 20s default cap (2026-09-08, was 5s in alpha9) leaves
- * ~4x headroom for cold-start jieba dict load on Win32; override via
- * ``SAGE_DOCTOR_TIMEOUT_MS`` env for CI smoke paths.
+ * surface in logs. The 5s default cap is generous: a healthy doctor run
+ * completes in <200ms, so the timeout only kicks in on broken-installers.
  *
  * Never throws — all failure modes (spawn error, timeout, non-zero exit,
  * unparseable output) collapse into a structured status field on the
@@ -197,24 +136,28 @@ export async function runDoctorCheck(
         }
       : pythonBinOrOptions;
   const startedAt = Date.now();
-  // alpha.8 (2026-08-27): 使用 options.args (来自后端 BackendLaunchPlan).
-  // 不提供时回退到 ``['-m', 'backend.cli.doctor', '--json']`` (向后兼容老调用).
-  // dev-conda plan 的 argv 形如 ``['run', '-n', 'sage-backend', 'python',
-  // '-m', 'backend.cli.doctor', '--json']``, 不再被硬编码覆盖成 ``-m ...``.
-  const doctorArgs = options.args ?? ['-m', 'backend.cli.doctor', '--json'];
-  // alpha.8 (2026-08-27): 保留 packaged 端设的 PYTHONPATH
-  // (``resources/backend + resources/sage-core``). 之前无条件覆盖为
-  // ``options.packageRoot`` 会让 packaged 后端 import 不到 backend.main.
-  // options.env.PYTHONPATH 缺省时回退到 options.packageRoot.
-  // 用 ``??`` 而非 ``||``: 空字符串 PYTHONPATH 是合法配置 (override), 不应被
-  // falsy 短路回退成 packageRoot.
-  const pythonPath = options.env?.PYTHONPATH ?? options.packageRoot;
-  // alpha.8 (2026-08-27): 宿主 ``process.env`` 走白名单 + 凭据黑名单过滤后再
-  // merge, 防止 OPENAI_API_KEY/ANTHROPIC_API_KEY 等扩散到子进程 stderr.
-  const safeHostEnv = filterProcessEnvForChild(process.env);
-  const proc = spawn(options.pythonBin, doctorArgs, {
+  // 2026-08-26: argv is now caller-supplied (via DoctorLaunchOptions.args)
+  // when the supervisor can produce a complete spawn plan (dev-conda,
+  // packaged-bundled, …). For legacy string-only callers we fall back to
+  // the historical `python -m backend.cli.doctor --json` shape.
+  const argv = options.args ?? ['-m', 'backend.cli.doctor', '--json'];
+  // 2026-08-26: env merge order matters. Earlier code did
+  //   `{ ...process.env, ...options.env, PYTHONPATH: options.packageRoot }`
+  // which unconditionally clobbered the packaged supervisor's
+  // `resourcesPath/backend:resourcesPath/sage-core` PYTHONPATH with a
+  // single `packageRoot`, breaking `import backend.cli.doctor`. New order:
+  // process.env defaults < caller options.env override < PYTHONPATH fallback
+  // (only if caller didn't already set one).
+  const mergedEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...options.env,
+  };
+  if (!('PYTHONPATH' in mergedEnv) || mergedEnv.PYTHONPATH === undefined) {
+    mergedEnv.PYTHONPATH = options.packageRoot;
+  }
+  const proc = spawn(options.pythonBin, argv, {
     cwd: options.cwd ?? options.packageRoot,
-    env: { ...safeHostEnv, ...options.env, PYTHONPATH: pythonPath },
+    env: mergedEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });

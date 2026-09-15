@@ -94,7 +94,7 @@ def test_register_evolution_task_does_not_interfere(
     evolution_jobs = {j for j in job_ids if j.startswith("evolution/")}
     user_jobs = {j for j in job_ids if j.startswith("task-")}
 
-    assert len(evolution_jobs) == 5
+    assert len(evolution_jobs) == 6  # Round 7: +skill_consolidation
     assert user_tid in user_jobs
     # JSON 持久化层只有 user task,evolution task 是 in-process 内存态
     data = json.loads(store_path.read_text("utf-8"))

@@ -4,27 +4,8 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 from backend.cli.doctor import CheckResult, Severity, register
-
-
-def _conda_env_name(exe_parts: tuple) -> Optional[str]:
-    """从解释器路径段中识别 Sage conda 环境名。
-
-    跨平台匹配 ``envs/<name>`` 连续段对:
-
-    - Linux: ``/anaconda3/envs/sage-backend/bin/python`` → (…, 'envs', 'sage-backend', …)
-    - Windows: ``C:\\Users\\x\\anaconda3\\envs\\sage-backend-py38\\python.exe``
-      → ('C:\\\\', 'Users', 'x', 'anaconda3', 'envs', 'sage-backend-py38', …)
-
-    main 分支用硬编码前缀 ``/anaconda3/envs/...``,在 Windows 上会把合法安装
-    误判为 CRITICAL;win7 分支改为按路径段匹配,两个平台都识别。
-    """
-    for i, part in enumerate(exe_parts[:-1]):
-        if part == "envs" and exe_parts[i + 1].startswith("sage-backend"):
-            return exe_parts[i + 1]
-    return None
 
 
 @register
@@ -32,9 +13,17 @@ class CondaEnvCheck:
     name = "conda_env"
     description = "验证当前 Python 解释器在 sage-backend conda 环境中"
 
+    EXPECTED_PATHS = (
+        # 注意：长路径（py38）必须排在短路径（默认）之前,
+        # 否则 ``startswith`` 会先匹配短路径,py38 版本校验不可达。
+        "/anaconda3/envs/sage-backend-py38",
+        "/anaconda3/envs/sage-backend",
+        "/opt/conda/envs/sage-backend",
+    )
+
     def run(self) -> CheckResult:
-        # packaged Win7 上 Python 在 <resourcesPath>/python/, 不在 conda 环境中。
-        # 这是正常的安装形态, 不应误报 CRITICAL。SAGE_IS_PACKAGED 由
+        # packaged Win/Linux 上 Python 在 <resourcesPath>/python/, 不在 conda
+        # 环境中。这是正常的安装形态, 不应误报 CRITICAL。SAGE_IS_PACKAGED 由
         # electron/doctor.ts spawn 时从 app.isPackaged 派生并注入 (CLI 调试
         # 时也可手动 export)。
         if os.environ.get("SAGE_IS_PACKAGED") == "1":
@@ -44,26 +33,24 @@ class CondaEnvCheck:
                 Severity.INFO,
                 f"环境正确 ({py_ver}, packaged)",
             )
-        exe_path = Path(sys.executable).resolve()
-        exe = str(exe_path)
+        exe = str(Path(sys.executable).resolve())
         py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
 
-        env_name = _conda_env_name(exe_path.parts)
-        if env_name is not None:
-            # py38 环境必须对应 Py3.8 解释器（用属性访问兼容单测的 SimpleNamespace mock）
-            py_ver_tuple = (sys.version_info.major, sys.version_info.minor)
-            if env_name.endswith("-py38") and py_ver_tuple != (3, 8):
+        for expected in self.EXPECTED_PATHS:
+            if exe.startswith(expected):
+                # py38 路径必须对应 Py3.8 解释器
+                if "py38" in expected and py_ver != "3.8":
+                    return CheckResult(
+                        self.name,
+                        Severity.CRITICAL,
+                        f"Py 版本 {py_ver} 与 py38 环境不匹配",
+                        "conda activate sage-backend-py38",
+                    )
                 return CheckResult(
                     self.name,
-                    Severity.CRITICAL,
-                    f"Py 版本 {py_ver} 与 {env_name} 环境不匹配",
-                    "conda activate sage-backend-py38",
+                    Severity.INFO,
+                    f"环境正确 ({py_ver})",
                 )
-            return CheckResult(
-                self.name,
-                Severity.INFO,
-                f"环境正确 ({py_ver})",
-            )
 
         return CheckResult(
             self.name,

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import uuid
@@ -26,7 +27,6 @@ class BaseEvolutionTask:
     """进化任务基类
 
     Subclasses can:
-
     - set ``self._hooks`` to a ``HookRegistry`` instance to receive
       ``evolution_completed`` events after each successful run.
     - leave ``self._hooks`` unset; the helper will silently no-op so
@@ -34,11 +34,11 @@ class BaseEvolutionTask:
     """
 
     def __init__(self, db=None, memory_manager=None, hooks: Optional[Any] = None):
-        self.db = db or get_database()
-        self.memory_manager = memory_manager
         # Optional — see ``_emit_evolution_completed``. Set externally
         # by ``create_evolution_tasks(hooks=...)`` or by the lifespan.
         self._hooks = hooks
+        self.db = db or get_database()
+        self.memory_manager = memory_manager
 
     async def run_async(self):
         """异步执行任务（子类实现）"""
@@ -80,6 +80,64 @@ class BaseEvolutionTask:
             logger.warning("evolution_completed hook emit failed: %s", exc)
 
 
+def _write_evolution_log(
+    db,
+    memory_type: str,
+    memory_id: str,
+    operation: str,
+    before_content: str = None,
+    after_content: str = None,
+    reason: str = None,
+) -> None:
+    """
+    写入一条记忆级进化日志 (memories_evolution_log)
+
+    统一 INSERT 入口，供 MemoryConsolidationTask / ImportanceReevaluationTask /
+    MemoryPruningTask 记录记忆级变更。采用 best-effort 语义：写入失败只
+    logger.warning，不让进化任务整体失败（日志缺失可接受，进化中断不可接受）。
+
+    表结构 (PRAGMA table_info 确认):
+        id, memory_type, memory_id, operation,
+        before_content, after_content, reason, created_at
+
+    Args:
+        db: Database 实例
+        memory_type: 记忆类型 (episodic / semantic)
+        memory_id: 记忆 ID（批量操作用 batch:<规则>:<时间戳> 合成 id）
+        operation: 操作类型 (promote / importance_adjust / prune)
+        before_content: 变更前内容或位置描述
+        after_content: 变更后内容或位置描述
+        reason: 变更原因（任务名；批量操作附带规则名）
+    """
+    try:
+        conn = db.get_connection()
+        conn.execute(
+            """
+            INSERT INTO memories_evolution_log
+            (id, memory_type, memory_id, operation, before_content, after_content,
+             reason, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                str(uuid.uuid4()),
+                memory_type,
+                memory_id,
+                operation,
+                before_content,
+                after_content,
+                reason,
+                # 毫秒时间戳，与 memories_episodic/memories_semantic 仓储层一致
+                int(time.time() * 1000),
+            ),
+        )
+        conn.commit()
+    except Exception as e:
+        logger.warning(
+            f"写入 memories_evolution_log 失败 (operation={operation}, "
+            f"memory_id={memory_id}): {e}"
+        )
+
+
 class DailySummaryTask(BaseEvolutionTask):
     """
     每日摘要任务
@@ -105,8 +163,8 @@ class DailySummaryTask(BaseEvolutionTask):
 
     async def run_async(self):
         """执行每日摘要"""
-        logger.info("开始执行每日摘要任务...")
         start = time.monotonic()
+        logger.info("开始执行每日摘要任务...")
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -205,13 +263,10 @@ class DailySummaryTask(BaseEvolutionTask):
             status="success",
         )
 
-        # Task 4 / Gap A — emit lifecycle hook for downstream watchers
-        # (background review, audit log, UI toast).
         await self._emit_evolution_completed(
             items_processed=processed,
             duration_ms=int((time.monotonic() - start) * 1000),
         )
-
         return processed
 
     async def _generate_summary(self, messages: List[dict]) -> Optional[str]:
@@ -319,8 +374,8 @@ class MemoryPruningTask(BaseEvolutionTask):
 
     async def run_async(self):
         """执行记忆修剪"""
-        logger.info("开始执行记忆修剪任务...")
         start = time.monotonic()
+        logger.info("开始执行记忆修剪任务...")
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -340,6 +395,15 @@ class MemoryPruningTask(BaseEvolutionTask):
         expired_deleted = cursor.rowcount
         total_deleted += expired_deleted
         logger.info(f"删除过期记忆: {expired_deleted} 条")
+        if expired_deleted > 0:
+            _write_evolution_log(
+                self.db,
+                memory_type="episodic",
+                memory_id=f"batch:expired:{now_ts}",
+                operation="prune",
+                before_content=str(expired_deleted),
+                reason="memory_pruning:expired",
+            )
 
         # 2. 删除极低价值且长期未访问的记忆
         cursor.execute(
@@ -354,6 +418,15 @@ class MemoryPruningTask(BaseEvolutionTask):
         low_value_deleted = cursor.rowcount
         total_deleted += low_value_deleted
         logger.info(f"删除低价值记忆: {low_value_deleted} 条")
+        if low_value_deleted > 0:
+            _write_evolution_log(
+                self.db,
+                memory_type="episodic",
+                memory_id=f"batch:low_value:{now_ts}",
+                operation="prune",
+                before_content=str(low_value_deleted),
+                reason="memory_pruning:low_value",
+            )
 
         # 3. 删除孤儿记忆（无关联会话且无重要内容）
         cursor.execute(
@@ -369,6 +442,15 @@ class MemoryPruningTask(BaseEvolutionTask):
         orphaned_deleted = cursor.rowcount
         total_deleted += orphaned_deleted
         logger.info(f"删除孤儿记忆: {orphaned_deleted} 条")
+        if orphaned_deleted > 0:
+            _write_evolution_log(
+                self.db,
+                memory_type="episodic",
+                memory_id=f"batch:orphaned:{now_ts}",
+                operation="prune",
+                before_content=str(orphaned_deleted),
+                reason="memory_pruning:orphaned",
+            )
 
         # 4. 超过上限时删除最旧的
         cursor.execute("SELECT COUNT(*) FROM memories_episodic")
@@ -390,6 +472,15 @@ class MemoryPruningTask(BaseEvolutionTask):
             limit_deleted = cursor.rowcount
             total_deleted += limit_deleted
             logger.info(f"超过上限删除: {limit_deleted} 条")
+            if limit_deleted > 0:
+                _write_evolution_log(
+                    self.db,
+                    memory_type="episodic",
+                    memory_id=f"batch:limit:{now_ts}",
+                    operation="prune",
+                    before_content=str(limit_deleted),
+                    reason="memory_pruning:limit",
+                )
 
         conn.commit()
 
@@ -410,12 +501,10 @@ class MemoryPruningTask(BaseEvolutionTask):
             status="success",
         )
 
-        # Task 4 / Gap A — emit lifecycle hook for downstream watchers.
         await self._emit_evolution_completed(
             items_processed=total_deleted,
             duration_ms=int((time.monotonic() - start) * 1000),
         )
-
         return total_deleted
 
     async def _log_evolution(
@@ -469,28 +558,21 @@ class PreferenceLearningTask(BaseEvolutionTask):
         self.config = config or {}
 
     async def run_async(self):
-        """执行偏好学习"""
-        logger.info("开始执行偏好学习任务...")
+        """执行偏好学习
+
+        双路分析（对标 hermes-agent: 偏好应语义化理解而非关键词匹配）:
+        1. 关键词路（零依赖兜底）: LIKE 扫描显式反馈关键词 → 规则映射
+        2. LLM 路（配置了端点时）: 近 7 天用户消息采样 → LLM 抽取有明确
+           证据的稳定偏好 JSON → 覆盖关键词基线
+        持久化不变: semantic 记忆 + preferences 表 + evolution_log 审计。
+        """
         start = time.monotonic()
+        logger.info("开始执行偏好学习任务...")
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        # 1. 获取近期反馈消息（包含反馈关键词的用户消息）
-        feedback_keywords = [
-            "反馈",
-            "评分",
-            "喜欢",
-            "不喜欢",
-            "太短",
-            "太长",
-            "详细",
-            "简单",
-            "好",
-            "差",
-        ]
-        "%" + "%".join(feedback_keywords) + "%"
-
+        # 1a. 关键词路: 获取近期反馈消息（包含反馈关键词的用户消息）
         cursor.execute("""
             SELECT id, session_id, content, created_at
             FROM messages
@@ -510,18 +592,35 @@ class PreferenceLearningTask(BaseEvolutionTask):
         """)
 
         feedback_messages = cursor.fetchall()
-        logger.info(f"找到 {len(feedback_messages)} 条反馈消息")
+        logger.info(f"找到 {len(feedback_messages)} 条关键词反馈消息")
 
-        if not feedback_messages:
-            logger.info("没有发现新的反馈，跳过")
+        # 1b. LLM 路: 近 7 天用户消息采样（不受关键词预过滤, 语义化理解）
+        llm = self._resolve_llm()
+        llm_preferences: Dict[str, str] = {}
+        if llm is not None:
+            recent_messages = self._fetch_recent_user_messages(cursor)
+            llm_preferences = await self._analyze_preferences_with_llm(
+                llm, recent_messages
+            )
+            if llm_preferences:
+                logger.info(f"LLM 偏好抽取命中 {len(llm_preferences)} 个维度")
+        else:
+            logger.debug("LLM 不可用，偏好学习仅走关键词路径")
+
+        # 2. 分析偏好模式: 关键词基线 + LLM 结果覆盖
+        preferences = self._analyze_preferences(feedback_messages)
+        preferences.update(llm_preferences)
+
+        # 证据门槛: 关键词与 LLM 采样均无信号时不落库 ——
+        # _analyze_preferences 恒返回默认基线, 无证据也写入会每天
+        # 生成一条无信息量的"用户偏好总结"（语义记忆噪音）。
+        if not feedback_messages and not llm_preferences:
+            logger.info("没有发现新的反馈（关键词与 LLM 采样均无信号），跳过")
             await self._emit_evolution_completed(
                 items_processed=0,
                 duration_ms=int((time.monotonic() - start) * 1000),
             )
             return 0
-
-        # 2. 分析偏好模式
-        preferences = self._analyze_preferences(feedback_messages)
 
         if not preferences:
             logger.info("无法分析出明确偏好")
@@ -577,12 +676,6 @@ class PreferenceLearningTask(BaseEvolutionTask):
             after_state=profile_text,
         )
 
-        # Task 4 / Gap A — emit lifecycle hook for downstream watchers.
-        await self._emit_evolution_completed(
-            items_processed=len(preferences),
-            duration_ms=int((time.monotonic() - start) * 1000),
-        )
-
         return len(preferences)
 
     def _analyze_preferences(self, feedback_messages: List[dict]) -> Dict[str, str]:
@@ -623,6 +716,145 @@ class PreferenceLearningTask(BaseEvolutionTask):
                     preferences["detail_level"] = pref
 
         return preferences
+
+    def _resolve_llm(self):
+        """解析偏好学习用的 LLM 客户端（注入优先，settings 兜底）
+
+        与 orchestration/llm_factory 同模式: 调用方可注入客户端（测试/
+        编排链），缺省从 app_settings 解析用户配置的端点。不可用返回
+        None —— 偏好学习降级为纯关键词路径，绝不抛异常。
+        """
+        if self.llm is not None:
+            return self.llm
+        try:
+            from backend.core.legacy.llm_client import LLMClient, LLMConfig
+            from backend.orchestration.llm_factory import load_llm_config_from_settings
+
+            cfg = load_llm_config_from_settings()
+            if cfg is None:
+                return None
+            return LLMClient(LLMConfig(**cfg))
+        except Exception as exc:  # noqa: BLE001 — 降级路径, 不拖垮定时任务
+            logger.warning(f"偏好学习 LLM 客户端解析失败，降级关键词路径: {exc}")
+            return None
+
+    def _fetch_recent_user_messages(self, cursor, days: int = 7):
+        """取近 N 天用户消息采样（LLM 路输入, 不做关键词预过滤）"""
+        try:
+            sample_limit = int(self.config.get("llm_sample_limit", 100))
+        except (TypeError, ValueError):
+            sample_limit = 100
+        cursor.execute(
+            """
+            SELECT id, session_id, content, created_at
+            FROM messages
+            WHERE role = 'user'
+              AND created_at >= ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (int(time.time()) - days * 86400, sample_limit),
+        )
+        return cursor.fetchall()
+
+    async def _analyze_preferences_with_llm(
+        self, llm, recent_messages: List[dict]
+    ) -> Dict[str, str]:
+        """LLM 抽取稳定偏好（只输出有明确证据的维度，宽容解析）
+
+        Returns:
+            形如 {"response_length": "short", ...} 的偏好字典；
+            LLM 失败 / 输出不可解析 / 无证据时返回 {}。
+        """
+        if llm is None or not recent_messages:
+            return {}
+
+        # 消息截断: 单条 200 字符足够表达偏好, 控制提示词体积
+        # （recent_messages 为 sqlite3.Row 或 dict, 统一用下标访问）
+        lines = []
+        for msg in recent_messages:
+            try:
+                content = msg["content"]
+            except (KeyError, IndexError, TypeError):
+                continue
+            if content:
+                lines.append(f"- {content[:200]}")
+        if not lines:
+            return {}
+
+        prompt = (
+            "以下是用户最近与 AI 助手的对话消息采样。请从中提取用户的稳定偏好，"
+            "只关注以下三个维度（取值约定）:\n"
+            "- response_length: short / medium / long / detailed（用户对回复长度的要求）\n"
+            "- tone: friendly / professional / humorous / formal（用户期望的语气）\n"
+            "- detail_level: brief / medium / comprehensive（用户期望的详细程度）\n\n"
+            "严格要求:\n"
+            "1. 只输出用户**明确表达过**的偏好（例如『回答简短点』『正式一些』）；\n"
+            "2. 没有证据的维度直接省略，不要猜测；\n"
+            '3. 只输出 JSON 对象，无其他文字。示例: {"response_length": "short"}\n\n'
+            "用户消息采样:\n" + "\n".join(lines)
+        )
+
+        try:
+            # 兼容 LLMPort 风格（Message 对象）与简单 chat() 接口 ——
+            # 与 MemoryExtractor._extract_with_llm 同一适配模式
+            try:
+                from backend.domain.message import Message
+
+                response_msg = await llm.chat(
+                    messages=[Message(role="user", content=prompt)]
+                )
+                content = (
+                    response_msg.content
+                    if hasattr(response_msg, "content")
+                    else str(response_msg)
+                )
+            except (ImportError, TypeError, AttributeError):
+                response = await llm.chat(
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                content = (
+                    response if isinstance(response, str) else response.get("content", "")
+                )
+        except Exception as exc:  # noqa: BLE001 — LLM 故障降级, 不抛出
+            logger.warning(f"偏好学习 LLM 调用失败，忽略本轮 LLM 信号: {exc}")
+            return {}
+
+        return self._parse_preference_json(content if isinstance(content, str) else "")
+
+    def _parse_preference_json(self, raw: str) -> Dict[str, str]:
+        """宽容解析 LLM 输出的偏好 JSON（容忍代码围栏与多余文字）"""
+        import json
+
+        if not raw:
+            return {}
+        text = raw.strip()
+        # 剥离 ```json ... ``` 围栏
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.lower().startswith("json"):
+                text = text[4:]
+        # 截取首个 { 到末个 } 之间
+        start, end = text.find("{"), text.rfind("}")
+        if start == -1 or end <= start:
+            return {}
+        try:
+            data = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        allowed = {
+            "response_length": {"short", "medium", "long", "detailed"},
+            "tone": {"friendly", "professional", "humorous", "formal"},
+            "detail_level": {"brief", "medium", "comprehensive"},
+        }
+        result: Dict[str, str] = {}
+        for key, allowed_values in allowed.items():
+            value = data.get(key)
+            if isinstance(value, str) and value.lower() in allowed_values:
+                result[key] = value.lower()
+        return result
 
     async def _log_evolution(
         self,
@@ -682,8 +914,8 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
 
     async def run_async(self):
         """执行重要性重评估"""
-        logger.info("开始执行重要性重评估任务...")
         start = time.monotonic()
+        logger.info("开始执行重要性重评估任务...")
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -724,6 +956,15 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
                 logger.debug(
                     f"降低记忆重要性: {memory['id']}, {memory['importance']} -> {new_importance}"
                 )
+                _write_evolution_log(
+                    self.db,
+                    memory_type="episodic",
+                    memory_id=memory["id"],
+                    operation="importance_adjust",
+                    before_content=str(memory["importance"]),
+                    after_content=str(new_importance),
+                    reason="importance_reevaluation",
+                )
 
         # 2. 重评估频繁访问的低重要性记忆
         cursor.execute(
@@ -755,6 +996,15 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
                 logger.debug(
                     f"提高记忆重要性: {memory['id']}, {memory['importance']} -> {new_importance}"
                 )
+                _write_evolution_log(
+                    self.db,
+                    memory_type="episodic",
+                    memory_id=memory["id"],
+                    operation="importance_adjust",
+                    before_content=str(memory["importance"]),
+                    after_content=str(new_importance),
+                    reason="importance_reevaluation",
+                )
 
         conn.commit()
         logger.info(f"重要性重评估完成，调整了 {total_adjusted} 条记忆")
@@ -766,12 +1016,10 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
             status="success",
         )
 
-        # Task 4 / Gap A — emit lifecycle hook for downstream watchers.
         await self._emit_evolution_completed(
             items_processed=total_adjusted,
             duration_ms=int((time.monotonic() - start) * 1000),
         )
-
         return total_adjusted
 
     async def _log_evolution(
@@ -828,8 +1076,8 @@ class MemoryConsolidationTask(BaseEvolutionTask):
 
     async def run_async(self):
         """执行记忆整合"""
-        logger.info("开始执行记忆整合任务（做梦）...")
         start = time.monotonic()
+        logger.info("开始执行记忆整合任务（做梦）...")
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -855,13 +1103,44 @@ class MemoryConsolidationTask(BaseEvolutionTask):
             already_exists = any(
                 e.get("content", "")[:50] == memory["content"][:50] for e in existing
             )
-            if not already_exists:
-                self.memory_manager.semantic.save(
+            if already_exists:
+                continue
+
+            try:
+                semantic_id = self.memory_manager.semantic.save(
                     content=memory["content"],
                     summary=memory.get("summary"),
                     tags=_safe_json_loads(memory.get("tags", "[]")),
                 )
+                # 晋升软删：写入 semantic 成功后，把源 episodic 行 is_valid 置 0，
+                # 避免检索出现重复事实。semantic.save 与本 UPDATE 复用同一连接，
+                # 紧随其后 commit 使两者一起持久化；任一步失败则回滚并跳过该条，
+                # 不留半完成状态（源行保持有效，下轮去重检查可识别已写入的语义行）。
+                cursor.execute(
+                    """
+                    UPDATE memories_episodic
+                    SET is_valid = 0
+                    WHERE id = ?
+                """,
+                    [memory["id"]],
+                )
+                conn.commit()
                 promoted += 1
+            except Exception as e:
+                conn.rollback()
+                logger.warning(f"记忆晋升失败，已回滚并跳过: {memory['id']}: {e}")
+                continue
+
+            # 晋升记录落记忆进化日志（best-effort，失败只 warning）
+            _write_evolution_log(
+                self.db,
+                memory_type="episodic",
+                memory_id=memory["id"],
+                operation="promote",
+                before_content=f"episodic:{memory['id']}",
+                after_content=f"semantic:{semantic_id}",
+                reason="memory_consolidation",
+            )
 
         total_consolidated += promoted
         logger.info(f"提升高频记忆到语义记忆: {promoted} 条")
@@ -886,15 +1165,44 @@ class MemoryConsolidationTask(BaseEvolutionTask):
         conn.commit()
         logger.info(f"记忆整合完成，共处理 {total_consolidated} 条记忆")
 
-        # Task 4 / Gap A — emit lifecycle hook for downstream watchers.
+        # F5 — return an int (total items processed), matching the other
+        # tasks, so the scheduler runner's ``int(result)`` conversion works.
+        # main 侧调用方/测试还按 ``result["promoted"]`` 读取明细，故返回
+        # ``ConsolidationResult``（int 子类 + 只读字典视图）同时满足两者。
         await self._emit_evolution_completed(
             items_processed=total_consolidated,
             duration_ms=int((time.monotonic() - start) * 1000),
         )
+        return ConsolidationResult(
+            total_consolidated, promoted=promoted, decayed=decayed
+        )
 
-        # F5 — return an int (total items processed), matching the other
-        # tasks, so the scheduler runner's ``int(result)`` conversion works.
-        return total_consolidated
+
+class ConsolidationResult(int):
+    """MemoryConsolidationTask 的返回值：既是 int（items_processed 总数，
+    与其他 evolution task / scheduler ``int(result)`` 约定一致），又支持
+    ``result["promoted"]`` / ``result["decayed"]`` / ``result["total"]``
+    明细读取（main 侧约定）。"""
+
+    def __new__(cls, total: int, *, promoted: int = 0, decayed: int = 0):
+        obj = super().__new__(cls, total)
+        obj._stats = {"promoted": promoted, "decayed": decayed, "total": total}
+        return obj
+
+    def __getitem__(self, key: str) -> int:
+        return self._stats[key]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._stats.get(key, default)
+
+    def keys(self):
+        return self._stats.keys()
+
+    def items(self):
+        return self._stats.items()
+
+    def as_dict(self) -> Dict[str, int]:
+        return dict(self._stats)
 
 
 def _safe_json_loads(s: str) -> list:
@@ -907,19 +1215,146 @@ def _safe_json_loads(s: str) -> list:
         return []
 
 
+class SkillConsolidationTask(BaseEvolutionTask):
+    """技能巡检任务 (Round 5/7, 对标 hermes curator consolidation review)
+
+    每周用 LLM 审阅 active 技能清单，产出 merge/archive/revise 建议，
+    追加进技能审计台账（consolidation_note，append-only，不动文件）。
+    人工审阅建议后走既有 archive / draft-approve 流程收口。
+    LLM/provider 不可用时静默跳过（no-op，不影响调度）。
+    """
+
+    def __init__(self, db=None, config: dict = None, hooks: Optional[Any] = None):
+        super().__init__(db=db, hooks=hooks)
+        self.config = config or {}
+
+    async def run_async(self):
+        start = time.monotonic()
+        logger.info("开始执行技能巡检任务...")
+        try:
+            from backend.skills.consolidator import (
+                collect_active_skills,
+                get_consolidation_service,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("巡检模块导入失败，跳过: %s", exc)
+            await self._emit_evolution_completed(
+                items_processed=0,
+                duration_ms=int((time.monotonic() - start) * 1000),
+            )
+            return 0
+
+        service = get_consolidation_service()
+        if service is None:
+            logger.info("LLM provider 未装配，技能巡检跳过")
+            await self._emit_evolution_completed(
+                items_processed=0,
+                duration_ms=int((time.monotonic() - start) * 1000),
+            )
+            return 0
+
+        skills = collect_active_skills()
+        if not skills:
+            logger.info("无 active 技能，巡检跳过")
+            await self._emit_evolution_completed(
+                items_processed=0,
+                duration_ms=int((time.monotonic() - start) * 1000),
+            )
+            return 0
+
+        pinned = self._pinned_names()
+        suggestions = await service.scan(skills, pinned_names=sorted(pinned))
+
+        from backend.skills.audit import SkillAuditLog
+
+        audit_log = SkillAuditLog(db=self.db)
+        recorded = 0
+        for suggestion in suggestions:
+            ok = audit_log.record(
+                "+".join(suggestion.get("skill_names", [])),
+                "consolidation_note",
+                actor="system",
+                after_content=json.dumps(suggestion, ensure_ascii=False),
+                source="consolidation_cron",
+            )
+            if ok:
+                recorded += 1
+
+        # Round 9: merge/revise 建议自动生成草稿（pending，走既有审批面）
+        drafts_created = 0
+        try:
+            from backend.skills.consolidator import collect_skill_docs
+
+            skill_docs = collect_skill_docs(
+                sorted({n for s in suggestions for n in s.get("skill_names", [])})
+            )
+            from backend.skills.draft_store import get_skill_draft_store as _gds
+
+            drafts_created = await service.generate_drafts(
+                suggestions, skill_docs, _gds(), source="consolidation_cron"
+            )
+        except Exception as exc:  # noqa: BLE001 — 草稿生成失败不影响台账记录
+            logger.warning("巡检草稿生成失败: %s", exc)
+
+        await self._log_evolution(
+            evolution_type="skill_consolidation",
+            description=f"技能巡检完成: {len(skills)} 个技能, {recorded} 条建议",
+            status="success",
+        )
+        logger.info(f"技能巡检完成: {recorded} 条建议, {drafts_created} 个草稿")
+        await self._emit_evolution_completed(
+            items_processed=recorded + drafts_created,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
+        return recorded + drafts_created
+
+    async def _log_evolution(
+        self, evolution_type: str, description: str, status: str, error_message: str = None
+    ):
+        """记录进化日志（与其他任务类同构）"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO evolution_log
+            (id, evolution_type, description, status, error_message, trigger_type, created_at, completed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                str(uuid.uuid4()),
+                evolution_type,
+                description,
+                status,
+                error_message,
+                "scheduled",
+                int(time.time()),
+                int(time.time()) if status == "success" else None,
+            ),
+        )
+
+        conn.commit()
+
+    def _pinned_names(self):
+        try:
+            from backend.skills.lifecycle import get_lifecycle_store
+
+            return get_lifecycle_store().get_pinned_names()
+        except Exception:  # noqa: BLE001
+            return set()
+
+
+
 def create_evolution_tasks(
     config: dict = None, hooks: Any = None
 ) -> Dict[str, BaseEvolutionTask]:
     """
     创建所有进化任务
 
-    Task 4 / Gap A — accepts an optional ``hooks`` (HookRegistry) and
-    threads it through to every task so they can emit
-    ``evolution_completed`` events after each successful run.
-
     Args:
         config: 配置字典
-        hooks: 可选的 HookRegistry,所有任务都会绑定此 hook 注册表
+        hooks: 可选 HookRegistry（Task 4 / Gap A）— 透传给每个任务，
+            任务成功后发 ``evolution_completed`` 事件
 
     Returns:
         任务名称到任务的映射
@@ -931,29 +1366,30 @@ def create_evolution_tasks(
 
     # 每日摘要任务
     if config.get("daily_summary", {}).get("enabled", True):
-        tasks["daily_summary"] = DailySummaryTask(
-            db=db, config=config.get("daily_summary", {}), hooks=hooks
-        )
+        tasks["daily_summary"] = DailySummaryTask(db=db, config=config.get("daily_summary", {}), hooks=hooks)
 
     # 记忆修剪任务
     if config.get("memory_pruning", {}).get("enabled", True):
-        tasks["memory_pruning"] = MemoryPruningTask(
-            db=db, config=config.get("memory_pruning", {}), hooks=hooks
-        )
+        tasks["memory_pruning"] = MemoryPruningTask(db=db, config=config.get("memory_pruning", {}), hooks=hooks)
 
     # 偏好学习任务
     if config.get("preference_learning", {}).get("enabled", True):
         tasks["preference_learning"] = PreferenceLearningTask(
-            db=db,
-            config=config.get("preference_learning", {}),
+            db=db, config=config.get("preference_learning", {}),
             hooks=hooks,
         )
 
     # 重要性重评估任务
     if config.get("importance_reevaluation", {}).get("enabled", True):
         tasks["importance_reevaluation"] = ImportanceReevaluationTask(
-            db=db,
-            config=config.get("importance_reevaluation", {}),
+            db=db, config=config.get("importance_reevaluation", {}),
+            hooks=hooks,
+        )
+
+    # 技能巡检任务 (Round 5/7) — 默认启用，每周运行；无 LLM 时 no-op
+    if config.get("skill_consolidation", {}).get("enabled", True):
+        tasks["skill_consolidation"] = SkillConsolidationTask(
+            db=db, config=config.get("skill_consolidation", {}),
             hooks=hooks,
         )
 

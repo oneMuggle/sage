@@ -51,7 +51,9 @@ def _formula_req(workspace: Path, filename: str) -> OfficeExcelGenerateRequest:
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_roundtrip_generate_edit_read_formulas(workspace: Path) -> None:
+def test_roundtrip_generate_edit_read_formulas(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     path = generate_xlsx(_formula_req(workspace, "formula-loop"))
 
     # 生成即公式（不是文本）
@@ -87,7 +89,21 @@ def test_roundtrip_generate_edit_read_formulas(workspace: Path) -> None:
     finally:
         wb.close()
 
-    # 读取：公式视图列出公式 + 缺缓存值提示
+    # 读取：公式视图列出公式 + 缺缓存值提示。
+    # R5 起缺缓存值会先尝试 formulas 本地求值（升级为
+    # "→ 35/40 (本地求值)"、提示行省略，由 test_excel_eval.py 锁定）；
+    # 这里 monkeypatch 掉 import，锁定「无 formulas 库」时的降级形状，
+    # 使闭环断言在任何环境都成立。
+    import builtins
+
+    real_import = builtins.__import__
+
+    def _no_formulas(name, *args, **kwargs):
+        if name == "formulas" or name.startswith("formulas."):
+            raise ImportError("formulas disabled for test")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _no_formulas)
     result = read_xlsx(path, include_formulas=True)
     sheet = result.sheets[0]
     assert sheet.formulas == ["B4=SUM(B2:B3)", "B5=B3*2"]
@@ -117,8 +133,23 @@ def _seed_session(conn, session_id: str) -> None:
     conn.commit()
 
 
-def test_roundtrip_service_read_formula_mode(tmp_path: Path, workspace: Path) -> None:
-    """OfficeToolService.create → read(formula_mode=True) 暴露同一公式视图。"""
+def test_roundtrip_service_read_formula_mode(
+    tmp_path: Path, workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OfficeToolService.create → read(formula_mode=True) 暴露同一公式视图.
+
+    同上：monkeypatch 掉 formulas import，锁定无求值库时的降级形状。
+    """
+    import builtins
+
+    real_import = builtins.__import__
+
+    def _no_formulas(name, *args, **kwargs):
+        if name == "formulas" or name.startswith("formulas."):
+            raise ImportError("formulas disabled for test")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _no_formulas)
     from backend.data.database import Database
     from backend.office.session_workspace import bind_session_workspace
     from backend.office.tool_service import OfficeToolService

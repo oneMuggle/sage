@@ -19,10 +19,11 @@ From pi's packages/ai/src/providers/faux.ts pattern.
 """
 
 from __future__ import annotations
+from typing import Dict, List
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from sage_core import Message, Role
 

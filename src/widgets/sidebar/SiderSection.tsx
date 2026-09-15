@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import type { ReactNode } from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
@@ -44,11 +45,28 @@ export function SiderSection({
         </button>
         {trailing && <div className="ml-auto">{trailing}</div>}
       </header>
-      {!collapsed && (
-        <div className="px-1" style={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}>
-          {render()}
-        </div>
-      )}
+      {/* 2026-09-13 P0: 分区展开/收起高度动画 — 此前是条件渲染硬切。
+          Chromium 106 (Electron 21) 不支持 grid-template-rows 0fr↔1fr 插值
+          (107+ 才有)，用 motion 的 JS 测高实现 height:auto 动画；
+          AnimatePresence initial={false} 保证首次挂载不播动画。 */}
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <div
+              className="px-1"
+              style={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}
+            >
+              {render()}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }

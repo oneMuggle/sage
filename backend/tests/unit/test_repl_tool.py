@@ -28,7 +28,13 @@ from backend.tools.repl_tool import (
 )
 from backend.tools.subprocess_util import file_identity
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(
+        os.name == "nt",
+        reason="repl 工具依赖 POSIX 进程组（start_verified_process 在 Windows 按设计拒绝）",
+    ),
+]
 
 
 @pytest.fixture()

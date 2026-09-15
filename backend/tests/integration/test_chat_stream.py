@@ -481,9 +481,10 @@ async def test_finally_finalizes_run_even_on_early_producer_failure():
     def _spy(run_id, status, final_summary):
         calls.append((run_id, status, final_summary))
 
-    # win7 py3.8: parenthesized context managers (PEP 617) 是 py3.10+ 语法
-    with patch("backend.api.legacy_routes.resolve_attachments", _boom), \
-            patch("backend.api.legacy_routes._finalize_orch_run", _spy):
+    with (
+        patch("backend.api.legacy_routes.resolve_attachments", _boom),
+        patch("backend.api.legacy_routes._finalize_orch_run", _spy),
+    ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             create_resp = await ac.post(
                 CHAT_STREAM_PATH,

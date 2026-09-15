@@ -40,10 +40,13 @@
 | 2026-07-24 | [Office M1–M2 Chat-Read Design](./2026-07-24-office-m1-m2-chat-read-design.md) | 已实施的 `@` Office 摘要注入子集 |
 | 2026-07-24 | [Office Staging Sweep Design](./2026-07-24-office-staging-sweep-design.md) | Workspace staging orphan sweep 设计 |
 | 2026-07-25 | [Office M1–M2 Completion Design](./2026-07-25-office-m1-m2-completion-design.md) | 完整 session Workspace、Office list/read tools 与跨进程 E2E 设计 |
+| 2026-08-02 | [记忆提取异步化 Design](./2026-08-02-memory-extraction-async-design.md) | hex + legacy 记忆提取脱离聊天响应关键路径 |
 | 2026-08-02 | [Skill Curator 生命周期 Design](./2026-08-02-skill-curator-lifecycle-design.md) | 技能 active/stale/archived 三态（读时算）+ 软归档动作 |
 | 2026-08-10 | [Storage Adapter asyncio.to_thread Design](./2026-08-10-storage-adapter-to-thread-design.md) | 存储适配器同步 SQLite 写 offload 到线程池，共享 SQLite 锁 |
 | 2026-08-11 | [Chat-Native Multi-Agent Orchestration Design](./2026-08-11-multi-agent-orchestration-design.md) | 聊天链路多 agent 编排：计划先行 + conductor 驱动 + 双失败模式门 |
 | 2026-08-20 | [Win7 Memory Manager Initialization and SSL Fix](./2026-08-20-win7-memory-manager-init-design.md) | memory tool 注入、Win7 certifi 打包与 SSL CA bootstrap |
+| 2026-08-23 | [Win7 与主分支平台能力修复](./2026-08-23-win7-parity-platform-fixes-design.md) | 修复记忆、流式 UI、LM Studio、工具、Office、知识库、摘要、时区与工作区设置 |
+| 2026-09-02 | [内网 Web 访问设计](./2026-09-02-intranet-web-access-design.md) | 网络模式门禁（online/intranet/offline）+ 域名白名单 + HTML 正文抽取 + 流式下载工具 |
 
 ## 与其他目录关系
 
@@ -53,6 +56,6 @@
 | [`docs/technical/`](../../technical/) | 已归档的**横切关注点**技术文档 |
 | [`docs/user-manual/`](../../user-manual/) | 终端用户操作指南 |
 | [`docs/superpowers/ideas/`](../ideas/) | 暂不做的零散想法 |
-| [`docs/superpowers/plans/`](../plans/) | 已合并的**历史执行计划**(2026-07-17 整理后已清空,仅保留当前 cleanup 自身) |
+| [`docs/superpowers/plans/`](../plans/) | 历史执行计划和过渡期 active plan；以文件内状态与 merged/superseded 说明为准 |
 
 > 维护规则来源:`feature-development.md`(项目根)。

@@ -81,5 +81,8 @@ export function useResizablePanel({
     };
   }, [anchor, maxWidth, minWidth, storageKey]);
 
-  return { width, onMouseDown };
+  // P1: 暴露拖拽态 — 面板宽度动画（push 模式 transition-[width]）在拖拽
+  // 期间需禁用，否则动画滞后拖垮跟手性（与 useResizableSidebar 同思路）。
+  // ref 在 mousedown 置位、mousemove 触发 setWidth 重渲染后读取即为 true。
+  return { width, isDragging: isDraggingRef.current, onMouseDown };
 }

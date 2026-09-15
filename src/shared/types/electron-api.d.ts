@@ -137,37 +137,6 @@ export interface OfficeElectronApiBridge {
 }
 
 /**
- * Memory bridge exposed at `window.electronAPI.memory`. Task 1 wired the
- * IPC commands; Task 2 (Gap B) types the shape and lands the Settings UI
- * toggle that calls `getAutoMemory` / `setAutoMemory`. The remaining 3
- * methods (`findByTurn`, `getProfile`, `getSummary`) type-stub for T5/T6.
- */
-export interface MemoryElectronApiBridge {
-  search: (args: { query: string; type?: string }) => Promise<unknown>;
-  save: (args: { content: string; importance?: number; category?: string }) => Promise<unknown>;
-  list: (args: { page?: number; page_size?: number; type?: string }) => Promise<unknown>;
-  delete: (args: { memory_id: string }) => Promise<unknown>;
-  /** GET /api/v1/preferences/auto_memory → "true" | "false" | null (default True). */
-  getAutoMemory: () => Promise<unknown>;
-  /** PUT /api/v1/preferences/auto_memory with body { value: boolean }. */
-  setAutoMemory: (args: { value: boolean }) => Promise<unknown>;
-  /** Important-2 — GET /api/v1/preferences/memory_retrieval → "true" | "false" | null (default True). */
-  getMemoryRetrieval: () => Promise<unknown>;
-  /** Important-2 — PUT /api/v1/preferences/memory_retrieval with body { value: boolean }. */
-  setMemoryRetrieval: (args: { value: boolean }) => Promise<unknown>;
-  findByTurn: (args: { turn_id: string }) => Promise<unknown>;
-  getProfile: () => Promise<unknown>;
-  getSummary: (args: { session_id: string }) => Promise<unknown>;
-  /**
-   * Task 6 — subscribe to backend memory_written SSE events (via main relay).
-   * The callback receives the raw JSON string payload of each SSE event.
-   * Resolves to an unsubscribe function, or `null` when the relay could not
-   * be established (caller should fall back to polling).
-   */
-  subscribe: (callback: (event: unknown) => void) => Promise<(() => void) | null>;
-}
-
-/**
  * Media bridge (Phase 2, 2026-09-12): multipart upload for chat attachments
  * and binary media fetching for TTS/ASR/image generation.
  */
@@ -281,15 +250,59 @@ export interface UpdateElectronApiBridge {
   checkWith: (providerId: string, channel?: string) => Promise<CheckResult | null>;
 }
 
+/**
+ * Memory bridge exposed at `window.electronAPI.memory`. Task 1 wired the
+ * IPC commands; Task 2 (Gap B) types the shape and lands the Settings UI
+ * toggle that calls `getAutoMemory` / `setAutoMemory`. The remaining 3
+ * methods (`findByTurn`, `getProfile`, `getSummary`) type-stub for T5/T6.
+ */
+export interface MemoryElectronApiBridge {
+  search: (args: { query: string; type?: string }) => Promise<unknown>;
+  save: (args: { content: string; importance?: number; category?: string }) => Promise<unknown>;
+  list: (args: { page?: number; page_size?: number; type?: string }) => Promise<unknown>;
+  delete: (args: { memory_id: string }) => Promise<unknown>;
+  /** GET /api/v1/preferences/auto_memory → "true" | "false" | null (default True). */
+  getAutoMemory: () => Promise<unknown>;
+  /** PUT /api/v1/preferences/auto_memory with body { value: boolean }. */
+  setAutoMemory: (args: { value: boolean }) => Promise<unknown>;
+  /** Important-2 — GET /api/v1/preferences/memory_retrieval → "true" | "false" | null (default True). */
+  getMemoryRetrieval: () => Promise<unknown>;
+  /** Important-2 — PUT /api/v1/preferences/memory_retrieval with body { value: boolean }. */
+  setMemoryRetrieval: (args: { value: boolean }) => Promise<unknown>;
+  findByTurn: (args: { turn_id: string }) => Promise<unknown>;
+  getProfile: () => Promise<unknown>;
+  getSummary: (args: { session_id: string }) => Promise<unknown>;
+  /**
+   * Task 6 — subscribe to backend memory_written SSE events (via main relay).
+   * The callback receives the raw JSON string payload of each SSE event.
+   * Resolves to an unsubscribe function, or `null` when the relay could not
+   * be established (caller should fall back to polling).
+   */
+  subscribe: (callback: (event: unknown) => void) => Promise<(() => void) | null>;
+}
+
 export interface ElectronAPI {
-  /** live-events P1 附带: 审批等待 OS 通知（点击聚焦窗口; 不支持平台降级）。 */
-  notifyApproval?: (payload: { title?: string; body?: string }) => Promise<{
-    ok: boolean;
-    reason?: string;
-  }>;
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
   invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T>;
+  /**
+   * P8 (2026-09-14): 嵌入模型下载桥 —— models:embedder:download / cancel
+   * 原生 IPC；进度经 api.listen('models:embedder:progress') 订阅。
+   * payload 缺省时 main 使用内置 EMBEDDER_MODEL_MANIFEST。
+   */
+  modelDownload?: {
+    download: (payload?: {
+      baseUrl?: string;
+      dirName?: string;
+      files?: { name: string; sha256: string }[];
+    }) => Promise<{ ok: boolean; totalBytes?: number; error?: string }>;
+    cancel: (dirName: string) => Promise<{ ok: boolean }>;
+  };
+  /** P13/P17: sage-file 工作区注册表 —— 渲染端绑定工作区时登记/注销到主进程白名单。 */
+  sageFile?: {
+    registerRoot: (path: string) => Promise<boolean>;
+    unregisterRoot: (path: string) => Promise<boolean>;
+  };
   /**
    * Streaming callers (wiki chat / wiki ingest) pass `options.streamId`
    * so the unlisten payload can abort the in-flight backend fetch via
@@ -331,6 +344,11 @@ export interface ElectronAPI {
     intent: 'create' | 'open';
     defaultPath?: string;
   }) => Promise<string | null>;
+  /** live-events P1 附带: 审批等待 OS 通知（点击聚焦窗口; 不支持平台降级）。 */
+  notifyApproval?: (payload: { title?: string; body?: string }) => Promise<{
+    ok: boolean;
+    reason?: string;
+  }>;
   /** S8 (round4): 分会话 OS 通知。main 展示原生 Notification,点击回发 session-notify-click。 */
   notifySession?: (payload: {
     sessionId: string;

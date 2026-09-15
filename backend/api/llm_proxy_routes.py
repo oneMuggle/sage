@@ -34,6 +34,7 @@ TLS 行为(Task 1 2026-08-23):
 """
 
 from __future__ import annotations
+from typing import Dict, FrozenSet, List, Optional, Set
 
 import asyncio
 import atexit
@@ -49,7 +50,7 @@ from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from ipaddress import ip_address
-from typing import Dict, FrozenSet, List, Optional, Set
+from typing import Dict, FrozenSet, List, Optional
 from urllib.parse import urlparse
 
 import httpcore
@@ -66,9 +67,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # 透传请求 / 响应头时需过滤的 hop-by-hop 头(RFC 7230 §6.1)
-# 额外过滤 content-encoding: 即使 proxy 向上游发 Accept-Encoding: identity,
-# 某些上游仍可能返回 Content-Encoding: gzip。如果不把这个 header 过滤掉,
-# httpx 客户端会尝试解压响应,导致 zlib.error: Error -3 while decompressing data。
+# 注: content-encoding 也需过滤,因为 httpx 的 response.content / aiter_bytes
+# 会透明解压上游响应;下游拿到的是明文,不能再带原始压缩编码声明。这样既能
+# 兼容无视 Accept-Encoding: identity 的上游,也保证响应头和响应体一致。
 HOP_BY_HOP_HEADERS: FrozenSet[str] = frozenset(
     {
         "host",
@@ -81,7 +82,7 @@ HOP_BY_HOP_HEADERS: FrozenSet[str] = frozenset(
         "transfer-encoding",
         "upgrade",
         "content-length",
-        "content-encoding",  # v2: 防止 httpx 尝试解压已处理的响应
+        "content-encoding",
     }
 )
 
@@ -348,7 +349,7 @@ _CA_BUNDLE_ENV_VARS: FrozenSet[str] = frozenset(
 )
 
 
-def _is_ca_bundle_available() -> bool:
+def _is_ca_bundle_available() -> bool:  # noqa: PLR0911 — 多分支表驱动早返,提取会破坏可读性
     """检测 CA bundle 是否可用.
 
     优先检查 ``SSL_CERT_FILE`` / ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE``
@@ -357,43 +358,35 @@ def _is_ca_bundle_available() -> bool:
     (OpenSSL ``/etc/ssl/certs`` / Windows cert store 派生文件) 也是合法 CA 源,
     在公司代理只配系统 bundle 不设 env vars 的环境里必须认.
 
-    行为矩阵（test_ca_bundle_env_var_* 覆盖）:
-    - env var 设了, 路径是非空文件 / 非空目录  → True
-    - env var 设了, 路径存在但空 / 是 0 字节文件 → False（不回落系统；用户
-      明确配了这条路却配错, 静默改走默认会掩盖 misconfig）
-    - env var 设了, 路径不存在 / 不可访问        → 继续下一 env var, 都没找到
-      才回落系统（兼容 test_ca_bundle_env_var_missing_file_returns_false
-      在 CI 有 certifi 的环境里返回 True）
-    - env var 全没设                            → 兜底探测系统默认 bundle
+    任一来源存在且路径可读 → True; 全部未设 / 路径缺失 / 不可读 → False.
 
-    返回: 任一来源可用 → True; 全部不可用 → False.
+    Semantics: 一旦用户**显式**设置了任一 env var(非空字符串),就视为用户选择,
+    不再 fallback 到 ``ssl.get_default_verify_paths()``. 这避免 certifi 注入后
+    系统默认 cafile 覆盖用户故意设置的"空文件 / 损坏 bundle"(典型场景:测试
+    隔离环境故意 mock 一个空 cert 来强制走非 TLS 路径;以及用户手动
+    ``SSL_CERT_FILE=/tmp/empty.pem`` 表示"我已知风险,继续").
     """
     from pathlib import Path
 
-    def _path_has_bundle(p: Path) -> bool:
-        """非空文件 / 非空目录 → True; 不存在 / 空文件 / 不可访问 → False."""
-        try:
-            if p.is_file() and p.stat().st_size > 0:
-                return True
-            if p.is_dir() and any(p.iterdir()):
-                # capath 是目录, 含已哈希链接的 cert 文件; 任意文件存在即视为可用.
-                return True
-        except OSError:
-            return False
-        return False
-
+    any_env_set = False
     for variable in _CA_BUNDLE_ENV_VARS:
         path_str = os.environ.get(variable)
         if not path_str:
             continue
+        any_env_set = True
         path = Path(path_str)
-        if _path_has_bundle(path):
-            return True
-        # Env var 显式设了但路径无效: 路径不存在 / 不可访问 → 继续下一 env var
-        # 或回落系统（典型: SSL_CERT_FILE=/no/such → 落到系统 bundle）;
-        # 路径存在但非空不可用 → 不回落系统, 直接 False.
-        if path.exists():
-            return False
+        try:
+            if path.is_file() and path.stat().st_size > 0:
+                return True
+            if path.is_dir() and any(path.iterdir()):
+                # capath 是目录, 含已哈希链接的 cert 文件; 任意文件存在即视为可用.
+                return True
+        except OSError:
+            continue
+
+    if any_env_set:
+        # 用户显式设置了 env var 但都不可用 → 不再 fallback,直接 False.
+        return False
 
     # 兜底: 探测 Python 进程默认的 CA bundle 路径 (OpenSSL ``DEFAULT@`` 区段).
     # get_default_verify_paths() 在所有 CPython 版本 (>= 3.7) 都返回 cafile/capath
@@ -409,8 +402,13 @@ def _is_ca_bundle_available() -> bool:
             path = Path(candidate)
         except (TypeError, ValueError):
             continue
-        if _path_has_bundle(path):
-            return True
+        try:
+            if path.is_file() and path.stat().st_size > 0:
+                return True
+            if path.is_dir() and any(path.iterdir()):
+                return True
+        except OSError:
+            continue
     return False
 
 
@@ -1057,8 +1055,12 @@ async def _proxy_streaming(
             _streamed_status: Optional[int] = upstream_resp.status_code
             _streamed_error: Optional[str] = None
             try:
-                # 用 aiter_raw 透传原始字节,把解压责任交给调用方。
-                async for chunk in upstream_resp.aiter_raw():
+                # 用 aiter_bytes 透传透明解压后的字节 (2026-09-02 修复):
+                # 上游若无视 Accept-Encoding: identity 仍返回 gzip, aiter_raw
+                # 会把 gzip block 当 chunk 边界吐出, SSE 解析会失败 (commit
+                # 3e60bc4f 历史问题)。aiter_bytes 让 httpx 按 content-encoding
+                # 自动解压后再吐 chunk, 与非流式路径保持语义一致。
+                async for chunk in upstream_resp.aiter_bytes():
                     remaining = MAX_RESPONSE_BODY_BYTES - total_bytes
                     if remaining <= 0:
                         logger.warning(

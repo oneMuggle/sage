@@ -8,9 +8,10 @@
 """
 
 from __future__ import annotations
+from typing import Optional, Tuple
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 import pytest
 import pytest_asyncio

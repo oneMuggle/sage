@@ -29,30 +29,6 @@ from backend.main import app
 
 pytestmark = pytest.mark.integration
 
-
-@pytest.fixture(autouse=True)
-def _isolate_legacy_memory_path(client):
-    """Keep this module on the legacy queue path regardless of prior tests."""
-    from backend.memory.async_extractor import reset_memory_extraction_queue
-
-    # Reset before the first request, not only during teardown: a preceding
-    # TestClient/integration module may have left a worker bound to a closed
-    # event loop.  Reusing that singleton can silently skip the legacy submit.
-    reset_memory_extraction_queue()
-    previous_lifecycle = getattr(app.state, "lifecycle", None)
-    previous_hooks = getattr(app.state, "hooks", None)
-    app.state.lifecycle = None
-    app.state.hooks = None
-    try:
-        yield
-    finally:
-        from backend.memory.async_extractor import reset_memory_extraction_queue
-
-        reset_memory_extraction_queue()
-        app.state.lifecycle = previous_lifecycle
-        app.state.hooks = previous_hooks
-
-
 CHAT_STREAM_PATH = "/api/v1/chat/stream"
 
 # 提取器 mock 固定返回的事实（绕过真实 LLM 提取）
@@ -68,13 +44,6 @@ _FIXED_FACTS = [
 
 async def _run_chat_stream(client, session_id: str, message: str) -> str:
     """POST /chat/stream + attach 消费 + 等 producer 跑完，返回 attach 响应文本。"""
-
-    # This helper specifically verifies the legacy queue path.  A previous
-    # TestClient-based integration test can leave a lifecycle manager on the
-    # process-global app state; make the path selection deterministic before
-    # the background producer starts.  The module fixture restores the value.
-    app.state.lifecycle = None
-    app.state.hooks = None
 
     # mock SageAgent.run_loop 直接 DONE（不调真实 LLM）
     async def mock_run_loop(messages, max_iterations=5, **kwargs):

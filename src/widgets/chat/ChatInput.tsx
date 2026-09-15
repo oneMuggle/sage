@@ -8,7 +8,7 @@ import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
 import { AtEntityMenu } from '../../features/chat/AtEntityMenu';
 import { parseEntityRefQuery } from '../../features/chat/entityRefs';
 import { importOfficeReference } from '../../features/office/importOfficeReference';
-import { knowledgeApi, skillsApi } from '../../shared/api';
+import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { type AtFileSelection } from '../../shared/api/fileSearchClient';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
@@ -17,8 +17,10 @@ import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
 import { InputCard, type KnowledgeDocType } from './InputCard';
+import { extractTemplateVars, TemplateFillDialog } from './TemplateFillDialog';
 import {
   commandToPrompt,
+  mergePromptTemplates,
   mergeSlashCommands,
   type DynamicSlashSkill,
   type SlashCommand,
@@ -166,6 +168,14 @@ function ChatInputInner({
   // On fetch failure we silently fall back to an empty list (no slash skills).
   const [dynamicSlashCommands, setDynamicSlashCommands] = useState<DynamicSlashSkill[]>([]);
 
+
+  // R27-A: 用户 Prompt 模板（映射为 tpl-* 命令，选中即填充输入框）
+  const [promptTemplates, setPromptTemplates] = useState<
+    { name: string; content: string; description?: string }[]
+  >([]);
+  // R29: {{变量}} 填充对话框目标模板内容（null = 关闭）
+  const [fillTarget, setFillTarget] = useState<string | null>(null);
+
   // Task 7 (2026-07-26): managed Office refs attached via the @ menu.
   // Dedupe by docId (immutable state — every update is a new array).
   const [officeRefs, setOfficeRefs] = useState<readonly ChatOfficeRef[]>([]);
@@ -201,6 +211,26 @@ function ChatInputInner({
       .catch(() => setDynamicSlashCommands([]));
   }, []);
 
+  // R27-A: 载入用户 Prompt 模板（失败静默降级为无模板）。返回 reload 供
+  // /prompt-save 保存成功后刷新列表。
+  const reloadPromptTemplates = useCallback(() => {
+    return promptApi
+      .list()
+      .then((templates) =>
+        setPromptTemplates(
+          templates.map((t) => ({
+            name: t.name,
+            content: t.content,
+            description: t.description,
+          })),
+        ),
+      )
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    void reloadPromptTemplates();
+  }, [reloadPromptTemplates]);
+
   const {
     files,
     images,
@@ -226,7 +256,7 @@ function ChatInputInner({
       setValue(newValue);
       setCursorPos(atQuery.startIdx + 1 + filePath.length + 1);
     },
-    [value, atQuery],
+    [value, atQuery, setValue],
   );
 
   /** 对标 S3: 把 `@kind:` 前缀写入输入框（光标停在冒号后，等待用户输入查询）。 */
@@ -297,12 +327,18 @@ function ChatInputInner({
     const newValue = value.slice(0, atQuery.startIdx) + value.slice(atQuery.endIdx);
     setValue(newValue);
     setCursorPos(atQuery.startIdx);
-  }, [value, atQuery]);
+  }, [value, atQuery, setValue]);
 
   const handleSend = () => {
     // RT5 (round7): 运行中允许发送 —— onSend（useChat.sendMessage）按会话
     // 活跃流先走 steering 注入当前 run，失败回退队列；不再 UI 硬拦截。
     if (!value.trim()) return;
+    // R17-F→R23: 图片通道已打通（images data URL 直传后端）。仍被丢弃的
+    // 只有 files 与 knowledgeRefs（officeRefs 走 office_refs 通道不受影响
+    // ）—— 诚实提示而不是静默丢失。
+    if (files.length > 0 || knowledgeRefs.length > 0) {
+      toast.warning(t('chat.attachment_not_sent'));
+    }
     onSend(value.trim(), {
       knowledgeRefs: knowledgeRefs.length > 0 ? knowledgeRefs : undefined,
       attachments: files.length > 0 ? files : undefined,
@@ -361,6 +397,39 @@ function ChatInputInner({
         const helpText = slashCommands.map((c) => `/${c.name} — ${c.description}`).join('\n');
         setValue('');
         onSend(`可用命令列表：\n${helpText}`);
+        return;
+      }
+
+      // R27-A: prompt-save —— 把命令后剩余文本存为模板（名称取前 24 字）
+      if (cmd.name === 'prompt-save') {
+        if (isLoading || disabled) return;
+        const body = value.replace(/^\/prompt-save\s*/i, '').trim();
+        setSlashMenuOpen(false);
+        if (!body) {
+          toast.error(t('prompt.save_empty'));
+          return;
+        }
+        promptApi
+          .create(body.slice(0, 24), body)
+          .then(() => {
+            toast.success(t('prompt.saved'));
+            setValue('');
+            void reloadPromptTemplates();
+          })
+          .catch(() => toast.error(t('prompt.save_failed')));
+        return;
+      }
+
+      // R27-A/R29: 模板 —— 选中后经 {{变量}} 填充对话框解析再回填输入框
+      //（无占位的模板直接填入）。
+      if (cmd.mode === 'template' && cmd.content != null) {
+        setSlashMenuOpen(false);
+        // 无占位直接填入；含 {{变量}} 才走填充对话框
+        if (extractTemplateVars(cmd.content).length === 0) {
+          setValue(cmd.content);
+          return;
+        }
+        setFillTarget(cmd.content);
         return;
       }
 
@@ -432,6 +501,7 @@ function ChatInputInner({
       isLoading,
       disabled,
       setValue,
+      reloadPromptTemplates,
       navigate,
       t,
     ],
@@ -483,8 +553,14 @@ function ChatInputInner({
     // 检测 slash 命令
     if (newValue.startsWith('/')) {
       const query = newValue.slice(1).split(/\s/)[0] ?? '';
-      // Path B: merge static commands with dynamically loaded SKILL.md slash commands.
-      const merged = mergeSlashCommands(dynamicSlashCommands);
+      // Path B: merge static commands with dynamically loaded SKILL.md slash
+      // commands and user prompt templates (R27-A).
+      // 注意: 每次 keystroke 从完整源重算 —— slashCommands state 是过滤后的
+      // 菜单子集,不能作为合并基底（列表会随输入缩水）。
+      const merged = mergePromptTemplates(
+        mergeSlashCommands(dynamicSlashCommands),
+        promptTemplates,
+      );
       const lower = query.toLowerCase();
       const filtered = merged.filter(
         (cmd) => cmd.name.toLowerCase().includes(lower) || cmd.label.toLowerCase().includes(lower),
@@ -597,6 +673,16 @@ function ChatInputInner({
         }
         hint={t('chat.hint')}
       />
+      {fillTarget != null && (
+        <TemplateFillDialog
+          content={fillTarget}
+          onConfirm={(resolved) => {
+            setValue(resolved);
+            setFillTarget(null);
+          }}
+          onCancel={() => setFillTarget(null)}
+        />
+      )}
     </div>
   );
 }

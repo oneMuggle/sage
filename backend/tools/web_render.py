@@ -30,6 +30,7 @@ from .browser_cdp import (
     RESERVED_BROWSER_ID,
     BrowserCDPError,
     BrowserSession,
+    apply_stealth,
     cdp_command,
     get_browser_manager,
     launch_browser,
@@ -98,6 +99,7 @@ def _render_persistent_enabled() -> bool:
     except Exception:  # noqa: BLE001 — 配置失败按关闭处理（保持现状行为）
         return False
 
+
 # ---------------------------------------------------------------------------
 # JS 壳判定（auto 模式，纯函数）
 # ---------------------------------------------------------------------------
@@ -143,9 +145,7 @@ class RenderError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
-def wait_page_ready(
-    session: BrowserSession, target_id: Optional[str], wait_for: str = ""
-) -> None:
+def wait_page_ready(session: BrowserSession, target_id: Optional[str], wait_for: str = "") -> None:
     """navigate 后等页面可用：readyState 达标 → (可选)等 wait_for → 正文稳定。
 
     SPA 的 hydrate 发生在 readyState=complete 之后，只等 readyState 会拿到
@@ -172,9 +172,7 @@ def wait_page_ready(
         deadline = time.monotonic() + READY_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
             try:
-                found = _evaluate_json(
-                    session, f"!!document.querySelector({selector})", target_id
-                )
+                found = _evaluate_json(session, f"!!document.querySelector({selector})", target_id)
             except BrowserCDPError:
                 return
             if found:
@@ -335,13 +333,19 @@ def render_page(url: str, network_policy: Any, wait_for: str = "") -> Dict[str, 
         target_id = created.get("targetId")
         if not target_id:
             raise RenderError("渲染标签页创建失败")
+        # AB4：文档创建前注入 stealth（失败不阻断渲染）
+        apply_stealth(session, target_id, command=cdp_command)
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
         if result.get("errorText"):
             raise RenderError(f"渲染导航失败: {result['errorText']}")
         wait_page_ready(session, target_id, wait_for=wait_for)
         _scroll_for_lazy_load(session, target_id)
+        # AB1：主文档 HTTP 状态经 Navigation Timing 读取（CDP 短连接收不到
+        # Network 事件帧）——让 Cloudflare 403/503 盾页在渲染分支也可见。
         expression = (
             "JSON.stringify({url:location.href,title:document.title,"
+            "status:(function(){try{var e=performance.getEntriesByType('navigation')[0];"
+            "return e&&e.responseStatus||0}catch(x){return 0}})(),"
             f"html:document.documentElement.outerHTML.slice(0,{RENDER_HTML_CAP})}})"
         )
         info = _evaluate_json(session, expression, target_id)
@@ -379,7 +383,8 @@ def render_page(url: str, network_policy: Any, wait_for: str = "") -> Dict[str, 
         links = []
         tables = []
         truncated = len(content_text) >= RENDER_TEXT_CAP
-    return {
+    status = page.get("status")
+    rendered: Dict[str, Any] = {
         "url": final_url,
         "title": title,
         "content": content_text,
@@ -388,6 +393,9 @@ def render_page(url: str, network_policy: Any, wait_for: str = "") -> Dict[str, 
         "rendered": True,
         "truncated": truncated,
     }
+    if isinstance(status, int) and status > 0:
+        rendered["rendered_status"] = status
+    return rendered
 
 
 __all__ = [

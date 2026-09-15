@@ -30,13 +30,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 from sage_core import ToolResult, ToolSpec
 from sage_core.repositories import ToolPort  # noqa: F401  (structural typing target)
 
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools.bash_validation import validate_bash
+from backend.tools.executor import (
+    TIMEOUT_EXCEPTIONS,
+    tool_timeout_message,
+    truncate_output as _truncate_output,
+)
 from backend.tools.permissions import (
     DEFAULT_PERMISSION_MODE,
     PermissionEnforcer,
@@ -124,16 +129,14 @@ class InprocToolAdapter:
 
         try:
             raw = await asyncio.wait_for(
-                asyncio.get_running_loop().run_in_executor(None, lambda: tool.execute(**args)),
+                asyncio.to_thread(tool.execute, **args),
                 timeout=self._policy.timeout_seconds,
             )
-        except (asyncio.TimeoutError, TimeoutError):  # noqa: UP041
-            # Python 3.10: asyncio.exceptions.TimeoutError ≠ builtin TimeoutError；
-            # 3.11+ 两者为同一类。兼容两个名称。
+        except TIMEOUT_EXCEPTIONS:
             return ToolResult(
                 success=False,
                 output="",
-                error=f"tool_timeout: exceeded {self._policy.timeout_seconds}s",
+                error=tool_timeout_message(self._policy.timeout_seconds),
                 metadata={
                     "timeout_seconds": self._policy.timeout_seconds,
                     "truncated": False,
@@ -151,7 +154,9 @@ class InprocToolAdapter:
         if output_value is None:
             output_value = raw.content
         output_str = "" if output_value is None else str(output_value)
-        truncated_output, truncation_meta = _truncate_output(output_str, self._policy)
+        truncated_output, truncation_meta = _truncate_output(
+            output_str, self._policy.max_output_bytes
+        )
 
         metadata: Optional[Dict[str, Any]] = None
         if truncation_meta:
@@ -201,19 +206,4 @@ class InprocToolAdapter:
         return None
 
 
-def _truncate_output(output: str, policy: ToolPolicy) -> Tuple[str, Dict[str, Any]]:
-    """按 ``policy.max_output_bytes``（utf-8 字节）截断 output。
 
-    Returns:
-        (截断后字符串, metadata dict)。未截断时返回 ``("", {})`` 之外的
-        (原字符串, {})，调用方可据此判定是否需要在 metadata 标 truncated。
-    """
-    raw_bytes = output.encode("utf-8")
-    if len(raw_bytes) <= policy.max_output_bytes:
-        return output, {}
-    truncated = raw_bytes[: policy.max_output_bytes].decode("utf-8", errors="replace")
-    return truncated, {
-        "truncated": True,
-        "original_bytes": len(raw_bytes),
-        "max_output_bytes": policy.max_output_bytes,
-    }

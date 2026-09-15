@@ -44,7 +44,8 @@ def test_read_file_truncated_when_exceeds_max_read_bytes(tmp_path):
 def test_read_file_not_truncated_when_under_limit(tmp_path):
     """小文件 + 宽松 max_read_bytes → truncated=False。"""
     f = tmp_path / "small.txt"
-    f.write_text("hello\nworld\n", encoding="utf-8")
+    # newline="" 禁用 Windows 的 \n → \r\n 翻译，保证磁盘字节数与断言一致
+    f.write_text("hello\nworld\n", encoding="utf-8", newline="")
     tool = ReadFileTool(policy=ToolPolicy(max_read_bytes=10_000))
 
     result = tool.execute(path=str(f))

@@ -7,11 +7,11 @@
 """
 
 from __future__ import annotations
+from typing import List, Optional
 
 import asyncio
 import subprocess
 from contextlib import ExitStack
-from typing import List, Optional
 from unittest.mock import patch
 
 import pytest

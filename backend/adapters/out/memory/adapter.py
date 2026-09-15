@@ -14,8 +14,9 @@ import threading
 from typing import Any, Dict, List, Optional
 
 from backend.domain.memory import MemoryContext
-from backend.memory import ConsolidationPipeline, MemoryManager, embedding_queue
+from backend.memory import ConsolidationPipeline, MemoryManager
 from backend.memory.embedder_factory import create_embedder
+from backend.memory.manager import classify_memory_type
 from backend.memory.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -51,10 +52,12 @@ class MemoryAdapter:
         self.consolidation = ConsolidationPipeline(
             summary_store=getattr(memory_manager, "summary_store", None)
         )
-        # E9-1 (P9): 嵌入器工厂 —— 缺省 HashEmbedder (零依赖);
-        # SAGE_EMBEDDER=onnx 且模型文件就位时升级为语义嵌入 (512 维,
-        # 独立向量表 memories_vec_512, 与 256 维 Hash 向量互不混用)。
+        # E9-1 (P9) + Round 1: 嵌入器工厂 —— 缺省 HashEmbedder (零依赖);
+        # SAGE_EMBEDDER=onnx 且模型文件就位时升级为 ONNX 语义嵌入 (512 维);
+        # SAGE_EMBEDDER=model 且端点配置时升级为 HTTP 语义嵌入 (ModelEmbedder)。
         self.embedder = create_embedder()
+        # Round 1: 向量回填线程一次性标志（防重入）
+        self._backfill_started = False
         # 用户画像（USER.md 概念）: 缺省惰性取全局单例,失败时降级为 None
         self.user_profile = user_profile
         if self.user_profile is None:
@@ -158,7 +161,7 @@ class MemoryAdapter:
 
         Args:
             query: 查询文本,用于匹配相关记忆
-            session_id: 会话 ID(当前实现中未使用,预留用于会话级记忆过滤)
+            session_id: 会话 ID,透传给 recall 用于工作记忆的会话级过滤
             limit: 每种记忆类型的返回数量限制,默认 5
 
         Returns:
@@ -168,15 +171,21 @@ class MemoryAdapter:
 
         logger.debug(f"Retrieving memories for query: {query[:50]}...")
 
-        # 1. 关键词检索（MemoryManager）
-        keyword_results = self.memory_manager.recall(query, limit=limit)
+        # 1. 关键词检索（MemoryManager，工作记忆按 session 隔离）
+        keyword_results = self.memory_manager.recall(query, limit=limit, session_id=session_id)
         keyword_items = keyword_results.get("episodic", []) + keyword_results.get("semantic", [])
 
         # 2. 向量检索（VectorStore,批次三 step 5 起按 session 隔离）
+        # Round 1: 语义 Embedder 的 encode 含 HTTP/ONNX 推理 —— 挪线程执行器,
+        # 避免阻塞事件循环（test_event_loop_blocking 500ms 延迟门禁）。
         vector_items: List[dict] = []
         if self.vector_store is not None:
-            vec_results = self.vector_store.search(
-                query, top_k=limit, session_id=session_id
+            loop = asyncio.get_running_loop()
+            vec_results = await loop.run_in_executor(
+                None,
+                lambda: self.vector_store.search(
+                    query, top_k=limit, session_id=session_id
+                ),
             )
             for vr in vec_results:
                 mem_id = vr["memory_id"]
@@ -272,23 +281,19 @@ class MemoryAdapter:
         同时将记忆内容向量化存入 VectorStore，供后续向量检索使用。
         写入前进行安全扫描（Hermes 风格），阻止可疑内容。
 
-        Task 4 / Gap A — ``source_turn_id`` / ``source_message_id`` /
-        ``memory_category`` are forwarded through ``metadata`` so the
-        MemoryManager → EpisodicMemory chain persists them in the new
-        traceability columns.
-
         Args:
             content: 要存储的记忆内容
             session_id: 关联的会话 ID
             importance: 重要性评分 (1-10),默认 5
             tags: 可选的标签列表,用于分类和检索
-            source_turn_id: 该事实来源的 turn ID
-            source_message_id: 该事实来源的 message ID
+            source_turn_id: 该事实来源的 turn ID（Task 4 / Gap A 可追溯性）
+            source_message_id: 该事实来源的 message ID（Task 4 / Gap A）
             memory_category: 事实分类（user_pref / project_fact / task_summary /
                 cross_session_pattern — 由调用方/extractor 决定）
 
         Returns:
-            str: 生成的记忆 ID,对于工作记忆返回空字符串
+            str: 生成的记忆 ID。episodic/semantic 为持久 ID;
+            工作记忆为合成 ID ``wm:<session>:<seq>``;memorize 返回 None 时返回空字符串
         """
         from backend.memory.safety import get_scanner
 
@@ -303,42 +308,39 @@ class MemoryAdapter:
             )
             return ""
 
-        # 统一分类（消除规则漂移，与 MemoryManager.classify_memory_type 共用）
-        from backend.memory.manager import classify_memory_type
+        # 统一分类（与 MemoryManager 共用模块级 classify_memory_type,消除规则漂移）
         memory_type = classify_memory_type("auto", importance, content)
 
-        # 构建元数据（含可追溯性字段）
+        # 构建元数据（含 win7 Task 4 / Gap A 可追溯性字段，经 MemoryManager →
+        # EpisodicMemory 链写入 source_turn_id / source_message_id / memory_category 列）
         metadata = {
             "session_id": session_id,
             "tags": tags or [],
             "source_turn_id": source_turn_id,
             "source_message_id": source_message_id,
             "memory_category": memory_category,
-            "memory_type": memory_type,
         }
 
-        # 调用 MemoryManager.memorize() 存储记忆（透传 memory_type 以与 module-level classify 对齐）
+        # 调用 MemoryManager.memorize() 存储记忆（透传分类结果与会话 ID）
         memory_id = self.memory_manager.memorize(
-            content=content, memory_type=memory_type, importance=importance, metadata=metadata
+            content=content,
+            memory_type=memory_type,
+            importance=importance,
+            metadata=metadata,
+            session_id=session_id,
         )
 
         # 向量化存储（仅持久层记忆:工作记忆合成 id 不入向量库）
-        # T2 (P10): 语义嵌入 (Onnx) 的单条推理 ~10-50ms, 同步执行会阻塞
-        # save 路径 (事件循环) —— 走后台编码队列异步落库 (best-effort);
-        # 字面哈希编码 ~µs 级, 保持同步 (写入即见, 无队列延迟)。
+        # Round 1: 同 retrieve(), encode 含 HTTP/ONNX 推理, 挪线程执行器
+        # (T2 的队列化由该方案覆盖 —— run_in_executor 同样不阻塞事件循环)。
         if self.vector_store is not None and memory_id and memory_type in ("episodic", "semantic"):
-            if getattr(self.embedder, "is_semantic", False):
-                embedding_queue.enqueue(
-                    self.vector_store.add,
-                    memory_id,
-                    content,
-                    memory_type=memory_type,
-                    session_id=session_id,
-                )
-            else:
-                self.vector_store.add(
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.vector_store.add(
                     memory_id, content, memory_type=memory_type, session_id=session_id
-                )
+                ),
+            )
 
         return memory_id or ""
 
@@ -402,23 +404,22 @@ class MemoryAdapter:
 
         Note:
             此方法通常由 ChatService 在每次对话后自动调用。
-            如果 Token 数量未超过阈值,则不执行任何操作。
+            如果该会话 Token 数量未超过阈值,则不执行任何操作。
         """
-        # 检查工作记忆的 Token 数量
-        if self.memory_manager.working.total_tokens > 3000:
+        # 检查指定会话工作记忆的 Token 数量（按 session 隔离）
+        session_tokens = self.memory_manager.working.total_tokens_for(session_id)
+        if session_tokens > 3000:
             logger.info(f"Compressing working memory for session: {session_id}")
 
             # 调用 ConsolidationPipeline.consolidate() 压缩记忆
             # consolidate() 会:
-            # 1. 获取工作记忆中的所有消息
+            # 1. 获取该会话工作记忆中的所有消息
             # 2. 使用 LLM 或简单策略生成摘要
             # 3. 将摘要存储到情景记忆
-            # 4. 清空工作记忆
+            # 4. 清空该会话的工作记忆
             self.consolidation.consolidate(self.memory_manager, session_id=session_id)
         else:
-            logger.debug(
-                f"Skipping compression: tokens={self.memory_manager.working.total_tokens} <= 3000"
-            )
+            logger.debug(f"Skipping compression: tokens={session_tokens} <= 3000")
 
     # ------------------------------------------------------------------ #
     # Task 5 / Gap E — traceability queries (by-turn / category / session)

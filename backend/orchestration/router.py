@@ -7,7 +7,7 @@ Routes tasks to appropriate agents based on:
 - Agent availability and load
 - Permission requirements
 """
-
+from typing import Optional
 import uuid
 from dataclasses import dataclass
 from enum import Enum

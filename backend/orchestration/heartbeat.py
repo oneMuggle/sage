@@ -7,11 +7,11 @@ Periodically scans running lanes and detects:
 
 Triggers recovery policies when issues are detected.
 """
-
 import asyncio
 import contextlib
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 from backend.orchestration.models import HeartbeatStatus, LaneStatus
 

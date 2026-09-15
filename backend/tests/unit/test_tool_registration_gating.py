@@ -58,6 +58,25 @@ def test_gating_applies_to_subagent_registry():
     names = set(registry.list_names())
     assert "web_search" not in names
     assert "web_fetch" not in names
+    # Round 6 B2: 浏览器 navigate 同口径——OFFLINE 不注册；本地浏览器工具照常
+    assert "browser_navigate" not in names
+    assert "browser_launch" in names
+    assert "browser_snapshot" in names
+
+
+def test_subagent_registry_registers_browser_channel_online():
+    """Round 6 B2: ONLINE 模式下子代理注册表暴露浏览器通道（navigate 含内）。"""
+    registry = build_readonly_tool_registry(network_policy=NetworkPolicy(mode=NetworkMode.ONLINE))
+    names = set(registry.list_names())
+    for tool in (
+        "browser_launch",
+        "browser_navigate",
+        "browser_snapshot",
+        "browser_interact",
+        "browser_cookies",
+        "browser_close",
+    ):
+        assert tool in names
     assert "read_file" in names
 
 

@@ -294,6 +294,7 @@ def test_discover_dirs_respects_env_var(tmp_path, monkeypatch):
     env_dir.mkdir()
     monkeypatch.setenv("SAGE_PERSONAS_DIR", str(env_dir))
     monkeypatch.setenv("HOME", str(tmp_path))  # ~/.sage/personas 不存在
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows expanduser 读 USERPROFILE
 
     result = discover_persona_dirs()
 
@@ -305,6 +306,7 @@ def test_discover_dirs_includes_home_sage_personas(tmp_path, monkeypatch):
     home_personas.mkdir(parents=True)
     monkeypatch.setenv("SAGE_PERSONAS_DIR", "")
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows expanduser 读 USERPROFILE
 
     result = discover_persona_dirs()
 
@@ -314,6 +316,7 @@ def test_discover_dirs_includes_home_sage_personas(tmp_path, monkeypatch):
 def test_discover_dirs_empty_when_nothing_exists(tmp_path, monkeypatch):
     monkeypatch.setenv("SAGE_PERSONAS_DIR", "")
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows expanduser 读 USERPROFILE
 
     assert discover_persona_dirs() == []
 

@@ -2,11 +2,11 @@
 Sage 后端测试 - 共享 fixtures
 """
 
-import asyncio
 import contextlib
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -26,27 +26,6 @@ os.environ.setdefault("SAGE_TEST_FAST_SQLITE", "1")
 # 秒过超时取消路径；个别用例要验证"等待确认"本身时，用 monkeypatch.
 # setenv("SAGE_ORCH_CONFIRM_TIMEOUT", ...) 在用例内覆盖。
 os.environ.setdefault("SAGE_ORCH_CONFIRM_TIMEOUT", "1")
-
-
-# win7/py3.8 专用兜底（run #1694 实证）: 某些清理路径会 set_event_loop(None)
-# （pytest-asyncio 0.23 的事件循环管理 + 个别用例的手动清理），py3.8 的
-# get_event_loop 从此在 MainThread 也永久 RuntimeError（policy _set_called
-# 置位）。串行下文件顺序碰不到；xdist --dist loadfile 的分桶顺序把它暴露，
-# test_orch_run_control_steer.py 整文件炸 "There is no current event loop"。
-# 每个用例前确保存在可用 loop；py3.10+ 已改语义，直接跳过。
-@pytest.fixture(autouse=True)
-def _ensure_usable_event_loop():
-    # noqa 下一行: ruff 按 3.11 视角认为版本判断"过时",但 win7 运行时是
-    # py3.8,这里的分支就是给 py3.8 用的。
-    if sys.version_info >= (3, 10):  # noqa: UP036
-        yield
-        return
-    loop = None
-    with contextlib.suppress(RuntimeError):
-        loop = asyncio.get_event_loop()
-    if loop is None or loop.is_closed():
-        asyncio.set_event_loop(asyncio.new_event_loop())
-    yield
 
 # 确保项目根目录在 sys.path 中
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -126,6 +105,9 @@ def setup_test_db(request):
     # A4: WakeStore 单例绑定全局 Database，必须随临时库一起重置，
     # 否则下一个用例拿到持有已关闭连接的旧 store。
     from backend.application.services.wake_store import reset_wake_store
+
+    # MessageSearchIndex 单例绑定全局 Database（Round 2 session_search）
+    from backend.data.message_search import reset_message_search_index
     from backend.main import app
     from backend.memory.registry import reset_memory_manager
 
@@ -138,6 +120,12 @@ def setup_test_db(request):
     # 会话自动放行台账（对标 S3）：进程内，跨用例清空
     from backend.services.auto_approval_ledger import reset_auto_approval_ledger
 
+    # SkillAuditLog 单例同理（Round 3 技能审计台账）
+    from backend.skills.audit import reset_skill_audit_log
+
+    # SkillDraftStore 单例绑定全局 DB 路径（无 reset 会缓存旧 tmp 库）
+    from backend.skills.draft_store import reset_skill_draft_store
+
     # SkillLifecycleStore 单例同理（技能归档策展状态）
     from backend.skills.lifecycle import reset_lifecycle_store
 
@@ -146,6 +134,15 @@ def setup_test_db(request):
 
     monkeypatch = request.getfixturevalue("monkeypatch")
     monkeypatch.setenv("SAGE_LOCAL_AUTH_TOKEN", "test-local-auth-token")
+    # Round 5 修复: recent_projects 等 user-data 文件是跨 worker 共享的
+    # 读-改-写资源，xdist 并行时互相覆盖 → wiki 授权 403 偶发。
+    # 给每个 xdist worker 独立的 user-data 目录，消除跨进程竞态。
+    xdist_worker = os.environ.get("PYTEST_XDIST_WORKER", "")
+    if xdist_worker:
+        monkeypatch.setenv(
+            "SAGE_USER_DATA_DIR",
+            str(Path(os.environ.get("SAGE_USER_DATA_DIR", tempfile.gettempdir())) / f"xdist-{xdist_worker}"),
+        )
     from backend.api import local_auth
     local_auth._local_auth_token = None
     initialize_local_auth_token()
@@ -158,8 +155,14 @@ def setup_test_db(request):
     reset_auto_approval_ledger()
     reset_usage_store()
     reset_lifecycle_store()
-    # §1.3a (§1.3a-batch3 主分支同步已合并): PRAGMA foreign_keys=ON,
-    # 测试 DB 也启用, ensure_session() 在需要父 session 行的测试里调用。
+    reset_skill_audit_log()
+    reset_skill_draft_store()
+    reset_message_search_index()
+    # MemoryExtractionQueue 单例绑定全局事件循环，必须随测试重置
+    # （取消残留 worker，避免跨测试泄漏 + "task was destroyed" 警告）
+    from backend.memory.async_extractor import reset_memory_extraction_queue
+
+    reset_memory_extraction_queue()
     # PR-3: 与生产 lifespan 保持一致, 启动时种子化 4 个默认 agent.
     # 测试不走 FastAPI lifespan, 显式调一次以模拟.
     from backend.data.agent_repo import AgentRepository

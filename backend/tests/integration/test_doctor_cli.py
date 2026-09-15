@@ -62,14 +62,9 @@ class TestDoctorCLITextMode:
 
     def test_text_output_includes_severity_tags(self):
         result = _run_doctor()
-        # Severity tags are emitted as `[<padded>]` lines (e.g. `[    INFO]` /
-        # `[WARN]` / `[CRITICAL]`). The padding width depends on the longest
-        # severity label. We don't require every tag to appear (some envs
-        # produce no CRITICAL/WARN); we just assert at least one of them
-        # appears as a bracketed severity tag.
         assert any(
             tag in result.stdout
-            for tag in ("[    INFO]", "[INFO]", "[WARN]", "[CRITICAL]")
+            for tag in ("[CRITICAL]", "[WARN", "[INFO")
         ), "no severity tag found in stdout"
 
     def test_text_output_summary_counts_match(self):
@@ -100,13 +95,12 @@ class TestDoctorCLIJsonMode:
         for key in ("checks", "summary", "timestamp", "python_version", "platform"):
             assert key in data, f"missing key: {key}"
 
-    def test_json_has_fifteen_checks(self):
+    def test_json_has_sixteen_checks(self):
         result = _run_doctor("--json")
         data = json.loads(result.stdout)
         assert isinstance(data["checks"], list)
-        # L15(2026-09-06): 15→16 (加 secret_storage; win7 线无 network 检查);
-        # CA3(2026-09-11): 16→17 (加 agents_files)
-        assert len(data["checks"]) == 17
+        # 2026-09-05: 15→16 (加 network)
+        assert len(data["checks"]) == 18
 
     def test_json_check_entry_shape(self):
         result = _run_doctor("--json")
@@ -122,8 +116,8 @@ class TestDoctorCLIJsonMode:
         result = _run_doctor("--json")
         data = json.loads(result.stdout)
         summary = data["summary"]
-        # CA3(2026-09-11): 16→17 (加 agents_files)
-        assert summary["critical"] + summary["warn"] + summary["info"] == 17
+        # 2026-09-05: 15→16 (加 network)
+        assert summary["critical"] + summary["warn"] + summary["info"] == 18
 
     def test_json_python_version_format(self):
         result = _run_doctor("--json")
@@ -156,6 +150,9 @@ class TestDoctorCLIJsonMode:
             "log_dir_size",
             "frontend_dist",
             "skills",
+            # 2026-09-04: runtime_env; 2026-09-05: network
+            "runtime_env",
+            "network",
         }
         assert expected.issubset(names)
 
@@ -197,8 +194,8 @@ class TestDoctorCLIExitCodes:
         json_total = summary["critical"] + summary["warn"] + summary["info"]
         assert json_result.returncode == _expected_exit_code(summary["critical"], summary["warn"])
 
-        # CA3(2026-09-11): 16→17 (加 agents_files) —— 两种模式必须报同样多的检查项
-        assert text_total == json_total == 17
+        # 2026-09-05: 15→16 (加 network); 之后 17/18 —— 两种模式必须报同样多的检查项
+        assert text_total == json_total == 18
 
 
 class TestDoctorCLIHelp:

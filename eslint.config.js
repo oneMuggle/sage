@@ -7,7 +7,7 @@ import importPlugin from 'eslint-plugin-import';
 import globals from 'globals';
 
 export default [
-  { ignores: ['dist', 'node_modules', 'src-tauri', 'coverage', '*.config.{js,ts,mjs}'] },
+  { ignores: ['dist', 'node_modules', 'src-tauri', 'coverage', '.claude', 'backend/**/export_assets', '*.config.{js,ts,mjs}'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

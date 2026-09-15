@@ -218,6 +218,35 @@ class McpClient:
             {"name": name, "arguments": arguments},
         )
 
+    # ---- R20-A: resources / prompts（与 http_client 对齐, stdio 服务器
+    # 此前合成不出资源/prompt 工具——synthesize_extra_specs 按 duck-typing
+    # 探测这四个方法, 缺失即静默跳过）----
+
+    def list_resources(self):
+        """List exposed resources: [{"uri": str, "name": str, ...}, ...]"""
+        self._ensure_started()
+        result = self._send_request("resources/list", {})
+        return result.get("resources", [])
+
+    def read_resource(self, uri: str):
+        """Read one resource: {"contents": [{"uri", "text"...}, ...]}"""
+        self._ensure_started()
+        return self._send_request("resources/read", {"uri": uri})
+
+    def list_prompts(self):
+        """List prompt templates: [{"name": str, "description": str}, ...]"""
+        self._ensure_started()
+        result = self._send_request("prompts/list", {})
+        return result.get("prompts", [])
+
+    def get_prompt(self, name: str, arguments: dict):
+        """Render one prompt template: {"messages": [...]}"""
+        self._ensure_started()
+        return self._send_request(
+            "prompts/get",
+            {"name": name, "arguments": arguments},
+        )
+
     def _ensure_started(self) -> None:
         if not self.is_running:
             raise McpClientError(f"MCP server '{self._config.name}' is not running")

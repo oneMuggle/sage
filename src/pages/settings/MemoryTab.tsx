@@ -13,16 +13,16 @@
  *   写死展示既不准也无用。
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
+import { memoryApi } from '../../shared/api';
 import { invoke } from '../../shared/api/desktopInvoke';
 
 import type { EndpointsTabProps } from './components';
 import { SettingRow, Toggle } from './components';
 
 export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
-  const navigate = useNavigate();
   const [embedderStatus, setEmbedderStatus] = useState<{
     type: string;
     dimensions: number;
@@ -32,95 +32,21 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
     semantic: boolean;
   } | null>(null);
   const [selecting, setSelecting] = useState(false);
-
-  // ── win7 原有: auto_memory / memory_retrieval 偏好（IPC bridge）──────
-  // Source of truth = backend preference via IPC bridge.
-  // null = not yet loaded OR backend returned null (default True).
-  const [autoMemoryLoaded, setAutoMemoryLoaded] = useState<boolean | null>(null);
-  // Important-2: the "记忆检索注入" toggle drives its OWN preference
-  // (memory_retrieval) — independent of auto_memory. Before this fix both
-  // toggles shared autoMemoryLoaded + handleAutoMemoryChange, so flipping
-  // one flipped the other.
-  const [memoryRetrievalLoaded, setMemoryRetrievalLoaded] = useState<boolean | null>(null);
-
+  // R17-B: 记忆固化手动触发
+  const [consolidating, setConsolidating] = useState(false);
+  const [consolidationResult, setConsolidationResult] = useState<{
+    promoted: number;
+    decayed: number;
+    total: number;
+  } | null>(null);
+  // 卸载守卫:异步回调不触碰已卸载组件的 state(避免 "setState on unmounted" 警告)
+  const mountedRef = useRef(true);
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      const api = window.electronAPI;
-      if (!api) {
-        if (!cancelled) setAutoMemoryLoaded(true);
-        return;
-      }
-      try {
-        const raw = await api.memory.getAutoMemory();
-        if (cancelled) return;
-        if (raw === null || raw === undefined) {
-          setAutoMemoryLoaded(true);
-          return;
-        }
-        setAutoMemoryLoaded(String(raw).toLowerCase() === 'true');
-      } catch {
-        if (!cancelled) setAutoMemoryLoaded(true);
-      }
-    };
-    load();
+    mountedRef.current = true;
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
     };
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      const api = window.electronAPI;
-      if (!api) {
-        if (!cancelled) setMemoryRetrievalLoaded(true);
-        return;
-      }
-      try {
-        const raw = await api.memory.getMemoryRetrieval();
-        if (cancelled) return;
-        if (raw === null || raw === undefined) {
-          setMemoryRetrievalLoaded(true);
-          return;
-        }
-        setMemoryRetrievalLoaded(String(raw).toLowerCase() === 'true');
-      } catch {
-        if (!cancelled) setMemoryRetrievalLoaded(true);
-      }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleAutoMemoryChange = async (next: boolean) => {
-    setAutoMemoryLoaded(next);
-    try {
-      await updateSettings({ autoMemory: next });
-    } catch {
-      // settingsClient already warns on failure
-    }
-    try {
-      const api = window.electronAPI;
-      if (!api) return;
-      await api.memory.setAutoMemory({ value: next });
-    } catch {
-      setAutoMemoryLoaded(!next);
-    }
-  };
-
-  const handleMemoryRetrievalChange = async (next: boolean) => {
-    setMemoryRetrievalLoaded(next);
-    try {
-      const api = window.electronAPI;
-      if (!api) return;
-      await api.memory.setMemoryRetrieval({ value: next });
-    } catch {
-      setMemoryRetrievalLoaded(!next);
-    }
-  };
 
   const loadEmbedderStatus = useCallback(async () => {
     try {
@@ -142,6 +68,37 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
     void loadEmbedderStatus();
   }, [loadEmbedderStatus]);
 
+  // P8 (2026-09-14): 语义模型下载 —— 订阅 models:embedder:progress
+  // （#755 已修 sage:event: 前缀），完成/失败即刷新嵌入器状态。
+  const [modelDownload, setModelDownload] = useState<{ stage: string; file?: string } | null>(
+    null,
+  );
+  const [downloadingModel, setDownloadingModel] = useState(false);
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    let cancelled = false;
+    const offs: Array<() => void> = [];
+    void window.electronAPI
+      .listen<{ stage: string; file?: string }>('models:embedder:progress', (p) => {
+        if (cancelled) return;
+        setModelDownload({ stage: p.stage, file: p.file });
+        if (p.stage === 'complete') {
+          setDownloadingModel(false);
+          void loadEmbedderStatus();
+        } else if (p.stage === 'error') {
+          setDownloadingModel(false);
+        }
+      })
+      .then((off) => {
+        if (cancelled) off();
+        else offs.push(off);
+      });
+    return () => {
+      cancelled = true;
+      offs.forEach((off) => off());
+    };
+  }, [loadEmbedderStatus]);
+
   const selectEmbedder = useCallback(
     async (mode: 'onnx' | 'hash') => {
       setSelecting(true);
@@ -154,8 +111,133 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
         setSelecting(false);
       }
     },
-    [],
+    [loadEmbedderStatus],
   );
+
+  // P8: 语义模型下载（触发 models:embedder:download；进度见上方 listen）
+  const handleDownloadModel = useCallback(async () => {
+    const api = window.electronAPI?.modelDownload;
+    if (!api) {
+      toast.error('当前环境不支持模型下载');
+      return;
+    }
+    setDownloadingModel(true);
+    try {
+      const res = await api.download();
+      if (res.ok) {
+        toast.success('语义模型下载完成，可启用语义嵌入');
+        await loadEmbedderStatus();
+      } else {
+        toast.error(`模型下载失败: ${res.error ?? '未知错误'}`);
+      }
+    } catch (err) {
+      toast.error(`模型下载失败: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setDownloadingModel(false);
+    }
+  }, [loadEmbedderStatus]);
+
+  // R19: 数据安全 —— 备份清单/手动备份/记忆导出
+  const [backups, setBackups] = useState<
+    { name: string; size_bytes: number; created_at: number }[]
+  >([]);
+  const [backingUp, setBackingUp] = useState(false);
+  const [exportingMemory, setExportingMemory] = useState(false);
+
+  const loadBackups = useCallback(async () => {
+    try {
+      const res = await invoke<{ backups: { name: string; size_bytes: number; created_at: number }[] }>(
+        'system_backups_list',
+      );
+      setBackups(res.backups ?? []);
+    } catch {
+      setBackups([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBackups();
+  }, [loadBackups]);
+
+  const handleBackupNow = useCallback(async () => {
+    setBackingUp(true);
+    try {
+      await invoke('system_backup_create');
+      await loadBackups();
+    } catch {
+      // 静默——列表不刷新即反映失败
+    } finally {
+      setBackingUp(false);
+    }
+  }, [loadBackups]);
+
+  // R21-A: 恢复备份（两步确认，下次启动生效）
+  const [restoringName, setRestoringName] = useState<string | null>(null);
+  const [restoreArmed, setRestoreArmed] = useState<string | null>(null);
+  const handleRestore = useCallback(
+    async (name: string) => {
+      if (restoreArmed !== name) {
+        setRestoreArmed(name);
+        return;
+      }
+      setRestoreArmed(null);
+      setRestoringName(name);
+      try {
+        await invoke('system_backup_restore', { name });
+        window.alert('恢复已安排：将在下次启动应用（已自动做恢复前安全备份）');
+      } catch {
+        window.alert('恢复失败，详见服务端日志');
+      } finally {
+        setRestoringName(null);
+      }
+    },
+    [restoreArmed],
+  );
+
+  // R21-B: 导入记忆 JSON
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importingMemory, setImportingMemory] = useState(false);
+  const handleImportMemoryFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImportingMemory(true);
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const res = await invoke<{ imported: number; skipped: number; failed: number }>(
+        'memory_import',
+        { payload },
+      );
+      window.alert(`导入完成：新增 ${res.imported} 条，跳过重复 ${res.skipped} 条，失败 ${res.failed} 条`);
+    } catch {
+      window.alert('导入失败：文件格式需为 Sage 导出的记忆 JSON');
+    } finally {
+      setImportingMemory(false);
+    }
+  }, []);
+
+  const handleExportMemory = useCallback(async () => {
+    setExportingMemory(true);
+    try {
+      const data = await invoke<unknown>('memory_export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json;charset=utf-8',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `sage-memory-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch {
+      // 静默
+    } finally {
+      setExportingMemory(false);
+    }
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -172,6 +254,37 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
               模型目录: {embedderStatus.model_dir} · 模型文件:
               {embedderStatus.model_ready ? '已就绪' : '未就绪'}
             </p>
+            {/* P8: ONNX 模型未就绪时提供一键下载（内置清单，sha256 校验） */}
+            {embedderStatus.model_ready === false && (
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  type="button"
+                  data-testid="embedder-model-download"
+                  disabled={downloadingModel}
+                  onClick={() => void handleDownloadModel()}
+                  className="px-3 py-1.5 rounded-radius-sm bg-primary text-text-inverse text-xs font-medium hover:bg-primary-hover disabled:opacity-50"
+                >
+                  {downloadingModel ? '下载中…' : '下载语义模型（约 90 MB）'}
+                </button>
+                {downloadingModel && modelDownload?.file && (
+                  <span className="text-[10px] text-muted tabular-nums">{modelDownload.file}</span>
+                )}
+                {downloadingModel && (
+                  <button
+                    type="button"
+                    data-testid="embedder-model-cancel"
+                    onClick={() => {
+                      void window.electronAPI?.modelDownload
+                        ?.cancel('bge-small-zh-v1.5')
+                        .catch(() => undefined);
+                    }}
+                    className="text-[10px] text-muted hover:text-text underline"
+                  >
+                    取消
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-xs text-text-secondary">嵌入器状态加载中…</p>
@@ -196,6 +309,46 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
         </div>
       </section>
       <section>
+        <h3 className="text-sm font-semibold text-text mb-3">记忆固化</h3>
+        <p className="text-xs text-text-secondary mb-2">
+          每周日 04:30 自动执行：把访问频繁的短期记忆晋升为语义记忆，并衰减长期未访问的记忆。也可手动立即执行。
+        </p>
+        <SettingRow label="手动固化" desc="立即运行一次记忆固化任务（通常无需手动触发）">
+          <button
+            type="button"
+            data-testid="memory-consolidation-run"
+            disabled={consolidating}
+            onClick={() => {
+              setConsolidating(true);
+              setConsolidationResult(null);
+              void memoryApi
+                .runConsolidation()
+                .then((result) => {
+                  if (!mountedRef.current) return;
+                  setConsolidationResult(result);
+                  toast.success(`固化完成：晋升 ${result.promoted} 条，衰减 ${result.decayed} 条`);
+                })
+                .catch((err: unknown) => {
+                  if (!mountedRef.current) return;
+                  toast.error(`固化失败: ${err instanceof Error ? err.message : String(err)}`);
+                })
+                .finally(() => {
+                  if (mountedRef.current) setConsolidating(false);
+                });
+            }}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            {consolidating ? '固化中...' : '立即固化'}
+          </button>
+        </SettingRow>
+        {consolidationResult && (
+          <p className="text-xs text-text-secondary mt-2" data-testid="memory-consolidation-result">
+            上次手动固化：晋升 {consolidationResult.promoted} 条 · 衰减 {consolidationResult.decayed}{' '}
+            条 · 处理 {consolidationResult.total} 条
+          </p>
+        )}
+      </section>
+      <section>
         <h3 className="text-sm font-semibold text-text mb-3">记忆管理</h3>        <SettingRow
           label="本地存储"
           desc="记忆数据存储在本地 SQLite 数据库中，具体路径由 SAGE_DB_PATH 环境变量与运行模式决定"
@@ -213,24 +366,79 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
             onChange={(v) => updateSettings({ memoryServerSync: v })}
           />
         </SettingRow>
-        <SettingRow label="自动记忆沉淀" desc="每轮对话后自动提取并保存有价值的点">
-          <Toggle value={autoMemoryLoaded ?? true} onChange={handleAutoMemoryChange} />
-        </SettingRow>
-        <SettingRow label="记忆检索注入" desc="对话时自动注入相关记忆到上下文">
-          <Toggle
-            value={memoryRetrievalLoaded ?? true}
-            onChange={handleMemoryRetrievalChange}
-          />
-        </SettingRow>
       </section>
       <section>
-        <button
-          type="button"
-          onClick={() => navigate('/memory')}
-          className="text-sm text-primary hover:underline"
-        >
-          查看记忆管理 →
-        </button>
+        <h3 className="text-sm font-semibold text-text mb-3">数据安全</h3>
+        <p className="text-xs text-text-secondary mb-2">
+          应用每日自动备份数据库（保留最近 7 份），也可手动立即备份；记忆支持导出为 JSON 文件。
+        </p>
+        <div className="flex gap-2 mb-3">
+          <button
+            type="button"
+            data-testid="backup-now"
+            disabled={backingUp}
+            onClick={() => void handleBackupNow()}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            {backingUp ? '备份中…' : '立即备份'}
+          </button>
+          <button
+            type="button"
+            data-testid="export-memory"
+            disabled={exportingMemory}
+            onClick={() => void handleExportMemory()}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            {exportingMemory ? '导出中…' : '导出记忆 (JSON)'}
+          </button>
+        </div>
+        {backups.length > 0 && (
+          <ul className="text-xs text-text-secondary space-y-1" data-testid="backup-list">
+            {backups.slice(0, 5).map((b) => (
+              <li key={b.name} className="font-mono flex items-center gap-2">
+                <span className="flex-1 truncate">
+                  {b.name} · {(b.size_bytes / 1024 / 1024).toFixed(1)} MB ·{' '}
+                  {new Date(b.created_at).toLocaleString()}
+                </span>
+                <button
+                  type="button"
+                  data-testid={`restore-${b.name}`}
+                  disabled={restoringName !== null}
+                  onClick={() => void handleRestore(b.name)}
+                  className={`px-2 py-0.5 rounded border text-[11px] disabled:opacity-50 ${
+                    restoreArmed === b.name
+                      ? 'border-error text-error bg-error/5'
+                      : 'border-border hover:bg-bg-hover'
+                  }`}
+                >
+                  {restoreArmed === b.name
+                    ? '确认恢复（下次启动生效）'
+                    : restoringName === b.name
+                      ? '恢复中…'
+                      : '恢复'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="mt-2">
+          <button
+            type="button"
+            data-testid="import-memory"
+            disabled={importingMemory}
+            onClick={() => importInputRef.current?.click()}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+          >
+            {importingMemory ? '导入中…' : '导入记忆 (JSON)'}
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => void handleImportMemoryFile(e)}
+          />
+        </div>
       </section>
     </div>
   );

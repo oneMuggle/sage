@@ -1,5 +1,15 @@
-import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 
 import { sortSiderItemsByStoredOrder } from '../../shared/lib/dnd/siderOrder';
 import { SortableSessionItem } from '../../shared/lib/dnd/sortableItem';

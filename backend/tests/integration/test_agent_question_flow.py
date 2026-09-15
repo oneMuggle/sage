@@ -21,7 +21,6 @@ import pytest
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.agent_state import AgentState
 from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
-from backend.data.settings_repo import SettingsRepository
 from backend.services.question_gate import (
     get_question_gate,
     init_question_gate,
@@ -35,20 +34,9 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(autouse=True)
 def _gate_lifecycle():
     """每个测试独立 gate, 防止跨测试挂起请求泄漏。"""
-    # question_gate 是进程级单例；本文件改写 settings.permission_mode
-    # 后写回原值（写后必还）。注意 permission_mode 残留并非跨测试泄漏
-    # 的实际根因——autouse setup_test_db 给每个测试独立 temp DB；真正
-    # 的跨测试残留源是 main.py lifespan 装配的全局 gate（shutdown 已
-    # reset）。
-    _repo = SettingsRepository()
-    _prev_mode = _repo.get("permission_mode")
     reset_question_gate()
     yield
     reset_question_gate()
-    if _prev_mode is None:
-        _repo.delete("permission_mode")
-    else:
-        _repo.set("permission_mode", _prev_mode)
 
 
 def _make_response(content: str = "", tool_calls=None) -> LLMResponse:

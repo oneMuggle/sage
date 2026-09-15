@@ -77,7 +77,11 @@ from backend.scheduler import get_evolution_logs
 from backend.skills.draft_store import get_skill_draft_store
 from backend.skills.loader import get_skill_loader
 from backend.skills.review_queue import get_review_queue
-from backend.skills.skill_md.frontmatter import SkillMdParseError, parse as parse_skill_md
+from backend.skills.skill_md.frontmatter import (
+    SkillMdParseError,
+    dump as dump_skill_md,
+    parse as parse_skill_md,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +218,13 @@ class ChatRequest(BaseModel):
     # Task 6 (M1-M2 chat-read): frontend 把 @mention 解析成
     # ``backend.office.chat_refs.ChatOfficeRef`` 列表,``chat_stream_create``
     # 在调 LLM 前同步授权. 空列表 = legacy 路径(attachment_resolver).
+    # 用 forward ref 避免 route→domain 循环导入; ``model_rebuild`` 在
+    # legacy_routes 模块加载完毕时自动被 Pydantic v2 调用.
     office_refs: List[ChatOfficeRef] = Field(default_factory=list)
+
+    # R37: 聊天文本文档附件 —— 已上传媒体 id 列表（POST /chat/attachments
+    # 返回的 media_ref.id）。producer 按 id 读全文，注入上下文附件块。
+    attachment_media_ids: List[str] = Field(default_factory=list)
 
     # G6 (2026-09-06): 聊天图片输入 —— base64 data URL 列表（data:image/png;base64,...）。
     # 非空时 user 消息转 OpenAI 多模态 content（text + image_url 分段），
@@ -335,7 +345,7 @@ class AgentUpdate(BaseModel):
     """
 
     # 注: Pydantic 默认对 "model_" 前缀的字段名有保留命名空间保护.
-    # 实际字段用 model_config_data (避开保留名), 路由层映射到 model_config.
+    # win7 (Pydantic 1/2 双兼容): 用 ``class Config`` 关掉该保护.
     class Config:
         protected_namespaces = ()
 
@@ -672,6 +682,20 @@ def _persist_compaction(
         continuation,
         after,
     )
+    # WS-C P0-3: 压缩失效点 — 压缩事务提交后, 通知 hex 路径 ChatService
+    # 实例失效该 session 的 system prompt 快照 (下一轮 run_turn 重建)。
+    # _persist_compaction 是自动 / 手动压缩共用的唯一落盘出口, 挂这里
+    # 一条代码路径覆盖两者。best-effort: 失败只记日志, 不影响压缩结果。
+    try:
+        from backend.application.services.chat_service import invalidate_session_snapshot
+
+        invalidate_session_snapshot(session_id)
+    except Exception as exc:
+        logger.warning(
+            "[M4] session=%s 压缩快照失效失败(忽略): %s",
+            _safe_log_field(session_id),
+            exc,
+        )
     return after
 
 
@@ -725,7 +749,6 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
 
     # 二次检查 + 占位：should_compact 检查与 LLM 调用之间，并发请求
     # 可能已进入压缩流程（``_compact_in_progress`` 已被占用）。
-    # 此处 ``add`` 返回 None 表示占位成功，否则意味着已经有别人先抢到。
     if _compact_in_progress_add(session_id) is False:
         logger.debug(
             "[M4] session=%s 并发抢先, 跳过本次自动压缩",
@@ -824,20 +847,42 @@ async def _extract_legacy_chat_memory(
     user_text: str,
     assistant_text: str,
 ) -> None:
-    """将 legacy 聊天记忆提取非阻塞地投递到单 worker 队列。"""
+    """legacy /chat/stream 在 assistant 消息落盘后 best-effort 提取记忆。
+
+    记忆提取异步化：本函数只做廉价装配（读 autoMemory 开关、构建
+    MemoryAdapter / MemoryExtractor），然后把耗时的 LLM 提取投递到
+    后台队列（``get_memory_extraction_queue().submit``），由单 worker
+    串行消费，不阻塞流式请求收尾。
+
+    - 开关：读 app_settings.autoMemory, 缺省 True（与前端 defaultSettings
+      及 hex 路径"有 memory 即写"的现行行为一致）。
+    - 实例：get_memory_manager() 全局单例 + MemoryAdapter 包装（与
+      main.py hex 装配方式一致）；提取 LLM 复用 HttpxLLMAdapter,
+      调用失败时 MemoryExtractor 内部降级为关键词提取。
+    - 函数保持 async 签名（调用点 await 不变），但 submit 非阻塞,
+      装配完立即返回。
+    - 任何异常只 warning 绝不外抛——记忆写入不得影响已完成的流式响应。
+    """
     try:
         from backend.data.settings_repo import SettingsRepository
 
         settings = SettingsRepository().get_json("app_settings")
-        enabled = not isinstance(settings, dict) or bool(settings.get("autoMemory", True))
+        enabled = True
+        if isinstance(settings, dict):
+            enabled = bool(settings.get("autoMemory", True))
         if not enabled:
             return
 
         from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
         from backend.adapters.out.memory.adapter import MemoryAdapter
-        from backend.memory.async_extractor import ExtractionRequest, get_memory_extraction_queue
+        from backend.memory.async_extractor import (
+            ExtractionRequest,
+            get_memory_extraction_queue,
+        )
         from backend.memory.extractor import MemoryExtractor
 
+        # 记忆提取异步化：廉价装配（读设置/建 adapter）仍在本函数内完成，
+        # 仅把耗时的 LLM 提取投递到后台队列，不阻塞流式请求收尾。
         get_memory_extraction_queue().submit(
             ExtractionRequest(
                 memory_port=MemoryAdapter(get_memory_manager()),
@@ -849,7 +894,10 @@ async def _extract_legacy_chat_memory(
             )
         )
     except Exception as exc:
-        logger.warning("[REQ %s] legacy 记忆提取失败(忽略, 不影响聊天): %s", request_id, exc)
+        logger.warning(
+            f"[REQ {request_id}] legacy 记忆提取失败(忽略, 不影响聊天): {exc}"
+        )
+# ===== WS-C P0-2 END =====
 
 
 # 进程内重入护栏（MEDIUM-1 后端兜底）：同一会话并发手动压缩时，两者都会在
@@ -1092,18 +1140,34 @@ def _get_skill_adapter():
     return get_singleton()
 
 
-def _skill_to_dict(ext: dict, enabled: bool, usage_count: int) -> dict:
+def _skill_to_dict(
+    ext: dict, enabled: bool, usage_count: int, pinned: Optional[bool] = None
+) -> dict:
     """把扩展 SkillSpec dict + 路由层 enabled/usage_count 序列化为响应 dict。
 
     ``ext`` 来自 ``InprocSkillAdapter.list_skills_extended()``,
     含 ``source / body / base_dir / version`` 等字段 (SKILL.md 时填充, builtin 时不存在)。
+
+    ``pinned`` 传 None 时不透出（Round 17 管理面：列表/单技能响应统一带 pin 态）。
 
     复制一份避免修改 adapter 返回的共享 dict (immutable-ish 风格)。
     """
     out = dict(ext)
     out["enabled"] = enabled
     out["usage_count"] = usage_count
+    if pinned is not None:
+        out["pinned"] = pinned
     return out
+
+
+def _get_pinned_names() -> Set[str]:
+    """lifecycle store 的 pin 集合（惰性导入，缺表时 best-effort 返回空集）。"""
+    try:
+        from backend.skills.lifecycle import get_lifecycle_store
+
+        return get_lifecycle_store().get_pinned_names()
+    except Exception:
+        return set()
 
 
 @router.get("/skills")
@@ -1111,8 +1175,14 @@ def _skill_to_dict(ext: dict, enabled: bool, usage_count: int) -> dict:
 def list_skills():
     """列出所有已注册技能 (含 disabled 与 usage_count + SKILL.md 扩展字段)。"""
     adapter = _get_skill_adapter()
+    pinned_names = _get_pinned_names()
     return [
-        _skill_to_dict(ext, adapter.is_enabled(ext["name"]), adapter.usage_count(ext["name"]))
+        _skill_to_dict(
+            ext,
+            adapter.is_enabled(ext["name"]),
+            adapter.usage_count(ext["name"]),
+            pinned=ext["name"] in pinned_names,
+        )
         for ext in adapter.list_skills_extended()
     ]
 
@@ -1141,7 +1211,9 @@ def toggle_skill(name: str, data: SkillToggle):
     # 返回完整 skill dict (与 list 接口一致) —— 用 list_skills_extended 拿带 source/body 的版本
     ext = next((e for e in adapter.list_skills_extended() if e["name"] == name), None)
     assert ext is not None  # set_enabled 已 guard
-    return _skill_to_dict(ext, adapter.is_enabled(name), adapter.usage_count(name))
+    return _skill_to_dict(
+        ext, adapter.is_enabled(name), adapter.usage_count(name), pinned=name in _get_pinned_names()
+    )
 
 
 class SkillArchive(BaseModel):
@@ -1157,13 +1229,23 @@ def archive_skill(name: str, data: SkillArchive):
 
     - 200 + 完整 skill dict（含新 lifecycle）
     - 404 + 结构化 detail（技能名不存在）
+    - 409 — 技能被 pin（Round 5: 钉住技能不参与归档）
     - 422（FastAPI 自动）— archived 缺失 / 类型错
 
     归档技能从 auto_activate / slash 候选排除（adapter 层），文件不动、可恢复。
-
-    §1.2 win7: 仅 sync SQLite 写（adapter.set_archived/list/is_enabled/usage_count）
-    无真 await → 降级 def + @with_db_lock 串行化单连接访问。
     """
+    # Round 5: pin 防归档 —— 钉住技能拒绝 archive=True 请求
+    if data.archived:
+        from backend.skills.lifecycle import get_lifecycle_store
+
+        if get_lifecycle_store().is_pinned(name):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "type": "skill_pinned",
+                    "message": f"skill '{name}' is pinned; unpin before archiving",
+                },
+            )
     adapter = _get_skill_adapter()
     if not adapter.set_archived(name, data.archived):
         raise HTTPException(
@@ -1173,7 +1255,42 @@ def archive_skill(name: str, data: SkillArchive):
     # 返回完整 skill dict（与 toggle 一致）—— lifecycle 已由 list_skills_extended 注入
     ext = next((e for e in adapter.list_skills_extended() if e["name"] == name), None)
     assert ext is not None  # set_archived 已 guard
-    return _skill_to_dict(ext, adapter.is_enabled(name), adapter.usage_count(name))
+    return _skill_to_dict(
+        ext, adapter.is_enabled(name), adapter.usage_count(name), pinned=name in _get_pinned_names()
+    )
+
+
+class SkillPinRequest(BaseModel):
+    """``POST /skills/{name}/pin`` 请求体（Round 5）。"""
+
+    pinned: bool
+
+
+@router.post("/skills/{name}/pin")
+@with_db_lock
+def pin_skill(name: str, data: SkillPinRequest):
+    """钉住 / 取消钉住技能（Round 5: 钉住后不可归档，巡检不给出 archive 建议）。
+
+    - 200 + ``{"name": ..., "pinned": ...}``
+    - 404 — 技能名不存在
+    """
+    from backend.skills.lifecycle import get_lifecycle_store
+
+    store = get_lifecycle_store()
+    if not store.is_pinned(name):
+        # 未 pin 过的技能名也可能尚未注册 —— 校验技能存在于技能面
+        # （adapter 层成员检查，无副作用），否则 404。
+        adapter = _get_skill_adapter()
+        if not any(e.get("name") == name for e in adapter.list_skills_extended()):
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "type": "skill_not_found",
+                    "message": f"skill '{name}' not found",
+                },
+            )
+    store.set_pinned(name, data.pinned)
+    return {"name": name, "pinned": data.pinned}
 
 
 class SkillExecuteRequest(BaseModel):
@@ -1491,7 +1608,7 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
         # existing 是 list/scalar (脏数据) → 用空树, 不阻断合法 PUT; 与 hex PUT 对齐.
         existing = {}
 
-    # LegacySettingsRequest 是 extra="allow", dict(exclude_none=True) 会包含所有 set 字段
+    # LegacySettingsRequest 是 extra="allow", model_dump(exclude_none=True) 会包含所有 set 字段
     # (含 extras, 如 streaming/foo/endpoints) — 这是设计: 旧客户端 PUT schema 之外字段不丢。
     payload = model_dump_compat(req, exclude_none=True)
 
@@ -1524,6 +1641,7 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
             detail={
                 "type": "invalid_settings_payload",
                 "message": "设置内容无效，请检查字段格式",
+                "field": field,
             },
         ) from exc
     try:
@@ -1557,19 +1675,17 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
 def legacy_get_preference(key: str) -> LegacyPreferenceItem:
     """通用 KV 读取（白名单限定 key）。
 
-    alpha.8 (2026-08-27): 当 key == "app_settings" 时, value 是整棵 settings JSON
-    字符串. 原样回显会把真实 apiKey 暴露给前端 — 必须走 redact_secrets_json()
-    抹掉 apiKey 留下 hasApiKey 元数据. 与 hex GET /preferences/{key} 对齐.
+    2026-08-26: 当 key=='app_settings' 时, 对 value (JSON 字符串) 做
+    ``redact_secrets_json`` —— 把 endpoint.apiKey 替换为 hasApiKey 标记,
+    防止明文凭据通过 preference GET 返回前端 (OWASP A02:2021).
     """
+    from backend.data.settings_canonicalizer import redact_secrets_json
     from backend.data.settings_repo import SettingsRepository
 
     if key not in SettingsRepository.KEYS:
         raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
     val = SettingsRepository().get(key)
-    if key == "app_settings" and val is not None and isinstance(val, str):
-        # DB 里存的是 raw JSON (含真实 apiKey); 响应里必须脱敏.
-        from backend.data.settings_canonicalizer import redact_secrets_json
-
+    if key == "app_settings":
         val = redact_secrets_json(val)
     return LegacyPreferenceItem(value=val)
 
@@ -1687,6 +1803,52 @@ async def chat(
             "message": None,
             "session": None,
         }
+
+
+def _build_memory_used_event(
+    memory_manager: Any,
+    query: str,
+    session_id: str,
+) -> Optional[Dict[str, Any]]:
+    """R17-E: 构造 memory_used 流事件（记忆召回展示）。
+
+    用 ``MemoryManager.recall`` 取本次消息命中的结构化记忆条目（每类
+    top3，总体截断 5 条、preview 截 80 字），供前端消息气泡展示
+    "N 条记忆已应用"。任何失败返回 ``None``（事件属增强信息，绝不
+    影响对话主流程）。
+    """
+    if memory_manager is None:
+        return None
+    try:
+        recall_fn = getattr(memory_manager, "recall", None)
+        if not callable(recall_fn):
+            return None
+        hits = recall_fn(query=query, limit=3, session_id=session_id) or {}
+        memories: List[Dict[str, Any]] = []
+        for mem_type, entries in hits.items():
+            for entry_item in (entries or [])[:3]:
+                if not isinstance(entry_item, dict):
+                    continue
+                preview = str(entry_item.get("content", ""))[:80]
+                if not preview.strip():
+                    continue
+                memories.append(
+                    {
+                        "id": str(entry_item.get("id") or preview),
+                        "memory_type": str(entry_item.get("memory_type") or mem_type),
+                        "preview": preview,
+                    }
+                )
+        if not memories:
+            return None
+        return {
+            "state": "memory_used",
+            "session_id": session_id,
+            "memories": memories[:5],
+        }
+    except Exception as exc:  # noqa: BLE001 — 降级铁律
+        logger.debug(f"memory_used event build skipped: {exc}")
+        return None
 
 
 @router.post("/chat/stream")
@@ -1987,12 +2149,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             run_id: Optional[str] = None
             dispatcher = None
             try:
-                # win7 惯例 (PR A §1.2): 同步 DB 读经 _run_db_sync; today_cost_usd
-                # 内部自带 _SQLITE_LOCK, 不能再包 _run_db_sync(非重入死锁),
-                # 改走裸 executor 线程。
                 from backend.data.settings_repo import SettingsRepository
                 from backend.services.usage_tracker import usage_tracker as _usage_tracker
 
+                # win7 惯例 (PR A §1.2): 同步 DB 读经 _run_db_sync; today_cost_usd
+                # 内部自带 _SQLITE_LOCK, 不能再包 _run_db_sync(非重入死锁),
+                # 改走裸 executor 线程。
                 _raw_limit = await _run_db_sync(
                     SettingsRepository().get, "spend_limit_usd"
                 )
@@ -2001,9 +2163,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug(f"[REQ {request_id}] 花费限额读取失败(视为不限): {limit_read_err}")
                 _spend_limit = 0.0
             if _spend_limit > 0:
-                import asyncio as _asyncio
-
-                _today_cost = await _asyncio.get_running_loop().run_in_executor(
+                _today_cost = await asyncio.get_running_loop().run_in_executor(
                     None, _usage_tracker.today_cost_usd
                 )
                 if _today_cost >= _spend_limit:
@@ -2013,7 +2173,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         _today_cost,
                         _spend_limit,
                     )
-                    # S1 (2026-09-06): finally 落库 failed + 原因
+                    # S1: finally 落库 failed + 原因
                     _producer_error = "今日花费已达限额（spend_limit_exceeded）"
                     await entry.queue.put(
                         {
@@ -2337,10 +2497,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             await asyncio.wait_for(
                                 confirm_event.wait(), timeout=confirm_timeout
                             )
-                        except asyncio.TimeoutError:  # noqa: UP041 — win7 跑 py3.8: asyncio.TimeoutError ≠ builtin TimeoutError(3.11 才统一),必须显式接 asyncio 别名
-                            # py3.8(win7): asyncio.TimeoutError ≠ builtin
-                            # TimeoutError(3.11 才统一)——裸 TimeoutError 在
-                            # py38 上接不住,超时会直接炸 producer。
+                        except asyncio.TimeoutError:  # noqa: UP041 — py3.8: asyncio.TimeoutError ≠ builtin TimeoutError (3.11 才统一)
                             logger.warning(
                                 "编排确认超时 (%ss)，自动取消 run %s",
                                 confirm_timeout,
@@ -2464,6 +2621,61 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
             # ===== L13 记忆上下文注入 END =====
 
+            # ===== R17-E 记忆召回展示事件 BEGIN =====
+            # L13 注入是静默的 —— 用户无法知道回答用了哪些记忆。注入成功
+            # 后用 recall() 取结构化命中（top3），推送 memory_used 流事件；
+            # 前端 Message 气泡显示"N 条记忆已应用"并可展开查看明细。
+            # fail-safe：任何异常只跳过事件，绝不影响注入与对话主流程。
+            if dynamic_context_parts and not memory_off:
+                l13_evt = _build_memory_used_event(
+                    getattr(agent, "memory_manager", None),
+                    query=data.message,
+                    session_id=data.session_id,
+                )
+                if l13_evt is not None:
+                    try:
+                        entry.queue.put_nowait(l13_evt)
+                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                        logger.debug(
+                            f"[REQ {request_id}] memory_used event push failed, ignored"
+                        )
+            # ===== R17-E 记忆召回展示事件 END =====
+
+            # ===== R37 文本文档附件注入 BEGIN =====
+            # 已上传文本文档（attachment_media_ids）按 id 读全文，截断后并入
+            # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
+            try:
+                from backend.services.multimodal.media_store import (
+                    MEDIA_ROOT,
+                    MediaKind,
+                    MediaStore,
+                )
+
+                r37_store = MediaStore(root=MEDIA_ROOT)
+                for r37_mid in data.attachment_media_ids[:10]:
+                    try:
+                        _r37_loaded = r37_store.load(r37_mid)
+                    except Exception:
+                        _r37_loaded = None
+                    if _r37_loaded is None:
+                        continue
+                    _r37_ref, r37_bytes = _r37_loaded
+                    if _r37_ref.kind != MediaKind.DOCUMENT:
+                        continue
+                    try:
+                        r37_text = r37_bytes.decode("utf-8")[:100_000]
+                    except UnicodeDecodeError:
+                        continue
+                    if not r37_text.strip():
+                        continue
+                    dynamic_context_parts.append(
+                        "<attached_document id=" + repr(r37_mid) + ">" + chr(10)
+                        + r37_text + chr(10) + "</attached_document>"
+                    )
+            except Exception as r37_att_err:
+                logger.debug(f"[REQ {request_id}] attachment media inject skipped: {r37_att_err}")
+            # ===== R37 文本文档附件注入 END =====
+
             attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
 
             # ===== S3 实体引用 (@memory:/@wiki:/@skill:/@agent:) BEGIN =====
@@ -2569,16 +2781,17 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # session metadata。每个落盘独立 try/except,失败只 logger.warning
             # 不破坏流。
             #
-            # PR A §1.2 (cherry-pick from main #294): 这些调用必须经
-            # ``_run_db_sync`` 包装,否则:
+            # PR A §1.2 (win7): 这些调用必须经 ``_run_db_sync`` 包装,否则:
             # 1) 同步 SQLite I/O 直接跑在事件循环线程,会阻塞其他 SSE/chat handler;
             # 2) 与 ``_SQLITE_LOCK`` 守护的 compact / fork / watchdog / storage
             #    adapter 路径并发时,会触发
             #    "cannot start a transaction within a transaction"。
+            message_repo = MessageRepository()
+            session_repo = SessionRepository()
             user_now = int(time.time() * 1000)
             try:
                 await _run_db_sync(
-                    MessageRepository().save,
+                    message_repo.save,
                     DbMessage(
                         id=str(uuid.uuid4()),
                         session_id=data.session_id,
@@ -2672,32 +2885,32 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             }
                         )
                         await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
-                    # 最终 reasoning 事件携带累积全量 (而非单次 evt.reasoning)。
-                    # 这样: 持久化、最终事件、前端累积 三者 reasoning 文本一致,
-                    # 不依赖前端每个 delta 都没丢。
-                    # 2026-09-02 bug fix (cherry-pick from main): state 改名为 "reasoning_final"
-                    # 区分"流式 delta"和"收尾全量"——前端对应走 replaceReasoning 而不是 appendReasoning,
-                    # 否则 reasoning_delta 累积全文 + done_reasoning 全量 = 用户视觉上重复两遍。
-                    await entry.queue.put({
-                        "state": "reasoning_final",
-                        "iteration": evt.iteration,
-                        "agent_id": evt.agent_id,
-                        "reasoning": done_reasoning,
-                    })
+                    # 2026-09-02 bug fix: 之前用 evt.to_dict() 复制出来的 final 事件
+                    # state 字段是 "reasoning",前端 appendReasoning 又把它当作增量追加,
+                    # 导致 reasoning_delta + reasoning 双重累积 (用户视觉上"重复两遍")。
+                    # 改成显式 state="reasoning_final" 区分:
+                    #   - reasoning_delta: 增量,前端 append
+                    #   - reasoning_final: 全量(对齐持久化字段),前端 replace 兜底
+                    # 不再依赖 evt.to_dict() 的隐式 state,避免类似 future 漂移。
+                    await entry.queue.put(
+                        {
+                            "state": "reasoning_final",
+                            "iteration": evt.iteration,
+                            "agent_id": evt.agent_id,
+                            "reasoning": done_reasoning,
+                        }
+                    )
                 else:
                     await entry.queue.put(evt.to_dict())
 
             # run_loop 正常结束 (DONE) → 持久化 assistant + 更新 session。
             # LLMError 走 except 分支,此块不执行 (无 assistant 可保存)。
-            #
-            # PR A §1.2: 这些落盘也必须经 ``_run_db_sync``,与用户消息持久化
-            # 路径走同一把 ``_SQLITE_LOCK``,保证会话级串行写。
             if done_content:
                 assistant_now = int(time.time() * 1000)
                 assistant_message_id: Optional[str] = None
                 try:
                     saved = await _run_db_sync(
-                        MessageRepository().save,
+                        message_repo.save,
                         DbMessage(
                             id=str(uuid.uuid4()),
                             session_id=data.session_id,
@@ -2745,27 +2958,25 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
                         )
                 try:
-                    sess = await _run_db_sync(
-                        SessionRepository().get, data.session_id
-                    )
+                    sess = await _run_db_sync(session_repo.get, data.session_id)
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 会话读取失败: {db_err}")
                 if sess is not None:
                     try:
                         await _run_db_sync(
-                            SessionRepository().update,
+                            session_repo.update,
                             data.session_id,
                             last_message_at=assistant_now,
                             message_count=sess.message_count + 2,
                         )
                     except Exception as db_err:
                         logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
-                # Important-1: when lifespan has installed a lifecycle manager,
-                # use it so memory_written hooks and traceability are emitted.
-                # Legacy boots without lifecycle use the async extraction queue.
+                # Important-1 (win7 Task 6): when lifespan has installed a lifecycle
+                # manager, use it so memory_written hooks and traceability are
+                # emitted. Otherwise fall back to the async extraction queue.
                 if assistant_message_id is not None:
                     lifecycle = getattr(request.app.state, "lifecycle", None)
-                    if lifecycle is not None:
+                    if lifecycle is not None and not memory_off:
                         try:
                             await lifecycle.on_turn_complete(
                                 data.session_id,
@@ -2803,9 +3014,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 # PR A §1.2: 标题更新同样需经 ``_run_db_sync``
                                 # 走 ``_SQLITE_LOCK``,与本会话其他写入串行化。
                                 await _run_db_sync(
-                                    SessionRepository().update,
-                                    data.session_id,
-                                    title=title,
+                                    session_repo.update, data.session_id, title=title
                                 )
                                 await entry.queue.put(
                                     {
@@ -2844,10 +3053,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 partial_text = "".join(streamed_partial_parts).strip()
                 if partial_text:
                     try:
-                        # win7 对齐：本分支无 message_repo 局部（#575 才引入），
                         # 落盘走与 DONE 持久化同一把 _SQLITE_LOCK（_run_db_sync）。
                         await _run_db_sync(
-                            MessageRepository().save,
+                            message_repo.save,
                             DbMessage(
                                 id=str(uuid.uuid4()),
                                 session_id=data.session_id,
@@ -2930,6 +3138,17 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             detail={"code": "session_busy", "active_stream_id": busy_err.active_stream_id},
         )
     return {"streamId": stream_id}
+
+
+@router.get("/chat/stream/active")
+def get_active_chat_stream(session_id: str, request: Request):
+    """R25-D4: 查询会话当前活跃的 chat 流（renderer 重载后 reattach 用）。
+
+    Returns:
+        ``{"streamId": "<uuid>" | None}`` —— None 表示该会话没有活跃流。
+    """
+    registry: StreamRegistry = request.app.state.streams
+    return {"streamId": registry.find_active_by_session(session_id)}
 
 
 @router.get("/chat/stream/{stream_id}")
@@ -3027,7 +3246,7 @@ def steer_agent(data: SteerRequest):
     消息在目标 run 的**下一迭代边界**注入 LLM 上下文（agent.run_loop
     消费，与编排链 O1 边界投递同语义）。纯内存注册表 + deque 操作，
     不走 DB 锁；失败面：
-    - 404 stream_not_found：stream 不存在/已结束
+  - 404 stream_not_found：stream 不存在/已结束
     - 409 not_running：stream 存在但 agent 不在 run 活跃窗口
       （前端收到 409 回退排队语义——run 结束后作为新消息发送）
     - 400 msg_too_long：超过 8KB 额度
@@ -3094,13 +3313,12 @@ def learn_from_session(request: LearnRequest):
     - 404 — session_id does not exist
     - 422 (FastAPI 自动) — session_id 缺失
 
-    .. note:: I-2 follow-up
-        The worker currently receives ``messages: []`` as a placeholder
-        and does not yet load the full conversation history from
-        ``session_id``. LLM therefore runs with empty context and may
-        produce low-quality or hallucinated drafts. A follow-up task
-        should have the worker call ``MessageRepository.get_by_session``
-        to populate the messages list before invoking ReviewService.
+    .. note:: fix/security-perf-quickwins §1.3a d (2026-08-09)
+        The route enqueues ``messages: []`` as a placeholder and the
+        background worker loads the full conversation history from
+        ``session_id`` via ``MessageRepository.get_by_session`` before
+        invoking ``ReviewService``. This keeps the HTTP request body
+        small while still giving the LLM a complete context to summarize.
     """
     # I-2 fix: validate session existence before enqueueing — avoids
     # wasting LLM tokens on reviews for non-existent sessions.
@@ -3116,10 +3334,13 @@ def learn_from_session(request: LearnRequest):
         trigger_type="explicit_learn",
         session_id=request.session_id,
         context={
-            # TODO(I-2): worker should load conversation history via
-            # MessageRepository.get_by_session(session_id) instead of
-            # passing an empty list. The LLM currently receives no
-            # conversation context, producing low-quality drafts.
+            # fix/security-perf-quickwins (2026-08-09, §1.3a d): the worker
+            # now loads conversation history from MessageRepository before
+            # invoking ReviewService (see backend/skills/review_queue.py
+            # _process_event). The empty placeholder below is intentional —
+            # it signals to the worker that loading is required, and also
+            # keeps the request body small (no point shipping N messages
+            # over HTTP when the worker can read them from the DB).
             "messages": [],
             "user_prompt": request.prompt,
         },
@@ -3222,9 +3443,27 @@ def approve_skill_draft(draft_id: str):
             },
         ) from exc
 
+    # Round 7: provenance frontmatter 注入 —— hermes 的 provenance 语义
+    # (agent-created / user-created)，审计与巡检都依赖这个标记区分来源。
+    content_to_write = draft.content
+    try:
+        meta, body = parse_skill_md(content_to_write)
+        metadata_field = meta.get("metadata")
+        if not isinstance(metadata_field, dict):
+            metadata_field = {}
+        metadata_field.setdefault("provenance", "agent-created")
+        meta["metadata"] = metadata_field
+        content_to_write = dump_skill_md(meta, body)
+    except (SkillMdParseError, TypeError, ValueError, UnicodeError) as exc:
+        logger.warning(
+            "provenance 注入失败，按原文落盘 (draft=%s): %s",
+            _safe_log_field(draft_id),
+            type(exc).__name__,
+        )
+
     try:
         skill_loader = get_skill_loader()
-        skill_loader.write(draft.name, draft.content, overwrite=False)
+        skill_loader.write(draft.name, content_to_write, overwrite=False)
     except FileExistsError as exc:
         logger.info(
             "Skill already exists; draft=%s remains pending",
@@ -3260,6 +3499,19 @@ def approve_skill_draft(draft_id: str):
         ) from exc
 
     draft_store.update_status(draft_id, "approved")
+    # Round 3: 审批创建动作进审计台账（append-only, best-effort）
+    try:
+        from backend.skills.audit import get_skill_audit_log
+
+        get_skill_audit_log().record(
+            draft.name,
+            "create",
+            actor="user",
+            after_content=content_to_write,
+            source=f"draft:{draft_id}",
+        )
+    except Exception as exc:  # noqa: BLE001 — 审计为旁路
+        logger.warning("Skill audit hook (create) failed: %s", exc)
     try:
         reload_result = _get_skill_adapter().rescan_skill_mds()
     except Exception as exc:  # noqa: BLE001 — approval succeeds even if reload fails
@@ -3297,6 +3549,240 @@ def reject_skill_draft(draft_id: str):
 
     draft_store.update_status(draft_id, "rejected")
     return {"status": "rejected", "draft_id": draft_id}
+
+
+# ---------------------------------------------------------------------------
+# Round 3 (skill audit + rollback, 对标 hermes curator):
+# 技能变更审计台账查询 + 单条一键回滚。
+# ---------------------------------------------------------------------------
+
+
+@router.get("/skills/{name}/audit")
+def list_skill_audit(name: str, limit: int = 50):
+    """List audit entries for a skill (append-only ledger).
+
+    - 200 + ``{"skill_name": ..., "entries": [...]}``
+    """
+    from backend.skills.audit import get_skill_audit_log
+
+    entries = get_skill_audit_log().list_entries(name, limit=max(1, min(limit, 200)))
+    return {"skill_name": name, "entries": entries}
+
+
+@router.post("/skills/{name}/rollback")
+@with_db_lock
+def rollback_skill(name: str):
+    """Rollback a skill to its latest recorded previous content.
+
+    - 200 + ``{"status": "rolled_back", "skill_name": ...}``
+    - 404 — skill does not exist on disk
+    - 409 — no rollback snapshot recorded for this skill
+    - 400 — invalid skill name
+    """
+    from backend.skills.audit import get_skill_audit_log
+    from backend.skills.loader import get_skill_loader
+
+    loader = get_skill_loader()
+    try:
+        current = loader.read(name)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_skill_name", "message": "Invalid skill name"},
+        ) from exc
+    if current is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "skill_not_found", "message": "Skill not found"},
+        )
+
+    snapshot = get_skill_audit_log().latest_before_snapshot(name)
+    if snapshot is None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "no_rollback_snapshot",
+                "message": "No previous content recorded for this skill",
+            },
+        )
+
+    try:
+        loader.write(name, snapshot, overwrite=True)
+    except (OSError, ValueError) as exc:
+        logger.error(
+            "Skill rollback write failed: name=%s error_type=%s",
+            _safe_log_field(name),
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "skill_write_failed", "message": "Failed to write skill"},
+        ) from exc
+
+    get_skill_audit_log().record(
+        name,
+        "rollback",
+        actor="user",
+        before_content=current,
+        after_content=snapshot,
+    )
+    logger.info("Skill rolled back: %s", _safe_log_field(name))
+    return {"status": "rolled_back", "skill_name": name}
+
+
+# ---------------------------------------------------------------------------
+# Round 5 (curator consolidation): LLM 巡检建议 —— 只产建议进台账，
+# 不自动动文件；人工审阅后走既有 archive / draft-approve 流程。
+# ---------------------------------------------------------------------------
+
+
+@router.post("/skills/consolidation/scan")
+async def scan_skill_consolidation(auto_draft: bool = True, mode: str = "full"):
+    """Run an LLM consolidation scan over active skills.
+
+    - 200 + ``{"suggestions": [...], "scanned": N, "drafts_created": M, "mode": ...}``
+    - 503 — LLM provider 未装配（巡检不可用）
+
+    Round 9: merge/revise 建议自动生成 SkillDraft（pending，进既有审批面，
+    落盘仍需人工批准）；archive 建议仅提示（已有可逆 archive 流程）。
+    ``auto_draft=false`` 退回仅建议模式。
+
+    R28 增量巡检：``mode=auto`` 时以上次巡检水位（台账最近一条
+    consolidation_note 的时间戳）为界，仅复审水位后有使用/台账事件的技能；
+    无水位（从未巡检）自动退化为全量。缺省 ``mode=full`` 行为不变。
+    """
+    from backend.skills.consolidator import (
+        collect_active_skills,
+        collect_delta_names,
+        collect_skill_docs,
+        get_consolidation_service,
+        last_scan_watermark,
+    )
+    from backend.skills.lifecycle import get_lifecycle_store
+
+    service = get_consolidation_service()
+    if service is None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "type": "llm_unavailable",
+                "message": "LLM provider not configured; consolidation scan unavailable",
+            },
+        )
+
+    scan_mode = "auto" if mode == "auto" else "full"
+    candidate_names: Optional[Set[str]] = None
+    if scan_mode == "auto":
+        watermark = last_scan_watermark()
+        if watermark is not None:
+            candidate_names = collect_delta_names(watermark)
+
+    store = get_lifecycle_store()
+    pinned = store.get_pinned_names()
+    skills = collect_active_skills(names=candidate_names)
+    suggestions = await service.scan(skills, pinned_names=sorted(pinned))
+
+    # 建议落审计台账（append-only；每条建议一条 consolidation_note）
+    from backend.skills.audit import get_skill_audit_log
+
+    audit_log = get_skill_audit_log()
+    for suggestion in suggestions:
+        audit_log.record(
+            "+".join(suggestion["skill_names"]),
+            "consolidation_note",
+            actor="system",
+            after_content=json.dumps(suggestion, ensure_ascii=False),
+            source="consolidation_scan",
+        )
+
+    drafts_created = 0
+    if auto_draft and suggestions:
+        from backend.skills.draft_store import get_skill_draft_store
+
+        skill_docs = collect_skill_docs(
+            sorted({n for s in suggestions for n in s.get("skill_names", [])})
+        )
+        drafts_created = await service.generate_drafts(
+            suggestions,
+            skill_docs,
+            get_skill_draft_store(),
+            source="consolidation_scan",
+        )
+    return {
+        "suggestions": suggestions,
+        "scanned": len(skills),
+        "drafts_created": drafts_created,
+        "mode": scan_mode,
+    }
+
+
+class ConsolidationAcceptRequest(BaseModel):
+    """``POST /skills/consolidation/accept`` 请求体（Round 15）。"""
+
+    skill_names: List[str]
+
+
+@router.post("/skills/consolidation/accept")
+@with_db_lock
+def accept_consolidation_archive(data: ConsolidationAcceptRequest):
+    """采纳 archive 类建议：批量归档指定技能（Round 15）。
+
+    - 200 + ``{"archived": [...], "skipped_pinned": [...], "missing": [...]}``
+    - 400 — skill_names 为空
+    pinned 技能自动跳过并在 skipped_pinned 报告（不会静默归档）。
+    merge/revise 类建议不走此端点（已有草稿审批面）。
+    """
+    from backend.skills.lifecycle import get_lifecycle_store
+
+    if not data.skill_names:
+        raise HTTPException(
+            status_code=400,
+            detail={"type": "empty_skill_names", "message": "skill_names is required"},
+        )
+    store = get_lifecycle_store()
+    adapter = _get_skill_adapter()
+    known = {e.get("name") for e in adapter.list_skills_extended()}
+    pinned = store.get_pinned_names()
+
+    archived: List[str] = []
+    skipped_pinned: List[str] = []
+    missing: List[str] = []
+    for name in data.skill_names:
+        if name not in known:
+            missing.append(name)
+        elif name in pinned:
+            skipped_pinned.append(name)
+        else:
+            store.set_archived(name, True)
+            archived.append(name)
+    return {
+        "archived": archived,
+        "skipped_pinned": skipped_pinned,
+        "missing": missing,
+    }
+
+
+@router.get("/skills/consolidation/suggestions")
+def list_consolidation_suggestions(limit: int = 50):
+    """List recorded consolidation suggestions (from the audit ledger)."""
+    from backend.skills.audit import get_skill_audit_log
+
+    entries = get_skill_audit_log().list_entries(limit=limit)
+    suggestions = []
+    for entry in entries:
+        if entry["action"] != "consolidation_note":
+            continue
+        try:
+            suggestions.append(
+                {
+                    "skill_names": entry["skill_name"].split("+"),
+                    "suggestion": json.loads(entry.get("after_content") or "{}"),
+                    "created_at": entry["created_at"],
+                }
+            )
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return {"suggestions": suggestions}
 
 
 def _draft_to_dict(draft) -> dict:

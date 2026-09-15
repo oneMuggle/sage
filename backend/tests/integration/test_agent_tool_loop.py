@@ -228,8 +228,10 @@ class TestAgentToolLoopSafety:
 
     @pytest.mark.asyncio()
     async def test_agent_tool_offloaded_event_loop_stays_responsive(self, monkeypatch):
-        """HIGH: the agent tool runs off-loop — a concurrent ticker keeps
-        advancing while the (slow) sub-run is awaited."""
+        """HIGH: the agent tool sub-run is cooperative async on the event loop
+        (live-events P2) — a concurrent ticker keeps advancing while the slow
+        sub-run is awaited. (The old thread-offload contract is replaced:
+        timeouts now cancel the sub-run instead of abandoning a thread.)"""
         agent = SageAgent()
         agent.permission_enforcer = _allow_agent_enforcer()
         primary_llm = MagicMock()

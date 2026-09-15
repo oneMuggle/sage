@@ -46,9 +46,15 @@ WEB_TOOLS = WEB_SEARCH_TOOLS + WEB_FETCH_TOOLS
 
 MEMORY_TOOLS = ("memory_search", "memory_save")
 
+# Round 2 (session_search): 跨会话历史对话原文检索 —— 记忆库存抽取条目，
+# 本工具补原始对话的检索入口（对标 hermes session search）。
+SESSION_SEARCH_TOOLS = ("session_search",)
+
 # Office CRUD 七件套（PR-3 补 office_archive — soft-delete，与 office_restore 配对）
 # + 2026-09 Office Parity Batch-1：把 HTTP 端点已验证的 PDF 三类能力
 # （读文本 / 生成 / 表单读写）与 Word 模板两件套（分析 / 填充）接入工具面。
+# + 2026-09 Office Parity Batch-2：office_analyze —— pandas 本地数据分析
+# （describe/计数/聚合/相关性，可生成分析报告 xlsx）。
 OFFICE_TOOLS = (
     "office_list",
     "office_read",
@@ -64,11 +70,11 @@ OFFICE_TOOLS = (
     "office_analyze_word_template",
     "office_fill_word_template",
     "office_analyze",
-    # Round 9 引用体系：BibTeX 解析（READ）
+    # 2026-09-11 Round 9 引用体系：BibTeX 解析（READ，纯文本、无工作区依赖）
     "office_parse_bibtex",
-    # Round 10 格式 Linter（READ）
+    # 2026-09-11 Round 10 格式 Linter：对照 FormatSpec 校验 docx（READ）
     "office_lint_word",
-    # Round 12 自动修复（WRITE_LOCAL）
+    # 2026-09-12 Round 12 自动修复：lint→修复→复检（WRITE_LOCAL）
     "office_repair_word",
 )
 
@@ -140,7 +146,8 @@ MULTIMODAL_TOOLS = ("text_to_speech", "speech_to_text", "generate_image")
 # 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 用户提问
 ORCH_TOOLS = ("agent", "todo_write", "structured_output", "ask_user_question")
 
-SANDBOX_TOOLS = ("calculator", "repl")
+# Round 8: execute_code —— 子进程 RPC 工具调用（EXEC 级权限面与 bash 等同）
+SANDBOX_TOOLS = ("calculator", "repl", "execute_code")
 
 #: 全部静态注册的内置工具名（排序去重）。新增内置工具时把名字加进对应
 #: 分组即可；tests/unit/test_tool_names.py 会对照 register_all_tools 的
@@ -152,6 +159,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(CODE_SEARCH_TOOLS)
         | set(WEB_TOOLS)
         | set(MEMORY_TOOLS)
+        | set(SESSION_SEARCH_TOOLS)
         | set(OFFICE_TOOLS)
         | set(JOURNAL_TOOLS)
         | set(RUNTIME_TOOLS)

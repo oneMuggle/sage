@@ -14,7 +14,8 @@ describe('settingsClient', () => {
   });
 
   it('getSettings 成功时返回数据', async () => {
-    mockInvoke.mockResolvedValue({ data: { maxContext: 4096 } });
+    // 2026-08-26: invokeBackend 直接 res.json() 出裸 settings dict, 无 envelope.
+    mockInvoke.mockResolvedValue({ maxContext: 4096 });
     const result = await settingsClient.getSettings();
     expect(result).toEqual({ maxContext: 4096 });
     expect(mockInvoke).toHaveBeenCalledWith('get_settings', {});

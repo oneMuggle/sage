@@ -31,6 +31,21 @@
  * IPC. The stale-read guard (`readIdRef`) is preserved: when the user
  * switches workspaces, any in-flight read is dropped before its data
  * reaches `setPreview`.
+ *
+ * Office parity batch 2 (2026-09-09): the preview panel toolbar carries
+ * 编辑预览 (item 2.5 — opens <OfficeEditPreviewDialog>, which dry-runs a
+ * composed edit via POST /office/update/preview and renders the change
+ * list) and 导出 PDF (item 2.7 — handled inside the panel via
+ * POST /office/export-pdf with a 打开所在文件夹 toast action).
+ * Round 2 (R1): the dialog now also APPLIES — 确认应用 POSTs the previewed
+ * ops to /office/doc/{doc_id}/update, then onApplied refreshes the
+ * document list and re-reads the preview (stale-read guard reused).
+ *
+ * Round 3 (N5): the document list carries batch operations — multi-select
+ * checkboxes plus 批量归档 (live view) / 批量恢复 (archived view). The
+ * list component owns the selection + progress/summary toasts; the hook's
+ * batchArchive/batchRestore loop the existing archive/restore APIs
+ * sequentially and refetch the list once.
  */
 
 import { FileSpreadsheet, FileText, FileType, FolderOpen, Presentation } from 'lucide-react';
@@ -41,6 +56,7 @@ import { useWorkspaceContext } from '../app/providers/SessionWorkspaceProvider';
 import { JournalPanel } from '../features/journal';
 import {
   OfficeDocumentList,
+  OfficeEditPreviewDialog,
   OfficeFilePicker,
   OfficeGenerateForm,
   OfficePreviewPanel,
@@ -90,6 +106,8 @@ export function Office() {
     showInFolder,
     archiveDocument,
     restoreDocument,
+    batchArchive,
+    batchRestore,
     readDocument,
   } = useOfficeDocuments(workspacePath);
 
@@ -98,6 +116,16 @@ export function Office() {
   // so the panel follows the row the user opened it from.
   const [snapshotDocId, setSnapshotDocId] = useState<string | null>(null);
   const snapshotDoc = snapshotDocId ? documents.find((d) => d.id === snapshotDocId) : undefined;
+
+  // Item 2.5: 编辑预览 dialog — opened from the preview panel toolbar.
+  // Only meaningful while a word/excel/ppt preview is showing (the panel
+  // hides the entry for pdf). Round 2 (R1): the dialog applies edits
+  // in-page after previewing (确认应用 → POST /office/doc/{id}/update);
+  // onApplied refreshes the list + preview via handleEditApplied.
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const editDoc = preview ? preview.data.summary : null;
+  const editSheetNames =
+    preview?.docType === 'excel' ? preview.data.sheets.map((s) => s.name) : undefined;
 
   // The bind modal owns its own IPC; we just need to know when the
   // workspace has actually changed so the stale-read guard can drop any
@@ -108,6 +136,7 @@ export function Office() {
     // in-flight read is correctly discarded.
     readIdRef.current += 1;
     setPreview(null);
+    setEditDialogOpen(false);
   };
 
   const toPreview = (docType: OfficeDocType, data: OfficeReadResult): OfficePreviewData => ({
@@ -123,6 +152,7 @@ export function Office() {
       return;
     }
     const myReadId = ++readIdRef.current;
+    setEditDialogOpen(false);
     try {
       const data = await importAndRead(docType);
       if (data === null) return; // user cancelled
@@ -154,6 +184,7 @@ export function Office() {
       return;
     }
     const myReadId = ++readIdRef.current;
+    setEditDialogOpen(false);
     try {
       const data = await readDropped(docType, sourcePath);
       if (myReadId !== readIdRef.current) return;
@@ -224,6 +255,27 @@ export function Office() {
   // preview reflects the restored bytes, and refresh the list (updated_at
   // changed). Shares the stale-read guard with the import flows.
   const handleSnapshotRestored = async (docId: string) => {
+    const doc = documents.find((d) => d.id === docId);
+    await refresh();
+    if (!doc) return;
+    const myReadId = ++readIdRef.current;
+    try {
+      const data = await readDocument(docId);
+      if (myReadId !== readIdRef.current) return;
+      setPreview(toPreview(doc.doc_type, data));
+    } catch (e) {
+      if (myReadId !== readIdRef.current) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`${t('office.toast.readFailed')}: ${msg}`);
+    }
+  };
+
+  // Round 2 (R1): the edit-preview dialog applied its ops — the managed
+  // file changed under us. Same follow-up as a snapshot restore: refresh
+  // the list (updated_at/status changed), then re-read the preview with
+  // the shared stale-read guard. The dialog stays open showing its
+  // self-check summary while this runs.
+  const handleEditApplied = async (docId: string) => {
     const doc = documents.find((d) => d.id === docId);
     await refresh();
     if (!doc) return;
@@ -346,12 +398,31 @@ export function Office() {
               </OfficeFilePicker>
             </div>
 
-            {/* Right: preview panel */}
+            {/* Right: preview panel — toolbar carries 编辑预览 (item 2.5,
+                word/excel/ppt only) and 导出 PDF (item 2.7, handled inside
+                the panel). */}
             <div>
               <h2 className="text-sm font-medium text-text-secondary mb-3">
                 {t('office.section.preview')}
               </h2>
-<OfficePreviewPanel preview={preview} />
+              <OfficePreviewPanel
+                preview={preview}
+                workspacePath={workspacePath}
+                onEditPreview={
+                  preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined
+                }
+              />
+              {editDialogOpen && editDoc && preview?.docType !== 'pdf' && (
+                <div className="mt-3">
+                  <OfficeEditPreviewDialog
+                    workspacePath={workspacePath}
+                    doc={editDoc}
+                    sheetNames={editSheetNames}
+                    onApplied={handleEditApplied}
+                    onClose={() => setEditDialogOpen(false)}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -386,6 +457,8 @@ export function Office() {
                 ))}
               </div>
             </div>
+            {/* Round-3 N5: batch actions — the list owns selection +
+                toasts; the hook loops the APIs and refetches once. */}
             <OfficeDocumentList
               documents={documents}
               loading={loading}
@@ -396,6 +469,8 @@ export function Office() {
               onArchive={handleArchive}
               onRestore={handleRestore}
               onViewSnapshots={(docId) => setSnapshotDocId(docId)}
+              onBatchArchive={batchArchive}
+              onBatchRestore={batchRestore}
             />
             {/* 历史版本 panel — opened from a row's History action */}
             {snapshotDoc && (

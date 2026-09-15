@@ -47,4 +47,8 @@ O3（round6）打通了子代理用量归因（usage_events.session_id 含编排
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A（run 级 token 预算守门） | PR #642（squash cf3b4fbb） | PR #643（cherry-win7-r11，squash 2a0d5390） |
+
+win7 对齐说明：usage_tracker 冲突按"保留 win7 侧"解决——win7 尚未同步 main 的 `_upsert_daily_rollup`（属未 cherry-pick 的其他主线特性），仅加入本批的 `session_usage_since`，避免静默带入半套未同步代码。本地 ruff 全过 + budget 5 例/usage 48 例绿后由 CI（含 py3.8 job）终验，squash merge（#643）。

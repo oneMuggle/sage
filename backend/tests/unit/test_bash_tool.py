@@ -24,7 +24,13 @@ from backend.tools.bash_tool import (
     clamp_bash_timeout,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(
+        os.name == "nt",
+        reason="bash 工具依赖 POSIX 进程组（start_verified_process 在 Windows 按设计拒绝）",
+    ),
+]
 
 
 @pytest.fixture()

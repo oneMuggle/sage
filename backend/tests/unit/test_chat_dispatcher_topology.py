@@ -1,7 +1,6 @@
 """ChatDispatcher depends_on 分波执行 + 级联取消 单测。"""
 
 from __future__ import annotations
-
 from typing import List
 
 import pytest

@@ -6,7 +6,7 @@
 
 PR B §1.2 设计要点
 -------------------
-- 所有 async 方法包 _to_thread(与 SqliteStorageAdapter 同形)
+- 所有 async 方法包 asyncio.to_thread(与 SqliteStorageAdapter 同形)
 - **不加锁**(纯内存 dict 操作,无并发问题)
 - 内存操作 μs 级,但仍包 to_thread 保持接口一致性、未来若换 redis
   后端同样行为、单测仍能断言"真在 thread 跑"
@@ -22,24 +22,15 @@ PR B §1.2 设计要点
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from sage_core import Message
 from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)
-
-
-async def _to_thread(func, *args, **kwargs):
-    """Py3.8 兼容的 ``_to_thread`` 等价物。
-
-    NOTE (win7 sync #295): 同 sqlite_adapter —— main 用 ``_to_thread``
-    (3.9+ API),win7 Py3.8 改用 ``run_in_executor(None, ...)`` 等价实现。
-    """
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
 
 @dataclass
@@ -53,7 +44,7 @@ class _SessionState:
 class MemoryStorageAdapter:
     """StoragePort 的纯 in-memory 实现。
 
-    PR B §1.2: 所有方法用 _to_thread 包装,无锁。
+    PR B §1.2: 所有方法用 asyncio.to_thread 包装,无锁。
     """
 
     def __init__(self) -> None:
@@ -62,7 +53,7 @@ class MemoryStorageAdapter:
     # ----- 会话 -----
 
     async def create_session(self, title: str = "") -> str:
-        return await _to_thread(self._sync_create_session, title)
+        return await asyncio.to_thread(self._sync_create_session, title)
 
     def _sync_create_session(self, title: str) -> str:
         # PR B §1.2 (HIGH fix): 用 uuid4 而非自增计数器 —— `self._counter += 1`
@@ -72,7 +63,7 @@ class MemoryStorageAdapter:
         return session_id
 
     async def list_sessions(self) -> List[Dict[str, Any]]:
-        return await _to_thread(self._sync_list_sessions)
+        return await asyncio.to_thread(self._sync_list_sessions)
 
     def _sync_list_sessions(self) -> List[Dict[str, Any]]:
         result = []
@@ -94,7 +85,7 @@ class MemoryStorageAdapter:
         return result
 
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
-        return await _to_thread(self._sync_get_session, session_id)
+        return await asyncio.to_thread(self._sync_get_session, session_id)
 
     def _sync_get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         state = self._sessions.get(session_id)
@@ -107,7 +98,7 @@ class MemoryStorageAdapter:
         }
 
     async def update_session(self, session_id: str, **fields: Any) -> int:
-        return await _to_thread(self._sync_update_session, session_id, fields)
+        return await asyncio.to_thread(self._sync_update_session, session_id, fields)
 
     def _sync_update_session(self, session_id: str, fields: Dict[str, Any]) -> int:
         state = self._sessions.get(session_id)
@@ -118,7 +109,7 @@ class MemoryStorageAdapter:
         return 1
 
     async def delete_session(self, session_id: str) -> int:
-        return await _to_thread(self._sync_delete_session, session_id)
+        return await asyncio.to_thread(self._sync_delete_session, session_id)
 
     def _sync_delete_session(self, session_id: str) -> int:
         existed = session_id in self._sessions
@@ -128,7 +119,7 @@ class MemoryStorageAdapter:
     # ----- 消息 -----
 
     async def append_message(self, session_id: str, message: Message) -> str:
-        return await _to_thread(self._sync_append_message, session_id, message)
+        return await asyncio.to_thread(self._sync_append_message, session_id, message)
 
     def _sync_append_message(self, session_id: str, message: Message) -> str:
         if session_id not in self._sessions:
@@ -141,7 +132,7 @@ class MemoryStorageAdapter:
         session_id: str,
         limit: int = 50,
     ) -> List[Message]:
-        return await _to_thread(self._sync_get_messages, session_id, limit)
+        return await asyncio.to_thread(self._sync_get_messages, session_id, limit)
 
     def _sync_get_messages(self, session_id: str, limit: int) -> List[Message]:
         state = self._sessions.get(session_id)

@@ -19,9 +19,11 @@
  *   ``source`` 字段决定徽章样式。
  */
 
+import { isDemoMode } from './demoFlag';
 import { invoke } from './desktopInvoke';
 import type {
   Memory,
+  MemoryConsolidationResult,
   MemoryListResponse,
   MemorySummariesListResponse,
   MemoryWriteRecord,
@@ -30,6 +32,13 @@ import type {
   UserProfileResponse,
 } from './types';
 import { ApiException, handleApiError, withRetry } from './utils';
+
+/** demo 记忆数据按需加载 (R2): 仅演示模式才拉取 demo 数据模块。 */
+let demoInterceptorsPromise: Promise<typeof import('./demoInterceptors')> | null = null;
+function loadDemoInterceptors(): Promise<typeof import('./demoInterceptors')> {
+  demoInterceptorsPromise ??= import('./demoInterceptors');
+  return demoInterceptorsPromise;
+}
 
 const MEMORY_LAYERS = ['episodic', 'semantic', 'working', 'session_summary', 'all'] as const;
 
@@ -137,8 +146,7 @@ function coerceMemoryItem(raw: unknown): Memory {
     statusRaw && VALID_SUMMARY_STATUSES.has(statusRaw as NonNullable<Memory['status']>)
       ? (statusRaw as NonNullable<Memory['status']>)
       : undefined;
-  const errorMessage =
-    status === 'failed' ? asOptionalString(raw.error_message) : undefined;
+  const errorMessage = status === 'failed' ? asOptionalString(raw.error_message) : undefined;
 
   const createdAt = asNumber(raw.created_at, 0);
   const createdAtMs = asNumber(raw.created_at_ms, createdAt > 0 ? createdAt * 1000 : 0);
@@ -190,9 +198,7 @@ function coerceMemoryListResponse(raw: unknown): MemoryListResponse {
     };
   }
 
-  const items = Array.isArray(raw.items)
-    ? (raw.items as unknown[]).map(coerceMemoryItem)
-    : [];
+  const items = Array.isArray(raw.items) ? (raw.items as unknown[]).map(coerceMemoryItem) : [];
   const breakdown = isRecord(raw.source_breakdown) ? raw.source_breakdown : {};
   return {
     items,
@@ -223,9 +229,7 @@ function coerceSummariesListResponse(raw: unknown): MemorySummariesListResponse 
     return fallback;
   }
   const sessionId = typeof raw.session_id === 'string' ? raw.session_id : '';
-  const items = Array.isArray(raw.items)
-    ? (raw.items as unknown[]).map(coerceMemoryItem)
-    : [];
+  const items = Array.isArray(raw.items) ? (raw.items as unknown[]).map(coerceMemoryItem) : [];
   // spec §4.3 step 5:session_id 必须一致;否则视为坏响应,扔掉 items,
   // 防止"我在看会话 A、列表给我返回会话 B 的摘要"的串味。
   const consistent = items.every((m) => !m.session_id || m.session_id === sessionId);
@@ -244,6 +248,11 @@ export const memoryApi = {
    * 搜索记忆
    */
   async searchMemories(query: string, memoryType?: 'episodic' | 'semantic'): Promise<Memory[]> {
+    // 演示模式 (2026-08-27): 关键词包含匹配过滤 demo 集合
+    if (isDemoMode()) {
+      const { searchDemoMemories } = await loadDemoInterceptors();
+      return searchDemoMemories(query, memoryType);
+    }
     // 查询词原文直传: 转义会破坏检索匹配
     return withRetry(async () => {
       try {
@@ -404,6 +413,36 @@ export const memoryApi = {
     });
   },
 
+  /**
+   * R17-B: 立即触发记忆固化（evolution/memory_consolidation）。
+   *
+   * 刻意**不走 withRetry**：手动触发的重任务是用户主动行为，失败后自动重跑
+   * 既是重复开销也违背"立即固化"的语义；失败原因由调用方 toast 引导。
+   * 返回任务统计 `{promoted, decayed, total}`；`ok=false` 表示任务执行失败
+   * （如 memory manager 未装配）。
+   */
+  async runConsolidation(): Promise<MemoryConsolidationResult> {
+    try {
+      const raw = await invoke<unknown>('scheduled_evolution_run', {
+        name: 'memory_consolidation',
+      });
+      const body = (raw ?? {}) as Record<string, unknown>;
+      if (body.ok === false) {
+        throw new Error(
+          typeof body.detail === 'string' ? body.detail : '记忆固化任务执行失败',
+        );
+      }
+      const result = (body.result ?? {}) as Record<string, unknown>;
+      return {
+        promoted: Number(result.promoted) || 0,
+        decayed: Number(result.decayed) || 0,
+        total: Number(result.total) || 0,
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
   // ---- 对标 S2 (2026-09-13): 写入台账 / 撤销 / 用户画像 ------------------
 
   /**
@@ -416,7 +455,7 @@ export const memoryApi = {
     limit: number = 20,
   ): Promise<MemoryWritesResponse> {
     const empty: MemoryWritesResponse = { items: [], latest_seq: afterSeq };
-    if (!sessionId) return empty;
+    if (!sessionId || isDemoMode()) return empty;
     try {
       const raw = await invoke<unknown>('get_recent_memory_writes', {
         sessionId,
@@ -462,6 +501,7 @@ export const memoryApi = {
 
   async getUserProfile(): Promise<UserProfileResponse> {
     const empty: UserProfileResponse = { items: [], categories: [], snapshot: '', char_limit: 0 };
+    if (isDemoMode()) return empty;
     try {
       const raw = await invoke<unknown>('get_user_profile', {});
       if (!isRecord(raw)) return empty;

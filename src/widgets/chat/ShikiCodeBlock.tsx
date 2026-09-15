@@ -41,6 +41,15 @@ function getHighlighter(): Promise<import('shiki').Highlighter> {
         'sql',
         'dockerfile',
         'diff',
+        // P22: 扩展语言覆盖
+        'kotlin',
+        'swift',
+        'ruby',
+        'php',
+        'csharp',
+        'xml',
+        'graphql',
+        'make',
       ],
       }),
     );

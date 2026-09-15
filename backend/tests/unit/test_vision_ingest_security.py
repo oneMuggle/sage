@@ -12,6 +12,11 @@ from backend.wiki.ingest import IngestConfig
 from backend.wiki.vision import VisionConfig, VisionProvider
 from backend.wiki.vision_ingest import VisionIngestConfig, ingest_with_vision
 
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="vision ingest 安全读依赖 POSIX O_NOFOLLOW（Windows 支持另行批次）",
+)
+
 
 @pytest.fixture()
 def vision_config(tmp_path: Path) -> VisionIngestConfig:
@@ -124,7 +129,7 @@ def test_bounded_read_rejects_hardlink_to_outside(tmp_path: Path):
     linked = tmp_path / "source.md"
     outside.write_bytes(b"outside secret")
     try:
-        os.link(str(outside), str(linked))
+        linked.hardlink_to(outside)
     except (OSError, NotImplementedError):
         pytest.skip("hardlinks are not supported")
 

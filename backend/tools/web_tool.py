@@ -6,6 +6,7 @@ Web 工具 - 网络搜索和网页获取
 from __future__ import annotations
 
 import ipaddress
+import re
 from ipaddress import IPv4Address, IPv6Address
 from typing import Any, Dict, Optional, Set, Union
 from urllib.parse import urljoin, urlparse
@@ -15,32 +16,19 @@ import httpx
 from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
-from backend.tools.http_factory import build_client
+from backend.tools.http_factory import DEFAULT_HEADERS, build_client, default_headers, retrying_send
 from backend.tools.network_config import load_network_policy
 from backend.tools.search_config import load_search_config
 from backend.tools.search_engines import SearchEngine, resolve_engine_chain
 from backend.wiki.html_extract import decode_html, extract
 
-from . import web_render
+from . import content_sniff, web_render
 from .base import BaseTool, ToolResult, ToolSchema
 from .web_render import RenderError
 
-# 浏览器级默认请求头。
-# 缺 User-Agent 的请求会被很多站点（小说站 / 学术站 / 论坛）按 bot 拒 403;
-# Accept-Language 让国内站点返回中文页,避免西文 fallback 误判。
-# UA 版本保持"现代"（U1, Round 2）：过旧版本号本身是廉价 bot 信号；
-# 注意它与 httpx 的 TLS 指纹解耦,硬风控站点仍走 browser 通道。
-_DEFAULT_HEADERS: Dict[str, str] = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-    ),
-    "Accept": (
-        "text/html,application/xhtml+xml,application/xml;q=0.9,"
-        "image/avif,image/webp,*/*;q=0.8"
-    ),
-    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-}
+# 浏览器级默认请求头 —— 自 Round 5 起定义在 http_factory（三个出网工具共用）；
+# 此处保留同名别名，兼容既有引用与测试。
+_DEFAULT_HEADERS: Dict[str, str] = DEFAULT_HEADERS
 
 #: 常见反爬拒绝状态码 → 路由指引文案（G1, Round 2）。
 #: 出路顺序即成本顺序：真浏览器通道（真实 Chrome 指纹）> 代理 > 换搜索源。
@@ -52,6 +40,92 @@ _ANTIBOT_GUIDANCE = (
 
 #: 触发 G1 指引的拒绝状态码
 _ANTIBOT_STATUS_CODES = frozenset({403, 429, 503})
+
+#: 反爬盾 / 验证码页特征（AB1，Round 5）：HTML 原文或抽取正文命中任一即视为"盾页"。
+#: 覆盖 Cloudflare / Akamai / Imperva(Incapsula) / 阿里云 WAF / 腾讯云 WAF / 百度云加速 /
+#: 知网 / 通用验证码提示。只在正文很短（真实页面不会只剩这些词）时判定，避免误伤
+#: 讨论反爬技术的正常文章。
+_ANTIBOT_PAGE_MARKERS = (
+    "cf-browser-verification",
+    "cf_chl_",
+    "__cf_chl",
+    "challenge-platform",
+    "just a moment...",
+    "checking your browser",
+    "verify you are human",
+    "attention required! | cloudflare",
+    "_incapsula_resource",
+    "incapsula incident",
+    "akamai",
+    "access denied",
+    "request unsuccessful",
+    "ddos-guard",
+    "please enable javascript and cookies",
+    "enable javascript to continue",
+    "waf.tencent",
+    "aliyun_waf",
+    "errors.aliyun.com",
+    "yundun.console.aliyun.com",
+    "405 not allowed",  # 阿里云 WAF 默认拦截页
+    "滑动验证",
+    "安全验证",
+    "人机验证",
+    "请完成验证",
+    "验证码",
+    "访问过于频繁",
+    "访问太频繁",
+    "请求过于频繁",
+    "异常访问",
+    "拒绝访问",
+    "页面正在加载中，请稍候",
+)
+
+#: 盾页判定的正文长度上限：正文长于此不判定为盾页
+_ANTIBOT_PAGE_MAX_TEXT = 1200
+
+_ANTIBOT_MARKER_RE = re.compile(
+    "|".join(re.escape(marker) for marker in _ANTIBOT_PAGE_MARKERS), re.IGNORECASE
+)
+
+
+def looks_like_antibot_page(html: str, extracted_text: str) -> bool:
+    """静态 / 渲染结果是否是反爬盾页（AB1，纯函数）。"""
+    text = (extracted_text or "").strip()
+    if len(text) > _ANTIBOT_PAGE_MAX_TEXT:
+        return False
+    sample = (html or "")[:200_000]
+    return bool(_ANTIBOT_MARKER_RE.search(text) or _ANTIBOT_MARKER_RE.search(sample))
+
+
+#: AU2 登录墙判定：密码框页面去标签后的词数上限（登录页几乎没有正文）
+_LOGIN_PAGE_MAX_WORDS = 250
+_TAG_RE = re.compile(r"<script\b.*?</script>|<style\b.*?</style>|<[^>]+>", re.I | re.S)
+
+
+class _AntibotBlocked(Exception):  # noqa: N818 — internal signal
+    """内部信号：静态通道被反爬拦截（状态码或盾页），可尝试升级到渲染通道。"""
+
+    def __init__(self, reason: str, status: int = 0) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.status = status
+
+
+class _RetryingClient(httpx.Client):
+    """``send`` 走 ``retrying_send``（AB5）的 httpx.Client —— 搜索引擎链无需改动即获得
+    重试 / Retry-After / 同 host 限速。经 ``build_client(client_class=...)`` 构造。"""
+
+    def send(
+        self, request: httpx.Request, *, stream: bool = False, **kwargs: Any
+    ) -> httpx.Response:  # type: ignore[override]
+        parent = super()
+
+        class _Sender:
+            @staticmethod
+            def send(req: httpx.Request, stream: bool = False) -> httpx.Response:
+                return parent.send(req, stream=stream, **kwargs)
+
+        return retrying_send(_Sender(), request, stream=stream)  # type: ignore[arg-type]
 
 
 class WebSearchTool(BaseTool):
@@ -72,7 +146,7 @@ class WebSearchTool(BaseTool):
         # 代理等配置改动即时生效。
         self.client = build_client(
             timeout=30.0,
-            headers=_DEFAULT_HEADERS,
+            headers=default_headers(),
         )
 
     def _build_schema(self) -> ToolSchema:
@@ -122,8 +196,9 @@ class WebSearchTool(BaseTool):
         try:
             with build_client(
                 timeout=30.0,
-                headers=_DEFAULT_HEADERS,
+                headers=default_headers(),
                 trust_env=not self._policy.subagent_only,
+                client_class=_RetryingClient,
             ) as client:
                 for engine in resolve_engine_chain(load_search_config()):
                     try:
@@ -191,7 +266,7 @@ class WebFetchTool(BaseTool):
     _MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
     #: C1：uncapped 抽取长度（缓存存全文，返回前按本次 max_length 裁剪）
-    _UNCAPPED_LENGTH = 10 ** 9
+    _UNCAPPED_LENGTH = 10**9
 
     def __init__(
         self,
@@ -208,7 +283,7 @@ class WebFetchTool(BaseTool):
             timeout=30.0,
             follow_redirects=False,
             trust_env=not self._policy.subagent_only,
-            headers=_DEFAULT_HEADERS,
+            headers=default_headers(),
         )
 
     def _effective_network_policy(self) -> NetworkPolicy:
@@ -264,6 +339,7 @@ class WebFetchTool(BaseTool):
                 "（render=auto 默认；always 强制渲染；never 仅静态 HTML）。"
                 "credential_domain 可携带 browser_cookies 导出的登录态"
                 "（仅附加到同域请求，跨域重定向自动剥离）。"
+                "静态请求被反爬拦截时默认自动升级到真浏览器通道重放（escalate）。"
                 "渲染分支内部会启动受控 headless 浏览器，不单独走启动审批。"
             ),
             parameters={
@@ -287,8 +363,10 @@ class WebFetchTool(BaseTool):
                     "credential_domain": {
                         "type": "string",
                         "description": (
-                            "browser_cookies 导出的凭据档案 domain"
-                            "（如 .cnki.net），附加登录态 cookie"
+                            "凭据档案 domain（如 .cnki.net）：browser_cookies 导出的 "
+                            "cookie 或 credential_set 设置的头部凭据（Bearer / API key），"
+                            "命中域自动附加、跨域剥离；过期报 credential_expired，"
+                            "被踢到登录页报 login_required"
                         ),
                     },
                     "wait_for": {
@@ -301,6 +379,13 @@ class WebFetchTool(BaseTool):
                     "refresh": {
                         "type": "boolean",
                         "description": "跳过缓存强制抓取（默认 false；15 分钟内同 URL 同 mode 命中缓存）",
+                    },
+                    "escalate": {
+                        "type": "boolean",
+                        "description": (
+                            "静态请求被反爬拦截（403/429/503 或验证盾页）时自动改经受控 "
+                            "headless 真浏览器重放一次（默认 true；render=never 时不升级）"
+                        ),
                     },
                 },
                 "required": ["url"],
@@ -316,6 +401,7 @@ class WebFetchTool(BaseTool):
         credential_domain: str = "",
         wait_for: str = "",
         refresh: bool = False,
+        escalate: bool = True,
         **kwargs,
     ) -> ToolResult:
         """获取网页并按 ``mode`` 抽取。
@@ -328,6 +414,7 @@ class WebFetchTool(BaseTool):
             credential_domain: browser_cookies 档案 domain，附加登录态 cookie
             wait_for:   渲染分支等待出现的 CSS 选择器（R2）
             refresh:    跳过缓存强制抓取（C1，默认 false）
+            escalate:   反爬拦截时自动升级到渲染通道（AB1，默认 true）
         """
         if mode not in self.VALID_MODES:
             return ToolResult(
@@ -355,18 +442,28 @@ class WebFetchTool(BaseTool):
                 content["cached"] = True
                 return ToolResult(success=True, content=content)
 
-        cookie_header: Optional[str] = None
+        credential_headers: Optional[Dict[str, str]] = None
         if credential_domain.strip():
-            from .credential_vault import cookie_domain_matches, cookie_header_for
+            from .credential_vault import cookie_domain_matches, resolve_credential
 
             credential_domain = credential_domain.strip()
-            cookie_header = cookie_header_for(credential_domain)
-            if cookie_header is None:
+            resolution = resolve_credential(credential_domain, url=url)
+            if resolution.status == "expired":
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_expired: {credential_domain!r} 的凭据已全部过期"
+                        f"（{', '.join(resolution.expired_names[:5])}）。"
+                        "请在浏览器重新登录后 browser_cookies action=export，"
+                        "或 credential_set 重新设置头部凭据"
+                    ),
+                )
+            if not resolution.ok or not resolution.headers:
                 return ToolResult(
                     success=False,
                     error=(
                         f"credential_not_found: 无 {credential_domain!r} 的凭据档案"
-                        "（先 browser_cookies action=export 导出）"
+                        "（先 browser_cookies action=export 导出，或 credential_set 设置头部凭据）"
                     ),
                 )
             target_host = urlparse(url).hostname or ""
@@ -378,6 +475,7 @@ class WebFetchTool(BaseTool):
                         f"不在凭据域 {credential_domain!r} 内（档案域按 cookie 归属）"
                     ),
                 )
+            credential_headers = resolution.headers
 
         network_policy = self._effective_network_policy()
         url_error = self._validate_target_url(url)
@@ -395,28 +493,50 @@ class WebFetchTool(BaseTool):
             if validation_error:
                 return ToolResult(success=False, error=validation_error)
 
+        can_escalate = bool(escalate) and render != "never" and mode != "raw"
         try:
-            response, final_url, credential_note = self._get_with_redirects(
-                url, network_policy, gated_by_whitelist, cookie_header, credential_domain.strip()
-            )
-            response.raise_for_status()
-            # C1：以 uncapped 抽取（缓存存全文，返回前统一裁剪）——
-            # 不同 max_length 的请求可共享同一份缓存
-            content = self._render(final_url, response, mode, self._UNCAPPED_LENGTH)
-            if credential_note:
-                content["note"] = credential_note
-            if self._should_render(render, response, content, max_length):
-                content = self._render_dynamic(
-                    final_url, network_policy, mode, self._UNCAPPED_LENGTH, content, wait_for
+            try:
+                response, final_url, credential_note = self._get_with_redirects(
+                    url,
+                    network_policy,
+                    gated_by_whitelist,
+                    credential_headers,
+                    credential_domain.strip(),
                 )
+                status = response.status_code
+                if status in _ANTIBOT_STATUS_CODES:
+                    raise _AntibotBlocked(f"http_{status}: 站点拒绝访问（状态码 {status}）", status)
+                response.raise_for_status()
+                # AU2：带凭据却被送到登录页 → login_required（不当普通正文返回）
+                if credential_headers:
+                    login_error = self._detect_login_wall(
+                        url, final_url, response, credential_domain
+                    )
+                    if login_error:
+                        return ToolResult(success=False, error=login_error)
+                # C1：以 uncapped 抽取（缓存存全文，返回前统一裁剪）——
+                # 不同 max_length 的请求可共享同一份缓存
+                content = self._render(final_url, response, mode, self._UNCAPPED_LENGTH)
+                if credential_note:
+                    content["note"] = credential_note
+                if content.get("kind") != "binary" and self._is_antibot_page(response, content):
+                    raise _AntibotBlocked("antibot_page: 静态响应是反爬验证 / 拦截页", status)
+                if self._should_render(render, response, content, max_length):
+                    content = self._render_dynamic(
+                        final_url, network_policy, mode, self._UNCAPPED_LENGTH, content, wait_for
+                    )
+            except _AntibotBlocked as blocked:
+                if not can_escalate:
+                    return ToolResult(success=False, error=f"{blocked.reason}{_ANTIBOT_GUIDANCE}")
+                # AB1：静态通道被拦 → 经渲染池（真 Chrome 指纹 + 代理 + 可选持久
+                # profile）重放一次；仍被拦才返回指引。
+                content = self._escalate(url, network_policy, mode, wait_for, blocked)
             if use_cache:
                 # 剥离易变 note / cached 标记后存全文副本
                 from .web_cache import put as _cache_put
 
                 storable = {
-                    key_: value
-                    for key_, value in content.items()
-                    if key_ not in ("note", "cached")
+                    key_: value for key_, value in content.items() if key_ not in ("note", "cached")
                 }
                 _cache_put(url, mode, storable)
             content["content"] = str(content.get("content", ""))[:max_length]
@@ -459,11 +579,12 @@ class WebFetchTool(BaseTool):
         url: str,
         network_policy: NetworkPolicy,
         gated_by_whitelist: bool,
-        cookie_header: Optional[str] = None,
+        credential_headers: Optional[Dict[str, str]] = None,
         credential_domain: str = "",
     ) -> tuple:
         current_url = url
         credential_stripped = False
+        refreshed_names: list = []
         for redirect_count in range(self._MAX_REDIRECTS + 1):
             url_error = self._validate_target_url(current_url)
             if url_error:
@@ -480,12 +601,12 @@ class WebFetchTool(BaseTool):
             # 302 到第三方 SSO/广告域）静默剥离，防止凭据外带。
             hop_headers: Dict[str, str] = {"Accept-Encoding": "identity"}
             credential_applied = False
-            if cookie_header:
+            if credential_headers:
                 from .credential_vault import cookie_domain_matches
 
                 hostname = urlparse(current_url).hostname or ""
                 if cookie_domain_matches(hostname, credential_domain):
-                    hop_headers["Cookie"] = cookie_header
+                    hop_headers.update(credential_headers)
                     credential_applied = True
                 elif redirect_count > 0:
                     credential_stripped = True
@@ -495,7 +616,7 @@ class WebFetchTool(BaseTool):
                 follow_redirects=False,
                 verify=not network_policy.allows_insecure_tls(current_url),
                 trust_env=not self._policy.subagent_only,
-                headers=_DEFAULT_HEADERS,
+                headers=default_headers(),
             ) as client:
                 # 强制 ``Accept-Encoding: identity`` 禁用 httpx 自动解压。
                 # 部分站点声明 ``Content-Encoding: gzip`` 但响应体实际不是合法
@@ -509,8 +630,14 @@ class WebFetchTool(BaseTool):
                     current_url,
                     headers=hop_headers,
                 )
-                response = client.send(request, stream=True)
+                # AB5：连接错 / 超时 / 5xx / 429 重试 + Retry-After + 同 host 限速
+                response = retrying_send(client, request, stream=True)
                 try:
+                    # AU2：命中域的响应带 Set-Cookie → 合并回 cookie 档案（续期 token 不丢）
+                    if credential_applied and "Cookie" in credential_headers:
+                        refreshed_names.extend(
+                            self._writeback_set_cookies(response, current_url, credential_domain)
+                        )
                     if response.is_redirect:
                         location = response.headers.get("location")
                         if redirect_count >= self._MAX_REDIRECTS:
@@ -522,6 +649,10 @@ class WebFetchTool(BaseTool):
                         current_url = urljoin(current_url, location)
                         continue
 
+                    if response.status_code in _ANTIBOT_STATUS_CODES:
+                        # 拒绝类状态：不缓冲正文，直接交给 execute 判定升级
+                        response.close()
+                        return response, current_url, None
                     response.raise_for_status()
                     declared = response.headers.get("content-length", "")
                     if declared.isdigit() and int(declared) > self._MAX_RESPONSE_BYTES:
@@ -544,12 +675,15 @@ class WebFetchTool(BaseTool):
                 finally:
                     response.close()
                 response = buffered_response
-            credential_note = (
-                "credential_stripped: 重定向跨出凭据域，登录态 cookie 已剥离"
-                if credential_stripped and not credential_applied
-                else None
-            )
-            return response, current_url, credential_note
+            notes = []
+            if credential_stripped and not credential_applied:
+                notes.append("credential_stripped: 重定向跨出凭据域，登录态凭据已剥离")
+            if refreshed_names:
+                notes.append(
+                    "credential_refreshed: 服务器续期了 cookie，档案已回写"
+                    f"（{', '.join(sorted(set(refreshed_names))[:5])}）"
+                )
+            return response, current_url, ("；".join(notes) if notes else None)
 
         raise ValueError("redirect_limit_exceeded: 重定向次数超限")
 
@@ -568,6 +702,12 @@ class WebFetchTool(BaseTool):
         }
 
         is_html = any(marker in content_type.lower() for marker in self._HTML_CONTENT_TYPES)
+        if not is_html and content_sniff.is_binary_payload(
+            response.content[: content_sniff.SNIFF_BYTES], content_type
+        ):
+            # SN1（Round 5）：二进制响应不以乱码正文返回，给结构化提示引导
+            # 模型改用 http_download。raw 模式同样适用——原始字节对模型无意义。
+            return self._binary_result(url, response, result)
         if mode == "raw" or not is_html:
             result["content"] = text[:max_length]
             return result
@@ -581,6 +721,126 @@ class WebFetchTool(BaseTool):
             result["tables"] = page.tables[: self._policy.max_result_items]
         return result
 
+    @staticmethod
+    def _binary_result(url: str, response: httpx.Response, base: Dict[str, Any]) -> Dict[str, Any]:
+        """二进制响应的结构化结果（SN1）：不给正文，给类型 / 大小 / 建议文件名。"""
+        from .download_tool import derive_filename
+
+        head = response.content[: content_sniff.SNIFF_BYTES]
+        detected = content_sniff.detect_kind(head)
+        declared = response.headers.get("content-length", "")
+        length: Optional[int] = None
+        if declared.isdigit():
+            length = int(declared)
+        elif response.content:
+            length = len(response.content)
+        suggested = derive_filename(url, response.headers.get("content-disposition"))
+        result = dict(base)
+        result.update(
+            {
+                "kind": "binary",
+                "detected_type": detected,
+                "content_length": length,
+                "suggested_filename": suggested,
+                "content": "",
+                "hint": (
+                    f"该 URL 返回的是二进制文件（{detected}，Content-Type {result.get('content_type') or '未知'}），"
+                    f"不是网页。请改用 http_download 下载到工作区（建议文件名 {suggested!r}），"
+                    "再用对应工具读取内容。"
+                ),
+            }
+        )
+        return result
+
+    @staticmethod
+    def _writeback_set_cookies(response: httpx.Response, url: str, credential_domain: str) -> list:
+        values = response.headers.get_list("set-cookie")
+        if not values:
+            return []
+        from .credential_vault import merge_set_cookies
+
+        try:
+            return merge_set_cookies(credential_domain, values, url)
+        except Exception:  # noqa: BLE001 — 回写失败不影响本次抓取
+            return []
+
+    def _detect_login_wall(
+        self, url: str, final_url: str, response: httpx.Response, credential_domain: str
+    ) -> Optional[str]:
+        """AU2：带凭据请求被送到登录页 → ``login_required`` 文案；否则 ``None``。"""
+        from .credential_vault import looks_like_login_html, looks_like_login_url
+
+        reason = ""
+        if final_url != url and looks_like_login_url(final_url) and not looks_like_login_url(url):
+            reason = f"重定向到登录页 {final_url}"
+        else:
+            content_type = response.headers.get("content-type", "")
+            if any(marker in content_type.lower() for marker in self._HTML_CONTENT_TYPES):
+                html_text, _ = decode_html(response.content, content_type)
+                # 密码框 + （登录类 URL 或 正文极短）才判定，避免误伤带登录小组件的正文页
+                if looks_like_login_html(html_text) and (
+                    looks_like_login_url(final_url)
+                    or len(_TAG_RE.sub(" ", html_text[:300_000]).split()) < _LOGIN_PAGE_MAX_WORDS
+                ):
+                    reason = "页面含密码输入框且无正文"
+        if not reason:
+            return None
+        return (
+            f"login_required: 携带 {credential_domain!r} 凭据访问仍被要求登录（{reason}）。"
+            "凭据可能已失效：请在浏览器重新登录后 browser_cookies action=export 再试；"
+            "或经 browser_launch + browser_navigate 真浏览器通道访问"
+        )
+
+    def _is_antibot_page(self, response: httpx.Response, content: Dict[str, Any]) -> bool:
+        """2xx 但正文是反爬盾页（Cloudflare 5 秒盾常以 200/503 + 验证页返回）。"""
+        content_type = response.headers.get("content-type", "")
+        if not any(marker in content_type.lower() for marker in self._HTML_CONTENT_TYPES):
+            return False
+        html_text, _ = decode_html(response.content, content_type)
+        return looks_like_antibot_page(html_text, str(content.get("content", "")))
+
+    def _escalate(
+        self,
+        url: str,
+        network_policy: NetworkPolicy,
+        mode: str,
+        wait_for: str,
+        blocked: _AntibotBlocked,
+    ) -> Dict[str, Any]:
+        """AB1 升级链：渲染池重放；渲染结果仍是盾页 / 拒绝状态 → 抛 RenderError 附指引。"""
+        try:
+            rendered = web_render.render_page(url, network_policy, wait_for=wait_for)
+        except RenderError as exc:
+            raise RenderError(
+                f"{blocked.reason}；已尝试真浏览器通道仍失败：{exc}{_ANTIBOT_GUIDANCE}"
+            ) from exc
+        rendered_status = rendered.get("rendered_status")
+        rendered_text = str(rendered.get("content", ""))
+        if (isinstance(rendered_status, int) and rendered_status in _ANTIBOT_STATUS_CODES) or (
+            looks_like_antibot_page(rendered_text, rendered_text)
+        ):
+            status_note = f"（渲染状态码 {rendered_status}）" if rendered_status else ""
+            raise RenderError(
+                f"{blocked.reason}；真浏览器通道同样被拦截{status_note}{_ANTIBOT_GUIDANCE}"
+            )
+        content: Dict[str, Any] = {
+            "url": rendered.get("url", url),
+            "status_code": rendered_status or 200,
+            "content_type": "text/html",
+            "encoding": "utf-8",
+            "mode": mode,
+            "title": rendered.get("title", ""),
+            "content": rendered_text,
+            "rendered": True,
+            "escalated": "render",
+            "escalated_from": blocked.reason,
+        }
+        if mode == "links":
+            content["links"] = list(rendered.get("links") or [])[: self._policy.max_result_items]
+        elif mode == "tables":
+            content["tables"] = list(rendered.get("tables") or [])[: self._policy.max_result_items]
+        return content
+
     def _should_render(
         self, render: str, response: httpx.Response, content: Dict[str, Any], max_length: int
     ) -> bool:
@@ -592,7 +852,7 @@ class WebFetchTool(BaseTool):
         """
         if render == "never":
             return False
-        if content.get("mode") == "raw":
+        if content.get("mode") == "raw" or content.get("kind") == "binary":
             return False
         content_type = response.headers.get("content-type", "")
         is_html = any(marker in content_type.lower() for marker in self._HTML_CONTENT_TYPES)
@@ -627,7 +887,5 @@ class WebFetchTool(BaseTool):
         if mode == "links":
             content["links"] = list(rendered.get("links") or [])[: self._policy.max_result_items]
         elif mode == "tables":
-            content["tables"] = list(rendered.get("tables") or [])[
-                : self._policy.max_result_items
-            ]
+            content["tables"] = list(rendered.get("tables") or [])[: self._policy.max_result_items]
         return content

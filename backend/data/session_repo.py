@@ -4,14 +4,18 @@
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import json
+import logging
 import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from backend.data.database import get_database
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -451,6 +455,20 @@ def fork_session(
         raise RuntimeError(
             f"fork_session: new session {new_session_id} missing right after commit"
         )
+
+    # Round 2: fork 复制的消息同步进全文索引（事务外 best-effort，
+    # 索引故障不影响 fork 结果）。
+    try:
+        from backend.data.message_search import get_message_search_index
+
+        index = get_message_search_index()
+        for m in session_repo.get_by_session(new_session_id):
+            index.index_message(
+                m.id, m.session_id, m.role, m.content, m.created_at
+            )
+    except Exception as exc:  # noqa: BLE001 — 索引故障不影响 fork
+        logger.warning("fork 消息索引挂钩失败: %s", exc)
+
     return forked
 
 
@@ -485,6 +503,20 @@ class MessageRepository:
         )
 
         conn.commit()
+        # Round 2: 同步消息全文索引（session_search 工具）。best-effort，
+        # 索引故障不影响消息写入。
+        try:
+            from backend.data.message_search import get_message_search_index
+
+            get_message_search_index().index_message(
+                message.id,
+                message.session_id,
+                message.role,
+                message.content,
+                message.created_at,
+            )
+        except Exception as exc:  # noqa: BLE001 — 索引故障不影响写入
+            logger.warning("save 消息索引挂钩失败: %s", exc)
         return message
 
     def replace_prefix_with_continuation(
@@ -514,6 +546,21 @@ class MessageRepository:
         cursor = conn.cursor()
         now = int(time.time() * 1000)
         try:
+            # Round 4 (压缩谱系): 删除前把前缀消息归档进派生会话 ——
+            # 同 cursor 同事务，与压缩同生共死；「历史已删、归档未写」
+            # 与「历史已删、摘要未写」同为不可接受的永久丢失窗口。
+            try:
+                from backend.data.session_lineage import archive_prefix_in_transaction
+
+                archive_prefix_in_transaction(
+                    cursor,
+                    session_id,
+                    delete_message_ids,
+                    reason="compaction",
+                    now_ms=now,
+                )
+            except Exception:
+                raise  # 归档失败 → 整体回滚（与压缩强一致）
             # sqlite3 默认在首个 DML 处隐式 BEGIN，commit() 前所有语句
             # 同属一个事务；循环逐条 DELETE 避免 IN (?) 占位符数量上限。
             for message_id in delete_message_ids:
@@ -544,6 +591,20 @@ class MessageRepository:
         except Exception:
             conn.rollback()
             raise
+
+        # Round 2: 压缩续接消息同步全文索引（事务外 best-effort）
+        try:
+            from backend.data.message_search import get_message_search_index
+
+            get_message_search_index().index_message(
+                continuation_message.id,
+                continuation_message.session_id,
+                continuation_message.role,
+                continuation_message.content,
+                continuation_message.created_at,
+            )
+        except Exception as exc:  # noqa: BLE001 — 索引故障不影响压缩
+            logger.warning("压缩续接消息索引挂钩失败: %s", exc)
 
     def get_by_session(self, session_id: str, limit: int = 100, offset: int = 0) -> List[Message]:
         """获取会话消息列表"""
@@ -617,4 +678,13 @@ class MessageRepository:
             (message_id, session_id, role, content, created_at),
         )
         conn.commit()
+        # Round 2: 定时消息同步全文索引（best-effort）
+        try:
+            from backend.data.message_search import get_message_search_index
+
+            get_message_search_index().index_message(
+                message_id, session_id, role, content, created_at
+            )
+        except Exception as exc:  # noqa: BLE001 — 索引故障不影响写入
+            logger.warning("定时消息索引挂钩失败: %s", exc)
         return {"id": message_id}

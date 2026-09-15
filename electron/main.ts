@@ -37,6 +37,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
 import { logger } from './logger';
 import { setupTrayAndGlobalShortcut } from './tray';
+import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
+import { registerSageFileProtocol, registerWorkspaceRoot, unregisterWorkspaceRoot } from './sageFileProtocol';
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
 logger.info('main: process started', {
@@ -262,14 +264,6 @@ let backendGeneration = 0;
 let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let backendAuthToken: string | null = null;
-// Captures the first N stderr lines emitted by the most recent backend
-// subprocess so the startup-failure dialog (alpha.18-win7 2026-09-10) can
-// show what Python printed before exiting/hanging. Without this the user
-// sees only "后端服务在 90 秒内未响应" with no actionable detail. The full
-// stderr is always written to the NDJSON log via logger.error('backend:
-// stderr'); this buffer is only the in-memory summary.
-let backendStartupStderrBuffer: string[] = [];
-const BACKEND_STARTUP_STDERR_BUFFER_LIMIT = 40;
 let updateManager: UpdateManager | null = null;
 let cleanupUpdateIpc: (() => void) | null = null;
 let cleanupProviderIpc: (() => void) | null = null;
@@ -368,19 +362,6 @@ let reportedBrokenInstaller = false;
  *   process — the actual cause (missing bundled Python) was hidden.
  *   We now refuse the fallback in packaged mode and tell the user what to do.
  */
-function getBackendStartupStderrSnippet(maxChars: number = 1500): string {
-  // alpha.18-win7 2026-09-10: returns the captured stderr lines as a single
-  // string, truncated to maxChars. Empty if the buffer has no data (the
-  // backend hung without printing anything — usually an event-loop block).
-  if (backendStartupStderrBuffer.length === 0) return '';
-  const joined = backendStartupStderrBuffer.join('\n');
-  if (joined.length <= maxChars) return joined;
-  // Truncate at a line boundary so we don't split a Python traceback frame.
-  const sliced = joined.slice(joined.length - maxChars);
-  const firstNewline = sliced.indexOf('\n');
-  return firstNewline >= 0 ? `…\n${sliced.slice(firstNewline + 1)}` : `…${sliced}`;
-}
-
 function spawnBackend(): ChildProcess {
   // Resolve SAGE_DB_PATH and SAGE_USER_DATA_DIR once so both packaged and
   // dev spawn paths share them. Backend prefers these env vars; falls back to:
@@ -419,6 +400,7 @@ function spawnBackend(): ChildProcess {
     // own (misleading) "port occupied / conda" dialog 30s later. Without
     // this, the user sees two stacked modal dialogs about the same problem.
     reportedBrokenInstaller = true;
+    updateSplashStage('安装包不完整，无法启动后端');
     void showStartupFailureDialog({
       reason: plan.title,
       detail: plan.detail,
@@ -437,15 +419,13 @@ function spawnBackend(): ChildProcess {
   backendAuthToken = process.env.SAGE_LOCAL_AUTH_TOKEN ?? randomBytes(32).toString('base64url');
   currentBackend = { generation, pid: -1, ownershipToken };
   backendLifecycle = 'starting';
-  // Reset the stderr capture buffer for this generation (alpha.18-win7
-  // 2026-09-10: surface real Python tracebacks in the startup-failure
-  // dialog instead of just "90 秒未响应"). Previous generations' stderr is
-  // already in the NDJSON log — we only keep the most recent attempt.
-  backendStartupStderrBuffer = [];
   // Task 0 review round 1, finding #6: tell the renderer the new lifecycle
   // state so BackendStatusBanner can show "starting…" before the first
   // health probe lands.
-  mainWindow?.webContents.send('backend:starting', { generation });
+  // 2026-09-13: 通道名必须带 `sage:event:` 前缀 — preload 的 listen shim
+  // 只在 `sage:event:<event>` 上注册 (preload.ts)，裸通道永远到不了渲染端，
+  // BackendStatusBanner 的 5 个订阅此前全部收不到事件（横幅失效）。
+  mainWindow?.webContents.send('sage:event:backend:starting', { generation });
 
   // ── Orphan cleanup (Windows only) ──────────────────────────────────────
   // A previous Electron main process may have crashed without running
@@ -503,17 +483,9 @@ function spawnBackend(): ChildProcess {
   proc.stdout?.on('data', (b) =>
     logger.debug('backend: stdout', { line: stdoutDecoder.push(b).trim() }),
   );
-  proc.stderr?.on('data', (b) => {
-    const line = stderrDecoder.push(b).trim();
-    logger.error('backend: stderr', { line });
-    // alpha.18-win7 2026-09-10: keep the first N decoded lines so the
-    // startup-failure dialog can show the user what Python actually
-    // printed. Capped to LIMIT lines × typical Python traceback fits well
-    // within 80-char lines — limit is a guardrail, not a UX knob.
-    if (backendStartupStderrBuffer.length < BACKEND_STARTUP_STDERR_BUFFER_LIMIT) {
-      backendStartupStderrBuffer.push(line);
-    }
-  });
+  proc.stderr?.on('data', (b) =>
+    logger.error('backend: stderr', { line: stderrDecoder.push(b).trim() }),
+  );
   proc.on('exit', (code) => {
     if (!isCurrentGeneration({ generation, pid: proc.pid ?? -1, ownershipToken }, currentBackend)) {
       logger.debug('main: stale backend exit ignored', { generation, pid: proc.pid });
@@ -616,7 +588,7 @@ export function scheduleBackendRestart(): void {
   if (appIsQuitting || restartTimer) return;
   if (restartCount >= MAX_RESTART_ATTEMPTS) {
     logger.error('main: backend restart exhausted', { attempts: restartCount });
-    mainWindow?.webContents.send('backend:disconnected', { attempt: -1 });
+    mainWindow?.webContents.send('sage:event:backend:disconnected', { attempt: -1 });
     return;
   }
   restartCount++;
@@ -625,7 +597,7 @@ export function scheduleBackendRestart(): void {
     attempt: restartCount,
     delayMs: delay,
   });
-  mainWindow?.webContents.send('backend:disconnected', { attempt: restartCount });
+    mainWindow?.webContents.send('sage:event:backend:disconnected', { attempt: restartCount });
   restartTimer = setTimeout(() => {
     restartTimer = null;
     if (appIsQuitting || backendProc || currentBackend || backendLifecycle !== 'idle') return;
@@ -639,7 +611,7 @@ export function scheduleBackendRestart(): void {
         if (!isCurrentGeneration(expectedBackend, currentBackend)) return;
         if (ready) {
           restartCount = 0;
-          mainWindow?.webContents.send('backend:reconnected', {});
+          mainWindow?.webContents.send('sage:event:backend:reconnected', {});
         }
       });
     });
@@ -717,7 +689,7 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
         // Task 0 review round 1, finding #6: tell the renderer the backend
         // is ready so BackendStatusBanner can clear the "starting…" state
         // (or never show it, if the spawn-to-ready window was sub-frame).
-        mainWindow?.webContents.send('backend:ready', { generation: expectedBackend.generation });
+        mainWindow?.webContents.send('sage:event:backend:ready', { generation: expectedBackend.generation });
         return true;
       }
     } catch {
@@ -875,6 +847,10 @@ function createMainWindow(): void {
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
     title: 'Sage',
+    // 2026-09-13: 防白屏 — ready-to-show（首帧绘制完成）后再显示窗口；
+    // 个别平台 ready-to-show 不触发时由 3s 兜底计时器放行。窗口显示的
+    // 同时关闭启动屏，两者同帧交替，无白屏间隙。
+    show: false,
     // __dirname = <asar>/dist-electron/electron/, 往上两层才是 <asar>/,
     // 对齐 electron-builder.yml files 里的 build/icon.ico (顶层).
     // 之前写 __dirname/../build/icon.ico = <asar>/dist-electron/build/icon.ico,
@@ -900,6 +876,23 @@ function createMainWindow(): void {
   });
   setMainWindow(win);
 
+  // 2026-09-13: ready-to-show（首帧就绪）后再显示主窗口并关闭启动屏，
+  // 消除「窗口已出现但页面尚未绘制」的白屏闪烁。
+  let mainWinShown = false;
+  const showMainWindow = () => {
+    if (mainWinShown || win.isDestroyed()) return;
+    mainWinShown = true;
+    if (!win.isVisible()) {
+      win.show();
+    }
+    closeSplashWindow();
+  };
+  const showFallbackTimer = setTimeout(showMainWindow, 3000);
+  win.once('ready-to-show', () => {
+    clearTimeout(showFallbackTimer);
+    showMainWindow();
+  });
+
   // Open external links in OS browser, not in-app
   win.webContents.setWindowOpenHandler(({ url }) => {
     openExternalSafely(url);
@@ -915,6 +908,7 @@ function createMainWindow(): void {
   if (isDev) {
     win.loadURL(VITE_DEV_URL).catch(async (e) => {
       logger.error('main: loadURL failed', { url: VITE_DEV_URL, err: e.message });
+      closeSplashWindow();
       await showStartupFailureDialog({
         reason: '加载前端开发服务失败',
         detail: `URL: ${VITE_DEV_URL}\n错误: ${e.message}`,
@@ -954,6 +948,7 @@ function createMainWindow(): void {
     }
     win.loadFile(indexHtml).catch(async (e) => {
       logger.error('main: loadFile failed', { path: indexHtml, err: e.message });
+      closeSplashWindow();
       await showStartupFailureDialog({
         reason: '加载前端资源失败',
         detail: `路径: ${indexHtml}\n错误: ${e.message}`,
@@ -1950,6 +1945,22 @@ async function isPortReleased(port: number, timeoutMs: number): Promise<void> {
 app.whenReady().then(async () => {
   // Step 3: prune log files older than 7 days on every cold start
   cleanupOlderThan(7);
+  // P9/P13 (2026-09-14): sage-file:// 协议 —— 工作区本地图片经白名单
+  // 校验后安全渲染（MarkdownImage 生成 sage-file://p/<enc> URL）。
+  // 必须在窗口加载页面前注册。
+  registerSageFileProtocol();
+  ipcMain.handle('sage-file:register-root', (_evt, root: string) => {
+    return registerWorkspaceRoot(String(root ?? ''));
+  });
+  ipcMain.handle('sage-file:unregister-root', (_evt, root: string) => {
+    return unregisterWorkspaceRoot(String(root ?? ''));
+  });
+  // 2026-09-13: 启动屏 — 后端冷启动实测 50–65s（健康检查上限 90s），此前
+  // 窗口创建排在 waitForBackend() 之后，用户双击图标后近一分钟无任何反馈。
+  // CI 冒烟 (SAGE_SKIP_BACKEND) / 演示录屏 / SAGE_NO_SPLASH=1 时不显示。
+  if (!isDemoProcess() && process.env.SAGE_SKIP_BACKEND !== '1' && process.env.SAGE_NO_SPLASH !== '1') {
+    createSplashWindow();
+  }
   // U12 (round4 批次 E): 系统托盘 + 全局快捷键唤起（Alt+Shift+S toggle）。
   // 内部全量降级:托盘/快捷键不可用只记日志,绝不阻断启动。
   setupTrayAndGlobalShortcut();
@@ -1964,6 +1975,7 @@ app.whenReady().then(async () => {
   // is captured into the NDJSON startup log so the user can diagnose degraded
   // experiences via Show Logs. Default 20s cap lives in doctor.ts and can be
   // tuned per-build via SAGE_DOCTOR_TIMEOUT_MS (CI smoke paths tighten it).
+  updateSplashStage('正在自检运行环境…');
   if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
     try {
       // 2026-08-26: use `resolveDoctorLaunchCommand` so the doctor
@@ -2115,7 +2127,7 @@ app.whenReady().then(async () => {
             PROBE_PATH +
             ' — Electron 与后端 SAGE_LOCAL_AUTH_TOKEN 失配。请重启 Sage 桌面端恢复。',
         );
-        mainWindow?.webContents.send('backend:auth-failed', { status: 401 });
+        mainWindow?.webContents.send('sage:event:backend:auth-failed', { status: 401 });
         return;
       }
       if (!probe.ok) {
@@ -2178,6 +2190,7 @@ app.whenReady().then(async () => {
     buildApplicationMenu();
     return;
   }
+  updateSplashStage('正在启动后端服务…');
   backendProc = spawnBackend();
   // If the resolver already fired the broken-installer dialog (because
   // bundled Python is missing or the platform is unsupported), suppress the
@@ -2191,8 +2204,8 @@ app.whenReady().then(async () => {
   if (!ready) {
     // ── Diagnostic: log backend process state at timeout ────────────────
     // Differentiate "backend crashed" (exitCode != null) from "backend
-    // still running but slow" (exitCode === null). Critical for Win7
-    // startup investigation (alpha.19-win7 2026-09-10).
+    // still running but slow" (exitCode === null). Carried over from
+    // alpha.19-win7 (PR #585) — universally useful on slow-startup machines.
     const procState = backendProc
       ? { pid: backendProc.pid, exitCode: backendProc.exitCode, signalCode: backendProc.signalCode }
       : { pid: null, exitCode: null, signalCode: null };
@@ -2207,11 +2220,9 @@ app.whenReady().then(async () => {
     });
 
     // ── Auto-retry once ─────────────────────────────────────────────────
-    // Some Win7 machines need >90s for the full module import chain
-    // (jieba + 50+ deps). The backend IS starting (second-run logs show
-    // encrypted secrets) but takes longer than the first timeout allows.
-    // Give it one more timeout period before showing the dialog.
-    logger.info('main: auto-retrying backend health check (Win7 slow-startup allowance)');
+    // Some machines need >90s for the full module import chain. Give one
+    // more timeout period before showing the dialog.
+    logger.info('main: auto-retrying backend health check (slow-startup allowance)');
     const autoRetryReady = await waitForBackend();
     if (autoRetryReady) {
       logger.info('main: backend ready after auto-retry');
@@ -2225,24 +2236,19 @@ app.whenReady().then(async () => {
 
     // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
     // User can open logs, retry the health check, or quit.
-    // alpha.18-win7 2026-09-10: include the first stderr lines we captured
-    // so the dialog shows the real Python error instead of a generic "is
-    // conda installed?" hint. If the buffer is empty (e.g. backend is hung
-    // without printing anything), fall back to the legacy hint.
-    // alpha.19-win7 2026-09-10: include backend process state so the user
-    // (and support logs) can differentiate crashed vs still-starting.
-    const stderrSnippet = getBackendStartupStderrSnippet();
+    // Include backend process state so the user (and support logs) can
+    // differentiate crashed vs still-starting.
     const procStateLine = backendProc
       ? `\n\n后端进程状态: pid=${backendProc.pid}, exitCode=${backendProc.exitCode}, signalCode=${backendProc.signalCode}`
       : '\n\n后端进程状态: 进程不存在 (backendProc=null)';
-    const baseDetail = stderrSnippet
-      ? `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。${procStateLine}\n\n后端最近一次输出:\n${stderrSnippet}`
-      : `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。${procStateLine}`;
+    const baseDetail = `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。${procStateLine}`;
+    updateSplashStage('后端服务启动失败');
     const choice = await showStartupFailureDialog({
       reason: `后端服务在 ${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)} 秒内未响应 (已自动重试一次)`,
       detail: baseDetail,
     });
     if (choice === 'retry') {
+      updateSplashStage('正在重试启动后端服务…');
       const ready2 = await waitForBackend();
       if (!ready2) {
         await showStartupFailureDialog({
@@ -2277,23 +2283,7 @@ app.whenReady().then(async () => {
   void updateManager
     ?.onAppStartup(() => mainWindow, BACKEND_URL)
     .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
-})
-  // alpha.18-win7 2026-09-10: catch synchronous throws inside the async chain.
-  // Without this, any uncaught exception (e.g. a TypeError in startup code,
-  // a misconfigured IPC handler) would be swallowed by the Promise and the
-  // app would sit at a blank screen with no diagnostic. Surface the error
-  // via the same startup-failure dialog so the user sees what went wrong
-  // and can open the log for the full traceback.
-  .catch(async (err) => {
-    logger.error('main: app.whenReady chain threw', {
-      error: String(err),
-      stack: err instanceof Error ? err.stack : undefined,
-    });
-    await showStartupFailureDialog({
-      reason: '启动过程发生未捕获异常',
-      detail: `启动时检测到未捕获异常:\n${err instanceof Error ? err.message : String(err)}\n\n详情请查看日志文件。`,
-    });
-  });
+});
 
 app.on('window-all-closed', () => {
   // On all platforms (incl. macOS), quit when last window closes.

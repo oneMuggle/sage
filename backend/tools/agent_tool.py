@@ -47,6 +47,7 @@ Timeouts and residual risk:
 """
 
 from __future__ import annotations
+from typing import Optional, Tuple
 
 import asyncio
 import concurrent.futures
@@ -57,10 +58,7 @@ import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
-
-if TYPE_CHECKING:  # 避免循环:backend.tools → agent → tools (doctor CLI 等冷启动场景)
-    from backend.orchestration.subagent_events import SubagentEventSink
+from typing import Any, Dict, Optional, Tuple
 
 from backend.domain.network_policy import NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
@@ -74,8 +72,17 @@ from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.llm_factory import build_llm_client_from_settings
 from backend.orchestration.models import Task
 from backend.orchestration.orch_settings import load_orch_settings
+from backend.orchestration.subagent_events import SubagentEventSink
 from backend.orchestration.task_registry import TaskRegistry
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.browser_tool import (
+    BrowserCloseTool,
+    BrowserCookiesTool,
+    BrowserInteractTool,
+    BrowserLaunchTool,
+    BrowserNavigateTool,
+    BrowserSnapshotTool,
+)
 from backend.tools.calculator import CalculatorTool
 from backend.tools.download_tool import HttpDownloadTool
 from backend.tools.file_tool import ListDirTool, ReadFileTool
@@ -86,8 +93,11 @@ from backend.tools.web_tool import WebFetchTool, WebSearchTool
 
 logger = logging.getLogger(__name__)
 
-# Hard read-only whitelist for sub-agents. glob/grep/todo arrive with the M2
-# branch — do not reference them here.
+# Delegation whitelist for sub-agents (Round 6 B2: 浏览器通道已并入——
+# launch/snapshot/interact/cookies/close 为本地或受审批操作，navigate 为
+# EXTERNAL 逐次审批且受网络模式门禁)。glob/grep/todo arrive with the M2
+# branch — do not reference them here. 实际注册边界见
+# build_readonly_tool_registry（未注册即不可见）。
 SUBAGENT_TOOL_WHITELIST: Tuple[str, ...] = (
     "read_file",
     "list_dir",
@@ -96,6 +106,12 @@ SUBAGENT_TOOL_WHITELIST: Tuple[str, ...] = (
     "http_download",
     "memory_search",
     "calculator",
+    "browser_launch",
+    "browser_navigate",
+    "browser_snapshot",
+    "browser_interact",
+    "browser_cookies",
+    "browser_close",
 )
 
 # Sub-agents are focused: small iteration budget, capped answers.
@@ -151,10 +167,13 @@ SUBAGENT_TIMEOUT_S: float = _resolve_timeout()
 SUBAGENT_SYSTEM_PROMPT = (
     "You are a focused Sage sub-agent performing a delegated task. "
     "You have READ-ONLY tools: file reading, directory listing, web search/fetch, "
-    "memory search, and a calculator. You cannot modify files or run commands. "
-    "File tools can only read the delegated scratch/workspace content; web fetch "
-    "rejects private or local destinations. Complete the task concisely and "
-    "return your final answer as plain text."
+    "memory search, and a calculator — plus a controlled browser channel "
+    "(browser_launch/navigate/snapshot/interact/cookies/close) for pages that "
+    "need JavaScript rendering or a login state. You cannot modify files or run "
+    "commands. File tools can only read the delegated scratch/workspace content; "
+    "web fetch and browser navigation reject private or local destinations and "
+    "are subject to network mode and approval gates. Complete the task concisely "
+    "and return your final answer as plain text."
 )
 
 
@@ -211,6 +230,17 @@ def build_readonly_tool_registry(
     if network_policy.fetch_enabled():
         registry.register(WebFetchTool(policy=policy, network_policy=network_policy))
         registry.register(HttpDownloadTool(policy=policy, network_policy=network_policy))
+    # Round 6 B2: 浏览器通道——navigate(EXTERNAL) 与 web_fetch 同口径受
+    # fetch_enabled 门禁（OFFLINE 不暴露出网导航）；launch/snapshot/interact/
+    # cookies/close 为本地或受审批操作，无条件注册。风险审批与网络模式门禁
+    # 照常生效。
+    if network_policy.fetch_enabled():
+        registry.register(BrowserNavigateTool(policy=policy))
+    registry.register(BrowserLaunchTool(policy=policy))
+    registry.register(BrowserSnapshotTool(policy=policy))
+    registry.register(BrowserInteractTool(policy=policy))
+    registry.register(BrowserCookiesTool(policy=policy))
+    registry.register(BrowserCloseTool(policy=policy))
     registry.register(MemorySearchTool(policy=policy))
     registry.register(CalculatorTool(policy=policy))
     registry._owned_workspace_root = owned_root  # noqa: SLF001 — lifecycle metadata
@@ -253,8 +283,11 @@ class AgentTool(BaseTool):
             description=(
                 "Launch a focused sub-agent to handle a delegated task. The sub-agent "
                 "has read-only tools (file/directory reading, web search/fetch, memory "
-                "search, calculator) and returns a final answer. Use it to parallelize "
-                "investigation work without polluting the main context."
+                "search, calculator) and a controlled browser channel "
+                "(browser_launch/navigate/snapshot/interact/cookies/close, subject to "
+                "the same approval and network-mode gates), and returns a final answer. "
+                "Use it to parallelize investigation work without polluting the main "
+                "context."
             ),
             parameters={
                 "type": "object",
@@ -493,14 +526,7 @@ class AgentTool(BaseTool):
                 if event:
                     emitter(event)
 
-            # Lazy import to avoid cold-start circular: backend.tools → agent →
-            # tools (doctor CLI 等子进程冷启动路径下,subagent_events → agent_state
-            # → backend.core.legacy.agent 会反向 import backend.tools.ToolRegistry)。
-            from backend.orchestration.subagent_events import (
-                SubagentEventSink as _SubagentEventSink,
-            )
-
-            sink = _SubagentEventSink(
+            sink = SubagentEventSink(
                 run_id=mirror_run_id,
                 task_id="a1",
                 entity_task_id="a1",
@@ -527,11 +553,9 @@ class AgentTool(BaseTool):
                 ),
                 timeout=SUBAGENT_TIMEOUT_S,
             )
-        except asyncio.TimeoutError:  # noqa: UP041 — py38: asyncio.TimeoutError ≠ TimeoutError
+        except TimeoutError:
             # wait_for 已取消内层协程 —— 子 run_loop 在取消点收口,
             # 不存在遗弃线程（异步通路的 L12 根修）。
-            # 注意:Python 3.8-3.10 上 asyncio.TimeoutError 与内置 TimeoutError 是
-            # 不同类,这里必须显式用 asyncio.TimeoutError(3.11+ 才是同一类)。
             logger.warning(
                 "Sub-agent timed out after %.1fs (coroutine cancelled, lane FAILED)",
                 SUBAGENT_TIMEOUT_S,

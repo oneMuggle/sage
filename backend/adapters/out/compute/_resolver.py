@@ -144,9 +144,19 @@ class ExecutableResolver:
 
 
 def _is_executable(path: Union[str, os.PathLike[str]]) -> bool:
-    """``True`` iff path 存在、是文件且当前用户具备执行权限。"""
-    try:
-        p = Path(path)
-    except (TypeError, ValueError):
+    """可执行判定。
+
+    POSIX 依赖执行位（X_OK）；Windows 无执行位（X_OK 恒真），改按
+    PATHEXT 后缀判定（与 ``shutil.which`` 同语义）—— 否则任意文本文件
+    都会被误判为可执行的 compute 二进制。
+    """
+    p = Path(path)
+    if not p.is_file():
         return False
-    return p.is_file() and os.access(p, os.X_OK)
+    if os.name == "nt":
+        pathext = os.environ.get("PATHEXT", "")
+        exts = tuple(
+            e.lower() for e in pathext.split(";") if e
+        ) or (".com", ".exe", ".bat", ".cmd")
+        return p.suffix.lower() in exts
+    return os.access(p, os.X_OK)

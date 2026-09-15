@@ -27,7 +27,10 @@ import pytest
 from backend.skills.registry import SkillRegistry
 from backend.tools.skill import SkillHotLoader
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(os.name == "nt", reason="skill 工具读取依赖 POSIX O_NOFOLLOW"),
+]
 
 
 # ============================================================================

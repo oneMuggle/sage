@@ -57,6 +57,8 @@ class ServerConfigIn(BaseModel):
     command: str = Field(min_length=1, max_length=512)
     args: List[str] = Field(default_factory=list)
     env: Dict[str, str] = Field(default_factory=dict)
+    # R34: HTTP 传输自定义鉴权头（stdio 服务器忽略）
+    headers: Dict[str, str] = Field(default_factory=dict)
     enabled: bool = True
     required: bool = False
     timeout_seconds: float = Field(default=30.0, gt=0, le=600)
@@ -70,6 +72,10 @@ class ServerUpdateIn(BaseModel):
 
     enabled: Optional[bool] = None
     timeout_seconds: Optional[float] = Field(default=None, gt=0, le=600)
+    # R20-B: per-tool 级开关 —— 全量替换语义（传空数组 = 清空禁用清单）
+    disabled_tools: Optional[List[str]] = None
+    # R34: HTTP 鉴权头 —— 全量替换语义；GET 响应中按敏感键脱敏
+    headers: Optional[Dict[str, str]] = None
 
     class Config:
         extra = "forbid"
@@ -93,6 +99,8 @@ def redact_env(env: Dict[str, str]) -> Dict[str, str]:
 def _config_to_dict(config: ServerConfig, builtin: bool) -> Dict[str, Any]:
     data = config.to_dict()
     data["env"] = redact_env(config.env)
+    # R34: 鉴权头与 env 同级敏感 —— Authorization/x-api-key 等值同样脱敏
+    data["headers"] = redact_env(config.headers)
     # UI uses this to disable the delete button for built-in servers
     data["builtin"] = builtin
     return data
@@ -140,6 +148,7 @@ def add_mcp_server(payload: ServerConfigIn) -> Dict[str, Any]:
             enabled=payload.enabled,
             required=payload.required,
             timeout_seconds=payload.timeout_seconds,
+            headers=dict(payload.headers),
         )
         record = _pool().add_server(config)
     except (McpConfigError, McpClientError) as exc:
@@ -168,6 +177,8 @@ def update_mcp_server(name: str, payload: ServerUpdateIn) -> Dict[str, Any]:
             name,
             enabled=payload.enabled,
             timeout_seconds=payload.timeout_seconds,
+            disabled_tools=payload.disabled_tools,
+            headers=payload.headers,
         )
     except KeyError:
         raise HTTPException(status_code=404, detail=f"unknown MCP server: {name}")

@@ -67,7 +67,10 @@ def test_memorize_auto_low_importance_short_goes_to_working(
     manager: MemoryManager,
 ) -> None:
     mid = manager.memorize("short low", memory_type="auto", importance=3)
-    assert mid is None
+    # P0-4 (main): working 路径不再返回 None, 改为合成 id (wm:<session>:<seq>)
+    assert mid is not None
+    assert mid.startswith("wm:")
+    assert mid == "wm:default:1"
     assert len(manager.working.messages) == 1
 
 
@@ -370,13 +373,16 @@ async def test_consolidate_compresses_working_memory(
     """MemoryManager.consolidate(session_id) compresses working memory into
     episodic (delegates to ConsolidationPipeline) and returns a memory id."""
     ensure_session(manager.episodic.db, "sess-c")
+    # main 的 WorkingMemory 按 session_id 隔离：消息需落在被 consolidate 的会话下
     manager.add_to_working(
-        "user", "hello consolidation test message worth remembering"
+        "user",
+        "hello consolidation test message worth remembering",
+        session_id="sess-c",
     )
     memory_id = await manager.consolidate("sess-c")
     assert memory_id is None or isinstance(memory_id, str)
     # working memory cleared after consolidation
-    assert len(manager.working.messages) == 0
+    assert manager.working.get_context("sess-c") == []
     # episodic now holds the compressed summary
     recent = manager.episodic.get_recent(limit=5)
     assert len(recent) >= 1

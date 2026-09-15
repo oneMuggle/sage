@@ -12,10 +12,11 @@
 """
 
 from __future__ import annotations
+from typing import Dict, Tuple
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Protocol, Tuple
+from typing import Iterable, List, Optional, Protocol
 
 from backend.domain.runtime import (
     ExecutionRequest,

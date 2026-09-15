@@ -7,10 +7,10 @@
 - ``_run_subagent`` 防御性 max-iteration guard（一直 retrying → RuntimeError）
 """
 from __future__ import annotations
+from typing import List, Optional
 
 import asyncio
 import warnings
-from typing import List, Optional
 from unittest.mock import AsyncMock, patch
 
 import pytest

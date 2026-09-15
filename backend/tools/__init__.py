@@ -3,6 +3,7 @@
 
 提供所有内置工具的注册函数
 """
+
 from typing import Optional
 
 from backend.domain.network_policy import NetworkPolicy
@@ -27,6 +28,7 @@ from .codebase_search_tool import CodebaseSearchTool
 from .commit_message_tool import GitCommitMessageTool
 from .download_tool import HttpDownloadTool
 from .edit_tool import EditTool
+from .execute_code_tool import ExecuteCodeTool
 from .file_summary_tool import FileSummaryTool
 from .file_tool import ListDirTool, ReadFileTool, WriteFileTool
 from .git_tool import (
@@ -74,6 +76,7 @@ from .repl_tool import ReplTool
 from .runtime_exec import RuntimeExecTool
 from .runtime_probe import RuntimeProbeTool
 from .search_tools import GlobSearchTool, GrepSearchTool
+from .session_search_tool import SessionSearchTool
 from .skill import SkillHotLoader
 from .skill_save_tool import SkillSaveTool
 from .skill_tool import SkillTool
@@ -89,11 +92,12 @@ def __getattr__(name):
 
     ``agent_tool`` is intentionally NOT eagerly imported above. Its module
     pulls in ``backend.orchestration.subagent_events`` which transitively
-    reaches ``backend.core.legacy.agent.py`` (``from backend.tools import
-    ToolRegistry, register_all_tools``) — a back-edge into this package
-    before its ``__init__`` finishes binding ``ToolRegistry``.
-    Python 3.10 silently tolerated the cycle (it returns the
-    partially-initialized module object), but Python 3.11 (used by CI) raises
+    reaches ``backend.core.legacy.agent.py:54`` (``from backend.tools
+    import ToolRegistry, register_all_tools``) — a back-edge into this
+    package before its ``__init__`` finishes binding ``ToolRegistry`` at
+    line 42. Python 3.10 silently tolerated the cycle (it returns the
+    partially-initialized module); Python 3.11 (used by CI per
+    ``.github/workflows/ci.yml`` line 82) raises
     ``ImportError: cannot import name 'ToolRegistry' from partially
     initialized module 'backend.tools'``. Issue #484.
 
@@ -112,8 +116,9 @@ def __getattr__(name):
 
 def __dir__():
     """Make ``AgentTool`` discoverable via ``dir(backend.tools)`` and tab
-    completion."""
-    return sorted(set(globals()) | {"AgentTool"})
+    completion, matching the pre-fix public surface.
+    """
+    return sorted({*globals().keys(), "AgentTool"})
 
 
 def register_all_tools(
@@ -148,6 +153,10 @@ def register_all_tools(
         registry.register(HttpDownloadTool(policy=policy, network_policy=network_policy))
     registry.register(CalculatorTool(policy=policy))
     registry.register(MemorySearchTool(policy=policy))
+    # Round 2 (session_search): 跨会话对话原文检索（READ 级）
+    registry.register(SessionSearchTool(policy=policy))
+    # Round 8 (execute_code): 零上下文 RPC 工具调用（EXEC 级，与 bash 同权限面）
+    registry.register(ExecuteCodeTool(registry=registry, policy=policy))
     registry.register(MemorySaveTool(policy=policy))
     registry.register(OfficeListTool(policy=policy))
     registry.register(OfficeReadTool(policy=policy))
@@ -180,6 +189,9 @@ def register_all_tools(
     registry.register(OfficeAnalyzeWordTemplateTool(policy=policy))
     registry.register(OfficeFillWordTemplateTool(policy=policy))
     # Office Parity Batch-2: office_analyze —— pandas 本地数据分析
+    # （describe/计数/聚合/相关性，可选分析报告 xlsx）。读类工具
+    # requires_tool_context=True（无绑定自动隐藏）；报告只写源文件同目录
+    # 的派生文件名，落点不经 LLM 选择。
     registry.register(OfficeAnalyzeTool(policy=policy))
     # 2026-09-10 journal template subsystem: 期刊模板 4 件套
     # （parse_template / fill_from_content / generate_article / validate）。
@@ -189,11 +201,11 @@ def register_all_tools(
     registry.register(OfficeJournalFillFromContentTool(policy=policy))
     registry.register(OfficeJournalGenerateArticleTool(policy=policy))
     registry.register(OfficeJournalValidateTool(policy=policy))
-    # Round 9 引用体系: office_parse_bibtex（READ）
+    # Round 9 引用体系: office_parse_bibtex（READ，BibTeX → ReferenceSpec）
     registry.register(OfficeBibTexTool(policy=policy))
-    # Round 10 格式 Linter: office_lint_word（READ）
+    # Round 10 格式 Linter: office_lint_word（READ，对照 FormatSpec 校验 docx）
     registry.register(OfficeLintWordTool(policy=policy))
-    # Round 12 自动修复: office_repair_word（WRITE_LOCAL）
+    # Round 12 自动修复: office_repair_word（WRITE_LOCAL，lint→修复→复检）
     registry.register(OfficeRepairWordTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
@@ -217,10 +229,14 @@ def register_all_tools(
     registry.register(SkillTool(policy=policy))
     # M2 part B: AskUserQuestion（READ，run_loop 分发前特判 + 提问闸口）
     registry.register(AskUserQuestionTool(policy=policy))
-    # M5 (win7 移植): in-loop sub-agent tool (claw-code execute_agent pattern)。
-    # 子代理自身只拿只读白名单 — 见 agent_tool.SUBAGENT_TOOL_WHITELIST。
-    # live-events 对齐 (2026-09-08): agent_tool 改为包初始化完成后局部导入
-    # （避免 backend.tools 循环导入, 见 __getattr__ 注释 / issue #484）。
+    # M5: in-loop sub-agent tool (claw-code execute_agent pattern). The
+    # sub-agent itself only ever gets the read-only whitelist — see
+    # agent_tool.SUBAGENT_TOOL_WHITELIST.
+    # Lazy import here (not at module top) — see __getattr__ docstring
+    # above for the cycle this avoids. Safe at runtime because this
+    # function is only called AFTER backend.tools.__init__ has fully
+    # finished, so the back-edge
+    # `backend.core.legacy.agent -> backend.tools` resolves cleanly.
     from .agent_tool import AgentTool
 
     registry.register(AgentTool(policy=policy))
@@ -292,6 +308,8 @@ __all__ = [
     "HttpDownloadTool",
     "CalculatorTool",
     "MemorySearchTool",
+    "SessionSearchTool",
+    "ExecuteCodeTool",
     "MemorySaveTool",
     "OfficeListTool",
     "OfficeReadTool",

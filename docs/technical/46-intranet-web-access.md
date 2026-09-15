@@ -34,11 +34,11 @@ host 校验在 **执行时** 读策略（`NetworkPolicy.check_host(url)`），�
 - **后缀混淆不命中**：`evilcnki.net` 不命中 `*.cnki.net`。比对的是"以 `.cnki.net` 结尾"，不是"以 `cnki.net` 结尾"。
 - 匹配前 host 统一 `lower()` + 去尾点，避免 `A.CNKI.NET.` 绕过白名单。
 
-空内网白名单 + `intranet` 模式是 fail-closed：`check_host` 拒绝一切 URL。这是刻意的 —— 切到内网没填白名单，结果是"什么都访问不了"而不是"什么都能访问"。前端 `NetworkTab` 此时显示提示条引导用户加 host。
+空内白名单 + `intranet` 模式是 fail-closed：`check_host` 拒绝一切 URL。这是刻意的 —— 切到内网没填白名单，结果是"什么都访问不了"而不是"什么都能访问"。前端 `NetworkTab` 此时显示提示条引导用户加 host。
 
 ## `web_fetch` 四模式
 
-`backend/tools/web_tool.py:WebFetchTool` 通过 `mode` 参数控制返回的字段：
+`backend/tools/web_tool.py:WebFetchTool` 通过 `mode` 参数控制返回的字段段：
 
 | `mode` | 返回字段 |
 |---|---|

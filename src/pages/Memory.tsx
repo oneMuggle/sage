@@ -10,7 +10,7 @@
  *
  * 渲染层复用 MemoryCard（含点击跳回产生该记忆的会话/轮次）。
  */
-import { Download, Search } from 'lucide-react';
+import { Download, Plus, Search } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -18,7 +18,7 @@ import { memoryApi } from '../shared/api';
 import type { Memory } from '../shared/api/types';
 import { useStore } from '../shared/lib/store';
 import { ErrorState } from '../shared/ui/ErrorState';
-import { UserProfileCard } from '../widgets/memory';
+import { NewMemoryModal, UserProfileCard } from '../widgets/memory';
 import { MemoryCard, type MemoryItem } from '../widgets/memory/MemoryCard';
 import { MemoryTabs, type MemoryTab } from '../widgets/memory/MemoryTabs';
 
@@ -63,6 +63,9 @@ export function Memory() {
   const [typeFilter, setTypeFilter] = useState('');
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  // main 对齐（fix/security-perf-quickwins §1.3b g）：手动新建记忆弹窗；
+  // 保存成功后直接 reloadAll 刷新「所有记忆」列表，无需整页刷新。
+  const [showNewMemory, setShowNewMemory] = useState(false);
   const currentSessionId = useStore((s) => s.currentSessionId);
 
   /**
@@ -337,6 +340,15 @@ export function Memory() {
     <div className="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">🧠 记忆管理</h1>
+        <div className="flex gap-2">
+        <button
+          data-testid="memory-add"
+          onClick={() => setShowNewMemory(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-text-inverse text-xs rounded-radius-sm hover:bg-primary-hover transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          新建记忆
+        </button>
         <button
           onClick={() => {
             void handleExport();
@@ -347,7 +359,14 @@ export function Memory() {
           <Download className="w-3.5 h-3.5" />
           {exporting ? '导出中...' : '导出'}
         </button>
+        </div>
       </div>
+
+      <NewMemoryModal
+        isOpen={showNewMemory}
+        onClose={() => setShowNewMemory(false)}
+        onSaved={reloadAll}
+      />
 
       {exportError && (
         <div className="mb-4">

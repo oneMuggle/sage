@@ -36,7 +36,6 @@ const STATE_LABELS: Record<string, string> = {
 export function ProgressSection({
   iteration,
   streamingState,
-  toolCalls,
   isLoading,
   taskBoard,
   sessionId,
@@ -86,20 +85,6 @@ export function ProgressSection({
         )}
       </div>
 
-      {/* win7 保留: 实时工具调用列表（main 三态重构时移除，win7 RightPanel 仍传 toolCalls） */}
-      {toolCalls.length > 0 && (
-        <div className="space-y-1">
-          {toolCalls.map((tc, i) => (
-            <div
-              key={tc.id ?? `${tc.name}-${i}`}
-              className="flex items-center gap-2 px-2 py-1 rounded text-xs bg-bg-hover"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              <span className="text-text-secondary">{tc.name}</span>
-            </div>
-          ))}
-        </div>
-      )}
       {/* P1 todo 接线: agent 自维护任务清单 + PR-C 编排计划镜像 */}
       <TodoListSection todos={todos} taskBoard={taskBoard} />
 

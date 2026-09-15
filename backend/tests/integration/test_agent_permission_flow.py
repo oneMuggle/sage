@@ -37,24 +37,9 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(autouse=True)
 def _gate_lifecycle():
     """每个测试独立 gate, 防止跨测试挂起请求泄漏。"""
-    # gate 是进程级单例（main.py lifespan shutdown 已负责常见清理），
-    # 此处兜底确保本文件内绝对干净。settings 虽因 autouse setup_test_db
-    # 的每测试独立 temp DB 本不会跨测试泄漏，但我们改写 permission_mode /
-    # permission_rules 后写回原值，保持"写后必还"的卫生。
-    _repo = SettingsRepository()
-    _prev_mode = _repo.get("permission_mode")
-    _prev_rules = _repo.get_json("permission_rules")
     reset_permission_gate()
     yield
     reset_permission_gate()
-    if _prev_mode is None:
-        _repo.delete("permission_mode")
-    else:
-        _repo.set("permission_mode", _prev_mode)
-    if _prev_rules is None:
-        _repo.delete("permission_rules")
-    else:
-        _repo.set_json("permission_rules", _prev_rules)
 
 
 def _make_response(content: str = "", tool_calls=None) -> LLMResponse:

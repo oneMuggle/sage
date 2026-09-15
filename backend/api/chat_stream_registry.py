@@ -18,6 +18,7 @@ Chat 流注册表 (I2: 拆分 create/attach,避免 LLM 被调两次)
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import asyncio
 import contextlib
@@ -210,6 +211,21 @@ class StreamRegistry:
             # 无论成功失败,attach 端点都要收到关闭信号
             with contextlib.suppress(asyncio.CancelledError):
                 await entry.queue.put(SENTINEL)
+
+    def find_active_by_session(self, session_id: str) -> Optional[str]:
+        """R25-D4: 返回该会话当前活跃（pending/running 且未挂起）的 streamId。
+
+        与 create 的 busy 仲裁同口径（挂起与终态不占位）。无活跃流返回
+        None —— 前端据此决定是否 reattach。
+        """
+        for stream_id, entry in self._entries.items():
+            if (
+                entry.session_id == session_id
+                and entry.status in ("pending", "running")
+                and not entry.suspended
+            ):
+                return stream_id
+        return None
 
     async def suspend(
         self,

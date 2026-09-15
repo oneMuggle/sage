@@ -20,11 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-
-from backend.compat.win7 import pydantic_compat as _pc
 from backend.compat.win7.pydantic_compat import ConfigDict
-
-_pc.install()
 
 from backend.data.project_repo import (
     Project,

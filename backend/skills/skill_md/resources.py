@@ -303,6 +303,26 @@ def _indexed_regular_resources(index: ResourceIndex, base_dir: Path) -> Set[Path
                     continue
                 if _is_reparse_point(lexical_path):
                     continue
+                # R32 句柄级复核：打开时刻的对象校验，闭合 lstat 元数据检查
+                # → 消费打开之间的 TOCTOU 窗口。校验失败（reparse/目录/
+                # 多链接/消失）一律跳过。平台分派：nt 走原生原语，
+                # POSIX 用 O_NOFOLLOW 打开校验。
+                try:
+                    if os.name == "nt":
+                        from backend.tools.win_reparse_io import (
+                            verify_regular_file_reparse_safe,
+                        )
+
+                        verify_regular_file_reparse_safe(str(lexical_path))
+                    else:
+                        nofollow = getattr(os, "O_NOFOLLOW", 0)
+                        fd = os.open(
+                            str(lexical_path),
+                            os.O_RDONLY | nofollow,
+                        )
+                        os.close(fd)
+                except OSError:
+                    continue
                 authorized.add(resolved_resource)
             except (OSError, RuntimeError, TypeError, ValueError):
                 continue

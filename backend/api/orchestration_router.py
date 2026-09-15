@@ -1,4 +1,4 @@
-"""Orchestration REST API (Phase 4).
+"""Orchestration REST API (Phase 4 + M5).
 
 Mount under ``/api/v1`` from ``backend/main.py``. Provides:
 
@@ -176,13 +176,11 @@ def _to_task_out(task: Task) -> TaskOut:
 
 
 def build_router() -> APIRouter:
-    """Build orchestration router with fresh registry instances.
+    """Build orchestration router.
 
     Returns an APIRouter exposing /orchestration/* endpoints.
     """
     router = APIRouter(prefix="/orchestration", tags=["orchestration"])
-    lane_registry = LaneRegistry()
-    event_stream = EventStream()
 
     @router.get("/lanes", response_model=List[LaneOut])
     async def list_lanes(
@@ -200,10 +198,10 @@ def build_router() -> APIRouter:
         Returns:
             List of matching lanes
         """
+        lane_registry = LaneRegistry()
         if status is not None:
             lanes = lane_registry.list_lanes_by_status(status, limit=limit)
         else:
-            # All lanes — use list_all if available, else list by each status
             try:
                 lanes = lane_registry.list_all_lanes()
             except AttributeError:
@@ -217,13 +215,10 @@ def build_router() -> APIRouter:
     async def get_lane(lane_id: str) -> LaneOut:
         """Get a single lane by ID.
 
-        Args:
-            lane_id: Lane ID
-
         Raises:
             HTTPException 404: Lane not found
         """
-        lane = lane_registry.get_lane(lane_id)
+        lane = LaneRegistry().get_lane(lane_id)
         if lane is None:
             raise HTTPException(status_code=404, detail=f"Lane {lane_id} not found")
         return _to_lane_out(lane)
@@ -235,19 +230,15 @@ def build_router() -> APIRouter:
     ) -> List[LaneEventOut]:
         """Get event history for a lane.
 
-        Args:
-            lane_id: Lane ID
-            limit: Max events to return
-
         Raises:
             HTTPException 404: Lane not found
         """
-        # Verify lane exists
+        lane_registry = LaneRegistry()
         lane = lane_registry.get_lane(lane_id)
         if lane is None:
             raise HTTPException(status_code=404, detail=f"Lane {lane_id} not found")
 
-        events = event_stream.get_lane_events(lane_id, limit=limit)
+        events = EventStream().get_lane_events(lane_id, limit=limit)
         return [
             LaneEventOut(
                 event_id=evt["event_id"],
@@ -393,14 +384,11 @@ def build_router() -> APIRouter:
     async def cancel_lane(lane_id: str, body: CancelIn) -> LaneOut:
         """Cancel a running or queued lane.
 
-        Args:
-            lane_id: Lane ID
-            body: Cancellation reason
-
         Raises:
             HTTPException 404: Lane not found
             HTTPException 409: Lane already in terminal state
         """
+        lane_registry = LaneRegistry()
         lane = lane_registry.get_lane(lane_id)
         if lane is None:
             raise HTTPException(status_code=404, detail=f"Lane {lane_id} not found")
@@ -422,7 +410,6 @@ def build_router() -> APIRouter:
         execution_registry.cancel(lane_id)
         TaskRegistry().mark_stopped(lane.task_id)
 
-        # Refresh from registry to get updated state
         refreshed = lane_registry.get_lane(lane_id)
         assert refreshed is not None  # Just updated, should exist
         return _to_lane_out(refreshed)

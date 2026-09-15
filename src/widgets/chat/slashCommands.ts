@@ -7,9 +7,9 @@ import {
   Languages,
   Minimize2,
   BookOpen,
+  GraduationCap,
   Network,
   UserRound,
-  GraduationCap,
   Brain,
   CalendarClock,
   FileSpreadsheet,
@@ -102,6 +102,20 @@ export const slashCommands: SlashCommand[] = [
     mode: 'compact',
   },
   {
+    name: 'learn',
+    label: '学习对话',
+    description: '从当前对话中学习,生成技能草案候选',
+    icon: GraduationCap,
+    mode: 'learn',
+  },
+  {
+    name: 'prompt-save',
+    label: '存为提示词模板',
+    description: '把命令后的文本保存为可复用的提示词模板（/prompt-save 你的提示词）',
+    icon: FileText,
+    mode: 'prompt',
+  },
+  {
     name: 'orchestrate',
     label: '多 agent 编排',
     description: '强制多 agent 编排：拆解子任务并行执行',
@@ -114,13 +128,6 @@ export const slashCommands: SlashCommand[] = [
     description: '强制单 agent 回答，跳过编排',
     icon: UserRound,
     mode: 'prompt',
-  },
-  {
-    name: 'learn',
-    label: '学习对话',
-    description: '从当前对话中学习,生成技能草案候选',
-    icon: GraduationCap,
-    mode: 'learn',
   },
   {
     name: 'plan',
@@ -234,6 +241,35 @@ export function mergeSlashCommands(dynamic: DynamicSlashSkill[]): SlashCommand[]
   }
 
   return result;
+}
+
+/**
+ * R27-A: 把用户 Prompt 模板并入斜杠命令列表。
+ * - 命令名 `tpl-<名称>`（不与既有命令去重抢占 —— 模板始终追加在尾部）；
+ * - 选中即填充输入框（mode: 'template'），{{变量}} 占位留给用户编辑；
+ * - description 截断到 ~80 字保持菜单紧凑。
+ */
+export function mergePromptTemplates(
+  commands: SlashCommand[],
+  templates: { name: string; content: string; description?: string }[],
+): SlashCommand[] {
+  const merged = [...commands];
+  for (const tpl of templates) {
+    const name = `tpl-${tpl.name}`.replace(/\s+/g, '-');
+    if (!tpl.content) continue;
+    merged.push({
+      name,
+      label: `/${name}`,
+      description:
+        (tpl.description && tpl.description.length > 80
+          ? `${tpl.description.slice(0, 77)}…`
+          : tpl.description) || 'Prompt 模板 —— 选中后填入输入框',
+      icon: FileText,
+      mode: 'template',
+      content: tpl.content,
+    });
+  }
+  return merged;
 }
 
 /** 根据命令名获取命令 */

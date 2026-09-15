@@ -185,16 +185,6 @@ class TestCompare:
 
 
 class TestPyVersionMatchCheck:
-    def test_prefers_requirements_py38(self, check):
-        """Win7 LTS: the check must try backend/requirements-py38.txt first,
-        not requirements.txt — the py38 variant is the active dependency spec
-        on the win7 branch."""
-        with mock.patch.object(pv_mod, "_parse_python_requirement") as m:
-            m.return_value = None
-            check.run()
-        first_called_path = m.call_args_list[0].args[0]
-        assert first_called_path.name == "requirements-py38.txt"
-
     def test_info_when_no_python_constraint(self, check):
         with mock.patch.object(pv_mod, "_parse_python_requirement", return_value=None):
             with mock.patch.object(pv_mod, "_parse_environment_yml", return_value=None):

@@ -94,3 +94,84 @@ async def test_put_settings_persists_and_get_returns():
         data = get_resp.json()
         assert data["maxContext"] == 4096
         assert data["version"] == "3.0.0"
+
+
+# ============================================================================
+# 2026-08-26: settings 脱敏 + legacy payload 字段净化 (与 legacy_routes 对齐)
+# ============================================================================
+#
+# 背景: hex 与 legacy 路由现在共享同一个脱敏策略. RED 测试锁定契约.
+
+import json
+
+_REDACTED_APIKEY_HEX = "sk-hex-SECRET-do-not-leak-aabbccddeeff0011"
+
+
+@pytest.mark.asyncio()
+@_HEX_ONLY
+async def test_hex_get_settings_redacts_endpoint_api_key():
+    from backend.data.settings_repo import SettingsRepository
+
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "endpoints": [
+                {
+                    "id": "ep-hex-real",
+                    "name": "Real",
+                    "baseUrl": "https://api.example.com/v1",
+                    "apiKey": _REDACTED_APIKEY_HEX,
+                    "protocol": "openai-compatible",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
+                }
+            ]
+        },
+        category="general",
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.get("/api/v1/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    ep = body["endpoints"][0]
+    assert ep.get("apiKey") in (None, "")
+    assert ep.get("hasApiKey") is True
+    assert _REDACTED_APIKEY_HEX not in resp.text
+
+
+@pytest.mark.asyncio()
+@_HEX_ONLY
+async def test_hex_get_preference_redacts_app_settings_payload():
+    from backend.data.settings_repo import SettingsRepository
+
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "endpoints": [
+                {
+                    "id": "ep-hex",
+                    "name": "Real",
+                    "baseUrl": "https://api.example.com/v1",
+                    "apiKey": _REDACTED_APIKEY_HEX,
+                    "protocol": "openai-compatible",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
+                }
+            ]
+        },
+        category="general",
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.get("/api/v1/preferences/app_settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["value"] is not None
+    assert _REDACTED_APIKEY_HEX not in body["value"]
+    parsed = json.loads(body["value"])
+    ep = parsed["endpoints"][0]
+    assert ep.get("apiKey") in (None, "")
+    assert ep.get("hasApiKey") is True

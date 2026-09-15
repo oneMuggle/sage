@@ -27,7 +27,7 @@ from backend.skills.skill_md.sandbox import SandboxPort, SandboxRequest, Sandbox
 from backend.skills.skill_md.script_runner import ScriptRunner
 from backend.skills.skill_md.skill import SkillMdDocument
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit]
 
 
 def _make_doc(name: str = "test-skill", base_dir: Optional[Path] = None) -> SkillMdDocument:
@@ -269,7 +269,10 @@ async def test_script_runner_rejects_symlink_component(tmp_path):
     target = other / "evil.py"
     target.write_text("print('outside')\n", encoding="utf-8")
     link = base / "scripts"
-    link.symlink_to(other, target_is_directory=True)
+    try:
+        link.symlink_to(other, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("当前环境无 symlink 特权")
     doc = _make_doc(base_dir=base)
     sandbox = MagicMock(spec=SandboxPort)
     confirmer = MagicMock(spec=ConfirmationPort)
@@ -446,8 +449,10 @@ async def test_script_runner_executes_private_snapshot_and_cleans_it(tmp_path):
     async def run(request):
         captured["request"] = request
         assert request.script_path.read_text(encoding="utf-8") == content
-        assert stat.S_IMODE(request.script_path.stat().st_mode) == 0o600
-        assert stat.S_IMODE(request.script_path.parent.stat().st_mode) == 0o700
+        if os.name == "posix":
+            # POSIX 位模型断言；Windows 用每用户 %TEMP% 隔离替代（R32）
+            assert stat.S_IMODE(request.script_path.stat().st_mode) == 0o600
+            assert stat.S_IMODE(request.script_path.parent.stat().st_mode) == 0o700
         return SandboxResult(True, 0, "ok", "", 1)
 
     sandbox = MagicMock(spec=SandboxPort)
@@ -508,6 +513,10 @@ async def test_script_runner_rejects_snapshot_creation_failure(tmp_path, monkeyp
 
 
 @pytest.mark.asyncio()
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows 分支走原生 reparse-safe 原语（不依赖 O_NOFOLLOW），前提仅 POSIX 成立",
+)
 async def test_script_runner_fails_closed_without_o_nofollow(tmp_path, monkeypatch):
     """不支持 O_NOFOLLOW 时拒绝读取，且不进入确认或沙箱。"""
     script = tmp_path / "test.py"

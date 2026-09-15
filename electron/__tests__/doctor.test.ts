@@ -1,284 +1,295 @@
-// electron/__tests__/doctor.test.ts
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { EventEmitter } from 'node:events';
-import type { Readable } from 'node:stream';
-
 /**
- * alpha.8 (2026-08-27) regression: doctor must accept the supervisor's
- * BackendLaunchPlan rather than hardcoding `-m backend.cli.doctor --json`.
+ * Doctor self-check unit tests (2026-08-26).
  *
- * Root causes being locked in by these tests:
- * 1. ``runDoctorCheck`` previously hardcoded ``['-m', 'backend.cli.doctor',
- *    '--json']`` and spawned only that argv, so dev-conda ``conda run -n
- *    sage-backend python -m backend.main`` would have produced the illegal
- *    ``conda -m backend.cli.doctor --json``.
- * 2. ``runDoctorCheck`` previously did
- *    ``env: { ...process.env, ...options.env, PYTHONPATH: options.packageRoot }``
- *    which unconditionally overrode any packaged ``PYTHONPATH`` the launcher
- *    set up (resources/backend + resources/sage-core) — breaking ``import
- *    backend.main`` probes inside the packaged env.
+ * Lock down the spawn contract so the next refactor can't reintroduce:
+ *   - hard-coded `['-m', 'backend.cli.doctor', '--json']` argv that
+ *     breaks conda/--json layering (the original bug produced
+ *     `conda -m backend.cli.doctor --json`)
+ *   - PYTHONPATH forced to `packageRoot`, which clobbered the packaged
+ *     supervisor's `resourcesPath/backend:resourcesPath/sage-core`
+ *   - missing cwd / missing env propagation
  *
- * After the fix, ``runDoctorCheck`` accepts ``args?: string[]`` and
- * ``PYTHONPATH`` is preserved when ``options.env.PYTHONPATH`` is already set.
+ * Strategy: replace `node:child_process.spawn` with a mock that records
+ * (cmd, args, options) tuples. Tests assert what `runDoctorCheck` actually
+ * passed to spawn — without spinning up a real Python subprocess.
  */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock node:child_process BEFORE importing the module under test so that
-// `import { spawn } from 'node:child_process'` picks up the stub.
-type SpawnCall = {
-  command: string;
-  args: readonly string[];
-  options: { cwd?: string; env?: NodeJS.ProcessEnv; stdio?: readonly [string, string, string] };
-};
-
-const spawnCalls: SpawnCall[] = [];
-let nextStdout = '';
-let nextStderr = '';
-let nextExitCode: number | null = 0;
-
-function makeFakeProc() {
-  const proc = new EventEmitter() as EventEmitter & {
-    stdout: Readable;
-    stderr: Readable;
-    kill: (signal?: string) => boolean;
-  };
-  const stdoutEE = new EventEmitter();
-  const stderrEE = new EventEmitter();
-  proc.stdout = stdoutEE as unknown as Readable;
-  proc.stderr = stderrEE as unknown as Readable;
-  proc.kill = () => true;
-  // Emit close asynchronously after listeners attach, mirroring real spawn.
-  queueMicrotask(() => {
-    if (nextStdout) stdoutEE.emit('data', Buffer.from(nextStdout, 'utf8'));
-    if (nextStderr) stderrEE.emit('data', Buffer.from(nextStderr, 'utf8'));
-    proc.emit('close', nextExitCode);
-  });
-  return proc;
-}
-
-vi.mock('node:child_process', () => ({
-  default: {
-    spawn: (command: string, args: readonly string[], options: Record<string, unknown>) => {
-      spawnCalls.push({
-        command,
-        args,
-        options: options as SpawnCall['options'],
-      });
-      return makeFakeProc();
-    },
-  },
-  spawn: (command: string, args: readonly string[], options: Record<string, unknown>) => {
-    spawnCalls.push({
-      command,
-      args,
-      options: options as SpawnCall['options'],
-    });
-    return makeFakeProc();
-  },
+const { spawnCalls, killLog } = vi.hoisted(() => ({
+  spawnCalls: [] as Array<{
+    cmd: string;
+    args: readonly string[];
+    options: Record<string, unknown>;
+  }>,
+  killLog: [] as Array<{ signal: string; t: number }>,
 }));
 
-import { runDoctorCheck, type DoctorLaunchOptions } from '../doctor';
-
-function defaultOptions(overrides: Partial<DoctorLaunchOptions> = {}): DoctorLaunchOptions {
-  return {
-    pythonBin: 'python',
-    packageRoot: '/mock/package',
-    cwd: '/mock/cwd',
-    env: {},
-    ...overrides,
+vi.mock('node:child_process', () => {
+  type Handler = (...args: unknown[]) => void;
+  // Per-spawn handler registry so `on('close', cb)` registrations from
+  // doctor.ts can be triggered synchronously via microtask. By default we
+  // emit close on next microtask so legacy tests can assert on spawn() args
+  // without hanging. The env-timeout tests below opt into ``delayClose``
+  // mode to let the killTimer fire first; they then call ``__closeSpawn``
+  // to manually fire close() once the SIGTERM assertion is done.
+  let delayClose = false;
+  const handlers = new Map<string, Handler[]>();
+  const fakeChild: Record<string, unknown> = {
+    stdout: { on: () => undefined },
+    stderr: { on: () => undefined },
+    kill: (signal?: string) => {
+      killLog.push({ signal: signal ?? 'SIGTERM', t: Date.now() });
+      return true;
+    },
+    __closeSpawn: () => {
+      for (const cb of handlers.get('close') ?? []) cb(0);
+    },
   };
+  fakeChild.on = (event: string, cb: Handler) => {
+    const arr = handlers.get(event) ?? [];
+    arr.push(cb);
+    handlers.set(event, arr);
+  };
+  fakeChild.once = (event: string, cb: Handler) => {
+    const arr = handlers.get(event) ?? [];
+    arr.push(cb);
+    handlers.set(event, arr);
+  };
+  const spawnFn = ((...args: unknown[]) => {
+    const [cmd, argv, options] = args as [string, readonly string[], Record<string, unknown>];
+    spawnCalls.push({ cmd, args: argv, options });
+    if (delayClose) {
+      // Stay "alive" until tests manually call __closeSpawn().
+      return fakeChild;
+    }
+    queueMicrotask(() => {
+      for (const cb of handlers.get('close') ?? []) cb(0);
+    });
+    return fakeChild;
+  }) as unknown as typeof import('node:child_process').spawn;
+  return {
+    spawn: spawnFn,
+    // node:child_process exposes both named and a CommonJS default; some
+    // interop paths reach for `default`. Provide a stub for those.
+    default: { spawn: spawnFn },
+    __setDelayClose: (v: boolean) => {
+      delayClose = v;
+    },
+    __closeSpawn: () => (fakeChild.__closeSpawn as () => void)(),
+  };
+});
+
+import { runDoctorCheck } from '../doctor';
+import * as cpMock from 'node:child_process';
+
+function lastSpawn(): {
+  cmd: string;
+  args: readonly string[];
+  options: Record<string, unknown>;
+} {
+  const call = spawnCalls[spawnCalls.length - 1];
+  if (!call) throw new Error('spawn was not called');
+  return call;
 }
 
-const DOCTOR_JSON_OK = JSON.stringify({
-  status: 'ok',
-  summary: { critical: 0, warn: 0, info: 3 },
-  checks: [],
-});
-
-beforeEach(() => {
-  spawnCalls.length = 0;
-  nextStdout = DOCTOR_JSON_OK;
-  nextStderr = '';
-  nextExitCode = 0;
-});
-
-describe('runDoctorCheck argv contract', () => {
-  it('使用 options.args 覆盖默认 argv (取代硬编码 -m backend.cli.doctor --json)', async () => {
-    // 模拟 dev-conda launcher plan: 命令 = conda, args 已是 ['run', '-n',
-    // 'sage-backend', 'python', '-m', 'backend.cli.doctor', '--json'].
-    const planArgs = ['run', '-n', 'sage-backend', 'python', '-m', 'backend.cli.doctor', '--json'];
-    await runDoctorCheck({
-      pythonBin: 'conda',
-      packageRoot: '/mock',
-      cwd: '/mock',
-      env: {},
-      args: planArgs,
-    });
-    expect(spawnCalls).toHaveLength(1);
-    expect(spawnCalls[0].command).toBe('conda');
-    expect(spawnCalls[0].args).toEqual(planArgs);
-    // 关键不变量: 不再生成非法的 `conda -m ...` argv
-    expect(spawnCalls[0].args[0]).not.toBe('-m');
+describe('runDoctorCheck (2026-08-26 argv + env contract)', () => {
+  beforeEach(() => {
+    spawnCalls.length = 0;
   });
-
-  it('options.args 缺省时使用 ["-m", "backend.cli.doctor", "--json"] (向后兼容)', async () => {
-    await runDoctorCheck({
-      pythonBin: '/path/to/python',
-      packageRoot: '/mock',
-      cwd: '/mock',
-      env: {},
-    });
-    expect(spawnCalls[0].command).toBe('/path/to/python');
-    expect(spawnCalls[0].args).toEqual(['-m', 'backend.cli.doctor', '--json']);
-  });
-
-  it('直接 python 解释器 plan (SAGE_PYTHON=python3) 时 argv 不包含 conda run 子命令', async () => {
-    // 模拟 SAGE_PYTHON=python3 的 dev 路径, launcher 给出
-    // args: ['-m', 'backend.cli.doctor', '--json'].
-    await runDoctorCheck({
-      pythonBin: 'python3',
-      packageRoot: '/mock',
-      cwd: '/mock',
-      env: {},
-      args: ['-m', 'backend.cli.doctor', '--json'],
-    });
-    expect(spawnCalls[0].command).toBe('python3');
-    expect(spawnCalls[0].args).toEqual(['-m', 'backend.cli.doctor', '--json']);
-  });
-
-  it('packaged plan: 命令是 bundled python, args 包含 -m backend.cli.doctor --json', async () => {
-    // packaged-win32-bundled / packaged-linux-bundled 共享一个 argv 形状.
-    const pyExe = '/resources/python/python.exe';
-    await runDoctorCheck({
-      pythonBin: pyExe,
-      packageRoot: '/resources',
-      cwd: '/resources',
-      env: { PYTHONPATH: '/resources/backend;/resources/sage-core' },
-      args: ['-m', 'backend.cli.doctor', '--json'],
-    });
-    expect(spawnCalls[0].command).toBe(pyExe);
-    expect(spawnCalls[0].args).toEqual(['-m', 'backend.cli.doctor', '--json']);
-  });
-});
-
-describe('runDoctorCheck PYTHONPATH preservation', () => {
-  it('options.env.PYTHONPATH 存在时不被 packageRoot 覆盖 (packaged 后端路径不丢失)', async () => {
-    await runDoctorCheck({
-      pythonBin: '/resources/python/python.exe',
-      packageRoot: '/resources',
-      cwd: '/resources',
-      env: { PYTHONPATH: '/resources/backend;/resources/sage-core' },
-      args: ['-m', 'backend.cli.doctor', '--json'],
-    });
-    const env = spawnCalls[0].options.env ?? {};
-    expect(env.PYTHONPATH).toBe('/resources/backend;/resources/sage-core');
-    // 关键不变量: PYTHONPATH 必须是 packaged 路径, 不应被 packageRoot
-    // ('/resources') 覆盖成单一目录.
-    expect(env.PYTHONPATH).not.toBe('/resources');
-  });
-
-  it('options.env.PYTHONPATH 缺省时回退到 options.packageRoot (向后兼容)', async () => {
-    await runDoctorCheck({
-      pythonBin: 'python',
-      packageRoot: '/mock/package',
-      cwd: '/mock/cwd',
-      env: {},
-      args: ['-m', 'backend.cli.doctor', '--json'],
-    });
-    const env = spawnCalls[0].options.env ?? {};
-    expect(env.PYTHONPATH).toBe('/mock/package');
-  });
-
-  it('options.env 中其它键 (SAGE_DB_PATH / SAGE_USER_DATA_DIR 等) 也透传给子进程', async () => {
-    await runDoctorCheck({
-      pythonBin: '/resources/python/python.exe',
-      packageRoot: '/resources',
-      cwd: '/resources',
-      env: {
-        PYTHONPATH: '/resources/backend;/resources/sage-core',
-        SAGE_DB_PATH: '/mock/sage.db',
-        SAGE_USER_DATA_DIR: '/mock/userData',
-        PYTHON_BACKEND_PORT: '8765',
-      },
-      args: ['-m', 'backend.cli.doctor', '--json'],
-    });
-    const env = spawnCalls[0].options.env ?? {};
-    expect(env.SAGE_DB_PATH).toBe('/mock/sage.db');
-    expect(env.SAGE_USER_DATA_DIR).toBe('/mock/userData');
-    expect(env.PYTHON_BACKEND_PORT).toBe('8765');
-  });
-});
-
-describe('runDoctorCheck cwd + interface', () => {
-  it('使用 options.cwd 而非 options.packageRoot', async () => {
-    await runDoctorCheck(defaultOptions({ cwd: '/launcher/cwd', packageRoot: '/something/else' }));
-    expect(spawnCalls[0].options.cwd).toBe('/launcher/cwd');
-  });
-
-  it('options.cwd 缺省时回退到 options.packageRoot', async () => {
-    await runDoctorCheck({ pythonBin: 'python', packageRoot: '/only/package', env: {} });
-    expect(spawnCalls[0].options.cwd).toBe('/only/package');
-  });
-
-  it('DoctorLaunchOptions 接受 args?: string[] 字段 (TS 类型契约)', () => {
-    // 编译期断言: 下面的字面量必须能通过 TS 校验.
-    const opts: DoctorLaunchOptions = {
-      pythonBin: 'python',
-      packageRoot: '/mock',
-      args: ['-m', 'backend.cli.doctor', '--json'],
-    };
-    expect(opts.args).toEqual(['-m', 'backend.cli.doctor', '--json']);
-  });
-});
-
-// 2026-09-08 (cherry from main PR #503): SAGE_DOCTOR_TIMEOUT_MS env override.
-// Alpha13+ doctor takes ~8-10s on packaged Win32 cold start (jieba dict +
-// 17-check expansion); the Electron-side default is now 20s (was 5s).
-// CI smoke paths tighten via the env var. resolveTimeoutMs is exported
-// from doctor.ts as a pure function so we can unit-test it without the
-// child_process mock dance.
-import { __testing__ } from '../doctor';
-
-describe('resolveTimeoutMs (2026-09-08 cherry from main PR #503)', () => {
-  const ORIGINAL_ENV = process.env.SAGE_DOCTOR_TIMEOUT_MS;
-  const { resolveTimeoutMs } = __testing__;
-
   afterEach(() => {
-    if (ORIGINAL_ENV === undefined) {
+    vi.useRealTimers();
+  });
+
+  it('spawns `python -m backend.cli.doctor --json` for legacy pythonBin string fallback', async () => {
+    // Backward-compat path: callers that still pass `pythonBin` get the
+    // historical default argv. Used when the supervisor can't produce a
+    // spawn plan (broken-installer → fallback to bare python).
+    vi.useFakeTimers();
+    const promise = runDoctorCheck('python', '/mock/project').catch(() => undefined);
+    const captured = lastSpawn();
+    expect(captured.cmd).toBe('python');
+    expect(captured.args).toEqual(['-m', 'backend.cli.doctor', '--json']);
+    expect(captured.options.cwd).toBe('/mock/project');
+    await vi.advanceTimersByTimeAsync(21_000);
+    await promise;
+  });
+
+  it('spawns the FULL argv when caller supplies it (no hard-coded --json)', async () => {
+    // Regression guard: doctor.ts used to hard-code
+    // `['-m', 'backend.cli.doctor', '--json']` regardless of options.args.
+    // That broke the dev-conda branch (passed command='conda', ignored
+    // the supervisor's `['run', '-n', 'sage-backend', 'python',
+    // '-m', 'backend.main']` argv).
+    vi.useFakeTimers();
+    const promise = runDoctorCheck({
+      pythonBin: 'conda',
+      args: ['run', '-n', 'sage-backend', 'python', '-m', 'backend.cli.doctor', '--json'],
+      cwd: '/mock/project',
+      env: { SAGE_DB_PATH: '/mock/sage.db' },
+      packageRoot: '/mock/project',
+    } as unknown as Parameters<typeof runDoctorCheck>[0]).catch(() => undefined);
+    const captured = lastSpawn();
+    expect(captured.cmd).toBe('conda');
+    expect(captured.args).toEqual([
+      'run',
+      '-n',
+      'sage-backend',
+      'python',
+      '-m',
+      'backend.cli.doctor',
+      '--json',
+    ]);
+    expect(captured.options.cwd).toBe('/mock/project');
+    await vi.advanceTimersByTimeAsync(21_000);
+    await promise;
+  });
+
+  it('does NOT overwrite PYTHONPATH when env already supplies one', async () => {
+    // Packaged supervisor sets PYTHONPATH to
+    // `<resources>/backend:<resources>/sage-core`. Old doctor.ts forced
+    // `PYTHONPATH: options.packageRoot`, replacing it with a single path
+    // missing `backend`/`sage-core` — the doctor subprocess crashed on
+    // `import backend.cli.doctor`.
+    vi.useFakeTimers();
+    const promise = runDoctorCheck({
+      pythonBin: '/mock/resources/python/bin/python3',
+      args: ['-m', 'backend.cli.doctor', '--json'],
+      cwd: '/mock/resources',
+      env: {
+        PYTHONPATH: '/mock/resources/backend:/mock/resources/sage-core',
+        SAGE_DB_PATH: '/mock/sage.db',
+      },
+      packageRoot: '/mock/project',
+    } as unknown as Parameters<typeof runDoctorCheck>[0]).catch(() => undefined);
+    const captured = lastSpawn();
+    const env = captured.options.env as Record<string, string>;
+    expect(env.PYTHONPATH).toBe('/mock/resources/backend:/mock/resources/sage-core');
+    expect(env.SAGE_DB_PATH).toBe('/mock/sage.db');
+    await vi.advanceTimersByTimeAsync(21_000);
+    await promise;
+  });
+
+  it('falls back to packageRoot for PYTHONPATH when caller did not supply one', async () => {
+    // Dev branch: conda handles PYTHONPATH via env name, so doctor should
+    // not need to set it. If a dev caller doesn't supply PYTHONPATH, we
+    // default to packageRoot — this test locks the choice so it stays
+    // intentional, not accidental.
+    vi.useFakeTimers();
+    const promise = runDoctorCheck({
+      pythonBin: 'conda',
+      args: ['run', '-n', 'sage-backend', 'python', '-m', 'backend.cli.doctor', '--json'],
+      cwd: '/mock/project',
+      env: {},
+      packageRoot: '/mock/project',
+    } as unknown as Parameters<typeof runDoctorCheck>[0]).catch(() => undefined);
+    const captured = lastSpawn();
+    const env = captured.options.env as Record<string, string>;
+    expect(env.PYTHONPATH).toBe('/mock/project');
+    await vi.advanceTimersByTimeAsync(21_000);
+    await promise;
+  });
+
+  it('legacy string signature: PYTHONPATH defaults to projectRoot', async () => {
+    // Backward-compat: when caller passes `(pythonBin, projectRoot)`,
+    // doctor.ts must default PYTHONPATH to projectRoot. Without this,
+    // the legacy CI smoke path would import-fail on bare `python`.
+    vi.useFakeTimers();
+    const promise = runDoctorCheck('python', '/mock/project').catch(() => undefined);
+    const captured = lastSpawn();
+    const env = captured.options.env as Record<string, string>;
+    expect(env.PYTHONPATH).toBe('/mock/project');
+    await vi.advanceTimersByTimeAsync(21_000);
+    await promise;
+  });
+
+  describe('SAGE_DOCTOR_TIMEOUT_MS env override (2026-09-08)', () => {
+    // Alpha13 doctor (with jieba dict + heavy check expansion) takes ~8-10s
+    // on packaged Win32 cold start. Default bumped to 20s; CI smoke paths
+    // tighten via SAGE_DOCTOR_TIMEOUT_MS to keep their assertions tight.
+    //
+    // We observe the configured timeout via the SIGTERM kill moment:
+    // doctor.ts fires ``proc.kill('SIGTERM')`` exactly ``timeoutMs`` ms
+    // after spawn. The mock records each kill into ``killLog`` so we can
+    // assert the delta between spawn and kill matches the configured cap.
+    const ORIGINAL_ENV = process.env.SAGE_DOCTOR_TIMEOUT_MS;
+
+    beforeEach(() => {
+      killLog.length = 0;
+      // Suppress the microtask-emitted close() so the spawn stays "alive"
+      // and the killTimer actually fires (otherwise close→clearTimeout
+      // races us and the SIGTERM never happens).
+      (cpMock as unknown as { __setDelayClose: (v: boolean) => void }).__setDelayClose(true);
+    });
+
+    afterEach(() => {
+      (cpMock as unknown as { __setDelayClose: (v: boolean) => void }).__setDelayClose(false);
+      if (ORIGINAL_ENV === undefined) {
+        delete process.env.SAGE_DOCTOR_TIMEOUT_MS;
+      } else {
+        process.env.SAGE_DOCTOR_TIMEOUT_MS = ORIGINAL_ENV;
+      }
+    });
+
+    it('honours SAGE_DOCTOR_TIMEOUT_MS=3000 (SIGTERM at +3000ms, not +20000ms)', async () => {
+      process.env.SAGE_DOCTOR_TIMEOUT_MS = '3000';
+      vi.useFakeTimers();
+      const startedAt = Date.now();
+      const promise = runDoctorCheck('python', '/mock/project').catch(() => undefined);
+      // Advance to exactly the env-configured deadline → killTimer fires SIGTERM.
+      await vi.advanceTimersByTimeAsync(3_000);
+      // Verify SIGTERM happened at the right wall-clock (this is the
+      // behaviour we actually care about; the SIGKILL escalation is just
+      // a safety net).
+      expect(killLog).toHaveLength(1);
+      expect(killLog[0].signal).toBe('SIGTERM');
+      expect(killLog[0].t - startedAt).toBeGreaterThanOrEqual(2_990);
+      expect(killLog[0].t - startedAt).toBeLessThanOrEqual(3_010);
+      // Now advance past the 500ms SIGKILL grace and manually fire close
+      // so the promise resolves (in real life, the Python child would
+      // exit on SIGKILL; the mock has no such reaction).
+      await vi.advanceTimersByTimeAsync(500);
+      (cpMock as unknown as { __closeSpawn?: () => void }).__closeSpawn?.();
+      await promise;
+    });
+
+    it('default 20s fires SIGTERM at ~+20000ms when env unset', async () => {
       delete process.env.SAGE_DOCTOR_TIMEOUT_MS;
-    } else {
-      process.env.SAGE_DOCTOR_TIMEOUT_MS = ORIGINAL_ENV;
-    }
-  });
+      vi.useFakeTimers();
+      const startedAt = Date.now();
+      const promise = runDoctorCheck('python', '/mock/project').catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(killLog).toHaveLength(1);
+      expect(killLog[0].t - startedAt).toBeGreaterThanOrEqual(19_990);
+      await vi.advanceTimersByTimeAsync(500);
+      (cpMock as unknown as { __closeSpawn?: () => void }).__closeSpawn?.();
+      await promise;
+    });
 
-  it('env unset → returns 20_000 (default after alpha13)', () => {
-    delete process.env.SAGE_DOCTOR_TIMEOUT_MS;
-    expect(resolveTimeoutMs()).toBe(20_000);
-  });
+    it('falls back to default when env is malformed', async () => {
+      process.env.SAGE_DOCTOR_TIMEOUT_MS = 'not-a-number';
+      vi.useFakeTimers();
+      const startedAt = Date.now();
+      const promise = runDoctorCheck('python', '/mock/project').catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(killLog[0].t - startedAt).toBeGreaterThanOrEqual(19_990);
+      await vi.advanceTimersByTimeAsync(500);
+      (cpMock as unknown as { __closeSpawn?: () => void }).__closeSpawn?.();
+      await promise;
+    });
 
-  it('env=3000 → returns 3000 (CI smoke tightening)', () => {
-    process.env.SAGE_DOCTOR_TIMEOUT_MS = '3000';
-    expect(resolveTimeoutMs()).toBe(3_000);
-  });
-
-  it('env=malformed → falls back to default 20_000', () => {
-    process.env.SAGE_DOCTOR_TIMEOUT_MS = 'not-a-number';
-    expect(resolveTimeoutMs()).toBe(20_000);
-  });
-
-  it('env=0 → falls back to default (does NOT silently disable timeout)', () => {
-    // Number.parseInt('0') = 0 → setTimeout(cb, 0) fires next tick → no
-    // timeout. Guard rejects <= 0 so this can't happen.
-    process.env.SAGE_DOCTOR_TIMEOUT_MS = '0';
-    expect(resolveTimeoutMs()).toBe(20_000);
-  });
-
-  it('env=empty string → falls back to default', () => {
-    process.env.SAGE_DOCTOR_TIMEOUT_MS = '';
-    expect(resolveTimeoutMs()).toBe(20_000);
-  });
-
-  it('env=negative → falls back to default', () => {
-    process.env.SAGE_DOCTOR_TIMEOUT_MS = '-1000';
-    expect(resolveTimeoutMs()).toBe(20_000);
+    it('treats env=0 as default (does not silently disable the timeout)', async () => {
+      // Naive ``Number.parseInt('0')`` = 0 → ``setTimeout(cb, 0)`` fires
+      // next tick → effectively no timeout. Guard rejects <= 0 in
+      // resolveTimeoutMs so this can't happen.
+      process.env.SAGE_DOCTOR_TIMEOUT_MS = '0';
+      vi.useFakeTimers();
+      const startedAt = Date.now();
+      const promise = runDoctorCheck('python', '/mock/project').catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(killLog[0].t - startedAt).toBeGreaterThanOrEqual(19_990);
+      await vi.advanceTimersByTimeAsync(500);
+      (cpMock as unknown as { __closeSpawn?: () => void }).__closeSpawn?.();
+      await promise;
+    });
   });
 });

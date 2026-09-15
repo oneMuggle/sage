@@ -185,8 +185,6 @@ def create_default_agents() -> List[AgentProfile]:
             system_prompt="你是一个专业的研究 Agent。负责搜索信息、综合资料、生成研究报告。",
             # Round 6 B2: 浏览器通道并入——登录态/动态页面场景委派可达
             tools=[
-                # win7 保留 memory_save —— researcher 查到资料后必须能落地为记忆,
-                # 否则下次 session 找不到（PR #396 knowledge persistence 闭环）。
                 "web_search",
                 "web_fetch",
                 "http_download",
@@ -196,7 +194,10 @@ def create_default_agents() -> List[AgentProfile]:
                 "browser_snapshot",
                 "browser_interact",
                 "browser_cookies",
-                "browser_close", "memory_save",
+                "browser_close",
+                # win7 保留 memory_save —— researcher 查到资料后必须能落地为记忆,
+                # 否则下次 session 找不到（PR #396 knowledge persistence 闭环）。
+                "memory_save",
             ],
             memory_access=["episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.5),

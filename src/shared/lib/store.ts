@@ -68,8 +68,9 @@ export interface Message {
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   memory_applied?: number;
-  reasoning_content?: string; // LLM 思考/推理过程
+  /** R17-E: 记忆召回明细（memory_used 流事件携带，可展开查看） */
   memory_refs?: { id: string; memory_type: string; preview: string }[];
+  reasoning_content?: string; // LLM 思考/推理过程
 }
 
 // 状态接口

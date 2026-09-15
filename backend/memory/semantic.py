@@ -3,11 +3,16 @@ Semantic Memory - 语义记忆模块
 使用 SQLite FTS5 全文搜索存储知识和概念
 注意：暂不使用 ChromaDB，保持简单
 
-中文支持：使用 jieba 分词，将分词结果存入 tokenized_content 列，
-FTS5 索引 tokenized_content 而非原始 content，使中文搜索生效。
+中文支持：使用 jieba 分词，将分词结果存入独立 FTS5 表 memories_semantic_fts
+（非 external-content，存分词文本而非原文，见 backend.data.database 中的
+ensure_semantic_fts_schema）。写入/更新/删除由本类在 Python 侧显式同步索引
+（单一事实来源，不使用触发器——历史 external-content + 触发器方案曾导致
+"database disk image is malformed"）。search() 优先走 FTS5 MATCH，
+命中为空或查询异常时回退 LIKE+jieba（_search_like），保证可用性。
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import json
 import logging
@@ -16,6 +21,11 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
+from backend.data.database import (
+    backfill_semantic_fts,
+    ensure_semantic_fts_schema,
+    fts_row_texts,
+)
 from backend.memory.chinese_tokenizer import tokenize, tokenize_for_search
 from backend.memory.summary_text import truncate_summary
 
@@ -44,7 +54,7 @@ class SemanticMemory:
         self._init_fts()
 
     def _init_fts(self) -> None:
-        """初始化 FTS5 全文搜索表"""
+        """确保主表与 FTS5 索引表存在且健康（schema 维护统一委托给 database 模块）。"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
@@ -80,16 +90,12 @@ class SemanticMemory:
         )
         conn.commit()
 
-        # 创建 FTS5 虚拟表（如果不存在）
-        cursor.execute("""
-            CREATE VIRTUAL TABLE IF NOT EXISTS memories_semantic_fts USING fts5(
-                content, summary, tags,
-                content='memories_semantic',
-                content_rowid='rowid'
-            )
-        """)
-
-        conn.commit()
+        # FTS5 独立虚拟表：结构检测/损坏自愈（database.ensure_semantic_fts_schema）
+        # + 幂等回填（覆盖绕过本类直接写主表的行，如 evolution 晋升）
+        if ensure_semantic_fts_schema(conn):
+            backfill_semantic_fts(conn, force=True)
+        else:
+            backfill_semantic_fts(conn)
 
     def save(
         self,
@@ -133,8 +139,36 @@ class SemanticMemory:
             (memory_id, content, summary, tags_json, session_id, now),
         )
 
+        # 显式同步 FTS 索引（单一事实来源：Python 侧维护，不使用触发器，
+        # 详见 backend.data.database.ensure_semantic_fts_schema 的根因说明）
+        self._sync_fts_row(cursor, memory_id)
+
         conn.commit()
         return memory_id
+
+    def _sync_fts_row(self, cursor: sqlite3.Cursor, memory_id: str) -> None:
+        """重建指定记忆的 FTS 索引行（按 rowid 先删后插，与主表行对齐）。
+
+        FTS 索引为辅助路径：同步失败只记 warning，不中断主表写入；
+        搜索可回退 LIKE 路径，且下次 init_db 会幂等回填补齐。
+        """
+        try:
+            row = cursor.execute(
+                "SELECT rowid, content, summary, tags FROM memories_semantic WHERE id = ?",
+                (memory_id,),
+            ).fetchone()
+            if row is None:
+                return
+            cursor.execute(
+                "DELETE FROM memories_semantic_fts WHERE rowid = ?", (row["rowid"],)
+            )
+            cursor.execute(
+                "INSERT INTO memories_semantic_fts (rowid, content, summary, tags) "
+                "VALUES (?, ?, ?, ?)",
+                (row["rowid"],) + fts_row_texts(row["content"], row["summary"], row["tags"]),
+            )
+        except sqlite3.DatabaseError as exc:
+            logger.warning("FTS 索引同步失败 (memory_id=%s): %s", memory_id, exc)
 
     def _generate_summary(self, content: str, max_length: int = 150) -> str:
         """生成记忆摘要 — 实现统一委托共享工具 (D2)。"""
@@ -171,24 +205,6 @@ class SemanticMemory:
 
         # FTS 无命中（如索引尚未回填）或异常 → 回退 LIKE+jieba
         return self._search_like(query, limit, tags, session_id=session_id)
-
-    def _rows_to_memories(self, rows: List[Any]) -> List[Dict[str, Any]]:
-        """Convert raw sqlite rows into the public memory dict shape.
-
-        ``tags`` is stored as JSON text in the column; if decoding fails we
-        fall back to an empty list so callers don't crash on corrupt rows
-        (matches the inline behavior in :meth:`_search_like`).
-        """
-        results: List[Dict[str, Any]] = []
-        for row in rows:
-            memory = dict(row)
-            if memory.get("tags"):
-                try:
-                    memory["tags"] = json.loads(memory["tags"])
-                except json.JSONDecodeError:
-                    memory["tags"] = []
-            results.append(memory)
-        return results
 
     def _search_fts(
         self,
@@ -279,9 +295,6 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        if not query or query.strip() == "":
-            return self.get_recent(limit)
-
         # jieba 分词，将查询拆分为多个搜索词
         tokens = [t.strip() for t in tokenize(query).split() if t.strip()]
         if not tokens:
@@ -289,7 +302,7 @@ class SemanticMemory:
 
         # 构建 LIKE OR 条件
         like_conditions = []
-        params = []
+        params: List[Any] = []
         for token in tokens:
             like_conditions.append("(content LIKE ? OR summary LIKE ?)")
             params.extend([f"%{token}%", f"%{token}%"])
@@ -314,11 +327,14 @@ class SemanticMemory:
         sql_parts.append("ORDER BY created_at DESC LIMIT ?")
         params.append(limit)
 
-        sql = " ".join(sql_parts)
-        cursor.execute(sql, params)
+        cursor.execute(" ".join(sql_parts), params)
+        return self._rows_to_memories(cursor.fetchall())
 
+    @staticmethod
+    def _rows_to_memories(rows: List[sqlite3.Row]) -> List[Dict[str, Any]]:
+        """将数据库行转换为记忆字典列表（解析 tags JSON）。"""
         results = []
-        for row in cursor.fetchall():
+        for row in rows:
             memory = dict(row)
             if memory.get("tags"):
                 try:
@@ -326,8 +342,8 @@ class SemanticMemory:
                 except json.JSONDecodeError:
                     memory["tags"] = []
             results.append(memory)
-
         return results
+
     def get_recent(
         self, limit: int = 20, session_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
@@ -384,6 +400,16 @@ class SemanticMemory:
         """
         return self.get_recent(limit=10000)
 
+    def exists_by_content(self, content: str) -> bool:
+        """R21-B: 导入去重 —— 精确匹配 content 的语义记忆是否已存在。"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT 1 FROM memories_semantic WHERE content = ? LIMIT 1",
+            (content,),
+        )
+        return cursor.fetchone() is not None
+
     def get_by_id(self, memory_id: str) -> Optional[Dict[str, Any]]:
         """
         根据 ID 获取记忆
@@ -429,13 +455,23 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        # 删除主表条目（FTS 索引当前未使用，search() 走 LIKE + jieba）
+        # 删除前取 rowid，用于同步删除 FTS 索引行
+        row = cursor.execute(
+            "SELECT rowid FROM memories_semantic WHERE id = ?", (memory_id,)
+        ).fetchone()
         cursor.execute("DELETE FROM memories_semantic WHERE id = ?", (memory_id,))
         deleted = cursor.rowcount > 0
 
-        # D1 (P6): 级联删除向量条目 (best-effort, 表不存在时静默跳过);
-        # 避免删除后向量仍被检索命中。先取主表 rowcount 再做向量清理,
-        # 避免返回值被覆盖。
+        if row is not None:
+            try:
+                cursor.execute(
+                    "DELETE FROM memories_semantic_fts WHERE rowid = ?", (row["rowid"],)
+                )
+            except sqlite3.DatabaseError as exc:
+                logger.warning("FTS 索引删除失败 (memory_id=%s): %s", memory_id, exc)
+
+        # D1 (P6): 级联删除向量条目 (best-effort, 与 FTS 删除同模式);
+        # 避免删除后向量仍被检索命中。
         try:
             cursor.execute("DELETE FROM memories_vec WHERE memory_id = ?", (memory_id,))
         except sqlite3.DatabaseError as exc:
@@ -471,7 +507,7 @@ class SemanticMemory:
         """
         更新记忆标签
 
-        FTS 索引通过 AFTER UPDATE 触发器自动同步，无需手动更新。
+        FTS 索引由本方法显式同步（单一事实来源，不使用触发器，见 _sync_fts_row）。
 
         Args:
             memory_id: 记忆 ID
@@ -493,6 +529,10 @@ class SemanticMemory:
         """,
             (tags_json, memory_id),
         )
+        updated = cursor.rowcount > 0
+
+        if updated:
+            self._sync_fts_row(cursor, memory_id)
 
         conn.commit()
-        return cursor.rowcount > 0
+        return updated

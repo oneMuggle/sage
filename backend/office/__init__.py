@@ -11,11 +11,6 @@ Module map:
 See docs/plans/2026-07-16_office-features.md for design.
 """
 
-# Win7 (py3.8 + pydantic 1.x) 兼容：在 pydantic 2.x 下为 no-op。
-from backend.compat.win7 import pydantic_compat as _pc  # noqa: E402
-
-_pc.install()
-
 # Phase 2 exports are loaded on demand so stdlib-only path checks can import
 # ``backend.office.path_safety`` without installing binary Office readers.
 _PHASE_2_EXPORTS = {

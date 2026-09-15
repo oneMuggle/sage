@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,7 +33,7 @@ def sample_manifest():
     return UpdateManifest(
         version="1.2.3",
         channel="stable",
-        release_date=datetime(2026, 9, 5, 12, 0, 0, tzinfo=timezone.utc),  # noqa: UP017
+        release_date=datetime(2026, 9, 5, 12, 0, 0, tzinfo=UTC),
         release_notes="## What's New\n- Feature A",
         min_upgradable_version="1.0.0",
         files={
@@ -62,7 +62,7 @@ def test_get_latest_success(client, metadata_dir, sample_manifest):
     channel_dir = metadata_dir / "stable"
     channel_dir.mkdir(parents=True)
     with open(channel_dir / "1.2.3.json", "w") as f:
-        f.write(sample_manifest.json())
+        f.write(sample_manifest.model_dump_json())
 
     response = client.get("/api/v1/updates/latest?channel=stable")
     assert response.status_code == 200
@@ -85,9 +85,9 @@ def test_get_history_with_limit(client, metadata_dir, sample_manifest):
 
     # Write 5 manifests
     for i in range(5):
-        manifest = sample_manifest.copy(update={"version": f"1.{i}.0"})
+        manifest = sample_manifest.model_copy(update={"version": f"1.{i}.0"})
         with open(channel_dir / f"1.{i}.0.json", "w") as f:
-            f.write(manifest.json())
+            f.write(manifest.model_dump_json())
 
     response = client.get("/api/v1/updates/history?channel=stable&limit=3")
     assert response.status_code == 200

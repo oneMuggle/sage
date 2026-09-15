@@ -23,6 +23,7 @@ def mock_memory_manager():
     manager = Mock(spec=MemoryManager)
     manager.working = Mock()
     manager.working.total_tokens = 1000
+    manager.working.total_tokens_for = Mock(return_value=1000)
     manager.working.messages = []
     manager.working.get_context = Mock(return_value=[])
     return manager
@@ -70,7 +71,7 @@ class TestMemoryAdapterRetrieve:
 
     @pytest.mark.asyncio()
     async def test_retrieve_calls_memory_manager_recall(self, adapter, mock_memory_manager):
-        """测试 retrieve() 调用了 MemoryManager.recall()"""
+        """测试 retrieve() 调用了 MemoryManager.recall() 并透传 session_id"""
         # Arrange
         mock_memory_manager.recall.return_value = {"working": [], "episodic": [], "semantic": []}
 
@@ -78,7 +79,7 @@ class TestMemoryAdapterRetrieve:
         await adapter.retrieve("火锅", "session-456", limit=3)
 
         # Assert
-        mock_memory_manager.recall.assert_called_once_with("火锅", limit=3)
+        mock_memory_manager.recall.assert_called_once_with("火锅", limit=3, session_id="session-456")
 
     @pytest.mark.asyncio()
     async def test_retrieve_handles_empty_results(self, adapter, mock_memory_manager):
@@ -102,7 +103,7 @@ class TestMemoryAdapterStore:
 
     @pytest.mark.asyncio()
     async def test_store_calls_memory_manager_memorize(self, adapter, mock_memory_manager):
-        """测试 store() 调用了 MemoryManager.memorize()"""
+        """测试 store() 调用了 MemoryManager.memorize()，携带统一分类结果与 session_id"""
         # Arrange
         mock_memory_manager.memorize.return_value = "memory-id-123"
 
@@ -114,15 +115,59 @@ class TestMemoryAdapterStore:
             tags=["preference", "food"],
         )
 
-        # Assert
-        mock_memory_manager.memorize.assert_called_once()
-        call_kwargs = mock_memory_manager.memorize.call_args[1]
-        assert call_kwargs["content"] == "用户喜欢吃火锅"
-        assert call_kwargs["importance"] == 7
-        meta = call_kwargs["metadata"]
-        assert meta["session_id"] == "session-123"
-        assert meta["tags"] == ["preference", "food"]
+        # Assert: importance=7 + 短内容 → classify_memory_type 判定为 episodic
+        mock_memory_manager.memorize.assert_called_once_with(
+            content="用户喜欢吃火锅",
+            memory_type="episodic",
+            importance=7,
+            metadata={
+                "session_id": "session-123",
+                "tags": ["preference", "food"],
+                # win7 Task 4 / Gap A — traceability fields always threaded
+                "source_turn_id": None,
+                "source_message_id": None,
+                "memory_category": None,
+            },
+            session_id="session-123",
+        )
         assert memory_id == "memory-id-123"
+
+    @pytest.mark.asyncio()
+    async def test_store_high_importance_classified_semantic(self, adapter, mock_memory_manager):
+        """importance>=8 → memory_type='semantic'，向量库按 semantic 落库"""
+        # Arrange
+        mock_memory_manager.memorize.return_value = "memory-id-sem"
+        adapter.vector_store = Mock()
+
+        # Act
+        memory_id = await adapter.store(content="重要事实", session_id="session-1", importance=9)
+
+        # Assert
+        call_kwargs = mock_memory_manager.memorize.call_args[1]
+        assert call_kwargs["memory_type"] == "semantic"
+        # PR #366 把 session_id 透传到 vector_store.add,用于按 session 隔离语义/情景向量.
+        adapter.vector_store.add.assert_called_once_with(
+            "memory-id-sem", "重要事实", memory_type="semantic", session_id="session-1"
+        )
+        assert memory_id == "memory-id-sem"
+
+    @pytest.mark.asyncio()
+    async def test_store_short_low_importance_classified_working(
+        self, adapter, mock_memory_manager
+    ):
+        """短内容 + importance<5 → memory_type='working'，返回合成 id 且不写向量库"""
+        # Arrange
+        mock_memory_manager.memorize.return_value = "wm:session-1:1"
+        adapter.vector_store = Mock()
+
+        # Act
+        memory_id = await adapter.store(content="临时", session_id="session-1", importance=2)
+
+        # Assert
+        call_kwargs = mock_memory_manager.memorize.call_args[1]
+        assert call_kwargs["memory_type"] == "working"
+        adapter.vector_store.add.assert_not_called()  # 工作记忆无持久 id，不入向量库
+        assert memory_id == "wm:session-1:1"
 
     @pytest.mark.asyncio()
     async def test_store_returns_empty_string_for_working_memory(
@@ -163,6 +208,7 @@ class TestMemoryAdapterStore:
         # Assert
         call_kwargs = mock_memory_manager.memorize.call_args[1]
         assert call_kwargs["metadata"]["tags"] == []
+
 
     @pytest.mark.asyncio()
     async def test_store_forwards_traceability_to_memorize(
@@ -248,14 +294,15 @@ class TestMemoryAdapterCompress:
     async def test_compress_when_tokens_exceed_threshold(
         self, adapter, mock_memory_manager, mock_consolidation
     ):
-        """测试当 Token 超过阈值时执行压缩"""
-        # Arrange: 设置 Token 数量为 4000 (> 3000)
-        mock_memory_manager.working.total_tokens = 4000
+        """测试当指定 session 的 Token 超过阈值时执行压缩"""
+        # Arrange: 设置该 session 的 Token 数量为 4000 (> 3000)
+        mock_memory_manager.working.total_tokens_for.return_value = 4000
 
         # Act
         await adapter.compress("session-123")
 
-        # Assert: 验证 consolidation.consolidate() 被调用
+        # Assert: 按 session 查询 Token，且 consolidation.consolidate() 被调用
+        mock_memory_manager.working.total_tokens_for.assert_called_once_with("session-123")
         mock_consolidation.consolidate.assert_called_once_with(
             mock_memory_manager, session_id="session-123"
         )
@@ -266,7 +313,7 @@ class TestMemoryAdapterCompress:
     ):
         """测试当 Token 数量低时跳过压缩"""
         # Arrange: 设置 Token 数量为 1000 (<= 3000)
-        mock_memory_manager.working.total_tokens = 1000
+        mock_memory_manager.working.total_tokens_for.return_value = 1000
 
         # Act
         await adapter.compress("session-123")
@@ -280,7 +327,7 @@ class TestMemoryAdapterCompress:
     ):
         """测试 Token 数量等于阈值时不压缩"""
         # Arrange: 设置 Token 数量为 3000 (== 3000)
-        mock_memory_manager.working.total_tokens = 3000
+        mock_memory_manager.working.total_tokens_for.return_value = 3000
 
         # Act
         await adapter.compress("session-123")

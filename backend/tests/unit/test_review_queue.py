@@ -1,4 +1,5 @@
 """Tests for ReviewQueue with async worker and SQLite persistence."""
+import contextlib
 import os
 import sqlite3
 import tempfile
@@ -17,7 +18,9 @@ def db_path():
         path = f.name
     yield path
     if os.path.exists(path):
-        os.unlink(path)
+        # Windows: sqlite 连接未显式关闭时文件仍被占用，交给系统临时目录回收
+        with contextlib.suppress(PermissionError):
+            os.unlink(path)
 
 
 class TestEnqueueDequeue:

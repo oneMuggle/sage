@@ -4,6 +4,7 @@ SageAgent - 核心对话引擎
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import asyncio
 import contextlib
@@ -18,6 +19,11 @@ from collections import deque
 from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
+from backend.chat.empty_response_guard import (
+    EMPTY_RESPONSE_FALLBACK_TEXT,
+    EMPTY_RESPONSE_SYSTEM_PROMPT,
+    empty_response_max_retries,
+)
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.exceptions import AgentError, ToolCallError
 from backend.core.legacy.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
@@ -59,6 +65,7 @@ from backend.services.question_gate import (
 from backend.tools import ToolRegistry, register_all_tools
 from backend.tools.ask_user_tool import ASK_USER_QUESTION_TOOL_NAME, validate_ask_user_args
 from backend.tools.base import ToolResult
+from backend.tools.executor import TIMEOUT_EXCEPTIONS, tool_timeout_message
 
 #: M2b 审查加固: 连续未应答提问上限。超时软结果使循环继续, 若无此限,
 #: 被操纵/犯错的 LLM 可循环提问持续骚扰用户。超限后直接返回错误结果。
@@ -87,6 +94,21 @@ from backend.tools.permissions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _tool_signature(tc: Any) -> str:
+    """B2 复读守卫: 规范化工具调用签名为 "工具名:排序参数JSON"。
+
+    参数解析失败时退化为原始字符串 —— 签名只用于重复检测，永不抛异常。
+    """
+    raw = tc.arguments if isinstance(tc.arguments, str) else "{}"
+    try:
+        canonical = json.dumps(
+            json.loads(raw), sort_keys=True, ensure_ascii=False
+        )
+    except (json.JSONDecodeError, TypeError, ValueError):
+        canonical = str(raw)
+    return f"{tc.name}:{canonical}"
 
 
 class QueryCache:
@@ -442,10 +464,12 @@ class SageAgent:
                 logger.warning(f"用户消息持久化失败: {db_err}")
 
             # 对话前：获取记忆上下文
-            memory_context = self.memory_manager.get_context(limit=10)
+            memory_context = self.memory_manager.get_context(
+                limit=10, session_id=session_id
+            )
 
             # 将用户消息添加到工作记忆
-            self.memory_manager.add_to_working("user", message)
+            self.memory_manager.add_to_working("user", message, session_id=session_id)
 
             # 调用 LLM
             if self.llm_client:
@@ -479,14 +503,18 @@ class SageAgent:
                 logger.warning(f"助手消息持久化失败: {db_err}")
 
             # 将助手消息添加到工作记忆
-            self.memory_manager.add_to_working("assistant", assistant_message["content"])
+            self.memory_manager.add_to_working(
+                "assistant", assistant_message["content"], session_id=session_id
+            )
 
             # 对话后：提取关键信息存入情景记忆
             self._extract_and_save_memories(session_id, user_message, assistant_message)
 
             # 对话后：检查是否需要压缩工作记忆
-            if self.memory_manager.working.total_tokens > 3000:
-                self.consolidation.consolidate(self.memory_manager, session_id=session_id)
+            if self.memory_manager.working.total_tokens_for(session_id) > 3000:
+                self.consolidation.consolidate(
+                    self.memory_manager, session_id=session_id
+                )
 
             # 更新会话
             session = self.session_repo.get(session_id)
@@ -660,7 +688,11 @@ class SageAgent:
         return True
 
     async def _await_tool_execution(
-        self, tool: Any, name: str, args: Dict[str, Any]
+        self,
+        tool: Any,
+        name: str,
+        args: Dict[str, Any],
+        tool_call_id: Optional[str] = None,
     ) -> Tuple[bool, Any]:
         """L12-lite: 执行工具并与中断事件竞争。
 
@@ -668,6 +700,10 @@ class SageAgent:
         agent / dispatch_subagents / 阻塞型工具包成 task —— 中断先到时
         取消执行任务（executor 线程内的子进程尽力等其自然超时, 事件循环
         立即恢复）, cancelled=True。
+
+        live-events P0: ``tool_call_id`` 仅用于 dispatch_subagents —— 注入
+        ``_tool_call_id``（dict 重建覆盖 LLM 可能注入的同名 key）, dispatcher
+        给子任务标 parent_tool_call_id, 前端把子代理实时步骤挂到 Delegate 卡片。
         """
         if name == "agent":
             # live-events P2 (2026-09-07): 优先走 execute_async —— 子代理作为
@@ -677,13 +713,19 @@ class SageAgent:
             # 才回落 run_in_executor 同步通路（行为与历史一致）。
             afn = getattr(tool, "execute_async", None)
             if callable(afn):
-                coro = afn(**args)
+                agent_kwargs = dict(args)
+                if tool_call_id:
+                    agent_kwargs["_tool_call_id"] = tool_call_id
+                coro = afn(**agent_kwargs)
             else:
                 coro = asyncio.get_running_loop().run_in_executor(
                     None, functools.partial(tool.execute, **args)
                 )
         elif name == "dispatch_subagents":
-            coro = tool.execute_async(**args)
+            dispatch_kwargs = dict(args)
+            if tool_call_id:
+                dispatch_kwargs["_tool_call_id"] = tool_call_id
+            coro = tool.execute_async(**dispatch_kwargs)
         elif getattr(tool, "is_blocking", False):
             coro = asyncio.get_running_loop().run_in_executor(
                 None, functools.partial(tool.execute, **args)
@@ -789,6 +831,22 @@ class SageAgent:
         self._run_loop_active = True
         # L7: 每-run 工具调用计数（跨迭代累计,超 ToolPolicy.max_tool_calls_per_run 终止）
         tool_calls_used = 0
+        # B1 空响应守卫配置（对标 hermes turn_empty_response）
+        # 切片 B: env 解析收敛到共享件 backend.chat.empty_response_guard
+        empty_response_max = empty_response_max_retries()
+        empty_response_retries = 0
+        # B2 工具复读守卫配置与状态（对标 hermes repetition_guard）:
+        # 相同 (工具名, 规范化参数) 签名重复出现 → 软限注入提醒, 硬限拦截执行。
+        try:
+            repeat_soft = int(os.getenv("SAGE_TOOL_REPEAT_SOFT_LIMIT", "3"))
+        except ValueError:
+            repeat_soft = 3
+        try:
+            repeat_hard = int(os.getenv("SAGE_TOOL_REPEAT_HARD_LIMIT", "5"))
+        except ValueError:
+            repeat_hard = 5
+        tool_sig_counts: Dict[str, int] = {}
+        repeat_nudged: set = set()
 
         # 阶段 1: max_iterations 默认从 profile 读, 否则兜底 DEFAULT_MAX_ITERATIONS
         effective_max_iterations = (
@@ -985,6 +1043,43 @@ class SageAgent:
                             continue
                         raise
 
+                # B1 空响应守卫: 模型既无工具调用又返回空白内容时, 注入 system
+                # 提示后重试（最多 empty_response_max 次, <=0 = 关闭保持旧行为）;
+                # 耗尽后 DONE + 兜底文案（不 FAILED, 前端有可见反馈而非报错）。
+                # 流式路径安全: 空响应本就无 CONTENT_DELTA 下发, 重试不会重复输出。
+                if (
+                    not response.tool_calls
+                    and empty_response_max > 0
+                    and not (response.content or "").strip()
+                ):
+                    if empty_response_retries < empty_response_max:
+                        empty_response_retries += 1
+                        logger.warning(
+                            "run_loop 检测到空响应 (iteration %s)，注入提示后重试 (%d/%d)",
+                            i,
+                            empty_response_retries,
+                            empty_response_max,
+                        )
+                        messages.append(
+                            {
+                                "role": "system",
+                                "content": EMPTY_RESPONSE_SYSTEM_PROMPT,
+                            }
+                        )
+                        continue
+                    logger.warning(
+               "run_loop 空响应重试耗尽 (%d 次)，以兜底文案结束", empty_response_max
+                    )
+                    fallback = EMPTY_RESPONSE_FALLBACK_TEXT
+                    messages.append({"role": "assistant", "content": fallback})
+                    yield AgentEvent(
+                        state=AgentState.DONE,
+                        iteration=i,
+                        content=fallback,
+                        agent_id=self.agent_id,
+                    )
+                    return
+
                 if not response.tool_calls:
                     messages.append(
                         {
@@ -999,6 +1094,31 @@ class SageAgent:
                         agent_id=self.agent_id,
                     )
                     return
+
+                # B2 复读计数: 统计本次响应中各工具调用签名的累计出现次数。
+                # 达软限（且未提醒过）注入 system 提醒 —— 提醒在 assistant
+                # 工具调用消息**之前**落盘, 工具结果仍直接跟随其 assistant
+                # 消息, 不违反 OpenAI 兼容端点的消息次序约束。
+                nudge_needed = False
+                for tc_sig_target in response.tool_calls:
+                    sig = _tool_signature(tc_sig_target)
+                    tool_sig_counts[sig] = tool_sig_counts.get(sig, 0) + 1
+                    if (
+                        repeat_soft > 0
+                        and tool_sig_counts[sig] >= repeat_soft
+                        and sig not in repeat_nudged
+                    ):
+                        repeat_nudged.add(sig)
+                        nudge_needed = True
+                if nudge_needed:
+                    messages.append(
+                        {
+                            "role": "system",
+                            "content": "检测到对相同工具以相同参数的重复调用。若结果"
+                            "不符合预期，请调整参数、换用其他工具，或基于已有信息"
+                            "直接作答；重复调用将被拦截。",
+                        }
+                    )
 
                 messages.append(
                     {
@@ -1067,11 +1187,33 @@ class SageAgent:
                             agent_id=self.agent_id,
                         )
 
+                    # 切片 A': 并行批次接入中心超时（与 hex InprocToolAdapter 同
+                    # policy.timeout_seconds / 同文案）—— 只读工具挂死不再拖死整轮。
+                    # wait_for 取消的只是 executor future 包装，残留线程无法强杀，
+                    # 但循环立即恢复；超时结果按错误观察事件落盘。
+                    parallel_timeout = getattr(
+                        self.tool_policy, "timeout_seconds", None
+                    )
+
+                    async def _run_one_with_timeout(tc_p, _timeout=parallel_timeout):
+                        fut = asyncio.get_running_loop().run_in_executor(
+                            None, functools.partial(_run_one, tc_p)
+                        )
+                        if _timeout and _timeout > 0:
+                            try:
+                                return await asyncio.wait_for(fut, timeout=_timeout)
+                            except TIMEOUT_EXCEPTIONS:
+                                logger.warning(
+                                    "并行只读批次工具超时: %s（%ss）",
+                                    tc_p.name,
+                                    _timeout,
+                                )
+                                return (tool_timeout_message(_timeout), True)
+                        return await fut
+
                     results_p = await asyncio.gather(
                         *(
-                            asyncio.get_running_loop().run_in_executor(
-                                None, functools.partial(_run_one, tc_p)
-                            )
+                            _run_one_with_timeout(tc_p)
                             for tc_p in response.tool_calls
                         )
                     )
@@ -1123,6 +1265,40 @@ class SageAgent:
                             agent_id=self.agent_id,
                         )
                         return
+
+                    # B2 复读硬限拦截: 相同签名已达硬限时不执行, 返回合成错误
+                    # tool result 引导模型换路（与参数解析失败同一事件面:
+                    # 无 ACTING, 仅 OBSERVING is_error）。并行只读批次不拦截
+                    # （零副作用且受 run 级工具预算约束）。
+                    if repeat_hard > 0:
+                        sig = _tool_signature(tc)
+                        if tool_sig_counts.get(sig, 0) >= repeat_hard:
+                            repeat_content = (
+                                f"[拦截] 工具 {tc.name} 以相同参数重复调用已达 "
+                                f"{repeat_hard} 次，已停止执行。请调整参数、换用"
+                                "其他工具，或基于已有信息直接回答。"
+                            )
+                            yield AgentEvent(
+                                state=AgentState.OBSERVING,
+                                iteration=i,
+                                tool_call=ToolCallRequest(
+                                    id=tc.id, name=tc.name, arguments={}
+                                ),
+                                tool_result=ToolCallResult(
+                                    tool_call_id=tc.id,
+                                    content=repeat_content,
+                                    is_error=True,
+                                ),
+                                agent_id=self.agent_id,
+                            )
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tc.id,
+                                    "content": repeat_content,
+                                }
+                            )
+                            continue
 
                     # L7: 参数解析失败回传 LLM——此前静默变 {}，LLM 无从得知
                     # 参数错了会原样重犯。现在作为 is_error 工具结果回传，LLM
@@ -1350,16 +1526,15 @@ class SageAgent:
                                     result_content = f"[错误] 工具不存在: {tc.name}"
                                     is_error = True
                                 else:
-                                    # live-events P0: dispatch_subagents 透传
-                                    # _tool_call_id(副本注入, 不污染 hooks payload)。
-                                    dispatch_args = args
-                                    if tc.name in ("dispatch_subagents", "agent"):
-                                        dispatch_args = {**args, "_tool_call_id": tc.id}
                                     # L12-lite: 可等待执行统一走中断竞争,
                                     # 中断先到即取消当前工具、事件循环立即恢复,
                                     # 否则语义与旧版完全一致。
+                                    # live-events P0: dispatch_subagents 透传本工具
+                                    # 调用 ID（helper 内注入）—— dispatcher 给子
+                                    # 任务标 parent_tool_call_id，前端把子代理
+                                    # 实时步骤挂到 Delegate 卡片。
                                     cancelled, result = await self._await_tool_execution(
-                                        tool, tc.name, dispatch_args
+                                        tool, tc.name, args, tool_call_id=tc.id
                                     )
                                     if cancelled:
                                         result_content = "[中断] 工具执行被用户取消"

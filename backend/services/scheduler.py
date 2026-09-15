@@ -1,12 +1,15 @@
 """APScheduler wrapper for Phase 8 scheduled tasks.
 
-Persistence: ``backend/data/scheduled_tasks.json`` (atomic write).
-Concurrency: a single ``threading.Lock`` guards JSON read/write.
-Failure mode: per-job exceptions are logged and never raised to the scheduler
-loop, so a bad task cannot kill the scheduler.
+Persistence: ``${SAGE_USER_DATA_DIR}/scheduled_tasks.json`` in packaged
+mode (env set by Electron at spawn → per-user ``<userData>``); falls back
+to ``backend/data/scheduled_tasks.json`` in dev / tests when env is unset.
+Concurrent write safety: a single ``threading.Lock`` guards JSON read/write.
+Failure mode: per-job exceptions are logged and never raised to the
+scheduler loop, so a bad task cannot kill the scheduler.
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import json
 import logging
@@ -261,6 +264,25 @@ class SchedulerService:
         self._evolution_tasks[name] = task
         logger.info("Evolution task registered: %s (%s)", name, expr)
 
+    def register_system_task(self, name: str, fn, cron_expr: str) -> None:
+        """注册一个系统维护任务（R19-B: SQLite 自动备份等）。
+
+        与 register_evolution_task 的区别：回调是任意可调用对象而非
+        BaseEvolutionTask，job_id 前缀 ``system/``。同样不写 JSON 持久化，
+        replace_existing 允许重启后重注册。
+        """
+        trigger = CronTrigger.from_crontab(cron_expr)
+        self._scheduler.add_job(
+            fn,
+            trigger=trigger,
+            id=f"system/{name}",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=600,
+        )
+        logger.info("System task registered: %s (%s)", name, cron_expr)
+
     def trigger_evolution_task(self, name: str) -> bool:
         """同步触发一个 evolution 任务(运维/手动用)。"""
         task = self._evolution_tasks.get(name)
@@ -268,6 +290,22 @@ class SchedulerService:
             return False
         self._fire_evolution(name, task)
         return True
+
+    def run_evolution_task_now(self, name: str) -> Optional[Dict[str, Any]]:
+        """同步运行一个 evolution 任务并返回其统计结果(手动触发 API 用, R17-B)。
+
+        与 trigger_evolution_task 的区别:任务返回值(如 MemoryConsolidationTask
+        的 {promoted, decayed, total})透传给调用方,而不是只进日志。
+        未注册返回 None;任务内部异常记日志后返回 None(与 _fire_evolution 语义一致)。
+        """
+        task = self._evolution_tasks.get(name)
+        if task is None:
+            return None
+        try:
+            return task.run()
+        except Exception:
+            logger.exception("Evolution task %s failed", name)
+            return None
 
     def get_evolution_task_names(self) -> List[str]:
         """已注册的 evolution 任务名列表。"""

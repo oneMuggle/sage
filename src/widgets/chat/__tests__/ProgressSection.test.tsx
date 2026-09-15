@@ -23,23 +23,11 @@ describe('ProgressSection', () => {
     expect(screen.getByText(/思考中/)).toBeInTheDocument();
   });
 
-  it('shows idle state when not loading', () => {
+  it('shows idle state when not loading and no taskBoard', () => {
     render(
       <ProgressSection iteration={0} streamingState={null} toolCalls={[]} isLoading={false} />,
     );
     expect(screen.getByText(/等待输入/)).toBeInTheDocument();
-  });
-
-  it('renders tool call names', () => {
-    const toolCalls = [
-      { id: 'tc1', name: 'write_file', args: {} },
-      { id: 'tc2', name: 'search', args: {} },
-    ];
-    render(
-      <ProgressSection iteration={1} streamingState="tool_call" toolCalls={toolCalls} isLoading />,
-    );
-    expect(screen.getByText('write_file')).toBeInTheDocument();
-    expect(screen.getByText('search')).toBeInTheDocument();
   });
 
   // 进度可视化 P0-2 (2026-08-12): 编排进行中不显示"等待输入",展示 task-progress-summary。

@@ -96,10 +96,11 @@ class TestResolvers:
 
     def test_process_end_to_end_with_failures(self):
         # 所有数据源都坏掉 → 仍然产出块（带说明），不抛
-        # NOTE(win7): 括号多行 with 是 Python 3.10+ 语法，Win7 CI 跑 3.8，改为嵌套写法。
-        with patch("backend.memory.get_memory_manager", side_effect=RuntimeError), patch.object(
-            entity_refs, "_wiki_project_root", return_value=None
-        ), patch("backend.data.agent_repo.AgentRepository", side_effect=RuntimeError):
+        with (
+            patch("backend.memory.get_memory_manager", side_effect=RuntimeError),
+            patch.object(entity_refs, "_wiki_project_root", return_value=None),
+            patch("backend.data.agent_repo.AgentRepository", side_effect=RuntimeError),
+        ):
             out = entity_refs.process("@memory:a @wiki:b @agent:c", "s1")
         assert "<references>" in out
         assert "=== 记忆: a ===" in out
