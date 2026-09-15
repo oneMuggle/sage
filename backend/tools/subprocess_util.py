@@ -555,7 +555,7 @@ def _windows_kill_process_tree(process: Any) -> bool:
     pid = process.pid
     taskkill_argv = ["taskkill.exe", "/PID", str(pid), "/T", "/F"]
     try:
-        subprocess.run(
+        result = subprocess.run(
             taskkill_argv,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -563,6 +563,8 @@ def _windows_kill_process_tree(process: Any) -> bool:
             check=False,
             timeout=_REAP_TIMEOUT_SECONDS,
         )
+        if result.returncode != 0:
+            raise OSError(f"taskkill exited with code {result.returncode}")
         return True
     except (OSError, subprocess.SubprocessError) as exc:
         # taskkill.exe 缺失 / 超时 / 拒绝 —— 退化为杀 leader，避免泄漏。
