@@ -14,6 +14,7 @@ from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 from pydantic import BaseModel, Field, conlist
+
 from backend.compat.win7.pydantic_compat import ConfigDict, field_validator
 
 logger = logging.getLogger(__name__)

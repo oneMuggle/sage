@@ -1,7 +1,6 @@
-from typing import Optional
 import json
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from packaging.version import Version
 

@@ -29,9 +29,9 @@ Conventions
 """
 
 from __future__ import annotations
-from typing import List
 
 from pathlib import Path
+from typing import List
 
 import pytest
 from openpyxl import Workbook, load_workbook

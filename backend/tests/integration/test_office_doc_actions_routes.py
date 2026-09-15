@@ -12,9 +12,9 @@ Covers the new HTTP endpoints end-to-end through the route functions:
 """
 
 from __future__ import annotations
-from typing import Set
 
 from pathlib import Path
+from typing import Set
 
 import pytest
 

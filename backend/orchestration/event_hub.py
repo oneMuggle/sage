@@ -1,13 +1,12 @@
 """In-process pub/sub hub for realtime orchestration run events."""
 
 from __future__ import annotations
-from typing import List
 
 import asyncio
 import contextlib
 from collections import defaultdict, deque
 from dataclasses import dataclass, replace
-from typing import Awaitable, Callable, Deque, Dict, Optional, Protocol, cast
+from typing import Awaitable, Callable, Deque, Dict, List, Optional, Protocol, cast
 
 from backend.domain.orch_events import RunEvent
 from backend.orchestration._lazy_lock import LazyLock

@@ -13,11 +13,10 @@ Legacy 会话 CRUD 路由 (S7-3, P7 — 从 legacy_routes.py 拆出)。
 """
 
 from __future__ import annotations
-from typing import Dict, List
 
 import json
 import logging
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel

@@ -22,12 +22,12 @@ packaged 模式 (SAGE_IS_PACKAGED=1): bundled Python 通过 ``sys.executable``
 runtime_probe API 拿到明细)。
 """
 from __future__ import annotations
-from typing import Dict
 
 import logging
 import os
 import subprocess
 import sys
+from typing import Dict
 
 from backend.cli.doctor import CheckResult, Severity, register
 from backend.tools.runtime_probe import RuntimeProbeTool

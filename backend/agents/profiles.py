@@ -3,11 +3,10 @@ Agent Profiles - Agent 角色定义和配置
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 # 工具名单一来源（防漂移）：种子白名单的工具名一律从这里组合，
 # 不写字面量 —— 历史两次漂移（terminal、file_read）见 tool_names 模块注释。

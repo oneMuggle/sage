@@ -13,14 +13,13 @@
 """
 
 from __future__ import annotations
-from typing import Optional, Tuple
 
 import logging
 import re
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.data.database import Database
 

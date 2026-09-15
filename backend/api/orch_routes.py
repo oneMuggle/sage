@@ -16,8 +16,8 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from backend.compat.win7.pydantic_compat import field_validator
 
+from backend.compat.win7.pydantic_compat import field_validator
 from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与文档语义保留
     _SQLITE_LOCK,
     make_with_db_lock,

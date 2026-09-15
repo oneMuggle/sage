@@ -56,6 +56,7 @@ from typing import Dict, List, Optional, Tuple
 import pymupdf
 from docx import Document
 from pydantic import BaseModel, Field
+
 from backend.compat.win7.pydantic_compat import ConfigDict
 
 from .errors import OfficeError

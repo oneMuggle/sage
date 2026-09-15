@@ -1,9 +1,9 @@
 """Unit tests for PDF form (AcroForm) read and fill."""
 
 from __future__ import annotations
-from typing import List, Optional
 
 from pathlib import Path
+from typing import List, Optional
 
 import pytest
 

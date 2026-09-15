@@ -6,9 +6,9 @@
 """
 
 from __future__ import annotations
-from typing import List
 
 from types import SimpleNamespace
+from typing import List
 from unittest.mock import patch
 
 import pytest

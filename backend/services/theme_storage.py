@@ -1,7 +1,6 @@
 """主题存储 — 单文件 JSON 原子读写"""
 
 from __future__ import annotations
-from typing import Optional
 
 import json
 import logging

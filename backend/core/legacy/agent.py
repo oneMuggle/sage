@@ -4,7 +4,6 @@ SageAgent - 核心对话引擎
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import asyncio
 import contextlib

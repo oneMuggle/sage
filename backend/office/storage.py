@@ -23,7 +23,6 @@ so tests can use `:memory:` and production uses the real Database.get_connection
 """
 
 from __future__ import annotations
-from typing import Optional, Tuple
 
 import json
 import logging
@@ -31,7 +30,7 @@ import shutil
 import sqlite3
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .errors import OfficePathError
 from .models import OfficeDocType, OfficeDocumentSummary, OfficeSnapshotInfo

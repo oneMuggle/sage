@@ -35,7 +35,6 @@ last_state_change / attempts`` and feed :class:`McpStatusReport`
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import contextlib
 import logging

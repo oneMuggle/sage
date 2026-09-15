@@ -89,7 +89,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'     # py38_compat_rewrite 本身用 PEP 604 语法，需 3.10+
-      - run: pip install libcst
+      - run: pip install libcst ruff==0.4.4   # ruff 版本与 backend/requirements-dev.txt 一致
       - name: Configure git
         run: |
           git config user.name "win7-sync-bot"

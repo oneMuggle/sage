@@ -11,7 +11,8 @@ cherry-pick 更稳（一次冲突解决、一次验证）。本脚本把这条�
          D 类（发布/打包冻结件）自动取 ours（win7 侧）
          其余冲突 → 停止，输出报告（exit 2），由人接手
     4. 无冲突：对 backend/ + packages/sage-core 跑 py38_compat_rewrite（需要 libcst），
-       去掉 CRLF 回写产生的 \\r，再跑 check_py38_compat.py 门禁
+       ruff --fix I001/F811/F401 收口 typing import，去掉 CRLF 回写产生的 \\r，
+       再跑 check_py38_compat.py + `ruff check backend/` 门禁（与 CI backend-py38 一致）
     5. 提交（--commit），并把报告写到 --report（markdown）+ --report-json
 
 退出码：0 = 已同步 / 无需同步；2 = 有需人工处理的冲突；1 = 门禁失败或其它错误
@@ -125,6 +126,7 @@ def render_report(rep: Dict) -> str:
         lines.append("## py38 门禁")
         lines.append("- rewrite 改写文件：{}（CRLF 还原 {}）".format(p38.get("rewritten", 0), p38.get("cr_fixed", 0)))
         lines.append("- check_py38_compat：{}".format("✅ 0 violations" if p38.get("ok") else "❌ 见日志"))
+        lines.append("- ruff check backend/：{}".format("✅" if p38.get("ruff_ok", True) else "❌ 见日志"))
         if p38.get("log"):
             lines.append("")
             lines.append("```")
@@ -235,7 +237,7 @@ def main() -> int:
     rep["merged_files"] = len([line for line in git("diff", "--name-only", "--cached").splitlines() if line])
 
     # py38 兼容回写 + 门禁
-    p38: Dict = {"rewritten": 0, "cr_fixed": 0, "ok": False, "log": ""}
+    p38: Dict = {"rewritten": 0, "cr_fixed": 0, "ok": False, "ruff_ok": True, "log": ""}
     if not args.skip_rewrite:
         before = set(changed_py_files())
         rw = py("scripts/py38_compat_rewrite.py", *PY38_TARGETS)
@@ -251,13 +253,33 @@ def main() -> int:
         touched = sorted(set(changed_py_files()) | before)
         p38["cr_fixed"] = strip_cr(touched)
         p38["rewritten"] = sum(1 for line in rw.stdout.splitlines() if line.strip().startswith("rewrote") or "-> rewritten" in line)
+        # py38_compat_rewrite 把 `from typing import …` 插在 __future__ 之后（顶部），
+        # 会触发 ruff I001（isort）/ F811（与既有 typing import 重名）。CI backend-py38
+        # 的第一步就是 `ruff check backend/`，所以这里用 --fix 收口（仅 I001/F811/F401）。
+        rf = subprocess.run(
+            [sys.executable, "-m", "ruff", "check", "--fix", "--select", "I001,F811,F401", "--", *PY38_TARGETS],
+            cwd=REPO, text=True, encoding="utf-8", errors="replace",
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        )
+        p38["log"] += "\n[ruff --fix I001,F811,F401]\n" + rf.stdout[-1500:]
+        touched = sorted(set(changed_py_files()) | set(touched))
+        p38["cr_fixed"] += strip_cr(touched)
         git("add", "-A", "--", *PY38_TARGETS)
+    # 与 CI backend-py38 第一步一致：ruff 全量（用 backend/ruff.toml）
+    rc = subprocess.run(
+        [sys.executable, "-m", "ruff", "check", "backend/"],
+        cwd=REPO, text=True, encoding="utf-8", errors="replace",
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    )
+    p38["ruff_ok"] = rc.returncode == 0
+    if not p38["ruff_ok"]:
+        p38["log"] += "\n[ruff check backend/]\n" + rc.stdout[-2000:]
     chk = py("scripts/check_py38_compat.py")
     p38["log"] += "\n" + chk.stdout
-    p38["ok"] = chk.returncode == 0
+    p38["ok"] = chk.returncode == 0 and p38.get("ruff_ok", True)
     rep["py38"] = p38
     if not p38["ok"]:
-        rep["status"] = "py38 门禁失败"
+        rep["status"] = "py38 门禁失败" if chk.returncode else "ruff 门禁失败（backend/ruff.toml）"
         if args.dry_run:
             git("merge", "--abort", check=False)
             git("checkout", "-q", original_ref)

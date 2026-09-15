@@ -52,7 +52,7 @@ _VALID_DAYS = {
 }
 
 
-def _parse_yaml_overrides(
+def _parse_yaml_overrides(  # noqa: PLR0911 — 表驱动早返
     config_path: Optional[Path],
 ) -> Dict[str, Tuple[str, str, str]]:
     """Parse config.yaml → {task_name → (minute, hour, dow)}.

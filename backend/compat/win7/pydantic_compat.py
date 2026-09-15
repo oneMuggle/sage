@@ -20,6 +20,7 @@ model_copy / ConfigDict / field_validator …）无需改写即可在 win7 运�
 """
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any, Dict
 
@@ -40,8 +41,10 @@ _INSTALLED = False
 if PYDANTIC_V2:
     from pydantic import ConfigDict, field_validator, model_validator  # type: ignore
 else:
-    from pydantic import root_validator as _root_validator  # type: ignore
-    from pydantic import validator as _validator  # type: ignore
+    from pydantic import (
+        root_validator as _root_validator,  # type: ignore
+        validator as _validator,  # type: ignore
+    )
 
     def ConfigDict(**kwargs: Any) -> Dict[str, Any]:  # type: ignore  # noqa: N802
         """v1 下返回普通 dict；配合 install() 的 metaclass 钩子生效。"""
@@ -115,17 +118,15 @@ def install() -> bool:
         if not hasattr(BaseModel, name):
             setattr(BaseModel, name, fn)
     if not hasattr(BaseModel, "model_fields"):
-        try:
+        with contextlib.suppress(Exception):  # pragma: no cover
             type(BaseModel).model_fields = property(_model_fields)  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover
-            pass
 
     # `model_config = ConfigDict(extra="forbid")` 在 v1 下需要转成 class Config
     meta = type(BaseModel)
     if not getattr(meta, "_win7_model_config_hook", False):
         orig_new = meta.__new__
 
-        def __new__(mcs, name, bases, namespace, **kwargs):  # type: ignore[no-untyped-def]
+        def __new__(mcs, name, bases, namespace, **kwargs):  # type: ignore[no-untyped-def]  # noqa: N807 — 替换 metaclass.__new__
             cfg = namespace.pop("model_config", None)
             if isinstance(cfg, dict) and cfg and "Config" not in namespace:
                 namespace["Config"] = type("Config", (), dict(cfg))

@@ -64,8 +64,8 @@ from pathlib import Path
 from typing import FrozenSet, List, Literal, Optional
 
 from pydantic import BaseModel, Field
-from backend.compat.win7.pydantic_compat import ConfigDict
 
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.office.errors import OfficePathError
 from backend.office.storage import validate_workspace
 

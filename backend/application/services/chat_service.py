@@ -22,7 +22,6 @@
 """
 
 from __future__ import annotations
-from typing import Dict
 
 import contextlib
 import logging

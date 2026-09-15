@@ -13,14 +13,13 @@
 """
 
 from __future__ import annotations
-from typing import Tuple
 
 import ast
 import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.domain.risk import RiskClass
 

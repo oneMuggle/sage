@@ -5,9 +5,9 @@
 """
 
 from __future__ import annotations
-from typing import Tuple
 
 import asyncio
+from typing import Tuple
 
 # Python 3.10: asyncio.TimeoutError ≠ builtin TimeoutError；3.11+ 为同一类，
 # 兼容两个名称（hex adapter 原内联写法收敛至此）。

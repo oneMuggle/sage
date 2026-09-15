@@ -2,13 +2,12 @@
 
 实现 7 个 MCP 工具，让 Claude 等外部 Agent 能查询 Sage Wiki。
 """
-from typing import Set
 import json
 import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 from fastapi import HTTPException
 

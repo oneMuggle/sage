@@ -11,12 +11,11 @@
 """
 
 from __future__ import annotations
-from typing import Dict
 
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

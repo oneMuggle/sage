@@ -18,7 +18,6 @@ Chat 流注册表 (I2: 拆分 create/attach,避免 LLM 被调两次)
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import asyncio
 import contextlib

@@ -9,7 +9,6 @@ scheduler loop, so a bad task cannot kill the scheduler.
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import json
 import logging

@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from pydantic import BaseModel, Field
+
 from backend.compat.win7.pydantic_compat import ConfigDict
 
 from .edit import update_document

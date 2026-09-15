@@ -19,7 +19,6 @@ Win7 LTS (Py3.8) 兼容约束:
 - 避免 walrus / match/case 在模块顶层
 """
 from __future__ import annotations
-from typing import Dict, Optional, Tuple
 
 import argparse
 import contextlib
@@ -31,7 +30,7 @@ import os
 import platform
 import sys
 from pathlib import Path
-from typing import Optional, Protocol, Union, runtime_checkable
+from typing import Dict, Optional, Protocol, Tuple, Union, runtime_checkable
 
 
 class Severity(str, enum.Enum):

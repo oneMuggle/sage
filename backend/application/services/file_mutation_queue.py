@@ -26,11 +26,10 @@ From pi's packages/coding-agent/src/core/tools/file-mutation-queue.ts pattern.
 """
 
 from __future__ import annotations
-from typing import Tuple
 
 import asyncio
 import contextlib
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Callable, Coroutine, Optional, Tuple
 
 # 操作类型：返回 Any 的异步函数
 FileOperation = Callable[[], Coroutine[Any, Any, Any]]

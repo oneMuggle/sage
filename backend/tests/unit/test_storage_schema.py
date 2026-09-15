@@ -3,11 +3,11 @@
 Task 4 of 2026-08-02-background-review: verify both tables are created by
 Database.init_db() with the correct column definitions.
 """
-from typing import List
 import contextlib
 import os
 import sqlite3
 import tempfile
+from typing import List
 
 from backend.data.database import Database
 

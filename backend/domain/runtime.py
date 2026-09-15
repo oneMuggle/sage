@@ -16,11 +16,10 @@ runtime_exec、project_diagnose 三个工具共享的领域结构。语言细节
 """
 
 from __future__ import annotations
-from typing import Tuple
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class RuntimeSource(str, Enum):

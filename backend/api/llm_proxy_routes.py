@@ -34,7 +34,6 @@ TLS 行为(Task 1 2026-08-23):
 """
 
 from __future__ import annotations
-from typing import Dict, FrozenSet, List, Optional, Set
 
 import asyncio
 import atexit
@@ -50,7 +49,7 @@ from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from ipaddress import ip_address
-from typing import Dict, FrozenSet, List, Optional
+from typing import Dict, FrozenSet, List, Optional, Set
 from urllib.parse import urlparse
 
 import httpcore

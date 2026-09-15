@@ -12,7 +12,6 @@ ensure_semantic_fts_schema）。写入/更新/删除由本类在 Python 侧显�
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import json
 import logging

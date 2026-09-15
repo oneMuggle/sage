@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field
+
 from backend.compat.win7.pydantic_compat import ConfigDict
 
 from .errors import OfficeError

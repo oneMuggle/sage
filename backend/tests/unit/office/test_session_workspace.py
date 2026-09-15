@@ -23,11 +23,11 @@ Coverage:
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import dataclasses
 import sqlite3
 from pathlib import Path
+from typing import Optional
 
 import pytest
 

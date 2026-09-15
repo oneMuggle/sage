@@ -16,7 +16,6 @@ lane 进入 ``succeeded`` 后，executor best-effort 调用本模块：
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import logging
 import os

@@ -26,7 +26,6 @@ logged warning — startup never crashes because of MCP config.
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import contextlib
 import json

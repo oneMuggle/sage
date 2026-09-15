@@ -1,9 +1,9 @@
-from typing import Optional
 import re
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Optional
 
 from pydantic import BaseModel, Field
+
 from backend.compat.win7.pydantic_compat import field_validator
 
 

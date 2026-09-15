@@ -22,12 +22,11 @@ PR B §1.2 设计要点
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sage_core import Message
 from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)

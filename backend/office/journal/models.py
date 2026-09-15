@@ -12,8 +12,8 @@ from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
-from backend.compat.win7.pydantic_compat import ConfigDict, field_validator
 
+from backend.compat.win7.pydantic_compat import ConfigDict, field_validator
 from backend.office.journal.errors import JournalContentShapeError
 from backend.office.models import ReferenceSpec
 

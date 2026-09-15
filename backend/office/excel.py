@@ -21,7 +21,6 @@ These omissions are intentional per plan §1.3 "non-goals".
 """
 
 from __future__ import annotations
-from typing import List, Tuple
 
 import logging
 import time

@@ -6,12 +6,12 @@ RunEvent and publishes it, without breaking the legacy event_recorder flow.
 """
 
 from __future__ import annotations
-from typing import List, Optional
 
 import asyncio
 import contextlib
 import os
 import tempfile
+from typing import List, Optional
 
 import pytest
 
