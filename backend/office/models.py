@@ -13,7 +13,15 @@ import logging
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, conlist, field_validator
+from pydantic import BaseModel, Field, conlist
+try:
+    from pydantic import ConfigDict, field_validator
+except ImportError:  # pydantic 1.x on win7
+    ConfigDict = dict  # type: ignore
+    from pydantic import validator as _validator  # type: ignore
+    def field_validator(*_a, **_kw):  # type: ignore
+        _kw.pop("mode", None)
+        return _validator(*_a, **_kw)
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +69,8 @@ class OfficeDocumentMetadata(BaseModel):
     """Per-document metadata captured at read/generate time."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     page_count: Optional[int] = Field(
         default=None, description="Slide count (PPT) or page count (Word)"
@@ -75,6 +85,8 @@ class OfficeDocumentSummary(BaseModel):
     """Compact document record — used in list API and as a sub-field in read results."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     id: str = Field(description="UUIDv4 assigned by storage layer")
     workspace_path: str = Field(description="Absolute path to the user's workspace dir")
@@ -115,6 +127,8 @@ class PptSlideContent(BaseModel):
     """One PPT slide's extracted content."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     index: int = Field(ge=0)
     title: Optional[str] = None
@@ -128,6 +142,8 @@ class OfficePptReadResult(BaseModel):
     """Result of POST /api/v1/office/ppt/read."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     summary: OfficeDocumentSummary
     slides: List[PptSlideContent]
@@ -137,6 +153,8 @@ class WordParagraphContent(BaseModel):
     """One Word paragraph."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     style: str = Field(description="Paragraph style name, e.g. 'Normal', 'Heading 1'")
     text: str
@@ -147,6 +165,8 @@ class WordTableContent(BaseModel):
     """One Word table."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     rows: List[List[str]]
 
@@ -162,6 +182,8 @@ class WordCommentContent(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     id: str = Field(description="批注 id（w:comment/@w:id，十进制字符串）")
     author: Optional[str] = Field(default=None, description="批注作者（w:author）")
@@ -179,6 +201,8 @@ class WordCommentsResult(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     comments: List[WordCommentContent] = Field(default_factory=list)
 
@@ -187,6 +211,8 @@ class WordHeaderFooterContent(BaseModel):
     """单节的页眉/页脚提取结果（section 为 1-based 节号）。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     section: int = Field(ge=1)
     header_text: str = ""
@@ -198,6 +224,8 @@ class OfficeWordReadResult(BaseModel):
     """Result of POST /api/v1/office/word/read."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     summary: OfficeDocumentSummary
     paragraphs: List[WordParagraphContent]
@@ -218,6 +246,8 @@ class ExcelSheetContent(BaseModel):
     """One Excel sheet."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     name: str
     rows: List[List[str]]
@@ -242,6 +272,8 @@ class OfficeExcelReadResult(BaseModel):
     """Result of POST /api/v1/office/excel/read."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     summary: OfficeDocumentSummary
     sheets: List[ExcelSheetContent]
@@ -256,6 +288,8 @@ class OfficeReadRequest(BaseModel):
     """Common shape for all three read endpoints."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str = Field(description="Absolute path to the workspace dir")
     file_path: str = Field(description="Absolute path to the .pptx/.docx/.xlsx file to read")
@@ -300,6 +334,8 @@ class ImageSourceSpec(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     source: str = Field(min_length=1, max_length=20_000_000)
     width_inches: Optional[float] = Field(default=None, gt=0, le=24)
@@ -315,6 +351,8 @@ class WordImageSpec(ImageSourceSpec):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     caption: Optional[str] = Field(default=None, max_length=200)
     after_paragraph: Optional[int] = Field(default=None, ge=0)
@@ -324,6 +362,8 @@ class PptSlideSpec(BaseModel):
     """One slide to generate in a PPT."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     title: str = Field(min_length=1, max_length=200)
     bullets: _constrained_list(str, max_length=20) = Field(default_factory=list)
@@ -341,6 +381,8 @@ class OfficePptGenerateRequest(BaseModel):
     """POST /api/v1/office/ppt/generate."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
     task_id: Optional[str] = Field(default=None, max_length=100)
@@ -362,6 +404,8 @@ class WordParagraphSpec(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     heading: Optional[Literal["h1", "h2", "h3", "h4", "h5"]] = Field(
         default=None, description="'h1' | 'h2' | 'h3' | 'h4' | 'h5' or None"
@@ -414,6 +458,8 @@ class ReferenceSpec(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     key: str = Field(min_length=1, max_length=100)
     ref_type: ReferenceType = "journal"
@@ -442,6 +488,8 @@ class BibliographySpec(BaseModel):
     """文末参考文献节样式（Round 9）。全字段可选。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     heading_text: str = Field(default="参考文献", max_length=50)
     font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
@@ -456,6 +504,8 @@ class WordTocSpec(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     heading_text: str = Field(default="目录", max_length=50)
     levels: str = Field(
@@ -486,6 +536,8 @@ class BibTeXParseRequest(BaseModel):
     """POST /api/v1/office/word/parse-bibtex（Round 9）。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     text: str = Field(min_length=1, max_length=2_000_000, description=".bib 文件内容")
 
@@ -494,6 +546,8 @@ class BibTeXParseResponse(BaseModel):
     """BibTeX 解析结果（Round 9）。条目可直接传入 word generate references。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     count: int = Field(ge=0)
     references: _constrained_list(ReferenceSpec, max_length=200)
@@ -506,6 +560,8 @@ class WordCellMergeSpec(BaseModel):
     心智模型一致，区别于 ExcelCellRange 的 1-based）。生成期校验越界。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     min_row: int = Field(ge=0)
     max_row: int = Field(ge=0)
@@ -521,6 +577,8 @@ class WordTableSpec(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     headers: _constrained_list(str, min_length=1, max_length=50)
     rows: _constrained_list(_constrained_list(str), max_length=1000) = Field(default_factory=list)
@@ -554,6 +612,8 @@ class WordPageMarginsSpec(BaseModel):
     """页边距（厘米）。None 的边保持 Word 默认。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     top: Optional[float] = Field(default=None, ge=0.0, le=10.0)
     bottom: Optional[float] = Field(default=None, ge=0.0, le=10.0)
@@ -565,6 +625,8 @@ class WordPageSetupSpec(BaseModel):
     """页面设置：纸张/方向/页边距。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     size: Optional[Literal["A4", "letter"]] = Field(default=None)
     orientation: Optional[Literal["portrait", "landscape"]] = Field(default=None)
@@ -575,6 +637,8 @@ class WordBodyStyleSpec(BaseModel):
     """正文（Normal 样式）默认排版。行距为倍数（如 1.5 倍）。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
     line_spacing: Optional[float] = Field(default=None, ge=1.0, le=3.0)
@@ -587,6 +651,8 @@ class WordHeadingStyleSpec(BaseModel):
     """标题样式覆盖（作用于 Title / Heading 1-3 样式定义本身）。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
     bold: Optional[bool] = None
@@ -605,6 +671,8 @@ class WordHeaderFooterSpec(BaseModel):
     """页眉/页脚设置。``page_number`` 仅在 footer 上生效（居中 PAGE 域）。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     text: Optional[str] = Field(default=None, max_length=200)
     align: Optional[Literal["left", "center", "right", "justify"]] = None
@@ -620,6 +688,8 @@ class WordFormatSpec(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     page: Optional[WordPageSetupSpec] = None
     body: Optional[WordBodyStyleSpec] = None
@@ -651,6 +721,8 @@ class WordSectionBreakSpec(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     start_paragraph: int = Field(ge=0, description="该 0-based 段落下标起进入新节")
     page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
@@ -660,6 +732,8 @@ class OfficeWordGenerateRequest(BaseModel):
     """POST /api/v1/office/word/generate."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
     task_id: Optional[str] = Field(default=None, max_length=100)
@@ -706,6 +780,8 @@ class ExcelSheetSpec(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     name: str = Field(min_length=1, max_length=31, description="Excel sheet name max length")
     headers: _constrained_list(str, max_length=100) = Field(default_factory=list)
@@ -751,6 +827,8 @@ class ExcelDataValidationSpec(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     range: str = Field(
         min_length=2,
@@ -774,6 +852,8 @@ class ExcelConditionalFormatSpec(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     rule_type: Literal["data_bar", "color_scale", "duplicate", "icon_set"]
     range: str = Field(
@@ -826,6 +906,8 @@ class ExcelPrintSetupSpec(BaseModel):
     """打印设置（Round 23）。全字段可选，None = 不设置。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     orientation: Optional[Literal["portrait", "landscape"]] = Field(
         default=None, description="纸张方向（默认纵向）"
@@ -851,6 +933,8 @@ class ExcelCellRange(BaseModel):
     """openpyxl Reference 风格的矩形单元格区域（1-based，含端点）。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     min_col: int = Field(ge=1, le=16384)
     min_row: int = Field(ge=1, le=1048576)
@@ -866,6 +950,8 @@ class ExcelChartSpec(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     sheet: Optional[str] = Field(default=None, max_length=31)
     type: Literal["line", "bar", "pie"]
@@ -881,6 +967,8 @@ class OfficeExcelGenerateRequest(BaseModel):
     """POST /api/v1/office/excel/generate."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
     task_id: Optional[str] = Field(default=None, max_length=100)
@@ -896,6 +984,8 @@ class ChartSeriesSpec(BaseModel):
     """matplotlib 图表的一条数据系列。``x`` 可省略（bar/pie 用 labels 补位）。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     name: str = Field(min_length=1, max_length=100)
     x: Optional[List[Union[str, float]]] = Field(
@@ -909,6 +999,8 @@ class ChartSpec(BaseModel):
     """批次 2.1：matplotlib 图表渲染规格（render_chart_png 输入）。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     type: Literal["line", "bar", "hbar", "pie"]
     title: Optional[str] = Field(default=None, max_length=200)
@@ -928,6 +1020,8 @@ class OfficeDocumentListResponse(BaseModel):
     """GET /api/v1/office/documents."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     documents: List[OfficeDocumentSummary]
     total: int = Field(ge=0)
@@ -937,6 +1031,8 @@ class OfficeDeleteResponse(BaseModel):
     """DELETE /api/v1/office/documents/{id}."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     id: str
     deleted: bool
@@ -946,6 +1042,8 @@ class OfficeSnapshotInfo(BaseModel):
     """One pre-edit snapshot file under ``<managed_dir>/.snapshots/``."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     snapshot_id: str = Field(
         description="快照文件名 '<ms>-<generated_filename>'，restore 时原样回传"
@@ -958,6 +1056,8 @@ class OfficeSnapshotListResponse(BaseModel):
     """GET /api/v1/office/doc/{doc_id}/snapshots."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     snapshots: List[OfficeSnapshotInfo]
     total: int = Field(ge=0)
@@ -967,6 +1067,8 @@ class OfficeDocumentActionResponse(BaseModel):
     """POST /doc/{doc_id}/archive | /restore | /snapshots/{sid}/restore."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     ok: bool
     summary: OfficeDocumentSummary
@@ -1001,6 +1103,8 @@ class TemplatePlaceholder(BaseModel):
     """One placeholder found in a Word template."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     name: str
     raw_tag: str
@@ -1017,6 +1121,8 @@ class WordTemplateAnalysis(BaseModel):
     """Result of analyzing a Word template."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     file_path: str
     placeholders: List[TemplatePlaceholder]
@@ -1028,6 +1134,8 @@ class WordTemplateAnalyzeRequest(BaseModel):
     """Request to analyze a Word template."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     template_path: str
@@ -1037,6 +1145,8 @@ class WordTemplateFillRequest(BaseModel):
     """Request to fill a Word template with data."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     template_path: str
@@ -1049,6 +1159,8 @@ class WordTemplateFillResult(BaseModel):
     """Result of filling a Word template."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     output_path: str
     filename: str
@@ -1066,6 +1178,8 @@ class TemplateLibraryPlaceholder(BaseModel):
     """One placeholder advertised by a template-library entry."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     name: str
     type: TemplatePlaceholderType
@@ -1076,6 +1190,8 @@ class TemplateLibraryEntry(BaseModel):
     """One template in the library: builtin 中文办公模板 or workspace user template."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     id: str = Field(
         description=(
@@ -1101,6 +1217,8 @@ class TemplateLibraryResponse(BaseModel):
     """GET /api/v1/office/templates."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     templates: List[TemplateLibraryEntry]
 
@@ -1114,6 +1232,8 @@ class OfficeTemplateInstantiateRequest(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
     task_id: Optional[str] = Field(default=None, max_length=100)
@@ -1150,6 +1270,8 @@ class PdfPageContent(BaseModel):
     """Content of one PDF page."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     page_number: int
     text: str
@@ -1161,6 +1283,8 @@ class PdfReadResult(BaseModel):
     """Result of reading a PDF file."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     summary: OfficeDocumentSummary
     pages: List[PdfPageContent]
@@ -1171,6 +1295,8 @@ class PdfReadRequest(BaseModel):
     """Request to read a PDF file."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     file_path: str
@@ -1180,6 +1306,8 @@ class PdfPageSpec(BaseModel):
     """One page in a generated PDF."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     title: Optional[str] = None
     paragraphs: List[str] = Field(default_factory=list)
@@ -1190,6 +1318,8 @@ class PdfGenerateRequest(BaseModel):
     """Request to generate a PDF."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
     task_id: Optional[str] = Field(default=None, max_length=100)
@@ -1205,6 +1335,8 @@ class PdfGenerateResult(BaseModel):
     """Result of generating a PDF."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     output_path: str
     filename: str
@@ -1216,6 +1348,8 @@ class PdfFormField(BaseModel):
     """One PDF form field."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     name: str
     type: str
@@ -1229,6 +1363,8 @@ class PdfFormReadResult(BaseModel):
     """Result of reading PDF form fields."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     file_path: str
     fields: List[PdfFormField]
@@ -1239,6 +1375,8 @@ class PdfFormReadRequest(BaseModel):
     """Request to read PDF form fields."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     file_path: str
@@ -1248,6 +1386,8 @@ class PdfFormFillRequest(BaseModel):
     """Request to fill a PDF form."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     template_path: str
@@ -1260,6 +1400,8 @@ class PdfFormFillResult(BaseModel):
     """Result of filling a PDF form."""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     output_path: str
     filename: str
@@ -1277,6 +1419,8 @@ class WordLintIssue(BaseModel):
     """单条格式违规。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     rule_id: str = Field(
         min_length=1, max_length=80,
@@ -1291,6 +1435,8 @@ class WordLintResult(BaseModel):
     """Linter 汇总结果。``ok`` = 无 error 级违规。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     ok: bool
     issue_count: int = Field(ge=0)
@@ -1304,6 +1450,8 @@ class WordLintRequest(BaseModel):
     """POST /api/v1/office/word/lint。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     file_path: str = Field(min_length=1, max_length=2000, description="待校验 .docx 路径")
@@ -1317,6 +1465,8 @@ class WordRepairResult(BaseModel):
     """自动修复结果（Round 12）。``ok`` = 修复后复检无 error 级违规。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     ok: bool
     repaired_rules: _constrained_list(str, max_length=100) = Field(
@@ -1331,6 +1481,8 @@ class WordRepairRequest(BaseModel):
     """POST /api/v1/office/word/repair。"""
 
     model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     file_path: str = Field(min_length=1, max_length=2000, description="待修复 .docx 路径")
