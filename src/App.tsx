@@ -149,6 +149,22 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // R47: Ctrl+Shift+D 切换暗色/亮色主题
+  useEffect(() => {
+    const onThemeToggle = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        const root = document.documentElement;
+        const isDark = root.classList.toggle('dark');
+        try {
+          localStorage.setItem('sage:theme-mode', isDark ? 'dark' : 'light');
+        } catch { /* ignore */ }
+      }
+    };
+    window.addEventListener('keydown', onThemeToggle);
+    return () => window.removeEventListener('keydown', onThemeToggle);
+  }, []);
+
   return (
     <HashRouter>
       <NavHistoryProvider>
