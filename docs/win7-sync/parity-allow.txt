@@ -126,3 +126,7 @@ tests/electron/question-answer.spec.ts
 .gitignore
 docs/win7-sync/*
 scripts/win7/*
+
+# release/win7 侧 cherry 计划文档 + py3.8 hardlink 回退（2026-09-15 merge origin/release/win7）
+docs/plans/2026-09-15_win7-*.md
+backend/tests/unit/test_wiki_path_security.py
