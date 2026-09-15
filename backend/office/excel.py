@@ -27,7 +27,6 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import pandas as pd
 from openpyxl import load_workbook
 
 from .errors import OfficeFileNotFoundError, OfficeParseError
@@ -638,6 +637,13 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """
     import uuid
 
+    # pandas 是 lazy import：win7 LTS 没有 cp38 wheel（memory:
+    # sage-pr540-bundle-pandas-alpha36-published.md），requirements-py38.txt
+    # 不含 pandas。如果模块顶层 import，bundling 时 ``import backend.main``
+    # 会触发 ``ModuleNotFoundError: No module named 'pandas'``。pandas 仅
+    # generate_xlsx 使用，且 ``from __future__ import annotations`` (PEP 563)
+    # 让 ``pd.DataFrame`` 类型注解保持字符串形式不运行时求值。
+    import pandas as pd
     from openpyxl import Workbook
 
     from .errors import OfficeGenerateError
