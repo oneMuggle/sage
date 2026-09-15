@@ -535,6 +535,26 @@ class OfficeCreateTool(BaseTool):
                                             "文本前缀；标题文本不要再手写编号"
                                         ),
                                     },
+                                    "first_page_different": {
+                                        "type": "boolean",
+                                        "description": (
+                                            "启用首页不同的页眉页脚（Round 33，"
+                                            "封面页场景）"
+                                        ),
+                                    },
+                                    "first_page_header": {
+                                        "type": "object",
+                                        "description": "首页页眉文本",
+                                        "properties": {"text": {"type": "string"}},
+                                    },
+                                    "first_page_footer": {
+                                        "type": "object",
+                                        "description": "首页页脚文本",
+                                        "properties": {
+                                            "text": {"type": "string"},
+                                            "page_number": {"type": "boolean"},
+                                        },
+                                    },
                                     "bibliography": {
                                         "type": "object",
                                         "description": (
