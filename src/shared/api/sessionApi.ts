@@ -180,6 +180,26 @@ export const sessionApi = {
   },
 
   /**
+   * R51: 会话归档/取消归档。
+   */
+  async setArchived(sessionId: string, archived: boolean): Promise<Session> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    return withRetry(async () => {
+      try {
+        return await invoke<Session>('session_update', { sessionId, isArchived: archived });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
    * M4: 从会话分叉。复制 atMessageId 及之前的消息（缺省全部）到新会话。
    *
    * U5': `options.beforeMessage` 切换为**开区间**——复制 atMessageId 之前

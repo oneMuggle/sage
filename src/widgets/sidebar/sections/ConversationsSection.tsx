@@ -50,6 +50,8 @@ export function ConversationsSection({
   const [messageHits, setMessageHits] = useState<Map<string, number>>(new Map());
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // R51: 归档会话显示切换
+  const [showArchived, setShowArchived] = useState(false);
   // R40: Ctrl+F 聚焦搜索框 —— 监听全局自定义事件
   useEffect(() => {
     const handler = () => searchInputRef.current?.focus();
@@ -58,6 +60,7 @@ export function ConversationsSection({
   }, []);
 
   const trimmedQuery = searchQuery.trim();
+  // R51: 归档过滤 —— 默认隐藏已归档会话
 
   useEffect(() => {
     if (trimmedQuery.length < 2) {
@@ -86,14 +89,15 @@ export function ConversationsSection({
   }, [trimmedQuery]);
 
   const displaySessions = useMemo(() => {
+    const base = showArchived ? sessions : sessions.filter((s) => !s.is_archived);
     const q = trimmedQuery.toLowerCase();
-    if (!q) return sessions;
+    if (!q) return base;
     // 标题匹配优先;消息内容命中的会话（标题不匹配也）并入展示
-    const titleMatches = sessions.filter((s) => s.title.toLowerCase().includes(q));
+    const titleMatches = base.filter((s) => s.title.toLowerCase().includes(q));
     const seen = new Set(titleMatches.map((s) => s.id));
-    const messageMatches = sessions.filter((s) => !seen.has(s.id) && messageHits.has(s.id));
+    const messageMatches = base.filter((s) => !seen.has(s.id) && messageHits.has(s.id));
     return [...titleMatches, ...messageMatches];
-  }, [sessions, trimmedQuery, messageHits]);
+  }, [sessions, trimmedQuery, messageHits, showArchived]);
 
   return (
     <SiderSection
@@ -116,7 +120,7 @@ export function ConversationsSection({
       }
       render={() => (
         <div className="flex flex-col min-h-0">
-          <div className="relative px-2 pb-1">
+          <div className="relative px-2 pb-1 flex items-center gap-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted pointer-events-none" />
             <input
               type="text"
@@ -128,6 +132,14 @@ export function ConversationsSection({
               data-testid="session-search"
               className="w-full h-6 pl-6 pr-2 text-xs rounded bg-bg-hover border border-transparent focus:border-primary focus:outline-none placeholder:text-muted"
             />
+            <button
+              type="button"
+              data-testid="toggle-archived"
+              onClick={() => setShowArchived((v) => !v)}
+              className={`text-[11px] whitespace-nowrap ${showArchived ? 'text-primary' : 'text-muted hover:text-text'}`}
+            >
+              {showArchived ? '隐藏归档' : '归档'}
+            </button>
           </div>
           {sessions.length === 0 ? (
             <div className="px-3 py-6 text-xs text-text-muted text-center space-y-2" data-testid="sessions-empty">
