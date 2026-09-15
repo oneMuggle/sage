@@ -32,6 +32,30 @@ export function PromptTemplatesTab() {
   const [error, setError] = useState<string | null>(null);
   // R38: 记忆清除后触发重渲染（localStorage 不经过 React，需手动 tick）
   const [, setMemoryTick] = useState(0);
+  // R42: 拖拽排序状态
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+
+  const handleDragStart = (index: number) => setDragIndex(index);
+  const handleDragOver = (index: number) => {
+    if (dragIndex !== null && dragIndex !== index) setDropIndex(index);
+  };
+  const handleDrop = async () => {
+    if (dragIndex === null || dropIndex === null || dragIndex === dropIndex) {
+      setDragIndex(null); setDropIndex(null); return;
+    }
+    const reordered = [...templates];
+    const [moved] = reordered.splice(dragIndex, 1);
+    reordered.splice(dropIndex, 0, moved);
+    setTemplates(reordered);
+    setDragIndex(null); setDropIndex(null);
+    try {
+      await promptApi.reorder(reordered.map((t) => t.id));
+    } catch {
+      await load(); // 排序失败回滚
+    }
+  };
+  const handleDragEnd = () => { setDragIndex(null); setDropIndex(null); };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -260,10 +284,15 @@ export function PromptTemplatesTab() {
         </p>
       ) : (
         <ul className="space-y-2" data-testid="prompts-list">
-          {templates.map((tpl) => (
+          {templates.map((tpl, idx) => (
             <li
               key={tpl.id}
-              className="p-3 rounded-radius-sm border border-border"
+              draggable
+              onDragStart={() => handleDragStart(idx)}
+              onDragOver={(e) => { e.preventDefault(); handleDragOver(idx); }}
+              onDrop={() => void handleDrop()}
+              onDragEnd={handleDragEnd}
+              className={`p-3 rounded-radius-sm border ${dropIndex === idx ? 'border-primary' : 'border-border'} ${dragIndex === idx ? 'opacity-50' : ''} cursor-grab active:cursor-grabbing`}
               data-testid="prompts-item"
             >
               <div className="flex items-start justify-between gap-2">
