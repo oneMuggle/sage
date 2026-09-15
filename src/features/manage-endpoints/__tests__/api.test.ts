@@ -526,3 +526,101 @@ describe('R33: 协议级模型发现 (anthropic / gemini / ollama)', () => {
     expect(result.discoveredModels?.[0]?.id).toBe('llama3');
   });
 });
+
+
+describe('R49: 非 openai 协议级补充测试', () => {
+  it('anthropic 对话连通：POST /v1/messages 解析 content[0].text', async () => {
+    mockFetch(async (url, init) => {
+      if (url.includes('/v1/models')) {
+        return makeJsonResponse(200, { data: [{ id: 'claude-sonnet-4' }] });
+      }
+      expect(url).toContain('/v1/messages');
+      const body = JSON.parse(String(init?.body ?? '{}'));
+      expect(body.model).toBe('claude-sonnet-4');
+      expect(body.max_tokens).toBe(16);
+      return makeJsonResponse(200, {
+        content: [{ type: 'text', text: 'pong from claude' }],
+      });
+    });
+    const result = await testEndpointConnection(
+      'https://api.anthropic.com',
+      'sk-ant-key',
+      'claude-sonnet-4',
+      'anthropic',
+    );
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('对话连通');
+    expect(result.message).toContain('claude-sonnet-4');
+  });
+
+  it('gemini 对话连通：POST generateContent 解析 candidates[0]', async () => {
+    mockFetch(async (url, init) => {
+      if (url.includes('/v1beta/models')) {
+        return makeJsonResponse(200, { models: [{ name: 'models/gemini-2.0-flash' }] });
+      }
+      expect(url).toContain('generateContent');
+      const body = JSON.parse(String(init?.body ?? '{}'));
+      expect(body.contents[0].parts[0].text).toBe('ping');
+      return makeJsonResponse(200, {
+        candidates: [{ content: { parts: [{ text: 'pong from gemini' }] } }],
+      });
+    });
+    const result = await testEndpointConnection(
+      'https://generativelanguage.googleapis.com',
+      'goog-key',
+      'gemini-2.0-flash',
+      'gemini',
+    );
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('对话连通');
+  });
+
+  it('ollama 对话连通：POST /api/chat stream=false 解析 message.content', async () => {
+    mockFetch(async (url, init) => {
+      if (url.includes('/api/tags')) {
+        return makeJsonResponse(200, { models: [{ name: 'llama3' }] });
+      }
+      expect(url).toContain('/api/chat');
+      const body = JSON.parse(String(init?.body ?? '{}'));
+      expect(body.stream).toBe(false);
+      return makeJsonResponse(200, { message: { content: 'pong from ollama' } });
+    });
+    const result = await testEndpointConnection(
+      'http://localhost:11434',
+      '',
+      'llama3',
+      'ollama',
+    );
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('对话连通');
+  });
+
+  it('anthropic 对话端点 401 → 失败 + 中文提示', async () => {
+    mockFetch(async (url) => {
+      if (url.includes('/v1/models')) {
+        return makeJsonResponse(200, { data: [{ id: 'claude-sonnet-4' }] });
+      }
+      return makeJsonResponse(401, { error: { message: 'invalid x-api-key' } });
+    });
+    const result = await testEndpointConnection(
+      'https://api.anthropic.com',
+      'bad-key',
+      'claude-sonnet-4',
+      'anthropic',
+    );
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('401');
+  });
+
+  it('空发现列表 → 降级为仅发现成功（不崩溃）', async () => {
+    mockFetch(async () => makeJsonResponse(200, { data: [] }));
+    const result = await testEndpointConnection(
+      'https://api.anthropic.com',
+      'key',
+      undefined,
+      'anthropic',
+    );
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('无可用于对话测试的模型');
+  });
+});
