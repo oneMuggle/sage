@@ -445,6 +445,28 @@ def apply_first_page_different(doc: Document, header: Any, footer: Any) -> None:
         _write_page_number_field(section)
 
 
+def apply_odd_even_different(doc: Document, even_header: Any, even_footer: Any) -> None:
+    """启用奇偶页不同并为偶数页写独立页眉/页脚（Round 34）。
+
+    settings.odd_and_even_pages_header_footer 为全局开关；偶数页内容
+    写入 section.even_page_header/footer（断开 linked）。
+    """
+    doc.settings.odd_and_even_pages_header_footer = True
+    section = doc.sections[0]
+    if even_header is not None:
+        part = section.even_page_header
+        if part.is_linked_to_previous:
+            part.is_linked_to_previous = False
+        target = part.paragraphs[0] if part.paragraphs else part.add_paragraph()
+        target.text = even_header.text or ""
+    if even_footer is not None:
+        part = section.even_page_footer
+        if part.is_linked_to_previous:
+            part.is_linked_to_previous = False
+        target = part.paragraphs[0] if part.paragraphs else part.add_paragraph()
+        target.text = even_footer.text or ""
+
+
 def apply_section_break(doc: Document, page: WordPageSetupSpec) -> None:
     """插入 NEW_PAGE 分节并对新节应用 page setup（Round 26 横排分节）。
 

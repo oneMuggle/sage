@@ -555,6 +555,23 @@ class OfficeCreateTool(BaseTool):
                                             "page_number": {"type": "boolean"},
                                         },
                                     },
+                                    "odd_even_pages": {
+                                        "type": "boolean",
+                                        "description": (
+                                            "启用奇偶页不同的页眉页脚（Round 34，"
+                                            "书籍排版场景）"
+                                        ),
+                                    },
+                                    "even_page_header": {
+                                        "type": "object",
+                                        "description": "偶数页页眉文本",
+                                        "properties": {"text": {"type": "string"}},
+                                    },
+                                    "even_page_footer": {
+                                        "type": "object",
+                                        "description": "偶数页页脚文本",
+                                        "properties": {"text": {"type": "string"}},
+                                    },
                                     "bibliography": {
                                         "type": "object",
                                         "description": (
