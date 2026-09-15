@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import base64
 import re
+import time
 from html import unescape
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -35,6 +36,9 @@ class SearchEngine:
 
     name = "base"
 
+    #: 健康探测（Round 9 R9-1）用的最小探针查询
+    PROBE_QUERY = "sage"
+
     def search(self, query: str, limit: int, client: httpx.Client) -> List[Dict[str, str]]:
         raise NotImplementedError
 
@@ -43,6 +47,31 @@ class SearchEngine:
         """清理 HTML 标签并解码实体（与原 WebSearchTool._clean_html 同实现）。"""
         clean = re.sub(r"<[^>]+>", "", text)
         return unescape(clean).strip()
+
+    def check(self, client: httpx.Client) -> Dict[str, Any]:
+        """引擎健康探测（Round 9 R9-1）：发一次最小真实查询，回报可用性。
+
+        返回 ``{"ok": bool, "latency_ms": int, "detail": str}``。语义口径：
+
+        - ok=True：请求成功（无论解析到几条结果——限流导致的 0 条也是
+          "引擎可达但被限流" 的有用信号，如实写进 detail）；
+        - ok=False：HTTP 错误/连接失败/解析异常，detail 截断至 200 字符。
+
+        大陆网络下 DDG 连接失败会如实报 ok=False——这正是自检的价值。
+        """
+        started = time.monotonic()
+        try:
+            results = self.search(self.PROBE_QUERY, 1, client=client)
+        except Exception as exc:  # noqa: BLE001 — 探测把一切失败如实上报
+            latency = int((time.monotonic() - started) * 1000)
+            return {"ok": False, "latency_ms": latency, "detail": str(exc)[:200]}
+        latency = int((time.monotonic() - started) * 1000)
+        return {
+            "ok": True,
+            "latency_ms": latency,
+            "detail": f"返回 {len(results)} 条结果" if results else "可达但 0 条结果（可能被限流）",
+        }
+
 
 
 # ---------------------------------------------------------------------------
