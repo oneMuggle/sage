@@ -90,3 +90,23 @@ def test_kill_process_tree_falls_back_to_leader_when_taskkill_fails(monkeypatch)
 
     assert result is True
     process.kill.assert_called_once_with()
+
+
+def test_kill_process_tree_falls_back_to_leader_when_taskkill_returns_failure(
+    monkeypatch,
+):
+    """taskkill 返回非零退出码时仍要退化为 leader kill。"""
+    process = mock.Mock(pid=1234)
+    process.poll.return_value = None
+    taskkill = mock.Mock(return_value=subprocess.CompletedProcess([], 1))
+    monkeypatch.setattr(subprocess_util, "os", _OsProxy("nt"))
+    monkeypatch.setattr(subprocess_util, "observe_process_exit", lambda *_: False)
+    monkeypatch.setattr(subprocess_util.subprocess, "run", taskkill)
+    monkeypatch.setattr(subprocess_util, "reap_process", mock.Mock(return_value=True))
+
+    result = subprocess_util.kill_process_tree(
+        process, reap=True, process_group_id=process.pid
+    )
+
+    assert result is True
+    process.kill.assert_called_once_with()
