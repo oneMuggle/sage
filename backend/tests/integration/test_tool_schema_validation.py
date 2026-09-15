@@ -19,6 +19,7 @@ from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.agent_state import AgentState
 from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
 from backend.data.settings_repo import SettingsRepository
+from backend.domain.risk import RiskClass
 from backend.services.permission_gate import (
     init_permission_gate,
     reset_permission_gate,
@@ -28,7 +29,6 @@ from backend.tools.permissions import (
     PermissionEnforcer,
     PermissionMode,
 )
-from backend.domain.risk import RiskClass
 
 pytestmark = pytest.mark.integration
 

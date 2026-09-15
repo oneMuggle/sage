@@ -25,7 +25,6 @@ REPL 工具 - Python 代码片段隔离执行（移植 claw-code execute_repl）
 import contextlib
 import logging
 import math
-import os
 import subprocess
 import sys
 import tempfile
