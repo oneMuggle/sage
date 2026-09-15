@@ -61,7 +61,7 @@ _CHAT_OK = {
 }
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_retries_on_429_then_succeeds(monkeypatch):
     monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "0")
     client = _make_client()
@@ -76,7 +76,7 @@ async def test_chat_retries_on_429_then_succeeds(monkeypatch):
     assert mock_http.post.await_count == 2
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_respects_retry_after_header(monkeypatch):
     monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "99")
     client = _make_client()
@@ -99,7 +99,7 @@ async def test_chat_respects_retry_after_header(monkeypatch):
     assert abs(sleeps[0] - 2.0) < 0.001
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_no_retry_on_auth_error():
     client = _make_client()
     mock_http = _wire_post(client, [_http_status_error(401)])
@@ -111,7 +111,7 @@ async def test_chat_no_retry_on_auth_error():
     assert mock_http.post.await_count == 1
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_raises_after_exhausting_retries(monkeypatch):
     monkeypatch.setenv("SAGE_LLM_RETRY_MAX_ATTEMPTS", "3")
     monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "0")
@@ -164,7 +164,7 @@ def _wire_stream(client: LLMClient, ctx_list: list) -> MagicMock:
     return mock_http
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_stream_retries_before_first_delta(monkeypatch):
     monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "0")
     client = _make_client()
@@ -194,7 +194,7 @@ async def test_stream_retries_before_first_delta(monkeypatch):
     assert events[-1][1].content == "hi"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_stream_no_retry_after_first_delta():
     client = _make_client()
 

@@ -15,7 +15,7 @@ from backend.cli.checks.sqlite_writable import (
 from backend.cli.doctor import Severity
 
 
-@pytest.fixture
+@pytest.fixture()
 def check():
     return SqliteWritableCheck()
 

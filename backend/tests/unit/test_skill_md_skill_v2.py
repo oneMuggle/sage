@@ -53,7 +53,7 @@ def _make_runner_mock() -> MagicMock:
 # =====================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_execute_v2_fallback_renders_resources(tmp_path):
     (tmp_path / "references").mkdir()
     (tmp_path / "references" / "guide.md").write_text("guide", encoding="utf-8")
@@ -67,7 +67,7 @@ async def test_execute_v2_fallback_renders_resources(tmp_path):
     assert str(tmp_path) not in result.content
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_execute_v2_fallback_returns_fixed_security_error(tmp_path):
     doc = _make_doc(body="See {baseDir}/references/missing.md", base_dir=tmp_path)
     doc.resources = build_resource_index(tmp_path)
@@ -94,7 +94,7 @@ async def test_execute_v2_fallback_returns_fixed_security_error(tmp_path):
     assert result.metadata["source"] == "skillmd"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_execute_v2_without_script_name_falls_back_to_v1(tmp_path):
     """execute_v2 params 中无 'script' 字段 → 回退到 v1，不调用 runner。"""
     doc = _make_doc(body="static v1 body")
@@ -117,7 +117,7 @@ async def test_execute_v2_without_script_name_falls_back_to_v1(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_execute_v2_with_script_name_dispatches_to_runner(tmp_path):
     """execute_v2 params 含 'script' → 委托 ScriptRunner.run_script。"""
     doc = _make_doc(base_dir=tmp_path)
@@ -143,7 +143,7 @@ async def test_execute_v2_with_script_name_dispatches_to_runner(tmp_path):
     assert call_kwargs["args"] == ()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_execute_v2_passes_args_as_tuple(tmp_path):
     """execute_v2 params['args'] (list) → tuple 传给 runner。"""
     doc = _make_doc(base_dir=tmp_path)
@@ -163,7 +163,7 @@ async def test_execute_v2_passes_args_as_tuple(tmp_path):
     assert isinstance(call_kwargs["args"], tuple)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_execute_v2_without_args_uses_empty_tuple(tmp_path):
     """execute_v2 params 中无 'args' 键 → 空 tuple 传给 runner。"""
     doc = _make_doc(base_dir=tmp_path)
@@ -182,7 +182,7 @@ async def test_execute_v2_without_args_uses_empty_tuple(tmp_path):
     assert call_kwargs["args"] == ()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_execute_v2_propagates_runner_failure(tmp_path):
     """runner 返回 success=False → execute_v2 透传失败结果。"""
     doc = _make_doc(base_dir=tmp_path)

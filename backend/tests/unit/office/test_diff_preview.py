@@ -30,7 +30,7 @@ pytestmark = pytest.mark.unit
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
+@pytest.fixture()
 def docx_path(tmp_path: Path) -> Path:
     path = tmp_path / "report.docx"
     doc = Document()
@@ -45,7 +45,7 @@ def docx_path(tmp_path: Path) -> Path:
     return path
 
 
-@pytest.fixture
+@pytest.fixture()
 def xlsx_path(tmp_path: Path) -> Path:
     path = tmp_path / "book.xlsx"
     wb = Workbook()
@@ -59,7 +59,7 @@ def xlsx_path(tmp_path: Path) -> Path:
     return path
 
 
-@pytest.fixture
+@pytest.fixture()
 def pptx_path(tmp_path: Path) -> Path:
     path = tmp_path / "deck.pptx"
     prs = Presentation()

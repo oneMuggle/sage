@@ -22,7 +22,7 @@ pytestmark = pytest.mark.unit
 FTS_TABLE = "memories_semantic_fts"
 
 
-@pytest.fixture
+@pytest.fixture()
 def db(tmp_path) -> Database:
     """独立临时 DB，不与 conftest autouse 的全局临时 DB 共享文件。"""
     database = Database(db_path=str(tmp_path / "fts.db"))
@@ -31,7 +31,7 @@ def db(tmp_path) -> Database:
     database.close()
 
 
-@pytest.fixture
+@pytest.fixture()
 def semantic(db: Database) -> SemanticMemory:
     return SemanticMemory(db)
 

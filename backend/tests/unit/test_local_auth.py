@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from backend.api.local_auth import initialize_local_auth_token, require_local_auth
 
 
-@pytest.fixture
+@pytest.fixture()
 def auth_app(monkeypatch):
     token = "synthetic-local-capability"
     monkeypatch.setenv("SAGE_LOCAL_AUTH_TOKEN", token)

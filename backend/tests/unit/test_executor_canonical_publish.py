@@ -43,7 +43,7 @@ class FakeSink(RunEventSink):
         return event
 
 
-@pytest.fixture
+@pytest.fixture()
 def temp_db():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         tmp_path = tmp.name
@@ -55,7 +55,7 @@ def temp_db():
         os.unlink(tmp_path)
 
 
-@pytest.fixture
+@pytest.fixture()
 def registries(temp_db):
     db, _ = temp_db
     lane_repo = LaneRepository()
@@ -73,7 +73,7 @@ def registries(temp_db):
     }
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_task(registries):
     return registries["task_registry"].create_task(
         name="t1",
@@ -82,7 +82,7 @@ def sample_task(registries):
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_lane(registries, sample_task):
     return registries["lane_registry"].create_lane(task_id=sample_task.task_id)
 

@@ -19,7 +19,7 @@ _HEX_ONLY = pytest.mark.skipif(
 # PG3.2: brief 的 PUT 端点依赖 svc.events.emit，需 DI 注入 ChatService。
 # 现有项目测试惯例：conftest 不触发 FastAPI lifespan，需手动 override DI。
 # 装配最简 ChatService mock（含 events.emit 占位）让端到端跑通。
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _hex_di_override():
     from sage_core import Message, Role
 
@@ -52,7 +52,7 @@ def _hex_di_override():
         app.dependency_overrides.pop(get_chat_service, None)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_get_settings_returns_null_when_no_data():
     async with AsyncClient(
@@ -64,7 +64,7 @@ async def test_get_settings_returns_null_when_no_data():
     assert resp.json() is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_put_settings_persists_and_get_returns():
     async with AsyncClient(
@@ -107,7 +107,7 @@ import json
 _REDACTED_APIKEY_HEX = "sk-hex-SECRET-do-not-leak-aabbccddeeff0011"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_get_settings_redacts_endpoint_api_key():
     from backend.data.settings_repo import SettingsRepository
@@ -141,7 +141,7 @@ async def test_hex_get_settings_redacts_endpoint_api_key():
     assert _REDACTED_APIKEY_HEX not in resp.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_get_preference_redacts_app_settings_payload():
     from backend.data.settings_repo import SettingsRepository

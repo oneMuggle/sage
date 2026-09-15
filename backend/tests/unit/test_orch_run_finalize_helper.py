@@ -6,7 +6,7 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture
+@pytest.fixture()
 def tmp_db(tmp_path, monkeypatch):
     from backend.data import database as db_mod
 

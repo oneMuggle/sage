@@ -13,7 +13,7 @@ from backend.memory.write_ledger import (
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture
+@pytest.fixture()
 def ledger():
     return MemoryWriteLedger(per_session_limit=3, session_limit=2)
 

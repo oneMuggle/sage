@@ -43,7 +43,7 @@ PREFIX = "/api/v1"
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_memory_list_all_layers_includes_working_and_summary(
     client,
     setup_test_db,
@@ -95,7 +95,7 @@ async def test_memory_list_all_layers_includes_working_and_summary(
     assert "session_summary" in sources
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_memory_list_source_breakdown_has_working_and_session_summary(
     client,
     setup_test_db,
@@ -132,7 +132,7 @@ async def test_memory_list_source_breakdown_has_working_and_session_summary(
     assert breakdown["session_summary"] >= 1
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_memory_list_omits_session_summary_without_session_id(
     client,
     setup_test_db,
@@ -173,7 +173,7 @@ def breakdown_safe(b):
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_memory_list_accepts_offset(client, setup_test_db):
     """``offset`` query param MUST work as a sibling of ``page``.
 
@@ -205,7 +205,7 @@ async def test_memory_list_accepts_offset(client, setup_test_db):
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_memory_list_session_id_filter(client, setup_test_db):
     """``session_id`` query param MUST scope the result to that session.
 
@@ -237,7 +237,7 @@ async def test_memory_list_session_id_filter(client, setup_test_db):
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_memory_summaries_missing_session_id_returns_400(
     client, setup_test_db
 ):
@@ -248,7 +248,7 @@ async def test_memory_summaries_missing_session_id_returns_400(
     assert resp.status_code == 400
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_memory_summaries_returns_envelope_for_session(
     client, setup_test_db
 ):
@@ -287,7 +287,7 @@ async def test_memory_summaries_returns_envelope_for_session(
     assert "failed" in statuses
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_memory_summaries_only_returns_target_session(
     client, setup_test_db
 ):
@@ -317,7 +317,7 @@ async def test_memory_summaries_only_returns_target_session(
     assert "B only" not in contents
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_memory_summaries_pagination(client, setup_test_db):
     """The envelope MUST respect ``page`` / ``page_size`` and echo them.
     """

@@ -19,7 +19,7 @@ PREFIX = "/api/v1"
 EXPECTED_DEFAULT_IDS = {"primary", "researcher", "coder", "memory_manager", "writer", "reviewer"}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_list_agents_returns_four_defaults_after_lifespan(client):
     """lifespan 启动后 GET /agents 必返回 6 个默认 agent."""
     resp = await client.get(f"{PREFIX}/agents")
@@ -31,7 +31,7 @@ async def test_list_agents_returns_four_defaults_after_lifespan(client):
     assert ids == EXPECTED_DEFAULT_IDS, f"期望默认 6 个 agent, 实际 {ids}"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_list_agents_profile_preserves_all_fields(client):
     """Agent profile 字段完整保留: name/role/system_prompt/tools/memory_access/
     model_config/max_iterations/enabled/description."""
@@ -56,7 +56,7 @@ async def test_list_agents_profile_preserves_all_fields(client):
     assert primary["description"]  # 非空
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_list_agents_includes_disabled_agents(client):
     """disabled 的 agent 仍在列表里 — GET /agents 不做 enabled 过滤."""
     from backend.data.agent_repo import AgentRepository
@@ -73,7 +73,7 @@ async def test_list_agents_includes_disabled_agents(client):
     assert by_id["primary"]["enabled"] is True
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_list_agents_idempotent_across_lifespan(client):
     """同一 DB 多次跑 seed 不会重复插入 — 不破坏 (PRIMARY KEY, id)."""
     from backend.data.agent_repo import AgentRepository
@@ -89,7 +89,7 @@ async def test_list_agents_idempotent_across_lifespan(client):
     assert len(second.json()) == 6
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_get_agent_by_id_returns_404(client):
     """不存在的 agent_id → 404 + 结构化 detail (给前端用)."""
     resp = await client.get(f"{PREFIX}/agents/nonexistent-agent-id")
@@ -98,7 +98,7 @@ async def test_get_agent_by_id_returns_404(client):
     assert detail["type"] == "agent_not_found"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_get_agent_by_id_returns_profile(client):
     """存在的 agent_id → 200 + 该 agent 完整 profile."""
     resp = await client.get(f"{PREFIX}/agents/coder")

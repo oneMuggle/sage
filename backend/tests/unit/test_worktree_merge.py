@@ -21,7 +21,7 @@ def _git(*args: str, cwd: Path) -> subprocess.CompletedProcess:
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def main_repo(tmp_path: Path) -> Path:
     d = tmp_path / "main"
     d.mkdir()

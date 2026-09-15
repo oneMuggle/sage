@@ -13,13 +13,13 @@ BASE = "/api/v1/memory"
 
 
 class TestRecentWrites:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_empty(self, client):
         r = await client.get(f"{BASE}/recent-writes", params={"session_id": "s-none"})
         assert r.status_code == 200
         assert r.json() == {"items": [], "latest_seq": 0}
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_cursor(self, client):
         ledger = get_write_ledger()
         a = ledger.record(memory_id="m1", kind=KIND_MEMORY, content="喜欢火锅", session_id="s1")
@@ -36,7 +36,7 @@ class TestRecentWrites:
 
 
 class TestUndoWrite:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_undo_memory(self, client):
         sid = SessionRepository().create(title="撤销测试").id
         mm = get_memory_manager()
@@ -49,12 +49,12 @@ class TestUndoWrite:
         # 情景记忆为软删除（is_valid=0），已不在 recent 列表中
         assert all(m["id"] != mid for m in mm.episodic.get_recent(limit=20, session_id=sid))
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_undo_unknown_id(self, client):
         r = await client.post(f"{BASE}/undo-write", json={"session_id": "s1", "id": "nope"})
         assert r.status_code == 404
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_undo_profile(self, client):
         store = get_user_profile()
         pid = store.add("用户偏好简洁回答", category="preference", importance=7)
@@ -64,7 +64,7 @@ class TestUndoWrite:
         assert r.json()["kind"] == "profile"
         assert all(e["id"] != pid for e in store.list())
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_undo_profile_without_ledger_falls_back(self, client):
         store = get_user_profile()
         pid = store.add("用户是后端工程师", category="identity", importance=6)
@@ -74,7 +74,7 @@ class TestUndoWrite:
 
 
 class TestProfileCrud:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_list_empty(self, client):
         r = await client.get(f"{BASE}/profile")
         assert r.status_code == 200
@@ -83,7 +83,7 @@ class TestProfileCrud:
         assert "preference" in body["categories"]
         assert body["char_limit"] > 0
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_create_update_delete(self, client):
         r = await client.post(
             f"{BASE}/profile",
@@ -121,12 +121,12 @@ class TestProfileCrud:
         r_del2 = await client.delete(f"{BASE}/profile/{new_item['id']}")
         assert r_del2.status_code == 404
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_update_missing(self, client):
         r = await client.put(f"{BASE}/profile/nope", json={"content": "x"})
         assert r.status_code == 404
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_update_empty_content(self, client):
         r = await client.post(f"{BASE}/profile", json={"content": "用户喜欢深色主题"})
         pid = r.json()["item"]["id"]

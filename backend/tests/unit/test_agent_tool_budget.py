@@ -20,7 +20,7 @@ def _mock_llm_with_tool_calls(responses: list) -> MagicMock:
     return mock_client
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_aborts_when_tool_budget_exceeded(monkeypatch):
     """工具调用数超过上限 → FAILED("tool_budget_exceeded")，不再执行后续工具。"""
     monkeypatch.setenv("SAGE_MAX_TOOL_CALLS_PER_RUN", "2")
@@ -50,7 +50,7 @@ async def test_run_loop_aborts_when_tool_budget_exceeded(monkeypatch):
     assert llm.chat.await_count == 2
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_within_budget_completes(monkeypatch):
     """未超预算的正常多工具会话不受影响。"""
     monkeypatch.setenv("SAGE_MAX_TOOL_CALLS_PER_RUN", "25")
@@ -71,7 +71,7 @@ async def test_run_loop_within_budget_completes(monkeypatch):
     assert events[-1].content == "done"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_invalid_json_args_returned_as_error_result():
     """arguments 非法 JSON → is_error 工具结果回传 LLM + tool 消息,循环继续。"""
     bad_call = LLMResponse(content="", tool_calls=[

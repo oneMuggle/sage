@@ -13,7 +13,7 @@ from backend.data.session_repo import MessageRepository
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture
+@pytest.fixture()
 def tmp_db():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db = Database(f.name)

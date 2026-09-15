@@ -42,7 +42,7 @@ def _is_ssl_bootstrap_test(request):
     return str(request.node.fspath).endswith(_SSL_BOOTSTRAP_TEST)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _configure_test_http_client_auth(request, monkeypatch):
     """为直接创建的测试 HTTP 客户端注入合成本地 capability。"""
     # These tests intentionally verify that an empty Authorization header is
@@ -69,7 +69,7 @@ def _configure_test_http_client_auth(request, monkeypatch):
     monkeypatch.setattr(httpx.AsyncClient, "__init__", async_client_init)
 
 
-@pytest.fixture
+@pytest.fixture()
 def tmp_db_path():
     """创建临时数据库文件，测试后自动清理"""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
@@ -86,7 +86,7 @@ def tmp_db_path():
             os.unlink(f.name)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def setup_test_db(request):
     """每个测试自动使用独立临时数据库。
 
@@ -247,7 +247,7 @@ async def client():
 # ========== LLM Mock Fixtures (P0-T7) ==========
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_llm_ok():
     """Mock LLM 返回正常 chat completion.
 
@@ -283,7 +283,7 @@ def mock_llm_ok():
         yield mock
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_llm_rate_limit():
     """Mock LLM 返回 429 限流响应"""
     import respx
@@ -299,7 +299,7 @@ def mock_llm_rate_limit():
         yield mock
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_llm_timeout():
     """Mock LLM 模拟超时（抛 httpx.TimeoutException）。
 
@@ -317,7 +317,7 @@ def mock_llm_timeout():
         yield mock
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_llm_server_error():
     """Mock LLM 返回 500 服务端错误"""
     import respx
@@ -333,7 +333,7 @@ def mock_llm_server_error():
         yield mock
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_messages():
     """测试用消息列表（标准 system + user 开头）"""
     return [
@@ -342,7 +342,7 @@ def sample_messages():
     ]
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_user_query():
     """测试用用户查询"""
     return "What is the capital of France?"
@@ -375,7 +375,7 @@ def ensure_session(db, session_id: str, title: str = "Test Session") -> str:
     return session_id
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_session(setup_test_db):
     """Pre-create a default ``sess-1`` session row for tests that need a
     FK-referenced session but don't care about the specific session_id.
@@ -386,13 +386,13 @@ def sample_session(setup_test_db):
     return ensure_session(setup_test_db, "sess-1")
 
 
-@pytest.fixture
+@pytest.fixture()
 def tmp_data_dir(tmp_path):
     """临时数据目录（避免污染真实 data/）—— 直接返回 tmp_path 便于测试中使用"""
     return tmp_path
 
 
-@pytest.fixture(autouse=False)
+@pytest.fixture()(autouse=False)
 def reset_skill_adapter():  # noqa: PT004 - 空 yield 是合法的 teardown-only fixture
     """M2b: 重置 skills 单例缓存 (enabled / usage_count)。
 

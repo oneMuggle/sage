@@ -28,25 +28,25 @@ pytestmark = pytest.mark.unit
 # --------------------------------------------------------------------------- #
 
 
-@pytest.fixture
+@pytest.fixture()
 def storage() -> MemoryStorageAdapter:
     """真实内存存储,覆盖 get/list/create/update/delete 全路径。"""
     return MemoryStorageAdapter()
 
 
-@pytest.fixture
+@pytest.fixture()
 def metrics() -> MagicMock:
     """只验证 metrics.gauge() 被调用,内容是实现细节。"""
     return MagicMock(spec=NoopMetricAdapter)
 
 
-@pytest.fixture
+@pytest.fixture()
 def events() -> MagicMock:
     """验证 emit(name, payload) 契约。"""
     return MagicMock()
 
 
-@pytest.fixture
+@pytest.fixture()
 def svc(storage, metrics, events) -> SessionService:
     return SessionService(storage=storage, metrics=metrics, events=events)
 

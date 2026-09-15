@@ -16,7 +16,7 @@ from backend.tools.web_tool import WebFetchTool, WebSearchTool, looks_like_antib
 pytestmark = [pytest.mark.unit]
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def http_sleeps(monkeypatch):
     """AB5 重试退避不真睡（自动装配）。"""
     waits = []
@@ -25,7 +25,7 @@ def http_sleeps(monkeypatch):
     return waits
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean_web_cache():
     """C1 缓存是模块级进程内存 —— 用例间清空，防止跨用例命中污染请求断言。"""
     web_cache.clear()

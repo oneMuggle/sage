@@ -14,7 +14,7 @@ from backend.tools.web_tool import WebSearchTool
 pytestmark = [pytest.mark.unit]
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean_search_cache():
     """Q1 查询缓存是模块级进程内存 —— 用例间清空，防跨用例命中污染。"""
     web_cache.clear()

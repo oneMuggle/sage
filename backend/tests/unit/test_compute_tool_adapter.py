@@ -114,7 +114,7 @@ def test_tool_spec_carries_params_schema() -> None:
 # ---------- execute 路由分发 ----------
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_execute_routes_compute_tool() -> None:
     """compute 工具应走 ComputePort.execute。"""
     compute = MockComputeAdapter(
@@ -141,7 +141,7 @@ async def test_execute_routes_compute_tool() -> None:
     assert compute.calls[0].params == {"mach": 6.5}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_execute_routes_inner_tool() -> None:
     """非 compute 工具应委托给 inner.execute。"""
     compute = MockComputeAdapter(specs=[ComputeSpec(name="compute_shock", description="d")])
@@ -159,7 +159,7 @@ async def test_execute_routes_inner_tool() -> None:
 # ---------- ComputeResult → ToolResult 翻译 ----------
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_success_result_serializes_output_as_json() -> None:
     """success → output 应是 JSON 序列化字符串。"""
     compute = MockComputeAdapter(
@@ -183,7 +183,7 @@ async def test_success_result_serializes_output_as_json() -> None:
     assert result.error is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_failure_result_carries_error_message() -> None:
     """failure → error 应为 ComputeError.message。"""
     compute = MockComputeAdapter(
@@ -212,7 +212,7 @@ async def test_failure_result_carries_error_message() -> None:
     assert result.metadata["exit_code"] == 2
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_metadata_includes_duration() -> None:
     """metadata 必须包含 duration_ms。"""
     compute = MockComputeAdapter(
@@ -242,7 +242,7 @@ class _RaisingComputeAdapter:
         raise RuntimeError("internal explosion")
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_compute_exception_is_swallowed() -> None:
     """ComputePort 抛异常 → ToolResult.success=False,不冒泡。"""
     compute = _RaisingComputeAdapter()

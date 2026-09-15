@@ -10,7 +10,7 @@ from backend.orchestration.event_hub import EventHub
 from backend.orchestration.snapshot_store import SnapshotStore
 
 
-@pytest.fixture
+@pytest.fixture()
 def client():
     from fastapi import FastAPI
 

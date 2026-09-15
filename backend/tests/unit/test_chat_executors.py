@@ -34,7 +34,7 @@ def test_attachment_executor_has_atexit_shutdown():
     # doesn't raise on import (which would happen if shutdown was misconfigured)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_resolve_attachments_returns_string():
     """resolve_attachments must return a string (possibly empty)."""
     from backend.chat.executors import resolve_attachments
@@ -44,7 +44,7 @@ async def test_resolve_attachments_returns_string():
     assert isinstance(result, str)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_resolve_attachments_calls_process_with_correct_args():
     """resolve_attachments must delegate to attachment_resolver.process."""
     from backend.chat.executors import resolve_attachments
@@ -59,7 +59,7 @@ async def test_resolve_attachments_calls_process_with_correct_args():
     assert result == "<attachments>content</attachments>"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_resolve_attachments_empty_workspace_skips():
     """Empty workspace_path should result in empty string (no mentions resolved)."""
     from backend.chat.executors import resolve_attachments

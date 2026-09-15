@@ -40,13 +40,13 @@ def test_write_rejects_symlinked_skill_file(tmp_path: Path):
     assert outside.read_text(encoding="utf-8") == "original"
 
 
-@pytest.fixture
+@pytest.fixture()
 def skills_dir(tmp_path: Path) -> Path:
     """A temporary skills directory."""
     return tmp_path / "skills"
 
 
-@pytest.fixture
+@pytest.fixture()
 def loader(skills_dir: Path) -> SkillLoader:
     """A SkillLoader backed by the temp directory."""
     return SkillLoader(skills_dir=skills_dir)

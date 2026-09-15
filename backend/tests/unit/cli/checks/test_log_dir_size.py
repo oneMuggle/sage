@@ -19,7 +19,7 @@ from backend.cli.checks.log_dir_size import (
 from backend.cli.doctor import Severity
 
 
-@pytest.fixture
+@pytest.fixture()
 def check():
     return LogDirSizeCheck()
 

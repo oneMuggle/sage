@@ -16,7 +16,7 @@ import pytest
 
 # 延迟导入: 测试文件 import 阶段就执行, 但 backend.main 的 lifespan 副作用也跑
 # (certifi bootstrap 设置 SSL_CERT_FILE), 我们要测的是函数本身, 而不是副作用.
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """每个测试前清空 ``SSL_CERT_FILE`` / ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE``."""
     for var in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"):

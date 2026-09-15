@@ -14,7 +14,7 @@ from backend.tools.web_tool import WebFetchTool, WebSearchTool
 pytestmark = [pytest.mark.unit]
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean_cache(monkeypatch):
     web_cache.clear()
     # B2/AB5：重试退避不真睡

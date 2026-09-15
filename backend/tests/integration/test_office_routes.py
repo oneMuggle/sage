@@ -33,7 +33,7 @@ from backend.office.path_safety import managed_document_path
 from backend.office.storage import generate_document_dir, list_documents as list_documents_storage
 
 
-@pytest.fixture
+@pytest.fixture()
 def workspace(tmp_path: Path) -> Path:
     """Per-test scratch workspace containing a freshly-created managed dir."""
     ws = tmp_path / "workspace"

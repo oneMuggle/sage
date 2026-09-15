@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_review_blocked_by_reviewed_guard():
     """_reviewed=True 时 gate 不再触发 _run_review。"""
     from backend.orchestration.chat_dispatcher import ChatDispatcher
@@ -33,7 +33,7 @@ async def test_review_blocked_by_reviewed_guard():
         mock_review.assert_not_called()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_review_failure_keeps_guard():
     """review 抛异常 → _reviewed 仍为 True（repo 已改为 INSERT OR REPLACE 幂等）。
 
@@ -59,7 +59,7 @@ async def test_review_failure_keeps_guard():
     assert dispatcher._reviewed is True
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_first_dispatch_at_set_on_first_call():
     """首次 dispatch → _first_dispatch_at 被设。"""
     from backend.orchestration.chat_dispatcher import ChatDispatcher
@@ -82,7 +82,7 @@ async def test_first_dispatch_at_set_on_first_call():
 # ===== Wave 3 A10 (2026-08-14): plan_override 跳过拆解，task_id 沿用不重枚举 =====
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_override_run_uses_provided_run_id_and_plan():
     """override 建 dispatcher 用 run_id，首 dispatch 读到 override plan。
 

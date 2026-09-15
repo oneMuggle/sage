@@ -36,7 +36,7 @@ _SCHEME_TEST = {"SAGE_SECRET_SCHEME": "test"}
 _SCHEME_NONE = {"SAGE_SECRET_SCHEME": "none"}
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _forced_scheme(monkeypatch):
     """默认强制 test scheme; 需要 none/真实平台时在用例内覆写。"""
     monkeypatch.setenv("SAGE_SECRET_SCHEME", "test")

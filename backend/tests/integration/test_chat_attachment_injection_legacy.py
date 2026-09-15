@@ -26,7 +26,7 @@ ATTACHMENT_PROMPT_PREFIX = (
 )
 
 
-@pytest.fixture
+@pytest.fixture()
 def captured_run_loop_messages():
     """Capture the final messages passed from the route to SageAgent.run_loop."""
     calls: List[List[dict]] = []
@@ -66,7 +66,7 @@ def _attachment_messages(messages):
     ]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_legacy_chat_stream_injects_pptx_digest(
     client, captured_run_loop_messages, monkeypatch, tmp_path
 ):
@@ -107,7 +107,7 @@ async def test_legacy_chat_stream_injects_pptx_digest(
     ]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_legacy_chat_stream_no_mention_no_injection(
     client, captured_run_loop_messages, monkeypatch, tmp_path
 ):
@@ -132,7 +132,7 @@ async def test_legacy_chat_stream_no_mention_no_injection(
     assert _attachment_messages(messages) == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_legacy_chat_stream_multi_doc_in_order(
     client, captured_run_loop_messages, monkeypatch, tmp_path
 ):
@@ -160,7 +160,7 @@ async def test_legacy_chat_stream_multi_doc_in_order(
     assert "=== b.docx ===\nW" in content
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_legacy_chat_stream_silently_skips_failed_mention(
     client, captured_run_loop_messages, monkeypatch, tmp_path
 ):

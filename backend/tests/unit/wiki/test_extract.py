@@ -54,7 +54,7 @@ pytestmark = [
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
+@pytest.fixture()
 def docx_path(tmp_path: Path) -> Path:
     """Generate a real DOCX with paragraphs + a small table."""
     req = OfficeWordGenerateRequest(
@@ -75,7 +75,7 @@ def docx_path(tmp_path: Path) -> Path:
     return generate_docx(req, output_dir=str(tmp_path))
 
 
-@pytest.fixture
+@pytest.fixture()
 def pptx_path(tmp_path: Path) -> Path:
     req = OfficePptGenerateRequest(
         slides=[
@@ -96,7 +96,7 @@ def pptx_path(tmp_path: Path) -> Path:
     return generate_ppt(req, output_dir=str(tmp_path))
 
 
-@pytest.fixture
+@pytest.fixture()
 def xlsx_path(tmp_path: Path) -> Path:
     req = OfficeExcelGenerateRequest(
         sheets=[

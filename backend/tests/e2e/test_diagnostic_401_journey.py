@@ -35,7 +35,7 @@ UPSTREAM = "http://upstream-401.example.com"
 CHAT_PATH = "/v1/chat/completions"
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean_recorder():
     """每个测试前后清空 recorder,防止跨测试泄漏。"""
     LlmTraceRecorder.clear()
@@ -43,7 +43,7 @@ def _clean_recorder():
     LlmTraceRecorder.clear()
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _mock_dns_for_upstream(monkeypatch):
     """Mock DNS: 给 test-only 域名 ``upstream-401.example.com`` 一个公网 IP,
     绕过代理层的 DNS 解析(否则 socket.getaddrinfo 真去查 .example.com 会失败)。
@@ -60,7 +60,7 @@ def _mock_dns_for_upstream(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_diagnostic_401_journey(client):
     """故意注入 401 → 导出诊断包 → zip 含 upstream_url + 错误信息 + header 脱敏。
 

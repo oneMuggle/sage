@@ -21,7 +21,7 @@ from backend.services.llm_trace.recorder import (
 )
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _reset_singleton():
     """每个测试重置全局 recorder,避免污染。"""
     _global_recorder.clear()

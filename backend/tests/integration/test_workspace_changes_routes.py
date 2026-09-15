@@ -22,7 +22,7 @@ from backend.main import app
 from backend.office.session_workspace import bind_session_workspace
 
 
-@pytest.fixture
+@pytest.fixture()
 def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     test_db = Database(":memory:")
     test_db.init_db()
@@ -30,12 +30,12 @@ def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     return test_db
 
 
-@pytest.fixture
+@pytest.fixture()
 def conn(db: Database) -> sqlite3.Connection:
     return db.get_connection()
 
 
-@pytest.fixture
+@pytest.fixture()
 def session_id(conn: sqlite3.Connection) -> str:
     value = "session-changes"
     conn.execute(
@@ -46,7 +46,7 @@ def session_id(conn: sqlite3.Connection) -> str:
     return value
 
 
-@pytest.fixture
+@pytest.fixture()
 def git_workspace(tmp_path: Path) -> Path:
     """带一个已跟踪文件（已修改）+ 一个未跟踪文件的 git 仓库。"""
     path = tmp_path / "workspace"
@@ -74,7 +74,7 @@ async def client(db: Database) -> AsyncIterator[httpx.AsyncClient]:
         yield value
 
 
-@pytest.fixture
+@pytest.fixture()
 def bound_session(
     conn: sqlite3.Connection, session_id: str, git_workspace: Path
 ) -> str:
@@ -82,14 +82,14 @@ def bound_session(
     return session_id
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_changes_requires_existing_session(client: httpx.AsyncClient) -> None:
     response = await client.get("/api/v1/sessions/nope/workspace/changes")
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "session_not_found"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_changes_requires_bound_workspace(
     client: httpx.AsyncClient, session_id: str
 ) -> None:
@@ -98,7 +98,7 @@ async def test_changes_requires_bound_workspace(
     assert response.json()["detail"]["code"] == "workspace_not_bound"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_changes_lists_modified_and_untracked(
     client: httpx.AsyncClient, bound_session: str
 ) -> None:
@@ -114,7 +114,7 @@ async def test_changes_lists_modified_and_untracked(
     assert isinstance(body["branch"], str)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_changes_clean_repo_has_empty_list(
     client: httpx.AsyncClient, conn: sqlite3.Connection, session_id: str, tmp_path: Path
 ) -> None:
@@ -129,7 +129,7 @@ async def test_changes_clean_repo_has_empty_list(
     assert body["changes"] == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_diff_returns_file_diff(
     client: httpx.AsyncClient, bound_session: str
 ) -> None:
@@ -144,7 +144,7 @@ async def test_diff_returns_file_diff(
     assert "+print('v2')" in body["diff"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_diff_path_outside_repo_rejected(
     client: httpx.AsyncClient, bound_session: str, tmp_path: Path
 ) -> None:
@@ -158,7 +158,7 @@ async def test_diff_path_outside_repo_rejected(
     assert response.json()["detail"]["code"] == "git_error"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_diff_without_binding_is_forbidden(
     client: httpx.AsyncClient, session_id: str
 ) -> None:

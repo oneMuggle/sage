@@ -34,13 +34,13 @@ from backend.tools.web_tool import WebSearchTool
 pytestmark = [pytest.mark.unit]
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _force_test_secret_scheme(monkeypatch):
     """enc: 加解密走确定性 test 方案（base64），保证 CI 可复现。"""
     monkeypatch.setenv("SAGE_SECRET_SCHEME", "test")
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean_search_cache():
     """Q1 查询缓存是模块级进程内存 —— 用例间清空，防跨用例命中污染。"""
     web_cache.clear()

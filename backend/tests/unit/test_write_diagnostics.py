@@ -15,7 +15,7 @@ from backend.tools.write_diagnostics import _syntax_check, attach_diagnostics
 pytestmark = [pytest.mark.unit]
 
 
-@pytest.fixture
+@pytest.fixture()
 def ws(tmp_path: Path) -> Path:
     d = tmp_path / "ws"
     d.mkdir()

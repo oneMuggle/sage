@@ -35,7 +35,7 @@ def _reset_skill_adapter_singleton() -> None:
     inproc_mod._skill_adapter_singleton = None
 
 
-@pytest.fixture
+@pytest.fixture()
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """Test client + reset adapter singleton so each test sees a fresh adapter."""
     skills = tmp_path / "skills"

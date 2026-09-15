@@ -23,7 +23,7 @@ from backend.office.models import (
 from backend.office.word_template import analyze_word_template, fill_word_template
 
 
-@pytest.fixture
+@pytest.fixture()
 def simple_template(tmp_path: Path) -> Path:
     """Create a simple Word template with placeholders."""
     doc = Document()

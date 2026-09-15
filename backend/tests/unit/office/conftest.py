@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 
-@pytest.fixture
+@pytest.fixture()
 def fixture_dir(tmp_path: Path) -> Path:
     """Per-test scratch directory. Each test gets a fresh tmp_path."""
     return tmp_path

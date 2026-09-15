@@ -23,7 +23,7 @@ from backend.office.session_workspace import bind_session_workspace
 from backend.office.storage import save_document
 
 
-@pytest.fixture
+@pytest.fixture()
 def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     test_db = Database(":memory:")
     test_db.init_db()
@@ -31,12 +31,12 @@ def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     return test_db
 
 
-@pytest.fixture
+@pytest.fixture()
 def conn(db: Database) -> sqlite3.Connection:
     return db.get_connection()
 
 
-@pytest.fixture
+@pytest.fixture()
 def session_id(conn: sqlite3.Connection) -> str:
     value = "session-workspace"
     conn.execute(
@@ -47,7 +47,7 @@ def session_id(conn: sqlite3.Connection) -> str:
     return value
 
 
-@pytest.fixture
+@pytest.fixture()
 def workspace(tmp_path: Path) -> Path:
     path = tmp_path / "workspace"
     path.mkdir()
@@ -62,7 +62,7 @@ async def client(db: Database) -> AsyncIterator[httpx.AsyncClient]:
         yield value
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_get_unbound_workspace_returns_null(
     client: httpx.AsyncClient, session_id: str
 ) -> None:
@@ -71,7 +71,7 @@ async def test_get_unbound_workspace_returns_null(
     assert response.json() == {"binding": None}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_search_without_binding_is_forbidden(
     client: httpx.AsyncClient, session_id: str
 ) -> None:
@@ -82,7 +82,7 @@ async def test_search_without_binding_is_forbidden(
     assert response.json()["detail"]["code"] == "workspace_not_bound"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_search_replaced_workspace_symlink_returns_gone(
     client: httpx.AsyncClient,
     conn: sqlite3.Connection,
@@ -106,7 +106,7 @@ async def test_search_replaced_workspace_symlink_returns_gone(
     assert response.json()["detail"]["code"] == "workspace_revoked"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_empty_search_without_binding_is_forbidden(
     client: httpx.AsyncClient, session_id: str
 ) -> None:
@@ -116,7 +116,7 @@ async def test_empty_search_without_binding_is_forbidden(
     assert response.json()["detail"]["code"] == "workspace_not_bound"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_bind_get_rebind_and_revoke_workspace(
     client: httpx.AsyncClient, session_id: str, workspace: Path, tmp_path: Path
 ) -> None:
@@ -142,7 +142,7 @@ async def test_bind_get_rebind_and_revoke_workspace(
     }
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @pytest.mark.parametrize("method", ["get", "put", "delete"])
 async def test_unknown_session_returns_404(
     client: httpx.AsyncClient, method: str, workspace: Path
@@ -153,7 +153,7 @@ async def test_unknown_session_returns_404(
     assert response.json()["detail"]["code"] == "session_not_found"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_invalid_path_returns_safe_400_without_absolute_path(
     client: httpx.AsyncClient, session_id: str, tmp_path: Path
 ) -> None:
@@ -166,7 +166,7 @@ async def test_invalid_path_returns_safe_400_without_absolute_path(
     assert sentinel not in response.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_bind_missing_workspace_path_uses_pydantic_422(
     client: httpx.AsyncClient, session_id: str
 ) -> None:
@@ -175,7 +175,7 @@ async def test_bind_missing_workspace_path_uses_pydantic_422(
     ).status_code == 422
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_search_validates_query_and_limit_with_pydantic(
     client: httpx.AsyncClient, conn: sqlite3.Connection, session_id: str, workspace: Path
 ) -> None:
@@ -186,7 +186,7 @@ async def test_search_validates_query_and_limit_with_pydantic(
         ).status_code == 422
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_search_response_has_typed_shape(
     client: httpx.AsyncClient, conn: sqlite3.Connection, session_id: str, workspace: Path
 ) -> None:

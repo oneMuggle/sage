@@ -9,7 +9,7 @@ import pytest
 from backend.orchestration.execution_registry import ExecutionRegistry
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_cancel_sets_interrupt_event_without_cancelling_task():
     registry = ExecutionRegistry()
     event = asyncio.Event()
@@ -25,7 +25,7 @@ async def test_cancel_sets_interrupt_event_without_cancelling_task():
         await task
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_unregister_does_not_remove_newer_registration():
     registry = ExecutionRegistry()
     first_event = asyncio.Event()

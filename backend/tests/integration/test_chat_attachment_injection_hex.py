@@ -99,7 +99,7 @@ def _attachment_messages(messages: List[Any]) -> List[Any]:
     ]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_chat_injects_pptx_digest(hex_client_with_mocks, monkeypatch, tmp_path):
     """@foo.pptx 走 resolver.process 后, LLM 收到的 messages 应含 <attachments> 块."""
@@ -138,7 +138,7 @@ async def test_hex_chat_injects_pptx_digest(hex_client_with_mocks, monkeypatch, 
     ]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_chat_no_mention_no_injection(hex_client_with_mocks, monkeypatch, tmp_path):
     """无 @ mention 时 LLM 收到的 messages 不应包含 <attachments> 块."""
@@ -170,7 +170,7 @@ async def test_hex_chat_no_mention_no_injection(hex_client_with_mocks, monkeypat
     assert _attachment_messages(messages) == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_chat_multi_doc_in_order(hex_client_with_mocks, monkeypatch, tmp_path):
     """@a.pptx @b.docx 产出按出现顺序的 attachment 块."""
@@ -205,7 +205,7 @@ async def test_hex_chat_multi_doc_in_order(hex_client_with_mocks, monkeypatch, t
     assert "=== b.docx ===\nW" in content
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_chat_attachment_block_not_persisted(
     hex_client_with_mocks, monkeypatch, tmp_path
@@ -247,7 +247,7 @@ async def test_hex_chat_attachment_block_not_persisted(
     assert _attachment_messages(messages), "current turn's LLM call lost the attachment block"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_chat_second_turn_attachment_not_replayed(
     hex_client_with_mocks, monkeypatch, tmp_path

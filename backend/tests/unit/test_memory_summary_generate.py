@@ -43,7 +43,7 @@ pytestmark = pytest.mark.unit
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
+@pytest.fixture()
 def store(tmp_db_path: str) -> SessionSummaryStore:
     db = Database(db_path=tmp_db_path)
     db.init_db()

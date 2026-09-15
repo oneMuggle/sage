@@ -175,7 +175,7 @@ class TestLaunchCommand:
 from backend.tools import http_factory  # noqa: E402
 
 
-@pytest.fixture
+@pytest.fixture()
 def no_sleep(monkeypatch):
     waits = []
     monkeypatch.setattr(http_factory, "_sleep", waits.append)

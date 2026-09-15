@@ -15,7 +15,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @pytest.mark.parametrize("path", ["../outside", "/etc", "wiki/../../outside"])
 async def test_mcp_files_rejects_path_escape(tmp_path, path, monkeypatch):
     root = tmp_path / "project"
@@ -26,7 +26,7 @@ async def test_mcp_files_rejects_path_escape(tmp_path, path, monkeypatch):
     assert exc.value.status_code == 400
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_mcp_read_accepts_legal_relative_path(tmp_path, monkeypatch):
     root = tmp_path / "project"
     (root / "wiki").mkdir(parents=True)
@@ -36,7 +36,7 @@ async def test_mcp_read_accepts_legal_relative_path(tmp_path, monkeypatch):
     assert '"content": "safe"' in result[0].text
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_mcp_rejects_symlink_project_root(tmp_path, monkeypatch):
     real = tmp_path / "real"
     real.mkdir()
@@ -48,7 +48,7 @@ async def test_mcp_rejects_symlink_project_root(tmp_path, monkeypatch):
     assert exc.value.status_code == 400
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_mcp_rejects_unregistered_project_root(tmp_path, monkeypatch):
     root = tmp_path / "untrusted"
     root.mkdir()
@@ -58,7 +58,7 @@ async def test_mcp_rejects_unregistered_project_root(tmp_path, monkeypatch):
     assert exc.value.status_code == 403
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_mcp_status_reports_regular_source_file_count(tmp_path, monkeypatch):
     root = tmp_path / "project"
     (root / "wiki").mkdir(parents=True)
@@ -81,7 +81,7 @@ async def test_mcp_status_reports_regular_source_file_count(tmp_path, monkeypatc
     assert status["source_files"] == 2
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_mcp_status_fails_closed_without_verified_nofollow(tmp_path, monkeypatch):
     root = tmp_path / "project"
     root.mkdir()

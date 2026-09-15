@@ -68,7 +68,7 @@ def _req(rid: str, tool: str = "bash", risk: str = "destructive"):
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def tmp_db(monkeypatch):
     from backend.data.database import Database
 
@@ -82,7 +82,7 @@ def tmp_db(monkeypatch):
     db.close()
 
 
-@pytest.fixture
+@pytest.fixture()
 def gateway(tmp_db, monkeypatch):
     """网关 + 已注入 FakeGate 的全局闸口（自动恢复）"""
     import backend.services.permission_gate as pg

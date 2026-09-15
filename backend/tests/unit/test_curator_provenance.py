@@ -17,7 +17,7 @@ from backend.skills.review_service import ReviewService
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture
+@pytest.fixture()
 def tmp_db():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db = Database(f.name)
@@ -33,7 +33,7 @@ def _provider(text: str):
 
 
 class TestConsolidationTask:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_records_suggestions_to_audit(self, tmp_db, monkeypatch):
         """巡检产出建议 → consolidation_note 落台账"""
         import backend.skills.consolidator as cons_mod
@@ -62,7 +62,7 @@ class TestConsolidationTask:
         assert entries[0]["action"] == "consolidation_note"
         assert entries[0]["source"] == "consolidation_cron"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_no_provider_is_noop(self, tmp_db, monkeypatch):
         """LLM 未装配 → no-op 返回 0，不报错"""
         import backend.skills.consolidator as cons_mod
@@ -71,7 +71,7 @@ class TestConsolidationTask:
         task = SkillConsolidationTask(db=tmp_db)
         assert await task.run_async() == 0
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_pinned_passed_to_scan(self, tmp_db, monkeypatch):
         """pinned 名单透传给 scan（archive 建议剔除用）"""
         import backend.skills.consolidator as cons_mod

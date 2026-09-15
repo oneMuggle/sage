@@ -10,7 +10,7 @@ from backend.memory.manager import MemoryManager
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _reset_singleton():
     """每个测试前后重置单例，确保测试隔离。"""
     reset_memory_manager()

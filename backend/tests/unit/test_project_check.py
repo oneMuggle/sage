@@ -6,7 +6,7 @@ from httpx import ASGITransport, AsyncClient
 from backend.main import app
 
 
-@pytest.fixture
+@pytest.fixture()
 async def client():
     transport = ASGITransport(app=app)
     async with AsyncClient(
@@ -24,7 +24,7 @@ def _qs(path: str, intent: str) -> str:
 
 
 # 12. create + not exists + parent writable → ok
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_check_create_missing_path_parent_writable(client, tmp_path):
     target = tmp_path / "new-wiki"
     r = await client.get(_qs(str(target), "create"))
@@ -37,7 +37,7 @@ async def test_check_create_missing_path_parent_writable(client, tmp_path):
 
 
 # 13. create + not exists + parent not writable → error
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_check_create_missing_path_parent_not_writable(client, tmp_path, monkeypatch):
     target = "/proc/1/this-cannot-be-created/cannot"
     r = await client.get(_qs(target, "create"))
@@ -48,7 +48,7 @@ async def test_check_create_missing_path_parent_not_writable(client, tmp_path, m
 
 
 # 14. create + exists + has wiki/ → error "already a wiki project"
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_check_create_existing_wiki_returns_error(client, tmp_path):
     target = tmp_path / "existing-wiki"
     target.mkdir()
@@ -63,7 +63,7 @@ async def test_check_create_existing_wiki_returns_error(client, tmp_path):
 
 
 # 15. create + exists but is a file → error
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_check_create_path_is_file(client, tmp_path):
     f = tmp_path / "a-file"
     f.write_text("hello")
@@ -74,7 +74,7 @@ async def test_check_create_path_is_file(client, tmp_path):
 
 
 # 16. open + not exists → error
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_check_open_missing_path(client, tmp_path):
     target = tmp_path / "no-such"
     r = await client.get(_qs(str(target), "open"))
@@ -85,7 +85,7 @@ async def test_check_open_missing_path(client, tmp_path):
 
 
 # 17. open + not a directory → error
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_check_open_path_is_file(client, tmp_path):
     f = tmp_path / "f"
     f.write_text("x")
@@ -95,7 +95,7 @@ async def test_check_open_path_is_file(client, tmp_path):
 
 
 # 18. open + exists + no wiki/ → error
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_check_open_no_wiki_subdir(client, tmp_path):
     d = tmp_path / "not-a-wiki"
     d.mkdir()
@@ -108,7 +108,7 @@ async def test_check_open_no_wiki_subdir(client, tmp_path):
 
 
 # 19. open + exists + has wiki/ → ok
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_check_open_valid_wiki(client, tmp_path):
     d = tmp_path / "valid-wiki"
     d.mkdir()
@@ -122,14 +122,14 @@ async def test_check_open_valid_wiki(client, tmp_path):
 
 
 # 20. intent missing or invalid → 422
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_check_invalid_intent_returns_422(client, tmp_path):
     r = await client.get(f"/api/v1/wiki/project/check?path={tmp_path}&intent=bogus")
     assert r.status_code == 422
 
 
 # 21. path contains ~ → expanduser
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_check_expanduser(client, tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows expanduser 读 USERPROFILE

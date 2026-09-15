@@ -139,7 +139,7 @@ def test_eventhub_publish_works_inside_running_loop() -> None:
     asyncio.run(_go())
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_eventhub_publish_works_inside_pytest_asyncio_loop() -> None:
     """Async test path — pytest-asyncio owns the loop."""
     hub = EventHub()

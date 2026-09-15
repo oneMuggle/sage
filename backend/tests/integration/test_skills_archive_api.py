@@ -3,7 +3,7 @@
 import pytest
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_archive_and_unarchive_builtin(client, reset_skill_adapter):
     # 归档 builtin（允许，非破坏可逆）
     r = await client.post("/api/v1/skills/search/archive", json={"archived": True})
@@ -21,14 +21,14 @@ async def test_archive_and_unarchive_builtin(client, reset_skill_adapter):
     assert r2.json()["lifecycle"] != "archived"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_archive_unknown_skill_404(client, reset_skill_adapter):
     r = await client.post("/api/v1/skills/no-such/archive", json={"archived": True})
     assert r.status_code == 404
     assert r.json()["detail"]["type"] == "skill_not_found"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_archive_invalid_body_422(client, reset_skill_adapter):
     r = await client.post("/api/v1/skills/search/archive", json={"archived": "yes"})
     assert r.status_code == 422  # StrictBool 拒绝非布尔

@@ -24,7 +24,7 @@ from backend.tools.todo_tool import MAX_TODO_ITEMS, TodoWriteTool
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean_store():
     """每个测试前后清空全局 todo 存储，防跨测试泄漏。"""
     get_todo_store().clear()

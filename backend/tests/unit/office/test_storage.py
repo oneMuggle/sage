@@ -43,7 +43,7 @@ from backend.office.storage import (
 )
 
 
-@pytest.fixture
+@pytest.fixture()
 def workspace(fixture_dir: Path) -> Path:
     """Create a real workspace directory under tmp_path."""
     ws = fixture_dir / "workspace"
@@ -51,7 +51,7 @@ def workspace(fixture_dir: Path) -> Path:
     return ws
 
 
-@pytest.fixture
+@pytest.fixture()
 def db_conn() -> sqlite3.Connection:
     """In-memory SQLite connection with office_documents table created."""
     conn = sqlite3.connect(":memory:")

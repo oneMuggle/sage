@@ -15,7 +15,7 @@ from backend.gateway.telegram import TelegramConfig
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture
+@pytest.fixture()
 def tmp_db(monkeypatch):
     from backend.data.database import Database
 
@@ -29,7 +29,7 @@ def tmp_db(monkeypatch):
     db.close()
 
 
-@pytest.fixture
+@pytest.fixture()
 def client():
     app = FastAPI()
     app.include_router(gateway_router)

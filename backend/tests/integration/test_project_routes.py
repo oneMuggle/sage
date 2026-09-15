@@ -16,7 +16,7 @@ from backend.data.database import Database
 from backend.main import app
 
 
-@pytest.fixture
+@pytest.fixture()
 def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     test_db = Database(":memory:")
     test_db.init_db()
@@ -24,12 +24,12 @@ def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     return test_db
 
 
-@pytest.fixture
+@pytest.fixture()
 def conn(db: Database) -> sqlite3.Connection:
     return db.get_connection()
 
 
-@pytest.fixture
+@pytest.fixture()
 def project_dir(tmp_path: Path) -> Path:
     path = tmp_path / "demo-project"
     path.mkdir()
@@ -50,14 +50,14 @@ async def _register(client: httpx.AsyncClient, path: Path) -> dict:
     return response.json()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_list_projects_empty(client: httpx.AsyncClient) -> None:
     response = await client.get("/api/v1/projects")
     assert response.status_code == 200
     assert response.json() == {"projects": []}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_register_project_is_idempotent_by_path(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:
@@ -75,7 +75,7 @@ async def test_register_project_is_idempotent_by_path(
     assert listed[0]["last_session_id"] is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_register_rejects_missing_directory(
     client: httpx.AsyncClient, tmp_path: Path
 ) -> None:
@@ -86,7 +86,7 @@ async def test_register_rejects_missing_directory(
     assert response.json()["detail"]["code"] == "invalid_workspace_path"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_remove_project_then_404(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:
@@ -100,7 +100,7 @@ async def test_remove_project_then_404(
     assert again.json()["detail"]["code"] == "project_not_found"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_open_project_binds_session_and_reuses_it(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:
@@ -129,7 +129,7 @@ async def test_open_project_binds_session_and_reuses_it(
     assert listed[0]["last_session_id"] == session_id
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_project_sessions_listing(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:
@@ -143,7 +143,7 @@ async def test_project_sessions_listing(
     assert [s["id"] for s in sessions] == [session_id]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_open_project_with_missing_directory_returns_410(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:
@@ -159,7 +159,7 @@ async def test_open_project_with_missing_directory_returns_410(
     assert len(listed) == 1
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_remove_project_keeps_bound_sessions(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:

@@ -115,7 +115,7 @@ async def _wait_until(pred, timeout_s: float = 2.0) -> None:
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_registry_suspend_sets_state_and_enqueues_event():
     reg = StreamRegistry()
 
@@ -143,7 +143,7 @@ async def test_registry_suspend_sets_state_and_enqueues_event():
     assert events == ["thinking", "suspended", "SENTINEL"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_registry_suspend_unknown_or_finished_stream_returns_false():
     reg = StreamRegistry()
     assert await reg.suspend("nope") is False
@@ -162,7 +162,7 @@ async def test_registry_suspend_unknown_or_finished_stream_returns_false():
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_sleep_for_registers_timer_wake_with_fire_at_about_now_plus_seconds():
     store = WakeStore()
     events = RecordingEventAdapter()
@@ -183,7 +183,7 @@ async def test_sleep_for_registers_timer_wake_with_fire_at_about_now_plus_second
     assert ("sage_wakes_created_total", {"kind": "timer"}) in metrics.counters
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_sleep_until_accepts_iso_string_and_naive_datetime():
     store = WakeStore()
     service = _make_service(wake_store=store)
@@ -197,13 +197,13 @@ async def test_sleep_until_accepts_iso_string_and_naive_datetime():
     assert w2.fire_at == "2026-08-01T02:00:00+00:00"  # +08:00 → UTC
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_sleep_for_without_wake_store_is_noop():
     service = _make_service(wake_store=None)
     assert await service.sleep_for("sess-1", 30) is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_suspend_api_input_validation():
     service = _make_service(wake_store=WakeStore())
 
@@ -217,7 +217,7 @@ async def test_suspend_api_input_validation():
         await service.wake_on("s", "  ")
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_wake_on_registers_completion_wake():
     store = WakeStore()
     service = _make_service(wake_store=store)
@@ -234,7 +234,7 @@ async def test_wake_on_registers_completion_wake():
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_tick_resumes_due_wakes_and_marks_fired():
     store = WakeStore()
     wake = store.add_wake(Wake.create("sess-1", WakeKind.TIMER, fire_at=_past_iso()))
@@ -251,7 +251,7 @@ async def test_tick_resumes_due_wakes_and_marks_fired():
     assert store.get_due_wakes() == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_tick_skips_future_timer_wakes():
     store = WakeStore()
     store.add_wake(
@@ -266,7 +266,7 @@ async def test_tick_skips_future_timer_wakes():
     assert resumer.resumed == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_tick_resumer_error_is_isolated_and_wake_still_fired():
     store = WakeStore()
     bad = store.add_wake(Wake.create("s1", WakeKind.TIMER, fire_at=_past_iso(10)))
@@ -281,7 +281,7 @@ async def test_tick_resumer_error_is_isolated_and_wake_still_fired():
     assert store.get_wake(good.id).state is WakeState.FIRED
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_completion_wake_flow_via_complete_job():
     store = WakeStore()
     wake = store.add_wake(Wake.create("sess-1", WakeKind.COMPLETION, job_id="job-7"))
@@ -296,7 +296,7 @@ async def test_completion_wake_flow_via_complete_job():
     assert [w.id for w in resumer.resumed] == [wake.id]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_start_runs_catchup_then_stop_cancels_loop():
     store = WakeStore()
     store.add_wake(Wake.create("sess-1", WakeKind.TIMER, fire_at=_past_iso()))
@@ -320,7 +320,7 @@ async def test_start_runs_catchup_then_stop_cancels_loop():
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_end_to_end_suspend_then_wake_resumes_session():
     """模拟 producer 自挂起 + scheduler 唤醒的完整链路。"""
     store = WakeStore()

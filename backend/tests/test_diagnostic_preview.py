@@ -7,14 +7,14 @@ from backend.main import app  # 触发 include_router
 from backend.services.llm_trace.recorder import LlmTraceRecorder, TraceRecord
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean_recorder():
     LlmTraceRecorder.clear()
     yield
     LlmTraceRecorder.clear()
 
 
-@pytest.fixture
+@pytest.fixture()
 def client():
     # TestClient 触发 startup;若需要 SAGE_LOCAL_AUTH_TOKEN,fixture 注入
     return TestClient(app)

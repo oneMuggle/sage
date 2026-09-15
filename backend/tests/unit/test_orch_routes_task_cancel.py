@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from backend.data import database as db_mod
 
 
-@pytest.fixture
+@pytest.fixture()
 def client(tmp_path, monkeypatch):
     db = tmp_path / "test.db"
     monkeypatch.setenv("SAGE_DB_PATH", str(db))
@@ -25,7 +25,7 @@ def client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
-@pytest.fixture
+@pytest.fixture()
 def active_dispatcher():
     """往进程内注册表塞一个活动 dispatcher（含一个可跳过的 queued 任务）。"""
     from backend.orchestration.chat_dispatcher import (

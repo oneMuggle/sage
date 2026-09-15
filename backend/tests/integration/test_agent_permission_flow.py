@@ -34,7 +34,7 @@ from backend.tools.permissions import (
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _gate_lifecycle():
     """每个测试独立 gate, 防止跨测试挂起请求泄漏。"""
     reset_permission_gate()
@@ -72,7 +72,7 @@ def _agent_with_stub_tool(tool_calls, final_content: str = "执行完毕") -> tu
     return agent, mock_tool
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_prompt_mode_yields_permission_request_then_executes_on_approval():
     """PROMPT 模式: terminal 调用 → permission_request 事件 → 批准后执行 → DONE。"""
     # Arrange: settings 走真实路径 (permission_mode=prompt), gate 初始化
@@ -122,7 +122,7 @@ async def test_run_loop_prompt_mode_yields_permission_request_then_executes_on_a
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_denial_injects_error_tool_result_and_continues_to_done():
     """用户拒绝 → 注入 "权限拒绝" 错误结果, 工具不执行, 循环继续到 DONE。"""
     # Arrange
@@ -157,7 +157,7 @@ async def test_run_loop_denial_injects_error_tool_result_and_continues_to_done()
     assert failed == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_approval_timeout_defaults_to_deny_and_loop_continues():
     """无人应答 → 超时 default-deny, 循环不挂死, 继续到 DONE。"""
     # Arrange
@@ -182,7 +182,7 @@ async def test_run_loop_approval_timeout_defaults_to_deny_and_loop_continues():
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_without_gate_defaults_to_deny_without_hanging():
     """gate 未初始化 (get_permission_gate()=None) → default-deny, 不挂起。"""
     # Arrange
@@ -206,7 +206,7 @@ async def test_run_loop_without_gate_defaults_to_deny_without_hanging():
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_workspace_write_mode_executes_read_tools_without_prompt():
     """workspace_write 默认模式下 READ 工具直接执行, 不产生审批事件。"""
     # Arrange: 默认 settings (无 permission_mode → workspace_write)
@@ -237,7 +237,7 @@ async def test_run_loop_workspace_write_mode_executes_read_tools_without_prompt(
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_deny_rule_from_settings_blocks_tool_before_dispatch():
     """settings 里的 deny 规则在 run 起点装载 → 工具调用被拒且不触发审批。"""
     # Arrange
@@ -263,7 +263,7 @@ async def test_run_loop_deny_rule_from_settings_blocks_tool_before_dispatch():
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_destructive_command_escalates_even_under_full_access():
     """FULL_ACCESS + rm -rf / → 安全网升级为审批请求 (risk=destructive)。"""
     # Arrange

@@ -29,7 +29,7 @@ async def _drain(d: ChatDispatcher):
     d._run_subagent = fake_run
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_plan_matched_task_uses_plan_goal_agent(tmp_path, monkeypatch):
     """task_id 匹配计划 → goal/agent 以计划为准（覆盖 tool-passed 值）。"""
     plan = json.dumps(
@@ -55,7 +55,7 @@ async def test_plan_matched_task_uses_plan_goal_agent(tmp_path, monkeypatch):
     assert "ok" in out
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_unknown_task_id_falls_back_to_tool_values(tmp_path, monkeypatch):
     """未知 task_id（不在计划）→ 回退 tool-passed 值，允许动态加任务。"""
     plan = json.dumps({"tasks": [{"task_id": "t1", "agent_id": "writer", "goal": "G1"}], "reasoning": ""})
@@ -66,7 +66,7 @@ async def test_unknown_task_id_falls_back_to_tool_values(tmp_path, monkeypatch):
     assert d._states["t9"].agent_id == "researcher"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_missing_task_id_auto_assigns(tmp_path, monkeypatch):
     """缺 task_id（malformed/旧客户端）→ 自分配 t{next}，跳过计划已占编号。"""
     plan = json.dumps({"tasks": [{"task_id": "t1", "agent_id": "writer", "goal": "G1"}], "reasoning": ""})
@@ -81,7 +81,7 @@ async def test_missing_task_id_auto_assigns(tmp_path, monkeypatch):
     assert assigned == ["t2"]
     assert d._states["t1"].agent_id == "writer"  # 计划 t1 未被缺省分配覆盖
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_plan_by_id_built_once_at_first_dispatch(tmp_path, monkeypatch):
     """_plan_by_id 只建一次：首 dispatch 后缓存，后续复用（编辑在首派发前生效）。"""
     plan = json.dumps({"tasks": [{"task_id": "t1", "agent_id": "writer", "goal": "G1"}], "reasoning": ""})

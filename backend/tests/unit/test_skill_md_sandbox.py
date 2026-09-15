@@ -457,7 +457,7 @@ def test_adapter_handles_subprocess_exception(tmp_path):
     assert "spawn failed" in result.error
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_adapter_handles_stdin_broken_pipe_and_cleans_up(tmp_path):
     """stdin 写入 BrokenPipe 时返回失败结果并清理进程。"""
     adapter = SubprocessSandboxAdapter()
@@ -488,7 +488,7 @@ async def test_adapter_handles_stdin_broken_pipe_and_cleans_up(tmp_path):
     terminate.assert_awaited_once_with(process)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_adapter_handles_collection_exception_and_cleans_up(tmp_path):
     """输出收集阶段的通用异常也应返回失败结果并清理进程。"""
     adapter = SubprocessSandboxAdapter()
@@ -520,7 +520,7 @@ async def test_adapter_handles_collection_exception_and_cleans_up(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_windows_termination_uses_taskkill_tree_without_shell():
     """Windows 清理使用 taskkill /T /F，且不经过 shell。"""
     adapter = SubprocessSandboxAdapter()
@@ -553,7 +553,7 @@ async def test_windows_termination_uses_taskkill_tree_without_shell():
     process.wait.assert_awaited_once_with()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_windows_taskkill_failure_falls_back_and_reaps_process():
     """taskkill 不可用或失败时仍直接终止并回收子进程。"""
     adapter = SubprocessSandboxAdapter()
@@ -579,7 +579,7 @@ async def test_windows_taskkill_failure_falls_back_and_reaps_process():
     process.wait.assert_awaited_once_with()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @pytest.mark.parametrize(
     "collection_result",
     [
@@ -618,7 +618,7 @@ async def test_windows_failure_paths_clean_up_process_tree(tmp_path, collection_
     cleanup.assert_awaited_once_with(process)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_adapter_enforces_combined_stdout_stderr_limit(tmp_path):
     """stdout and stderr share one output budget."""
     adapter = SubprocessSandboxAdapter(max_output_bytes=10)
@@ -635,7 +635,7 @@ async def test_adapter_enforces_combined_stdout_stderr_limit(tmp_path):
     assert len(result.stdout.encode()) + len(result.stderr.encode()) <= 10
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_adapter_rejects_oversized_stdin_without_spawning(tmp_path):
     """stdin is rejected before a child can receive an unbounded payload."""
     adapter = SubprocessSandboxAdapter()
@@ -650,7 +650,7 @@ async def test_adapter_rejects_oversized_stdin_without_spawning(tmp_path):
     assert "stdin" in result.error
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_adapter_bounds_nonstandard_communicate_fallback(tmp_path):
     """Fallback communicate results are capped across both returned streams."""
     adapter = SubprocessSandboxAdapter(max_output_bytes=5)
@@ -674,7 +674,7 @@ async def test_adapter_bounds_nonstandard_communicate_fallback(tmp_path):
     assert len(result.stdout.encode()) + len(result.stderr.encode()) <= 5
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_adapter_real_subprocess_success(tmp_path):
     """真实 subprocess: 执行简单 print 脚本。"""
     adapter = SubprocessSandboxAdapter()
@@ -689,7 +689,7 @@ async def test_adapter_real_subprocess_success(tmp_path):
     assert "hello world" in result.stdout
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_adapter_real_subprocess_failure(tmp_path):
     """真实 subprocess: 执行抛异常的脚本。"""
     adapter = SubprocessSandboxAdapter()
@@ -703,7 +703,7 @@ async def test_adapter_real_subprocess_failure(tmp_path):
     assert result.exit_code == 2
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_adapter_real_subprocess_with_args(tmp_path):
     """真实 subprocess: 传递参数。"""
     adapter = SubprocessSandboxAdapter()
@@ -723,7 +723,7 @@ async def test_adapter_real_subprocess_with_args(tmp_path):
     assert "hello world" in result.stdout
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_adapter_real_subprocess_stdin(tmp_path):
     """真实 subprocess: 传递 stdin。"""
     adapter = SubprocessSandboxAdapter()
@@ -743,7 +743,7 @@ async def test_adapter_real_subprocess_stdin(tmp_path):
     assert "got: hello stdin" in result.stdout
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_adapter_real_subprocess_env_filter(tmp_path):
     """真实 subprocess: 敏感环境变量被过滤。"""
     adapter = SubprocessSandboxAdapter()

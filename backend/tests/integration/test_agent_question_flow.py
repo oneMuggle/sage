@@ -31,7 +31,7 @@ from backend.tools.ask_user_tool import UNANSWERED_RESULT_TEXT
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _gate_lifecycle():
     """每个测试独立 gate, 防止跨测试挂起请求泄漏。"""
     reset_question_gate()

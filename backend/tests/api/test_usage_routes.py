@@ -11,14 +11,14 @@ from backend.services.usage_tracker import usage_tracker
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _reset_tracker():
     usage_tracker.reset()
     yield
     usage_tracker.reset()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_usage_summary_contract_empty(client):
     resp = await client.get("/api/v1/usage")
     assert resp.status_code == 200
@@ -40,7 +40,7 @@ async def test_usage_summary_contract_empty(client):
     assert body["today"]["requests"] == 0
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_usage_summary_reflects_records(client):
     usage_tracker.record("gpt-4o", 100, 40)
     usage_tracker.record("unknown-model", 10, 2)

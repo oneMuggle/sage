@@ -13,7 +13,7 @@ from backend.cli.checks.backend_health import BackendHealthCheck
 from backend.cli.doctor import Severity
 
 
-@pytest.fixture
+@pytest.fixture()
 def check():
     return BackendHealthCheck()
 

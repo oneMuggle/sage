@@ -14,7 +14,7 @@ from backend.cli.checks.heavy_deps import (
 from backend.cli.doctor import Severity
 
 
-@pytest.fixture
+@pytest.fixture()
 def check():
     return HeavyDepsCheck()
 

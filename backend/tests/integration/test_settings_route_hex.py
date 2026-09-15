@@ -19,7 +19,7 @@ _HEX_ONLY = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean():
     repo = SettingsRepository()
     conn = repo.db.get_connection()
@@ -39,7 +39,7 @@ def _clean():
         app.dependency_overrides[get_chat_service] = saved
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_put_invalid_settings_uses_safe_structured_error_and_log(client, caplog):
     """Hex settings validation does not echo protocol/path values."""
@@ -69,7 +69,7 @@ async def test_hex_put_invalid_settings_uses_safe_structured_error_and_log(clien
     assert local_path not in logs
     assert "error_type=invalid_settings_payload" in logs
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_put_settings_prevalidation_error_is_fixed_and_non_echoing(client):
     """Pydantic failures on hex /settings never expose submitted values."""
@@ -93,7 +93,7 @@ async def test_hex_put_settings_prevalidation_error_is_fixed_and_non_echoing(cli
         assert path not in response.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_other_validation_routes_keep_fastapi_default_handler(client):
     """The scoped handler must not rewrite validation errors elsewhere."""
@@ -103,7 +103,7 @@ async def test_hex_other_validation_routes_keep_fastapi_default_handler(client):
     assert response.json()["detail"][0]["type"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 @pytest.mark.parametrize(
     "dirty_settings",
@@ -137,7 +137,7 @@ async def test_hex_put_rejects_scalar_persisted_settings_containers_without_500(
     assert "/private/synthetic/path" not in resp.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_put_with_unknown_field_rejected(client):
     """hex_routes 通过 Pydantic extra=forbid 拒收白名单外字段。"""
@@ -149,7 +149,7 @@ async def test_hex_put_with_unknown_field_rejected(client):
     assert "foo" not in resp.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_put_survives_legacy_residue_and_cleans_db(client):
     """existing 里残留前端已删字段 (compactMode/proxyMode 等) → hex PUT 不再
@@ -176,7 +176,7 @@ async def test_hex_put_survives_legacy_residue_and_cleans_db(client):
     assert "compactMode" not in stored
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 @pytest.mark.parametrize(
     "scalar_value",
@@ -209,7 +209,7 @@ async def test_hex_get_preference_scalar_app_settings_returns_safe_object(scalar
     assert "api-token-secret" not in resp.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_hex_put_preference_app_settings_redacts_variants_and_preserves_storage(client):
     payload = {
@@ -242,7 +242,7 @@ async def test_hex_put_preference_app_settings_redacts_variants_and_preserves_st
     assert SettingsRepository().get_json("app_settings") == payload
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 @pytest.mark.parametrize("invalid_value", ["not-json", "[]", "null", '"scalar"', "42"])
 async def test_hex_put_preference_app_settings_rejects_invalid_json_without_overwrite(

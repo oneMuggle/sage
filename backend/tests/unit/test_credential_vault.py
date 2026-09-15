@@ -39,7 +39,7 @@ from backend.tools.web_tool import WebFetchTool
 pytestmark = [pytest.mark.unit]
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _no_http_sleep(monkeypatch):
     """B2/AB5 重试退避不真睡。"""
     from backend.tools import http_factory
@@ -54,7 +54,7 @@ _COOKIES = [
 ]
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _force_test_secret_scheme(monkeypatch):
     """enc: 加解密走确定性 test 方案（base64），保证 CI 可复现。"""
     monkeypatch.setenv("SAGE_SECRET_SCHEME", "test")
@@ -73,7 +73,7 @@ class _MemRepo:
         self.data[key] = value
 
 
-@pytest.fixture
+@pytest.fixture()
 def repo():
     return _MemRepo()
 

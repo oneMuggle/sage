@@ -26,7 +26,7 @@ pytestmark = [pytest.mark.unit]
 _BASE = "https://mirror.example.internal"
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def sleep_calls(monkeypatch):
     """重试退避不真睡；记录等待秒数供断言。"""
     waits = []

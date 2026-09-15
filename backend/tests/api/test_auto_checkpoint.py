@@ -20,7 +20,7 @@ from backend.data.settings_repo import SettingsRepository
 from backend.office.session_workspace import bind_session_workspace
 
 
-@pytest.fixture
+@pytest.fixture()
 def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     test_db = Database(":memory:")
     test_db.init_db()
@@ -28,7 +28,7 @@ def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     return test_db
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def isolated_user_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = tmp_path / "sage-user-data"
     monkeypatch.setenv("SAGE_USER_DATA_DIR", str(root))

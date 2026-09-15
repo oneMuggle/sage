@@ -10,7 +10,7 @@ import pytest
 from backend.services.theme_storage import ThemeStorage, _default_storage_dir
 
 
-@pytest.fixture
+@pytest.fixture()
 def storage(tmp_path: Path) -> ThemeStorage:
     """使用临时目录作为存储根"""
     return ThemeStorage(storage_dir=tmp_path)
@@ -46,7 +46,7 @@ class TestThemeStorageDefaultDir:
         assert s._dir == tmp_path
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_payload() -> dict:
     return {
         "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",

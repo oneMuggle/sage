@@ -25,7 +25,7 @@ from backend.office.workspace_search import (
 )
 
 
-@pytest.fixture
+@pytest.fixture()
 def conn() -> sqlite3.Connection:
     db = Database(":memory:")
     db.init_db()
@@ -38,14 +38,14 @@ def conn() -> sqlite3.Connection:
     return connection
 
 
-@pytest.fixture
+@pytest.fixture()
 def workspace(tmp_path: Path) -> Path:
     path = tmp_path / "workspace"
     path.mkdir()
     return path
 
 
-@pytest.fixture
+@pytest.fixture()
 def binding(conn: sqlite3.Connection, workspace: Path):
     return bind_session_workspace(conn, "session-a", str(workspace), now_ms=1)
 

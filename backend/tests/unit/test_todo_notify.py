@@ -27,7 +27,7 @@ from backend.tools.todo_tool import TodoWriteTool
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean():
     get_todo_store().clear()
     yield

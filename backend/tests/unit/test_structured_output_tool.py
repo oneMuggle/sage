@@ -23,7 +23,7 @@ from backend.tools.structured_output_tool import (
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean_store():
     """复位会话存储，防跨测试泄漏。"""
     so_module._structured_output_store.clear()

@@ -53,7 +53,7 @@ class TestLedger:
 
 
 class TestRoutes:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_preset_roundtrip(self, client):
         r = await client.get("/api/v1/permissions/preset")
         assert r.status_code == 200
@@ -70,7 +70,7 @@ class TestRoutes:
         r4 = await client.post("/api/v1/permissions/preset", json={"preset": "bogus"})
         assert r4.status_code == 400
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_preset_custom_mode(self, client):
         from backend.data.settings_repo import SettingsRepository
 
@@ -79,7 +79,7 @@ class TestRoutes:
         assert r.json()["custom"] is True
         assert r.json()["mode"] == "read_only"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_preset_origin_guard(self, client):
         r = await client.post(
             "/api/v1/permissions/preset",
@@ -88,7 +88,7 @@ class TestRoutes:
         )
         assert r.status_code == 403
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_session_auto_approvals(self, client):
         led = get_auto_approval_ledger()
         led.record(session_id="s9", tool_name="read_file", capability="read", mode="workspace_write", reason="只读")

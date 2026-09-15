@@ -116,7 +116,7 @@ def test_list_directory_accepts_empty_path_as_project_root(tmp_path):
     assert listing[0]["is_dir"] is True
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_file_handlers_keep_legal_relative_functionality(tmp_path, monkeypatch):
     root = tmp_path / "project"
     root.mkdir()
@@ -128,7 +128,7 @@ async def test_file_handlers_keep_legal_relative_functionality(tmp_path, monkeyp
     assert await delete_file("wiki/renamed.md", str(root)) == {"success": True}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_file_handlers_reject_symlinked_destination_without_touching_outside(tmp_path, monkeypatch):
     root = tmp_path / "project"
     root.mkdir()
@@ -143,7 +143,7 @@ async def test_file_handlers_reject_symlinked_destination_without_touching_outsi
     assert not (outside / "evil.md").exists()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_file_handlers_reject_symlink_delete_and_rename_without_touching_outside(tmp_path, monkeypatch):
     root = tmp_path / "project"
     root.mkdir()
@@ -166,7 +166,7 @@ async def test_file_handlers_reject_symlink_delete_and_rename_without_touching_o
     assert outside_file.exists()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_clip_rejects_raw_sources_symlink_without_creating_outside_file(tmp_path, monkeypatch):
     root = tmp_path / "project"
     root.mkdir()
@@ -187,7 +187,7 @@ async def test_clip_rejects_raw_sources_symlink_without_creating_outside_file(tm
     assert list(outside.iterdir()) == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_file_handlers_reject_escape_without_mutating_outside(tmp_path, monkeypatch):
     root = tmp_path / "project"
     root.mkdir()

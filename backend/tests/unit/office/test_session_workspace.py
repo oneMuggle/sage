@@ -56,7 +56,7 @@ from backend.office.workspace_errors import (
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
+@pytest.fixture()
 def work_a(fixture_dir: Path) -> Path:
     """Workspace A: real directory under tmp_path."""
     ws = fixture_dir / "work-a"
@@ -64,7 +64,7 @@ def work_a(fixture_dir: Path) -> Path:
     return ws
 
 
-@pytest.fixture
+@pytest.fixture()
 def work_b(fixture_dir: Path) -> Path:
     """Workspace B: real directory under tmp_path."""
     ws = fixture_dir / "work-b"
@@ -72,7 +72,7 @@ def work_b(fixture_dir: Path) -> Path:
     return ws
 
 
-@pytest.fixture
+@pytest.fixture()
 def conn() -> sqlite3.Connection:
     """In-memory SQLite with sessions + office_documents + session_workspace_bindings tables."""
     db = Database(":memory:")

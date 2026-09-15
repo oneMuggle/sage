@@ -93,7 +93,7 @@ def _make_wiki_project(tmp_path: Path) -> Tuple[Path, Path]:
     return project, source
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_copy_to_raw_writes_legal_source(tmp_path):
     project = tmp_path / "project"
     source = tmp_path / "input.md"
@@ -119,7 +119,7 @@ def test_copy_to_raw_windows_fails_closed_without_no_follow(tmp_path, monkeypatc
     assert not dest.exists()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_copy_to_raw_preserves_existing_regular_file(tmp_path):
     project = tmp_path / "project"
     source = tmp_path / "input.md"
@@ -136,7 +136,7 @@ async def test_copy_to_raw_preserves_existing_regular_file(tmp_path):
     assert target.read_bytes() == b"existing"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_copy_to_raw_with_source_content_accepts_identical_existing_file(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
@@ -153,7 +153,7 @@ async def test_copy_to_raw_with_source_content_accepts_identical_existing_file(t
     assert target.read_bytes() == b"same"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_copy_to_raw_with_source_content_rejects_conflicting_existing_file(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
@@ -173,7 +173,7 @@ async def test_copy_to_raw_with_source_content_rejects_conflicting_existing_file
     assert target.read_bytes() == b"old"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_copy_to_raw_rejects_broken_symlink(tmp_path):
     project = tmp_path / "project"
     source = tmp_path / "input.md"
@@ -187,7 +187,7 @@ async def test_copy_to_raw_rejects_broken_symlink(tmp_path):
         await copy_to_raw(project, source)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_copy_to_raw_does_not_follow_replaced_target(tmp_path):
     project = tmp_path / "project"
     source = tmp_path / "input.md"
@@ -219,7 +219,7 @@ def test_cache_identity_uses_raw_bytes_not_decoded_text(tmp_path):
     assert _compute_source_sha256(b"a\xffb") != _compute_source_sha256(b"a\xfeb")
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_ingest_stream_uses_logical_name_for_snapshot_path(tmp_path):
     project, source = _make_wiki_project(tmp_path)
     snapshot = project / ".llm-wiki" / ".tmp-random-name.md"
@@ -247,7 +247,7 @@ async def test_ingest_stream_uses_logical_name_for_snapshot_path(tmp_path):
     assert events[-1]["data"]["stage"] == "completed"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_ingest_stream_rejects_oversized_source_before_raw_copy(tmp_path):
     from backend.wiki.extract import MAX_FILE_BYTES
 
@@ -269,7 +269,7 @@ async def test_ingest_stream_rejects_oversized_source_before_raw_copy(tmp_path):
     assert (project / "raw").exists() is False
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_ingest_stream_emits_progress_in_order(tmp_path):
     """Happy path: stream yields 6+ progress events in expected stage order."""
     project, source = _make_wiki_project(tmp_path)
@@ -310,7 +310,7 @@ async def test_ingest_stream_emits_progress_in_order(tmp_path):
     assert "raw/sources/doc.md" in cache_data
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_ingest_stream_ndjson_bytes_format(tmp_path):
     """NDJSON 字节流: 每行 UTF-8 + ``\\n`` 终止 + 可独立 JSON 解析。"""
     project, source = _make_wiki_project(tmp_path)
@@ -332,7 +332,7 @@ async def test_ingest_stream_ndjson_bytes_format(tmp_path):
         assert "percent" in parsed["data"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_ingest_stream_stage_labels_match_widget(tmp_path):
     """Stages 集合必须匹配 ``WikiIngestProgress.tsx::STAGE_LABELS`` 键集合(除 'unknown')。
 
@@ -359,7 +359,7 @@ async def test_ingest_stream_stage_labels_match_widget(tmp_path):
     assert stages == expected, f"stage set mismatch: got {stages}, expected {expected}"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_ingest_stream_cache_hit_short_circuits(tmp_path):
     """缓存命中: 在 cache 命中后直接 emit ``completed`` 并 return, 不调用 LLM。"""
     project, source = _make_wiki_project(tmp_path)
@@ -417,7 +417,7 @@ async def test_ingest_stream_cache_hit_short_circuits(tmp_path):
     assert call_count["n"] == 0, "LLM should NOT be called on cache hit"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_ingest_stream_exception_yields_failed_then_reraises(tmp_path):
     """异常路径: yield ``failed`` event (percent=0), 然后 re-raise 给 FastAPI 关流。"""
     project, source = _make_wiki_project(tmp_path)

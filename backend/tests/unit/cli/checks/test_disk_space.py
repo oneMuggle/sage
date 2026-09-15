@@ -15,7 +15,7 @@ from backend.cli.checks.disk_space import (
 from backend.cli.doctor import Severity
 
 
-@pytest.fixture
+@pytest.fixture()
 def check():
     return DiskSpaceCheck()
 

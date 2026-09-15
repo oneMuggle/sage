@@ -16,7 +16,7 @@ from backend.core.legacy.llm_client import LLMClient, LLMConfig
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture
+@pytest.fixture()
 def client():
     return LLMClient(
         LLMConfig(
@@ -28,7 +28,7 @@ def client():
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_401_raises_auth_failed(client):
     """HTTP 401 应映射为 AUTH_FAILED。"""
     mock_response = AsyncMock()
@@ -51,7 +51,7 @@ async def test_401_raises_auth_failed(client):
         assert exc_info.value.status_code == 401
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_429_raises_rate_limited(client):
     """HTTP 429 应映射为 RATE_LIMITED。"""
     mock_response = AsyncMock()
@@ -73,7 +73,7 @@ async def test_429_raises_rate_limited(client):
         assert exc_info.value.retry_after == 60
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_500_raises_server_error(client):
     """HTTP 5xx 应映射为 SERVER_ERROR。"""
     mock_response = AsyncMock()
@@ -94,7 +94,7 @@ async def test_500_raises_server_error(client):
         assert exc_info.value.status_code == 500
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_timeout_raises_timeout_error(client):
     """httpx.TimeoutException 应映射为 TIMEOUT。"""
     with patch.object(client, "_get_client") as mock_get_client:
@@ -107,7 +107,7 @@ async def test_timeout_raises_timeout_error(client):
         assert exc_info.value.type == LLMErrorType.TIMEOUT
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_connect_error_raises_network_error(client):
     """httpx.ConnectError 应映射为 NETWORK。"""
     with patch.object(client, "_get_client") as mock_get_client:
@@ -120,7 +120,7 @@ async def test_connect_error_raises_network_error(client):
         assert exc_info.value.type == LLMErrorType.NETWORK
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_parsing_error_raises_parsing_error_type(client):
     """响应 JSON 解析失败时映射为 PARSING。"""
     import json
@@ -142,7 +142,7 @@ async def test_parsing_error_raises_parsing_error_type(client):
         assert exc_info.value.type == LLMErrorType.PARSING
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_empty_choices_raises_parsing_error(client):
     """choices 为空时应映射为 PARSING。"""
     mock_response = AsyncMock()
@@ -173,7 +173,7 @@ def _http_error_response(status_code: int, text: str):
     return mock_response
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @pytest.mark.parametrize(
     ("status_code", "body"),
     [
@@ -202,7 +202,7 @@ async def test_context_overflow_classified(client, status_code, body):
         assert exc_info.value.status_code == status_code
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_bad_request_without_overflow_markers_stays_unknown(client):
     """不命中特征串的 400 维持 UNKNOWN（避免把参数错误误标成溢出）。"""
     mock_response = _http_error_response(400, "Invalid parameter: temperature=99")

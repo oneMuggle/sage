@@ -185,7 +185,7 @@ import pytest
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_sqlite_adapter_uses_to_thread():
     """验证 SqliteStorageAdapter 7 个方法都通过 asyncio.to_thread 调度。"""
     adapter = SqliteStorageAdapter()
@@ -229,7 +229,7 @@ async def test_sqlite_adapter_uses_to_thread():
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_to_thread_actually_offloads_to_worker():
     """验证 adapter 方法真的在 worker 线程跑,不在主事件循环线程跑。"""
     main_thread_id = threading.get_ident()
@@ -252,7 +252,7 @@ async def test_to_thread_actually_offloads_to_worker():
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_concurrent_writes_are_serialized_by_lock():
     """N=20 并发 create_session,实际执行时间不重叠(锁串行)。
 
@@ -287,7 +287,7 @@ async def test_concurrent_writes_are_serialized_by_lock():
         )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_memory_adapter_concurrent_creates_no_duplicate_ids():
     """HIGH fix regression: 10 并发 create_session 必须返回 10 个唯一 ID。
 
@@ -304,7 +304,7 @@ async def test_memory_adapter_concurrent_creates_no_duplicate_ids():
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_to_thread_propagates_sync_exceptions():
     """_sync_X 抛异常,await to_thread 同样抛(行为与原版一致)。"""
     adapter = SqliteStorageAdapter()
@@ -330,7 +330,7 @@ def _make_message(role: str, content: str) -> Any:
 # ============================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_memory_adapter_uses_to_thread():
     """验证 MemoryStorageAdapter 7 个方法都通过 asyncio.to_thread(无锁)。"""
     adapter = MemoryStorageAdapter()
@@ -370,7 +370,7 @@ async def test_memory_adapter_uses_to_thread():
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_memory_adapter_offloads_to_worker_no_lock():
     """MemoryStorageAdapter 包 to_thread 但无锁,并发执行,所有 thread_id != 主线程。"""
     main_thread_id = threading.get_ident()

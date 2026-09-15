@@ -8,7 +8,7 @@ from httpx import ASGITransport, AsyncClient
 pytestmark = [pytest.mark.integration]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_upload_audio_attachment(tmp_path, monkeypatch):
     """POST /api/v1/chat/attachments 上传音频文件"""
     monkeypatch.setattr("backend.api.chat_attachment_routes.MEDIA_ROOT", tmp_path)
@@ -29,7 +29,7 @@ async def test_upload_audio_attachment(tmp_path, monkeypatch):
     assert "media_ref" in data
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_upload_too_large(tmp_path, monkeypatch):
     """超过 25MB 上限应返回错误"""
     from backend.api.chat_attachment_routes import MAX_ATTACHMENT_SIZE, router
@@ -49,7 +49,7 @@ async def test_upload_too_large(tmp_path, monkeypatch):
     assert "error" in data
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_upload_unsupported_type(tmp_path, monkeypatch):
     """不支持的文件类型应返回错误"""
     monkeypatch.setattr("backend.api.chat_attachment_routes.MEDIA_ROOT", tmp_path)

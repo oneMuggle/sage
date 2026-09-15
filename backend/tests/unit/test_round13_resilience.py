@@ -38,7 +38,7 @@ def _inject_plan(dispatcher, items):
     dispatcher._plan_loaded = True
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_same_batch_retry_survives_cascade(tmp_path, monkeypatch):
     """同批 [源失败, 重派(depends_on 源)] → 重派剥离依赖独立执行，不被级联判死。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -111,7 +111,7 @@ def test_retry_dep_stripped_only_for_retry_source(tmp_path, monkeypatch):
     assert deps == ["t0"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_collect_wait_false_returns_snapshot(tmp_path, monkeypatch):
     """wait=false → 非阻塞快照：running 态 + 任务明细；完成后 completed。"""
     _init_tmp_db(tmp_path, monkeypatch)

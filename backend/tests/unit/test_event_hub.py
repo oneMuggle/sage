@@ -10,7 +10,7 @@ from backend.domain.orch_events import RunEventType, make_event
 from backend.orchestration.event_hub import EventHub
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_publish_assigns_monotonic_seq_per_run_and_subscriber_receives() -> None:
     hub = EventHub(history_size=10)
     subscription = await hub.subscribe("run-1")
@@ -31,7 +31,7 @@ async def test_publish_assigns_monotonic_seq_per_run_and_subscriber_receives() -
     await subscription.close()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_subscribe_after_seq_replays_history_then_live_events() -> None:
     hub = EventHub(history_size=10)
     for _ in range(4):
@@ -48,7 +48,7 @@ async def test_subscribe_after_seq_replays_history_then_live_events() -> None:
     await subscription.close()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_slow_subscriber_does_not_block_other_subscriber() -> None:
     hub = EventHub(history_size=10, subscriber_queue_size=1)
     slow = await hub.subscribe("run-1")
@@ -64,7 +64,7 @@ async def test_slow_subscriber_does_not_block_other_subscriber() -> None:
     await fast.close()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_publish_calls_event_applier() -> None:
     applied = []
 
@@ -79,7 +79,7 @@ async def test_publish_calls_event_applier() -> None:
     assert applied == [published]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_publish_restores_sequence_from_repository() -> None:
     class Repository:
         def __init__(self) -> None:

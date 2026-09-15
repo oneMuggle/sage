@@ -24,7 +24,7 @@ FIXTURE_DIR = (
 )
 
 
-@pytest.fixture
+@pytest.fixture()
 def workspace(tmp_path: Path) -> Path:
     (tmp_path / "office" / "journal" / "specs").mkdir(parents=True)
     (tmp_path / "office" / "journal" / "cache").mkdir(parents=True)

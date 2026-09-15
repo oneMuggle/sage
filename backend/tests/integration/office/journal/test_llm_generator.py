@@ -31,7 +31,7 @@ class MockLLMProxy:
         return self._responses.pop(0)
 
 
-@pytest.fixture
+@pytest.fixture()
 def workspace(tmp_path: Path) -> Path:
     (tmp_path / "office" / "journal" / "specs").mkdir(parents=True)
     (tmp_path / "office" / "journal" / "cache").mkdir(parents=True)
@@ -39,7 +39,7 @@ def workspace(tmp_path: Path) -> Path:
     return tmp_path
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_generate_article_one_round_passes(workspace):
     spec = parse_journal_spec(FIXTURE_DIR / "simple_chinese_template.docx")
     content_round1 = {
@@ -63,7 +63,7 @@ async def test_generate_article_one_round_passes(workspace):
     assert Path(rec.output_path).exists()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_generate_article_two_rounds_with_self_correction(workspace):
     """Round 1 缺 '关键词' → validator 报 warning；Round 2 补全。"""
     spec = parse_journal_spec(FIXTURE_DIR / "simple_chinese_template.docx")
@@ -94,7 +94,7 @@ async def test_generate_article_two_rounds_with_self_correction(workspace):
     assert len(mock.calls) == 2  # 跑了两轮
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_generate_article_structured_references_formatted(workspace):
     """Round 25：LLM 返回 structured_references → 参考文献 [N] 格式化。"""
     spec = parse_journal_spec(FIXTURE_DIR / "simple_chinese_template.docx")
@@ -135,7 +135,7 @@ async def test_generate_article_structured_references_formatted(workspace):
     assert "[1] 王五, 赵六. 大模型对齐研究[J]. 人工智能学报, 2021, 44(3): 55-66." in joined
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_generate_article_sanitizes_structured_references(workspace):
     """Round 30：次品条目剔除（缺 title/ref_type 非法），合法条目保留；
     key 重复自动补唯一后缀。"""
@@ -184,7 +184,7 @@ async def test_generate_article_sanitizes_structured_references(workspace):
     assert "bad1" not in joined
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_generate_article_all_bad_refs_falls_back(workspace):
     """全为次品条目 → structured_references 清空，纯文本回退，生成不失败。"""
     spec = parse_journal_spec(FIXTURE_DIR / "simple_chinese_template.docx")

@@ -69,7 +69,7 @@ async def _drive_stream(client, session_id: str, message: str, extra: Optional[d
             await entry.task
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_auto_compaction_before_chat_run_loop(client, monkeypatch):
     """超阈值会话发消息 → 历史被压缩 + 续接标记 + 本轮 user/assistant 都在。"""
     monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "100")
@@ -106,7 +106,7 @@ async def test_auto_compaction_before_chat_run_loop(client, monkeypatch):
     assert sess.message_count == 9
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_auto_compaction_failure_never_blocks_chat(client, monkeypatch):
     """摘要 LLM 爆炸 → 聊天照常完成, 历史保持未压缩。"""
     monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "100")
@@ -137,7 +137,7 @@ async def test_auto_compaction_failure_never_blocks_chat(client, monkeypatch):
     assert "还要聊" in contents
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_auto_compaction_prefers_request_llm_config(client, monkeypatch):
     """LOW: 请求自带 api_key/api_url → 自动压缩走该配置组装的 LLMClient。
 

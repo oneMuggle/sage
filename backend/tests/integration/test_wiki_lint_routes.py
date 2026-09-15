@@ -10,7 +10,7 @@ from backend.api import wiki_routes
 from backend.api.wiki_routes import lint
 
 
-@pytest.fixture
+@pytest.fixture()
 def project_root(tmp_path: Path) -> Path:
     """创建临时 Wiki 项目。"""
     project = tmp_path / "wiki-project"
@@ -19,7 +19,7 @@ def project_root(tmp_path: Path) -> Path:
     return project
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _patch_auth(monkeypatch, project_root: Path):
     """绕过项目授权。"""
     monkeypatch.setattr(

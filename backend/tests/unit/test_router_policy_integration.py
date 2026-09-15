@@ -93,7 +93,7 @@ class TestBackwardsCompatibility:
 
 
 class TestDispatchWithPolicy:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_no_policy_engine_falls_back_to_route_task(self):
         r = _make_router(with_policy=False)
         ctx = PolicyContext(lane_id="lane-1", task_id="task-1")
@@ -101,7 +101,7 @@ class TestDispatchWithPolicy:
         assert decision is not None
         assert events == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_with_policy_engine_emits_no_events_for_clean_context(self):
         r = _make_router(with_policy=True)
         ctx = PolicyContext(lane_id="lane-1", task_id="task-1")
@@ -109,7 +109,7 @@ class TestDispatchWithPolicy:
         assert decision is not None
         assert events == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_with_policy_engine_emits_retry_event_on_test_failure(self):
         r = _make_router(with_policy=True)
         ctx = PolicyContext(lane_id="lane-1", task_id="task-1", failure_class="Test", attempt=1)
@@ -125,7 +125,7 @@ class TestDispatchWithPolicy:
 
 
 class TestTryDispatchPrivileged:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_no_token_store_denies_approval_actions(self):
         r = _make_router(with_policy=True, with_token_store=False)
         ctx = PolicyContext(lane_id="lane-1", task_id="task-1", force_push=True, branch="feat/x")
@@ -136,7 +136,7 @@ class TestTryDispatchPrivileged:
         assert deny_reason is not None
         assert "token_store" in deny_reason.lower() or "approval" in deny_reason.lower()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_clean_context_dispatches_normally(self):
         r = _make_router(with_policy=True, with_token_store=True)
         ctx = PolicyContext(lane_id="lane-1", task_id="task-1")
@@ -146,7 +146,7 @@ class TestTryDispatchPrivileged:
         assert deny_reason is None
         assert decision is not None
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_force_push_without_token_denied(self):
         r = _make_router(with_policy=True, with_token_store=True)
         ctx = PolicyContext(lane_id="lane-1", task_id="task-1", force_push=True, branch="feat/x")
@@ -156,7 +156,7 @@ class TestTryDispatchPrivileged:
         assert decision is None
         assert deny_reason is not None
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_force_push_with_valid_token_granted(self):
         r = _make_router(with_policy=True, with_token_store=True)
         ctx = PolicyContext(
@@ -182,7 +182,7 @@ class TestTryDispatchPrivileged:
         # Token must be consumed.
         assert token.consumed_count == 1
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_force_push_with_invalid_token_denied(self):
         r = _make_router(with_policy=True, with_token_store=True)
         ctx = PolicyContext(
@@ -208,7 +208,7 @@ class TestTryDispatchPrivileged:
         assert deny_reason is not None
         assert token.consumed_count == 0  # not consumed
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_cross_branch_merge_without_token_denied(self):
         r = _make_router(with_policy=True, with_token_store=True)
         ctx = PolicyContext(
@@ -225,7 +225,7 @@ class TestTryDispatchPrivileged:
         assert decision is None
         assert deny_reason is not None
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_cross_branch_merge_with_token_granted(self):
         r = _make_router(with_policy=True, with_token_store=True)
         ctx = PolicyContext(
@@ -250,7 +250,7 @@ class TestTryDispatchPrivileged:
         assert decision is not None
         assert token.consumed_count == 1
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_unknown_token_denied(self):
         r = _make_router(with_policy=True, with_token_store=True)
         ctx = PolicyContext(

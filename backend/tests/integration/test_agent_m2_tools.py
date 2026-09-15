@@ -27,7 +27,7 @@ from backend.tools.registry import ToolRegistry
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _gate_lifecycle():
     """每个测试独立 gate，防跨测试挂起请求泄漏。"""
     reset_permission_gate()
@@ -48,7 +48,7 @@ def _agent_with_real_tools(tmp_path) -> SageAgent:
     return agent
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_grep_then_edit_round_trip_in_workspace(tmp_path):
     """grep_search 定位 → edit_file 修复，真实工具往返 + 文件落盘验证。"""
     # Arrange: workspace 内一个含待修标记的文件
@@ -111,7 +111,7 @@ async def test_run_loop_grep_then_edit_round_trip_in_workspace(tmp_path):
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_edit_outside_workspace_denied_by_boundary(tmp_path):
     """workspace_write 放行 edit_file 能力，但工具内边界检查拒绝越界写入。"""
     # Arrange: workspace 与外部文件分离
@@ -147,7 +147,7 @@ async def test_run_loop_edit_outside_workspace_denied_by_boundary(tmp_path):
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_repl_triggers_permission_request_under_prompt_mode():
     """PROMPT 模式: repl（EXECUTE）→ PERMISSION_REQUEST → 批准后真实执行。"""
     # Arrange

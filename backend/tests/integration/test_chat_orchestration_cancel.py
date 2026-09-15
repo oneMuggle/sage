@@ -11,7 +11,7 @@ from backend.data.orch_run_repo import OrchRun, OrchRunRepository
 from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS, ChatDispatcher
 
 
-@pytest.fixture
+@pytest.fixture()
 def client(tmp_path, monkeypatch):
     """tmp DB + SAGE_DB_PATH env + 重置全局 _db 单例,挂 main 的 app（含 orch 路由）。"""
     db = tmp_path / "cancel.db"

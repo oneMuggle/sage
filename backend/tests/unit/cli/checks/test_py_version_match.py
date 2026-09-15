@@ -18,7 +18,7 @@ from backend.cli.checks.py_version_match import (
 from backend.cli.doctor import Severity
 
 
-@pytest.fixture
+@pytest.fixture()
 def check():
     return PyVersionMatchCheck()
 

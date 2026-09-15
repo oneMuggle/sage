@@ -11,7 +11,7 @@ from backend.orchestration.snapshot_store import SnapshotStore
 from backend.tools.observe_tool import ObserveSubagentsTool
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_observe_returns_snapshot():
     store = SnapshotStore()
     await store.apply_event(make_event(
@@ -30,7 +30,7 @@ async def test_observe_returns_snapshot():
     assert data["tasks"][0]["task_id"] == "t1"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_observe_filters_by_task_ids():
     store = SnapshotStore()
     for tid in ["t1", "t2", "t3"]:
@@ -46,7 +46,7 @@ async def test_observe_filters_by_task_ids():
     assert ids == {"t1", "t3"}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_observe_unknown_run():
     store = SnapshotStore()
     tool = ObserveSubagentsTool(snapshot_store=store)
@@ -55,7 +55,7 @@ async def test_observe_unknown_run():
     assert "不存在" in result.error
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_observe_missing_run_id():
     store = SnapshotStore()
     tool = ObserveSubagentsTool(snapshot_store=store)
@@ -64,7 +64,7 @@ async def test_observe_missing_run_id():
     assert "run_id" in result.error
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_observe_default_run_id():
     store = SnapshotStore()
     await store.apply_event(make_event(
@@ -77,7 +77,7 @@ async def test_observe_default_run_id():
     assert data["run_id"] == "default-run"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_observe_sync_execute_works_inside_running_loop():
     """O4 (2026-09-08): run_loop 对非特判工具走同步直调 —— 事件循环运行中
     调 ``execute`` 必须返回快照而非自拒错误（旧实现 asyncio.run 检测到
@@ -100,7 +100,7 @@ async def test_observe_sync_execute_works_inside_running_loop():
     assert len(data["tasks"]) == 1
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_observe_sync_execute_matches_async_payload():
     """同步与异步通路返回同一 payload（同一 _read_snapshot 实现）。"""
     store = SnapshotStore()

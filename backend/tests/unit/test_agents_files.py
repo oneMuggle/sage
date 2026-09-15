@@ -188,7 +188,7 @@ def test_export_unknown_agent_raises_lookup(tmp_path):
 # ---- 端点（RV 与 CA2 的 REST 面） ----------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_endpoints_import_and_export(tmp_path, monkeypatch):
     """POST /agents/import-files 重扫导入；POST /agents/{id}/export 写文件。"""
     import httpx

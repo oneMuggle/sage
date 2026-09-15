@@ -51,7 +51,7 @@ def _payload(tool_name: str = "terminal", event: str = "pre_tool_use") -> Dict[s
 # ==================== decision 解析 ====================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_allow_decision_parsed():
     cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow"}}))'"""
     outcome = await run_hook(_cfg(cmd), _payload())
@@ -59,7 +59,7 @@ async def test_allow_decision_parsed():
     assert not outcome.denied
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_deny_decision_honored_with_reason():
     cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny", "reason": "nope"}}))'"""
     outcome = await run_hook(_cfg(cmd), _payload())
@@ -67,7 +67,7 @@ async def test_deny_decision_honored_with_reason():
     assert outcome.reason == "nope"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_modify_decision_carries_updated_input():
     cmd = (
         f"""{PY} -c 'import json; """
@@ -78,7 +78,7 @@ async def test_modify_decision_carries_updated_input():
     assert outcome.updated_input == {"command": "echo hi"}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_modify_without_updated_input_is_noop():
     cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "modify"}}))'"""
     outcome = await run_hook(_cfg(cmd), _payload())
@@ -86,7 +86,7 @@ async def test_modify_without_updated_input_is_noop():
     assert not outcome.modified
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_unknown_decision_is_noop():
     cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "explode"}}))'"""
     outcome = await run_hook(_cfg(cmd), _payload())
@@ -96,7 +96,7 @@ async def test_unknown_decision_is_noop():
 # ==================== fail-open 路径 ====================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_timeout_kills_process_and_is_noop():
     outcome_started = time.monotonic()
     outcome = await run_hook(_cfg("sleep 30", timeout=0.3), _payload())
@@ -106,27 +106,27 @@ async def test_timeout_kills_process_and_is_noop():
     assert elapsed < 10, "timeout should kill the process group promptly"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_nonzero_exit_is_noop():
     outcome = await run_hook(_cfg("exit 3"), _payload())
     assert outcome.decision == DECISION_NOOP
     assert "3" in (outcome.reason or "")
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_non_json_stdout_is_noop():
     outcome = await run_hook(_cfg("echo hello-not-json"), _payload())
     assert outcome.decision == DECISION_NOOP
     assert outcome.reason == "non-json stdout"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_empty_stdout_is_silent_allow():
     outcome = await run_hook(_cfg("true"), _payload())
     assert outcome.decision == DECISION_ALLOW
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_env_vars_and_stdin_payload_reach_hook():
     cmd = (
         f"""{PY} -c 'import json, os, sys; p = json.load(sys.stdin); """
@@ -158,7 +158,7 @@ def test_matcher_globbing(matcher: str, tool: str, expected: bool):
     assert matches_tool(matcher, tool) is expected
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_event_hooks_skips_non_matching():
     deny = _cfg(
         f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny"}}))'""",
@@ -168,7 +168,7 @@ async def test_run_event_hooks_skips_non_matching():
     assert outcome.decision == DECISION_ALLOW
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_event_hooks_deny_short_circuits():
     deny_cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny", "reason": "first"}}))'"""
     allow_cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow"}}))'"""
@@ -178,7 +178,7 @@ async def test_run_event_hooks_deny_short_circuits():
     assert outcome.reason == "first"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_event_hooks_filters_by_event():
     deny = _cfg(
         f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny"}}))'""",
@@ -324,7 +324,7 @@ def test_config_still_rejects_unknown_event():
         validate_hooks([{"event": "session_start", "command": "echo x"}])
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_user_prompt_submit_deny_blocks_prompt():
     """user_prompt_submit 钩子 deny → denied,producer 据此拦截消息。"""
     deny = _cfg(
@@ -341,7 +341,7 @@ async def test_user_prompt_submit_deny_blocks_prompt():
     assert outcome.reason == "nope"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_user_prompt_submit_allow_passes():
     allow = _cfg(f'{PY} -c "print(\'\')"', event="user_prompt_submit")
     outcome = await run_event_hooks(
@@ -350,7 +350,7 @@ async def test_user_prompt_submit_allow_passes():
     assert not outcome.denied
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_stop_hook_runs_and_decisions_ignored_by_caller():
     """stop 钩子可执行; 其 decision 由调用方忽略 (observe-only 语义)。"""
     deny = _cfg(

@@ -135,7 +135,7 @@ def test_aggregator_ignores_non_list_and_synthesizes_id():
 # =============================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_stream_events_yields_deltas_then_response():
     client = _make_client()
     _wire_stream(
@@ -163,7 +163,7 @@ async def test_chat_stream_events_yields_deltas_then_response():
     assert final.tool_calls == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_stream_events_aggregates_tool_calls():
     client = _make_client()
     _wire_stream(
@@ -199,7 +199,7 @@ async def test_chat_stream_events_aggregates_tool_calls():
     assert "让我先看状态。" in [p for k, p in events if k == "content_delta"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_stream_events_extracts_think_tags_from_content():
     client = _make_client()
     _wire_stream(
@@ -221,7 +221,7 @@ async def test_chat_stream_events_extracts_think_tags_from_content():
     assert final.reasoning_content == "推理中"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_stream_events_http_error_raises_llm_error():
     import httpx
 
@@ -276,7 +276,7 @@ def _make_agent(client):
     return agent
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_streams_content_deltas_then_done():
     client = _FakeStreamClient(
         events=[("content_delta", "你好"), ("content_delta", "！"), ("response", LLMResponse(content="你好！"))],
@@ -296,7 +296,7 @@ async def test_run_loop_streams_content_deltas_then_done():
     client.chat.assert_not_awaited()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_falls_back_when_stream_fails_before_first_delta():
     client = _FakeStreamClient(error_before_first=True)
     agent = _make_agent(client)
@@ -313,7 +313,7 @@ async def test_run_loop_falls_back_when_stream_fails_before_first_delta():
     assert client.stream_unsupported is True
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_raises_when_stream_fails_after_first_delta():
     client = _FakeStreamClient(
         events=[
@@ -337,7 +337,7 @@ async def test_run_loop_raises_when_stream_fails_after_first_delta():
         await drain_loop()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_env_off_disables_streaming(monkeypatch):
     monkeypatch.setenv("SAGE_LLM_STREAMING", "0")
     client = _FakeStreamClient()

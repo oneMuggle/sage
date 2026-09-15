@@ -16,7 +16,7 @@ from backend.api.scheduled_router import build_router
 from backend.services.scheduler import SchedulerService
 
 
-@pytest.fixture
+@pytest.fixture()
 def scheduler(tmp_path: Path) -> SchedulerService:
     return SchedulerService(
         store_path=tmp_path / "scheduled_tasks.json",
@@ -25,7 +25,7 @@ def scheduler(tmp_path: Path) -> SchedulerService:
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def client(scheduler: SchedulerService) -> TestClient:
     app = FastAPI()
     app.include_router(build_router(lambda: scheduler), prefix="/api/v1")

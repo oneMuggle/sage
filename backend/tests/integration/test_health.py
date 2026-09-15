@@ -8,7 +8,7 @@ from backend.api.local_auth import ownership_health_proof
 pytestmark = pytest.mark.integration
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_health_check(client):
     """健康检查端点返回 ok 状态"""
     resp = await client.get("/health")
@@ -18,7 +18,7 @@ async def test_health_check(client):
     assert set(data) == {"status", "buildId", "pid", "generation"}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_health_exposes_only_non_sensitive_supervisor_fields(client):
     """Health is safe for unauthenticated liveness probes and ownership checks."""
     resp = await client.get("/health")
@@ -43,7 +43,7 @@ async def test_health_proof_requires_supervisor_token(client, monkeypatch):
     assert "ownershipToken" not in data
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_health_proof_rejects_stale_token(client, monkeypatch):
     monkeypatch.setenv("SAGE_BACKEND_OWNERSHIP_TOKEN", "owner-token")
     response = await client.get(
@@ -73,7 +73,7 @@ async def test_health_proof_rejects_stale_token(client, monkeypatch):
     assert "access-control-allow-origin" not in denied.headers
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_sensitive_routes_require_local_bearer_token(client):
     """Application middleware protects endpoints from separately mounted routers."""
     headers = {
@@ -87,7 +87,7 @@ async def test_sensitive_routes_require_local_bearer_token(client):
     assert mcp.status_code == 401
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_openapi_docs(client):
     """OpenAPI 文档端点可访问"""
     resp = await client.get("/openapi.json")
@@ -96,7 +96,7 @@ async def test_openapi_docs(client):
     assert "openapi" in schema
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_docs_ui(client):
     """Swagger UI 端点可访问"""
     resp = await client.get("/docs")

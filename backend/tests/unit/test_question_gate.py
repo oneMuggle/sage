@@ -27,7 +27,7 @@ OPTIONS = (
 )
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean_global_gate():
     """每个测试前后重置全局 gate, 避免跨测试泄漏。"""
     reset_question_gate()

@@ -23,7 +23,7 @@ from backend.tools.context import (
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _gate_lifecycle():
     reset_permission_gate()
     yield

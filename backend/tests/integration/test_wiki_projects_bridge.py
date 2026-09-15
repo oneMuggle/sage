@@ -21,7 +21,7 @@ from backend.main import app
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture
+@pytest.fixture()
 def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     test_db = Database(":memory:")
     test_db.init_db()
@@ -29,7 +29,7 @@ def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     return test_db
 
 
-@pytest.fixture
+@pytest.fixture()
 def conn(db: Database) -> sqlite3.Connection:
     return db.get_connection()
 
@@ -42,7 +42,7 @@ async def client(db: Database) -> AsyncIterator[httpx.AsyncClient]:
         yield value
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_open_wiki_project_touches_registry_last_opened_at(
     client: httpx.AsyncClient, conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
@@ -62,7 +62,7 @@ async def test_open_wiki_project_touches_registry_last_opened_at(
     assert after.last_opened_at > 1_000
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_create_wiki_project_registers_into_projects(
     client: httpx.AsyncClient, conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
@@ -81,7 +81,7 @@ async def test_create_wiki_project_registers_into_projects(
     assert rows[0].path == str(base.resolve())
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_registered_project_passes_wiki_authorization(
     client: httpx.AsyncClient, conn: sqlite3.Connection, tmp_path: Path
 ) -> None:

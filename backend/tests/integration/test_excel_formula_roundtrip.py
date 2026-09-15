@@ -24,7 +24,7 @@ from backend.office.models import ExcelSheetSpec, OfficeExcelGenerateRequest
 _FORMULA_CACHE_NOTE = "公式计算值需在 Excel 中打开后生效"
 
 
-@pytest.fixture
+@pytest.fixture()
 def workspace(tmp_path: Path) -> Path:
     """Per-test scratch workspace matching ``managed_document_path`` layout."""
     ws = tmp_path / "workspace"

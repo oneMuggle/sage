@@ -25,7 +25,7 @@ pytestmark = pytest.mark.unit  # 走 ASGITransport 直连 app, 属快测
 OPTIONS = [{"label": "Markdown"}, {"label": "PDF"}]
 
 
-@pytest.fixture
+@pytest.fixture()
 def gate():
     """每个测试初始化独立 gate, 结束重置。"""
     reset_question_gate()

@@ -27,7 +27,7 @@ from backend.data.orch_context_repo import (
 )
 
 
-@pytest.fixture
+@pytest.fixture()
 def repo():
     return OrchestrationContextRepository()
 
@@ -50,7 +50,7 @@ def _seed_run_and_task(run_id: str, task_id: str) -> None:
     conn.commit()
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _seed_parents():
     """Seed the default (run-1, task-1) parent rows for every test."""
     _seed_run_and_task("run-1", "task-1")

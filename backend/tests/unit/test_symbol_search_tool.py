@@ -12,7 +12,7 @@ from backend.tools.symbol_search_tool import SymbolSearchTool, _tokenize
 pytestmark = [pytest.mark.unit]
 
 
-@pytest.fixture
+@pytest.fixture()
 def codebase(tmp_path: Path) -> Path:
     ws = tmp_path / "proj"
     ws.mkdir()

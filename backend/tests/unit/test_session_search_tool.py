@@ -21,7 +21,7 @@ class FakeIndex:
         return self.results
 
 
-@pytest.fixture
+@pytest.fixture()
 def tool():
     return SessionSearchTool(index=FakeIndex())
 

@@ -12,7 +12,7 @@ from typing import Callable, Optional
 import pytest
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _isolate_ssl_env():
     """Keep SSL environment variables isolated from the test process.
 

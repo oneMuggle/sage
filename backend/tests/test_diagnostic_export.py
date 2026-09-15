@@ -18,14 +18,14 @@ from backend.main import app
 from backend.services.llm_trace.recorder import LlmTraceRecorder, TraceRecord
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _clean():
     LlmTraceRecorder.clear()
     yield
     LlmTraceRecorder.clear()
 
 
-@pytest.fixture
+@pytest.fixture()
 def client():
     return TestClient(app)
 

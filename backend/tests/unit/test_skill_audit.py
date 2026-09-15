@@ -12,7 +12,7 @@ from backend.skills.audit import SkillAuditLog, get_skill_audit_log, reset_skill
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture
+@pytest.fixture()
 def tmp_db():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db = Database(f.name)
@@ -21,7 +21,7 @@ def tmp_db():
         db.close()
 
 
-@pytest.fixture
+@pytest.fixture()
 def audit(tmp_db):
     return SkillAuditLog(db=tmp_db)
 

@@ -45,7 +45,7 @@ def _make_draft(**overrides) -> SkillDraft:
     return SkillDraft(**defaults)
 
 
-@pytest.fixture
+@pytest.fixture()
 def store(tmp_path):
     """Return a SkillDraftStore backed by a temp database with the table created."""
     db_path = str(tmp_path / "test.db")

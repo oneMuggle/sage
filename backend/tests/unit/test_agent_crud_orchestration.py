@@ -17,7 +17,7 @@ from backend.data.agent_repo import AgentRepository
 from backend.main import app
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_writer_is_in_default_agents_with_correct_tool_names():
     from backend.agents.profiles import create_default_agents
 
@@ -29,7 +29,7 @@ async def test_writer_is_in_default_agents_with_correct_tool_names():
     assert "memory_search" in writer.tools
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_ensure_default_agents_inserts_writer_into_existing_db():
     """已存在 DB（非空表）也要有 writer —— seed_defaults_if_empty 只覆盖空表。
 
@@ -44,7 +44,7 @@ async def test_ensure_default_agents_inserts_writer_into_existing_db():
     assert ensure_default_agents() == 0
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_create_agent_endpoint_creates_custom_role():
     payload = {
         "id": "quant_analyst",
@@ -66,7 +66,7 @@ async def test_create_agent_endpoint_creates_custom_role():
     assert AgentRepository().get("quant_analyst")["name"] == "量化分析师"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_create_agent_endpoint_rejects_duplicate_id():
     payload = {
         "id": "researcher",  # 已存在默认角色
@@ -82,7 +82,7 @@ async def test_create_agent_endpoint_rejects_duplicate_id():
     assert resp.json()["detail"]["type"] == "agent_already_exists"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_create_agent_endpoint_validates_role():
     payload = {
         "id": "bad_role",
@@ -110,7 +110,7 @@ def test_primary_seed_contains_agent_tool():
     assert "agent" in primary.tools
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_ensure_upgrades_stale_primary_tools_with_agent():
     """存量 DB primary 停留在旧种子列表 → ensure 追加 agent。"""
     from backend.agents.profiles import _PRIMARY_TOOLS_BEFORE_AGENT, ensure_default_agents

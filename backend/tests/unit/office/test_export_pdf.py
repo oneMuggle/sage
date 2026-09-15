@@ -26,7 +26,7 @@ from backend.office.path_safety import is_within
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
+@pytest.fixture()
 def ws(tmp_path: Path) -> Path:
     """A fresh workspace directory per test."""
     workspace = tmp_path / "workspace"

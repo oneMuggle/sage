@@ -46,7 +46,7 @@ pytestmark = pytest.mark.unit
 # ============================================================================
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _reset_root_logger():
     """每个测试前后保存/恢复 root logger handlers 与 level. 防止污染其它测试."""
     root = logging.getLogger()
@@ -59,7 +59,7 @@ def _reset_root_logger():
     root.disabled = saved_disabled
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()(autouse=True)
 def _reset_sage_logger_singleton():
     """重置 SageLogger 单例的初始化标志, 避免测试间干扰.
 

@@ -51,7 +51,7 @@ def _write_test_pdf(path: Path) -> Path:
     return path
 
 
-@pytest.fixture
+@pytest.fixture()
 def source_pdf(tmp_path: Path) -> Path:
     """Source PDF inside a fresh workspace directory."""
     workspace = tmp_path / "workspace"

@@ -11,7 +11,7 @@ from backend.tools.bash_tool import BashTool
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture
+@pytest.fixture()
 def tool():
     cfg = SimpleNamespace(
         timeout_default=30, timeout_max=300, output_cap=30000

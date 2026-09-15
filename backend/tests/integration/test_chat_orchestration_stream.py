@@ -68,7 +68,7 @@ async def _stream_events(ac: httpx.AsyncClient, payload: dict) -> list[dict]:
     ]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_multi_mode_emits_task_plan_and_registers_dispatch_tool():
     """复杂任务必进编排：task_plan 事件必出 + dispatch_subagents 工具必注册。"""
     registered_tools: list = []
@@ -144,7 +144,7 @@ async def test_multi_mode_emits_task_plan_and_registers_dispatch_tool():
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_single_mode_has_no_orchestration_events_or_tool():
     """简单任务复杂化=0：single 路径无编排事件 + 无 dispatch 工具。"""
     registered_tools: list = []
@@ -186,7 +186,7 @@ async def test_single_mode_has_no_orchestration_events_or_tool():
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_force_single_skips_orchestration_even_for_complex_message():
     """用户 /single override：复杂消息也不进编排。"""
     async def mock_run_loop(messages, max_iterations=5, **kwargs):
@@ -217,7 +217,7 @@ async def test_force_single_skips_orchestration_even_for_complex_message():
     assert "task_status" not in states
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_multi_degrades_to_single_when_plan_has_one_task():
     """Planner 降级为单任务（LLM 没拆开）→ 视为没开编排，无 task_plan。"""
     registered_tools: list = []
@@ -257,7 +257,7 @@ async def test_multi_degrades_to_single_when_plan_has_one_task():
     assert "dispatch_subagents" not in registered_tools
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_multi_mode_injects_plan_block_into_run_loop_system_content():
     """plan 块注入 system prompt：conductor（run_loop）收到的 system_content 含任务目标。"""
     captured_messages: list = []
@@ -307,7 +307,7 @@ async def test_multi_mode_injects_plan_block_into_run_loop_system_content():
     assert "目标：writer" in system_content
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_explicit_null_orchestration_mode_does_not_422():
     """explicit null orchestration_mode 必须被接受（IPC `?? null` 序列化路径）。
 
@@ -368,7 +368,7 @@ async def test_explicit_null_orchestration_mode_does_not_422():
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_plain_chat_sets_tool_context_for_artifact_recording():
     """普通聊天（无 office 授权）也必须设置 ToolExecutionContext —— 否则
     write_file 等工具的 artifact 记录因 current_tool_context() 为 None 静默
@@ -416,7 +416,7 @@ async def test_plain_chat_sets_tool_context_for_artifact_recording():
     assert ctx.office_doc_scope == frozenset(), "无 office 授权 → 空 scope"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_task_plan_event_includes_depends_on():
     """P1-6 (2026-08-14): task_plan 事件透传 depends_on（来自 Task.blocked_by）。"""
     registered_tools: list = []
@@ -492,7 +492,7 @@ async def test_task_plan_event_includes_depends_on():
 """P2-8 — orchestration_mode=template:<id> 走模板拆解。"""
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_classify_template_prefix_is_multi():
     """template: 前缀 → 直接 multi（跳过 LLM 二分类）。"""
     mode = await _classify_orchestration_mode(
@@ -501,14 +501,14 @@ async def test_classify_template_prefix_is_multi():
     assert mode == "multi"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_classify_unknown_template_still_multi():
     """未知模板 id 也判 multi（降级在 decompose 层，不在这里）。"""
     mode = await _classify_orchestration_mode("x", "template:nope", llm_client=None)
     assert mode == "multi"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_template_mode_decomposes_via_deterministic_template():
     """P2-8: orchestration_mode=template:research-write → decompose_from_template
     拆解出 task_plan（2 任务、goal 含用户请求）。"""
@@ -591,7 +591,7 @@ async def test_template_mode_decomposes_via_deterministic_template():
 """Wave 3 A10 — plan_override 跳过 LLM 拆解，task_id 沿用不重枚举。"""
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_override_path_skips_decompose_and_preserves_task_id():
     """A10: POST /chat/stream 带 plan_override + run_id → 跳过 decompose，
     task_plan 首事件沿用 override task_id、total_tasks==1、run_id 复用。"""

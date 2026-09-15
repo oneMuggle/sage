@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_multi_task_with_retry_persists_retry_count(tmp_path, monkeypatch):
     """spec §5.4: 多任务 + 1 失败子任务自动重试成功 → OrchTask.retry_count=1 + OrchRun.finalize。
 

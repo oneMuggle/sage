@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from backend.api.legacy_routes import router
 
 
-@pytest.fixture
+@pytest.fixture()
 def client():
     """Create a TestClient with the legacy router mounted."""
     app = FastAPI()

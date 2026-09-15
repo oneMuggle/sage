@@ -9,13 +9,13 @@ from backend.models.update import FileMeta, UpdateManifest
 from backend.services.update_metadata import UpdateMetadataService
 
 
-@pytest.fixture
+@pytest.fixture()
 def client():
     """Create test client."""
     return TestClient(app)
 
 
-@pytest.fixture
+@pytest.fixture()
 def metadata_dir(tmp_path, monkeypatch):
     """Override metadata directory for tests."""
     test_dir = tmp_path / "test-metadata"
@@ -27,7 +27,7 @@ def metadata_dir(tmp_path, monkeypatch):
     return test_dir
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_manifest():
     """Create a sample manifest."""
     return UpdateManifest(

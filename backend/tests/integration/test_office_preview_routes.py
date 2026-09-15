@@ -42,7 +42,7 @@ from backend.office.storage import generate_document_dir
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture
+@pytest.fixture()
 def workspace(tmp_path: Path) -> Path:
     ws = tmp_path / "workspace"
     ws.mkdir()

@@ -61,7 +61,7 @@ class TestParseSuggestions:
 
 
 class TestScan:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_scan_returns_normalized_suggestions(self):
         svc = ConsolidationService(
             _provider('[{"type": "archive", "skill_names": ["release"], "reason": "零使用"}]')
@@ -71,14 +71,14 @@ class TestScan:
             {"type": "archive", "skill_names": ["release"], "reason": "零使用"}
         ]
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_llm_failure_returns_empty(self):
         provider = SimpleNamespace()
         provider.complete = AsyncMock(side_effect=RuntimeError("down"))
         svc = ConsolidationService(provider)
         assert await svc.scan(SKILLS) == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_empty_skills_skips_llm(self):
         provider = SimpleNamespace()
         provider.complete = AsyncMock()

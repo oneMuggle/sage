@@ -100,7 +100,7 @@ def _patch_subagents(fake):
     return stack
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_dispatch_parallel_runs_and_pushes_statuses():
     """2 个子任务 → 事件序 queued→running→done 各 2 次，聚合含两子结果。"""
     queue = _make_queue()
@@ -128,7 +128,7 @@ async def test_dispatch_parallel_runs_and_pushes_statuses():
     assert fake.max_active <= 2
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_dispatch_retry_exhausted_isolated():
     """子任务 2 恒失败 → 重试 2 次后 failed + 错误进聚合，子任务 1 正常 done。"""
     queue = _make_queue()
@@ -156,7 +156,7 @@ async def test_dispatch_retry_exhausted_isolated():
     assert fake.calls >= 3  # 4 次 = t1 成功×1 + t2 首次+重试×2
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_dispatch_concurrency_capped_at_four():
     """5 个任务，并发上限 = settings.max_concurrent_subagents（默认 4）—— 最大 active ≤ 上限。"""
     queue = _make_queue()
@@ -172,7 +172,7 @@ async def test_dispatch_concurrency_capped_at_four():
     assert fake.max_active <= dispatcher.settings.max_concurrent_subagents
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_dispatch_lane_mirrored_with_retry_count():
     """lane 镜像：子任务 lane 落库且 SUCCEEDED；重试后 retry_count 进事件。"""
     from backend.orchestration.lane_registry import LaneRegistry
@@ -220,7 +220,7 @@ class _ReviewSageAgent(_FakeSageAgent):
         super().__init__(results=[content])
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_dispatch_runs_review_when_all_planned_tasks_dispatched():
     """total_tasks 达标 → 聚合追加复核块 + review lane SUCCEEDED。"""
     from backend.orchestration.lane_registry import LaneRegistry
@@ -262,7 +262,7 @@ async def test_dispatch_runs_review_when_all_planned_tasks_dispatched():
     assert lane_registry.get_lane("lane-t1").status.value == "succeeded"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_dispatch_review_fail_on_negative_evidence():
     """NEGATIVE_EVIDENCE 高置信 → verdict fail，block 要求修复。"""
     queue = _make_queue()
@@ -288,7 +288,7 @@ async def test_dispatch_review_fail_on_negative_evidence():
     assert "修复" in aggregated
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_dispatch_review_failure_skips_without_blocking():
     """reviewer 崩溃 → 跳过验证，聚合不变，不抛异常。"""
     queue = _make_queue()
@@ -311,7 +311,7 @@ async def test_dispatch_review_failure_skips_without_blocking():
     assert "## 复核结果" not in aggregated
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_dispatch_no_review_when_total_tasks_unset():
     """total_tasks 未设（None）→ 不跑 review，聚合无复核块。"""
     queue = _make_queue()
@@ -332,7 +332,7 @@ async def test_dispatch_no_review_when_total_tasks_unset():
     assert "## 复核结果" not in aggregated
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_worktree_isolation_wires_policy_and_cleans(monkeypatch, tmp_path):
     """开启隔离时 task parameters 使用 worktree；成功后留存待验收（A4）。"""
     from backend.orchestration import chat_dispatcher as module
@@ -385,7 +385,7 @@ async def test_worktree_isolation_wires_policy_and_cleans(monkeypatch, tmp_path)
     assert lane.metadata["acceptance_pending"] is True
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_worktree_isolation_disabled_or_non_repo_falls_back(monkeypatch, tmp_path):
     """开关关闭或 workspace 非 git repo 时保持 scratch 行为。"""
     from backend.orchestration import chat_dispatcher as module
@@ -423,7 +423,7 @@ async def test_worktree_isolation_disabled_or_non_repo_falls_back(monkeypatch, t
     assert captured[1]["workspace_dir"] is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_worktree_create_async_exception_falls_back(monkeypatch, tmp_path):
     """创建路径抛异常 → 回落 scratch，任务照常成功，无残留副本。"""
     from backend.orchestration import chat_dispatcher as module
@@ -461,7 +461,7 @@ async def test_worktree_create_async_exception_falls_back(monkeypatch, tmp_path)
     assert dispatcher._worktree_dirs == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_worktree_cleanup_async_exception_keeps_result(monkeypatch, tmp_path):
     """失败路径清理抛异常被吞 → 派发结果不受影响（A4：成功留存不清理）。"""
     from backend.orchestration import chat_dispatcher as module
@@ -506,7 +506,7 @@ async def test_worktree_cleanup_async_exception_keeps_result(monkeypatch, tmp_pa
     assert dispatcher._worktree_dirs == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_worktree_async_path_does_not_block_event_loop(monkeypatch, tmp_path):
     """git 慢操作期间事件循环仍能响应并发任务 —— 异步路径不阻塞。"""
     from backend.orchestration import chat_dispatcher as module
@@ -578,7 +578,7 @@ def test_dispatcher_defaults_settings_when_omitted():
     assert d.settings.max_concurrent_subagents == 4
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_dispatch_passes_output_schema_to_subagent(monkeypatch):
     """tool-passed output_schema 进入 ChatTaskState 并写进 Task.parameters。"""
     captured = {}
@@ -607,7 +607,7 @@ async def test_dispatch_passes_output_schema_to_subagent(monkeypatch):
     assert dispatcher._states["dynamic-1"].output_schema == schema
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_followup_task_inherits_done_parent_history(monkeypatch):
     """有效 followup_of 复用已完成父任务历史，并建立隐式依赖。"""
     queue = _make_queue()
@@ -666,7 +666,7 @@ async def test_followup_task_inherits_done_parent_history(monkeypatch):
     assert built["deps"]["t2"] == ["t1"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_planned_followup_uses_new_goal_and_replays_it(monkeypatch):
     """计划权威任务续聊时，raw goal 覆盖计划 goal，并传给 runner。"""
     from backend.orchestration import chat_dispatcher as module
@@ -712,7 +712,7 @@ async def test_planned_followup_uses_new_goal_and_replays_it(monkeypatch):
     assert dispatcher._histories["t2"] == history
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_followup_invalid_parent_degrades_to_new_task(caplog):
     """不存在或未完成的 followup_of 降级为普通任务，不建立父依赖。"""
     dispatcher = ChatDispatcher(
@@ -739,7 +739,7 @@ async def test_followup_invalid_parent_degrades_to_new_task(caplog):
     assert "followup_of" in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_followup_self_reference_degrades_and_does_not_reject_batch(
     monkeypatch, caplog
 ):
@@ -779,7 +779,7 @@ async def test_followup_self_reference_degrades_and_does_not_reject_batch(
     assert "followup_of" in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_followup_invalid_parent_degradation_visible_in_aggregate():
     """L2: 无效 followup_of（父不存在）→ 聚合该子任务块含降级提示。"""
     dispatcher = ChatDispatcher(
@@ -807,7 +807,7 @@ async def test_followup_invalid_parent_degradation_visible_in_aggregate():
     assert "本次结果不含续聊上下文" in aggregated
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_followup_self_reference_degradation_visible_in_aggregate(monkeypatch):
     """L2: 自指 followup_of → 聚合该子任务块含降级提示，整批不拒。"""
     from backend.orchestration import chat_dispatcher as module

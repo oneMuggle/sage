@@ -22,7 +22,7 @@ from backend.main import app
 from backend.office.session_workspace import bind_session_workspace
 
 
-@pytest.fixture
+@pytest.fixture()
 def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     test_db = Database(":memory:")
     test_db.init_db()
@@ -30,12 +30,12 @@ def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     return test_db
 
 
-@pytest.fixture
+@pytest.fixture()
 def conn(db: Database) -> sqlite3.Connection:
     return db.get_connection()
 
 
-@pytest.fixture
+@pytest.fixture()
 def session_id(conn: sqlite3.Connection) -> str:
     value = "session-revert"
     conn.execute(
@@ -46,7 +46,7 @@ def session_id(conn: sqlite3.Connection) -> str:
     return value
 
 
-@pytest.fixture
+@pytest.fixture()
 def git_workspace(tmp_path: Path) -> Path:
     """已跟踪文件 v1 提交 + 工作区两处远离的修改 + 一个未跟踪文件。
 
@@ -81,7 +81,7 @@ async def client(db: Database) -> AsyncIterator[httpx.AsyncClient]:
         yield value
 
 
-@pytest.fixture
+@pytest.fixture()
 def bound_session(conn: sqlite3.Connection, session_id: str, git_workspace: Path) -> str:
     bind_session_workspace(conn, session_id, str(git_workspace))
     return session_id
@@ -95,7 +95,7 @@ def _hunk_count(diff_text: str) -> int:
     return sum(1 for line in diff_text.splitlines() if line.startswith("@@ "))
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_revert_restores_file(
     client: httpx.AsyncClient, bound_session: str, git_workspace: Path
 ) -> None:
@@ -109,7 +109,7 @@ async def test_revert_restores_file(
     assert "l18-EDIT" not in _worktree(git_workspace)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_revert_untracked_requires_flag(
     client: httpx.AsyncClient, bound_session: str, git_workspace: Path
 ) -> None:
@@ -132,7 +132,7 @@ async def test_revert_untracked_requires_flag(
     assert not (git_workspace / "untracked.py").exists()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_revert_path_escape_rejected(
     client: httpx.AsyncClient, bound_session: str
 ) -> None:
@@ -144,7 +144,7 @@ async def test_revert_path_escape_rejected(
     assert response.json()["errors"][0]["error"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_revert_requires_binding(
     client: httpx.AsyncClient, session_id: str
 ) -> None:
@@ -155,7 +155,7 @@ async def test_revert_requires_binding(
     assert response.status_code == 403
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_revert_hunks_restores_only_selected(
     client: httpx.AsyncClient, bound_session: str, git_workspace: Path
 ) -> None:
@@ -177,7 +177,7 @@ async def test_revert_hunks_restores_only_selected(
     assert "l18-EDIT" in content
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_revert_hunks_out_of_range_is_502(
     client: httpx.AsyncClient, bound_session: str, git_workspace: Path
 ) -> None:
@@ -190,7 +190,7 @@ async def test_revert_hunks_out_of_range_is_502(
     assert _worktree(git_workspace) == before
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_revert_hunks_requires_binding(
     client: httpx.AsyncClient, session_id: str
 ) -> None:
