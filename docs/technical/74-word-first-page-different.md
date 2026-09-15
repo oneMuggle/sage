@@ -33,3 +33,10 @@ PAGE 域、first_page_different=False 零变化、模型字段。word 全家族�
 
 奇偶页页眉页脚（evenAndOddHeaders）、TOC 真页码版（headless/COM）、
 Pillow 阈值配置化。
+
+## 附：Round 34 奇偶页页眉页脚
+
+`odd_even_pages: bool` + `even_page_header/even_page_footer`——启用后
+`settings.odd_and_even_pages_header_footer = True`（全局开关），偶数页
+内容写入 `section.even_page_header/footer`（断开 linked）。未启用时
+settings 开关保持 False（零变化）。

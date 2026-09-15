@@ -643,6 +643,14 @@ class WordFormatSpec(BaseModel):
     )
     first_page_header: WordHeaderFooterSpec | None = None
     first_page_footer: WordHeaderFooterSpec | None = None
+    # Round 34：奇偶页不同页眉页脚（书籍排版）。启用后偶数页用
+    # even_page_header/even_page_footer 的独立内容。
+    odd_even_pages: bool = Field(
+        default=False, description="启用奇偶页不同的页眉页脚"
+    )
+    even_page_header: WordHeaderFooterSpec | None = None
+    even_page_footer: WordHeaderFooterSpec | None = None
+
     # Round 26：横排/分节。每个 break 在 start_paragraph（0-based）前
     # 插入 NEW_PAGE 分节并对新节应用 page_setup；按列表顺序依次生效。
     section_breaks: _constrained_list("WordSectionBreakSpec", max_length=20) = Field(
