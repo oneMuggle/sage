@@ -25,7 +25,6 @@ REPL 工具 - Python 代码片段隔离执行（移植 claw-code execute_repl）
 import contextlib
 import logging
 import math
-import os
 import subprocess
 import sys
 import tempfile
@@ -110,6 +109,10 @@ def _attempt_process_group_kill(
         return leader_exit_observed, True
     if process_group_id is None:
         return leader_exit_observed, False
+    if process_group_id != process.pid:
+        # spawn_verified 在 Windows 上仍以 process.pid 作为 group id；任何
+        # 漂移都意味着不可安全发信号，遵循 POSIX 的 fail-closed 行为。
+        return leader_exit_observed, False
     observed = True if leader_exit_observed else observe_process_exit(process, 0.0)
     if observed is True:
         leader_exit_observed = True
@@ -126,7 +129,14 @@ def _attempt_process_group_kill(
             reap=False,
             process_group_id=process_group_id,
         )
-    return leader_exit_observed, False
+    # observed is None：Windows 上 waitid 不可用，observe_process_exit 永远
+    # 返回 None。仍需尝试 kill_process_tree——后者在 Windows 上走 taskkill
+    # 分支或回退到 leader kill，避免后台会话泄漏在 _PENDING_CLEANUPS 中堆积。
+    return leader_exit_observed, kill_process_tree(
+        process,
+        reap=False,
+        process_group_id=process_group_id,
+    )
 
 
 def _retry_pending_cleanups() -> None:
@@ -342,8 +352,6 @@ class ReplTool(BaseTool):
         stdout_identity: Optional[Tuple[int, int]] = None
         stderr_identity: Optional[Tuple[int, int]] = None
         try:
-            if os.name == "nt" or not hasattr(os, "waitid"):
-                raise RuntimeError("REPL 平台不支持安全进程组回收")
             try:
                 verified = spawn_verified(
                     [sys.executable, "-I", script_path],
