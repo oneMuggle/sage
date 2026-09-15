@@ -66,6 +66,15 @@ from backend.tools.ask_user_tool import ASK_USER_QUESTION_TOOL_NAME, validate_as
 from backend.tools.base import ToolResult
 from backend.tools.executor import TIMEOUT_EXCEPTIONS, tool_timeout_message
 
+
+class _TimeoutToolResult:
+    """中心超时的错误结果对象（消费方按 result.success/content/error 读取）。"""
+
+    def __init__(self, error: str) -> None:
+        self.success = False
+        self.content = None
+        self.error = error
+
 #: M2b 审查加固: 连续未应答提问上限。超时软结果使循环继续, 若无此限,
 #: 被操纵/犯错的 LLM 可循环提问持续骚扰用户。超限后直接返回错误结果。
 MAX_CONSECUTIVE_UNANSWERED_QUESTIONS = 3
@@ -730,6 +739,26 @@ class SageAgent:
                 None, functools.partial(tool.execute, **args)
             )
         else:
+            # R32 切片 A 延伸：同步内联工具迁入 executor 并接入中心超时——
+            # 挂死工具不再阻塞事件循环（hex 适配器同语义；executor 线程
+            # 不可强杀，超时后遗弃线程等待自然退出，事件循环立即恢复）。
+            timeout_s = getattr(self.tool_policy, "timeout_seconds", None)
+            if timeout_s and timeout_s > 0:
+                try:
+                    result = await asyncio.wait_for(
+                        asyncio.get_running_loop().run_in_executor(
+                            None, functools.partial(tool.execute, **args)
+                        ),
+                        timeout=timeout_s,
+                    )
+                except TIMEOUT_EXCEPTIONS:
+                    logger.warning(
+                        "串行内联工具超时: %s（%ss）", name, timeout_s
+                    )
+                    return False, _TimeoutToolResult(
+                        tool_timeout_message(timeout_s)
+                    )
+                return False, result
             return False, tool.execute(**args)
 
         event = self._interrupt_event
