@@ -48,6 +48,8 @@ vi.mock('../ThemeSelector', () => ({
   ThemeSelector: () => <div data-testid="theme-selector-stub" />,
 }));
 
+vi.mock('../FontSettingsSection', () => ({ FontSettingsSection: () => null }));
+
 function renderTab(): void {
   render(
     <I18nProvider>

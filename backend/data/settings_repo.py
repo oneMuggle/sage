@@ -21,6 +21,10 @@ class SettingsRepository:
             "app_settings",
             "theme_mode",
             "theme_preset",
+            "font_ui",
+            "font_code",
+            "font_size_ui",
+            "font_size_code",
             "current_session_id",
             # Task 2 (Gap B) — MemoryLifecycleManager auto_memory preference gate.
             # Surfaced via /api/v1/preferences/auto_memory (GET/PUT) backed by

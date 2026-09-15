@@ -24,6 +24,10 @@ export type PreferenceKey =
   | 'app_settings'
   | 'theme_mode'
   | 'theme_preset'
+  | 'font_ui'
+  | 'font_code'
+  | 'font_size_ui'
+  | 'font_size_code'
   | 'current_session_id'
   | 'permission_mode'
   | 'permission_rules'
@@ -69,6 +73,21 @@ export const settingsClient = {
     // 不是 envelope. value 才是真实载荷.
     const resp = await ipcCall<{ value: T | null }>('get_preference', { key });
     return resp?.value ?? null;
+  },
+
+  /** 字体同步使用严格写入：IPC 错误和超时向调用方抛出，原有写入契约不变。 */
+  async setPreferenceStrict(key: PreferenceKey, value: string, category = 'ui'): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        invoke('set_preference', { key, value, value_type: 'string', category }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('IPC timeout')), LOAD_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   },
 
   async setPreference(key: PreferenceKey, value: string, category = 'ui'): Promise<void> {
