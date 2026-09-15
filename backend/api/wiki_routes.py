@@ -16,7 +16,7 @@ from typing import AsyncIterator, List, Optional, Tuple
 import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.wiki import (
     ChatConfig,
@@ -142,7 +142,9 @@ def _resolve_source_file(project_path: str, source_file: str) -> Tuple[Path, Pat
             try:
                 lexical.relative_to(root)
             except ValueError as containment_exc:
-                raise HTTPException(status_code=400, detail="源文件必须位于项目目录内") from containment_exc
+                raise HTTPException(
+                    status_code=400, detail="源文件必须位于项目目录内"
+                ) from containment_exc
             raise HTTPException(status_code=404, detail="源文件不存在") from exc
         raise HTTPException(status_code=400, detail="源文件必须位于项目目录内") from exc
     return root, resolved
@@ -427,6 +429,50 @@ class ChatRequest(BaseModel):
     embed_api_key: str
     embed_model: str
     max_tokens: int = 4096
+    selected_paths: Optional[List[str]] = Field(default=None, max_length=500)
+
+
+class CitationLocateRequest(BaseModel):
+    project_path: str
+    path: str = Field(min_length=1, max_length=4096)
+    content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    line_start: int = Field(ge=1, le=1_000_000)
+    line_end: int = Field(ge=1, le=1_000_000)
+
+
+def _citation_file(project_root: Path, path: str) -> Path:
+    allowed = {
+        file.relative_to(project_root).as_posix(): file for file in iter_wiki_markdown(project_root)
+    }
+    if path not in allowed:
+        raise HTTPException(status_code=403, detail="来源不是可访问的 Wiki 页面")
+    return allowed[path]
+
+
+@router.post("/citations/locate")
+async def locate_citation(req: CitationLocateRequest) -> dict:
+    import hashlib
+
+    root = authorize_registered_project(req.project_path)
+    target = _citation_file(root, req.path)
+    if req.line_end < req.line_start or req.line_end - req.line_start >= 500:
+        raise HTTPException(status_code=422, detail="引用行范围无效或超过500行")
+    try:
+        content = secure_read_file_bounded(root, target, 1024 * 1024).decode("utf-8")
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="来源读取失败") from exc
+    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    lines = content.splitlines()
+    if req.line_start > len(lines):
+        raise HTTPException(status_code=422, detail="引用位置已失效，请重新打开来源")
+    return {
+        "path": req.path,
+        "excerpt": "\n".join(lines[req.line_start - 1 : req.line_end])[:16000],
+        "content_hash": content_hash,
+        "line_start": req.line_start,
+        "line_end": min(req.line_end, len(lines)),
+        "changed": content_hash != req.content_hash,
+    }
 
 
 # ============================================================================
@@ -939,7 +985,9 @@ async def queue_retry(task_id: str, project_path: str):
     success = queue.retry(task_id)
 
     if not success:
-        raise HTTPException(status_code=400, detail="无法重试任务（任务不存在、非失败状态或已达最大重试次数）")
+        raise HTTPException(
+            status_code=400, detail="无法重试任务（任务不存在、非失败状态或已达最大重试次数）"
+        )
 
     return {"success": True}
 
@@ -1009,6 +1057,12 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
         StreamingResponse: NDJSON 流式响应
     """
     project_root = authorize_registered_project(req.project_path)
+    if req.selected_paths:
+        allowed = {
+            file.relative_to(project_root).as_posix() for file in iter_wiki_markdown(project_root)
+        }
+        if not set(req.selected_paths).issubset(allowed):
+            raise HTTPException(status_code=403, detail="来源不是可访问的 Wiki 页面")
 
     # 配置
     config = ChatConfig(
@@ -1019,6 +1073,7 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
         embed_api_key=req.embed_api_key,
         embed_model=req.embed_model,
         max_tokens=req.max_tokens,
+        selected_paths=req.selected_paths,
     )
 
     # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON）

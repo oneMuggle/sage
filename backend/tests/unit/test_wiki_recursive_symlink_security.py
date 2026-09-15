@@ -41,6 +41,25 @@ def test_search_skips_symlink_files_and_directories(tmp_path: Path) -> None:
     assert result.results == []
 
 
+@pytest.mark.parametrize("allowed_paths", [None, set(), {"wiki/selected.md"}])
+def test_search_filters_sources_before_limit(tmp_path: Path, allowed_paths) -> None:
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    (wiki / "selected.md").write_text("# Selected\nneedle", encoding="utf-8")
+    for index in range(25):
+        (wiki / f"excluded-{index}.md").write_text("# needle\nneedle " * 10, encoding="utf-8")
+
+    result = search_wiki(tmp_path, "needle", limit=1, allowed_paths=allowed_paths)
+
+    if allowed_paths is None:
+        assert len(result.results) == 1
+        assert result.results[0].path.startswith("wiki/excluded-")
+        assert result == search_wiki(tmp_path, "needle", limit=1)
+    else:
+        assert [hit.path for hit in result.results] == sorted(allowed_paths)
+        assert result.total == len(allowed_paths)
+
+
 def test_graph_skips_symlink_files_and_directories(tmp_path: Path) -> None:
     project, _outside = _make_wiki_tree(tmp_path)
 

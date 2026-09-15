@@ -2,6 +2,7 @@
 
 定义 Wiki 子系统的核心数据结构，包括项目、文件、页面、搜索结果、图谱等。
 """
+
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -67,7 +68,8 @@ class WikiChatResponse:
     """Wiki 聊天响应。"""
 
     answer: str
-    citations: List[str]  # 引用的页面路径
+    citations: List[Dict[str, Any]]
+    sources: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class GraphSignal(str, Enum):
@@ -207,5 +209,6 @@ class WikiChatOutcome:
     """Wiki 聊天结果。"""
 
     answer: str
-    citations: List[str]
+    citations: List[Dict[str, Any]]
     stats: RetrievalStats
+    sources: List[Dict[str, Any]] = field(default_factory=list)

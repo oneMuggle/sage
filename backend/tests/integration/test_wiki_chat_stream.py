@@ -39,7 +39,17 @@ async def _stub_chat_context(
 ) -> Tuple[str, List[str], RetrievalStats]:
     """桩 _build_chat_context 返回值,避开 token/embedding/vectorstore 实际调用."""
     if citations is None:
-        citations = ["wiki/a.md"]
+        citations = [
+            {
+                "id": "S1",
+                "path": "wiki/a.md",
+                "title": "A",
+                "excerpt": "body A",
+                "content_hash": "0" * 64,
+                "line_start": 1,
+                "line_end": 1,
+            }
+        ]
     stats = RetrievalStats(
         token_hits=1,
         vector_hits=1,
@@ -154,7 +164,8 @@ async def test_chat_stream_yields_chunk_and_done(wiki_project, patch_wiki_chat):
     last = events[-1]
     assert last["event"] == "done"
     assert "citations" in last["data"]
-    assert "wiki/a.md" in last["data"]["citations"]
+    assert last["data"]["citations"] == []
+    assert last["data"]["sources"][0]["path"] == "wiki/a.md"
 
 
 @pytest.mark.asyncio()
@@ -168,7 +179,7 @@ async def test_chat_stream_empty_citations_yields_only_done(wiki_project, patch_
     assert resp.status_code == 200
     events = _parse_ndjson(resp.text)
     assert len(events) == 1
-    assert events[0] == {"event": "done", "data": {"citations": []}}
+    assert events[0] == {"event": "done", "data": {"citations": [], "sources": []}}
 
 
 @pytest.mark.asyncio()
@@ -235,3 +246,156 @@ async def test_chat_stream_sets_no_cache_headers(wiki_project, patch_wiki_chat):
     assert resp.status_code == 200
     assert resp.headers.get("cache-control") == "no-cache"
     assert resp.headers.get("x-accel-buffering") == "no"
+
+
+@pytest.mark.asyncio()
+async def test_selected_paths_reject_outside_wiki(wiki_project, patch_wiki_chat):
+    patch_wiki_chat(_stub_llm_context())
+    body = {**_request_body(str(wiki_project)), "selected_paths": ["../secret.md"]}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post(CHAT_STREAM_PATH, json=body)
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio()
+async def test_citation_locate_detects_source_change(wiki_project):
+    import hashlib
+
+    content = "# A\nbody A"
+    body = {
+        "project_path": str(wiki_project),
+        "path": "wiki/a.md",
+        "content_hash": hashlib.sha256(content.encode()).hexdigest(),
+        "line_start": 2,
+        "line_end": 2,
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/api/v1/wiki/citations/locate", json=body)
+        assert response.status_code == 200
+        assert response.json()["excerpt"] == "body A"
+        assert response.json()["changed"] is False
+        (wiki_project / "wiki/a.md").write_text("# A\nchanged")
+        changed = await ac.post("/api/v1/wiki/citations/locate", json=body)
+        assert changed.json()["changed"] is True
+        blocked = await ac.post(
+            "/api/v1/wiki/citations/locate", json={**body, "path": "../secret.md"}
+        )
+        assert blocked.status_code == 403
+
+
+@pytest.mark.asyncio()
+async def test_context_citations_only_describe_budgeted_content(wiki_project):
+    from backend.wiki.chat import ChatConfig, _build_chat_context, chat_with_wiki
+
+    async def no_embedding(*args):
+        raise RuntimeError("offline")
+
+    config = ChatConfig("http://test", "test", "test", "http://test", "test", "test", max_tokens=0)
+    context, sources, _ = await _build_chat_context(config, wiki_project, "body", no_embedding)
+    assert not context
+    assert sources == []
+
+    config.max_tokens = 4096
+    config.selected_paths = ["wiki/a.md"]
+    context, sources, _ = await _build_chat_context(config, wiki_project, "body", no_embedding)
+    assert [source["path"] for source in sources] == ["wiki/a.md"]
+    assert sources[0]["excerpt"] == "# A\nbody A"
+    assert sources[0]["line_end"] == 2
+    assert "[S1]" in context
+
+    async def answer(*args, **kwargs):
+        return "supported [S1], invented [S99]"
+
+    result = await chat_with_wiki(config, wiki_project, "body", answer, no_embedding)
+    assert [source["id"] for source in result.citations] == ["S1"]
+    config.selected_paths = []
+    _, sources, _ = await _build_chat_context(config, wiki_project, "body", no_embedding)
+    assert sources == []
+
+
+@pytest.mark.asyncio()
+async def test_stream_citations_accept_only_known_ids_across_deltas(wiki_project, patch_wiki_chat):
+    patch_wiki_chat(_stub_llm_context(("answer [S", "1] [S99]")))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post(CHAT_STREAM_PATH, json=_request_body(str(wiki_project)))
+    done = _parse_ndjson(response.text)[-1]["data"]
+    assert [item["id"] for item in done["citations"]] == ["S1"]
+    assert done["sources"] == done["citations"]
+
+
+def test_wiki_answer_tool_distinguishes_sources_from_answer_citations(wiki_project, monkeypatch):
+    from types import SimpleNamespace
+
+    from backend.tools import wiki_tool
+
+    monkeypatch.setattr(
+        wiki_tool, "current_tool_context", lambda: SimpleNamespace(session_id="session")
+    )
+    monkeypatch.setattr(
+        wiki_tool, "get_database", lambda: SimpleNamespace(get_connection=lambda: None)
+    )
+    monkeypatch.setattr(wiki_tool, "_resolve_bound_workspace", lambda conn: wiki_project)
+    result = wiki_tool.WikiAnswerTool().execute(query="body")
+    assert result.success
+    assert result.content["citations"] == []
+    assert result.content["sources"][0]["path"] == "wiki/a.md"
+    assert "[S1]" in result.content["messages"][0]["content"]
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    ("selected", "expected_status", "scans"),
+    [
+        (["wiki/a.md", "wiki/b.md", "wiki/a.md"], 200, 1),
+        (["wiki/a.md", "../secret.md"], 403, 1),
+        ([], 200, 0),
+    ],
+)
+async def test_source_validation_enumerates_once(
+    wiki_project, patch_wiki_chat, monkeypatch, selected, expected_status, scans
+):
+    from backend.api import wiki_routes
+
+    patch_wiki_chat(_stub_llm_context())
+    original = wiki_routes.iter_wiki_markdown
+    calls = []
+
+    def enumerate_pages(root):
+        calls.append(root)
+        return original(root)
+
+    monkeypatch.setattr(wiki_routes, "iter_wiki_markdown", enumerate_pages)
+    body = {**_request_body(str(wiki_project)), "selected_paths": selected}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post(CHAT_STREAM_PATH, json=body)
+    assert response.status_code == expected_status
+    assert len(calls) == scans
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    ("content", "start", "end", "status"),
+    [
+        ("", 1, 1, 422),
+        ("# A", 2, 3, 422),
+        ("# Changed\nbody", 1, 3, 200),
+    ],
+)
+async def test_locate_rejects_missing_start_line(wiki_project, content, start, end, status):
+    (wiki_project / "wiki/a.md").write_text(content)
+    body = {
+        "project_path": str(wiki_project),
+        "path": "wiki/a.md",
+        "content_hash": "0" * 64,
+        "line_start": start,
+        "line_end": end,
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/api/v1/wiki/citations/locate", json=body)
+    assert response.status_code == status
+    if status == 422:
+        assert response.json()["detail"] == "引用位置已失效，请重新打开来源"
+    else:
+        assert response.json()["changed"] is True
+        assert response.json()["line_end"] == 2
+        assert response.json()["excerpt"] == content

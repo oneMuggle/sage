@@ -294,7 +294,8 @@ def test_wiki_answer_returns_messages_and_citations(tmp_path: Path):
         {"role": "system", "content": "SYS:\n--- 文件: wiki/a.md ---\nAlpha context.\n"},
         {"role": "user", "content": "USER:alpha"},
     ]
-    assert result.content["citations"] == ["wiki/a.md"]
+    assert result.content["citations"] == []
+    assert result.content["sources"] == ["wiki/a.md"]
     # No path leak.
     import json
 
