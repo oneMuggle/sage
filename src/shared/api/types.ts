@@ -1340,6 +1340,10 @@ export interface WordFormatSpec {
   first_page_different?: boolean;
   first_page_header?: WordHeaderFooterSpec;
   first_page_footer?: WordHeaderFooterSpec;
+  // Round 34：奇偶页不同页眉页脚（书籍排版场景）
+  odd_even_pages?: boolean;
+  even_page_header?: WordHeaderFooterSpec;
+  even_page_footer?: WordHeaderFooterSpec;
 }
 
 // Word 插图（Round 8）：支持行内放置与题注自动编号。
