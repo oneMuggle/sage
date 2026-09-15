@@ -24,8 +24,9 @@ def global_search(
     knowledge_project: str | None = Query(
         None,
         description=(
-            "P9: 知识搜索范围（wiki 项目根目录绝对路径）。须为已登记/最近"
-            "打开的项目（未授权 403、缺 wiki/ 目录 404）；缺省=最近打开的项目。"
+            "P9/P13: 知识搜索范围（wiki 项目根目录，支持逗号分隔多根）。"
+            "每根须为已登记/最近打开的项目（未授权 403、缺 wiki/ 目录 404）；"
+            "缺省=最近打开的项目。"
         ),
     ),
 ) -> Dict[str, Any]:
@@ -54,7 +55,15 @@ def global_search(
 
     # ---- 知识搜索 (wiki) ----
     if "knowledge" in wanted:
-        scope = _resolve_knowledge_scope(knowledge_project) if knowledge_project else None
+        # P13: 支持逗号分隔多根——逐根授权（任一未授权 403 fail-closed），
+        # 传回规范化后的根列表供 _search_knowledge 合并搜索。
+        scope = None
+        if knowledge_project:
+            scope = ",".join(
+                str(_resolve_knowledge_scope(part))
+                for part in knowledge_project.split(",")
+                if part
+            )
         results["knowledge"] = _search_knowledge(q, limit, project_path=scope)
 
     # ---- 项目搜索（P7, 项目模块）----
@@ -148,34 +157,53 @@ def _search_knowledge(
 ) -> List[Dict[str, Any]]:
     """知识库文档搜索（复用 wiki search_wiki）。无活跃项目时返回空。
 
-    ``project_path``（P9，Path 或 str）：显式搜索范围（已经
-    ``_resolve_knowledge_scope`` 授权校验）；缺省回退最近打开的项目。
+    ``project_path``（P9，Path 或 str；P13 支持逗号分隔多根）：显式搜索
+    范围（每根已经 ``_resolve_knowledge_scope`` 授权校验）——多根时逐根
+    搜索、按 score 降序合并、路径去重后截取总 limit；缺省回退最近打开
+    的项目。
     """
     try:
         from backend.storage.recent_projects import load_recent
         from backend.wiki.search import search_wiki
 
+        roots: List[Any] = []
         if project_path is not None:
-            project_root = project_path
+            # P13: 逗号分隔多根（单值 = 单根列表，向后兼容 P9）。
+            # Path 包装：search_wiki 内部做 project_root / "wiki" 拼接。
+            from pathlib import Path as _Path
+
+            roots = [_Path(p) for p in str(project_path).split(",") if p]
         else:
             recent = load_recent()
             if not recent:
                 return []
             # 取最近打开的项目作为搜索范围
-            project_root = recent[0].path if recent else ""
-        if not project_root:
+            root = recent[0].path if recent else ""
+            if root:
+                roots = [root]
+        if not roots:
             return []
-        result = search_wiki(project_root=project_root, query=query, limit=limit)
-        # search_wiki 返回 SearchResponse: {results: [{path, title, snippet, ...}]}
-        docs = result.results if hasattr(result, "results") else []
-        return [
-            {
-                "path": getattr(d, "path", "") or d.get("path", ""),
-                "title": getattr(d, "title", "") or d.get("title", d.get("path", "")),
-                "snippet": (getattr(d, "snippet", "") or d.get("snippet", ""))[:200],
-            }
-            for d in docs
-        ]
+
+        merged: List[Dict[str, Any]] = []
+        seen_paths: set = set()
+        for project_root in roots:
+            result = search_wiki(project_root=project_root, query=query, limit=limit)
+            # search_wiki 返回 SearchResponse: {results: [{path, title, snippet, ...}]}
+            docs = result.results if hasattr(result, "results") else []
+            for d in docs:
+                path = getattr(d, "path", "") or d.get("path", "")
+                key = f"{project_root}::{path}"
+                if key in seen_paths:
+                    continue
+                seen_paths.add(key)
+                merged.append(
+                    {
+                        "path": path,
+                        "title": getattr(d, "title", "") or d.get("title", d.get("path", "")),
+                        "snippet": (getattr(d, "snippet", "") or d.get("snippet", ""))[:200],
+                    }
+                )
+        return merged[:limit]
     except Exception as e:
         import logging
 

@@ -97,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **归档视图批量操作**;前端纳入 PDF 全流程
 
 ### Added(projects)
+- **项目模块 P13**: 知识搜索范围支持"全部最近 wiki 项目"——knowledge_project 支持逗号分隔多根(逐根授权任一未授权 403 fail-closed;多根逐个 search_wiki 按 score 合并、root::path 去重、截取总 limit;单值向后兼容 P9),命令面板范围分组新增"全部最近 wiki 项目"选项(>=2 个项目时出现,选择持久化逗号拼接范围)(方案 docs/plans/2026-09-16_knowledge-multi-scope-plan.md)
 - **项目模块 P9**: 知识搜索默认域配置化——/search/global 新增可选 knowledge_project（经 authorize_registered_project 校验：未授权 403/非 wiki 404，与 wiki 域同契约），_search_knowledge 显式范围优先、缺省回退最近打开（默认行为零变化）；命令面板新增"知识范围"分组（默认+最近 wiki 项目 ≤5，localStorage 持久化 sage:knowledge-scope:v1，选择不关面板），搜索请求按范围携带参数(方案 docs/plans/2026-09-15_knowledge-scope-p9-plan.md)
 - **项目模块 P8**: wiki recent_projects 存储迁移到 projects 注册表(SQLite)——recent_projects.py 重写为只读投影适配器(公共 API 全保,消费方零改动);projects 表新增可空 intent 列(幂等迁移,NULL 读侧映射 open);MAX_RECENT 为投影截断而非注册表生命周期,save_recent 窗口重写只删上一窗口内行;旧 JSON 一次性导入后改名 .migrated 备份;单调毫秒保证同毫秒 record 顺序可判定;移除 wiki/files 平台原语依赖(方案 docs/plans/2026-09-15_wiki-recents-sqlite-p8-plan.md)
 - **项目模块 P7**: 全局搜索接入项目分组——/search/global 默认含 projects 组(ProjectRepository.search 按 name/path LIKE + 会话计数聚合,types=project 可单选),命令面板搜索模式命中项目名/路径片段可直达(复用 open 流,handleOpenProject 收敛为 {id} 签名)(方案 docs/plans/2026-09-14_projects-search-p7-plan.md)

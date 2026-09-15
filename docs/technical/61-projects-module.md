@@ -282,3 +282,17 @@ project_authorization / chat.entity_refs）零改动。
   导航）；搜索请求按范围携带 `knowledge_project`；
 - win7 对齐：search_routes / CommandPalette 小块追加；授权门禁复用 P6
   桥接的 project_authorization；py3.8 兼容。
+
+## 18. P13 落地记录（2026-09-16，feat/knowledge-multi-scope）
+
+方案：`docs/plans/2026-09-16_knowledge-multi-scope-plan.md`。P9 知识
+范围的跨项目扩展：
+
+- 后端 `knowledge_project` 支持逗号分隔多根——逐根授权（任一未授权
+  403 fail-closed）→ `_search_knowledge` 逐根 search_wiki、按 score
+  合并、`root::path` 去重、截取总 limit；roots 以 Path 包装（集成测试
+  捕获 str 拼接 TypeError）；单值行为与 P9 完全一致（向后兼容）；
+- 前端范围分组新增"全部最近 wiki 项目"（逗号拼接全部 recents ≤5，
+  跨项目合并搜索；仅 ≥2 个项目时出现）；单项目选项语义不变；
+- 测试：后端 +2（多根合并/任一未授权 fail-closed）+ P9 回归；前端 +2
+  （全部选项渲染/选择持久化并携带多根参数）。
