@@ -21,14 +21,14 @@ export function MarkdownPreview({ content }: { content: string }) {
             const isInline = !match;
             return isInline ? (
               <code
-                className="bg-bg-muted px-1.5 py-0.5 rounded text-sm font-mono text-text"
+                className="bg-bg-muted px-1.5 py-0.5 rounded text-code font-mono text-text"
                 {...props}
               >
                 {children}
               </code>
             ) : (
               <div className="bg-bg-muted rounded-lg p-3 my-3 overflow-x-auto">
-                <code className={`text-sm font-mono ${className || ''}`} {...props}>
+                <code className={`text-code font-mono ${className || ''}`} {...props}>
                   {children}
                 </code>
               </div>

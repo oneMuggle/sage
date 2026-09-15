@@ -53,7 +53,9 @@ interface MessageProps {
 function CodeBlock({ language, children }: { language?: string; children: string }) {
   // Inline code fallback
   if (!language && !children.includes('\n')) {
-    return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{children}</code>;
+    return (
+      <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{children}</code>
+    );
   }
 
   return <ShikiCodeBlock language={language}>{children}</ShikiCodeBlock>;
@@ -323,7 +325,7 @@ function MessageComponent({
         >
           {/* Message content with Markdown */}
           {isAssistant ? (
-            <div className="max-w-none">
+            <div className="max-w-none max-w-3xl mx-auto w-full">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeKatex]}
@@ -336,14 +338,14 @@ function MessageComponent({
                     const isInlineCode = !className && !content.includes('\n');
                     if (isInlineCode) {
                       return (
-                        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">
+                        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">
                           {content}
                         </code>
                       );
                     }
                     if (!lang) {
                       return (
-                        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">
+                        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">
                           {content}
                         </code>
                       );
@@ -359,7 +361,7 @@ function MessageComponent({
                   },
                   table({ children }) {
                     return (
-                      <div className="overflow-x-auto my-3">
+                      <div className="overflow-x-auto my-3 max-h-80 overflow-y-auto">
                         <table className="min-w-full text-xs border-collapse border border-border">
                           {children}
                         </table>
@@ -368,7 +370,7 @@ function MessageComponent({
                   },
                   th({ children }) {
                     return (
-                      <th className="border border-border px-3 py-1.5 bg-bg-subtle font-semibold text-left">
+                      <th className="border border-border px-3 py-1.5 bg-bg-subtle font-semibold text-left sticky top-0 z-[1]">
                         {children}
                       </th>
                     );

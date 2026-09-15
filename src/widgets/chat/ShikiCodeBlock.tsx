@@ -21,27 +21,36 @@ function getHighlighter(): Promise<import('shiki').Highlighter> {
   if (!highlighterPromise) {
     highlighterPromise = import('shiki').then(({ createHighlighter }) =>
       createHighlighter({
-      themes: ['github-dark', 'github-light'],
-      langs: [
-        'javascript',
-        'typescript',
-        'python',
-        'rust',
-        'go',
-        'java',
-        'cpp',
-        'c',
-        'html',
-        'css',
-        'json',
-        'yaml',
-        'toml',
-        'markdown',
-        'bash',
-        'sql',
-        'dockerfile',
-        'diff',
-      ],
+        themes: ['github-dark', 'github-light'],
+        langs: [
+          'javascript',
+          'typescript',
+          'python',
+          'rust',
+          'go',
+          'java',
+          'cpp',
+          'c',
+          'html',
+          'css',
+          'json',
+          'yaml',
+          'toml',
+          'markdown',
+          'bash',
+          'sql',
+          'dockerfile',
+          'diff',
+          // P22: 扩展语言覆盖
+          'kotlin',
+          'swift',
+          'ruby',
+          'php',
+          'csharp',
+          'xml',
+          'graphql',
+          'make',
+        ],
       }),
     );
   }
@@ -117,12 +126,12 @@ export function ShikiCodeBlock({ language, children }: ShikiCodeBlockProps) {
       {/* 代码区域 */}
       {highlightedHtml ? (
         <div
-          className="shiki-code overflow-x-auto text-xs leading-relaxed"
+          className="shiki-code overflow-x-auto text-code leading-relaxed"
           style={{ margin: 0 }}
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
         />
       ) : (
-        <pre className="bg-[#282c34] text-gray-300 p-3 text-xs leading-relaxed overflow-x-auto rounded-b-md">
+        <pre className="bg-[#282c34] text-gray-300 p-3 text-code font-mono leading-relaxed overflow-x-auto rounded-b-md">
           <code>{children.replace(/\n$/, '')}</code>
         </pre>
       )}
