@@ -80,7 +80,7 @@ def test_session_usage_since_fail_open(tmp_path, monkeypatch):
 # ---- dispatcher 守门 ----------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_budget_exceeded_cancels_queued_and_rejects_next(tmp_path, monkeypatch):
     _init_tmp_db(tmp_path, monkeypatch)
     queue = _make_queue()
@@ -116,7 +116,7 @@ async def test_budget_exceeded_cancels_queued_and_rejects_next(tmp_path, monkeyp
         await d.dispatch([{"task_id": "t3", "agent_id": "primary", "goal": "g3"}])
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_budget_disabled_never_trips(tmp_path, monkeypatch):
     """预算 0（默认关闭）→ 即便用量巨大也零影响。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -147,7 +147,7 @@ async def test_budget_disabled_never_trips(tmp_path, monkeypatch):
     assert "token 预算上限" not in aggregated
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_budget_not_exceeded_noop(tmp_path, monkeypatch):
     """用量低于预算 → 不触发、聚合无标注。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -174,7 +174,7 @@ async def test_budget_not_exceeded_noop(tmp_path, monkeypatch):
     assert "token 预算上限" not in aggregated
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_budget_trip_error_attribution_on_queued_tasks(tmp_path, monkeypatch):
     """BU6 (round16): 预算触顶收口的任务 error = budget_exceeded（非 cancelled by user）。
 

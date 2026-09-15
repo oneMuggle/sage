@@ -92,7 +92,7 @@ def _make_inproc(tool, policy: Optional[ToolPolicy] = None) -> InprocToolAdapter
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_inproc_default_policy_is_tool_policy():
     """缺省构造（不传 policy）时，InprocToolAdapter 内部用 ToolPolicy() 默认。"""
     big = _BigOutputTool()
@@ -102,7 +102,7 @@ async def test_inproc_default_policy_is_tool_policy():
     assert adapter._policy.max_output_bytes == 256_000  # type: ignore[attr-defined]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_inproc_slow_tool_returns_tool_timeout():
     policy = ToolPolicy(timeout_seconds=0.05)
     adapter = _make_inproc(_SlowSyncTool(sleep_s=0.5), policy=policy)
@@ -115,7 +115,7 @@ async def test_inproc_slow_tool_returns_tool_timeout():
     assert result.metadata.get("timeout_seconds") == 0.05
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_inproc_big_output_is_truncated_to_max_bytes():
     policy = ToolPolicy(max_output_bytes=1024)
     adapter = _make_inproc(_BigOutputTool(), policy=policy)
@@ -130,7 +130,7 @@ async def test_inproc_big_output_is_truncated_to_max_bytes():
     assert result.metadata["original_bytes"] > policy.max_output_bytes
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_inproc_small_output_is_not_truncated():
     policy = ToolPolicy(max_output_bytes=1024)
     small_tool = type("Small", (), {})()
@@ -204,7 +204,7 @@ class _FakeInnerForCompute:
         return ToolResult(success=True, output="inner", error=None, metadata=None)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_compute_slow_compute_returns_tool_timeout():
     policy = ToolPolicy(timeout_seconds=0.05)
     adapter = ComputeToolAdapter(
@@ -221,7 +221,7 @@ async def test_compute_slow_compute_returns_tool_timeout():
     assert result.metadata.get("timeout_seconds") == 0.05
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_compute_big_output_is_truncated_to_max_bytes():
     policy = ToolPolicy(max_output_bytes=2048)
     # 构造会让 json.dumps 后 > 2048 bytes 的 payload

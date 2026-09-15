@@ -39,7 +39,7 @@ GOOD_FILLED = FIXTURE_ROOT / "good_filled_paper.docx"
 BAD_FILLED = FIXTURE_ROOT / "bad_filled_paper.docx"
 
 
-@pytest.fixture()
+@pytest.fixture
 def workspace(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     ws.mkdir()

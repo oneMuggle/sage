@@ -37,7 +37,7 @@ def _insert_message(client, session_id: str, message_id: str, content: str = "te
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_delete_existing_message_returns_deleted_true(client):
     """存在消息 → 200 + {\"deleted\": true}."""
     create_resp = await client.post(f"{PREFIX}/sessions", json={"title": "消息删除测试"})
@@ -50,7 +50,7 @@ async def test_delete_existing_message_returns_deleted_true(client):
     assert data == {"deleted": True}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_delete_missing_message_returns_404(client):
     """不存在的 message_id → 404 + 结构化 detail (前端可分类处理)."""
     resp = await client.post(f"{PREFIX}/messages/m-nonexistent/delete")
@@ -60,7 +60,7 @@ async def test_delete_missing_message_returns_404(client):
     assert "m-nonexistent" in detail["message"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_delete_message_idempotency_returns_404_on_second_call(client):
     """第二次删同一 id → 404 (不是 200, 不是 500)."""
     create_resp = await client.post(f"{PREFIX}/sessions", json={"title": "幂等测试"})
@@ -78,7 +78,7 @@ async def test_delete_message_idempotency_returns_404_on_second_call(client):
     assert second.json()["detail"]["type"] == "message_not_found"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_delete_message_removes_row_from_db(client):
     """删除后 GET /sessions/{id}/messages 不再列出该消息 — 物理删除不是软删."""
     create_resp = await client.post(f"{PREFIX}/sessions", json={"title": "物理删除验证"})
@@ -103,7 +103,7 @@ async def test_delete_message_removes_row_from_db(client):
     assert "m-phys-001" not in remaining_ids
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_delete_message_does_not_affect_other_sessions_messages(client):
     """删一个会话里的消息不应影响其他会话."""
     from backend.data.session_repo import Message, MessageRepository

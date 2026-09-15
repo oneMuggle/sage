@@ -408,7 +408,7 @@ def test_memory_search_filters_results_from_other_sessions(memory_manager_spy):
 # ---------- pytest fixtures used by the contract tests ----------
 
 
-@pytest.fixture()
+@pytest.fixture
 def real_memory_manager(monkeypatch):
     """Spy whose ``memorize`` returns a stable memory ID and records calls.
 
@@ -423,7 +423,7 @@ def real_memory_manager(monkeypatch):
     return spy
 
 
-@pytest.fixture()
+@pytest.fixture
 def memory_manager_spy():
     """``MagicMock`` whose ``search_memories`` returns ``[]`` by default.
 

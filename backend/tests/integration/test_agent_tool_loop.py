@@ -78,7 +78,7 @@ def _sub_done_turn() -> LLMResponse:
 
 
 class TestAgentToolInRunLoop:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_run_loop_spawns_subagent_lane_and_reaches_done(self):
         # Arrange — primary agent with mocked LLM (side_effect queue).
         agent = SageAgent()
@@ -146,7 +146,7 @@ class TestAgentToolInRunLoop:
         assert len(tool_messages) == 1
         assert "sub answer: 42" in tool_messages[0]["content"]
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_run_loop_survives_subagent_failure(self):
         """Sub-agent LLM failure → error tool result, primary loop continues."""
         agent = SageAgent()
@@ -181,7 +181,7 @@ class TestAgentToolInRunLoop:
 
 
 class TestAgentToolLoopSafety:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_subagent_timeout_fails_lane_and_loop_continues(self, monkeypatch):
         """HIGH: hung sub-run → 超时 tool error, lane FAILED, loop → DONE."""
         monkeypatch.setattr("backend.tools.agent_tool.SUBAGENT_TIMEOUT_S", 0.2)
@@ -226,7 +226,7 @@ class TestAgentToolLoopSafety:
         assert lanes[0].status == LaneStatus.FAILED
         assert "timeout" in (lanes[0].error or "")
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_agent_tool_offloaded_event_loop_stays_responsive(self, monkeypatch):
         """HIGH: the agent tool sub-run is cooperative async on the event loop
         (live-events P2) — a concurrent ticker keeps advancing while the slow
@@ -283,7 +283,7 @@ class TestAgentToolLoopSafety:
 class TestAgentToolPermissions:
     """agent 工具的能力分类是安全边界，在 run_loop 层面回归。"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_agent_tool_needs_approval_without_rule(self):
         """无 allow 规则时，workspace_write 下派生子代理必须被闸口拦截。
 
@@ -362,7 +362,7 @@ class _SlowBlockingTool(BaseTool):
 
 
 class TestBlockingToolOffload:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_blocking_tool_keeps_event_loop_responsive(self):
         """is_blocking=True 的工具在 executor 线程执行 —— 工具 sleep 期间，
         同一事件循环上的心跳协程持续推进（未卸载时 ticks 只有 1）。"""

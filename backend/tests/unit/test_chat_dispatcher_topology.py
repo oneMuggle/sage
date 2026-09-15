@@ -40,7 +40,7 @@ def _drain_events(queue) -> list[dict]:
     return events
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_dependent_task_starts_after_upstream_done():
     """t2 依赖 t1 → t2 的首个 running 事件必须在 t1 done 之后（分波串行）。"""
     queue = _make_queue()
@@ -67,7 +67,7 @@ async def test_dependent_task_starts_after_upstream_done():
     assert "结果二" in aggregated
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_same_wave_tasks_still_parallel():
     """同波任务仍并行（max_active ≥ 2）。"""
     queue = _make_queue()
@@ -94,7 +94,7 @@ async def test_same_wave_tasks_still_parallel():
     assert fake.max_active >= 2  # t2/t3 同波并行
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_upstream_failure_cascades_without_running_downstream():
     """上游失败 → 下游直接置 failed（error=blocked_by_failed:t1），子代理不跑。"""
     queue = _make_queue()
@@ -134,7 +134,7 @@ async def test_upstream_failure_cascades_without_running_downstream():
     assert fake.calls <= 3
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_transitive_cascade_attributes_direct_upstream():
     """三级链 t1→t2→t3：t1 失败 → t2/t3 级联，且 t3 的归因引用直接上游 t2。"""
     queue = _make_queue()
@@ -171,7 +171,7 @@ async def test_transitive_cascade_attributes_direct_upstream():
     assert fake.calls <= 3  # 只有 t1 的重试链真正派遣过子代理
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_cycle_rejected_before_any_dispatch():
     """环依赖 → dispatch 抛 ValueError（含环路径），无任何子代理运行。"""
     queue = _make_queue()
@@ -193,7 +193,7 @@ async def test_cycle_rejected_before_any_dispatch():
     assert fake.calls == 0
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_no_deps_batch_backward_compatible():
     """无依赖批次退化为原全并行行为：queued×N → running×N → done×N。"""
     queue = _make_queue()

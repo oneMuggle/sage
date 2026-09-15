@@ -11,7 +11,7 @@ from backend.cli.checks.config_integrity import ConfigIntegrityCheck
 from backend.cli.doctor import Severity
 
 
-@pytest.fixture()
+@pytest.fixture
 def check():
     return ConfigIntegrityCheck()
 

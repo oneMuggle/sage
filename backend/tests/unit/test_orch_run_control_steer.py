@@ -27,7 +27,7 @@ from backend.orchestration.event_hub import EventHub
 from backend.orchestration.snapshot_store import SnapshotStore
 
 
-@pytest.fixture()
+@pytest.fixture
 def app_deps():
     """Build a FastAPI TestClient wired with all steer dependencies.
 

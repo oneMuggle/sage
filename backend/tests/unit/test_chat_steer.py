@@ -39,7 +39,7 @@ def test_inject_rejects_blank_content():
     assert agent.inject_user_message("   ") is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_steering_consumed_at_iteration_boundary():
     """run 中注入的消息在下一迭代边界以【用户补充】前缀进入 LLM 上下文。"""
     agent = SageAgent()
@@ -74,7 +74,7 @@ async def test_steering_consumed_at_iteration_boundary():
     assert injected[0]["content"].startswith("【用户补充】")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_steer_window_narrows_after_run():
     """run 结束后 inject 拒绝；run 启动时清空残留（不跨 run 泄漏）。"""
     agent = SageAgent()
@@ -95,7 +95,7 @@ async def test_steer_window_narrows_after_run():
 # ---- 端点层 --------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_steer_endpoint_injects_into_registered_stream(monkeypatch):
     from backend.api import legacy_routes as lr
     from backend.main import app
@@ -118,7 +118,7 @@ async def test_steer_endpoint_injects_into_registered_stream(monkeypatch):
     assert len(agent._pending_user_messages) == 2
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_steer_endpoint_404_for_unknown_stream():
     from backend.main import app
 
@@ -132,7 +132,7 @@ async def test_steer_endpoint_404_for_unknown_stream():
     assert resp.json()["detail"]["code"] == "stream_not_found"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_steer_endpoint_409_when_not_running(monkeypatch):
     from backend.api import legacy_routes as lr
     from backend.main import app
@@ -150,7 +150,7 @@ async def test_steer_endpoint_409_when_not_running(monkeypatch):
     assert resp.json()["detail"]["code"] == "not_running"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_steer_endpoint_400_for_blank_and_oversize(monkeypatch):
     from backend.api import legacy_routes as lr
     from backend.main import app

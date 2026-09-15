@@ -70,7 +70,7 @@ def test_manager_private_wrapper_consistent() -> None:
 # ==================== MemoryManager session 感知集成 ====================
 
 
-@pytest.fixture()
+@pytest.fixture
 def manager() -> MemoryManager:
     """真实 WorkingMemory + Mock episodic/semantic（本测试只关注 working 路径）。"""
     episodic = Mock()

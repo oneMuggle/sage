@@ -10,7 +10,7 @@ from backend.cli.checks.port_backend import PORT, PortBackendCheck
 from backend.cli.doctor import Severity
 
 
-@pytest.fixture()
+@pytest.fixture
 def check():
     return PortBackendCheck()
 

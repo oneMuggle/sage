@@ -6,7 +6,7 @@ from httpx import ASGITransport, AsyncClient
 pytestmark = [pytest.mark.integration]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_serve_media_found(tmp_path, monkeypatch):
     """GET /api/v1/media/{id} 应返回文件"""
     from backend.services.multimodal.media_store import MediaKind, MediaStore
@@ -26,7 +26,7 @@ async def test_serve_media_found(tmp_path, monkeypatch):
     assert resp.status_code == 200
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_serve_media_not_found():
     """GET /api/v1/media/{id} 不存在应 404"""
     from fastapi import FastAPI

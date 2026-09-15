@@ -41,7 +41,7 @@ def _mock_llm(payload: str) -> object:
 
 
 class TestPlannerLLMDecomposition:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_mock_llm_parses_task_dag(self):
         """Valid JSON DAG → tasks with dependencies and agent_hint wired."""
         payload = json.dumps(
@@ -95,7 +95,7 @@ class TestPlannerLLMDecomposition:
         # Tasks persisted.
         assert TaskRegistry().get_task(t1.task_id) is not None
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_malformed_json_falls_back_to_single_task(self):
         """Unparseable LLM output → single-task fallback, no exception."""
         planner = _make_planner(_mock_llm("this is not JSON {{{"))
@@ -107,7 +107,7 @@ class TestPlannerLLMDecomposition:
         assert plan.tasks[0].name.startswith("Execute:")
         assert "fallback" in plan.reasoning.lower()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_code_fence_wrapped_json_is_accepted(self):
         """LLMs often wrap JSON in ```json fences — must still parse."""
         payload = "```json\n" + json.dumps(
@@ -120,7 +120,7 @@ class TestPlannerLLMDecomposition:
         assert len(plan.tasks) == 1
         assert plan.tasks[0].name == "Only task"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_task_cap_enforced(self):
         """More than MAX_PLAN_TASKS emitted → truncated to the cap."""
         payload = json.dumps(
@@ -137,7 +137,7 @@ class TestPlannerLLMDecomposition:
 
         assert len(plan.tasks) == MAX_PLAN_TASKS
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_forward_and_unknown_dependencies_dropped(self):
         """depends_on referencing later/unknown ids is dropped (DAG-safe)."""
         payload = json.dumps(
@@ -158,7 +158,7 @@ class TestPlannerLLMDecomposition:
         # t2's back-ref to t1 kept.
         assert second.blocked_by == [first.task_id]
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_llm_exception_falls_back(self):
         """LLM transport failure → fallback, planning still works degraded."""
         client = AsyncMock()
@@ -170,7 +170,7 @@ class TestPlannerLLMDecomposition:
         assert len(plan.tasks) == 1
         assert plan.tasks[0].description == "goal that must not crash"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_no_llm_configured_degrades_to_single_task(self):
         """auto_configure with no settings endpoint → fallback planning."""
         planner = Planner(
@@ -185,7 +185,7 @@ class TestPlannerLLMDecomposition:
         assert len(plan.tasks) == 1
         assert plan.tasks[0].description == "degraded goal"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_injected_llm_client_used_over_settings(self, monkeypatch):
         """An injected client wins; settings factory is never consulted."""
         called = {"n": 0}
@@ -282,7 +282,7 @@ class TestPlannerHostileInputs:
         assert "agent_hint" not in sanitized[1]["parameters"]
         assert sanitized[2]["parameters"]["agent_hint"] == "my_custom"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_description_cap_survives_full_decomposition(self):
         """Cap holds end-to-end through decompose_request + persistence."""
         payload = json.dumps(
@@ -295,7 +295,7 @@ class TestPlannerHostileInputs:
         assert len(plan.tasks) == 1
         assert len(plan.tasks[0].description) == MAX_TASK_DESCRIPTION_CHARS
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_1000_task_response_capped(self):
         """MEDIUM-3a: a flood of 1000 tasks is truncated to MAX_PLAN_TASKS."""
         payload = json.dumps(
@@ -319,7 +319,7 @@ class TestPlannerHostileInputs:
         # Chained deps survive within the capped prefix.
         assert plan.tasks[1].blocked_by == [plan.tasks[0].task_id]
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_explicit_cycle_attempt_is_acyclic_by_construction(self):
         """MEDIUM-3b: t1↔t2↔t3 cycle attempt completes (no hang) and is
         deterministically acyclic — deps can only resolve to EARLIER

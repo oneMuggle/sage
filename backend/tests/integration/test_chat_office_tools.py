@@ -96,7 +96,7 @@ def _registry_size() -> int:
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_no_binding_sets_empty_scope_tool_context(client, tmp_path: Path):
     """Legacy path (no refs, no binding) -> producer sets a context with
     an empty office scope. F2 (2026-08-12): 普通聊天也必须设置
@@ -140,7 +140,7 @@ async def test_no_binding_sets_empty_scope_tool_context(client, tmp_path: Path):
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_active_binding_sets_and_resets_tool_context(client, tmp_path: Path):
     """Active binding + refs -> producer sets ToolExecutionContext before
     run_loop and resets it afterwards (verified via current_tool_context).
@@ -202,7 +202,7 @@ async def test_active_binding_sets_and_resets_tool_context(client, tmp_path: Pat
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_rebind_between_auth_and_tool_execution_fails_closed(client, tmp_path: Path):
     """If the binding is revoked between authorization and tool execution,
     the ToolExecutionContext carries a stale generation. OfficeToolService

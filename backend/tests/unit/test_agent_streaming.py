@@ -91,7 +91,7 @@ def _make_client() -> LLMClient:
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_stream_yields_each_delta_in_order():
     """多个 SSE delta 应按顺序逐个 yield 出来。"""
     client = _make_client()
@@ -117,7 +117,7 @@ async def test_chat_stream_yields_each_delta_in_order():
     assert "".join(chunks) == "你好！"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_stream_terminates_on_done_sentinel():
     """`data: [DONE]` 哨兵出现时,迭代器应停止,不再 yield。
 
@@ -144,7 +144,7 @@ async def test_chat_stream_terminates_on_done_sentinel():
     assert chunks == ["片段1"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_stream_skips_empty_delta_and_malformed_lines():
     """空 content / 损坏 JSON 行应被静默跳过,不影响后续正常 chunk。"""
     client = _make_client()
@@ -167,7 +167,7 @@ async def test_chat_stream_skips_empty_delta_and_malformed_lines():
     assert chunks == ["有效片段"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_stream_raises_classified_llm_error_on_http_error():
     """HTTP 错误状态码应抛分类 LLMError(Task 11 已关闭:5xx → SERVER_ERROR)。"""
     client = _make_client()
@@ -210,7 +210,7 @@ def _mock_llm_no_tool(content: str = "ok") -> MagicMock:
     return mock_client
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_run_loop_terminates_immediately_after_done_event():
     """DONE 事件之后,async for 应立即停止(不再有 THINKING 之类的后续事件)。"""
     agent = SageAgent()
@@ -227,7 +227,7 @@ async def test_run_loop_terminates_immediately_after_done_event():
     assert "thinking" not in [e.state.value for e in events[done_idx + 1 :]]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_run_loop_reusable_across_iterations():
     """同一个 agent 实例可以连续多次运行 run_loop,无残留状态。
 

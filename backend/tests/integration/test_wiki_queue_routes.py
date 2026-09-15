@@ -21,7 +21,7 @@ from backend.api.wiki_routes import (
 from backend.wiki import IngestQueue
 
 
-@pytest.fixture()
+@pytest.fixture
 def project_root(tmp_path: Path) -> Path:
     """创建临时 Wiki 项目。"""
     project = tmp_path / "wiki-project"

@@ -29,7 +29,7 @@ def _make_service(side_effects):
 
 
 class TestRetryEmptyResponse:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_empty_then_valid_returns_valid(self):
         """空响应 → 注入提示重试 → 返回非空响应"""
         service, llm = _make_service(
@@ -47,7 +47,7 @@ class TestRetryEmptyResponse:
             for m in messages
         )
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_always_empty_returns_none(self):
         """始终空 → None（调用方保留原响应）"""
         service, _ = _make_service(
@@ -61,7 +61,7 @@ class TestRetryEmptyResponse:
         )
         assert result is None
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_llm_failure_returns_none(self):
         service, _ = _make_service([RuntimeError("down")])
         result = await service._retry_empty_response(
@@ -71,7 +71,7 @@ class TestRetryEmptyResponse:
 
 
 class TestRunTurnGuardIntegration:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_run_turn_retries_empty_response(self):
         """run_turn 空响应 → 自动重试并持久化非空回复"""
         mock_llm = AsyncMock()

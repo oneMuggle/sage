@@ -12,7 +12,7 @@ from backend.cli.checks.runtime_env import RuntimeEnvCheck
 from backend.cli.doctor import Severity
 
 
-@pytest.fixture()
+@pytest.fixture
 def check():
     return RuntimeEnvCheck()
 

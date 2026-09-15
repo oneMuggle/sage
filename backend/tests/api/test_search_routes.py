@@ -10,20 +10,20 @@ import pytest
 from backend.data.session_repo import SessionRepository
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_global_search_missing_q_returns_422(client):
     resp = await client.get("/api/v1/search/global")
     assert resp.status_code == 422
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_global_search_empty_q_returns_422(client):
     # q 的 min_length=1，空串应被 FastAPI 校验拒绝
     resp = await client.get("/api/v1/search/global", params={"q": ""})
     assert resp.status_code == 422
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_global_search_returns_all_four_keys(client):
     resp = await client.get("/api/v1/search/global", params={"q": "never-match-xyz"})
     assert resp.status_code == 200
@@ -36,14 +36,14 @@ async def test_global_search_returns_all_four_keys(client):
     assert isinstance(body["projects"], list)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_global_search_types_filter_limits_keys(client):
     resp = await client.get("/api/v1/search/global", params={"q": "abc", "types": "session"})
     assert resp.status_code == 200
     assert set(resp.json().keys()) == {"sessions"}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_global_search_finds_session_by_title(client):
     repo = SessionRepository()
     repo.create(title="项目计划评审")
@@ -58,7 +58,7 @@ async def test_global_search_finds_session_by_title(client):
     assert "updated_at" in sessions[0]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_global_search_respects_limit(client):
     repo = SessionRepository()
     for i in range(5):
@@ -72,7 +72,7 @@ async def test_global_search_respects_limit(client):
 # ===== P7: 项目模块接入全局搜索 =====
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_global_search_finds_registered_project(client, tmp_path):
 
     from backend.data.project_repo import ProjectRepository
@@ -95,7 +95,7 @@ async def test_global_search_finds_registered_project(client, tmp_path):
     assert "id" in projects[0]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_global_search_project_types_filter(client, tmp_path):
     from backend.data.project_repo import ProjectRepository
 
@@ -126,7 +126,7 @@ def _seed_wiki_project(root, token: str) -> None:
     record_recent(str(root), root.name, "open")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_knowledge_project_scope_limits_results(client, tmp_path):
     """显式范围=A 时，只命中 A 内的页面（即使 B 更新）。"""
     project_a = tmp_path / "project-a"
@@ -150,7 +150,7 @@ async def test_knowledge_project_scope_limits_results(client, tmp_path):
     assert all("note-aaaa" in item["path"] for item in knowledge)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_knowledge_project_unauthorized_returns_403(client, tmp_path):
     """范围目录未登记/未打开 → 403（与 wiki 域授权契约一致）。"""
     rogue = tmp_path / "rogue"
@@ -162,7 +162,7 @@ async def test_knowledge_project_unauthorized_returns_403(client, tmp_path):
     assert resp.status_code == 403
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_knowledge_project_without_wiki_dir_returns_404(client, tmp_path):
     """范围目录存在但不是 wiki 项目（缺 wiki/）→ 404。"""
     plain = tmp_path / "plain"

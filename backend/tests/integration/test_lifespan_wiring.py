@@ -11,7 +11,7 @@ from backend.main import (
 )
 
 
-@pytest.mark.integration()
+@pytest.mark.integration
 def test_lifespan_health_metadata_uses_runtime_ownership_envelope(monkeypatch):
     """Health metadata is derived from the process environment and is JSON-safe."""
     monkeypatch.setenv("SAGE_BUILD_ID", "test-build")

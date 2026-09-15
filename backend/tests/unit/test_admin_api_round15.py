@@ -18,7 +18,7 @@ from backend.skills.lifecycle import SkillLifecycleStore
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def tmp_db():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db = Database(f.name)
@@ -28,7 +28,7 @@ def tmp_db():
 
 
 class TestConsolidationAccept:
-    @pytest.fixture()
+    @pytest.fixture
     def client(self):
         app = FastAPI()
         app.include_router(legacy_router)
@@ -85,7 +85,7 @@ class TestConsolidationAccept:
 
 
 class TestGatewayBinds:
-    @pytest.fixture()
+    @pytest.fixture
     def client(self):
         app = FastAPI()
         app.include_router(gateway_router)

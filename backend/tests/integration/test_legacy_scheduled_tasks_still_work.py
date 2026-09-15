@@ -16,26 +16,26 @@ import pytest
 from backend.services.scheduler import SchedulerService
 
 
-@pytest.fixture()
+@pytest.fixture
 def store_path(tmp_path: Path) -> Path:
     return tmp_path / "scheduled_tasks.json"
 
 
-@pytest.fixture()
+@pytest.fixture
 def message_repo() -> MagicMock:
     repo = MagicMock()
     repo.insert = MagicMock(return_value={"id": "msg-1"})
     return repo
 
 
-@pytest.fixture()
+@pytest.fixture
 def session_repo() -> MagicMock:
     repo = MagicMock()
     repo.exists = MagicMock(return_value=True)
     return repo
 
 
-@pytest.fixture()
+@pytest.fixture
 def scheduler(
     store_path: Path, message_repo: MagicMock, session_repo: MagicMock
 ) -> SchedulerService:

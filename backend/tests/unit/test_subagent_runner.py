@@ -65,7 +65,7 @@ def _make_task(goal: str = "调研 X", scratch: str | None = None):
     return Task(task_id="t1", name="T1", description=goal, parameters=params)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_runner_prefers_workspace_dir_for_tool_policy():
     """worktree workspace_dir 存在时优先于 scratch_dir 注入 ToolPolicy。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -90,7 +90,7 @@ async def test_runner_prefers_workspace_dir_for_tool_policy():
     assert captured["workspace_root"] == "/tmp/worktree"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_runner_returns_succeeded_dict():
     from backend.orchestration.subagent_runner import SubagentRunner
 
@@ -108,7 +108,7 @@ async def test_runner_returns_succeeded_dict():
     assert fake.calls == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_runner_invalid_agent_raises():
     from backend.orchestration.subagent_runner import SubagentRunner
 
@@ -118,7 +118,7 @@ async def test_runner_invalid_agent_raises():
         await SubagentRunner()(_make_task(), "ghost_agent")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_run_lane_with_retry_loops_until_terminal():
     from backend.orchestration.models import Lane, LaneStatus
     from backend.orchestration.subagent_runner import run_lane_with_retry
@@ -140,7 +140,7 @@ async def test_run_lane_with_retry_loops_until_terminal():
     assert result["result"]["output"] == "ok"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_run_lane_with_retry_returns_failed_terminal():
     from backend.orchestration.models import Lane, LaneStatus
     from backend.orchestration.subagent_runner import run_lane_with_retry
@@ -162,7 +162,7 @@ async def test_run_lane_with_retry_returns_failed_terminal():
     assert "MAX_RETRIES_EXCEEDED" in result["error"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_lane_executor_runs_real_subagent_runner():
     """LaneExecutor + SubagentRunner 集成（spec §5.4）：真实 runner 产出
     DONE content → 任务 COMPLETED、lane SUCCEEDED。"""
@@ -215,7 +215,7 @@ async def test_lane_executor_runs_real_subagent_runner():
     assert fake.calls == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_runner_interrupt_event_stops_child():
     """P0-3: interrupt_event 置位 → watcher 调 child.interrupt() → 抛 interrupted。"""
     import asyncio
@@ -255,7 +255,7 @@ async def test_runner_interrupt_event_stops_child():
             await run_task
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_runner_surfaces_last_failed_event_error():
     """P0-3: 子 agent FAILED（非中断）→ RuntimeError 携带事件 error 而非笼统文案。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -312,7 +312,7 @@ _SCHEMA = {
 }
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_output_schema_success_returns_compact_json():
     """声明 schema 且子 agent 输出合法 JSON → output 为紧凑 JSON 字符串。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -339,7 +339,7 @@ async def test_output_schema_success_returns_compact_json():
     assert user_content.startswith("调研 X\n\n")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_output_schema_violation_falls_back_to_raw():
     """schema 校验失败 → 降级返回原文（不 fail 任务）。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -360,7 +360,7 @@ async def test_output_schema_violation_falls_back_to_raw():
     assert isinstance(result["messages"], list)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_output_schema_validator_exception_falls_back_to_raw():
     """schema validator 异常 → warning 后降级返回原文，不失败任务。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -383,7 +383,7 @@ async def test_output_schema_validator_exception_falls_back_to_raw():
     warning.assert_called_once()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_no_schema_keeps_raw_behavior():
     """未声明 schema → 与旧版行为一致（回归守卫）。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -405,7 +405,7 @@ async def test_no_schema_keeps_raw_behavior():
     assert isinstance(result["messages"], list)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_runner_replays_history_with_system_and_recent_messages():
     """续聊只保留首条 system、最近消息，并追加新的 user goal。"""
     from backend.orchestration.subagent_runner import MAX_REPLAY_MESSAGES, SubagentRunner

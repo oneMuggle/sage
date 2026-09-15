@@ -29,7 +29,7 @@ def _init_tmp_db(tmp_path, monkeypatch):
     db_mod.get_database().init_db()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_background_dispatch_and_collect(tmp_path, monkeypatch):
     """后台派发：start 返回句柄、在飞互斥、wait 拿到聚合。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -64,7 +64,7 @@ async def test_background_dispatch_and_collect(tmp_path, monkeypatch):
     await d.wait_background(timeout=5)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_wait_background_timeout_does_not_kill_dispatch(tmp_path, monkeypatch):
     """collect 超时（shield）→ 后台派发继续推进，之后仍可拿到结果。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -89,7 +89,7 @@ async def test_wait_background_timeout_does_not_kill_dispatch(tmp_path, monkeypa
     assert "结果 t1" in aggregated
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_wait_background_without_dispatch_raises(tmp_path, monkeypatch):
     _init_tmp_db(tmp_path, monkeypatch)
     queue = _make_queue()
@@ -98,7 +98,7 @@ async def test_wait_background_without_dispatch_raises(tmp_path, monkeypatch):
         await d.wait_background(timeout=1)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_collect_tool_passthrough_and_errors(tmp_path, monkeypatch):
     _init_tmp_db(tmp_path, monkeypatch)
     queue = _make_queue()
@@ -139,7 +139,7 @@ async def test_collect_tool_passthrough_and_errors(tmp_path, monkeypatch):
     assert queue is not None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_dispatch_tool_background_snapshot(tmp_path, monkeypatch):
     """background=true → 立即返回快照（dispatched_background + task_ids）。"""
     _init_tmp_db(tmp_path, monkeypatch)

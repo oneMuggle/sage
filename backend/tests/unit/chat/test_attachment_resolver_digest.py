@@ -29,7 +29,7 @@ from backend.chat.attachment_resolver import (
 # ─── fixtures: 现场生成真实小文件 ────────────────────────────────
 
 
-@pytest.fixture()
+@pytest.fixture
 def word_workspace(tmp_path):
     """带结构化 docx 的工作区: heading + 多句段落 + 两种列表 + 表格。"""
     from docx import Document
@@ -55,7 +55,7 @@ def word_workspace(tmp_path):
     return tmp_path
 
 
-@pytest.fixture()
+@pytest.fixture
 def excel_workspace(tmp_path):
     """带 xlsx 的工作区: Sales 12 行数值数据 + Notes 纯文本表。"""
     from openpyxl import Workbook
@@ -73,7 +73,7 @@ def excel_workspace(tmp_path):
     return tmp_path
 
 
-@pytest.fixture()
+@pytest.fixture
 def pdf_workspace(tmp_path):
     """带 2 页 ASCII pdf 的工作区 (走 backend.office.pdf 的生成纯函数)。"""
     from backend.office.models import PdfGenerateRequest, PdfPageSpec

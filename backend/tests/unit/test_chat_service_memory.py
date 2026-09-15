@@ -20,7 +20,7 @@ from backend.ports.memory import MemoryPort
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_llm():
     """创建 mock 的 LLMPort"""
     llm = Mock()
@@ -34,7 +34,7 @@ def mock_llm():
     return llm
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_tools():
     """创建 mock 的 ToolPort"""
     tools = Mock()
@@ -42,7 +42,7 @@ def mock_tools():
     return tools
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_storage():
     """创建 mock 的 StoragePort"""
     storage = Mock()
@@ -51,7 +51,7 @@ def mock_storage():
     return storage
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_metrics():
     """创建 mock 的 MetricPort"""
     metrics = Mock()
@@ -61,7 +61,7 @@ def mock_metrics():
     return metrics
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_events():
     """创建 mock 的 EventPort"""
     events = Mock()
@@ -69,7 +69,7 @@ def mock_events():
     return events
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_memory():
     """创建 mock 的 MemoryPort"""
     memory = Mock(spec=MemoryPort)
@@ -79,7 +79,7 @@ def mock_memory():
     return memory
 
 
-@pytest.fixture()
+@pytest.fixture
 def chat_service_with_memory(
     mock_llm, mock_tools, mock_storage, mock_metrics, mock_events, mock_memory
 ):
@@ -95,7 +95,7 @@ def chat_service_with_memory(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def chat_service_without_memory(mock_llm, mock_tools, mock_storage, mock_metrics, mock_events):
     """创建不带记忆功能的 ChatService 实例 (向后兼容)"""
     return ChatService(
@@ -112,7 +112,7 @@ def chat_service_without_memory(mock_llm, mock_tools, mock_storage, mock_metrics
 class TestChatServiceMemoryRetrieval:
     """测试记忆检索功能"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_chat_service_retrieves_memory_before_chat(
         self, chat_service_with_memory, mock_memory
     ):
@@ -135,7 +135,7 @@ class TestChatServiceMemoryRetrieval:
             limit=5,
         )
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_chat_service_handles_memory_retrieval_error(
         self, chat_service_with_memory, mock_memory
     ):
@@ -155,7 +155,7 @@ class TestChatServiceMemoryRetrieval:
 class TestChatServiceMemoryInjection:
     """测试记忆注入功能"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_chat_service_injects_memory_to_system_prompt(
         self, chat_service_with_memory, mock_llm, mock_memory
     ):
@@ -183,7 +183,7 @@ class TestChatServiceMemoryInjection:
         # 验证 system prompt 包含记忆
         assert "记忆上下文" in system_msg.content
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_chat_service_no_memory_injection_when_empty(
         self, chat_service_with_memory, mock_llm, mock_memory
     ):
@@ -206,7 +206,7 @@ class TestChatServiceMemoryInjection:
 class TestChatServiceMemoryStorage:
     """测试记忆存储功能"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_chat_service_stores_memory_after_chat(
         self, chat_service_with_memory, mock_memory, mock_llm
     ):
@@ -237,7 +237,7 @@ class TestChatServiceMemoryStorage:
         call_kwargs = mock_memory.store.call_args[1]
         assert call_kwargs["session_id"] == "session-123"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_chat_service_detects_preferences(
         self, chat_service_with_memory, mock_memory, mock_llm
     ):
@@ -268,7 +268,7 @@ class TestChatServiceMemoryStorage:
         call_kwargs = mock_memory.store.call_args[1]
         assert call_kwargs["importance"] == 7  # LLM 提取设定 importance=7
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_chat_service_skips_short_conversations(
         self, chat_service_with_memory, mock_memory
     ):
@@ -286,7 +286,7 @@ class TestChatServiceMemoryStorage:
 class TestChatServiceMemoryCompression:
     """测试记忆压缩功能"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_chat_service_compresses_working_memory(
         self, chat_service_with_memory, mock_memory
     ):
@@ -300,7 +300,7 @@ class TestChatServiceMemoryCompression:
         # Assert 验证压缩被调用
         mock_memory.compress.assert_called_once_with("session-123")
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_chat_service_handles_compression_error(
         self, chat_service_with_memory, mock_memory
     ):
@@ -319,7 +319,7 @@ class TestChatServiceMemoryCompression:
 class TestChatServiceBackwardCompatibility:
     """测试向后兼容性"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_chat_service_works_without_memory(self, chat_service_without_memory):
         """测试 ChatService 在没有 memory 时仍能工作"""
         # Arrange

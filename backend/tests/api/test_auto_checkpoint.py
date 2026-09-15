@@ -20,7 +20,7 @@ from backend.data.settings_repo import SettingsRepository
 from backend.office.session_workspace import bind_session_workspace
 
 
-@pytest.fixture()
+@pytest.fixture
 def db(monkeypatch: pytest.MonkeyPatch) -> Database:
     test_db = Database(":memory:")
     test_db.init_db()

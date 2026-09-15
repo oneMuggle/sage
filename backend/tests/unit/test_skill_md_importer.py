@@ -35,12 +35,12 @@ def _make_named_upload(name: str, content: bytes, filename: Optional[str] = None
     return upload
 
 
-@pytest.fixture()
+@pytest.fixture
 def registry() -> SkillRegistry:
     return SkillRegistry()
 
 
-@pytest.fixture()
+@pytest.fixture
 def builtin_names(registry: SkillRegistry) -> List[str]:
     """Register a few builtins to test conflict behavior."""
     for n in ("coder", "search", "writer"):
@@ -56,7 +56,7 @@ def builtin_names(registry: SkillRegistry) -> List[str]:
     return ["coder", "search", "writer"]
 
 
-@pytest.fixture()
+@pytest.fixture
 def skills_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point SAGE_SKILLS_DIR to a fresh tmp dir for each test."""
     d = tmp_path / "skills"

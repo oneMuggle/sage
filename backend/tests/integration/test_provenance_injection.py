@@ -11,7 +11,7 @@ from backend.api.legacy_routes import router
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture()
+@pytest.fixture
 def client():
     app = FastAPI()
     app.include_router(router)

@@ -60,7 +60,7 @@ def _mock_dns_for_upstream(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_diagnostic_401_journey(client):
     """故意注入 401 → 导出诊断包 → zip 含 upstream_url + 错误信息 + header 脱敏。
 

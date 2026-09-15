@@ -28,7 +28,7 @@ class _FakeService:
         self.generate_drafts = AsyncMock(return_value=0)
 
 
-@pytest.fixture()
+@pytest.fixture
 def scan_env(monkeypatch):
     """打桩 consolidator 模块属性；返回 (captured, service, setters)。"""
     captured: dict = {}
@@ -51,7 +51,7 @@ def scan_env(monkeypatch):
     return captured, service, set_watermark, set_delta
 
 
-@pytest.fixture()
+@pytest.fixture
 def client():
     app = FastAPI()
     app.include_router(router)

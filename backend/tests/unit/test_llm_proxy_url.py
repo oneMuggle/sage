@@ -46,7 +46,7 @@ class _RecordingBackend(httpcore.AsyncNetworkBackend):
         return None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_fixed_ip_backend_always_connects_to_pinned_address():
     from backend.api.llm_proxy_routes import _FixedIPNetworkBackend
 
@@ -61,7 +61,7 @@ async def test_fixed_ip_backend_always_connects_to_pinned_address():
     ]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_resolver_validates_all_addresses_and_pins_deterministically(monkeypatch):
     import backend.api.llm_proxy_routes as proxy_routes
 
@@ -78,7 +78,7 @@ async def test_resolver_validates_all_addresses_and_pins_deterministically(monke
     assert await proxy_routes._resolve_and_validate_upstream_host(parsed) == "1.1.1.1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_resolver_allows_private_addresses_only_for_allowlisted_host(monkeypatch):
     import backend.api.llm_proxy_routes as proxy_routes
 
@@ -97,7 +97,7 @@ async def test_resolver_allows_private_addresses_only_for_allowlisted_host(monke
     monkeypatch.setenv("SAGE_LLM_PROXY_ALLOWED_HOSTS", "lan.example")
     assert await proxy_routes._resolve_and_validate_upstream_host(parsed) == "192.168.1.20"
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_resolver_dns_timeout_maps_to_gaierror(monkeypatch):
     import asyncio
 
@@ -113,7 +113,7 @@ async def test_resolver_dns_timeout_maps_to_gaierror(monkeypatch):
         )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_resolver_rejects_when_dns_concurrency_is_saturated(monkeypatch):
     """DNS waiters fail closed instead of growing an unbounded queue."""
     import asyncio

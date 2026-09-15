@@ -21,7 +21,7 @@ pytestmark = pytest.mark.unit
 _DUMMY_PROFILE = {"system_prompt": "你是测试子 agent", "tools": []}
 
 
-@pytest.fixture()
+@pytest.fixture
 def temp_db():
     """临时 SQLite 库（与 test_orchestration_executor.py 同款）。"""
     import os
@@ -55,7 +55,7 @@ def _make_task(goal: str = "调研 X", **extra_params) -> Task:
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_runner_prepends_retry_hint_to_goal():
     """带 retry_hint 的任务 → user 消息前置失败说明 + 原 goal 保留。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -89,7 +89,7 @@ async def test_runner_prepends_retry_hint_to_goal():
     assert content.endswith("调研 X")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_runner_without_retry_hint_keeps_prompt_unchanged():
     """首次执行（无 retry_hint 键）→ prompt 与旧版逐字一致。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -117,7 +117,7 @@ async def test_runner_without_retry_hint_keeps_prompt_unchanged():
     assert captured["user_contents"] == ["调研 X"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_executor_writes_retry_hint_on_lane_retry(temp_db):
     """lane 首败重试 → task.parameters["retry_hint"] 带 attempt/last_error。"""
 
@@ -200,7 +200,7 @@ class _SimpleLane:
     lane_id = "lane-x"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_run_lane_with_retry_honors_backoff(monkeypatch):
     from backend.orchestration import subagent_runner as sr
 
@@ -219,7 +219,7 @@ async def test_run_lane_with_retry_honors_backoff(monkeypatch):
     assert sleeps == [5, 15]  # 索引按 retry_count-1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_run_lane_with_retry_without_backoff_no_sleep(monkeypatch):
     from backend.orchestration import subagent_runner as sr
 

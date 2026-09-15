@@ -39,14 +39,14 @@ WRITE_MODE_TOOLS = frozenset(
 )
 
 
-@pytest.fixture()
+@pytest.fixture
 def registry() -> ToolRegistry:
     reg = ToolRegistry()
     register_all_tools(reg)
     return reg
 
 
-@pytest.fixture()
+@pytest.fixture
 def bound_ctx() -> ToolExecutionContext:
     return ToolExecutionContext(
         session_id="sess-reg",

@@ -37,7 +37,7 @@ pytestmark = [
 ]
 
 
-@pytest.fixture()
+@pytest.fixture
 def tool():
     return ReplTool()
 

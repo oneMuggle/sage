@@ -27,7 +27,7 @@ from backend.data.orch_context_repo import (
 )
 
 
-@pytest.fixture()
+@pytest.fixture
 def repo():
     return OrchestrationContextRepository()
 

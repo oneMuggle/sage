@@ -16,7 +16,7 @@ from backend.data import database as db_mod
 from backend.data.approval_decision_repo import ApprovalDecisionRepository
 
 
-@pytest.fixture()
+@pytest.fixture
 def repo(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     monkeypatch.setenv("SAGE_DB_PATH", str(db_path))
@@ -55,7 +55,7 @@ def test_append_and_list_roundtrip(repo):
     assert row.latency_ms >= 100
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_gate_gui_answer_recorded(repo):
     from backend.services.permission_gate import ApprovalGate, ApprovalRequest
 
@@ -74,7 +74,7 @@ async def test_gate_gui_answer_recorded(repo):
     assert rows[0].answered_by == "gui"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_gate_timeout_recorded_as_deny(repo):
     from backend.services.permission_gate import ApprovalGate, ApprovalRequest
 
@@ -91,7 +91,7 @@ async def test_gate_timeout_recorded_as_deny(repo):
     assert rows[0].risk == "destructive"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_auto_approve_recorded(repo):
     from backend.orchestration.subagent_approval import AutoApproveEnforcer
     from backend.tools.permissions import PermissionDecision
@@ -114,7 +114,7 @@ async def test_auto_approve_recorded(repo):
     assert rows[0].answered_by == "auto"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_recording_failure_does_not_block_approval(repo, monkeypatch):
     """落库失败必须静默 —— 审批流照常返回（降级铁律）。"""
     from backend.services.permission_gate import ApprovalGate, ApprovalRequest
@@ -138,7 +138,7 @@ async def test_recording_failure_does_not_block_approval(repo, monkeypatch):
     assert answer.answered_by == "gui"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_resolver_attributes_run_and_task(repo):
     """C2: 注册归属解析器后（main 启动时注入），gate 决策记录携带 run/task。"""
     from backend.services.permission_gate import (
@@ -167,7 +167,7 @@ async def test_resolver_attributes_run_and_task(repo):
     assert rows[0].task_id == "t7"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_without_resolver_run_task_stay_none(repo):
     """未注册解析器（主会话审批/单测环境）→ run/task 为空，记录照常。"""
     from backend.services.permission_gate import ApprovalGate, ApprovalRequest

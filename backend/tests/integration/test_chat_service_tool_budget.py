@@ -60,7 +60,7 @@ def _make_service(events, tool_calls_per_response, policy: ToolPolicy):
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_tool_budget_exceeded_stops_execution_and_emits_status():
     """5 个 tool_calls + max_tool_calls_per_run=3 → 仅执行 3 次 + run_end status=tool_budget_exceeded。"""
     events = _RecordingEvents()
@@ -82,7 +82,7 @@ async def test_tool_budget_exceeded_stops_execution_and_emits_status():
     assert len(tool_results) == 3
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_tool_budget_not_exceeded_normal_status_ok():
     """2 个 tool_calls + max_tool_calls_per_run=3 → 正常 + run_end status=ok。"""
     events = _RecordingEvents()
@@ -99,7 +99,7 @@ async def test_tool_budget_not_exceeded_normal_status_ok():
     assert len(tool_results) == 2
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_tool_budget_zero_blocks_all_tool_calls():
     """max_tool_calls_per_run=0 → 一次 tool_call 也不执行，run_end status=tool_budget_exceeded。"""
     events = _RecordingEvents()

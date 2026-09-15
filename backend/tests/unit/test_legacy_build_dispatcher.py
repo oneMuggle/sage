@@ -20,7 +20,7 @@ from backend.orchestration.chat_dispatcher import ChatDispatcher
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_build_dispatcher_valid_run_id_returns_dispatcher() -> None:
     queue: asyncio.Queue = asyncio.Queue()
     dispatcher = _build_orchestration_dispatcher(
@@ -36,7 +36,7 @@ async def test_build_dispatcher_valid_run_id_returns_dispatcher() -> None:
     assert dispatcher.total_tasks == 3
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "bad_run_id",
     [

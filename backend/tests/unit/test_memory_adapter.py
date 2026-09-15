@@ -17,7 +17,7 @@ from backend.memory import MemoryManager
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_memory_manager():
     """创建 mock 的 MemoryManager"""
     manager = Mock(spec=MemoryManager)
@@ -29,13 +29,13 @@ def mock_memory_manager():
     return manager
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_consolidation():
     """创建 mock 的 ConsolidationPipeline"""
     return Mock()
 
 
-@pytest.fixture()
+@pytest.fixture
 def adapter(mock_memory_manager, mock_consolidation):
     """创建 MemoryAdapter 实例"""
     adapter = MemoryAdapter(mock_memory_manager)
@@ -46,7 +46,7 @@ def adapter(mock_memory_manager, mock_consolidation):
 class TestMemoryAdapterRetrieve:
     """测试 retrieve() 方法"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_retrieve_returns_memory_context(self, adapter, mock_memory_manager):
         """测试 retrieve() 返回 MemoryContext"""
         # Arrange: 设置 mock 返回值
@@ -69,7 +69,7 @@ class TestMemoryAdapterRetrieve:
         summaries = [item.get("summary") for item in all_items]
         assert "偏好" in summaries or "知识" in summaries
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_retrieve_calls_memory_manager_recall(self, adapter, mock_memory_manager):
         """测试 retrieve() 调用了 MemoryManager.recall() 并透传 session_id"""
         # Arrange
@@ -81,7 +81,7 @@ class TestMemoryAdapterRetrieve:
         # Assert
         mock_memory_manager.recall.assert_called_once_with("火锅", limit=3, session_id="session-456")
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_retrieve_handles_empty_results(self, adapter, mock_memory_manager):
         """测试 retrieve() 处理空结果"""
         # Arrange
@@ -101,7 +101,7 @@ class TestMemoryAdapterRetrieve:
 class TestMemoryAdapterStore:
     """测试 store() 方法"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_store_calls_memory_manager_memorize(self, adapter, mock_memory_manager):
         """测试 store() 调用了 MemoryManager.memorize()，携带统一分类结果与 session_id"""
         # Arrange
@@ -125,7 +125,7 @@ class TestMemoryAdapterStore:
         )
         assert memory_id == "memory-id-123"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_store_high_importance_classified_semantic(self, adapter, mock_memory_manager):
         """importance>=8 → memory_type='semantic'，向量库按 semantic 落库"""
         # Arrange
@@ -144,7 +144,7 @@ class TestMemoryAdapterStore:
         )
         assert memory_id == "memory-id-sem"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_store_short_low_importance_classified_working(
         self, adapter, mock_memory_manager
     ):
@@ -162,7 +162,7 @@ class TestMemoryAdapterStore:
         adapter.vector_store.add.assert_not_called()  # 工作记忆无持久 id，不入向量库
         assert memory_id == "wm:session-1:1"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_store_returns_empty_string_for_working_memory(
         self, adapter, mock_memory_manager
     ):
@@ -176,7 +176,7 @@ class TestMemoryAdapterStore:
         # Assert
         assert memory_id == ""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_store_uses_default_importance(self, adapter, mock_memory_manager):
         """测试 store() 使用默认的 importance=5"""
         # Arrange
@@ -189,7 +189,7 @@ class TestMemoryAdapterStore:
         call_kwargs = mock_memory_manager.memorize.call_args[1]
         assert call_kwargs["importance"] == 5
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_store_uses_empty_tags_when_none(self, adapter, mock_memory_manager):
         """测试 store() 当 tags=None 时使用空列表"""
         # Arrange
@@ -206,7 +206,7 @@ class TestMemoryAdapterStore:
 class TestMemoryAdapterCompress:
     """测试 compress() 方法"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_compress_when_tokens_exceed_threshold(
         self, adapter, mock_memory_manager, mock_consolidation
     ):
@@ -223,7 +223,7 @@ class TestMemoryAdapterCompress:
             mock_memory_manager, session_id="session-123"
         )
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_compress_skips_when_tokens_low(
         self, adapter, mock_memory_manager, mock_consolidation
     ):
@@ -237,7 +237,7 @@ class TestMemoryAdapterCompress:
         # Assert: 验证 consolidation.consolidate() 未被调用
         mock_consolidation.consolidate.assert_not_called()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_compress_at_exact_threshold(
         self, adapter, mock_memory_manager, mock_consolidation
     ):
@@ -307,7 +307,7 @@ class TestClassifyConsistency:
             (3, "x" * 300, "episodic"),  # 长内容 (>=200) 即使低重要性也不算 episodic
         ],
     )
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_store_classification_matches_module_function(
         self, adapter, mock_memory_manager, importance, content, expected
     ):
@@ -328,7 +328,7 @@ class TestClassifyConsistency:
 class TestMemoryAdapterProfileIntegration:
     """用户画像接入（USER.md 概念）"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_retrieve_reserves_core_slots_for_retrieved_facts(
         self, adapter, mock_memory_manager
     ):
@@ -355,7 +355,7 @@ class TestMemoryAdapterProfileIntegration:
         assert len(contents) <= 5
         assert sum(1 for c in contents if c.startswith("画像")) <= 3
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_store_profile_writes_to_profile_store(self, adapter):
         """store_profile 委托 UserProfileStore.add, 返回画像 ID。"""
         profile = Mock()
@@ -368,7 +368,7 @@ class TestMemoryAdapterProfileIntegration:
             "用户偏好X", category="preference", importance=7
         )
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_store_profile_falls_back_when_profile_unavailable(
         self, adapter, mock_memory_manager
     ):

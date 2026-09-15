@@ -31,7 +31,7 @@ def _make_adapter(embedder):
     return adapter
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_hash_embedder_uses_keyword_heavy_weights():
     """字面哈希嵌入器: 关键词路权重 > 向量路 (哈希向量与关键词路重叠)。"""
     adapter = _make_adapter(HashEmbedder(dimensions=256))
@@ -53,7 +53,7 @@ async def test_hash_embedder_uses_keyword_heavy_weights():
     assert captured["weights"] == [0.6, 0.4]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_semantic_embedder_uses_vector_heavy_weights():
     """语义嵌入器: 向量路权重 > 关键词路 (真语义相似度)。"""
     embedder = OnnxEmbedder(model_dir="/tmp/unused")
@@ -76,7 +76,7 @@ async def test_semantic_embedder_uses_vector_heavy_weights():
     assert captured["weights"] == [0.3, 0.7]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_retrieval_emits_hit_rate_log(caplog):
     """检索完成后输出命中率观测日志 (keyword/vector/fused 计数)。"""
     adapter = _make_adapter(HashEmbedder(dimensions=256))

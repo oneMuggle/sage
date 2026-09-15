@@ -14,7 +14,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.unit()
+@pytest.mark.unit
 def test_cosine_similarity_preserves_zip_truncation_for_unequal_vectors():
     # The former strict=False call intentionally used the shorter length.
     assert _cosine_similarity([1.0, 0.0, 99.0], [1.0, 0.0]) == pytest.approx(0.010100494835363)

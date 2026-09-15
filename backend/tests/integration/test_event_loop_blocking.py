@@ -96,7 +96,7 @@ GATE_REPETITIONS = 5
 CONCURRENT_WRITES = 200
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_health_baseline_no_load(client):
     """基线:无负载时 /health P99 < 300ms(2026-09-05 从 20ms 放宽,CI runner 漂移)。"""
     samples: List[float] = []
@@ -220,7 +220,7 @@ async def _run_gate_rounds(client, gate_tag: str) -> List[float]:
     return p99s
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_health_latency_under_concurrent_session_crud(client):
     """§1.2 修复回归(**两级门禁版**, Round 18):两轮独立 5 轮 P99 中位数均超阈值才判红。
 
@@ -286,7 +286,7 @@ async def test_health_latency_under_concurrent_session_crud(client):
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_concurrent_session_list_completes(client):
     """基线:50 并发 GET /api/v1/sessions(降级为 def)全部成功,总耗时合理。
 
@@ -315,7 +315,7 @@ async def test_concurrent_session_list_completes(client):
     assert total_ms < 5000, f"50 并发 GET 总耗时 {total_ms:.0f}ms 过长"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_cross_path_concurrent_no_sqlite_programming_error(client):
     """PR B §1.2 跨路径并发回归:PR A (sync def handler 直连 repo) + PR B
     (async adapter → to_thread) 同时打同一个 sqlite3.Connection,不能报错。

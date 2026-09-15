@@ -8,7 +8,7 @@ import pytest
 from backend.data.session_repo import SessionRepository
 
 
-@pytest.fixture()
+@pytest.fixture
 def repo(setup_test_db):
     return SessionRepository()
 

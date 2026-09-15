@@ -128,7 +128,7 @@ def test_sage_agent_with_missing_agent_id_falls_back_to_none():
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_sage_agent_call_llm_uses_profile_system_prompt():
     """_call_llm 调用 LLM 时, 第一条 system message 应是 profile.system_prompt。"""
     repo = AgentRepository()
@@ -154,7 +154,7 @@ async def test_sage_agent_call_llm_uses_profile_system_prompt():
     assert first_msg["content"] == custom_prompt
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_sage_agent_call_llm_default_system_prompt_when_no_agent_id():
     """无 agent_id 时, _call_llm 使用 build_system_base() 构建默认提示（含 agent 列表）。"""
     agent = SageAgent()
@@ -177,7 +177,7 @@ async def test_sage_agent_call_llm_default_system_prompt_when_no_agent_id():
     assert "可用 Agent" in first_msg["content"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_sage_agent_call_llm_appends_memory_context_to_system_prompt():
     """_call_llm 应把 memory_context 拼到 system_prompt 之后。"""
     agent = SageAgent()
@@ -204,7 +204,7 @@ async def test_sage_agent_call_llm_appends_memory_context_to_system_prompt():
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_sage_agent_profile_max_iterations_used_when_not_overridden():
     """run_loop 不传 max_iterations 时，使用 profile 的值。"""
     repo = AgentRepository()
@@ -231,7 +231,7 @@ async def test_sage_agent_profile_max_iterations_used_when_not_overridden():
     assert failed[0].iteration == 7
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_sage_agent_explicit_max_iterations_overrides_profile():
     """run_loop 显式传 max_iterations 时，覆盖 profile 的值。"""
     repo = AgentRepository()
@@ -263,7 +263,7 @@ async def test_sage_agent_explicit_max_iterations_overrides_profile():
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_sage_agent_events_carry_agent_id_when_loaded():
     """传 agent_id 时，每个事件都携带该 agent_id。"""
     agent = SageAgent(agent_id="primary")
@@ -278,7 +278,7 @@ async def test_sage_agent_events_carry_agent_id_when_loaded():
         assert evt.agent_id == "primary"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_sage_agent_events_carry_none_when_no_agent_id():
     """无 agent_id 时，事件的 agent_id 为 None（向后兼容）。"""
     agent = SageAgent()

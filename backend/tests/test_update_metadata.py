@@ -6,13 +6,13 @@ from backend.models.update import FileMeta, UpdateManifest
 from backend.services.update_metadata import UpdateMetadataService
 
 
-@pytest.fixture()
+@pytest.fixture
 def metadata_dir(tmp_path):
     """Create temporary metadata directory."""
     return tmp_path / "metadata"
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_manifest():
     """Create a sample manifest for testing."""
     return UpdateManifest(

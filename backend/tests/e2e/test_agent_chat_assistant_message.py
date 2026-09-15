@@ -19,7 +19,7 @@ from backend.core.legacy.llm_client import LLMResponse
 pytestmark = pytest.mark.e2e
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_returns_error_dict_on_llm_error():
     """LLM 抛错时 chat() 返回结构化 error 字典，message 为 None。"""
     agent = SageAgent()
@@ -38,7 +38,7 @@ async def test_chat_returns_error_dict_on_llm_error():
     assert result["session"] is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_returns_assistant_message_on_success():
     """LLM 成功时 chat() 返回 message 字典。"""
     agent = SageAgent()

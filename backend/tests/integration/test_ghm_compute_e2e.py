@@ -139,7 +139,7 @@ async def ghm_e2e_client():
             app.dependency_overrides.pop(get_chat_service, None)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 @requires_ghm
 async def test_e2e_chat_triggers_real_ghm_compute(ghm_e2e_client) -> None:
     """完整链路:LLM 选 compute_shock → 真打 ghm → TOOL message 含真实结果。"""
@@ -168,7 +168,7 @@ async def test_e2e_chat_triggers_real_ghm_compute(ghm_e2e_client) -> None:
     assert "6.5" in tool_msg.content
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 @requires_ghm
 async def test_e2e_unknown_compute_op_returns_error_in_tool_message(
     ghm_e2e_client,

@@ -15,7 +15,7 @@ def test_parse_assertions_module_function():
     assert assertions[1].confidence == 0.8
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_run_review_success_path():
     """reviewer 成功 → verdict/block/assertion_count；emit 回调被调。"""
     emitted = []

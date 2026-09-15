@@ -50,7 +50,7 @@ def test_chat_request_schema_accepts_agent_id():
 # 避免构造完整 MessageResponse。关键是断言 SageAgent 被以正确 kwargs 调用。
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 @_LEGACY_ONLY
 async def test_chat_defaults_to_primary_agent_when_agent_id_omitted():
     """不传 agent_id 时，/chat 应 fallback 到 "primary"。
@@ -81,7 +81,7 @@ async def test_chat_defaults_to_primary_agent_when_agent_id_omitted():
         )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 @_LEGACY_ONLY
 async def test_chat_passes_explicit_agent_id():
     """显式传 agent_id="coder" 时,应直接透传,不要覆盖。"""
@@ -107,7 +107,7 @@ async def test_chat_passes_explicit_agent_id():
         assert call_kwargs.get("agent_id") == "coder"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 @_LEGACY_ONLY
 async def test_chat_treats_empty_string_agent_id_as_primary():
     """空字符串 agent_id 应 fallback 到 primary(等价 None)。"""

@@ -41,7 +41,7 @@ class FakeRegistry:
         return None
 
 
-@pytest.fixture()
+@pytest.fixture
 def tool(tmp_db=None):
     return ExecuteCodeTool(registry=FakeRegistry())
 

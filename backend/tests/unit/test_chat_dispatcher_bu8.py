@@ -38,7 +38,7 @@ def _seed_usage(session_id: str, total_tokens: int, created_at_ms: int) -> None:
     conn.commit()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_aggregate_header_shows_budget_consumption(tmp_path, monkeypatch):
     """预算开启 → 聚合头展示已消耗/预算与百分比。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -64,7 +64,7 @@ async def test_aggregate_header_shows_budget_consumption(tmp_path, monkeypatch):
     assert "/ 预算 1000 tokens" in aggregated
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_aggregate_header_no_budget_line_when_disabled(tmp_path, monkeypatch):
     """预算关闭（0）→ 头部无消耗行。"""
     _init_tmp_db(tmp_path, monkeypatch)

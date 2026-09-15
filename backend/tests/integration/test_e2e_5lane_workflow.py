@@ -101,7 +101,7 @@ def _make_task(task_id: str, name: str = "t") -> MagicMock:
 
 
 class TestFiveLaneEndToEndWorkflow:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_full_pipeline_5_lanes_with_retry(self, tmp_path):
         """End-to-end: 4 succeed first try, 1 fails then retries successfully."""
 

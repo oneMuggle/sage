@@ -35,7 +35,7 @@ def _drain(queue):
 # ---- RV1: dispatcher preset 短路 ---------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_preset_task_short_circuits_without_subagent(tmp_path, monkeypatch):
     """带 preset_output 的任务 → 直接 done，_run_subagent 从未被调用。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -69,7 +69,7 @@ async def test_preset_task_short_circuits_without_subagent(tmp_path, monkeypatch
     assert statuses.count("done") >= 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_preset_done_unblocks_downstream(tmp_path, monkeypatch):
     """preset done 的上游放行下游真实执行 —— 级联闭包不误伤。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -100,7 +100,7 @@ async def test_preset_done_unblocks_downstream(tmp_path, monkeypatch):
     assert d._states["t2"].status == "done"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_preset_without_marker_runs_normally(tmp_path, monkeypatch):
     """无 preset_output 的计划 → 行为与旧版逐字一致。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -155,7 +155,7 @@ def _seed_run_with_tasks(run_id: str, statuses: list):
         )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_rerun_failed_endpoint_builds_override(tmp_path, monkeypatch):
     from httpx import ASGITransport
 
@@ -179,7 +179,7 @@ async def test_rerun_failed_endpoint_builds_override(tmp_path, monkeypatch):
     assert "preset_output" not in override[2]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_rerun_failed_endpoint_409_when_no_failures(tmp_path, monkeypatch):
     from httpx import ASGITransport
 
@@ -195,7 +195,7 @@ async def test_rerun_failed_endpoint_409_when_no_failures(tmp_path, monkeypatch)
     assert resp.status_code == 409
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_rerun_failed_endpoint_404_unknown_run(tmp_path, monkeypatch):
     from httpx import ASGITransport
 

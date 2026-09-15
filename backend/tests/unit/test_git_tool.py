@@ -40,7 +40,7 @@ def _git(*args: str, cwd: Path) -> None:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """带首次提交的最小 git 仓库（hello.txt + other.txt 均已跟踪）。"""
     _git("init", cwd=tmp_path)

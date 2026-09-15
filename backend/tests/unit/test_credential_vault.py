@@ -73,7 +73,7 @@ class _MemRepo:
         self.data[key] = value
 
 
-@pytest.fixture()
+@pytest.fixture
 def repo():
     return _MemRepo()
 

@@ -21,14 +21,14 @@ from backend.tools.context import ToolExecutionContext
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def registry() -> ToolRegistry:
     reg = ToolRegistry()
     register_all_tools(reg)
     return reg
 
 
-@pytest.fixture()
+@pytest.fixture
 def bound_ctx() -> ToolExecutionContext:
     """模拟已绑定工作区的 chat turn。"""
     return ToolExecutionContext(

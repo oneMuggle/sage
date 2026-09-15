@@ -28,7 +28,7 @@ def _provider(text: str):
     return provider
 
 
-@pytest.fixture()
+@pytest.fixture
 def tmp_db():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db = Database(f.name)
@@ -37,13 +37,13 @@ def tmp_db():
         db.close()
 
 
-@pytest.fixture()
+@pytest.fixture
 def draft_store(tmp_db):
     return SkillDraftStore(db_path=tmp_db.db_path)
 
 
 class TestDraftFromSuggestion:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_merge_generates_draft_fields(self):
         svc = ConsolidationService(_provider(MERGE_JSON))
         suggestion = {"type": "merge", "skill_names": ["deploy", "release"]}
@@ -52,7 +52,7 @@ class TestDraftFromSuggestion:
         assert fields is not None
         assert fields["name"] == "deploy-all"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_revise_generates_draft_fields(self):
         svc = ConsolidationService(_provider(MERGE_JSON))
         suggestion = {"type": "revise", "skill_names": ["deploy"]}
@@ -60,7 +60,7 @@ class TestDraftFromSuggestion:
         fields = await svc.draft_from_suggestion(suggestion, docs)
         assert fields is not None
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_archive_returns_none(self):
         svc = ConsolidationService(_provider(MERGE_JSON))
         assert (
@@ -70,7 +70,7 @@ class TestDraftFromSuggestion:
             is None
         )
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_llm_failure_returns_none(self):
         provider = SimpleNamespace()
         provider.complete = AsyncMock(side_effect=RuntimeError("down"))
@@ -82,7 +82,7 @@ class TestDraftFromSuggestion:
             is None
         )
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_schema_violation_returns_none(self, tmp_db):
         """LLM 输出缺字段/超长描述 → 校验失败返回 None"""
         bad = '{"name": "x"}'
@@ -96,7 +96,7 @@ class TestDraftFromSuggestion:
 
 
 class TestGenerateDrafts:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_drafts_inserted_pending(self, draft_store):
         svc = ConsolidationService(_provider(MERGE_JSON))
         suggestions = [
@@ -111,7 +111,7 @@ class TestGenerateDrafts:
         assert pending[0].name == "deploy-all"
         assert pending[0].source_context.get("consolidation") is True
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_single_failure_does_not_break_batch(self, draft_store):
         """第一条草稿生成失败 → 第二条照常入库"""
         calls = {"n": 0}

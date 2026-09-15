@@ -16,7 +16,7 @@ from backend.office.errors import (
 from backend.office.models import PdfGenerateRequest, PdfPageSpec
 
 
-@pytest.fixture()
+@pytest.fixture
 def simple_pdf(tmp_path: Path) -> Path:
     """Create a simple PDF for testing."""
     from reportlab.lib.pagesizes import A4

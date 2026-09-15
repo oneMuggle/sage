@@ -91,7 +91,7 @@ def _spawn_with_collectors(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def registry():
     reg = BashSessionRegistry()
     yield reg

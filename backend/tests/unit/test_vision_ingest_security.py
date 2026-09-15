@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture()
+@pytest.fixture
 def vision_config(tmp_path: Path) -> VisionIngestConfig:
     return VisionIngestConfig(
         ingest_config=IngestConfig("http://llm.test", "key", "model", "http://embed.test", "key", "embed"),
@@ -28,7 +28,7 @@ def vision_config(tmp_path: Path) -> VisionIngestConfig:
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_parser_uses_held_snapshot_when_snapshot_path_is_replaced(
     tmp_path, vision_config, monkeypatch
 ):
@@ -62,7 +62,7 @@ async def test_parser_uses_held_snapshot_when_snapshot_path_is_replaced(
     assert captured["source_content"] == b"original snapshot"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_enhanced_content_does_not_reopen_a_temporary_path(
     tmp_path, vision_config, monkeypatch
 ):
@@ -92,7 +92,7 @@ async def test_enhanced_content_does_not_reopen_a_temporary_path(
     assert captured["processed_content"] == "parsed"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_source_over_limit_is_rejected_before_snapshot_creation(
     tmp_path, vision_config
 ):
@@ -103,7 +103,7 @@ async def test_source_over_limit_is_rejected_before_snapshot_creation(
         await ingest_with_vision(vision_config, source, AsyncMock(), AsyncMock())
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_snapshot_cleanup_error_does_not_mask_ingest_result(
     tmp_path, vision_config, monkeypatch
 ):

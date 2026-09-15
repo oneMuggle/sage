@@ -108,7 +108,7 @@ def test_timeout_returns_false(monkeypatch, tmp_path):
     assert is_git_repo(tmp_path) is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_async_wrappers_delegate_to_thread(tmp_path):
     """异步包装经 executor 运行同步函数；create/cleanup 可用。"""
     from backend.orchestration.worktree import remove_worktree_async

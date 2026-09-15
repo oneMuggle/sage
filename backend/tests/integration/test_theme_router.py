@@ -9,13 +9,13 @@ import pytest
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture()
+@pytest.fixture
 def theme_storage_dir(tmp_path: Path) -> Path:
     """临时主题存储目录"""
     return tmp_path
 
 
-@pytest.fixture()
+@pytest.fixture
 def theme_client(client, theme_storage_dir: Path, monkeypatch: pytest.MonkeyPatch):
     """注入临时 ThemeStorage 到 theme_router"""
     from backend.services.theme_storage import ThemeStorage
@@ -25,7 +25,7 @@ def theme_client(client, theme_storage_dir: Path, monkeypatch: pytest.MonkeyPatc
     return client
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_payload() -> dict:
     return {
         "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
@@ -38,14 +38,14 @@ def sample_payload() -> dict:
 
 
 class TestSaveTheme:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_save_returns_id(self, theme_client, sample_payload: dict) -> None:
         resp = await theme_client.post("/api/v1/theme/save", json=sample_payload)
         assert resp.status_code == 200
         data = resp.json()
         assert data["id"] == sample_payload["id"]
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_save_validates_payload(self, theme_client) -> None:
         bad = {"id": "x", "name": "y", "css": "z", "appearance": "sepia"}
         resp = await theme_client.post("/api/v1/theme/save", json=bad)
@@ -53,13 +53,13 @@ class TestSaveTheme:
 
 
 class TestListThemes:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_list_empty(self, theme_client) -> None:
         resp = await theme_client.get("/api/v1/theme/list")
         assert resp.status_code == 200
         assert resp.json() == []
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_list_returns_saved(self, theme_client, sample_payload: dict) -> None:
         await theme_client.post("/api/v1/theme/save", json=sample_payload)
         resp = await theme_client.get("/api/v1/theme/list")
@@ -70,14 +70,14 @@ class TestListThemes:
 
 
 class TestDeleteTheme:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_delete_existing(self, theme_client, sample_payload: dict) -> None:
         await theme_client.post("/api/v1/theme/save", json=sample_payload)
         resp = await theme_client.post("/api/v1/theme/delete", json={"id": sample_payload["id"]})
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_delete_missing(self, theme_client) -> None:
         resp = await theme_client.post("/api/v1/theme/delete", json={"id": "nonexistent"})
         assert resp.status_code == 200
@@ -85,7 +85,7 @@ class TestDeleteTheme:
 
 
 class TestGetTheme:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_get_existing(self, theme_client, sample_payload: dict) -> None:
         await theme_client.post("/api/v1/theme/save", json=sample_payload)
         resp = await theme_client.get(f"/api/v1/theme/get/{sample_payload['id']}")
@@ -93,7 +93,7 @@ class TestGetTheme:
         data = resp.json()
         assert data["name"] == "Test Theme"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_get_missing_returns_404(self, theme_client) -> None:
         resp = await theme_client.get("/api/v1/theme/get/nonexistent")
         assert resp.status_code == 404

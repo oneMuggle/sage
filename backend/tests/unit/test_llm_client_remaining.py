@@ -55,7 +55,7 @@ def _make_config(**overrides) -> LLMConfig:
 # ============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_normal_response_via_fixture(mock_llm_ok):
     """mock_llm_ok → 正常 chat 返回 LLMResponse, content='Hello from mock!'."""
     client = LLMClient(_make_config())
@@ -68,7 +68,7 @@ async def test_chat_normal_response_via_fixture(mock_llm_ok):
     assert response.total_tokens == 15
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_rate_limit_via_fixture(mock_llm_rate_limit):
     """mock_llm_rate_limit → LLMError(RATE_LIMITED), 无 retry-after header → retry_after=None."""
     client = LLMClient(_make_config())
@@ -78,7 +78,7 @@ async def test_chat_rate_limit_via_fixture(mock_llm_rate_limit):
     assert exc_info.value.retry_after is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_server_error_via_fixture(mock_llm_server_error):
     """mock_llm_server_error → LLMError(SERVER_ERROR, status_code=500)."""
     client = LLMClient(_make_config())
@@ -88,7 +88,7 @@ async def test_chat_server_error_via_fixture(mock_llm_server_error):
     assert exc_info.value.status_code == 500
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_timeout_fixture_maps_to_timeout(mock_llm_timeout):
     """mock_llm_timeout 抛 httpx.TimeoutException，命中 LLMClient 中
     ``except httpx.TimeoutException`` 分支，映射为 LLMErrorType.TIMEOUT。
@@ -155,7 +155,7 @@ def test_get_client_recreates_after_close():
 # ============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_close_when_client_never_initialized_is_noop():
     """未调用过 _get_client 时, close() 是 no-op, 不抛错."""
     client = LLMClient(_make_config())
@@ -164,7 +164,7 @@ async def test_close_when_client_never_initialized_is_noop():
     assert client._client is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_close_calls_aclose_on_initialized_client():
     """初始化过的 client, close() 触发 _client.aclose()."""
     client = LLMClient(_make_config())
@@ -175,7 +175,7 @@ async def test_close_calls_aclose_on_initialized_client():
     aclose_mock.assert_awaited_once()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_close_skips_already_closed_client():
     """client 已关闭时, close() 不会重复调用 aclose()."""
     client = LLMClient(_make_config())
@@ -270,7 +270,7 @@ def test_parse_tool_calls_empty_input_returns_empty_list():
 # ============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_with_claude_provider_keeps_max_tokens(mock_llm_ok):
     """provider=claude 时, 请求仍能成功（line 166 走 max_tokens 保持分支）."""
     client = LLMClient(_make_config(provider="claude"))
@@ -283,7 +283,7 @@ async def test_chat_with_claude_provider_keeps_max_tokens(mock_llm_ok):
 # ============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_rate_limit_with_invalid_retry_after_header_falls_back_to_none():
     """429 且 retry-after header 不是合法整数 → retry_after=None（不抛错）."""
     client = LLMClient(_make_config())
@@ -304,7 +304,7 @@ async def test_rate_limit_with_invalid_retry_after_header_falls_back_to_none():
     assert exc_info.value.retry_after is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_unknown_http_error_status_maps_to_unknown():
     """4xx 中除 401/429 之外的状态码（如 418）→ LLMError(UNKNOWN, status_code=418)."""
     client = LLMClient(_make_config())
@@ -324,7 +324,7 @@ async def test_unknown_http_error_status_maps_to_unknown():
     assert exc_info.value.status_code == 418
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_unexpected_exception_maps_to_unknown():
     """非 httpx / ValueError / KeyError 的异常 → LLMError(UNKNOWN)."""
     client = LLMClient(_make_config())
@@ -343,7 +343,7 @@ async def test_unexpected_exception_maps_to_unknown():
 # ============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_response_with_tool_calls_parses_them():
     """响应 message 含 tool_calls 时, LLMResponse.tool_calls 正确填充."""
     client = LLMClient(_make_config())
@@ -400,7 +400,7 @@ async def _drain_stream(agen):
         pass
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_stream_yields_content_chunks():
     """chat_stream 正常路径: 解析 SSE chunk, 拼接 content 字段, 遇 [DONE] 终止."""
     client = LLMClient(_make_config())
@@ -430,7 +430,7 @@ async def test_chat_stream_yields_content_chunks():
         assert chunks == ["Hello", " world"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_stream_skips_non_data_lines():
     """chat_stream 忽略不以 'data: ' 开头的行（如 SSE 注释、空行）."""
     client = LLMClient(_make_config())
@@ -461,7 +461,7 @@ async def test_chat_stream_skips_non_data_lines():
         assert chunks == ["ok"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_stream_skips_invalid_json_lines():
     """chat_stream 跳过 JSON 解析失败的 data 行, 继续读后续 chunk."""
     client = LLMClient(_make_config())
@@ -491,7 +491,7 @@ async def test_chat_stream_skips_invalid_json_lines():
         assert chunks == ["valid"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_stream_http_error_raises_llm_error():
     """chat_stream HTTP 500 错误时抛 LLMError(SERVER_ERROR).
 
@@ -522,7 +522,7 @@ async def test_chat_stream_http_error_raises_llm_error():
     assert "500" in str(exc_info.value)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_stream_other_exception_raises_llm_error():
     """chat_stream 其他异常（非 httpx/ValueError/KeyError）时抛 LLMError(UNKNOWN).
 
@@ -552,7 +552,7 @@ async def test_chat_stream_other_exception_raises_llm_error():
 # ============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_complete_returns_response_content(mock_llm_ok):
     """complete() 把 prompt 包装为单条 user 消息, 返回 chat 响应 content."""
     client = LLMClient(_make_config())
@@ -590,7 +590,7 @@ def test_to_dict_exports_config_subset():
 # ============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_proxy_default_routes_through_backend(monkeypatch):
     """v2: 默认 ``use_proxy=True`` 时,_get_client 把请求发到本机 backend proxy,
     并携带独立的本地 capability header，同时保留 provider Authorization。
@@ -628,7 +628,7 @@ async def test_proxy_default_routes_through_backend(monkeypatch):
     assert captured["init_headers"]["X-Sage-Local-Authorization"] == "Bearer local-capability"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_use_proxy_false_bypasses_proxy(monkeypatch):
     """v2: ``use_proxy=False`` 时,LLMClient 直连 base_url(单测场景),不走 proxy,
     也不发 X-LLM-Provider-Url header。"""
@@ -664,7 +664,7 @@ async def test_use_proxy_false_bypasses_proxy(monkeypatch):
     assert captured["init_headers"]["Authorization"] == "Bearer test-key"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_proxy_omits_local_capability_when_token_is_missing(monkeypatch):
     """缺少显式本地 token 时不发送空/伪造 capability header。"""
     monkeypatch.delenv("SAGE_LOCAL_AUTH_TOKEN", raising=False)
@@ -689,7 +689,7 @@ async def test_proxy_omits_local_capability_when_token_is_missing(monkeypatch):
     assert captured["init_headers"]["Authorization"] == "Bearer provider-key"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_backend_url_from_env():
     """v2: backend_url 默认从 ``BACKEND_URL`` 环境变量读取。"""
     import os

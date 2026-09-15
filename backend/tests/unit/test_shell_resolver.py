@@ -15,7 +15,7 @@ from backend.tools.shell_resolver import resolve_shell_uncached
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def _clean_shell_cache():
     shell_resolver.resolve_shell.cache_clear()
     yield

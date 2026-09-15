@@ -136,7 +136,7 @@ def test_no_leak_into_sibling_test_when_reset_is_explicit():
 # ---------- concurrent asyncio.gather isolation ----------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_concurrent_tasks_get_isolated_contexts():
     """Two concurrent asyncio tasks each see their own context, not each other's."""
     ctx_a = _ctx(session_id="task-a")
@@ -165,7 +165,7 @@ async def test_concurrent_tasks_get_isolated_contexts():
     assert seen["b_after_reset"] is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_default_inside_task_is_none():
     """Inside a fresh task with no set_tool_context(), current is None."""
     assert current_tool_context() is None

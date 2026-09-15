@@ -23,7 +23,7 @@ SESSION_BOUND = "m6-ctx-bound"
 SESSION_UNBOUND = "m6-ctx-unbound"
 
 
-@pytest.fixture()
+@pytest.fixture
 def captured_run_loop_messages():
     calls: List[List[dict]] = []
 
@@ -64,7 +64,7 @@ def _system_content(messages: List[dict]) -> str:
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_bound_workspace_injects_project_context(
     client, captured_run_loop_messages, tmp_path
 ):
@@ -84,7 +84,7 @@ async def test_bound_workspace_injects_project_context(
     assert str(workspace) in system_text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_unbound_session_gets_no_injection(client, captured_run_loop_messages):
     messages = await _chat_once(client, captured_run_loop_messages, SESSION_UNBOUND)
 

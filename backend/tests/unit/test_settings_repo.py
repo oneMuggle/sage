@@ -7,7 +7,7 @@ import pytest
 from backend.data.settings_repo import SettingsRepository
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_db():
     db = MagicMock()
     conn = MagicMock()

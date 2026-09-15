@@ -8,7 +8,7 @@ from backend.domain.orch_events import make_event
 from backend.orchestration.snapshot_store import SnapshotStore
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_apply_run_event_updates_status():
     store = SnapshotStore()
     event = make_event(run_id="run-1", seq=0, event_type="run.started", producer="test")
@@ -19,7 +19,7 @@ async def test_apply_run_event_updates_status():
     assert snapshot.run_id == "run-1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_apply_task_event_creates_task():
     store = SnapshotStore()
     event = make_event(
@@ -38,7 +38,7 @@ async def test_apply_task_event_creates_task():
     assert snapshot.tasks[0].status == "pending"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_old_worker_cannot_overwrite_new_state():
     store = SnapshotStore()
     new = make_event(
@@ -55,7 +55,7 @@ async def test_old_worker_cannot_overwrite_new_state():
     assert snapshot.status == "completed"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_summary_counts_tasks_by_status():
     store = SnapshotStore()
     await store.apply_event(make_event(
@@ -76,13 +76,13 @@ async def test_summary_counts_tasks_by_status():
     assert snapshot.summary.get("pending", 0) == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_unknown_run_returns_none():
     store = SnapshotStore()
     assert store.get_run_snapshot("nonexistent") is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_list_run_ids():
     store = SnapshotStore()
     await store.apply_event(make_event(run_id="run-1", seq=0, event_type="run.created", producer="test"))

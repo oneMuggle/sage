@@ -11,7 +11,7 @@ from backend.tests.conftest import ensure_session
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def episodic(tmp_db_path: str) -> EpisodicMemory:
     db = Database(db_path=tmp_db_path)
     db.init_db()

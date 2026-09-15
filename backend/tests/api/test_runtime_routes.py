@@ -98,7 +98,7 @@ async def chat_service_injected():
 # --- 200 路径 ---
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_probe_returns_tool_result(client, chat_service_injected):
     resp = await client.post("/api/v1/runtime/probe", json={})
     assert resp.status_code == 200
@@ -109,7 +109,7 @@ async def test_probe_returns_tool_result(client, chat_service_injected):
     assert chat_service_injected.tools.calls[-1][0] == "runtime_probe"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_diagnose_returns_tool_result(client, chat_service_injected):
     resp = await client.post("/api/v1/runtime/diagnose", json={"project_root": "/tmp/x"})
     assert resp.status_code == 200
@@ -121,7 +121,7 @@ async def test_diagnose_returns_tool_result(client, chat_service_injected):
     assert args["project_root"] == "/tmp/x"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_exec_forwards_args_and_result(client, chat_service_injected):
     payload = {
         "language": "python",
@@ -142,7 +142,7 @@ async def test_exec_forwards_args_and_result(client, chat_service_injected):
     assert args["timeout"] == 30
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_exec_without_workspace_root_omits_key(client, chat_service_injected):
     """workspace_root 为 None 时不写入 args (与 probe 同语义)。"""
     payload = {
@@ -159,7 +159,7 @@ async def test_exec_without_workspace_root_omits_key(client, chat_service_inject
 # --- 503 路径 ---
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_probe_503_when_chat_service_missing(client):
     if hasattr(app.state, "chat_service"):
         delattr(app.state, "chat_service")
@@ -168,7 +168,7 @@ async def test_probe_503_when_chat_service_missing(client):
     assert "chat_service" in resp.json()["detail"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_probe_503_when_tool_unregistered(client):
     """tools 列表里缺 runtime_probe -> 503。"""
     service = _FakeChatService(tools=_FakeTools(specs=[]))
@@ -184,7 +184,7 @@ async def test_probe_503_when_tool_unregistered(client):
 # --- ToolResult 字段映射 ---
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_dispatch_maps_error_and_metadata(client, chat_service_injected):
     chat_service_injected.tools.results["runtime_probe"] = _FakeResult(
         success=False,

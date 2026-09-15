@@ -123,7 +123,7 @@ def _good_draft_payload() -> Dict[str, Any]:
     }
 
 
-@pytest.fixture()
+@pytest.fixture
 def seeded_db(tmp_path):
     """提供一个真实 SQLite + 已建表的 skill_drafts 表。"""
     db_path = str(tmp_path / "test_skill_save.db")

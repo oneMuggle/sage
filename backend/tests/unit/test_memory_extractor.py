@@ -10,7 +10,7 @@ pytestmark = pytest.mark.unit
 class TestMemoryExtractorKeywords:
     """测试关键词降级提取（无 LLM）"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_extract_preference_with_keyword(self):
         """包含偏好关键词时应提取事实。"""
         extractor = MemoryExtractor(llm_client=None)
@@ -22,14 +22,14 @@ class TestMemoryExtractorKeywords:
         assert any("火锅" in f["content"] for f in facts)
         assert all(f["importance"] == 7 for f in facts)
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_extract_short_message_returns_empty(self):
         """太短的消息不应提取。"""
         extractor = MemoryExtractor(llm_client=None)
         facts = await extractor.extract("hi", "hello")
         assert facts == []
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_extract_no_keywords_returns_empty(self):
         """无偏好关键词的普通对话不应提取。"""
         extractor = MemoryExtractor(llm_client=None)
@@ -40,7 +40,7 @@ class TestMemoryExtractorKeywords:
 class TestMemoryExtractorLLM:
     """测试 LLM 提取"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_extract_with_mock_llm_json(self):
         """LLM 返回 JSON 时应正确解析。"""
 
@@ -63,7 +63,7 @@ class TestMemoryExtractorLLM:
         assert facts[0]["importance"] == 8
         assert facts[0]["category"] == "preference"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_extract_with_markdown_code_block(self):
         """LLM 返回 markdown 代码块中的 JSON 应正确解析。"""
 
@@ -84,7 +84,7 @@ class TestMemoryExtractorLLM:
         assert len(facts) == 1
         assert "Python" in facts[0]["content"]
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_extract_with_invalid_json_falls_back(self):
         """LLM 返回无效 JSON 时应降级到关键词提取。"""
 
@@ -101,7 +101,7 @@ class TestMemoryExtractorLLM:
         facts = await extractor.extract("我喜欢吃火锅，每次都去那家店" + "x" * 20, "好的")
         assert len(facts) >= 0
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_extract_with_llm_error_falls_back(self):
         """LLM 调用失败时应降级到关键词提取。"""
 

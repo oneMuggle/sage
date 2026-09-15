@@ -30,7 +30,7 @@ class _FakeRepo:
         type(self).store[key] = value
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(monkeypatch):
     _FakeRepo.store.clear()
     monkeypatch.setattr(prompt_routes, "SettingsRepository", _FakeRepo)

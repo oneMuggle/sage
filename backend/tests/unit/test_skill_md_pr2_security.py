@@ -58,7 +58,7 @@ def test_loader_passes_script_runner_to_skill(tmp_path):
     assert registry.get("demo")._script_runner is runner
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_inproc_prefers_execute_v2_and_keeps_sync_fallback():
     registry = SkillRegistry()
     skill = MagicMock()
@@ -240,7 +240,7 @@ def test_inproc_delete_removes_slash_command(tmp_path, monkeypatch):
     assert not adapter._registry.exists("deploy")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_inproc_import_rebuilds_slash_registry(tmp_path):
     """导入 user-invocable 技能后，slash 索引必须立即刷新。"""
     from io import BytesIO
@@ -270,7 +270,7 @@ async def test_inproc_import_rebuilds_slash_registry(tmp_path):
     assert adapter.list_slash_commands() == ["/deploy"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_script_runner_rejects_replacement_after_confirmation(tmp_path):
     """确认后脚本被替换时，必须 fail-closed。"""
     script = tmp_path / "run.py"
@@ -297,7 +297,7 @@ async def test_script_runner_rejects_replacement_after_confirmation(tmp_path):
     assert "symlink" in result.error.lower() or "符号链接" in result.error
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_sandbox_enforces_bounded_output(tmp_path):
     script = tmp_path / "spam.py"
     script.write_text("print('x' * 10000)", encoding="utf-8")
@@ -311,7 +311,7 @@ async def test_sandbox_enforces_bounded_output(tmp_path):
     assert result.exit_code != 0
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_sandbox_starts_posix_process_group(tmp_path):
     script = tmp_path / "ok.py"
     script.write_text("print('ok')", encoding="utf-8")

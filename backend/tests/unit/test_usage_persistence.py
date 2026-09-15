@@ -13,7 +13,7 @@ from backend.services.usage_tracker import UsageTracker
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def tracker_with_db(monkeypatch, tmp_path: Path) -> UsageTracker:
     """内存库 + 每测试独立 tracker(清全局单例状态不必要——自建实例)。"""
     from backend.data import database as database_module
@@ -100,7 +100,7 @@ def test_tracker_fail_open_on_db_error(monkeypatch):
     assert tracker.summary()["totals"]["prompt_tokens"] == 10
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_run_loop_session_attribution():
     from backend.core.legacy.agent import SageAgent
     from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse

@@ -17,7 +17,7 @@ def _init_tmp_db(tmp_path, monkeypatch):
     db_mod.get_database().init_db()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_cancel_is_idempotent():
     d = ChatDispatcher(stream_id="s1", entry_queue=asyncio.Queue(), run_id="orch-test")
     assert d.cancel() is True
@@ -25,7 +25,7 @@ async def test_cancel_is_idempotent():
     assert d._cancelled.is_set()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_cancel_before_dispatch_skips_queued_in_gather(tmp_path, monkeypatch):
     """dispatch 前 cancel → 全部 queued 转 cancelled，不做任何子任务。
 
@@ -47,7 +47,7 @@ async def test_cancel_before_dispatch_skips_queued_in_gather(tmp_path, monkeypat
     assert d._states["t1"].error == "cancelled by user"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_cancel_during_run_short_circuits_queued(tmp_path, monkeypatch):
     """cancel 在 t1 running 时到达 → t1 放行完成；排队等槽的 t2 拿到槽后短路为 cancelled。
 
@@ -88,7 +88,7 @@ async def test_cancel_during_run_short_circuits_queued(tmp_path, monkeypatch):
     assert ran == ["t1"]  # t2 未调 _run_subagent
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_cancel_before_dispatch_skips_review_loop(tmp_path, monkeypatch):
     """取消后验证环不触发：plan_covered 已满足也不拉 reviewer。
 
@@ -164,7 +164,7 @@ def test_aggregate_in_flight_excludes_cancelled():
     assert "（1 已取消）" in result2
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_cancel_during_run_marks_subagent_cancelled_not_failed(tmp_path, monkeypatch):
     """P0-3: cancel 打断 running 子任务 → status=cancelled（旧行为一律 failed）。"""
     _init_tmp_db(tmp_path, monkeypatch)

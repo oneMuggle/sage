@@ -22,7 +22,7 @@ from backend.scheduler.evolution import PreferenceLearningTask
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def tmp_db():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db = Database(f.name)
@@ -73,7 +73,7 @@ class TestParsePreferenceJson:
 
 
 class TestAnalyzeWithLLM:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_llm_returns_preferences(self):
         task = PreferenceLearningTask.__new__(PreferenceLearningTask)
         llm = MagicMock()
@@ -82,7 +82,7 @@ class TestAnalyzeWithLLM:
         result = await task._analyze_preferences_with_llm(llm, messages)
         assert result == {"response_length": "short"}
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_llm_failure_returns_empty(self):
         task = PreferenceLearningTask.__new__(PreferenceLearningTask)
         llm = MagicMock()
@@ -90,7 +90,7 @@ class TestAnalyzeWithLLM:
         result = await task._analyze_preferences_with_llm(llm, [{"content": "hi"}])
         assert result == {}
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_empty_messages_skips_llm(self):
         task = PreferenceLearningTask.__new__(PreferenceLearningTask)
         llm = MagicMock()
@@ -101,7 +101,7 @@ class TestAnalyzeWithLLM:
 
 
 class TestResolveLLM:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_injected_client_wins(self, tmp_db, monkeypatch):
         """注入的客户端优先, 不读 settings"""
         monkeypatch.delenv("LLM_BASE_URL", raising=False)
@@ -111,7 +111,7 @@ class TestResolveLLM:
 
 
 class TestRunAsyncEvidenceGate:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_no_evidence_no_write(self, tmp_db, monkeypatch):
         """无关键词反馈且 LLM 无信号 → 不写库"""
         _insert_user_message(tmp_db, "今天天气真不错")
@@ -125,7 +125,7 @@ class TestRunAsyncEvidenceGate:
         ).fetchone()
         assert row[0] == 0
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_llm_preferences_persisted(self, tmp_db, monkeypatch):
         """LLM 抽取的偏好覆盖关键词基线并落库"""
         _insert_user_message(tmp_db, "回答简短点")

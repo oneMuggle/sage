@@ -19,7 +19,7 @@ import pytest
 SEED_AGENTS = {"primary", "researcher", "coder", "memory_manager"}
 
 
-@pytest.fixture()
+@pytest.fixture
 def _no_llm(monkeypatch):
     """Force the degraded planner path (no endpoint settings)."""
     monkeypatch.setattr(
@@ -27,7 +27,7 @@ def _no_llm(monkeypatch):
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_planner_llm(monkeypatch):
     """Planner LLM emitting a two-task DAG."""
     payload = json.dumps(
@@ -52,7 +52,7 @@ def mock_planner_llm(monkeypatch):
     return client
 
 
-@pytest.fixture()
+@pytest.fixture
 def _stub_background_exec(monkeypatch):
     """Isolate lane lifecycle from B2 wait=false background execution.
 

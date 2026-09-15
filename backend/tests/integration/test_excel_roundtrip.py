@@ -44,7 +44,7 @@ from backend.office.models import ExcelSheetSpec, OfficeExcelGenerateRequest
 # ─────────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture()
+@pytest.fixture
 def workspace(tmp_path: Path) -> Path:
     """Per-test scratch workspace matching ``managed_document_path`` layout."""
     ws = tmp_path / "workspace"

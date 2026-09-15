@@ -53,14 +53,14 @@ from backend.office.workspace_errors import (
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture()
+@pytest.fixture
 def work_a(fixture_dir: Path) -> Path:
     ws = fixture_dir / "work-a"
     ws.mkdir()
     return ws
 
 
-@pytest.fixture()
+@pytest.fixture
 def conn() -> sqlite3.Connection:
     db = Database(":memory:")
     db.init_db()
@@ -100,7 +100,7 @@ def _make_doc(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def binding_a(conn: sqlite3.Connection, work_a: Path):
     """Active binding for session-a -> work-a, generation=1."""
     _insert_session(conn, "session-a")

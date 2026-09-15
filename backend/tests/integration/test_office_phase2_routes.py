@@ -32,7 +32,7 @@ from backend.office.models import (
 )
 
 
-@pytest.fixture()
+@pytest.fixture
 def workspace(tmp_path: Path) -> Path:
     """Per-test scratch workspace."""
     ws = tmp_path / "workspace"
@@ -40,7 +40,7 @@ def workspace(tmp_path: Path) -> Path:
     return ws
 
 
-@pytest.fixture()
+@pytest.fixture
 def http_client() -> TestClient:
     """Authenticated client exercising the real FastAPI route stack."""
     return TestClient(

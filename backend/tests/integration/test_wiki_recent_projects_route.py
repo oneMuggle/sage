@@ -8,7 +8,7 @@ from backend.main import app
 pytestmark = pytest.mark.integration
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_record_recent_project_returns_empty_204(monkeypatch, tmp_path):
     """Recording a project keeps 204 semantics and sends no response body."""
     from backend.api import wiki_routes

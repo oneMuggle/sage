@@ -78,7 +78,7 @@ def _patch_stream(client, response=None, enter_error=None):
     return patcher
 
 
-@pytest.fixture()
+@pytest.fixture
 def client():
     return LLMClient(
         LLMConfig(
@@ -99,7 +99,7 @@ async def _consume(stream):
     return [chunk async for chunk in stream]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_stream_timeout_raises_timeout_error(client):
     """连接/读取超时应映射为 TIMEOUT。"""
     # Arrange
@@ -114,7 +114,7 @@ async def test_stream_timeout_raises_timeout_error(client):
         patcher.stop()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_stream_connect_error_raises_network_error(client):
     """httpx.ConnectError 应映射为 NETWORK。"""
     # Arrange
@@ -129,7 +129,7 @@ async def test_stream_connect_error_raises_network_error(client):
         patcher.stop()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_stream_401_raises_auth_failed(client):
     """HTTP 401 应映射为 AUTH_FAILED。"""
     # Arrange
@@ -145,7 +145,7 @@ async def test_stream_401_raises_auth_failed(client):
         patcher.stop()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_stream_429_raises_rate_limited(client):
     """HTTP 429 应映射为 RATE_LIMITED 并携带 retry_after。"""
     # Arrange
@@ -163,7 +163,7 @@ async def test_stream_429_raises_rate_limited(client):
         patcher.stop()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_stream_500_raises_server_error(client):
     """HTTP 5xx 应映射为 SERVER_ERROR。"""
     # Arrange
@@ -179,7 +179,7 @@ async def test_stream_500_raises_server_error(client):
         patcher.stop()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_stream_unknown_status_raises_unknown(client):
     """其余 HTTP 状态码（如 404）应映射为 UNKNOWN，与非流式路径一致。"""
     # Arrange
@@ -195,7 +195,7 @@ async def test_stream_unknown_status_raises_unknown(client):
         patcher.stop()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_stream_decoding_failure_raises_parsing(client):
     """流体解码抛出 ValueError 时应映射为 PARSING。"""
 
@@ -220,7 +220,7 @@ async def test_stream_decoding_failure_raises_parsing(client):
         patcher.stop()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_stream_success_yields_content_chunks(client):
     """正常流应逐 chunk yield 内容（yield 契约不受错误分类重构影响）。"""
     # Arrange

@@ -51,7 +51,7 @@ def _make_adapter(db: Database, succeed: bool = True) -> InprocSkillAdapter:
     return InprocSkillAdapter(registry=registry)
 
 
-@pytest.fixture()
+@pytest.fixture
 def db(tmp_path):
     database = Database(db_path=str(tmp_path / "test_skill_usage.db"))
     database.init_db()
@@ -59,7 +59,7 @@ def db(tmp_path):
     database.close()
 
 
-@pytest.fixture()
+@pytest.fixture
 def store(db):
     return SkillUsageStore(db)
 
@@ -149,7 +149,7 @@ class TestSkillUsageStore:
 
 
 class TestAdapterExecuteUsage:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_execute_success_bumps_memory_and_db(self, db):
         adapter = _make_adapter(db, succeed=True)
         result = await adapter.execute("search", "run", {})
@@ -159,7 +159,7 @@ class TestAdapterExecuteUsage:
         # DB 持久化
         assert get_usage_store(db).get("search")["use_count"] == 1
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_execute_failure_does_not_bump(self, db):
         adapter = _make_adapter(db, succeed=False)
         result = await adapter.execute("search", "run", {})
@@ -167,7 +167,7 @@ class TestAdapterExecuteUsage:
         assert adapter.usage_count("search") == 0
         assert get_usage_store(db).get("search") is None
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_execute_missing_skill_no_bump(self, db):
         adapter = _make_adapter(db, succeed=True)
         result = await adapter.execute("nonexistent", "run", {})
@@ -179,7 +179,7 @@ class TestAdapterExecuteUsage:
         adapter.bump_usage("search")
         assert get_usage_store(db).get("search")["use_count"] == 1
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_usage_hydrated_from_db_on_reinit(self, db):
         """新建 adapter 从 skill_usage 表回填持久化计数（重启不归零）。"""
         adapter1 = _make_adapter(db, succeed=True)

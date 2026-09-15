@@ -42,7 +42,7 @@ def _seed_usage(session_id: str, total_tokens: int, created_at_ms: int) -> None:
 # ---- BD7: 快照聚合增强 --------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_snapshot_includes_partial_aggregate(tmp_path, monkeypatch):
     """wait=false 快照含 aggregate 字段（部分聚合 markdown）。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -69,7 +69,7 @@ async def test_snapshot_includes_partial_aggregate(tmp_path, monkeypatch):
     assert snap["budget_exceeded"] is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_snapshot_none_state_has_no_aggregate(tmp_path, monkeypatch):
     """从未后台派发 → none 态不带 aggregate（无 states 可聚合）。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -84,7 +84,7 @@ async def test_snapshot_none_state_has_no_aggregate(tmp_path, monkeypatch):
 # ---- BU7: 预算预警 ------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_budget_warning_at_80_percent(tmp_path, monkeypatch, caplog):
     """用量跨过预算 80% → 一次性 WARNING 预警；守门不触发。"""
     _init_tmp_db(tmp_path, monkeypatch)

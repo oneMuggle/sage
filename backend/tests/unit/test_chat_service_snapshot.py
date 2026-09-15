@@ -36,7 +36,7 @@ pytestmark = pytest.mark.unit
 # --------------------------------------------------------------------------- #
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_llm():
     llm = Mock()
     llm.chat = AsyncMock(
@@ -48,14 +48,14 @@ def mock_llm():
     return llm
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_tools():
     tools = Mock()
     tools.list_tools = Mock(return_value=[])
     return tools
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_storage():
     storage = Mock()
     storage.append_message = AsyncMock()
@@ -63,7 +63,7 @@ def mock_storage():
     return storage
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_metrics():
     metrics = Mock()
     metrics.counter = Mock()
@@ -72,14 +72,14 @@ def mock_metrics():
     return metrics
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_events():
     events = Mock()
     events.emit = Mock()
     return events
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_memory():
     memory = Mock(spec=MemoryPort)
     memory.retrieve = AsyncMock(return_value=MemoryContext(working=[], episodic=[], semantic=[]))
@@ -88,7 +88,7 @@ def mock_memory():
     return memory
 
 
-@pytest.fixture()
+@pytest.fixture
 def service(mock_llm, mock_tools, mock_storage, mock_metrics, mock_events, mock_memory):
     return ChatService(
         llm=mock_llm,
@@ -139,7 +139,7 @@ class TestSystemPromptSnapshot:
         assert "## 图表生成能力" in static_prompt
         mock_tools.list_tools.assert_called_once_with()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_second_turn_reuses_static_segment(self, service, mock_llm):
         """同 session 两次 run_turn：静态段只组装一次，第二次命中缓存。"""
         calls = _spy_static_build(service)
@@ -154,7 +154,7 @@ class TestSystemPromptSnapshot:
         first, second = mock_llm.chat.call_args_list
         assert _system_content_of(second) == _system_content_of(first)
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_dynamic_memory_appended_after_snapshot_each_turn(
         self, service, mock_llm, mock_memory
     ):
@@ -178,7 +178,7 @@ class TestSystemPromptSnapshot:
             assert "以下是相关的记忆上下文" in content
             assert "饮食偏好" in content
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_instance_invalidate_forces_rebuild(self, service):
         """invalidate_session_snapshot 后下一轮重新组装静态段。"""
         calls = _spy_static_build(service)
@@ -193,7 +193,7 @@ class TestSystemPromptSnapshot:
         assert len(calls) == 2, "失效后应重新组装静态段"
         assert "session-3" in service._system_prompt_snapshots
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_module_level_invalidate_notifies_live_instances(self, service):
         """模块级失效入口（legacy_routes 压缩落点调用）能通知存活实例。"""
         calls = _spy_static_build(service)
@@ -208,14 +208,14 @@ class TestSystemPromptSnapshot:
         await service.run_turn("session-4", Message(role=Role.USER, content="第二轮"))
         assert len(calls) == 2
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_unknown_session_invalidate_is_noop(self, service):
         """失效不存在的 session 不抛异常。"""
         service.invalidate_session_snapshot("never-seen")
         invalidate_session_snapshot("never-seen")
         assert service._system_prompt_snapshots == {}
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_session_id_none_not_cached(self, service, mock_llm):
         """session_id 为 None 时不缓存，每轮都重新组装（旧路径）。"""
         calls = _spy_static_build(service)
@@ -232,7 +232,7 @@ class TestSystemPromptSnapshot:
 # --------------------------------------------------------------------------- #
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_extractor():
     extractor = Mock()
     extractor.extract = AsyncMock(
@@ -255,7 +255,7 @@ def mock_extractor():
 
 
 class TestExtractAndStoreMemory:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_disabled_returns_zero_without_any_call(self, mock_memory, mock_extractor):
         """enabled=False（autoMemory 关闭）直接返回 0，不提取不写入。"""
         stored = await extract_and_store_memory(
@@ -270,7 +270,7 @@ class TestExtractAndStoreMemory:
         mock_extractor.extract.assert_not_called()
         mock_memory.store.assert_not_called()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_none_memory_port_returns_zero(self, mock_extractor):
         """memory_port=None（未装配记忆）直接返回 0。"""
         stored = await extract_and_store_memory(
@@ -284,7 +284,7 @@ class TestExtractAndStoreMemory:
         assert stored == 0
         mock_extractor.extract.assert_not_called()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_happy_path_returns_count_and_passes_session_id(
         self, mock_memory, mock_extractor
     ):
@@ -309,7 +309,7 @@ class TestExtractAndStoreMemory:
         assert first_kwargs["importance"] == 7
         assert first_kwargs["tags"] == ["preference"]
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_extractor_error_swallowed(self, mock_memory):
         """extractor 抛错：内部吞掉（warning），返回 0，绝不外抛。"""
         extractor = Mock()
@@ -320,7 +320,7 @@ class TestExtractAndStoreMemory:
         assert stored == 0
         mock_memory.store.assert_not_called()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_store_error_swallowed(self, mock_extractor):
         """store 抛错：内部吞掉（warning），绝不外抛。"""
         memory = Mock(spec=MemoryPort)

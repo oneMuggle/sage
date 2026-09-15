@@ -33,7 +33,7 @@ pytestmark = [
 ]
 
 
-@pytest.fixture()
+@pytest.fixture
 def tool():
     return BashTool()
 
@@ -260,7 +260,7 @@ def test_bash_unknown_kwarg_rejected(tool):
 # ---------- 后台执行 ----------
 
 
-@pytest.fixture()
+@pytest.fixture
 def clean_registry():
     """每个后台测试用干净的全局注册表。"""
     registry = get_registry()

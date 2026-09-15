@@ -44,7 +44,7 @@ def _parse_ndjson(text: str) -> List[dict]:
     return [json.loads(line) for line in text.split("\n") if line.strip()]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_stream_create_returns_stream_id_immediately():
     """POST /chat/stream 返回 {"streamId": "..."},无 NDJSON 流式输出。"""
     from backend.api.chat_stream_registry import StreamRegistry
@@ -76,7 +76,7 @@ async def test_chat_stream_create_returns_stream_id_immediately():
             await entry.task
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_chat_stream_attach_streams_ndjson_events():
     """create + attach: NDJSON 事件按序到达。"""
     from backend.api.chat_stream_registry import StreamRegistry
@@ -143,7 +143,7 @@ async def test_chat_stream_attach_streams_ndjson_events():
             assert done_events[0]["content"] == "答案是 2"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_two_attaches_share_queue_without_invoking_llm_twice():
     """关键不变性:同一 streamId 多次 attach,LLM 只被调一次。
 
@@ -198,7 +198,7 @@ async def test_two_attaches_share_queue_without_invoking_llm_twice():
             assert "done" in all_states
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_attach_unknown_stream_id_returns_404():
     """attach 一个不存在的 streamId → 404。"""
     from backend.api.chat_stream_registry import StreamRegistry
@@ -211,7 +211,7 @@ async def test_attach_unknown_stream_id_returns_404():
     assert resp.status_code == 404
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_producer_exception_emits_failed_event_and_closes_stream():
     """producer 抛异常 → attach 收到 failed 事件 + 流正常关闭。"""
 
@@ -247,7 +247,7 @@ async def test_producer_exception_emits_failed_event_and_closes_stream():
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_producer_passes_llm_config_to_run_loop_when_api_key_and_url_provided():
     """回归保护:当请求体含 api_key + api_url 时,producer 必须把 llm_config
     传给 agent.run_loop,而不是用实例化时为 None 的默认 LLM。
@@ -303,7 +303,7 @@ async def test_producer_passes_llm_config_to_run_loop_when_api_key_and_url_provi
     assert llm_config["temperature"] == 0.3
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_producer_passes_no_llm_config_when_request_omits_api_key():
     """请求不带 api_key/api_url → producer 不传 llm_config(走默认 agent client)。"""
     from backend.api.chat_stream_registry import StreamRegistry
@@ -338,7 +338,7 @@ async def test_producer_passes_no_llm_config_when_request_omits_api_key():
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_producer_passes_provider_from_request_body():
     """请求体显式带 provider → llm_config["provider"] 跟着变,不再硬写 'custom'。"""
     from backend.api.chat_stream_registry import StreamRegistry
@@ -378,7 +378,7 @@ async def test_producer_passes_provider_from_request_body():
     ), f"provider 应该透传,实际 {llm_config.get('provider')!r}"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_producer_passes_reasoning_params_when_provided():
     """请求体带 reasoning_effort / thinking_budget → 出现在 llm_config 里。"""
     from backend.api.chat_stream_registry import StreamRegistry
@@ -418,7 +418,7 @@ async def test_producer_passes_reasoning_params_when_provided():
     assert llm_config["thinking_budget"] == 4096
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_producer_omits_reasoning_params_when_not_provided():
     """请求体不带推理参数 → llm_config 里也不带(避免污染老 LLM)。"""
     from backend.api.chat_stream_registry import StreamRegistry
@@ -458,7 +458,7 @@ async def test_producer_omits_reasoning_params_when_not_provided():
     assert "thinking_budget" not in llm_config
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_finally_finalizes_run_even_on_early_producer_failure():
     """P0-4 (2026-08-20): producer 早期异常也必须走到 _finalize_orch_run。
 

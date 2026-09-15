@@ -26,7 +26,7 @@ def _utc(**delta) -> str:
     return to_utc_iso(datetime.now(timezone.utc) + timedelta(**delta))  # noqa: UP017
 
 
-@pytest.fixture()
+@pytest.fixture
 def store():
     """绑定 autouse 临时数据库的 WakeStore。"""
     return WakeStore()

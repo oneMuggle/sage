@@ -52,7 +52,7 @@ class _StubResult:
     summary: OfficeDocumentSummary
 
 
-@pytest.fixture()
+@pytest.fixture
 def conn() -> sqlite3.Connection:
     """Inject a fresh :memory: Database into the global _db slot.
 

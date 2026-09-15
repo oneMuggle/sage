@@ -145,7 +145,7 @@ def test_continuation_message_format():
 # ---- compact_messages ----------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_compact_messages_keep_recent_boundary():
     """14 条 + keep_recent=6 → 摘要 8 条,返回 1+6 条,尾部原样保留。"""
     messages = _dict_messages(14)
@@ -164,7 +164,7 @@ async def test_compact_messages_keep_recent_boundary():
     assert new_messages[1:] == messages[-6:]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_compact_messages_llm_failure_raises():
     """LLM 调用失败 → CompactionError,绝不返回半成品。"""
     messages = _dict_messages(14)
@@ -176,7 +176,7 @@ async def test_compact_messages_llm_failure_raises():
         await compact_messages(messages, broken_llm)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_compact_messages_empty_digest_raises():
     messages = _dict_messages(14)
 
@@ -187,7 +187,7 @@ async def test_compact_messages_empty_digest_raises():
         await compact_messages(messages, empty_llm)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_compact_messages_too_few_raises():
     """消息数 <= keep_recent 时没有可压缩前缀 → 抛错。"""
     messages = _dict_messages(6)

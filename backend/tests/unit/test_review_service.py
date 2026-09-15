@@ -73,7 +73,7 @@ class TestGenerateDraftHappyPath:
         finally:
             review_service.reset_review_service()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_default_provider_receives_selected_model_on_complete(self, monkeypatch):
         """The selected model is passed to the provider's complete contract."""
         from backend.data.settings_repo import SettingsRepository
@@ -140,7 +140,7 @@ class TestGenerateDraftHappyPath:
 
         assert resolve_model_from_settings() == "local-model"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_generate_draft_uses_selected_chat_model(self, monkeypatch):
         """Background review follows the persisted model selection."""
         from backend.data.settings_repo import SettingsRepository
@@ -158,7 +158,7 @@ class TestGenerateDraftHappyPath:
 
         assert provider.complete.call_args.kwargs["model"] == "configured-review-model"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_generate_draft_keeps_default_model_without_selection(self, monkeypatch):
         """Missing model selection retains the backwards-compatible fallback."""
         from backend.data.settings_repo import SettingsRepository
@@ -170,7 +170,7 @@ class TestGenerateDraftHappyPath:
 
         assert provider.complete.call_args.kwargs["model"] == "sonnet"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_generate_draft_settings_failure_keeps_default_model(self, monkeypatch):
         """Settings I/O failures do not prevent draft generation."""
         from backend.data.settings_repo import SettingsRepository
@@ -185,7 +185,7 @@ class TestGenerateDraftHappyPath:
 
         assert provider.complete.call_args.kwargs["model"] == "sonnet"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_injected_provider_uses_stable_model_snapshot(self, monkeypatch):
         """注入 provider 后，设置变化不能让 endpoint/provider 与 model 拆配。"""
         from backend.data.settings_repo import SettingsRepository
@@ -212,7 +212,7 @@ class TestGenerateDraftHappyPath:
 
         assert provider.complete.call_args.kwargs["model"] == "model-at-construction"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_generate_draft_with_mock_llm(self):
         """generate_draft returns a SkillDraft with fields parsed from LLM JSON."""
         from backend.skills.review_service import ReviewService, SkillDraft
@@ -235,7 +235,7 @@ class TestGenerateDraftHappyPath:
         assert draft.id  # non-empty UUID string
         assert draft.created_at > 0
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_generate_draft_preserves_source_context(self):
         """Source session_id and context are carried through to the draft."""
         from backend.skills.review_service import ReviewService
@@ -249,7 +249,7 @@ class TestGenerateDraftHappyPath:
         assert draft.source_session_id == "sess-42"
         assert draft.source_context == ctx
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_generate_draft_default_session_id_empty(self):
         """Missing session_id in context defaults to empty string."""
         from backend.skills.review_service import ReviewService
@@ -271,7 +271,7 @@ class TestGenerateDraftHappyPath:
 class TestParseLLMOutput:
     """Tests for JSON extraction from various LLM output formats."""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_parse_markdown_json_code_block(self):
         """LLM wraps JSON in ```json ... ``` — should be extracted."""
         from backend.skills.review_service import ReviewService
@@ -283,7 +283,7 @@ class TestParseLLMOutput:
         draft = await service.generate_draft(trigger_type="t", context={})
         assert draft.name == "test-skill"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_parse_plain_markdown_code_block(self):
         """LLM wraps JSON in ``` ... ``` (no language tag) — should work."""
         from backend.skills.review_service import ReviewService
@@ -295,7 +295,7 @@ class TestParseLLMOutput:
         draft = await service.generate_draft(trigger_type="t", context={})
         assert draft.name == "test-skill"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_parse_raw_json(self):
         """LLM returns bare JSON — should parse directly."""
         from backend.skills.review_service import ReviewService
@@ -306,7 +306,7 @@ class TestParseLLMOutput:
         draft = await service.generate_draft(trigger_type="t", context={})
         assert draft.name == "test-skill"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_parse_json_with_surrounding_text(self):
         """LLM adds explanatory text around the JSON block."""
         from backend.skills.review_service import ReviewService
@@ -327,7 +327,7 @@ class TestParseLLMOutput:
 class TestErrorHandling:
     """LLM errors must be handled gracefully."""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_invalid_json_raises_value_error(self):
         """LLM returning non-JSON output raises ValueError."""
         from backend.skills.review_service import ReviewService
@@ -338,7 +338,7 @@ class TestErrorHandling:
         with pytest.raises(ValueError, match="Failed to parse"):
             await service.generate_draft(trigger_type="t", context={})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_missing_required_field_raises_key_error(self):
         """LLM returning JSON without required fields raises KeyError."""
         from backend.skills.review_service import ReviewService
@@ -350,7 +350,7 @@ class TestErrorHandling:
         with pytest.raises(KeyError):
             await service.generate_draft(trigger_type="t", context={})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_none_text_raises_value_error(self):
         """LLM returning an AssistantTurn with text=None raises ValueError."""
         from backend.skills.review_service import ReviewService
@@ -362,7 +362,7 @@ class TestErrorHandling:
         with pytest.raises(ValueError, match="empty or None text"):
             await service.generate_draft(trigger_type="t", context={})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_empty_string_text_raises_value_error(self):
         """LLM returning an AssistantTurn with text='' raises ValueError."""
         from backend.skills.review_service import ReviewService
@@ -374,7 +374,7 @@ class TestErrorHandling:
         with pytest.raises(ValueError, match="empty or None text"):
             await service.generate_draft(trigger_type="t", context={})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_llm_provider_exception_propagates(self):
         """If the LLM provider raises, the exception propagates to caller."""
         from backend.skills.review_service import ReviewService
@@ -437,7 +437,7 @@ class TestSkillDraftDataclass:
 class TestSchemaValidation:
     """PR-1: LLM output must satisfy the enhanced schema constraints."""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_name_regex_rejects_uppercase(self):
         """Skill name must be kebab-case (lowercase + digits + hyphens)."""
         from backend.skills.review_service import ReviewService
@@ -456,7 +456,7 @@ class TestSchemaValidation:
         with pytest.raises(ValueError, match="kebab-case"):
             await service.generate_draft(trigger_type="t", context={})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_name_regex_rejects_too_short(self):
         """Skill name must be ≥ 3 chars."""
         from backend.skills.review_service import ReviewService
@@ -475,7 +475,7 @@ class TestSchemaValidation:
         with pytest.raises(ValueError, match="3..40"):
             await service.generate_draft(trigger_type="t", context={})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "bad_name",
         [
@@ -505,7 +505,7 @@ class TestSchemaValidation:
         with pytest.raises(ValueError, match="kebab-case"):
             await service.generate_draft(trigger_type="t", context={})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_name_regex_rejects_too_long(self):
         """Skill name must be no longer than 40 chars."""
         from backend.skills.review_service import ReviewService
@@ -524,7 +524,7 @@ class TestSchemaValidation:
         with pytest.raises(ValueError, match="3..40"):
             await service.generate_draft(trigger_type="t", context={})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("name", ["abc", "a" * 40])
     async def test_name_regex_accepts_length_boundaries(self, name):
         """Three and 40 character names are valid length boundaries."""
@@ -544,7 +544,7 @@ class TestSchemaValidation:
         draft = await service.generate_draft(trigger_type="t", context={})
         assert draft.name == name
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_description_too_long(self):
         """Description must be ≤ 80 chars."""
         from backend.skills.review_service import ReviewService
@@ -563,7 +563,7 @@ class TestSchemaValidation:
         with pytest.raises(ValueError, match="≤ 80"):
             await service.generate_draft(trigger_type="t", context={})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("missing_section", "content"),
         [
@@ -599,7 +599,7 @@ class TestSchemaValidation:
         with pytest.raises(ValueError, match=missing_section):
             await service.generate_draft(trigger_type="t", context={})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_when_to_use_too_short(self):
         """when_to_use must be ≥ 30 chars."""
         from backend.skills.review_service import ReviewService
@@ -618,7 +618,7 @@ class TestSchemaValidation:
         with pytest.raises(ValueError, match="≥ 30"):
             await service.generate_draft(trigger_type="t", context={})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("field", "raw_value", "expected_fragment"),
         [
@@ -653,7 +653,7 @@ class TestSchemaValidation:
         with pytest.raises(ValueError, match=re.escape(expected_fragment)):
             await service.generate_draft(trigger_type="t", context={})
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_valid_schema_passes(self):
         """A fully compliant draft should pass all schema checks."""
         from backend.skills.review_service import ReviewService, SkillDraft

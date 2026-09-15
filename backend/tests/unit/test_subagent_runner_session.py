@@ -74,7 +74,7 @@ class _BoundaryFakeAgent:
         yield AgentEvent(state=AgentState.DONE, content="ok")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_initial_pending_context_injected_before_run():
     """run 启动前已存在的 pending steering → 注入首条 user 消息之后。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -109,7 +109,7 @@ async def test_initial_pending_context_injected_before_run():
     assert repo.delivered == ["ctx-1"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_pending_context_injected_at_thinking_boundary():
     """THINKING 边界投递 —— 边界后写入的 pending 在下一轮迭代前可见。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -130,7 +130,7 @@ async def test_pending_context_injected_at_thinking_boundary():
     assert repo.delivered == ["ctx-mid"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_delivered_messages_not_reinjected():
     """已 delivered 的消息不再重复注入。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -157,7 +157,7 @@ async def test_delivered_messages_not_reinjected():
     assert repo.delivered == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_repo_failure_degrades_silently():
     """repo 拉取/迁移抛错 → 降级继续，子任务正常完成。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -185,7 +185,7 @@ async def test_repo_failure_degrades_silently():
     assert result["status"] == "succeeded"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_session_id_passed_to_child_run_loop():
     """O3: session_id 非空 → child.run_loop 收到 session_id kwarg。"""
     from backend.orchestration.subagent_runner import SubagentRunner
@@ -212,7 +212,7 @@ async def test_session_id_passed_to_child_run_loop():
     assert captured["session_id"] == "sess-42"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_session_id_omitted_when_unset():
     """O3: session_id 为空 → 不传 kwarg（兼容只接受三参的老签名桩）。"""
     from backend.orchestration.subagent_runner import SubagentRunner

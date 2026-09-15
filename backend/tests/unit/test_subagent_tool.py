@@ -45,7 +45,7 @@ class TestSchema:
 
 
 class TestExecuteAsync:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_execute_async_delegates_to_dispatcher(self):
         dispatcher = _make_dispatcher("调研完毕")
         tool = DispatchSubagentsTool(dispatcher)
@@ -57,7 +57,7 @@ class TestExecuteAsync:
         assert result.content == "调研完毕"
         dispatcher.dispatch.assert_awaited_once_with(tasks)
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_execute_async_passes_errors_through(self):
         dispatcher = _make_dispatcher()
         dispatcher.dispatch = AsyncMock(side_effect=RuntimeError("dispatch boom"))
@@ -81,7 +81,7 @@ class TestExecuteSync:
 class TestRunLoopSpecialCase:
     """真实 run_loop：mock LLM 返回 dispatch_subagents 工具调用 → 断言走 execute_async。"""
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_run_loop_dispatches_via_execute_async(self):
         from backend.core.legacy.agent import SageAgent
         from backend.core.legacy.agent_state import AgentState

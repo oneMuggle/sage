@@ -13,7 +13,7 @@ pytestmark = pytest.mark.integration
 PREFIX = "/api/v1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_evolution_logs_empty(client):
     """空库上 /evolution/logs 返回空列表。"""
     resp = await client.get(f"{PREFIX}/evolution/logs")
@@ -21,7 +21,7 @@ async def test_evolution_logs_empty(client):
     assert resp.json() == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_evolution_logs_returns_inserted(client):
     """插入 evolution_log 后 /evolution/logs 能查到。"""
     from backend.data.database import get_database

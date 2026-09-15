@@ -240,7 +240,7 @@ def test_manager_cap():
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def stubbed(monkeypatch):
     """固定一个活会话 + 可编程的 cdp_command 假体。
 
