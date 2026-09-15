@@ -99,9 +99,10 @@ class OverrideRecord(CatalogValue):
 class ProbeRecord(CatalogValue):
     patch: EndpointPatch
     adapter: NonblankString
-    status: Literal["success", "failed"]
+    status: Literal["success", "unsupported", "error"]
     observed_at: str
     error: str | None = None
+    base_url: str | None = None  # endpoint URL at probe time; enables staleness detection
 
 
 class SnapshotDiff(CatalogValue):

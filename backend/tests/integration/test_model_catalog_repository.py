@@ -164,8 +164,8 @@ def test_override_cas_and_probe_failure_preserve_user_and_last_success(repo):
     with pytest.raises(CatalogConflict):
         repo.set_override(endpoint(), {"native": 1}, 0)
     repo.save_probe(endpoint(), {"service": 8000}, adapter="ollama", status="success")
-    repo.save_probe(endpoint(), {}, adapter="ollama", status="failed", error="unavailable")
-    assert repo.get_probe(endpoint()).status == "failed"
+    repo.save_probe(endpoint(), {}, adapter="ollama", status="error", error="unavailable")
+    assert repo.get_probe(endpoint()).status == "error"
     publish(repo, candidate(native=64000))
     result = repo.resolve(endpoint())
     assert result.limits.service == 8000
@@ -272,3 +272,86 @@ def test_unknown_review_fields_and_missing_item_are_rejected(repo):
     with pytest.raises(KeyError):
         repo.ignore(snap, "missing")
     assert repo.diff(snap)[0].status == "pending"
+
+
+def test_save_probe_stores_base_url(repo):
+    """ProbeRecord stores base_url for staleness detection."""
+    repo.save_probe(
+        endpoint(),
+        {"native": 4096},
+        adapter="ollama",
+        status="success",
+        base_url="http://localhost:11434",
+    )
+    record = repo.get_probe(endpoint())
+    assert record.base_url == "http://localhost:11434"
+    assert record.patch.native == 4096
+
+
+def test_probe_url_change_invalidates_effective(repo):
+    """When endpoint URL changes, old effective data is discarded."""
+    # First probe: success with URL A
+    repo.save_probe(
+        endpoint(),
+        {"native": 4096},
+        adapter="ollama",
+        status="success",
+        base_url="http://host-a:11434",
+    )
+    first_probe = repo.get_probe(endpoint())
+    assert first_probe.patch.native == 4096
+
+    # Second probe: success with URL B (different endpoint)
+    repo.save_probe(
+        endpoint(),
+        {"native": 8192},
+        adapter="ollama",
+        status="success",
+        base_url="http://host-b:11434",
+    )
+    second_probe = repo.get_probe(endpoint())
+    # Probe record stores latest data
+    assert second_probe.patch.native == 8192
+    assert second_probe.base_url == "http://host-b:11434"
+    # effective_data should only contain the new probe's data (old was stale)
+    row = repo.db.get_connection().execute(
+        "SELECT effective_data FROM model_catalog_probes WHERE endpoint_id=? AND model_id=?",
+        (endpoint().endpoint_id, endpoint().model_id),
+    ).fetchone()
+    from backend.model_catalog.schemas import EndpointPatch
+
+    effective = EndpointPatch.model_validate_json(row[0])
+    assert effective.native == 8192  # only new probe's data
+    assert effective.service is None  # no accumulated data
+
+
+def test_probe_same_url_merges_effective(repo):
+    """When endpoint URL is unchanged, effective data accumulates."""
+    repo.save_probe(
+        endpoint(),
+        {"native": 4096},
+        adapter="ollama",
+        status="success",
+        base_url="http://host-a:11434",
+    )
+    repo.save_probe(
+        endpoint(),
+        {"service": 2048},
+        adapter="ollama",
+        status="success",
+        base_url="http://host-a:11434",
+    )
+    # The probe record stores the latest probe data only
+    record = repo.get_probe(endpoint())
+    assert record.patch.native is None  # second probe didn't set native
+    assert record.patch.service == 2048  # second probe set service
+    # But effective_data in DB should have both merged
+    row = repo.db.get_connection().execute(
+        "SELECT effective_data FROM model_catalog_probes WHERE endpoint_id=? AND model_id=?",
+        (endpoint().endpoint_id, endpoint().model_id),
+    ).fetchone()
+    from backend.model_catalog.schemas import EndpointPatch
+
+    effective = EndpointPatch.model_validate_json(row[0])
+    assert effective.native == 4096
+    assert effective.service == 2048

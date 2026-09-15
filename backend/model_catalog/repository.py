@@ -149,6 +149,7 @@ class CatalogRepository:
         adapter: str,
         status: str,
         error: str | None = None,
+        base_url: str | None = None,
     ) -> None:
         record = ProbeRecord(
             patch=EndpointPatch.model_validate(patch),
@@ -156,16 +157,30 @@ class CatalogRepository:
             status=status,
             observed_at=utc_now(),
             error=error,
+            base_url=base_url,
         )
         with self._transaction() as conn:
             row = conn.execute(
-                "SELECT effective_data FROM model_catalog_probes "
+                "SELECT data, effective_data FROM model_catalog_probes "
                 "WHERE endpoint_id=? AND model_id=?",
                 (endpoint.endpoint_id, endpoint.model_id),
             ).fetchone()
-            effective = EndpointPatch.model_validate_json(row[0]) if row else EndpointPatch()
-            if record.status == "success":
-                effective = self._merge_patch(effective, record.patch)
+            if row:
+                old_probe = ProbeRecord.model_validate_json(row[0])
+                url_changed = (
+                    base_url is not None
+                    and old_probe.base_url is not None
+                    and old_probe.base_url != base_url
+                )
+            else:
+                url_changed = False
+            # If endpoint URL changed, old effective data is stale — reset
+            if url_changed:
+                effective = EndpointPatch.model_validate(patch) if record.status == "success" else EndpointPatch()
+            else:
+                effective = EndpointPatch.model_validate_json(row[1]) if row else EndpointPatch()
+                if record.status == "success":
+                    effective = self._merge_patch(effective, record.patch)
             conn.execute(
                 "INSERT INTO model_catalog_probes VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(endpoint_id, model_id) DO UPDATE SET "
