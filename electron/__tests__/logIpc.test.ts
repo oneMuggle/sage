@@ -9,7 +9,10 @@ let originalEnv: Record<string, string | undefined>;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), 'sage-logIpc-test-'));
-  originalEnv = { SAGE_LOG_DIR: process.env.SAGE_LOG_DIR, SAGE_LOG_LEVEL: process.env.SAGE_LOG_LEVEL };
+  originalEnv = {
+    SAGE_LOG_DIR: process.env.SAGE_LOG_DIR,
+    SAGE_LOG_LEVEL: process.env.SAGE_LOG_LEVEL,
+  };
   process.env.SAGE_LOG_DIR = tmpDir;
   process.env.SAGE_LOG_LEVEL = 'debug';
   vi.resetModules();
@@ -77,5 +80,30 @@ describe('logIpc', () => {
       .map((l) => JSON.parse(l) as { source?: string })
       .filter((o) => o.source === 'renderer');
     expect(rendererLines.length).toBeLessThanOrEqual(100);
+  });
+
+  it('sage:log:get-level returns current SAGE_LOG_LEVEL', async () => {
+    const handlers = new Map<string, (e: unknown, p: unknown) => Promise<unknown>>();
+    const fakeIpcMain = {
+      handle: (c: string, h: (e: unknown, p: unknown) => Promise<unknown>) => handlers.set(c, h),
+    };
+    const { registerLogIpc } = await import('../ipc/logIpc');
+    registerLogIpc(fakeIpcMain as never);
+    const handler = handlers.get('sage:log:get-level')!;
+    const fakeEvt = { sender: { id: 1 } } as unknown;
+
+    // beforeEach 已设 SAGE_LOG_LEVEL='debug'
+    await expect(handler(fakeEvt, undefined)).resolves.toBe('debug');
+
+    // set-level 同步回写 process.env,get-level 应读到新值
+    const setHandler = handlers.get('sage:log:set-level')!;
+    await setHandler(fakeEvt, { level: 'warn' });
+    await expect(handler(fakeEvt, undefined)).resolves.toBe('warn');
+
+    // 非法/缺失值回退到 DEFAULT_LOG_LEVEL ('info')
+    process.env.SAGE_LOG_LEVEL = 'bogus';
+    await expect(handler(fakeEvt, undefined)).resolves.toBe('info');
+    delete process.env.SAGE_LOG_LEVEL;
+    await expect(handler(fakeEvt, undefined)).resolves.toBe('info');
   });
 });
