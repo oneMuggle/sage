@@ -12,6 +12,8 @@ import type {
   RecordRecentRequest,
   LintResponse,
   ReviewResponse,
+  WikiCitation,
+  WikiCitationLocation,
 } from '../types/wiki';
 
 // Backend API base URL
@@ -251,6 +253,9 @@ export async function wikiIngestStream(
  * (see backend/api/wiki_routes.py: `class ChatRequest`).
  */
 export interface WikiChatStreamRequest {
+  streamId?: string;
+  ownerToken?: string;
+  selectedPaths?: string[];
   query: string;
   projectPath: string;
   llmBaseUrl: string;
@@ -264,6 +269,9 @@ export interface WikiChatStreamRequest {
 export async function wikiChatStream(req: WikiChatStreamRequest): Promise<{ streamId: string }> {
   ensureBackendAccess();
   return invoke<{ streamId: string }>('wiki_chat_stream', {
+    stream_id: req.streamId,
+    owner_token: req.ownerToken,
+    ...(req.selectedPaths !== undefined ? { selected_paths: req.selectedPaths } : {}),
     query: req.query,
     project_path: req.projectPath,
     llm_base_url: req.llmBaseUrl,
@@ -272,6 +280,27 @@ export async function wikiChatStream(req: WikiChatStreamRequest): Promise<{ stre
     embed_base_url: req.embedBaseUrl,
     embed_api_key: req.embedApiKey,
     embed_model: req.embedModel,
+  });
+}
+
+export async function cancelWikiChatStream(streamId: string, ownerToken: string): Promise<void> {
+  ensureBackendAccess();
+  await invoke<void>('wiki_chat_cancel', {
+    stream_id: streamId,
+    owner_token: ownerToken,
+  });
+}
+
+export async function locateWikiCitation(
+  projectPath: string,
+  citation: WikiCitation,
+): Promise<WikiCitationLocation> {
+  return httpPost('/wiki/citations/locate', {
+    project_path: projectPath,
+    path: citation.path,
+    content_hash: citation.content_hash,
+    line_start: citation.line_start,
+    line_end: citation.line_end,
   });
 }
 

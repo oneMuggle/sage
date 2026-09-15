@@ -6,6 +6,25 @@ export interface WikiProject {
   path: string;
 }
 
+export interface WikiCitation {
+  id: string;
+  path: string;
+  title: string;
+  excerpt: string;
+  content_hash: string;
+  line_start: number;
+  line_end: number;
+}
+
+export interface WikiCitationLocation {
+  path: string;
+  excerpt: string;
+  content_hash: string;
+  line_start: number;
+  line_end: number;
+  changed: boolean;
+}
+
 export interface FileNode {
   name: string;
   path: string;
