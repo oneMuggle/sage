@@ -129,7 +129,19 @@ export function ConversationsSection({
               className="w-full h-6 pl-6 pr-2 text-xs rounded bg-bg-hover border border-transparent focus:border-primary focus:outline-none placeholder:text-muted"
             />
           </div>
-          {displaySessions.length === 0 && searchQuery.trim() ? (
+          {sessions.length === 0 ? (
+            <div className="px-3 py-6 text-xs text-text-muted text-center space-y-2" data-testid="sessions-empty">
+              <p>尚无会话</p>
+              <button
+                type="button"
+                data-testid="sessions-empty-new"
+                onClick={onNewSession}
+                className="text-primary hover:underline"
+              >
+                + 新建会话
+              </button>
+            </div>
+          ) : displaySessions.length === 0 && searchQuery.trim() ? (
             <div className="px-3 py-4 text-xs text-text-muted text-center">
               {t('sidebar.no_match')}
             </div>
