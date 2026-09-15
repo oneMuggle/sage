@@ -27,10 +27,10 @@ pytestmark = pytest.mark.unit
 
 
 def test_estimate_text_tokens_same_semantics_as_working():
-    """公式与 working.estimate_tokens 逐字一致：cjk + other//4 + len//4。"""
+    """公式与 working.estimate_tokens 逐字一致：cjk + other//4。"""
     assert _estimate_text_tokens("") == 0
-    assert _estimate_text_tokens("你好世界") == 5  # 4 cjk + 4//4
-    assert _estimate_text_tokens("abcdefgh") == 4  # 8//4 + 8//4
+    assert _estimate_text_tokens("你好世界") == 4  # 4 cjk + 0 other//4
+    assert _estimate_text_tokens("abcdefgh") == 2  # 0 cjk + 8 other//4
 
 
 def test_estimate_messages_tokens_counts_role_and_content():
