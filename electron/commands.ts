@@ -241,6 +241,12 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/prompts/templates/${encodeURIComponent(String(a.id))}`,
   },
+  // R42: 拖拽排序 —— 按新顺序排列的模板 id 列表
+  prompts_reorder: {
+    method: 'PUT',
+    path: () => '/api/v1/prompts/templates/reorder',
+    body: (a) => ({ ordered_ids: a.orderedIds }),
+  },
   // R30: 模板导入/导出（导出无 body；导入信封即 body）
   prompts_export: {
     method: 'GET',
