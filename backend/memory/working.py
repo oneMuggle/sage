@@ -32,7 +32,7 @@ def estimate_tokens(text: str) -> int:
     # 简单估算：中文按字符计，英文按单词计
     chinese_chars = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
     other_chars = len(text) - chinese_chars
-    return chinese_chars + other_chars // 4 + len(text) // 4
+    return chinese_chars + other_chars // 4
 
 
 class WorkingMemory:
