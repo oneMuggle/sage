@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 const DRAFTS_KEY = 'sage-drafts';
 
@@ -15,9 +15,7 @@ interface DraftStore {
  * @param sessionId - Current session ID (null = no persistence)
  * @returns [draft, setDraft] - Draft value and setter
  */
-export function useSessionDraft(
-  sessionId: string | null,
-): [string, (value: string) => void] {
+export function useSessionDraft(sessionId: string | null): [string, (value: string) => void] {
   // Load draft for current session on mount or session change
   const [draft, setDraftState] = useState<string>(() => {
     if (!sessionId) return '';
@@ -30,18 +28,21 @@ export function useSessionDraft(
   });
 
   // Update draft and persist to localStorage
-  const setDraft = (value: string) => {
-    setDraftState(value);
-    if (sessionId) {
-      try {
-        const store = JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? '{}') as DraftStore;
-        store[sessionId] = value;
-        localStorage.setItem(DRAFTS_KEY, JSON.stringify(store));
-      } catch {
-        // Silently fail - privacy mode or quota exceeded
+  const setDraft = useCallback(
+    (value: string) => {
+      setDraftState(value);
+      if (sessionId) {
+        try {
+          const store = JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? '{}') as DraftStore;
+          store[sessionId] = value;
+          localStorage.setItem(DRAFTS_KEY, JSON.stringify(store));
+        } catch {
+          // Silently fail - privacy mode or quota exceeded
+        }
       }
-    }
-  };
+    },
+    [sessionId],
+  );
 
   // Load draft when sessionId changes
   useEffect(() => {

@@ -195,6 +195,24 @@ class ProjectRepository:
         ).fetchall()
         return [Session.from_row(row) for row in rows]
 
+    def search(self, query: str, limit: int = 10) -> List[Project]:
+        """按名称/路径模糊搜索项目（P7 全局搜索接入，最近打开优先）。
+
+        与 SessionRepository.search 同约定：LIKE 不转义 ``%``/``_``。
+        """
+        conn = self.db.get_connection()
+        pattern = f"%{query}%"
+        rows = conn.execute(
+            """
+            SELECT * FROM projects
+            WHERE name LIKE ? OR path LIKE ?
+            ORDER BY last_opened_at DESC, id DESC
+            LIMIT ?
+            """,
+            (pattern, pattern, limit),
+        ).fetchall()
+        return [_row_to_project(row) for row in rows]
+
 
 def open_project(
     project_id: str, now_ms: Optional[int] = None
@@ -232,6 +250,19 @@ def open_project(
     return project, session, True
 
 
+def register_quietly(path: str, now_ms: Optional[int] = None) -> Optional[Project]:
+    """容错登记：失败记日志返回 None，绝不抛（供跨域写侧联动使用）。
+
+    P6 桥接用——wiki open/create 成功后顺手把目录同步进侧栏项目清单；
+    注册表写入失败不应影响 wiki 主流程。
+    """
+    try:
+        return ProjectRepository().register(path, now_ms=now_ms)
+    except Exception as exc:  # noqa: BLE001 — 跨域联动失败只降级
+        logger.info("project register_quietly skipped for %s: %s", path, exc)
+        return None
+
+
 __all__ = [
     "DEFAULT_LIST_LIMIT",
     "PROJECT_SESSIONS_LIMIT",
@@ -240,4 +271,5 @@ __all__ = [
     "ProjectPathMissingError",
     "ProjectRepository",
     "open_project",
+    "register_quietly",
 ]

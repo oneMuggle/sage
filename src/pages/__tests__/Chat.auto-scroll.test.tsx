@@ -162,6 +162,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -195,6 +196,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -221,6 +223,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -251,6 +254,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -292,6 +296,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -324,6 +329,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -351,6 +357,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -373,6 +380,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -398,6 +406,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -428,6 +437,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -455,6 +465,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -484,6 +495,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -510,6 +522,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -541,6 +554,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -579,6 +593,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -609,6 +624,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });

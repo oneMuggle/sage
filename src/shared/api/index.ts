@@ -11,8 +11,11 @@ export { knowledgeApi } from './knowledgeApi';
 export { learnApi } from './learnApi';
 export { memoryApi } from './memoryApi';
 export { permissionApi } from './permissionApi';
-export { projectApi } from './projectApi';
 export { messageApi } from './messageApi';
+export { promptApi } from './promptApi';
+export type { PromptTemplate } from './promptApi';
+export { projectApi } from './projectApi';
+export type { ProjectOpenResult, ProjectSummary } from './projectApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';
 export { skillDraftsApi } from './skillDraftsApi';
@@ -41,6 +44,9 @@ export type {
   ChatRequest,
   ChatResponse,
   ChatOfficeRef,
+  ConsolidationAcceptResult,
+  ConsolidationScanResult,
+  ConsolidationSuggestion,
   FreshnessSummaryInfo,
   KnowledgeDoc,
   LearnResponse,
@@ -67,6 +73,8 @@ export type {
   QuestionOption,
   Session,
   SessionCompactResult,
+  SessionLineage,
+  LineageArchive,
   SessionWorkspaceBinding,
   Skill,
   SkillDispatch,

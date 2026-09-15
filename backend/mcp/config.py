@@ -83,11 +83,22 @@ class ServerConfig:
     enabled: bool = True
     required: bool = False
     timeout_seconds: float = 30.0
+    # R20-B: per-tool 级开关 —— 命中（原始名或 namespaced 名）的工具
+    # 不注册进 registry。空 tuple = 全部暴露（默认行为不变）。
+    disabled_tools: Tuple[str, ...] = ()
+    # R34: HTTP 传输自定义鉴权头（仅 HttpClientMcpClient 消费；stdio 忽略）。
+    headers: Dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         # frozen dataclass: normalize list → tuple via object.__setattr__
         if not isinstance(self.args, tuple):
             object.__setattr__(self, "args", tuple(self.args))
+        if not isinstance(self.disabled_tools, tuple):
+            object.__setattr__(
+                self, "disabled_tools", tuple(self.disabled_tools)
+            )
+        if not isinstance(self.headers, dict):
+            object.__setattr__(self, "headers", dict(self.headers))
 
     def to_dict(self) -> Dict[str, object]:
         """JSON-serializable dict (for persistence / API responses)."""
@@ -100,6 +111,8 @@ class ServerConfig:
             "enabled": self.enabled,
             "required": self.required,
             "timeout_seconds": self.timeout_seconds,
+            "disabled_tools": list(self.disabled_tools),
+            "headers": dict(self.headers),
         }
 
 
@@ -117,6 +130,8 @@ def validate_server_config(
     required: bool = False,
     timeout_seconds: float = 30.0,
     url: Optional[str] = None,
+    disabled_tools: Optional[Tuple[str, ...]] = None,
+    headers: Optional[Dict[str, str]] = None,
 ) -> ServerConfig:
     """Validate raw fields and return an immutable ServerConfig.
 
@@ -158,6 +173,26 @@ def validate_server_config(
         raise McpConfigError(
             f"server {name!r}: timeout_seconds must be > 0"
         )
+    safe_headers: Dict[str, str] = {}
+    if headers:
+        for h_key, h_value in headers.items():
+            if not isinstance(h_key, str) or not h_key.strip():
+                raise McpConfigError(
+                    f"server {name!r}: header names must be non-empty strings"
+                )
+            if not isinstance(h_value, str):
+                raise McpConfigError(
+                    f"server {name!r}: header values must be strings"
+                )
+            safe_headers[h_key.strip()] = h_value
+    tools_disabled: Tuple[str, ...] = ()
+    if disabled_tools:
+        for entry in disabled_tools:
+            if not isinstance(entry, str) or not entry.strip():
+                raise McpConfigError(
+                    f"server {name!r}: disabled_tools entries must be non-empty strings"
+                )
+        tools_disabled = tuple(dict.fromkeys(t.strip() for t in disabled_tools))
     return ServerConfig(
         name=name,
         command=command.strip() if isinstance(command, str) else "",
@@ -167,6 +202,8 @@ def validate_server_config(
         enabled=bool(enabled),
         required=bool(required),
         timeout_seconds=timeout,
+        disabled_tools=tools_disabled,
+        headers=safe_headers,
     )
 
 
@@ -228,6 +265,8 @@ def _config_from_dict(raw: Dict[str, object]) -> ServerConfig:
         name=str(raw.get("name", "")),
         command=str(raw.get("command", "")),
         args=tuple(raw.get("args") or ()),  # type: ignore[arg-type]
+        disabled_tools=tuple(raw.get("disabled_tools") or ()),  # type: ignore[arg-type]
+        headers=dict(raw.get("headers") or {}),  # type: ignore[arg-type]
         env=dict(raw.get("env") or {}),  # type: ignore[arg-type]
         enabled=bool(raw.get("enabled", True)),
         required=bool(raw.get("required", False)),

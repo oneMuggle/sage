@@ -10,10 +10,18 @@
 """
 
 import json
+import os
 import time
 from pathlib import Path
 
+import pytest
+
 from backend.wiki.graph import get_graph_cached
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="graph cache 依赖 wiki/files POSIX no-follow 原语（Windows 支持另行批次）",
+)
 
 
 def _make_wiki(project_root: Path) -> None:

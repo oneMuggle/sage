@@ -76,7 +76,7 @@ def _serialize_summary(summary: OfficeDocumentSummary) -> Dict[str, Any]:
     never reach the LLM tool output; callers only need the doc id / type /
     filename to decide whether to read the document.
     """
-    data = summary.dict()
+    data = summary.model_dump(mode="json")
     data.pop("workspace_path", None)
     return data
 
@@ -106,7 +106,7 @@ def _read_doc(doc: OfficeDocumentSummary, formula_mode: bool = False) -> Dict[st
             generated_filename=doc.generated_filename,
             original_filename=doc.original_filename,
         )
-        return result.dict()
+        return result.model_dump(mode="json")
     if doc_type is OfficeDocType.WORD:
         from backend.office.word import read_docx
 
@@ -117,7 +117,7 @@ def _read_doc(doc: OfficeDocumentSummary, formula_mode: bool = False) -> Dict[st
             generated_filename=doc.generated_filename,
             original_filename=doc.original_filename,
         )
-        return result.dict()
+        return result.model_dump(mode="json")
     if doc_type is OfficeDocType.EXCEL:
         from backend.office.excel import read_xlsx
 
@@ -129,7 +129,7 @@ def _read_doc(doc: OfficeDocumentSummary, formula_mode: bool = False) -> Dict[st
             original_filename=doc.original_filename,
             include_formulas=formula_mode,
         )
-        return result.dict()
+        return result.model_dump(mode="json")
     raise ValueError(f"unsupported doc_type: {doc_type}")
 
 
@@ -798,6 +798,13 @@ def _coerce_word_request(
         title=title,
         paragraphs=paragraphs,
         tables=tables,
+        # Round 8 修复：受管路径此前丢弃 images（直通路径却支持）——对齐。
+        images=content.get("images") or [],
+        # Round 7 FormatSpec：受管路径与直通路径同样透传版式规范（None 零变化）
+        format_spec=content.get("format_spec"),
+        # Round 9 引用体系：结构化文献 + 引用样式随 content 透传
+        references=content.get("references") or [],
+        citation_style=content.get("citation_style") or "gbt7714",
     )
 
 

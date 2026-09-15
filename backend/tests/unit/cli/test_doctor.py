@@ -407,11 +407,11 @@ class TestMain:
         data = json.loads(out)
         assert "checks" in data
         assert "summary" in data
-        # 2026-09-04: 14→15 (加 runtime_env); L15(2026-09-06): 15→16 (加 secret_storage);
-        # CA3(2026-09-11): 16→17 (加 agents_files)
-        assert len(data["checks"]) == 17
+        # 2026-09-05: 15→16 (加 network); 2026-09-06: 16→17 (L15 加 secret_storage);
+        # 2026-09-11: 17→18 (CA3 加 agents_files)
+        assert len(data["checks"]) == 18
 
-    def test_main_runs_all_fifteen_checks(self, capsys):
+    def test_main_runs_all_sixteen_checks(self, capsys):
         main([])
         out = capsys.readouterr().out
         expected_names = [
@@ -431,8 +431,8 @@ class TestMain:
             "skills",
             # 2026-09-04: 本地开发环境助手 — Python/Node.js 探测
             "runtime_env",
-            # L15(2026-09-06) — API Key 静态加密状态
-            "secret_storage",
+            # 2026-09-05: 网络访问策略（mode / host 白名单 / httpx 依赖）
+            "network",
         ]
         for n in expected_names:
             assert n in out, f"missing check: {n}"
@@ -531,8 +531,8 @@ class TestImportAllChecks:
         before = len(d.ALL_CHECKS)
         d._import_all_checks()
         # After import, 8 unique classes should be registered
-        # 2026-09-04: 14→15 (加 runtime_env)
-        assert len(d.ALL_CHECKS) >= 15
+        # 2026-09-05: 15→16 (加 network)
+        assert len(d.ALL_CHECKS) >= 16
         # Calling twice doesn't crash (may double-register; that's fine)
         d._import_all_checks()
         assert len(d.ALL_CHECKS) >= before

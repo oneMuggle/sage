@@ -7,7 +7,7 @@ import pytest
 import respx
 from httpx import Response
 
-from backend.tools import web_cache, web_tool
+from backend.tools import http_factory, web_cache, web_tool
 from backend.tools.search_config import SearchConfig
 from backend.tools.web_tool import WebFetchTool, WebSearchTool
 
@@ -15,8 +15,11 @@ pytestmark = [pytest.mark.unit]
 
 
 @pytest.fixture(autouse=True)
-def _clean_cache():
+def _clean_cache(monkeypatch):
     web_cache.clear()
+    # B2/AB5：重试退避不真睡
+    monkeypatch.setattr(http_factory, "_sleep", lambda _s: None)
+    http_factory.get_host_rate_limiter().reset()
     yield
     web_cache.clear()
 
@@ -25,9 +28,7 @@ def _fetch_tool():
     return WebFetchTool()
 
 
-_HTML_OK = (
-    "<html><body><p>" + "静态正文内容" * 100 + "</p></body></html>"
-)
+_HTML_OK = "<html><body><p>" + "静态正文内容" * 100 + "</p></body></html>"
 
 _OK = {"status_code": 200, "content_type": "text/html; charset=utf-8"}
 
@@ -46,9 +47,7 @@ class TestAntibotGuidance:
     def test_antibot_status_guides_browser_channel(self, status):
         with respx.mock(base_url="https://hard.example", assert_all_called=False) as mock:
             mock.get("/p").mock(
-                return_value=Response(
-                    status, text="denied", headers={"content-type": "text/html"}
-                )
+                return_value=Response(status, text="denied", headers={"content-type": "text/html"})
             )
             result = _fetch_tool().execute(url="https://hard.example/p")
 
@@ -60,9 +59,7 @@ class TestAntibotGuidance:
     def test_other_status_keeps_generic_message(self):
         with respx.mock(base_url="https://down.example", assert_all_called=False) as mock:
             mock.get("/p").mock(
-                return_value=Response(
-                    500, text="boom", headers={"content-type": "text/html"}
-                )
+                return_value=Response(500, text="boom", headers={"content-type": "text/html"})
             )
             result = _fetch_tool().execute(url="https://down.example/p")
 
@@ -78,14 +75,14 @@ class TestAntibotGuidance:
             name = "ddg"
 
             def search(self, query, limit, client):
-
                 raise RuntimeError("Client error '403 Forbidden'")
 
         with patch(
-            "backend.tools.web_tool.resolve_engine_chain",
-            return_value=[_Forbidden()],
-        ), patch("backend.tools.web_tool.load_search_config", return_value=SearchConfig()):
-            result = WebSearchTool().execute(query="q")
+                "backend.tools.web_tool.resolve_engine_chain",
+                return_value=[_Forbidden()],
+            ):
+            with patch("backend.tools.web_tool.load_search_config", return_value=SearchConfig()):
+                result = WebSearchTool().execute(query="q")
 
         assert result.success is False
         assert "browser_launch" in result.error or "代理" in result.error
@@ -140,7 +137,10 @@ class TestWebCacheUnit:
             web_cache.put(f"https://a.example/{i}", "text", {"content": str(i)})
         assert web_cache.size() <= web_cache.CACHE_MAX_ENTRIES
         assert web_cache.get("https://a.example/0", "text") is None  # 最旧被淘汰
-        assert web_cache.get(f"https://a.example/{web_cache.CACHE_MAX_ENTRIES + 4}", "text") is not None
+        assert (
+            web_cache.get(f"https://a.example/{web_cache.CACHE_MAX_ENTRIES + 4}", "text")
+            is not None
+        )
 
 
 class TestWebFetchCache:
@@ -168,7 +168,7 @@ class TestWebFetchCache:
     def test_max_length_applied_on_cache_hit(self):
         with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
             _mock_ok(mock, "/long")
-            _fetch_tool().execute(url="https://example.com/long", max_length=10 ** 6)
+            _fetch_tool().execute(url="https://example.com/long", max_length=10**6)
             hit = _fetch_tool().execute(url="https://example.com/long", max_length=8)
 
         assert hit.success is True
@@ -209,18 +209,17 @@ class TestWebFetchCache:
         )
         import unittest.mock
 
-        with unittest.mock.patch(
-            "backend.data.settings_repo.SettingsRepository", return_value=repo
-        ), respx.mock(base_url="https://www.example.com", assert_all_called=False) as mock:
-            route = mock.get("/paper").mock(
-                return_value=Response(200, text=_HTML_OK, headers={"content-type": "text/html"})
-            )
-            _fetch_tool().execute(
-                url="https://www.example.com/paper", credential_domain=".example.com"
-            )
-            _fetch_tool().execute(
-                url="https://www.example.com/paper", credential_domain=".example.com"
-            )
+        with unittest.mock.patch("backend.data.settings_repo.SettingsRepository", return_value=repo):
+            with respx.mock(base_url="https://www.example.com", assert_all_called=False) as mock:
+                route = mock.get("/paper").mock(
+                    return_value=Response(200, text=_HTML_OK, headers={"content-type": "text/html"})
+                )
+                _fetch_tool().execute(
+                    url="https://www.example.com/paper", credential_domain=".example.com"
+                )
+                _fetch_tool().execute(
+                    url="https://www.example.com/paper", credential_domain=".example.com"
+                )
 
         assert route.call_count == 2  # 凭据请求每次真抓
 
@@ -232,7 +231,9 @@ class TestWebFetchCache:
             _fetch_tool().execute(url="https://err.example/e")
             _fetch_tool().execute(url="https://err.example/e")
 
-        assert route.call_count == 2  # 负结果不缓存
+        # 负结果不缓存：两次 execute 都真抓；B2/AB5 起 5xx 会自动重试
+        # （1 + DEFAULT_FETCH_RETRIES 次），所以总命中 = 2 × (1 + retries)。
+        assert route.call_count == 2 * (1 + http_factory.DEFAULT_FETCH_RETRIES)
 
 
 # ---------- Q1 web_search 查询缓存 ----------
@@ -256,9 +257,7 @@ class TestWebSearchQueryCache:
     def _tool_with_engine(self, monkeypatch, engine):
         from backend.tools.search_config import SearchConfig
 
-        monkeypatch.setattr(
-            "backend.tools.web_tool.resolve_engine_chain", lambda config: [engine]
-        )
+        monkeypatch.setattr("backend.tools.web_tool.resolve_engine_chain", lambda config: [engine])
         monkeypatch.setattr(
             "backend.tools.web_tool.load_search_config",
             lambda: SearchConfig(engine_order=("fake",)),

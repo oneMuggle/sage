@@ -1,4 +1,6 @@
 // Wiki API layer - HTTP API calls to backend
+import { backendRequest } from '../api/backendRequest';
+import { isDemoMode } from '../api/demoFlag';
 import { invoke } from '../api/desktopInvoke';
 import type {
   WikiProject,
@@ -15,58 +17,43 @@ import type {
 // Backend API base URL
 const API_BASE = 'http://127.0.0.1:8765/api/v1';
 
+function ensureBackendAccess(): void {
+  if (isDemoMode()) throw new Error('演示模式不支持后端操作');
+}
+
 // Helper function for HTTP requests
 async function httpPost<T>(endpoint: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  ensureBackendAccess();
+  return backendRequest<T>({
+    path: `${API_BASE}${endpoint}`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body,
   });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`HTTP ${response.status}: ${error}`);
-  }
-
-  return response.json();
 }
 
 async function httpGet<T>(
   endpoint: string,
   params?: Record<string, string | number | undefined>,
 ): Promise<T> {
+  ensureBackendAccess();
   const url = new URL(`${API_BASE}${endpoint}`);
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        url.searchParams.append(key, String(value));
-      }
+      if (value !== undefined) url.searchParams.append(key, String(value));
     });
   }
-
-  const response = await fetch(url.toString());
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`HTTP ${response.status}: ${error}`);
-  }
-
-  return response.json();
+  return backendRequest<T>({ path: url.pathname + url.search });
 }
 
 async function httpDelete<T>(endpoint: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  ensureBackendAccess();
+  return backendRequest<T>({
+    path: `${API_BASE}${endpoint}`,
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body,
   });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`HTTP ${response.status}: ${error}`);
-  }
-
-  return response.json();
 }
 
 // ==================== Project API ====================
@@ -231,6 +218,7 @@ export interface WikiIngestStreamRequest {
 export async function wikiIngestStream(
   req: WikiIngestStreamRequest,
 ): Promise<{ streamId: string }> {
+  ensureBackendAccess();
   return invoke<{ streamId: string }>('wiki_ingest_stream', {
     source_file: req.sourceFile,
     project_path: req.projectPath,
@@ -274,6 +262,7 @@ export interface WikiChatStreamRequest {
 }
 
 export async function wikiChatStream(req: WikiChatStreamRequest): Promise<{ streamId: string }> {
+  ensureBackendAccess();
   return invoke<{ streamId: string }>('wiki_chat_stream', {
     query: req.query,
     project_path: req.projectPath,
@@ -350,7 +339,7 @@ export interface ResearchResponse {
   web_results: WebResultData[];
   synthesis: string;
   saved_path: string;
-  error: string;
+  error: { code: string; message: string } | null;
 }
 
 export async function startWikiResearch(req: ResearchRequest): Promise<ResearchResponse> {

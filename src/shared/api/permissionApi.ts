@@ -6,6 +6,7 @@
  * - 会话自动放行列表：本会话未经用户确认即放行的工具调用（"已自动批准 N 次"）。
  */
 
+import { isDemoMode } from './demoFlag';
 import { invoke } from './desktopInvoke';
 import { handleApiError } from './utils';
 
@@ -51,6 +52,7 @@ function asPreset(v: unknown): PermissionPreset {
 export const permissionApi = {
   async getPreset(): Promise<PermissionPresetState> {
     const fallback: PermissionPresetState = { preset: 'standard', mode: 'workspace_write', custom: false };
+    if (isDemoMode()) return fallback;
     try {
       const raw = await invoke<unknown>('permissions_get_preset', {});
       if (!isRecord(raw)) return fallback;
@@ -77,7 +79,7 @@ export const permissionApi = {
     options?: { limit?: number; sideEffectOnly?: boolean },
   ): Promise<SessionAutoApprovals> {
     const empty: SessionAutoApprovals = { session_id: sessionId, count: 0, total: 0, items: [] };
-    if (!sessionId) return empty;
+    if (!sessionId || isDemoMode()) return empty;
     try {
       const raw = await invoke<unknown>('permissions_session_auto_approvals', {
         sessionId,

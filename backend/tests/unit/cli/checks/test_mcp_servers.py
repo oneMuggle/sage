@@ -58,6 +58,10 @@ class TestCommandResolvable:
         assert ok is False
         assert "不存在" in reason
 
+    @pytest.mark.skipif(
+        os.name == "nt",
+        reason="python3/PATH 解析语义在 Windows 不同（另行批次定性）",
+    )
     def test_path_lookup_via_which(self):
         # python3 一定在 PATH
         ok, _ = _command_resolvable("python3")
@@ -122,6 +126,10 @@ class TestMcpServersCheck:
         assert result.severity == Severity.INFO
         assert "2 个 MCP server 全部可解析" in result.message
 
+    @pytest.mark.skipif(
+        os.name == "nt",
+        reason="python3/PATH 解析语义在 Windows 不同（另行批次定性）",
+    )
     def test_disabled_server_skipped(self, check, tmp_path):
         """enabled=False 的 server 不参与 command 校验。"""
         _write_mcp_config(
@@ -137,6 +145,10 @@ class TestMcpServersCheck:
             result = check.run()
         assert result.severity == Severity.INFO
 
+    @pytest.mark.skipif(
+        os.name == "nt",
+        reason="python3/PATH 解析语义在 Windows 不同（另行批次定性）",
+    )
     def test_mixed_valid_and_invalid(self, check, tmp_path):
         """部分 server 不可解析 → WARN,提示修正。"""
         _write_mcp_config(

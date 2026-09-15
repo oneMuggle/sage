@@ -2,13 +2,34 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import HTTPException
 
 from backend.storage.recent_projects import load_recent
+
+logger = logging.getLogger(__name__)
+
+
+def _projects_registry_paths() -> List[Path]:
+    """P6 桥接：projects 注册表（backend/data/project_repo.py）中的路径。
+
+    用户在侧边栏"项目"里显式登记的工作目录与 wiki recents 同一信任来源
+    （"用户把该目录用作 Sage 的工作上下文"），因此授权判定取两者并集。
+
+    Lazy import：保持本模块对 data 层零硬依赖，也便于测试 monkeypatch
+    本函数。任何读取失败 → 空列表（fail-closed，与 recents 同语义）。
+    """
+    try:
+        from backend.data.project_repo import ProjectRepository
+
+        return [Path(item.path) for item in ProjectRepository().list(limit=200)]
+    except Exception as exc:  # noqa: BLE001 — 读取失败绝不放宽授权
+        logger.debug("projects registry unavailable for authorization: %s", exc)
+        return []
 
 
 def canonical_project_path(project_path: str) -> Optional[Path]:
@@ -55,6 +76,18 @@ def authorize_registered_project(project_path: str) -> Path:
     except Exception:
         # A malformed/unreadable registry must never grant access.
         registered = False
+
+    # P6 桥接：projects 注册表命中同样视为已登记（recents ∪ registry）。
+    # 与 recents 分支同款 try/except —— 任何异常一律视为未登记（fail-closed）。
+    if not registered:
+        try:
+            for item_path in _projects_registry_paths():
+                resolved = canonical_project_path(str(item_path))
+                if resolved is not None and _same_path(resolved, canonical):
+                    registered = True
+                    break
+        except Exception:
+            registered = False
 
     if not registered:
         raise HTTPException(status_code=403, detail="项目未授权")

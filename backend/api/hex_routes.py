@@ -30,12 +30,11 @@ import logging
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sage_core import LLMError, Message, Role
 from sage_core.exceptions import SessionNotFoundError
 
-from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
 from backend.api.settings_models import SettingsPayload, model_dump_compat
 from backend.application.services.chat_service import ChatService
 from backend.application.services.session_service import SessionService
@@ -119,9 +118,9 @@ async def chat(
         f"message_len={len(req.message)}"
     )
 
-    # Office @-mention: 与 legacy /chat/stream 对齐, 在 run_in_executor 里
-    # 跑 attachment_resolver.process (含路径安全校验 + 50MiB 上限 + 失败
-    # mention 静默 skip — 这些已在 Task 3 落地到 attachment_resolver.process 本身).
+    # Office @-mention: 与 legacy /chat/stream 对齐, 调用 resolve_attachments
+    # (含路径安全校验 + 50MiB 上限 + 失败 mention 静默 skip — 这些已在 Task 3
+    # 落地到 attachment_resolver.process 本身).
     attachment_block = await resolve_attachments(
         req.message, req.workspace_path or ""
     )
@@ -181,28 +180,10 @@ async def chat(
     return ChatResponse(session_id=req.session_id, reply=assistant.content)
 
 
-# ==================== Prometheus /metrics 端点（PG3.1） ====================
-
-
-@router.get("/metrics")
-def metrics(svc: ChatService = Depends(get_chat_service)) -> Response:
-    """Prometheus 指标端点（text/plain）。
-
-    行为：
-    - 当 ``svc.metrics`` 是 ``PrometheusMetricAdapter`` 实例时，输出
-      Prometheus 标准的 text-format 字节流（含 9 个预注册指标的
-      ``# HELP`` / ``# TYPE`` 行）。
-    - 其它 adapter（如测试环境的 ``NoopMetricAdapter``）→ 返回
-      HTTP 200 + 空 body（``text/plain``）。
-
-    注意：本端点**不**走 ChatService 业务逻辑，纯粹读 ChatService
-    装配的 metrics adapter；不产生新事件 / 不调用 LLM。
-    """
-    adapter = svc.metrics
-    if isinstance(adapter, PrometheusMetricAdapter):
-        return Response(content=adapter.render(), media_type=adapter.content_type)
-    return Response(content=b"", media_type="text/plain; charset=utf-8")
-
+# ==================== Prometheus /metrics 端点 ====================
+# L8 PR-A (2026-09-09): metrics 端点已抽到 backend/api/metrics_routes.py,
+# 在 main.py 中无条件挂载 (与 API_MODE 解耦)。此处保留 get_chat_service 导出
+# 以兼容现有测试中对该工厂的依赖覆盖 (app.dependency_overrides)。
 
 # ==================== PUT /settings 端点（PG3.2 — settings_changed 审计） ====================
 
@@ -315,6 +296,7 @@ async def get_settings() -> Optional[dict]:
     from backend.data.settings_canonicalizer import (
         detect_legacy_snake_pollution,
         redact_secrets,
+        strip_unknown_fields,
         to_camel,
     )
     from backend.data.settings_repo import SettingsRepository
@@ -333,9 +315,9 @@ async def get_settings() -> Optional[dict]:
     translated = to_camel(raw)
     # Task 1 (2026-08-23): 历史 endpoints[*] 无 protocol 字段 → 默认 ``openai-compatible``.
     _migrate_default_protocol(translated)
-    # alpha.8 (2026-08-27): 脱敏 endpoints[*].apiKey 明文 — 与 legacy GET 对齐.
-    # redact_secrets 不修改入参, 返回新 dict.
-    return redact_secrets(translated)
+    # 2026-08-26: 边界净化 + 脱敏 apiKey (与 legacy GET 保持一致).
+    cleaned = strip_unknown_fields(translated)
+    return redact_secrets(cleaned)
 
 
 def _migrate_default_protocol(settings: dict) -> None:
@@ -369,18 +351,17 @@ class PreferenceItem(BaseModel):
 async def get_preference(key: str) -> PreferenceItem:
     """通用 KV 读取（白名单限定 key）。
 
-    alpha.8 (2026-08-27): 当 key == "app_settings" 时, value 是整棵 settings JSON
-    字符串. 必须走 redact_secrets_json() 抹掉 apiKey 留下 hasApiKey 元数据.
-    与 legacy 对齐.
+    2026-08-26: 当 key=='app_settings' 时, 对 value (JSON 字符串) 做
+    ``redact_secrets_json`` —— 把 endpoint.apiKey 替换为 hasApiKey 标记,
+    防止明文凭据通过 preference GET 返回前端 (OWASP A02:2021).
     """
+    from backend.data.settings_canonicalizer import redact_secrets_json
     from backend.data.settings_repo import SettingsRepository
 
     if key not in SettingsRepository.KEYS:
         raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
     val = SettingsRepository().get(key)
-    if key == "app_settings" and val is not None and isinstance(val, str):
-        from backend.data.settings_canonicalizer import redact_secrets_json
-
+    if key == "app_settings":
         val = redact_secrets_json(val)
     return PreferenceItem(value=val)
 

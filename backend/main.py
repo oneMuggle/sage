@@ -13,11 +13,18 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 # ── Startup diagnostic timer (module-level) ───────────────────────────────
-# 2026-09-10 (Win7 startup incident): record monotonic start BEFORE any
+# 2026-09-10 (slow-startup incident): record monotonic start BEFORE any
 # heavy import so we can diagnose which phase is slow on machines where the
 # backend hangs between "python -m backend.main" and "uvicorn.run()".
 # Guarded by __name__ == "__main__" so pytest imports don't emit noise.
+# Carried over from release/win7 PR #585; equally applicable to main.
 _startup_t0: float = time.monotonic() if __name__ == "__main__" else 0.0
+
+
+def _startup_mark(step: str) -> None:
+    """R22-D7: 启动逐步耗时埋点 —— 此前只有 4 个时点，db init 与
+    lifespan-complete 之间的 ~20 步串行初始化是耗时黑盒。"""
+    logger.info("[sage-startup] t=%.1fs %s complete", time.monotonic() - _startup_t0, step)
 if __name__ == "__main__":
     print(  # noqa: T201
         f"[sage-startup] t=0.0s module load begin (pid={os.getpid()})",
@@ -93,9 +100,11 @@ from backend.api.office_routes import (
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.permission_routes import router as permission_router
 from backend.api.project_routes import router as project_router
+from backend.api.prompt_routes import router as prompt_router
 from backend.api.question_routes import router as question_router
 from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
+from backend.api.system_routes import router as system_router
 from backend.api.theme_router import router as theme_router
 from backend.api.usage_routes import router as usage_router
 from backend.api.v1 import updates as updates_router_module
@@ -254,7 +263,7 @@ def _build_chat_service(lifecycle=None) -> ChatService:
         metrics=PrometheusMetricAdapter(),
         events=FileEventAdapter(),
         memory=memory_adapter,  # MemoryPort for memory integration
-lifecycle=lifecycle,  # Task 4 / Gap A — optional MemoryLifecycleManager
+        lifecycle=lifecycle,  # Task 4 / Gap A — optional MemoryLifecycleManager
         wake_store=get_wake_store(),  # A4: 会话挂起 / 唤醒注册
     )
 
@@ -280,6 +289,16 @@ async def lifespan(app: FastAPI):
     # Local desktop capability: resolve the token before serving any sensitive route.
     # The value is intentionally never logged or returned by the health endpoint.
     initialize_local_auth_token()
+
+    # R21-A: 应用待恢复备份（必须在 init_db 之前 —— 原子替换主库文件后
+    # 再建连接，避免旧 WAL 污染恢复出的库）。fail-safe，不阻塞启动。
+    try:
+        from backend.services.backup_service import apply_pending_restore
+
+        if apply_pending_restore():
+            logger.info("pending backup restore applied at startup")
+    except Exception:
+        logger.exception("apply_pending_restore failed (ignored)")
 
     # 启动时初始化
     # PR A §1.2 测试隔离修复：lifespan 通过 ``get_database()`` 拿全局
@@ -475,6 +494,12 @@ async def lifespan(app: FastAPI):
     )
     logger.info("ChatStreamRegistry 已初始化(后台 sweeper 每 60s 清理孤儿流)")
 
+    # 记忆提取异步化：后台单 worker 消费提取队列，不阻塞聊天响应
+    from backend.memory.async_extractor import get_memory_extraction_queue
+
+    get_memory_extraction_queue().start()
+    logger.info("MemoryExtractionQueue 已启动（记忆提取后台 worker）")
+
     # Phase 8: scheduled tasks service — load JSON, start APScheduler
     from pathlib import Path
 
@@ -496,6 +521,7 @@ async def lifespan(app: FastAPI):
     scheduler_service.start()
     app.state.scheduler = scheduler_service
     logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
+    _startup_mark("scheduler")
 
     # PR-C §5.1: 把 5 个 evolution 任务挂到 lifespan,按 cron 自动跑
     # (memory_pruning / memory_consolidation / daily_summary /
@@ -514,6 +540,35 @@ async def lifespan(app: FastAPI):
         list(_evo_registered.keys()),
     )
 
+    # R19-B: SQLite 自动备份 —— 启动时后台线程备份一次（fail-safe, 不阻塞
+    # 启动）+ 每日 03:10 定时备份（独立于 evolution 任务, 只做整库在线复制）。
+    def _startup_backup() -> None:
+        from backend.services.backup_service import create_backup
+
+        try:
+            create_backup("startup")
+        except Exception:
+            logger.exception("startup backup failed (ignored)")
+
+    def _create_backup_daily() -> None:
+        from backend.services.backup_service import create_backup
+
+        try:
+            create_backup("daily")
+        except Exception:
+            logger.exception("daily backup failed (ignored)")
+
+    import threading as _threading
+
+    _threading.Thread(target=_startup_backup, name="startup-backup", daemon=True).start()
+    try:
+
+        scheduler_service.register_system_task(
+            "daily-backup", _create_backup_daily, "10 3 * * *"
+        )
+    except Exception:
+        logger.exception("daily backup job registration failed (ignored)")
+
     # PR-C §5.2: 把 ReviewService + SkillDraftStore 注入到全局 ReviewQueue,
     # 然后启动后台 worker。否则 hex/legacy 路径 enqueue 的 review_events
     # 永远在 SQLite 里堆积、不出草稿。和 init_scheduler_service 同 pattern。
@@ -523,6 +578,7 @@ async def lifespan(app: FastAPI):
     bootstrap_review_collaborators()
     get_review_queue().start()
     logger.info("ReviewQueue 协作对象已注入且 worker 已启动")
+    _startup_mark("review-queue")
 
     # A4 Suspend-Resume: wake 仓储 + 唤醒调度器 — tick 扫描到期 wake,
     # 在对应 session 注入新一轮对话恢复挂起的 agent。resumer 走
@@ -550,6 +606,22 @@ async def lifespan(app: FastAPI):
     )
     app.state.wake_scheduler.start()
     logger.info("WakeScheduler 已初始化并启动（A4 Suspend-Resume，tick=15s）")
+    _startup_mark("wake-scheduler")
+
+    # Round 6 (Telegram 网关 MVP): 配置了 TELEGRAM_BOT_TOKEN 才启动长轮询
+    # 后台线程；未配置零开销。白名单见 gateway/telegram.py 模块文档。
+    try:
+        from backend.gateway.telegram import get_telegram_gateway
+
+        _tg_gateway = get_telegram_gateway()
+        if _tg_gateway is not None:
+            _tg_gateway.start_polling()
+            app.state.telegram_gateway = _tg_gateway
+            logger.info("Telegram 网关已启动（长轮询，白名单 %d 个 chat）",
+                        len(_tg_gateway.config.allowed_chat_ids))
+        _startup_mark("telegram-gateway")
+    except Exception as exc:  # noqa: BLE001 — 网关失败不阻塞后端启动
+        logger.warning("Telegram 网关启动失败（忽略）: %s", exc)
 
     # M1 工具安全加固: 全局审批闸口 — agent 循环 await 审批, 路由解析应答
     from backend.services.permission_gate import init_permission_gate
@@ -576,46 +648,13 @@ async def lifespan(app: FastAPI):
         app.state.wiki_mcp_server = None
 
     # Phase 2 (multi-agent core): 初始化注册中心 + Planner + Router + HeartbeatMonitor
+    from backend.orchestration.agent_adapter import SeededAgentRegistry
     from backend.orchestration.heartbeat import HeartbeatMonitor
     from backend.orchestration.lane_registry import LaneRegistry
-    from backend.orchestration.models import Agent
     from backend.orchestration.planner import Planner
     from backend.orchestration.router import DispatchStrategy, Router
     from backend.orchestration.task_registry import TaskRegistry
     from backend.orchestration.team_registry import TeamRegistry
-
-    class _AgentRegistryAdapter:
-        """薄适配器：将 AgentRepository (返回 dict) 适配为 Router 期望的 list_agents() 接口。"""
-
-        def __init__(self) -> None:
-            self._repo = AgentRepository()
-
-        def list_agents(self) -> List[Agent]:
-            profiles = self._repo.list_all()
-            agents: List[Agent] = []
-            for p in profiles:
-                if not p.get("enabled", True):
-                    continue
-                # 解析 tools 字段为 capabilities（与现有 AgentProfile 字段对齐）
-                tools = p.get("tools", [])
-                if isinstance(tools, str):
-                    try:
-                        import json as _json
-
-                        tools = _json.loads(tools)
-                    except Exception:
-                        tools = []
-                agents.append(
-                    Agent(
-                        agent_id=p["id"],
-                        name=p.get("name", p["id"]),
-                        status="active",
-                        capabilities=list(tools) if tools else [p.get("role", "general")],
-                        max_concurrent_tasks=2,
-                        default_permission="implement",
-                    )
-                )
-            return agents
 
     app.state.task_registry = TaskRegistry()
     app.state.lane_registry = LaneRegistry()
@@ -626,7 +665,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.router = Router(
         lane_registry=app.state.lane_registry,
-        agent_registry=_AgentRegistryAdapter(),
+        agent_registry=SeededAgentRegistry(AgentRepository()),
         strategy=DispatchStrategy.CAPABILITY_BASED,
     )
     app.state.heartbeat_monitor = HeartbeatMonitor(
@@ -637,6 +676,7 @@ async def lifespan(app: FastAPI):
     )
     await app.state.heartbeat_monitor.start()
     logger.info("Multi-agent core 已装配（Planner + Router + HeartbeatMonitor 已启动）")
+    _startup_mark("multi-agent")
 
     # Phase 1 observability: SnapshotStore + EventHub + REST endpoints
     from backend.api import orch_run_control
@@ -667,8 +707,8 @@ async def lifespan(app: FastAPI):
     )
 
     # S7-1 (P7): ChatService 无条件装配 —— runtime 路由复用其 tools 路径,
-    # 与 API_MODE 无关 (win7 分支此前默认 legacy 不装配, /runtime 会 503);
-    # hex /chat 是否挂载由模块级 API_MODE 决定。
+    # 与 API_MODE 无关 (此前 lifespan 默认 "hex" 恰好让 runtime 可用, 属于
+    # 矛盾默认值的巧合而非设计); hex /chat 是否挂载由模块级 API_MODE 决定。
     # Wire the MemoryLifecycleManager into ChatService so run_turn drives
     # set_current_turn (F4 — production caller for source_turn_id).
     from backend.api.hex_routes import get_chat_service
@@ -678,6 +718,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.chat_service = _build_chat_service(lifecycle=lifecycle)
     # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
+    # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
     app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
     logger.info(
         "ChatService 已装配 (runtime 与 hex /chat 共享); API_MODE=%s (路由挂载见模块级常量)",
@@ -695,6 +736,11 @@ async def lifespan(app: FastAPI):
     yield
 
     # 关闭时清理
+    # Round 6: 停 Telegram 轮询线程（daemon 兜底，显式停更干净）
+    _tg = getattr(app.state, "telegram_gateway", None)
+    if _tg is not None:
+        with suppress(Exception):
+            _tg.stop_polling()
     _shutdown_bash_sessions()
     _shutdown_browser_sessions()
     _shutdown_repl_cleanups()
@@ -858,10 +904,10 @@ async def add_request_id_header(request: Request, call_next):
 API_MODE = os.environ.get("API_MODE", "legacy").lower()
 
 # 路由装配（P2 双轨）：
-# - API_MODE=hex：先注册 hex（/chat 走 ChatService），
+# - API_MODE=hex（默认）：先注册 hex（/chat 走 ChatService），
 #   再注册 legacy（/sessions、/memory、/evolution、/interrupt）。
 #   FastAPI 按注册顺序匹配——hex 的 /chat 优先命中，其余走 legacy。
-# - API_MODE=legacy（默认）：仅注册 legacy。
+# - API_MODE=legacy：仅注册 legacy。
 # 通用 LLM 代理（/api/v1/llm/*）在两种模式下都注册 — 浏览器到 LLM 的
 # 测试连接 / 拉取模型调用都走它，与 API_MODE 无关（见 llm_proxy_routes.py）。
 # PG-A1 GREEN-2 的"临时切 legacy"已于 S7-1 (P7) 收口为单一读取点;
@@ -870,9 +916,12 @@ API_MODE = os.environ.get("API_MODE", "legacy").lower()
 app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/v1/theme")
 app.include_router(office_router, prefix="/api/v1")
+from backend.api.gateway_routes import router as gateway_router
+
+app.include_router(gateway_router, prefix="/api/v1")
 register_office_exception_handlers(app)
 app.include_router(workspace_router, prefix="/api/v1")
-# 项目模块 P1 (cherry-win7 对齐): /api/v1/projects 最近项目注册表 + 项目内会话
+# 项目模块 P1 (2026-09-13): /api/v1/projects 最近项目注册表 + 项目内会话
 app.include_router(project_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
 app.include_router(permission_router, prefix="/api/v1")
@@ -888,6 +937,10 @@ app.include_router(wiki_router, prefix="/api/v1")
 app.include_router(usage_router, prefix="/api/v1")
 # U18: HTML 会话导出 (POST /sessions/{id}/export, 与 API_MODE 无关)
 app.include_router(export_router, prefix="/api/v1")
+# R19-C/D: 系统维护 (备份清单/手动备份/记忆导出, 与 API_MODE 无关)
+app.include_router(system_router, prefix="/api/v1")
+# R27-A: Prompt 模板库 CRUD (与 API_MODE 无关)
+app.include_router(prompt_router, prefix="/api/v1")
 # Artifacts 面板: /sessions/{id}/artifacts (list / content / reveal)
 app.include_router(artifact_router, prefix="/api/v1")
 
@@ -903,6 +956,13 @@ app.include_router(updates_router_module.router, prefix="/api/v1")
 # 复用 ChatService.tools 路径, runtime_exec 自动走 PermissionEnforcer 审批
 # (与 BashTool 同等门禁), 见 docs/plans/2026-09-04_local-development-assistant.md
 app.include_router(runtime_router, prefix="/api/v1")
+
+# L8 PR-A (2026-09-09): Prometheus /metrics 端点从 hex_routes 抽出,
+# 无条件挂载, 与 API_MODE 解耦 (历史仅 API_MODE=hex 时挂载, 默认 legacy 模式下
+# /api/v1/metrics 不存在, Grafana 无法直接接入)。
+from backend.api.metrics_routes import router as metrics_router
+
+app.include_router(metrics_router, prefix="/api/v1")
 
 if API_MODE == "hex":
     app.include_router(hex_router, prefix="/api/v1")
@@ -952,10 +1012,9 @@ async def health_check():
 
 
 # ── Diagnostic: all module-level imports complete ─────────────────────────
-# 2026-09-10 (Win7 startup incident): if this line never appears in stderr,
-# the hang is inside the import chain (jieba / sage_core / backend.api.*).
-# If it appears but uvicorn never starts, the hang is inside __main__ or
-# lifespan(). Elapsed time isolates slow imports from slow init.
+# 2026-09-10: if this line never appears in stderr, the hang is inside the
+# import chain. If it appears but uvicorn never starts, the hang is inside
+# __main__ or lifespan(). Elapsed time isolates slow imports from slow init.
 if __name__ == "__main__":
     _elapsed_imports = time.monotonic() - _startup_t0
     print(  # noqa: T201
@@ -1003,3 +1062,4 @@ if __name__ == "__main__":
         flush=True,
     )
     uvicorn.run(app, host="127.0.0.1", port=port, log_config=None)
+

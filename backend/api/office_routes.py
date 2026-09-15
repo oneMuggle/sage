@@ -26,6 +26,19 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from backend.data.database import Database, get_database
+from backend.office import progress as office_progress
+from backend.office.apply_update import (
+    OfficeDocUpdateRequest,
+    OfficeDocUpdateResult,
+    apply_doc_update,
+)
+from backend.office.bibtex import parse_bibtex
+from backend.office.diff_preview import (
+    DiffPreviewResult,
+    OfficeExportPdfRequest,
+    OfficeUpdatePreviewRequest,
+    preview_update,
+)
 from backend.office.errors import (
     OfficeError,
     OfficeFileNotFoundError,
@@ -39,7 +52,6 @@ from backend.office.journal.models import (
     JournalContent,
     JournalSpec,
     JournalViolation,
-    parse_obj,
 )
 from backend.office.journal.parser import parse_journal_spec
 from backend.office.journal.persistence import (
@@ -49,6 +61,8 @@ from backend.office.journal.persistence import (
 )
 from backend.office.journal.validator import validate_document
 from backend.office.models import (
+    BibTeXParseRequest,
+    BibTeXParseResponse,
     OfficeDeleteResponse,
     OfficeDocStatus,
     OfficeDocType,
@@ -62,6 +76,7 @@ from backend.office.models import (
     OfficePptReadResult,
     OfficeReadRequest,
     OfficeSnapshotListResponse,
+    OfficeTemplateInstantiateRequest,
     OfficeWordGenerateRequest,
     OfficeWordReadResult,
     PdfFormFillRequest,
@@ -72,6 +87,11 @@ from backend.office.models import (
     PdfGenerateResult,
     PdfReadRequest,
     PdfReadResult,
+    TemplateLibraryResponse,
+    WordLintRequest,
+    WordLintResult,
+    WordRepairRequest,
+    WordRepairResult,
     WordTemplateAnalysis,
     WordTemplateAnalyzeRequest,
     WordTemplateFillRequest,
@@ -80,10 +100,12 @@ from backend.office.models import (
 from backend.office.path_safety import resolve_within
 from backend.office.pdf import MAX_PDF_SIZE, generate_pdf, read_pdf
 from backend.office.pdf_forms import fill_pdf_form, read_pdf_form
+from backend.office.pdf_to_word import PdfToWordRequest, PdfToWordResult, convert_pdf_to_word
 from backend.office.ppt import generate_ppt, read_ppt
 from backend.office.storage import (
     archive_document,
     delete_document,
+    document_path,
     get_document,
     list_documents,
     list_snapshots,
@@ -92,7 +114,10 @@ from backend.office.storage import (
     save_document,
     validate_workspace,
 )
+from backend.office.template_library import instantiate_template, list_templates
 from backend.office.word import generate_docx, read_docx
+from backend.office.word_lint import lint_docx
+from backend.office.word_repair import repair_docx
 from backend.office.word_template import analyze_word_template, fill_word_template
 
 if TYPE_CHECKING:
@@ -502,12 +527,15 @@ def generate_ppt_endpoint(req: OfficePptGenerateRequest) -> dict:
     CRITICAL FIX: now also calls save_document() to persist the generated
     document in the office_documents table so it appears in the list API.
     """
-    output_path = generate_ppt(req)
-    _build_summary_for_generated(
-        file_path=output_path,
-        doc_type=OfficeDocType.PPT,
-        workspace_path=req.workspace_path,
-    )
+    with office_progress.track(req.task_id, "生成 PPT") as prog:
+        prog.report("生成文档", 30)
+        output_path = generate_ppt(req)
+        prog.report("登记文档", 90)
+        _build_summary_for_generated(
+            file_path=output_path,
+            doc_type=OfficeDocType.PPT,
+            workspace_path=req.workspace_path,
+        )
     return {
         "output_path": str(output_path),
         "filename": output_path.name,
@@ -518,12 +546,15 @@ def generate_ppt_endpoint(req: OfficePptGenerateRequest) -> dict:
 @router.post("/word/generate")
 def generate_word_endpoint(req: OfficeWordGenerateRequest) -> dict:
     """Generate a .docx file from structured input."""
-    output_path = generate_docx(req)
-    _build_summary_for_generated(
-        file_path=output_path,
-        doc_type=OfficeDocType.WORD,
-        workspace_path=req.workspace_path,
-    )
+    with office_progress.track(req.task_id, "生成 Word") as prog:
+        prog.report("生成文档", 30)
+        output_path = generate_docx(req)
+        prog.report("登记文档", 90)
+        _build_summary_for_generated(
+            file_path=output_path,
+            doc_type=OfficeDocType.WORD,
+            workspace_path=req.workspace_path,
+        )
     return {
         "output_path": str(output_path),
         "filename": output_path.name,
@@ -531,15 +562,54 @@ def generate_word_endpoint(req: OfficeWordGenerateRequest) -> dict:
     }
 
 
+@router.post("/word/parse-bibtex")
+def parse_bibtex_endpoint(req: BibTeXParseRequest) -> BibTeXParseResponse:
+    """解析 BibTeX 文本为结构化参考文献（Round 9 引用体系）。
+
+    纯文本解析，零落盘/零外发；条目可直接传入 /word/generate 的
+    ``references``。解析失败由全局 OfficeParseError → 422 信封处理。
+    """
+    references = parse_bibtex(req.text)
+    return BibTeXParseResponse(count=len(references), references=references)
+
+
+@router.post("/word/lint")
+def lint_word_endpoint(req: WordLintRequest) -> WordLintResult:
+    """对照 FormatSpec 校验 .docx（Round 10 格式 Linter）。
+
+    纯回读；file_path 经工作区围栏（resolve_within）把守，5MB 上限与
+    读取端点一致。解析失败走全局 OfficeParseError → 422 信封。
+    """
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    _check_size_limit(file_path, req.max_size_bytes)
+    return lint_docx(file_path, req.format_spec)
+
+
+@router.post("/word/repair")
+def repair_word_endpoint(req: WordRepairRequest) -> WordRepairResult:
+    """对照 FormatSpec 自动修复 .docx 可机械修复违规（Round 12）。
+
+    默认写 ``<stem>-repaired.docx`` 新文件；overwrite=true 时原子替换
+    原文件。修复后自动复检，remaining 携带未消除违规（如语义类
+    citation/coverage）。围栏与尺寸上限同 lint 端点。
+    """
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    _check_size_limit(file_path, req.max_size_bytes)
+    return repair_docx(file_path, req.format_spec, overwrite=req.overwrite)
+
+
 @router.post("/excel/generate")
 def generate_excel_endpoint(req: OfficeExcelGenerateRequest) -> dict:
     """Generate a .xlsx file from structured input."""
-    output_path = generate_xlsx(req)
-    _build_summary_for_generated(
-        file_path=output_path,
-        doc_type=OfficeDocType.EXCEL,
-        workspace_path=req.workspace_path,
-    )
+    with office_progress.track(req.task_id, "生成 Excel") as prog:
+        prog.report("生成文档", 30)
+        output_path = generate_xlsx(req)
+        prog.report("登记文档", 90)
+        _build_summary_for_generated(
+            file_path=output_path,
+            doc_type=OfficeDocType.EXCEL,
+            workspace_path=req.workspace_path,
+        )
     return {
         "output_path": str(output_path),
         "filename": output_path.name,
@@ -601,7 +671,11 @@ def generate_pdf_endpoint(req: PdfGenerateRequest) -> PdfGenerateResult:
 
     Service function handles workspace validation and output path safety.
     """
-    return generate_pdf(req)
+    with office_progress.track(req.task_id, "生成 PDF") as prog:
+        prog.report("生成文档", 40)
+        result = generate_pdf(req)
+        prog.report("完成", 95)
+    return result
 
 
 @router.post("/pdf/read-form", response_model=PdfFormReadResult)
@@ -619,6 +693,215 @@ def fill_pdf_form_endpoint(req: PdfFormFillRequest) -> PdfFormFillResult:
     """
     return fill_pdf_form(req)
 
+
+# ──────────────────────────────────────────────────────────────────────
+# Update preview + PDF export (Office parity batch 2 — Item 2.5)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.post("/update/preview", response_model=DiffPreviewResult)
+def preview_update_endpoint(req: OfficeUpdatePreviewRequest) -> DiffPreviewResult:
+    """Dry-run update ops against a copy; the source file is never touched.
+
+    File resolution mirrors office_update:
+    - ``file_path`` → validated to lie inside ``workspace_path``;
+    - ``doc_id``    → resolved via ``_require_document`` (404 when unknown)
+      + ``document_path`` (managed dir layout), containment re-checked
+      against the row's canonical ``workspace_path``.
+    Invalid ops come back as ``DiffPreviewResult(ok=False, error=…)`` so
+    the UI can show WHY the real update would fail (this is a preview).
+    """
+    if req.doc_id:
+        doc = _require_document(_db().get_connection(), req.doc_id)
+        managed = document_path(doc)
+        if not managed.is_file():
+            raise OfficeFileNotFoundError(managed)
+        file_path = _validate_file_in_workspace(str(managed), doc.workspace_path)
+    elif req.file_path:
+        file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    else:
+        raise OfficePathError("file_path or doc_id is required")
+    return preview_update(file_path, req.ops)
+
+
+@router.post("/export-pdf")
+def export_pdf_endpoint(req: OfficeExportPdfRequest):
+    """Export a workspace document to PDF via backend.office.export_pdf.
+
+    The ``export_pdf`` module is delivered by a parallel batch-2 agent, so
+    the import is deferred to call time (keeps this router importable
+    before that module lands). Because the route imports the *module
+    object* and looks up the attribute on each call, the clean test patch
+    point is ``backend.office.export_pdf.export_to_pdf``.
+    """
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    from backend.office import export_pdf
+
+    with office_progress.track(req.task_id, "导出 PDF") as prog:
+        prog.report("转换 PDF", 30)
+        result = export_pdf.export_to_pdf(file_path, Path(req.workspace_path).resolve())
+        prog.report("完成", 95)
+    return result
+
+
+@router.get("/progress/{task_id}")
+def get_progress_endpoint(task_id: str):
+    """P7: 查询 office 长任务进度（前端 500ms 轮询）。
+
+    任务不存在（未开始 / 已结束）时返回 ``active: false`` 而非 404 ——
+    轮询方把 active=false 视为任务完成信号，无需异常处理。
+    """
+    snap = office_progress.snapshot(task_id)
+    if snap is None:
+        return {"active": False, "stage": None, "percent": None, "title": None}
+    return {"active": True, **snap}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Template library (batch 3 — Item 3.2)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.get("/templates", response_model=TemplateLibraryResponse)
+def list_templates_endpoint(workspace_path: Optional[str] = None) -> TemplateLibraryResponse:
+    """List the builtin 中文办公模板 + workspace user templates.
+
+    Builtin entries carry curated placeholder metadata and are instantiated by
+    ``id``; workspace entries (``<workspace>/office/templates/*.docx``) are
+    classified with the existing template scanner and instantiated by
+    ``filename``. Broken workspace files are skipped with a logged warning.
+    """
+    return list_templates(workspace_path)
+
+
+@router.post("/templates/instantiate", response_model=WordTemplateFillResult)
+def instantiate_template_endpoint(
+    req: OfficeTemplateInstantiateRequest,
+) -> WordTemplateFillResult:
+    """Instantiate a library template (word/excel/ppt) into the managed layout.
+
+    Fills through the same machinery per doc_type (word: docxtpl with ZIP
+    guards, dangerous-Jinja scan, SandboxedEnvironment, ≤10MB images; xlsx/
+    pptx: {{marker}} replacement per Round-3 N2). The generated row is
+    persisted here (like the other generate routes) so the document shows up
+    in GET /documents — doc_type derived from the output extension so excel/
+    ppt templates land in the right list.
+    """
+    with office_progress.track(req.task_id, "模板实例化") as prog:
+        prog.report("填充模板", 30)
+        result = instantiate_template(
+            req.workspace_path,
+            template_id=req.template_id,
+            workspace_template=req.workspace_template,
+            filename=req.filename,
+            data=req.data,
+            images=req.images,
+        )
+        prog.report("登记文档", 90)
+        output_path = Path(result.output_path)
+        ext = output_path.suffix.lstrip(".").lower()
+        doc_type = {"docx": OfficeDocType.WORD, "xlsx": OfficeDocType.EXCEL, "pptx": OfficeDocType.PPT}.get(ext, OfficeDocType.WORD)
+        _build_summary_for_generated(
+            file_path=output_path,
+            doc_type=doc_type,
+            workspace_path=req.workspace_path,
+        )
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Apply update (Office parity round 2 — R1: edit-preview dialog 的「应用」)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.post("/doc/{doc_id}/update", response_model=OfficeDocUpdateResult)
+def update_document_endpoint(
+    doc_id: str, req: OfficeDocUpdateRequest
+) -> OfficeDocUpdateResult:
+    """Apply update ops to a managed document in place.
+
+    Semantics mirror the office_update tool path: pre-edit snapshot first
+    (best-effort), then the all-or-nothing editor (a rejected op leaves the
+    file untouched), then the row refresh (status → edited, fresh
+    ``updated_at`` / ``file_size_bytes``) and a best-effort self-check
+    readback of the saved file.
+
+    Errors: unknown doc id → 404 (``OfficeFileNotFoundError``); missing
+    managed file → 404; rejected ops → 422 (``OfficeOpRejectedError``,
+    per-op failure info in ``message``); file-level save failure → 500
+    (``OfficeEditError``). All mapped by the registered OfficeError handler.
+    """
+    conn = _db().get_connection()
+    doc = _require_document(conn, doc_id)
+    return apply_doc_update(conn, doc, req.ops)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# PDF → Word conversion + self-check history (Office parity round 3 — N3/N4)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.post("/pdf/to-word", response_model=PdfToWordResult)
+def pdf_to_word_endpoint(req: PdfToWordRequest) -> PdfToWordResult:
+    """Convert a text-layer PDF into a managed .docx (round-3 N3).
+
+    The service function (:func:`backend.office.pdf_to_word.convert_pdf_to_word`)
+    never raises and returns ``PdfToWordResult(ok=False, error=...)`` on any
+    failure; this handler only adds the boundary checks that map to HTTP
+    errors (400/404 via the OfficeError handler) and the persistence step:
+
+    - ``file_path`` must lie inside ``workspace_path`` (path traversal → 400);
+    - ``source_doc_id``, when given, must exist (unknown id → 404) and becomes
+      the generated Word row's ``derived_from`` lineage.
+    """
+    logger.info("Converting PDF to Word: %s", req.file_path)
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    if req.source_doc_id:
+        _require_document(_db().get_connection(), req.source_doc_id)
+    result = convert_pdf_to_word(
+        file_path,
+        Path(req.workspace_path).resolve(),
+        req.out_filename or "",
+    )
+    if result.ok:
+        # Persist the generated row like the other generate routes.
+        # _build_summary_for_generated() takes no derived_from (its existing
+        # call sites don't track lineage), so the lineage is attached after
+        # the helper ran and the row is re-saved (INSERT OR REPLACE keeps
+        # this a plain overwrite of the row we just created).
+        summary = _build_summary_for_generated(
+            file_path=Path(result.output_path),
+            doc_type=OfficeDocType.WORD,
+            workspace_path=req.workspace_path,
+        )
+        if req.source_doc_id:
+            summary.derived_from = req.source_doc_id
+            save_document(_db().get_connection(), summary)
+    return result
+
+
+@router.get("/doc/{doc_id}/self-checks")
+def list_self_checks_endpoint(doc_id: str, limit: int = 50) -> dict:
+    """List a document's self-check verification history (round-3 N4).
+
+    Response shape is the fixed frontend contract:
+    ``{"items": [{id, doc_id, action, ok, summary, created_at}, ...], "total"}``
+    — newest first, ``ok`` a bool, ``summary`` the deserialized readback dict.
+    ``total`` mirrors ``len(items)`` (same convention as the snapshots
+    endpoint) because the backend list query has no pagination offset.
+
+    The ``backend.office.selfcheck_history`` module is imported lazily at
+    call time (same parallel-delivery pattern as ``export_pdf``), keeping
+    this router importable even if the history module is absent.
+    """
+    conn = _db().get_connection()
+    _require_document(conn, doc_id)
+    # Clamp the page size: at least 1 row, never more than 500 per call.
+    clamped_limit = max(1, min(limit, 500))
+    from backend.office.selfcheck_history import list_for_document
+
+    items = list_for_document(conn, doc_id, limit=clamped_limit)
+    return {"items": items, "total": len(items)}
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -799,7 +1082,7 @@ def fill_journal_from_content_endpoint(
     canonical_ws = _canonicalize_workspace(req.workspace_path)
     # Validate content shape up front for clearer 422.
     try:
-        content_model = parse_obj(JournalContent, req.content)
+        content_model = JournalContent.model_validate(req.content)
     except Exception as exc:
         raise JournalContentShapeError(f"content shape invalid: {exc}") from exc
     # Resolve spec.
@@ -915,6 +1198,18 @@ __all__ = [
     "restore_document_endpoint",
     "list_snapshots_endpoint",
     "restore_snapshot_endpoint",
+    # Office parity batch 2 (Item 2.5): update preview + PDF export
+    "preview_update_endpoint",
+    "export_pdf_endpoint",
+    # Office parity batch 3 (Item 3.2): template library
+    "list_templates_endpoint",
+    "instantiate_template_endpoint",
+    # Office parity round 2 (R1): apply update ops to a managed document
+    "update_document_endpoint",
+    # Office parity round 3 (N3): PDF → Word text-level conversion
+    "pdf_to_word_endpoint",
+    # Office parity round 3 (N4): self-check verification history
+    "list_self_checks_endpoint",
     # 2026-09-10 journal template subsystem
     "parse_journal_template_endpoint",
     "list_journal_specs_endpoint",

@@ -28,8 +28,8 @@ const ORCH_LABEL: Record<TaskStatusValue, string> = {
   cancelled: '已取消',
 };
 
-/** 编排状态 → 字形/中文标签（导出供测试与潜在复用）。 */
-export function mapOrchStatus(status: TaskStatusValue) {
+/** 编排状态 → 字形/中文标签。 */
+function mapOrchStatus(status: TaskStatusValue) {
   return { glyph: ORCH_GLYPH[status], label: ORCH_LABEL[status] };
 }
 
@@ -76,8 +76,7 @@ export function TodoListSection({ todos, taskBoard }: TodoListSectionProps) {
         <>
           <div className="text-xs font-medium text-text-secondary pt-1">编排计划</div>
           {taskBoard.plan.map((item) => {
-            const status: TaskStatusValue =
-              taskBoard.statuses[item.task_id]?.status ?? 'queued';
+            const status: TaskStatusValue = taskBoard.statuses[item.task_id]?.status ?? 'queued';
             const { glyph, label } = mapOrchStatus(status);
             return (
               <div

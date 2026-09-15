@@ -68,7 +68,8 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // body {mode: 'ask' | 'auto'}; 404 when the run is not active in-process.
   orchestration_set_approval_mode: {
     method: 'POST',
-    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/approval-mode`,
+    path: (a) =>
+      `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/approval-mode`,
     body: (a) => ({ mode: a.mode }),
   },
 
@@ -132,6 +133,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/compact`,
   },
+  // R17-A2: 压缩谱系（归档会话列表，新→旧）。sessionApi.getLineage。
+  session_lineage: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/lineage`,
+  },
   session_fork: {
     method: 'POST',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/fork`,
@@ -153,6 +159,13 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/export`,
     body: (a) => ({ theme: a.theme ?? 'auto' }),
   },
+  // R18-C: Markdown 会话导出 —— 后端同一端点按 format 分派；body 只下发
+  // format（extra=forbid，sessionId 走路径参数）。
+  export_session_markdown: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/export`,
+    body: () => ({ format: 'markdown' }),
+  },
 
   // session workspace binding
   workspace_bind: {
@@ -169,7 +182,9 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace`,
   },
 
-  // 项目模块 P1 (cherry-win7 对齐): 最近项目注册表 + 项目内会话
+  // 项目模块 P1 (2026-09-13): 最近项目注册表 + 项目内会话。
+  // open = "复用最近活跃会话或新建并绑定项目目录"（后端原子完成，返回
+  // { project, session, created }），前端拿到 session.id 后 setCurrent + 导航。
   projects_list: {
     method: 'GET',
     path: () => '/api/v1/projects',
@@ -196,6 +211,74 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   projects_list_sessions: {
     method: 'GET',
     path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/sessions`,
+  },
+
+  // R19: 数据安全 —— 备份清单/手动备份/记忆导出（system_routes，GET/POST
+  // 均无业务 body，本机 token 由 fetch 桥统一注入）。
+  // R25-D4: 查询会话活跃 chat 流（renderer 重载后 reattach）。null = 无活跃流。
+  // R27-A: Prompt 模板库 CRUD
+  prompts_list: {
+    method: 'GET',
+    path: () => '/api/v1/prompts/templates',
+  },
+  prompts_create: {
+    method: 'POST',
+    path: () => '/api/v1/prompts/templates',
+    body: (a) => ({ name: a.name, content: a.content, description: a.description ?? '' }),
+  },
+  prompts_update: {
+    method: 'PUT',
+    path: (a) => `/api/v1/prompts/templates/${encodeURIComponent(String(a.id))}`,
+    body: (a) => {
+      const body: Record<string, unknown> = {};
+      if (a.name != null) body.name = a.name;
+      if (a.content != null) body.content = a.content;
+      if (a.description != null) body.description = a.description;
+      return body;
+    },
+  },
+  prompts_delete: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/prompts/templates/${encodeURIComponent(String(a.id))}`,
+  },
+  // R30: 模板导入/导出（导出无 body；导入信封即 body）
+  prompts_export: {
+    method: 'GET',
+    path: () => '/api/v1/prompts/templates/export',
+  },
+  prompts_import: {
+    method: 'POST',
+    path: () => '/api/v1/prompts/templates/import',
+    body: (a) => a.payload as Record<string, unknown>,
+  },
+  chat_stream_active: {
+    method: 'GET',
+    path: (a) => `/api/v1/chat/stream/active?session_id=${encodeURIComponent(String(a.sessionId))}`,
+  },
+    system_backups_list: {
+    method: 'GET',
+    path: () => '/api/v1/system/backups',
+  },
+  system_backup_create: {
+    method: 'POST',
+    path: () => '/api/v1/system/backups',
+    body: () => ({}),
+  },
+  memory_export: {
+    method: 'GET',
+    path: () => '/api/v1/memory/export',
+  },
+  // R21: 备份恢复（下次启动生效）+ 记忆导入
+  system_backup_restore: {
+    method: 'POST',
+    path: (a) => `/api/v1/system/backups/${encodeURIComponent(String(a.name))}/restore`,
+    body: () => ({}),
+  },
+  memory_import: {
+    method: 'POST',
+    path: () => '/api/v1/memory/import',
+    // 信封即 body（后端 import_memory(payload) 直接收 dict）
+    body: (a) => a.payload as Record<string, unknown>,
   },
   workspace_search_files: {
     method: 'GET',
@@ -270,7 +353,14 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   session_update: {
     method: 'PATCH',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}`,
-    body: (a) => ({ title: a.title }),
+    body: (a) => {
+      const body: Record<string, unknown> = {};
+      // R18-B: is_pinned 置顶开关（后端 SessionUpdateIn.is_pinned 已支持）
+      if (a.isPinned != null) body.is_pinned = a.isPinned;
+      // title 缺省不下发 —— PATCH 只更新显式传入的字段
+      if (a.title != null) body.title = a.title;
+      return body;
+    },
   },
 
   // F12 (对标增强第五轮批次 B): 跨会话消息全文搜索（侧栏搜索框数据源）
@@ -491,6 +581,16 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/scheduled/tasks/${encodeURIComponent(String(a.id))}/run`,
   },
+  // R17-B: evolution 任务（固化/巡检等）手动触发面 —— APScheduler 侧 job，
+  // 不在 JSON 持久化的用户任务表里，走独立路由。
+  scheduled_evolution_tasks: {
+    method: 'GET',
+    path: () => '/api/v1/scheduled/evolution/tasks',
+  },
+  scheduled_evolution_run: {
+    method: 'POST',
+    path: (a) => `/api/v1/scheduled/evolution/${encodeURIComponent(String(a.name))}/run`,
+  },
 
   // custom CSS theme storage (themeCssClient)
   // Backend theme_router 挂在 /api/v1/theme (与其他 IPC 路由一致)
@@ -523,6 +623,30 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   archive_skill: {
     method: 'POST',
     path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/archive`,
+  },
+  // R17-A1: 技能 pin / 固化巡检（consolidation）管理面。skillsApi.pinSkill 等。
+  // autoDraft 由 path builder 转 snake query；accept 的 body 走 camelToSnakeKeys。
+  pin_skill: {
+    method: 'POST',
+    path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/pin`,
+  },
+  skills_consolidation_scan: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/skills/consolidation/scan?auto_draft=${
+        a?.autoDraft === false ? 'false' : 'true'
+      }&mode=${a?.mode === 'auto' ? 'auto' : 'full'}`,
+  },
+  skills_consolidation_suggestions: {
+    method: 'GET',
+    path: (a) => {
+      const limit = a?.limit != null ? `?limit=${encodeURIComponent(String(a.limit))}` : '';
+      return `/api/v1/skills/consolidation/suggestions${limit}`;
+    },
+  },
+  skills_consolidation_accept: {
+    method: 'POST',
+    path: () => '/api/v1/skills/consolidation/accept',
   },
 
   // Path B: list user-invocable SKILL.md slash command names.
@@ -680,6 +804,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   office_word_generate: { method: 'POST', path: () => '/api/v1/office/word/generate' },
   office_excel_generate: { method: 'POST', path: () => '/api/v1/office/excel/generate' },
   office_pdf_generate: { method: 'POST', path: () => '/api/v1/office/pdf/generate' },
+  // P7 (2026-09-14): office 长任务进度轮询（任务不存在时后端返回 active:false）。
+  office_get_progress: {
+    method: 'GET',
+    path: (a) => `/api/v1/office/progress/${encodeURIComponent(String(a.taskId))}`,
+  },
   // Office parity batch 1 (item 1.7): archive/restore + snapshot lifecycle.
   // Backend service layer lives in backend/office/tool_service.py:601-716
   // (archive / restore) and backend/office/storage.py:316-360 (snapshots);
@@ -701,6 +830,72 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) =>
       `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/snapshots/${encodeURIComponent(String(a.snapshotId))}/restore`,
+  },
+  // Office parity batch 2 (items 2.5 / 2.7): update PREVIEW (dry-run —
+  // applies ops to a temp copy, never the source) and explicit PDF export.
+  // Backend: backend/api/office_routes.py:620-658 (POST /update/preview,
+  // POST /export-pdf). Batch 2 shipped preview-only — real edits stayed on
+  // the chat-driven office_update tool path; round 2 (R1) adds the
+  // page-level office_doc_update route right below.
+  // Body keys (workspacePath/filePath/docId/ops) pass through the normal
+  // recursive camelToSnakeKeys; the composed op dicts use only lowercase
+  // single-word keys (find/replace/sheet/cells/addr/value/index/title),
+  // so the translation is a no-op on them.
+  office_update_preview: { method: 'POST', path: () => '/api/v1/office/update/preview' },
+  office_export_pdf: { method: 'POST', path: () => '/api/v1/office/export-pdf' },
+
+  // Office parity round 2 (R1): page-level apply-update — closes the
+  // edit-preview loop opened by office_update_preview. Backend contract:
+  // POST /api/v1/office/doc/{doc_id}/update body {ops} (same op dicts the
+  // preview route takes) → {ok, summary, self_check:{ok, summary?, error?}}.
+  // Unknown doc → 404 {error_type, message, file_path}; invalid ops → 422
+  // same shape. rawBody: op dicts are forwarded to the backend editor
+  // verbatim (runtime-validated there). The recursive camelToSnakeKeys is
+  // a no-op on the lowercase single-word keys this dialog composes today
+  // (find/replace/sheet/cells/addr/value/index/title), but ops are
+  // pass-through user-shaped data — any future camelCase op key (e.g.
+  // "cellRange") would be mangled into "_cell_range", so the body is
+  // built explicitly snake_case instead (doc_id rides in the path and
+  // must not leak into the body).
+  office_doc_update: {
+    method: 'POST',
+    path: (a) => `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/update`,
+    rawBody: true,
+    body: (a) => ({ ops: Array.isArray(a.ops) ? (a.ops as Record<string, unknown>[]) : [] }),
+  },
+
+  // Office parity batch 3 (item 3.2): Word template library (从模板创建).
+  // Backend: backend/api/office_routes.py — GET /templates (builtin +
+  // workspace *.docx) and POST /templates/instantiate (→ WordTemplateFillResult).
+  office_list_templates: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/office/templates?workspace_path=${encodeURIComponent(String(a.workspacePath))}`,
+  },
+  // rawBody: the `data` / `images` maps are keyed by template placeholder
+  // names — user data, not JS identifiers. The default camelToSnakeKeys
+  // would mangle e.g. "ReportDate" into "_report_date", so the route skips
+  // translation and the body builder maps the top-level fields to the
+  // backend's snake_case contract explicitly; placeholder keys inside the
+  // maps pass through untouched.
+  office_templates_instantiate: {
+    method: 'POST',
+    path: () => '/api/v1/office/templates/instantiate',
+    rawBody: true,
+    body: (a) => {
+      const body: Record<string, unknown> = {
+        workspace_path: String(a.workspacePath ?? ''),
+        filename: String(a.filename ?? ''),
+        data: (a.data as Record<string, string>) ?? {},
+      };
+      // Exactly one of the two instantiate keys is sent (backend contract).
+      if (a.templateId) body.template_id = a.templateId;
+      if (a.workspaceTemplate) body.workspace_template = a.workspaceTemplate;
+      if (a.images && Object.keys(a.images as Record<string, string>).length > 0) {
+        body.images = a.images;
+      }
+      return body;
+    },
   },
 
   // M3: MCP multi-server management (backend/api/mcp_routes.py).
@@ -728,7 +923,17 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}`,
   },
   // M6 生态扩展: 用量/成本面板 (backend/services/usage_tracker.py 内存态)
-  usage_summary: { method: 'GET', path: () => '/api/v1/usage' },
+  // L8 PR-A (2026-09-09): 支持 range=today|total 查询参数, 默认 today。
+  // L8 PR-B (2026-09-09): range 扩到 today|7d|30d|total。
+  // 未传 range 时省略 query string (后端会按 today 默认处理)。
+  usage_summary: {
+    method: 'GET',
+    path: (a) => {
+      const range = a?.range as string | undefined;
+      if (!range) return '/api/v1/usage';
+      return `/api/v1/usage?range=${encodeURIComponent(range)}`;
+    },
+  },
   // U14 (批次 C): 会话级持久化用量
   usage_get_session: {
     method: 'GET',

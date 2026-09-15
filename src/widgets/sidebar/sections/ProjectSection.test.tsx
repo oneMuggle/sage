@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { ProjectSummary } from '../../../shared/api/projectApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
+import { useStore } from '../../../shared/lib/store';
 
 import { ProjectSection } from './ProjectSection';
 
@@ -12,6 +13,7 @@ const removeMock = vi.fn();
 const openMock = vi.fn();
 const createSessionMock = vi.fn();
 const listSessionsMock = vi.fn();
+const deleteSessionMock = vi.fn();
 
 vi.mock('../../../shared/api/projectApi', () => ({
   projectApi: {
@@ -21,6 +23,12 @@ vi.mock('../../../shared/api/projectApi', () => ({
     open: (...args: unknown[]) => openMock(...args),
     createSession: (...args: unknown[]) => createSessionMock(...args),
     listSessions: (...args: unknown[]) => listSessionsMock(...args),
+  },
+}));
+
+vi.mock('../../../shared/api/sessionApi', () => ({
+  sessionApi: {
+    delete: (...args: unknown[]) => deleteSessionMock(...args),
   },
 }));
 
@@ -65,9 +73,15 @@ const baseProps = {
 
 describe('ProjectSection', () => {
   beforeEach(() => {
-    [listMock, registerMock, removeMock, openMock, createSessionMock, listSessionsMock].forEach(
-      (m) => m.mockReset(),
-    );
+    [
+      listMock,
+      registerMock,
+      removeMock,
+      openMock,
+      createSessionMock,
+      listSessionsMock,
+      deleteSessionMock,
+    ].forEach((m) => m.mockReset());
     listMock.mockResolvedValue([]);
   });
 
@@ -169,5 +183,204 @@ describe('ProjectSection', () => {
     await waitFor(() => {
       expect(screen.getByTestId('project-missing-badge')).toBeInTheDocument();
     });
+  });
+
+  // ===== P2: 行展开会话子列表 =====
+
+  it('P2: 展开 chevron 懒加载会话子列表，子行点击切换会话', async () => {
+    listMock.mockResolvedValue(projects);
+    listSessionsMock.mockResolvedValue([
+      { ...session, id: 's1', title: 'first session', updated_at: Date.now() },
+      { ...session, id: 's2', title: 'second session', updated_at: Date.now() },
+    ]);
+    const onOpenSession = vi.fn();
+    renderWithI18n(<ProjectSection {...baseProps} onOpenSession={onOpenSession} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    expect(screen.queryByTestId('project-session-row')).not.toBeInTheDocument();
+
+    // 展开第一个项目
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => {
+      expect(listSessionsMock).toHaveBeenCalledWith('p1');
+      expect(screen.getAllByTestId('project-session-row')).toHaveLength(2);
+    });
+    expect(screen.getByText('first session')).toBeInTheDocument();
+
+    // 子行点击 → onOpenSession（不触发行点击的 open）
+    fireEvent.click(screen.getAllByTestId('project-session-row')[0]);
+    await waitFor(() => {
+      expect(onOpenSession).toHaveBeenCalledWith('s1');
+    });
+    expect(openMock).not.toHaveBeenCalled();
+  });
+
+  it('P2: 展开无会话的项目显示空态提示', async () => {
+    listMock.mockResolvedValue(projects);
+    listSessionsMock.mockResolvedValue([]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    fireEvent.click(screen.getAllByTestId('project-expand')[1]); // empty 项目
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-sessions-empty')).toBeInTheDocument();
+    });
+  });
+
+  it('P2: 再次点击 chevron 收起子列表', async () => {
+    listMock.mockResolvedValue(projects);
+    listSessionsMock.mockResolvedValue([{ ...session, id: 's1', title: 'first session' }]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('project-session-row').length).toBe(1);
+    });
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => {
+      expect(screen.queryByTestId('project-session-row')).not.toBeInTheDocument();
+    });
+    // 收起再展开不重复拉取（缓存命中）
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('project-session-row').length).toBe(1);
+    });
+    expect(listSessionsMock).toHaveBeenCalledTimes(1);
+  });
+
+  // ===== P4: 子行会话删除 + 会话数量联动刷新 =====
+
+  it('P4: 子行删除两步确认后调用 sessionApi.delete 并刷新清单/子列表', async () => {
+    listMock.mockResolvedValue(projects);
+    listSessionsMock.mockResolvedValue([{ ...session, id: 's1', title: 'first session' }]);
+    deleteSessionMock.mockResolvedValue(undefined);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getAllByTestId('project-session-row'));
+
+    const callsBefore = listMock.mock.calls.length;
+    const delBtn = screen.getAllByTestId('project-session-delete')[0];
+    fireEvent.click(delBtn); // armed
+    expect(deleteSessionMock).not.toHaveBeenCalled();
+    fireEvent.click(delBtn); // 确认
+    await waitFor(() => {
+      expect(deleteSessionMock).toHaveBeenCalledWith('s1');
+      // 删除联动刷新项目清单（计数）与子列表
+      expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore);
+      expect(listSessionsMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('P4: 子行删除失败时保留子列表并提示', async () => {
+    listMock.mockResolvedValue(projects);
+    listSessionsMock.mockResolvedValue([{ ...session, id: 's1', title: 'first session' }]);
+    deleteSessionMock.mockRejectedValue(new Error('backend offline'));
+    renderWithI18n(<ProjectSection {...baseProps} />);
+
+    await waitFor(() => screen.getAllByTestId('project-row'));
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getAllByTestId('project-session-row'));
+
+    const delBtn = screen.getAllByTestId('project-session-delete')[0];
+    fireEvent.click(delBtn);
+    fireEvent.click(delBtn);
+    await waitFor(() => {
+      expect(deleteSessionMock).toHaveBeenCalledWith('s1');
+    });
+    // 失败不收起子列表
+    expect(screen.getAllByTestId('project-session-row').length).toBe(1);
+  });
+
+  it('P4: store 会话数量变化触发项目清单防抖刷新', async () => {
+    vi.useFakeTimers();
+    try {
+      listMock.mockResolvedValue([]);
+      renderWithI18n(<ProjectSection {...baseProps} />);
+      await vi.advanceTimersByTimeAsync(0);
+      const initialCalls = listMock.mock.calls.length;
+      expect(initialCalls).toBeGreaterThan(0);
+
+      useStore.setState({ sessions: [{ ...session, id: 'sx', title: 'x' }] });
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(listMock.mock.calls.length).toBeGreaterThan(initialCalls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // ===== P5: 区块局部拖拽登记 =====
+
+  it('P5: 拖入带 path 的文件 → 批量登记并刷新清单', async () => {
+    listMock.mockResolvedValue([]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getByTestId('project-drop-zone'));
+
+    const callsBefore = listMock.mock.calls.length;
+    fireEvent.drop(screen.getByTestId('project-drop-zone'), {
+      dataTransfer: {
+        files: [{ path: 'C:\\work\\a' }, { path: 'C:\\work\\b' }],
+      } as unknown as DataTransfer,
+    });
+
+    await waitFor(() => {
+      expect(registerMock).toHaveBeenCalledTimes(2);
+      expect(registerMock).toHaveBeenCalledWith('C:\\work\\a');
+      expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+  });
+
+  it('P5: 拖入无 path 的文件（浏览器语义）静默忽略', async () => {
+    listMock.mockResolvedValue([]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getByTestId('project-drop-zone'));
+
+    const callsBefore = registerMock.mock.calls.length;
+    fireEvent.drop(screen.getByTestId('project-drop-zone'), {
+      dataTransfer: { files: [{ name: 'x.txt' }] } as unknown as DataTransfer,
+    });
+
+    // 异步 handler 有机会执行后仍不应调用 register
+    await new Promise((r) => setTimeout(r, 50));
+    expect(registerMock.mock.calls.length).toBe(callsBefore);
+  });
+
+  it('P5: dragOver 显示提示、dragLeave 复位', async () => {
+    listMock.mockResolvedValue([]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    const zone = screen.getByTestId('project-drop-zone');
+
+    expect(screen.queryByTestId('project-drop-hint')).not.toBeInTheDocument();
+    fireEvent.dragOver(zone, { dataTransfer: { files: [] } });
+    expect(screen.getByTestId('project-drop-hint')).toBeInTheDocument();
+
+    fireEvent.dragLeave(zone, { dataTransfer: { files: [] } });
+    expect(screen.queryByTestId('project-drop-hint')).not.toBeInTheDocument();
+  });
+
+  it('P5: register 失败（非目录）时逐条提示且不刷新清单', async () => {
+    listMock.mockResolvedValue([]);
+    registerMock.mockRejectedValue(
+      new Error('Backend POST /api/v1/projects → 400: invalid_workspace_path'),
+    );
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getByTestId('project-drop-zone'));
+
+    const callsBefore = listMock.mock.calls.length;
+    fireEvent.drop(screen.getByTestId('project-drop-zone'), {
+      dataTransfer: { files: [{ path: 'C:\\not-a-dir' }] } as unknown as DataTransfer,
+    });
+
+    await waitFor(() => {
+      expect(registerMock).toHaveBeenCalledWith('C:\\not-a-dir');
+    });
+    // 全部失败：清单不刷新
+    await new Promise((r) => setTimeout(r, 50));
+    expect(listMock.mock.calls.length).toBe(callsBefore);
   });
 });

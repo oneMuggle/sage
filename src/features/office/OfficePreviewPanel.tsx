@@ -1,22 +1,50 @@
 /**
- * OfficePreviewPanel — render read results from any Office doc type (Phase 1.3, step 16).
+ * OfficePreviewPanel — render read results from any Office doc type.
  *
  * Discriminates on the `summary.doc_type` field and renders the appropriate
  * sub-layout (PPT slides / Word paragraphs+tables / Excel sheets / PDF pages).
- * PDF (parity batch 1, item 1.2): plain text preview of the extracted page
- * text returned by POST /office/pdf/read — richer (image/table) rendering
- * is deliberately deferred.
+ *
+ * Office parity batch 1 (item 1.2): added the PDF page-card preview.
+ *
+ * Office parity batch 2 (item 2.6): Word/Excel/PPT now render from the
+ * structured read results with real typography —
+ *   Word : heading size/weight scale, prose paragraphs, lists preserved,
+ *          bordered tables, inline image count.
+ *   Excel: per-sheet tabs, styled header row, right-aligned monospace
+ *          numerals, sheet dims, formula-view code list (additive
+ *          `formulas` field from read_xlsx include_formulas).
+ *   PPT  : slide cards with number badge, emphasized title, bullet list,
+ *          collapsible notes.
+ * Long content is render-capped (ROW/PARAGRAPH/COLUMN caps + a "…还有 N
+ * 行" note) and the whole body scrolls — a 10k-row sheet must not
+ * produce 10k DOM rows.
+ *
+ * Office parity batch 2 (item 2.7): the toolbar carries 导出 PDF for
+ * word/excel/ppt docs (POST /office/export-pdf → locally installed
+ * LibreOffice / MS Word converter). Failures surface via toast; the
+ * success toast offers 打开所在文件夹 through the existing managed-file
+ * gateway (the exported `<stem>.pdf` sits next to the managed source).
  */
 
-import { FileSpreadsheet, FileText, FileType, Presentation } from 'lucide-react';
+import { FileDown, FileSpreadsheet, FileText, FileType, Pencil, Presentation } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
+
+import { useTaskCenterStore } from '../../features/task-center/taskCenterStore';
+import { officeApi } from '../../shared/api/officeApi';
 import type {
+  OfficeDocType,
   OfficeExcelReadResult,
+  OfficeExcelSheetContent,
   OfficePdfReadResult,
   OfficePptReadResult,
   OfficeWordReadResult,
 } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
+import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
+
+import { pollOfficeProgress } from './officeProgress';
 
 export type OfficePreviewData =
   | { docType: 'ppt'; data: OfficePptReadResult }
@@ -30,27 +58,57 @@ export interface OfficePreviewPanelProps {
    * Workspace root — preferred over summary.workspace_path when building
    * the managed path for the PDF-export call. Read-result summaries carry
    * workspace_path, but the field is optional on the shared summary type.
-   * (win7 移植注：接口对齐 main；本分支面板实现暂不消费该字段。)
    */
   workspacePath?: string;
   /**
    * Item 2.5: opens the edit-preview dialog for the current document.
    * Absent → no 编辑预览 button (e.g. pdf previews).
-   * (win7 移植注：接口对齐 main；本分支面板暂无编辑入口。)
    */
   onEditPreview?: () => void;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Render caps (item 2.6): keep the DOM bounded for huge documents. The
+// note under each capped block tells the user how much was hidden.
+// ──────────────────────────────────────────────────────────────────────
+
+export const ROW_RENDER_CAP = 300;
+export const PARAGRAPH_RENDER_CAP = 300;
+export const COLUMN_RENDER_CAP = 40;
+
 // Static lookup so Tailwind JIT sees full literal class names at build time
-// (don't interpolate pl-${level} — Tailwind scans source for literal tokens only).
-const HEADING_PADDING: Record<number, string> = {
-  1: 'pl-2',
-  2: 'pl-4',
-  3: 'pl-6',
+// (don't interpolate text-${level} — Tailwind scans source for literal
+// tokens only).
+const HEADING_CLASSES: Record<number, string> = {
+  1: 'text-xl font-bold text-text',
+  2: 'text-lg font-semibold text-text',
+  3: 'text-base font-semibold text-text',
 };
 
-export function OfficePreviewPanel({ preview }: OfficePreviewPanelProps) {
+function headingClass(level: number): string {
+  return HEADING_CLASSES[level] ?? 'text-sm font-semibold text-text';
+}
+
+/** Excel-style numeric detection — numbers render right-aligned monospace. */
+function isNumericCell(cell: string): boolean {
+  return cell.trim() !== '' && Number.isFinite(Number(cell));
+}
+
+/** Docs that can be exported to PDF (item 2.7) and edited (item 2.5). */
+function isEditableDocType(docType: OfficeDocType): boolean {
+  return docType === 'word' || docType === 'excel' || docType === 'ppt';
+}
+
+export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: OfficePreviewPanelProps) {
   const { t } = useI18n();
+  const [exporting, setExporting] = useState(false);
+  // P2: 导出已耗时（spinner + 秒表，统一按钮 busy 规范）
+  const elapsed = useElapsedSeconds(exporting);
+  // P16: 可视化进度条（百分比来自任务中心 store 轮询）
+  const taskPercent = useTaskCenterStore(
+    (s) => (exporting ? s.tasks['office:export']?.percent ?? null : null),
+  );
+
   if (!preview) {
     return (
       <div className="flex items-center justify-center p-12 text-muted text-sm border border-dashed border-border rounded-lg">
@@ -59,25 +117,213 @@ export function OfficePreviewPanel({ preview }: OfficePreviewPanelProps) {
     );
   }
 
+  const summary = preview.data.summary;
+
+  const handleExportPdf = async () => {
+    if (exporting) return;
+    const ws = workspacePath ?? summary.workspace_path;
+    if (!ws) {
+      toast.error(t('office.export.failed'));
+      return;
+    }
+    // Managed layout `<workspace>/office/<docType>/<docId>/<filename>` —
+    // the same reconstruction readDocument uses (useOfficeDocuments).
+    const managedPath = [
+      ws,
+      'office',
+      summary.doc_type,
+      summary.id,
+      summary.generated_filename,
+    ].join('/');
+    setExporting(true);
+    // P7: 进度追踪任务 id + 轮询（同 OfficeGenerateForm）
+    const taskId = crypto.randomUUID();
+    const stopPoll = pollOfficeProgress(taskId, (p) =>
+      useTaskCenterStore.getState().updateTask('office:export', {
+        phase: p.stage ?? undefined,
+        percent: p.percent,
+      }),
+    );
+    useTaskCenterStore
+      .getState()
+      .registerTask('office:export', 'office', '导出 PDF', undefined, summary.generated_filename);
+    try {
+      const res = await officeApi.exportPdf({
+        workspace_path: ws,
+        file_path: managedPath,
+        task_id: taskId,
+      });
+      if (res.ok && res.output_path) {
+        toast.success(t('office.export.success'), {
+          description: res.output_path,
+          action: window.electronAPI
+            ? {
+                label: t('office.export.openFolder'),
+                onClick: () => {
+                  void window.electronAPI?.office
+                    .showOfficeDocumentInFolder({
+                      workspacePath: ws,
+                      docType: summary.doc_type,
+                      documentId: summary.id,
+                      filename: summary.generated_filename,
+                    })
+                    .catch(() => {
+                      // Gateway failure is non-fatal here — the export
+                      // itself already succeeded.
+                    });
+                },
+              }
+            : undefined,
+        });
+        return;
+      }
+      // ok=false: the backend reports converter problems in `error`.
+      // The "no local converter" path is the only one whose message
+      // mentions the soffice executable — map it to the dedicated i18n
+      // string; everything else keeps the raw backend detail.
+      const noConverter = typeof res.error === 'string' && res.error.includes('soffice');
+      toast.error(
+        noConverter
+          ? t('office.export.noConverter')
+          : `${t('office.export.failed')}: ${res.error ?? ''}`.trimEnd(),
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`${t('office.export.failed')}: ${msg}`);
+    } finally {
+      stopPoll();
+      useTaskCenterStore.getState().finishTask('office:export');
+      setExporting(false);
+    }
+  };
+
   return (
-    <div className="border border-border rounded-lg bg-surface overflow-hidden">
+    <div className="border border-border rounded-lg bg-surface overflow-hidden" data-testid="office-preview-panel">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-bg-subtle">
         {preview.docType === 'ppt' && <Presentation className="w-4 h-4" />}
         {preview.docType === 'word' && <FileText className="w-4 h-4" />}
         {preview.docType === 'excel' && <FileSpreadsheet className="w-4 h-4" />}
         {preview.docType === 'pdf' && <FileType className="w-4 h-4" />}
-        <span className="font-medium text-sm">{preview.data.summary.generated_filename}</span>
-        <span className="ml-auto text-xs text-muted">
-          {(preview.data.summary.metadata.file_size_bytes / 1024).toFixed(1)} KB
+        <span className="font-medium text-sm truncate">{summary.generated_filename}</span>
+        <span className="ml-auto text-xs text-muted shrink-0">
+          {(summary.metadata.file_size_bytes / 1024).toFixed(1)} KB
         </span>
+        {isEditableDocType(preview.docType) && (
+          <div className="flex items-center gap-1 shrink-0">
+            {onEditPreview && (
+              <button
+                type="button"
+                onClick={onEditPreview}
+                className="flex items-center gap-1 px-2 py-1 rounded border border-border text-xs text-text-secondary hover:bg-bg-hover transition-colors"
+                data-testid="office-edit-preview-button"
+                aria-label={t('office.edit.open')}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                {t('office.edit.open')}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void handleExportPdf()}
+              disabled={exporting}
+              className="flex items-center gap-1 px-2 py-1 rounded border border-border text-xs text-text-secondary hover:bg-bg-hover transition-colors disabled:opacity-50"
+              data-testid="office-export-pdf-button"
+              aria-label={t('office.export.pdf')}
+            >
+              {exporting ? (
+                <>
+                  {/* P2: spinner + 已耗时（统一按钮 busy 规范） */}
+                  <span
+                    className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"
+                    aria-hidden
+                  />
+                  <span className="tabular-nums">
+                    {t('office.export.exporting')} · {elapsed}s
+                  </span>
+                </>
+              ) : (
+                <>
+                  <FileDown className="w-3.5 h-3.5" />
+                  {t('office.export.pdf')}
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* P16: 导出期间的可视化进度条（百分比来自任务中心轮询） */}
+      {exporting && taskPercent != null && (
+        <div
+          className="h-1 rounded-full bg-bg-subtle overflow-hidden"
+          data-testid="office-export-progress-bar"
+        >
+          <div
+            className="h-full bg-primary rounded-full transition-[width] duration-500"
+            style={{ width: `${taskPercent}%` }}
+          />
+        </div>
+      )}
 
       <div className="p-4 max-h-96 overflow-y-auto">
         {preview.docType === 'ppt' && <PptPreview data={preview.data} />}
         {preview.docType === 'word' && <WordPreview data={preview.data} />}
-        {preview.docType === 'excel' && <ExcelPreview data={preview.data} />}
+        {preview.docType === 'excel' && <ExcelPreview key={summary.id} data={preview.data} />}
         {preview.docType === 'pdf' && <PdfPreview data={preview.data} />}
       </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Shared table renderer (word + excel + pdf pages): first row is the
+// styled header; cells capped; numerals right-aligned monospace.
+// ──────────────────────────────────────────────────────────────────────
+
+function CappedTable({ rows, numericCells = false }: { rows: string[][]; numericCells?: boolean }) {
+  const { t } = useI18n();
+  const [header, ...body] = rows;
+  const shownBody = body.slice(0, ROW_RENDER_CAP);
+  const hidden = body.length - shownBody.length;
+  return (
+    <div className="border border-border rounded overflow-x-auto">
+      <table className="w-full text-xs border-collapse">
+        <thead>
+          <tr className="bg-bg-subtle">
+            {header.map((cell, ci) => (
+              <th
+                key={ci}
+                className={`px-3 py-2 border-b border-border text-left font-medium text-text whitespace-nowrap ${
+                  numericCells && isNumericCell(cell) ? 'text-right font-mono' : ''
+                }`}
+              >
+                {cell}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {shownBody.map((row, ri) => (
+            <tr key={ri} className="even:bg-bg-subtle/40">
+              {row.map((cell, ci) => (
+                <td
+                  key={ci}
+                  className={`px-3 py-1.5 border-b border-border last:border-b-0 text-text-secondary ${
+                    numericCells && isNumericCell(cell) ? 'text-right font-mono' : ''
+                  }`}
+                >
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {hidden > 0 && (
+        <div className="px-3 py-1.5 text-xs text-muted bg-bg-subtle">
+          {t('office.preview.rowsTruncated').replace('{n}', String(hidden))}
+        </div>
+      )}
     </div>
   );
 }
@@ -90,15 +336,23 @@ function PptPreview({ data }: { data: OfficePptReadResult }) {
   return (
     <ol className="space-y-3">
       {data.slides.map((slide) => (
-        <li key={slide.index} className="border border-border rounded p-3">
-          <div className="text-xs text-muted mb-1">
-            {t('office.preview.slidePrefix')}
-            {slide.index + 1}
-            {t('office.preview.slideSuffix')}
+        <li key={slide.index} className="border border-border rounded-lg p-3 bg-surface">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded bg-primary/10 text-primary text-xs font-semibold">
+              {slide.index + 1}
+            </span>
+            {slide.title ? (
+              <div className="font-semibold text-text text-base truncate">{slide.title}</div>
+            ) : (
+              <div className="text-sm text-muted italic">
+                {t('office.preview.slidePrefix')}
+                {slide.index + 1}
+                {t('office.preview.slideSuffix')}
+              </div>
+            )}
           </div>
-          {slide.title && <div className="font-semibold text-text mb-1">{slide.title}</div>}
           {slide.text_blocks.length > 0 && (
-            <ul className="text-sm space-y-0.5 list-disc list-inside text-text-secondary">
+            <ul className="text-sm space-y-1 list-disc list-inside text-text-secondary mt-1">
               {slide.text_blocks.map((block, i) => (
                 <li key={i}>{block}</li>
               ))}
@@ -111,9 +365,12 @@ function PptPreview({ data }: { data: OfficePptReadResult }) {
             </div>
           )}
           {slide.notes && (
-            <div className="text-xs text-muted mt-2 italic">
-              {t('office.preview.notes')} {slide.notes}
-            </div>
+            <details className="mt-2 group">
+              <summary className="text-xs text-muted cursor-pointer select-none hover:text-text-secondary">
+                {t('office.preview.notes')}
+              </summary>
+              <p className="text-xs text-muted italic mt-1 whitespace-pre-wrap">{slide.notes}</p>
+            </details>
           )}
         </li>
       ))}
@@ -129,18 +386,25 @@ function PdfPreview({ data }: { data: OfficePdfReadResult }) {
   return (
     <ol className="space-y-3">
       {data.pages.map((page) => (
-        <li key={page.page_number} className="border border-border rounded p-3">
+        <li key={page.page_number} className="border border-border rounded-lg p-3 bg-surface">
           <div className="text-xs text-muted mb-1">
             {t('office.preview.pagePrefix')}
             {page.page_number}
             {t('office.preview.pageSuffix')}
           </div>
           {page.text ? (
-            <pre className="text-sm text-text-secondary whitespace-pre-wrap font-sans">
+            <pre className="text-sm text-text-secondary whitespace-pre-wrap font-sans leading-relaxed">
               {page.text}
             </pre>
           ) : (
             <p className="text-xs text-muted italic">{t('office.preview.emptyPage')}</p>
+          )}
+          {page.tables.length > 0 && (
+            <div className="mt-2 space-y-2">
+              {page.tables.map((rows, ti) => (
+                <CappedTable key={ti} rows={rows} />
+              ))}
+            </div>
           )}
         </li>
       ))}
@@ -150,33 +414,95 @@ function PdfPreview({ data }: { data: OfficePdfReadResult }) {
 
 function WordPreview({ data }: { data: OfficeWordReadResult }) {
   const { t } = useI18n();
+  const shown = data.paragraphs.slice(0, PARAGRAPH_RENDER_CAP);
+  const hidden = data.paragraphs.length - shown.length;
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted">
         {data.paragraphs.length} {t('office.preview.paragraphCount')} · {data.tables.length}{' '}
         {t('office.preview.tableCount')} · {data.images} {t('office.preview.imageCount')}
       </p>
-      {data.paragraphs.map((para, i) => (
-        <div
-          key={i}
-          className={[
-            'text-sm',
-            para.level > 0
-              ? `font-semibold text-text ${HEADING_PADDING[Math.min(para.level, 3)] ?? ''}`
-              : 'text-text-secondary',
-          ].join(' ')}
-        >
-          {para.text}
+      <div className="space-y-1.5">
+        {shown.map((para, i) => {
+          if (para.level > 0) {
+            return (
+              <div key={i} className={`mt-3 ${headingClass(para.level)}`}>
+                {para.text}
+              </div>
+            );
+          }
+          // List styles survive the read as 'List Paragraph' / 'List Bullet'…
+          const isListItem = /list/i.test(para.style);
+          if (isListItem) {
+            return (
+              <div key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                <span className="mt-[7px] w-1 h-1 rounded-full bg-current shrink-0" aria-hidden />
+                <span className="min-w-0">{para.text}</span>
+              </div>
+            );
+          }
+          return (
+            <p key={i} className="text-sm text-text-secondary leading-relaxed">
+              {para.text}
+            </p>
+          );
+        })}
+      </div>
+      {hidden > 0 && (
+        <p className="text-xs text-muted">
+          {t('office.preview.paragraphsTruncated').replace('{n}', String(hidden))}
+        </p>
+      )}
+      {data.tables.map((table, i) => (
+        <div key={i} className="mt-3">
+          <CappedTable rows={table.rows} />
         </div>
       ))}
-      {data.tables.map((table, i) => (
-        <div key={i} className="border border-border rounded overflow-x-auto mt-3">
-          <table className="w-full text-xs">
+    </div>
+  );
+}
+
+function ExcelSheetTable({ sheet }: { sheet: OfficeExcelSheetContent }) {
+  const { t } = useI18n();
+  const shownRows = sheet.rows.slice(0, ROW_RENDER_CAP);
+  const hiddenRows = sheet.rows.length - shownRows.length;
+  const shownCols = COLUMN_RENDER_CAP;
+  const clippedRows = shownRows.map((row) => {
+    if (row.length <= shownCols) return row;
+    return row.slice(0, shownCols);
+  });
+  const hiddenCols = sheet.max_col > shownCols ? sheet.max_col - shownCols : 0;
+  return (
+    <div className="space-y-2">
+      {clippedRows.length === 0 ? (
+        <p className="text-xs text-muted">{t('office.preview.emptySheet')}</p>
+      ) : (
+        <div className="border border-border rounded overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-bg-subtle">
+                {clippedRows[0].map((cell, ci) => (
+                  <th
+                    key={ci}
+                    className={`px-3 py-2 border-b border-border text-left font-medium text-text whitespace-nowrap ${
+                      isNumericCell(cell) ? 'text-right font-mono' : ''
+                    }`}
+                  >
+                    {cell}
+                  </th>
+                ))}
+              </tr>
+            </thead>
             <tbody>
-              {table.rows.map((row, ri) => (
-                <tr key={ri} className={ri === 0 ? 'bg-bg-subtle font-medium' : ''}>
+              {clippedRows.slice(1).map((row, ri) => (
+                <tr key={ri} className="even:bg-bg-subtle/40">
                   {row.map((cell, ci) => (
-                    <td key={ci} className="px-3 py-2 border-b border-border last:border-b-0">
+                    <td
+                      key={ci}
+                      className={`px-3 py-1.5 border-b border-border last:border-b-0 text-text-secondary ${
+                        isNumericCell(cell) ? 'text-right font-mono' : ''
+                      }`}
+                    >
                       {cell}
                     </td>
                   ))}
@@ -184,49 +510,82 @@ function WordPreview({ data }: { data: OfficeWordReadResult }) {
               ))}
             </tbody>
           </table>
+          {(hiddenRows > 0 || hiddenCols > 0) && (
+            <div className="px-3 py-1.5 text-xs text-muted bg-bg-subtle">
+              {hiddenRows > 0 && (
+                <span>
+                  {t('office.preview.rowsTruncated').replace('{n}', String(hiddenRows))}
+                </span>
+              )}
+              {hiddenRows > 0 && hiddenCols > 0 && <span className="mx-2">·</span>}
+              {hiddenCols > 0 && (
+                <span>
+                  {t('office.preview.cellsTruncated').replace('{n}', String(hiddenCols))}
+                </span>
+              )}
+            </div>
+          )}
         </div>
-      ))}
+      )}
+      {/* 公式视图 (item 1.4 additive field): render as a subtle code list. */}
+      {sheet.formulas && sheet.formulas.length > 0 && (
+        <div className="border border-border rounded bg-bg-subtle/60 p-2">
+          <div className="text-xs text-muted mb-1">{t('office.preview.formulas')}</div>
+          <ul className="space-y-0.5">
+            {sheet.formulas.slice(0, ROW_RENDER_CAP).map((entry, i) => (
+              <li key={i} className="font-mono text-xs text-text-secondary break-all">
+                {entry}
+              </li>
+            ))}
+          </ul>
+          {sheet.note && (
+            <p className="text-xs text-muted italic mt-1">{t('office.preview.formulasNote')}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 function ExcelPreview({ data }: { data: OfficeExcelReadResult }) {
   const { t } = useI18n();
+  const [activeSheet, setActiveSheet] = useState(0);
   if (data.sheets.length === 0) {
     return <p className="text-muted text-sm">{t('office.preview.emptyWorkbook')}</p>;
   }
+  const sheet = data.sheets[Math.min(activeSheet, data.sheets.length - 1)];
   return (
-    <div className="space-y-4">
-      {data.sheets.map((sheet) => (
-        <div key={sheet.name}>
-          <h3 className="text-sm font-semibold text-text mb-2">
-            {sheet.name}{' '}
-            <span className="text-xs font-normal text-muted">
-              ({sheet.max_row} {t('office.preview.rowUnit')} × {sheet.max_col}{' '}
-              {t('office.preview.colUnit')})
-            </span>
-          </h3>
-          {sheet.rows.length === 0 ? (
-            <p className="text-xs text-muted">{t('office.preview.emptySheet')}</p>
-          ) : (
-            <div className="border border-border rounded overflow-x-auto">
-              <table className="w-full text-xs">
-                <tbody>
-                  {sheet.rows.map((row, ri) => (
-                    <tr key={ri} className={ri === 0 ? 'bg-bg-subtle font-medium' : ''}>
-                      {row.map((cell, ci) => (
-                        <td key={ci} className="px-3 py-2 border-b border-border last:border-b-0">
-                          {cell}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      ))}
+    <div className="space-y-3">
+      {/* Per-sheet tabs (stacked sections don't scale past a few sheets). */}
+      <div className="flex items-center gap-1 flex-wrap" role="tablist" data-testid="office-excel-tabs">
+        {data.sheets.map((s, i) => (
+          <button
+            key={s.name}
+            type="button"
+            role="tab"
+            aria-selected={i === activeSheet}
+            onClick={() => setActiveSheet(i)}
+            className={[
+              'px-2.5 py-1 rounded text-xs border transition-colors',
+              i === activeSheet
+                ? 'border-primary bg-primary/10 text-primary font-medium'
+                : 'border-border text-text-secondary hover:bg-bg-hover',
+            ].join(' ')}
+          >
+            {s.name}
+          </button>
+        ))}
+      </div>
+      <div>
+        <h3 className="text-sm font-semibold text-text mb-2">
+          {sheet.name}{' '}
+          <span className="text-xs font-normal text-muted">
+            ({sheet.max_row} {t('office.preview.rowUnit')} × {sheet.max_col}{' '}
+            {t('office.preview.colUnit')})
+          </span>
+        </h3>
+        <ExcelSheetTable sheet={sheet} />
+      </div>
     </div>
   );
 }

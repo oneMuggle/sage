@@ -1,206 +1,202 @@
-import { describe, it, expect } from 'vitest';
+/**
+ * 2026-08-26 (OWASP A02:2021): 单测 restoreRedactedApiKeys 纯函数.
+ *
+ * 这是 storage.loadSettings 里 "脱敏 GET 不能覆盖本地 key" 的核心防护.
+ * 验证以下契约:
+ *   - 远程 {apiKey:'', hasApiKey:true} + 本地有非空 key → 按 id 匹配恢复本地值
+ *   - 远程 {apiKey:'', hasApiKey:false} → 不还原 (用户从未设置)
+ *   - 远程 {apiKey:''} (无 hasApiKey 字段, 历史响应) → 不还原 (避免覆盖)
+ *   - 远程 apiKey 非空 (后端未脱敏) → 原样返回
+ *   - id 不匹配 → 不还原
+ *   - local 没有该 endpoint → 不凭空捏造
+ *   - 顺序错位 (local 与 remote endpoint 数组顺序不同) → 按 id 匹配而非按 index
+ *   - 入参非对象 → 原样返回 (防御性)
+ */
+import { describe, expect, it } from 'vitest';
 
 import { restoreRedactedApiKeys } from '../storage';
-import type { AppSettings } from '../types';
-import { DEFAULT_SETTINGS } from '../types';
+import { DEFAULT_SETTINGS, type AppSettings } from '../types';
 
-/**
- * alpha.8 (2026-08-27): regression for the
- * "[[sage-settings-redaction-key-preservation]] + [[sage-settings-redaction-idempotency-fix]]"
- * contract on the frontend.
- *
- * Backend GET /settings now returns redacted apiKey (empty string) + a
- * ``hasApiKey: bool`` boolean. The frontend must NOT trust the empty
- * ``apiKey`` from the backend — it must restore the real local key from
- * localStorage when ``hasApiKey === true``.
- *
- * ``restoreRedactedApiKeys`` is the pure-function part of that contract.
- * ``loadSettings`` calls it after ``deepMerge(local, remote, 'remote-wins')``
- * to fix-up the endpoints[*].apiKey fields.
- */
+function ep(id: string, apiKey: string, extra: Partial<AppSettings['endpoints'][number]> = {}) {
+  return {
+    id,
+    name: id,
+    baseUrl: 'http://localhost',
+    apiKey,
+    protocol: 'openai-compatible' as const,
+    modelId: '',
+    localModelPath: '',
+    discoveredModels: [],
+    lastDiscoveredAt: null,
+    ...extra,
+  };
+}
 
-const fullEndpoint = (overrides: Partial<AppSettings['endpoints'][number]> = {}) => ({
-  id: 'e1',
-  name: 'LM Studio',
-  baseUrl: 'http://127.0.0.1:1234/v1',
-  apiKey: '',
-  protocol: 'openai-compatible' as const,
-  modelId: '',
-  localModelPath: '',
-  discoveredModels: [],
-  lastDiscoveredAt: 0,
-  ...overrides,
-});
-
-describe('restoreRedactedApiKeys', () => {
-  it('remote hasApiKey=true + local 有非空 key → 恢复本地 key', () => {
-    const remote: AppSettings = {
+describe('restoreRedactedApiKeys (2026-08-26)', () => {
+  it('local 有真实 key + remote 脱敏 (hasApiKey=true) → 按 id 恢复本地值', () => {
+    const local: Partial<AppSettings> = {
       ...DEFAULT_SETTINGS,
-      endpoints: [fullEndpoint({ id: 'e1', apiKey: '', hasApiKey: true })],
+      endpoints: [ep('e1', 'sk-LOCAL-REAL')],
     };
-    const local: AppSettings = {
+    const remote: Partial<AppSettings> = {
       ...DEFAULT_SETTINGS,
-      endpoints: [fullEndpoint({ id: 'e1', apiKey: 'sk-local-secret' })],
+      endpoints: [{ ...ep('e1', ''), hasApiKey: true }],
     };
-    const restored = restoreRedactedApiKeys(remote, local);
-    expect(restored.endpoints[0].apiKey).toBe('sk-local-secret');
-    expect(restored.endpoints[0].hasApiKey).toBe(true);
+    const result = restoreRedactedApiKeys(remote, local);
+    expect(result.endpoints?.[0].apiKey).toBe('sk-LOCAL-REAL');
+    // hasApiKey 保留 — 让下游 deepMerge 不再覆盖这个 endpoint 的其它字段
+    expect(result.endpoints?.[0].hasApiKey).toBe(true);
   });
 
-  it('remote hasApiKey=false → 不恢复, apiKey 保持空 (用户主动清空信号)', () => {
-    const remote: AppSettings = {
+  it('remote hasApiKey=false → 用户从未设置 key, 不还原', () => {
+    // 防止从 local 兜底凭空捏造 key: local 有真实 key, 但 remote 显式说
+    // hasApiKey=false, 说明用户主动清空. 我们尊重 remote 的真相.
+    const local: Partial<AppSettings> = {
       ...DEFAULT_SETTINGS,
-      endpoints: [fullEndpoint({ id: 'e1', apiKey: '', hasApiKey: false })],
+      endpoints: [ep('e1', 'sk-LOCAL-REAL')],
     };
-    const local: AppSettings = {
+    const remote: Partial<AppSettings> = {
       ...DEFAULT_SETTINGS,
-      endpoints: [fullEndpoint({ id: 'e1', apiKey: 'sk-old-key' })],
+      endpoints: [{ ...ep('e1', ''), hasApiKey: false }],
     };
-    const restored = restoreRedactedApiKeys(remote, local);
-    // 用户在 UI 上清空 key 后存盘 → remote.hasApiKey=false → 哪怕 local
-    // 缓存里有旧 key, 也绝不能用旧值覆盖回去 (会复活用户已经删除的凭据).
-    expect(restored.endpoints[0].apiKey).toBe('');
-    expect(restored.endpoints[0].hasApiKey).toBe(false);
+    const result = restoreRedactedApiKeys(remote, local);
+    expect(result.endpoints?.[0].apiKey).toBe('');
+    expect(result.endpoints?.[0].hasApiKey).toBe(false);
   });
 
-  it('remote 缺 hasApiKey 字段 → 视为 False, 不恢复 (legacy 兼容)', () => {
-    // alpha.7 schema 没有 hasApiKey 字段; 用 unknown 双断言模拟老格式.
-    // 直接传 AppSettings['endpoints'][number] 会被 TS 拒 (hasApiKey 是 optional).
-    const legacyEndpoint = {
-      id: 'e1',
-      name: 'LM Studio',
-      baseUrl: 'http://127.0.0.1:1234/v1',
-      apiKey: '',
-      protocol: 'openai-compatible',
-      modelId: '',
-      localModelPath: '',
-      discoveredModels: [],
-      lastDiscoveredAt: 0,
-    } as unknown as AppSettings['endpoints'][number];
-    const remote: AppSettings = {
+  it('remote 没 hasApiKey 字段 (历史响应) → 不动 apiKey, 避免覆盖真实值', () => {
+    // 旧后端没有 redact_secrets, apiKey 是真实值或空. 这里 apiKey='' 可能是
+    // 真实空, 也可能是历史污染. 我们无法区分, 选择不动.
+    const local: Partial<AppSettings> = {
       ...DEFAULT_SETTINGS,
-      endpoints: [legacyEndpoint],
+      endpoints: [ep('e1', 'sk-LOCAL-REAL')],
     };
-    const local: AppSettings = {
+    const remote: Partial<AppSettings> = {
       ...DEFAULT_SETTINGS,
-      endpoints: [fullEndpoint({ id: 'e1', apiKey: 'sk-legacy' })],
+      endpoints: [ep('e1', '')], // no hasApiKey
     };
-    const restored = restoreRedactedApiKeys(remote, local);
-    expect(restored.endpoints[0].apiKey).toBe('');
+    const result = restoreRedactedApiKeys(remote, local);
+    expect(result.endpoints?.[0].apiKey).toBe('');
   });
 
-  it('local 为 null → 返回 remote 原样 (首次启动 / 缓存为空)', () => {
-    const remote: AppSettings = {
+  it('remote apiKey 非空 (后端未脱敏) → 原样保留, 不覆盖', () => {
+    // 后端万一没脱敏 (e.g. 调试场景) → apiKey 是真值, 不该被 local 覆盖.
+    const local: Partial<AppSettings> = {
       ...DEFAULT_SETTINGS,
-      endpoints: [fullEndpoint({ id: 'e1', apiKey: '', hasApiKey: true })],
+      endpoints: [ep('e1', 'sk-LOCAL-OLD')],
     };
-    const restored = restoreRedactedApiKeys(remote, null);
-    expect(restored.endpoints[0].apiKey).toBe('');
-    expect(restored.endpoints[0].hasApiKey).toBe(true);
+    const remote: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [{ ...ep('e1', 'sk-REMOTE-NEW'), hasApiKey: true }],
+    };
+    const result = restoreRedactedApiKeys(remote, local);
+    expect(result.endpoints?.[0].apiKey).toBe('sk-REMOTE-NEW');
   });
 
-  it('local 有 endpoint, remote 没有 (用户删除端点) → remote 不变', () => {
-    const remote: AppSettings = {
+  it('id 不匹配 → 不还原, 走 deepMerge 字段比较 (remote-wins → 空)', () => {
+    const local: Partial<AppSettings> = {
       ...DEFAULT_SETTINGS,
-      endpoints: [fullEndpoint({ id: 'e1', apiKey: '', hasApiKey: true })],
+      endpoints: [ep('local-only', 'sk-LOCAL-REAL')],
     };
-    const local: AppSettings = {
+    const remote: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [{ ...ep('remote-only', ''), hasApiKey: true }],
+    };
+    const result = restoreRedactedApiKeys(remote, local);
+    expect(result.endpoints?.[0].apiKey).toBe('');
+    expect(result.endpoints?.[0].id).toBe('remote-only');
+  });
+
+  it('local 无对应 id → 不凭空捏造 key', () => {
+    const local: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [],
+    };
+    const remote: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [{ ...ep('e1', ''), hasApiKey: true }],
+    };
+    const result = restoreRedactedApiKeys(remote, local);
+    expect(result.endpoints?.[0].apiKey).toBe('');
+  });
+
+  it('顺序错位 → 按 id 而非 index 匹配', () => {
+    // local: [e1, e2]  remote: [e2, e1]  — 还原必须按 id, 不是按数组 index.
+    const local: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [ep('e1', 'sk-LOCAL-1'), ep('e2', 'sk-LOCAL-2')],
+    };
+    const remote: Partial<AppSettings> = {
       ...DEFAULT_SETTINGS,
       endpoints: [
-        fullEndpoint({ id: 'e1', apiKey: 'sk-1' }),
-        fullEndpoint({ id: 'e2', apiKey: 'sk-2' }),
+        { ...ep('e2', ''), hasApiKey: true },
+        { ...ep('e1', ''), hasApiKey: true },
       ],
     };
-    const restored = restoreRedactedApiKeys(remote, local);
-    expect(restored.endpoints).toHaveLength(1);
-    expect(restored.endpoints[0].id).toBe('e1');
-    expect(restored.endpoints[0].apiKey).toBe('sk-1');
+    const result = restoreRedactedApiKeys(remote, local);
+    expect(result.endpoints?.[0].apiKey).toBe('sk-LOCAL-2');
+    expect(result.endpoints?.[1].apiKey).toBe('sk-LOCAL-1');
   });
 
-  it('remote 有 endpoint, local 没有 (新端点) → 不恢复, apiKey 保持空', () => {
-    const remote: AppSettings = {
+  it('local.apiKey 为空 + remote 脱敏 → 保持空 (用户清空过, 不能从无到有)', () => {
+    const local: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [ep('e1', '')],
+    };
+    const remote: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [{ ...ep('e1', ''), hasApiKey: true }],
+    };
+    const result = restoreRedactedApiKeys(remote, local);
+    expect(result.endpoints?.[0].apiKey).toBe('');
+  });
+
+  it('remote 非对象 → 原样返回 (防御性)', () => {
+    expect(restoreRedactedApiKeys(null as unknown as AppSettings, {})).toBeNull();
+    const empty = {} as AppSettings;
+    expect(restoreRedactedApiKeys(empty, {})).toBe(empty);
+  });
+
+  it('remote.endpoints 不是数组 → 原样返回', () => {
+    const remote = {
+      ...DEFAULT_SETTINGS,
+      endpoints: 'oops' as unknown as AppSettings['endpoints'],
+    };
+    expect(restoreRedactedApiKeys(remote, {})).toBe(remote);
+  });
+
+  it('混合: 多 endpoint 列表, 部分脱敏部分未脱敏', () => {
+    const local: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [ep('e1', 'sk-LOCAL-1'), ep('e2', 'sk-LOCAL-2'), ep('e3', '')],
+    };
+    const remote: Partial<AppSettings> = {
       ...DEFAULT_SETTINGS,
       endpoints: [
-        fullEndpoint({ id: 'e1', apiKey: '', hasApiKey: true }),
-        fullEndpoint({ id: 'e2', apiKey: '', hasApiKey: true }),
+        { ...ep('e1', ''), hasApiKey: true }, // 脱敏
+        { ...ep('e2', 'sk-REMOTE-2'), hasApiKey: true }, // 未脱敏 (unusual)
+        { ...ep('e3', ''), hasApiKey: false }, // 用户清空
       ],
     };
-    const local: AppSettings = {
-      ...DEFAULT_SETTINGS,
-      endpoints: [fullEndpoint({ id: 'e1', apiKey: 'sk-1' })],
-    };
-    const restored = restoreRedactedApiKeys(remote, local);
-    expect(restored.endpoints).toHaveLength(2);
-    expect(restored.endpoints[0].apiKey).toBe('sk-1');
-    expect(restored.endpoints[1].apiKey).toBe('');
+    const result = restoreRedactedApiKeys(remote, local);
+    expect(result.endpoints?.[0].apiKey).toBe('sk-LOCAL-1');
+    expect(result.endpoints?.[1].apiKey).toBe('sk-REMOTE-2');
+    expect(result.endpoints?.[2].apiKey).toBe('');
   });
 
-  it('endpoint 顺序按 remote 排列, 与 local 不同也无影响', () => {
-    const remote: AppSettings = {
+  it('不修改入参 — 纯函数契约', () => {
+    const local: Partial<AppSettings> = {
       ...DEFAULT_SETTINGS,
-      endpoints: [
-        fullEndpoint({ id: 'e1', apiKey: '', hasApiKey: true }),
-        fullEndpoint({ id: 'e2', apiKey: '', hasApiKey: true }),
-      ],
+      endpoints: [ep('e1', 'sk-LOCAL-REAL')],
     };
-    const local: AppSettings = {
+    const remote: Partial<AppSettings> = {
       ...DEFAULT_SETTINGS,
-      // local 顺序相反
-      endpoints: [
-        fullEndpoint({ id: 'e2', apiKey: 'sk-2' }),
-        fullEndpoint({ id: 'e1', apiKey: 'sk-1' }),
-      ],
+      endpoints: [{ ...ep('e1', ''), hasApiKey: true }],
     };
-    const restored = restoreRedactedApiKeys(remote, local);
-    expect(restored.endpoints[0].id).toBe('e1');
-    expect(restored.endpoints[0].apiKey).toBe('sk-1');
-    expect(restored.endpoints[1].id).toBe('e2');
-    expect(restored.endpoints[1].apiKey).toBe('sk-2');
-  });
-
-  it('local endpoint apiKey 是空串 → 不恢复 (本地也没 key)', () => {
-    const remote: AppSettings = {
-      ...DEFAULT_SETTINGS,
-      endpoints: [fullEndpoint({ id: 'e1', apiKey: '', hasApiKey: true })],
-    };
-    const local: AppSettings = {
-      ...DEFAULT_SETTINGS,
-      endpoints: [fullEndpoint({ id: 'e1', apiKey: '' })],
-    };
-    const restored = restoreRedactedApiKeys(remote, local);
-    expect(restored.endpoints[0].apiKey).toBe('');
-  });
-
-  it('不修改入参 remote / local 的 endpoints 数组与字段', () => {
-    const remoteSnapshot = fullEndpoint({ id: 'e1', apiKey: '', hasApiKey: true });
-    const localSnapshot = fullEndpoint({ id: 'e1', apiKey: 'sk-local' });
-    const remote: AppSettings = {
-      ...DEFAULT_SETTINGS,
-      endpoints: [remoteSnapshot],
-    };
-    const local: AppSettings = {
-      ...DEFAULT_SETTINGS,
-      endpoints: [localSnapshot],
-    };
-
+    const beforeRemote = JSON.parse(JSON.stringify(remote));
+    const beforeLocal = JSON.parse(JSON.stringify(local));
     restoreRedactedApiKeys(remote, local);
-
-    // 入参未被 mutate
-    expect(remote.endpoints[0].apiKey).toBe('');
-    expect(remote.endpoints[0].hasApiKey).toBe(true);
-    expect(local.endpoints[0].apiKey).toBe('sk-local');
-  });
-
-  it('endpoints 为空数组 → 直接返回 remote 原样', () => {
-    const remote: AppSettings = {
-      ...DEFAULT_SETTINGS,
-      endpoints: [],
-    };
-    const local: AppSettings = {
-      ...DEFAULT_SETTINGS,
-      endpoints: [],
-    };
-    const restored = restoreRedactedApiKeys(remote, local);
-    expect(restored.endpoints).toEqual([]);
+    expect(remote).toEqual(beforeRemote);
+    expect(local).toEqual(beforeLocal);
   });
 });

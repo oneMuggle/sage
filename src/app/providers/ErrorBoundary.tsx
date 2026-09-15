@@ -43,6 +43,17 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       if (this.props.fallback) {
         return this.props.fallback(error, this.reset);
       }
+      // DIAGNOSTIC: dump all available error metadata so we can see the
+      // real cause when the bundled chunk throws a bare `new Error()` with
+      // an empty message (which is what's happening in v0.4.5-alpha.15).
+      const debug = {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        constructor: error.constructor.name,
+        keys: Object.keys(error),
+        stringified: String(error),
+      };
       return (
         <div
           role="alert"
@@ -52,9 +63,28 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <p className="text-muted mb-4 text-sm max-w-md text-center">
             {error.message || '未知错误'}
           </p>
+          {/* DIAGNOSTIC: show raw error JSON so we can see real cause */}
+          <pre
+            data-testid="sage-error-dump"
+            style={{
+              background: '#1a1a1a',
+              color: '#ff6b6b',
+              padding: '12px',
+              fontFamily: 'monospace',
+              fontSize: 11,
+              maxWidth: 900,
+              maxHeight: 240,
+              overflow: 'auto',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              textAlign: 'left',
+            }}
+          >
+            {JSON.stringify(debug, null, 2)}
+          </pre>
           <button
             onClick={this.reset}
-            className="px-4 py-2 bg-primary text-text-inverse rounded-radius-sm text-sm hover:bg-primary-hover"
+            className="mt-4 px-4 py-2 bg-primary text-text-inverse rounded-radius-sm text-sm hover:bg-primary-hover"
           >
             重试
           </button>

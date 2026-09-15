@@ -39,7 +39,6 @@ from .models import (
 from .review import ReviewItem, ReviewResult, ReviewType, WikiReview
 from .search import search_wiki
 from .vectorstore import VectorStore
-from .vectorstore_hnsw import HNSWVectorStore
 from .vision import (
     ImageCaption,
     VisionConfig,
@@ -50,6 +49,19 @@ from .vision import (
 )
 from .vision_ingest import VisionIngestConfig, ingest_with_vision
 from .web_search import SearchProvider, WebSearchResult, multi_query_search
+
+# HNSWVectorStore is optional: hnswlib ships source-only on Windows (no cp311
+# win_amd64 wheel), so the bundled-Python path cannot include it. Lazy-import
+# here so `import backend.wiki` succeeds in any environment; end-users who
+# actually want HNSW must install hnswlib separately (e.g. via conda).
+# See backend/requirements-bundled.txt for the bundled dep set.
+try:
+    from .vectorstore_hnsw import HNSWVectorStore
+
+    _HNSW_AVAILABLE = True
+except ImportError:
+    HNSWVectorStore = None  # type: ignore
+    _HNSW_AVAILABLE = False
 
 # MCP Server 是可选的（需要额外安装 mcp 包）
 try:

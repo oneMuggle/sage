@@ -13,7 +13,13 @@ from backend.orchestration.worktree import (
     remove_worktree,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(
+        os.name == "nt",
+        reason="git 子进程 Windows 调用语义差异，另行批次定性",
+    ),
+]
 
 
 def _init_repo(path: Path) -> None:

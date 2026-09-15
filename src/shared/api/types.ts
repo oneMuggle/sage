@@ -38,6 +38,23 @@ export interface SessionCompactResult {
   removed: number;
 }
 
+/** R17-A2: GET /sessions/{id}/lineage 归档条目（压缩前缀派生的归档会话） */
+export interface LineageArchive {
+  archive_session_id: string;
+  title: string;
+  message_count: number;
+  /** epoch ms；后端缺省时为 null */
+  archived_at: number | string | null;
+  /** 归档原因：compaction_prefix 等 */
+  reason?: string | null;
+}
+
+/** R17-A2: GET /sessions/{id}/lineage 响应（archives 新→旧） */
+export interface SessionLineage {
+  session_id: string;
+  archives: LineageArchive[];
+}
+
 /** U18: POST /sessions/{id}/export 响应（JSON 信封，html 为自包含文档文本） */
 export interface SessionExportResult {
   /** 自包含导出 HTML 全文（内联 CSS/JS/marked/highlight.js，离线可开） */
@@ -129,7 +146,7 @@ export type AgentState =
   | 'thinking'
   | 'reasoning' // 新增：携带 LLM 思考/推理过程内容
   | 'reasoning_delta' // 新增：reasoning 增量事件（流式输出）
-  | 'reasoning_final' // 2026-09-02 (win7 cherry-pick): 后端 reasoning 流末尾发的全量事件,前端必须 replace 而非 append
+  | 'reasoning_final' // 2026-09-02: reasoning 流末尾发的全量对齐事件,前端 replace
   | 'acting'
   | 'permission_request' // M1: 工具审批卡点 — 等待用户批准/拒绝
   | 'ask_user_question' // M2 part B: AskUserQuestion 卡点 — 等待用户选择/填写
@@ -149,13 +166,16 @@ export type AgentState =
   | 'task_review'
   // P1 todo 接线 (2026-08-21): agent 任务清单全量快照,与 llmStream.ts 双处一致。
   | 'todo_snapshot'
-  // S7 (2026-09-06): 工具落库产物后经活跃流推送的事件,载荷见 AgentEvent.artifact。
-  | 'artifact_created'
   // live-events P0 (2026-09-06): 子代理内部事件投影镜像(工具调用/结果/
   // 审批/提问/失败),见 SubagentLiveState。不进消息气泡,进任务板 live 态。
   | 'subagent_event'
   // live-events P1 (2026-09-06): run 级子代理审批模式切换回显(ask|auto)。
-  | 'approval_mode';
+  | 'approval_mode'
+  // S7 (2026-09-06): 工具落库产物后经活跃流推送的事件,载荷见 AgentEvent.artifact。
+  | 'artifact_created'
+  // R17-E: 记忆召回展示 —— L13 注入记忆上下文后推送本次命中条目,
+  // 载荷见 AgentEvent.memories。
+  | 'memory_used';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -408,15 +428,6 @@ export interface AgentEvent {
   // P1 todo 接线: todo_snapshot 全量快照字段,与 llmStream.ts 双处一致。
   todos?: TodoItem[];
   session_id?: string;
-  // S7 (2026-09-06): artifact_created 事件载荷（工具线程落库后经活跃流推送）。
-  artifact?: {
-    id: string;
-    path: string;
-    name: string;
-    kind: string;
-    size: number;
-    created_at: number;
-  };
   // live-events P0 (2026-09-06): subagent_event 镜像字段(收敛类型见
   // SubagentLiveEvent,这里保持宽松 AgentEvent 可直接 cast)。
   phase?: SubagentEventPhase;
@@ -430,6 +441,17 @@ export interface AgentEvent {
   ts?: number;
   // live-events P1: approval_mode 切换回显字段。
   mode?: 'ask' | 'auto';
+  // S7 (2026-09-06): artifact_created 事件载荷（工具线程落库后经活跃流推送）。
+  artifact?: {
+    id: string;
+    path: string;
+    name: string;
+    kind: string;
+    size: number;
+    created_at: number;
+  };
+  // R17-E: memory_used 事件载荷（L13 记忆注入命中条目,气泡内可展开）。
+  memories?: { id: string; memory_type: string; preview: string }[];
 }
 
 // ==================== 错误类型定义 ====================
@@ -585,6 +607,15 @@ export interface MemorySummariesListResponse {
   offset?: number;
 }
 
+/** R17-B: 记忆固化（evolution/memory_consolidation）任务统计 */
+export interface MemoryConsolidationResult {
+  /** 晋升为语义记忆的条数 */
+  promoted: number;
+  /** 衰减 importance 的条数 */
+  decayed: number;
+  total: number;
+}
+
 // ==================== Knowledge 类型定义 ====================
 
 export interface KnowledgeDoc {
@@ -640,6 +671,30 @@ export interface Skill {
   dispatch?: SkillDispatch;
   // 生命周期态（curator）— active=近期在用 / stale=冷（含从未用）/ archived=用户归档
   lifecycle?: 'active' | 'stale' | 'archived';
+  // Round 17 管理面：钉住态（pin 后不可归档、巡检不给出 archive 建议）。
+  // 旧后端列表不透出该字段 — optional 向后兼容。
+  pinned?: boolean;
+}
+
+/** 巡检建议条目 — GET /skills/consolidation/suggestions（Round 17 管理面）。 */
+export interface ConsolidationSuggestion {
+  skill_names: string[];
+  suggestion: Record<string, unknown>;
+  created_at: number;
+}
+
+/** 固化巡检结果 — POST /skills/consolidation/scan。 */
+export interface ConsolidationScanResult {
+  suggestions: ConsolidationSuggestion[];
+  scanned: number;
+  drafts_created: number;
+}
+
+/** 巡检建议采纳结果 — POST /skills/consolidation/accept。 */
+export interface ConsolidationAcceptResult {
+  archived: string[];
+  skipped_pinned: string[];
+  missing: string[];
 }
 
 export interface SkillExecuteRequest {
@@ -812,7 +867,14 @@ export interface UpdateTaskInput {
 // ============================================================================
 
 export type LaneStatus =
-  'created' | 'ready' | 'running' | 'blocked' | 'succeeded' | 'failed' | 'stopped' | 'cancelled';
+  | 'created'
+  | 'ready'
+  | 'running'
+  | 'blocked'
+  | 'succeeded'
+  | 'failed'
+  | 'stopped'
+  | 'cancelled';
 
 export type HeartbeatStatus = 'healthy' | 'stalled' | 'transport_dead';
 
@@ -1027,7 +1089,17 @@ export interface OfficeDocumentSummary {
   created_at: number;
   updated_at: number;
   metadata: OfficeDocumentMetadata;
+  /**
+   * Source document id when this row was produced by an edit/copy/derive
+   * operation; null for fresh reads and from-scratch generations.
+   * Backend field: backend/office/models.py:93-99.
+   */
   derived_from: string | null;
+  /**
+   * Unix timestamp (ms) when the row was soft-deleted via archive.
+   * Non-null rows are hidden from `list_documents(include_archived=False)`.
+   * Backend field: backend/office/models.py:100-106.
+   */
   archived_at: number | null;
 }
 
@@ -1055,11 +1127,24 @@ export interface OfficeWordTableContent {
   rows: string[][];
 }
 
+export interface WordHeaderFooterContent {
+  // Round 15：read_docx 页眉/页脚提取（section 为 1-based 节号）。
+  // Backend counterpart: WordHeaderFooterContent in backend/office/models.py。
+  section: number;
+  header_text: string;
+  footer_text: string;
+  has_page_number_field: boolean;
+}
+
 export interface OfficeWordReadResult {
   summary: OfficeDocumentSummary;
   paragraphs: OfficeWordParagraphContent[];
   tables: OfficeWordTableContent[];
   images: number;
+  comments?: unknown[];
+  // Round 15：每节页眉/页脚与目录域 instr 列表
+  headers_footers?: WordHeaderFooterContent[];
+  toc_fields?: string[];
 }
 
 export interface OfficeExcelSheetContent {
@@ -1067,6 +1152,15 @@ export interface OfficeExcelSheetContent {
   rows: string[][];
   max_row: number;
   max_col: number;
+  /**
+   * 公式视图 (item 1.4, additive): filled only when the read ran with
+   * include_formulas=true — entries like 'B4=SUM(B2:B3)' (with a cached
+   * value: 'B4=SUM(B2:B3) → 30'). null/absent = no formula view.
+   * Backend field: backend/office/models.py:176-182.
+   */
+  formulas?: string[] | null;
+  /** One-line hint shown when formulas lack cached values. */
+  note?: string | null;
 }
 
 export interface OfficeExcelReadResult {
@@ -1117,6 +1211,8 @@ export interface PdfPageSpec {
 export type PdfPageSize = 'A4' | 'Letter' | 'Legal';
 
 export interface OfficePdfGenerateRequest {
+  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
+  task_id?: string;
   workspace_path: string;
   filename: string;
   pages: PdfPageSpec[];
@@ -1137,6 +1233,12 @@ export interface OfficeReadRequest {
   workspace_path: string;
   file_path: string;
   max_size_bytes?: number;
+  /**
+   * User-visible filename of the dropped/picked file. Optional on backend
+   * (backend/office/models.py:189-209); included so the storage layer can
+   * echo `original_filename` into the resulting OfficeDocumentSummary.
+   */
+  original_filename?: string;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1152,31 +1254,23 @@ export interface PptSlideSpec {
 }
 
 export interface OfficePptGenerateRequest {
+  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
+  task_id?: string;
   workspace_path: string;
   filename: string;
   slides: PptSlideSpec[];
 }
 
 export interface WordParagraphSpec {
-  heading?: 'h1' | 'h2' | 'h3';
+  // Round 20：heading 扩展到 h4/h5
+  heading?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5';
   style?: 'bullet' | 'numbered';
   text: string;
+  // Round 9：文中引用（references 条目 key；段落尾部上标 [N]，首现编号）
+  citations?: string[];
 }
 
-export interface WordTableSpec {
-  headers: string[];
-  rows: string[][];
-}
-
-// win7 移植注：WordFormatSpec 系列属 main 预存类型（Round 7/9/13），
-// 本分支原无；A4b 交付抽屉（format_spec/lint）依赖，原文移植。
-export interface BibliographySpec {
-  heading_text?: string;
-  font_size_pt?: number;
-  hanging_indent_cm?: number;
-}
-
-// Word 版式规范（Round 7 FormatSpec —— “版式即配置”）。
+// Word 版式规范（Round 7 FormatSpec —— "版式即配置"）。
 // Backend counterpart: WordFormatSpec 系列模型 in backend/office/models.py。
 // 全字段可选，不传时生成器保持既有默认版式。
 export interface WordPageMarginsSpec {
@@ -1241,6 +1335,108 @@ export interface WordFormatSpec {
   toc?: WordTocSpec;
 }
 
+// Word 插图（Round 8）：支持行内放置与题注自动编号。
+// Backend counterpart: WordImageSpec in backend/office/models.py。
+export interface WordImageSpec {
+  source: string;
+  width_inches?: number;
+  height_inches?: number;
+  caption?: string;
+  after_paragraph?: number;
+}
+
+// 结构化参考文献（Round 9 引用体系）。
+// Backend counterpart: ReferenceSpec in backend/office/models.py。
+export type ReferenceType =
+  | 'journal'
+  | 'book'
+  | 'thesis'
+  | 'conference'
+  | 'report'
+  | 'webpage'
+  | 'patent'
+  | 'standard'
+  | 'newspaper';
+
+export interface ReferenceSpec {
+  key: string;
+  ref_type?: ReferenceType;
+  title: string;
+  authors?: string[];
+  year?: string;
+  source?: string;
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  publisher?: string;
+  address?: string;
+  url?: string;
+  doi?: string;
+  access_date?: string;
+  language?: 'zh' | 'en';
+}
+
+export interface BibliographySpec {
+  heading_text?: string;
+  font_size_pt?: number;
+  hanging_indent_cm?: number;
+}
+
+export interface WordCellMergeSpec {
+  min_row: number;
+  max_row: number;
+  min_col: number;
+  max_col: number;
+}
+
+export interface WordTableSpec {
+  headers: string[];
+  rows: string[][];
+  caption?: string;
+  style?: 'grid' | 'three_line';
+  header_repeat?: boolean;
+  column_widths_cm?: number[];
+  merges?: WordCellMergeSpec[];
+}
+
+// Word 格式 Linter（Round 10）：对照 FormatSpec 校验 docx。
+// Backend counterpart: WordLintIssue / WordLintResult / WordLintRequest
+// in backend/office/models.py。
+export interface WordLintIssue {
+  rule_id: string;
+  severity: 'error' | 'warning';
+  message: string;
+  fix_hint?: string;
+}
+
+export interface WordLintResult {
+  ok: boolean;
+  issue_count: number;
+  error_count: number;
+  warning_count: number;
+  checked_rules: string[];
+  issues: WordLintIssue[];
+}
+
+// Word 格式自动修复（Round 12）：lint → repair → 复检闭环。
+// Backend counterpart: WordRepairResult / WordRepairRequest
+// in backend/office/models.py。
+export interface WordRepairResult {
+  ok: boolean;
+  repaired_rules: string[];
+  output_path: string;
+  overwrite: boolean;
+  remaining: WordLintResult;
+}
+
+export interface WordRepairRequest {
+  workspace_path: string;
+  file_path: string;
+  format_spec: WordFormatSpec;
+  overwrite?: boolean;
+  max_size_bytes?: number;
+}
+
 /**
  * A4b: Word lint (Round 10 linter) — backend counterpart:
  * backend/office/models.py WordLintIssue / WordLintResult / WordLintRequest.
@@ -1270,22 +1466,86 @@ export interface OfficeWordLintRequest {
 }
 
 export interface OfficeWordGenerateRequest {
+  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
+  task_id?: string;
   workspace_path: string;
   filename: string;
   title: string;
   paragraphs?: WordParagraphSpec[];
   tables?: WordTableSpec[];
+  images?: WordImageSpec[];
   font_family?: string;
   ascii_font?: string;
+  format_spec?: WordFormatSpec;
+  // Round 9 引用体系：结构化文献 + 引用样式
+  references?: ReferenceSpec[];
+  citation_style?: 'gbt7714' | 'apa';
 }
 
 export interface ExcelSheetSpec {
   name: string;
   headers?: string[];
   rows?: string[][];
+  column_widths?: number[];
+  // Round 14：表头样式 / 冻结首行 / 自适应列宽 / 按列名数字格式
+  header_style?: boolean;
+  freeze_header?: boolean;
+  autofit_columns?: boolean;
+  number_formats?: Record<string, string>;
+  // Round 17：条件格式（数据条/色阶/重复值高亮）
+  conditional_formats?: ExcelConditionalFormatSpec[];
+  // Round 18：下拉数据验证（状态/分类列防手输错值）
+  data_validations?: ExcelDataValidationSpec[];
+  // Round 23：打印设置（方向/缩放/打印区域）
+  print_setup?: ExcelPrintSetupSpec;
+}
+
+export interface ExcelPrintSetupSpec {
+  orientation?: 'portrait' | 'landscape';
+  fit_to_width?: number;
+  print_area?: string;
+  // Round 28：每页重复的标题行，如 '1:1'（长表打印每页带表头）
+  title_rows?: string;
+  // Round 31：打印页边距（厘米）
+  margins_cm?: {
+    top?: number;
+    bottom?: number;
+    left?: number;
+    right?: number;
+  };
+}
+
+export interface ExcelDataValidationSpec {
+  range: string;
+  options: string[];
+  allow_blank?: boolean;
+  prompt_title?: string;
+  prompt?: string;
+}
+
+export interface ExcelConditionalFormatSpec {
+  rule_type: 'data_bar' | 'color_scale' | 'duplicate' | 'icon_set';
+  range: string;
+  color?: string;
+  min_color?: string;
+  max_color?: string;
+  fill_color?: string;
+  // Round 19：icon_set 图标样式（默认 3Arrows）
+  icon_style?:
+    | '3Arrows'
+    | '3TrafficLights1'
+    | '3Signs'
+    | '3Symbols'
+    | '4Arrows'
+    | '4RedToBlack'
+    | '4Rating'
+    | '5Arrows'
+    | '5Rating';
 }
 
 export interface OfficeExcelGenerateRequest {
+  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
+  task_id?: string;
   workspace_path: string;
   filename: string;
   sheets: ExcelSheetSpec[];
@@ -1439,6 +1699,8 @@ export interface OfficeDocUpdateResponse {
 
 /** Request of POST /office/export-pdf. */
 export interface OfficeExportPdfRequest {
+  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
+  task_id?: string;
   workspace_path: string;
   file_path: string;
 }
@@ -1514,6 +1776,8 @@ export interface OfficeTemplateListResponse {
  * mcp_server_add's env map).
  */
 export interface OfficeTemplateInstantiateRequest {
+  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
+  task_id?: string;
   workspace_path: string;
   template_id?: string;
   workspace_template?: string;
@@ -1635,6 +1899,9 @@ export interface JournalFillFromContentRequest {
     sections: JournalContentSection;
     references: string[];
     citations?: string[];
+    // Round 21：结构化文献（fill 时用引用引擎格式化，优先于 references）
+    structured_references?: ReferenceSpec[];
+    citation_style?: 'gbt7714' | 'apa';
   };
   output_filename: string;
 }

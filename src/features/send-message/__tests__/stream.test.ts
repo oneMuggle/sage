@@ -82,6 +82,10 @@ describe('chatApi.chatStream (PR-6)', () => {
       // PM1 (round8): 计划模式, 缺省 null
       plan_mode: null,
       memory_mode: 'on',
+      // R23-D2: 聊天图片输入, 缺省空数组
+      images: [],
+      // R37: 文本文档附件 id, 缺省空数组
+      attachment_media_ids: [],
     });
     // 2) listen 订阅 chat-stream-{id} (从 {streamId} 对象解构得到)
     expect(listenMock).toHaveBeenCalledWith(`chat-stream-${streamId}`, expect.any(Function));

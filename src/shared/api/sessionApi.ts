@@ -3,7 +3,13 @@
  */
 
 import { invoke } from './desktopInvoke';
-import type { Message, Session, SessionCompactResult, SessionExportResult } from './types';
+import type {
+  Message,
+  Session,
+  SessionCompactResult,
+  SessionExportResult,
+  SessionLineage,
+} from './types';
 import { ApiException, handleApiError, isValidSessionId, withRetry } from './utils';
 
 export const sessionApi = {
@@ -108,6 +114,26 @@ export const sessionApi = {
   },
 
   /**
+   * R17-A2: 查询压缩谱系（压缩前缀派生的归档会话，新→旧）。
+   *
+   * 与 compact 同理**不走 withRetry**：只读查询，失败由调用方 toast 即可。
+   */
+  async getLineage(sessionId: string): Promise<SessionLineage> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    try {
+      return await invoke<SessionLineage>('session_lineage', { sessionId });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
    * U4' (对标增强第五轮批次 A): 会话重命名。
    *
    * PATCH 幂等,走 withRetry;标题原文直传（对齐 #516 数据污染修正——
@@ -124,6 +150,29 @@ export const sessionApi = {
     return withRetry(async () => {
       try {
         return await invoke<Session>('session_update', { sessionId, title });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * R18-B: 会话置顶/取消置顶。
+   *
+   * PATCH 幂等走 withRetry;后端 SessionUpdateIn.is_pinned 已支持,
+   * IPC body 增量下发（title 不动）。
+   */
+  async setPinned(sessionId: string, pinned: boolean): Promise<Session> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    return withRetry(async () => {
+      try {
+        return await invoke<Session>('session_update', { sessionId, isPinned: pinned });
       } catch (error) {
         throw handleApiError(error);
       }
@@ -183,6 +232,29 @@ export const sessionApi = {
     return withRetry(async () => {
       try {
         return await invoke<SessionExportResult>('export_session_html', { sessionId, theme });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * R18-C: 导出会话为 Markdown。
+   *
+   * 后端同一导出端点按 format=markdown 分派，返回 {markdown, filename}。
+   */
+  async exportMarkdown(sessionId: string): Promise<SessionExportResult> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    return withRetry(async () => {
+      try {
+        const res = await invoke<SessionExportResult>('export_session_markdown', { sessionId });
+        return res;
       } catch (error) {
         throw handleApiError(error);
       }
@@ -298,6 +370,19 @@ interface MessageSearchWire {
  * Electron 渲染进程里 blob: URL 下载走 session 的 will-download 流程，
  * 弹出系统保存对话框；纯浏览器环境直接进下载目录。
  */
+/** R18-C: 把导出 Markdown 文本作为文件下载（同 downloadHtmlFile 机制）。 */
+export function downloadMarkdownFile(markdown: string, filename: string): void {
+  const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 export function downloadHtmlFile(html: string, filename: string): void {
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);

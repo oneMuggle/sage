@@ -36,4 +36,8 @@ round12/13 交付了机制（background 派发、collect 收集、retry_of 重�
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A（后台工作流指令化与重派可见性） | PR #684（squash d157ff8e） | PR #688（cherry-win7-r15，squash b263c8ef） |
+
+win7 对齐说明：零冲突落位；py3.8 纪律照旧；本地 ruff 全过 + dispatcher/orch 回归 24 例绿后由 CI（含 py3.8 job）终验，squash merge（#688）。

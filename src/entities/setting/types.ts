@@ -51,10 +51,9 @@ export interface EndpointConfig {
   discoveredModels: DiscoveredModel[];
   lastDiscoveredAt: number | null;
   /**
-   * alpha.8 (2026-08-27): 端点 ``apiKey`` 脱敏元数据. 后端 GET /settings 把真实 apiKey 抹掉
-   * 只回显 ``hasApiKey``, 前端据此按 endpoint ID 从 localStorage 找回原 key.
-   * 仅后端 / settingsClient 写入; 用户手动编辑 settings JSON 时若不存在则视为 ``false``
-   * (保守不恢复旧值, 与 main 一致).
+   * 2026-08-26 (OWASP A02:2021): 后端 redact_secrets 在 GET 响应里把
+   * apiKey 置为 "" 并打这个 flag. 客户端按 id 在 localStorage 中找回真实 key.
+   * sanitizeForBackend 不在白名单里, 不会回写; 仅在 GET → loadSettings 路径消费.
    */
   hasApiKey?: boolean;
 }
@@ -134,6 +133,10 @@ export interface AppSettings {
   // Wave 3 P2-9
   orch: OrchSettings;
 
+  // 演示模式开关 (2026-08-27): 启用后 Electron main 进程跳过 Python 后端
+  // spawn, 前端可走 /demo 路由录屏. 关闭时回到正常 LLM 调用路径.
+  demoMode: boolean;
+
   // Internal
   version: string;
 }
@@ -206,6 +209,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   // Wave 3 P2-9
   orch: DEFAULT_ORCH_SETTINGS,
+
+  // 演示模式: 默认关闭. 开启后 main 进程跳过 Python 后端启动.
+  demoMode: false,
 
   // Internal
   version: SETTINGS_VERSION,
@@ -309,6 +315,7 @@ export function withDemoSettingsDefaults(s: AppSettings): AppSettings {
   const embedding = fillSelection(s.modelSelections.embeddingModel, vision.endpoints, 'bge-m3');
   return {
     ...s,
+    demoMode: true,
     endpoints: embedding.endpoints,
     modelSelections: {
       chatModel: chat.selection,

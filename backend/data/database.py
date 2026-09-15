@@ -6,12 +6,13 @@ SQLite 实现
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import os
 import sqlite3
 import threading
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -151,17 +152,45 @@ class _LockedConnection:
     def __getattr__(self, name: str) -> Any:
         return getattr(self._conn, name)
 
+# ==================== 语义记忆 FTS5 索引 ====================
+# 独立 FTS5 表（非 external-content）+ jieba 分词文本 + Python 侧显式同步。
+#
+# 历史 "database disk image is malformed" 根因（WS-B 诊断结论）：
+# 旧表使用 external-content 模式（content='memories_semantic'），该模式自身不存储
+# 内容，要求调用方严格遵守同步协议——删除必须通过 'delete' 命令并提供索引时的原始
+# 列值、UPDATE 必须先 'delete' 旧值再 insert 新值。当时的触发器/手动维护使用了
+# plain DELETE 且 FTS rowid 与内容表 rowid 漂移，留下悬空索引条目，破坏 shadow
+# 表 B 树，后续查询即报 malformed。修复：改用独立（存内容）FTS5 表，plain
+# INSERT/UPDATE/DELETE 均合法；写入由 SemanticMemory 单一入口显式同步（无触发器）。
+
+SEMANTIC_FTS_TABLE = "memories_semantic_fts"
+
+
+def _segment_for_index(text: Optional[str]) -> str:
+    """索引侧分词：jieba 搜索引擎模式（cut_for_search），空格连接。
+
+    相比精确模式额外把长词细分出子词（如 "吃火锅" → 同时产出 "火锅"），
+    保证短词查询（"火锅"）能命中包含长词的文本；查询侧用精确模式的
+    tokenize_for_search 即可，因为长词本身也保留在索引中。
+    """
+    if not text:
+        return ""
+    # 延迟导入，避免 backend.data ↔ backend.memory 包级循环依赖
+    import jieba
+
+    return " ".join(w.strip() for w in jieba.cut_for_search(text) if w.strip())
+
+
 def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
     """Add source_turn_id / source_message_id / memory_category columns and
     supporting indexes to ``memories_episodic``.
 
-    Idempotent — safe to call on every startup. Used by :meth:`Database.init_db`
-    after the base schema is created so legacy DBs (pre-Task 4) pick up the
-    new columns without a separate migration tool.
+    win7 承载：main 的 memory 子系统已改走 summary/consolidation 表，不再
+    调用本迁移；但 win7 的 memory/episodic.py 仍写这三列，且存量库早于
+    这些列存在。幂等，可在每次 init_db 调用。
     """
     cur = db.execute("PRAGMA table_info(memories_episodic)")
     existing_cols = {row[1] for row in cur.fetchall()}
-
     new_cols = {
         "source_turn_id": "TEXT",
         "source_message_id": "TEXT",
@@ -171,7 +200,6 @@ def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
         if col not in existing_cols:
             db.execute(f"ALTER TABLE memories_episodic ADD COLUMN {col} {typedef}")
             logger.info("migration: added memories_episodic.%s", col)
-
     db.execute(
         "CREATE INDEX IF NOT EXISTS idx_mem_episodic_session_turn "
         "ON memories_episodic(session_id, source_turn_id)"
@@ -184,16 +212,136 @@ def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
 
 
 def _warm_jieba() -> None:
-    """预热 jieba 词典；缺失或损坏时不阻塞后端启动。"""
+    """§1.2 修复：模块导入时预热 jieba 词典，避免首次 FTS 写入冷启动 500ms+。
+
+    触发场景：用户首次保存记忆时 `_segment_for_index` 调 `jieba.cut_for_search()`,
+    jieba 首次执行需从磁盘加载主词典（~500ms 阻塞）。预热把这次开销从「用户请求路径」
+    转移到「后端启动路径」，聊天主链路不被拖累。
+
+    fail-open：jieba 缺失 / 词典损坏 → 跳过预热，不阻塞 import（首次 FTS 写入会
+    触发自然加载，多花 500ms 但不影响功能）。
+    """
     try:
         import jieba
 
-        list(jieba.cut("__warmup__"))
+        list(jieba.cut("__warmup__"))  # 触发主词典加载
+        logger.debug("database: jieba pre-warmed at import time")
     except Exception as exc:  # noqa: BLE001
+        # jieba 缺失 / import 失败 / 词典损坏 — 不阻塞 backend 启动
         logger.debug("database: jieba warmup skipped (non-fatal): %s", exc)
 
 
+# 副作用：模块导入即预热 jieba。这是 _segment_for_index 的"前辈路径"，
+# 把 ~500ms 冷启动成本从「首次用户请求」前移到「后端启动」窗口。
 _warm_jieba()
+
+
+def fts_row_texts(
+    content: Optional[str], summary: Optional[str], tags_json: Optional[str]
+) -> Tuple[str, str, str]:
+    """生成一行 memories_semantic 写入 FTS 索引表的 jieba 分词文本三元组。
+
+    FTS5 默认 unicode61 分词器不切分中文（整句成为一个 token），因此索引表写入
+    分词后的文本而非原文，使中文 MATCH 可用。tags 为 JSON 数组字符串，展开为
+    空格连接的标签文本再分词。
+    """
+    tags_text = ""
+    if tags_json:
+        try:
+            tags = json.loads(tags_json)
+            if isinstance(tags, list):
+                tags_text = _segment_for_index(" ".join(str(t) for t in tags))
+        except (json.JSONDecodeError, TypeError):
+            tags_text = ""
+    return (_segment_for_index(content), _segment_for_index(summary), tags_text)
+
+
+def _drop_semantic_fts(cursor: sqlite3.Cursor) -> None:
+    """删除 FTS 虚拟表（连带 shadow 表），并清理残留在 memories_semantic 上的旧 FTS 触发器。"""
+    cursor.execute(f"DROP TABLE IF EXISTS {SEMANTIC_FTS_TABLE}")
+    legacy_triggers = cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'trigger' "
+        "AND tbl_name = 'memories_semantic' AND lower(name) LIKE '%fts%'"
+    ).fetchall()
+    for trigger_row in legacy_triggers:
+        cursor.execute(f'DROP TRIGGER IF EXISTS "{trigger_row[0]}"')
+
+
+def ensure_semantic_fts_schema(conn: sqlite3.Connection) -> bool:
+    """确保 memories_semantic_fts 为健康的独立 FTS5 虚拟表，返回是否发生了重建。
+
+    处理两类坏状态（幂等，可重复调用）：
+    1. 结构不可靠：非虚拟表残留，或旧 external-content 定义（malformed 根因）
+       → drop 后重建为独立表；
+    2. 数据损坏：轻量完整性探测（count(*)）捕获 sqlite3.DatabaseError
+       （含 "malformed" / "corruption found"）→ drop 重建。
+
+    永不抛出：FTS 为非关键路径，任何失败降级为 warning，不阻塞后端启动。
+    重建后调用方应以 force=True 触发 backfill_semantic_fts 回填。
+    """
+    try:
+        cursor = conn.cursor()
+        rebuilt = False
+        row = cursor.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (SEMANTIC_FTS_TABLE,),
+        ).fetchone()
+        if row is not None:
+            schema_sql = (row[0] or "").replace(" ", "").lower()
+            if "virtualtable" not in schema_sql or "content=" in schema_sql:
+                logger.warning(
+                    "memories_semantic_fts 为旧 external-content/残留结构，drop 重建为独立 FTS5 表"
+                )
+                _drop_semantic_fts(cursor)
+                rebuilt = True
+            else:
+                try:
+                    cursor.execute(f"SELECT count(*) FROM {SEMANTIC_FTS_TABLE}")
+                    cursor.fetchone()
+                except sqlite3.DatabaseError as exc:
+                    logger.warning("memories_semantic_fts 损坏（%s），drop 重建", exc)
+                    _drop_semantic_fts(cursor)
+                    rebuilt = True
+        cursor.execute(
+            f"CREATE VIRTUAL TABLE IF NOT EXISTS {SEMANTIC_FTS_TABLE} "
+            "USING fts5(content, summary, tags)"
+        )
+        conn.commit()
+        return rebuilt
+    except sqlite3.DatabaseError as exc:
+        logger.warning("语义记忆 FTS 表初始化失败（搜索将降级为 LIKE）: %s", exc)
+        return False
+
+
+def backfill_semantic_fts(conn: sqlite3.Connection, force: bool = False) -> None:
+    """幂等回填：把 memories_semantic 现有行同步进 FTS 索引表（jieba 分词）。
+
+    - force=False：仅当两表行数不一致时回填（正常启动快速跳过，避免全量分词）；
+    - force=True：整体清空重填（ensure_semantic_fts_schema 重建表后使用）。
+
+    覆盖绕过 SemanticMemory 直接写主表的路径（如 evolution 晋升），下次 init_db
+    时被同步进索引。FTS 为非关键路径，失败只记 warning，不影响主表数据与启动。
+    """
+    try:
+        cursor = conn.cursor()
+        if not force:
+            fts_count = cursor.execute(f"SELECT count(*) FROM {SEMANTIC_FTS_TABLE}").fetchone()[0]
+            memory_count = cursor.execute("SELECT count(*) FROM memories_semantic").fetchone()[0]
+            if fts_count == memory_count:
+                return
+        cursor.execute(f"DELETE FROM {SEMANTIC_FTS_TABLE}")
+        rows = cursor.execute(
+            "SELECT rowid, content, summary, tags FROM memories_semantic"
+        ).fetchall()
+        for row in rows:
+            cursor.execute(
+                f"INSERT INTO {SEMANTIC_FTS_TABLE} (rowid, content, summary, tags) "
+                "VALUES (?, ?, ?, ?)",
+                (row[0],) + fts_row_texts(row[1], row[2], row[3]),
+            )
+        conn.commit()
+    except sqlite3.DatabaseError as exc:
+        logger.warning("语义记忆 FTS 回填失败（搜索将降级为 LIKE）: %s", exc)
 
 
 class Database:
@@ -226,26 +374,28 @@ class Database:
 
         代理与 ``self._connection`` 按身份绑定: 测试会直接替换 ``_connection``
         注入 mock 连接 (如 evolution hooks 的故障注入), 身份变化时重建代理,
-        避免拿到包着旧真实连接的过期代理。
+        避免拿到包着旧真实连接的过期代理。(win7 保留)
         """
-        if self._conn_proxy is None or self._conn_proxy._conn is not self._connection:
-            if self._connection is None:
-                self._connection = sqlite3.connect(self.db_path, check_same_thread=False)
-                self._connection.row_factory = sqlite3.Row
-                # 启用 WAL 模式提高并发性能
-                self._connection.execute("PRAGMA journal_mode=WAL")
-                self._connection.execute("PRAGMA busy_timeout=5000")
-                # fix/security-perf-quickwins (2026-08-09): 启用外键约束。否则
-                # session_workspace_bindings 等表的 ON DELETE CASCADE 是 silent no-op,
-                # 删会话后留下悬挂行 (见 docs/technical/33-office-m1-m2-completion.md §6-2).
-                self._connection.execute("PRAGMA foreign_keys=ON")
-                # feat/sqlite-fast-pragma: 测试期跳过 fsync (~5x faster setup)。
-                # 仅当 SAGE_TEST_FAST_SQLITE=1 时启用 synchronous=OFF。
-                # 注意：synchronous=OFF 在断电/OS crash 时可能丢最后几个事务，但
-                # Sage 测试用 tempfile，OS crash 后整个文件不存在 → 仅对测试场景安全。
-                # 生产 DB（data/sage.db）始终保持 synchronous=FULL（默认值）。
-                if os.environ.get("SAGE_TEST_FAST_SQLITE") == "1":
-                    self._connection.execute("PRAGMA synchronous=OFF")
+        if self._conn_proxy is not None and self._conn_proxy._conn is not self._connection:
+            self._conn_proxy = None
+        if self._connection is None:
+            self._connection = sqlite3.connect(self.db_path, check_same_thread=False)
+            self._connection.row_factory = sqlite3.Row
+            # 启用 WAL 模式提高并发性能
+            self._connection.execute("PRAGMA journal_mode=WAL")
+            self._connection.execute("PRAGMA busy_timeout=5000")
+            # fix/security-perf-quickwins (2026-08-09): 启用外键约束。否则
+            # session_workspace_bindings 等表的 ON DELETE CASCADE 是 silent no-op,
+            # 删会话后留下悬挂行 (见 docs/technical/33-office-m1-m2-completion.md §6-2).
+            self._connection.execute("PRAGMA foreign_keys=ON")
+            # feat/sqlite-fast-pragma: 测试期跳过 fsync (~5x faster setup)。
+            # 仅当 SAGE_TEST_FAST_SQLITE=1 时启用 synchronous=OFF。
+            # 注意：synchronous=OFF 在断电/OS crash 时可能丢最后几个事务，但
+            # Sage 测试用 tempfile，OS crash 后整个文件不存在 → 仅对测试场景安全。
+            # 生产 DB（data/sage.db）始终保持 synchronous=FULL（默认值）。
+            if os.environ.get("SAGE_TEST_FAST_SQLITE") == "1":
+                self._connection.execute("PRAGMA synchronous=OFF")
+        if self._conn_proxy is None:
             self._conn_proxy = _LockedConnection(self._connection)
         assert self._conn_proxy is not None
         return self._conn_proxy
@@ -384,12 +534,7 @@ class Database:
             )
         """)
 
-        # Task 4 / Gap A — idempotent migration: add source_turn_id /
-        # source_message_id / memory_category columns + indexes for memory
-        # traceability (which turn/message a fact came from; which category).
-        # Safe to call on every startup — see _migrate_memory_traceability.
-        # win7-only: main no longer calls this, but win7 databases predate the
-        # columns, so the migration must keep running here.
+        # win7-only（Task 4 / Gap A）：补 source_turn_id 等三列，见 _migrate_memory_traceability。
         _migrate_memory_traceability(conn)
 
         # 技能定义不再由 SQLite ``skills`` 表承载。
@@ -552,11 +697,13 @@ class Database:
         )
         conn.commit()
 
-        # Projects registry (项目模块 P1, cherry-win7 对齐)。用户在侧边栏
-        # 显式登记的项目目录清单（对标 Cursor Recent Workspaces）。行独立
-        # 于会话存在；path 存 validate_workspace 规范化后的绝对路径并
-        # UNIQUE —— 重复登记幂等。归属关系复用 session_workspace_bindings
-        # 活跃绑定（不落第二份）。
+        # Projects registry (项目模块 P1, 2026-09-13). 用户在侧边栏显式
+        # 登记的项目目录清单（对标 Cursor Recent Workspaces / Claude Code
+        # 项目 → 会话归属）。行独立于会话存在：登记过的目录即使还没有
+        # 任何会话绑定也保留。path 存 validate_workspace 规范化后的绝对
+        # 路径并 UNIQUE —— 重复登记同一目录是幂等的（只刷新
+        # last_opened_at，不新增行）。会话与项目的归属关系不落在本表，
+        # 复用 session_workspace_bindings 的活跃绑定（workspace_path 相等）。
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
@@ -569,6 +716,36 @@ class Database:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_projects_recent "
             "ON projects(last_opened_at DESC)"
+        )
+        # P8 (2026-09-15): wiki recents 迁移到注册表——intent 保存最近一次
+        # 登记意图（"create"|"open"），NULL = 非 wiki 来源（侧栏登记），
+        # 读侧映射为 "open"。幂等迁移，旧库/旧行兼容（NULL 允许）。
+        cursor.execute("PRAGMA table_info(projects)")
+        _projects_columns = {row["name"] for row in cursor.fetchall()}
+        if "intent" not in _projects_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN intent TEXT")
+        conn.commit()
+
+        # Office self-check history (round-3 Office parity, N4). Every
+        # office write that produces a self_check readback (create / update
+        # / apply / archive / restore / snapshot_restore) appends one audit
+        # row so the doc detail view can replay the verification timeline.
+        # ``doc_id`` is "" for unmanaged writes (legacy output_dir /
+        # file_path paths) — pure audit trail no managed query matches.
+        # Additive + idempotent, same pattern as office_documents above.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS office_self_checks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                ok INTEGER NOT NULL,
+                summary TEXT,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_office_self_checks_doc "
+            "ON office_self_checks(doc_id, created_at)"
         )
         conn.commit()
 
@@ -694,6 +871,56 @@ class Database:
                 "ALTER TABLE usage_events ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0"
             )
             conn.commit()
+        # L8 缓存维度拆分 (2026-09-09 PR-A): 把单列 cached_tokens 拆为
+        # cache_read + cache_creation 两列——Anthropic cache_read 命中极便宜
+        # 而 cache_creation 略贵，合并展示无法判断 prompt cache 利用率。
+        # 同时预留流式首字节延迟 (first_token_ms) 与总延迟 (latency_ms) 字段,
+        # 后续 PR-C 写 TTFT 可观测性。
+        cursor.execute("PRAGMA table_info(usage_events)")
+        _usage_cols = [row["name"] for row in cursor.fetchall()]
+        if "cache_read_tokens" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0"
+            )
+            conn.commit()
+        if "cache_creation_tokens" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN cache_creation_tokens INTEGER NOT NULL DEFAULT 0"
+            )
+            conn.commit()
+        if "first_token_ms" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN first_token_ms INTEGER"
+            )
+            conn.commit()
+        if "latency_ms" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN latency_ms INTEGER"
+            )
+            conn.commit()
+        # L8 PR-B (2026-09-09): 用量日聚合表 — 7d/30d 时间范围查询的预聚合层,
+        # 避免每次都扫 usage_events 全量。days_bucket 0=今天, 1=昨天 ... 6=6 天前
+        # (7d 范围), >=7 即 30d 范围折叠到月聚合。模型维度另算。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS usage_daily_rollups (
+                day TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                model TEXT NOT NULL,
+                requests INTEGER NOT NULL DEFAULT 0,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                cached_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+                estimated_cost_usd REAL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (day, scope, model)
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_usage_daily_rollups_scope_day
+            ON usage_daily_rollups(scope, day DESC)
+        """)
 
         # Agent 配置表 (PR-3)
         # 4 个默认 agent (primary/researcher/coder/memory_manager) 在 lifespan
@@ -717,6 +944,7 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_agents_role ON agents(role)
         """)
 
+        # 语义记忆表（用于 FTS5 全文搜索）
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS memories_semantic (
                 id TEXT PRIMARY KEY,
@@ -726,6 +954,12 @@ class Database:
                 created_at INTEGER NOT NULL
             )
         """)
+
+        # FTS5 独立虚拟表用于语义记忆全文搜索（jieba 分词文本）。
+        # 不再使用 external-content 模式与同步触发器（历史 malformed 根因，详见
+        # ensure_semantic_fts_schema docstring）：写入路径由 SemanticMemory 在
+        # Python 侧显式同步（单一事实来源），此处负责结构检测 + 完整性自愈。
+        fts_rebuilt = ensure_semantic_fts_schema(conn)
 
         # 记忆进化日志表（预留）
         cursor.execute("""
@@ -1080,6 +1314,10 @@ class Database:
                 "ALTER TABLE orch_context_messages "
                 "ADD COLUMN expected_task_revision INTEGER"
             )
+
+        # FTS 幂等回填：把 memories_semantic 现有行同步进索引（含绕过 SemanticMemory
+        # 直接写主表的行，如 evolution 晋升；重建后 force 全量重填，否则行数一致即跳过）
+        backfill_semantic_fts(conn, force=fts_rebuilt)
 
         # N2: journal 元数据表（office_journal_specs + office_journal_generations）。
         # 通过延迟导入避免 backend.data ↔ backend.office.journal 包级循环。

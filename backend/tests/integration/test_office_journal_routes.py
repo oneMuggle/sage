@@ -213,14 +213,14 @@ def test_fill_from_content_invalid_content_shape(workspace: Path):
             workspace_path=str(workspace), file_path=str(target)
         )
     )
-    # sections 期望 Dict[str, str]，传 list → Pydantic v1/v2 都拒（int→str 强转不适用）
+    # title 期望 str，传 int → Pydantic ValidationError → JournalContentShapeError
     req = OfficeJournalFillRequest(
         workspace_path=str(workspace),
         spec_id=parsed.spec.spec_id,
         content={
-            "title": "ok",
+            "title": 12345,
             "abstract": "x",
-            "sections": ["关键词"],
+            "sections": {"关键词": "k"},
         },
     )
     with pytest.raises(JournalContentShapeError):

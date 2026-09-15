@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import * as ApiModule from '../index';
 
 describe('src/shared/api structural exports', () => {
-  it('exports the 7 API objects', () => {
+  it('exports the 8 API objects', () => {
     expect(ApiModule.sessionApi).toBeDefined();
     expect(ApiModule.messageApi).toBeDefined();
     expect(ApiModule.chatApi).toBeDefined();
@@ -20,6 +20,7 @@ describe('src/shared/api structural exports', () => {
     expect(ApiModule.knowledgeApi).toBeDefined();
     expect(ApiModule.skillsApi).toBeDefined();
     expect(ApiModule.agentsApi).toBeDefined();
+    expect(ApiModule.officeApi).toBeDefined();
   });
 
   it('each API object exposes CRUD-shape (has at least one async method)', () => {
@@ -32,6 +33,7 @@ describe('src/shared/api structural exports', () => {
       ApiModule.knowledgeApi,
       ApiModule.skillsApi,
       ApiModule.agentsApi,
+      ApiModule.officeApi,
     ]) {
       const methods = Object.values(api as Record<string, unknown>).filter(
         (v) => typeof v === 'function',

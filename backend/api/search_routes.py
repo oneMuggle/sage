@@ -1,7 +1,7 @@
 # backend/api/search_routes.py
 """全局搜索路由（P1-3.7 UI 优化方案 2026-09-13）。
 
-聚合会话 / 记忆 / 知识三类搜索结果为统一接口，供前端命令面板 (cmdk) 使用。
+聚合会话 / 记忆 / 知识 / 项目四类搜索结果为统一接口，供前端命令面板 (cmdk) 使用。
 """
 
 from __future__ import annotations
@@ -19,21 +19,29 @@ def global_search(
     limit: int = Query(10, ge=1, le=50, description="每类返回上限"),
     types: Optional[str] = Query(
         None,
-        description="逗号分隔的类型过滤: session,memory,knowledge (默认全部)",
+        description="逗号分隔的类型过滤: session,memory,knowledge,project (默认全部)",
+    ),
+    knowledge_project: Optional[str] = Query(
+        None,
+        description=(
+            "P9: 知识搜索范围（wiki 项目根目录绝对路径）。须为已登记/最近"
+            "打开的项目（未授权 403、缺 wiki/ 目录 404）；缺省=最近打开的项目。"
+        ),
     ),
 ) -> Dict[str, Any]:
-    """全局搜索: 聚合会话标题 / 记忆内容 / 知识库文档的模糊匹配结果。
+    """全局搜索: 聚合会话标题 / 记忆内容 / 知识库文档 / 登记项目的模糊匹配结果。
 
     返回格式:
     ```json
     {
       "sessions": [{"id": "...", "title": "...", "updated_at": 1726185600000}],
       "memories": [{"id": "...", "content": "...", "memory_type": "..."}],
-      "knowledge": [{"path": "...", "title": "...", "snippet": "..."}]
+      "knowledge": [{"path": "...", "title": "...", "snippet": "..."}],
+      "projects": [{"id": "...", "name": "...", "path": "...", "session_count": 2}]
     }
     ```
     """
-    wanted = set(types.split(",")) if types else {"session", "memory", "knowledge"}
+    wanted = set(types.split(",")) if types else {"session", "memory", "knowledge", "project"}
     results: Dict[str, List[Any]] = {}
 
     # ---- 会话搜索 ----
@@ -46,7 +54,12 @@ def global_search(
 
     # ---- 知识搜索 (wiki) ----
     if "knowledge" in wanted:
-        results["knowledge"] = _search_knowledge(q, limit)
+        scope = _resolve_knowledge_scope(knowledge_project) if knowledge_project else None
+        results["knowledge"] = _search_knowledge(q, limit, project_path=scope)
+
+    # ---- 项目搜索（P7, 项目模块）----
+    if "project" in wanted:
+        results["projects"] = _search_projects(q, limit)
 
     return results
 
@@ -94,20 +107,65 @@ def _search_memories(query: str, limit: int) -> List[Dict[str, Any]]:
         return []
 
 
-def _search_knowledge(query: str, limit: int) -> List[Dict[str, Any]]:
-    """知识库文档搜索（复用 wiki search_wiki）。无活跃项目时返回空。"""
+def _search_projects(query: str, limit: int) -> List[Dict[str, Any]]:
+    """登记项目搜索（P7）：name/path LIKE + 会话计数聚合。"""
+    try:
+        from backend.data.project_repo import ProjectRepository
+
+        repo = ProjectRepository()
+        projects = repo.search(query=query, limit=limit)
+        stats = repo.session_stats()
+        return [
+            {
+                "id": p.id,
+                "name": p.name,
+                "path": p.path,
+                "session_count": stats.get(p.path, (0, None))[0],
+            }
+            for p in projects
+        ]
+    except Exception as e:
+        import logging
+
+        logging.getLogger(__name__).warning("project search failed: %s", e)
+        return []
+
+
+def _resolve_knowledge_scope(raw: str) -> Any:
+    """P9: 校验显式知识搜索范围（须为已登记/最近打开的 wiki 项目）。
+
+    复用 wiki 域授权门禁（recents ∪ projects 注册表成员 + ``wiki/`` 目录
+    存在）：未授权 403、非 wiki 项目 404，与 wiki 其它操作同契约——防止
+    知识搜索被当作任意目录的文件内容浏览器。
+    """
+    from backend.wiki.project_authorization import authorize_registered_project
+
+    return authorize_registered_project(raw)
+
+
+def _search_knowledge(
+    query: str, limit: int, project_path: Optional[Any] = None
+) -> List[Dict[str, Any]]:
+    """知识库文档搜索（复用 wiki search_wiki）。无活跃项目时返回空。
+
+    ``project_path``（P9，Path 或 str）：显式搜索范围（已经
+    ``_resolve_knowledge_scope`` 授权校验）；缺省回退最近打开的项目。
+    """
     try:
         from backend.storage.recent_projects import load_recent
         from backend.wiki.search import search_wiki
 
-        recent = load_recent()
-        if not recent:
+        if project_path is not None:
+            project_root = project_path
+        else:
+            recent = load_recent()
+            if not recent:
+                return []
+            # 取最近打开的项目作为搜索范围
+            project_root = recent[0].path if recent else ""
+        if not project_root:
             return []
-        # 取最近打开的项目作为搜索范围
-        project_path = recent[0].path if recent else ""
-        if not project_path:
-            return []
-        result = search_wiki(project_root=project_path, query=query, limit=limit)
+        result = search_wiki(project_root=project_root, query=query, limit=limit)
         # search_wiki 返回 SearchResponse: {results: [{path, title, snippet, ...}]}
         docs = result.results if hasattr(result, "results") else []
         return [

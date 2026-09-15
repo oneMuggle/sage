@@ -11,12 +11,12 @@
 
 from __future__ import annotations
 
-import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from backend.domain.orch_events import RunEvent, RunSnapshot, TaskSummary
+from backend.orchestration._lazy_lock import LazyLock
 
 
 @dataclass
@@ -62,7 +62,7 @@ class SnapshotStore:
 
     def __init__(self) -> None:
         self._runs: Dict[str, _RunSnapshot] = {}
-        self._lock = asyncio.Lock()
+        self._lock = LazyLock()
 
     async def apply_event(self, event: RunEvent) -> None:
         """根据事件类型更新对应快照。"""
@@ -163,13 +163,7 @@ class SnapshotStore:
             task.current_step_id = payload.get("step_id", task.current_step_id)
             task.output_preview = payload.get("output_preview", task.output_preview)
         elif event.event_type in ("task.waiting_input", "task.waiting_approval"):
-            # py3.8 无 str.removeprefix（py3.9+）
-            _prefix = "task."
-            task.status = (
-                event.event_type[len(_prefix):]
-                if event.event_type.startswith(_prefix)
-                else event.event_type
-            )
+            task.status = event.event_type[len("task."):]  # py3.8: 无 str.removeprefix（3.9+）
             task.waiting_reason = payload.get("reason")
 
     def _apply_step_event(self, run: _RunSnapshot, event: RunEvent) -> None:

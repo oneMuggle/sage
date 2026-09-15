@@ -77,6 +77,20 @@ describe('mergeSlashCommands', () => {
   });
 });
 
+describe('M4: /compact is a real action (not a prompt)', () => {
+  it("compact command has mode 'compact'", () => {
+    const compact = slashCommands.find((c) => c.name === 'compact');
+    expect(compact).toBeDefined();
+    expect(compact!.mode).toBe('compact');
+  });
+
+  it('commandToPrompt falls through to the generic branch for compact', () => {
+    // compact 不再走提示词路径；即使误调也只返回通用 fallback
+    const compact = slashCommands.find((c) => c.name === 'compact')!;
+    expect(commandToPrompt(compact, '')).toBe('/compact');
+  });
+});
+
 describe('orchestration slash commands', () => {
   it('registers orchestrate with prompt mode', () => {
     const cmd = slashCommands.find((c) => c.name === 'orchestrate');
@@ -90,19 +104,5 @@ describe('orchestration slash commands', () => {
     expect(cmd).toBeDefined();
     expect(cmd!.mode).toBe('prompt');
     expect(cmd!.description).toMatch(/单 agent|单任务|关闭/i);
-  });
-});
-
-describe('M4: /compact is a real action (not a prompt)', () => {
-  it("compact command has mode 'compact'", () => {
-    const compact = slashCommands.find((c) => c.name === 'compact');
-    expect(compact).toBeDefined();
-    expect(compact!.mode).toBe('compact');
-  });
-
-  it('commandToPrompt falls through to the generic branch for compact', () => {
-    // compact 不再走提示词路径；即使误调也只返回通用 fallback
-    const compact = slashCommands.find((c) => c.name === 'compact')!;
-    expect(commandToPrompt(compact, '')).toBe('/compact');
   });
 });

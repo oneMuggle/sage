@@ -34,4 +34,8 @@ conductor 的并行派发是**同步阻塞原语**：`dispatch_subagents` 工具
 
 ## 4. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A（后台派发与中途收集） | PR #648（squash 57740a42） | PR #650（cherry-win7-r12，squash 9c91e17f） |
+
+win7 对齐说明：零冲突落位；py3.8 纪律（asyncio.TimeoutError + noqa UP041）随测试迁移；本地 ruff 全过 + background 7 例绿后由 CI（含 py3.8 job）终验，squash merge（#650）。

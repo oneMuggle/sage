@@ -12,15 +12,13 @@
 // 状态符 + [task · agent] + live_step（后端预拼装,截断防刷屏）。
 
 import { selectSessionSlots, useChatStreamStore } from '../../features/send-message/chatStreamStore';
-import { useStore } from '../../shared/lib/store';
 
-export function SubagentLivePanel() {
-  // S2: 读当前会话的键控槽位 —— 并行会话各自的面板互不串扰
-  const currentSessionId = useStore((s) => s.currentSessionId);
-  const taskBoard = useChatStreamStore((s) => selectSessionSlots(s, currentSessionId).taskBoard);
+export function SubagentLivePanel({ sessionId }: { sessionId: string | null | undefined }) {
+  // S2 并行会话槽位模型: taskBoard/streaming 按会话隔离, 经 sessionId 取本会话槽位。
+  const taskBoard = useChatStreamStore((s) => selectSessionSlots(s, sessionId).taskBoard);
   const isLoading = useChatStreamStore((s) => {
-    const streaming = selectSessionSlots(s, currentSessionId).streaming;
-    return streaming !== null && streaming.state !== 'done';
+    const slots = selectSessionSlots(s, sessionId);
+    return slots.streaming !== null && slots.streaming.state !== 'done';
   });
 
   if (!isLoading || !taskBoard) return null;

@@ -1,16 +1,23 @@
-"""Unit tests for backend.storage.recent_projects."""
+"""Unit tests for backend.storage.recent_projects.
+
+P8（2026-09-15）：存储迁移到 projects 注册表（SQLite）——本文件从
+"JSON 文件读写"语义重写为"注册表投影"语义；旧 JSON 仅作为一次性迁移
+来源（`_ensure_legacy_import`）覆盖保留。
+"""
+
+from __future__ import annotations
 
 import json
 from pathlib import Path
 
 import pytest
 
+from backend.data.database import Database  # noqa: F401 — autouse 夹具已隔离库
 from backend.storage.recent_projects import (
     MAX_RECENT,
     RecentProject,
     load_recent,
     most_recent_parent,
-    recent_projects_file,
     record_recent,
     save_recent,
     user_data_dir,
@@ -19,23 +26,26 @@ from backend.storage.recent_projects import (
 
 @pytest.fixture()
 def isolated_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Redirect user data dir to tmp_path for isolation."""
+    """Redirect user data dir to tmp_path (legacy JSON import source)."""
     monkeypatch.setenv("SAGE_USER_DATA_DIR", str(tmp_path))
     return tmp_path
 
 
-# 1. load_recent: file missing -> empty list
-def test_load_recent_returns_empty_when_file_missing(isolated_data_dir: Path):
+# 1. 空库 → 空清单（无 legacy JSON 时迁移为 no-op）
+def test_load_recent_returns_empty_when_registry_empty(isolated_data_dir: Path):
     assert load_recent() == []
+    # 迁移探针不应创建 JSON（只在存在时导入并改名）
+    assert not (isolated_data_dir / "recent-projects.json.migrated").exists()
 
 
-# 2. load_recent: file empty -> empty list
-def test_load_recent_returns_empty_when_file_empty(isolated_data_dir: Path):
+# 2/3. legacy JSON：空文件 → no-op；损坏 → .bak 备份 + 空清单
+def test_load_recent_legacy_empty_file_is_noop(isolated_data_dir: Path):
     (isolated_data_dir / "recent-projects.json").write_text("")
     assert load_recent() == []
+    # 迁移完成即改名（空文件也不例外），避免每次读取重复探针
+    assert (isolated_data_dir / "recent-projects.json.migrated").exists()
 
 
-# 3. load_recent: corrupted JSON -> backup + empty
 def test_load_recent_backs_up_corrupted_file(isolated_data_dir: Path):
     p = isolated_data_dir / "recent-projects.json"
     p.write_text("{ this is not valid json")
@@ -45,34 +55,37 @@ def test_load_recent_backs_up_corrupted_file(isolated_data_dir: Path):
     assert len(bak_files) == 1
 
 
-# 4. load_recent: invalid entry -> skipped
-def test_load_recent_skips_invalid_entries(isolated_data_dir: Path):
+# 4. legacy JSON 导入：有效条目入库、无效跳过、文件改名 .migrated
+def test_load_recent_imports_legacy_json(isolated_data_dir: Path):
     p = isolated_data_dir / "recent-projects.json"
     p.write_text(
         json.dumps(
             [
-                {"path": "/a", "name": "a", "opened_at": 1.0, "intent": "create"},
+                {"path": "/a", "name": "a", "opened_at": 1000.0, "intent": "create"},
                 {"bogus": "entry"},
-                {"path": "/b", "name": "b", "opened_at": 2.0, "intent": "open"},
+                {"path": "/b", "name": "b", "opened_at": 2000.0, "intent": "open"},
             ]
         )
     )
     items = load_recent()
-    assert len(items) == 2
-    assert items[0].path == "/a"
-    assert items[1].path == "/b"
+    # opened_at 2000.0s 的 /b 更新 → 排最前；无效条目跳过
+    assert [i.path for i in items] == ["/b", "/a"]
+    assert items[0].intent == "open"
+    assert items[1].intent == "create"
+    assert items[1].opened_at == 1000.0
+    # 一次性迁移：改名 + 不再重复导入
+    assert (isolated_data_dir / "recent-projects.json.migrated").exists()
+    assert load_recent() == items
 
 
-# 5. save_recent: atomic write (no partial file on crash)
-def test_save_recent_writes_atomically(isolated_data_dir: Path):
+# 5. save_recent：经注册表持久化（load_recent 回读一致）
+def test_save_recent_roundtrips_through_registry(isolated_data_dir: Path):
     items = [RecentProject(path="/x", name="x", opened_at=1.0, intent="create")]
     save_recent(items)
-    f = recent_projects_file()
-    assert f.exists()
-    # No leftover .tmp file
-    assert not (f.with_suffix(f.suffix + ".tmp")).exists()
-    data = json.loads(f.read_text(encoding="utf-8"))
-    assert data[0]["path"] == "/x"
+    loaded = load_recent()
+    assert len(loaded) == 1
+    assert loaded[0].path == "/x"
+    assert loaded[0].intent == "create"
 
 
 # 6. record_recent: new entry -> length +1
@@ -98,14 +111,22 @@ def test_record_recent_dedup_moves_to_head(isolated_data_dir: Path):
     assert items[1].path == "/b"
 
 
-# 8. record_recent: exceeds MAX_RECENT -> truncated to MAX_RECENT
-def test_record_recent_truncates_to_max(isolated_data_dir: Path):
+# 8. MAX_RECENT 是读侧投影截断：注册表保留全部行，投影只回前 10 条
+def test_record_recent_truncates_projection_to_max(isolated_data_dir: Path):
     for i in range(MAX_RECENT + 5):
         record_recent(f"/p{i}", f"p{i}", "create")
     items = load_recent()
     assert len(items) == MAX_RECENT
     # Most recent should be at the head
     assert items[0].path == f"/p{MAX_RECENT + 4}"
+
+    # 注册表本身保留全部行（越窗行仍归属侧栏清单，不被删除）
+    from backend.data.database import get_database
+
+    total = get_database().get_connection().execute(
+        "SELECT COUNT(*) AS c FROM projects"
+    ).fetchone()["c"]
+    assert total == MAX_RECENT + 5
 
 
 def test_record_recent_rejects_invalid_intent(isolated_data_dir: Path):
@@ -136,47 +157,45 @@ def test_most_recent_parent_returns_none_when_parent_missing(
     assert most_recent_parent() is None
 
 
-# 12. user_data_dir: env var priority
+# 12. user_data_dir: env var priority（legacy 迁移来源路径仍遵循）
 def test_user_data_dir_uses_env_var_when_set(isolated_data_dir: Path, tmp_path: Path):
     assert user_data_dir() == isolated_data_dir
 
 
-# 13. Pydantic v1-compatible validation uses parse_obj when model_validate is absent
-def test_load_recent_supports_pydantic_v1_api(isolated_data_dir: Path, monkeypatch):
-    p = isolated_data_dir / "recent-projects.json"
-    p.write_text(json.dumps([{"path": "/v1", "name": "v1", "opened_at": 1.0, "intent": "open"}]))
+# 13. save_recent 越窗保护：只删上一窗口内且不在新清单的行
+def test_save_recent_deletes_only_within_previous_window(isolated_data_dir: Path):
+    record_recent("/a", "a", "create")
+    record_recent("/b", "b", "create")
+    record_recent("/c", "c", "create")
+    # 上一窗口 = {a, b, c}；新清单只留 c → a/b 从注册表删除
+    save_recent([RecentProject(path="/c", name="c", opened_at=1.0, intent="open")])
+    assert [i.path for i in load_recent()] == ["/c"]
 
-    class V1Project:
-        @classmethod
-        def parse_obj(cls, raw):
-            return cls(raw)
-
-        def __init__(self, raw):
-            self.path = raw["path"]
-
-    monkeypatch.setattr("backend.storage.recent_projects.RecentProject", V1Project)
-
-    items = load_recent()
-
-    assert len(items) == 1
-    assert items[0].path == "/v1"
+    # save_recent = "这就是完整 recents 清单"（窗口重写语义）：
+    # d 经 record_recent 已进入窗口，随后的 save([c]) 会移除它
+    record_recent("/d", "d", "open")
+    save_recent([RecentProject(path="/c", name="c", opened_at=1.0, intent="open")])
+    assert [i.path for i in load_recent()] == ["/c"]
 
 
-# 14. Pydantic v1-compatible serialization uses dict when model_dump is absent
+# 14. save_recent / record_recent 支持 pydantic v1 属性形态（鸭子类型）
 def test_save_recent_supports_pydantic_v1_api(isolated_data_dir: Path):
     class V1Project:
-        def dict(self):
-            return {"path": "/v1", "name": "v1", "opened_at": 1.0, "intent": "open"}
+        path = "/v1"
+        name = "v1"
+        opened_at = 1.0
+        intent = "open"
 
     save_recent([V1Project()])
 
-    assert json.loads((isolated_data_dir / "recent-projects.json").read_text())[0]["path"] == "/v1"
+    loaded = load_recent()
+    assert len(loaded) == 1
+    assert loaded[0].path == "/v1"
 
 
 def test_save_recent_does_not_swallow_serialization_errors(isolated_data_dir: Path):
     class BrokenProject:
-        def dict(self):
-            raise RuntimeError("serialization failed")
+        path = "/broken"
 
-    with pytest.raises(RuntimeError, match="serialization failed"):
+    with pytest.raises(OSError, match="recent projects"):
         save_recent([BrokenProject()])

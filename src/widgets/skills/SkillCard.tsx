@@ -22,6 +22,9 @@ interface SkillCardProps {
   // 生命周期（curator）：active/stale/archived badge + 归档回调
   lifecycle?: 'active' | 'stale' | 'archived';
   onArchive?: (name: string, archived: boolean) => void;
+  // R17-A1 管理面：钉住态（pin 后不可归档、巡检不给出 archive 建议）
+  pinned?: boolean;
+  onPin?: (name: string, pinned: boolean) => void;
 }
 
 const SkillCard: React.FC<SkillCardProps> = ({
@@ -39,6 +42,8 @@ const SkillCard: React.FC<SkillCardProps> = ({
   onDelete,
   lifecycle,
   onArchive,
+  pinned,
+  onPin,
 }) => {
   // M9: 用户可调用的 slash command — 仅在显式声明 user_invocable_name 时渲染,
   // name 回退策略在 chat 层处理 (避免前端做映射)
@@ -88,6 +93,16 @@ const SkillCard: React.FC<SkillCardProps> = ({
                 title={`命令调度模式: ${dispatchChip}`}
               >
                 {dispatchChip}
+              </span>
+            )}
+            {pinned != null && (
+              <span
+                className={`px-2 py-0.5 text-xs rounded-full ${
+                  pinned ? 'bg-warning/20 text-warning' : 'bg-bg-subtle text-text-secondary'
+                }`}
+                title={pinned ? '已钉住：不可归档，巡检不给出归档建议' : '未钉住'}
+              >
+                {pinned ? '📌 已钉住' : '未钉住'}
               </span>
             )}
             {lifecycle && (
@@ -141,6 +156,21 @@ const SkillCard: React.FC<SkillCardProps> = ({
 
         {/* 开关 + 删除按钮 (builtin 不显示) */}
         <div className="flex items-center gap-2 ml-4">
+          {/* R17-A1 管理面：钉住 / 取消钉住（pin 后不可归档） */}
+          {onPin && (
+            <button
+              type="button"
+              onClick={() => onPin(name, !pinned)}
+              className={`px-2 py-1 text-xs rounded border transition-colors ${
+                pinned
+                  ? 'border-warning text-warning hover:bg-warning/10'
+                  : 'border-border text-text-secondary hover:text-text'
+              }`}
+              aria-label={pinned ? `取消钉住 ${name}` : `钉住 ${name}`}
+            >
+              {pinned ? '取消钉住' : '钉住'}
+            </button>
+          )}
           {/* 生命周期：归档 / 取消归档（软标记，可逆） */}
           {onArchive && (
             <button

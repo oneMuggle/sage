@@ -12,6 +12,11 @@ from unittest import mock
 import pytest
 
 from backend.tools import subprocess_util
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="start_verified_process 为 POSIX-only（Windows 上按设计抛 RuntimeError）",
+)
 from backend.tools.subprocess_util import (
     MAX_OUTPUT_CAP_BYTES,
     MAX_OUTPUT_OFFSET_BYTES,
@@ -22,7 +27,13 @@ from backend.tools.subprocess_util import (
     unlink_quietly,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(
+        os.name == "nt",
+        reason="start_verified_process 为 POSIX-only（Windows 上按设计抛 RuntimeError）",
+    ),
+]
 
 
 def test_make_temp_output_file_creates_empty_readable_file():

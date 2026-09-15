@@ -20,9 +20,15 @@ import type { WindowControlsBridge } from '../src/shared/api/windowControlsClien
 import type {
   DiagnosticElectronApiBridge,
   ImportResult,
+  ImportedOfficeFile,
   JournalElectronApiBridge,
+  OfficeDocType,
+  OfficeElectronApiBridge,
+  OfficeManagedRef,
+  PickedOfficeFile,
   ProvidersElectronApiBridge,
   RescanResult,
+  SavedOfficeFile,
   SkillsElectronApiBridge,
   UpdateElectronApiBridge,
 } from '../src/shared/types/electron-api';
@@ -41,39 +47,6 @@ import type { LogLevel } from '../src/shared/log/levels';
 
 /** UnlistenFn signature mirrors Tauri 2.x for drop-in Phase 2 compatibility. */
 export type UnlistenFn = () => void;
-
-/**
- * Gap D (T1): typed shape of `window.electronAPI.memory`. Each method
- * forwards to its matching snake_case IPC cmd in electron/commands.ts
- * (which translates to a backend route via invoke.ts). The renderer
- * callers (`src/shared/api/memoryClient.ts` / future SettingsMemoryTab)
- * consume this contract — types here, runtime in the `electronAPI.memory`
- * object below.
- *
- * 6 of the 9 backing endpoints already exist (search / save / list /
- * delete / auto_memory get+put). The remaining 3 (findByTurn via
- * {turn_id}, getProfile, getSummary via {session_id}) ship in later
- * tasks; calling them now returns 404 — expected for T1.
- */
-type MemoryApi = {
-  search: (args: { query: string; type?: string }) => Promise<unknown>;
-  save: (args: { content: string; importance?: number; category?: string }) => Promise<unknown>;
-  list: (args: { page?: number; page_size?: number; type?: string }) => Promise<unknown>;
-  delete: (args: { memory_id: string }) => Promise<unknown>;
-  getAutoMemory: () => Promise<unknown>;
-  setAutoMemory: (args: { value: boolean }) => Promise<unknown>;
-  /** Important-2 — independent "记忆检索注入" preference (GET/PUT
-   *  /api/v1/preferences/memory_retrieval). Independent of auto_memory. */
-  getMemoryRetrieval: () => Promise<unknown>;
-  setMemoryRetrieval: (args: { value: boolean }) => Promise<unknown>;
-  findByTurn: (args: { turn_id: string }) => Promise<unknown>;
-  getProfile: () => Promise<unknown>;
-  getSummary: (args: { session_id: string }) => Promise<unknown>;
-  /** Task 6 — subscribe to backend memory_written SSE events (via main relay).
-   *  Resolves to an unsubscribe function, or `null` when the main relay could
-   *  not be established (renderer should fall back to polling). */
-  subscribe: (callback: (event: unknown) => void) => Promise<(() => void) | null>;
-};
 
 const electronAPI = {
   /**
@@ -158,6 +131,32 @@ const electronAPI = {
   } satisfies WindowControlsBridge,
 
   /**
+   * P8 (2026-09-14): 嵌入模型下载桥 —— 委托 main 进程 ipcMain.handle
+   * (models:embedder:download / cancel)；进度经 models:embedder:progress
+   * 事件（sage:event: 前缀）由 api.listen 订阅。payload 缺省时使用内置
+   * EMBEDDER_MODEL_MANIFEST。
+   */
+  modelDownload: {
+    download: (payload?: {
+      baseUrl?: string;
+      dirName?: string;
+      files?: { name: string; sha256: string }[];
+    }) => ipcRenderer.invoke('models:embedder:download', payload ?? {}),
+    cancel: (dirName: string) => ipcRenderer.invoke('models:embedder:cancel', dirName),
+  },
+
+  /**
+   * P13 (2026-09-14): sage-file 工作区注册表 —— 渲染端绑定工作区时经此
+   * 登记，主进程校验后加入白名单。sage-file:// 协议据此判定文件可读性。
+   */
+  sageFile: {
+    registerRoot: (path: string) =>
+      ipcRenderer.invoke('sage-file:register-root', path) as Promise<boolean>,
+    unregisterRoot: (path: string) =>
+      ipcRenderer.invoke('sage-file:unregister-root', path) as Promise<boolean>,
+  },
+
+  /**
    * Phase 6 (2026-06-27): Native folder picker for LLM Wiki.
    * Returns absolute path string, or null if user cancelled.
    */
@@ -198,72 +197,45 @@ const electronAPI = {
   } satisfies SkillsElectronApiBridge,
 
   /**
-   * Gap D (T1): Memory CRUD + preferences + traceability IPC bridge.
-   * Each method translates to the matching snake_case cmd in
-   * electron/commands.ts — see MemoryApi type above for param shapes.
-   * Post-T1 the renderer wraps these into a typed `memoryClient` (T2),
-   * wires settings UI (T5), and exposes profile/summary helpers (T6).
+   * Office document bridge (Phase 1.3 + M0 Task 5).
+   *
+   * Phase 1.3 (2026-07-16): pickOfficeFile / pickSavePath for /office page.
+   *
+   * M0 Task 5 (2026-07-23): seven new gateway channels backing Chat-native
+   * CRUD — atomic import via dialog or drag/drop, token-gated complete /
+   * discard lifecycle, native Save As, shell.openPath, shell.showItemInFolder.
+   * Source paths are NEVER accepted from the renderer; the bridge
+   * reconstructs managed paths from `OfficeManagedRef` tuples.
    */
-  memory: {
-    search: (args: { query: string; type?: string }) =>
-      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_search', args }),
-    save: (args: { content: string; importance?: number; category?: string }) =>
-      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_save', args }),
-    list: (args: { page?: number; page_size?: number; type?: string }) =>
-      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_list', args }),
-    delete: (args: { memory_id: string }) =>
-      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_delete', args }),
-    getAutoMemory: () => ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_auto', args: {} }),
-    // Backend stores boolean prefs as 'true'/'false' strings (Pydantic str model);
-    // stringify here so renderer can pass a real boolean without thinking about it.
-    setAutoMemory: (args: { value: boolean }) =>
-      ipcRenderer.invoke('sage:invoke', {
-        cmd: 'memory_set_auto',
-        args: { value: String(args.value) },
-      }),
-    getMemoryRetrieval: () =>
-      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_retrieval', args: {} }),
-    setMemoryRetrieval: (args: { value: boolean }) =>
-      ipcRenderer.invoke('sage:invoke', {
-        cmd: 'memory_set_retrieval',
-        args: { value: String(args.value) },
-      }),
-    findByTurn: (args: { turn_id: string }) =>
-      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_find_by_turn', args }),
-    getProfile: () => ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_profile', args: {} }),
-    getSummary: (args: { session_id: string }) =>
-      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_summary', args }),
-    /**
-     * Task 6 — real-time memory events. Asks main to open an EventSource to
-     * the backend SSE endpoint, then relays each `sage:memory:event` payload
-     * (a JSON string) to the callback. Returns an unsubscribe function, or
-     * `null` if the main relay could not be established (invoke rejected or
-     * main reported { subscribed: false }) — the renderer must fall back to
-     * polling in that case instead of silently dead-airing.
-     */
-    subscribe: async (callback: (event: unknown) => void) => {
-      let result: { subscribed?: boolean; error?: string } | undefined;
-      try {
-        result = (await ipcRenderer.invoke('sage:memory:subscribe')) as {
-          subscribed?: boolean;
-          error?: string;
-        };
-      } catch (e) {
-        console.error('[preload] memory subscribe failed:', e);
-        return null;
-      }
-      if (!result?.subscribed) {
-        console.warn('[preload] memory subscribe unavailable:', result?.error ?? 'unknown');
-        return null;
-      }
-      const listener = (_e: IpcRendererEvent, data: unknown) => callback(data);
-      ipcRenderer.on('sage:memory:event', listener);
-      return () => {
-        ipcRenderer.off('sage:memory:event', listener);
-        ipcRenderer.invoke('sage:memory:unsubscribe').catch(() => undefined);
-      };
-    },
-  } satisfies MemoryApi,
+  office: {
+    pickOfficeFile: (docType: OfficeDocType) =>
+      ipcRenderer.invoke('office:pick-file', { docType }) as Promise<PickedOfficeFile | null>,
+    pickSavePath: (defaultName: string) =>
+      ipcRenderer.invoke('office:save-dialog', { defaultName }) as Promise<string | null>,
+    pickAndImportOfficeFile: (workspacePath: string, docType: OfficeDocType) =>
+      ipcRenderer.invoke('office:pick-and-import', {
+        workspacePath,
+        docType,
+      }) as Promise<ImportedOfficeFile | null>,
+    importDroppedOfficeFile: (workspacePath: string, docType: OfficeDocType, sourcePath: string) =>
+      ipcRenderer.invoke('office:import-dropped', {
+        workspacePath,
+        docType,
+        sourcePath,
+      }) as Promise<ImportedOfficeFile>,
+    completeOfficeImport: (importToken: string) =>
+      ipcRenderer.invoke('office:complete-import', { importToken }) as Promise<void>,
+    discardOfficeImport: (importToken: string) =>
+      ipcRenderer.invoke('office:discard-import', { importToken }) as Promise<void>,
+    sweepOrphanStaging: (opts: { workspacePath: string; knownDocIds: string[] }) =>
+      ipcRenderer.invoke('office:sweep-orphan-staging', opts) as Promise<{ swept: number }>,
+    saveOfficeDocumentAs: (ref: OfficeManagedRef) =>
+      ipcRenderer.invoke('office:save-as', ref) as Promise<SavedOfficeFile | null>,
+    openOfficeDocument: (ref: OfficeManagedRef) =>
+      ipcRenderer.invoke('office:open', ref) as Promise<void>,
+    showOfficeDocumentInFolder: (ref: OfficeManagedRef) =>
+      ipcRenderer.invoke('office:show-in-folder', ref) as Promise<void>,
+  } satisfies OfficeElectronApiBridge,
 
   /**
    * Media bridge (Phase 2, 2026-09-12): multipart upload for chat attachments

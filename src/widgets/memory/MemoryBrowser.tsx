@@ -352,7 +352,10 @@ function MemoryItemCard({
       : 0;
 
   return (
-    <div className="p-3 border border-border rounded-radius-sm bg-surface cursor-pointer hover:border-primary transition-colors">
+    <div
+      data-testid={memory.source === 'episodic' ? 'memory-episodic-item' : 'memory-item'}
+      className="p-3 border border-border rounded-radius-sm bg-surface cursor-pointer hover:border-primary transition-colors"
+    >
       <div className="flex items-center justify-between mb-1 gap-2">
         <span className="font-semibold text-sm text-text truncate flex-1">{title}</span>
         <div className="flex items-center gap-1.5">

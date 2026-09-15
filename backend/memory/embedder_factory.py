@@ -1,4 +1,4 @@
-"""嵌入器工厂 (E9-1, P9)
+"""嵌入器工厂 (E9-1, P9 + Round 1)
 
 按配置选择嵌入器实现：
 
@@ -8,6 +8,9 @@
     1. 可选依赖 onnxruntime + tokenizers 已安装;
     2. 模型文件目录 (``SAGE_EMBEDDING_MODEL_DIR`` 或 userData/models/bge-small-zh-v1.5)
        内含 model.onnx + tokenizer.json。
+- ``SAGE_EMBEDDER=model``: ``ModelEmbedder`` —— OpenAI 兼容 /embeddings
+  HTTP API (Round 1, 复用 wiki 的 EMBED_BASE_URL/EMBED_API_KEY/EMBED_MODEL
+  环境变量约定)。适合不想下载本地模型的部署; 端点不可用时熔断降级。
 
 任一条件不满足 → 记 warning 并降级 HashEmbedder。降级是显式设计:
 嵌入属增强能力, 不应让缺依赖阻塞记忆系统启动。
@@ -24,6 +27,7 @@ from backend.memory.embedder import (
     BGE_SMALL_ZH_DIMENSIONS,
     Embedder,
     HashEmbedder,
+    ModelEmbedder,
     OnnxEmbedder,
 )
 
@@ -115,5 +119,21 @@ def create_embedder(preferred_mode: Optional[str] = None) -> Embedder:
                 )
             except Exception as exc:  # noqa: BLE001 — 模型损坏等一律降级
                 logger.warning("OnnxEmbedder 初始化失败 (%s)，降级 HashEmbedder。", exc)
+        return HashEmbedder(dimensions=256)
+
+    if choice == "model":
+        embedder = ModelEmbedder.from_env()
+        if embedder is not None:
+            logger.info(
+                "语义嵌入已启用: ModelEmbedder dims=%s base_url=%s model=%s",
+                embedder.dimensions,
+                embedder._base_url,
+                embedder._model,
+            )
+            return embedder
+        logger.warning(
+            "SAGE_EMBEDDER=model 但未配置 EMBED_BASE_URL/EMBED_MODEL，"
+            "降级 HashEmbedder。"
+        )
 
     return HashEmbedder(dimensions=256)

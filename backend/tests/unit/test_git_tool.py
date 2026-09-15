@@ -7,6 +7,7 @@ Windows / CI 全绿）。覆盖：status/diff/log/commit 正常流 + 非仓库 +
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -24,7 +25,13 @@ from backend.tools.git_tool import (
     GitStatusTool,
 )
 
-pytestmark = [pytest.mark.unit]
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(
+        os.name == "nt",
+        reason="git 子进程在 Windows 的调用语义差异（PATH/shell 解析），Windows 定性另行批次",
+    ),
+]
 
 
 def _git(*args: str, cwd: Path) -> None:

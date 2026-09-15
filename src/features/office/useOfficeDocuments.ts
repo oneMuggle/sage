@@ -9,6 +9,8 @@
  *   Electron managed-file bridge (M0 Task 5)
  * - archiveDocument / restoreDocument + view toggle: soft-delete
  *   lifecycle (parity batch 1, item 1.7)
+ * - batchArchive / batchRestore: sequential multi-doc archive/restore
+ *   with ONE refetch and a per-item success/failure split (round-3 N5)
  * - refresh: re-fetch documents list
  *
  * M0 Task 6 (2026-07-23): the hook now owns the import-token lifecycle.
@@ -34,6 +36,7 @@ import type {
   OfficeWordReadResult,
 } from '../../shared/api/types';
 
+import type { OfficeBatchResult } from './OfficeDocumentList';
 import { importOfficeByType } from './importOfficeReference';
 
 /** Read result union — OfficePreviewPanel is doc-type-agnostic. */
@@ -95,6 +98,18 @@ export interface UseOfficeDocumentsReturn {
    * Restore (un-archive) a document, then re-fetch the current view.
    */
   restoreDocument: (docId: string) => Promise<void>;
+  /**
+   * Batch-archive the given docs sequentially (round-3 N5), then refetch
+   * the current view ONCE for the whole batch. Per-item failures are
+   * collected — not thrown — so the caller can report a counted summary
+   * toast.
+   */
+  batchArchive: (docIds: string[]) => Promise<OfficeBatchResult>;
+  /**
+   * Batch-restore the given docs sequentially; same contract as
+   * batchArchive (round-3 N5).
+   */
+  batchRestore: (docIds: string[]) => Promise<OfficeBatchResult>;
   /**
    * Re-read a document's managed file and return the fresh read result —
    * used after a snapshot restore to refresh the preview (item 1.7).
@@ -336,6 +351,43 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     [refresh],
   );
 
+  // Round-3 N5: batch lifecycle. Sequential on purpose — the archive /
+  // restore endpoints are cheap and the user sees a single summary when
+  // the whole batch settled. Failures are collected per item (not
+  // thrown) so the toolbar can report 成功 N 项 / 失败 M 项.
+  const runBatch = useCallback(
+    async (
+      docIds: string[],
+      op: (docId: string) => Promise<unknown>,
+    ): Promise<OfficeBatchResult> => {
+      const succeeded: string[] = [];
+      const failed: string[] = [];
+      for (const docId of docIds) {
+        try {
+          await op(docId);
+          succeeded.push(docId);
+        } catch {
+          failed.push(docId);
+        }
+      }
+      // One refetch for the whole batch — the per-doc actions refresh
+      // after every call; doing that for N items would refetch N times.
+      await refresh();
+      return { succeeded, failed };
+    },
+    [refresh],
+  );
+
+  const batchArchive = useCallback(
+    (docIds: string[]) => runBatch(docIds, (id) => officeApi.archiveDocument(id)),
+    [runBatch],
+  );
+
+  const batchRestore = useCallback(
+    (docIds: string[]) => runBatch(docIds, (id) => officeApi.restoreDocument(id)),
+    [runBatch],
+  );
+
   /**
    * Re-read a document's managed file (snapshot-restore follow-up).
    * The managed layout `<workspace>/office/<docType>/<docId>/<filename>`
@@ -374,6 +426,8 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     showInFolder,
     archiveDocument,
     restoreDocument,
+    batchArchive,
+    batchRestore,
     readDocument,
     findDocument,
   };

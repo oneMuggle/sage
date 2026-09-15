@@ -2,7 +2,9 @@ import re
 from datetime import datetime
 from typing import Dict, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
+
+from backend.compat.win7.pydantic_compat import field_validator
 
 
 class FileMeta(BaseModel):
@@ -13,14 +15,16 @@ class FileMeta(BaseModel):
     size: int = Field(..., ge=0, description="File size in bytes")
     signature: Optional[str] = Field(None, description="Code signature (Authenticode/GPG)")
 
-    @validator("url")
-    def validate_https(cls, v: str) -> str:  # noqa: N805
+    @field_validator("url")
+    @classmethod
+    def validate_https(cls, v: str) -> str:
         if not v.startswith("https://"):
             raise ValueError("File URL must use HTTPS")
         return v
 
-    @validator("sha512")
-    def validate_sha512(cls, v: str) -> str:  # noqa: N805
+    @field_validator("sha512")
+    @classmethod
+    def validate_sha512(cls, v: str) -> str:
         if not re.match(r"^[a-f0-9]{128}$", v):
             raise ValueError("SHA-512 must be 128 hex characters")
         return v
@@ -36,14 +40,16 @@ class UpdateManifest(BaseModel):
     files: Dict[str, FileMeta] = Field(..., description="Platform-keyed file metadata")
     components: Dict[str, str] = Field(default_factory=dict, description="Component versions (future use)")
 
-    @validator("version")
-    def validate_semver(cls, v: str) -> str:  # noqa: N805
+    @field_validator("version")
+    @classmethod
+    def validate_semver(cls, v: str) -> str:
         if not re.match(r"^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$", v):
             raise ValueError("Version must be semantic version")
         return v
 
-    @validator("channel")
-    def validate_channel(cls, v: str) -> str:  # noqa: N805
+    @field_validator("channel")
+    @classmethod
+    def validate_channel(cls, v: str) -> str:
         if v not in ("stable", "beta", "alpha"):
             raise ValueError("Channel must be stable, beta, or alpha")
         return v

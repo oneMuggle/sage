@@ -57,10 +57,7 @@ import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
-
-if TYPE_CHECKING:  # 避免循环:backend.tools → agent → tools (doctor CLI 等冷启动场景)
-    from backend.orchestration.subagent_events import SubagentEventSink
+from typing import Any, Dict, Optional, Tuple
 
 from backend.domain.network_policy import NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
@@ -74,6 +71,7 @@ from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.llm_factory import build_llm_client_from_settings
 from backend.orchestration.models import Task
 from backend.orchestration.orch_settings import load_orch_settings
+from backend.orchestration.subagent_events import SubagentEventSink
 from backend.orchestration.task_registry import TaskRegistry
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.browser_tool import (
@@ -527,14 +525,7 @@ class AgentTool(BaseTool):
                 if event:
                     emitter(event)
 
-            # Lazy import to avoid cold-start circular: backend.tools → agent →
-            # tools (doctor CLI 等子进程冷启动路径下,subagent_events → agent_state
-            # → backend.core.legacy.agent 会反向 import backend.tools.ToolRegistry)。
-            from backend.orchestration.subagent_events import (
-                SubagentEventSink as _SubagentEventSink,
-            )
-
-            sink = _SubagentEventSink(
+            sink = SubagentEventSink(
                 run_id=mirror_run_id,
                 task_id="a1",
                 entity_task_id="a1",
@@ -561,11 +552,9 @@ class AgentTool(BaseTool):
                 ),
                 timeout=SUBAGENT_TIMEOUT_S,
             )
-        except asyncio.TimeoutError:  # noqa: UP041 — py38: asyncio.TimeoutError ≠ TimeoutError
+        except (TimeoutError, asyncio.TimeoutError):  # noqa: UP041 — py3.8/3.10: asyncio.TimeoutError ≠ builtin TimeoutError; 3.11+ 同一类
             # wait_for 已取消内层协程 —— 子 run_loop 在取消点收口,
             # 不存在遗弃线程（异步通路的 L12 根修）。
-            # 注意:Python 3.8-3.10 上 asyncio.TimeoutError 与内置 TimeoutError 是
-            # 不同类,这里必须显式用 asyncio.TimeoutError(3.11+ 才是同一类)。
             logger.warning(
                 "Sub-agent timed out after %.1fs (coroutine cancelled, lane FAILED)",
                 SUBAGENT_TIMEOUT_S,

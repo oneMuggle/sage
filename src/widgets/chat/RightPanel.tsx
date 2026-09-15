@@ -31,6 +31,9 @@ interface RightPanelProps {
   onCancelExecution?: (runId: string) => void;
   // RV3 (round8): 终态且有失败任务时的重跑入口（透传 ProgressSection → TaskTreeSection）。
   onRerunFailed?: (runId: string) => void;
+  // P1 (UI 优化方案 2026-09-13): push = 参与 flex 布局挤压主区（Claude
+  // artifacts 风格，桌面端）；overlay = fixed 覆盖层（窄屏/移动端回退）。
+  variant?: 'overlay' | 'push';
 }
 
 type Tab = 'progress' | 'artifacts' | 'changes' | 'outline';
@@ -105,6 +108,7 @@ function RightPanelInner({
   taskBoard,
   onCancelExecution,
   onRerunFailed,
+  variant = 'overlay',
 }: RightPanelProps) {
   const [tab, setTab] = useState<Tab>('progress');
   const [selected, setSelected] = useState<Artifact | null>(null);
@@ -112,7 +116,11 @@ function RightPanelInner({
   const { items: outlineItems, isLoading: outlineLoading } = useConversationOutline(sessionId);
   // P0-3 (UI 优化方案 2026-09-12): 面板宽度可调 —— 拖拽左边缘手柄，
   // 持久化到 localStorage（范围 280~600，默认 320）。
-  const { width, onMouseDown: onResizeMouseDown } = useResizablePanel({
+  const {
+    width,
+    isDragging,
+    onMouseDown: onResizeMouseDown,
+  } = useResizablePanel({
     storageKey: 'right-panel-width',
     minWidth: 280,
     maxWidth: 600,
@@ -120,15 +128,10 @@ function RightPanelInner({
     anchor: 'right',
   });
 
-  return (
-    <aside
-      className={
-        'fixed top-12 right-0 h-[calc(100vh-3rem)] bg-surface border-l border-border ' +
-        'transform transition-transform duration-200 ease-in-out z-30 ' +
-        (open ? 'translate-x-0' : 'translate-x-full')
-      }
-      style={{ width: `${width}px` }}
-    >
+  const isPush = variant === 'push';
+
+  const content = (
+    <>
       {/* P0-3: 左边缘拖拽手柄 —— 悬停时高亮 + cursor-col-resize 反馈 */}
       <div
         className="absolute top-0 left-0 h-full w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10"
@@ -144,7 +147,11 @@ function RightPanelInner({
 
       <div className="h-[calc(100%-2.5rem)] overflow-y-auto min-h-0">
         {selected && sessionId ? (
-          <ArtifactViewer artifact={selected} sessionId={sessionId} onBack={() => setSelected(null)} />
+          <ArtifactViewer
+            artifact={selected}
+            sessionId={sessionId}
+            onBack={() => setSelected(null)}
+          />
         ) : tab === 'progress' ? (
           <ProgressSection
             iteration={iteration}
@@ -174,6 +181,35 @@ function RightPanelInner({
           />
         )}
       </div>
+    </>
+  );
+
+  return (
+    <aside
+      data-testid="right-panel"
+      data-open={open ? 'true' : 'false'}
+      aria-hidden={isPush && !open ? true : undefined}
+      className={
+        isPush
+          ? // push: 参与父级 flex 布局，开合动画在宽度上（拖拽时禁用过渡保跟手）
+            'relative h-full flex-shrink-0 overflow-hidden bg-surface border-l border-border ' +
+            (isDragging ? '' : 'transition-[width] duration-200 ease-in-out')
+          : // overlay: fixed 覆盖层，平移进出（窄屏/移动端）
+            'fixed top-12 right-0 h-[calc(100vh-3rem)] bg-surface border-l border-border ' +
+            'transform transition-transform duration-200 ease-in-out z-30 ' +
+            (open ? 'translate-x-0' : 'translate-x-full')
+      }
+      style={isPush ? { width: open ? width : 0 } : { width: `${width}px` }}
+    >
+      {isPush ? (
+        // push 模式: 内容容器固定宽度，动画期间不被压扁
+        <div className="h-full" style={{ width: `${width}px` }}>
+          {content}
+        </div>
+      ) : (
+        // overlay 模式保持原有直接子元素结构（resize 手柄 parentElement 断言依赖）
+        content
+      )}
     </aside>
   );
 }

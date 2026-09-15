@@ -299,6 +299,17 @@ def _try_import_backend(
                 if os.name == "nt"
                 else {}
             ),
+            # Win32: ``Path.home()`` / expanduser 读取 USERPROFILE（POSIX
+            # 缺 HOME 时有 pwd 兜底而 Windows 没有）。部分后端模块在
+            # import 期调用 Path.home()，缺失会导致探针 import 直接崩溃
+            # → doctor 误报 import_backend=False。
+            **(
+                {
+                    key: os.environ[key]
+                    for key in ("USERPROFILE", "HOMEDRIVE", "HOMEPATH")
+                    if os.environ.get(key)
+                }
+            ),
         }
         # Round 2: merge supervisor launcher context so the probe sees
         # SAGE_BACKEND_GENERATION / SAGE_BACKEND_OWNERSHIP_TOKEN and any
@@ -361,6 +372,8 @@ def _import_all_checks() -> None:
         # 2026-09-04: 本地开发环境助手 — runtime_probe 工具的 doctor 集成。
         # 只探 Python/Node.js 可用性, 不附带工具链明细 (避免 doctor 变慢)。
         "runtime_env",
+        # §1.6 三期扩容(2026-09-05) — 网络访问策略（mode / host 白名单 / httpx 依赖）。
+        "network",
         # L15(2026-09-06) — API Key 静态加密状态(SecretBox scheme / 加密覆盖率)。
         "secret_storage",
         # CA3(round9) — .sage/agents/*.md 档案文件结构体检。

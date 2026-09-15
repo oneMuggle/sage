@@ -25,8 +25,9 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
+import pandas as pd
 from openpyxl import load_workbook
 
 from .errors import OfficeFileNotFoundError, OfficeParseError
@@ -42,7 +43,9 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 #: 公式单元格缺缓存值时附加在读取结果里的一行提示（openpyxl 不能计算公式，
-#: 缓存值要等 Excel/LibreOffice 打开后重算写入）。
+#: 缓存值要等 Excel/LibreOffice 打开后重算写入）。Round2 R5：缺缓存值时
+#: 先尝试 formulas 本地求值（excel_eval.evaluate_workbook），全部公式都
+#: 解析出值的 sheet 不再附此提示；仍有未解析公式时保留。
 _FORMULA_CACHE_NOTE = "公式计算值需在 Excel 中打开后生效"
 
 #: 数值类型元组常量：py38 兼容（isinstance 的 ``int | float`` 写法需 3.10+），
@@ -136,6 +139,28 @@ def _extract_sheet_formulas(ws_formula, ws_values) -> Tuple[List[str], bool]:
     return entries, any_cache_missing
 
 
+def _apply_local_eval(
+    entries: List[str], resolved: Optional[Dict[str, Any]]
+) -> List[str]:
+    """R5（Round2）：把本地求值结果回填进缺缓存值的公式条目。
+
+    ``B4=SUM(B2:B3)`` → ``B4=SUM(B2:B3) → 30 (本地求值)``。只处理还没有
+    ``→ 值`` 标记（即缺缓存值）的条目；坐标未命中或求值结果为 None 时
+    视为未解析、保持原样（读取侧据此决定是否保留缓存提示行）。
+    """
+    if not resolved:
+        return entries
+    out: List[str] = []
+    for entry in entries:
+        coord, sep, body = entry.partition("=")
+        value = resolved.get(coord) if sep else None
+        if sep and value is not None and " → " not in body:
+            out.append(f"{coord}={body} → {_cell_value_to_str(value)} (本地求值)")
+        else:
+            out.append(entry)
+    return out
+
+
 def _build_xlsx_summary(
     file_path: Path,
     *,
@@ -190,6 +215,11 @@ def read_xlsx(
             （有缓存值时为 ``CELL=formula → cached``）；存在无缓存值的
             公式时在 ``note`` 附上「公式计算值需在 Excel 中打开后生效」。
             openpyxl 不能自行计算公式，缺缓存值属正常现象。
+            R5（Round2）：存在缺缓存值公式时用 ``formulas`` 库本地求值
+            （见 :mod:`.excel_eval`，全 fail-safe），求出值的条目升级为
+            ``CELL=formula → value (本地求值)``；某 sheet 的公式全部解析
+            出值时不再附 ``note``。求值仅在 include_formulas=True 且至少
+            一个缓存值缺失时触发，且有公式数/超时上限。
 
     Returns:
         OfficeExcelReadResult with summary + sheets array (each with name + rows
@@ -221,26 +251,50 @@ def read_xlsx(
         except Exception as exc:
             raise OfficeParseError(f"Failed to parse XLSX: {exc}", file_path=file_path) from exc
 
-    sheets: List[ExcelSheetContent] = []
+    # R5（Round2）：先收集各 sheet 的公式条目；任一 sheet 存在缺缓存值的
+    # 公式时，才用 formulas 库做一次整簿本地求值（evaluate_workbook 内部
+    # 全 fail-safe，失败返回 None → 行为与不引入求值时完全一致）。
+    collected: List[Tuple[str, List[List[str]], int, int, Optional[List[str]]]] = []
+    any_cache_missing = False
     for ws in wb.worksheets:
         rows, max_row, max_col = _extract_sheet_rows(ws)
-        formulas: Optional[List[str]] = None
-        note: Optional[str] = None
+        entries: Optional[List[str]] = None
         if wb_formulas is not None and ws.title in wb_formulas.sheetnames:
-            entries, any_cache_missing = _extract_sheet_formulas(
+            formula_entries, sheet_cache_missing = _extract_sheet_formulas(
                 wb_formulas[ws.title], ws
             )
-            if entries:
-                formulas = entries
-                if any_cache_missing:
-                    note = _FORMULA_CACHE_NOTE
+            if formula_entries:
+                entries = formula_entries
+                if sheet_cache_missing:
+                    any_cache_missing = True
+        collected.append((ws.title, rows, max_row, max_col, entries))
+
+    evaluated: Optional[Dict[str, Dict[str, Any]]] = None
+    if any_cache_missing:
+        from .excel_eval import evaluate_workbook
+
+        evaluated = evaluate_workbook(file_path)
+
+    sheets: List[ExcelSheetContent] = []
+    for title, rows, max_row, max_col, entries in collected:
+        formulas_out: Optional[List[str]] = None
+        note: Optional[str] = None
+        if entries:
+            if evaluated:
+                formulas_out = _apply_local_eval(entries, evaluated.get(title))
+            else:
+                formulas_out = entries
+            # 缓存提示只对仍有「无缓存值且求值未解析」公式的 sheet 保留；
+            # 全部公式都解析出值时省略。
+            if any(" → " not in entry for entry in formulas_out):
+                note = _FORMULA_CACHE_NOTE
         sheets.append(
             ExcelSheetContent(
-                name=ws.title,
+                name=title,
                 rows=rows,
                 max_row=max_row,
                 max_col=max_col,
-                formulas=formulas,
+                formulas=formulas_out,
                 note=note,
             )
         )
@@ -293,6 +347,282 @@ def _mark_formula_cells(wb) -> int:
     return count
 
 
+def _apply_sheet_column_widths(writer, req) -> int:
+    """批次 2.3：把 ExcelSheetSpec.column_widths 写入对应 worksheet。
+
+    在 ``pd.ExcelWriter`` 上下文内、工作簿保存前调用；宽度单位为 Excel
+    字符宽度（与 openpyxl ``column_dimensions[..].width`` 一致）。返回
+    设置的列数（诊断用）。
+    """
+    from openpyxl.utils import get_column_letter
+
+    applied = 0
+    for sheet_spec in getattr(req, "sheets", None) or ():
+        widths = getattr(sheet_spec, "column_widths", None)
+        if not widths:
+            continue
+        ws = writer.sheets.get(sheet_spec.name[:31])
+        if ws is None:
+            continue
+        for col_idx, width in enumerate(widths[:200], start=1):
+            ws.column_dimensions[get_column_letter(col_idx)].width = float(width)
+            applied += 1
+    return applied
+
+
+def _apply_generate_charts(writer, req) -> int:
+    """批次 2.1：工作簿保存前挂载 ``req.charts`` 的 Excel 原生图表。
+
+    ``chart_spec.sheet`` 缺省挂到第一个 sheet。 Raises ValueError（由
+    generate_xlsx 折算为 OfficeGenerateError）。
+    """
+    from .charts import build_openpyxl_chart
+
+    applied = 0
+    book = writer.book
+    for chart_spec in getattr(req, "charts", None) or ():
+        name = getattr(chart_spec, "sheet", None) or (
+            book.sheetnames[0] if book.sheetnames else None
+        )
+        if not name or name not in book.sheetnames:
+            raise ValueError(f"chart_sheet_not_found: {getattr(chart_spec, 'sheet', None)!r}")
+        build_openpyxl_chart(book[name], chart_spec)
+        applied += 1
+    return applied
+
+
+
+
+def _apply_sheet_formats(writer, req) -> None:
+    """Round 14：按 sheet 应用表头样式 / 冻结首行 / 自适应列宽 / 数字格式。
+
+    在 ``pd.ExcelWriter`` 上下文内、``_apply_sheet_column_widths`` 之后
+    调用（autofit 尊重已写入的显式列宽）。全字段可选——任一未启用时该
+    项零触碰，旧 payload 行为不变。
+    """
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    header_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    header_font = Font(bold=True)
+    center = Alignment(horizontal="center", vertical="center")
+
+    for sheet_spec in getattr(req, "sheets", None) or ():
+        name = sheet_spec.name[:31]
+        ws = writer.sheets.get(name)
+        if ws is None:
+            continue
+        headers = list(sheet_spec.headers or [])
+
+        if sheet_spec.header_style and headers:
+            for cell in ws[1]:
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = center
+
+        if sheet_spec.freeze_header:
+            ws.freeze_panes = "A2"
+
+        if sheet_spec.autofit_columns:
+            explicit = {
+                get_column_letter(i + 1)
+                for i in range(len(sheet_spec.column_widths or []))
+            }
+            for col_idx in range(1, ws.max_column + 1):
+                letter = get_column_letter(col_idx)
+                if letter in explicit:
+                    continue
+                longest = 0
+                for row in ws.iter_rows(min_col=col_idx, max_col=col_idx):
+                    for cell in row:
+                        if cell.value is None:
+                            continue
+                        text = str(cell.value)
+                        width = sum(2 if ord(ch) > 0x2E80 else 1 for ch in text)
+                        longest = max(longest, width)
+                if longest:
+                    ws.column_dimensions[letter].width = min(longest * 1.2 + 2, 60)
+
+        if sheet_spec.number_formats and headers:
+            fmt_by_col = {}
+            for col_idx, header in enumerate(headers, start=1):
+                fmt = sheet_spec.number_formats.get(header)
+                if fmt:
+                    fmt_by_col[col_idx] = fmt
+            for col_idx, fmt in fmt_by_col.items():
+                for row in ws.iter_rows(min_col=col_idx, max_col=col_idx, min_row=2):
+                    for cell in row:
+                        if cell.value is None or cell.data_type == "f":
+                            continue
+                        cell.number_format = fmt
+
+def _apply_conditional_formats(writer, req) -> None:
+    """Round 17：把 ExcelConditionalFormatSpec 写入对应 worksheet。
+
+    在 ``_apply_sheet_formats`` 之后调用。三种规则：data_bar（数据条）、
+    color_scale（双色色阶）、duplicate（COUNTIF 重复值高亮）。range 非法
+    或 openpyxl 拒绝时单条跳过（warning），不阻断生成。
+    """
+    import logging
+    import re
+
+    from openpyxl.formatting.rule import (
+        ColorScaleRule,
+        DataBarRule,
+        FormulaRule,
+        IconSetRule,
+    )
+    from openpyxl.styles import PatternFill
+
+    logger_ = logging.getLogger(__name__)
+    cell_re = re.compile(r"^[A-Za-z]{1,3}[0-9]+$")
+
+    for sheet_spec in getattr(req, "sheets", None) or ():
+        ws = writer.sheets.get(sheet_spec.name[:31])
+        if ws is None:
+            continue
+        for cfmt in getattr(sheet_spec, "conditional_formats", None) or ():
+            rng = cfmt.range
+            cells = rng.split(":")
+            if len(cells) != 2 or not all(cell_re.match(c) for c in cells):
+                logger_.warning(
+                    "conditional format range 非法，跳过: %s (%s)", rng, sheet_spec.name
+                )
+                continue
+            try:
+                if cfmt.rule_type == "data_bar":
+                    rule = DataBarRule(
+                        start_type="min",
+                        end_type="max",
+                        color=(cfmt.color or "638EC6").lstrip("#"),
+                    )
+                    ws.conditional_formatting.add(rng, rule)
+                elif cfmt.rule_type == "color_scale":
+                    rule = ColorScaleRule(
+                        start_type="min",
+                        start_color=(cfmt.min_color or "F8696B").lstrip("#"),
+                        end_type="max",
+                        end_color=(cfmt.max_color or "63BE7B").lstrip("#"),
+                    )
+                    ws.conditional_formatting.add(rng, rule)
+                elif cfmt.rule_type == "icon_set":
+                    style = cfmt.icon_style or "3Arrows"
+                    n_icons = int(style[0])
+                    step = 100 // n_icons
+                    rule = IconSetRule(
+                        icon_style=style,
+                        type="percent",
+                        values=[i * step for i in range(n_icons)],
+                    )
+                    ws.conditional_formatting.add(rng, rule)
+                elif cfmt.rule_type == "duplicate":
+                    first_cell = rng.split(":")[0]
+                    fill = PatternFill(
+                        start_color=(cfmt.fill_color or "FFFF00").lstrip("#"),
+                        end_color=(cfmt.fill_color or "FFFF00").lstrip("#"),
+                        fill_type="solid",
+                    )
+                    rule = FormulaRule(
+                        formula=[f"COUNTIF({rng},{first_cell})>1"], fill=fill
+                    )
+                    ws.conditional_formatting.add(rng, rule)
+            except Exception as exc:  # noqa: BLE001 — 单条规则失败不阻断
+                logger_.warning(
+                    "conditional format 写入失败，跳过: %s (%s): %s",
+                    rng, sheet_spec.name, exc,
+                )
+
+
+def _apply_data_validations(writer, req) -> None:
+    """Round 18：把 ExcelDataValidationSpec 写为下拉列表数据验证。
+
+    内联列表 formula1 总长（含引号逗号）超 255 字符（Excel 硬限制）时
+    该条跳过（warning），不阻断生成。
+    """
+    import logging
+
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    logger_ = logging.getLogger(__name__)
+    for sheet_spec in getattr(req, "sheets", None) or ():
+        ws = writer.sheets.get(sheet_spec.name[:31])
+        if ws is None:
+            continue
+        for dv_spec in getattr(sheet_spec, "data_validations", None) or ():
+            options = list(dv_spec.options or [])
+            if not options:
+                continue
+            formula = '"' + ",".join(options) + '"'
+            if len(formula) > 255:
+                logger_.warning(
+                    "data validation 选项总长超 255 字符，跳过: %s (%s)",
+                    dv_spec.range, sheet_spec.name,
+                )
+                continue
+            dv = DataValidation(
+                type="list",
+                formula1=formula,
+                allow_blank=dv_spec.allow_blank,
+                showDropDown=False,  # False = 显示下拉箭头（openpyxl 语义取反）
+            )
+            dv.error = "请从下拉列表中选择有效选项"
+            dv.errorTitle = "无效输入"
+            if dv_spec.prompt_title:
+                dv.promptTitle = dv_spec.prompt_title
+            if dv_spec.prompt:
+                dv.prompt = dv_spec.prompt
+            dv.add(dv_spec.range)
+            ws.add_data_validation(dv)
+
+
+def _apply_print_setup(writer, req) -> None:
+    """Round 23：把 ExcelPrintSetupSpec 写入对应 worksheet。
+
+    在 ``_apply_conditional_formats`` 之后调用。方向 / fitToWidth /
+    打印区域逐项可选；openpyxl 拒绝时单条跳过（warning）不阻断。
+    """
+    import logging
+
+    logger_ = logging.getLogger(__name__)
+    for sheet_spec in getattr(req, "sheets", None) or ():
+        print_setup = getattr(sheet_spec, "print_setup", None)
+        if print_setup is None:
+            continue
+        ws = writer.sheets.get(sheet_spec.name[:31])
+        if ws is None:
+            continue
+        try:
+            if print_setup.orientation == "landscape":
+                ws.page_setup.orientation = "landscape"
+            elif print_setup.orientation == "portrait":
+                ws.page_setup.orientation = "portrait"
+            if print_setup.fit_to_width is not None:
+                ws.page_setup.fitToWidth = print_setup.fit_to_width
+                ws.sheet_properties.pageSetUpPr.fitToPage = True
+            if print_setup.print_area:
+                ws.print_area = print_setup.print_area
+            if getattr(print_setup, "title_rows", None):
+                ws.print_title_rows = print_setup.title_rows
+            # Round 31：打印页边距（厘米）——openpyxl 单位为英寸，需换算
+            margins = getattr(print_setup, "margins_cm", None)
+            if margins is not None:
+                from openpyxl.worksheet.page import PageMargins
+
+                def _cm_to_in(value):
+                    return None if value is None else value / 2.54
+
+                ws.page_margins = PageMargins(
+                    left=_cm_to_in(margins.left) or ws.page_margins.left,
+                    right=_cm_to_in(margins.right) or ws.page_margins.right,
+                    top=_cm_to_in(margins.top) or ws.page_margins.top,
+                    bottom=_cm_to_in(margins.bottom) or ws.page_margins.bottom,
+                    header=ws.page_margins.header,
+                    footer=ws.page_margins.footer,
+                )
+        except Exception as exc:  # noqa: BLE001 — 单 sheet 失败不阻断
+            logger_.warning("打印设置写入失败，跳过: %s (%s)", exc, sheet_spec.name)
+
+
 def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .xlsx file from structured Pydantic input.
 
@@ -313,6 +643,7 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     from .errors import OfficeGenerateError
     from .models import OfficeDocType
     from .path_safety import managed_document_path, resolve_output_path
+    from .progress import report_current
     from .storage import validate_workspace
 
     if output_dir is not None:
@@ -324,21 +655,89 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        wb = Workbook()
-        # Remove the default sheet — we'll add per spec
-        wb.remove(wb.active)
+        # Per Sprint 1 PR-1 (sage-excel-capability-assessment-2026-09-09):
+        # generate_xlsx now actually uses pandas. We build a one-row-or-more
+        # DataFrame per sheet and let pandas.ExcelWriter + df.to_excel
+        # handle file format, sheet creation, and cell-by-cell writes.
+        # This still depends on openpyxl under the hood (the engine), but
+        # pandas gives us:
+        #  - automatic row/column alignment (ragged rows become NaN → "")
+        #  - type coercion (numeric strings stay strings; "007" is preserved)
+        #  - ergonomic bulk insert for future multi-sheet templates
+        # Behaviour parity with the previous openpyxl-cell-by-loop is locked
+        # down by backend/tests/{unit,integration}/office/test_*_*.py.
 
-        for sheet_spec in req.sheets:
-            ws = wb.create_sheet(title=sheet_spec.name[:31])  # Excel limit
-            # Write headers
-            for ci, header in enumerate(sheet_spec.headers):
-                ws.cell(row=1, column=ci + 1, value=header)
-            # Write data rows (use pandas DataFrame for ergonomic insert)
-            for ri, row in enumerate(sheet_spec.rows):
-                for ci, cell in enumerate(row):
-                    ws.cell(row=ri + 2, column=ci + 1, value=cell)
+        # ``ExcelWriter(engine="openpyxl")`` creates an empty workbook on
+        # disk; df.to_excel(writer, sheet_name=...) adds each sheet.
+        # Note: ExcelWriter does NOT emit a default Sheet — sheets are
+        # only created by to_excel calls. Empty-sheet cases (zero to_excel
+        # calls) would leave a corrupt/empty .xlsx, so we fall back to
+        # openpyxl Workbook creation in that pathological case.
+        if not req.sheets:
+            # Defensive: Pydantic constrains sheets to min_length=1, so this
+            # branch is unreachable through the API. Kept for direct callers.
+            wb = Workbook()
+            wb.remove(wb.active)
+            wb.save(str(output_path))
+            return output_path
 
-        wb.save(str(output_path))
+        # Build all DataFrames first so we can detect the all-empty case
+        # before opening the writer (avoids writing a file with no sheets).
+        sheet_specs: List[Tuple[str, pd.DataFrame, bool]] = []
+        total_sheets = len(req.sheets)
+        for sheet_idx, sheet_spec in enumerate(req.sheets):
+            name = sheet_spec.name[:31]  # Excel 31-char sheet-name cap
+            headers = sheet_spec.headers
+            rows = sheet_spec.rows
+
+            # P12: 逐 sheet 进度上报
+            report_current(
+                f"生成工作表 {sheet_idx + 1}/{total_sheets}",
+                30 + int(50 * (sheet_idx + 1) / total_sheets),
+            )
+            if headers or rows:
+                # Build DataFrame. With columns=headers, pandas enforces the
+                # column count and pads/truncates ragged rows with NaN. We
+                # fill NaN with "" so the reader (which returns "" for empty
+                # cells) sees the same string grid as before.
+                df = pd.DataFrame(rows, columns=headers).fillna("")
+            else:
+                # Empty sheet: still need a sheet object but no data.
+                df = pd.DataFrame()
+
+            sheet_specs.append((name, df, bool(headers)))
+
+        # Pathological case: all sheets are empty AND we have at least one.
+            # ExcelWriter + zero to_excel calls would produce an empty file,
+            # which openpyxl can't read back as a valid workbook. Fall back
+            # to a minimal openpyxl Workbook with one empty sheet.
+            if all(df.empty and not has_headers for _, df, has_headers in sheet_specs):
+                wb = Workbook()
+                wb.remove(wb.active)
+                for name, _, _ in sheet_specs:
+                    wb.create_sheet(title=name)
+                wb.save(str(output_path))
+                return output_path
+
+        with pd.ExcelWriter(str(output_path), engine="openpyxl") as writer:
+            for name, df, has_headers in sheet_specs:
+                df.to_excel(
+                    writer,
+                    sheet_name=name,
+                    index=False,
+                    header=has_headers,
+                )
+            # Item 1.4: '=' 前缀的字符串单元格统一兜底为真公式
+            # （无公式时零改动；见 _mark_formula_cells）。
+            _mark_formula_cells(writer.book)
+            # 批次 2.3：按 sheet 写入可选列宽；批次 2.1：挂载原生图表
+            # （必须在 writer 保存前，图表才会随工作簿序列化）。
+            _apply_sheet_column_widths(writer, req)
+            _apply_sheet_formats(writer, req)
+            _apply_conditional_formats(writer, req)
+            _apply_data_validations(writer, req)
+            _apply_print_setup(writer, req)
+            _apply_generate_charts(writer, req)
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate XLSX: {exc}", file_path=output_path) from exc
 

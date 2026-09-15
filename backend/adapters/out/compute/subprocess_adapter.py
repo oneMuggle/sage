@@ -191,7 +191,7 @@ class SubprocessComputeAdapter:
                 proc.communicate(),
                 timeout=timeout_s,
             )
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):  # noqa: UP041 — py3.8/3.10: asyncio.TimeoutError ≠ builtin TimeoutError; 3.11+ 同一类
             proc.kill()
             await proc.wait()
             return ComputeResult(

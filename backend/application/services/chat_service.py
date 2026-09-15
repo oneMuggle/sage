@@ -35,6 +35,10 @@ from sage_core import LLMError, Message, Role, ToolCall
 from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
 
 from backend.application.services.wake_store import WakeStore
+from backend.chat.empty_response_guard import (
+    EMPTY_RESPONSE_SYSTEM_PROMPT,
+    empty_response_max_retries,
+)
 from backend.domain.wake import Wake, WakeKind, to_utc_iso
 
 # Optional memory types (for backward compatibility)
@@ -72,6 +76,19 @@ SKILL_NUDGE_SUFFIX = (
     "如果它可能是你会重复的流程，可以考虑把它保存为一个技能（SKILL.md）。"
 )
 
+# Round 2 (审阅触发升级, 对标 hermes background review 的判断力):
+# 后台审阅入队阈值降到 2 —— 2~3 次工具调用的边缘回合带
+# ``needs_screening=true`` 入队，由 ReviewService LLM 初筛决定要不要起稿
+# （LLM 不可用则跳过，宁缺勿滥）；≥4 次的复杂回合照旧直达起稿。
+# 用户可见的 SKILL_NUDGE 维持 ≥4 不变。审批闸口不变。
+REVIEW_ENQUEUE_TOOL_CALL_THRESHOLD = 2
+
+# Round 14: hex 路径空响应守卫 —— 无工具调用且 content 空白时注入
+# system 提示重试（与 legacy run_loop 的 B1 守卫同语义对齐）；
+# 重试耗尽保留原空响应（不 FAILED，不阻塞单轮）。
+# 切片 B: 重试上限与提示文案收敛到 backend.chat.empty_response_guard 共享件，
+# 统一读 SAGE_EMPTY_RESPONSE_MAX_RETRIES（此前 hex 硬编码 1，legacy 默认 2）。
+
 # OTel tracer（P3.3：用于在 span 上记录关键属性）
 _tracer = get_tracer("chat_service")
 
@@ -108,8 +125,8 @@ class ChatService:
         permission_preset: Optional[PermissionPreset] = None,  # M3 权限预设
         permission_allowed_paths: Optional[List[str]] = None,  # M3 允许的路径
         permission_denied_tools: Optional[List[str]] = None,  # M3 黑名单
-        lifecycle: Optional[Any] = None,  # Task 4 / Gap A — optional MemoryLifecycleManager
         wake_store: Optional[WakeStore] = None,  # A4 Suspend-Resume 唤醒仓储
+        lifecycle: Optional[Any] = None,  # Task 4 / Gap A — optional MemoryLifecycleManager
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -130,6 +147,16 @@ class ChatService:
         )
         # P3.2: 当前活跃 session 计数（用于 sage_active_sessions gauge）
         self._active_session_count: int = 0
+        # WS-C P0-3: system prompt frozen snapshot — 按 session 缓存静态段
+        # （身份 / 工具说明等不随 turn 变化的部分），后续 turn 复用同一字符串
+        # 以保证 LLM 请求前缀稳定、提升 prefix cache 命中率；动态记忆段
+        # 每 turn 拼接在快照之后。key=session_id, value=静态 prompt。
+        # session_id 为空的调用不缓存（见 _run_turn_inner）。
+        self._system_prompt_snapshots: Dict[str, str] = {}
+        # WS-C P0-3: 注册到弱引用登记表，使 legacy_routes 压缩落盘完成后
+        # 可通过模块级 invalidate_session_snapshot() 通知所有存活实例失效
+        # 对应 session 的快照（WeakSet 不阻止实例被 GC）。
+        _CHAT_SERVICE_REGISTRY.add(self)
 
     # ------------------------------------------------------------------ #
     # 会话生命周期（含审计事件 + Prometheus 指标）
@@ -280,18 +307,20 @@ class ChatService:
         )
         span.set_attribute("history.size", len(history))
 
-        # Inject system prompt (including diagram tool guidance if available)
-        from backend.agents.profiles import build_system_base
+        # WS-C P0-3: frozen snapshot — system prompt 拆成「静态段 + 动态段」：
+        #   静态段（身份 / 工具说明, 不随 turn 变化）按 session 首次组装后
+        #   缓存复用, 保证 LLM 请求前缀稳定, 提升 prefix cache 命中率;
+        #   动态段（每 turn retrieve 的记忆上下文）逐轮拼接在快照之后,
+        #   注入位置与现状保持一致。session_id 为空则不缓存, 走旧路径。
+        static_content = (
+            self._system_prompt_snapshots.get(session_id) if session_id else None
+        )
+        if static_content is None:
+            static_content = self._build_static_system_prompt()
+            if session_id:
+                self._system_prompt_snapshots[session_id] = static_content
 
-        system_content = build_system_base()
-        try:
-            from backend.core.diagram_prompt import DIAGRAM_TOOL_PROMPT
-
-            # Check if diagram tools are available in the tool registry
-            if self.tools and any("drawio" in t.name for t in self.tools.list()):
-                system_content += DIAGRAM_TOOL_PROMPT
-        except Exception:
-            pass
+        system_content = static_content
 
         # 2.5) 注入记忆上下文到 system prompt (Memory Integration)
         if memory_context and memory_context.has_memories:
@@ -405,6 +434,13 @@ class ChatService:
         span.set_attribute("llm.duration_ms", int(duration * 1000))
         span.set_attribute("response.has_tool_calls", bool(response.tool_calls))
 
+        # Round 14: 空响应守卫（与 legacy B1 同语义）—— 空白回复先重试
+        if (not response.tool_calls) and (not (response.content or "").strip()):
+            retried = await self._retry_empty_response(history, llm_tools)
+            if retried is not None:
+                response = retried
+                span.set_attribute("response.empty_retried", True)
+
         # 4) 执行模型发起的 tool_calls（PG2.9：单轮执行；不触发二次 LLM）
         budget_exceeded = False
         if response.tool_calls:
@@ -431,13 +467,21 @@ class ChatService:
                 tool_call_count >= SKILL_NUDGE_TOOL_CALL_THRESHOLD
                 and not activation_block
             )
+            # Round 2: 低阈值入队（2~3 次工具调用）→ 需要 LLM 初筛
+            should_enqueue_review = (
+                tool_call_count >= REVIEW_ENQUEUE_TOOL_CALL_THRESHOLD
+                and not activation_block
+            )
+            needs_screening = (
+                tool_call_count < SKILL_NUDGE_TOOL_CALL_THRESHOLD
+            )
 
             if response.content and is_complex_turn:
                 response.content = (response.content or "") + SKILL_NUDGE_SUFFIX
                 span.set_attribute("skills.nudge_applied", True)
 
             # 4.5.1) Background Review: enqueue complex_turn signal
-            if is_complex_turn:
+            if should_enqueue_review:
                 from backend.skills.review_queue import get_review_queue
 
                 review_queue = get_review_queue()
@@ -453,6 +497,7 @@ class ChatService:
                         "tool_calls": tool_calls_serialized,
                         "tool_call_count": tool_call_count,
                         "threshold": SKILL_NUDGE_TOOL_CALL_THRESHOLD,
+                        "needs_screening": needs_screening,
                     },
                 )
                 span.set_attribute("review.complex_turn_enqueued", True)
@@ -491,16 +536,17 @@ class ChatService:
             span.set_attribute("tokens.completion", completion_tokens)
 
         # 7) 提取并存储记忆 (Memory Integration)
-        # Gate via auto_memory flag (caches 30s, default True). Lifecycle wrapper
-        # exposes is_auto_memory_enabled(); legacy MemoryManager does not, so
-        # hasattr() lets tests/older call sites pass through unchanged.
+        #    - lifecycle 装配时（win7 Task 6 / Gap A）：MemoryLifecycleManager
+        #      .on_turn_complete 负责 auto_memory 门控 + 提取 + 持久化 + 逐条
+        #      memory_written 事件；source_message_id 指向真实落库的消息 id。
+        #    - 否则若 memory 暴露 is_auto_memory_enabled()：门控后走
+        #      _extract_and_store_memory；门控关闭时 store/compress 均跳过。
+        #    - 否则（legacy MemoryManager / MemoryAdapter 直连）：同步走
+        #      _extract_and_store_memory，保留 memory_category / source_turn_id /
+        #      source_message_id 可追溯字段（main 的后台提取队列
+        #      MemoryExtractionQueue 仍由 legacy_routes 聊天路径使用）。
         if self.memory:
             if self._lifecycle is not None:
-                # Task 6 — production end-of-turn path: the lifecycle hook does
-                # extraction + persist + emits one memory_written per fact (gate
-                # handled internally via is_auto_memory_enabled). source_message_id
-                # threads the persisted assistant/user message id so click-to-trace
-                # highlights the exact producing message.
                 try:
                     await self._lifecycle.on_turn_complete(
                         session_id,
@@ -510,11 +556,7 @@ class ChatService:
                 except Exception as e:  # noqa: BLE001 — never break the turn
                     logger.warning(f"on_turn_complete failed: {e}")
                     span.set_attribute("memory.store_error", str(e))
-                try:
-                    await self.memory.compress(session_id)
-                except Exception as e:  # noqa: BLE001 — never break the turn
-                    logger.warning(f"Failed to compress working memory: {e}")
-                    span.set_attribute("memory.compress_error", str(e))
+                await self._compress_working_memory(session_id, span)
             elif hasattr(self.memory, "is_auto_memory_enabled"):
                 try:
                     auto_enabled = await self.memory.is_auto_memory_enabled()
@@ -535,11 +577,7 @@ class ChatService:
                     except Exception as e:
                         logger.warning(f"Failed to store memory: {e}")
                         span.set_attribute("memory.store_error", str(e))
-                    try:
-                        await self.memory.compress(session_id)
-                    except Exception as e:
-                        logger.warning(f"Failed to compress working memory: {e}")
-                        span.set_attribute("memory.compress_error", str(e))
+                    await self._compress_working_memory(session_id, span)
             else:
                 # Legacy path: MemoryManager doesn't have lifecycle wrapper yet
                 try:
@@ -553,16 +591,8 @@ class ChatService:
                 except Exception as e:
                     logger.warning(f"Failed to store memory: {e}")
                     span.set_attribute("memory.store_error", str(e))
-
-            # 8) 压缩工作记忆 (Memory Integration) — 仅 win7 legacy path 兜底调用 compress：
-            # hex path (lifecycle 不为 None) 已在 if 分支内部调；
-            # gate path (memory.is_auto_memory_enabled) 已在 elif 分支内部调。
-            if self.memory is not None and self._lifecycle is None and not hasattr(self.memory, "is_auto_memory_enabled"):
-                try:
-                    await self.memory.compress(session_id)
-                except Exception as e:
-                    logger.warning(f"Failed to compress working memory: {e}")
-                    span.set_attribute("memory.compress_error", str(e))
+                # 8) 压缩工作记忆 (Memory Integration)
+                await self._compress_working_memory(session_id, span)
 
             # 9) 标题自动生成：首轮对话后 (message_count <= 2)
             try:
@@ -586,8 +616,59 @@ class ChatService:
         return [user_message, response]
 
     # ------------------------------------------------------------------ #
+    # 内部辅助：system prompt 组装 (WS-C P0-3 frozen snapshot)
+    # ------------------------------------------------------------------ #
+
+    def _build_static_system_prompt(self) -> str:
+        """组装 system prompt 的静态段（身份 + agent 列表 + 图表工具说明）。
+
+        返回内容**不包含**任何随 turn 变化的部分（如每轮检索的记忆上下文），
+        因此可按 session 缓存为 frozen snapshot 跨 turn 复用，保证 LLM
+        请求前缀稳定、提升 prefix cache 命中率。
+        """
+        from backend.agents.profiles import build_system_base
+
+        system_content = build_system_base()
+        try:
+            from backend.core.diagram_prompt import (
+                DIAGRAM_TOOL_PROMPT,
+                DRAWIO_TOOL_PREFIX,
+            )
+
+            # Check if diagram tools are available in the tool registry
+            if self.tools and any(
+                tool.name.startswith(DRAWIO_TOOL_PREFIX)
+                for tool in self.tools.list_tools()
+            ):
+                system_content += DIAGRAM_TOOL_PROMPT
+        except Exception:
+            pass
+        return system_content
+
+    def invalidate_session_snapshot(self, session_id: str) -> None:
+        """丢弃指定 session 的 system prompt 静态段快照（下一轮重建）。
+
+        WS-C P0-3 失效点：会话压缩完成后由 legacy_routes 的压缩落盘路径
+        （``_persist_compaction``）经模块级 ``invalidate_session_snapshot()``
+        路由到本方法——压缩只在 legacy_routes 触发（自动 / 手动），
+        ChatService 自身无感知，故采用"模块级登记 + 广播失效"的最小改动
+        方案。代价 = 每次压缩后首轮重建一次静态段，可忽略。
+
+        对未知 / 不存在的 session_id 调用是安全的 no-op。
+        """
+        self._system_prompt_snapshots.pop(session_id, None)
+
+    # ------------------------------------------------------------------ #
     # 内部辅助：记忆提取与存储 (Memory Integration)
     # ------------------------------------------------------------------ #
+
+    async def _compress_working_memory(self, session_id: str, span: Any) -> None:
+        """压缩工作记忆（best-effort，失败只记 warning + span 属性）。"""
+        try:
+            await self.memory.compress(session_id)
+        except Exception as e:  # noqa: BLE001 — never break the turn
+            logger.warning(f"Failed to compress working memory: {e}")
+            span.set_attribute("memory.compress_error", str(e))
 
     async def _extract_and_store_memory(
         self,
@@ -617,7 +698,10 @@ class ChatService:
         extractor = MemoryExtractor(llm_client=self.llm)
         facts = await extractor.extract(
             user_message=user_message.content or "",
-            assistant_message=assistant_message.content or "",
+            # 剥离技能 nudge 后缀, 避免提示文本被提取为"记忆事实"（review LOW）
+            assistant_message=(assistant_message.content or "").replace(
+                SKILL_NUDGE_SUFFIX, ""
+            ),
         )
 
         for fact in facts:
@@ -740,6 +824,33 @@ class ChatService:
     # ------------------------------------------------------------------ #
     # 内部辅助：执行 tool_calls
     # ------------------------------------------------------------------ #
+
+    async def _retry_empty_response(
+        self, history: List[Message], llm_tools: Optional[List[Dict[str, Any]]]
+    ) -> Optional[Message]:
+        """空响应重试：注入 system 提示后再试至多 N 次（Round 14）。
+
+        重试上限读 SAGE_EMPTY_RESPONSE_MAX_RETRIES（切片 B：与 legacy 统一，
+        默认 2，<=0 关闭守卫）。
+
+        Returns:
+            首个非空响应；重试耗尽仍为空 → None（调用方保留原空响应，
+            行为退化为旧版，不 FAILED）。
+        """
+        retry_history = list(history) + [
+            Message(role=Role.SYSTEM, content=EMPTY_RESPONSE_SYSTEM_PROMPT)
+        ]
+        max_retries = empty_response_max_retries()
+        for attempt in range(max_retries):
+            logger.warning("hex 空响应重试（第 %d/%d 次）", attempt + 1, max_retries)
+            try:
+                response = await self.llm.chat(retry_history, tools=llm_tools)
+            except Exception as exc:  # noqa: BLE001 — 重试失败即放弃（保留原响应）
+                logger.warning("hex 空响应重试失败: %s", exc)
+                return None
+            if (response.tool_calls) or (response.content or "").strip():
+                return response
+        return None
 
     async def _execute_tool_calls(
         self,
@@ -1006,6 +1117,7 @@ def invalidate_session_snapshot(session_id: str) -> None:
         except Exception as e:  # 防御性：单实例失效失败不阻断其余实例
             logger.warning(f"Failed to invalidate snapshot for session {session_id}: {e}")
 
+
 def _extract_action_target(args: dict) -> str:
     """从工具参数中提取 ``LanePermission`` 关心的 target。
 
@@ -1022,3 +1134,4 @@ def _extract_action_target(args: dict) -> str:
         if isinstance(v, str):
             return v
     return ""
+

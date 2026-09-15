@@ -64,6 +64,18 @@ export default defineConfig({
   // - base: './' required for Electron file:// loading (relative paths)
   // - watch.ignored now excludes archive/ (was src-tauri/, archived)
   base: './',
+  resolve: {
+    // CRITICAL: dedupe react/react-dom so ReactDOM reads the SAME React
+    // instance as React. Without this, ESM module resolution can produce
+    // two different module records for `react` and `react-dom`, and
+    // ReactDOM's __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED
+    // check fails (returns undefined) → TypeError → white screen.
+    // Symptom: `Cannot read properties of undefined (reading
+    // '__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED')` in
+    // vendor-react-*.js line ~17, with rootChildren=0 (React never
+    // initialized). v0.4.5-alpha.17 logs showed exactly this.
+    dedupe: ['react', 'react-dom', 'react-dom/client'],
+  },
   clearScreen: false,
   server: {
     // Keep the development server and Vitest UI on loopback only. Do not
@@ -95,6 +107,18 @@ export default defineConfig({
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 500,
+    resolve: {
+      // CRITICAL: dedupe react/react-dom so ReactDOM reads the SAME React
+      // instance as React. Without this, ESM module resolution can produce
+      // two different module records for `react` and `react-dom`, and
+      // ReactDOM's __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED
+      // check fails (returns undefined) → TypeError → white screen.
+      // Symptom: `Cannot read properties of undefined (reading
+      // '__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED')` in
+      // vendor-react-*.js line ~17, with rootChildren=0 (React never
+      // initialized).
+      dedupe: ['react', 'react-dom', 'react-dom/client'],
+    },
     rollupOptions: {
       output: {
         manualChunks: {

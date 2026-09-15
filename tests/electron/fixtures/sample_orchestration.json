@@ -1,0 +1,9 @@
+{
+  "session_id": "sess_sample_001",
+  "plan": "Research 3-tier memory + produce summary",
+  "agents": [
+    {"name": "planner",  "agent_id": "planner_1"},
+    {"name": "executor", "agent_id": "executor_1"},
+    {"name": "reviewer", "agent_id": "reviewer_1"}
+  ]
+}

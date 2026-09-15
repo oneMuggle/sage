@@ -141,9 +141,9 @@ def _read_frontmatter(path: Path) -> Tuple[Dict[str, str], str]:
 
 def _rel(path: Path, root: Path) -> str:
     try:
-        return str(path.relative_to(root))
+        return path.relative_to(root).as_posix()
     except ValueError:
-        return str(path)
+        return path.as_posix()
 
 
 def _resolve_wikilink(target: str, wiki_dir: Path) -> Optional[Path]:
@@ -201,11 +201,11 @@ class WikiReview:
         for md in self.wiki_dir.rglob("*.md"):
             stem = md.stem.lower()
             existing_targets.add(stem)
-            rel = _rel(md, self.wiki_dir).replace("\\", "/")
-            # py3.8 无 str.removesuffix（py3.9+）
-            if rel.endswith(".md"):
-                rel = rel[: -len(".md")]
-            existing_targets.add(rel.lower())
+            rel = _rel(md, self.wiki_dir)
+            rel_key = rel.replace("\\", "/")
+            if rel_key.endswith(".md"):  # py3.8: 无 str.removesuffix（3.9+）
+                rel_key = rel_key[: -len(".md")]
+            existing_targets.add(rel_key.lower())
 
         items: List[ReviewItem] = []
         # target → 指向它的源文件列表

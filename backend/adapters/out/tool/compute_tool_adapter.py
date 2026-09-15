@@ -32,8 +32,8 @@ from sage_core.repositories import (
     ToolPort,  # noqa: F401  (structural typing target)
 )
 
-from backend.adapters.out.tool.inproc_adapter import _truncate_output
 from backend.domain.tool_policy import ToolPolicy
+from backend.tools.executor import truncate_output as _truncate_output
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ def _compute_result_to_tool_result(result: ComputeResult, policy: ToolPolicy) ->
                 error=f"compute output not JSON-serializable: {exc}",
                 metadata=metadata or None,
             )
-        truncated, truncation_meta = _truncate_output(output_str, policy)
+        truncated, truncation_meta = _truncate_output(output_str, policy.max_output_bytes)
         if truncation_meta:
             metadata.update(truncation_meta)
         return ToolResult(

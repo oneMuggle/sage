@@ -23,7 +23,10 @@ from backend.skills.skill_md.script_runner import ScriptRunner
 from backend.skills.skill_md.skill import SkillMdDocument
 from backend.skills.skill_md.slash_registry import SlashCommandRegistry
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(os.name == "nt", reason="PR2 安全用例依赖 POSIX O_NOFOLLOW/symlink（Windows 支持另行批次）"),
+]
 
 
 def _write_skill(root: Path, name: str = "demo") -> Path:
@@ -81,6 +84,7 @@ async def test_inproc_prefers_execute_v2_and_keeps_sync_fallback():
 def test_production_adapter_builds_fail_closed_script_runner(tmp_path, monkeypatch):
     monkeypatch.setenv("SAGE_SKILLS_DIR", str(tmp_path))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))  # Windows expanduser 读 USERPROFILE
     monkeypatch.chdir(Path(__file__).resolve().parents[2])
     with patch("backend.skills.register_skill_md_skills") as register:
         adapter = InprocSkillAdapter(registry=SkillRegistry())

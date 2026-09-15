@@ -191,7 +191,9 @@ def _validate_interact_args(
     return None
 
 
-def _validate_action_args(action: str, selector: str, text: str, value: str) -> Optional[ToolResult]:
+def _validate_action_args(
+    action: str, selector: str, text: str, value: str
+) -> Optional[ToolResult]:
     """click / type 两个依赖定位参数的 action 的专项校验。"""
     if action == "click":
         if not selector and not text:
@@ -329,8 +331,14 @@ class BrowserNavigateTool(BaseTool):
                 "type": "object",
                 "properties": {
                     "url": {"type": "string", "description": "目标 URL"},
-                    "browser_id": {"type": "string", "description": "browser_launch 返回的 id（单实例可省略）"},
-                    "new_tab": {"type": "boolean", "description": "在新标签页打开（默认 false，用当前页）"},
+                    "browser_id": {
+                        "type": "string",
+                        "description": "browser_launch 返回的 id（单实例可省略）",
+                    },
+                    "new_tab": {
+                        "type": "boolean",
+                        "description": "在新标签页打开（默认 false，用当前页）",
+                    },
                     "wait_for": {
                         "type": "string",
                         "description": "CSS 选择器：等它出现再返回（默认空 = 就绪+稳定即返回）",
@@ -370,9 +378,9 @@ class BrowserNavigateTool(BaseTool):
         try:
             session = _resolve_session(browser_id or None)
             if new_tab:
-                created = cdp_command(
-                    session, "Target.createTarget", {"url": url.strip()}
-                ).get("targetId")
+                created = cdp_command(session, "Target.createTarget", {"url": url.strip()}).get(
+                    "targetId"
+                )
                 if not created:
                     return ToolResult(success=False, error="新标签页创建失败")
                 _wait_page_settled(session, created, wait_for)
@@ -473,7 +481,10 @@ class BrowserInteractTool(BaseTool):
                 "properties": {
                     "action": {"type": "string", "description": "click | type | press | scroll"},
                     "selector": {"type": "string", "description": "CSS 选择器（click/type 用）"},
-                    "text": {"type": "string", "description": "按可见文本定位（click 用，selector 缺省时生效）"},
+                    "text": {
+                        "type": "string",
+                        "description": "按可见文本定位（click 用，selector 缺省时生效）",
+                    },
                     "value": {"type": "string", "description": "type 的输入内容 / scroll 的像素"},
                     "key": {"type": "string", "description": "press 的键名"},
                     "clear": {"type": "boolean", "description": "type 前先清空（默认 false）"},
@@ -626,9 +637,7 @@ class BrowserCloseTool(BaseTool):
                 cdp_command(session, "Target.closeTarget", {"targetId": target_id})
             except BrowserCDPError as exc:
                 return _error(exc)
-            return ToolResult(
-                success=True, content={"closed": "target", "target_id": target_id}
-            )
+            return ToolResult(success=True, content={"closed": "target", "target_id": target_id})
 
         from .browser_cdp import _terminate_session
 
@@ -641,17 +650,18 @@ class BrowserCloseTool(BaseTool):
 
 
 class BrowserCookiesTool(BaseTool):
-    """导出/管理站点 cookie 凭据档案（cookie 桥，方案 2026-09-13 §2.5）。
+    """导出/管理站点凭据档案（cookie 桥，方案 2026-09-13 §2.5；Round 5 AU1/AU4）。
 
-    导出当前页面 cookie domain 的 cookie，经 SecretBox 加密落档案；之后
-    ``web_fetch`` / ``http_download`` 用 ``credential_domain`` 引用，登录墙
-    后的资源（订阅源文献 PDF）即可达。返回结果恒为脱敏预览（只有名字）。
+    导出当前页面 cookie domain 的 cookie（含 expires/secure 元数据），经 SecretBox
+    加密落档案；之后 ``web_fetch`` / ``http_download`` 用 ``credential_domain``
+    引用，登录墙后的资源（订阅源文献 PDF）即可达。``set_header`` 动作另存
+    头部型凭据（Bearer / API key），无需浏览器。返回结果恒为脱敏预览（只有名字）。
     """
 
     risk = RiskClass.WRITE_LOCAL
     is_blocking = True
 
-    _VALID_ACTIONS = ("export", "list", "delete")
+    _VALID_ACTIONS = ("export", "list", "delete", "set_header")
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
@@ -660,16 +670,33 @@ class BrowserCookiesTool(BaseTool):
                 "站点 cookie 凭据档案。action=export：把当前浏览器页面的 "
                 "cookie（按其 domain）加密存入凭据档案，供 web_fetch / "
                 "http_download 用 credential_domain 参数引用（先登录后导出，"
-                "即可抓登录墙后的资源）；action=list：列出档案（脱敏）；"
-                "action=delete：删除某 domain 的档案。"
+                "即可抓登录墙后的资源）；action=list：列出档案（脱敏，含剩余时效）；"
+                "action=delete：删除某 domain 的档案；action=set_header：保存头部型凭据"
+                "（如 header_name=Authorization header_value='Bearer xxx' 或 API key 自定义头，"
+                "无需浏览器，值不回显），同样以 credential_domain 引用、跨域剥离。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
-                    "action": {"type": "string", "description": "export | list | delete"},
+                    "action": {
+                        "type": "string",
+                        "description": "export | list | delete | set_header",
+                    },
                     "domain": {
                         "type": "string",
-                        "description": "delete 用的档案 domain（如 .cnki.net）",
+                        "description": "delete / set_header 用的档案 domain（如 .cnki.net、api.example.com）",
+                    },
+                    "header_name": {
+                        "type": "string",
+                        "description": "set_header：头名（如 Authorization、X-API-Key）",
+                    },
+                    "header_value": {
+                        "type": "string",
+                        "description": "set_header：头值（如 'Bearer xxx'）；只加密落库，不回显",
+                    },
+                    "ttl_seconds": {
+                        "type": "integer",
+                        "description": "set_header：可选有效期（秒），过期后报 credential_expired",
                     },
                     "browser_id": {"type": "string", "description": "单实例可省略"},
                 },
@@ -677,20 +704,56 @@ class BrowserCookiesTool(BaseTool):
             },
         )
 
-    def execute(  # noqa: PLR0911 — 每个拒绝/动作路径独立 return，扁平更直读
-        self, action: str = "", domain: str = "", browser_id: str = "", **kwargs: Any
+    def execute(  # noqa: PLR0911, PLR0913 — 每个拒绝/动作路径独立 return，扁平更直读
+        self,
+        action: str = "",
+        domain: str = "",
+        browser_id: str = "",
+        header_name: str = "",
+        header_value: str = "",
+        ttl_seconds: int = 0,
+        **kwargs: Any,
     ) -> ToolResult:
         if kwargs:
             return ToolResult(
                 success=False,
                 error=(
                     f"未知参数: {', '.join(sorted(kwargs))}"
-                    "（合法参数: action, domain, browser_id）"
+                    "（合法参数: action, domain, browser_id, header_name, header_value, ttl_seconds）"
                 ),
             )
         if action not in self._VALID_ACTIONS:
             return ToolResult(
                 success=False, error=f"action 必须是 {', '.join(self._VALID_ACTIONS)}"
+            )
+
+        if action == "set_header":
+            from .credential_vault import save_header_credential
+
+            if not domain.strip() or not header_name.strip() or not str(header_value).strip():
+                return ToolResult(
+                    success=False, error="set_header 需要 domain、header_name、header_value"
+                )
+            try:
+                save_header_credential(
+                    domain,
+                    {header_name.strip(): str(header_value)},
+                    ttl_seconds=int(ttl_seconds) if ttl_seconds else None,
+                )
+            except ValueError as exc:
+                return ToolResult(success=False, error=f"invalid_header: {exc}")
+            return ToolResult(
+                success=True,
+                content={
+                    "domain": domain.strip().lower(),
+                    "kind": "header",
+                    "header_names": [header_name.strip()],
+                    "expires_in_seconds": int(ttl_seconds) if ttl_seconds else None,
+                    "note": (
+                        "头部凭据已加密存档（值不回显）。web_fetch / http_download "
+                        "传 credential_domain=<上述 domain> 即可附加该头（跨域自动剥离）。"
+                    ),
+                },
             )
 
         if action == "list":
@@ -725,6 +788,7 @@ class BrowserCookiesTool(BaseTool):
         from .credential_vault import save_credential
 
         by_domain: Dict[str, list] = {}
+        now = time.time()
         for item in raw_cookies:
             if not isinstance(item, dict) or not item.get("name"):
                 continue
@@ -735,11 +799,18 @@ class BrowserCookiesTool(BaseTool):
         saved = []
         for cookie_domain, cookies in sorted(by_domain.items()):
             save_credential(cookie_domain, cookies)
+            # AU1：告知最短剩余时效，模型 / 用户可预知失效
+            expiries = [
+                int(c["expires"] - now)
+                for c in cookies
+                if isinstance(c.get("expires"), (int, float)) and c["expires"] > 0  # noqa: UP038 — py3.8
+            ]
             saved.append(
                 {
                     "domain": cookie_domain,
                     "cookie_names": [str(c.get("name")) for c in cookies],
                     "count": len(cookies),
+                    "expires_in_seconds": min(expiries) if expiries else None,
                 }
             )
         return ToolResult(

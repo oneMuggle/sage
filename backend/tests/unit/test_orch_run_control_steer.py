@@ -89,7 +89,7 @@ def _seed_run_and_task_sync(store: SnapshotStore, *, run_id="run-1", task_id="t1
             ))
             current = store.get_task_revision(run_id, task_id)
 
-    asyncio.get_event_loop().run_until_complete(_go())
+    asyncio.run(_go())
 
 
 # ---------------------------------------------------------------- happy path
@@ -171,7 +171,7 @@ def test_steer_broadcasts_control_events(app_deps) -> None:
         finally:
             await sub.close()
 
-    events = asyncio.get_event_loop().run_until_complete(_capture())
+    events = asyncio.run(_capture())
     types = [e.event_type for e in events]
     assert "task.context.append_requested" in types
     assert "task.context.appended" in types
@@ -234,7 +234,7 @@ def test_steer_returns_409_when_task_succeeded(app_deps) -> None:
             entity={"task_id": "t1"}, payload={"output_preview": "done"},
         ))
 
-    asyncio.get_event_loop().run_until_complete(_seed_terminal())
+    asyncio.run(_seed_terminal())
 
     resp = tc.post(
         "/orch/runs/run-1/tasks/t1/steer",
@@ -265,7 +265,7 @@ def test_steer_returns_409_when_task_failed(app_deps) -> None:
             entity={"task_id": "t1"}, payload={"error": "boom"},
         ))
 
-    asyncio.get_event_loop().run_until_complete(_seed_terminal())
+    asyncio.run(_seed_terminal())
 
     resp = tc.post(
         "/orch/runs/run-1/tasks/t1/steer",

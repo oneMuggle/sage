@@ -1,8 +1,7 @@
-"""期刊子系统的 Pydantic 模型 (main+win7 双兼容)。
+"""期刊子系统的 Pydantic v2 模型。
 
 设计要点：
-- 同时支持 Pydantic v1 (release/win7 + Python 3.8) 与 v2 (main + Python 3.10)
-- 使用 ConfigDict(extra="forbid") (v2) / class Config (v1) 防字段蔓延；
+- 使用 ConfigDict(extra="forbid") 防止字段蔓延；
 - 时间戳统一 epoch ms（与 office.models 一致）；
 - enums 继承 str 兼容 sqlite 存储；
 - JournalSpec 暴露 validate_content(content) 自检方法，generator/validator 复用。
@@ -10,18 +9,13 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional
 
-try:  # Pydantic v2 (main, Python 3.10+)
-    from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field
 
-    _PYDANTIC_V2 = True
-except ImportError:  # Pydantic v1 (release/win7, Python 3.8)
-    from pydantic import BaseModel, Field, validator as field_validator  # type: ignore[no-redef]
-
-    _PYDANTIC_V2 = False
-
+from backend.compat.win7.pydantic_compat import ConfigDict, field_validator
 from backend.office.journal.errors import JournalContentShapeError
+from backend.office.models import ReferenceSpec
 
 
 class ViolationSeverity(str, Enum):
@@ -41,26 +35,15 @@ class CitationStyle(str, Enum):
 
 
 class FontFamily(BaseModel):
-    if _PYDANTIC_V2:
-        model_config = ConfigDict(extra="forbid")
-    else:
-        class Config:
-            extra = "forbid"
-
+    model_config = ConfigDict(extra="forbid")
     family: str
     ascii_family: Optional[str] = None
     eastasia: Optional[str] = None
 
 
 class HeadingSpec(BaseModel):
-    if _PYDANTIC_V2:
-        model_config = ConfigDict(extra="forbid")
-    else:
-        class Config:
-            extra = "forbid"
-
+    model_config = ConfigDict(extra="forbid")
     keyword: str
-    # Field(ge=..., le=...) 在 v1/v2 均支持数值约束
     level: int = Field(ge=1, le=6)
     expected_pt: float = Field(gt=0)
 
@@ -68,11 +51,7 @@ class HeadingSpec(BaseModel):
 class JournalSpec(BaseModel):
     """由 parser 从 OOXML 自动抽取的期刊格式规范。"""
 
-    if _PYDANTIC_V2:
-        model_config = ConfigDict(extra="forbid")
-    else:
-        class Config:
-            extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     spec_id: str
     template_sha256: str
@@ -104,38 +83,24 @@ class JournalSpec(BaseModel):
 class JournalContent(BaseModel):
     """用户提交的论文内容（结构化）。"""
 
-    if _PYDANTIC_V2:
-        model_config = ConfigDict(extra="forbid")
-    else:
-        class Config:
-            extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
-    # v1 不支持 str 上的 min_length/max_length — 改用 validator 兜底
-    title: str = ""
-    abstract: str = ""
+    title: str = Field(min_length=1, max_length=200)
+    abstract: str = Field(default="")
     sections: Dict[str, str] = Field(default_factory=dict)  # section_key → text
     references: List[str] = Field(default_factory=list)
+    # Round 21：结构化文献（可选）。提供时 fill 阶段用 R9 引用引擎
+    # （backend.office.references）按 citation_style 格式化生成带 [N]
+    # 编号的参考文献文本，优先于 references 纯文本。
+    structured_references: Optional[List[ReferenceSpec]] = None
+    citation_style: Literal["gbt7714", "apa"] = "gbt7714"
     citations: List[str] = Field(default_factory=list)
-
-    if not _PYDANTIC_V2:
-        @field_validator("title")  # type: ignore[misc]
-        @classmethod
-        def _check_title(cls, v: str) -> str:
-            if not v:
-                raise ValueError("title 不能为空")
-            if len(v) > 200:
-                raise ValueError("title 长度不能超过 200")
-            return v
 
 
 class JournalViolation(BaseModel):
     """单条规则违规 + 修复建议。"""
 
-    if _PYDANTIC_V2:
-        model_config = ConfigDict(extra="forbid")
-    else:
-        class Config:
-            extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     rule_id: str
     severity: ViolationSeverity
@@ -147,11 +112,7 @@ class JournalViolation(BaseModel):
 class JournalGenerationRecord(BaseModel):
     """SQLite 元数据记录（office_journal_generations 行）。"""
 
-    if _PYDANTIC_V2:
-        model_config = ConfigDict(extra="forbid")
-    else:
-        class Config:
-            extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     gen_id: str
     spec_id: str
@@ -162,7 +123,7 @@ class JournalGenerationRecord(BaseModel):
     bytes_written: int = Field(default=0, ge=0)
     extra: Dict[str, Any] = Field(default_factory=dict)
 
-    @field_validator("mode")  # type: ignore[misc]
+    @field_validator("mode")
     @classmethod
     def _check_mode(cls, v: str) -> str:
         if v not in {"structured_fill", "llm_generate"}:
@@ -179,53 +140,4 @@ __all__ = [
     "JournalContent",
     "JournalViolation",
     "JournalGenerationRecord",
-    "to_jsonable",
-    "to_json_str",
-    "parse_obj",
-    "parse_raw",
 ]
-
-
-# ---- v1/v2 模型序列化辅助 ----
-def to_jsonable(model: BaseModel) -> Dict[str, Any]:
-    """Pydantic v1/v2 双兼容:返回可 JSON 序列化的 dict。
-
-    - v2: model.model_dump(mode="json")
-    - v1: model.dict()
-    """
-    if _PYDANTIC_V2:
-        return model.model_dump(mode="json")
-    return model.dict()  # type: ignore[no-any-return]
-
-
-def to_json_str(model: BaseModel, **kwargs: Any) -> str:
-    """Pydantic v1/v2 双兼容:返回 JSON 字符串。
-
-    - v2: model.model_dump_json(**kwargs)（支持 indent 等）
-    - v1: model.json(**kwargs)
-    """
-    if _PYDANTIC_V2:
-        return model.model_dump_json(**kwargs)  # type: ignore[no-any-return]
-    return model.json(**kwargs)  # type: ignore[no-any-return]
-
-
-def parse_obj(model_cls: type, data: Any) -> BaseModel:
-    """Pydantic v1/v2 双兼容:从 dict 创建模型实例。
-
-    - v2: cls.model_validate(data)
-    - v1: cls.parse_obj(data)
-    """
-    if _PYDANTIC_V2:
-        return model_cls.model_validate(data)  # type: ignore[no-any-return]
-    return model_cls.parse_obj(data)  # type: ignore[no-any-return]
-
-
-def parse_raw(model_cls: type, data: Union[str, bytes]) -> BaseModel:
-    """Pydantic v1/v2 双兼容:从 JSON 字符串创建模型实例。
-
-    - v2: cls.model_validate_json(data)
-    - v1: cls.parse_raw(data)
-    """
-    if _PYDANTIC_V2:
-        return model_cls.model_validate_json(data)  # type: ignore[no-any-return]
-    return model_cls.parse_raw(data)  # type: ignore[no-any-return]

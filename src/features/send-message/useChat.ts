@@ -9,11 +9,7 @@ import {
   ApiException,
   type ChatConfig,
   type ChatOfficeRef,
-  type SubagentLiveEvent,
   type TaskPlanItem,
-  type TaskProgressEvent,
-  type TaskReviewEvent,
-  type TaskStatusEvent,
 } from '../../shared/api';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import {
@@ -24,17 +20,16 @@ import {
 import { logger } from '../../shared/lib/logger';
 import { historyBudgetFor } from '../../shared/lib/modelWindows';
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
-import { bumpArtifactEvent } from '../artifacts/artifactEventsStore';
 import { useSettings } from '../manage-settings/useSettings';
 
-// S2: selectSessionSlots 读取会话键控槽位；live-events: mergeLiveEvent 消费子代理事件
 import {
-  mergeLiveEvent,
   selectSessionSlots,
   useChatStreamStore,
   type TaskBoardState,
 } from './chatStreamStore';
+import { applyOrchestrationEventToBoard } from './orchestrationEvents';
 import { notifySession, shouldNotify } from './sessionNotify';
+import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 
 /**
  * 从 endpoint baseUrl 启发式推导 LLM provider 字符串。
@@ -74,8 +69,9 @@ interface ActiveStreamHandle {
   finish: (() => void) | null;
 }
 
-// win7 移植注：R25-D4 的 reattachedSids 声明随冲突块带入，
-// 但其使用点属 main 预存逻辑、本分支无对应代码，故不引入。
+// R25-D4: 本模块已 reattach 的会话（跨 hook 实例/StrictMode 双挂载去重）
+const reattachedSids = new Set<string>();
+
 // A1 (parity-s4): module-level registry of live stream handles.
 // Handles used to live only in the hook ref, so a background session stream
 // could be watched but never cancelled after leaving the Chat page.
@@ -217,6 +213,9 @@ export function useChat() {
         planMode?: boolean;
         /** 对标 S2: 临时聊天（本轮不读写长期记忆） */
         memoryDisabled?: boolean;
+        /** R23-D2: 聊天图片输入（base64 data URL，≤4 张/单张 5MiB） */
+        images?: string[];
+        attachmentMediaIds?: string[];
       },
     ) => {
       const sid = sessionId ?? currentSessionId;
@@ -299,12 +298,14 @@ export function useChat() {
       }
 
       // PR-6: 先占位 assistant message, 流式过程中累积 content
+      // 2026-09-13 P0: 哨兵值抽为 THINKING_PLACEHOLDER，Message 据此渲染
+      // shimmer 占位而非把占位文案当 markdown 静态文本。
       const assistantId = crypto.randomUUID();
       const assistantMessage: Message = {
         id: assistantId,
         session_id: sid,
         role: 'assistant',
-        content: '🤔 思考中…',
+        content: THINKING_PLACEHOLDER,
         created_at: Date.now(),
       };
       addMessage(assistantMessage);
@@ -312,7 +313,7 @@ export function useChat() {
       // taskBoard — 流式进度全部走 store,跨路由切换保留(2026-08-19)。
       // S2: 只重置本会话槽位,并行会话互不覆盖。
       useChatStreamStore.getState().startStream(sid, assistantId, {
-        initialContent: '🤔 思考中…',
+        initialContent: THINKING_PLACEHOLDER,
       });
 
       const config: ChatConfig = {
@@ -419,7 +420,7 @@ export function useChat() {
         if (!finalContent && !finalReasoning && finalToolCalls.length === 0) {
           finalContent = '[错误: 模型未返回任何内容]';
         } else if (
-          finalContent === '🤔 思考中…' &&
+          finalContent === THINKING_PLACEHOLDER &&
           !finalReasoning &&
           finalToolCalls.length === 0
         ) {
@@ -452,6 +453,10 @@ export function useChat() {
         // 流结束后刷新侧栏会话列表（获取自动生成的标题 + S1 落库的运行态徽章）
         // hex 路径无 NDJSON session_updated 事件，此处兜底刷新
         void useStore.getState().loadSessions();
+        // R25-D5: 消息对账 —— 网关/scheduler 等外部写库方不经本渲染进程，
+        // 流结束后以服务端为准刷新一次，消除"开着会话看不到新消息"的窗口
+        // （loadMessages 每次直查 get_messages，无缓存问题）。
+        void useStore.getState().loadMessages(sid);
         // U5 + S3: 流自然结束后发送**该会话**队列中的下一条(短暂让位,避免与
         // 收尾渲染竞争)。其它会话的队列不受影响。
         if (flushQueue) {
@@ -516,191 +521,23 @@ export function useChat() {
                 useQuestionState.getState().setFromEvent(evt.user_question, sid);
               }
 
-              // S7 (2026-09-06): 产物事件 → 计数 store。右侧产物面板与侧栏
-              // 徽章事件驱动刷新（此前只能手动刷新）。
-              if (evt.state === 'artifact_created' && evt.artifact) {
-                bumpArtifactEvent(sid);
+              // R35: 编排/任务板事件（task_plan/status/progress/review、
+              // subagent_event、approval_mode、todo_snapshot、artifact_created）
+              // 抽取到 orchestrationEvents.applyOrchestrationEventToBoard，
+              // 主路径与重接路径共用（重接重放时任务板完整重建）。
+              if (applyOrchestrationEventToBoard(evt, sid)) {
                 return;
               }
 
-              // Multi-Agent Orchestration: task_plan 事件 → 初始化编排任务板。
-              // "先消费、不进内容累加器" — 不产生消息气泡占位文本,后续 uiText
-              // 分支不会命中。
-              // Fix #4 (2026-09-06): 同时更新消息占位符，告知用户计划已生成，
-              // 需要向下滚动查看 PlanCard 并点击"开始执行"。
-              if (evt.state === 'task_plan' && evt.run_id && evt.plan) {
-                useChatStreamStore.getState().setTaskBoard(sid, {
-                  runId: evt.run_id,
-                  plan: evt.plan,
-                  statuses: {},
-                  live: {},
-                });
-                // 更新消息内容，替代"🤔 思考中…"占位符
-                replaceContent('📋 编排计划已生成，请向下滚动查看计划并点击"开始执行"按钮确认');
-                return;
-              }
-              // Multi-Agent Orchestration: task_status 事件 → 按 run_id 匹配合并进任务板。
-              // 旧 run 的 task_status 直接忽略（prev 为 null 或 runId 不匹配都返回原值）。
-              // 后端 task_status 载荷含 TaskStatusEvent 全字段,故宽松 AgentEvent 可直接 cast。
-              // 进度可视化 P0-2 (2026-08-12): 同步重算 progress 5 元组,让
-              // ProgressSection 无需等待 task_progress 就能实时反映 done/queued。
-              if (evt.state === 'task_status' && evt.run_id && evt.task_id) {
-                // 闭包内 TS 不保留 evt 字段的 narrowing,先捕获为 const
-                const runId = evt.run_id;
-                const taskId = evt.task_id;
-                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) => {
-                  if (!prev || prev.runId !== runId) return prev;
-                  const nextStatuses = {
-                    ...prev.statuses,
-                    [taskId]: evt as TaskStatusEvent,
-                  };
-                  const counts = { done: 0, running: 0, queued: 0, failed: 0, cancelled: 0 };
-                  for (const st of Object.values(nextStatuses)) {
-                    if (st.status === 'done') counts.done++;
-                    else if (st.status === 'running') counts.running++;
-                    else if (st.status === 'queued') counts.queued++;
-                    else if (st.status === 'failed') counts.failed++;
-                    else if (st.status === 'cancelled') counts.cancelled++;
-                  }
-                  const total = Math.max(
-                    prev.progress?.total ?? 0,
-                    Object.keys(nextStatuses).length,
-                  );
-                  return {
-                    ...prev,
-                    statuses: nextStatuses,
-                    progress: { total, ...counts },
-                    // P1-5: 首个 task_status = 派发已开始,记录时间戳供
-                    // PlanCard 锁定（派发后 plan_update 后端返回 409）。
-                    dispatchedAt: prev.dispatchedAt ?? Date.now(),
-                  };
-                });
-                return;
-              }
-              // 进度可视化 P0-2 (2026-08-12): task_progress 整盘概览事件。
-              // 后端在 task_plan 之后立即推一次(total=N,全 queued),前端
-              // 据此初始化 progress;后续 task_status 触发时由上面 reducer
-              // 实时聚合覆盖,保持单一数据源。AgentEvent 在宽松字段下
-              // 5 元组都是 optional,运行时真有数据(后端 SSE 保证),此处
-              // 用 TaskProgressEvent 收紧类型避免反复 ?? 0 退化。
-              if (evt.state === 'task_progress' && evt.run_id) {
-                const runId = evt.run_id;
-                const tp = evt as TaskProgressEvent;
-                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) =>
-                  prev && prev.runId === runId
-                    ? {
-                        ...prev,
-                        progress: {
-                          total: tp.total ?? 0,
-                          done: tp.done ?? 0,
-                          running: tp.running ?? 0,
-                          queued: tp.queued ?? 0,
-                          failed: tp.failed ?? 0,
-                          cancelled: tp.cancelled ?? 0,
-                        },
-                      }
-                    : prev,
-                );
-                return;
-              }
-
-              // M1/M2 审批与提问接线已上移至本 onEvent 顶部（S4: 带 sid 记录归属会话）。
-
-              // P0-6 (2026-08-20): task_review 事件 → 复核结论写入任务板，
-              // 由 TaskTreeSection 渲染横幅。不进消息气泡 ——
-              // agentStateMapping 对 task_review 返回 null 的既有行为保留。
-              if (evt.state === 'task_review' && evt.run_id) {
-                const runId = evt.run_id;
-                const review = evt as TaskReviewEvent;
-                useChatStreamStore
-                  .getState()
-                  .updateTaskBoard(sid, runId, (prev) =>
-                    prev && prev.runId === runId ? { ...prev, review } : prev,
-                  );
-                return;
-              }
-
-              // live-events P0 (2026-09-06): subagent_event 镜像 → 任务板
-              // live 态（行内实时步骤/审批徽章/最近事件环形缓冲）。
-              // 不进消息气泡 —— agentStateMapping 对该 state 返回 null。
-              if (evt.state === 'subagent_event' && evt.run_id && evt.task_id) {
-                const runId = evt.run_id;
-                const taskId = evt.task_id;
-                const liveEvent = evt as SubagentLiveEvent;
-                // S2: 键控 —— 写入当前会话的任务板槽位
-                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) => {
-                  // live-events P2: ``agent`` 工具单次委派没有 task_plan ——
-                  // 首条事件到达时用事件自描述合成轻量任务板（run_id 形如
-                  // agent-*）。已有编排板（orch-*）不可被替换,防串扰;
-                  // agent 临时板之间允许后来者接管（轻量面,单派遣可视）。
-                  if (!prev || prev.runId !== runId) {
-                    if (!prev || prev.runId.startsWith('agent-')) {
-                      return {
-                        runId,
-                        plan: [
-                          {
-                            task_id: taskId,
-                            agent_id: evt.agent_id ?? 'subagent',
-                            goal: evt.goal ?? '',
-                          },
-                        ],
-                        statuses: {},
-                        live: {
-                          // 合成即并入首条事件（否则首条被吞,liveStep 缺失）
-                          [taskId]: mergeLiveEvent(undefined, liveEvent),
-                        },
-                      };
-                    }
-                    return prev;
-                  }
-                  return {
-                    ...prev,
-                    live: {
-                      ...(prev.live ?? {}),
-                      [taskId]: mergeLiveEvent(prev.live?.[taskId], liveEvent),
-                    },
-                  };
-                });
-                return;
-              }
-              // live-events P1 (2026-09-06): approval_mode 切换回显 → 任务板
-              // 头部开关状态（后端 set_approval_mode 成功后推送）。
-              if (evt.state === 'approval_mode' && evt.run_id) {
-                const runId = evt.run_id;
-                const mode = evt.mode === 'auto' ? 'auto' : 'ask';
-                useChatStreamStore
-                  .getState()
-                  .updateTaskBoard(sid, runId, (prev) =>
-                    prev && prev.runId === runId ? { ...prev, approvalMode: mode } : prev,
-                  );
-                return;
-              }
-
-              // P1 todo 接线 (2026-08-21): todo_write 全量快照 → store。
-              // 不进消息气泡（agentStateMapping 对编排事件同类处理）。
-              if (evt.state === 'todo_snapshot' && Array.isArray(evt.todos)) {
-                useChatStreamStore.getState().setTodos(sid, evt.todos);
-                return;
-              }
-
-              // 处理 reasoning 事件：三种 state 不同处理 (2026-09-02 bug fix, win7 cherry-pick)
-              // - reasoning_delta / reasoning → appendReasoning 累积增量
-              // - reasoning_final → replaceReasoning 收尾全量 (后端 done_reasoning)
-              //   区分避免 deltas + final 双重累积 → 用户视觉上"思考过程重复两遍"
+              // 处理 reasoning 事件：三种 state 不同处理 (2026-09-02 bug fix)
+              //   - reasoning_delta: 增量, appendReasoning 累积
+              //   - reasoning:       旧路径兼容 (非流式 LLM, 直接 yield 全量), append 累加
+              //   - reasoning_final: 后端每段末尾发 done_reasoning 全量, replace 替换
+              //                     (不再 append → 避免与 reasoning_delta 重复显示)
               if (evt.state === 'reasoning_delta' && evt.reasoning) {
                 useChatStreamStore.getState().appendReasoning(sid, assistantId, evt.reasoning);
               } else if (evt.state === 'reasoning' && evt.reasoning) {
-                // 兼容旧后端：收尾事件仍使用 reasoning，但 payload 是累计全量。
-                // 若它包含当前累积内容，替换而非再次追加，避免旧协议重复显示。
-                // S2: 从本会话键控槽位读当前累积（win7 旧协议兼容逻辑保留）。
-                const currentReasoning =
-                  selectSessionSlots(useChatStreamStore.getState(), sid).streaming?.reasoning ??
-                  '';
-                if (evt.reasoning.startsWith(currentReasoning)) {
-                  useChatStreamStore.getState().replaceReasoning(sid, assistantId, evt.reasoning);
-                } else {
-                  useChatStreamStore.getState().appendReasoning(sid, assistantId, evt.reasoning);
-                }
+                useChatStreamStore.getState().appendReasoning(sid, assistantId, evt.reasoning);
               } else if (evt.state === 'reasoning_final' && evt.reasoning) {
                 useChatStreamStore.getState().replaceReasoning(sid, assistantId, evt.reasoning);
               }
@@ -786,8 +623,7 @@ export function useChat() {
                 // reasoning 事件不更新 content，仅更新 state。
                 // reasoning_delta 复用同一处理,避免依赖 producer 必须以
                 // 完整 reasoning 事件收尾的顺序不变式。
-                // reasoning_final (2026-09-02 / win7 cherry-pick): 同样不进 content,
-                // 仅更新 state, 实际 reasoning 文本替换在上面的分支完成。
+                // reasoning_final (2026-09-02): 后端每段末尾全量对齐事件,同样不进 content。
                 useChatStreamStore.getState().setStreamingMeta(sid, assistantId, {
                   state: evt.state,
                 });
@@ -825,6 +661,8 @@ export function useChat() {
           },
           config,
           officeRefs,
+          opts?.images,
+          opts?.attachmentMediaIds,
         );
         // S3: 记入本会话句柄（cancel 用于同会话安全网取消 + interrupt 用）
         const handle = activeHandleRef.current.get(sid);
@@ -890,6 +728,117 @@ export function useChat() {
       await loadMessages(sessionId);
     },
     [loadMessages],
+  );
+
+  // R25-D4: reattach —— renderer 重载/切回会话时,后端仍在跑的 chat 流
+  // 通过 activeStream 查询 + listenStream 重新接上。BroadcastQueue 会把
+  // attach 前缓冲的事件重放给首个 subscriber,占位消息能追上完整内容。
+  // 精简事件面: content/reasoning 增量 + done/failed 终态 + 审批/提问
+  // 转发（R35: 编排任务板经 orchestrationEvents 在重放时完整重建）。
+  const reattachActiveStream = useCallback(
+    async (sid: string) => {
+      if (!sid || activeSidsRef.current.has(sid)) return;
+      // 模块级守卫: React StrictMode 双挂载/重复调用时只接一次
+      // （Electron main 对重复 listen 早退,双 handler 会重复累积内容）
+      if (reattachedSids.has(sid)) return;
+      let streamId: string | null = null;
+      try {
+        streamId = await chatApi.activeStream(sid);
+      } catch {
+        return; // 查询失败静默（后端未起/演示模式）
+      }
+      if (!streamId) return;
+      reattachedSids.add(sid);
+
+      const assistantId = crypto.randomUUID();
+      addMessage({
+        id: assistantId,
+        session_id: sid,
+        role: 'assistant',
+        content: '',
+        created_at: Date.now(),
+      });
+      useChatStreamStore.getState().startStream(sid, assistantId, {
+        initialContent: '',
+      });
+      markStreamActive(sid, { streamId, cancel: null, finish: () => {} });
+
+      const finishReattach = (finalContent: string | null, errText?: string) => {
+        reattachedSids.delete(sid);
+        if (finalContent !== null) {
+          updateMessage(assistantId, { content: finalContent });
+        } else if (errText) {
+          updateMessage(assistantId, { content: `[错误] ${errText}` });
+        }
+        useChatStreamStore.getState().clearStream(sid, assistantId);
+        useChatStreamStore.getState().resetToolCalls(sid);
+        markStreamIdle(sid);
+        usePermissionState.getState().resolve(sid);
+        useQuestionState.getState().resolve(sid);
+        // R25-D5: 对账 —— producer 的 DONE 持久化是权威,重载服务端真值
+        void useStore.getState().loadMessages(sid);
+        void useStore.getState().loadSessions();
+      };
+
+      let acc = '';
+      let accReasoning = '';
+      try {
+        await chatApi.listenStream(streamId, {
+          onEvent: (evt) => {
+            if (evt.type === 'session_updated') {
+              void useStore.getState().loadSessions();
+              return;
+            }
+            if (evt.state === 'content_delta' && evt.content) {
+              acc += evt.content;
+              useChatStreamStore.getState().appendContent(sid, assistantId, acc);
+              return;
+            }
+            if (
+              (evt.state === 'reasoning_delta' || evt.state === 'reasoning') &&
+              evt.reasoning
+            ) {
+              accReasoning += evt.reasoning;
+              useChatStreamStore
+                .getState()
+                .appendReasoning(sid, assistantId, accReasoning);
+              return;
+            }
+            if (evt.state === 'permission_request' && evt.permission_request) {
+              usePermissionState.getState().setFromEvent(evt.permission_request, sid);
+              return;
+            }
+            if (evt.state === 'ask_user_question' && evt.user_question) {
+              useQuestionState.getState().setFromEvent(evt.user_question, sid);
+              return;
+            }
+            if (evt.state === 'done') {
+              const finalContent = evt.content ?? acc;
+              finishReattach(finalContent);
+              return;
+            }
+            if (evt.state === 'failed') {
+              finishReattach(null, evt.error ?? '流式失败');
+              return;
+            }
+            // R35: 编排/任务板事件走共享应用器 —— 重放时任务板/live 态
+            // 完整重建（与主路径同一套 store 写入）。
+            if (applyOrchestrationEventToBoard(evt, sid)) {
+              return;
+            }
+            // 其余事件（工具 acting/observing 等）降级为 streaming meta 文案
+            useChatStreamStore.getState().setStreamingMeta(sid, assistantId, {
+              state: evt.state,
+            });
+          },
+          onError: (err) => finishReattach(null, err.message),
+          onDone: () => finishReattach(acc || null),
+        });
+      } catch {
+        finishReattach(null, '重新接上流失败');
+      }
+    },
+    [addMessage, updateMessage, markStreamActive, markStreamIdle],
   );
 
   // Phase 6: /btw 补充消息
@@ -1001,5 +950,6 @@ export function useChat() {
     planApprovalFor,
     /** PM2: 清除计划批准状态（批准执行或忽略时调用） */
     clearPlanApproval: useCallback(() => setPlanApprovalFor(null), []),
+    reattachActiveStream,
   };
 }

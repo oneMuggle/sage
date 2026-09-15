@@ -13,7 +13,6 @@ import pytest
 from sage_core import Message, Role, ToolCall
 from sage_core.repositories import StoragePort
 
-import backend.adapters.out.storage.memory_adapter as memory_adapter_module
 from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
 
 pytestmark = pytest.mark.unit
@@ -185,7 +184,6 @@ from typing import Any
 
 import pytest
 
-import backend.adapters.out.storage.sqlite_adapter as sqlite_adapter_module
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 
 
@@ -195,16 +193,15 @@ async def test_sqlite_adapter_uses_to_thread():
     adapter = SqliteStorageAdapter()
     call_log: List[str] = []
 
-    # Monkey-patch 模块级 _to_thread 记录调用
-    # (win7 sync #295: Py3.8 无 asyncio.to_thread,adapter 用 _to_thread helper)
-    original_to_thread = sqlite_adapter_module._to_thread
+    # Monkey-patch asyncio.to_thread 记录调用
+    original_to_thread = asyncio.to_thread
 
     async def spy_to_thread(func, *args, **kwargs):
         call_log.append(func.__name__)
         return await original_to_thread(func, *args, **kwargs)
 
     monkey = pytest.MonkeyPatch()
-    monkey.setattr(sqlite_adapter_module, "_to_thread", spy_to_thread)
+    monkey.setattr(asyncio, "to_thread", spy_to_thread)
     try:
         # 触发 7 个方法
         sid = await adapter.create_session(title="t")
@@ -341,15 +338,14 @@ async def test_memory_adapter_uses_to_thread():
     adapter = MemoryStorageAdapter()
     call_log: List[str] = []
 
-    # win7 sync #295: 同样 patch 模块级 _to_thread(非 asyncio.to_thread)
-    original_to_thread = memory_adapter_module._to_thread
+    original_to_thread = asyncio.to_thread
 
     async def spy_to_thread(func, *args, **kwargs):
         call_log.append(func.__name__)
         return await original_to_thread(func, *args, **kwargs)
 
     monkey = pytest.MonkeyPatch()
-    monkey.setattr(memory_adapter_module, "_to_thread", spy_to_thread)
+    monkey.setattr(asyncio, "to_thread", spy_to_thread)
     try:
         sid = await adapter.create_session(title="t")
         await adapter.list_sessions()

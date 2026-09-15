@@ -23,13 +23,7 @@ from typing import List, Optional
 
 from backend.data.database import get_database
 from backend.office.journal.errors import JournalSpecNotFoundError
-from backend.office.journal.models import (
-    JournalGenerationRecord,
-    JournalSpec,
-    parse_raw,
-    to_json_str,
-    to_jsonable,
-)
+from backend.office.journal.models import JournalGenerationRecord, JournalSpec
 from backend.office.path_safety import is_within
 
 _LAYOUT_ROOT = Path("office") / "journal"
@@ -74,7 +68,7 @@ def save_spec(workspace: Path, spec: JournalSpec) -> Path:
     # 原子写入：先写临时文件再 rename，避免写入中途断电/崩溃留半截 JSON（I2）。
     tmp_path = path.with_suffix(".json.tmp")
     tmp_path.write_text(
-        json.dumps(to_jsonable(spec), indent=2, ensure_ascii=False),
+        json.dumps(spec.model_dump(mode="json"), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
     tmp_path.replace(path)
@@ -96,7 +90,7 @@ def save_spec(workspace: Path, spec: JournalSpec) -> Path:
                 spec.template_sha256,
                 spec.template_filename,
                 str(workspace.resolve()),
-                to_json_str(spec),
+                spec.model_dump_json(),
                 time.time_ns() // 1_000_000,  # epoch ms
             ),
         )
@@ -120,12 +114,10 @@ def load_spec(workspace: Path, spec_id: str) -> JournalSpec:
     from pydantic import ValidationError
 
     try:
-        return parse_raw(JournalSpec, data)
+        return JournalSpec.model_validate_json(data)
     except ValidationError as exc:
-        # Pydantic v1 & v2 都有 .errors() → list；len() 即错误数。
-        count = len(exc.errors())
         raise JournalSpecNotFoundError(
-            f"spec_id={spec_id} (corrupt: {count} validation error(s))"
+            f"spec_id={spec_id} (corrupt: {exc.error_count()} validation error(s))"
         ) from exc
 
 
@@ -137,7 +129,7 @@ def list_specs(workspace: Path) -> List[JournalSpec]:
     for p in sorted(layout["specs"].glob("*.json")):
         try:
             out.append(
-                parse_raw(JournalSpec,
+                JournalSpec.model_validate_json(
                     p.read_bytes().decode("utf-8")
                 )
             )

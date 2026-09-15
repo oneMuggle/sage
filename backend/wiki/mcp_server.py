@@ -136,6 +136,18 @@ def _authorized_project_root(project_path: str) -> Path:
             registered.add(_canonical_project_root(item.path).as_posix())
         except HTTPException:
             continue
+    # P6 桥接: projects 注册表（侧边栏"项目"）与 recents 同一信任来源，
+    # 并集授权；读取失败 → 不放宽（fail-closed 语义不变）。
+    try:
+        from backend.wiki.project_authorization import _projects_registry_paths
+
+        for item in _projects_registry_paths():
+            try:
+                registered.add(_canonical_project_root(str(item)).as_posix())
+            except HTTPException:
+                continue
+    except Exception:  # noqa: BLE001 — 桥接读取失败绝不放宽授权
+        pass
     if root.as_posix() not in configured | registered:
         raise HTTPException(status_code=403, detail="项目根未获 MCP 授权")
 

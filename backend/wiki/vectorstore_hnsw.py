@@ -2,7 +2,6 @@
 
 使用 hnswlib 实现高效的近似最近邻搜索，支持大规模向量检索（100k+ chunks）。
 """
-
 import json
 import logging
 import os
@@ -247,7 +246,7 @@ class HNSWVectorStore:
 
         # 转换结果
         hits = []
-        for label, distance in zip(labels[0], distances[0]):
+        for label, distance in zip(labels[0], distances[0]):  # noqa: B905 — strict keyword is unavailable on Python 3.8
             if label not in self.label_to_id:
                 continue
 

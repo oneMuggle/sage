@@ -52,7 +52,7 @@ def _has_symlink_component(path: Path) -> bool:
 def _is_relative_to(path: Path, parent: Path) -> bool:
     """兼容 Python 3.8 的 Path.is_relative_to。"""
     try:
-        return path.is_relative_to(parent)
+        return path.is_relative_to(parent)  # py38: guarded (AttributeError fallback below)
     except AttributeError:
         try:
             path.relative_to(parent)
@@ -67,6 +67,14 @@ def _read_bound_regular_file(path: Path) -> Tuple[bytes, Tuple[int, int], bytes]
     这里不回退到 ``Path.read_bytes``：没有 ``O_NOFOLLOW`` 的平台无法提供
     所需的路径到 fd 绑定保证，必须拒绝执行（尤其是 Windows）。
     """
+    if os.name == "nt":
+        # R32 切片 B：Windows 走原生 reparse-safe 绑定读取
+        # （卷序号 + 文件索引等价 (st_dev, st_ino)，消费方只做相等比较）。
+        from backend.tools.win_reparse_io import read_file_bound_reparse_safe
+
+        data, win_identity = read_file_bound_reparse_safe(str(path))
+        return data, win_identity, hashlib.sha256(data).digest()
+
     nofollow = getattr(os, "O_NOFOLLOW", None)
     if nofollow is None:
         raise OSError("安全读取需要 O_NOFOLLOW；当前平台不支持")
@@ -288,10 +296,16 @@ class ScriptRunner:
         )
 
     def _create_snapshot(self, script_path: Path, content: bytes) -> Path:
-        """原子创建 0700 临时目录和 0600 脚本快照，失败则不执行。"""
+        """原子创建 0700 临时目录和 0600 脚本快照，失败则不执行。
+
+        Windows：``os.fchmod`` 不存在、目录 ACL 与 POSIX 位模型不同 ——
+        mkdtemp 默认已为当前用户私有（%TEMP% 每用户目录），文件以 0600
+        等价创建后跳过位调整；快照目录本身每用户隔离，安全语义等价。
+        """
         snapshot_dir = Path(tempfile.mkdtemp(prefix="sage-skill-"))
         try:
-            snapshot_dir.chmod(stat.S_IRWXU)
+            if os.name == "posix":
+                snapshot_dir.chmod(stat.S_IRWXU)
             snapshot_path = snapshot_dir / script_path.name
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
             if hasattr(os, "O_BINARY"):
@@ -302,7 +316,8 @@ class ScriptRunner:
                     fd = -1
                     snapshot_file.write(content)
                     snapshot_file.flush()
-                    os.fchmod(snapshot_file.fileno(), stat.S_IRUSR | stat.S_IWUSR)
+                    if os.name == "posix":
+                        os.fchmod(snapshot_file.fileno(), stat.S_IRUSR | stat.S_IWUSR)
             finally:
                 if fd != -1:
                     os.close(fd)

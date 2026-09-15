@@ -126,19 +126,20 @@ class TestSuccessPath:
 
         tool = SkillSaveTool()
         with patch(
-            "backend.tools.skill_save_tool.get_review_service",
-            return_value=service,
-        ), patch(
-            "backend.tools.skill_save_tool.get_skill_draft_store",
-            return_value=store,
-        ):
-            result = tool.execute(
-                name="academic-search-cnki",
-                description="CNKI 学术检索",
-                when_to_use="当用户在 CNKI 检索学术文献时",
-                tool_sequence=[_ok_call("web_fetch"), _ok_call("ask_user_question")],
-                session_id="sess-1",
-            )
+                "backend.tools.skill_save_tool.get_review_service",
+                return_value=service,
+            ):
+            with patch(
+                    "backend.tools.skill_save_tool.get_skill_draft_store",
+                    return_value=store,
+                ):
+                result = tool.execute(
+                    name="academic-search-cnki",
+                    description="CNKI 学术检索",
+                    when_to_use="当用户在 CNKI 检索学术文献时",
+                    tool_sequence=[_ok_call("web_fetch"), _ok_call("ask_user_question")],
+                    session_id="sess-1",
+                )
 
         assert result.success is True
         assert result.output == "draft-uuid-1234"
@@ -165,18 +166,19 @@ class TestSuccessPath:
 
         tool = SkillSaveTool()
         with patch(
-            "backend.tools.skill_save_tool.get_review_service",
-            return_value=service,
-        ), patch(
-            "backend.tools.skill_save_tool.get_skill_draft_store",
-            return_value=store,
-        ):
-            result = tool.execute(
-                name="academic-search-cnki",
-                description="CNKI 学术检索",
-                when_to_use="当用户在 CNKI 检索学术文献时",
-                tool_sequence=seq,
-            )
+                "backend.tools.skill_save_tool.get_review_service",
+                return_value=service,
+            ):
+            with patch(
+                    "backend.tools.skill_save_tool.get_skill_draft_store",
+                    return_value=store,
+                ):
+                result = tool.execute(
+                    name="academic-search-cnki",
+                    description="CNKI 学术检索",
+                    when_to_use="当用户在 CNKI 检索学术文献时",
+                    tool_sequence=seq,
+                )
 
         assert result.success is True
         ctx_arg = service.generate_draft.call_args.kwargs["context"]
@@ -193,18 +195,19 @@ class TestSuccessPath:
 
         tool = SkillSaveTool()
         with patch(
-            "backend.tools.skill_save_tool.get_review_service",
-            return_value=service,
-        ), patch(
-            "backend.tools.skill_save_tool.get_skill_draft_store",
-            return_value=store,
-        ):
-            tool.execute(
-                name="academic-search-cnki",
-                description="CNKI 学术检索",
-                when_to_use="当用户在 CNKI 检索学术文献时",
-                tool_sequence=[_ok_call()],
-            )
+                "backend.tools.skill_save_tool.get_review_service",
+                return_value=service,
+            ):
+            with patch(
+                    "backend.tools.skill_save_tool.get_skill_draft_store",
+                    return_value=store,
+                ):
+                tool.execute(
+                    name="academic-search-cnki",
+                    description="CNKI 学术检索",
+                    when_to_use="当用户在 CNKI 检索学术文献时",
+                    tool_sequence=[_ok_call()],
+                )
 
         store.insert.assert_called_once_with(draft)
 
@@ -227,18 +230,19 @@ class TestFailureModes:
 
         tool = SkillSaveTool()
         with patch(
-            "backend.tools.skill_save_tool.get_review_service",
-            return_value=service,
-        ), patch(
-            "backend.tools.skill_save_tool.get_skill_draft_store",
-            return_value=store,
-        ):
-            result = tool.execute(
-                name="academic-search-cnki",
-                description="CNKI 学术检索",
-                when_to_use="当用户在 CNKI 检索学术文献时",
-                tool_sequence=[_ok_call()],
-            )
+                "backend.tools.skill_save_tool.get_review_service",
+                return_value=service,
+            ):
+            with patch(
+                    "backend.tools.skill_save_tool.get_skill_draft_store",
+                    return_value=store,
+                ):
+                result = tool.execute(
+                    name="academic-search-cnki",
+                    description="CNKI 学术检索",
+                    when_to_use="当用户在 CNKI 检索学术文献时",
+                    tool_sequence=[_ok_call()],
+                )
 
         assert result.success is False
         assert "review pipeline 拒绝草稿" in result.error
@@ -255,18 +259,19 @@ class TestFailureModes:
 
         tool = SkillSaveTool()
         with patch(
-            "backend.tools.skill_save_tool.get_review_service",
-            return_value=service,
-        ), patch(
-            "backend.tools.skill_save_tool.get_skill_draft_store",
-            return_value=store,
-        ):
-            result = tool.execute(
-                name="academic-search-cnki",
-                description="CNKI 学术检索",
-                when_to_use="当用户在 CNKI 检索学术文献时",
-                tool_sequence=[_ok_call()],
-            )
+                "backend.tools.skill_save_tool.get_review_service",
+                return_value=service,
+            ):
+            with patch(
+                    "backend.tools.skill_save_tool.get_skill_draft_store",
+                    return_value=store,
+                ):
+                result = tool.execute(
+                    name="academic-search-cnki",
+                    description="CNKI 学术检索",
+                    when_to_use="当用户在 CNKI 检索学术文献时",
+                    tool_sequence=[_ok_call()],
+                )
 
         assert result.success is False
         assert "持久化失败" in result.error

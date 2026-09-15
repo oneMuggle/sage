@@ -227,6 +227,7 @@ describe('skills IPC (PR-C)', () => {
 
 // Backend mounts legacy_routes under /api/v1 (see backend/main.py:215).
 // All Electron IPC paths MUST match — otherwise every IPC call 404s.
+const API_PREFIX = '/api/v1';
 
 describe('COMMAND_ROUTES', () => {
   it('includes the full session/message/chat surface used by the renderer', () => {
@@ -247,13 +248,11 @@ describe('COMMAND_ROUTES', () => {
     }
   });
 
-  // Guard: every command path MUST start with /api/v1 or /api/theme.
-  // Legacy routes use /api/v1 (matches backend/main.py:215 legacy_router mount).
-  // Theme routes use /api/theme (matches backend/main.py theme_router mount).
-  // If a new command is added without one of these prefixes, this test fails —
-  // preventing a class of 404 bugs where the renderer talks to a path the
-  // backend doesn't expose at root.
-  it('all command paths are prefixed with /api/v1 or /api/theme', () => {
+  // Guard: every command path MUST start with /api/v1 (matches backend mount).
+  // If a new command is added without the prefix, this test fails — preventing
+  // a class of 404 bugs where the renderer talks to a path the backend doesn't
+  // expose at root.
+  it('all command paths are prefixed with /api/v1', () => {
     for (const [cmd, route] of Object.entries(COMMAND_ROUTES)) {
       const samplePath = route.path({
         limit: 1,
@@ -262,8 +261,8 @@ describe('COMMAND_ROUTES', () => {
         streamId: 'x',
         sessionId: 'x',
       });
-      expect(samplePath, `${cmd} path must start with /api/v1 or /api/theme`).toMatch(
-        /^(\/api\/v1\/|\/api\/theme\/)/,
+      expect(samplePath, `${cmd} path must start with ${API_PREFIX}`).toMatch(
+        new RegExp(`^${API_PREFIX}/`),
       );
     }
   });
@@ -294,6 +293,32 @@ describe('COMMAND_ROUTES', () => {
   it('builds list_sessions URL with limit/offset query params', () => {
     const path = COMMAND_ROUTES.list_sessions.path({ limit: 50, offset: 10 });
     expect(path).toBe('/api/v1/sessions?limit=50&offset=10');
+  });
+
+  // 项目模块 P1 (2026-09-13): 最近项目注册表 + 项目内会话
+  it('projects_* routes target /api/v1/projects with id path params', () => {
+    expect(COMMAND_ROUTES.projects_list.method).toBe('GET');
+    expect(COMMAND_ROUTES.projects_list.path({})).toBe('/api/v1/projects');
+
+    expect(COMMAND_ROUTES.projects_register.method).toBe('POST');
+    expect(COMMAND_ROUTES.projects_register.path({})).toBe('/api/v1/projects');
+    expect(COMMAND_ROUTES.projects_register.body?.({ path: 'C:\\w' })).toEqual({ path: 'C:\\w' });
+
+    expect(COMMAND_ROUTES.projects_remove.method).toBe('DELETE');
+    expect(COMMAND_ROUTES.projects_remove.path({ id: 'p/1' })).toBe('/api/v1/projects/p%2F1');
+
+    expect(COMMAND_ROUTES.projects_open.method).toBe('POST');
+    expect(COMMAND_ROUTES.projects_open.path({ id: 'p1' })).toBe('/api/v1/projects/p1/open');
+
+    expect(COMMAND_ROUTES.projects_create_session.method).toBe('POST');
+    expect(COMMAND_ROUTES.projects_create_session.path({ id: 'p1' })).toBe(
+      '/api/v1/projects/p1/sessions',
+    );
+
+    expect(COMMAND_ROUTES.projects_list_sessions.method).toBe('GET');
+    expect(COMMAND_ROUTES.projects_list_sessions.path({ id: 'p1' })).toBe(
+      '/api/v1/projects/p1/sessions',
+    );
   });
 
   it('defaults list_sessions limit/offset to 100/0', () => {
@@ -361,12 +386,114 @@ describe('COMMAND_ROUTES', () => {
     expect(COMMAND_ROUTES.delete_memory.path({})).toBe('/api/v1/memory/delete');
   });
 
-it('builds orchestration_create_lane as POST /api/v1/orchestration/lanes (M5)', () => {
+  it('builds orchestration_create_lane as POST /api/v1/orchestration/lanes (M5)', () => {
     const r = COMMAND_ROUTES.orchestration_create_lane;
     expect(r.method).toBe('POST');
     // Guard: fixed collection path, no args interpolated.
     expect(r.path({})).toBe('/api/v1/orchestration/lanes');
     expect(r.path({ goal: 'x', agent: 'researcher' })).toBe('/api/v1/orchestration/lanes');
+  });
+
+  // Office parity batch 2 (items 2.5 / 2.7): update PREVIEW dry-run +
+  // PDF export. Backend routes: backend/api/office_routes.py:620-658.
+  // Batch 2 shipped preview-only; round 2 (R1) adds the apply-update
+  // route office_doc_update right below.
+  it('has office_update_preview posting to the update/preview dry-run route', () => {
+    const r = COMMAND_ROUTES.office_update_preview;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/office/update/preview');
+    expect(r.rawBody).toBeUndefined();
+  });
+
+  it('has office_export_pdf posting to the export-pdf route', () => {
+    const r = COMMAND_ROUTES.office_export_pdf;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/office/export-pdf');
+    expect(r.rawBody).toBeUndefined();
+  });
+
+  // Office parity round 2 (R1): page-level apply-update closing the
+  // preview loop. Backend: POST /office/doc/{doc_id}/update.
+  it('has office_doc_update posting to the doc-scoped update route', () => {
+    const r = COMMAND_ROUTES.office_doc_update;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({ docId: 'doc-1' })).toBe('/api/v1/office/doc/doc-1/update');
+    // Path param, so a doc id with special chars must be encoded.
+    expect(r.path({ docId: 'd/1' })).toBe('/api/v1/office/doc/d%2F1/update');
+  });
+
+  it('office_doc_update uses rawBody so op dict keys survive verbatim', () => {
+    const r = COMMAND_ROUTES.office_doc_update;
+    // Ops are forwarded to the backend editor verbatim — the recursive
+    // camelToSnakeKeys would mangle any camelCase op key (e.g. a future
+    // "cellStyle" → "cell_style"), so the body skips translation.
+    expect(r.rawBody).toBe(true);
+    const ops = [
+      { op: 'replace_text', find: '大模型', replace: 'LLM' },
+      {
+        op: 'set_cells',
+        sheet: 'Sheet1',
+        cells: [{ addr: 'B2', value: '10', cellStyle: 'bold' }],
+      },
+    ];
+    expect(r.body?.({ docId: 'doc-1', ops })).toEqual({ ops });
+    // doc_id rides in the path — it must not leak into the body.
+    expect(r.body?.({ docId: 'doc-1', ops })).not.toHaveProperty('doc_id');
+    // Missing ops degrade to an empty list (backend 422s on that shape).
+    expect(r.body?.({ docId: 'doc-1' })).toEqual({ ops: [] });
+  });
+
+  // Office parity batch 3 (item 3.2): Word template library.
+  // Backend routes: GET /office/templates + POST /office/templates/instantiate.
+  it('has office_list_templates as a workspace-scoped GET route', () => {
+    const r = COMMAND_ROUTES.office_list_templates;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({ workspacePath: '/tmp/my ws' })).toBe(
+      '/api/v1/office/templates?workspace_path=%2Ftmp%2Fmy%20ws',
+    );
+  });
+
+  it('has office_templates_instantiate with rawBody so placeholder keys survive', () => {
+    const r = COMMAND_ROUTES.office_templates_instantiate;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/office/templates/instantiate');
+    // `data` keys are template placeholder names (user data) — camelToSnakeKeys
+    // would mangle e.g. "ReportDate" into "_report_date".
+    expect(r.rawBody).toBe(true);
+    const body = r.body?.({
+      workspacePath: '/ws',
+      templateId: 'weekly_report',
+      filename: '周报-2026-09-10.docx',
+      data: { ReportDate: '2026-09-10', author: '张三' },
+    }) as Record<string, unknown>;
+    expect(body).toEqual({
+      workspace_path: '/ws',
+      template_id: 'weekly_report',
+      filename: '周报-2026-09-10.docx',
+      data: { ReportDate: '2026-09-10', author: '张三' },
+    });
+  });
+
+  it('office_templates_instantiate body prefers workspace_template when given', () => {
+    const r = COMMAND_ROUTES.office_templates_instantiate;
+    const body = r.body?.({
+      workspacePath: '/ws',
+      workspaceTemplate: '项目周报.docx',
+      filename: 'out.docx',
+      data: {},
+      images: { Logo: 'base64' },
+    }) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      workspace_path: '/ws',
+      workspace_template: '项目周报.docx',
+      images: { Logo: 'base64' },
+    });
+    expect(body).not.toHaveProperty('template_id');
   });
 });
 
@@ -521,116 +648,6 @@ describe('settings & preferences IPC routes', () => {
   });
 });
 
-describe('theme IPC routes', () => {
-  it('has theme_list route (GET /api/v1/theme/list)', () => {
-    const r = COMMAND_ROUTES.theme_list;
-    expect(r).toBeDefined();
-    expect(r.method).toBe('GET');
-    expect(r.path({})).toBe('/api/v1/theme/list');
-  });
-
-  it('has theme_save route (POST /api/v1/theme/save)', () => {
-    const r = COMMAND_ROUTES.theme_save;
-    expect(r).toBeDefined();
-    expect(r.method).toBe('POST');
-    expect(r.path({})).toBe('/api/v1/theme/save');
-  });
-
-  it('has theme_get route (GET /api/v1/theme/get/{id}) with URL encoding', () => {
-    const r = COMMAND_ROUTES.theme_get;
-    expect(r).toBeDefined();
-    expect(r.method).toBe('GET');
-    expect(r.path({ id: 'abc-123' })).toBe('/api/v1/theme/get/abc-123');
-    expect(r.path({ id: 'id/with/slash' })).toBe('/api/v1/theme/get/id%2Fwith%2Fslash');
-  });
-
-  it('has theme_delete route (POST /api/v1/theme/delete)', () => {
-    const r = COMMAND_ROUTES.theme_delete;
-    expect(r).toBeDefined();
-    expect(r.method).toBe('POST');
-    expect(r.path({})).toBe('/api/v1/theme/delete');
-  });
-
-  it('all theme paths have /api/v1/theme prefix', () => {
-    const paths = [
-      COMMAND_ROUTES.theme_list.path({}),
-      COMMAND_ROUTES.theme_save.path({}),
-      COMMAND_ROUTES.theme_get.path({ id: 'x' }),
-      COMMAND_ROUTES.theme_delete.path({}),
-    ];
-    paths.forEach((p) => expect(p).toMatch(/^\/api\/v1\/theme\//));
-  });
-});
-
-describe('scheduled tasks IPC routes', () => {
-  it('has scheduled_list_tasks route', () => {
-    expect(COMMAND_ROUTES.scheduled_list_tasks).toEqual({
-      method: 'GET',
-      path: expect.any(Function),
-    });
-    expect(COMMAND_ROUTES.scheduled_list_tasks.path({})).toBe('/api/v1/scheduled/tasks');
-  });
-
-  it('has scheduled_create_task route', () => {
-    expect(COMMAND_ROUTES.scheduled_create_task.method).toBe('POST');
-    expect(COMMAND_ROUTES.scheduled_create_task.path({})).toBe('/api/v1/scheduled/tasks');
-  });
-
-  it('has scheduled_update_task route with id encoding', () => {
-    expect(COMMAND_ROUTES.scheduled_update_task.method).toBe('PATCH');
-    expect(COMMAND_ROUTES.scheduled_update_task.path({ id: 'task-1' })).toBe(
-      '/api/v1/scheduled/tasks/task-1',
-    );
-  });
-
-  it('has scheduled_delete_task route', () => {
-    expect(COMMAND_ROUTES.scheduled_delete_task.method).toBe('DELETE');
-    expect(COMMAND_ROUTES.scheduled_delete_task.path({ id: 'task-1' })).toBe(
-      '/api/v1/scheduled/tasks/task-1',
-    );
-  });
-
-  it('has scheduled_run_task route', () => {
-    expect(COMMAND_ROUTES.scheduled_run_task.method).toBe('POST');
-    expect(COMMAND_ROUTES.scheduled_run_task.path({ id: 'task-1' })).toBe(
-      '/api/v1/scheduled/tasks/task-1/run',
-    );
-  });
-});
-
-describe('MCP management IPC routes (M3)', () => {
-  it('exposes status / servers / add / update / delete', () => {
-    expect(COMMAND_ROUTES.mcp_status.method).toBe('GET');
-    expect(COMMAND_ROUTES.mcp_status.path({})).toBe('/api/v1/mcp/status');
-    expect(COMMAND_ROUTES.mcp_servers.method).toBe('GET');
-    expect(COMMAND_ROUTES.mcp_servers.path({})).toBe('/api/v1/mcp/servers');
-    expect(COMMAND_ROUTES.mcp_server_add.method).toBe('POST');
-    expect(COMMAND_ROUTES.mcp_server_add.path({})).toBe('/api/v1/mcp/servers');
-    expect(COMMAND_ROUTES.mcp_server_update.method).toBe('PATCH');
-    expect(COMMAND_ROUTES.mcp_server_delete.method).toBe('DELETE');
-  });
-
-  it('mcp_server_update puts name in path and only patch fields in body', () => {
-    const r = COMMAND_ROUTES.mcp_server_update;
-    expect(r.path({ name: 'srv/1' })).toBe('/api/v1/mcp/servers/srv%2F1');
-    // name must not leak into the body (backend model is extra=forbid)
-    expect(r.body!({ name: 'srv', enabled: false, timeout_seconds: 45 })).toEqual({
-      enabled: false,
-      timeout_seconds: 45,
-    });
-    expect(r.body!({ name: 'srv', enabled: true })).toEqual({ enabled: true });
-  });
-
-  it('mcp_server_delete encodes the server name', () => {
-    expect(COMMAND_ROUTES.mcp_server_delete.path({ name: 'drawio' })).toBe(
-      '/api/v1/mcp/servers/drawio',
-    );
-    expect(COMMAND_ROUTES.mcp_server_delete.path({ name: 'a b' })).toBe(
-      '/api/v1/mcp/servers/a%20b',
-    );
-  });
-});
-
 describe('permission IPC routes (M1 tool security hardening)', () => {
   // Backend: backend/api/permission_routes.py — GET /permissions/pending +
   // POST /permissions/{request_id}/answer（ApprovalAnswerBody extra="forbid"）。
@@ -718,6 +735,39 @@ describe('question IPC routes (M2 part B: AskUserQuestion)', () => {
       COMMAND_ROUTES.questions_answer.path({ requestId: 'x' }),
     ];
     paths.forEach((p) => expect(p).toMatch(/^\/api\/v1\//));
+  });
+});
+
+describe('MCP management IPC routes (M3)', () => {
+  it('exposes status / servers / add / update / delete', () => {
+    expect(COMMAND_ROUTES.mcp_status.method).toBe('GET');
+    expect(COMMAND_ROUTES.mcp_status.path({})).toBe('/api/v1/mcp/status');
+    expect(COMMAND_ROUTES.mcp_servers.method).toBe('GET');
+    expect(COMMAND_ROUTES.mcp_servers.path({})).toBe('/api/v1/mcp/servers');
+    expect(COMMAND_ROUTES.mcp_server_add.method).toBe('POST');
+    expect(COMMAND_ROUTES.mcp_server_add.path({})).toBe('/api/v1/mcp/servers');
+    expect(COMMAND_ROUTES.mcp_server_update.method).toBe('PATCH');
+    expect(COMMAND_ROUTES.mcp_server_delete.method).toBe('DELETE');
+  });
+
+  it('mcp_server_update puts name in path and only patch fields in body', () => {
+    const r = COMMAND_ROUTES.mcp_server_update;
+    expect(r.path({ name: 'srv/1' })).toBe('/api/v1/mcp/servers/srv%2F1');
+    // name must not leak into the body (backend model is extra=forbid)
+    expect(r.body!({ name: 'srv', enabled: false, timeout_seconds: 45 })).toEqual({
+      enabled: false,
+      timeout_seconds: 45,
+    });
+    expect(r.body!({ name: 'srv', enabled: true })).toEqual({ enabled: true });
+  });
+
+  it('mcp_server_delete encodes the server name', () => {
+    expect(COMMAND_ROUTES.mcp_server_delete.path({ name: 'drawio' })).toBe(
+      '/api/v1/mcp/servers/drawio',
+    );
+    expect(COMMAND_ROUTES.mcp_server_delete.path({ name: 'a b' })).toBe(
+      '/api/v1/mcp/servers/a%20b',
+    );
   });
 });
 

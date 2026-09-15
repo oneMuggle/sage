@@ -17,9 +17,13 @@ import { invoke } from './desktopInvoke';
 import type {
   OfficeArchiveResponse,
   OfficeDeleteResponse,
+  OfficeDocUpdateRequest,
+  OfficeDocUpdateResponse,
   OfficeDocumentListResponse,
   OfficeExcelGenerateRequest,
   OfficeExcelReadResult,
+  OfficeExportPdfRequest,
+  OfficeExportPdfResult,
   OfficePdfGenerateRequest,
   OfficePdfGenerateResult,
   OfficePdfReadRequest,
@@ -30,6 +34,11 @@ import type {
   OfficeRestoreResponse,
   OfficeSnapshotListResponse,
   OfficeSnapshotRestoreResponse,
+  OfficeTemplateInstantiateRequest,
+  OfficeTemplateInstantiateResult,
+  OfficeTemplateListResponse,
+  OfficeUpdatePreviewRequest,
+  OfficeUpdatePreviewResult,
   OfficeWordGenerateRequest,
   OfficeWordLintRequest,
   OfficeWordLintResult,
@@ -231,6 +240,7 @@ export const officeApi = {
         workspacePath: req.workspace_path,
         filename: req.filename,
         slides: req.slides,
+        task_id: req.task_id,
       });
     } catch (error) {
       throw handleApiError(error);
@@ -252,6 +262,7 @@ export const officeApi = {
         title: req.title,
         paragraphs: req.paragraphs,
         tables: req.tables,
+        task_id: req.task_id,
       });
     } catch (error) {
       throw handleApiError(error);
@@ -271,6 +282,7 @@ export const officeApi = {
         workspacePath: req.workspace_path,
         filename: req.filename,
         sheets: req.sheets,
+        task_id: req.task_id,
       });
     } catch (error) {
       throw handleApiError(error);
@@ -312,7 +324,154 @@ export const officeApi = {
         pages: req.pages,
         pageSize: req.page_size,
         orientation: req.orientation,
+        task_id: req.task_id,
       });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Dry-run update ops against a temp COPY of the document (batch 2,
+   * item 2.5) — the source file is never touched. Resolves the target
+   * by doc_id when given (managed-layout lookup server-side), else by
+   * file_path. Invalid ops come back as
+   * `{ok: false, changes: [], error}` so the UI can show WHY the real
+   * update would fail.
+   *
+   * Round 2 (R1): the apply counterpart is `updateDocument` — the
+   * dialog previews first, then applies the SAME ops on user confirm.
+   *
+   * No retry — runs the full editor pipeline per op.
+   */
+  async previewUpdate(req: OfficeUpdatePreviewRequest): Promise<OfficeUpdatePreviewResult> {
+    try {
+      return await invoke<OfficeUpdatePreviewResult>('office_update_preview', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+        docId: req.doc_id,
+        ops: req.ops,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Apply previously previewed update ops to the document (round 2, R1).
+   *
+   * POST /api/v1/office/doc/{doc_id}/update body {ops} — the same op
+   * dicts `previewUpdate` dry-ran. Resolves the target by doc_id
+   * (managed-layout lookup server-side). Returns
+   * `{ok, summary, self_check}` where `summary` is the post-update
+   * document row (status='edited') and `self_check` reports whether a
+   * post-apply re-read confirmed the ops landed.
+   *
+   * Errors (unknown doc → 404, invalid ops → 422, both
+   * `{error_type, message, file_path}`) throw via handleApiError —
+   * there is no ok=false transport shape.
+   *
+   * No retry — side-effecting (writes the managed file; a transient
+   * blip must not double-apply).
+   */
+  async updateDocument(req: OfficeDocUpdateRequest): Promise<OfficeDocUpdateResponse> {
+    try {
+      return await invoke<OfficeDocUpdateResponse>('office_doc_update', {
+        docId: req.doc_id,
+        ops: req.ops,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Export a workspace .docx/.xlsx/.pptx to PDF via locally installed
+   * converters (batch 2, item 2.7) — LibreOffice headless first, then
+   * MS Word COM (Windows/.docx). Output lands next to the source as
+   * `<stem>.pdf`.
+   *
+   * Never throws for converter problems: failures come back as
+   * `{ok: false, method: null, output_path: null, error}`. HTTP-level
+   * failures (4xx/5xx, backend down) still throw via handleApiError.
+   *
+   * No retry — conversion is side-effecting (overwrites the output PDF).
+   */
+  async exportPdf(req: OfficeExportPdfRequest): Promise<OfficeExportPdfResult> {
+    try {
+      return await invoke<OfficeExportPdfResult>('office_export_pdf', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+        task_id: req.task_id,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * List document templates available in a workspace (batch 3, item 3.2;
+   * round 3 N2 adds excel/ppt) — builtin entries shipped with the backend
+   * plus the workspace's own `templates/*.docx|xlsx|pptx`. Each entry
+   * carries `doc_type`; the picker filters on the tab's kind so unknown
+   * future kinds degrade gracefully.
+   *
+   * Bounded retry — read-only and idempotent, same policy as listDocuments.
+   */
+  async listTemplates(workspacePath: string): Promise<OfficeTemplateListResponse> {
+    return withRetry(async () => {
+      try {
+        return await invoke<OfficeTemplateListResponse>('office_list_templates', {
+          workspacePath,
+        });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * Instantiate a template with placeholder data (batch 3, item 3.2;
+   * round 3 N2: works for word/excel/ppt templates — the backend picks
+   * the filler by the template's doc_type). Returns
+   * `output_path` / `filename` / `file_size_bytes` / `filled_count` /
+   * `unfilled_placeholders`. The backend persists a document row, so the
+   * result shows up in the document list after a refresh.
+   *
+   * Route is `rawBody` — see OfficeTemplateInstantiateRequest for why the
+   * placeholder-name keys in `data` / `images` must not be key-translated.
+   *
+   * No retry — side-effecting (creates a new OOXML file + document row).
+   */
+  async instantiateTemplate(
+    req: OfficeTemplateInstantiateRequest,
+  ): Promise<OfficeTemplateInstantiateResult> {
+    try {
+      return await invoke<OfficeTemplateInstantiateResult>('office_templates_instantiate', {
+        workspacePath: req.workspace_path,
+        templateId: req.template_id,
+        workspaceTemplate: req.workspace_template,
+        filename: req.filename,
+        data: req.data,
+        images: req.images,
+        task_id: req.task_id,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P7: 轮询 office 长任务进度（生成/导出期间的阶段 + 百分比）。
+   *
+   * 任务不存在（未开始/已结束）时后端返回 `active: false` 而非 404，
+   * 轮询方据此判定完成，无需异常处理。
+   */
+  async getOfficeProgress(
+    taskId: string,
+  ): Promise<{ active: boolean; stage: string | null; percent: number | null }> {
+    try {
+      return await invoke('office_get_progress', { taskId });
     } catch (error) {
       throw handleApiError(error);
     }

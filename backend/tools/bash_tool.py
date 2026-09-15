@@ -33,7 +33,7 @@ import logging
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.domain.risk import RiskClass
 
@@ -192,11 +192,41 @@ class BashTool(BaseTool):
 
     def _decorate(self, content: Dict[str, Any], shell: ShellSpec, cwd: Optional[str]) -> Dict[str, Any]:
         """给结果补上执行环境元数据。"""
+        import os
+
         content["shell"] = shell.kind
+        if (os.getenv("SAGE_BASH_EXEC_BACKEND") or "").strip().lower() == "docker":
+            content["exec_backend"] = "docker"
         content["cwd"] = cwd or str(Path.cwd())
         if shell.is_fallback:
             content["shell_fallback"] = SHELL_FALLBACK_NOTE
         return content
+
+    @staticmethod
+    def _docker_maybe_wrap(
+        command: str, cwd: Optional[str], shell: ShellSpec
+    ) -> Tuple[Optional[List[str]], Optional[str]]:
+        """docker 沙箱执行后端（Round 13, 对标 hermes terminal backends）。
+
+        ``SAGE_BASH_EXEC_BACKEND=docker`` 时把命令包装进一次性容器：
+        文件系统/进程/网络与宿主隔离（workspace 目录挂载为 /workspace）。
+        local（默认）/未知值 → 返回 (None, cwd) 走既有宿主路径。
+
+        Returns:
+            (docker argv, spawn cwd) —— argv 非 None 时 cwd 恒为 None
+            （容器内工作目录由 -w /workspace 指定）。
+        """
+        import os
+
+        backend = (os.getenv("SAGE_BASH_EXEC_BACKEND") or "").strip().lower()
+        if backend != "docker":
+            return None, cwd
+        image = (os.getenv("SAGE_BASH_DOCKER_IMAGE") or "").strip() or "python:3.11-slim"
+        argv: List[str] = ["docker", "run", "--rm"]
+        if cwd:
+            argv += ["-v", f"{cwd}:/workspace", "-w", "/workspace"]
+        argv += [image, shell.executable, *shell.args_prefix, command]
+        return argv, None
 
     def _spawn(
         self, command: str, cwd: Optional[str], shell: ShellSpec
@@ -216,12 +246,20 @@ class BashTool(BaseTool):
         out_handle = open(stdout_path, "wb")  # noqa: SIM115
         err_handle = open(stderr_path, "wb")  # noqa: SIM115
         try:
-            verified = spawn_verified(
-                [shell.executable, *shell.args_prefix, command],
-                cwd=cwd,
-                stdout=out_handle,
-                stderr=err_handle,
-            )
+            # Round 13: docker 沙箱执行后端 —— SAGE_BASH_EXEC_BACKEND=docker
+            # 时命令在容器内执行（文件系统/进程/网络与宿主隔离）。
+            docker_argv, spawn_cwd = self._docker_maybe_wrap(command, cwd, shell)
+            if docker_argv is not None:
+                verified = spawn_verified(
+                    docker_argv, cwd=spawn_cwd, stdout=out_handle, stderr=err_handle
+                )
+            else:
+                verified = spawn_verified(
+                    [shell.executable, *shell.args_prefix, command],
+                    cwd=cwd,
+                    stdout=out_handle,
+                    stderr=err_handle,
+                )
         except Exception:
             unlink_quietly(stdout_path)
             unlink_quietly(stderr_path)

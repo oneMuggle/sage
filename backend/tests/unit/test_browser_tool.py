@@ -191,7 +191,12 @@ def test_js_type_uses_native_setter_and_events():
 
 
 def _fake_session(browser_id: str, alive: bool = True) -> BrowserSession:
-    process = SimpleNamespace(poll=lambda: None if alive else 1, terminate=lambda: None, kill=lambda: None, wait=lambda timeout=None: None)
+    process = SimpleNamespace(
+        poll=lambda: None if alive else 1,
+        terminate=lambda: None,
+        kill=lambda: None,
+        wait=lambda timeout=None: None,
+    )
     return BrowserSession(
         browser_id=browser_id,
         executable="fake-browser",
@@ -306,9 +311,7 @@ def test_navigate_offline_gate_blocks_http_only(stubbed, monkeypatch):
     monkeypatch.setattr(
         browser_tool,
         "load_network_policy",
-        lambda: NetworkPolicy(
-            mode=NetworkMode.INTRANET, allowed_hosts=("*.example.internal",)
-        ),
+        lambda: NetworkPolicy(mode=NetworkMode.INTRANET, allowed_hosts=("*.example.internal",)),
     )
     result = _tool(BrowserNavigateTool).execute(url="https://evil.example/", browser_id="b1")
     assert result.success is False
@@ -354,7 +357,9 @@ def test_navigate_rejects_bad_scheme_and_reports_error_text(stubbed):
 
 def test_snapshot_caps_text(stubbed, monkeypatch):
     monkeypatch.setattr(browser_tool, "SNAPSHOT_TEXT_CAP", 8)
-    stubbed.results.append({"result": {"value": json.dumps({"url": "u", "title": "t", "text": "x"})}})
+    stubbed.results.append(
+        {"result": {"value": json.dumps({"url": "u", "title": "t", "text": "x"})}}
+    )
     result = _tool(BrowserSnapshotTool).execute(browser_id="b1")
     assert result.success is True
     # 截断发生在页面侧（JS slice）—— 锁定表达式包含上限
@@ -386,8 +391,7 @@ def test_interact_happy_paths(stubbed):
     assert tool.execute(action="click", text="登录", browser_id="b1").success is True
     stubbed.results.append({"result": {"value": {"ok": True, "info": "typed 5 chars"}}})
     assert (
-        tool.execute(action="type", selector="#q", value="hello", browser_id="b1").success
-        is True
+        tool.execute(action="type", selector="#q", value="hello", browser_id="b1").success is True
     )
     stubbed.results.append({"result": {"value": {"ok": True, "info": "scrolled to y=800"}}})
     assert tool.execute(action="scroll", value=800, browser_id="b1").success is True
@@ -459,10 +463,51 @@ def test_real_browser_smoke():
     browser_cdp.get_browser_manager().close_all()
     session = browser_cdp.launch_browser(headless=True)
     try:
-        result = _tool(BrowserNavigateTool).execute(url="about:blank", browser_id=session.browser_id)
+        result = _tool(BrowserNavigateTool).execute(
+            url="about:blank", browser_id=session.browser_id
+        )
         assert result.success is True
         result = _tool(BrowserSnapshotTool).execute(browser_id=session.browser_id)
         assert result.success is True
         assert result.content["url"].startswith("about:blank")
     finally:
         browser_cdp.get_browser_manager().close_all()
+
+
+# ---------- Round 5 B2 / AB4：去自动化痕迹 ----------
+
+
+def test_launch_command_disables_automation_controlled_flag():
+    command = browser_cdp._build_launch_command("/usr/bin/chrome", True, "/tmp/p")
+    assert "--disable-blink-features=AutomationControlled" in command
+    assert "--headless=new" in command
+    assert command[-1] == "about:blank"
+
+
+def test_stealth_script_covers_three_cheapest_signals():
+    script = browser_cdp.STEALTH_SCRIPT
+    assert "webdriver" in script
+    assert "window.chrome" in script
+    assert "languages" in script
+
+
+def test_apply_stealth_uses_new_document_hook(monkeypatch):
+    calls = []
+
+    def fake_cdp(session, method, params=None, target_id=None):
+        calls.append((method, params, target_id))
+        return {}
+
+    monkeypatch.setattr(browser_cdp, "cdp_command", fake_cdp)
+    session = SimpleNamespace(browser_id="b")
+    assert browser_cdp.apply_stealth(session, "tgt") is True
+    assert calls[0][0] == "Page.addScriptToEvaluateOnNewDocument"
+    assert calls[0][2] == "tgt"
+
+
+def test_apply_stealth_swallows_cdp_errors(monkeypatch):
+    def boom(*args, **kwargs):
+        raise browser_cdp.BrowserCDPError("no")
+
+    monkeypatch.setattr(browser_cdp, "cdp_command", boom)
+    assert browser_cdp.apply_stealth(SimpleNamespace(browser_id="b")) is False

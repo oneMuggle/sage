@@ -147,7 +147,7 @@ describe('chatStreamStore', () => {
     });
   });
 
-  // 2026-09-02 bug fix (win7 cherry-pick): 验证 reasoning_delta + reasoning_final 不再重复显示
+  // 2026-09-02 bug fix: 验证 reasoning_delta + reasoning_final 不再重复显示
   describe('reasoning 流式去重 (reasoning_final 替换而非追加)', () => {
     it('appendReasoning 累积 reasoning 增量', () => {
       useChatStreamStore.getState().startStream(SESS, 'msg-1', { initialContent: '' });

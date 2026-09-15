@@ -248,3 +248,25 @@ D-3 只挂了前台 `_run_foreground`；后台 shell（`run_in_background` 的�
 apply_patch 与 edit_file 同源（`_resolve_matches`），同样受"缩进/行尾差异即失败"之苦。`_validate_plan` 精确 0 命中且非 replace_all 时，复用 `edit_tool._resolve_fuzzy_range`（strip 窗口匹配 + 行尾补齐规则），命中恰 1 处才容错替换；`_PlannedEdit` 加 fuzzy 标记透出。多文件原子性不变（校验阶段内存推演）。
 
 **测试**：apply_patch 单文件缩进差异容错命中 / 多处拒绝 / 原子性回归；后台 output 解析用例。
+
+## 2.7 批次 H 详细设计（2026-09-11 增补，本次实施）
+
+> 基线：origin/main `597e89e3`；分支 `feat-parity-r5-batch-h`。主题：**代码理解性能与覆盖补强**（延续 F-3/G-2 主线的可本地验证小批次）。
+
+### H-1 symbol_search 持久化缓存 + 增量扫描（P2，工作量 M）
+
+现状每次查询全量重扫（现扫现查、2000 文件上限），大工作区查询延迟线性叠加。仿批次 E workspace_index 模式：`~/.sage/symbol-index/<workspace-sha1>/index.sqlite3` 缓存 symbols + files(mtime/size)，增量只重析变化文件，消失文件清理。查询时从缓存加载评分。上限提升至 5000 文件。
+
+### H-2 symbol_search 语言扩展（P2，工作量 S）
+
+F-3 行级正则模式复用，新增 Go（func/type struct|interface）/ Rust（fn/struct/trait/impl）/ Java（class/interface/方法签名）定义提取，扩展名 .go/.rs/.java 入枚举。
+
+### H-3 edit_file 容错透明度（P3，工作量 S）
+
+`fuzzy_matched` 布尔升级为附命中起始行号 `fuzzy_line`，LLM 与用户都能确认容错落点。
+
+### H-4 kill_shell 输出 test_failures（P3，工作量 S）
+
+G-1 补齐：被终止的后台测试进程经 KillShellTool 读取输出时同款挂 `test_failures`（终止时往往正是失败输出最全的时刻）。
+
+**测试**：symbol_index 增量/清理/新语言用例；edit_tool fuzzy_line 用例；kill_shell 解析用例（平台允许处）。

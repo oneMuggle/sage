@@ -3,6 +3,7 @@
  */
 
 import { clsx } from 'clsx';
+import { Search } from 'lucide-react';
 import { useState } from 'react';
 
 import { useSettings } from '../../features/manage-settings/useSettings';
@@ -20,10 +21,6 @@ import { ProvidersManager } from './ProvidersManager';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
 import { UpdatesTab } from './UpdatesTab';
 
-// NOTE (win7 sync #292): main 移除了 network tab(代理设置为死设置,
-// proxyMode/proxyUrl/tlsVersion 无实际消费点,已从 schema/canonicalizer 删除)。
-// win7 保留顶部 tab 布局(#292 只清理假功能,不含 main 的 U15 左侧导航改版)。
-// NOTE (win7 sync): 加 'runtime' tab 用于本地开发环境助手。
 type SettingsTab =
   | 'general'
   | 'endpoints'
@@ -38,6 +35,8 @@ type SettingsTab =
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  // R41: 设置搜索 —— 按关键词过滤左侧 tab，纯前端
+  const [searchQuery, setSearchQuery] = useState('');
   const { settings, updateSettings, resetSettings } = useSettings();
 
   const tabs: { key: SettingsTab; label: string }[] = [
@@ -55,6 +54,10 @@ export function Settings() {
     tabs.push({ key: 'providers', label: '更新源' });
   }
 
+  const filteredTabs = searchQuery.trim()
+    ? tabs.filter((tab) => tab.label.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : tabs;
+
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Left sub-nav (U15 from OpenWorker) */}
@@ -62,8 +65,20 @@ export function Settings() {
         <div className="h-12 flex items-center px-4 border-b border-line">
           <h2 className="text-[16px] font-semibold text-ink">设置</h2>
         </div>
+        <div className="px-2 pt-2">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
+            <input
+              data-testid="settings-search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索设置…"
+              className="w-full pl-7 pr-2 py-1.5 text-xs rounded-md border border-border bg-bg text-text placeholder:text-muted"
+            />
+          </div>
+        </div>
         <nav className="p-2 space-y-1">
-          {tabs.map((tab) => (
+          {filteredTabs.map((tab) => (
             <button
               key={tab.key}
               className={clsx(

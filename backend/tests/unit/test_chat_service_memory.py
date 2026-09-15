@@ -14,6 +14,7 @@ import pytest
 from backend.application.services.chat_service import ChatService
 from backend.domain.memory import MemoryContext
 from backend.domain.message import Message, Role
+from backend.memory.async_extractor import get_memory_extraction_queue
 from backend.ports.memory import MemoryPort
 
 pytestmark = pytest.mark.unit
@@ -228,6 +229,9 @@ class TestChatServiceMemoryStorage:
         # Act
         await chat_service_with_memory.run_turn("session-123", user_message)
 
+        # 记忆提取已异步化：等后台 worker 消费完再断言落库效果
+        await get_memory_extraction_queue().drain()
+
         # Assert 验证记忆被存储
         assert mock_memory.store.called
         call_kwargs = mock_memory.store.call_args[1]
@@ -255,6 +259,9 @@ class TestChatServiceMemoryStorage:
 
         # Act
         await chat_service_with_memory.run_turn("session-123", user_message)
+
+        # 记忆提取已异步化：等后台 worker 消费完再断言落库效果
+        await get_memory_extraction_queue().drain()
 
         # Assert 验证 importance 被提高
         assert mock_memory.store.called

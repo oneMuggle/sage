@@ -41,6 +41,7 @@ vi.mock('../../features/send-message/useChat', () => ({
     clearError: vi.fn(),
     messages: [],
     loadMessages: vi.fn(),
+    reattachActiveStream: vi.fn(),
     interrupt: vi.fn(),
     currentAgentId: null,
     streamingMessageId: null,

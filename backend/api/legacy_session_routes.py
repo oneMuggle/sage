@@ -25,7 +25,6 @@ from backend.api.error_contract import error_json
 from backend.api.legacy_routes import (
     SessionCreate,
     SessionUpdate,
-    _run_db_sync,
     get_session_repo,
     router,
 )
@@ -212,13 +211,11 @@ async def compact_session(session_id: str):
       DB 不动（落盘走单事务，失败整体回滚）
     """
     session_repo = SessionRepository()
-    if await _run_db_sync(session_repo.get, session_id) is None:
+    if session_repo.get(session_id) is None:
         raise HTTPException(status_code=404, detail="会话不存在")
 
     message_repo = MessageRepository()
-    messages = await _run_db_sync(
-        message_repo.get_by_session, session_id, limit=100000
-    )
+    messages = message_repo.get_by_session(session_id, limit=100000)
     before = len(messages)
 
     if not should_compact(messages):
@@ -258,13 +255,7 @@ async def compact_session(session_id: str):
             return error_json(502, "compaction_failed", str(exc))
 
         try:
-            after = await _run_db_sync(
-                _legacy_routes._persist_compaction,
-                session_id,
-                messages,
-                new_messages,
-                removed_count,
-            )
+            after = _legacy_routes._persist_compaction(session_id, messages, new_messages, removed_count)
         except Exception as exc:
             # 单事务已回滚——DB 保持压缩前状态（CRITICAL-1 的核心保证）。
             logger.warning(
@@ -423,3 +414,23 @@ def search_messages(
     return {"results": results, "has_more": has_more}
 
 
+
+
+# ---------------------------------------------------------------------------
+# Round 4 (session lineage, 对标 hermes): 压缩归档谱系查询
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sessions/{session_id}/lineage")
+def list_session_lineage(session_id: str):
+    """List compaction archives (lineage children) of a session.
+
+    归档会话本体（is_archived=1）的消息用既有 /sessions/{id}/messages 读取。
+
+    - 200 + ``{"session_id": ..., "archives": [...]}``
+    """
+    from backend.data.database import get_database
+    from backend.data.session_lineage import list_archives
+
+    archives = list_archives(get_database(), session_id)
+    return {"session_id": session_id, "archives": archives}

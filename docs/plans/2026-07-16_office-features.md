@@ -1,5 +1,7 @@
 # Office 文档功能：读取与生成 (PPT/Word/Excel)
 
+- [x] M0 Foundation 完成（commits 6ae9434..0c90be1）
+
 > **状态：** 计划（进行中）
 > **日期：** 2026-07-16
 > **作者：** planner agent

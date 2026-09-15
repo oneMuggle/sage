@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from backend.compat.win7.pydantic_compat import field_validator
 from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与文档语义保留
     _SQLITE_LOCK,
     make_with_db_lock,
@@ -56,7 +57,14 @@ class SessionRunsResponse(BaseModel):
 
 
 class PlanUpdateRequest(BaseModel):
-    plan: List[Dict[str, Any]] = Field(min_items=1)  # ≥1 行守卫 (pydantic 1 用 min_items)
+    plan: List[Dict[str, Any]] = Field()  # ≥1 行守卫
+
+    @field_validator("plan")
+    @classmethod
+    def _require_plan(cls, value: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not value:
+            raise ValueError("plan must contain at least one item")
+        return value
 
 
 def _run_detail(run: OrchRun) -> OrchRunDetail:
@@ -210,13 +218,16 @@ class CancelRunResponse(BaseModel):
 
 
 class ApprovalModeRequest(BaseModel):
-    """run 级子代理审批模式切换请求（live-events P1）。
-
-    Win7 分支约定（见 settings_models.py）: 不用 ``field_validator``
-    （Pydantic 1 不可用），取值校验在 route handler 里显式做。
-    """
+    """run 级子代理审批模式切换请求（live-events P1）。"""
 
     mode: str
+
+    @field_validator("mode")
+    @classmethod
+    def _require_known_mode(cls, value: str) -> str:
+        if value not in ("ask", "auto"):
+            raise ValueError("mode must be 'ask' or 'auto'")
+        return value
 
 
 @router.post("/runs/{run_id}/approval-mode")
@@ -233,8 +244,6 @@ def set_approval_mode(run_id: str, body: ApprovalModeRequest) -> Dict[str, Any]:
     """
     from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
 
-    if body.mode not in ("ask", "auto"):
-        raise HTTPException(status_code=422, detail=f"invalid mode: {body.mode}")
     dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
     if dispatcher is None:
         raise HTTPException(status_code=404, detail="active run not found")

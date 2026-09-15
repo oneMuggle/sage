@@ -481,16 +481,15 @@ async def test_finally_finalizes_run_even_on_early_producer_failure():
     def _spy(run_id, status, final_summary):
         calls.append((run_id, status, final_summary))
 
-    # win7 py3.8: parenthesized context managers (PEP 617) 是 py3.10+ 语法
-    with patch("backend.api.legacy_routes.resolve_attachments", _boom), \
-            patch("backend.api.legacy_routes._finalize_orch_run", _spy):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            create_resp = await ac.post(
-                CHAT_STREAM_PATH,
-                json={"session_id": "s", "message": "hi"},
-            )
-            stream_id = create_resp.json()["streamId"]
-            await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+    with patch("backend.api.legacy_routes.resolve_attachments", _boom):
+        with patch("backend.api.legacy_routes._finalize_orch_run", _spy):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+                create_resp = await ac.post(
+                    CHAT_STREAM_PATH,
+                    json={"session_id": "s", "message": "hi"},
+                )
+                stream_id = create_resp.json()["streamId"]
+                await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
 
     assert calls, "finally 未能调用 _finalize_orch_run（终态变量未前置？）"
     # 早期异常路径没有 DONE 事件 → 终态必须是 failed，summary 为 None

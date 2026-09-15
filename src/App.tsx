@@ -12,6 +12,7 @@ import {
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { UpdateDialog } from './components/UpdateDialog';
 import { loadCurrentSessionId } from './entities/session/storage';
+import { useSettingsStore } from './features/manage-settings/settingsStore';
 import { onSessionNotifyClick } from './features/send-message/sessionNotify';
 import { Chat } from './pages/Chat';
 import { Welcome } from './pages/Welcome';
@@ -39,6 +40,10 @@ const ScheduledTasks = lazy(() =>
 );
 const Skills = lazy(() => import('./pages/Skills').then((m) => ({ default: m.default })));
 const Help = lazy(() => import('./pages/Help').then((m) => ({ default: m.Help })));
+
+// ChatRoute 内直接调用 hook 形式的 useStore setter 会引入条件调用问题,
+// 用 getState() 命令式写入更直白(与 App useEffect 里的用法一致)。
+const setCurrentSessionIdFromStore = (id: string) => useStore.getState().setCurrentSessionId(id);
 
 // 批次三 step 6 (spec §4.3 line 150):
 // Memory 页"按会话查看摘要"或"来源会话跳转"以 /chat?session=<id> 深链形式进入。
@@ -74,14 +79,33 @@ function AppStartupRestore() {
   return null;
 }
 
+// 2026-08-26: 全局 settings 在 App 启动时加载一次 — 所有 useSettings() 调用
+// 共享同一份 state. 之前的 useSettings 在每个组件 mount 时独立 loadSettings,
+// Sidebar 永远显示首次 mount 时的 "未配置".
+function AppStartupSettings() {
+  useEffect(() => {
+    void useSettingsStore.getState().loadSettings();
+  }, []);
+  return null;
+}
+
 // Phase 7: gate /chat by currentSessionId; fall back to /welcome when missing.
-// Gap E (Task 5): allow mounting when the URL carries ?session=… (click-to-trace
-// from the Memory page) — Chat applies the session param on mount.
+// 批次三 step 6 (spec §4.3 line 150): Memory 页"来源会话跳转"以
+// /chat?session=<id> 形式进入 — ChatRoute 消费该参数写入 store,
+// 复用 setCurrentSessionId → loadMessages 的既有切换链路。
 function ChatRoute() {
   const currentSessionId = useStore((s) => s.currentSessionId);
-  const [searchParams] = useSearchParams();
-  const sessionParam = searchParams.get('session');
-  if (!currentSessionId && !sessionParam) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedSessionId = searchParams.get('session');
+  useEffect(() => {
+    if (requestedSessionId && requestedSessionId !== currentSessionId) {
+      setCurrentSessionIdFromStore(requestedSessionId);
+      // 清掉参数,避免刷新时反复触发会话切换。
+      // 注:必须 replace 而非 push,否则后退按钮会停在带 ?session= 的旧 URL。
+      setSearchParams({}, { replace: true });
+    }
+  }, [requestedSessionId, currentSessionId, setSearchParams]);
+  if (!currentSessionId) {
     return <Navigate to="/welcome" replace />;
   }
   return <Chat />;
@@ -109,6 +133,22 @@ function App() {
   // U18 (round4): 快捷键帮助覆盖层（非输入焦点下按 ? 打开）
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
 
+
+  // R40: Ctrl+N 新建会话 —— 全局快捷键（仅无 modifier 冲突时触发）
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        useStore.getState().createSession().then((id) => {
+          useStore.getState().setCurrentSessionId(id);
+          window.location.hash = '#/chat';
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   return (
     <HashRouter>
       <NavHistoryProvider>
@@ -118,6 +158,7 @@ function App() {
         />
         <BackendStatusBanner />
         <AppStartupRestore />
+        <AppStartupSettings />
         <SessionNotifyBridge />
         <Routes>
           <Route

@@ -6,7 +6,7 @@
 设计要点
 --------
 
-- **PR B §1.2**:所有 async 方法包 _to_thread,让 chat_service /
+- **PR B §1.2**:所有 async 方法包 asyncio.to_thread,让 chat_service /
   session_service 这条 keep_async 路径在事件循环上不被同步 SQLite 写阻塞
   (PR A 已修 legacy_routes 直接 repo 路径,本 PR 修 service→adapter 路径)。
   实际的 SQLite 访问在 ``_sync_X`` 内持有
@@ -41,18 +41,6 @@ from backend.data.session_repo import (
 )
 
 _DEFAULT_TITLE = "新对话"
-
-
-async def _to_thread(func, *args, **kwargs):
-    """Py3.8 兼容的 ``_to_thread`` 等价物。
-
-    NOTE (win7 sync #295): main 直接用 ``_to_thread``(3.9+ API),
-    win7 是 Py3.8,改用 ``get_running_loop().run_in_executor(None, ...)``
-    等价实现——``_to_thread`` 本身正是这个薄封装。行为一致:
-    函数跑在默认 ThreadPoolExecutor worker,不阻塞事件循环。
-    """
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
 
 # ============================================================================
@@ -159,7 +147,7 @@ class SqliteStorageAdapter:
 
         PR B §1.2: async 包装负责调度,实际逻辑在 _sync_create_session 跑 threadpool。
         """
-        return await _to_thread(self._sync_create_session, title)
+        return await asyncio.to_thread(self._sync_create_session, title)
 
     def _sync_create_session(self, title: str) -> str:
         """create_session 的同步实现,跑在 threadpool worker。
@@ -174,7 +162,7 @@ class SqliteStorageAdapter:
 
     async def list_sessions(self) -> List[Dict[str, Any]]:
         """列出当前所有会话（已过滤归档），返回 dict 列表。"""
-        return await _to_thread(self._sync_list_sessions)
+        return await asyncio.to_thread(self._sync_list_sessions)
 
     def _sync_list_sessions(self) -> List[Dict[str, Any]]:
         with _SQLITE_LOCK:
@@ -226,7 +214,7 @@ class SqliteStorageAdapter:
 
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """按 ID 取单个会话;不存在返 ``None``。"""
-        return await _to_thread(self._sync_get_session, session_id)
+        return await asyncio.to_thread(self._sync_get_session, session_id)
 
     def _sync_get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         with _SQLITE_LOCK:
@@ -248,7 +236,7 @@ class SqliteStorageAdapter:
         ``is_pinned`` 字段是 bool,持久化层需要 0/1 int,这里做转换。
         其他字段(如 ``title``)原样转发。
         """
-        return await _to_thread(self._sync_update_session, session_id, fields)
+        return await asyncio.to_thread(self._sync_update_session, session_id, fields)
 
     def _sync_update_session(self, session_id: str, fields: Dict[str, Any]) -> int:
         """update_session 的同步实现。
@@ -271,7 +259,7 @@ class SqliteStorageAdapter:
 
     async def delete_session(self, session_id: str) -> int:
         """按 ID 删除会话;返受影响行数(0=不存在,1=已删除)。"""
-        return await _to_thread(self._sync_delete_session, session_id)
+        return await asyncio.to_thread(self._sync_delete_session, session_id)
 
     def _sync_delete_session(self, session_id: str) -> int:
         with _SQLITE_LOCK:
@@ -287,7 +275,7 @@ class SqliteStorageAdapter:
             ``source_message_id``，让前端 ``data-turn-id`` 可精确命中）。
         """
         row = _domain_to_data_message(session_id, message)
-        return await _to_thread(self._sync_append_message, row)
+        return await asyncio.to_thread(self._sync_append_message, row)
 
     def _sync_append_message(self, row: _DataMessage) -> str:
         """append_message 的同步实现。
@@ -307,7 +295,7 @@ class SqliteStorageAdapter:
 
         实现：先取全部历史，然后取尾部 ``limit`` 条并保持时间正序。
         """
-        return await _to_thread(self._sync_get_messages, session_id, limit)
+        return await asyncio.to_thread(self._sync_get_messages, session_id, limit)
 
     def _sync_get_messages(self, session_id: str, limit: int) -> List[Message]:
         """get_messages 的同步实现。

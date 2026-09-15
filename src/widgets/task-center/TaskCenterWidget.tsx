@@ -52,6 +52,8 @@ interface Entry {
   laneId?: string;
   /** A4b: office 交付包坐标（awaiting 条目开抽屉用）。 */
   deliveryRef?: OfficeDeliveryRef | null;
+  /** P11: 关联文档名（office 条目跳转后高亮文档行）。 */
+  docName?: string | null;
   /**
    * A4: 点击直达交付抽屉（而非 route 跳转）。仅交付待验收项置位；
    * blocked lane 等仍走原 route（其 awaiting 语义是等审批/输入，
@@ -106,6 +108,32 @@ function isLaneCancellable(status: LaneStatus): boolean {
   return status === 'created' || status === 'ready' || status === 'running' || status === 'blocked';
 }
 
+/**
+ * P19: 状态优先级排序 —— 最重要的任务排在展开列表顶部。
+ * 优先级：failed > awaiting_approval > running > paused > queued > succeeded > cancelled
+ */
+const STATUS_PRIORITY: Readonly<Record<TaskCenterStatus, number>> = {
+  failed: 0,
+  awaiting_approval: 1,
+  running: 2,
+  paused: 3,
+  queued: 4,
+  succeeded: 5,
+  cancelled: 6,
+};
+
+function sortEntries(entries: Entry[]): Entry[] {
+  return [...entries].sort((a, b) => {
+    const pa = STATUS_PRIORITY[a.status] ?? 99;
+    const pb = STATUS_PRIORITY[b.status] ?? 99;
+    if (pa !== pb) return pa - pb;
+    // 同优先级内按已耗时降序（越久排越前）
+    const ta = a.startedAt ?? 0;
+    const tb = b.startedAt ?? 0;
+    return ta - tb;
+  });
+}
+
 function StatusIcon({ status }: { status: TaskCenterStatus }) {
   const cls = 'w-3.5 h-3.5 shrink-0';
   switch (status) {
@@ -136,6 +164,7 @@ export function TaskCenterWidget() {
   const registryTasks = useTaskCenterStore((s) => s.tasks);
   const clearFinished = useTaskCenterStore((s) => s.clearFinished);
   const openDelivery = useTaskCenterStore((s) => s.openDelivery);
+  const setHighlight = useTaskCenterStore((s) => s.setHighlight);
   const streamSessions = useChatStreamStore((s) => s.sessions);
   const lanes = useLaneBoardStore((s) => s.lanes);
   const cancelLane = useLaneBoardStore((s) => s.cancel);
@@ -212,7 +241,7 @@ export function TaskCenterWidget() {
         laneId: lane.lane_id,
         opensDelivery: isLaneAwaitingDecision(lane),
       }));
-    return [...registryEntries, ...chatEntries, ...laneEntries];
+    return sortEntries([...registryEntries, ...chatEntries, ...laneEntries]);
     // streamStartsRef is a ref and stays out of deps: entries read it after
     // the maintenance effect above, so first-seen times are already present.
   }, [registryTasks, activeStreamIds, lanes, sessions, t]);
@@ -261,6 +290,10 @@ export function TaskCenterWidget() {
         openDelivery({ kind: 'office', entryId: entry.id });
         return;
       }
+    }
+    // P11: office 任务带关联文档名 → 跳转后定位并高亮对应文档行。
+    if (entry.source === 'registry' && entry.route === '/office' && entry.docName) {
+      setHighlight(entry.docName);
     }
     if (entry.route) navigate(entry.route);
   };

@@ -1,0 +1,5 @@
+{
+  "title": "Sage E2E Testing Strategy",
+  "body": "Sage uses a tier-based E2E strategy: stub backend for fast local feedback, real backend for nightly verification.",
+  "tags": ["testing", "automation", "e2e"]
+}

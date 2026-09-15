@@ -574,3 +574,322 @@ class TestPermissionGate:
         assert "跳过" in done_evt["content"]
         observing = events_box["events"][2]
         assert "权限拒绝" in observing["tool_result"]["content"]
+
+
+# ---- Task 3: orchestration endpoint tests ----
+#
+# Note: the Task 3 brief wrote these against the ``requests`` library, but the
+# sage-backend env intentionally has no ``requests`` installed (this file's
+# _HTTPHelper exists precisely for "stdlib only, no requests dependency"), so
+# they are transcribed with identical names/assertions on top of _HTTPHelper
+# (and raw urllib for the NDJSON header check).
+
+
+def test_orchestration_create_run_returns_3_lanes():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        data = http.post(
+            "/api/v1/orchestration/runs",
+            {"session_id": "sess1", "plan": "test plan"},
+        )
+        assert data["run_id"].startswith("run_")
+        assert data["status"] == "running"
+        assert len(data["lanes"]) == 3
+        assert {lane["name"] for lane in data["lanes"]} == {"planner", "executor", "reviewer"}
+    finally:
+        server.stop()
+
+
+def test_orchestration_get_run_after_create():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        created = http.post(
+            "/api/v1/orchestration/runs", {"session_id": "s1", "plan": "p"}
+        )
+        rid = created["run_id"]
+        fetched = http.get("/api/v1/orchestration/runs/{}".format(rid))
+        assert fetched["run_id"] == rid
+    finally:
+        server.stop()
+
+
+def test_orchestration_cancel_sets_flag():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        created = http.post(
+            "/api/v1/orchestration/runs", {"session_id": "s1", "plan": "p"}
+        )
+        rid = created["run_id"]
+        http.post("/api/v1/orchestration/runs/{}/cancel".format(rid))
+        fetched = http.get("/api/v1/orchestration/runs/{}".format(rid))
+        assert fetched["cancelled"] is True
+    finally:
+        server.stop()
+
+
+def test_orchestration_approve_records_token():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        created = http.post(
+            "/api/v1/orchestration/runs", {"session_id": "s1", "plan": "p"}
+        )
+        rid = created["run_id"]
+        resp = http.post(
+            "/api/v1/orchestration/runs/{}/approve".format(rid),
+            {"token": "user_token_1"},
+        )
+        assert resp["approval_token"] == "user_token_1"
+    finally:
+        server.stop()
+
+
+def test_orchestration_events_sse_stream():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        created = http.post(
+            "/api/v1/orchestration/runs", {"session_id": "s1", "plan": "p"}
+        )
+        rid = created["run_id"]
+        req = urllib.request.Request(
+            server.url + "/api/v1/orchestration/runs/{}/events".format(rid),
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            assert resp.status == 200
+            assert "application/x-ndjson" in resp.headers["Content-Type"]
+            first_line = resp.readline().decode("utf-8")
+            event = json.loads(first_line)
+            assert event["run_id"] == rid
+    finally:
+        server.stop()
+
+
+# ---- Task 4: wiki endpoint tests ----
+#
+# Note: the Task 4 brief wrote these against the ``requests`` library, but the
+# sage-backend env intentionally has no ``requests`` installed (this file's
+# _HTTPHelper exists precisely for "stdlib only, no requests dependency"), so
+# they are transcribed with identical names/assertions on top of _HTTPHelper
+# (same adaptation as the Task 3 orchestration tests above).
+
+
+def test_wiki_ingest_then_search_returns_ranked_results():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        r1 = http.post(
+            "/api/v1/wiki/ingest",
+            {"title": "Sage Memory", "content": "Sage has 3-tier memory"},
+        )
+        doc_id = r1["doc_id"]
+        assert r1["chunks"] >= 1
+
+        r2 = http.post(
+            "/api/v1/wiki/search",
+            {"query": "memory", "limit": 5},
+        )
+        assert r2["total"] >= 1
+        assert r2["items"][0]["doc_id"] == doc_id
+        assert 0.0 <= r2["items"][0]["score"] <= 1.0
+    finally:
+        server.stop()
+
+
+def test_wiki_extract_returns_title_and_body():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        data = http.post(
+            "/api/v1/wiki/extract",
+            {"content": "Sage is great. It supports E2E."},
+        )
+        assert "title" in data
+        assert "body" in data
+        assert isinstance(data.get("links", []), list)
+    finally:
+        server.stop()
+
+
+def test_wiki_insights_returns_summary_and_tags():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        r1 = http.post(
+            "/api/v1/wiki/ingest",
+            {"title": "Foo", "content": "Sage memory works."},
+        )
+        doc_id = r1["doc_id"]
+        r2 = http.get("/api/v1/wiki/insights/{}".format(doc_id))
+        assert "summary" in r2
+        assert isinstance(r2.get("tags", []), list)
+    finally:
+        server.stop()
+
+
+def test_wiki_deep_research_returns_plan():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        data = http.post(
+            "/api/v1/wiki/deep-research",
+            {"topic": "Sage memory tiers"},
+        )
+        assert "steps" in data
+        assert data["status"] in ("pending", "running", "done")
+    finally:
+        server.stop()
+
+
+# ---- Task 5: memory endpoint tests ----
+#
+# Note: the Task 5 brief wrote these against the ``requests`` library, but the
+# sage-backend env intentionally has no ``requests`` installed (this file's
+# _HTTPHelper exists precisely for "stdlib only, no requests dependency"), so
+# they are transcribed with identical names/assertions on top of _HTTPHelper
+# (same adaptation as the Task 3/4 tests above; the brief's GET ``params={...}``
+# are folded into the URL query string since _HTTPHelper has no params arg).
+
+
+def test_memory_three_tier_write_and_search():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        for layer in ["episodic", "semantic", "working"]:
+            r = http.post(
+                "/api/v1/memory/{}".format(layer),
+                {"session_id": "s1", "content": "hello {}".format(layer)},
+            )
+            assert r["layer"] == layer
+            assert r["id"].startswith("mem_")
+
+        r = http.get("/api/v1/memory/search?q=hello")
+        assert len(r["episodic"]) >= 1
+        assert len(r["semantic"]) >= 1
+        assert len(r["working"]) >= 1
+    finally:
+        server.stop()
+
+
+def test_memory_search_filters_by_layer():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        http.post(
+            "/api/v1/memory/episodic",
+            {"session_id": "s1", "content": "episodic event"},
+        )
+        http.post(
+            "/api/v1/memory/semantic",
+            {"session_id": "s1", "content": "semantic fact"},
+        )
+        r = http.get("/api/v1/memory/search?q=event&layer=episodic")
+        assert len(r["episodic"]) >= 1
+        assert all(item["layer"] == "episodic" for item in r["episodic"])
+    finally:
+        server.stop()
+
+
+def test_memory_profile_returns_user_summary():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        http.post(
+            "/api/v1/memory/semantic",
+            {"session_id": "s1", "content": "user likes tests"},
+        )
+        r = http.get("/api/v1/memory/profile/user_123")
+        assert r["user_id"] == "user_123"
+        assert "facts" in r
+    finally:
+        server.stop()
+
+
+def test_memory_consolidate_returns_pending():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        r = http.post("/api/v1/memory/consolidate", {"session_id": "s1"})
+        assert r["status"] == "pending"
+    finally:
+        server.stop()
+
+
+# ---- Task 6: evolution endpoint tests ----
+#
+# Note: the Task 6 brief wrote these against the ``requests`` library, but the
+# sage-backend env intentionally has no ``requests`` installed (this file's
+# _HTTPHelper exists precisely for "stdlib only, no requests dependency"), so
+# they are transcribed with identical names/assertions on top of _HTTPHelper
+# (same adaptation as the Task 3/4/5 tests above; the brief's explicit
+# ``status_code == 200`` asserts are folded into _HTTPHelper's default
+# expected_status=200 check).
+
+
+def test_evolution_signals_returns_seed_list():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        r = http.get("/api/v1/evolution/signals")
+        signals = r["signals"]
+        assert len(signals) >= 1
+        assert "id" in signals[0]
+        assert "type" in signals[0]
+        assert "strength" in signals[0]
+    finally:
+        server.stop()
+
+
+def test_evolution_draft_to_queue_to_approve():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        signals = http.get("/api/v1/evolution/signals")["signals"]
+        sid = signals[0]["id"]
+        r1 = http.post("/api/v1/evolution/draft", {"signal_ids": [sid]})
+        draft_id = r1["id"]
+        assert r1["status"] == "pending"
+
+        r2 = http.get("/api/v1/evolution/queue")
+        drafts = r2["drafts"]
+        assert any(d["id"] == draft_id for d in drafts)
+
+        http.post("/api/v1/evolution/approve/{}".format(draft_id))
+
+        r4 = http.get("/api/v1/evolution/queue")
+        approved = [d for d in r4["drafts"] if d["id"] == draft_id][0]
+        assert approved["status"] == "approved"
+    finally:
+        server.stop()
+
+
+def test_evolution_scheduler_status():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        data = http.get("/api/v1/evolution/scheduler/status")
+        assert data["state"] in ("idle", "running", "stopped")
+        assert "last_run_at_ms" in data
+        assert "next_run_at_ms" in data
+    finally:
+        server.stop()

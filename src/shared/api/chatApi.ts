@@ -5,10 +5,18 @@
 
 import { clientLogger } from '../log/client';
 
+import { isDemoMode } from './demoFlag';
 import { listen, type UnlistenFn } from './desktopEvent';
 import { invoke } from './desktopInvoke';
 import type { AgentEvent, ChatConfig, ChatOfficeRef, ChatResponse } from './types';
 import { ApiException, handleApiError, isValidSessionId, withRetry } from './utils';
+
+/** demo 聊天脚本按需加载 (R2): 仅演示模式才拉取 demo 数据模块。 */
+let demoChatScriptPromise: Promise<typeof import('./demoChatScript')> | null = null;
+function loadDemoChatScript(): Promise<typeof import('./demoChatScript')> {
+  demoChatScriptPromise ??= import('./demoChatScript');
+  return demoChatScriptPromise;
+}
 
 // DIAG(2026-07-30): 当 stream 以 FAILED 收尾时,把整轮事件序列推到主进程日志,
 // 便于定位 '为什么 agent 跑到 max_iterations'。仅用于排查,不参与业务逻辑。
@@ -18,6 +26,13 @@ export const chatApi = {
   async chat(sessionId: string, message: string, config?: ChatConfig): Promise<ChatResponse> {
     // 消息原文直传: 用户内容会进入 LLM 上下文并落库,任何转义都是数据污染
     // (XSS 由渲染层 React 转义负责, 不在此处处理)。
+    if (isDemoMode()) {
+      throw new ApiException({
+        error: 'DEMO_MODE_UNSUPPORTED',
+        message: '演示模式不支持同步聊天，请使用流式聊天',
+        details: {},
+      });
+    }
 
     // 验证会话ID
     if (!isValidSessionId(sessionId)) {
@@ -103,21 +118,31 @@ export const chatApi = {
     },
     config?: ChatConfig,
     officeRefs?: readonly ChatOfficeRef[],
+    /** R23-D2: 聊天图片输入（base64 data URL），后端限 4 张/单张 5MiB */
+    images?: string[],
+    attachmentMediaIds?: string[],
   ): Promise<{ streamId: string; cancel: () => void }> {
     // 消息原文直传,理由同 chat()。
-    if (!isValidSessionId(sessionId)) {
-      throw new ApiException({
-        error: 'VALIDATION_ERROR',
-        message: '无效的会话ID格式',
-        details: { sessionId },
-      });
-    }
     if (!handlers || typeof handlers.onEvent !== 'function') {
       throw new ApiException({
         error: 'VALIDATION_ERROR',
         message: 'chatStream 缺少 onEvent 回调',
         details: {},
       });
+    }
+    const isBtwSession = sessionId === '__btw__';
+    if (!isBtwSession && !isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    // 演示模式 (2026-08-27): 不发请求, 按脚本时间线推同形事件流。
+    // 仅保留 /btw 使用的特殊会话，其余路径仍遵守 UUID 校验。
+    if (isDemoMode()) {
+      const { runDemoChatStream } = await loadDemoChatScript();
+      return runDemoChatStream(sessionId, message, handlers);
     }
 
     // 1) 启动流 (同步 invoke, 立即返回 { streamId: "..." } 对象)
@@ -143,6 +168,9 @@ export const chatApi = {
       plan_mode: config?.planMode ?? null,
       // 对标 S2: 临时聊天 → memory_mode='off'（缺省 'on'）
       memory_mode: config?.memoryDisabled ? 'off' : 'on',
+      // R23-D2: 聊天图片输入 —— 后端 ChatRequest.images（data URL 列表）
+      images: images ?? [],
+      attachment_media_ids: attachmentMediaIds ?? [],
     });
     const eventName = `chat-stream-${streamId}`;
 
@@ -273,5 +301,121 @@ export const chatApi = {
     feedWatchdog();
 
     return { streamId, cancel };
+  },
+
+  /**
+   * R25-D4: 查询会话当前活跃的 chat 流（renderer 重载/切回会话后 reattach 用）。
+   * 无活跃流返回 null。
+   */
+  async activeStream(sessionId: string): Promise<string | null> {
+    const res = await invoke<{ streamId: string | null }>('chat_stream_active', { sessionId });
+    return res.streamId ?? null;
+  },
+
+  /**
+   * R25-D4: 只监听既有流（不 create）—— renderer 重载后重新 attach 到
+   * 后端仍在跑的 chat 流。BroadcastQueue 会把 attach 之前缓冲的事件重放
+   * 给首个 subscriber，因此占位消息能追上完整内容。
+   * 返回 cancel()（unlisten + 停看门狗）。
+   */
+  async listenStream(
+    streamId: string,
+    handlers: {
+      onEvent: (event: AgentEvent) => void;
+      onError?: (error: Error) => void;
+      onDone?: () => void;
+    },
+  ): Promise<{ cancel: () => void }> {
+    const eventName = `chat-stream-${streamId}`;
+    let unlisten: UnlistenFn | null = null;
+    let settled = false;
+
+    const STREAM_WATCHDOG_SILENCE_MS = 180_000;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearWatchdog = (): void => {
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
+    };
+    const cancel = (): void => {
+      clearWatchdog();
+      if (unlisten) {
+        try {
+          unlisten();
+        } catch {
+          // ignore
+        }
+        unlisten = null;
+      }
+    };
+    const finishOnce = (cb: () => void): void => {
+      if (settled) return;
+      settled = true;
+      cancel();
+      try {
+        cb();
+      } catch {
+        // 用户回调抛错不外泄
+      }
+    };
+    const feedWatchdog = (): void => {
+      clearWatchdog();
+      watchdogTimer = setTimeout(() => {
+        if (settled) return;
+        clientLogger.error('listenStream: watchdog timeout, no events', {
+          streamId,
+          silenceMs: STREAM_WATCHDOG_SILENCE_MS,
+        });
+        finishOnce(() => {
+          if (handlers.onError) {
+            handlers.onError(
+              new Error(
+                `流式响应已 ${Math.round(STREAM_WATCHDOG_SILENCE_MS / 1000)} 秒无任何事件,已中断。`,
+              ),
+            );
+          }
+          handlers.onDone?.();
+        });
+      }, STREAM_WATCHDOG_SILENCE_MS);
+    };
+
+    try {
+      unlisten = await listen<AgentEvent>(eventName, (evt) => {
+        const payload = evt.payload;
+        feedWatchdog();
+        try {
+          handlers.onEvent(payload);
+        } catch (cbErr) {
+          if (handlers.onError) {
+            handlers.onError(cbErr instanceof Error ? cbErr : new Error(String(cbErr)));
+          }
+          finishOnce(() => handlers.onDone?.());
+          return;
+        }
+        if (payload.state === 'done' || payload.state === 'failed') {
+          if (payload.state === 'failed' && payload.error && handlers.onError) {
+            const errPayload = payload.error;
+            const errMsg =
+              typeof errPayload === 'string'
+                ? errPayload
+                : ((errPayload as { message?: string }).message ?? JSON.stringify(errPayload));
+            handlers.onError(new Error(errMsg));
+          }
+          finishOnce(() => handlers.onDone?.());
+        }
+      });
+    } catch (listenErr) {
+      const err = listenErr instanceof Error ? listenErr : new Error('订阅流式事件失败');
+      if (handlers.onError) handlers.onError(err);
+      throw new ApiException({
+        error: 'STREAM_LISTEN_FAILED',
+        message: err.message,
+        details: { streamId },
+      });
+    }
+
+    feedWatchdog();
+    return { cancel };
   },
 };

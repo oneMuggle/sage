@@ -13,6 +13,7 @@ vi.mock('../../../features/artifacts/useArtifacts', () => ({
 vi.mock('../../../shared/api/orchRunClient', () => ({
   orchRunClient: { listRuns: vi.fn().mockResolvedValue([]) },
 }));
+
 import { RightPanel } from '../RightPanel';
 
 const props = {

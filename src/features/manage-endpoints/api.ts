@@ -1,5 +1,11 @@
-import type { DiscoveredModel, ModelCapability } from '../../entities/setting/types';
+import {
+  DEMO_ENDPOINT_MODELS,
+  type DiscoveredModel,
+  type ModelCapability,
+} from '../../entities/setting/types';
+import type { EndpointProtocol } from '../../entities/setting/types';
 import { backendRequest } from '../../shared/api/backendRequest';
+import { isDemoMode } from '../../shared/api/demoFlag';
 
 interface OpenAIModelInfo {
   id: string;
@@ -127,6 +133,7 @@ function _parseUpstreamError(err: unknown): string {
  * 这样浏览器永远只跟同源后端对话,绕开 CORS。
  */
 export async function fetchModels(baseUrl: string, apiKey: string): Promise<DiscoveredModel[]> {
+  if (isDemoMode()) return DEMO_ENDPOINT_MODELS.map((model) => ({ ...model }));
   const response = await backendRequest<OpenAIModelsResponse>({
     path: `${LLM_PROXY_BASE}/v1/models`,
     method: 'GET',
@@ -150,6 +157,62 @@ export async function fetchModels(baseUrl: string, apiKey: string): Promise<Disc
     capabilities: inferCapabilities(m.id),
     endpointId: '',
   }));
+}
+
+/**
+ * R33: 按协议发现模型 —— anthropic/gemini/ollama 走各自的 /models 语义。
+ * 全部经本机后端 LLM 代理透传（X-LLM-Provider-Url 指定上游），自定义
+ * 鉴权头（x-api-key / anthropic-version / x-goog-api-key）会被代理原样
+ * 转发（_filter_request_headers 只剔除 hop-by-hop 与本地能力令牌）。
+ */
+export async function fetchModelsByProtocol(
+  protocol: EndpointProtocol,
+  baseUrl: string,
+  apiKey: string,
+): Promise<DiscoveredModel[]> {
+  if (protocol === 'openai-compatible') return fetchModels(baseUrl, apiKey);
+  const base = baseUrl.replace(/\/+$/, '');
+  if (isDemoMode()) return DEMO_ENDPOINT_MODELS.map((model) => ({ ...model }));
+
+  const toModels = (ids: string[]): DiscoveredModel[] =>
+    ids.map((id) => ({ id, capabilities: inferCapabilities(id), endpointId: '' }));
+
+  if (protocol === 'anthropic') {
+    const response = await backendRequest<{ data?: Array<{ id?: string }> }>({
+      path: `${LLM_PROXY_BASE}/v1/models`,
+      method: 'GET',
+      headers: {
+        'X-LLM-Provider-Url': base,
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+    });
+    return toModels((response.data ?? []).map((m) => String(m.id ?? '')).filter(Boolean));
+  }
+
+  if (protocol === 'gemini') {
+    const response = await backendRequest<{ models?: Array<{ name?: string }> }>({
+      path: `${LLM_PROXY_BASE}/v1beta/models`,
+      method: 'GET',
+      headers: {
+        'X-LLM-Provider-Url': base,
+        'x-goog-api-key': apiKey,
+      },
+    });
+    return toModels(
+      (response.models ?? [])
+        .map((m) => String(m.name ?? '').replace(/^models\//, ''))
+        .filter(Boolean),
+    );
+  }
+
+  // ollama
+  const response = await backendRequest<{ models?: Array<{ name?: string }> }>({
+    path: `${LLM_PROXY_BASE}/api/tags`,
+    method: 'GET',
+    headers: { 'X-LLM-Provider-Url': base },
+  });
+  return toModels((response.models ?? []).map((m) => String(m.name ?? '')).filter(Boolean));
 }
 
 /**
@@ -183,7 +246,7 @@ async function testChatCompletion(
     if (error instanceof DOMException && error.name === 'AbortError') {
       return { success: false, message: '请求超时 (15s)' };
     }
-// 401/429/上游 envelope → _parseUpstreamError 统一翻译; 其它降级到原 message。
+    // 401/429/上游 envelope → _parseUpstreamError 统一翻译; 其它降级到原 message。
     return { success: false, message: _parseUpstreamError(error) };
   }
 }
@@ -196,12 +259,57 @@ export async function testEndpointConnection(
   baseUrl: string,
   apiKey: string,
   chatModel?: string,
+  protocol: EndpointProtocol = 'openai-compatible',
 ): Promise<ConnectionTestResult> {
   const start = Date.now();
+  if (isDemoMode()) {
+    return {
+      success: true,
+      message: `演示端点可用 · 发现 ${DEMO_ENDPOINT_MODELS.length} 个模型 · 未发送网络请求`,
+      latency: 0,
+      discoveredModels: DEMO_ENDPOINT_MODELS.map((model) => ({ ...model })),
+    };
+  }
   try {
-    // Step 1: Test /models endpoint
-    const models = await fetchModels(baseUrl, apiKey);
+    // Step 1: Test /models endpoint（R33: 按协议分发发现语义）
+    const models = await fetchModelsByProtocol(protocol, baseUrl, apiKey);
     const modelDiscovery = `发现 ${models.length} 个模型`;
+
+    // R36: 非 openai 协议也做对话级连通测试（各家生成端点按协议构造）
+    if (protocol !== 'openai-compatible') {
+      let chatTestModel = chatModel;
+      if (!chatTestModel || !models.some((m) => m.id === chatTestModel)) {
+        chatTestModel = models.find((m) => !isEmbeddingModel(m.id))?.id;
+      }
+      if (chatTestModel) {
+        const chatResult = await testChatCompletionByProtocol(
+          protocol,
+          baseUrl,
+          apiKey,
+          chatTestModel,
+        );
+        if (!chatResult.success) {
+          return {
+            success: false,
+            message: `${modelDiscovery}，但对话端点异常: ${chatResult.message}`,
+            latency: Date.now() - start,
+            discoveredModels: models,
+          };
+        }
+        return {
+          success: true,
+          message: `连接成功 · ${modelDiscovery} · ${chatResult.message}`,
+          latency: Date.now() - start,
+          discoveredModels: models,
+        };
+      }
+      return {
+        success: true,
+        message: `连接成功，${modelDiscovery}（无可用于对话测试的模型）`,
+        latency: Date.now() - start,
+        discoveredModels: models,
+      };
+    }
 
     // Step 2: 选定 chat 测试模型
     // 优先用调用方传入的 chatModel, 但仅当它属于被测端点 (出现在 /v1/models 列表) 时;
@@ -247,6 +355,75 @@ export async function testEndpointConnection(
       latency: Date.now() - start,
     };
   }
+}
+
+/**
+ * R36: 非 openai 协议的对话级连通测试 —— 各家生成端点语义不同，
+ * 按协议构造最小 completion。全部经本机 LLM 代理透传
+ * （X-LLM-Provider-Url 指定上游 + 协议鉴权头原样转发）。
+ *
+ * 成功消息带模型与"对话连通"标记；上游非 2xx 时抛错（含代理的
+ * 结构化 envelope），由调用方 _parseUpstreamError 统一翻译。
+ */
+async function testChatCompletionByProtocol(
+  protocol: Exclude<EndpointProtocol, 'openai-compatible'>,
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+): Promise<{ success: boolean; message: string }> {
+  const base = baseUrl.replace(/\/+$/, '');
+
+  if (protocol === 'anthropic') {
+    const response = await backendRequest<{ content?: Array<{ text?: string }> }>({
+      path: `${LLM_PROXY_BASE}/v1/messages`,
+      method: 'POST',
+      headers: {
+        'X-LLM-Provider-Url': base,
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: {
+        model,
+        max_tokens: 16,
+        messages: [{ role: 'user', content: 'ping' }],
+      },
+    });
+    const text = response.content?.[0]?.text ?? '';
+    return { success: true, message: `对话连通 · ${model} · ${text.slice(0, 40)}` };
+  }
+
+  if (protocol === 'gemini') {
+    const response = await backendRequest<{
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    }>({
+      path: `${LLM_PROXY_BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      method: 'POST',
+      headers: {
+        'X-LLM-Provider-Url': base,
+        'x-goog-api-key': apiKey,
+      },
+      body: {
+        contents: [{ parts: [{ text: 'ping' }] }],
+        generationConfig: { maxOutputTokens: 16 },
+      },
+    });
+    const text = response.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    return { success: true, message: `对话连通 · ${model} · ${text.slice(0, 40)}` };
+  }
+
+  // ollama
+  const response = await backendRequest<{ message?: { content?: string } }>({
+    path: `${LLM_PROXY_BASE}/api/chat`,
+    method: 'POST',
+    headers: { 'X-LLM-Provider-Url': base },
+    body: {
+      model,
+      messages: [{ role: 'user', content: 'ping' }],
+      stream: false,
+    },
+  });
+  const text = response.message?.content ?? '';
+  return { success: true, message: `对话连通 · ${model} · ${text.slice(0, 40)}` };
 }
 
 /**

@@ -3,7 +3,6 @@
 使用 JSON 文件存储嵌入向量，支持余弦相似度搜索。
 存储路径: {project_root}/.llm-wiki/vectors.json
 """
-
 import json
 import math
 from dataclasses import dataclass
@@ -191,7 +190,7 @@ class VectorStore:
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
     """计算余弦相似度。"""
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b))  # noqa: B905 — strict keyword is unavailable on Python 3.8
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
 

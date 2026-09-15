@@ -11,7 +11,7 @@ import {
   FileSpreadsheet,
   HelpCircle,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -25,7 +25,7 @@ import { useStoredSiderOrder } from '../../shared/lib/dnd/useStoredSiderOrder';
 import { unlockFeature, useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
-import { AttnBadge, BrandLogo, LiveDot, type LiveState } from '../../shared/ui';
+import { AttnBadge, BrandLogo, LiveDot, Tooltip, type LiveState } from '../../shared/ui';
 import {
   ConversationsSection,
   CronJobSection,
@@ -127,7 +127,13 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
     items: sessions,
     getId: (s) => s.id,
   });
-  const orderedSessionIds = orderedItems.map((s) => s.id);
+  // R18-B: 置顶分区 —— 置顶组稳定在前（组内保持手动拖拽顺序），未置顶在后。
+  const pinnedFirstItems = useMemo(() => {
+    const pinned = orderedItems.filter((it) => it.is_pinned);
+    if (pinned.length === 0) return orderedItems;
+    return [...pinned, ...orderedItems.filter((it) => !it.is_pinned)];
+  }, [orderedItems]);
+  const orderedSessionIds = pinnedFirstItems.map((s) => s.id);
 
   // U9: Live-Dot vs Attention-Badge 分离。
   // 待处理数 = 审批与提问两个串行卡点之和（后端单 agent 循环，各至多 1 项挂起），
@@ -218,7 +224,7 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
       case 'conversations':
         return (
           <ConversationsSection
-            sessions={orderedItems}
+            sessions={pinnedFirstItems}
             order={orderedSessionIds}
             currentSessionId={currentSessionId}
             collapsed={isCollapsed}
@@ -285,17 +291,21 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
             const Icon = item.icon;
 
             return (
-              <Link
-                key={item.path}
-                to={item.path}
-                title={item.label}
-                className={clsx(
-                  'flex items-center justify-center w-10 h-10 rounded-radius-sm transition-colors',
-                  isActive ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-bg-hover',
-                )}
-              >
-                <Icon className="w-5 h-5" />
-              </Link>
+              // P1: 折叠 rail 图标用统一 Tooltip（radix）替代原生 title
+              <Tooltip key={item.path} content={item.label} side="right">
+                <Link
+                  to={item.path}
+                  aria-label={item.label}
+                  className={clsx(
+                    'flex items-center justify-center w-10 h-10 rounded-radius-sm transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-text-secondary hover:bg-bg-hover',
+                  )}
+                >
+                  <Icon className="w-5 h-5" />
+                </Link>
+              </Tooltip>
             );
           })}
         </nav>

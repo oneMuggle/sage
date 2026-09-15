@@ -30,18 +30,18 @@
 | 34   | [MCP 多服务器管理 (M3)](./34-mcp-multi-server.md)    | 多服务器 JSON 配置合并 + 同步池并行发现/故障隔离/重连 + 降级状态报告 + /api/v1/mcp/* + Settings MCP Tab     |
 | 35   | [会话工程：压缩 + 分叉 (M4)](./35-session-compact-fork.md) | 上下文压缩（手动 /compact + 请求层自动阈值）+ 会话分叉全量前缀复制 + sessions 表 fork 两列幂等迁移           |
 | 36   | [编排端到端 (M5)](./36-orchestration-e2e.md)        | Planner LLM 注入 + POST /orchestration/lanes + 循环内 agent 子代理（白名单 + 300s 超时 + run_in_executor 卸载）|
-| 37   | [生态扩展 (M6)](./37-ecosystem-extensions.md)      | Hooks（pre/post 工具执行）+ 用量/成本面板 + SAGE.md/CLAUDE.md 项目上下文发现 + i18n 清扫 + 零依赖 mock LLM parity harness |
+| 37   | [生态扩展 (M6 + L8 三轮)](./37-ecosystem-extensions.md)      | Hooks（pre/post 工具执行）+ 用量/成本面板（DB 落库 + 命中率 + range + 趋势 + CSV）+ SAGE.md/CLAUDE.md 项目上下文发现 + i18n 清扫 + 零依赖 mock LLM parity harness |
 | 38   | [Artifacts Panel（产物面板）](./38-artifacts-panel.md) | Chat 右侧抽屉双 Tab：AI 工具调用进度 + write_file 产物追踪/多格式预览/文件管理器定位                                       |
 | 39   | [记忆系统与用户画像](./39-memory-user-profile.md) | 三层记忆（Working/Episodic/Semantic）+ RRF 融合 + UserProfileStore(USER.md) 冻结快照/分类路由/core 独立预算 |
 | 40   | [代码探索工具三件套](./40-code-exploration-tools.md) | grep_search / glob_search / file_summary：primary agent 工具白名单扩展 + ast 解析 + ReDoS 缓解 |
-| 41   | [sage doctor](./41-sage-doctor.md) | 安装/环境级 self-check CLI：8 项检查（conda env / backend health / SQLite writable / config integrity / ports / py version / disk space）+ 退出码 0/1/2 + electron 启动前自动跑（默认 20s 超时，可经 `SAGE_DOCTOR_TIMEOUT_MS` env 覆盖，fail-open） |
+| 41   | [sage doctor](./41-sage-doctor.md) | 安装/环境级 self-check CLI：17 项检查（conda env / backend health / SQLite writable / config integrity / ports / py version / disk space / llm_config / mcp_servers / heavy_deps / log_dir_size / frontend_dist / skills / runtime_env / network / secret_storage）+ 退出码 0/1/2 + electron 启动前自动跑（默认 20s 超时，可经 `SAGE_DOCTOR_TIMEOUT_MS` env 覆盖，fail-open） |
 | 42   | [Chat-Native Multi-Agent Orchestration](./42-chat-multi-agent-orchestration.md) | 聊天链路多 agent 编排：语义判定 + tool-toggle 门 + ChatDispatcher 拓扑分波调度（depends_on/级联取消）+ task_plan/task_status/todo_snapshot 事件 + 前端任务树与 todo 清单镜像 + output_schema 结构化返回/followup 续聊/worktree 隔离（默认关）/LaneBoard 快照激活 |
 | 43   | [§1.2 事件循环门禁升级](./43-event-loop-gate.md) | 单点 P99 → 5 轮 P99 中位数门禁：阈值演进 50→100→200→150→400ms 设计历史 + 抗抖动/回归敏感权衡 |
 | 44   | [bash 命令行工具](./44-bash-tool.md) | 对齐 Claude Code Bash tool：放开 shell 操作符（危险判定收敛到 bash_validation + PermissionEnforcer）+ 后台执行三工具（bash/bash_output/kill_shell）+ 30 KiB 有界输出 + 进程组回收 + 跨平台 shell 探测（Git Bash / PowerShell 降级） |
 | 45   | [渐进式功能披露](./44-progressive-disclosure.md) | sticky-unlock 存储、受门控入口及 `/skills` 始终可发现的设计边界 |
 | 46   | [Sage 品牌图标资产与复用](./45-brand-icons.md) | 品牌主形象（几何 S + 星点 + 青紫渐变）的资产层级、`<BrandLogo>` 共享组件规范、macOS `.icns` 缺口与未来补全路径 |
-| 47   | [内网 Web 访问（网络模式门禁 + 取页下载）](./46-intranet-web-access.md) | NetworkPolicy 三档门禁 + host 白名单通配 + web_fetch 四 mode + http_download 边界约束 + 不变量 |
-| 48   | [Git Worktree 并行开发](./47-git-worktree-workflow.md) | `scripts/worktree.sh` helper（new/list/ports/remove/clean）+ `.worktrees/` 端口分配机制 + main/release-win7 并行 cherry-pick 场景 + 与 `.claude/worktrees/` agent 隔离的边界 |
+| 46   | [内网 Web 访问（网络模式门禁 + 取页下载）](./46-intranet-web-access.md) | NetworkPolicy 三档门禁 + host 白名单通配 + web_fetch 四 mode + http_download 边界约束 + 不变量 |
+| 47   | [Git Worktree 并行开发](./47-git-worktree-workflow.md) | `scripts/worktree.sh` helper（new/list/ports/remove/clean）+ `.worktrees/` 端口分配机制 + main/release-win7 并行 cherry-pick 场景 + 与 `.claude/worktrees/` agent 隔离的边界 |
 | 48   | [Office CRUD 闭环完成](./48-office-crud-completion.md) | 2026-09 PR-1..5：profile 白名单接通 + archive/restore + pre-edit snapshot + chat @filename 兜底 + re-read 元数据保留 + write_file 二进制黑名单 + win7 同步；闭环增删改查 + chat ref + 二进制防护 + win7 兼容 |
 | 49   | [本地开发环境助手](./49-local-development-assistant.md) | 运行时探测 + 项目诊断 + 安全执行：`backend/domain` + 3 tools + `/api/v1/runtime/*` + Electron IPC + Settings 开发环境 Tab + humanize 渲染 + doctor check |
 | 50   | [Wiki 完整性优化](./50-wiki-completeness-optimization.md) | 4 项补齐：持久化摄入队列（5 状态）/ Chrome Web Clipper（Manifest V3）/ Lint（6 规则）/ Review（5 确定性审核器 + blake2b 稳定 ID + Jaccard 0.6）|

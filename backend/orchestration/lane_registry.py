@@ -48,9 +48,16 @@ class LaneRegistry:
            fresh lane for the given task.
         2. ``create_lane(lane)`` — persist a pre-built ``Lane`` as-is (used
            by ``Router._create_lane`` which assigns agent/permission/metadata
-           before creation). On this path the passed object is persisted and
-           returned **as-is** — no copy is made, so the caller's ``Lane``
-           instance may be mutated by this call (metadata merge).
+           before creation). Polymorphism semantics on this path:
+
+           - The passed object is persisted and returned **as-is** — no copy
+             is made, so the caller's ``Lane`` instance may be mutated by
+             this call (metadata merge) and by later registry operations.
+           - ``metadata``, when given, is merged *into* ``lane.metadata``
+             (the passed keys win on conflict).
+           - ``worktree`` is **ignored** on this path: the workspace is taken
+             from the pre-built Lane's own ``worktree`` field. The keyword
+             only applies when constructing from a ``task_id`` string.
 
         Args:
             task_id: Task ID to execute, or a pre-built Lane

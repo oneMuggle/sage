@@ -68,7 +68,8 @@ export function getUpdateHmacSecret(): string {
   // alpha.37-main all share this bug). The HMAC protects only the local
   // ``update-state.json`` integrity (it is not a cross-machine trust
   // anchor), so per-install random secrets are equivalent to a build-time
-  // shared secret for this purpose. See PR #573 (alpha.20-win7).
+  // shared secret for this purpose. See PR #578 (alpha.20-win7) and
+  // PR #579 (alpha.38-main).
   const secretPath = path.join(app.getPath('userData'), '.update-state-hmac-secret');
   try {
     return fssync.readFileSync(secretPath, 'utf8').trim();

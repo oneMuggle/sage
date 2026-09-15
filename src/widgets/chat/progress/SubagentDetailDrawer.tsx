@@ -16,9 +16,7 @@ import { useOrchEventSubscription } from '../../../entities/orchestration/useOrc
 import type { RunEvent, TaskSummary } from '../../../shared/api/orchEvents';
 
 import { ContextInput } from './ContextInput';
-import { EventTimeline } from './EventTimeline';
-
-interface SubagentDetailDrawerProps {
+import { EventTimeline } from './EventTimeline';interface SubagentDetailDrawerProps {
   /** Currently visible (controlled by parent) */
   open: boolean;
   /** Called when the drawer should close */

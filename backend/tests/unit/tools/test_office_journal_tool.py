@@ -230,8 +230,8 @@ def test_fill_from_content_invalid_shape(tmp_path: Path):
     _setup_workspace(tmp_path)
     token = set_tool_context(_ctx())
     try:
-        # Pydantic v1 与 v2 都不接受 sections 为 str；该字段在 v1 也不会被强转。
-        r = _tool_fill().execute(content={"title": "ok", "abstract": "x", "sections": "not-a-dict"})
+        # title 期望 str，传 int → Pydantic ValidationError
+        r = _tool_fill().execute(content={"title": 12345, "abstract": "x", "sections": {}})
         assert r.success is False
         assert "content_shape_invalid" in r.error
     finally:
