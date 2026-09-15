@@ -1068,7 +1068,7 @@ class SageAgent:
                         )
                         continue
                     logger.warning(
-               "run_loop 空响应重试耗尽 (%d 次)，以兜底文案结束", empty_response_max
+                        "run_loop 空响应重试耗尽 (%d 次)，以兜底文案结束", empty_response_max
                     )
                     fallback = EMPTY_RESPONSE_FALLBACK_TEXT
                     messages.append({"role": "assistant", "content": fallback})
