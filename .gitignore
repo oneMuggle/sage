@@ -76,6 +76,8 @@ data/
 #   backend/data/project_repo.py 曾被此规则静默忽略）
 !backend/data/
 backend/data/*.db
+# Office/媒体运行时产物（tests 会在 backend/data/media/YYYY/MM/DD/ 落盘）
+backend/data/media/
 backend/data/*.sqlite
 backend/data/*.sqlite3
 

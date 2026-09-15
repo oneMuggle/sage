@@ -252,19 +252,30 @@ def main() -> int:
             return 1
         touched = sorted(set(changed_py_files()) | before)
         p38["cr_fixed"] = strip_cr(touched)
-        p38["rewritten"] = sum(1 for line in rw.stdout.splitlines() if line.strip().startswith("rewrote") or "-> rewritten" in line)
+        rewritten_files = [
+            line.split(":", 1)[1].strip().replace("\\", "/")
+            for line in rw.stdout.splitlines()
+            if line.strip().startswith("rewrote:")
+        ]
+        p38["rewritten"] = len(rewritten_files)
         # py38_compat_rewrite 把 `from typing import …` 插在 __future__ 之后（顶部），
         # 会触发 ruff I001（isort）/ F811（与既有 typing import 重名）。CI backend-py38
         # 的第一步就是 `ruff check backend/`，所以这里用 --fix 收口（仅 I001/F811/F401）。
-        rf = subprocess.run(
-            [sys.executable, "-m", "ruff", "check", "--fix", "--select", "I001,F811,F401", "--", *PY38_TARGETS],
-            cwd=REPO, text=True, encoding="utf-8", errors="replace",
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        )
-        p38["log"] += "\n[ruff --fix I001,F811,F401]\n" + rf.stdout[-1500:]
+        # 只对 rewrite 真正改过的文件跑 —— 对整个目录跑会把 CI 不检查的
+        # packages/sage-core 里既有的 isort 顺序也改掉，制造与 main 的无意义漂移
+        # （2026-09-15 首次真实运行时踩到：8 个 sage-core 文件被顺手改了）。
+        if rewritten_files:
+            rf = subprocess.run(
+                [sys.executable, "-m", "ruff", "check", "--fix", "--select", "I001,F811,F401", "--", *rewritten_files],
+                cwd=REPO, text=True, encoding="utf-8", errors="replace",
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            )
+            p38["log"] += "\n[ruff --fix I001,F811,F401 on {} rewritten files]\n".format(len(rewritten_files)) + rf.stdout[-1500:]
         touched = sorted(set(changed_py_files()) | set(touched))
         p38["cr_fixed"] += strip_cr(touched)
-        git("add", "-A", "--", *PY38_TARGETS)
+        # 只暂存已跟踪文件的修改（-u）：`-A` 会把 backend/data/media/ 之类测试产物
+        # （.gitignore 里 `!backend/data/` 重新包含了该目录）一并提交进同步分支。
+        git("add", "-u", "--", *PY38_TARGETS)
     # 与 CI backend-py38 第一步一致：ruff 全量（用 backend/ruff.toml）
     rc = subprocess.run(
         [sys.executable, "-m", "ruff", "check", "backend/"],
