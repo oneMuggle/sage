@@ -14,7 +14,7 @@ def _clean_recorder():
     LlmTraceRecorder.clear()
 
 
-@pytest.fixture()
+@pytest.fixture
 def client():
     # TestClient 触发 startup;若需要 SAGE_LOCAL_AUTH_TOKEN,fixture 注入
     return TestClient(app)

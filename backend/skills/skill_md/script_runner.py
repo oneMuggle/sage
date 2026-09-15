@@ -26,7 +26,7 @@ import shutil
 import stat
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from backend.skills.base import SkillResult
 from backend.skills.skill_md.confirm import ConfirmationPort
@@ -164,7 +164,7 @@ class ScriptRunner:
         self,
         sandbox: SandboxPort,
         confirmer: ConfirmationPort,
-        allowed_roots: Optional[List[Path]] = None,
+        allowed_roots: List[Path] | None = None,
     ) -> None:
         """初始化 ScriptRunner。
 
@@ -237,7 +237,7 @@ class ScriptRunner:
             return self._make_error("用户拒绝执行脚本")
 
         # 确认后以同一普通文件重新读取并比较 hash，再创建受控快照。
-        snapshot_path: Optional[Path] = None
+        snapshot_path: Path | None = None
         try:
             if _has_symlink_component(validated_path):
                 raise ValueError("script path or parent contains symlink")

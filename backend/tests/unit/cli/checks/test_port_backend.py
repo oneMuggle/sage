@@ -44,7 +44,7 @@ class TestPortBackendCheck:
         assert "空闲" in result.message
         assert check.name == "port_backend"
 
-    @pytest.mark.skipif(
+    @pytest.mark.skipi()f(
         os.name == "nt",
         reason="端口占用探测在 Windows 语义不同（产品缺口，另行批次）",
     )

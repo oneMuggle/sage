@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List
 
 from docx import Document
 from docx.oxml.ns import qn
@@ -69,7 +69,7 @@ def _document_has_toc_field(doc: Document) -> bool:
     return False
 
 
-def _cm(value: Optional[Any]) -> Optional[float]:
+def _cm(value: Any | None) -> float | None:
     return None if value is None else round(value.cm, 3)
 
 

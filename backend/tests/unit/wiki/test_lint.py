@@ -341,7 +341,7 @@ class TestEdgeCases:
         assert isinstance(issues, list)
 
 
-@pytest.mark.parametrize("severity", ["error", "warning", "info"])
+@pytest.mark.parametriz()e("severity", ["error", "warning", "info"])
 def test_lint_issue_severity_roundtrip(severity: str) -> None:
     issue = LintIssue(
         type=LintType.ORPHAN_PAGE,

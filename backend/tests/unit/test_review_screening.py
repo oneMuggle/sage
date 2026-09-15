@@ -30,20 +30,20 @@ def _fake_provider_ok():
 
 
 class TestShouldGenerate:
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_yes_with_reason(self):
         svc = ReviewService(_fake_provider('{"save_skill": true, "reason": "可复用"}'))
         keep, reason = await svc.should_generate({"tool_calls": []})
         assert keep is True
         assert "可复用" in reason
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_no(self):
         svc = ReviewService(_fake_provider('{"save_skill": false, "reason": "一次性"}'))
         keep, reason = await svc.should_generate({})
         assert keep is False
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_fenced_json_tolerated(self):
         svc = ReviewService(
             _fake_provider('结果如下：\n```json\n{"save_skill": true, "reason": "流程清晰"}\n```')
@@ -51,13 +51,13 @@ class TestShouldGenerate:
         keep, _ = await svc.should_generate({})
         assert keep is True
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_garbage_output_is_false(self):
         svc = ReviewService(_fake_provider("不是 JSON"))
         keep, _ = await svc.should_generate({})
         assert keep is False
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_empty_text_is_false(self):
         svc = ReviewService(_fake_provider(""))
         keep, _ = await svc.should_generate({})

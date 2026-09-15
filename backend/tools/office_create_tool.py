@@ -25,7 +25,7 @@ from __future__ import annotations
 import json as _json
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
@@ -55,7 +55,7 @@ from backend.tools.file_tool import _record_artifact_safely
 _VALID_DOC_TYPES = tuple(t.value for t in OfficeDocType)
 
 
-def _check_content(content: Any) -> Optional[ToolResult]:
+def _check_content(content: Any) -> ToolResult | None:
     """校验 content：非空 dict 或非空字符串（字符串由 ``_normalize_content``
     包装为 word 段落）。拆开 isinstance 避免 UP038（union 语法 3.10+）。"""
     if content is None:
@@ -137,7 +137,7 @@ def _excel_self_check_summary(path: Path, *, requested: Any) -> Dict[str, Any]:
 
 def _ppt_self_check_summary(path: Path) -> Dict[str, Any]:
     parsed = read_ppt(path, workspace_path="")
-    first_title: Optional[str] = None
+    first_title: str | None = None
     if parsed.slides:
         first_title = parsed.slides[0].title
         if first_title is not None:
@@ -150,7 +150,7 @@ def build_self_check(
     path: Path,
     *,
     requested: Any = None,
-    page_count: Optional[int] = None,
+    page_count: int | None = None,
 ) -> Dict[str, Any]:
     """成功写入后回读产物的紧凑摘要（office_create / office_update 共用）。
 
@@ -195,7 +195,7 @@ def managed_self_check(
     workspace_path: str,
     doc_id: str,
     doc_type: str,
-) -> Optional[Dict[str, Any]]:
+) -> Dict[str, Any] | None:
     """受管文档（doc_id / binding 模式）的 self_check 回读。
 
     与 ``OfficeToolService._resolve_doc`` 同构地解析 on-disk 路径
@@ -1050,11 +1050,11 @@ class OfficeCreateTool(BaseTool):
 
     def execute(
         self,
-        doc_type: Optional[str] = None,
-        output_dir: Optional[str] = None,
-        filename: Optional[str] = None,
-        content: Optional[Dict[str, Any]] = None,
-        font_family: Optional[str] = None,
+        doc_type: str | None = None,
+        output_dir: str | None = None,
+        filename: str | None = None,
+        content: Dict[str, Any] | None = None,
+        font_family: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
         # doc_type 大小写容错（T6 实测模型传 "Word"）：归一化后再校验。
@@ -1095,7 +1095,7 @@ class OfficeCreateTool(BaseTool):
         doc_type: str,
         filename: str,
         content: Any,
-    ) -> Optional[ToolResult]:
+    ) -> ToolResult | None:
         """Route to OfficeToolService.create when an active binding exists.
 
         Returns:
@@ -1166,7 +1166,7 @@ class OfficeCreateTool(BaseTool):
         doc_type_enum: OfficeDocType,
         filename: str,
         content: Any,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Dict[str, Any] | None:
         """把 LLM 的 content 输入归一化为结构化 dict。
 
         四层兜底（仅 WORD；excel/ppt 保持严格）：
@@ -1207,11 +1207,11 @@ class OfficeCreateTool(BaseTool):
 
     @staticmethod
     def _check_params(
-        doc_type: Optional[str],
-        output_dir: Optional[str],
-        filename: Optional[str],
-        content: Optional[Dict[str, Any]],
-    ) -> Optional[ToolResult]:
+        doc_type: str | None,
+        output_dir: str | None,
+        filename: str | None,
+        content: Dict[str, Any] | None,
+    ) -> ToolResult | None:
         """fail-fast 参数校验；返回错误 ToolResult 或 None（通过）。"""
         if doc_type not in _VALID_DOC_TYPES:
             return ToolResult(success=False, error=f"unsupported_doc_type: {doc_type}")
@@ -1237,7 +1237,7 @@ class OfficeCreateTool(BaseTool):
         filename: str,
         doc_type_enum: OfficeDocType,
         target_dir: Path,
-    ) -> Optional[ToolResult]:
+    ) -> ToolResult | None:
         """工作区边界 + 路径守卫；返回错误 ToolResult 或 None（通过）。
 
         - 工作区边界：``policy.workspace_root`` 绑定（hex 链）时拒绝越界写入；
@@ -1267,7 +1267,7 @@ class OfficeCreateTool(BaseTool):
         filename: str,
         content: Dict[str, Any],
         target_dir: Path,
-        font_family: Optional[str] = None,
+        font_family: str | None = None,
     ) -> ToolResult:
         """构造生成请求并执行（复用生成器 + Pydantic 校验），返回结果。"""
         payload: Dict[str, Any] = dict(content)

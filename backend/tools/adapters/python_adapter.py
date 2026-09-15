@@ -23,7 +23,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Tuple
 
 from backend.domain.runtime import (
     Diagnostic,
@@ -340,7 +340,7 @@ class PythonAdapter:
         self,
         path: str,
         ctx: AdapterContext,
-    ) -> Optional[RuntimeInfo]:
+    ) -> RuntimeInfo | None:
         if not (Path(path).is_file() and os.access(path, os.X_OK)):
             return None
         real = os.path.realpath(path)
@@ -377,7 +377,7 @@ def _parse_json_line(text: str) -> dict:
         return {}
 
 
-def _target_version_meet(target: Optional[str]):
+def _target_version_meet(target: str | None):
     if not target:
         return None
 
@@ -429,7 +429,7 @@ def _compare(actual: Tuple[int, ...], target: Tuple[int, ...], op: str) -> bool:
     return False
 
 
-def _pick_best_runtime(runtimes: List[RuntimeInfo]) -> Optional[RuntimeInfo]:
+def _pick_best_runtime(runtimes: List[RuntimeInfo]) -> RuntimeInfo | None:
     candidates = [r for r in runtimes if r.is_compatible is not False]
     candidates.sort(key=_runtime_sort_key, reverse=True)
     return candidates[0] if candidates else None

@@ -64,7 +64,7 @@ def _tool_calls(*pairs):
 # ---- L6 并行批次 ----
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_parallel_readonly_batch_executes_and_orders():
     """两个 READ 工具 → 并行执行, ACTING 先于 OBSERVING, 消息按原顺序。"""
     slow = _FakeTool("search_web", delay=0.15, content="web-result")
@@ -100,7 +100,7 @@ async def test_parallel_readonly_batch_executes_and_orders():
     assert events[-1].state.value == "done"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_mixed_risk_batch_falls_back_to_serial():
     """批次含 WRITE 工具 → 不并行, 走串行路径 (行为不变)。"""
     write_tool = _FakeTool("write_file", risk=RiskClass.WRITE_LOCAL)
@@ -126,7 +126,7 @@ async def test_mixed_risk_batch_falls_back_to_serial():
     assert states.index("acting", 0, first_observing) < first_observing
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_hooks_present_disables_parallel():
     """配置了 pre_tool_use 钩子 → 回退串行 (钩子 deny/modify 是顺序语义)。"""
     read_tool = _FakeTool("read_file")
@@ -163,7 +163,7 @@ async def test_hooks_present_disables_parallel():
     assert states.index("acting", 0, first_obs) < first_obs
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_parallel_budget_overflow_falls_back():
     """批次超出预算余量 → 回退串行守卫(在精确超限点终止)。"""
     t1 = _FakeTool("read_file")
@@ -194,7 +194,7 @@ async def test_parallel_budget_overflow_falls_back():
 # ---- L12-lite 中断即时取消 ----
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_interrupt_cancels_running_blocking_tool():
     """阻塞工具执行中收到 interrupt → 立即取消并 FAILED, 不等执行完成。"""
     slow = _FakeTool("bash", risk=RiskClass.EXEC, is_blocking=True, delay=30.0)
@@ -234,7 +234,7 @@ async def test_interrupt_cancels_running_blocking_tool():
     assert any("被用户取消" in e.tool_result.content for e in observing)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_no_interrupt_completes_normally():
     """不中断时竞争 helper 不改变语义。"""
     tool = _FakeTool("read_file", content="fine")
@@ -253,7 +253,7 @@ async def test_no_interrupt_completes_normally():
 # ---- 切片 A': 并行批次中心超时 ----
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_parallel_batch_tool_timeout_returns_error():
     """批次内单工具超过 policy.timeout_seconds → tool_timeout 错误观察事件，
     其余工具照常执行（与 hex InprocToolAdapter 同文案）。"""
@@ -283,7 +283,7 @@ async def test_parallel_batch_tool_timeout_returns_error():
     assert events[-1].state.value == "done"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_parallel_batch_without_timeout_keeps_old_behavior():
     """policy.timeout_seconds 为 0/None → 不施加超时（旧行为回退）。"""
     slow = _FakeTool("slow_reader", delay=0.3, content="慢但完成")

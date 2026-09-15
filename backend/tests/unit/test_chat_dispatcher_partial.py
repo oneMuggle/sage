@@ -24,7 +24,7 @@ def _init_tmp_db(tmp_path, monkeypatch):
     db_mod.get_database().init_db()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_collect_timeout_returns_partial_aggregate(tmp_path, monkeypatch):
     """t1 快 t2 慢：collect 超时 → partial 载荷含 t1 结果；再 collect 收全量。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -67,7 +67,7 @@ async def test_collect_timeout_returns_partial_aggregate(tmp_path, monkeypatch):
     assert "慢结果 t2" in full.content
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_partial_aggregate_without_dispatch_raises(tmp_path, monkeypatch):
     _init_tmp_db(tmp_path, monkeypatch)
     queue = _make_queue()
@@ -76,7 +76,7 @@ async def test_partial_aggregate_without_dispatch_raises(tmp_path, monkeypatch):
         d.partial_aggregate()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_partial_aggregate_counts_failed(tmp_path, monkeypatch):
     """failed 任务计入 total，聚合头带失败摘要（既有 _aggregate 语义）。"""
     _init_tmp_db(tmp_path, monkeypatch)

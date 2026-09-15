@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict
 
 from backend.core.legacy.agent_state import AgentEvent, AgentState
 from backend.domain.orch_events import ControlEventType, RunEvent, StepEventType, make_event
@@ -74,10 +74,10 @@ class SubagentEventSink:
         entity_task_id: str,
         agent_id: str,
         goal: str,
-        parent_tool_call_id: Optional[str] = None,
+        parent_tool_call_id: str | None = None,
         emit_chat: Callable[[Dict[str, Any]], None],
-        publish_event: Optional[Callable[[RunEvent], Awaitable[None]]] = None,
-        note_approval: Optional[Callable[[str], None]] = None,
+        publish_event: Callable[[RunEvent], Awaitable[None]] | None = None,
+        note_approval: Callable[[str], None] | None = None,
         max_events: int = MAX_EVENTS_PER_SUBTASK,
     ) -> None:
         self._run_id = run_id
@@ -280,15 +280,15 @@ class SubagentEventSink:
     # 辅助
     # ------------------------------------------------------------------
 
-    def _emit_mirror(self, event: Optional[Dict[str, Any]]) -> None:
+    def _emit_mirror(self, event: Dict[str, Any] | None) -> None:
         """镜像入队前的统一防御：预算耗尽时 _mirror 返回 None,不外发。"""
         if event is not None:
             self._emit_chat(event)
 
     def _mirror(self, *, phase: str, iteration: int = 0, live_step: str = "",
-                tool_name: Optional[str] = None, args_summary: Optional[str] = None,
-                preview: Optional[str] = None, is_error: bool = False,
-                approved: Optional[bool] = None) -> Optional[Dict[str, Any]]:
+                tool_name: str | None = None, args_summary: str | None = None,
+                preview: str | None = None, is_error: bool = False,
+                approved: bool | None = None) -> Dict[str, Any] | None:
         """构造聊天流 ``subagent_event`` 镜像；预算耗尽返回 None（丢弃）。"""
         if self._budget <= 0:
             return None
@@ -345,8 +345,8 @@ class SubagentEventSink:
 
 
 def _entity_step(lane_task_id: str, agent_id: str,
-                 step_id: Optional[str] = None,
-                 name: Optional[str] = None) -> Dict[str, Any]:
+                 step_id: str | None = None,
+                 name: str | None = None) -> Dict[str, Any]:
     """构造 canonical 事件 entity（task_id 用 lane 层 ``task-<id>`` 键）。"""
     entity: Dict[str, Any] = {"task_id": lane_task_id, "agent_id": agent_id}
     if step_id is not None:

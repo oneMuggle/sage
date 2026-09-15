@@ -13,7 +13,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Tuple
 
 from backend.domain.runtime import (
     Diagnostic,
@@ -207,7 +207,7 @@ class NodeAdapter:
             if Path(extra).is_file():
                 yield extra
 
-    def _probe_node(self, path: str, ctx: AdapterContext) -> Optional[RuntimeInfo]:
+    def _probe_node(self, path: str, ctx: AdapterContext) -> RuntimeInfo | None:
         if not (Path(path).is_file() and os.access(path, os.X_OK)):
             return None
         result = ctx.safe_run([path, "-v"], timeout=5.0)
@@ -225,7 +225,7 @@ class NodeAdapter:
             capabilities=RuntimeCapability(can_execute=True),
         )
 
-    def _probe_tool(self, path: str, tool: str, ctx: AdapterContext) -> Optional[RuntimeInfo]:
+    def _probe_tool(self, path: str, tool: str, ctx: AdapterContext) -> RuntimeInfo | None:
         if not (Path(path).is_file() and os.access(path, os.X_OK)):
             return None
         result = ctx.safe_run([path, "--version"], timeout=5.0)
@@ -272,7 +272,7 @@ def _mark_default(results: List[RuntimeInfo]) -> List[RuntimeInfo]:
     return new_results
 
 
-def _pick_default(runtimes: List[RuntimeInfo]) -> Optional[RuntimeInfo]:
+def _pick_default(runtimes: List[RuntimeInfo]) -> RuntimeInfo | None:
     for r in runtimes:
         if r.is_default:
             return r

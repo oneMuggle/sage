@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.gateway.base import (
     BaseGateway,
@@ -71,7 +71,7 @@ class TelegramConfig:
     poll_timeout_seconds: int = 25
 
     @classmethod
-    def load(cls) -> Optional[TelegramConfig]:
+    def load(cls) -> TelegramConfig | None:
         """双源配置（Round 19）: env 优先（部署覆盖），settings 兜底
         （桌面用户无 env 配置习惯）。
 
@@ -107,7 +107,7 @@ class TelegramConfig:
         return cls(bot_token=token, allowed_chat_ids=allowed)
 
     @classmethod
-    def from_env(cls) -> Optional[TelegramConfig]:
+    def from_env(cls) -> TelegramConfig | None:
         """从环境变量构造；未配置 token 时返回 None（网关关闭）。
 
         兼容保留（Round 6 契约）；新调用方请用 ``load()``。
@@ -122,7 +122,7 @@ class TelegramConfig:
         return cls(bot_token=token, allowed_chat_ids=allowed)
 
     @staticmethod
-    def _settings_node() -> Optional[Dict[str, Any]]:
+    def _settings_node() -> Dict[str, Any] | None:
         """读 app_settings.telegram 节点；无设置/无节点返回 None。"""
         try:
             from backend.data.settings_repo import SettingsRepository
@@ -155,8 +155,8 @@ class TelegramGateway(BaseGateway):
     def __init__(
         self,
         config: TelegramConfig,
-        transport: Optional[TelegramTransport] = None,
-        llm_factory: Optional[Any] = None,
+        transport: TelegramTransport | None = None,
+        llm_factory: Any | None = None,
         db: Any = None,
     ) -> None:
         self.config = config
@@ -184,7 +184,7 @@ class TelegramGateway(BaseGateway):
     def send_reply(self, chat_id: str, text: str) -> None:
         self.transport.send_message(chat_id, text)
 
-    def parse_update(self, update: Dict[str, Any]) -> Optional[tuple]:
+    def parse_update(self, update: Dict[str, Any]) -> tuple | None:
         message = update.get("message") or {}
         chat = message.get("chat") or {}
         chat_id = str(chat.get("id", ""))
@@ -197,7 +197,7 @@ class TelegramGateway(BaseGateway):
     # Telegram 特有：信封解析 + 白名单拒答文案
     # ------------------------------------------------------------------ #
 
-    def handle_update(self, update: Dict[str, Any]) -> Optional[str]:
+    def handle_update(self, update: Dict[str, Any]) -> str | None:
         """处理单条 Telegram update。返回回复文本（或 None）。"""
         parsed = self.parse_update(update)
         if parsed is None:
@@ -232,10 +232,10 @@ class TelegramGateway(BaseGateway):
 # Global singleton
 # ------------------------------------------------------------------ #
 
-_gateway: Optional[TelegramGateway] = None
+_gateway: TelegramGateway | None = None
 
 
-def get_telegram_gateway() -> Optional[TelegramGateway]:
+def get_telegram_gateway() -> TelegramGateway | None:
     """返回全局网关单例；未配置 token 时返回 None（网关关闭）"""
     global _gateway
     if _gateway is None:

@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
@@ -66,7 +66,7 @@ class SkillSaveTool(BaseTool):
 
     risk = RiskClass.WRITE_LOCAL
 
-    def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
+    def __init__(self, policy: ToolPolicy | None = None) -> None:
         super().__init__(policy=policy)
 
     def _build_schema(self) -> ToolSchema:
@@ -127,7 +127,7 @@ class SkillSaveTool(BaseTool):
         description: str,
         when_to_use: str,
         tool_sequence: List[Dict[str, Any]],
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
         """沉淀流程为 skill 草稿。

@@ -78,7 +78,7 @@ def test_windows_accepts_path_bash_only_under_known_program_files_root(monkeypat
     assert resolve_shell_uncached().executable == path_bash
 
 
-@pytest.mark.parametrize("path", [r"C:\attacker\Git\bin\bash.exe", "bash.exe", r"\\server\share\Git\bin\bash.exe", r"\\?\C:\Program Files\Git\bin\bash.exe", r"C:\Other\bash.exe"])
+@pytest.mark.parametriz()e("path", [r"C:\attacker\Git\bin\bash.exe", "bash.exe", r"\\server\share\Git\bin\bash.exe", r"\\?\C:\Program Files\Git\bin\bash.exe", r"C:\Other\bash.exe"])
 def test_windows_rejects_untrusted_path_bash(monkeypatch, path):
     powershell = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
     _windows(monkeypatch, isfile=lambda p: p == powershell, known_roots=(r"C:\Program Files",), system_root=r"C:\Windows")
@@ -109,7 +109,7 @@ def test_windows_ignores_attacker_program_files_environment(monkeypatch):
         resolve_shell_uncached()
 
 
-@pytest.mark.parametrize("base", [r"\foo", "/foo", r"C:foo", r"\\server\share", r"\\?\C:\Windows", "relative"])
+@pytest.mark.parametriz()e("base", [r"\foo", "/foo", r"C:foo", r"\\server\share", r"\\?\C:\Windows", "relative"])
 def test_local_windows_absolute_rejects_unsafe_paths(base):
     assert not shell_resolver._is_local_windows_absolute(base)
 
@@ -167,7 +167,7 @@ def test_canonical_windows_path_strips_extended_prefix():
     )
 
 
-@pytest.mark.parametrize("path", [r"\\server\share\tool.exe", r"\\.\PhysicalDrive0", r"\\?\UNC\server\share\tool.exe"])
+@pytest.mark.parametriz()e("path", [r"\\server\share\tool.exe", r"\\.\PhysicalDrive0", r"\\?\UNC\server\share\tool.exe"])
 def test_canonical_windows_path_keeps_non_local_prefixes(path):
     assert shell_resolver._canonical_windows_path(path) != shell_resolver._canonical_windows_path(
         r"C:\tool.exe"
@@ -218,7 +218,7 @@ def test_fake_kernel32_verifies_extended_final_path_and_configures_abi(monkeypat
     assert close.restype == wintypes.BOOL
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "callback",
     [
         lambda *_args: 0,
@@ -237,7 +237,7 @@ def test_final_path_invalid_results_fail_closed(monkeypatch, callback):
     assert closed == [42]
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "setup",
     [
         lambda: {"attributes": lambda _p: 0x400},
@@ -288,7 +288,7 @@ def test_shell_spec_is_frozen():
         spec.kind = "sh"
 
 
-@pytest.mark.usefixtures("_clean_shell_cache")
+@pytest.mark.usefixture()s("_clean_shell_cache")
 def test_resolve_shell_caches_result(monkeypatch):
     calls = []
     _fake_os(monkeypatch, "posix", isfile=lambda p: calls.append(p) or p == "/bin/bash", access=lambda p, _m: p == "/bin/bash")

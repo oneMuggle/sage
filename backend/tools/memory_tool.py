@@ -16,7 +16,7 @@ Task 2 (Win7 parity) 修复要点
   ``limit`` clamp 到 ``[1, 100]``,默认 20。
 """
 
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, List, Tuple
 
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
@@ -86,7 +86,7 @@ class MemorySearchTool(BaseTool):
         self,
         memory_manager: Any = None,
         memory: Any = None,
-        policy: Optional[ToolPolicy] = None,
+        policy: ToolPolicy | None = None,
     ) -> None:
         """构造器接受 ``memory_manager``(旧)与 ``memory``(新 brief)两种命名。
 
@@ -124,7 +124,7 @@ class MemorySearchTool(BaseTool):
         )
 
     @staticmethod
-    def _normalize_memory_type(memory_type: Optional[str]) -> Optional[str]:
+    def _normalize_memory_type(memory_type: str | None) -> str | None:
         """Validate and normalize the supported search memory types."""
         if memory_type is None or memory_type == "":
             return None
@@ -135,7 +135,7 @@ class MemorySearchTool(BaseTool):
         return memory_type
 
     @staticmethod
-    def _clamp_limit(limit: Optional[int]) -> int:
+    def _clamp_limit(limit: int | None) -> int:
         """``[1, 100]`` clamp, 缺省 20。
 
         旧默认值是 5, 新默认值是 20(对齐后端 ``/memory/search`` 端点)。
@@ -153,7 +153,7 @@ class MemorySearchTool(BaseTool):
     def execute(
         self,
         query: str,
-        memory_type: Optional[str] = SEARCH_TYPE_ALL,
+        memory_type: str | None = SEARCH_TYPE_ALL,
         limit: int = DEFAULT_SEARCH_LIMIT,
         **kwargs: Any,
     ) -> ToolResult:
@@ -215,7 +215,7 @@ class MemorySaveTool(BaseTool):
         self,
         memory_manager: Any = None,
         memory: Any = None,
-        policy: Optional[ToolPolicy] = None,
+        policy: ToolPolicy | None = None,
     ) -> None:
         """同 ``MemorySearchTool``: ``memory`` 是新 brief 首选 kwarg。"""
         super().__init__(policy=policy)
@@ -257,8 +257,8 @@ class MemorySaveTool(BaseTool):
         content: str,
         importance: int = 5,
         memory_type: str = "episodic",
-        tags: Optional[List[str]] = None,
-        session_id: Optional[str] = None,
+        tags: List[str] | None = None,
+        session_id: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
         """
@@ -281,7 +281,7 @@ class MemorySaveTool(BaseTool):
         # (Too many returns). elif 顺序保证 ``context is None`` 先匹配,
         # 后续 ``context.session_id`` 访问安全。
         context = current_tool_context()
-        guard_failed: Optional[str] = None
+        guard_failed: str | None = None
         if self.memory is None:
             guard_failed = "记忆管理器未初始化"
         elif context is None:

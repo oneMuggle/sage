@@ -72,7 +72,7 @@ def test_script_runner_with_allowed_roots():
 # =====================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_happy_path(tmp_path):
     """完整 happy path: 校验 → 确认 → 沙箱 → SkillResult 成功。"""
     # 设置技能目录
@@ -131,7 +131,7 @@ async def test_script_runner_happy_path(tmp_path):
     assert req.cwd == script.parent.resolve()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_with_args(tmp_path):
     """ScriptRunner 传递 args 给沙箱。"""
     scripts_dir = tmp_path / "scripts"
@@ -170,7 +170,7 @@ async def test_script_runner_with_args(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_rejects_traversal(tmp_path):
     """ScriptRunner 拒绝路径遍历（../ 跳出 allowed_roots）。"""
     base = tmp_path / "skills"
@@ -202,7 +202,7 @@ async def test_script_runner_rejects_traversal(tmp_path):
     sandbox.run.assert_not_called()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_rejects_script_not_in_base_dir(tmp_path):
     """ScriptRunner 拒绝不在 base_dir 内的脚本。"""
     base = tmp_path / "skills"
@@ -239,7 +239,7 @@ async def test_script_runner_rejects_script_not_in_base_dir(tmp_path):
     sandbox.run.assert_not_called()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_rejects_absolute_script_path(tmp_path):
     """绝对路径不能跳过当前技能目录边界。"""
     base = tmp_path / "skill-a"
@@ -259,7 +259,7 @@ async def test_script_runner_rejects_absolute_script_path(tmp_path):
     sandbox.run.assert_not_called()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_rejects_symlink_component(tmp_path):
     """技能目录内的符号链接不能把脚本解析到另一技能。"""
     base = tmp_path / "skill-a"
@@ -285,7 +285,7 @@ async def test_script_runner_rejects_symlink_component(tmp_path):
     sandbox.run.assert_not_called()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_accepts_script_in_nested_subdir(tmp_path):
     """ScriptRunner 接受嵌套子目录中的脚本。"""
     base = tmp_path / "skills"
@@ -326,7 +326,7 @@ async def test_script_runner_accepts_script_in_nested_subdir(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_user_declined_returns_error(tmp_path):
     """用户拒绝 → success=False，不执行沙箱。"""
     scripts_dir = tmp_path / "scripts"
@@ -362,7 +362,7 @@ async def test_script_runner_user_declined_returns_error(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_rejects_content_changed_after_confirmation(tmp_path):
     """确认后普通文件内容变化必须 fail-closed。"""
     script = tmp_path / "test.py"
@@ -386,7 +386,7 @@ async def test_script_runner_rejects_content_changed_after_confirmation(tmp_path
     sandbox.run.assert_not_called()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_rejects_replaced_regular_file_after_confirmation(tmp_path):
     """确认后替换为另一普通文件即使内容不同也必须拒绝。"""
     script = tmp_path / "test.py"
@@ -412,7 +412,7 @@ async def test_script_runner_rejects_replaced_regular_file_after_confirmation(tm
     sandbox.run.assert_not_called()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_rejects_same_hash_different_inode_after_confirmation(tmp_path):
     """确认后 inode 改变但 SHA-256 不变仍必须拒绝（不能只依赖 hash）。"""
     script = tmp_path / "test.py"
@@ -437,7 +437,7 @@ async def test_script_runner_rejects_same_hash_different_inode_after_confirmatio
     assert result.success is False
     assert "identity" in result.error.lower() or "inode" in result.error.lower()
     sandbox.run.assert_not_called()
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_executes_private_snapshot_and_cleans_it(tmp_path):
     """沙箱接收受控快照，权限正确且执行后清理。"""
     script = tmp_path / "test.py"
@@ -492,7 +492,7 @@ async def test_script_runner_executes_private_snapshot_and_cleans_it(tmp_path):
     assert not captured["path"].parent.exists()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_rejects_snapshot_creation_failure(tmp_path, monkeypatch):
     """快照无法安全创建时必须拒绝执行。"""
     script = tmp_path / "test.py"
@@ -512,8 +512,8 @@ async def test_script_runner_rejects_snapshot_creation_failure(tmp_path, monkeyp
     sandbox.run.assert_not_called()
 
 
-@pytest.mark.asyncio()
-@pytest.mark.skipif(
+@pytest.mark.asynci()o()
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="Windows 分支走原生 reparse-safe 原语（不依赖 O_NOFOLLOW），前提仅 POSIX 成立",
 )
@@ -538,7 +538,7 @@ async def test_script_runner_fails_closed_without_o_nofollow(tmp_path, monkeypat
 
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_sandbox_failure_returns_error(tmp_path):
     """沙箱失败（exit_code != 0）→ success=False。"""
     scripts_dir = tmp_path / "scripts"
@@ -572,7 +572,7 @@ async def test_script_runner_sandbox_failure_returns_error(tmp_path):
     assert result.metadata["exit_code"] == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_sandbox_timeout_returns_error(tmp_path):
     """沙箱超时 → success=False, timed_out=True。"""
     scripts_dir = tmp_path / "scripts"
@@ -613,7 +613,7 @@ async def test_script_runner_sandbox_timeout_returns_error(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_sandbox_exception_does_not_propagate(tmp_path):
     """沙箱抛异常 → 收敛为 success=False，不向上传播。"""
     scripts_dir = tmp_path / "scripts"
@@ -640,7 +640,7 @@ async def test_script_runner_sandbox_exception_does_not_propagate(tmp_path):
     assert "sandbox crashed" in result.error or "exception" in result.error.lower()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_confirmer_exception_does_not_propagate(tmp_path):
     """confirmer 抛异常 → 收敛为 success=False（默认拒绝）。"""
     scripts_dir = tmp_path / "scripts"
@@ -667,7 +667,7 @@ async def test_script_runner_confirmer_exception_does_not_propagate(tmp_path):
     sandbox.run.assert_not_called()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_invalid_path_construction_is_converged():
     """doc.base_dir/script_name 构造异常时也应返回失败结果。"""
     doc = _make_doc(base_dir=object())  # type: ignore[arg-type]
@@ -683,7 +683,7 @@ async def test_script_runner_invalid_path_construction_is_converged():
     confirmer.confirm.assert_not_called()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_invalid_args_are_converged(tmp_path):
     """args 非 tuple[str, ...] 时应返回失败结果而不是抛异常。"""
     script = tmp_path / "test.py"
@@ -714,7 +714,7 @@ async def test_script_runner_invalid_args_are_converged(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_path_validation_before_confirmation(tmp_path):
     """路径校验失败时，不应调用 confirmer (短路优化)。"""
     base = tmp_path / "skills"
@@ -743,7 +743,7 @@ async def test_script_runner_path_validation_before_confirmation(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_metadata_includes_execution_info(tmp_path):
     """SkillResult.metadata 包含完整执行信息。"""
     scripts_dir = tmp_path / "scripts"
@@ -789,7 +789,7 @@ async def test_script_runner_metadata_includes_execution_info(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_script_runner_nonexistent_script(tmp_path):
     """脚本不存在 → success=False，不执行沙箱。"""
     base = tmp_path / "skills"

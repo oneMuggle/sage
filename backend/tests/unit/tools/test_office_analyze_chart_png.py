@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import builtins
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Tuple
 
 import pytest
 from openpyxl import Workbook
@@ -165,7 +165,7 @@ def test_matplotlib_missing_keeps_analysis_success(
     result = _run(env, file_path=str(xlsx), operations=[dict(_AGG_OP)], write_report=True)
 
     assert result.success is True
-    report: Optional[dict] = result.content["report"]
+    report: dict | None = result.content["report"]
     assert report is not None
     assert report["chart_png"] is None
     assert (env.work / "sales-analysis.xlsx").exists()

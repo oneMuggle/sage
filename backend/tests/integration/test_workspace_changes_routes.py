@@ -82,14 +82,14 @@ def bound_session(
     return session_id
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_changes_requires_existing_session(client: httpx.AsyncClient) -> None:
     response = await client.get("/api/v1/sessions/nope/workspace/changes")
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "session_not_found"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_changes_requires_bound_workspace(
     client: httpx.AsyncClient, session_id: str
 ) -> None:
@@ -98,7 +98,7 @@ async def test_changes_requires_bound_workspace(
     assert response.json()["detail"]["code"] == "workspace_not_bound"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_changes_lists_modified_and_untracked(
     client: httpx.AsyncClient, bound_session: str
 ) -> None:
@@ -114,7 +114,7 @@ async def test_changes_lists_modified_and_untracked(
     assert isinstance(body["branch"], str)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_changes_clean_repo_has_empty_list(
     client: httpx.AsyncClient, conn: sqlite3.Connection, session_id: str, tmp_path: Path
 ) -> None:
@@ -129,7 +129,7 @@ async def test_changes_clean_repo_has_empty_list(
     assert body["changes"] == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_diff_returns_file_diff(
     client: httpx.AsyncClient, bound_session: str
 ) -> None:
@@ -144,7 +144,7 @@ async def test_diff_returns_file_diff(
     assert "+print('v2')" in body["diff"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_diff_path_outside_repo_rejected(
     client: httpx.AsyncClient, bound_session: str, tmp_path: Path
 ) -> None:
@@ -158,7 +158,7 @@ async def test_diff_path_outside_repo_rejected(
     assert response.json()["detail"]["code"] == "git_error"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_diff_without_binding_is_forbidden(
     client: httpx.AsyncClient, session_id: str
 ) -> None:

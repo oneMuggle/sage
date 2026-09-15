@@ -16,7 +16,7 @@ import time
 import uuid
 from collections import deque
 from threading import Lock
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from backend.chat.empty_response_guard import (
     EMPTY_RESPONSE_FALLBACK_TEXT,
@@ -239,10 +239,10 @@ class SageAgent:
 
     def __init__(
         self,
-        llm_config: Optional[Dict[str, Any]] = None,
-        agent_id: Optional[str] = None,
+        llm_config: Dict[str, Any] | None = None,
+        agent_id: str | None = None,
         bare: bool = False,
-        policy: Optional[ToolPolicy] = None,
+        policy: ToolPolicy | None = None,
     ):
         """初始化 SageAgent。
 
@@ -264,8 +264,8 @@ class SageAgent:
         self._interrupted = False
         # L12-lite (批次 C-3): 中断事件 —— run_loop 起点创建, interrupt()
         # 置位; 工具执行以 task 竞争该事件, 中断先到即取消当前工具。
-        self._interrupt_event: Optional[asyncio.Event] = None
-        self._current_session_id: Optional[str] = None
+        self._interrupt_event: asyncio.Event | None = None
+        self._current_session_id: str | None = None
         # RT5 (round7): 单 agent steering —— 运行中注入的用户补充消息。
         # run_loop 每轮迭代顶部排空（迭代边界语义，与中断检查同位）；
         # _run_loop_active 为 False 时 inject 拒绝（调用方回退排队语义）。
@@ -278,8 +278,8 @@ class SageAgent:
         # 加载 agent profile (阶段 1: Profile → 运行时)
         # 从 SQLite 读最新版本, 用户刚 PATCH 的 enabled/system_prompt 立即生效
         # agent_id 不存在 / 已禁用 → self.profile = None → 保持默认行为(向后兼容)
-        self.profile: Optional[Dict[str, Any]] = None
-        self.agent_id: Optional[str] = None
+        self.profile: Dict[str, Any] | None = None
+        self.agent_id: str | None = None
         if agent_id:
             from backend.agents.profiles import get_enabled_agent
 
@@ -347,15 +347,15 @@ class SageAgent:
         # - permission_enforcer: None 时 run_loop 从 settings 现读现建;
         #   测试 / 特殊场景可直接赋值覆盖。
         # - approval_timeout: 审批等待秒数; None → gate 默认 300s。
-        self.permission_enforcer: Optional[PermissionEnforcer] = None
-        self.approval_timeout: Optional[float] = None
+        self.permission_enforcer: PermissionEnforcer | None = None
+        self.approval_timeout: float | None = None
         # M2 part B: 提问等待秒数; None → gate 默认 300s（测试可缩短）。
-        self.question_timeout: Optional[float] = None
+        self.question_timeout: float | None = None
 
         # 初始化 LLM 客户端
         if llm_config:
             self.llm_config = LLMConfig(**llm_config)
-            self.llm_client: Optional[LLMClient] = LLMClient(self.llm_config)
+            self.llm_client: LLMClient | None = LLMClient(self.llm_config)
             logger.info(
                 "LLM 客户端已初始化: provider={}, model={}".format(
                     llm_config.get("provider"), llm_config.get("model")
@@ -381,9 +381,9 @@ class SageAgent:
 
     async def _restore_llm_after_dynamic(
         self,
-        llm_config: Optional[Dict[str, Any]],
-        original_llm_client: Optional[LLMClient],
-        original_llm_config: Optional[LLMConfig],
+        llm_config: Dict[str, Any] | None,
+        original_llm_client: LLMClient | None,
+        original_llm_config: LLMConfig | None,
     ) -> None:
         """恢复原始 LLM client/config, 并关闭动态配置新建的 client。
 
@@ -402,7 +402,7 @@ class SageAgent:
                 await dynamic_client.close()
 
     async def chat(
-        self, session_id: str, message: str, llm_config: Optional[Dict[str, Any]] = None
+        self, session_id: str, message: str, llm_config: Dict[str, Any] | None = None
     ) -> Dict[str, Any]:
         """
         处理用户消息
@@ -691,7 +691,7 @@ class SageAgent:
         tool: Any,
         name: str,
         args: Dict[str, Any],
-        tool_call_id: Optional[str] = None,
+        tool_call_id: str | None = None,
     ) -> Tuple[bool, Any]:
         """L12-lite: 执行工具并与中断事件竞争。
 
@@ -775,7 +775,7 @@ class SageAgent:
         return int(getattr(self.tool_policy, "max_tool_calls_per_run", 25) or 25)
 
     @staticmethod
-    def _should_stream(llm_client: Optional[LLMClient]) -> bool:
+    def _should_stream(llm_client: LLMClient | None) -> bool:
         """是否尝试流式 LLM 调用（L2 真流式开关）。
 
         - env ``SAGE_LLM_STREAMING`` 设为 0/false/off/no 时全局关闭；
@@ -791,9 +791,9 @@ class SageAgent:
     async def run_loop(  # noqa: PLR0911 — 状态机多出口
         self,
         messages: List[Dict[str, Any]],
-        max_iterations: Optional[int] = None,
-        llm_config: Optional[Dict[str, Any]] = None,
-        session_id: Optional[str] = None,
+        max_iterations: int | None = None,
+        llm_config: Dict[str, Any] | None = None,
+        session_id: str | None = None,
     ):
         """ReAct 主循环。
 
@@ -957,7 +957,7 @@ class SageAgent:
                 # 流内聚合。流式不可用（上游不支持 stream+tools / stream_options,
                 # 或首个增量前请求失败）时自动回退非流式 chat(),行为与旧版完全
                 # 一致;首个增量之后失败无法安全重放,按原错误面终止。
-                response: Optional[LLMResponse] = None
+                response: LLMResponse | None = None
                 # RT2 (round7): 溢出急救环 —— CONTEXT_OVERFLOW 时就地机械压缩
                 # messages 后重试（最多 _MAX_FIRST_AID_ATTEMPTS 次：常规 → 激进），
                 # 仍溢出按原错误面终止。重试对生成端透明：压缩标记直接嵌在被截断
@@ -1624,7 +1624,7 @@ class SageAgent:
     # M1 工具安全加固: 权限执行辅助
     # ------------------------------------------------------------------
 
-    def _office_boundary_resolver(self) -> Optional[str]:
+    def _office_boundary_resolver(self) -> str | None:
         """从当前会话绑定解析 workspace_root；未绑定返回 None。
 
         DB / 上下文查询失败时向上抛异常，不在此吞掉——校验器侧

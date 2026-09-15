@@ -21,7 +21,7 @@ from backend.tools.file_tool import MAX_WRITE_SIZE_BYTES
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def tool():
     return EditTool()
 

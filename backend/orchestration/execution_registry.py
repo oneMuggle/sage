@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict
 
 
 @dataclass
@@ -37,13 +37,13 @@ class ExecutionRegistry:
         handle.interrupt_event.set()
         return True
 
-    def unregister(self, lane_id: str, task: Optional[asyncio.Task] = None) -> None:
+    def unregister(self, lane_id: str, task: asyncio.Task | None = None) -> None:
         """Remove a handle, preserving a newer registration if one exists."""
         handle = self._handles.get(lane_id)
         if handle is not None and (task is None or handle.task is task):
             self._handles.pop(lane_id, None)
 
-    def get(self, lane_id: str) -> Optional[ExecutionHandle]:
+    def get(self, lane_id: str) -> ExecutionHandle | None:
         return self._handles.get(lane_id)
 
 

@@ -69,7 +69,7 @@ def _make_doc(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def db_conn() -> sqlite3.Connection:
     """In-memory SQLite connection with the office_documents table created."""
     conn = sqlite3.connect(":memory:")

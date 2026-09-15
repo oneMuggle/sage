@@ -21,7 +21,7 @@
 import difflib
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from .base import BaseTool, ToolResult, ToolSchema
 from .file_tool import MAX_WRITE_SIZE_BYTES, _contains_binary_marker, detect_bom_encoding
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 def _resolve_fuzzy_range(
     original: str, old_string: str
-) -> Tuple[Optional[Tuple[int, int, str]], int]:
+) -> Tuple[Tuple[int, int, str] | None, int]:
     """F-1 (round5 批次 F): 行级 trim 容错定位（精确匹配 0 命中后的兜底）。
 
     文件行与 old_string 行各自 strip 后做连续窗口匹配；命中恰好统计并返回
@@ -101,10 +101,10 @@ def _count_logical_lines(fragment: str) -> int:
 
 def _validate_edit_call_shape(  # noqa: PLR0911 — 守卫式参数校验：一参数一分支，平铺胜于嵌套
     kwargs: Dict[str, Any],
-    file_path: Optional[str],
-    old_string: Optional[str],
-    new_string: Optional[str],
-) -> Optional[ToolResult]:
+    file_path: str | None,
+    old_string: str | None,
+    new_string: str | None,
+) -> ToolResult | None:
     """调用形态检查：未知参数 / 必需参数哨兵 / 类型；返回 None 表示放行。
 
     必需参数以 ``None`` 哨兵区分"未提供"与"空值"：漏传 ``new_string``
@@ -136,7 +136,7 @@ def _validate_edit_call_shape(  # noqa: PLR0911 — 守卫式参数校验：一�
     return None
 
 
-def _validate_edit_params(old_string: str, new_string: str) -> Optional[ToolResult]:
+def _validate_edit_params(old_string: str, new_string: str) -> ToolResult | None:
     """参数级前置检查（与文件无关）；返回 None 表示放行。"""
     if old_string == new_string:
         return ToolResult(success=False, error="old_string 与 new_string 必须不同")
@@ -145,7 +145,7 @@ def _validate_edit_params(old_string: str, new_string: str) -> Optional[ToolResu
     return None
 
 
-def _validate_target_file(target: Path, file_path: str) -> Optional[ToolResult]:
+def _validate_target_file(target: Path, file_path: str) -> ToolResult | None:
     """目标文件前置检查：存在 / 常规文件 / 尺寸 / 非二进制；返回 None 表示放行。
 
     尺寸检查（``st_size`` 与写限额比对）有意排在读文件与二进制嗅探之前：
@@ -177,7 +177,7 @@ def _validate_target_file(target: Path, file_path: str) -> Optional[ToolResult]:
 
 def _resolve_matches(
     original: str, old_string: str, replace_all: bool
-) -> Tuple[Optional[int], Optional[ToolResult]]:
+) -> Tuple[int | None, ToolResult | None]:
     """计算替换次数：0 处 → 带提示错误；多处且非 replace_all → 唯一性错误。
 
     返回 ``(次数, None)`` 放行或 ``(None, ToolResult)`` 拒绝。
@@ -226,9 +226,9 @@ class EditTool(BaseTool):
 
     def execute(
         self,
-        file_path: Optional[str] = None,
-        old_string: Optional[str] = None,
-        new_string: Optional[str] = None,
+        file_path: str | None = None,
+        old_string: str | None = None,
+        new_string: str | None = None,
         replace_all: bool = False,
         **kwargs,
     ) -> ToolResult:
@@ -292,7 +292,7 @@ class EditTool(BaseTool):
             return ToolResult(success=False, error=f"文件解码失败（{encoding}）: {exc}")
 
         match_count, match_error = _resolve_matches(original, old_string, replace_all)
-        fuzzy_result: Optional[Tuple[int, int, str, int]] = None
+        fuzzy_result: Tuple[int, int, str, int] | None = None
         fuzzy_hits = 0
         if match_error is not None and not replace_all:
             # F-1 (round5 批次 F): 精确匹配 0 命中 → 行级 trim 容错兜底。
@@ -305,7 +305,7 @@ class EditTool(BaseTool):
             return match_error
 
         replacements = match_count if replace_all else 1
-        fuzzy_line: Optional[int] = None
+        fuzzy_line: int | None = None
         if fuzzy_result is not None:
             start, end, trailing_eol, fuzzy_line = fuzzy_result
             insert_new = new_string

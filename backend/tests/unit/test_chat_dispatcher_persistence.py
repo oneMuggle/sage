@@ -14,7 +14,7 @@ import pytest
 from backend.data import database as db_mod
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_emit_task_status_persists_to_repo():
     """每次 _emit_task_status 末尾都调一次 _persist_task_state。"""
     from backend.orchestration.chat_dispatcher import ChatDispatcher, ChatTaskState
@@ -32,7 +32,7 @@ async def test_emit_task_status_persists_to_repo():
     assert mock_repo.upsert_state.call_args.kwargs["task_id"] == "t1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_persist_failure_does_not_block_emit():
     """写库抛异常 → logger.warning,不应 raise。"""
     from backend.orchestration.chat_dispatcher import ChatDispatcher, ChatTaskState
@@ -110,7 +110,7 @@ def test_mark_run_dispatched_failure_degrades():
     dispatcher._mark_run_dispatched(111)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_dispatch_first_call_persists_dispatched_at(tmp_path, monkeypatch):
     """dispatch 首次调用 → _mark_run_dispatched 把 dispatched_at 落库。"""
     from backend.orchestration.chat_dispatcher import ChatDispatcher

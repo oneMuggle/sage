@@ -8,7 +8,6 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
 from backend.cli.checks.skills import discover_skill_roots, lint_skill_files
 
@@ -21,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[list] = None) -> int:
+def main(argv: list | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command != "lint":
         build_parser().print_help()

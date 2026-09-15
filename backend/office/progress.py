@@ -19,7 +19,7 @@ from __future__ import annotations
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Dict, Generator, Optional
+from typing import Dict, Generator
 
 _lock = threading.Lock()
 _progress: Dict[str, Dict] = {}
@@ -27,7 +27,7 @@ _progress: Dict[str, Dict] = {}
 # P12: ContextVar 关联的当前任务 —— 路由层 track() 设置，service 层
 # report_current() 上报。sync handler 跑在 threadpool，同线程调用栈内
 # 自动传播；未设置（chat 工具等直接调用）时全部 no-op。
-_current_task_id: ContextVar[Optional[str]] = ContextVar(
+_current_task_id: ContextVar[str | None] = ContextVar(
     "office_progress_task_id", default=None
 )
 
@@ -54,7 +54,7 @@ def report(task_id: str, stage: str, percent: int) -> None:
 class _Reporter:
     """report() 的空安全句柄；task_id 为 None 时全部 no-op。"""
 
-    def __init__(self, task_id: Optional[str]) -> None:
+    def __init__(self, task_id: str | None) -> None:
         self.task_id = task_id
 
     def report(self, stage: str, percent: int) -> None:
@@ -70,7 +70,7 @@ class _Reporter:
 
 
 @contextmanager
-def track(task_id: Optional[str], title: str) -> Generator[_Reporter, None, None]:
+def track(task_id: str | None, title: str) -> Generator[_Reporter, None, None]:
     reporter = _Reporter(task_id)
     token = None
     if task_id:
@@ -88,7 +88,7 @@ def track(task_id: Optional[str], title: str) -> Generator[_Reporter, None, None
                 _progress.pop(task_id, None)
 
 
-def snapshot(task_id: str) -> Optional[Dict]:
+def snapshot(task_id: str) -> Dict | None:
     """只读快照；任务不存在（未开始/已结束）返回 None。"""
     with _lock:
         entry = _progress.get(task_id)

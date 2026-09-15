@@ -29,7 +29,7 @@ READ，接线时必须只信任经认证的用户配置，**绝不能**读取 wo
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Callable, Dict, Mapping, Optional
+from typing import Any, Callable, Dict, Mapping
 
 
 class RiskClass(str, Enum):
@@ -51,14 +51,14 @@ SHELL_TOOLS = frozenset({"bash"})
 EXTERNAL_TOOLS = frozenset({"web_search", "web_fetch", "http_download"})
 
 _BASE: Dict[str, RiskClass] = {
-    **{name: RiskClass.WRITE_LOCAL for name in WRITE_TOOLS},
-    **{name: RiskClass.EXEC for name in SHELL_TOOLS},
-    **{name: RiskClass.EXTERNAL for name in EXTERNAL_TOOLS},
+    **dict.fromkeys(WRITE_TOOLS, RiskClass.WRITE_LOCAL),
+    **dict.fromkeys(SHELL_TOOLS, RiskClass.EXEC),
+    **dict.fromkeys(EXTERNAL_TOOLS, RiskClass.EXTERNAL),
 }
 
 # 用户级风险覆盖解析器：tool name -> RiskClass（返回 None 表示交给后续
 # 优先级解析）。A19 接线；在此之前调用方应始终传 None。
-RiskOverrides = Callable[[str], Optional[RiskClass]]
+RiskOverrides = Callable[[str], RiskClass | None]
 
 
 def _requires_approval(metadata: Any) -> bool:
@@ -73,8 +73,8 @@ def _requires_approval(metadata: Any) -> bool:
 def classify(
     tool_name: str,
     metadata: Any = None,
-    overrides: Optional[RiskOverrides] = None,
-    declared: Optional[Mapping[str, RiskClass]] = None,
+    overrides: RiskOverrides | None = None,
+    declared: Mapping[str, RiskClass] | None = None,
 ) -> RiskClass:
     """解析工具调用的有效风险。
 

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
 
 MAX_CODE_BYTES = 256 * 1024  # 单次执行 256 KiB
 MIN_TIMEOUT_SECONDS = 1
@@ -42,7 +41,7 @@ class RuntimeValidationError(ValueError):
 def validate_runtime_path(
     path: str,
     *,
-    workspace_root: Optional[Path],
+    workspace_root: Path | None,
 ) -> str:
     if not isinstance(path, str) or not path:
         raise RuntimeValidationError("runtime_path 不能为空")
@@ -56,10 +55,10 @@ def validate_runtime_path(
 
 
 def validate_cwd(
-    cwd: Optional[str],
+    cwd: str | None,
     *,
     workspace_root: Path,
-) -> Optional[str]:
+) -> str | None:
     if cwd is None:
         return None
     target = Path(cwd).expanduser()
@@ -87,7 +86,7 @@ def validate_code_size(code: str) -> int:
     return size
 
 
-def validate_timeout(timeout: Optional[int]) -> int:
+def validate_timeout(timeout: int | None) -> int:
     if timeout is None:
         return 60
     if not isinstance(timeout, int) or timeout < MIN_TIMEOUT_SECONDS:
@@ -101,7 +100,7 @@ def validate_timeout(timeout: Optional[int]) -> int:
     return timeout
 
 
-def validate_env_overrides(env: Optional[dict]) -> dict:
+def validate_env_overrides(env: dict | None) -> dict:
     if not env:
         return {}
     sanitized: dict = {}

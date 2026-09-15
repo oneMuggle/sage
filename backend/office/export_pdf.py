@@ -42,7 +42,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple
+from typing import List, Literal, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -89,15 +89,15 @@ class ExportPdfResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ok: bool = Field(description="导出是否成功")
-    method: Optional[Literal["libreoffice", "word_com"]] = Field(
+    method: Literal["libreoffice", "word_com"] | None = Field(
         default=None,
         description="实际使用的转换器；失败时为 None",
     )
-    output_path: Optional[str] = Field(
+    output_path: str | None = Field(
         default=None,
         description="生成的 PDF 绝对路径（位于源文件旁，<stem>.pdf）",
     )
-    error: Optional[str] = Field(
+    error: str | None = Field(
         default=None,
         description="失败原因；成功时为 None",
     )
@@ -117,7 +117,7 @@ def _candidate_soffice_paths() -> List[str]:
     return list(_LINUX_SOFFICE_CANDIDATES)
 
 
-def _locate_soffice() -> Optional[str]:
+def _locate_soffice() -> str | None:
     """Locate the LibreOffice executable, or ``None`` if not installed.
 
     Detection order: ``SAGE_SOFFICE_PATH`` env var (must exist on disk;
@@ -207,7 +207,7 @@ def _convert_with_libreoffice(
     return True, ""
 
 
-def _tail(stream: Optional[bytes], limit: int = 400) -> str:
+def _tail(stream: bytes | None, limit: int = 400) -> str:
     """Decode the tail of captured subprocess output for error messages."""
     if not stream:
         return ""

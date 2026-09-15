@@ -35,7 +35,7 @@ def test_validate_accepts_well_formed_args():
     assert validate_ask_user_args(_valid_args()) is None
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "options",
     [
         [{"label": "A"}, {"label": "A"}],
@@ -49,7 +49,7 @@ def test_validate_rejects_duplicate_labels(options):
     assert "重复" in error
 
 
-@pytest.mark.parametrize("bad_description", [{"evil": True}, 42, ["nested"], ("t",)])
+@pytest.mark.parametriz()e("bad_description", [{"evil": True}, 42, ["nested"], ("t",)])
 def test_validate_rejects_nonstring_description(bad_description):
     """非字符串 description → 拒绝（防穿透到 React 渲染层炸 UI）。"""
     options = [{"label": "A", "description": bad_description}, {"label": "B"}]

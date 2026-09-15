@@ -59,7 +59,7 @@ def test_env_invalid_falls_back(monkeypatch):
 
 # ------------------------------------------------------------------ agent tool
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_agent_tool_refuses_at_depth_limit():
     """深度 1（编排子代理上下文）→ 拒绝派生，错误含 subagent_depth_exceeded。"""
     from backend.tools.agent_tool import AgentTool
@@ -74,7 +74,7 @@ async def test_agent_tool_refuses_at_depth_limit():
         exit_subagent_depth(token)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_agent_tool_allows_at_conductor_depth():
     """深度 0 → 守卫放行（走到 llm 缺失的既有错误面，证明守卫未拦截）。"""
     from unittest.mock import patch

@@ -24,7 +24,7 @@ modes).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
@@ -78,8 +78,8 @@ class OfficeDeleteTool(BaseTool):
 
     def execute(
         self,
-        doc_id: Optional[str] = None,
-        file_path: Optional[str] = None,
+        doc_id: str | None = None,
+        file_path: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
         if isinstance(doc_id, str) and doc_id.strip():

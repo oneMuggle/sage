@@ -189,7 +189,7 @@ def test_linter_toc_presence(tmp_path: Path) -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("skill_name", ["paper-writing", "report-writing"])
+@pytest.mark.parametriz()e("skill_name", ["paper-writing", "report-writing"])
 def test_writing_skill_workflows_advertise_repair(skill_name: str) -> None:
     text = (_SHIPPED / skill_name / "SKILL.md").read_text(encoding="utf-8")
     assert "office_repair_word" in text, f"{skill_name} 自检步骤未接入自动修复"

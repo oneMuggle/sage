@@ -20,7 +20,7 @@ import struct
 import threading
 import time
 from pathlib import Path
-from typing import Any, List, Optional, Protocol
+from typing import Any, List, Protocol
 
 
 class EmbedderError(RuntimeError):
@@ -316,7 +316,7 @@ class ModelEmbedder:
         base_url: str,
         api_key: str = "",
         model: str = "text-embedding-3-small",
-        dimensions: Optional[int] = None,
+        dimensions: int | None = None,
         timeout_seconds: float = 10.0,
     ) -> None:
         self._base_url = base_url.rstrip("/")
@@ -330,7 +330,7 @@ class ModelEmbedder:
         self._circuit_open_until = 0.0
 
     @classmethod
-    def from_env(cls) -> Optional[ModelEmbedder]:
+    def from_env(cls) -> ModelEmbedder | None:
         """从环境变量构造；未配置端点时返回 None。
 
         与 wiki_routes 的解析顺序一致：EMBED_* 优先，回退 LLM_*。
@@ -414,7 +414,7 @@ class ModelEmbedder:
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
-        all_vectors: List[Optional[List[float]]] = [None] * len(texts)
+        all_vectors: List[List[float] | None] = [None] * len(texts)
         try:
             for start in range(0, len(texts), self._MAX_BATCH):
                 batch = texts[start : start + self._MAX_BATCH]

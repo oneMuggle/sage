@@ -20,7 +20,7 @@ import os
 import shutil
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, FrozenSet, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, FrozenSet, List, Set, Tuple
 
 if TYPE_CHECKING:
     from .skill import SkillMdDocument
@@ -38,8 +38,8 @@ class GatingContext:
     @classmethod
     def from_env(
         cls,
-        platform: Optional[str] = None,
-        bin_whitelist: Optional[List[str]] = None,
+        platform: str | None = None,
+        bin_whitelist: List[str] | None = None,
     ) -> GatingContext:
         """从当前环境构造 GatingContext。
 
@@ -138,8 +138,8 @@ def evaluate_gating(doc: SkillMdDocument, ctx: GatingContext) -> GatingResult:
 
 
 def build_gating_context(
-    platform: Optional[str] = None,
-    bin_whitelist: Optional[List[str]] = None,
+    platform: str | None = None,
+    bin_whitelist: List[str] | None = None,
 ) -> GatingContext:
     """构造门控上下文。bin 探测开销由调用方控制。
 

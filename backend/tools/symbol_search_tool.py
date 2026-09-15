@@ -25,7 +25,7 @@ import re
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from backend.domain.risk import RiskClass
 
@@ -217,7 +217,7 @@ def _cache_db_path(workspace_root: str) -> Path:
     return base / "symbol-index" / key / "index.sqlite3"
 
 
-def _open_cache(db_path: Path) -> Optional[sqlite3.Connection]:
+def _open_cache(db_path: Path) -> sqlite3.Connection | None:
     """打开缓存连接；任何失败返回 None（fail-open 走全量内存扫描）。"""
     try:
         db_path.parent.mkdir(parents=True, exist_ok=True)

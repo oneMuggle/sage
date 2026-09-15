@@ -19,7 +19,7 @@ from backend.cli.checks.frontend_dist import (
 from backend.cli.doctor import Severity
 
 
-@pytest.fixture()
+@pytest.fixture
 def check():
     return FrontendDistCheck()
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class BashConfig:
         )
 
 
-def load_bash_config(repo: Optional[Any] = None) -> BashConfig:
+def load_bash_config(repo: Any | None = None) -> BashConfig:
     """读取 bash 运行参数；任何失败回退 ``BashConfig()``（硬编码时代行为）。
 
     Args:

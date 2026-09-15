@@ -9,7 +9,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from .files import secure_delete_path, secure_write_temp_file
 from .ingest import IngestConfig, ingest_source
@@ -33,7 +33,7 @@ class ResearchTask:
     web_results: List[WebSearchResult] = field(default_factory=list)
     synthesis: str = ""
     saved_path: str = ""
-    error: Optional[Dict[str, str]] = None
+    error: Dict[str, str] | None = None
 
 
 async def generate_search_queries(topic: str, llm_call: Callable) -> List[str]:
@@ -150,7 +150,7 @@ async def deep_research(
     llm_call: Callable = None,
     ingest_config: IngestConfig = None,
     auto_ingest: bool = True,
-    http_post: Optional[Callable] = None,
+    http_post: Callable | None = None,
 ) -> ResearchTask:
     """执行 Deep Research 流程。
 

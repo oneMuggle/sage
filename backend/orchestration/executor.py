@@ -12,7 +12,7 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Callable
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from backend.orchestration.acceptance import (
     record_acceptance_event,
@@ -71,11 +71,11 @@ class LaneExecutor:
         self,
         lane_registry: Any,
         task_registry: Any,
-        event_recorder: Optional[EventRecorder] = None,
-        agent_runner: Optional[Callable] = None,
-        interrupt_event: Optional[asyncio.Event] = None,
-        run_event_sink: Optional[RunEventSink] = None,
-        run_id: Optional[str] = None,
+        event_recorder: EventRecorder | None = None,
+        agent_runner: Callable | None = None,
+        interrupt_event: asyncio.Event | None = None,
+        run_event_sink: RunEventSink | None = None,
+        run_id: str | None = None,
         acceptance_enabled: bool = True,
     ) -> None:
         """
@@ -102,7 +102,7 @@ class LaneExecutor:
     async def execute_lane(  # noqa: PLR0911 — 7 returns: cancel/perm/fail/succeed/retry/abort/default
         self,
         lane: Lane,
-        agent_id: Optional[str] = None,
+        agent_id: str | None = None,
     ) -> Dict[str, Any]:
         """
         Execute a Lane through its full lifecycle.
@@ -291,7 +291,7 @@ class LaneExecutor:
         lane: Lane,
         task: Task,
         error_message: str,
-        error_code: Optional[str] = None,
+        error_code: str | None = None,
     ) -> Dict[str, Any]:
         """
         Handle lane execution failure using the task's recovery policy.
@@ -501,7 +501,7 @@ class LaneExecutor:
         task_id: str,
         assertions: list,
         reviewer_id: str = "system",
-        verdict: Optional[str] = None,
+        verdict: str | None = None,
     ) -> ReviewReport:
         """Build a `ReviewReport` v1 and emit a `lane.review.submitted` event.
 
@@ -564,7 +564,7 @@ class LaneExecutor:
         lane: Lane,
         event: LaneEvent,
         provenance: EventProvenance,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Dict[str, Any] | None = None,
     ) -> None:
         """
         Record a lane event with full context.
@@ -590,7 +590,7 @@ class LaneExecutor:
         lane: Lane,
         event: LaneEvent,
         provenance: EventProvenance,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Dict[str, Any] | None = None,
     ) -> None:
         """Translate a legacy lane event into a canonical RunEvent and publish it.
 
@@ -619,7 +619,7 @@ class LaneExecutor:
     async def _default_agent_runner(
         self,
         task: Task,
-        agent_id: Optional[str],
+        agent_id: str | None,
     ) -> Dict[str, Any]:
         """
         Default agent runner. Override in production with real execution.

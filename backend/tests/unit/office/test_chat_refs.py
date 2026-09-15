@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 import pytest
 from pydantic import ValidationError
@@ -55,21 +54,21 @@ from backend.office.workspace_errors import (
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture()
+@pytest.fixture
 def work_a(fixture_dir: Path) -> Path:
     ws = fixture_dir / "work-a"
     ws.mkdir()
     return ws
 
 
-@pytest.fixture()
+@pytest.fixture
 def work_b(fixture_dir: Path) -> Path:
     ws = fixture_dir / "work-b"
     ws.mkdir()
     return ws
 
 
-@pytest.fixture()
+@pytest.fixture
 def conn() -> sqlite3.Connection:
     db = Database(":memory:")
     db.init_db()
@@ -89,8 +88,8 @@ def _make_doc(
     doc_id: str,
     workspace_path: str,
     doc_type: OfficeDocType = OfficeDocType.WORD,
-    original_filename: Optional[str] = "doc.docx",
-    archived_at: Optional[int] = None,
+    original_filename: str | None = "doc.docx",
+    archived_at: int | None = None,
 ) -> OfficeDocumentSummary:
     return OfficeDocumentSummary(
         id=doc_id,
@@ -106,14 +105,14 @@ def _make_doc(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def binding_a(conn: sqlite3.Connection, work_a: Path):
     """Active binding for session-a -> work-a, generation=1."""
     _insert_session(conn, "session-a")
     return bind_session_workspace(conn, "session-a", str(work_a), now_ms=1000)
 
 
-@pytest.fixture()
+@pytest.fixture
 def doc_a(conn: sqlite3.Connection, work_a: Path) -> OfficeDocumentSummary:
     """A document that lives in workspace A (the binding's canonical path)."""
     return save_document(
@@ -127,7 +126,7 @@ def doc_a(conn: sqlite3.Connection, work_a: Path) -> OfficeDocumentSummary:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def doc_b(conn: sqlite3.Connection, work_b: Path) -> OfficeDocumentSummary:
     """A document that lives in workspace B (a different workspace)."""
     return save_document(

@@ -22,7 +22,7 @@ LibreOffice 打开即渲染（fldSimple 自带占位 run，无需打开后手动
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from docx import Document
 from docx.enum.section import WD_ORIENT
@@ -202,7 +202,7 @@ def _apply_footer(doc: Document, footer: WordHeaderFooterSpec) -> None:
         paragraph._p.append(fld)
 
 
-def apply_format_spec(doc: Document, spec: Optional[WordFormatSpec]) -> None:
+def apply_format_spec(doc: Document, spec: WordFormatSpec | None) -> None:
     """把版式规范应用到文档（样式定义 + 节属性 + 页眉页脚）。
 
     在 ``generate_docx`` 中于 ``set_doc_default_font`` 之后、写正文之前调用，
@@ -236,7 +236,7 @@ def apply_format_spec(doc: Document, spec: Optional[WordFormatSpec]) -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _border_element(tag: str, *, val: str, sz: Optional[str] = None) -> Any:
+def _border_element(tag: str, *, val: str, sz: str | None = None) -> Any:
     """构造单个 w:top/bottom/left/right/insideH/insideV 边框元素。"""
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn

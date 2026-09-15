@@ -246,7 +246,7 @@ def test_delete_unregisters_from_registry(tmp_skills_dir: Path, registry: SkillR
 # 但 endpoint 走的是单例的另一个 registry)。
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_delete_endpoint_returns_200(
     tmp_skills_dir: Path, client, reset_skill_adapter
 ) -> None:
@@ -274,7 +274,7 @@ async def test_delete_endpoint_returns_200(
     assert adapter.has_skill("web-search") is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_delete_endpoint_builtin_returns_400(
     tmp_skills_dir: Path, client, reset_skill_adapter
 ) -> None:
@@ -287,7 +287,7 @@ async def test_delete_endpoint_builtin_returns_400(
     assert "内置技能" in detail["message"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_delete_endpoint_missing_returns_404(
     tmp_skills_dir: Path, client, reset_skill_adapter
 ) -> None:

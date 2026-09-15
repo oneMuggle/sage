@@ -26,7 +26,7 @@ import logging
 import os
 import stat
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 import yaml
 
@@ -100,7 +100,7 @@ def discover_skill_md_dirs() -> List[Path]:
     return roots
 
 
-def _discover_shipped_dir() -> Optional[Path]:
+def _discover_shipped_dir() -> Path | None:
     """返回随包分发的 SKILL.md 默认模板目录(若存在)。
 
     shipped 是只读 starter(例: ``academic-search``),作为
@@ -256,9 +256,9 @@ class SkillMdHotLoader:
     def __init__(
         self,
         registry: SkillRegistry,
-        dirs: Optional[List[Path]] = None,
-        gating_ctx: Optional[GatingContext] = None,
-        script_runner: Optional[ScriptRunner] = None,
+        dirs: List[Path] | None = None,
+        gating_ctx: GatingContext | None = None,
+        script_runner: ScriptRunner | None = None,
     ) -> None:
         self._registry = registry
         self._dirs: List[Path] = list(dirs or [])
@@ -267,7 +267,7 @@ class SkillMdHotLoader:
         self._gating_ctx = gating_ctx  # None = 不门控 (v1 行为)
         self._script_runner = script_runner
         self.skipped: List[Dict[str, str]] = []
-        self._last_skip: Optional[Dict[str, str]] = None
+        self._last_skip: Dict[str, str] | None = None
 
     # ===== scan / load =====
 
@@ -560,9 +560,9 @@ class SkillMdHotLoader:
 
 def register_skill_md_skills(
     registry: SkillRegistry,
-    dirs: Optional[List[str]] = None,
-    gating_ctx: Optional[GatingContext] = None,
-    script_runner: Optional[ScriptRunner] = None,
+    dirs: List[str] | None = None,
+    gating_ctx: GatingContext | None = None,
+    script_runner: ScriptRunner | None = None,
 ) -> int:
     """便捷封装: 从 ``dirs`` (或 ``discover_skill_md_dirs() + shipped``) 加载 SKILL.md。
 

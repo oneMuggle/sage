@@ -15,16 +15,15 @@
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 from backend.cli.doctor import Severity
 
 
 class _FakeRepo:
-    def __init__(self, raw: Optional[str]) -> None:
+    def __init__(self, raw: str | None) -> None:
         self._raw = raw
 
-    def get(self, key: str) -> Optional[str]:
+    def get(self, key: str) -> str | None:
         assert key == "network_policy"
         return self._raw
 
@@ -35,7 +34,7 @@ def _make_check():
     return NetworkCheck()
 
 
-def _run_with_repo(raw: Optional[str]):
+def _run_with_repo(raw: str | None):
     return _make_check().run_with_repo(_FakeRepo(raw))
 
 

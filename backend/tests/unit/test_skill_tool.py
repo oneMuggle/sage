@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Sequence
 
 import pytest
 from sage_core import SkillResult
@@ -33,8 +33,8 @@ class _StubSkillAdapter:
     def __init__(
         self,
         names: Sequence[str],
-        slash_commands: Optional[Sequence[str]] = None,
-        fail_command: Optional[str] = None,
+        slash_commands: Sequence[str] | None = None,
+        fail_command: str | None = None,
     ) -> None:
         self._names = list(names)
         self._slash = set(slash_commands if slash_commands is not None else names)

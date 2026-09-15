@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 _HEADING_RE = re.compile(r"^(#{1,3})\s+(.+)$")
 _BULLET_RE = re.compile(r"^[\-\*]\s+(.+)$")
@@ -21,7 +21,7 @@ _NUMBERED_RE = re.compile(r"^\d+\.\s+(.+)$")
 
 def parse_markdown_to_paragraphs(
     text: str,
-) -> List[Dict[str, Optional[str]]]:
+) -> List[Dict[str, str | None]]:
     """把 markdown 文本解析成结构化段落列表。
 
     Returns:
@@ -30,7 +30,7 @@ def parse_markdown_to_paragraphs(
     if not text or not text.strip():
         return [{"text": "", "heading": None, "style": None}]
 
-    result: List[Dict[str, Optional[str]]] = []
+    result: List[Dict[str, str | None]] = []
     # 按空行分段（一段 = 一个或多个连续非空行）
     blocks = re.split(r"\n\s*\n", text.strip())
 

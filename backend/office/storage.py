@@ -30,7 +30,7 @@ import shutil
 import sqlite3
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from .errors import OfficePathError
 from .models import OfficeDocType, OfficeDocumentSummary, OfficeSnapshotInfo
@@ -279,7 +279,7 @@ def delete_document(conn: sqlite3.Connection, doc_id: str) -> bool:
 def archive_document(
     conn: sqlite3.Connection,
     doc_id: str,
-    now_ms: Optional[int] = None,
+    now_ms: int | None = None,
 ) -> bool:
     """Set ``archived_at`` to the current (or supplied) ms epoch.
 
@@ -326,8 +326,8 @@ def restore_document(
 def snapshot_pre_edit(
     summary: OfficeDocumentSummary,
     *,
-    now_ms: Optional[int] = None,
-) -> Optional[Path]:
+    now_ms: int | None = None,
+) -> Path | None:
     """Copy the current on-disk file to a timestamped sibling snapshot.
 
     Called by :class:`backend.office.tool_service.OfficeToolService.update`
@@ -370,7 +370,7 @@ def snapshot_pre_edit(
         return None
 
 
-def _parse_snapshot_ts(name: str) -> Optional[int]:
+def _parse_snapshot_ts(name: str) -> int | None:
     """Return the millisecond epoch encoded in ``<ms>-<filename>``, else None."""
     head, sep, _rest = name.partition("-")
     if not sep or not head.isdigit():
@@ -378,7 +378,7 @@ def _parse_snapshot_ts(name: str) -> Optional[int]:
     return int(head)
 
 
-def _snapshot_dir_for(summary: OfficeDocumentSummary) -> Optional[Path]:
+def _snapshot_dir_for(summary: OfficeDocumentSummary) -> Path | None:
     """Return the document's ``.snapshots`` dir, or None when unavailable."""
     source = document_path(summary)
     if not source.is_file():
@@ -461,7 +461,7 @@ def restore_from_snapshot(
     summary: OfficeDocumentSummary,
     snapshot_id: str,
     *,
-    now_ms: Optional[int] = None,
+    now_ms: int | None = None,
 ) -> OfficeDocumentSummary:
     """Restore the document file from a snapshot; return the refreshed summary.
 

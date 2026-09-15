@@ -16,7 +16,7 @@ from backend.main import app
 pytestmark = pytest.mark.unit
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_endpoint_hits_registered_stream_agent(monkeypatch):
     from backend.api import legacy_routes as lr
 
@@ -33,7 +33,7 @@ async def test_endpoint_hits_registered_stream_agent(monkeypatch):
     assert agent.is_interrupted() is True
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_cancel_interrupts_primary_and_dispatcher(monkeypatch):
     """Run-level cancellation reaches both in-process execution owners."""
     from backend.api import legacy_routes as lr, orch_routes as orch
@@ -66,7 +66,7 @@ async def test_run_cancel_interrupts_primary_and_dispatcher(monkeypatch):
     assert dispatcher._cancelled.is_set()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_stream_registration_replays_cancel_before_dispatcher_binding():
     """A cancellation during planning is replayed when dispatcher is bound."""
     from backend.api import legacy_routes as lr
@@ -89,7 +89,7 @@ async def test_stream_registration_replays_cancel_before_dispatcher_binding():
         lr._ACTIVE_STREAMS.pop("race", None)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_endpoint_bodyless_compat_returns_none():
     """旧调用方不带 body → 200 + target=none（不再误中断随机新实例）。"""
     async with httpx.AsyncClient(
@@ -101,7 +101,7 @@ async def test_endpoint_bodyless_compat_returns_none():
     assert resp.json()["target"] == "none"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_interrupt_stream_cancels_dispatcher_in_multi_mode(monkeypatch):
     """multi 模式：中断主 agent 的同时 cancel 关联 dispatcher。"""
     from backend.api import legacy_routes as lr

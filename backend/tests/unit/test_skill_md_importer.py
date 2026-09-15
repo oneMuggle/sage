@@ -290,7 +290,7 @@ async def test_import_files_skips_existing_skill_md(
 # ===== test_import_files_skips_invalid_name =====
 
 
-@pytest.mark.parametrize("bad_name", ["BadName", "with space", "../etc/passwd", "x" * 65])
+@pytest.mark.parametriz()e("bad_name", ["BadName", "with space", "../etc/passwd", "x" * 65])
 async def test_import_files_skips_invalid_name(
     registry: SkillRegistry, skills_dir: Path, bad_name: str
 ) -> None:
@@ -329,7 +329,7 @@ async def test_import_files_redacts_invalid_frontmatter_name(
     assert "/home/user/private" not in str(result)
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "filename",
     [
         "/home/user/private/broken.md",
@@ -403,7 +403,7 @@ async def test_import_files_skips_parse_error(registry: SkillRegistry, skills_di
     assert skip["reason"] == "parse_error"
 
 
-@pytest.mark.parametrize("name_field", ["''", "null", "42", "Bad Name"])
+@pytest.mark.parametriz()e("name_field", ["''", "null", "42", "Bad Name"])
 async def test_import_files_classifies_bom_invalid_name(
     registry: SkillRegistry, skills_dir: Path, name_field: str
 ) -> None:
@@ -690,7 +690,7 @@ def test_parse_file_from_bytes_rejects_missing_frontmatter() -> None:
         parse_file_from_bytes(b"plain markdown")
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("field", "value"),
     [
         ("description", "x" * 1025),

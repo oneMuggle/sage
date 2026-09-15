@@ -19,14 +19,13 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
 class ValidationResult:
     """验证结果"""
     valid: bool
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 class ToolValidator:
@@ -112,7 +111,7 @@ class ToolValidator:
 
         return ValidationResult(True)
 
-    def _get_call_name(self, node: ast.Call) -> Optional[str]:
+    def _get_call_name(self, node: ast.Call) -> str | None:
         """获取函数调用的名称"""
         if isinstance(node.func, ast.Name):
             return node.func.id

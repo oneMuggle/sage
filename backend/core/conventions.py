@@ -10,7 +10,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.core.legacy.llm_client import LLMClient
 from backend.data.database import get_database
@@ -60,7 +60,7 @@ class ConventionManager:
     DECAY_FACTOR = 0.9
     MIN_CONFIDENCE = 0.1
 
-    def __init__(self, llm_client: Optional[LLMClient] = None):
+    def __init__(self, llm_client: LLMClient | None = None):
         self.db = get_database()
         self.llm_client = llm_client
         self._ensure_table()
@@ -148,7 +148,7 @@ class ConventionManager:
         row["is_active"] = bool(row["is_active"])
         return Convention(**dict(row))
 
-    def get_active(self, category: Optional[str] = None) -> List[Convention]:
+    def get_active(self, category: str | None = None) -> List[Convention]:
         """获取活跃惯例"""
         conn = self.db.get_connection()
         cursor = conn.cursor()

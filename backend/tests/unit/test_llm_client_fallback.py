@@ -54,7 +54,7 @@ def _make_client(fallback_model=None) -> LLMClient:
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_no_fallback_raises_after_retries_exhausted(client=None):
     client = _make_client()
     with patch.object(client, "_get_client") as mock_get_client:
@@ -71,7 +71,7 @@ async def test_no_fallback_raises_after_retries_exhausted(client=None):
     assert mock_http.post.await_args_list[0][1]["json"]["model"] == "gpt-4o"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_fallback_model_takes_over_after_retry_exhaustion():
     client = _make_client(fallback_model="gpt-4o-mini")
     with patch.object(client, "_get_client") as mock_get_client:
@@ -90,7 +90,7 @@ async def test_fallback_model_takes_over_after_retry_exhaustion():
     assert mock_http.post.await_args_list[3][1]["json"]["model"] == "gpt-4o-mini"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_fallback_triggers_only_once():
     client = _make_client(fallback_model="gpt-4o-mini")
     with patch.object(client, "_get_client") as mock_get_client:
@@ -106,7 +106,7 @@ async def test_fallback_triggers_only_once():
     assert mock_http.post.await_count == 6
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_fallback_not_used_when_same_as_primary():
     client = _make_client(fallback_model="gpt-4o")
     with patch.object(client, "_get_client") as mock_get_client:

@@ -9,7 +9,7 @@ import json
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from . import frontmatter
 from .files import iter_wiki_markdown, secure_atomic_write_file, secure_read_text
@@ -181,7 +181,7 @@ def relevance(query: str, graph: GraphData, k_hops: int = K_HOPS) -> List[Tuple[
         return []
 
     # BFS 传播
-    scores: Dict[str, float] = {seed: 1.0 for seed in seeds}
+    scores: Dict[str, float] = dict.fromkeys(seeds, 1.0)
     frontier = set(seeds)
 
     # 构建邻接表
@@ -211,7 +211,7 @@ def relevance(query: str, graph: GraphData, k_hops: int = K_HOPS) -> List[Tuple[
 
 
 def get_graph_cached(
-    project_root: Path, query: Optional[str] = None, limit: int = 100
+    project_root: Path, query: str | None = None, limit: int = 100
 ) -> GraphData:
     """Build or load the wiki graph, with mtime-based cache.
 
@@ -242,7 +242,7 @@ def get_graph_cached(
         default=0.0,
     )
 
-    graph: Optional[GraphData] = None
+    graph: GraphData | None = None
     try:
         cache = json.loads(secure_read_text(project_root, cache_path))
         # Match on mtime only — query/limit are filtered at read time

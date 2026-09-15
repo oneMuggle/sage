@@ -19,7 +19,7 @@ Public surface:
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
@@ -55,7 +55,7 @@ class OfficeBibTexTool(BaseTool):
             },
         )
 
-    def execute(self, text: Optional[str] = None, **kwargs: Any) -> ToolResult:
+    def execute(self, text: str | None = None, **kwargs: Any) -> ToolResult:
         if not isinstance(text, str) or not text.strip():
             return ToolResult(success=False, error="text_required")
         try:

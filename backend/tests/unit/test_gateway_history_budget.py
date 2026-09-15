@@ -12,7 +12,7 @@ from backend.gateway.telegram import TelegramConfig, TelegramGateway, _history_b
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def tmp_db(monkeypatch):
     from backend.data.database import Database
 

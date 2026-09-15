@@ -58,7 +58,7 @@ async def _collect(agent, **kwargs):
 
 
 class TestEmptyResponseGuard:
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_empty_then_valid_retries_and_completes(self, monkeypatch):
         """空响应 → 注入提示重试 → 正常内容 DONE"""
         monkeypatch.setenv("SAGE_EMPTY_RESPONSE_MAX_RETRIES", "2")
@@ -78,7 +78,7 @@ class TestEmptyResponseGuard:
             for m in messages
         )
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_exhausted_retries_yields_fallback_done(self, monkeypatch):
         """重试耗尽 → DONE + 兜底文案（非 FAILED）"""
         monkeypatch.setenv("SAGE_EMPTY_RESPONSE_MAX_RETRIES", "1")
@@ -92,7 +92,7 @@ class TestEmptyResponseGuard:
         # 1 次初始 + 1 次重试
         assert agent.llm_client.chat.call_count == 2
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_guard_disabled_keeps_legacy_behavior(self, monkeypatch):
         """SAGE_EMPTY_RESPONSE_MAX_RETRIES=0 → 保持旧行为（空响应即 DONE）"""
         monkeypatch.setenv("SAGE_EMPTY_RESPONSE_MAX_RETRIES", "0")
@@ -105,7 +105,7 @@ class TestEmptyResponseGuard:
 
 
 class TestRepetitionGuard:
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_soft_limit_injects_nudge(self, monkeypatch):
         """相同工具调用达软限 → messages 注入 system 提醒, 执行不中断"""
         monkeypatch.setenv("SAGE_TOOL_REPEAT_SOFT_LIMIT", "2")
@@ -128,7 +128,7 @@ class TestRepetitionGuard:
         )
         assert agent.tool_registry.get.return_value.execute.call_count == 3
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_hard_limit_intercepts_execution(self, monkeypatch):
         """相同工具调用达硬限 → 不执行, 返回合成错误 tool result"""
         monkeypatch.setenv("SAGE_TOOL_REPEAT_SOFT_LIMIT", "0")

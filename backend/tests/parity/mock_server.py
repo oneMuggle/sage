@@ -18,7 +18,7 @@ import json
 import logging
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ SCENARIOS: Dict[str, List[Dict[str, Any]]] = {
 }
 
 
-def detect_scenario(body: Dict[str, Any]) -> Optional[str]:
+def detect_scenario(body: Dict[str, Any]) -> str | None:
     """从请求消息里找 ``PARITY_SCENARIO:<name>`` 前缀 → 场景名。"""
     for message in body.get("messages") or []:
         content = message.get("content")
@@ -197,8 +197,8 @@ class MockLLMServer:
 
     def __init__(self, scenarios: Dict[str, List[Dict[str, Any]]]) -> None:
         self._scenarios = scenarios
-        self._httpd: Optional[ThreadingHTTPServer] = None
-        self._thread: Optional[threading.Thread] = None
+        self._httpd: ThreadingHTTPServer | None = None
+        self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._call_counts: Dict[str, int] = {}
         self.requests: List[Dict[str, Any]] = []
@@ -236,7 +236,7 @@ class MockLLMServer:
 
     # ---------- 场景分发 ----------
 
-    def next_response(self, scenario: str) -> Optional[Dict[str, Any]]:
+    def next_response(self, scenario: str) -> Dict[str, Any] | None:
         scripts = self._scenarios.get(scenario)
         if not scripts:
             return None

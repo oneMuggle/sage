@@ -84,7 +84,7 @@ import tempfile
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Set, Tuple
 
 from docx import Document
 
@@ -170,7 +170,7 @@ class BuiltinTemplate:
 
 # ── per-process cache dir + lazy build cache ─────────────────────────
 
-_BUILTIN_CACHE_DIR: Optional[Path] = None
+_BUILTIN_CACHE_DIR: Path | None = None
 _BUILTIN_DOCX_CACHE: Dict[str, Path] = {}
 
 
@@ -855,7 +855,7 @@ def _analyze_workspace_template(
     return _marker_library_placeholders(_scan_pptx_marker_names(path))
 
 
-def list_templates(workspace_path: Optional[str] = None) -> TemplateLibraryResponse:
+def list_templates(workspace_path: str | None = None) -> TemplateLibraryResponse:
     """List builtin templates plus workspace user templates.
 
     ``workspace_path`` 缺省 / 不传时只返回 builtin；传入时校验 workspace
@@ -925,8 +925,8 @@ def _resolve_workspace_template(
 
 def _resolve_source_template(
     workspace: Path,
-    template_id: Optional[str],
-    workspace_template: Optional[str],
+    template_id: str | None,
+    workspace_template: str | None,
 ) -> Tuple[Path, OfficeDocType]:
     """Locate the source template file (builtin id OR workspace file).
 
@@ -945,7 +945,7 @@ def _resolve_source_template(
     raise OfficePathError("template_id or workspace_template is required")
 
 
-def _validate_data_caps(data: Optional[Dict[str, Any]]) -> None:
+def _validate_data_caps(data: Dict[str, Any] | None) -> None:
     """Reject oversized string values (protects render + storage)."""
     if not data:
         return
@@ -1158,11 +1158,11 @@ def _instantiate_marker_template(
 
 def instantiate_template(
     workspace_path: str,
-    template_id: Optional[str] = None,
-    workspace_template: Optional[str] = None,
+    template_id: str | None = None,
+    workspace_template: str | None = None,
     filename: str = "",
-    data: Optional[Dict[str, Any]] = None,
-    images: Optional[Dict[str, str]] = None,
+    data: Dict[str, Any] | None = None,
+    images: Dict[str, str] | None = None,
 ) -> WordTemplateFillResult:
     """Instantiate a library template into the managed layout for its doc type.
 

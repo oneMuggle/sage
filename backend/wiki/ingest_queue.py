@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +31,12 @@ class IngestTask:
     project_root: str
     status: QueueStatus
     created_at: datetime
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    error_message: Optional[str] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    error_message: str | None = None
     retry_count: int = 0
     max_retries: int = 3
-    result: Optional[Dict[str, Any]] = None
+    result: Dict[str, Any] | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典（用于 JSON 序列化）。"""
@@ -154,7 +154,7 @@ class IngestQueue:
         logger.info(f"Added ingest task {task_id}: {source_path}")
         return task_id
 
-    def get(self, task_id: str) -> Optional[IngestTask]:
+    def get(self, task_id: str) -> IngestTask | None:
         """获取任务。
 
         Args:
@@ -165,7 +165,7 @@ class IngestQueue:
         """
         return self._tasks.get(task_id)
 
-    def get_next_pending(self) -> Optional[IngestTask]:
+    def get_next_pending(self) -> IngestTask | None:
         """获取下一个待处理任务。
 
         Returns:

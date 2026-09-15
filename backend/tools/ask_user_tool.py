@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Sequence
 
 from .base import BaseTool, ToolResult, ToolSchema
 
@@ -36,7 +36,7 @@ MAX_OPTIONS = 4
 UNANSWERED_RESULT_TEXT = "用户未回答，请自行决定合理默认值"
 
 
-def _validate_options(options: Any) -> Optional[str]:  # noqa: PLR0911 — 级联校验早退可读性优先
+def _validate_options(options: Any) -> str | None:  # noqa: PLR0911 — 级联校验早退可读性优先
     """校验 options 列表（2-4 项，每项含非空唯一 label）；合法返回 None。"""
     if not isinstance(options, list):
         return "options 必须是列表"
@@ -59,7 +59,7 @@ def _validate_options(options: Any) -> Optional[str]:  # noqa: PLR0911 — 级�
     return None
 
 
-def validate_ask_user_args(args: Dict[str, Any]) -> Optional[str]:
+def validate_ask_user_args(args: Dict[str, Any]) -> str | None:
     """校验 LLM 传入的 ask_user_question 参数；合法返回 None，否则返回错误描述。
 
     约束（镜像 Claude AskUserQuestion）:
@@ -90,7 +90,7 @@ def validate_ask_user_args(args: Dict[str, Any]) -> Optional[str]:
 
 def render_answer_result(
     answers: Sequence[str],
-    custom: Optional[str],
+    custom: str | None,
 ) -> ToolResult:
     """把用户应答渲染为 ToolResult（纯函数，供 execute 复用）。
 
@@ -165,11 +165,11 @@ class AskUserQuestionTool(BaseTool):
     def execute(
         self,
         question: str = "",
-        header: Optional[str] = None,
-        options: Optional[List[Dict[str, Any]]] = None,
+        header: str | None = None,
+        options: List[Dict[str, Any]] | None = None,
         multi_select: bool = False,
-        answers: Optional[Sequence[str]] = None,
-        custom: Optional[str] = None,
+        answers: Sequence[str] | None = None,
+        custom: str | None = None,
         **kwargs,
     ) -> ToolResult:
         """渲染用户应答为 ToolResult。

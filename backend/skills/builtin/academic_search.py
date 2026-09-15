@@ -19,7 +19,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from ..base import BaseSkill, SkillResult, SkillSchema
 from .academic_adapters import get_site_adapter
@@ -130,7 +130,7 @@ class AcademicSearchSkill(BaseSkill):
         # 4. 可选:问用户排序偏好
         ask_user = tools.get("ask_user_question")
         sort_pref = "relevance"
-        user_options: Optional[List[str]] = None
+        user_options: List[str] | None = None
         if ask_user is not None:
             user_options = ["按相关度", "按时间", "按引用数"]
             question_result = ask_user.execute(

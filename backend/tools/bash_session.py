@@ -11,7 +11,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from .subprocess_util import (
     MAX_OUTPUT_CAP_BYTES,
@@ -50,13 +50,13 @@ class BashSession:
     command: str
     stdout_path: str
     stderr_path: str
-    stdout_identity: Optional[Tuple[int, int]] = None
-    stderr_identity: Optional[Tuple[int, int]] = None
+    stdout_identity: Tuple[int, int] | None = None
+    stderr_identity: Tuple[int, int] | None = None
     stdout_offset: int = 0
     stderr_offset: int = 0
     started_at: float = field(default_factory=time.monotonic)
-    collectors: Optional[Tuple[BoundedOutputCollector, BoundedOutputCollector]] = None
-    process_group_id: Optional[int] = None
+    collectors: Tuple[BoundedOutputCollector, BoundedOutputCollector] | None = None
+    process_group_id: int | None = None
     leader_exit_observed: bool = False
     process_group_killed: bool = False
     operation_lock: threading.RLock = field(
@@ -84,10 +84,10 @@ class _PendingCleanup:
     process: Any
     stdout_path: str
     stderr_path: str
-    collectors: Optional[Tuple[BoundedOutputCollector, BoundedOutputCollector]]
-    stdout_identity: Optional[Tuple[int, int]] = None
-    stderr_identity: Optional[Tuple[int, int]] = None
-    process_group_id: Optional[int] = None
+    collectors: Tuple[BoundedOutputCollector, BoundedOutputCollector] | None
+    stdout_identity: Tuple[int, int] | None = None
+    stderr_identity: Tuple[int, int] | None = None
+    process_group_id: int | None = None
     leader_exit_observed: bool = False
     process_group_killed: bool = False
 
@@ -95,7 +95,7 @@ class _PendingCleanup:
 class BashSessionRegistry:
     """线程安全的后台会话表；shell_id 永不用于构造文件路径。"""
 
-    def __init__(self, max_sessions: Optional[int] = None) -> None:
+    def __init__(self, max_sessions: int | None = None) -> None:
         # max_sessions=None → 模块默认（PR-2 前的硬编码行为）。经 get_registry()
         # 创建的实例由 load_bash_config() 供给配置值；直接构造（多数单测）不变。
         self._max_sessions = MAX_BACKGROUND_SESSIONS if max_sessions is None else int(max_sessions)
@@ -117,7 +117,7 @@ class BashSessionRegistry:
         command: str,
         stdout_path: str,
         stderr_path: str,
-        collectors: Optional[Tuple[BoundedOutputCollector, BoundedOutputCollector]] = None,
+        collectors: Tuple[BoundedOutputCollector, BoundedOutputCollector] | None = None,
     ) -> BashSession:
         if not isinstance(verified, VerifiedProcess):
             raise TypeError("registry requires VerifiedProcess from spawn_verified")
@@ -157,7 +157,7 @@ class BashSessionRegistry:
         process_group_id: int,
         stdout_path: str,
         stderr_path: str,
-        collectors: Optional[Tuple[BoundedOutputCollector, BoundedOutputCollector]],
+        collectors: Tuple[BoundedOutputCollector, BoundedOutputCollector] | None,
     ) -> None:
         observed = observe_process_exit(process, 0.0)
         leader_exit_observed = observed is True
@@ -196,11 +196,11 @@ class BashSessionRegistry:
             pending.collectors
         )
 
-    def get(self, shell_id: str) -> Optional[BashSession]:
+    def get(self, shell_id: str) -> BashSession | None:
         with self._lock:
             return self._sessions.get(shell_id)
 
-    def read_increment(self, shell_id: str, cap: int) -> Optional[Dict[str, Any]]:
+    def read_increment(self, shell_id: str, cap: int) -> Dict[str, Any] | None:
         _validate_cap(cap)
         with self._lock:
             session = self._sessions.get(shell_id)
@@ -211,7 +211,7 @@ class BashSessionRegistry:
         payload["shell_id"] = shell_id
         return payload
 
-    def terminate(self, shell_id: str, cap: int) -> Optional[Dict[str, Any]]:
+    def terminate(self, shell_id: str, cap: int) -> Dict[str, Any] | None:
         _validate_cap(cap)
         with self._lock:
             session = self._sessions.get(shell_id)
@@ -334,9 +334,9 @@ class BashSessionRegistry:
 
     def _finish_collectors(
         self,
-        collectors: Optional[Tuple[BoundedOutputCollector, BoundedOutputCollector]],
-    ) -> Optional[BaseException]:
-        first_error: Optional[BaseException] = None
+        collectors: Tuple[BoundedOutputCollector, BoundedOutputCollector] | None,
+    ) -> BaseException | None:
+        first_error: BaseException | None = None
         if collectors:
             for collector in collectors:
                 try:
@@ -367,7 +367,7 @@ class BashSessionRegistry:
 
     @staticmethod
     def _collectors_alive(
-        collectors: Optional[Tuple[BoundedOutputCollector, BoundedOutputCollector]],
+        collectors: Tuple[BoundedOutputCollector, BoundedOutputCollector] | None,
     ) -> bool:
         return any(bool(collector.is_alive) for collector in collectors or ())
 
@@ -419,7 +419,7 @@ class BashSessionRegistry:
 
 #: 进程级单例。惰性创建（首次 get_registry() 才读 bash_config，import 期
 #: 不碰 DB —— 同 conftest "AST-only tests 不在收集期 import application" 约束）。
-_REGISTRY: Optional[BashSessionRegistry] = None
+_REGISTRY: BashSessionRegistry | None = None
 
 
 def get_registry() -> BashSessionRegistry:

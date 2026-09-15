@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -28,7 +28,7 @@ class SkillResult:
     content: Any = None  # 返回内容
     metadata: Dict[str, Any] = field(default_factory=dict)  # 元数据
     success: bool = True  # 是否成功
-    error: Optional[str] = None  # 错误信息
+    error: str | None = None  # 错误信息
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -49,7 +49,7 @@ class BaseSkill(ABC):
     """
 
     def __init__(self):
-        self._schema: Optional[SkillSchema] = None
+        self._schema: SkillSchema | None = None
 
     @property
     def schema(self) -> SkillSchema:

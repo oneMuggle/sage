@@ -13,7 +13,7 @@ import asyncio
 import os
 import unittest.mock
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import pytest
 
@@ -42,7 +42,7 @@ def _write_skill_md_with_dispatch(
     name: str,
     *,
     user_invocable: bool = False,
-    user_invocable_name: Optional[str] = None,
+    user_invocable_name: str | None = None,
     command_dispatch: str = "auto",
     disable_model_invocation: bool = False,
     body: str = "Skill body\n",

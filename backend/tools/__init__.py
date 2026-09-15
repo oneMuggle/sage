@@ -123,8 +123,8 @@ def __dir__():
 
 def register_all_tools(
     registry: ToolRegistry,
-    policy: Optional[ToolPolicy] = None,
-    network_policy: Optional[NetworkPolicy] = None,
+    policy: ToolPolicy | None = None,
+    network_policy: NetworkPolicy | None = None,
 ) -> None:
     """
     注册所有内置工具到注册表

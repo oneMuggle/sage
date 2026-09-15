@@ -51,7 +51,7 @@ def _make_service(events, llm_responses, tool_success=True):
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_turn_emits_run_start_turn_start_run_end():
     events = _RecordingEvents()
     svc = _make_service(events, [Message(role=Role.ASSISTANT, content="hi")])
@@ -74,7 +74,7 @@ async def test_run_turn_emits_run_start_turn_start_run_end():
     assert seqs[0] == 0
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_turn_emits_tool_result_with_run_id():
     events = _RecordingEvents()
     tool_call_msg = Message(

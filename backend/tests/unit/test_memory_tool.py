@@ -12,7 +12,7 @@ exposing ``memorize`` / ``search_memories`` 两个 sync 方法。``remember`` �
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 
 import pytest
 
@@ -52,9 +52,9 @@ class _FakeMemoryManager:
 
     def __init__(
         self,
-        memorize_return: Optional[str] = "mem-1",
-        search_return: Optional[List[dict]] = None,
-        raise_exc: Optional[Exception] = None,
+        memorize_return: str | None = "mem-1",
+        search_return: List[dict] | None = None,
+        raise_exc: Exception | None = None,
     ) -> None:
         self.memorize_calls: List[tuple] = []
         self.search_memories_calls: List[tuple] = []
@@ -408,7 +408,7 @@ def test_memory_search_filters_results_from_other_sessions(memory_manager_spy):
 # ---------- pytest fixtures used by the contract tests ----------
 
 
-@pytest.fixture()
+@pytest.fixture
 def real_memory_manager(monkeypatch):
     """Spy whose ``memorize`` returns a stable memory ID and records calls.
 
@@ -423,7 +423,7 @@ def real_memory_manager(monkeypatch):
     return spy
 
 
-@pytest.fixture()
+@pytest.fixture
 def memory_manager_spy():
     """``MagicMock`` whose ``search_memories`` returns ``[]`` by default.
 

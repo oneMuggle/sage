@@ -65,7 +65,7 @@ async def hex_sessions_client():
 # ==================== POST /sessions ====================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 @_HEX_ONLY
 async def test_post_sessions_creates_and_returns_dict(hex_sessions_client):
     """POST /sessions 创建会话,返回 dict 包含 id + title (匹配 legacy 契约)。"""
@@ -77,7 +77,7 @@ async def test_post_sessions_creates_and_returns_dict(hex_sessions_client):
     assert data["title"] == "我的新会话"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 @_HEX_ONLY
 async def test_post_sessions_default_title(hex_sessions_client):
     """未传 title 时使用 SessionCreate 默认值。"""
@@ -90,7 +90,7 @@ async def test_post_sessions_default_title(hex_sessions_client):
 # ==================== GET /sessions ====================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 @_HEX_ONLY
 async def test_get_sessions_lists_created(hex_sessions_client):
     """GET /sessions 列出已创建的会话。"""
@@ -108,7 +108,7 @@ async def test_get_sessions_lists_created(hex_sessions_client):
 # ==================== GET /sessions/{id} ====================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 @_HEX_ONLY
 async def test_get_session_returns_dict(hex_sessions_client):
     """GET /sessions/{id} 返单个 dict。"""
@@ -121,7 +121,7 @@ async def test_get_session_returns_dict(hex_sessions_client):
     assert resp.json()["id"] == sid
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 @_HEX_ONLY
 async def test_get_session_404_when_missing(hex_sessions_client):
     """GET 不存在会话返 404 + '会话不存在' detail (匹配 legacy 错误文案)。"""
@@ -134,7 +134,7 @@ async def test_get_session_404_when_missing(hex_sessions_client):
 # ==================== PATCH /sessions/{id} ====================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 @_HEX_ONLY
 async def test_patch_session_updates_title(hex_sessions_client):
     """PATCH 改 title 生效,响应返新值。"""
@@ -146,7 +146,7 @@ async def test_patch_session_updates_title(hex_sessions_client):
     assert resp.json()["title"] == "新"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 @_HEX_ONLY
 async def test_patch_session_404_when_missing(hex_sessions_client):
     """PATCH 不存在会话返 404。"""
@@ -158,7 +158,7 @@ async def test_patch_session_404_when_missing(hex_sessions_client):
 # ==================== DELETE /sessions/{id} ====================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 @_HEX_ONLY
 async def test_delete_session_returns_status_ok(hex_sessions_client):
     """DELETE 成功返 {"status": "ok"} (匹配 legacy 契约)。"""
@@ -170,7 +170,7 @@ async def test_delete_session_returns_status_ok(hex_sessions_client):
     assert resp.json() == {"status": "ok"}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 @_HEX_ONLY
 async def test_delete_session_404_when_missing(hex_sessions_client):
     """DELETE 不存在会话返 404。"""
@@ -179,7 +179,7 @@ async def test_delete_session_404_when_missing(hex_sessions_client):
     assert resp.status_code == 404
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 @_HEX_ONLY
 async def test_delete_session_decrements_counter(hex_sessions_client):
     """删除已存在会话后,active_sessions 计数应回到 0。"""
@@ -194,7 +194,7 @@ async def test_delete_session_decrements_counter(hex_sessions_client):
 # ==================== GET /sessions/{id}/messages ====================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 @_HEX_ONLY
 async def test_get_messages_empty_for_new_session(hex_sessions_client):
     """新会话无消息,GET messages 返空 list。"""
@@ -206,7 +206,7 @@ async def test_get_messages_empty_for_new_session(hex_sessions_client):
     assert resp.json() == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 @_HEX_ONLY
 async def test_get_messages_returns_dicts(hex_sessions_client):
     """GET messages 返 list[dict],每条含 role + content。"""

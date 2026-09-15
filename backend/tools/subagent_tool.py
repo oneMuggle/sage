@@ -16,7 +16,7 @@ multi 模式下拿到 ``task_plan`` 后，按计划调用本工具，把
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 
@@ -113,7 +113,7 @@ class CollectSubagentsTool(BaseTool):
         if not callable(wait):
             return ToolResult(success=False, error="当前 dispatcher 不支持 collect")
         timeout_raw = kwargs.get("timeout_secs")
-        timeout: Optional[float] = None
+        timeout: float | None = None
         try:
             timeout = float(timeout_raw) if timeout_raw is not None else None
         except (TypeError, ValueError):

@@ -28,7 +28,7 @@ class _FakeChunkedResponse:
         raise AssertionError("tee_stream should not call aread()")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_tee_returns_concatenated_bytes_and_invokes_callback():
     chunks = [b"hello ", b"world", b"!"]
     resp = _FakeChunkedResponse(chunks)
@@ -40,7 +40,7 @@ async def test_tee_returns_concatenated_bytes_and_invokes_callback():
     assert captured == chunks  # 回调收到每个原始 chunk
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_tee_handles_empty_stream():
     resp = _FakeChunkedResponse([])
     captured = []
@@ -51,7 +51,7 @@ async def test_tee_handles_empty_stream():
     assert captured == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_tee_propagates_callback_exceptions():
     resp = _FakeChunkedResponse([b"a", b"b"])
 
@@ -62,7 +62,7 @@ async def test_tee_propagates_callback_exceptions():
         await tee_stream(resp, bad_cb)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_tee_handles_binary_content():
     """非 UTF-8 内容不应在 tee 层被强行解码。"""
     chunks = [b"\x00\x01", b"\xff\xfe\xfd"]

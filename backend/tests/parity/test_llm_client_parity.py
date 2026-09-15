@@ -59,7 +59,7 @@ def _make_client(base_url: str) -> LLMClient:
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_parity_plain_chat_reply(mock_server):
     """(a) 普通回复: content / finish_reason / usage 全链路解析。"""
     client = _make_client(mock_server.base_url)
@@ -90,7 +90,7 @@ async def test_parity_plain_chat_reply(mock_server):
     await client.close()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_parity_tool_call_round_trip(mock_server):
     """(b) tool_call 往返: 首轮解析 tool_calls, 喂回工具结果后拿到终答。"""
     client = _make_client(mock_server.base_url)
@@ -135,7 +135,7 @@ async def test_parity_tool_call_round_trip(mock_server):
     await client.close()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_parity_streaming_reply(mock_server):
     """(c) SSE 流式: chunk 文本拼接 + 末尾 usage 进 tracker。"""
     client = _make_client(mock_server.base_url)
@@ -154,7 +154,7 @@ async def test_parity_streaming_reply(mock_server):
     await client.close()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_parity_missing_scenario_marker_yields_llm_error(mock_server):
     """无场景标记 → mock 返回 400 → 客户端映射为 LLMError (不透传原始异常)。"""
     from backend.core.errors import LLMError

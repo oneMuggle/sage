@@ -11,7 +11,7 @@ import pytest
 from backend.wiki import file_parser
 
 
-@pytest.mark.unit
+@pytest.mark.unit()
 def test_docx_image_extraction_rejects_oversized_member_before_read(monkeypatch):
     info = SimpleNamespace(filename="word/media/bomb.png", file_size=file_parser.MAX_IMAGE_BYTES + 1)
     archive = Mock()
@@ -25,7 +25,7 @@ def test_docx_image_extraction_rejects_oversized_member_before_read(monkeypatch)
     archive.read.assert_not_called()
 
 
-@pytest.mark.unit
+@pytest.mark.unit()
 def test_pptx_image_extraction_rejects_total_budget_before_read(monkeypatch):
     infos = [
         SimpleNamespace(filename="ppt/media/one.png", file_size=file_parser.MAX_IMAGE_BYTES),
@@ -43,7 +43,7 @@ def test_pptx_image_extraction_rejects_total_budget_before_read(monkeypatch):
     assert archive.read.call_count == 1
 
 
-@pytest.mark.unit
+@pytest.mark.unit()
 def test_parse_document_rejects_office_zip_budget_before_parser(monkeypatch, tmp_path):
     source = tmp_path / "bomb.docx"
     source.write_bytes(b"small zip container")
@@ -56,11 +56,11 @@ def test_parse_document_rejects_office_zip_budget_before_parser(monkeypatch, tmp
     parser.assert_not_called()
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="解析器安全读依赖 POSIX 文件描述符（Windows 支持另行批次）",
 )
-@pytest.mark.unit
+@pytest.mark.unit()
 def test_parse_document_reads_xlsx_through_opened_descriptor(monkeypatch, tmp_path):
     source = tmp_path / "data.xlsx"
     source.write_bytes(b"xlsx")

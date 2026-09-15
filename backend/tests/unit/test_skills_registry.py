@@ -12,7 +12,7 @@ SkillRegistry 单元测试
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from unittest.mock import Mock
 
 import pytest
@@ -28,7 +28,7 @@ pytestmark = pytest.mark.unit
 # ============================================================================
 
 
-def _make_skill(name: str = "x", triggers: Optional[List[str]] = None) -> BaseSkill:
+def _make_skill(name: str = "x", triggers: List[str] | None = None) -> BaseSkill:
     class _S(BaseSkill):
         def _build_schema(self) -> SkillSchema:
             return SkillSchema(

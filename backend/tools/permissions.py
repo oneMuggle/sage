@@ -22,7 +22,7 @@ import fnmatch
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
 
 from backend.tools.base import _is_safe_path
 from backend.tools.bash_validation import BashRisk, validate_bash
@@ -188,10 +188,8 @@ class PermissionEnforcer:
         self,
         mode: PermissionMode,
         rules: Sequence[PermissionRule],
-        bash_validator: Optional[Callable[[str], Any]] = None,
-        path_boundary_validator: Optional[
-            Callable[[str, Dict[str, Any]], Optional[PermissionDecision]]
-        ] = None,
+        bash_validator: Callable[[str], Any] | None = None,
+        path_boundary_validator: Callable[[str, Dict[str, Any]], PermissionDecision | None] | None = None,
     ) -> None:
         self._mode = mode
         self._rules: Tuple[PermissionRule, ...] = tuple(rules)
@@ -213,7 +211,7 @@ class PermissionEnforcer:
     def rules(self) -> Tuple[PermissionRule, ...]:
         return self._rules
 
-    def check(self, tool_name: str, args: Optional[Dict[str, Any]] = None) -> PermissionDecision:
+    def check(self, tool_name: str, args: Dict[str, Any] | None = None) -> PermissionDecision:
         """工具分发前的许可检查（同步、无副作用）。
 
         Args:
@@ -259,7 +257,7 @@ class PermissionEnforcer:
 
     def _validate_execute_command(
         self, capability: ToolCapability, args: Dict[str, Any]
-    ) -> Optional[Any]:
+    ) -> Any | None:
         """EXECUTE 能力工具跑 bash 风险校验；其余能力返回 None。"""
         if capability is not ToolCapability.EXECUTE or self._bash_validator is None:
             return None
@@ -268,9 +266,9 @@ class PermissionEnforcer:
             return self._bash_validator(command)
         return None
 
-    def _match_rules(self, tool_name: str) -> Dict[str, Optional[str]]:
+    def _match_rules(self, tool_name: str) -> Dict[str, str | None]:
         """按优先级收集首个命中的 deny / allow / ask 规则 pattern。"""
-        matched: Dict[str, Optional[str]] = {"deny": None, "allow": None, "ask": None}
+        matched: Dict[str, str | None] = {"deny": None, "allow": None, "ask": None}
         for rule in self._rules:
             if not rule.matches(tool_name):
                 continue
@@ -286,7 +284,7 @@ class PermissionEnforcer:
         return _ask(f"{risk_reason}：即使在 {self._mode.value} 模式下也必须经用户确认")
 
     def _mode_decision(
-        self, tool_name: str, capability: ToolCapability, bash_result: Optional[Any]
+        self, tool_name: str, capability: ToolCapability, bash_result: Any | None
     ) -> PermissionDecision:
         """无规则命中时的模式矩阵兜底（每个分支带可读 reason）。"""
         if self._mode is PermissionMode.FULL_ACCESS:
@@ -308,8 +306,8 @@ class PermissionEnforcer:
 
 
 def make_office_path_boundary(
-    boundary_resolver: Optional[Callable[[], Optional[str]]] = None,
-) -> Callable[[str, Dict[str, Any]], Optional[PermissionDecision]]:
+    boundary_resolver: Callable[[], str | None] | None = None,
+) -> Callable[[str, Dict[str, Any]], PermissionDecision | None]:
     """构造 office 写类工具（create/update/delete）的 path-boundary 校验器。
 
     ``boundary_resolver`` 每次调用返回当前会话 workspace_root（``None`` 表示
@@ -332,7 +330,7 @@ def make_office_path_boundary(
         "office_delete": "file_path",
     }
 
-    def _validator(tool_name: str, args: Dict[str, Any]) -> Optional[PermissionDecision]:
+    def _validator(tool_name: str, args: Dict[str, Any]) -> PermissionDecision | None:
         if tool_name not in _BOUNDARY_TOOLS:
             return None
         if boundary_resolver is None:
@@ -347,7 +345,7 @@ def make_office_path_boundary(
 
     def _check_path_arg(
         args: Dict[str, Any], key: str, root: str, tool_name: str
-    ) -> Optional[PermissionDecision]:
+    ) -> PermissionDecision | None:
         """校验 ``args[key]`` 是否落在 ``root`` 内；外 → ask，内/缺失 → None。"""
         target = args.get(key)
         if not isinstance(target, str) or not target.strip():
@@ -394,8 +392,8 @@ def parse_rules(raw: Any) -> List[PermissionRule]:
 
 
 def load_enforcer_from_settings(
-    repo: Optional[Any] = None,
-    path_boundary_validator: Optional[Callable] = None,
+    repo: Any | None = None,
+    path_boundary_validator: Callable | None = None,
 ) -> PermissionEnforcer:
     """从 settings_repo 读取模式 + 规则，构造 enforcer（注入 bash 校验器）。
 

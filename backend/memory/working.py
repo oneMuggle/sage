@@ -19,14 +19,14 @@ from __future__ import annotations
 import logging
 import time
 from collections import deque
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_SESSION_ID = "default"
 
 
-def normalize_session_id(session_id: Optional[str]) -> str:
+def normalize_session_id(session_id: str | None) -> str:
     """归一化会话 ID：None / 空字符串 → "default"。"""
     if session_id is None or session_id == "":
         return DEFAULT_SESSION_ID
@@ -70,8 +70,8 @@ class WorkingMemory:
         self,
         max_size: int = 20,
         max_tokens: int = 4000,
-        db: Optional[Any] = None,
-        session_id: Optional[str] = None,
+        db: Any | None = None,
+        session_id: str | None = None,
     ):
         """
         初始化工作记忆
@@ -89,7 +89,7 @@ class WorkingMemory:
         self.max_tokens = max_tokens
         self._db = db
         # 构造时绑定的会话（None = 未绑定，无参调用落于 "default"）
-        self._bound_sid: Optional[str] = (
+        self._bound_sid: str | None = (
             normalize_session_id(session_id) if session_id is not None else None
         )
 
@@ -111,13 +111,13 @@ class WorkingMemory:
 
     # ==================== 内部工具 ====================
 
-    def _resolve(self, session_id: Optional[str]) -> str:
+    def _resolve(self, session_id: str | None) -> str:
         """解析生效会话：显式参数 > 构造绑定会话 > "default"。"""
         if session_id is not None and session_id != "":
             return str(session_id)
         return self._bound_sid or DEFAULT_SESSION_ID
 
-    def resolve_session_id(self, session_id: Optional[str]) -> str:
+    def resolve_session_id(self, session_id: str | None) -> str:
         """解析生效会话 ID 的公开入口（供 MemoryManager 等上层合成 id 使用）。"""
         return self._resolve(session_id)
 
@@ -156,7 +156,7 @@ class WorkingMemory:
 
     # ==================== 核心 API ====================
 
-    def add(self, session_id: Optional[Any] = None, message: Optional[Dict[str, Any]] = None) -> int:
+    def add(self, session_id: Any | None = None, message: Dict[str, Any] | None = None) -> int:
         """
         添加消息到工作记忆
 
@@ -244,7 +244,7 @@ class WorkingMemory:
             self.total_tokens -= evicted_tokens
 
     def get_context(
-        self, session_id: Optional[Any] = None, limit: Optional[int] = None
+        self, session_id: Any | None = None, limit: int | None = None
     ) -> List[Dict[str, Any]]:
         """
         获取指定会话的当前上下文
@@ -266,7 +266,7 @@ class WorkingMemory:
             return msgs
         return msgs[-limit:]
 
-    def get_recent(self, session_id: Optional[Any] = None, limit: int = 5) -> List[Dict[str, Any]]:
+    def get_recent(self, session_id: Any | None = None, limit: int = 5) -> List[Dict[str, Any]]:
         """
         获取指定会话最近 N 条消息
 
@@ -284,7 +284,7 @@ class WorkingMemory:
         sid = self._resolve(session_id)
         return self._session_messages(sid)[-limit:]
 
-    def clear(self, session_id: Optional[str] = None) -> None:
+    def clear(self, session_id: str | None = None) -> None:
         """
         清空指定会话的工作记忆
 
@@ -300,7 +300,7 @@ class WorkingMemory:
         # 持久化清空状态
         self._save_snapshot(sid)
 
-    def total_tokens_for(self, session_id: Optional[str] = None) -> int:
+    def total_tokens_for(self, session_id: str | None = None) -> int:
         """
         获取指定会话的估算 Token 数量
 
@@ -316,7 +316,7 @@ class WorkingMemory:
         """列出当前持有消息的全部 session ID（有序）。"""
         return sorted({m.get("session_id", DEFAULT_SESSION_ID) for m in self._messages})
 
-    def set_summary(self, summary: str, session_id: Optional[str] = None) -> None:
+    def set_summary(self, summary: str, session_id: str | None = None) -> None:
         """
         设置会话摘要
 
@@ -326,7 +326,7 @@ class WorkingMemory:
         """
         self._summaries[self._resolve(session_id)] = summary
 
-    def get_summary(self, session_id: Optional[str] = None) -> str:
+    def get_summary(self, session_id: str | None = None) -> str:
         """
         获取会话摘要
 
@@ -342,7 +342,7 @@ class WorkingMemory:
             return summary
         return f"[{len(self._session_messages(sid))} 条消息, ~{self._session_tokens.get(sid, 0)} tokens]"
 
-    def add_entity(self, entity: str, session_id: Optional[str] = None) -> None:
+    def add_entity(self, entity: str, session_id: str | None = None) -> None:
         """
         添加活跃实体
 
@@ -354,7 +354,7 @@ class WorkingMemory:
         if entity not in entities:
             entities.append(entity)
 
-    def set_variable(self, key: str, value: Any, session_id: Optional[str] = None) -> None:
+    def set_variable(self, key: str, value: Any, session_id: str | None = None) -> None:
         """
         设置临时变量
 
@@ -365,7 +365,7 @@ class WorkingMemory:
         """
         self._variables.setdefault(self._resolve(session_id), {})[key] = value
 
-    def get_variable(self, key: str, default: Any = None, session_id: Optional[str] = None) -> Any:
+    def get_variable(self, key: str, default: Any = None, session_id: str | None = None) -> Any:
         """
         获取临时变量
 
@@ -381,7 +381,7 @@ class WorkingMemory:
 
     # ==================== 持久化方法 ====================
 
-    def _save_snapshot(self, session_id: Optional[str] = None) -> None:
+    def _save_snapshot(self, session_id: str | None = None) -> None:
         """将指定会话的工作记忆快照保存到 SQLite
 
         按 session_id 分行写入真实会话值（不再写 NULL）。

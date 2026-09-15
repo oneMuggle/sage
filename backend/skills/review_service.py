@@ -17,7 +17,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from string import Template
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 from backend.domain.message import Message
 
@@ -133,7 +133,7 @@ class ReviewService:
             object with a ``.text`` attribute.
     """
 
-    def __init__(self, llm_provider: Any, model: Optional[str] = None) -> None:
+    def __init__(self, llm_provider: Any, model: str | None = None) -> None:
         self.llm_provider = llm_provider
         self._model = model or _resolve_injected_provider_model()
         self._prompt_template = self._load_prompt_template()
@@ -417,7 +417,7 @@ class ReviewService:
 # to inject a fake — production paths let ``provider=None`` and pick up
 # ``HttpxLLMAdapter`` lazily on the first real ``generate_draft`` call.
 # ------------------------------------------------------------------ #
-_review_service: Optional[ReviewService] = None
+_review_service: ReviewService | None = None
 
 
 def get_review_service(

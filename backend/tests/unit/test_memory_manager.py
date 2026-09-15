@@ -14,7 +14,7 @@ from backend.tests.conftest import ensure_session
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def manager(tmp_db_path: str) -> MemoryManager:
     db = Database(db_path=tmp_db_path)
     db.init_db()

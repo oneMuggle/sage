@@ -50,7 +50,7 @@ class SkillDraftStore:
         self,
         draft_id: str,
         status: str,
-        reviewed_by: Optional[str] = None,
+        reviewed_by: str | None = None,
     ) -> None:
         """Transition a draft's status and record review metadata.
 
@@ -69,7 +69,7 @@ class SkillDraftStore:
 
     # ── read ──────────────────────────────────────────────────
 
-    def get(self, draft_id: str) -> Optional[SkillDraft]:
+    def get(self, draft_id: str) -> SkillDraft | None:
         """Return a single draft by ID, or ``None`` if not found."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
@@ -138,7 +138,7 @@ class SkillDraftStore:
 _skill_draft_store: Optional["SkillDraftStore"] = None
 
 
-def get_skill_draft_store(db_path: Optional[str] = None) -> "SkillDraftStore":
+def get_skill_draft_store(db_path: str | None = None) -> "SkillDraftStore":
     """Return the global SkillDraftStore singleton.
 
     Args:

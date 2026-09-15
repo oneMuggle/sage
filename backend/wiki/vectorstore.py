@@ -7,7 +7,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from .files import secure_atomic_write_file, secure_read_text
 
@@ -36,7 +36,7 @@ class SearchHit:
 class VectorStore:
     """JSON 向量存储。"""
 
-    def __init__(self, storage_path: Path, dim: int, records: Optional[List[ChunkRecord]] = None):
+    def __init__(self, storage_path: Path, dim: int, records: List[ChunkRecord] | None = None):
         self.storage_path = storage_path
         self.dim = dim
         self.records: List[ChunkRecord] = records or []

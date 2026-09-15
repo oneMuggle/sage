@@ -29,7 +29,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from .browser_ws import ws_close, ws_connect, ws_recv_text, ws_send_text
 
@@ -81,7 +81,7 @@ def _windows_candidates() -> List[Path]:
     return [Path(base) / rel for base in bases if base for rel in (chrome_rel, edge_rel)]
 
 
-def discover_browser_executable() -> Optional[str]:
+def discover_browser_executable() -> str | None:
     """按 环境变量 → 平台路径 → PATH 顺序找 Chromium 系浏览器。"""
     env_override = os.environ.get("SAGE_BROWSER_PATH")
     if env_override and Path(env_override).is_file():
@@ -99,7 +99,7 @@ def discover_browser_executable() -> Optional[str]:
     return _darwin_candidates()
 
 
-def _darwin_candidates() -> Optional[str]:
+def _darwin_candidates() -> str | None:
     import platform
 
     if platform.system() != "Darwin":
@@ -147,7 +147,7 @@ class BrowserSessionManager:
             )
         self._sessions[session.browser_id] = session
 
-    def get(self, browser_id: Optional[str]) -> Optional[BrowserSession]:
+    def get(self, browser_id: str | None) -> BrowserSession | None:
         """按 id 取会话；None → 唯一"用户"实例（单实例场景免传 id）。
 
         保留 id（RESERVED_BROWSER_ID，web_fetch 渲染池）不算用户实例。
@@ -163,7 +163,7 @@ class BrowserSessionManager:
             return user_sessions[0]
         return None
 
-    def require(self, browser_id: Optional[str]) -> BrowserSession:
+    def require(self, browser_id: str | None) -> BrowserSession:
         session = self.get(browser_id)
         if session is None:
             if browser_id:
@@ -176,7 +176,7 @@ class BrowserSessionManager:
             raise BrowserCDPError("浏览器进程已退出（可能被用户关闭）——请重新 browser_launch")
         return session
 
-    def remove(self, browser_id: str) -> Optional[BrowserSession]:
+    def remove(self, browser_id: str) -> BrowserSession | None:
         return self._sessions.pop(browser_id, None)
 
     def count(self) -> int:
@@ -240,7 +240,7 @@ def browser_downloads_root() -> Path:
     return root
 
 
-_manager: Optional[BrowserSessionManager] = None
+_manager: BrowserSessionManager | None = None
 
 
 def get_browser_manager() -> BrowserSessionManager:
@@ -285,7 +285,7 @@ def _build_launch_command(
 
 def launch_browser(
     headless: bool = True,
-    browser_id: Optional[str] = None,
+    browser_id: str | None = None,
     persistent: bool = False,
     profile_name: str = "default",
 ) -> BrowserSession:
@@ -388,7 +388,7 @@ class _CDPConnection:
         self._next_id = 0
 
     def command(
-        self, method: str, params: Optional[Dict[str, Any]] = None, session_id: Optional[str] = None
+        self, method: str, params: Dict[str, Any] | None = None, session_id: str | None = None
     ) -> Dict[str, Any]:
         self._next_id += 1
         message: Dict[str, Any] = {"id": self._next_id, "method": method, "params": params or {}}
@@ -423,7 +423,7 @@ def _list_page_targets(session: BrowserSession) -> List[Dict[str, Any]]:
     return [info for info in result.get("targetInfos", []) if info.get("type") == "page"]
 
 
-def ensure_page_target(session: BrowserSession, target_id: Optional[str] = None) -> str:
+def ensure_page_target(session: BrowserSession, target_id: str | None = None) -> str:
     """解析可用页面目标；无页面 / 指定目标不存在时新建 about:blank 页。"""
     pages = _list_page_targets(session)
     if target_id:
@@ -446,8 +446,8 @@ def ensure_page_target(session: BrowserSession, target_id: Optional[str] = None)
 def cdp_command(
     session: BrowserSession,
     method: str,
-    params: Optional[Dict[str, Any]] = None,
-    target_id: Optional[str] = None,
+    params: Dict[str, Any] | None = None,
+    target_id: str | None = None,
 ) -> Dict[str, Any]:
     """向指定页面目标发送一条 CDP 命令并返回 result。
 
@@ -492,7 +492,7 @@ STEALTH_SCRIPT = """
 
 
 def apply_stealth(
-    session: BrowserSession, target_id: Optional[str] = None, command: Any = None
+    session: BrowserSession, target_id: str | None = None, command: Any = None
 ) -> bool:
     """在目标页注入 ``STEALTH_SCRIPT``（新文档创建前执行）。失败返回 False，不抛。
 

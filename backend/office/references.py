@@ -18,7 +18,7 @@ journal 子系统（#584）后续均可复用。不引入 citeproc-py / bibtexpa
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import List
 
 from .models import ReferenceSpec
 
@@ -65,7 +65,7 @@ def format_authors(ref: ReferenceSpec, *, style: str) -> str:
     return ", ".join(authors)
 
 
-def _seg(*parts: Optional[str]) -> str:
+def _seg(*parts: str | None) -> str:
     """按序拼接非空片段（前置分隔符已含在片段内）。"""
     return "".join(p for p in parts if p)
 

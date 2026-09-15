@@ -19,7 +19,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture()
+@pytest.fixture
 def check():
     return CondaEnvCheck()
 

@@ -221,7 +221,7 @@ def _build_adapter_with_mocked_client() -> Tuple[HttpxLLMAdapter, AsyncMock]:
     return adapter, chat_mock
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_delegates_to_llmclient_with_dict_messages():
     """``chat`` 把 domain 消息转为 dict 后传给 ``LLMClient.chat``。"""
     adapter, chat_mock = _build_adapter_with_mocked_client()
@@ -242,7 +242,7 @@ async def test_chat_delegates_to_llmclient_with_dict_messages():
     assert reply.content == "hi back"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_passes_tools_through_to_llmclient():
     """``tools`` 参数透传到 LLMClient.chat。"""
     adapter, chat_mock = _build_adapter_with_mocked_client()
@@ -254,7 +254,7 @@ async def test_chat_passes_tools_through_to_llmclient():
     assert chat_mock.call_args.kwargs["tools"] == tools
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_passes_string_tool_choice_through_to_llmclient():
     """``tool_choice`` 为 str 时, 透传。"""
     adapter, chat_mock = _build_adapter_with_mocked_client()
@@ -266,7 +266,7 @@ async def test_chat_passes_string_tool_choice_through_to_llmclient():
     assert chat_mock.call_args.kwargs["tool_choice"] == "required"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_dict_tool_choice_safely_falls_back_to_none():
     """``tool_choice`` 为 dict 时, 降级为 ``None``（LLMClient 暂不识 dict 形式）。"""
     adapter, chat_mock = _build_adapter_with_mocked_client()
@@ -279,7 +279,7 @@ async def test_chat_dict_tool_choice_safely_falls_back_to_none():
     assert chat_mock.call_args.kwargs["tool_choice"] is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_converts_response_with_tool_calls_to_domain():
     """``chat`` 端到端：LLMResponse 含 tool_calls → domain.Message 含 ToolCall 列表。"""
     adapter, _ = _build_adapter_with_mocked_client()
@@ -297,7 +297,7 @@ async def test_chat_converts_response_with_tool_calls_to_domain():
     assert reply.tool_calls[0].args == {"x": 1}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_via_real_mock_fixture_returns_domain_message(mock_llm_ok):
     """端到端：使用 P0 的 ``mock_llm_ok`` 走完真实 HTTP mock 路径, 拿到 ``domain.Message``。"""
     adapter = HttpxLLMAdapter(
@@ -320,7 +320,7 @@ async def test_chat_via_real_mock_fixture_returns_domain_message(mock_llm_ok):
 # ============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_stream_yields_chunks_from_underlying_client():
     """``chat_stream`` 透传底层 async generator 的 chunk。"""
     adapter = HttpxLLMAdapter(
@@ -342,7 +342,7 @@ async def test_chat_stream_yields_chunks_from_underlying_client():
     assert chunks == ["Hello", " ", "world"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_stream_converts_domain_messages_to_dicts():
     """``chat_stream`` 把 domain 消息转为 dict 再传给 LLMClient。"""
     adapter = HttpxLLMAdapter(
@@ -386,7 +386,7 @@ async def test_chat_stream_converts_domain_messages_to_dicts():
     ]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_stream_via_real_mock_fixture_yields_chunks():
     """端到端：用 P0 mock fixture + httpx ``stream`` mock 走完 stream 路径。"""
     adapter = HttpxLLMAdapter(
@@ -431,7 +431,7 @@ async def test_chat_stream_via_real_mock_fixture_yields_chunks():
 # ============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_aclose_delegates_to_underlying_llmclient():
     """``aclose`` 调用 ``LLMClient.close``。"""
     adapter = HttpxLLMAdapter(

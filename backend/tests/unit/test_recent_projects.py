@@ -24,7 +24,7 @@ from backend.storage.recent_projects import (
 )
 
 
-@pytest.fixture()
+@pytest.fixture
 def isolated_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Redirect user data dir to tmp_path (legacy JSON import source)."""
     monkeypatch.setenv("SAGE_USER_DATA_DIR", str(tmp_path))

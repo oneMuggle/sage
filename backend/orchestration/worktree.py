@@ -14,14 +14,14 @@ import asyncio
 import logging
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 logger = logging.getLogger(__name__)
 
 _GIT_TIMEOUT_S = 30
 
 
-def _run_git(args: List[str], cwd: Optional[Path] = None) -> bool:
+def _run_git(args: List[str], cwd: Path | None = None) -> bool:
     try:
         proc = subprocess.run(
             ["git"] + args,
@@ -84,7 +84,7 @@ def remove_worktree(dest: Path) -> None:
         logger.warning("worktree 移除异常（将遗留目录）: %s: %s", dest, exc)
 
 
-def prune_worktrees(cwd: Optional[Path] = None) -> bool:
+def prune_worktrees(cwd: Path | None = None) -> bool:
     """在 ``cwd`` 上执行 ``git worktree prune``，清掉悬空的 worktree 管理元数据。
 
     场景（安全修复波 2026-08-23）：崩溃残留的 worktree 目录被直接 rmtree 后，

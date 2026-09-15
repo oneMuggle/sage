@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 @dataclass
@@ -50,8 +50,8 @@ class ComputeRequest:
 
     operation: str
     params: Dict[str, Any] = field(default_factory=dict)
-    timeout_ms: Optional[int] = None
-    request_id: Optional[str] = None
+    timeout_ms: int | None = None
+    request_id: str | None = None
 
 
 class ComputeErrorType(str, Enum):
@@ -95,9 +95,9 @@ class ComputeResult:
     """
 
     success: bool
-    output: Optional[Dict[str, Any]] = None
-    raw_stdout: Optional[str] = None
-    raw_stderr: Optional[str] = None
-    exit_code: Optional[int] = None
-    duration_ms: Optional[int] = None
-    error: Optional[ComputeError] = None
+    output: Dict[str, Any] | None = None
+    raw_stdout: str | None = None
+    raw_stderr: str | None = None
+    exit_code: int | None = None
+    duration_ms: int | None = None
+    error: ComputeError | None = None

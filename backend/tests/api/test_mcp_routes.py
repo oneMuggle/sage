@@ -169,7 +169,7 @@ class TestAddServer:
         stored = json.loads(_config_path(tmp_path).read_text(encoding="utf-8"))
         assert [s["name"] for s in stored["servers"]] == ["srv"]
 
-    @pytest.mark.parametrize("bad_name", ["UPPER", "bad name"])
+    @pytest.mark.parametriz()e("bad_name", ["UPPER", "bad name"])
     def test_add_invalid_name_slug_400(self, client, bad_name):
         # passes pydantic shape checks, fails the slug regex → semantic 400
         resp = client.post(

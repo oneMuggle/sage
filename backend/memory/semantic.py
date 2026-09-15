@@ -18,7 +18,7 @@ import logging
 import sqlite3
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.data.database import (
     backfill_semantic_fts,
@@ -99,9 +99,9 @@ class SemanticMemory:
     def save(
         self,
         content: str,
-        summary: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        session_id: Optional[str] = None,
+        summary: str | None = None,
+        tags: List[str] | None = None,
+        session_id: str | None = None,
     ) -> str:
         """
         保存语义记忆
@@ -177,8 +177,8 @@ class SemanticMemory:
         self,
         query: str,
         limit: int = 10,
-        tags: Optional[List[str]] = None,
-        session_id: Optional[str] = None,
+        tags: List[str] | None = None,
+        session_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         """
         搜索语义记忆
@@ -209,8 +209,8 @@ class SemanticMemory:
         self,
         query: str,
         limit: int = 10,
-        tags: Optional[List[str]] = None,
-        session_id: Optional[str] = None,
+        tags: List[str] | None = None,
+        session_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         """
         走 FTS5 全文索引搜索（jieba 分词 + OR MATCH）。
@@ -277,8 +277,8 @@ class SemanticMemory:
         self,
         query: str,
         limit: int = 10,
-        tags: Optional[List[str]] = None,
-        session_id: Optional[str] = None,
+        tags: List[str] | None = None,
+        session_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         """
         LIKE + jieba 回退搜索（FTS 索引不可用或无命中时使用）
@@ -344,7 +344,7 @@ class SemanticMemory:
         return results
 
     def get_recent(
-        self, limit: int = 20, session_id: Optional[str] = None
+        self, limit: int = 20, session_id: str | None = None
     ) -> List[Dict[str, Any]]:
         """
         获取最近的语义记忆
@@ -479,7 +479,7 @@ class SemanticMemory:
         conn.commit()
         return deleted
 
-    def count(self, session_id: Optional[str] = None) -> int:
+    def count(self, session_id: str | None = None) -> int:
         """
         获取记忆总数（批次三 step 5：可按 session 过滤）
 

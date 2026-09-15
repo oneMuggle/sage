@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import builtins
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.domain.risk import RiskClass, RiskOverrides, classify as classify_risk
 
@@ -104,8 +104,8 @@ class ToolRegistry:
 
     def get_schemas_for_llm(
         self,
-        context: Optional[ToolExecutionContext] = None,
-        allowed_tools: Optional[List[str]] = None,
+        context: ToolExecutionContext | None = None,
+        allowed_tools: List[str] | None = None,
     ) -> builtins.list[Dict[str, Any]]:
         """
         获取适合 LLM 调用的工具 Schema 列表
@@ -192,7 +192,7 @@ class ToolRegistry:
         self,
         name: str,
         metadata: Any = None,
-        overrides: Optional[RiskOverrides] = None,
+        overrides: RiskOverrides | None = None,
     ) -> RiskClass:
         """
         解析工具的有效风险（A1）

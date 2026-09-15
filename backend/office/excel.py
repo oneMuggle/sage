@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 from openpyxl import load_workbook
@@ -140,7 +140,7 @@ def _extract_sheet_formulas(ws_formula, ws_values) -> tuple[List[str], bool]:
 
 
 def _apply_local_eval(
-    entries: List[str], resolved: Optional[Dict[str, Any]]
+    entries: List[str], resolved: Dict[str, Any] | None
 ) -> List[str]:
     """R5（Round2）：把本地求值结果回填进缺缓存值的公式条目。
 
@@ -166,8 +166,8 @@ def _build_xlsx_summary(
     *,
     document_id: str,
     workspace_path: str,
-    generated_filename: Optional[str],
-    original_filename: Optional[str],
+    generated_filename: str | None,
+    original_filename: str | None,
     status: OfficeDocStatus,
     sheet_count: int,
 ) -> OfficeDocumentSummary:
@@ -195,10 +195,10 @@ def _build_xlsx_summary(
 def read_xlsx(
     file_path: Path,
     *,
-    document_id: Optional[str] = None,
+    document_id: str | None = None,
     workspace_path: str = "",
-    generated_filename: Optional[str] = None,
-    original_filename: Optional[str] = None,
+    generated_filename: str | None = None,
+    original_filename: str | None = None,
     include_formulas: bool = False,
 ) -> OfficeExcelReadResult:
     """Read a .xlsx file and return its structured content.
@@ -254,11 +254,11 @@ def read_xlsx(
     # R5（Round2）：先收集各 sheet 的公式条目；任一 sheet 存在缺缓存值的
     # 公式时，才用 formulas 库做一次整簿本地求值（evaluate_workbook 内部
     # 全 fail-safe，失败返回 None → 行为与不引入求值时完全一致）。
-    collected: List[Tuple[str, List[List[str]], int, int, Optional[List[str]]]] = []
+    collected: List[Tuple[str, List[List[str]], int, int, List[str] | None]] = []
     any_cache_missing = False
     for ws in wb.worksheets:
         rows, max_row, max_col = _extract_sheet_rows(ws)
-        entries: Optional[List[str]] = None
+        entries: List[str] | None = None
         if wb_formulas is not None and ws.title in wb_formulas.sheetnames:
             formula_entries, sheet_cache_missing = _extract_sheet_formulas(
                 wb_formulas[ws.title], ws
@@ -269,7 +269,7 @@ def read_xlsx(
                     any_cache_missing = True
         collected.append((ws.title, rows, max_row, max_col, entries))
 
-    evaluated: Optional[Dict[str, Dict[str, Any]]] = None
+    evaluated: Dict[str, Dict[str, Any]] | None = None
     if any_cache_missing:
         from .excel_eval import evaluate_workbook
 
@@ -277,8 +277,8 @@ def read_xlsx(
 
     sheets: List[ExcelSheetContent] = []
     for title, rows, max_row, max_col, entries in collected:
-        formulas_out: Optional[List[str]] = None
-        note: Optional[str] = None
+        formulas_out: List[str] | None = None
+        note: str | None = None
         if entries:
             if evaluated:
                 formulas_out = _apply_local_eval(entries, evaluated.get(title))
@@ -623,7 +623,7 @@ def _apply_print_setup(writer, req) -> None:
             logger_.warning("打印设置写入失败，跳过: %s (%s)", exc, sheet_spec.name)
 
 
-def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
+def generate_xlsx(req, output_dir: str | None = None) -> Path:
     """Generate a .xlsx file from structured Pydantic input.
 
     ``output_dir`` 提供时写入该任意目录（信任的用户指定目录，经

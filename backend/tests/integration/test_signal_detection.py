@@ -30,7 +30,7 @@ def _cleanup_singletons():
     reset_usage_store()
 
 
-@pytest.fixture()
+@pytest.fixture
 def temp_db_path():
     """Create a temporary SQLite DB with the skill_usage table."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:

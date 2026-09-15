@@ -26,7 +26,7 @@ def client():
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_sends_tools_when_provided(client):
     """tools 参数应传递到请求体。"""
     mock_response = AsyncMock()
@@ -64,7 +64,7 @@ async def test_chat_sends_tools_when_provided(client):
         assert body["tool_choice"] == "auto"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_omits_tools_when_none(client):
     """tools=None 时请求体不应包含 tools 字段。"""
     mock_response = AsyncMock()

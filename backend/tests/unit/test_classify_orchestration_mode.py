@@ -21,21 +21,21 @@ def _client_returning(text: str):
     return client
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_force_multi_short_circuits():
     client = _client_returning("single")  # 即使 LLM 说 single，force 也赢
     assert await _classify_orchestration_mode("hi", "force_multi", client) == "multi"
     client.complete.assert_not_awaited()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_force_single_short_circuits():
     client = _client_returning("multi")
     assert await _classify_orchestration_mode("hi", "force_single", client) == "single"
     client.complete.assert_not_awaited()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_auto_passes_through_multi():
     client = _client_returning("multi")
     assert (
@@ -44,25 +44,25 @@ async def test_auto_passes_through_multi():
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_auto_passes_through_single():
     client = _client_returning("single")
     assert await _classify_orchestration_mode("今天天气怎么样", "auto", client) == "single"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_auto_no_client_falls_back_single():
     assert await _classify_orchestration_mode("复杂任务", "auto", None) == "single"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_auto_llm_error_falls_back_single():
     client = MagicMock()
     client.complete = AsyncMock(side_effect=RuntimeError("llm down"))
     assert await _classify_orchestration_mode("复杂任务", "auto", client) == "single"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_auto_handles_braces_in_user_message():
     """回归测试：用户消息含字面量 { / } 时不应触发 .format() KeyError。
 

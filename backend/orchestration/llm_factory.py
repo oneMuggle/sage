@@ -24,7 +24,7 @@ missing keys, snake_case residue) yields ``None`` rather than raising.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = "gpt-3.5-turbo"
 
 
-def load_llm_config_from_settings() -> Optional[Dict[str, Any]]:
+def load_llm_config_from_settings() -> Dict[str, Any] | None:
     """Resolve an ``LLMConfig``-compatible dict from persisted app_settings.
 
     Returns:
@@ -106,7 +106,7 @@ def load_llm_config_from_settings() -> Optional[Dict[str, Any]]:
 
 
 def _endpoint_has_required_api_key(
-    endpoint: Dict[str, Any], *, protocol: Optional[str] = None
+    endpoint: Dict[str, Any], *, protocol: str | None = None
 ) -> bool:
     """Return whether an endpoint satisfies its protocol's auth contract."""
     endpoint_protocol = protocol or endpoint.get("protocol") or "openai-compatible"
@@ -118,7 +118,7 @@ def _endpoint_has_required_api_key(
 _SUPPORTED_PROTOCOLS = frozenset({"anthropic", "gemini", "ollama", "openai-compatible"})
 
 
-def resolve_model_from_settings() -> Optional[str]:  # noqa: PLR0911
+def resolve_model_from_settings() -> str | None:  # noqa: PLR0911
     """Resolve the selected model, falling back to the endpoint's discovered model.
 
     The endpoint and model are resolved together so callers cannot submit a
@@ -191,7 +191,7 @@ def resolve_model_from_settings() -> Optional[str]:  # noqa: PLR0911
         return None
 
 
-def build_llm_client_from_settings() -> Optional[Any]:
+def build_llm_client_from_settings() -> Any | None:
     """Build an ``LLMClient`` from persisted settings, or ``None``.
 
     Never raises — construction failures are logged and return ``None`` so
@@ -245,8 +245,8 @@ def load_session_model_overrides() -> Dict[str, str]:
 
 
 def resolve_chat_model(
-    session_id: Optional[str], profile_model: Optional[str] = None
-) -> Optional[str]:
+    session_id: str | None, profile_model: str | None = None
+) -> str | None:
     """按「会话覆盖 > profile 声明（非占位）」解析模型；都不命中返回 None。
 
     返回 None 表示沿用全局选择（app_settings.modelSelections）——
@@ -266,9 +266,9 @@ def resolve_chat_model(
 
 
 def load_llm_config_for_chat(
-    session_id: Optional[str] = None,
-    profile_model: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+    session_id: str | None = None,
+    profile_model: str | None = None,
+) -> Dict[str, Any] | None:
     """全局端点配置 + 会话/profile 模型覆盖 → LLMConfig 兼容 dict。
 
     端点（api_key/base_url/provider）恒取全局选择 —— 会话级只覆盖模型名，

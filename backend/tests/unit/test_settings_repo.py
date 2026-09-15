@@ -22,7 +22,7 @@ def test_keys_whitelist():
     assert "current_session_id" in SettingsRepository.KEYS
 
 
-@pytest.mark.parametrize("key", ["font_ui", "font_code", "font_size_ui", "font_size_code"])
+@pytest.mark.parametriz()e("key", ["font_ui", "font_code", "font_size_ui", "font_size_code"])
 def test_font_keys_whitelist(key):
     assert key in SettingsRepository.KEYS
 

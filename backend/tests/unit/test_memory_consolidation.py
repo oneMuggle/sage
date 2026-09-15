@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pytest
 
@@ -25,7 +25,7 @@ pytestmark = pytest.mark.unit
 class _FakeLLM:
     """最小 LLMClient stub。"""
 
-    def __init__(self, response: Optional[str] = "summary text") -> None:
+    def __init__(self, response: str | None = "summary text") -> None:
         self._response = response
         self.calls: List[str] = []
 
@@ -39,7 +39,7 @@ class _ErrorLLM:
         raise RuntimeError("boom")
 
 
-@pytest.fixture()
+@pytest.fixture
 def manager(tmp_db_path: str) -> MemoryManager:
     db = Database(db_path=tmp_db_path)
     db.init_db()

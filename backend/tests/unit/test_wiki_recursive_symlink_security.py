@@ -49,7 +49,7 @@ def test_graph_skips_symlink_files_and_directories(tmp_path: Path) -> None:
     assert [node.id for node in graph.nodes] == ["wiki/legal.md"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_does_not_read_symlinked_wiki_page(tmp_path: Path) -> None:
     project, _outside = _make_wiki_tree(tmp_path)
 

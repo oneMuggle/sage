@@ -29,7 +29,7 @@ import time
 import uuid
 import weakref
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 from sage_core import LLMError, Message, Role, ToolCall
 from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
@@ -120,12 +120,12 @@ class ChatService:
         storage: StoragePort,
         metrics: MetricPort,
         events: EventPort,
-        memory: Optional[MemoryPort] = None,  # Optional for backward compatibility
-        tool_policy: Optional[ToolPolicy] = None,  # M2 工具调用预算守卫
-        permission_preset: Optional[PermissionPreset] = None,  # M3 权限预设
-        permission_allowed_paths: Optional[List[str]] = None,  # M3 允许的路径
-        permission_denied_tools: Optional[List[str]] = None,  # M3 黑名单
-        wake_store: Optional[WakeStore] = None,  # A4 Suspend-Resume 唤醒仓储
+        memory: MemoryPort | None = None,  # Optional for backward compatibility
+        tool_policy: ToolPolicy | None = None,  # M2 工具调用预算守卫
+        permission_preset: PermissionPreset | None = None,  # M3 权限预设
+        permission_allowed_paths: List[str] | None = None,  # M3 允许的路径
+        permission_denied_tools: List[str] | None = None,  # M3 黑名单
+        wake_store: WakeStore | None = None,  # A4 Suspend-Resume 唤醒仓储
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -204,7 +204,7 @@ class ChatService:
         self,
         session_id: str,
         user_message: Message,
-        extra_system_messages: Optional[List[Message]] = None,
+        extra_system_messages: List[Message] | None = None,
     ) -> List[Message]:
         """执行一轮对话（含 ReAct 工具调用——PG2.9 阶段只做单轮）。
 
@@ -244,7 +244,7 @@ class ChatService:
         session_id: str,
         user_message: Message,
         span: Any,
-        extra_system_messages: Optional[List[Message]] = None,
+        extra_system_messages: List[Message] | None = None,
     ) -> List[Message]:
         """``run_turn`` 的实际实现，调用方需已开好 OTel span。"""
         # M1: run-lifecycle 事件作用域（稳定 run_id + 单调 seq）
@@ -260,7 +260,7 @@ class ChatService:
         )
 
         # 1.5) 检索相关记忆 (Memory Integration)
-        memory_context: Optional[MemoryContext] = None
+        memory_context: MemoryContext | None = None
         if self.memory:
             try:
                 memory_context = await self.memory.retrieve(
@@ -613,7 +613,7 @@ class ChatService:
         seconds: float,
         *,
         note: str = "",
-    ) -> Optional[Wake]:
+    ) -> Wake | None:
         """挂起会话，``seconds`` 秒后由 WakeScheduler 唤醒。
 
         agent 在长轮询 / 等待外部副作用时调用：注册 TIMER wake 后让出
@@ -637,7 +637,7 @@ class ChatService:
         when: Union[datetime, str],
         *,
         note: str = "",
-    ) -> Optional[Wake]:
+    ) -> Wake | None:
         """挂起会话，直到 ISO-8601 时间戳 ``when``（naive 时间按 UTC 解释）。
 
         过去的时间戳合法：wake 将在下一轮 scheduler tick 立即被消费。
@@ -663,7 +663,7 @@ class ChatService:
         job_id: str,
         *,
         note: str = "",
-    ) -> Optional[Wake]:
+    ) -> Wake | None:
         """挂起会话，直到后台任务 ``job_id`` 完成。
 
         任务退出路径调 ``WakeStore.complete_job(job_id)`` 把该 wake 标记
@@ -678,7 +678,7 @@ class ChatService:
             Wake.create(session_id, WakeKind.COMPLETION, job_id=str(job_id), note=note)
         )
 
-    async def _register_wake(self, wake: Wake) -> Optional[Wake]:
+    async def _register_wake(self, wake: Wake) -> Wake | None:
         """落库 wake + 审计事件 + 计数。未装配 wake_store 时降级为 no-op。"""
         if self.wake_store is None:
             logger.warning(
@@ -704,8 +704,8 @@ class ChatService:
     # ------------------------------------------------------------------ #
 
     async def _retry_empty_response(
-        self, history: List[Message], llm_tools: Optional[List[Dict[str, Any]]]
-    ) -> Optional[Message]:
+        self, history: List[Message], llm_tools: List[Dict[str, Any]] | None
+    ) -> Message | None:
         """空响应重试：注入 system 提示后再试至多 N 次（Round 14）。
 
         重试上限读 SAGE_EMPTY_RESPONSE_MAX_RETRIES（切片 B：与 legacy 统一，
@@ -837,7 +837,7 @@ class ChatService:
 # --------------------------------------------------------------------------- #
 
 
-def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> str:
+def _skill_activation_block(message: str, skills: SkillPort | None) -> str:
     """计算本轮用户消息自动激活的技能上下文块（含前导换行，可直接追加）。
 
     结构性探测：仅当 skills adapter 实现 ``auto_activate(message)`` 扩展
@@ -868,11 +868,11 @@ def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> str:
 
 
 async def extract_and_store_memory(
-    memory_port: Optional[MemoryPort],
+    memory_port: MemoryPort | None,
     extractor: Any,
     user_text: str,
     assistant_text: str,
-    session_id: Optional[str],
+    session_id: str | None,
     enabled: bool,
 ) -> int:
     """从一轮对话中提取原子事实并写入记忆系统（best-effort，绝不外抛）。

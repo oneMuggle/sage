@@ -15,7 +15,7 @@ from __future__ import annotations
 import ast
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 _DIAGNOSABLE_SUFFIXES = frozenset({".py", ".pyw", ".json"})
 
 
-def _syntax_check(path: Path) -> Optional[Dict[str, Any]]:
+def _syntax_check(path: Path) -> Dict[str, Any] | None:
     """对 Python/JSON 文件做语法检查；返回诊断 dict 或 None（无问题/不适用）。
 
     F-2 (round5 批次 F): ``.json`` 走 stdlib ``json.loads``——配置/manifest
@@ -56,7 +56,7 @@ def _syntax_check(path: Path) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _json_check(path: Path) -> Optional[Dict[str, Any]]:
+def _json_check(path: Path) -> Dict[str, Any] | None:
     """JSON 语法检查（stdlib json, 零依赖）。"""
     import json
 
@@ -82,8 +82,8 @@ def _json_check(path: Path) -> Optional[Dict[str, Any]]:
 
 
 def attach_diagnostics(
-    content: Optional[Dict[str, Any]], file_path: str
-) -> Optional[Dict[str, Any]]:
+    content: Dict[str, Any] | None, file_path: str
+) -> Dict[str, Any] | None:
     """把写后诊断附加到成功的工具结果 content；返回原 dict（可能带新字段）。
 
     失败静默 —— 诊断是锦上添花，绝不能让写文件本身报错。

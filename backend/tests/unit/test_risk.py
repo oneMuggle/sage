@@ -63,17 +63,17 @@ class TestRiskClass:
 class TestClassifyBaseTable:
     """classify 按名兜底表测试套件"""
 
-    @pytest.mark.parametrize("name", sorted(WRITE_TOOLS))
+    @pytest.mark.parametriz()e("name", sorted(WRITE_TOOLS))
     def test_builtin_write_tools(self, name):
         """内置写工具 → WRITE_LOCAL"""
         assert classify(name) is RiskClass.WRITE_LOCAL
 
-    @pytest.mark.parametrize("name", sorted(SHELL_TOOLS))
+    @pytest.mark.parametriz()e("name", sorted(SHELL_TOOLS))
     def test_builtin_shell_tools(self, name):
         """内置 shell 工具 → EXEC"""
         assert classify(name) is RiskClass.EXEC
 
-    @pytest.mark.parametrize("name", sorted(EXTERNAL_TOOLS))
+    @pytest.mark.parametriz()e("name", sorted(EXTERNAL_TOOLS))
     def test_builtin_external_tools(self, name):
         """内置网络工具 → EXTERNAL"""
         assert classify(name) is RiskClass.EXTERNAL

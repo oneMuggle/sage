@@ -57,7 +57,7 @@ def _git(*args: str, cwd: str) -> None:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def git_repo(tmp_path):
     d = tmp_path / "repo"
     d.mkdir()
@@ -72,7 +72,7 @@ def git_repo(tmp_path):
     return d
 
 
-@pytest.fixture()
+@pytest.fixture
 def temp_db():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         tmp_path = tmp.name
@@ -83,7 +83,7 @@ def temp_db():
         os.unlink(tmp_path)
 
 
-@pytest.fixture()
+@pytest.fixture
 def registries(temp_db):
     db, _ = temp_db
     lane_repo = LaneRepository()

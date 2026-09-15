@@ -13,7 +13,7 @@
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from .base import BaseTool, ToolResult, ToolSchema
 from .todo_state import SessionStateStore, resolve_session_id
@@ -101,7 +101,7 @@ def validate_against_schema(data: Any, schema: Dict[str, Any]) -> List[str]:
 _structured_output_store = SessionStateStore()
 
 
-def get_last_structured_output(session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def get_last_structured_output(session_id: str | None = None) -> Dict[str, Any] | None:
     """读取某会话最后一次 structured_output 载荷。
 
     ``session_id=None`` → 取当前 ContextVar 上下文（无上下文 → 匿名桶）。

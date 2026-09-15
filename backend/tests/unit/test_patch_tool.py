@@ -16,7 +16,7 @@ from backend.tools.patch_tool import ApplyPatchTool
 pytestmark = [pytest.mark.unit]
 
 
-@pytest.fixture()
+@pytest.fixture
 def workspace(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     ws.mkdir()

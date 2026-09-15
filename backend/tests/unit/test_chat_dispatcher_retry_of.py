@@ -26,7 +26,7 @@ def _init_tmp_db(tmp_path, monkeypatch):
     db_mod.get_database().init_db()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_retry_of_resolves_failed_source(tmp_path, monkeypatch):
     """failed 源 → retry_of 生效；done 源 → 降级。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -60,7 +60,7 @@ async def test_retry_of_resolves_failed_source(tmp_path, monkeypatch):
     assert d._states["t3"].retry_of is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_retry_of_unknown_source_degrades(tmp_path, monkeypatch):
     _init_tmp_db(tmp_path, monkeypatch)
     queue = _make_queue()
@@ -153,7 +153,7 @@ def _drain_events(queue):
     return events
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_task_status_event_carries_retry_of(tmp_path, monkeypatch):
     """重派任务的 task_status 事件携带 retry_of；普通任务不带。"""
     _init_tmp_db(tmp_path, monkeypatch)

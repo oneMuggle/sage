@@ -23,7 +23,7 @@ import logging
 import threading
 from collections import OrderedDict
 from contextlib import suppress
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List
 
 from .context import current_tool_context
 
@@ -79,7 +79,7 @@ class SessionStateStore:
             self._buckets.move_to_end(session_id)
             return _shelter(self._buckets[session_id])
 
-    def clear(self, session_id: Optional[str] = None) -> None:
+    def clear(self, session_id: str | None = None) -> None:
         """清空指定桶；``session_id=None`` 清空全部（测试复位用）。"""
         with self._lock:
             if session_id is None:
@@ -162,7 +162,7 @@ class _NotifyingTodoStore(SessionStateStore):
             logger.debug("todo 持久化失败（忽略）session=%s: %s", session_id, exc)
 
     @staticmethod
-    def _load_persisted(session_id: str) -> Optional[List[Dict[str, Any]]]:
+    def _load_persisted(session_id: str) -> List[Dict[str, Any]] | None:
         if session_id == ANONYMOUS_SESSION_ID:
             return None
         try:
@@ -173,7 +173,7 @@ class _NotifyingTodoStore(SessionStateStore):
             logger.debug("todo 读取持久层失败（忽略）session=%s: %s", session_id, exc)
             return None
 
-    def clear(self, session_id: Optional[str] = None) -> None:
+    def clear(self, session_id: str | None = None) -> None:
         """清内存桶 + 删持久行 —— clear 语义是"处处遗忘"。
 
         B4 前只清内存；持久化后若不删行，get 会从 DB 复活已 clear 的清单。

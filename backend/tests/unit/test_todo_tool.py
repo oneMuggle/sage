@@ -94,7 +94,7 @@ def test_todo_write_uses_full_replace_semantics():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("bad_status", ["done", "PENDING", "", "in-progress"])
+@pytest.mark.parametriz()e("bad_status", ["done", "PENDING", "", "in-progress"])
 def test_todo_write_rejects_invalid_status(bad_status):
     """status 必须严格在 pending/in_progress/completed 枚举内。"""
     # Act
@@ -105,7 +105,7 @@ def test_todo_write_rejects_invalid_status(bad_status):
     assert "status" in result.error
 
 
-@pytest.mark.parametrize("bad_content", ["", "   ", 123, None])
+@pytest.mark.parametriz()e("bad_content", ["", "   ", 123, None])
 def test_todo_write_rejects_empty_or_nonstring_content(bad_content):
     """content 必须是非空字符串。"""
     # Act

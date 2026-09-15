@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 import struct
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import sqlite_vec
 
@@ -105,7 +105,7 @@ class VectorStore:
         except Exception as e:
             logger.warning(f"向量存储表创建失败: {e}")
 
-    def _existing_table_dimension(self, conn: Any) -> Optional[int]:
+    def _existing_table_dimension(self, conn: Any) -> int | None:
         """从 sqlite_master 读存量虚拟表的建表维度；表不存在返回 None"""
         try:
             row = conn.execute(
@@ -124,7 +124,7 @@ class VectorStore:
         memory_id: str,
         text: str,
         memory_type: str = "episodic",
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> None:
         """添加记忆向量
 
@@ -162,8 +162,8 @@ class VectorStore:
         self,
         query: str,
         top_k: int = 10,
-        memory_type: Optional[str] = None,
-        session_id: Optional[str] = None,
+        memory_type: str | None = None,
+        session_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         """向量相似度搜索
 

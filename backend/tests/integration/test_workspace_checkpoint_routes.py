@@ -75,7 +75,7 @@ def bound_session(conn: sqlite3.Connection, session_id: str, workspace: Path) ->
     return session_id
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_create_list_restore_roundtrip(
     client: httpx.AsyncClient, bound_session: str, workspace: Path
 ) -> None:
@@ -115,14 +115,14 @@ async def test_create_list_restore_roundtrip(
     assert pre_id in ids
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_list_empty(client: httpx.AsyncClient, bound_session: str) -> None:
     response = await client.get(f"/api/v1/sessions/{bound_session}/workspace/checkpoints")
     assert response.status_code == 200
     assert response.json()["checkpoints"] == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_restore_invalid_id_400(client: httpx.AsyncClient, bound_session: str) -> None:
     response = await client.post(
         f"/api/v1/sessions/{bound_session}/workspace/checkpoints/restore",
@@ -132,7 +132,7 @@ async def test_restore_invalid_id_400(client: httpx.AsyncClient, bound_session: 
     assert response.json()["detail"]["code"] == "invalid_checkpoint_id"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_restore_missing_snapshot_404(
     client: httpx.AsyncClient, bound_session: str
 ) -> None:
@@ -144,7 +144,7 @@ async def test_restore_missing_snapshot_404(
     assert response.json()["detail"]["code"] == "checkpoint_not_found"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_requires_binding(
     client: httpx.AsyncClient, session_id: str, workspace: Path
 ) -> None:

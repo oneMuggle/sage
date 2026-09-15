@@ -748,7 +748,7 @@ def test_redact_secrets_json_passthrough_for_non_string():
     assert redact_secrets_json("not-valid-json{") == "{}"
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "scalar_json",
     [
         '"api-token-secret"',

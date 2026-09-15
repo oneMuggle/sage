@@ -5,7 +5,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from .extract import (
     MAX_FILE_BYTES,
@@ -48,7 +48,7 @@ def _extract_zip_images(file_path: Path, prefix: str) -> List[Tuple[bytes, str]]
     return images
 
 
-def _parser_path(file_path: Path, opened_fd: Optional[int]) -> Path:
+def _parser_path(file_path: Path, opened_fd: int | None) -> Path:
     """Return a parser path bound to an already-open descriptor."""
     if opened_fd is None:
         return file_path
@@ -60,7 +60,7 @@ def _parser_path(file_path: Path, opened_fd: Optional[int]) -> Path:
 
 def parse_document(
     file_path: Path,
-    opened_fd: Optional[int] = None,
+    opened_fd: int | None = None,
     max_file_bytes: int = MAX_FILE_BYTES,
     max_seconds: float = MAX_PARSE_SECONDS,
 ) -> str:
@@ -206,7 +206,7 @@ def _parse_html(file_path: Path) -> str:
 
 
 def extract_images(
-    file_path: Path, opened_fd: Optional[int] = None
+    file_path: Path, opened_fd: int | None = None
 ) -> List[Tuple[bytes, str]]:
     """从文档中提取图片。
 

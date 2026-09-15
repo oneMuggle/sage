@@ -28,7 +28,7 @@ def _clean_settings():
     conn.commit()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_put_invalid_settings_uses_safe_structured_error_and_log(client, caplog):
     """Invalid protocol/path values never cross the HTTP or logging boundary."""
     import logging
@@ -59,7 +59,7 @@ async def test_put_invalid_settings_uses_safe_structured_error_and_log(client, c
     assert "error_type=invalid_settings_payload" in logs
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_get_translates_legacy_snake_to_camel(client):
     """DB 里手插一条 snake_case 行, GET 应翻译为 camelCase 返回。
 
@@ -92,7 +92,7 @@ async def test_get_translates_legacy_snake_to_camel(client):
     assert "k" not in resp.text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_put_settings_prevalidation_error_is_fixed_and_non_echoing(client):
     """Pydantic failures on legacy /settings never expose submitted values."""
     secret = "synthetic-secret-legacy"
@@ -118,7 +118,7 @@ async def test_put_settings_prevalidation_error_is_fixed_and_non_echoing(client)
         assert path not in response.text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_other_validation_routes_keep_fastapi_default_handler(client):
     """The scoped handler must not rewrite validation errors elsewhere."""
     response = await client.patch("/api/v1/agents/primary/toggle", json={"enabled": "secret"})
@@ -127,7 +127,7 @@ async def test_other_validation_routes_keep_fastapi_default_handler(client):
     assert response.json()["detail"][0]["type"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_get_returns_null_when_corrupted_json(client):
     """DB 行 JSON 损坏 → GET 返回 null (不抛 500)。"""
     conn = SettingsRepository().db.get_connection()
@@ -141,8 +141,8 @@ async def test_get_returns_null_when_corrupted_json(client):
     assert resp.json() is None
 
 
-@pytest.mark.asyncio()
-@pytest.mark.parametrize(
+@pytest.mark.asynci()o()
+@pytest.mark.parametriz()e(
     "dirty_settings",
     [
         {"endpoints": 1},
@@ -174,7 +174,7 @@ async def test_put_rejects_scalar_persisted_settings_containers_without_500(
     assert "/private/synthetic/path" not in resp.text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_put_with_unknown_field_rejected(client):
     """PUT 接受 schema 内字段 + 不在白名单的字段 → 400 + 详细信息。"""
     resp = await client.put(
@@ -190,7 +190,7 @@ async def test_put_with_unknown_field_rejected(client):
     assert "foo" in resp.text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_put_survives_legacy_residue_and_cleans_db(client):
     """existing 里残留前端已删字段 (compactMode/proxyMode 等) → PUT 不再 400,
     且首次成功保存后 DB 自动净化（残留字段被剥离, 合法字段保留）。"""
@@ -221,7 +221,7 @@ async def test_put_survives_legacy_residue_and_cleans_db(client):
     assert "tlsVersion" not in stored
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_put_with_legacy_compat_fields_does_not_400(client):
     """B1 回归: legacy PUT 含 api_base_url / api_key / model 三个 legacy compat 字段
     不再返回 400. 这 3 字段剥离后不进 DB, 但进审计 changed_fields.
@@ -257,7 +257,7 @@ async def test_put_with_legacy_compat_fields_does_not_400(client):
     assert persisted.get("streaming") is True
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_get_returns_null_when_top_level_is_list(client):
     """B2 回归: DB 行是合法 JSON list (脏数据) → GET 返回 null, 不抛 500.
     与 hex GET 行为对齐 (parity).
@@ -284,7 +284,7 @@ async def test_get_returns_null_when_top_level_is_list(client):
 # 4. GET /settings 把新字段原样回传 (canonicalizer 不破坏 camelCase)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_settings_migrates_legacy_snake_case_and_rejects_invalid_timezone(client):
     """Task 1: PUT /settings 接受合法 IANA timezone 并持久化; 非法 timezone → 422."""
     valid = await client.put(
@@ -303,7 +303,7 @@ async def test_settings_migrates_legacy_snake_case_and_rejects_invalid_timezone(
     assert invalid.status_code == 422
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_settings_accepts_protocol_model_id_local_model_path(client):
     """Task 1: EndpointConfig 新字段 protocol / modelId / localModelPath 应通过
     canonicalizer 白名单校验 + 存到 DB."""
@@ -334,7 +334,7 @@ async def test_settings_accepts_protocol_model_id_local_model_path(client):
     assert ep["localModelPath"] == "/Users/me/Models/qwen.gguf"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_settings_unknown_endpoint_field_still_rejected(client):
     """回归门禁: 新增白名单字段后, 老的「未知字段 → 400」行为不变."""
     resp = await client.put(
@@ -356,7 +356,7 @@ async def test_settings_unknown_endpoint_field_still_rejected(client):
     assert "category" in resp.text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_get_round_trips_new_fields_through_canonicalizer(client):
     """Task 1: GET /settings 把 DB 中的 timezone / protocol / modelId / localModelPath
     原样回传 (DB 已存 camelCase, canonicalizer 不需动作)."""
@@ -411,7 +411,7 @@ async def test_get_round_trips_new_fields_through_canonicalizer(client):
 _REDACTED_APIKEY = "sk-test-SECRET-do-not-leak-1f2e3d4c5b6a"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_get_settings_redacts_endpoint_api_key(client):
     """GET /settings 返回的 endpoint 必须把 apiKey 替换为非敏感标记, DB 原 key 不外泄."""
     SettingsRepository().set_json(
@@ -444,7 +444,7 @@ async def test_get_settings_redacts_endpoint_api_key(client):
     assert ep["baseUrl"] == "https://api.example.com/v1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_get_settings_reports_has_api_key_false_when_missing(client):
     """GET /settings 当 endpoint 没有 apiKey 时, hasApiKey 应为 False."""
     SettingsRepository().set_json(
@@ -472,7 +472,7 @@ async def test_get_settings_reports_has_api_key_false_when_missing(client):
     assert ep.get("hasApiKey") is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_get_settings_cleans_legacy_snake_case_residue(client):
     """GET /settings 收到 legacy DB 行残留 snake_case 字段时, 应清洗后回传."""
     SettingsRepository().set_json(
@@ -499,7 +499,7 @@ async def test_get_settings_cleans_legacy_snake_case_residue(client):
     assert "local_model_path" not in ep
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_get_preference_redacts_app_settings_payload(client):
     """GET /preferences/app_settings 应返回脱敏 payload, 不含明文 apiKey."""
     SettingsRepository().set_json(
@@ -530,8 +530,8 @@ async def test_get_preference_redacts_app_settings_payload(client):
     assert ep.get("hasApiKey") is True
 
 
-@pytest.mark.asyncio()
-@pytest.mark.parametrize(
+@pytest.mark.asynci()o()
+@pytest.mark.parametriz()e(
     "scalar_value",
     [
         json.dumps("api-token-secret"),
@@ -557,7 +557,7 @@ async def test_get_preference_scalar_app_settings_returns_safe_object(client, sc
     assert "api-token-secret" not in resp.text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_put_preference_app_settings_redacts_response_and_preserves_storage(client):
     payload = {
         "endpoints": [{"id": "ep", "apiKey": _REDACTED_APIKEY}],
@@ -597,7 +597,7 @@ async def test_put_preference_app_settings_redacts_response_and_preserves_storag
     assert stored["endpoints"][0]["apiKey"] == _REDACTED_APIKEY
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_put_preference_app_settings_invalid_json_never_echoes_body(client):
     synthetic = 'invalid-json synthetic-secret "token": "top-token"'
     SettingsRepository().set_json("app_settings", {"streaming": True}, category="general")
@@ -609,8 +609,8 @@ async def test_put_preference_app_settings_invalid_json_never_echoes_body(client
     assert SettingsRepository().get_json("app_settings") == {"streaming": True}
 
 
-@pytest.mark.asyncio()
-@pytest.mark.parametrize("invalid_value", ["[1, 2, 3]", "null", '"scalar"', "42"])
+@pytest.mark.asynci()o()
+@pytest.mark.parametriz()e("invalid_value", ["[1, 2, 3]", "null", '"scalar"', "42"])
 async def test_put_preference_app_settings_rejects_non_object_without_overwrite(
     client, invalid_value
 ):
@@ -624,7 +624,7 @@ async def test_put_preference_app_settings_rejects_non_object_without_overwrite(
     assert SettingsRepository().get_json("app_settings") == baseline
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_put_app_settings_does_not_echo_plaintext_api_key(client):
     """PUT /settings 响应 (LegacySettingsResponse) 不应包含明文 apiKey."""
     resp = await client.put(

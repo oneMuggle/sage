@@ -83,6 +83,6 @@ class TestGuardRelPath:
     def test_empty_rejected(self, tmp_path: os.PathLike) -> None:
         assert guard_rel_path(str(tmp_path), "") is not None
 
-    @pytest.mark.skipif(os.name != "nt", reason="Windows 盘符语义")
+    @pytest.mark.skipi()f(os.name != "nt", reason="Windows 盘符语义")
     def test_other_drive_rejected(self) -> None:
         assert guard_rel_path("C:\\repo", "D:\\evil.py") is not None

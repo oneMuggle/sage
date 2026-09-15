@@ -133,7 +133,7 @@ def test_analyze_non_body_placeholders_and_indices(tmp_path: Path):
             placeholders["footer_nested"].col_index) == (0, 0, 0)
 
 
-@pytest.mark.parametrize("control_location", ["body_table", "header", "footer"])
+@pytest.mark.parametriz()e("control_location", ["body_table", "header", "footer"])
 def test_analyze_jinja_control_in_all_stories(tmp_path: Path, control_location: str):
     doc = Document()
     if control_location == "body_table":

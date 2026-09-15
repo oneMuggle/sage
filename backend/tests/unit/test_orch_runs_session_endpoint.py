@@ -14,7 +14,7 @@ from backend.data.orch_run_repo import OrchRun, OrchRunRepository
 from backend.data.orch_task_repo import OrchTaskRepository
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(tmp_path, monkeypatch):
     db = tmp_path / "test.db"
     monkeypatch.setenv("SAGE_DB_PATH", str(db))

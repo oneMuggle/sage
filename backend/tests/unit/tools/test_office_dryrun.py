@@ -24,7 +24,6 @@ Fixtures mirror ``test_office_archive_tool.py`` / ``test_office_update_tool.py``
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 from unittest.mock import patch
 
 import pytest
@@ -67,7 +66,7 @@ def _make_doc(
     *,
     doc_id: str,
     workspace_path: str,
-    archived_at: Optional[int] = None,
+    archived_at: int | None = None,
     doc_type: OfficeDocType = OfficeDocType.WORD,
     original_filename: str = "上传.docx",
 ) -> OfficeDocumentSummary:

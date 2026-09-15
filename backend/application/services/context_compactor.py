@@ -54,7 +54,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Tuple
 
 from backend.application.services.branch_summarizer import BranchSummarizer
 
@@ -151,7 +151,7 @@ class ContextCompactor:
         context_window: int = 131072,
         compact_threshold_ratio: float = 0.75,
         sliding_window_size: int = _DEFAULT_WINDOW_SIZE,
-        branch_summarizer: Optional[BranchSummarizer] = None,
+        branch_summarizer: BranchSummarizer | None = None,
     ) -> None:
         """初始化压缩器。
 
@@ -218,7 +218,7 @@ class ContextCompactor:
     async def compact_with_summary(
         self,
         messages: List[Dict[str, Any]],
-        summarize: Optional[Summarizer] = None,
+        summarize: Summarizer | None = None,
     ) -> List[Dict[str, Any]]:
         """三层压缩（含可选的 Layer 3 LLM 摘要）。
 

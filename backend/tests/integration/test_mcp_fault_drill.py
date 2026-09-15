@@ -39,7 +39,7 @@ def _cfg(name: str, marker: Path, required: bool = False):
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def drill(tmp_path):
     """Pool + two live stdio servers (alpha, bravo) + kill marker path."""
     marker = tmp_path / "kill.marker"

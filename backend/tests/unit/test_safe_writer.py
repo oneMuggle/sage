@@ -14,7 +14,7 @@ import pytest
 from backend.skills.safe_writer import write_skill_file
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="POSIX 分支（目录 fd + O_NOFOLLOW）用例；Windows 分支见下方 R32 用例",
 )
@@ -36,7 +36,7 @@ def test_overwrite_rejects_hardlink_without_modifying_outside(tmp_path: Path) ->
     assert outside.read_text(encoding="utf-8") == "outside-secret"
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="POSIX 分支用例",
 )
@@ -56,7 +56,7 @@ def test_non_overwrite_keeps_existing_file_unchanged(tmp_path: Path) -> None:
 # ---------- R32: Windows 原生 reparse-safe 分支 ----------
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows 原生分支行为")
+@pytest.mark.skipi()f(os.name != "nt", reason="Windows 原生分支行为")
 def test_windows_write_roundtrip(tmp_path: Path) -> None:
     """Windows 端到端：写盘成功、内容一致、返回词法路径。"""
     root = tmp_path / "skills"
@@ -66,7 +66,7 @@ def test_windows_write_roundtrip(tmp_path: Path) -> None:
     assert target.read_text(encoding="utf-8") == "windows-content"
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows 原生分支行为")
+@pytest.mark.skipi()f(os.name != "nt", reason="Windows 原生分支行为")
 def test_windows_overwrite_truncates(tmp_path: Path) -> None:
     root = tmp_path / "skills"
     first = write_skill_file(root, "demo", "longer-original", overwrite=False)
@@ -74,7 +74,7 @@ def test_windows_overwrite_truncates(tmp_path: Path) -> None:
     assert first.read_text(encoding="utf-8") == "short"
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows 原生分支行为")
+@pytest.mark.skipi()f(os.name != "nt", reason="Windows 原生分支行为")
 def test_windows_non_overwrite_keeps_existing(tmp_path: Path) -> None:
     root = tmp_path / "skills"
     write_skill_file(root, "demo", "original", overwrite=False)
@@ -85,7 +85,7 @@ def test_windows_non_overwrite_keeps_existing(tmp_path: Path) -> None:
     assert (root / "demo" / "SKILL.md").read_text(encoding="utf-8") == "original"
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows 原生分支行为")
+@pytest.mark.skipi()f(os.name != "nt", reason="Windows 原生分支行为")
 def test_windows_rejects_path_separator_in_name(tmp_path: Path) -> None:
     """name 含分隔符 = 越界尝试，直接拒绝（越界防护契约）。"""
     root = tmp_path / "skills"
@@ -97,7 +97,7 @@ def test_windows_rejects_path_separator_in_name(tmp_path: Path) -> None:
     assert not (root / "SKILL.md").exists()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows 原生分支行为")
+@pytest.mark.skipi()f(os.name != "nt", reason="Windows 原生分支行为")
 def test_windows_rejects_symlinked_component(tmp_path: Path) -> None:
     """symlink 组件（目录或叶）必须被拒绝，秘密不得写入链接目标。"""
     outside = tmp_path / "outside"

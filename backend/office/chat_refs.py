@@ -61,7 +61,7 @@ import logging
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import FrozenSet, List, Literal, Optional
+from typing import FrozenSet, List, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -135,9 +135,9 @@ class AuthorizedOfficeRequest:
 def authorize_chat_office_request(
     conn: sqlite3.Connection,
     session_id: str,
-    request_workspace_path: Optional[str],
+    request_workspace_path: str | None,
     office_refs: List[ChatOfficeRef],
-) -> Optional[AuthorizedOfficeRequest]:
+) -> AuthorizedOfficeRequest | None:
     """Validate ``office_refs`` against the live session-workspace binding.
 
     Returns:

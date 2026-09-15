@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class MemoryExtractor:
         >>> # 返回 [{"content": "用户喜欢吃火锅", "importance": 7, ...}]
     """
 
-    def __init__(self, llm_client: Optional[Any] = None) -> None:
+    def __init__(self, llm_client: Any | None = None) -> None:
         """初始化提取器
 
         Args:
@@ -61,7 +61,7 @@ class MemoryExtractor:
         self,
         user_message: str,
         assistant_message: str,
-        existing_facts: Optional[List[str]] = None,
+        existing_facts: List[str] | None = None,
     ) -> List[Dict[str, Any]]:
         """从对话中提取事实
 

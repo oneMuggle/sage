@@ -22,7 +22,6 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import pytest
 
@@ -52,7 +51,7 @@ class _StubResult:
     summary: OfficeDocumentSummary
 
 
-@pytest.fixture()
+@pytest.fixture
 def conn() -> sqlite3.Connection:
     """Inject a fresh :memory: Database into the global _db slot.
 
@@ -73,7 +72,7 @@ def _stub_result(
     doc_type: OfficeDocType,
     status: OfficeDocStatus,
     file_size_bytes: int,
-    page_count: Optional[int] = None,
+    page_count: int | None = None,
 ) -> _StubResult:
     """Build a stub result whose summary mirrors what a real reader returns."""
     now_ms = int(time.time() * 1000)
@@ -100,10 +99,10 @@ def _write_existing_row(
     doc_id: str,
     workspace: str,
     doc_type: OfficeDocType,
-    original_filename: Optional[str],
+    original_filename: str | None,
     generated_filename: str,
-    archived_at: Optional[int],
-    derived_from: Optional[str],
+    archived_at: int | None,
+    derived_from: str | None,
     file_size_bytes: int,
 ) -> None:
     """Insert a row directly so we can stage the merge scenarios."""

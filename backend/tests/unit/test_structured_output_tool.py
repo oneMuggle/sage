@@ -152,7 +152,7 @@ def test_structured_output_absent_schema_skips_validation():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("value", "type_name", "expect_ok"),
     [
         ({}, "object", True),

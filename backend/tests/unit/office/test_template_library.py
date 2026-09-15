@@ -66,7 +66,7 @@ def test_builtin_registry_ids_and_names():
         assert spec.description
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "spec", BUILTIN_TEMPLATES, ids=[spec.id for spec in BUILTIN_TEMPLATES]
 )
 def test_builtin_registry_placeholders_non_empty(spec):
@@ -82,7 +82,7 @@ def test_builtin_registry_placeholders_non_empty(spec):
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "spec", BUILTIN_TEMPLATES, ids=[spec.id for spec in BUILTIN_TEMPLATES]
 )
 def test_builtin_build_produces_valid_docx(spec):

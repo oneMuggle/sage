@@ -19,7 +19,7 @@ from backend.api.legacy_routes import router
 from backend.skills.review_service import SkillDraft
 
 
-@pytest.fixture()
+@pytest.fixture
 def client():
     """Create a TestClient with the legacy router mounted."""
     app = FastAPI()

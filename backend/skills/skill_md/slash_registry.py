@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from ..registry import SkillRegistry
 from .skill import SkillMdSkill
@@ -23,7 +23,7 @@ from .skill import SkillMdSkill
 class SlashCommandRegistry:
     """Slash command → SkillMdSkill 索引。"""
 
-    def __init__(self, mapping: Optional[Dict[str, SkillMdSkill]] = None) -> None:
+    def __init__(self, mapping: Dict[str, SkillMdSkill] | None = None) -> None:
         self._commands: Dict[str, SkillMdSkill] = mapping or {}
 
     @classmethod

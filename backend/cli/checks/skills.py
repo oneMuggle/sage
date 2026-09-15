@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, NamedTuple, Optional, Sequence
+from typing import Dict, List, NamedTuple, Sequence
 
 from backend.cli.doctor import CheckResult, Severity, register
 
@@ -104,7 +104,7 @@ def discover_skill_files(roots: Sequence[Path]) -> List[SkillFile]:
     return files
 
 
-def lint_skill_files(roots: Optional[Sequence[Path]] = None) -> List[str]:
+def lint_skill_files(roots: Sequence[Path] | None = None) -> List[str]:
     """Return human-readable warnings for discovered skills."""
     selected_roots = list(discover_skill_roots() if roots is None else roots)
     messages: List[str] = []

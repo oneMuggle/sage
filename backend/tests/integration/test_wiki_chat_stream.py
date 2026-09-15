@@ -138,7 +138,7 @@ def _parse_ndjson(text: str) -> List[dict]:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_stream_yields_chunk_and_done(wiki_project, patch_wiki_chat):
     """Happy path: stream yields chunk events + terminal done event in NDJSON."""
     patch_wiki_chat(_stub_llm_context())
@@ -157,7 +157,7 @@ async def test_chat_stream_yields_chunk_and_done(wiki_project, patch_wiki_chat):
     assert "wiki/a.md" in last["data"]["citations"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_stream_empty_citations_yields_only_done(wiki_project, patch_wiki_chat):
     """无命中: 仅一条 done (citations:[]), 无 chunk 事件."""
     patch_wiki_chat(_stub_llm_context(), citations=[])
@@ -171,7 +171,7 @@ async def test_chat_stream_empty_citations_yields_only_done(wiki_project, patch_
     assert events[0] == {"event": "done", "data": {"citations": []}}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_stream_llm_error_reraises_after_error_event(wiki_project, patch_wiki_chat):
     """LLM 异常路径: generator 写 error 行后必须 re-raise (关连接).
 
@@ -215,7 +215,7 @@ async def test_chat_stream_llm_error_reraises_after_error_event(wiki_project, pa
     assert "LLM exploded" not in json.dumps(events[-1], ensure_ascii=False)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_old_chat_endpoint_returns_404():
     """旧 /chat 端点已删除 → POST /chat 返回 404 (不命中)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -224,7 +224,7 @@ async def test_old_chat_endpoint_returns_404():
     assert resp.status_code == 404
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_chat_stream_sets_no_cache_headers(wiki_project, patch_wiki_chat):
     """StreamingResponse 设置 Cache-Control: no-cache + X-Accel-Buffering: no."""
     patch_wiki_chat(_stub_llm_context())

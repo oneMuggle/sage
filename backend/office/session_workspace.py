@@ -27,7 +27,6 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from backend.office.models import OfficeDocumentSummary
 from backend.office.storage import (
@@ -42,7 +41,7 @@ from backend.office.workspace_errors import (
 logger = logging.getLogger(__name__)
 
 
-def _now_ms(now_ms: Optional[int]) -> int:
+def _now_ms(now_ms: int | None) -> int:
     """Default ``now_ms`` to wall-clock when caller doesn't supply one."""
     if now_ms is None:
         return int(time.time() * 1000)
@@ -85,7 +84,7 @@ class SessionWorkspaceBinding:
     workspace_path: str
     generation: int
     activated_at: int
-    revoked_at: Optional[int]
+    revoked_at: int | None
 
 
 def _row_to_binding(row: sqlite3.Row) -> SessionWorkspaceBinding:
@@ -99,7 +98,7 @@ def _row_to_binding(row: sqlite3.Row) -> SessionWorkspaceBinding:
     )
 
 
-def _fetch_active(conn: sqlite3.Connection, session_id: str) -> Optional[SessionWorkspaceBinding]:
+def _fetch_active(conn: sqlite3.Connection, session_id: str) -> SessionWorkspaceBinding | None:
     """Return the live (revoked_at IS NULL) binding for the session, or None."""
     row = conn.execute(
         """
@@ -116,7 +115,7 @@ def bind_session_workspace(
     conn: sqlite3.Connection,
     session_id: str,
     workspace_path: str,
-    now_ms: Optional[int] = None,
+    now_ms: int | None = None,
 ) -> SessionWorkspaceBinding:
     """Bind (or rebind) a chat session to a workspace directory.
 
@@ -173,7 +172,7 @@ def bind_session_workspace(
 def get_workspace_binding(
     conn: sqlite3.Connection,
     session_id: str,
-) -> Optional[SessionWorkspaceBinding]:
+) -> SessionWorkspaceBinding | None:
     """Return the live binding for a session, or ``None`` when unbound/revoked."""
     return _fetch_active(conn, session_id)
 
@@ -181,8 +180,8 @@ def get_workspace_binding(
 def get_active_workspace(
     conn: sqlite3.Connection,
     session_id: str,
-    expected_generation: Optional[int] = None,
-) -> Optional[SessionWorkspaceBinding]:
+    expected_generation: int | None = None,
+) -> SessionWorkspaceBinding | None:
     """Return the live binding, optionally asserting the generation matches.
 
     When ``expected_generation`` is supplied and doesn't match the current
@@ -201,7 +200,7 @@ def get_active_workspace(
 def revoke_session_workspace(
     conn: sqlite3.Connection,
     session_id: str,
-    now_ms: Optional[int] = None,
+    now_ms: int | None = None,
 ) -> SessionWorkspaceBinding:
     """Tombstone the session's live binding.
 
@@ -278,7 +277,7 @@ def get_document_in_workspace(
     conn: sqlite3.Connection,
     document_id: str,
     workspace_path: str,
-) -> Optional[OfficeDocumentSummary]:
+) -> OfficeDocumentSummary | None:
     """Look up a document by id within a workspace, hiding archived rows.
 
     Scoping by ``(id, workspace_path, archived_at IS NULL)`` ensures a
@@ -304,7 +303,7 @@ def get_document_in_workspace_any_status(
     conn: sqlite3.Connection,
     document_id: str,
     workspace_path: str,
-) -> Optional[OfficeDocumentSummary]:
+) -> OfficeDocumentSummary | None:
     """Look up a document by id, including archived rows.
 
     Same workspace-scope guard as :func:`get_document_in_workspace` but
@@ -331,7 +330,7 @@ def find_document_by_filename(
     conn: sqlite3.Connection,
     workspace_path: str,
     filename: str,
-) -> Optional[OfficeDocumentSummary]:
+) -> OfficeDocumentSummary | None:
     """Look up a document by its on-disk filename within a workspace.
 
     Mirrors :func:`get_document_in_workspace` except the lookup key is

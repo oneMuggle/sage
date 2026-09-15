@@ -9,7 +9,7 @@ import os
 import shutil
 from ctypes import wintypes
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Tuple
 
 SHELL_FALLBACK_NOTE = (
     "未找到 bash（已尝试 PATH 与 Git for Windows 安装目录），"
@@ -78,7 +78,7 @@ def _get_windows_program_files_roots() -> Tuple[str, ...]:
         return ()
 
 
-def _get_windows_system_directory() -> Optional[str]:
+def _get_windows_system_directory() -> str | None:
     if os.name != "nt":
         return None
     try:
@@ -158,7 +158,7 @@ def _resolve_posix() -> ShellSpec:
     raise RuntimeError("未找到可用的 POSIX shell（/bin/bash 和 /bin/sh 均不是可执行 regular file）。")
 
 
-def _trusted_git_bash_path(path: object, roots: Tuple[str, ...]) -> Optional[str]:
+def _trusted_git_bash_path(path: object, roots: Tuple[str, ...]) -> str | None:
     if not _is_local_windows_absolute(path) or not _is_regular_file(path) or path.endswith(("\\", "/")):
         return None
     for root in roots:
@@ -168,7 +168,7 @@ def _trusted_git_bash_path(path: object, roots: Tuple[str, ...]) -> Optional[str
     return None
 
 
-def _find_windows_bash() -> Optional[str]:
+def _find_windows_bash() -> str | None:
     roots = _get_windows_program_files_roots()
     found = _trusted_git_bash_path(shutil.which("bash"), roots)
     if found:
@@ -180,7 +180,7 @@ def _find_windows_bash() -> Optional[str]:
     return None
 
 
-def _find_powershell() -> Optional[str]:
+def _find_powershell() -> str | None:
     root = _get_windows_system_directory()
     if not root:
         return None

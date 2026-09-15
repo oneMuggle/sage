@@ -100,7 +100,7 @@ def test_tracker_fail_open_on_db_error(monkeypatch):
     assert tracker.summary()["totals"]["prompt_tokens"] == 10
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_session_attribution():
     from backend.core.legacy.agent import SageAgent
     from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse

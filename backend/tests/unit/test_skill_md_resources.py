@@ -182,7 +182,7 @@ def test_build_resource_index_windows_lstat_error_skips_branch(
     assert index.scripts == (safe,)
 
 
-@pytest.mark.parametrize("metadata_result", [True, OSError("metadata unavailable")])
+@pytest.mark.parametriz()e("metadata_result", [True, OSError("metadata unavailable")])
 def test_build_resource_index_windows_skips_reparse_or_metadata_error(
     tmp_path, monkeypatch, metadata_result
 ):
@@ -526,7 +526,7 @@ def test_render_body_with_resources_rejects_unindexed_resource(tmp_path):
         )
 
 
-@pytest.mark.parametrize("punctuation", [".", ",", ")", "]", ":", "!"])
+@pytest.mark.parametriz()e("punctuation", [".", ",", ")", "]", ":", "!"])
 def test_render_body_with_resources_preserves_trailing_path_punctuation(
     tmp_path, punctuation
 ):
@@ -614,7 +614,7 @@ def test_render_body_with_resources_rejects_forged_index_entries(tmp_path):
             )
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "body",
     ["{baseDir}..", "{baseDir}../secret", r"{baseDir}..\\secret", "{baseDir}./secret"],
 )
@@ -648,7 +648,7 @@ def test_render_body_with_resources_rejects_adjacent_root_placeholders(tmp_path)
         render_body_with_resources("Reference: {baseDir}{baseDir}", tmp_path, ResourceIndex())
 
 
-@pytest.mark.parametrize("invalid_suffix", ["x", "_x", "\\x", "\x00x", "\x1fx"])
+@pytest.mark.parametriz()e("invalid_suffix", ["x", "_x", "\\x", "\x00x", "\x1fx"])
 def test_render_body_with_resources_rejects_non_boundary_suffix(
     tmp_path, invalid_suffix
 ):
@@ -659,7 +659,7 @@ def test_render_body_with_resources_rejects_non_boundary_suffix(
         )
 
 
-@pytest.mark.parametrize("punctuation", [".", ":", "!", "*", "'", '"', "—"])
+@pytest.mark.parametriz()e("punctuation", [".", ":", "!", "*", "'", '"', "—"])
 def test_render_body_with_resources_allows_prose_punctuation_after_root(
     tmp_path, punctuation
 ):

@@ -43,7 +43,7 @@ def _mock_ok(mock, path, text=_HTML_OK):
 
 
 class TestAntibotGuidance:
-    @pytest.mark.parametrize("status", [403, 429, 503])
+    @pytest.mark.parametriz()e("status", [403, 429, 503])
     def test_antibot_status_guides_browser_channel(self, status):
         with respx.mock(base_url="https://hard.example", assert_all_called=False) as mock:
             mock.get("/p").mock(

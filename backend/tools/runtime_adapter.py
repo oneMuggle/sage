@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Protocol
+from typing import Iterable, List, Protocol
 
 from backend.domain.runtime import (
     ExecutionRequest,
@@ -32,8 +32,8 @@ class CommandRequest:
     """适配器构造出的执行命令，由 runtime_exec 实际启动。"""
 
     argv: List[str]
-    stdin_payload: Optional[str] = None
-    env: Optional[dict] = None
+    stdin_payload: str | None = None
+    env: dict | None = None
     cleanup_paths: tuple[Path, ...] = ()
 
 
@@ -41,13 +41,13 @@ class CommandRequest:
 class SafeRunResult:
     """``safe_run`` 的最小结果包装。"""
 
-    exit_code: Optional[int]
+    exit_code: int | None
     stdout: str
     stderr: str
     duration_seconds: float
     timed_out: bool = False
     output_truncated: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class SafeRunFunc(Protocol):
@@ -58,9 +58,9 @@ class SafeRunFunc(Protocol):
         argv: List[str],
         *,
         timeout: float,
-        cwd: Optional[Path] = None,
-        env: Optional[dict] = None,
-        input_text: Optional[str] = None,
+        cwd: Path | None = None,
+        env: dict | None = None,
+        input_text: str | None = None,
     ) -> SafeRunResult: ...
 
 
@@ -126,7 +126,7 @@ class AdapterRegistry:
             raise ValueError(f"runtime adapter already registered: {language}")
         self._adapters[language] = adapter
 
-    def get(self, language: str) -> Optional[RuntimeAdapter]:
+    def get(self, language: str) -> RuntimeAdapter | None:
         return self._adapters.get(language.lower())
 
     def languages(self) -> List[str]:

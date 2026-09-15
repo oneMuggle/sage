@@ -10,7 +10,7 @@ Routes tasks to appropriate agents based on:
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 from backend.orchestration.models import Agent, Lane, LaneStatus, Task
 from backend.orchestration.permission import PermissionPreset
@@ -279,10 +279,10 @@ class Router:
     async def try_dispatch_privileged(
         self,
         task: Task,
-        token_id: Optional[str],
+        token_id: str | None,
         actor: str,
         context: "PolicyContext",
-    ) -> Tuple[Optional[RoutingDecision], List["PolicyDecisionEvent"], Optional[str]]:
+    ) -> Tuple[RoutingDecision | None, List["PolicyDecisionEvent"], str | None]:
         """Dispatch a task that may require an approval token.
 
         Algorithm:

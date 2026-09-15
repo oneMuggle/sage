@@ -24,7 +24,7 @@ import json
 import re
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from .browser_cdp import (
     RESERVED_BROWSER_ID,
@@ -145,7 +145,7 @@ class RenderError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
-def wait_page_ready(session: BrowserSession, target_id: Optional[str], wait_for: str = "") -> None:
+def wait_page_ready(session: BrowserSession, target_id: str | None, wait_for: str = "") -> None:
     """navigate 后等页面可用：readyState 达标 → (可选)等 wait_for → 正文稳定。
 
     SPA 的 hydrate 发生在 readyState=complete 之后，只等 readyState 会拿到
@@ -202,7 +202,7 @@ def wait_page_ready(session: BrowserSession, target_id: Optional[str], wait_for:
         time.sleep(_SETTLE_POLL_INTERVAL)
 
 
-def _evaluate_json(session: BrowserSession, expression: str, target_id: Optional[str]) -> Any:
+def _evaluate_json(session: BrowserSession, expression: str, target_id: str | None) -> Any:
     """Runtime.evaluate（returnByValue）→ 解析 value；异常细节透出。"""
     result = cdp_command(
         session,
@@ -216,7 +216,7 @@ def _evaluate_json(session: BrowserSession, expression: str, target_id: Optional
     return (result.get("result") or {}).get("value")
 
 
-def _scroll_for_lazy_load(session: BrowserSession, target_id: Optional[str]) -> None:
+def _scroll_for_lazy_load(session: BrowserSession, target_id: str | None) -> None:
     """触底滚动触发懒加载（R3）：最多 ``_LAZY_SCROLL_MAX_ROUNDS`` 轮，
     scrollHeight 连续 ``_LAZY_SCROLL_STABLE_ROUNDS`` 轮不变即提前结束。
 
@@ -261,7 +261,7 @@ class _RendererPool:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._session: Optional[BrowserSession] = None
+        self._session: BrowserSession | None = None
         self._last_used = 0.0
 
     def acquire(self) -> BrowserSession:
@@ -327,7 +327,7 @@ def render_page(url: str, network_policy: Any, wait_for: str = "") -> Dict[str, 
         raise RenderError(rejection)
 
     session = _pool.acquire()
-    target_id: Optional[str] = None
+    target_id: str | None = None
     try:
         created = cdp_command(session, "Target.createTarget", {"url": "about:blank"})
         target_id = created.get("targetId")

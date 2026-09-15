@@ -16,7 +16,7 @@ from backend.skills.review_queue import ReviewQueue
 from backend.skills.review_service import ReviewService
 
 
-@pytest.fixture()
+@pytest.fixture
 def temp_db():
     """Create a temporary database with required tables."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
@@ -63,7 +63,7 @@ def temp_db():
         os.unlink(db_path)
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_llm_provider():
     """Mock LLM provider that returns a valid skill draft JSON."""
     provider = Mock()

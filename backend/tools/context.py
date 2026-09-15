@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import FrozenSet, Optional
+from typing import FrozenSet
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,7 @@ class ToolExecutionContext:
 #: The active ``ToolExecutionContext`` for the current asyncio task or
 #: thread. Defaults to ``None`` so callers without an explicit request
 #: see no context (e.g. unit tests, internal background jobs).
-_tool_context_var: ContextVar[Optional[ToolExecutionContext]] = ContextVar(
+_tool_context_var: ContextVar[ToolExecutionContext | None] = ContextVar(
     "backend_tool_execution_context", default=None
 )
 
@@ -77,7 +77,7 @@ def set_tool_context(ctx: ToolExecutionContext) -> Token:
     return _tool_context_var.set(ctx)
 
 
-def current_tool_context() -> Optional[ToolExecutionContext]:
+def current_tool_context() -> ToolExecutionContext | None:
     """Return the active context for the current task, or ``None`` if unset."""
     return _tool_context_var.get()
 

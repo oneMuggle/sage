@@ -25,7 +25,7 @@ def _clean():
     LlmTraceRecorder.clear()
 
 
-@pytest.fixture()
+@pytest.fixture
 def client():
     return TestClient(app)
 

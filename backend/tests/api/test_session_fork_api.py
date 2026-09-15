@@ -43,14 +43,14 @@ def _seed_messages(session_id: str, n: int = 6):
     return ids
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_fork_unknown_session_returns_404(client):
     resp = await client.post(f"{PREFIX}/sessions/nonexistent-id/fork", json={})
     assert resp.status_code == 404
     assert resp.json()["detail"]["type"] == "session_not_found"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_fork_unknown_message_returns_404(client):
     create = await client.post(f"{PREFIX}/sessions", json={"title": "源会话"})
     session_id = create.json()["id"]
@@ -63,7 +63,7 @@ async def test_fork_unknown_message_returns_404(client):
     assert resp.json()["detail"]["type"] == "message_not_found"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_fork_prefix_copy_exactness_at_boundary(client):
     """at_message_id=fork-seed-2 → 复制 0..2（含）共 3 条，3..5 不复制。"""
     create = await client.post(f"{PREFIX}/sessions", json={"title": "边界分叉"})
@@ -94,7 +94,7 @@ async def test_fork_prefix_copy_exactness_at_boundary(client):
     assert all("分叉测试消息 #3" not in r.content for r in rows)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_fork_all_copy_default(client):
     """省略 at_message_id → 复制全部; forked_at_message_id 为 None。"""
     create = await client.post(f"{PREFIX}/sessions", json={"title": "全量分叉"})
@@ -112,7 +112,7 @@ async def test_fork_all_copy_default(client):
     assert [r.content for r in rows] == [f"分叉测试消息 #{i}" for i in range(5)]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_fork_title_override_and_default(client):
     """显式 title 覆盖; 缺省 title 为 "Fork: <原标题>"。"""
     create = await client.post(f"{PREFIX}/sessions", json={"title": "原始标题"})
@@ -128,7 +128,7 @@ async def test_fork_title_override_and_default(client):
     assert custom_fork.json()["title"] == "我的分支"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_list_sessions_serializes_fork_fields(client):
     """list_sessions / get_session 序列化必须带上 fork_root（侧栏徽标依赖）。"""
     create = await client.post(f"{PREFIX}/sessions", json={"title": "序列化检查"})
@@ -148,7 +148,7 @@ async def test_list_sessions_serializes_fork_fields(client):
     assert "forked_at_message_id" in got
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_fork_does_not_touch_source_session(client):
     """分叉是非破坏性的：源会话消息不变。"""
     create = await client.post(f"{PREFIX}/sessions", json={"title": "源不动"})
@@ -166,7 +166,7 @@ async def test_fork_does_not_touch_source_session(client):
     assert source.fork_root is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_fork_inherits_active_workspace_binding(client, tmp_path):
     """B1 (对标增强第五轮批次 A): fork 复制源会话的活跃工作区绑定。
 
@@ -206,7 +206,7 @@ async def test_fork_inherits_active_workspace_binding(client, tmp_path):
     assert source_binding["generation"] == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_fork_without_binding_leaves_fork_unbound(client):
     """B1 边界: 源会话无绑定 → fork 会话同样无绑定(binding 为 null)。"""
     create = await client.post(f"{PREFIX}/sessions", json={"title": "无绑定"})
@@ -219,7 +219,7 @@ async def test_fork_without_binding_leaves_fork_unbound(client):
     assert got.json()["binding"] is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_fork_before_message_exclusive_cut(client):
     """U5' before_message=True → 开区间截断：复制分叉点之前（不含本身）。
 

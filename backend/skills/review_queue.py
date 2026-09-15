@@ -6,7 +6,6 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ class ReviewQueue:
 
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
-        self.worker_thread: Optional[threading.Thread] = None
+        self.worker_thread: threading.Thread | None = None
         self.running: bool = False
         self._wake: threading.Event = threading.Event()
         # 进程内写锁: SQLite 同一时刻只允许一个写者, 与其让多个连接在
@@ -140,7 +139,7 @@ class ReviewQueue:
         except sqlite3.Error as e:
             logger.error("Failed to enqueue review event: %s", e)
 
-    def _dequeue_next(self) -> Optional[ReviewEvent]:
+    def _dequeue_next(self) -> ReviewEvent | None:
         """Pop the oldest pending event and mark it 'processing'.
 
         Returns None if the queue is empty.
@@ -370,10 +369,10 @@ class ReviewQueue:
 # Global singleton (same pattern as get_usage_store)
 # ------------------------------------------------------------------ #
 
-_review_queue: Optional[ReviewQueue] = None
+_review_queue: ReviewQueue | None = None
 
 
-def get_review_queue(db_path: Optional[str] = None) -> ReviewQueue:
+def get_review_queue(db_path: str | None = None) -> ReviewQueue:
     """Return the global ReviewQueue singleton.
 
     Args:

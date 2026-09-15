@@ -40,7 +40,7 @@ def test_host_matches_wildcard_rejects_suffix_confusion():
     assert host_matches("evilcnki.net", "*.cnki.net") is False
 
 
-@pytest.mark.parametrize("bad", ["*", "*.net", "*.", "*.internal", "a.*.net", "*cnki.net"])
+@pytest.mark.parametriz()e("bad", ["*", "*.net", "*.", "*.internal", "a.*.net", "*cnki.net"])
 def test_overbroad_or_malformed_wildcard_is_rejected(bad):
     with pytest.raises(ValueError, match="通配"):
         NetworkPolicy(mode=NetworkMode.INTRANET, allowed_hosts=(bad,))
@@ -147,7 +147,7 @@ def test_from_config_rejects_unknown_mode():
         NetworkPolicy.from_config({"mode": "carrier-pigeon"})
 
 
-@pytest.mark.parametrize("bad", [42, {"a": 1}, "docs.example.internal"])
+@pytest.mark.parametriz()e("bad", [42, {"a": 1}, "docs.example.internal"])
 def test_from_config_rejects_non_list_host_field(bad):
     """裸字符串也要拒：tuple("a.b") 会拆成单字符元组，静默污染白名单。"""
     with pytest.raises(TypeError, match="allowed_hosts"):

@@ -160,7 +160,7 @@ def test_aliases_snake_side_is_actually_snake_case() -> None:
         assert re.match(r"^[a-z][a-z0-9_]*$", k), f"key {k!r} not snake_case"
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "snake_key",
     list(ALIASES.keys()),
 )
@@ -175,7 +175,7 @@ def test_each_alias_translates_to_expected_camel(snake_key: str) -> None:
     )
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "camel_key",
     list(ALIASES.values()),
 )

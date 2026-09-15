@@ -17,7 +17,7 @@ from backend.data import database as db_mod
 from backend.data.orch_run_repo import OrchRun, OrchRunRepository
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(tmp_path, monkeypatch):
     """tmp DB + SAGE_DB_PATH env + 重置全局 _db 单例,挂 legacy_router。"""
     db = tmp_path / "test.db"

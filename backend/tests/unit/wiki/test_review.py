@@ -552,7 +552,7 @@ class TestEdgeCases:
         assert ReviewType.CONFIRM.value == "confirm"
         assert ReviewType.SUGGESTION.value == "suggestion"
 
-    @pytest.mark.parametrize(
+    @pytest.mark.parametriz()e(
         "type_",
         list(ReviewType),
     )

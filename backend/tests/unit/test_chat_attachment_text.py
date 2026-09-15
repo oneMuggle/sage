@@ -81,7 +81,7 @@ class _FakeStore:
         return ref, item["content"]
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(monkeypatch):
     if not _HAS_MULTIPART:
         pytest.skip("python-multipart not installed (本地环境)；CI 全量安装")

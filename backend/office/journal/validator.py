@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 
 from docx import Document
 from docx.oxml.ns import qn
@@ -25,7 +25,7 @@ _TOLERANCE_PT = 0.5
 _TOLERANCE_CM = 0.3
 
 
-def _normalize(name: Optional[str]) -> str:
+def _normalize(name: str | None) -> str:
     if not name:
         return ""
     from backend.office.journal.parser import _FONT_FAMILY_ALIASES
@@ -61,7 +61,7 @@ def _style_pt(style) -> float:
         return 0.0
 
 
-def check_body_font(doc: Document, spec: JournalSpec) -> Optional[JournalViolation]:
+def check_body_font(doc: Document, spec: JournalSpec) -> JournalViolation | None:
     normal = doc.styles["Normal"]
     actual_ea = _normalize(_style_eastasia(normal))
     expected_ea = _normalize(spec.font_body.eastasia)
@@ -78,7 +78,7 @@ def check_body_font(doc: Document, spec: JournalSpec) -> Optional[JournalViolati
     )
 
 
-def check_heading_font(doc: Document, spec: JournalSpec) -> Optional[JournalViolation]:
+def check_heading_font(doc: Document, spec: JournalSpec) -> JournalViolation | None:
     heading_style = None
     for s in doc.styles:
         if s.name == "Heading 1":
@@ -99,7 +99,7 @@ def check_heading_font(doc: Document, spec: JournalSpec) -> Optional[JournalViol
     )
 
 
-def check_body_size(doc: Document, spec: JournalSpec) -> Optional[JournalViolation]:
+def check_body_size(doc: Document, spec: JournalSpec) -> JournalViolation | None:
     normal = doc.styles["Normal"]
     actual_pt = _style_pt(normal)
     if actual_pt == 0.0 or spec.body_pt == 0.0:
@@ -115,7 +115,7 @@ def check_body_size(doc: Document, spec: JournalSpec) -> Optional[JournalViolati
     )
 
 
-def check_line_spacing(doc: Document, spec: JournalSpec) -> Optional[JournalViolation]:
+def check_line_spacing(doc: Document, spec: JournalSpec) -> JournalViolation | None:
     normal = doc.styles["Normal"]
     pf = normal.paragraph_format
     actual = pf.line_spacing
@@ -132,7 +132,7 @@ def check_line_spacing(doc: Document, spec: JournalSpec) -> Optional[JournalViol
     )
 
 
-def check_margins(doc: Document, spec: JournalSpec) -> Optional[JournalViolation]:
+def check_margins(doc: Document, spec: JournalSpec) -> JournalViolation | None:
     if not doc.sections:
         return None
     section = doc.sections[0]
@@ -150,7 +150,7 @@ def check_margins(doc: Document, spec: JournalSpec) -> Optional[JournalViolation
     )
 
 
-def check_headings(doc: Document, spec: JournalSpec) -> Optional[JournalViolation]:
+def check_headings(doc: Document, spec: JournalSpec) -> JournalViolation | None:
     present = [
         p.text.strip()
         for p in doc.paragraphs
@@ -168,7 +168,7 @@ def check_headings(doc: Document, spec: JournalSpec) -> Optional[JournalViolatio
     )
 
 
-def check_citations(doc: Document, spec: JournalSpec) -> Optional[JournalViolation]:
+def check_citations(doc: Document, spec: JournalSpec) -> JournalViolation | None:
     """引用风格检测（info 级）。仅当 spec.citation_style != UNKNOWN 时运行。"""
     if spec.citation_style == CitationStyle.UNKNOWN:
         return None

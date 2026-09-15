@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from backend.data.database import get_database
 from backend.office.journal.errors import JournalSpecNotFoundError
@@ -166,7 +166,7 @@ def record_generation(
 
 
 def list_generations(
-    workspace: Path, spec_id: Optional[str] = None
+    workspace: Path, spec_id: str | None = None
 ) -> List[JournalGenerationRecord]:
     """列 workspace 的生成记录；可选按 spec_id 过滤；按 created_at 升序。"""
     _validate_workspace(workspace)

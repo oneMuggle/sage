@@ -16,7 +16,7 @@ from backend.cli.checks.llm_config import (
 from backend.cli.doctor import Severity
 
 
-@pytest.fixture()
+@pytest.fixture
 def check():
     return LlmConfigCheck()
 

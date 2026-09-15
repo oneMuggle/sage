@@ -34,7 +34,7 @@ def _make_response(content: str = "", tool_calls: list = None) -> LLMResponse:
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_returns_done_when_no_tool_call():
     """LLM 返回纯文本时，状态机经过 THINKING → DONE。"""
     agent = SageAgent()
@@ -52,7 +52,7 @@ async def test_run_loop_returns_done_when_no_tool_call():
     assert done_evt.content == "你好"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_executes_tool_and_observes():
     """LLM 返回工具调用时，状态机经过 THINKING → ACTING → OBSERVING → THINKING → DONE。"""
     tool_call = LLMToolCall(
@@ -90,7 +90,7 @@ async def test_run_loop_executes_tool_and_observes():
     assert AgentState.DONE in states
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_respects_max_iterations():
     """max_iterations=2 时，应发出 FAILED。"""
     tool_call = LLMToolCall(id="c", name="calculator", arguments="{}")
@@ -111,8 +111,8 @@ async def test_run_loop_respects_max_iterations():
     assert failed[0].error == "max_iterations_exceeded"
 
 
-@pytest.mark.asyncio()
-@pytest.mark.parametrize(
+@pytest.mark.asynci()o()
+@pytest.mark.parametriz()e(
     ("profile", "label"),
     [(None, "无 profile"), ({}, "profile 缺 max_iterations 键")],
 )
@@ -147,7 +147,7 @@ async def test_run_loop_default_budget_is_10(profile, label):
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_tool_success_yields_observation_with_content():
     """工具调用成功:THINKING → ACTING → OBSERVING(带 tool_result) → THINKING → DONE。"""
     tool_call = LLMToolCall(
@@ -202,7 +202,7 @@ async def test_run_loop_tool_success_yields_observation_with_content():
     mock_tool.execute.assert_called_once_with(expression="2+2")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_tool_returns_error_observation_continues():
     """工具返回 success=False → 标记 is_error=True 但不进入 FAILED,继续 THINKING 循环。"""
     tool_call = LLMToolCall(
@@ -247,7 +247,7 @@ async def test_run_loop_tool_returns_error_observation_continues():
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_tool_not_found_marks_error_and_continues():
     """工具不存在 → result_content 标记错误,继续循环(不抛异常)。"""
     tool_call = LLMToolCall(
@@ -278,7 +278,7 @@ async def test_run_loop_tool_not_found_marks_error_and_continues():
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_tool_raises_exception_is_caught():
     """工具 execute() 抛异常 → 内部 try/except 捕获,is_error=True,继续循环。"""
     tool_call = LLMToolCall(
@@ -309,7 +309,7 @@ async def test_run_loop_tool_raises_exception_is_caught():
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_malformed_tool_arguments_return_error_to_llm():
     """LLM 返回的 tool_call.arguments 是非 JSON 字符串时,不再静默降级 {} 执行
     （L7）——改为 is_error 工具结果回传 LLM,工具不执行,循环正常收敛 DONE。"""
@@ -356,7 +356,7 @@ async def test_run_loop_malformed_tool_arguments_return_error_to_llm():
     assert len(tool_messages) == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_llm_empty_content_yields_done_with_empty_string(monkeypatch):
     """LLM 返回空 content 且无 tool_call → 直接 DONE,content 为空串。
 
@@ -378,7 +378,7 @@ async def test_run_loop_llm_empty_content_yields_done_with_empty_string(monkeypa
     assert done.content == ""
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_max_iterations_exceeded_yields_failed_event():
     """max_iterations=1 且 LLM 持续返回 tool_call → 第 1 次迭代后发出 FAILED 事件。
 
@@ -407,7 +407,7 @@ async def test_run_loop_max_iterations_exceeded_yields_failed_event():
     assert AgentState.DONE not in states[failed_idx + 1 :]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_llm_exception_propagates_without_being_swallowed():
     """LLM 抛 LLMError 时不会被 run_loop 捕获,直接向上传播(由 chat() 统一处理)。
 
@@ -427,7 +427,7 @@ async def test_run_loop_llm_exception_propagates_without_being_swallowed():
     assert exc_info.value.type == LLMErrorType.RATE_LIMITED
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_raises_agent_error_when_llm_client_unset():
     """self.llm_client is None 时,run_loop 启动就抛 AgentError,不发任何事件。"""
     agent = SageAgent()
@@ -442,7 +442,7 @@ async def test_run_loop_raises_agent_error_when_llm_client_unset():
         await _consume()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_appends_tool_message_to_messages_in_place():
     """run_loop 应当在原 messages 列表中追加 tool 消息(供下一轮 LLM 看到工具结果)。"""
     tool_call = LLMToolCall(id="c1", name="calc", arguments="{}")
@@ -472,7 +472,7 @@ async def test_run_loop_appends_tool_message_to_messages_in_place():
     assert tool_msg["tool_call_id"] == "c1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_prefers_tool_result_output_over_content():
     """Machine-readable ToolResult.output must reach the next tool message."""
     tool_call = LLMToolCall(id="c-output", name="memory_save", arguments="{}")
@@ -502,7 +502,7 @@ async def test_run_loop_prefers_tool_result_output_over_content():
     assert tool_message["content"] == '"mem-output"'
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_falls_back_to_tool_result_content_when_output_is_none():
     """旧 ToolResult 未设置 output 时仍把 content 传给下一轮 LLM。"""
     tool_call = LLMToolCall(id="c-content-none", name="legacy", arguments="{}")
@@ -532,7 +532,7 @@ async def test_run_loop_falls_back_to_tool_result_content_when_output_is_none():
     assert json.loads(tool_message["content"]) == {"legacy": "ok"}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_falls_back_to_legacy_tool_result_content():
     """Legacy result objects without output remain compatible."""
     tool_call = LLMToolCall(id="c-content", name="legacy", arguments="{}")
@@ -558,7 +558,7 @@ async def test_run_loop_falls_back_to_legacy_tool_result_content():
     assert json.loads(tool_message["content"]) == {"legacy": "ok"}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_tool_with_non_typed_result_serializes_via_default():
     """工具返回非 success/content 对象(例如裸 str)时,走 default=str 序列化路径。"""
     tool_call = LLMToolCall(id="c1", name="weird", arguments="{}")
@@ -586,7 +586,7 @@ async def test_run_loop_tool_with_non_typed_result_serializes_via_default():
     assert "plain string result" in observing.tool_result.content
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_handles_multiple_tool_calls_in_one_iteration():
     """单轮 LLM 响应包含多个 tool_call 时,每个都应被独立执行 + 观察。"""
     tc1 = LLMToolCall(id="c1", name="a", arguments="{}")
@@ -621,7 +621,7 @@ async def test_run_loop_handles_multiple_tool_calls_in_one_iteration():
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_accepts_llm_config_and_uses_it_when_no_default_client():
     """agent.llm_client is None 时,run_loop 收到 llm_config 应该用新 client 而不是抛 AgentError。
 
@@ -669,7 +669,7 @@ async def test_run_loop_accepts_llm_config_and_uses_it_when_no_default_client():
     assert events[-1].content == "hi"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_restores_original_llm_client_after_llm_config_call():
     """传入 llm_config 临时替换 client,跑完后必须恢复(不污染 agent 实例)。
 
@@ -712,7 +712,7 @@ async def test_run_loop_restores_original_llm_client_after_llm_config_call():
     original_client.chat.assert_awaited()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_raises_agent_error_when_no_client_and_no_llm_config():
     """self.llm_client is None 且调用方没传 llm_config → 仍然抛 AgentError(向后兼容)。
 
@@ -746,7 +746,7 @@ def _make_response_with_reasoning(
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_yields_reasoning_event_when_llm_returns_reasoning():
     """LLM 返回 reasoning_content 时，run_loop 应 yield REASONING 事件。"""
     agent = SageAgent()
@@ -776,7 +776,7 @@ async def test_run_loop_yields_reasoning_event_when_llm_returns_reasoning():
     assert done_evt.content == "答案是 42"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_no_reasoning_event_when_llm_returns_no_reasoning():
     """LLM 不返回 reasoning_content 时，run_loop 不应 yield REASONING 事件。"""
     agent = SageAgent()
@@ -812,7 +812,7 @@ def _tool_messages(llm_mock) -> list:
     return [m for m in second_call.args[0] if m.get("role") == "tool"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_truncates_oversized_tool_result_in_context(monkeypatch):
     """超过 SAGE_TOOL_RESULT_CAP_CHARS 的工具结果在 LLM 上下文中被截断。
 
@@ -856,7 +856,7 @@ async def test_run_loop_truncates_oversized_tool_result_in_context(monkeypatch):
     assert json.loads(observing.tool_result.content) == big_text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_loop_run_budget_exhaustion_stops_injecting_results(monkeypatch):
     """run 级累计预算耗尽后, 后续工具结果不再注入上下文, 以占位说明替代。
 
@@ -932,7 +932,7 @@ def _long_history() -> list:
     return messages
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_overflow_first_aid_compacts_and_retries(monkeypatch):
     """首次 LLM 调用抛 CONTEXT_OVERFLOW → 就地压缩后重试一次 → DONE。
 
@@ -964,7 +964,7 @@ async def test_overflow_first_aid_compacts_and_retries(monkeypatch):
     assert early_tool["tool_call_id"] == "call_0"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_overflow_persists_after_max_first_aid_attempts(monkeypatch):
     """始终溢出 → 两次急救压缩耗尽后按原错误面抛出（不无限重试）。"""
     monkeypatch.delenv("SAGE_RUN_CTX_BUDGET_TOKENS", raising=False)
@@ -984,7 +984,7 @@ async def test_overflow_persists_after_max_first_aid_attempts(monkeypatch):
     assert agent.llm_client.chat.await_count == 3
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_overflow_mid_stream_skips_first_aid(monkeypatch):
     """首个增量之后失败（无法安全重放）→ 不急救重试，按原错误面抛出。"""
     monkeypatch.delenv("SAGE_RUN_CTX_BUDGET_TOKENS", raising=False)
@@ -1013,7 +1013,7 @@ async def test_overflow_mid_stream_skips_first_aid(monkeypatch):
     agent.llm_client.chat.assert_not_awaited()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_high_water_proactive_compaction(monkeypatch):
     """迭代边界高水位预防：估算超预算 → 先压缩再调 LLM（无溢出也生效）。"""
     monkeypatch.setenv("SAGE_RUN_CTX_BUDGET_TOKENS", "1")  # 阈值压到极小触发压缩
@@ -1032,7 +1032,7 @@ async def test_high_water_proactive_compaction(monkeypatch):
     assert messages[2]["content"].endswith("[已压缩：早期工具结果]")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_non_overflow_llm_error_not_first_aided(monkeypatch):
     """非溢出 LLMError（如 rate_limited）不触发急救压缩，直接透传。"""
     monkeypatch.delenv("SAGE_RUN_CTX_BUDGET_TOKENS", raising=False)

@@ -18,7 +18,6 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 from .safe_writer import write_skill_file
 
@@ -34,7 +33,7 @@ class SkillLoader:
             Defaults to ``$SAGE_SKILLS_DIR`` → ``~/.sage/skills``.
     """
 
-    def __init__(self, skills_dir: Optional[Path] = None) -> None:
+    def __init__(self, skills_dir: Path | None = None) -> None:
         self._explicit_skills_dir = skills_dir
 
     def write(self, name: str, content: str, *, overwrite: bool = True) -> Path:
@@ -61,7 +60,7 @@ class SkillLoader:
         logger.info("Skill written to %s", target_file)
         return target_file
 
-    def read(self, name: str) -> Optional[str]:
+    def read(self, name: str) -> str | None:
         """读取技能的 SKILL.md 全文 (Round 3 审计/回滚用)。
 
         Returns:
@@ -105,7 +104,7 @@ class SkillLoader:
 # Global singleton
 # ------------------------------------------------------------------ #
 
-_skill_loader: Optional[SkillLoader] = None
+_skill_loader: SkillLoader | None = None
 
 
 def get_skill_loader() -> SkillLoader:

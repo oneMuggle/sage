@@ -178,7 +178,7 @@ def _mock_http(body: dict) -> AsyncMock:
     return mock_http
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_llm_response_carries_usage_and_tracker_records():
     client = _make_client()
     with patch.object(client, "_get_client", return_value=_mock_http(_openai_body())):
@@ -198,7 +198,7 @@ async def test_llm_response_carries_usage_and_tracker_records():
     await client.close()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_llm_response_usage_none_when_absent():
     client = _make_client()
     body = _openai_body(with_usage=False)

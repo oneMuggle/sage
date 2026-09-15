@@ -23,7 +23,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from urllib.parse import urlsplit
 
 from backend.domain.risk import RiskClass
@@ -56,12 +56,12 @@ def _error(exc: BrowserCDPError) -> ToolResult:
     return ToolResult(success=False, error=str(exc))
 
 
-def _resolve_session(browser_id: Optional[str]) -> BrowserSession:
+def _resolve_session(browser_id: str | None) -> BrowserSession:
     """统一入口：解析会话并把 BrowserCDPError 归一为带提示的错误。"""
     return get_browser_manager().require(browser_id)
 
 
-def validate_url(url: str) -> Optional[str]:
+def validate_url(url: str) -> str | None:
     """导航 scheme 校验；返回错误文案或 None。"""
     if not isinstance(url, str) or not url.strip():
         return "url 不能为空"
@@ -146,7 +146,7 @@ def _js_scroll(amount: int) -> str:
     )
 
 
-def _evaluate_json(session: BrowserSession, expression: str, target_id: Optional[str]) -> Any:
+def _evaluate_json(session: BrowserSession, expression: str, target_id: str | None) -> Any:
     """Runtime.evaluate（returnByValue）→ 解析 value；异常细节透出。"""
     result = cdp_command(
         session,
@@ -167,7 +167,7 @@ def _validate_interact_args(
     text: str,
     value: str,
     key: str,
-) -> Optional[ToolResult]:
+) -> ToolResult | None:
     """browser_interact 参数校验；返回拒绝结果或 None（放行）。"""
     if kwargs:
         return ToolResult(
@@ -193,7 +193,7 @@ def _validate_interact_args(
 
 def _validate_action_args(
     action: str, selector: str, text: str, value: str
-) -> Optional[ToolResult]:
+) -> ToolResult | None:
     """click / type 两个依赖定位参数的 action 的专项校验。"""
     if action == "click":
         if not selector and not text:
@@ -208,7 +208,7 @@ def _validate_action_args(
 
 
 def _wait_page_settled(
-    session: BrowserSession, target_id: Optional[str], wait_for: str = ""
+    session: BrowserSession, target_id: str | None, wait_for: str = ""
 ) -> None:
     """navigate 后等页面可用（readyState + 正文稳定，见 web_render.wait_page_ready）。
 

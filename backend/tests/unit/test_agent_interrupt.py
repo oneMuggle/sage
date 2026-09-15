@@ -20,7 +20,7 @@ def _make_response(content: str = "", tool_calls: list = None) -> LLMResponse:
     return LLMResponse(content=content, tool_calls=tool_calls or [])
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_pre_set_interrupt_flag_yields_failed_without_llm_call():
     """进循环前已置位 → 首个事件即 FAILED，LLM 一次都不调。"""
     agent = SageAgent()
@@ -39,7 +39,7 @@ async def test_pre_set_interrupt_flag_yields_failed_without_llm_call():
     assert agent.is_interrupted() is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_interrupt_between_iterations_stops_before_next_llm_call():
     """第 0 轮 LLM 返回 tool_calls（调用期间置位）→ 第 1 轮顶部 FAILED。"""
     tool_call = LLMToolCall(

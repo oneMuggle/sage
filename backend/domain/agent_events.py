@@ -31,7 +31,7 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Callable, Coroutine
 
 
 class AgentEventType(Enum):
@@ -149,7 +149,7 @@ class AgentEventBus:
         """
         self._follow_up_queue.append(message)
 
-    def get_steering(self) -> Optional[str]:
+    def get_steering(self) -> str | None:
         """
         获取下一个 steering 消息
 
@@ -160,7 +160,7 @@ class AgentEventBus:
             return self._steering_queue.pop(0)
         return None
 
-    def get_follow_up(self) -> Optional[str]:
+    def get_follow_up(self) -> str | None:
         """
         获取下一个 follow-up 消息
 

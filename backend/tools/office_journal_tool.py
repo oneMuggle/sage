@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from docx import Document
 
@@ -45,8 +45,8 @@ from backend.tools.context import ToolExecutionContext, current_tool_context
 
 
 def _resolve_active_workspace(
-    ctx: Optional[ToolExecutionContext],
-) -> Optional[Path]:
+    ctx: ToolExecutionContext | None,
+) -> Path | None:
     """有活动绑定 → 绑定工作区 Path；否则 ``None``。
 
     与 office_template_tool 内的同名函数对齐签名。复用 ``get_active_workspace``
@@ -69,8 +69,8 @@ def _resolve_active_workspace(
 
 
 def _resolve_spec(
-    spec_id: Optional[str],
-    file_path: Optional[str],
+    spec_id: str | None,
+    file_path: str | None,
     workspace: Path,
 ) -> JournalSpec:
     """解析 spec 来源：spec_id → load_spec；file_path → parse_journal_spec。
@@ -118,7 +118,7 @@ class OfficeJournalParseTemplateTool(BaseTool):
             },
         )
 
-    def execute(self, file_path: Optional[str] = None, **kwargs: Any) -> ToolResult:
+    def execute(self, file_path: str | None = None, **kwargs: Any) -> ToolResult:
         if not isinstance(file_path, str) or not file_path.strip():
             return ToolResult(success=False, error="content_shape_invalid")
         # 路径围栏：file_path 必须在绑定 workspace 内（policy.workspace_root）
@@ -205,10 +205,10 @@ class OfficeJournalFillFromContentTool(BaseTool):
 
     def execute(  # noqa: PLR0911
         self,
-        content: Optional[Dict[str, Any]] = None,
-        spec_id: Optional[str] = None,
-        file_path: Optional[str] = None,
-        output_filename: Optional[str] = None,
+        content: Dict[str, Any] | None = None,
+        spec_id: str | None = None,
+        file_path: str | None = None,
+        output_filename: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
         if not isinstance(content, dict):
@@ -292,10 +292,10 @@ class OfficeJournalGenerateArticleTool(BaseTool):
 
     def execute(  # noqa: PLR0911
         self,
-        user_request: Optional[str] = None,
-        spec_id: Optional[str] = None,
-        file_path: Optional[str] = None,
-        output_filename: Optional[str] = None,
+        user_request: str | None = None,
+        spec_id: str | None = None,
+        file_path: str | None = None,
+        output_filename: str | None = None,
         max_rounds: int = 2,
         **kwargs: Any,
     ) -> ToolResult:
@@ -409,8 +409,8 @@ class OfficeJournalValidateTool(BaseTool):
 
     def execute(  # noqa: PLR0911 - many early-return guard clauses for input validation
         self,
-        file_path: Optional[str] = None,
-        spec_id: Optional[str] = None,
+        file_path: str | None = None,
+        spec_id: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
         if not isinstance(file_path, str) or not file_path.strip():

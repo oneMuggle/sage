@@ -225,7 +225,7 @@ def test_probe_chrome_major_reads_version_dir(tmp_path, monkeypatch):
     assert http_factory._probe_chrome_major() == 130
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("value", "expected"),
     [("5", 5.0), ("  12 ", 12.0), ("", None), (None, None), ("garbage", None)],
 )

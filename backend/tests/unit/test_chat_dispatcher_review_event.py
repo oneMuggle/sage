@@ -27,7 +27,7 @@ def _dispatcher(settings: OrchSettings | None = None) -> ChatDispatcher:
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_run_review_emits_task_review_event():
     """_run_review 末尾 push task_review NDJSON 事件到 entry_queue。"""
     dispatcher = _dispatcher()
@@ -54,7 +54,7 @@ async def test_run_review_emits_task_review_event():
     assert "未产出" in e["summary"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_zero_assertion_parse_triggers_fail():
     """0-parse → verdict=fail + summary 含'未产出'。"""
     dispatcher = _dispatcher()
@@ -70,7 +70,7 @@ async def test_zero_assertion_parse_triggers_fail():
     assert "未产出" in result["block"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_review_pass_with_fact_assertion():
     """[FACT] 类断言 → verdict=pass。"""
     from backend.orchestration.report_schema import Assertion, AssertionType
@@ -88,7 +88,7 @@ async def test_review_pass_with_fact_assertion():
     assert result["verdict"] == "pass"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_review_fail_with_negative_evidence_high_confidence():
     """[NEGATIVE_EVIDENCE] confidence>=0.7 → verdict=fail。"""
     from backend.orchestration.report_schema import Assertion, AssertionType
@@ -128,7 +128,7 @@ def test_broken_review_yields_then_raises():
             asyncio.run(agen.__anext__())
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_max_lane_iterations_guard_returns_failure():
     """executor 一直返回 retrying → 注入的 max_lane_iterations 后 raise RuntimeError。
 

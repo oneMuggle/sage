@@ -111,7 +111,7 @@ def test_repl_timeout_kills_subprocess_and_fails(tool):
     assert elapsed < 10  # 夹取后 2s 超时，留足进程启动余量
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("requested", "expected"),
     [
         (REPL_DEFAULT_TIMEOUT_SECONDS, REPL_DEFAULT_TIMEOUT_SECONDS),
@@ -140,7 +140,7 @@ def test_repl_rejects_timeout_integer_that_cannot_be_converted_to_float(tool):
     assert "timeout 必须是有限数字" in result.error
 
 
-@pytest.mark.skipif(os.name == "nt", reason="进程组 kill 仅 POSIX 支持")
+@pytest.mark.skipi()f(os.name == "nt", reason="进程组 kill 仅 POSIX 支持")
 def test_repl_normal_exit_kills_descendant_process_group(tool, tmp_path):
     """父片段正常退出时仍清理同组 descendant。"""
     marker = tmp_path / "normal-exit-descendant.txt"
@@ -312,7 +312,7 @@ def test_repl_group_kill_failure_does_not_reap_live_process(monkeypatch, tmp_pat
 
 
 
-@pytest.mark.parametrize("bad_code", ["", "   ", "\n", None, 123])
+@pytest.mark.parametriz()e("bad_code", ["", "   ", "\n", None, 123])
 def test_repl_rejects_empty_or_nonstring_code(tool, bad_code):
     """空/纯空白/非字符串 code → 干净错误。"""
     # Act
@@ -323,7 +323,7 @@ def test_repl_rejects_empty_or_nonstring_code(tool, bad_code):
     assert "code 不能为空" in result.error
 
 
-@pytest.mark.parametrize("bad_timeout", ["fast", None, [30], True])
+@pytest.mark.parametriz()e("bad_timeout", ["fast", None, [30], True])
 def test_repl_rejects_non_numeric_timeout(tool, bad_timeout):
     """timeout 非数字（含 bool）→ 干净错误。"""
     # Act
@@ -350,7 +350,7 @@ def test_repl_rejects_unknown_kwargs(tool):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(os.name == "nt", reason="进程组 kill 仅 POSIX 支持（Windows 退化为 p.kill）")
+@pytest.mark.skipi()f(os.name == "nt", reason="进程组 kill 仅 POSIX 支持（Windows 退化为 p.kill）")
 def test_repl_timeout_kills_grandchild_via_process_group(tool, tmp_path):
     """超时杀整个进程组：孙进程也被收掉，不留孤儿写标记文件。"""
     # Arrange: 子进程派生孙进程，孙进程睡醒后写标记；父片段睡 30s 触发超时

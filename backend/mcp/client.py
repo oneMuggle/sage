@@ -23,7 +23,7 @@ import queue
 import subprocess
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.mcp.config import McpServerConfig
 
@@ -52,14 +52,14 @@ class McpClient:
 
     def __init__(self, config: McpServerConfig):
         self._config = config
-        self._process: Optional[subprocess.Popen] = None
+        self._process: subprocess.Popen | None = None
         self._request_id = 0
         self._lock = threading.Lock()
         self._initialized = False
         self._stderr_lines: List[str] = []
-        self._stderr_thread: Optional[threading.Thread] = None
-        self._stdout_queue: Optional[queue.Queue] = None
-        self._stdout_thread: Optional[threading.Thread] = None
+        self._stderr_thread: threading.Thread | None = None
+        self._stdout_queue: queue.Queue | None = None
+        self._stdout_thread: threading.Thread | None = None
         # M3: per-server response timeout from config (previously a
         # hardcoded 60s). Falls back to 60s for configs without the field.
         self._timeout = float(getattr(config, "timeout_seconds", 60.0) or 60.0)

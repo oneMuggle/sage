@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -27,7 +27,7 @@ pytestmark = pytest.mark.unit
 
 
 def _mock_tool(
-    name: str, *, success: bool = True, content: Any = None, error: Optional[str] = None
+    name: str, *, success: bool = True, content: Any = None, error: str | None = None
 ) -> Mock:
     """构造一个返回 ToolResult 形状的 tool mock。"""
     tool = Mock()

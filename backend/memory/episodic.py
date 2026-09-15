@@ -13,7 +13,7 @@ import logging
 import sqlite3
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.memory.chinese_tokenizer import tokenize
 from backend.memory.summary_text import truncate_summary
@@ -45,8 +45,8 @@ class EpisodicMemory:
         self,
         content: str,
         importance: int = 5,
-        metadata: Optional[Dict[str, Any]] = None,
-        session_id: Optional[str] = None,
+        metadata: Dict[str, Any] | None = None,
+        session_id: str | None = None,
         memory_type: str = "conversation",
     ) -> str:
         """
@@ -99,8 +99,8 @@ class EpisodicMemory:
         query: str,
         limit: int = 10,
         min_importance: int = 1,
-        memory_type: Optional[str] = None,
-        session_id: Optional[str] = None,
+        memory_type: str | None = None,
+        session_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         """
         搜索情景记忆
@@ -176,7 +176,7 @@ class EpisodicMemory:
 
         return results
 
-    def get_recent(self, limit: int = 10, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_recent(self, limit: int = 10, session_id: str | None = None) -> List[Dict[str, Any]]:
         """
         获取最近的记忆
 
@@ -335,7 +335,7 @@ class EpisodicMemory:
             return memory
         return None
 
-    def count(self, session_id: Optional[str] = None) -> int:
+    def count(self, session_id: str | None = None) -> int:
         """
         获取记忆总数（批次三 step 5：可按 session 过滤）
 

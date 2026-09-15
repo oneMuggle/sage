@@ -20,7 +20,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator, List, Optional, Tuple, Union
+from typing import Iterator, List, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ class ProjectContext:
 def _ancestor_chain(root: Path) -> List[Path]:
     """返回从文件系统根到 ``root`` 的目录链 (祖先在前)。"""
     chain: List[Path] = []
-    cursor: Optional[Path] = root
+    cursor: Path | None = root
     while cursor is not None:
         chain.append(cursor)
         parent = cursor.parent

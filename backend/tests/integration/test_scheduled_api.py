@@ -12,21 +12,21 @@ from backend.api.scheduled_router import build_router
 from backend.services.scheduler import SchedulerService
 
 
-@pytest.fixture()
+@pytest.fixture
 def message_repo() -> MagicMock:
     repo = MagicMock()
     repo.insert = MagicMock(return_value={"id": "msg-1"})
     return repo
 
 
-@pytest.fixture()
+@pytest.fixture
 def session_repo() -> MagicMock:
     repo = MagicMock()
     repo.exists = MagicMock(return_value=True)
     return repo
 
 
-@pytest.fixture()
+@pytest.fixture
 def scheduler(tmp_path: Path, message_repo: MagicMock, session_repo: MagicMock) -> SchedulerService:
     return SchedulerService(
         store_path=tmp_path / "scheduled_tasks.json",
@@ -35,7 +35,7 @@ def scheduler(tmp_path: Path, message_repo: MagicMock, session_repo: MagicMock) 
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(scheduler: SchedulerService) -> TestClient:
     app = FastAPI()
     app.include_router(build_router(lambda: scheduler), prefix="/api/v1")

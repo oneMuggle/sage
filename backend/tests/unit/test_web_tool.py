@@ -179,7 +179,7 @@ def test_web_fetch_rejects_malformed_ipv6_url():
     assert "无效的 URL" in result.error
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "bad_url",
     [
         "https://www.qishux xia.com/",  # 模型分词把域名切成两段,中间多空格
@@ -280,7 +280,7 @@ def test_web_fetch_subagent_blocks_private_destinations():
     assert "subagent_web_fetch_blocked" in result.error
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "address",
     [
         "100.64.0.1",
@@ -528,7 +528,7 @@ def test_web_fetch_decodes_gbk_page():
     assert "摘要正文" in result.content["content"]
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("mode", "present", "absent"),
     [
         ("text", (), ("links", "tables")),
@@ -991,7 +991,7 @@ def _fetch_tool():
     return WebFetchTool(network_policy=_intranet("example.com"))
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("html", "text", "expected"),
     [
         (

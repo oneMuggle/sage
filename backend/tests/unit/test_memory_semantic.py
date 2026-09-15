@@ -10,7 +10,7 @@ from backend.memory.semantic import SemanticMemory
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def semantic(tmp_db_path: str) -> SemanticMemory:
     db = Database(db_path=tmp_db_path)
     db.init_db()

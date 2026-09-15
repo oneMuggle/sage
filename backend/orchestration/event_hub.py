@@ -6,7 +6,7 @@ import asyncio
 import contextlib
 from collections import defaultdict, deque
 from dataclasses import dataclass, replace
-from typing import Awaitable, Callable, Deque, Dict, Optional, Protocol, cast
+from typing import Awaitable, Callable, Deque, Dict, Protocol, cast
 
 from backend.domain.orch_events import RunEvent
 from backend.orchestration._lazy_lock import LazyLock
@@ -67,8 +67,8 @@ class EventHub:
         self,
         history_size: int = 1000,
         subscriber_queue_size: int = 1000,
-        event_repository: Optional[_EventRepository] = None,
-        event_applier: Optional[Callable[[RunEvent], Awaitable[None]]] = None,
+        event_repository: _EventRepository | None = None,
+        event_applier: Callable[[RunEvent], Awaitable[None]] | None = None,
     ) -> None:
         if history_size < 1 or subscriber_queue_size < 1:
             raise ValueError("history_size and subscriber_queue_size must be positive")
@@ -119,7 +119,7 @@ class EventHub:
                     await self._event_applier(event)
             return len(events)
 
-    async def restore_runs(self, run_ids: Optional[list[str]] = None) -> int:
+    async def restore_runs(self, run_ids: list[str] | None = None) -> int:
         """Replay persisted events for selected runs, or all known runs."""
         if self._event_repository is None:
             return 0
@@ -172,7 +172,7 @@ class EventHub:
             with contextlib.suppress(asyncio.QueueFull):
                 subscriber.queue.put_nowait(_CLOSE)
 
-    def subscriber_count(self, run_id: Optional[str] = None) -> int:
+    def subscriber_count(self, run_id: str | None = None) -> int:
         """Return active subscriber count, optionally scoped to one run."""
         if run_id is not None:
             return sum(not sub.closed for sub in self._subscribers[run_id])

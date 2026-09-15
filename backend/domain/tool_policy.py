@@ -14,7 +14,7 @@ claw-code ``concept.md`` §4 原则 2「显式限制」：byte/turn/glob caps + 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 # 默认值与方案 §3.2 设计一致
 _DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -43,7 +43,7 @@ class ToolPolicy:
     max_result_items: int = _DEFAULT_MAX_RESULT_ITEMS
     max_read_bytes: int = _DEFAULT_MAX_READ_BYTES
     max_tool_calls_per_run: int = _DEFAULT_MAX_TOOL_CALLS_PER_RUN
-    workspace_root: Optional[str] = None
+    workspace_root: str | None = None
     # Sub-agent-only restrictions; direct tool callers keep legacy behavior.
     subagent_only: bool = False
 

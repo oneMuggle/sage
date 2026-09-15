@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,7 @@ class TitleGenerator:
         self,
         user_message: str,
         assistant_message: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """从首轮对话生成标题
 
         Args:
@@ -64,7 +63,7 @@ class TitleGenerator:
         self,
         user_message: str,
         assistant_message: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """使用 LLM 生成标题"""
         prompt = TITLE_PROMPT.format(
             user_message=user_message[:300],
@@ -101,7 +100,7 @@ class TitleGenerator:
         return str(response)
 
     @staticmethod
-    def _clean_title(raw: str) -> Optional[str]:
+    def _clean_title(raw: str) -> str | None:
         """清洗 LLM 返回的标题文本"""
         if not raw:
             return None

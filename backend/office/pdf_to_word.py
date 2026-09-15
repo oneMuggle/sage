@@ -51,7 +51,7 @@ from __future__ import annotations
 import logging
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import pymupdf
 from docx import Document
@@ -88,14 +88,14 @@ class PdfToWordRequest(BaseModel):
 
     workspace_path: str = Field(description="Absolute path to the workspace dir")
     file_path: str = Field(description="Absolute path to the source .pdf file")
-    out_filename: Optional[str] = Field(
+    out_filename: str | None = Field(
         default=None,
         description=(
             "Output .docx filename; defaults to '<pdf-stem>.docx'. Extension "
             "is auto-appended when omitted."
         ),
     )
-    source_doc_id: Optional[str] = Field(
+    source_doc_id: str | None = Field(
         default=None,
         description=(
             "Managed doc id of the source PDF. When given, the generated "
@@ -114,18 +114,18 @@ class PdfToWordResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ok: bool
-    output_path: Optional[str] = Field(default=None, description="生成的 .docx 绝对路径")
-    filename: Optional[str] = Field(default=None, description="生成的文件名（含扩展名）")
-    file_size_bytes: Optional[int] = Field(default=None, ge=0)
-    paragraph_count: Optional[int] = Field(default=None, ge=0)
-    table_count: Optional[int] = Field(default=None, ge=0)
-    image_count: Optional[int] = Field(
+    output_path: str | None = Field(default=None, description="生成的 .docx 绝对路径")
+    filename: str | None = Field(default=None, description="生成的文件名（含扩展名）")
+    file_size_bytes: int | None = Field(default=None, ge=0)
+    paragraph_count: int | None = Field(default=None, ge=0)
+    table_count: int | None = Field(default=None, ge=0)
+    image_count: int | None = Field(
         default=None,
         ge=0,
         description="源 PDF 中的图片数量（转换跳过图片，仅计数上报）",
     )
-    page_count: Optional[int] = Field(default=None, ge=0)
-    error: Optional[str] = Field(default=None, description="失败原因；成功时为 None")
+    page_count: int | None = Field(default=None, ge=0)
+    error: str | None = Field(default=None, description="失败原因；成功时为 None")
 
 
 def _body_font_size(pdf: pymupdf.Document) -> float:
@@ -247,7 +247,7 @@ def _table_bboxes(page: pymupdf.Page) -> List[Tuple[float, float, float, float]]
 
 
 def _block_center_inside(
-    block_bbox: Optional[List[float]],
+    block_bbox: List[float] | None,
     table_rects: List[Tuple[float, float, float, float]],
 ) -> bool:
     """Whether a text block's center falls inside any rendered table region."""

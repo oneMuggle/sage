@@ -25,7 +25,7 @@ import os
 import re
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple  # noqa: UP035 — py3.8 纪律
+from typing import Any, Dict, List, Tuple  # noqa: UP035 — py3.8 纪律
 
 import numpy as np
 
@@ -115,7 +115,7 @@ def _fts_delete_path(conn: sqlite3.Connection, path: str) -> None:
     conn.execute("DELETE FROM chunks_fts WHERE path = ?", (path,))
 
 
-def _fts_match_query(query: str) -> Optional[str]:
+def _fts_match_query(query: str) -> str | None:
     """把自由文本规整为 FTS5 MATCH 语法（词间 OR；特殊字符剥离防语法炸）。"""
     tokens = [t for t in re.split(r"[^0-9A-Za-z_\u4e00-\u9fff]+", query) if t]
     if not tokens:
@@ -267,7 +267,7 @@ def chunk_file(path: Path, lines: List[str]) -> List[Tuple[int, str]]:
     return chunk_file_semantic(lines, family)
 
 
-def load_embedding_config() -> Optional[Dict[str, str]]:
+def load_embedding_config() -> Dict[str, str] | None:
     """从 app_settings 读取 embedding 端点配置; 未配置返回 None。
 
     前端 modelSelections.embeddingModel = {endpointId, modelId} 指向
@@ -366,7 +366,7 @@ def _embed_texts(config: Dict[str, str], texts: List[str]) -> List[List[float]]:
     return flat
 
 
-def _meta_get(conn: sqlite3.Connection, key: str) -> Optional[str]:
+def _meta_get(conn: sqlite3.Connection, key: str) -> str | None:
     row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
     return None if row is None else row[0]
 

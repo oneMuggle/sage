@@ -126,7 +126,7 @@ def test_slash_list_excludes_archived():
     assert "/review" not in adapter.list_slash_commands()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_disabled_slash_command_is_hidden_and_rejected():
     adapter = _skillmd_adapter("review", user_invocable=True, user_invocable_name="/review")
     adapter.set_enabled("review", False)
@@ -135,7 +135,7 @@ async def test_disabled_slash_command_is_hidden_and_rejected():
         await adapter.execute_command("/review")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_slash_execute_archived_raises():
     """归档技能的 slash command 执行抛 LookupError（路由层 → 404）。"""
     adapter = _skillmd_adapter("review", user_invocable=True, user_invocable_name="/review")

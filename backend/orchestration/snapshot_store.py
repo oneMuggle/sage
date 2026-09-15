@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from backend.domain.orch_events import RunEvent, RunSnapshot, TaskSummary
 from backend.orchestration._lazy_lock import LazyLock
@@ -28,15 +28,15 @@ class _TaskSnapshot:
     goal: str = ""
     status: str = "pending"
     revision: int = 0
-    current_step_id: Optional[str] = None
-    waiting_reason: Optional[str] = None
+    current_step_id: str | None = None
+    waiting_reason: str | None = None
     last_event_seq: int = 0
     producer_generation: int = 0
-    started_at: Optional[int] = None
-    finished_at: Optional[int] = None
+    started_at: int | None = None
+    finished_at: int | None = None
     last_event_at: int = 0
-    error: Optional[str] = None
-    output_preview: Optional[str] = None
+    error: str | None = None
+    output_preview: str | None = None
 
 
 @dataclass
@@ -47,13 +47,13 @@ class _RunSnapshot:
     status: str = "draft"
     revision: int = 0
     last_event_seq: int = 0
-    owner_session_id: Optional[str] = None
+    owner_session_id: str | None = None
     producer_generation: int = 0
-    created_at: Optional[int] = None
-    started_at: Optional[int] = None
-    finished_at: Optional[int] = None
+    created_at: int | None = None
+    started_at: int | None = None
+    finished_at: int | None = None
     last_event_at: int = 0
-    final_summary: Optional[str] = None
+    final_summary: str | None = None
     tasks: Dict[str, _TaskSnapshot] = field(default_factory=dict)
 
 
@@ -178,7 +178,7 @@ class SnapshotStore:
         if step_id:
             task.current_step_id = step_id
 
-    def get_run_snapshot(self, run_id: str) -> Optional[RunSnapshot]:
+    def get_run_snapshot(self, run_id: str) -> RunSnapshot | None:
         """返回 run 的当前快照（不可变视图）。"""
         run = self._runs.get(run_id)
         if run is None:
@@ -210,7 +210,7 @@ class SnapshotStore:
     def list_run_ids(self) -> List[str]:
         return list(self._runs.keys())
 
-    def get_task_revision(self, run_id: str, task_id: str) -> Optional[int]:
+    def get_task_revision(self, run_id: str, task_id: str) -> int | None:
         """Return the current in-memory task revision for compatibility callers."""
         state = self.get_task_steering_state(run_id, task_id)
         return state[1] if state is not None else None
@@ -233,7 +233,7 @@ class SnapshotStore:
 
     def get_task_steering_state(
         self, run_id: str, task_id: str
-    ) -> Optional[tuple[str, int]]:
+    ) -> tuple[str, int] | None:
         """Return task status and revision for a lock-protected steering check."""
         run = self._runs.get(run_id)
         if run is None:

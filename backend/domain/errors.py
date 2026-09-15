@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 class LLMErrorType(str, Enum):
@@ -43,8 +43,8 @@ class LLMError(Exception):
 
     type: LLMErrorType
     message: str
-    status_code: Optional[int] = None
-    retry_after: Optional[int] = None  # 仅 RATE_LIMITED 时使用（秒）
+    status_code: int | None = None
+    retry_after: int | None = None  # 仅 RATE_LIMITED 时使用（秒）
 
     def __post_init__(self) -> None:
         # dataclass 不会自动调用 super().__init__，手动把 message 传给

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.domain.risk import RiskClass
 from backend.domain.runtime import (
@@ -64,10 +64,10 @@ class ProjectDiagnoseTool(BaseTool):
     def execute(  # type: ignore[override]
         self,
         *,
-        languages: Optional[List[str]] = None,
+        languages: List[str] | None = None,
         include_tools: bool = True,
-        target_version: Optional[str] = None,
-        project_root: Optional[str] = None,
+        target_version: str | None = None,
+        project_root: str | None = None,
         **_kwargs: Any,
     ) -> ToolResult:
         root = Path(project_root) if project_root else Path.cwd()
@@ -125,7 +125,7 @@ class ProjectDiagnoseTool(BaseTool):
             if diag.level is DiagnosticLevel.PARTIAL and level is DiagnosticLevel.SATISFIED:
                 level = DiagnosticLevel.PARTIAL
 
-        recommended: Optional[str] = None
+        recommended: str | None = None
         for diag in per_language.values():
             if diag.recommended_runtime:
                 recommended = diag.recommended_runtime

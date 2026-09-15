@@ -101,7 +101,7 @@ def test_bridge_register_get_unregister():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_execute_async_forwards_events_and_succeeds():
     """有桥时: acting/observing 镜像 + 终态合成 task_status done;结果正常。"""
     emitted: List[Dict[str, Any]] = []
@@ -139,7 +139,7 @@ async def test_execute_async_forwards_events_and_succeeds():
     assert terminal[0]["output_preview"] == "调研结论"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_execute_async_timeout_cancels_subagent():
     """超时 → 内层协程被取消（L12 根修）+ lane 失败 + 合成 task_status failed。"""
     emitted: List[Dict[str, Any]] = []
@@ -166,7 +166,7 @@ async def test_execute_async_timeout_cancels_subagent():
     assert terminal[0]["status"] == "failed"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_execute_async_without_bridge_still_succeeds():
     """无桥（非流上下文）→ 行为退化为纯执行,不产生镜像也不崩溃。"""
     tool, _fake = _make_tool([_acting(), _observing()])
@@ -175,7 +175,7 @@ async def test_execute_async_without_bridge_still_succeeds():
     assert result.content["answer"] == "调研结论"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_execute_async_validates_inputs():
     tool, _fake = _make_tool([])
     result = await tool.execute_async(description="", prompt="x")
@@ -184,7 +184,7 @@ async def test_execute_async_validates_inputs():
     assert result.success is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_execute_async_requires_llm():
     tool = AgentTool(llm_client=None, subagent_factory=lambda registry: None)
     with patch("backend.tools.agent_tool.build_llm_client_from_settings", return_value=None):
@@ -193,7 +193,7 @@ async def test_execute_async_requires_llm():
     assert "no_llm_configured" in (result.error or "")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_execute_async_caps_answer():
     long_answer = "x" * (SUBAGENT_ANSWER_CAP + 100)
 

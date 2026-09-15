@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import builtins
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pytest
 from openpyxl import Workbook
@@ -187,7 +187,7 @@ def test_read_xlsx_keeps_note_when_eval_partial(
     """部分解析：仍有未解析公式 → 提示行保留，已解析条目照常升级。"""
     path = _build_multi_formula_xlsx(fixture_dir / "multi.xlsx")
 
-    def _partial(file_path: object) -> Optional[Dict[str, Dict[str, Any]]]:
+    def _partial(file_path: object) -> Dict[str, Dict[str, Any]] | None:
         return {"Calc": {"B4": 30}}  # C1 缺席 → 未解析
 
     monkeypatch.setattr("backend.office.excel_eval.evaluate_workbook", _partial)

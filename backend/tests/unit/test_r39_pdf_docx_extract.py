@@ -30,7 +30,7 @@ _requires_pdf = pytest.mark.skipif(not _HAS_PYMUPDF, reason="pymupdf not install
 _requires_docx = pytest.mark.skipif(not _HAS_DOCX, reason="python-docx not installed")
 
 
-@pytest.fixture()
+@pytest.fixture
 def client():
     app = FastAPI()
     app.include_router(chat_attachment_routes.router)

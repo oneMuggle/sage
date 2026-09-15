@@ -15,7 +15,7 @@ import zipfile
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from docx import Document
 from docxtpl import DocxTemplate, InlineImage
@@ -92,10 +92,10 @@ def _extract_placeholders_from_text(
     text: str,
     location: PlaceholderLocation,
     *,
-    paragraph_index: Optional[int] = None,
-    table_index: Optional[int] = None,
-    row_index: Optional[int] = None,
-    col_index: Optional[int] = None,
+    paragraph_index: int | None = None,
+    table_index: int | None = None,
+    row_index: int | None = None,
+    col_index: int | None = None,
 ) -> List[TemplatePlaceholder]:
     """Extract {{}} placeholders from a text string.
 
@@ -273,7 +273,7 @@ def analyze_word_template(
     file_path: Path,
     *,
     workspace_path: str,
-    document_id: Optional[str] = None,
+    document_id: str | None = None,
 ) -> WordTemplateAnalysis:
     """Analyze a Word template and extract all {{}} placeholders."""
     file_path = Path(file_path)

@@ -73,7 +73,7 @@ def _stub_background_exec(monkeypatch):
 
 
 class TestCreateLanes:
-    @pytest.mark.usefixtures("_no_llm", "_stub_background_exec")
+    @pytest.mark.usefixture()s("_no_llm", "_stub_background_exec")
     async def test_create_lane_degraded_single_task(self, client):
         """No LLM → single fallback lane, bound to a seeded agent."""
         resp = await client.post(
@@ -96,7 +96,7 @@ class TestCreateLanes:
         assert task["status"] == "created"
         assert task["team_id"] == body["team_id"]
 
-    @pytest.mark.usefixtures("mock_planner_llm", "_stub_background_exec")
+    @pytest.mark.usefixture()s("mock_planner_llm", "_stub_background_exec")
     async def test_create_lanes_with_mock_llm_two_tasks(self, client):
         """LLM DAG → two lanes, dependency wired between tasks."""
         resp = await client.post(
@@ -110,7 +110,7 @@ class TestCreateLanes:
         # Second task depends on the first (real ids).
         assert tasks[1]["blocked_by"] == [tasks[0]["task_id"]]
 
-    @pytest.mark.usefixtures("_no_llm", "_stub_background_exec")
+    @pytest.mark.usefixture()s("_no_llm", "_stub_background_exec")
     async def test_created_lane_visible_in_get_endpoints(self, client):
         """GET list/detail/events reflect the created lane."""
         created = (
@@ -133,7 +133,7 @@ class TestCreateLanes:
         events = (await client.get(f"/api/v1/orchestration/lanes/{lane_id}/events")).json()
         assert any(e["event_type"] == "lane.started" for e in events)
 
-    @pytest.mark.usefixtures("_no_llm", "_stub_background_exec")
+    @pytest.mark.usefixture()s("_no_llm", "_stub_background_exec")
     async def test_cancel_created_lane(self, client):
         """Cancellation still works on planner-created lanes."""
         created = (
@@ -151,7 +151,7 @@ class TestCreateLanes:
         again = await client.post(f"/api/v1/orchestration/lanes/{lane_id}/cancel", json={})
         assert again.status_code == 409
 
-    @pytest.mark.usefixtures("mock_planner_llm", "_stub_background_exec")
+    @pytest.mark.usefixture()s("mock_planner_llm", "_stub_background_exec")
     async def test_explicit_agent_pins_all_lanes(self, client):
         """?agent=researcher → every lane bound to researcher."""
         resp = await client.post(
@@ -162,13 +162,13 @@ class TestCreateLanes:
         assert len(body["lanes"]) == 2
         assert all(lane["agent_id"] == "researcher" for lane in body["lanes"])
 
-    @pytest.mark.usefixtures("_no_llm")
+    @pytest.mark.usefixture()s("_no_llm")
     async def test_empty_goal_400(self, client):
         resp = await client.post("/api/v1/orchestration/lanes", json={"goal": "   "})
         assert resp.status_code == 400
         assert "empty" in resp.json()["detail"]
 
-    @pytest.mark.usefixtures("_no_llm")
+    @pytest.mark.usefixture()s("_no_llm")
     async def test_unknown_agent_400(self, client):
         resp = await client.post(
             "/api/v1/orchestration/lanes", json={"goal": "g", "agent": "ghost-agent"}

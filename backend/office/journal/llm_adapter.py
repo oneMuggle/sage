@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from sage_core import Message, Role
 
@@ -47,7 +47,7 @@ class JournalLLMAdapter:
     def __init__(
         self,
         provider: ProviderClient,
-        model: Optional[str] = None,
+        model: str | None = None,
     ) -> None:
         self._provider = provider
         self._model = model or resolve_default_model()
@@ -105,7 +105,7 @@ def resolve_default_model() -> str:
     return "unknown"
 
 
-def _parse_turn_text(text: Optional[str]) -> Any:
+def _parse_turn_text(text: str | None) -> Any:
     """把 AssistantTurn.text 解析为 dict；失败时回退为 ``{"raw": text}``。
 
     ``generate_article`` 收到 dict 后会 ``JournalContent.model_validate``，

@@ -506,7 +506,7 @@ def test_collector_posix_fd_error_marks_output_lost(tmp_path, monkeypatch):
         os.close(write_fd)
 
 
-@pytest.mark.parametrize("max_bytes", [MAX_OUTPUT_CAP_BYTES + 1, 10**100])
+@pytest.mark.parametriz()e("max_bytes", [MAX_OUTPUT_CAP_BYTES + 1, 10**100])
 def test_collector_rejects_max_bytes_above_shared_limit(tmp_path, max_bytes):
     with pytest.raises(ValueError, match="maximum"):
         BoundedOutputCollector(io.BytesIO(), str(tmp_path / "output"), max_bytes)

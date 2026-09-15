@@ -11,7 +11,7 @@ from backend.api.legacy_routes import router
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture()
+@pytest.fixture
 def client():
     """Bare app + legacy router（与 test_approval_api 同模式）"""
     app = FastAPI()

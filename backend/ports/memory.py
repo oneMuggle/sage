@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Protocol
+from typing import List, Protocol
 
 from backend.domain.memory import MemoryContext
 
@@ -50,7 +50,7 @@ class MemoryPort(Protocol):
         ...
 
     async def store(
-        self, content: str, session_id: str, importance: int = 5, tags: Optional[List[str]] = None
+        self, content: str, session_id: str, importance: int = 5, tags: List[str] | None = None
     ) -> str:
         """存储记忆
 

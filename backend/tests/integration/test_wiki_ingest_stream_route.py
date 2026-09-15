@@ -135,7 +135,7 @@ def _make_request_body(project, source: str = "doc.md", source_abs: str = None) 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_ingest_stream_returns_application_x_ndjson_content_type(
     wiki_project, patch_ingest_stream
 ):
@@ -148,7 +148,7 @@ async def test_ingest_stream_returns_application_x_ndjson_content_type(
         assert r.headers["content-type"].startswith("application/x-ndjson")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_ingest_stream_sets_no_cache_headers(wiki_project, patch_ingest_stream):
     """Cache-Control + X-Accel-Buffering prevent proxies from buffering
     the stream (which would defeat SSE/NDJSON delivery)."""
@@ -160,7 +160,7 @@ async def test_ingest_stream_sets_no_cache_headers(wiki_project, patch_ingest_st
         assert r.headers["x-accel-buffering"] == "no"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_ingest_stream_yields_six_progress_events_for_happy_path(
     wiki_project, patch_ingest_stream
 ):
@@ -187,7 +187,7 @@ async def test_ingest_stream_yields_six_progress_events_for_happy_path(
         assert all(e["event"] == "progress" for e in events)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_ingest_stream_returns_404_for_missing_source_file(wiki_project, patch_ingest_stream):
     """Fast-fail BEFORE the stream opens — surface parse errors as
     HTTPException (500/400), not as half-streamed NDJSON."""
@@ -199,7 +199,7 @@ async def test_ingest_stream_returns_404_for_missing_source_file(wiki_project, p
         assert "源文件不存在" in r.json()["detail"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_ingest_stream_yields_failed_event_when_generator_raises(
     wiki_project, patch_ingest_stream
 ):

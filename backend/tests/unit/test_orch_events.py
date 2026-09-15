@@ -29,7 +29,7 @@ from backend.domain.orch_events import (
 class TestRunStateMachine:
     """Run 状态机合法转移测试。"""
 
-    @pytest.mark.parametrize(
+    @pytest.mark.parametriz()e(
         ("from_status", "to_status"),
         [
             (RunStatus.DRAFT, RunStatus.QUEUED),
@@ -54,7 +54,7 @@ class TestRunStateMachine:
         """合法转移应返回 True。"""
         assert validate_run_transition(from_status, to_status) is True
 
-    @pytest.mark.parametrize(
+    @pytest.mark.parametriz()e(
         ("from_status", "to_status"),
         [
             # 终态不可转出
@@ -105,7 +105,7 @@ class TestRunStateMachine:
 class TestTaskStateMachine:
     """Task 状态机合法转移测试。"""
 
-    @pytest.mark.parametrize(
+    @pytest.mark.parametriz()e(
         ("from_status", "to_status"),
         [
             (TaskStatus.PLANNED, TaskStatus.QUEUED),
@@ -138,7 +138,7 @@ class TestTaskStateMachine:
         """合法转移应返回 True。"""
         assert validate_task_transition(from_status, to_status) is True
 
-    @pytest.mark.parametrize(
+    @pytest.mark.parametriz()e(
         ("from_status", "to_status"),
         [
             # 终态不可转出
@@ -176,7 +176,7 @@ class TestTaskStateMachine:
 class TestStepStateMachine:
     """Step 状态机合法转移测试。"""
 
-    @pytest.mark.parametrize(
+    @pytest.mark.parametriz()e(
         ("from_status", "to_status"),
         [
             (StepStatus.PENDING, StepStatus.RUNNING),
@@ -197,7 +197,7 @@ class TestStepStateMachine:
         """合法转移应返回 True。"""
         assert validate_step_transition(from_status, to_status) is True
 
-    @pytest.mark.parametrize(
+    @pytest.mark.parametriz()e(
         ("from_status", "to_status"),
         [
             # 终态不可转出

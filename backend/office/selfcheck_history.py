@@ -44,7 +44,7 @@ import json
 import logging
 import sqlite3
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +60,8 @@ def record(
     doc_id: str,
     action: str,
     ok: bool,
-    summary: Optional[dict],
-    conn: Optional[sqlite3.Connection] = None,
+    summary: dict | None,
+    conn: sqlite3.Connection | None = None,
 ) -> None:
     """Best-effort append of one self-check history row.
 
@@ -85,7 +85,7 @@ def record(
             from backend.data.database import get_database
 
             conn = get_database().get_connection()
-        summary_json: Optional[str] = None
+        summary_json: str | None = None
         if summary is not None:
             summary_json = json.dumps(summary, ensure_ascii=False)
         conn.execute(

@@ -19,7 +19,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, FrozenSet, List, Optional
+from typing import Any, Dict, FrozenSet, List
 
 from backend.data.orchestration_repo import LaneEventRepository
 
@@ -114,7 +114,7 @@ class LaneEventPayload:
     event: LaneEvent
     lane_id: str
     task_id: str
-    agent_id: Optional[str] = None
+    agent_id: str | None = None
     timestamp: int = field(default_factory=lambda: int(time.time() * 1000))
     provenance: EventProvenance = EventProvenance.LIVE_LANE
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -140,7 +140,7 @@ class EventRecorder:
     Each event is persisted with full context for audit and replay.
     """
 
-    def __init__(self, repo: Optional[LaneEventRepository] = None) -> None:
+    def __init__(self, repo: LaneEventRepository | None = None) -> None:
         self.repo = repo or LaneEventRepository()
 
     def record(
@@ -148,9 +148,9 @@ class EventRecorder:
         event: LaneEvent,
         lane_id: str,
         task_id: str,
-        agent_id: Optional[str] = None,
+        agent_id: str | None = None,
         provenance: EventProvenance = EventProvenance.LIVE_LANE,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Dict[str, Any] | None = None,
     ) -> str:
         """
         Record a lane event.
@@ -197,7 +197,7 @@ class EventStream:
     - Time-range queries (for monitoring dashboards)
     """
 
-    def __init__(self, repo: Optional[LaneEventRepository] = None) -> None:
+    def __init__(self, repo: LaneEventRepository | None = None) -> None:
         self.repo = repo or LaneEventRepository()
 
     def get_lane_events(

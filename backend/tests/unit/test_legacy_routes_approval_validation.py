@@ -19,7 +19,7 @@ def test_accepts_valid_skill_md_with_matching_name() -> None:
     _validate_skill_draft_content(VALID_CONTENT, "test-skill")
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("content", "expected_message"),
     [
         ("# no frontmatter", "frontmatter"),

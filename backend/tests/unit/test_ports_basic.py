@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 import pytest
 from sage_core import Message, Role, SkillResult, SkillSpec, ToolResult, ToolSpec
@@ -184,8 +184,8 @@ class _InMemoryLLM:
     async def chat(
         self,
         messages: List[Message],
-        tools: Optional[List[Any]] = None,
-        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        tools: List[Any] | None = None,
+        tool_choice: Union[str, Dict[str, Any]] | None = None,
     ) -> Message:
         return Message(role=Role.ASSISTANT, content="ok")
 

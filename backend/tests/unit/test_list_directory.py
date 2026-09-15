@@ -13,7 +13,7 @@ import pytest
 from backend.api.wiki_routes import list_directory_impl
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="list_directory 依赖 wiki/files POSIX no-follow 原语",
 )

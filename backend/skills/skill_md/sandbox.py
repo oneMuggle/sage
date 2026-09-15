@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, FrozenSet, Optional, Protocol, Tuple
+from typing import Dict, FrozenSet, Protocol, Tuple
 
 # 子进程可继承的非敏感运行时变量。HOME/USERPROFILE 等身份变量刻意排除。
 DEFAULT_ENV_ALLOWLIST: FrozenSet[str] = frozenset(
@@ -100,10 +100,10 @@ class SandboxRequest:
 
     script_path: Path
     args: Tuple[str, ...] = ()
-    cwd: Optional[Path] = None
+    cwd: Path | None = None
     env: Dict[str, str] = field(default_factory=dict)
     timeout_s: float = 30.0
-    stdin_data: Optional[bytes] = None
+    stdin_data: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -126,7 +126,7 @@ class SandboxResult:
     stderr: str
     duration_ms: int
     timed_out: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class SandboxPort(Protocol):

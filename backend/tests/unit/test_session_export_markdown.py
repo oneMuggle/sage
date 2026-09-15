@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any, List
 
 import pytest
 
@@ -26,11 +26,11 @@ pytestmark = pytest.mark.unit
 class _Repo:
     """最小内存仓库 seam（session_export 的可选注入参数）。"""
 
-    def __init__(self, session: Optional[SessionModel], messages: List[MessageModel]):
+    def __init__(self, session: SessionModel | None, messages: List[MessageModel]):
         self._session = session
         self._messages = messages
 
-    def get(self, session_id: str) -> Optional[SessionModel]:
+    def get(self, session_id: str) -> SessionModel | None:
         return self._session
 
     def get_by_session(self, session_id: str, limit: int = 10) -> List[MessageModel]:

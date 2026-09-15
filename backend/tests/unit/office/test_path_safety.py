@@ -258,7 +258,7 @@ def test_resolve_output_path_expands_home(monkeypatch, tmp_path):
     assert out.name == "slides.pptx"
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "filename",
     ["../evil.docx", "a/b.docx", "a\\b.docx", "bad.txt", ".."],
 )

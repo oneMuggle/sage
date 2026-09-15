@@ -70,8 +70,8 @@ class _PendingReplCleanup:
     collectors: Optional[Tuple[BoundedOutputCollector, BoundedOutputCollector]]  # noqa: UP045
     stdout_path: str
     stderr_path: str
-    stdout_identity: Optional[Tuple[int, int]] = None
-    stderr_identity: Optional[Tuple[int, int]] = None
+    stdout_identity: Tuple[int, int] | None = None
+    stderr_identity: Tuple[int, int] | None = None
     process_group_id: Optional[int] = None  # noqa: UP045
     leader_exit_observed: bool = False
     process_group_killed: bool = False
@@ -88,7 +88,7 @@ def _close_process_streams(process: Any) -> None:
                 stream.close()
 
 
-def _timeout_validation_error(timeout: object) -> Optional[str]:
+def _timeout_validation_error(timeout: object) -> str | None:
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):  # noqa: UP038 — py3.8 不支持 X | Y isinstance
         return "timeout 必须是数字"
     try:
@@ -181,8 +181,8 @@ def _retain_pending_cleanup(
     stderr_path: str,
     process_group_id: Optional[int],  # noqa: UP045
     *,
-    stdout_identity: Optional[Tuple[int, int]] = None,
-    stderr_identity: Optional[Tuple[int, int]] = None,
+    stdout_identity: Tuple[int, int] | None = None,
+    stderr_identity: Tuple[int, int] | None = None,
     leader_exit_observed: bool = False,
     process_group_killed: bool = False,
 ) -> None:
@@ -281,7 +281,7 @@ class ReplTool(BaseTool):
         self, code: str = "", timeout: float = REPL_DEFAULT_TIMEOUT_SECONDS, **kwargs: object
     ) -> ToolResult:
         """执行 Python 代码片段并返回执行结果。"""
-        error: Optional[str] = None
+        error: str | None = None
         if kwargs:
             names = ", ".join(sorted(kwargs))
             error = f"未知参数: {names}（合法参数: code, timeout）"
@@ -335,12 +335,12 @@ class ReplTool(BaseTool):
         started = time.monotonic()
         process = None
         collectors = None
-        process_group_id: Optional[int] = None
+        process_group_id: int | None = None
         process_group_killed = False
         leader_exit_observed = False
         owns_output_paths = False
-        stdout_identity: Optional[Tuple[int, int]] = None
-        stderr_identity: Optional[Tuple[int, int]] = None
+        stdout_identity: Tuple[int, int] | None = None
+        stderr_identity: Tuple[int, int] | None = None
         try:
             if os.name == "nt" or not hasattr(os, "waitid"):
                 raise RuntimeError("REPL 平台不支持安全进程组回收")
@@ -398,7 +398,7 @@ class ReplTool(BaseTool):
                         process, reap=False, process_group_id=process_group_id
                     )
 
-            cleanup_error: Optional[BaseException] = None
+            cleanup_error: BaseException | None = None
             if not process_group_killed:
                 cleanup_error = RuntimeError("REPL 进程组无法安全终止")
             for collector in collectors:
@@ -451,7 +451,7 @@ class ReplTool(BaseTool):
                          stdout_collector_truncated or stderr_collector_truncated},
             )
         finally:
-            final_cleanup_error: Optional[BaseException] = None
+            final_cleanup_error: BaseException | None = None
             if process is not None:
                 if collectors is None:
                     if process_group_id is not None and not leader_exit_observed:

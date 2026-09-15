@@ -187,7 +187,7 @@ def test_search_rejects_query_longer_than_200_code_points(
         search_workspace_files(conn, binding.session_id, "界" * 201, 20)
 
 
-@pytest.mark.parametrize("limit", [0, 51])
+@pytest.mark.parametriz()e("limit", [0, 51])
 def test_search_rejects_out_of_range_limit(conn: sqlite3.Connection, binding, limit: int) -> None:
     with pytest.raises(ValueError, match="limit"):
         search_workspace_files(conn, binding.session_id, "report", limit)

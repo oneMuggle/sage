@@ -29,12 +29,12 @@ pytestmark = pytest.mark.unit
 def _make_doc(
     name: str = "test-skill",
     description: str = "A test skill",
-    triggers: Optional[List[str]] = None,
+    triggers: List[str] | None = None,
     body: str = "Body content",
-    version: Optional[str] = "1.0.0",
-    metadata: Optional[dict] = None,
-    raw_frontmatter: Optional[dict] = None,
-    base_dir: Optional[Path] = None,
+    version: str | None = "1.0.0",
+    metadata: dict | None = None,
+    raw_frontmatter: dict | None = None,
+    base_dir: Path | None = None,
 ) -> SkillMdDocument:
     return SkillMdDocument(
         name=name,

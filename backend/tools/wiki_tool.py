@@ -33,7 +33,7 @@ import asyncio
 import logging
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.data.database import get_database
 from backend.office.session_workspace import get_active_workspace
@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 def _resolve_bound_workspace(
     conn: sqlite3.Connection,
-) -> Optional[Path]:
+) -> Path | None:
     """Return the binding's workspace path, or None when unbound / stale.
 
     Both tools share this resolution step. The result is the canonical
@@ -153,7 +153,7 @@ class WikiSearchTool(BaseTool):
 
     def execute(
         self,
-        query: Optional[str] = None,
+        query: str | None = None,
         limit: int = 20,
         **_kwargs: Any,
     ) -> ToolResult:
@@ -251,7 +251,7 @@ class WikiAnswerTool(BaseTool):
 
     def execute(
         self,
-        query: Optional[str] = None,
+        query: str | None = None,
         **_kwargs: Any,
     ) -> ToolResult:
         ctx = current_tool_context()

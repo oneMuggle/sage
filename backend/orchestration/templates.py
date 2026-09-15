@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 @dataclass
@@ -72,7 +72,7 @@ BUILTIN_TEMPLATES: Dict[str, OrchestrationTemplate] = {
 }
 
 
-def get_template(template_id: str) -> Optional[OrchestrationTemplate]:
+def get_template(template_id: str) -> OrchestrationTemplate | None:
     return BUILTIN_TEMPLATES.get(template_id)
 
 

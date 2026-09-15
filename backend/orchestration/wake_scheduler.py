@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from backend.application.services.wake_store import WakeStore
 
@@ -54,7 +54,7 @@ class WakeScheduler:
         self.store = store
         self.resumer = resumer
         self.tick_seconds = tick_seconds
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
 
     # ------------------------------------------------------------------ #
     # 生命周期

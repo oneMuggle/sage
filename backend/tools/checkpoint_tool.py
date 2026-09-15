@@ -25,7 +25,7 @@ import time
 import uuid
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from zipfile import ZipFile
 
 from backend.domain.risk import RiskClass
@@ -71,7 +71,7 @@ def _checkpoint_dir(workspace_root: str) -> Path:
     return _user_data_root() / "checkpoints" / key
 
 
-def _safe_member_path(root: Path, arcname: str) -> Optional[Path]:
+def _safe_member_path(root: Path, arcname: str) -> Path | None:
     """把 zip 成员名解析为 root 内的安全目标路径；越界返回 None。
 
     防 zip-slip：拒绝绝对路径、盘符、``..`` 段，以及 resolve 后逃出 root 的

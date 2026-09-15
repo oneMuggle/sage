@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from backend.domain.risk import RiskClass
 
@@ -98,7 +98,7 @@ class ApplyPatchTool(BaseTool):
             },
         )
 
-    def execute(self, patches: Optional[List[Dict[str, Any]]] = None, **kwargs: Any) -> ToolResult:
+    def execute(self, patches: List[Dict[str, Any]] | None = None, **kwargs: Any) -> ToolResult:
         if kwargs:
             return ToolResult(
                 success=False,
@@ -125,7 +125,7 @@ class ApplyPatchTool(BaseTool):
 
     def _validate_plan(
         self, root: str, patches: List[Dict[str, Any]]
-    ) -> Tuple[List[_PlannedEdit], Optional[ToolResult]]:
+    ) -> Tuple[List[_PlannedEdit], ToolResult | None]:
         """只读校验阶段：全部补丁在内存中推演终态，任何失败整批拒绝。
 
         相对路径一律按工作区根解析（与 bash 的 cwd 参数同口径），不按
@@ -202,7 +202,7 @@ class ApplyPatchTool(BaseTool):
     @staticmethod
     def _load_original(
         target: Path, file_path: str
-    ) -> Tuple[Optional[ToolResult], Optional[str], Optional[str]]:
+    ) -> Tuple[ToolResult | None, str | None, str | None]:
         """读取原文件（edit_tool 同款前置检查 + BOM 感知 + 行尾保留）。
 
         返回 ``(拒绝结果, 原文, 编码)``；拒绝时后两者为 None。
@@ -226,7 +226,7 @@ class ApplyPatchTool(BaseTool):
             return ToolResult(success=False, error=f"读取失败: {exc}"), None, None
 
     @staticmethod
-    def _validate_patch_shape(index: int, patch: Any) -> Optional[ToolResult]:
+    def _validate_patch_shape(index: int, patch: Any) -> ToolResult | None:
         """单条补丁的形态检查：dict / 必需键 / 类型 / 未登记键。"""
         if not isinstance(patch, dict):
             return ApplyPatchTool._with_index(

@@ -23,7 +23,7 @@ to ``{ok: False, error}`` and never fails the tool result.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
@@ -72,7 +72,7 @@ class OfficeRestoreTool(BaseTool):
 
     def execute(
         self,
-        doc_id: Optional[str] = None,
+        doc_id: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
         if not isinstance(doc_id, str) or not doc_id.strip():

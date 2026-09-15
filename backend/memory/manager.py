@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.memory.episodic import EpisodicMemory
 from backend.memory.semantic import SemanticMemory
@@ -65,7 +65,7 @@ class MemoryManager:
         working: WorkingMemory,
         episodic: EpisodicMemory,
         semantic: SemanticMemory,
-        summary_store: Optional[SessionSummaryStore] = None,
+        summary_store: SessionSummaryStore | None = None,
     ):
         """
         初始化记忆管理器
@@ -83,7 +83,7 @@ class MemoryManager:
         self.semantic = semantic
         self.summary_store = summary_store
 
-    def remember(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
+    def remember(self, content: str, metadata: Dict[str, Any] | None = None) -> str:
         """
         将内容存入情景记忆
 
@@ -116,10 +116,10 @@ class MemoryManager:
         content: str,
         memory_type: str = "auto",
         importance: int = 5,
-        tags: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        session_id: Optional[str] = None,
-    ) -> Optional[str]:
+        tags: List[str] | None = None,
+        metadata: Dict[str, Any] | None = None,
+        session_id: str | None = None,
+    ) -> str | None:
         """
         通用记忆存储接口
 
@@ -182,8 +182,8 @@ class MemoryManager:
         self,
         query: str,
         limit: int = 5,
-        memory_types: Optional[List[str]] = None,
-        session_id: Optional[str] = None,
+        memory_types: List[str] | None = None,
+        session_id: str | None = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         检索记忆
@@ -234,7 +234,7 @@ class MemoryManager:
 
         return results
 
-    def get_context(self, limit: int = 10, session_id: Optional[str] = None) -> str:
+    def get_context(self, limit: int = 10, session_id: str | None = None) -> str:
         """
         获取上下文用于 Agent
 
@@ -311,7 +311,7 @@ class MemoryManager:
 
         return "\n".join(parts) if parts else ""
 
-    def compress(self, session_id: Optional[str] = None) -> None:
+    def compress(self, session_id: str | None = None) -> None:
         """
         压缩指定会话的工作记忆
         生成摘要并保存到情景记忆
@@ -346,7 +346,7 @@ class MemoryManager:
         except Exception as e:
             logger.error(f"压缩工作记忆失败: {e}")
 
-    def add_to_working(self, role: str, content: str, session_id: Optional[str] = None) -> None:
+    def add_to_working(self, role: str, content: str, session_id: str | None = None) -> None:
         """
         添加消息到工作记忆
 
@@ -360,9 +360,9 @@ class MemoryManager:
     def search_memories(
         self,
         query: str,
-        memory_type: Optional[str] = None,
+        memory_type: str | None = None,
         limit: int = 20,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         """
         搜索记忆的统一接口

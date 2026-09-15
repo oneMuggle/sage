@@ -48,7 +48,7 @@ import math
 import re
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
@@ -108,7 +108,7 @@ def _resolve_bound_document(
     ctx: ToolExecutionContext,
     doc_id: str,
     expected_doc_type: OfficeDocType,
-) -> Optional[Tuple[Path, str, Any]]:
+) -> Tuple[Path, str, Any] | None:
     """binding 内解析 doc_id → (on-disk path, workspace_path, summary)。"""
     try:
         conn = get_database().get_connection()
@@ -125,7 +125,7 @@ def _resolve_bound_document(
     return document_path(doc), binding.workspace_path, doc
 
 
-def _resolve_active_workspace(ctx: Optional[ToolExecutionContext]) -> Optional[Path]:
+def _resolve_active_workspace(ctx: ToolExecutionContext | None) -> Path | None:
     """有活动绑定 → 绑定工作区 Path；否则 ``None``（DB 不可用同样吞掉）。"""
     if ctx is None or not ctx.session_id:
         return None
@@ -142,7 +142,7 @@ def _resolve_active_workspace(ctx: Optional[ToolExecutionContext]) -> Optional[P
 
 
 def _workspace_for_input(
-    ctx: Optional[ToolExecutionContext], input_path: Path
+    ctx: ToolExecutionContext | None, input_path: Path
 ) -> Path:
     """file_path 模式的 workspace 取值：优先绑定工作区，回退输入父目录。"""
     binding_ws = _resolve_active_workspace(ctx)
@@ -177,9 +177,9 @@ def _office_error_result(exc: Exception, fallback: str) -> ToolResult:
 
 def _resolve_xlsx_input(  # noqa: PLR0911 — 错误早退路径多，保持线性可读
     tool: BaseTool,
-    ctx: Optional[ToolExecutionContext],
-    doc_id: Optional[str],
-    file_path: Optional[str],
+    ctx: ToolExecutionContext | None,
+    doc_id: str | None,
+    file_path: str | None,
 ) -> Union[Tuple[Path, str, Any], ToolResult]:
     """解析 doc_id / file_path 双模式输入（doc_id 优先，EXCEL 类型）。"""
     if isinstance(doc_id, str) and doc_id.strip():
@@ -346,7 +346,7 @@ def _sheet_label(base: str, used: set) -> str:
     return candidate
 
 
-def _column_names_preview(df: Any) -> Tuple[List[str], Optional[str]]:
+def _column_names_preview(df: Any) -> Tuple[List[str], str | None]:
     """顶层回显的列名名单（截断到 _MAX_COLUMN_NAMES）。"""
     names = [str(c) for c in list(df.columns)[:_MAX_COLUMN_NAMES]]
     note = None
@@ -356,7 +356,7 @@ def _column_names_preview(df: Any) -> Tuple[List[str], Optional[str]]:
     return names, note
 
 
-def _require_column(df: Any, column: str) -> Optional[ToolResult]:
+def _require_column(df: Any, column: str) -> ToolResult | None:
     """列存在性校验；缺失时错误信息带可用列名（截断）。"""
     if column in [str(c) for c in df.columns]:
         return None
@@ -445,7 +445,7 @@ def _op_value_counts(df: Any, column: str, top_n: int) -> Dict[str, Any]:
     }
 
 
-def _op_aggregate(df: Any, group_by: str, column: Optional[str], agg: str) -> Dict[str, Any]:
+def _op_aggregate(df: Any, group_by: str, column: str | None, agg: str) -> Dict[str, Any]:
     """groupby 聚合；count 无需数值列（按组计数）。"""
     if agg == "count" and not column:
         grouped = df.groupby(group_by, dropna=False).size()
@@ -521,7 +521,7 @@ def _write_table_to_sheet(ws: Any, columns: List[str], rows: List[List[Any]]) ->
 
 def _write_aggregate_chart_png(
     report_path: Path, aggregate: Dict[str, Any]
-) -> Optional[Dict[str, Any]]:
+) -> Dict[str, Any] | None:
     """R6（Round2）：aggregate 结果渲染 PNG，落报告同目录，best-effort。
 
     命名 ``<report_stem>-chart.png``（如 ``sales-analysis-chart.png``），
@@ -670,7 +670,7 @@ def _build_analysis_report(
         (r for r in results if r.get("kind") == "aggregate" and r.get("rows")),
         None,
     )
-    chart_png: Optional[Dict[str, Any]] = None
+    chart_png: Dict[str, Any] | None = None
     if aggregate is not None:
         chart_png = _write_aggregate_chart_png(output_path, aggregate)
 
@@ -795,10 +795,10 @@ class OfficeAnalyzeTool(BaseTool):
 
     def execute(  # noqa: PLR0911 — 错误早退路径多，保持线性可读
         self,
-        operations: Optional[Any] = None,
-        doc_id: Optional[str] = None,
-        file_path: Optional[str] = None,
-        sheet: Optional[str] = None,
+        operations: Any | None = None,
+        doc_id: str | None = None,
+        file_path: str | None = None,
+        sheet: str | None = None,
         write_report: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
@@ -911,7 +911,7 @@ class OfficeAnalyzeTool(BaseTool):
 
         if write_report:
             report_path = path.parent / f"{path.stem}-analysis.xlsx"
-            report_error: Optional[str] = None
+            report_error: str | None = None
             try:
                 from backend.office.path_safety import resolve_within
 
@@ -953,9 +953,9 @@ class OfficeAnalyzeTool(BaseTool):
         )
 
     @staticmethod
-    def _sheet_error(path: Path, sheet_name: Optional[str], exc: ValueError) -> ToolResult:
+    def _sheet_error(path: Path, sheet_name: str | None, exc: ValueError) -> ToolResult:
         """sheet 名错误 → sheet_not_found + 可用 sheet 名单；其余原样透传。"""
-        available: Optional[List[str]] = None
+        available: List[str] | None = None
         try:
             from openpyxl import load_workbook
 

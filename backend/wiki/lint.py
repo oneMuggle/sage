@@ -21,7 +21,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import List, Set
 
 
 class LintSeverity(str, Enum):
@@ -67,11 +67,11 @@ class LintIssue:
     page: str
     detail: str
     # Wikilink 断链专用字段
-    broken_target: Optional[str] = None
-    suggested_target: Optional[str] = None
-    suggested_source: Optional[str] = None
+    broken_target: str | None = None
+    suggested_target: str | None = None
+    suggested_source: str | None = None
     # 受影响页面列表（orphan 检查时使用）
-    affected_pages: Optional[List[str]] = None
+    affected_pages: List[str] | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -349,7 +349,7 @@ class WikiLint:
 
     def _resolve_wikilink(
         self, source_file: Path, link_target: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """尝试将 wikilink 目标解析为已存在文件的相对路径。
 
         返回 None 表示未找到。

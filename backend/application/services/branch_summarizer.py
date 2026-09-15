@@ -51,7 +51,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -164,10 +164,10 @@ class BranchSummaryResult:
     （已附加进 ``summary`` 文本末尾，单独返回便于持久化/展示）。
     """
 
-    summary: Optional[str] = None
+    summary: str | None = None
     read_files: List[str] = field(default_factory=list)
     modified_files: List[str] = field(default_factory=list)
-    error: Optional[str] = None
+    error: str | None = None
 
 
 # ── token 估算 ──────────────────────────────────────────
@@ -278,7 +278,7 @@ def _shorten_arg_values(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def extract_file_ops(
-    messages: List[Dict[str, Any]], file_ops: Optional[FileOperations] = None
+    messages: List[Dict[str, Any]], file_ops: FileOperations | None = None
 ) -> FileOperations:
     """从消息序列累计文件操作（工具调用 + 嵌套摘要清单）。
 
@@ -562,7 +562,7 @@ def prepare_branch_messages(
 
 def build_branch_prompt(
     conversation_text: str,
-    custom_instructions: Optional[str] = None,
+    custom_instructions: str | None = None,
     replace_instructions: bool = False,
 ) -> str:
     """构造分支摘要的用户侧 prompt。
@@ -630,7 +630,7 @@ class BranchSummarizer:
         self,
         messages: List[Dict[str, Any]],
         *,
-        custom_instructions: Optional[str] = None,
+        custom_instructions: str | None = None,
         replace_instructions: bool = False,
         include_preamble: bool = True,
     ) -> BranchSummaryResult:
@@ -718,7 +718,7 @@ class BranchSummarizer:
     def to_context_message(
         result: BranchSummaryResult,
         *,
-        from_id: Optional[str] = None,
+        from_id: str | None = None,
     ) -> Dict[str, Any]:
         """把摘要结果包装为可注入上下文的 system 消息。
 

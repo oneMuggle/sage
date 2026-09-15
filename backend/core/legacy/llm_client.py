@@ -13,7 +13,7 @@ import re
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import httpx
 
@@ -130,8 +130,8 @@ class LLMMessage:
 
     role: str  # "system" | "user" | "assistant" | "tool"
     content: str
-    tool_calls: Optional[List[Dict[str, Any]]] = None
-    tool_call_id: Optional[str] = None
+    tool_calls: List[Dict[str, Any]] | None = None
+    tool_call_id: str | None = None
 
 
 @dataclass
@@ -148,8 +148,8 @@ class LLMChoice:
     """单条回复选项"""
 
     message: LLMMessage
-    finish_reason: Optional[str] = None
-    tool_calls: Optional[List[LLMToolCall]] = None
+    finish_reason: str | None = None
+    tool_calls: List[LLMToolCall] | None = None
 
 
 @dataclass
@@ -157,11 +157,11 @@ class LLMResponse:
     """LLM 回复"""
 
     content: str = ""
-    reasoning_content: Optional[str] = (
+    reasoning_content: str | None = (
         None  # LLM 思考/推理过程（Claude extended thinking, o1 reasoning 等）
     )
     model: str = ""
-    finish_reason: Optional[str] = None
+    finish_reason: str | None = None
     tool_calls: List[LLMToolCall] = field(default_factory=list)
     input_tokens: int = 0
     output_tokens: int = 0
@@ -169,8 +169,8 @@ class LLMResponse:
     # M6 生态扩展: OpenAI 响应中的原始 usage 块 (prompt_tokens /
     # completion_tokens / total_tokens)。响应无 usage 字段时保持 None —
     # 既有调用方不受影响。
-    usage: Optional[Dict[str, int]] = None
-    raw: Optional[Dict[str, Any]] = None
+    usage: Dict[str, int] | None = None
+    raw: Dict[str, Any] | None = None
 
 
 @dataclass
@@ -185,8 +185,8 @@ class LLMConfig:
     timeout: int = 60
     # 推理参数（覆盖 commit #38 之前的硬编码 "custom" provider 路径，
     # 让用户在前端选的真实 provider 透传到 LLMClient，并启用 thinking 输出）
-    reasoning_effort: Optional[str] = None  # OpenAI o1/o3/5: "low" | "medium" | "high"
-    thinking_budget: Optional[int] = None  # Gemini 2.5: 思考 token 上限,0 关闭,-1 动态
+    reasoning_effort: str | None = None  # OpenAI o1/o3/5: "low" | "medium" | "high"
+    thinking_budget: int | None = None  # Gemini 2.5: 思考 token 上限,0 关闭,-1 动态
     extra_headers: Dict[str, str] = field(default_factory=dict)
     # === v2: LLM proxy 路由 ===
     # 为统一「测试连接」与「chat」两条路径的 baseUrl 解析规则（避免 baseUrl 是否
@@ -203,7 +203,7 @@ class LLMConfig:
     # D-1 (round5 批次 D): 主模型重试耗尽后的同 endpoint 降级模型
     # （如 gpt-4o → gpt-4o-mini）。None = 不降级。仅对可重试类错误
     # （限流/服务端错误/超时/网络）生效,每实例至多降级一次。
-    fallback_model: Optional[str] = None
+    fallback_model: str | None = None
 
 
 class StreamToolCallAggregator:
@@ -275,14 +275,14 @@ class LLMClient:
 
     def __init__(self, config: LLMConfig):
         self.config = config
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
         # L2 真流式 (2026-09-06): 流式 + tools 首块前失败过的 provider 标记
         # （部分上游不支持 stream+tools 或 stream_options）。置位后
         # run_loop 直接走非流式,避免每次迭代都白白多打一个失败请求。
         self.stream_unsupported = False
         # L8 (批次 C): 用量归因的会话维度——run_loop 按需注入,缺省 None
         # (usage_events 落库为 unattributed 行)。
-        self.session_id: Optional[str] = None
+        self.session_id: str | None = None
 
     def _get_client(self) -> httpx.AsyncClient:
         """获取或创建 HTTP 客户端
@@ -418,7 +418,7 @@ class LLMClient:
         return result
 
     @staticmethod
-    def _extract_think_tags(content: str) -> Tuple[Optional[str], str]:
+    def _extract_think_tags(content: str) -> Tuple[str | None, str]:
         """
         从 content 中提取 <think>...</think> 标签内容。
 
@@ -447,8 +447,8 @@ class LLMClient:
     async def chat(
         self,
         messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = None,
+        tools: List[Dict[str, Any]] | None = None,
+        tool_choice: str | None = None,
     ) -> LLMResponse:
         """
         发送聊天请求（非流式）
@@ -573,7 +573,7 @@ class LLMClient:
 
         # ===== M6 USAGE BEGIN: 规范化 usage + 记录到全局 tracker =====
         # tracker 故障永不影响 chat 返回 (fail-open)。
-        usage_dict: Optional[Dict[str, int]] = None
+        usage_dict: Dict[str, int] | None = None
         if isinstance(usage, dict) and usage:
             usage_dict = {
                 "prompt_tokens": int(usage.get("prompt_tokens") or 0),
@@ -642,7 +642,7 @@ class LLMClient:
 
         # ===== M6 USAGE BEGIN: 流式 usage 捕获 (final chunk 若携带 usage) =====
         stream_model: str = self.config.model
-        stream_usage: Optional[Dict[str, Any]] = None
+        stream_usage: Dict[str, Any] | None = None
         # ===== M6 USAGE END =====
 
         try:
@@ -696,8 +696,8 @@ class LLMClient:
     async def chat_stream_events(
         self,
         messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = None,
+        tools: List[Dict[str, Any]] | None = None,
+        tool_choice: str | None = None,
     ) -> AsyncGenerator[Tuple[str, Any], None]:
         """流式 chat（L2 真流式）：内容/推理增量实时产出，工具调用增量聚合。
 
@@ -743,9 +743,9 @@ class LLMClient:
         aggregator = StreamToolCallAggregator()
         content_parts: List[str] = []
         reasoning_parts: List[str] = []
-        finish_reason: Optional[str] = None
+        finish_reason: str | None = None
         stream_model: str = self.config.model
-        stream_usage: Optional[Dict[str, Any]] = None
+        stream_usage: Dict[str, Any] | None = None
 
         # L3 重试退避（流式版）: 仅在"尚未产出任何增量"时重试——此时重放
         # 安全（调用方没收到过任何事件）;已有增量后失败无法安全重放,按原
@@ -864,7 +864,7 @@ class LLMClient:
                 reasoning_content = parsed_reasoning
             raw_content = parsed_content
 
-        usage_dict: Optional[Dict[str, int]] = None
+        usage_dict: Dict[str, int] | None = None
         if isinstance(stream_usage, dict) and stream_usage:
             usage_dict = {
                 "prompt_tokens": int(stream_usage.get("prompt_tokens") or 0),

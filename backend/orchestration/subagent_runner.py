@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List
 
 from backend.agents.profiles import build_system_base, get_enabled_agent
 from backend.core.legacy.agent import SageAgent
@@ -74,7 +74,7 @@ def run_lane_accepts_backoff(fn: Any) -> bool:
     return func_accepts_kwarg(target, "backoff_secs")
 
 
-def extract_json_payload(text: str) -> Optional[Dict[str, Any]]:
+def extract_json_payload(text: str) -> Dict[str, Any] | None:
     """从 LLM 输出文本提取 JSON object；三种形态依次尝试，失败返回 None。
 
     优先级：整段即 JSON > ``` 围栏 > 首个 ``{`` 到末个 ``}`` 子串。
@@ -115,13 +115,13 @@ class SubagentRunner:
 
     def __init__(
         self,
-        llm_config: Optional[Dict[str, Any]] = None,
-        interrupt_event: Optional[asyncio.Event] = None,
-        event_sink: Optional[Callable[[AgentEvent], Awaitable[None]]] = None,
+        llm_config: Dict[str, Any] | None = None,
+        interrupt_event: asyncio.Event | None = None,
+        event_sink: Callable[[AgentEvent], Awaitable[None]] | None = None,
         approval_mode: str = "ask",
-        session_id: Optional[str] = None,
-        context_repo: Optional[Any] = None,
-        context_task_id: Optional[str] = None,
+        session_id: str | None = None,
+        context_repo: Any | None = None,
+        context_task_id: str | None = None,
     ) -> None:
         self._llm_config = llm_config
         # P0-3 (2026-08-20): 取消事件 —— ChatDispatcher._cancelled 传入，
@@ -147,7 +147,7 @@ class SubagentRunner:
         self._context_repo = context_repo
         self._context_task_id = context_task_id
 
-    async def __call__(self, task: Any, agent_id: Optional[str]) -> Dict[str, Any]:
+    async def __call__(self, task: Any, agent_id: str | None) -> Dict[str, Any]:
         """Run one subtask via SageAgent.run_loop; return executor-usable dict.
 
         Args:
@@ -222,7 +222,7 @@ class SubagentRunner:
                 {"role": "user", "content": user_content},
             ]
         collected: list[str] = []
-        last_error: Optional[str] = None
+        last_error: str | None = None
 
         # O1: run 启动前投递一次 —— 捕获任务启动前（排队/确认窗口期）
         # 已写入的 pending steering。
@@ -236,7 +236,7 @@ class SubagentRunner:
 
         # P0-3 (2026-08-20): interrupt watcher —— 与 child.run_loop 并发，
         # 取消事件到达即置位子 agent 中断标志；正常结束时 finally 撤销。
-        watcher: Optional[asyncio.Task] = None
+        watcher: asyncio.Task | None = None
         if self._interrupt_event is not None:
             async def _watch() -> None:
                 await self._interrupt_event.wait()
@@ -327,9 +327,9 @@ class SubagentRunner:
     @staticmethod
     def _structured_output(
         raw_output: str,
-        schema: Optional[Dict[str, Any]],
+        schema: Dict[str, Any] | None,
         task: Any,
-    ) -> Optional[str]:
+    ) -> str | None:
         """schema 声明时提取+校验 JSON；通过返回紧凑 JSON，否则降级原文（None）。
 
         校验失败只 warning 不 fail —— 结构化是增强而非硬约束，降级保证子任务
@@ -367,8 +367,8 @@ class SubagentRunner:
 async def run_lane_with_retry(
     executor: LaneExecutor,
     lane: Lane,
-    agent_id: Optional[str],
-    backoff_secs: Optional[List[int]] = None,
+    agent_id: str | None,
+    backoff_secs: List[int] | None = None,
 ) -> Dict[str, Any]:
     """执行 lane 并在 executor 返回 ``retrying`` 时循环再调（retry 语义）。
 

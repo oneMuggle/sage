@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from backend.domain.risk import RiskClass
 
@@ -29,7 +29,7 @@ _DIFF_CAP_BYTES = 16 * 1024
 _MAX_NUMSTAT_ENTRIES = 200
 
 
-def _run_git(args: List[str], cwd: str) -> Tuple[Optional[str], Optional[str]]:
+def _run_git(args: List[str], cwd: str) -> Tuple[str | None, str | None]:
     """与 git_tool 同口径的 git 子进程执行（仅读命令）。"""
     try:
         completed = subprocess.run(

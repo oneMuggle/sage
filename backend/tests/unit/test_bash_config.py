@@ -134,7 +134,7 @@ def test_settings_repo_roundtrip_accepts_bash_config_key():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "raw",
     [
         "{not json",
@@ -225,7 +225,7 @@ def test_get_registry_singleton_applies_configured_max(monkeypatch):
     assert get_registry() is registry  # 单例语义保持
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="spawn_verified 需要 POSIX 进程组（Windows 上按设计拒绝）",
 )

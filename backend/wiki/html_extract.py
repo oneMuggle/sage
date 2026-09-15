@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from email.message import Message
 from html.parser import HTMLParser
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 from urllib.parse import urljoin
 
 #: 这些标签的**内容**整段丢弃，不只是剥标签
@@ -53,7 +53,7 @@ class ExtractedPage:
     tables: List[List[List[str]]] = field(default_factory=list)
 
 
-def charset_from_content_type(content_type: Optional[str]) -> Optional[str]:
+def charset_from_content_type(content_type: str | None) -> str | None:
     """从 ``Content-Type`` 头解析 charset 参数。
 
     用 ``email.message.Message`` 而非手写 split —— 它正确处理带引号的值与
@@ -69,7 +69,7 @@ def charset_from_content_type(content_type: Optional[str]) -> Optional[str]:
     return str(value).strip() or None
 
 
-def _charset_from_meta(head: bytes) -> Optional[str]:
+def _charset_from_meta(head: bytes) -> str | None:
     """从文档头部的 ``<meta charset>`` / ``<meta http-equiv>`` 取编码名。"""
     match = _META_CHARSET_RE.search(head)
     if not match:
@@ -77,7 +77,7 @@ def _charset_from_meta(head: bytes) -> Optional[str]:
     return match.group(1).decode("ascii", errors="ignore") or None
 
 
-def decode_html(body: bytes, content_type: Optional[str] = None) -> Tuple[str, str]:
+def decode_html(body: bytes, content_type: str | None = None) -> Tuple[str, str]:
     """把响应字节解成文本。返回 ``(文本, 实际使用的编码名)``。
 
     优先级：``Content-Type`` 头 → ``<meta charset>`` → utf-8 → gb18030 →
@@ -117,15 +117,15 @@ class _Collector(HTMLParser):
         self.title = ""
         self._chunks: List[str] = []
         self.links: List[Dict[str, str]] = []
-        self._link_href: Optional[str] = None
+        self._link_href: str | None = None
         self._link_text: List[str] = []
         self.tables: List[List[List[str]]] = []
         self._table_stack: List[List[List[str]]] = []
         # 嵌套表格时，保存/恢复外层 row/cell 上下文
-        self._row_stack: List[Optional[List[str]]] = []
-        self._cell_stack: List[Optional[List[str]]] = []
-        self._row: Optional[List[str]] = None
-        self._cell: Optional[List[str]] = None
+        self._row_stack: List[List[str] | None] = []
+        self._cell_stack: List[List[str] | None] = []
+        self._row: List[str] | None = None
+        self._cell: List[str] | None = None
 
     def handle_starttag(self, tag: str, attrs: List[Any]) -> None:
         if tag in SKIP_TAGS:

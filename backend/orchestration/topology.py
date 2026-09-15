@@ -7,7 +7,7 @@ deps 引用不在本批的 task_id 时视为已满足（宽松处理，兼容跨
 from __future__ import annotations
 
 from collections import deque
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Set
 
 
 class DependencyCycleError(ValueError):
@@ -18,13 +18,13 @@ class DependencyCycleError(ValueError):
         self.cycle = cycle
 
 
-def find_cycle(deps_by_id: Dict[str, List[str]]) -> Optional[List[str]]:
+def find_cycle(deps_by_id: Dict[str, List[str]]) -> List[str] | None:
     """DFS 找环；返回路径如 ["t2","t3","t2"]，无环 None。"""
     WHITE, GRAY, BLACK = 0, 1, 2
-    color: Dict[str, int] = {k: WHITE for k in deps_by_id}
+    color: Dict[str, int] = dict.fromkeys(deps_by_id, WHITE)
     path: List[str] = []
 
-    def visit(node: str) -> Optional[List[str]]:
+    def visit(node: str) -> List[str] | None:
         color[node] = GRAY
         path.append(node)
         for dep in deps_by_id.get(node, []):
@@ -58,7 +58,7 @@ def build_waves(
         DependencyCycleError: 图中存在环（含环路径）。
     """
     id_set = set(task_ids)
-    indeg: Dict[str, int] = {tid: 0 for tid in task_ids}
+    indeg: Dict[str, int] = dict.fromkeys(task_ids, 0)
     dependents: Dict[str, List[str]] = {tid: [] for tid in task_ids}
     for tid in task_ids:
         for dep in deps_by_id.get(tid, []):

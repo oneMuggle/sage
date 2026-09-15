@@ -37,7 +37,7 @@ collapses to the standard ``success=False`` error shape.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
@@ -93,11 +93,11 @@ _OP_DESCRIPTIONS = {
 }
 
 
-def _infer_doc_type(file_path: Path) -> Optional[str]:
+def _infer_doc_type(file_path: Path) -> str | None:
     return _EXT_TO_DOC_TYPE.get(file_path.suffix.lower())
 
 
-def _normalize_ops(ops: Any) -> Optional[List[Dict[str, Any]]]:
+def _normalize_ops(ops: Any) -> List[Dict[str, Any]] | None:
     """ops 必须是非空 dict 数组；返回 None 表示非法。"""
     if not isinstance(ops, list) or not ops:
         return None
@@ -170,9 +170,9 @@ class OfficeUpdateTool(BaseTool):
 
     def execute(  # noqa: PLR0911 — dry_run/正式路径守卫链，逐条早退
         self,
-        doc_id: Optional[str] = None,
-        file_path: Optional[str] = None,
-        ops: Optional[List[Dict[str, Any]]] = None,
+        doc_id: str | None = None,
+        file_path: str | None = None,
+        ops: List[Dict[str, Any]] | None = None,
         dry_run: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
@@ -240,7 +240,7 @@ class OfficeUpdateTool(BaseTool):
         ctx: ToolExecutionContext,
         doc_id: str,
         doc_type: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Dict[str, Any] | None:
         """doc_id 模式的 self_check：binding 内解析受管文档后回读。
 
         binding 过期 / doc 消失 / DB 异常 → ``None``（不附加 self_check

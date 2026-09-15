@@ -11,7 +11,7 @@ Provides high-level operations for task management:
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 from backend.data.orchestration_repo import TaskRepository
 from backend.orchestration.models import Task, TaskPacket, TaskStatus
@@ -25,19 +25,19 @@ class TaskRegistry:
     providing atomic state transitions and dependency-aware queries.
     """
 
-    def __init__(self, repo: Optional[TaskRepository] = None) -> None:
+    def __init__(self, repo: TaskRepository | None = None) -> None:
         self.repo = repo or TaskRepository()
 
     def create_task(
         self,
         name: Union[str, Task],
-        description: Optional[str] = None,
-        blocked_by: Optional[List[str]] = None,
+        description: str | None = None,
+        blocked_by: List[str] | None = None,
         priority: int = 0,
         executor_type: str = "agent",
-        parameters: Optional[Dict[str, Any]] = None,
-        packet: Optional[TaskPacket] = None,
-        team_id: Optional[str] = None,
+        parameters: Dict[str, Any] | None = None,
+        packet: TaskPacket | None = None,
+        team_id: str | None = None,
         task_type: str = "general",
     ) -> Task:
         """
@@ -116,7 +116,7 @@ class TaskRegistry:
         except ValueError:
             return False
 
-    def mark_failed(self, task_id: str, error: Optional[str] = None) -> bool:
+    def mark_failed(self, task_id: str, error: str | None = None) -> bool:
         """Transition task to FAILED state."""
         task = self.repo.get(task_id)
         if not task:
@@ -152,7 +152,7 @@ class TaskRegistry:
         except ValueError:
             return False
 
-    def get_ready_tasks(self, team_id: Optional[str] = None) -> List[Task]:
+    def get_ready_tasks(self, team_id: str | None = None) -> List[Task]:
         """
         Get tasks that are ready to execute.
 
@@ -170,8 +170,8 @@ class TaskRegistry:
 
     def list_tasks(
         self,
-        status: Optional[TaskStatus] = None,
-        team_id: Optional[str] = None,
+        status: TaskStatus | None = None,
+        team_id: str | None = None,
         limit: int = 100,
     ) -> List[Task]:
         """List tasks with optional filters."""

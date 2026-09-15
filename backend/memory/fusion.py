@@ -12,14 +12,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
 
 def reciprocal_rank_fusion(
     result_lists: List[List[Dict[str, Any]]],
-    weights: Optional[List[float]] = None,
+    weights: List[float] | None = None,
     k: int = 60,
 ) -> List[Dict[str, Any]]:
     """Reciprocal Rank Fusion 融合多路检索结果

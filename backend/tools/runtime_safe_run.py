@@ -17,7 +17,7 @@ import subprocess
 import time
 from contextlib import suppress
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from backend.tools.runtime_adapter import SafeRunResult
 from backend.tools.subprocess_util import (
@@ -38,9 +38,9 @@ def safe_run(
     argv: List[str],
     *,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
-    cwd: Optional[Path] = None,
-    env: Optional[dict] = None,
-    input_text: Optional[str] = None,
+    cwd: Path | None = None,
+    env: dict | None = None,
+    input_text: str | None = None,
     output_cap: int = DEFAULT_OUTPUT_CAP,
 ) -> SafeRunResult:
     """统一的子进程调用入口。
@@ -72,7 +72,7 @@ def safe_run(
     stderr_path = make_temp_output_file(prefix="sage_probe_stderr_")
 
     start = time.monotonic()
-    process: Optional[subprocess.Popen] = None
+    process: subprocess.Popen | None = None
     try:
         process = subprocess.Popen(  # noqa: S603
             list(argv),
@@ -102,7 +102,7 @@ def safe_run(
         )
 
     timed_out = False
-    exit_code: Optional[int] = None
+    exit_code: int | None = None
     try:
         if input_text is not None and process.stdin is not None:
             try:
@@ -170,7 +170,7 @@ SAFE_ENV_ALLOWLIST = frozenset(
 )
 
 
-def _sanitized_env(overrides: Optional[dict]) -> Optional[dict]:
+def _sanitized_env(overrides: dict | None) -> dict | None:
     """构造最小白名单环境；``None`` 表示使用父进程白名单结果。"""
 
     base: dict

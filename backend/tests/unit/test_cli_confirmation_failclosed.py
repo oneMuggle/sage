@@ -55,7 +55,7 @@ def test_async_callback_returning_true_is_honored():
     assert result is True
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "timeout_error",
     [
         TimeoutError(),

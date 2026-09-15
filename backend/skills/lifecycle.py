@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Optional, Set
+from typing import Set
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def _now_ms() -> int:
 
 
 def classify_lifecycle(
-    last_used_at_ms: Optional[int],
+    last_used_at_ms: int | None,
     archived: bool,
     now_ms: int,
     stale_threshold_ms: int = DEFAULT_STALE_THRESHOLD_MS,
@@ -237,7 +237,7 @@ class SkillLifecycleStore:
 
 
 # 全局单例（与 get_usage_store 同模式）
-_lifecycle_store: Optional[SkillLifecycleStore] = None
+_lifecycle_store: SkillLifecycleStore | None = None
 
 
 def get_lifecycle_store(db=None) -> SkillLifecycleStore:

@@ -12,7 +12,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from .extract import MAX_FILE_BYTES
 from .ingest import IngestConfig, ingest_source
@@ -77,7 +77,7 @@ async def ingest_with_vision(
     source_file_path: Path,
     llm_call: Callable,
     http_post: Callable,
-    progress_callback: Optional[Callable] = None,
+    progress_callback: Callable | None = None,
 ) -> Any:
     """执行 Vision-enabled Ingest 流程。
 

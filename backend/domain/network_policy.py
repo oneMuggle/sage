@@ -14,10 +14,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 
-def _extract_hostname(url: str) -> Optional[str]:
+def _extract_hostname(url: str) -> str | None:
     """从 URL 字符串提取 hostname。
 
     手写实现以保持 ``domain/`` 纯净性（``test_no_external_imports_in_domain``
@@ -164,7 +164,7 @@ class NetworkPolicy:
         """``web_fetch`` / ``http_download`` 是否注册。"""
         return self.mode is not NetworkMode.OFFLINE
 
-    def check_host(self, url: str) -> Optional[str]:
+    def check_host(self, url: str) -> str | None:
         """执行期 host 准入。返回中文拒绝原因；``None`` 表示放行。"""
         if self.mode is NetworkMode.ONLINE:
             return None

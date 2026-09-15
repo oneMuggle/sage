@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import logging
 import shlex
-from typing import Any, List, Optional
+from typing import Any, List
 
 from backend.domain.tool_policy import ToolPolicy
 
@@ -43,8 +43,8 @@ class SkillTool(BaseTool):
 
     def __init__(
         self,
-        policy: Optional[ToolPolicy] = None,
-        adapter: Optional[Any] = None,
+        policy: ToolPolicy | None = None,
+        adapter: Any | None = None,
     ) -> None:
         """Args:
         policy:  M2 工具策略（缺省 ToolPolicy()）。
@@ -95,7 +95,7 @@ class SkillTool(BaseTool):
             },
         )
 
-    def execute(self, skill: str = "", args: Optional[str] = None, **kwargs) -> ToolResult:
+    def execute(self, skill: str = "", args: str | None = None, **kwargs) -> ToolResult:
         """解析并执行技能。
 
         Args:

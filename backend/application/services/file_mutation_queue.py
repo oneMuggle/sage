@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Callable, Coroutine
 
 # 操作类型：返回 Any 的异步函数
 FileOperation = Callable[[], Coroutine[Any, Any, Any]]
@@ -51,7 +51,7 @@ class FileMutationQueue:
         self._queue: asyncio.Queue[tuple[FileOperation, asyncio.Future]] = asyncio.Queue()
         self._running = False
         self._lock = asyncio.Lock()
-        self._processor_task: Optional[asyncio.Task] = None
+        self._processor_task: asyncio.Task | None = None
 
     async def start(self) -> None:
         """启动队列处理器"""
@@ -130,7 +130,7 @@ class FileMutationQueue:
 
 
 # 全局队列实例（可选）
-_global_queue: Optional[FileMutationQueue] = None
+_global_queue: FileMutationQueue | None = None
 
 
 async def get_file_mutation_queue() -> FileMutationQueue:

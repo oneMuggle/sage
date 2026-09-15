@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, List, Optional
+from typing import Any, List
 
 EMPTY_RESPONSE_SYSTEM_PROMPT = (
     "上一次响应内容为空。请直接给出完整回复；若任务无法继续，请说明原因。"
@@ -28,6 +28,6 @@ def empty_response_max_retries() -> int:
         return DEFAULT_MAX_RETRIES
 
 
-def is_blank_response(tool_calls: Optional[List[Any]], content: Optional[str]) -> bool:
+def is_blank_response(tool_calls: List[Any] | None, content: str | None) -> bool:
     """既无工具调用又无非空正文 → 空响应。"""
     return not tool_calls and not (content or "").strip()

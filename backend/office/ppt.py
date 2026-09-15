@@ -26,7 +26,7 @@ import contextlib
 import logging
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -47,7 +47,7 @@ from .storage import validate_workspace
 logger = logging.getLogger(__name__)
 
 
-def _extract_slide_title(slide) -> Optional[str]:
+def _extract_slide_title(slide) -> str | None:
     """Get the slide title from the title placeholder or first text shape."""
     try:
         if slide.shapes.title is not None and slide.shapes.title.has_text_frame:
@@ -74,7 +74,7 @@ def _extract_text_blocks(slide) -> List[str]:
     under the title in title-slide layouts).
     """
     blocks: List[str] = []
-    title_shape_id: Optional[int] = None
+    title_shape_id: int | None = None
     try:
         if slide.shapes.title is not None:
             title_shape_id = id(slide.shapes.title)
@@ -108,7 +108,7 @@ def _count_images(slide) -> int:
     return sum(1 for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.PICTURE)
 
 
-def _extract_notes(slide) -> Optional[str]:
+def _extract_notes(slide) -> str | None:
     """Speaker notes text, or None if no notes slide."""
     try:
         notes_slide = slide.notes_slide
@@ -126,8 +126,8 @@ def _build_pptx_summary(
     *,
     document_id: str,
     workspace_path: str,
-    generated_filename: Optional[str],
-    original_filename: Optional[str],
+    generated_filename: str | None,
+    original_filename: str | None,
     status: OfficeDocStatus,
     page_count: int,
 ) -> OfficeDocumentSummary:
@@ -154,10 +154,10 @@ def _build_pptx_summary(
 def read_ppt(
     file_path: Path,
     *,
-    document_id: Optional[str] = None,
+    document_id: str | None = None,
     workspace_path: str = "",
-    generated_filename: Optional[str] = None,
-    original_filename: Optional[str] = None,
+    generated_filename: str | None = None,
+    original_filename: str | None = None,
 ) -> OfficePptReadResult:
     """Read a .pptx file and return its structured content.
 
@@ -235,7 +235,7 @@ _LAYOUT_NAME_HINTS = {
 _LAYOUT_INDEX_FALLBACK = {"title": 0, "title_content": 1, "blank": 6}
 
 
-def _resolve_slide_layout(prs, layout_name: Optional[str]):
+def _resolve_slide_layout(prs, layout_name: str | None):
     """按名字在演示文稿模板里找版式；找不到回退常见索引；再不行返回 None
     （调用方据此走原有 Blank + 文本框几何路径）。"""
     if not layout_name:
@@ -309,7 +309,7 @@ def _safe_filename(name: str, default_ext: str) -> str:
     raise OfficePathError(f"Unknown default_ext: {default_ext!r}")
 
 
-def generate_ppt(req, output_dir: Optional[str] = None) -> Path:
+def generate_ppt(req, output_dir: str | None = None) -> Path:
     """Generate a .pptx file from structured Pydantic input.
 
     ``output_dir`` 提供时写入该任意目录（信任的用户指定目录，经

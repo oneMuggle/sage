@@ -25,7 +25,7 @@ import secrets
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 class PolicyDecisionKind(str, Enum):
@@ -57,12 +57,12 @@ class PolicyContext:
     attempt: int = 1
 
     # Failure context
-    failure_class: Optional[str] = None  # "Test" / "Compile" / "TrustGate" / ...
-    heartbeat_status: Optional[str] = None  # "healthy" / "stalled" / "dead" / "transport_dead"
-    lane_status: Optional[str] = None  # "green" / "red" / "blocked" / ...
+    failure_class: str | None = None  # "Test" / "Compile" / "TrustGate" / ...
+    heartbeat_status: str | None = None  # "healthy" / "stalled" / "dead" / "transport_dead"
+    lane_status: str | None = None  # "green" / "red" / "blocked" / ...
 
     # Action context
-    action: Optional[str] = None
+    action: str | None = None
     branch: str = "main"
     repo: str = ""
     commit: str = ""
@@ -104,7 +104,7 @@ class PolicyDecisionEvent:
     explanation: str
     lane_id: str
     decided_at: int
-    approval_token_id: Optional[str] = None
+    approval_token_id: str | None = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -164,7 +164,7 @@ class PolicyEngine:
         now = int(time.time() * 1000)
         events: List[PolicyDecisionEvent] = []
         for d in decisions:
-            token_id: Optional[str] = None
+            token_id: str | None = None
             if d.kind == PolicyDecisionKind.APPROVAL:
                 # Each approval decision must carry a token id (even if it is a
                 # placeholder — the real token is minted by ApprovalTokenStore).

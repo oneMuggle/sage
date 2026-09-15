@@ -34,7 +34,7 @@ import contextlib
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 from docx import Document
 from docx.oxml import OxmlElement
@@ -311,8 +311,8 @@ def _build_docx_summary(
     *,
     document_id: str,
     workspace_path: str,
-    generated_filename: Optional[str],
-    original_filename: Optional[str],
+    generated_filename: str | None,
+    original_filename: str | None,
     status: OfficeDocStatus,
     paragraph_count: int,
 ) -> OfficeDocumentSummary:
@@ -339,10 +339,10 @@ def _build_docx_summary(
 def read_docx(
     file_path: Path,
     *,
-    document_id: Optional[str] = None,
+    document_id: str | None = None,
     workspace_path: str = "",
-    generated_filename: Optional[str] = None,
-    original_filename: Optional[str] = None,
+    generated_filename: str | None = None,
+    original_filename: str | None = None,
 ) -> OfficeWordReadResult:
     """Read a .docx file and return its structured content.
 
@@ -467,7 +467,7 @@ def _extract_comments(doc: Document, file_path: Path) -> List[WordCommentContent
     return comments
 
 
-def _find_comments_part(doc: Document) -> Optional[Any]:
+def _find_comments_part(doc: Document) -> Any | None:
     """Locate the ``word/comments.xml`` part of an opened document, or None.
 
     python-docx 1.1.2 has no comments API; the part loads as a plain blob
@@ -580,7 +580,7 @@ _ALIGN_TO_DOCX = {
 }
 
 
-def _normalize_hex_color(color: str) -> Optional[str]:
+def _normalize_hex_color(color: str) -> str | None:
     """'FF0000' / '#ff0000' → 'FF0000'；非法返回 None（批次 2.3）。"""
     hex_text = str(color).strip().lstrip("#")
     if len(hex_text) != 6 or any(c not in "0123456789abcdefABCDEF" for c in hex_text):
@@ -651,7 +651,7 @@ def _add_inline_image(
     image: Any,
     figure_no: int,
     output_path: Path,
-    workspace_path: Optional[str],
+    workspace_path: str | None,
     trailing: bool = False,
 ) -> None:
     """写入一张插图；带题注时图居中并在下方追加 "图N　caption" 题注。
@@ -781,7 +781,7 @@ def _add_bibliography(
             run.font.size = Pt(font_size)
 
 
-def generate_docx(req, output_dir: Optional[str] = None) -> Path:
+def generate_docx(req, output_dir: str | None = None) -> Path:
     """Generate a .docx file from structured Pydantic input.
 
     ``output_dir`` 提供时写入该任意目录（信任的用户指定目录，经

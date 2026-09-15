@@ -286,7 +286,7 @@ def test_scan_skips_hidden_dirs(tmp_path):
     assert not registry.exists(".hidden-skill")
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
 )
@@ -305,7 +305,7 @@ def test_scan_skips_symlinked_skill_directory(tmp_path):
     assert not registry.exists("linked")
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
 )
@@ -323,7 +323,7 @@ def test_scan_skips_symlinked_skill_md(tmp_path):
     assert not registry.exists("linked")
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
 )
@@ -342,7 +342,7 @@ def test_scan_skips_candidate_with_symlinked_parent(tmp_path):
     assert not registry.exists("linked")
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
 )
@@ -401,7 +401,7 @@ def test_scan_skips_missing_required_field(tmp_path):
     assert not registry.exists("Has Spaces")
 
 
-@pytest.mark.parametrize("name_field", ["''", "null", "42", "Bad Name"])
+@pytest.mark.parametriz()e("name_field", ["''", "null", "42", "Bad Name"])
 def test_scan_classifies_bom_invalid_name(tmp_path, name_field):
     """A parser-stripped BOM must not hide an explicitly invalid name."""
     registry = SkillRegistry()
@@ -586,7 +586,7 @@ def test_hot_reload_no_change_returns_false(tmp_path):
     assert loader.hot_reload("alpha") is True  # 强制 reload 仍能成功
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
 )
@@ -610,7 +610,7 @@ def test_hot_reload_fails_closed_when_loaded_path_becomes_symlink(tmp_path):
     assert registry.get("alpha").execute(params={}, context={}).content == "original body"
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
 )
@@ -707,7 +707,7 @@ def test_validate_base_dir_rejects_sibling(tmp_path):
         validate_base_dir(sibling, allowed_roots=[root])
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="Windows 无 O_NOFOLLOW，读侧已放宽为静态检查+受限读取；拒绝语义与 symlink 用例仅 POSIX 可验证",
 )

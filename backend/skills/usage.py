@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ class SkillUsageStore:
         except Exception as exc:  # noqa: BLE001 - best-effort 契约
             logger.debug(f"Low success rate check skipped for {name!r}: {exc}")
 
-    def get(self, name: str) -> Optional[Dict[str, Any]]:
+    def get(self, name: str) -> Dict[str, Any] | None:
         """读取单个技能的聚合统计。"""
         try:
             if self.db is None:
@@ -166,7 +166,7 @@ class SkillUsageStore:
 
 
 # 全局单例（与 get_memory_manager 同模式）
-_usage_store: Optional[SkillUsageStore] = None
+_usage_store: SkillUsageStore | None = None
 
 
 def get_usage_store(db=None) -> SkillUsageStore:

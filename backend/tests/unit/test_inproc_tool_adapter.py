@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pytest
 from sage_core import ToolResult, ToolSpec
@@ -89,7 +89,7 @@ class _FakeRawResult:
         self,
         success: bool,
         content: Any = None,
-        error: Optional[str] = None,
+        error: str | None = None,
     ) -> None:
         self.success = success
         self.content = content
@@ -102,8 +102,8 @@ class _FakeTool:
     def __init__(
         self,
         name: str,
-        raw: Optional[_FakeRawResult] = None,
-        raise_exc: Optional[Exception] = None,
+        raw: _FakeRawResult | None = None,
+        raise_exc: Exception | None = None,
     ) -> None:
         self._name = name
         self._raw = raw
@@ -272,7 +272,7 @@ def _fake_registry_with(*names: str):
         def __init__(self) -> None:
             self._tools = {n: _FakeTool(n) for n in names}
 
-        def get(self, name: str) -> Optional[Any]:
+        def get(self, name: str) -> Any | None:
             return self._tools.get(name)
 
         def list(self) -> List[Any]:

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Set
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +24,12 @@ SUGGESTION_TYPES = ("merge", "archive", "revise")
 class ConsolidationService:
     """LLM 驱动的技能巡检（产出建议，不直接修改技能）"""
 
-    def __init__(self, llm_provider: Any, model: Optional[str] = None) -> None:
+    def __init__(self, llm_provider: Any, model: str | None = None) -> None:
         self.llm_provider = llm_provider
         self._model = model
 
     @classmethod
-    def from_review_service(cls, review_service: Any) -> Optional[ConsolidationService]:
+    def from_review_service(cls, review_service: Any) -> ConsolidationService | None:
         """从既有 ReviewService 复用 provider/model；未装配返回 None。"""
         if review_service is None:
             return None
@@ -41,7 +41,7 @@ class ConsolidationService:
     async def scan(
         self,
         skills: List[Dict[str, Any]],
-        pinned_names: Optional[List[str]] = None,
+        pinned_names: List[str] | None = None,
     ) -> List[Dict[str, Any]]:
         """扫描技能清单，返回归一化后的建议列表（不落库）。
 
@@ -95,7 +95,7 @@ class ConsolidationService:
 
     @staticmethod
     def _parse_suggestions(
-        raw: str, pinned: Optional[set] = None
+        raw: str, pinned: set | None = None
     ) -> List[Dict[str, Any]]:
         """宽容解析 LLM 建议数组（容忍代码围栏/前后杂文），并做类型/名单过滤"""
         text = (raw or "").strip()
@@ -138,7 +138,7 @@ class ConsolidationService:
         self,
         suggestion: Dict[str, Any],
         skill_docs: Dict[str, str],
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Dict[str, Any] | None:
         """把 merge/revise 建议生成为技能草稿 JSON（Round 9）。
 
         archive 建议 / LLM 输出不可解析 / 校验失败 → None。
@@ -280,7 +280,7 @@ def collect_skill_docs(names: List[str]) -> Dict[str, str]:
     return docs
 
 
-def collect_active_skills(names: Optional[Set[str]] = None) -> List[Dict[str, Any]]:
+def collect_active_skills(names: Set[str] | None = None) -> List[Dict[str, Any]]:
     """收集 active（未归档）技能的巡检输入清单。
 
     经 InprocSkillAdapter（与 legacy_routes 同一技能面）惰性获取；
@@ -321,7 +321,7 @@ def collect_active_skills(names: Optional[Set[str]] = None) -> List[Dict[str, An
     return skills
 
 
-def last_scan_watermark() -> Optional[int]:
+def last_scan_watermark() -> int | None:
     """上次固化巡检的水位（ms）：台账中最近一条 consolidation_note 的时间戳。
 
     每次 scan（手动或 cron）都会写一条 consolidation_note，故该值即
@@ -369,10 +369,10 @@ def collect_delta_names(watermark_ms: int) -> Set[str]:
 # Global singleton（与 get_review_service 同模式）
 # ------------------------------------------------------------------ #
 
-_consolidation_service: Optional[ConsolidationService] = None
+_consolidation_service: ConsolidationService | None = None
 
 
-def get_consolidation_service() -> Optional[ConsolidationService]:
+def get_consolidation_service() -> ConsolidationService | None:
     """从 ReviewService 复用 provider 的惰性单例；未装配返回 None"""
     global _consolidation_service
     if _consolidation_service is None:

@@ -29,7 +29,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol, Union
+from typing import Any, Dict, List, Protocol, Union
 
 from sage_core import Message, Role, ToolCall
 
@@ -40,8 +40,8 @@ class LLMPort(Protocol):
     async def chat(
         self,
         messages: List[Message],
-        tools: Optional[List[Any]] = None,
-        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        tools: List[Any] | None = None,
+        tool_choice: Union[str, Dict[str, Any]] | None = None,
     ) -> Message:
         """非流式对话。
 
@@ -141,15 +141,15 @@ class AssistantTurn:
     ``length``；各 adapter 负责把厂商原生值映射过来。
     """
 
-    text: Optional[str] = None
+    text: str | None = None
     tool_calls: List[ToolCall] = field(default_factory=list)
-    finish_reason: Optional[str] = None
+    finish_reason: str | None = None
     # 模型思考内容（Claude extended thinking / Gemini thought summaries /
     # DeepSeek reasoning_content）。仅展示与持久化，不应回放为上下文。
-    reasoning: Optional[str] = None
+    reasoning: str | None = None
     model: str = ""
     # 未报告 usage 的兼容服务器为 None —— 绝不猜测。
-    usage: Optional[TokenUsage] = None
+    usage: TokenUsage | None = None
     raw: Any = field(default=None, repr=False, compare=False)
 
     @property
@@ -174,9 +174,9 @@ class StreamChunk:
     ``turn``（含归一化 ``usage``，若 provider 在流末报告）。
     """
 
-    text_delta: Optional[str] = None
-    reasoning_delta: Optional[str] = None
-    turn: Optional[AssistantTurn] = None
+    text_delta: str | None = None
+    reasoning_delta: str | None = None
+    turn: AssistantTurn | None = None
 
 
 @dataclass(frozen=True)
@@ -210,8 +210,8 @@ class ProviderClient(ABC):
         *,
         model: str,
         messages: List[Message],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        tools: List[Dict[str, Any]] | None = None,
+        tool_choice: Union[str, Dict[str, Any]] | None = None,
         **settings: Any,
     ) -> AssistantTurn:
         """对给定 messages/tools 返回一次模型回复。"""
@@ -225,8 +225,8 @@ class ProviderClient(ABC):
         *,
         model: str,
         messages: List[Message],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        tools: List[Dict[str, Any]] | None = None,
+        tool_choice: Union[str, Dict[str, Any]] | None = None,
         **settings: Any,
     ) -> AsyncIterator[StreamChunk]:
         """流式输出。默认实现：不做 token 级流式，仅产出一个携带完整

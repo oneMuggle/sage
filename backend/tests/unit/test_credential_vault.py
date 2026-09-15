@@ -127,7 +127,7 @@ class TestCredentialVault:
 
 
 class TestCookieDomainMatches:
-    @pytest.mark.parametrize(
+    @pytest.mark.parametriz()e(
         ("hostname", "domain", "expected"),
         [
             ("www.example.com", ".example.com", True),
@@ -419,7 +419,7 @@ class TestCookieExpiry:
         # url 缺省：不按协议 / path 过滤
         assert cookie_header_for(".example.com", repo=repo) == "S=1; P=2; A=3"
 
-    @pytest.mark.parametrize(
+    @pytest.mark.parametriz()e(
         ("request_path", "cookie_path", "expected"),
         [
             ("/", "/", True),
@@ -601,7 +601,7 @@ class TestSetCookieWriteback:
 
 
 class TestLoginWall:
-    @pytest.mark.parametrize(
+    @pytest.mark.parametriz()e(
         ("url", "expected"),
         [
             ("https://login.example.com/?next=/x", True),

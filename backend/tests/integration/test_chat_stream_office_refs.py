@@ -90,7 +90,7 @@ def _registry_size() -> int:
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_office_refs_without_binding_returns_403_and_no_registry_entry(
     client, tmp_path: Path
 ):
@@ -117,7 +117,7 @@ async def test_office_refs_without_binding_returns_403_and_no_registry_entry(
     assert _registry_size() == 0
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_office_refs_with_active_binding_starts_stream(
     client, tmp_path: Path
 ):
@@ -168,7 +168,7 @@ async def test_office_refs_with_active_binding_starts_stream(
     assert len(captured_messages) == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_workspace_path_mismatch_returns_400_and_no_registry_entry(
     client, tmp_path: Path
 ):
@@ -199,7 +199,7 @@ async def test_workspace_path_mismatch_returns_400_and_no_registry_entry(
     assert _registry_size() == 0
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_unknown_doc_ref_returns_404_and_no_registry_entry(
     client, tmp_path: Path
 ):
@@ -223,7 +223,7 @@ async def test_unknown_doc_ref_returns_404_and_no_registry_entry(
     assert _registry_size() == 0
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_no_office_refs_falls_through_to_legacy_path(
     client, tmp_path: Path
 ):

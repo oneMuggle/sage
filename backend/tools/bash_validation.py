@@ -44,7 +44,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Pattern, Tuple
+from typing import List, Pattern, Tuple
 
 
 class BashRisk(str, Enum):
@@ -205,7 +205,7 @@ def _rm_destructive_hits(lowered: str) -> List[Tuple[BashRisk, str]]:
         body = tokens[tokens.index("rm") + 1 :]
         recursive = False
         force = False
-        dangerous_target: Optional[str] = None
+        dangerous_target: str | None = None
         seen_dashdash = False
         for tok in body:
             if seen_dashdash:

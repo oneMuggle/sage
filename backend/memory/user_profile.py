@@ -25,7 +25,7 @@ import logging
 import time
 import uuid
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ class UserProfileStore:
         content: str,
         category: str = "preference",
         importance: int = 5,
-    ) -> Optional[str]:
+    ) -> str | None:
         """添加一条用户画像（去重 + 限长 + 安全扫描）。
 
         Args:
@@ -259,7 +259,7 @@ class UserProfileStore:
 
 
 # 全局单例（与 get_memory_manager 同模式）
-_profile_store: Optional[UserProfileStore] = None
+_profile_store: UserProfileStore | None = None
 
 
 def get_user_profile(db=None) -> UserProfileStore:

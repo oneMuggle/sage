@@ -24,7 +24,7 @@ Py3.8 兼容(release/win7 cherry-pick)。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -40,7 +40,7 @@ class SessionNode:
     """
 
     id: str
-    parent_id: Optional[str]
+    parent_id: str | None
     message_id: str
     children: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -52,16 +52,16 @@ class SessionBranch:
 
     session_id: str
     nodes: Dict[str, SessionNode] = field(default_factory=dict)
-    current_node_id: Optional[str] = None
-    root_node_id: Optional[str] = None
+    current_node_id: str | None = None
+    root_node_id: str | None = None
 
     def add_node(
         self,
-        parent_id: Optional[str],
+        parent_id: str | None,
         message_id: str,
         *,
         node_id: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Dict[str, Any] | None = None,
     ) -> SessionNode:
         """在 ``parent_id`` 下添加新节点,并把当前游标移到该节点。
 
@@ -118,7 +118,7 @@ class SessionBranch:
             )
         self.current_node_id = node_id
 
-    def get_path_to_root(self, node_id: Optional[str] = None) -> List[str]:
+    def get_path_to_root(self, node_id: str | None = None) -> List[str]:
         """从 ``node_id``(默认当前游标)到根的路径,含两端,**根在前**。
 
         空树 / 游标未设置返回空列表。

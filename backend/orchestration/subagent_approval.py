@@ -22,7 +22,7 @@ fail-closed），即便转发后，逐次人工确认也会让并行编排退化
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from backend.tools.bash_validation import BashRisk, validate_bash
 from backend.tools.permissions import (
@@ -59,7 +59,7 @@ class AutoApproveEnforcer:
     def rules(self):  # noqa: ANN201 — 与 base 同型
         return self._base.rules
 
-    def check(self, tool_name: str, args: Optional[Dict[str, Any]] = None) -> PermissionDecision:
+    def check(self, tool_name: str, args: Dict[str, Any] | None = None) -> PermissionDecision:
         decision = self._base.check(tool_name, args or {})
         if not decision.needs_approval:
             # allow / deny 原样保留 —— deny 永远胜出。
@@ -111,7 +111,7 @@ def _record_auto_approval(tool_name: str) -> None:
         logger.debug("auto 批准决策落库失败（忽略）tool=%s: %s", tool_name, exc)
 
 
-def build_subagent_enforcer(approval_mode: str) -> Optional[PermissionEnforcer]:
+def build_subagent_enforcer(approval_mode: str) -> PermissionEnforcer | None:
     """按审批模式构造子代理 enforcer；非 auto / 构造失败返回 ``None``。
 
     ``None`` = 子代理走默认路径（run_loop 从 settings 现读现建）。

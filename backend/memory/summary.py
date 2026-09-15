@@ -42,7 +42,7 @@ import sqlite3
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.data.database import Database
 
@@ -89,12 +89,12 @@ class SessionSummary:
 
     id: str
     session_id: str
-    source_turn_id: Optional[str]
+    source_turn_id: str | None
     content: str
     created_at_ms: int
     updated_at_ms: int
     status: str
-    error_message: Optional[str]
+    error_message: str | None
 
 
 def _row_to_summary(row: sqlite3.Row) -> SessionSummary:
@@ -134,8 +134,8 @@ class SessionSummaryStore:
         session_id: str,
         content: str,
         status: str = PENDING,
-        source_turn_id: Optional[str] = None,
-        error_message: Optional[str] = None,
+        source_turn_id: str | None = None,
+        error_message: str | None = None,
     ) -> SessionSummary:
         """Insert a new summary row. The caller picks ``status`` — use
         :data:`PENDING` when the row is a placeholder waiting on the
@@ -195,14 +195,14 @@ class SessionSummaryStore:
 
     # ── read ───────────────────────────────────────────────────────────
 
-    def get_by_id(self, summary_id: str) -> Optional[SessionSummary]:
+    def get_by_id(self, summary_id: str) -> SessionSummary | None:
         cursor = self.db.get_connection().cursor()
         row = cursor.execute(
             "SELECT * FROM session_summaries WHERE id = ?", (summary_id,)
         ).fetchone()
         return _row_to_summary(row) if row is not None else None
 
-    def get_latest_ready(self, session_id: str) -> Optional[SessionSummary]:
+    def get_latest_ready(self, session_id: str) -> SessionSummary | None:
         """Most recent READY summary for ``session_id``, or ``None``.
 
         Used by the retrieval-priority layer (step 5) to inject the
@@ -229,8 +229,8 @@ class SessionSummaryStore:
         pending_id: str,
         content: str,
         status: str,
-        error_message: Optional[str] = None,
-    ) -> Optional[SessionSummary]:
+        error_message: str | None = None,
+    ) -> SessionSummary | None:
         """Promote a PENDING row to READY / FAILED after the LLM call.
 
         只允许更新 ``status='pending'`` 的行:这是 spec §4.3 step 4
@@ -325,10 +325,10 @@ def generate_summary(
 def persist_summary(
     store: SessionSummaryStore,
     session_id: str,
-    source_turn_id: Optional[str],
+    source_turn_id: str | None,
     content: str,
     status: str = READY,
-    error_message: Optional[str] = None,
+    error_message: str | None = None,
 ) -> SessionSummary:
     """Persist a single summary row through :class:`SessionSummaryStore`.
 
@@ -371,7 +371,7 @@ def generate_and_persist_summary(
     session_id: str,
     messages: List[Dict[str, Any]],
     llm_call: Any,
-    source_turn_id: Optional[str] = None,
+    source_turn_id: str | None = None,
 ) -> SessionSummary:
     """End-to-end hook: generate via the LLM and persist a row.
 

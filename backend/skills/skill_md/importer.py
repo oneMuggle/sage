@@ -19,7 +19,7 @@ import logging
 import os
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 import yaml
 
@@ -52,7 +52,7 @@ _UPLOAD_READ_CHUNK_BYTES = 64 * 1024
 UploadedFile = Any  # fastapi.UploadFile 等;运行时 duck-typed
 
 
-async def _read_upload_with_limit(upload: UploadedFile) -> Tuple[Optional[bytes], int]:
+async def _read_upload_with_limit(upload: UploadedFile) -> Tuple[bytes | None, int]:
     """分块读取上传文件；超限时立即停止且不保留超限内容。"""
     chunks: List[bytes] = []
     total = 0
@@ -168,13 +168,13 @@ class SkillMdImporter:
         self,
         registry: SkillRegistry,
         *,
-        skills_dir: Optional[Path] = None,
-        script_runner: Optional[ScriptRunner] = None,
+        skills_dir: Path | None = None,
+        script_runner: ScriptRunner | None = None,
     ) -> None:
         self._registry = registry
         self._explicit_skills_dir = skills_dir
         self._script_runner = script_runner
-        self._batch_loader: Optional[SkillMdHotLoader] = None  # lazy-init for batch reuse
+        self._batch_loader: SkillMdHotLoader | None = None  # lazy-init for batch reuse
 
     async def import_files(self, files: List[UploadedFile]) -> Dict[str, List[Dict[str, str]]]:
         """逐文件解析 + 写盘 + hot_reload, 聚合结果。
@@ -374,7 +374,7 @@ def _strip_md_extension(filename: str) -> str:
 
 
 def parse_file_from_bytes(
-    content: bytes, *, fallback_name: Optional[str] = None
+    content: bytes, *, fallback_name: str | None = None
 ) -> Tuple[Dict[str, Any], str]:
     """从字节内容解析并校验 frontmatter，返回 ``(meta, body)``。
 

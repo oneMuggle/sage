@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from backend.domain.network_policy import NetworkPolicy
 
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 SETTINGS_KEY_NETWORK_POLICY = "network_policy"
 
 
-def load_network_policy(repo: Optional[Any] = None) -> NetworkPolicy:
+def load_network_policy(repo: Any | None = None) -> NetworkPolicy:
     """读取网络策略；任何失败回退 ``NetworkPolicy()``（ONLINE）。
 
     Args:

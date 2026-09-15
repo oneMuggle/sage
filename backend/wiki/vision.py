@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 import httpx
 
@@ -93,7 +93,7 @@ async def caption_image(
     config: VisionConfig,
     image_data: bytes,
     image_path: str = "",
-    project_root: Optional[Path] = None,
+    project_root: Path | None = None,
     context: str = "",
 ) -> ImageCaption:
     """为图片生成描述。

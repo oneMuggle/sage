@@ -18,7 +18,7 @@ from backend.tools.todo_state import (
 )
 
 
-@pytest.fixture()
+@pytest.fixture
 def repo(tmp_path, monkeypatch):
     """tmp DB + SAGE_DB_PATH env + 重置全局 _db 单例。"""
     db_path = tmp_path / "test.db"

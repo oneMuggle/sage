@@ -23,7 +23,7 @@ from backend.services.permission_gate import (
 pytestmark = [pytest.mark.unit]
 
 
-@pytest.fixture()
+@pytest.fixture
 def workspace(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()

@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ logger = logging.getLogger(__name__)
 class OfficeError(Exception):
     """Base class for all office-domain errors."""
 
-    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+    def __init__(self, message: str, *, file_path: Path | None = None) -> None:
         super().__init__(message)
         self.message = message
         self.file_path = file_path
@@ -39,7 +38,7 @@ class OfficeError(Exception):
 class OfficeFileNotFoundError(OfficeError):
     """The requested file does not exist."""
 
-    def __init__(self, file_path: Path, message: Optional[str] = None) -> None:
+    def __init__(self, file_path: Path, message: str | None = None) -> None:
         # message 可覆盖默认文案（默认走基类自动拼装的 "Office file not found: ..."），
         # 调用方常用来补一句业务上下文，例如 "journal spec not found: spec_xxx"。
         if message is None:
@@ -51,21 +50,21 @@ class OfficeFileNotFoundError(OfficeError):
 class OfficePathError(OfficeError):
     """Path validation failed (path traversal, outside workspace, etc.)."""
 
-    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+    def __init__(self, message: str, *, file_path: Path | None = None) -> None:
         super().__init__(message, file_path=file_path)
 
 
 class OfficeParseError(OfficeError):
     """File exists but cannot be parsed (corrupt, wrong format, missing deps)."""
 
-    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+    def __init__(self, message: str, *, file_path: Path | None = None) -> None:
         super().__init__(message, file_path=file_path)
 
 
 class OfficeGenerateError(OfficeError):
     """Tried to write a document but the generator failed."""
 
-    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+    def __init__(self, message: str, *, file_path: Path | None = None) -> None:
         super().__init__(message, file_path=file_path)
 
 
@@ -86,7 +85,7 @@ class OfficeSizeLimitError(OfficeError):
         actual_size: int,
         max_size: int,
         *,
-        file_path: Optional[Path] = None,
+        file_path: Path | None = None,
     ) -> None:
         super().__init__(
             f"File too large: {actual_size} bytes (max {max_size} bytes)",
@@ -113,14 +112,14 @@ class OfficeTemplateError(OfficeError):
 class OfficeTemplateParseError(OfficeTemplateError):
     """Template file cannot be parsed (invalid DOCX, no placeholders, etc.)."""
 
-    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+    def __init__(self, message: str, *, file_path: Path | None = None) -> None:
         super().__init__(message, file_path=file_path)
 
 
 class OfficeTemplateFillError(OfficeTemplateError):
     """Template fill failed (missing data, type mismatch, etc.)."""
 
-    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+    def __init__(self, message: str, *, file_path: Path | None = None) -> None:
         super().__init__(message, file_path=file_path)
 
 
@@ -137,21 +136,21 @@ class OfficePdfError(OfficeError):
 class OfficePdfParseError(OfficePdfError):
     """PDF file cannot be parsed (corrupt, wrong format, etc.)."""
 
-    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+    def __init__(self, message: str, *, file_path: Path | None = None) -> None:
         super().__init__(message, file_path=file_path)
 
 
 class OfficePdfGenerateError(OfficePdfError):
     """PDF generation failed."""
 
-    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+    def __init__(self, message: str, *, file_path: Path | None = None) -> None:
         super().__init__(message, file_path=file_path)
 
 
 class OfficePdfFormError(OfficePdfError):
     """PDF form operation failed (field not found, read-only, etc.)."""
 
-    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+    def __init__(self, message: str, *, file_path: Path | None = None) -> None:
         super().__init__(message, file_path=file_path)
 
 

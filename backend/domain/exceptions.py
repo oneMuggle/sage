@@ -8,7 +8,7 @@ P2 设计稿一致）。旧位置短期保留以避免破坏既有 import，PG2.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 class SageBaseError(Exception):
@@ -24,7 +24,7 @@ class SageBaseError(Exception):
         self,
         message: str,
         code: str = "SAGE_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: Dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.message = message
@@ -51,7 +51,7 @@ class AgentError(SageBaseError):
     def __init__(
         self,
         message: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: Dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message=message, code="AGENT_ERROR", details=details)
 
@@ -63,7 +63,7 @@ class ToolCallError(SageBaseError):
         self,
         tool_name: str,
         message: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: Dict[str, Any] | None = None,
     ) -> None:
         merged: Dict[str, Any] = dict(details or {})
         merged["tool_name"] = tool_name
@@ -80,7 +80,7 @@ class MaxIterationsError(SageBaseError):
     def __init__(
         self,
         max_iterations: int,
-        details: Optional[Dict[str, Any]] = None,
+        details: Dict[str, Any] | None = None,
     ) -> None:
         merged: Dict[str, Any] = dict(details or {})
         merged["max_iterations"] = max_iterations
@@ -102,7 +102,7 @@ class SageMemoryError(SageBaseError):
         self,
         operation: str,
         message: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: Dict[str, Any] | None = None,
     ) -> None:
         merged: Dict[str, Any] = dict(details or {})
         merged["operation"] = operation
@@ -119,7 +119,7 @@ class SessionNotFoundError(SageBaseError):
     def __init__(
         self,
         session_id: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: Dict[str, Any] | None = None,
     ) -> None:
         merged: Dict[str, Any] = dict(details or {})
         merged["session_id"] = session_id
@@ -137,7 +137,7 @@ class ValidationError(SageBaseError):
         self,
         field: str,
         message: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: Dict[str, Any] | None = None,
     ) -> None:
         merged: Dict[str, Any] = dict(details or {})
         merged["field"] = field
@@ -155,7 +155,7 @@ class SecurityError(SageBaseError):
         self,
         threat_type: str,
         message: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: Dict[str, Any] | None = None,
     ) -> None:
         merged: Dict[str, Any] = dict(details or {})
         merged["threat_type"] = threat_type

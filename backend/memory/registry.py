@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from backend.data.database import get_database
 from backend.memory.episodic import EpisodicMemory
@@ -18,7 +17,7 @@ from backend.memory.working import WorkingMemory
 
 logger = logging.getLogger(__name__)
 
-_memory_manager: Optional[MemoryManager] = None
+_memory_manager: MemoryManager | None = None
 
 
 def get_memory_manager() -> MemoryManager:

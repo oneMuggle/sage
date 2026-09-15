@@ -23,7 +23,7 @@ _OFFICE_MODULES = [
 ]
 
 
-@pytest.mark.parametrize("name", _OFFICE_MODULES)
+@pytest.mark.parametriz()e("name", _OFFICE_MODULES)
 def test_office_module_exposes_logger(name: str) -> None:
     mod = importlib.import_module(f"backend.office.{name}")
     assert hasattr(mod, "logger")

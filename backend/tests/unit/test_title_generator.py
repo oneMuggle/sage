@@ -50,13 +50,13 @@ class TestCleanTitle:
 
 
 class TestGenerate:
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_none_llm_returns_none(self):
         gen = TitleGenerator(None)
         result = await gen.generate("hello", "world response")
         assert result is None
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_short_messages_returns_none(self):
         mock_llm = AsyncMock()
         gen = TitleGenerator(mock_llm)
@@ -64,7 +64,7 @@ class TestGenerate:
         assert result is None
         mock_llm.chat.assert_not_called()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_llm_success(self):
         """LLM 返回正常标题"""
 
@@ -81,7 +81,7 @@ class TestGenerate:
         )
         assert result == "Python 入门指南"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_llm_failure_returns_none(self):
         """LLM 抛异常 → 降级返回 None"""
         mock_llm = AsyncMock()
@@ -91,7 +91,7 @@ class TestGenerate:
         result = await gen.generate("hello world", "This is a response about programming")
         assert result is None
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asynci()o()
     async def test_llm_dict_response(self):
         """LLM 返回 dict 格式（降级接口）"""
         mock_llm = AsyncMock()

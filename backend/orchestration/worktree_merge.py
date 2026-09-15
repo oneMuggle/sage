@@ -22,7 +22,7 @@ import subprocess
 import uuid
 from dataclasses import dataclass, field as dc_field
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class MergeResult:
 
 def _run_git(
     args: List[str], cwd: Path, timeout_s: int = _GIT_TIMEOUT_S
-) -> Optional[subprocess.CompletedProcess]:
+) -> subprocess.CompletedProcess | None:
     try:
         return subprocess.run(
             # 编码铁律：git for windows 输出恒 UTF-8，必须显式解码——
@@ -86,7 +86,7 @@ def _is_git_repo(path: Path) -> bool:
     return proc is not None and proc.returncode == 0
 
 
-def find_main_repo(worktree: Path) -> Optional[Path]:
+def find_main_repo(worktree: Path) -> Path | None:
     """worktree 自知的主仓路径；失败返 None。"""
     proc = _run_git(
         ["rev-parse", "--path-format=absolute", "--git-common-dir"], worktree
@@ -100,7 +100,7 @@ def find_main_repo(worktree: Path) -> Optional[Path]:
     return main
 
 
-def _status_porcelain(repo: Path) -> Optional[List[str]]:
+def _status_porcelain(repo: Path) -> List[str] | None:
     proc = _run_git(["status", "--porcelain"], repo)
     if proc is None or proc.returncode != 0:
         return None
@@ -125,7 +125,7 @@ def sanitize_branch_suffix(raw: str) -> str:
 
 
 def accept_lane_worktree(
-    worktree: str, *, lane_id: str, main_repo: Optional[str] = None
+    worktree: str, *, lane_id: str, main_repo: str | None = None
 ) -> MergeResult:
     """执行接受合并。永不抛错（超时/IO 转 git-error）。
 
@@ -141,7 +141,7 @@ def accept_lane_worktree(
 
 
 def _accept_inner(  # noqa: PLR0911 — fail-closed 多拒绝分支是设计
-    worktree: str, *, lane_id: str, main_repo: Optional[str]
+    worktree: str, *, lane_id: str, main_repo: str | None
 ) -> MergeResult:
     wt = Path(worktree)
     if not wt.is_dir():

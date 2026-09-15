@@ -21,7 +21,7 @@ import logging
 import sqlite3
 import threading
 from datetime import datetime, timezone
-from typing import Callable, List, Optional
+from typing import Callable, List
 
 from backend.data.database import Database, get_database
 from backend.domain.wake import Wake, WakeKind, WakeState, utc_now_iso
@@ -51,7 +51,7 @@ def _row_to_wake(row) -> Wake:
 class WakeStore:
     """``wakes`` 表的仓储（add / due 扫描 / 状态迁移）。"""
 
-    def __init__(self, db: Optional[Database] = None) -> None:
+    def __init__(self, db: Database | None = None) -> None:
         self.db = db or get_database()
         self._lock = threading.Lock()
         self._ensure_schema()
@@ -135,7 +135,7 @@ class WakeStore:
     # 查询
     # ------------------------------------------------------------------ #
 
-    def get_wake(self, wake_id: str) -> Optional[Wake]:
+    def get_wake(self, wake_id: str) -> Wake | None:
         row = (
             self.db.get_connection()
             .execute("SELECT * FROM wakes WHERE id = ?", (wake_id,))
@@ -144,7 +144,7 @@ class WakeStore:
         return _row_to_wake(row) if row else None
 
     def get_due_wakes(
-        self, now: Optional[datetime] = None, limit: int = DUE_SCAN_LIMIT
+        self, now: datetime | None = None, limit: int = DUE_SCAN_LIMIT
     ) -> List[Wake]:
         """所有到期待消费的 wake。
 
@@ -179,7 +179,7 @@ class WakeStore:
         )
         return [_row_to_wake(row) for row in rows]
 
-    def pending(self, session_id: Optional[str] = None) -> List[Wake]:
+    def pending(self, session_id: str | None = None) -> List[Wake]:
         """所有未消费（pending / due）的 wake，可选按会话过滤。"""
         conn = self.db.get_connection()
         if session_id is None:
@@ -266,7 +266,7 @@ class WakeStore:
 # 模块级单例（与 get_database / get_memory_manager 同款）
 # --------------------------------------------------------------------------- #
 
-_wake_store: Optional[WakeStore] = None
+_wake_store: WakeStore | None = None
 
 
 def get_wake_store() -> WakeStore:

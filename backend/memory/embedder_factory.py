@@ -21,7 +21,6 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 from backend.memory.embedder import (
     BGE_SMALL_ZH_DIMENSIONS,
@@ -76,7 +75,7 @@ def _preferred_mode_from_settings() -> str:
     return ""
 
 
-def create_embedder(preferred_mode: Optional[str] = None) -> Embedder:
+def create_embedder(preferred_mode: str | None = None) -> Embedder:
     """按配置创建嵌入器; ONNX/HTTP 端点不可用时降级 HashEmbedder。
 
     偏好解析顺序: preferred_mode 参数 (API 显式切换) > settings

@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pytest
 
@@ -87,8 +87,8 @@ class _FakeLLMProvider:
     def __init__(self, response_json: Dict[str, Any]) -> None:
         self._response_text = json.dumps(response_json, ensure_ascii=False)
         self.call_count = 0
-        self.last_model: Optional[str] = None
-        self.last_messages: Optional[List[Any]] = None
+        self.last_model: str | None = None
+        self.last_messages: List[Any] | None = None
 
     async def complete(self, **kwargs: Any) -> _AssistantTurn:
         self.call_count += 1
@@ -123,7 +123,7 @@ def _good_draft_payload() -> Dict[str, Any]:
     }
 
 
-@pytest.fixture()
+@pytest.fixture
 def seeded_db(tmp_path):
     """提供一个真实 SQLite + 已建表的 skill_drafts 表。"""
     db_path = str(tmp_path / "test_skill_save.db")

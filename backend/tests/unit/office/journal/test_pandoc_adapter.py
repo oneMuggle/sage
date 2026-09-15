@@ -42,7 +42,7 @@ def test_convert_docx_passthrough(tmp_path: Path):
     assert (tmp_path / "cache").exists() is False  # passthrough 不写缓存
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     shutil.which("pandoc") is None, reason="pandoc 系统依赖未安装"
 )
 def test_convert_doc_to_docx_uses_cache(tmp_path: Path, monkeypatch):

@@ -283,7 +283,7 @@ def test_download_records_artifact_after_success(tmp_path):
 # ---------- 文件名净化 ----------
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("url", "disposition", "expected"),
     [
         (f"{_BASE}/files/论文A.pdf", None, "论文A.pdf"),
@@ -302,7 +302,7 @@ def test_derive_filename(url, disposition, expected):
     assert derive_filename(url, disposition) == expected
 
 
-@pytest.mark.parametrize("name", ["/etc/passwd", "..\\..\\evil", "a/b/c.txt"])
+@pytest.mark.parametriz()e("name", ["/etc/passwd", "..\\..\\evil", "a/b/c.txt"])
 def test_sanitize_filename_strips_path_separators(name):
     out = sanitize_filename(name)
     assert "/" not in out

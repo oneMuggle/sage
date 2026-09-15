@@ -23,7 +23,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
@@ -238,7 +238,7 @@ class ExecuteCodeTool(BaseTool):
 
         deadline = started + timeout
         rpc_served = 0
-        final: Optional[Dict[str, Any]] = None
+        final: Dict[str, Any] | None = None
         try:
             while True:
                 if done_event.wait(timeout=0.05):

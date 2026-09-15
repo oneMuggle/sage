@@ -16,7 +16,7 @@ from backend.memory.user_profile import DEFAULT_CHAR_LIMIT, UserProfileStore
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def db(tmp_path):
     """临时 SQLite 数据库（每用例独立）。"""
     db = Database(db_path=str(tmp_path / "test_profile.db"))
@@ -25,7 +25,7 @@ def db(tmp_path):
     db.close()
 
 
-@pytest.fixture()
+@pytest.fixture
 def store(db):
     """已 load 的 UserProfileStore 实例。"""
     s = UserProfileStore(db)

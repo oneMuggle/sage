@@ -19,7 +19,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ class BaseGateway:
 
     def __init__(
         self,
-        llm_factory: Optional[Any] = None,
+        llm_factory: Any | None = None,
         db: Any = None,
     ) -> None:
         self._llm_factory = llm_factory  # (session_id) -> LLMClient；None=惰性
@@ -106,7 +106,7 @@ class BaseGateway:
         self.stats = GatewayStats()
         # 已转发审批的去重集合（request_id 全量；进程内即可）
         self._forwarded_approval_ids: set = set()
-        self._poll_thread: Optional[threading.Thread] = None
+        self._poll_thread: threading.Thread | None = None
         self._running = False
         self._ensure_table()
 
@@ -118,10 +118,10 @@ class BaseGateway:
     def send_reply(self, chat_id: str, text: str) -> None:
         raise NotImplementedError
 
-    def parse_update(self, update: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    def parse_update(self, update: Dict[str, Any]) -> Tuple[str, str] | None:
         raise NotImplementedError
 
-    def handle_update(self, update: Dict[str, Any]) -> Optional[str]:
+    def handle_update(self, update: Dict[str, Any]) -> str | None:
         """默认编排：parse → 统计 → process_message（子类可覆写加平台分支）"""
         parsed = self.parse_update(update)
         if parsed is None:
@@ -208,7 +208,7 @@ class BaseGateway:
     def _reply_text(self, chat_id: str, text: str) -> None:
         self.send_reply(chat_id, text)
 
-    def process_message(self, chat_id: str, text: str) -> Optional[str]:
+    def process_message(self, chat_id: str, text: str) -> str | None:
         """白名单 → 命令分发 → LLM 对话（parse 之后的平台无关主路径）"""
         if not self._is_allowed(chat_id):
             self.stats.rejected += 1
@@ -282,7 +282,7 @@ class BaseGateway:
         repo.save(assistant_msg)
         return reply
 
-    def _resolve_llm(self, session_id: str) -> Optional[Any]:
+    def _resolve_llm(self, session_id: str) -> Any | None:
         """解析 LLM 客户端（注入优先，settings 兜底；不可用返回 None）"""
         if self._llm_factory is not None:
             return self._llm_factory(session_id)
@@ -307,7 +307,7 @@ class BaseGateway:
         """request_id 前 8 位（审批命令用短 id）"""
         return request_id.replace("-", "")[:8]
 
-    def _resolve_pending(self, short_id: str) -> Optional[Any]:
+    def _resolve_pending(self, short_id: str) -> Any | None:
         """按短 id 前缀匹配挂起审批请求"""
         from backend.services.permission_gate import get_permission_gate
 
@@ -321,7 +321,7 @@ class BaseGateway:
 
     def _handle_command(  # noqa: PLR0911 — 命令分发逐条 return 可读性更好
         self, text: str, chat_id: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """处理 /approve /deny /pending /status /reset /help 命令。
 
         Returns:

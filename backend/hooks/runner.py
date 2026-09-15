@@ -25,7 +25,7 @@ import os
 import signal
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.hooks.config import HookConfig
 
@@ -42,8 +42,8 @@ class HookOutcome:
     """单个事件 + 工具上所有匹配钩子的合并结果。"""
 
     decision: str = DECISION_ALLOW
-    updated_input: Optional[Dict[str, Any]] = None
-    reason: Optional[str] = None
+    updated_input: Dict[str, Any] | None = None
+    reason: str | None = None
     messages: List[str] = field(default_factory=list)
 
     @property
@@ -69,7 +69,7 @@ def build_payload(
     event: str,
     tool_name: str,
     tool_input: Any,
-    tool_output: Optional[str] = None,
+    tool_output: str | None = None,
     is_error: bool = False,
 ) -> Dict[str, Any]:
     """构造经 STDIN 传给钩子的 JSON payload。"""
@@ -89,8 +89,8 @@ def build_payload(
 
 def validate_modified_args(
     updated_input: Dict[str, Any],
-    schema_parameters: Optional[Dict[str, Any]],
-) -> Optional[str]:
+    schema_parameters: Dict[str, Any] | None,
+) -> str | None:
     """对钩子修改后的工具参数做轻量 JSON-Schema 再校验。
 
     失败返回错误描述字符串, 通过返回 ``None``。只检查 ``required`` 存在性
@@ -114,7 +114,7 @@ def validate_modified_args(
     return None
 
 
-def _kill_process_group(proc: Optional[asyncio.subprocess.Process]) -> None:
+def _kill_process_group(proc: asyncio.subprocess.Process | None) -> None:
     """杀掉钩子进程组 (超时兜底)。POSIX 用 killpg, Windows 尽力 kill。"""
     if proc is None or proc.returncode is not None:
         return
@@ -183,7 +183,7 @@ async def run_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOu
         logger.warning("hooks: unserializable payload, skipping hook: %s", exc)
         return HookOutcome(decision=DECISION_NOOP, reason="payload not serializable")
 
-    proc: Optional[asyncio.subprocess.Process] = None
+    proc: asyncio.subprocess.Process | None = None
     try:
         proc = await asyncio.create_subprocess_shell(
             hook_cfg.command,

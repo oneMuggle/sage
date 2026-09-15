@@ -11,7 +11,7 @@ from backend.skills.registry import SkillRegistry
 from backend.skills.skill_md.loader import SkillMdHotLoader
 
 
-@pytest.fixture()
+@pytest.fixture
 def tmp_skills_dir(tmp_path: Path) -> Path:
     """返回临时 skills 根目录。"""
     return tmp_path

@@ -27,7 +27,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class EntityRef:
 class ResolvedRef:
     ref: EntityRef
     items: List[str] = field(default_factory=list)
-    note: Optional[str] = None  # 未命中/数据源不可用时的说明
+    note: str | None = None  # 未命中/数据源不可用时的说明
 
 
 def extract_entity_refs(text: str) -> List[EntityRef]:
@@ -79,7 +79,7 @@ def _clip(text: str, limit: int = MAX_ITEM_CHARS) -> str:
 # ---- 各类解析器（惰性 import，失败静默） ---------------------------------
 
 
-def _resolve_memory(query: str, session_id: Optional[str]) -> ResolvedRef:
+def _resolve_memory(query: str, session_id: str | None) -> ResolvedRef:
     ref = EntityRef("memory", query, f"@memory:{query}")
     try:
         from backend.memory import get_memory_manager
@@ -99,7 +99,7 @@ def _resolve_memory(query: str, session_id: Optional[str]) -> ResolvedRef:
     return ResolvedRef(ref, items=items, note=None if items else "没有匹配的记忆")
 
 
-def _wiki_project_root() -> Optional[Path]:
+def _wiki_project_root() -> Path | None:
     """最近打开的 Wiki 项目（recent-projects 首项）；没有则 None。"""
     try:
         from backend.storage.recent_projects import load_recent
@@ -114,7 +114,7 @@ def _wiki_project_root() -> Optional[Path]:
         return None
 
 
-def _resolve_wiki(query: str, _session_id: Optional[str]) -> ResolvedRef:
+def _resolve_wiki(query: str, _session_id: str | None) -> ResolvedRef:
     ref = EntityRef("wiki", query, f"@wiki:{query}")
     root = _wiki_project_root()
     if root is None:
@@ -131,7 +131,7 @@ def _resolve_wiki(query: str, _session_id: Optional[str]) -> ResolvedRef:
     return ResolvedRef(ref, items=items, note=None if items else f"Wiki「{root.name}」中没有匹配页面")
 
 
-def _resolve_skill(query: str, _session_id: Optional[str]) -> ResolvedRef:
+def _resolve_skill(query: str, _session_id: str | None) -> ResolvedRef:
     ref = EntityRef("skill", query, f"@skill:{query}")
     try:
         from backend.api.legacy_routes import _get_skill_adapter
@@ -154,7 +154,7 @@ def _resolve_skill(query: str, _session_id: Optional[str]) -> ResolvedRef:
     return ResolvedRef(ref, items=items, note=None if items else "没有匹配的技能")
 
 
-def _resolve_agent(query: str, _session_id: Optional[str]) -> ResolvedRef:
+def _resolve_agent(query: str, _session_id: str | None) -> ResolvedRef:
     ref = EntityRef("agent", query, f"@agent:{query}")
     try:
         from backend.data.agent_repo import AgentRepository
@@ -179,7 +179,7 @@ def _resolve_agent(query: str, _session_id: Optional[str]) -> ResolvedRef:
     return ResolvedRef(ref, items=items, note=None if items else "没有匹配的智能体")
 
 
-_RESOLVERS: Dict[str, Callable[[str, Optional[str]], ResolvedRef]] = {
+_RESOLVERS: Dict[str, Callable[[str, str | None], ResolvedRef]] = {
     "memory": _resolve_memory,
     "wiki": _resolve_wiki,
     "skill": _resolve_skill,
@@ -187,7 +187,7 @@ _RESOLVERS: Dict[str, Callable[[str, Optional[str]], ResolvedRef]] = {
 }
 
 
-def resolve_entity_refs(refs: List[EntityRef], session_id: Optional[str] = None) -> List[ResolvedRef]:
+def resolve_entity_refs(refs: List[EntityRef], session_id: str | None = None) -> List[ResolvedRef]:
     out: List[ResolvedRef] = []
     for ref in refs:
         resolver = _RESOLVERS.get(ref.kind)
@@ -232,7 +232,7 @@ def render_references_block(resolved: List[ResolvedRef]) -> str:
     return "\n".join(parts)
 
 
-def process(text: str, session_id: Optional[str] = None) -> str:
+def process(text: str, session_id: str | None = None) -> str:
     """路由层一键调用：返回 references 块（可能为空串）。"""
     refs = extract_entity_refs(text)
     if not refs:

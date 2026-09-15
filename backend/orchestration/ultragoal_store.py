@@ -36,7 +36,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Union
 
 # ============================================================================
 # Errors
@@ -82,7 +82,7 @@ class Ultragoal:
     title: str
     objective: str
     acceptance_criteria: List[str]
-    parent_goal_id: Optional[str] = None
+    parent_goal_id: str | None = None
     status: _GoalStatus = "active"
     created_at: int = field(default_factory=lambda: int(time.time() * 1000))
     updated_at: int = field(default_factory=lambda: int(time.time() * 1000))
@@ -143,7 +143,7 @@ class LedgerEntry:
     actor: str
     action: _LedgerAction
     goal_id: str
-    before: Optional[Dict[str, Any]]
+    before: Dict[str, Any] | None
     after: Dict[str, Any]
     evidence_refs: List[str] = field(default_factory=list)
 
@@ -229,7 +229,7 @@ class UltragoalStore:
       - `worker-write-rejected.log` — append-only
     """
 
-    def __init__(self, persist_dir: Optional[Union[Path, str]] = None) -> None:
+    def __init__(self, persist_dir: Union[Path, str] | None = None) -> None:
         self.persist_dir = Path(persist_dir) if persist_dir is not None else None
         self._goals: Dict[str, Ultragoal] = {}
         self._ledger: List[LedgerEntry] = []
@@ -251,8 +251,8 @@ class UltragoalStore:
         title: str,
         objective: str,
         acceptance_criteria: List[str],
-        parent_goal_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        parent_goal_id: str | None = None,
+        metadata: Dict[str, Any] | None = None,
     ) -> Ultragoal:
         """Create a new goal. Raises DuplicateGoalId if goal_id exists."""
         with self._lock:
@@ -292,9 +292,9 @@ class UltragoalStore:
         self,
         goal_id: str,
         actor: str,
-        status: Optional[_GoalStatus] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        sub_goal_ids: Optional[List[str]] = None,
+        status: _GoalStatus | None = None,
+        metadata: Dict[str, Any] | None = None,
+        sub_goal_ids: List[str] | None = None,
     ) -> Ultragoal:
         """Update mutable fields of a goal. Raises GoalNotFound if missing."""
         with self._lock:
@@ -402,7 +402,7 @@ class UltragoalStore:
         actor: str,
         action: _LedgerAction,
         goal_id: str,
-        before: Optional[Dict[str, Any]],
+        before: Dict[str, Any] | None,
         after: Dict[str, Any],
         evidence_refs: List[str],
     ) -> None:
@@ -539,8 +539,8 @@ class UltragoalGuard:
         title: str,
         objective: str,
         acceptance_criteria: List[str],
-        parent_goal_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        parent_goal_id: str | None = None,
+        metadata: Dict[str, Any] | None = None,
     ) -> Ultragoal:
         self.assert_can_write(actor, "create_goal")
         return self.store.create_goal(
@@ -556,9 +556,9 @@ class UltragoalGuard:
         self,
         goal_id: str,
         actor: str,
-        status: Optional[_GoalStatus] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        sub_goal_ids: Optional[List[str]] = None,
+        status: _GoalStatus | None = None,
+        metadata: Dict[str, Any] | None = None,
+        sub_goal_ids: List[str] | None = None,
     ) -> Ultragoal:
         self.assert_can_write(actor, "update_goal")
         return self.store.update_goal(
@@ -590,7 +590,7 @@ class UltragoalGuard:
         self,
         goal_id: str,
         actor: str,
-        evidence: Optional[List[str]] = None,
+        evidence: List[str] | None = None,
     ) -> Ultragoal:
         """Convenience: mark goal complete + record a terminal checkpoint."""
         self.assert_can_write(actor, "complete")

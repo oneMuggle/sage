@@ -192,7 +192,7 @@ class TestMigration:
 # ==================== Windows 真实 DPAPI ====================
 
 
-@pytest.mark.skipif(secret_box.sys.platform != "win32", reason="DPAPI 仅 Windows")
+@pytest.mark.skipi()f(secret_box.sys.platform != "win32", reason="DPAPI 仅 Windows")
 class TestDpapiReal:
     def test_roundtrip(self, monkeypatch):
         monkeypatch.setenv("SAGE_SECRET_SCHEME", "dpapi")

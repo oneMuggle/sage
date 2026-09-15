@@ -4,20 +4,20 @@
 用于 Wiki 页面（区别于 backend/skills/skill_md/frontmatter.py 用于 SKILL.md）。
 """
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 @dataclass
 class Frontmatter:
     """YAML frontmatter 数据。"""
 
-    title: Optional[str] = None
-    page_type: Optional[str] = None  # "source"/"entity"/"concept"/...
+    title: str | None = None
+    page_type: str | None = None  # "source"/"entity"/"concept"/...
     tags: List[str] = field(default_factory=list)
     related: List[str] = field(default_factory=list)  # wikilink 目标
     sources: List[str] = field(default_factory=list)
-    created: Optional[str] = None
-    updated: Optional[str] = None
+    created: str | None = None
+    updated: str | None = None
     extra: Dict[str, str] = field(default_factory=dict)  # 未知字段
 
 

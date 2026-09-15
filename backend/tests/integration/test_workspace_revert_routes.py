@@ -95,7 +95,7 @@ def _hunk_count(diff_text: str) -> int:
     return sum(1 for line in diff_text.splitlines() if line.startswith("@@ "))
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_revert_restores_file(
     client: httpx.AsyncClient, bound_session: str, git_workspace: Path
 ) -> None:
@@ -109,7 +109,7 @@ async def test_revert_restores_file(
     assert "l18-EDIT" not in _worktree(git_workspace)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_revert_untracked_requires_flag(
     client: httpx.AsyncClient, bound_session: str, git_workspace: Path
 ) -> None:
@@ -132,7 +132,7 @@ async def test_revert_untracked_requires_flag(
     assert not (git_workspace / "untracked.py").exists()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_revert_path_escape_rejected(
     client: httpx.AsyncClient, bound_session: str
 ) -> None:
@@ -144,7 +144,7 @@ async def test_revert_path_escape_rejected(
     assert response.json()["errors"][0]["error"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_revert_requires_binding(
     client: httpx.AsyncClient, session_id: str
 ) -> None:
@@ -155,7 +155,7 @@ async def test_revert_requires_binding(
     assert response.status_code == 403
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_revert_hunks_restores_only_selected(
     client: httpx.AsyncClient, bound_session: str, git_workspace: Path
 ) -> None:
@@ -177,7 +177,7 @@ async def test_revert_hunks_restores_only_selected(
     assert "l18-EDIT" in content
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_revert_hunks_out_of_range_is_502(
     client: httpx.AsyncClient, bound_session: str, git_workspace: Path
 ) -> None:
@@ -190,7 +190,7 @@ async def test_revert_hunks_out_of_range_is_502(
     assert _worktree(git_workspace) == before
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_revert_hunks_requires_binding(
     client: httpx.AsyncClient, session_id: str
 ) -> None:

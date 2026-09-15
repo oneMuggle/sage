@@ -21,7 +21,6 @@ binding + ``save_document`` to seed rows.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import pytest
 
@@ -48,7 +47,7 @@ def _make_doc(
     *,
     doc_id: str,
     workspace_path: str,
-    archived_at: Optional[int] = None,
+    archived_at: int | None = None,
 ) -> OfficeDocumentSummary:
     return OfficeDocumentSummary(
         id=doc_id,

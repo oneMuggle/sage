@@ -48,13 +48,13 @@ async def _fake_llm_ok(prompt: str) -> str:
     return DIGEST
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_compact_unknown_session_returns_404(client):
     resp = await client.post(f"{PREFIX}/sessions/nonexistent-id/compact")
     assert resp.status_code == 404
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_compact_below_message_floor_is_noop(client, monkeypatch):
     """4 条消息 < 12 地板 → compacted=false + below_message_floor, DB 不动。"""
     monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "1")
@@ -73,7 +73,7 @@ async def test_compact_below_message_floor_is_noop(client, monkeypatch):
     assert len(MessageRepository().get_by_session(sess.id)) == 4
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_compact_below_token_threshold_is_noop(client, monkeypatch):
     """消息数够但 token 未达阈值 → below_token_threshold。"""
     monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "999999999")
@@ -87,7 +87,7 @@ async def test_compact_below_token_threshold_is_noop(client, monkeypatch):
     assert data["reason"] == "below_token_threshold"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_compact_success_replaces_rows_and_preserves_tail(client, monkeypatch):
     """14 条 → 摘要替代前 8 条, 保留后 6 条; 续接消息排在保留尾部之前。"""
     monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "100")
@@ -119,7 +119,7 @@ async def test_compact_success_replaces_rows_and_preserves_tail(client, monkeypa
     assert SessionRepository().get(sess.id).message_count == 7
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_compact_llm_failure_leaves_db_untouched(client, monkeypatch):
     """LLM 摘要失败 → ok=false + compaction_failed, 一行都不动。"""
     monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "100")
@@ -141,7 +141,7 @@ async def test_compact_llm_failure_leaves_db_untouched(client, monkeypatch):
     assert [r.id for r in rows] == [f"seed-{i}" for i in range(14)]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_compact_persist_failure_rolls_back_whole_transaction(client, monkeypatch):
     """CRITICAL-1: 续接消息 INSERT 在事务中途失败（重复主键）→ 整体回滚。
 
@@ -172,7 +172,7 @@ async def test_compact_persist_failure_rolls_back_whole_transaction(client, monk
     assert SessionRepository().get(sess.id).message_count == 14
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_compact_concurrent_reentry_returns_409(client, monkeypatch):
     """MEDIUM-1 后端兜底：同会话重复触发压缩 → 409 compact_in_progress，DB 不动。"""
     monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "100")
@@ -194,7 +194,7 @@ async def test_compact_concurrent_reentry_returns_409(client, monkeypatch):
     assert len(MessageRepository().get_by_session(sess.id)) == 14
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_compact_without_llm_config_returns_error(client, monkeypatch):
     """没有可用 LLM 配置 → ok=false + llm_not_configured。"""
     monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "100")

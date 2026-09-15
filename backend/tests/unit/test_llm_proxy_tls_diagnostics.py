@@ -192,7 +192,7 @@ def test_tls_certificate_error_does_not_loop_on_self_reference() -> None:
 
 
 # 简单 sanity: 确保 import 时 sys 平台不被改 (Windows-only skip)
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     sys.platform.startswith("win"),
     reason="Win32 路径分隔符不同; 测试只对 POSIX 行为有意义",
 )

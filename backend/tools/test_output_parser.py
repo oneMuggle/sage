@@ -14,7 +14,7 @@ bash 跑测试非零退出时,LLM 只能在 30KiB 截断文本里自己找失败
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 #: 只扫描尾部行数——测试框架的摘要/失败清单恒在输出尾部
 _TAIL_LINES = 200
@@ -34,10 +34,10 @@ def _tail(text: str, max_lines: int = _TAIL_LINES) -> List[str]:
     return lines[-max_lines:]
 
 
-def _parse_pytest(lines: List[str]) -> Optional[Dict[str, Any]]:
+def _parse_pytest(lines: List[str]) -> Dict[str, Any] | None:
     failures: List[str] = []
-    summary_failed: Optional[int] = None
-    summary_passed: Optional[int] = None
+    summary_failed: int | None = None
+    summary_passed: int | None = None
     for line in lines:
         match = _PYTEST_FAILED_RE.match(line)
         if match:
@@ -63,11 +63,11 @@ def _parse_pytest(lines: List[str]) -> Optional[Dict[str, Any]]:
     return result
 
 
-def _parse_js_family(lines: List[str]) -> Optional[Dict[str, Any]]:
+def _parse_js_family(lines: List[str]) -> Dict[str, Any] | None:
     fail_files: List[str] = []
     fail_tests: List[str] = []
-    summary_failed: Optional[int] = None
-    summary_passed: Optional[int] = None
+    summary_failed: int | None = None
+    summary_passed: int | None = None
     for line in lines:
         m = _VITEST_FAIL_FILE_RE.match(line) or _JEST_FAIL_FILE_RE.match(line)
         if m:
@@ -95,7 +95,7 @@ def _parse_js_family(lines: List[str]) -> Optional[Dict[str, Any]]:
     return result
 
 
-def parse_test_failures(stdout: str, stderr: str) -> Optional[Dict[str, Any]]:
+def parse_test_failures(stdout: str, stderr: str) -> Dict[str, Any] | None:
     """从测试命令输出中解析失败用例清单。
 
     支持 pytest 与 vitest/jest 的常规输出形态（含 ``-ra`` / ``-v`` 摘要）。

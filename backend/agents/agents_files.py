@@ -23,7 +23,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +181,7 @@ def _profile_from_repo_row(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def import_agents_from_files(directory: Optional[Path] = None) -> Dict[str, List[str]]:
+def import_agents_from_files(directory: Path | None = None) -> Dict[str, List[str]]:
     """扫描目录导入档案。返回 ``{"imported", "unchanged", "errors"}``。
 
     语义：
@@ -220,7 +220,7 @@ def import_agents_from_files(directory: Optional[Path] = None) -> Dict[str, List
     return result
 
 
-def export_agent_to_file(agent_id: str, directory: Optional[Path] = None) -> Path:
+def export_agent_to_file(agent_id: str, directory: Path | None = None) -> Path:
     """把 DB 档案导出为 markdown 文件（覆盖写），返回文件路径。
 
     Raises:

@@ -23,15 +23,15 @@ Why early-bind, not lazy:
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 def bootstrap_review_collaborators(
-    queue: Optional[Any] = None,
-    review_service: Optional[Any] = None,
-    draft_store: Optional[Any] = None,
+    queue: Any | None = None,
+    review_service: Any | None = None,
+    draft_store: Any | None = None,
 ) -> None:
     """Wire ``ReviewService`` and ``SkillDraftStore`` into the process-wide
     ``ReviewQueue`` singleton.

@@ -34,7 +34,7 @@ key insertion order).
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 class CircuitBreaker:
@@ -57,7 +57,7 @@ class CircuitBreaker:
         self.max_repeats: int = max_repeats
         self._call_counts: Dict[str, int] = {}
 
-    def check(self, tool_name: str, arguments: Dict[str, Any]) -> Optional[str]:
+    def check(self, tool_name: str, arguments: Dict[str, Any]) -> str | None:
         """
         记录一次调用并检查是否应熔断。
 

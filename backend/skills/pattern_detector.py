@@ -9,7 +9,7 @@ beyond a configurable threshold.
 from __future__ import annotations
 
 from collections import Counter
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 class PatternDetector:
@@ -36,7 +36,7 @@ class PatternDetector:
         tool_calls: List[Dict],
         threshold: int = 3,
         window_size: int = 5,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """
         Detect repeated tool call patterns within a sliding window.
 

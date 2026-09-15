@@ -96,7 +96,7 @@ def _profile_rows() -> list:
     return conn.execute("SELECT content, category FROM user_profile").fetchall()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_legacy_chat_stream_extracts_memory_after_assistant_persisted(client):
     """一次成功 chat 后提取条目落库（autoMemory 缺省 True）。
 
@@ -141,7 +141,7 @@ async def test_legacy_chat_stream_extracts_memory_after_assistant_persisted(clie
     assert matched[0]["category"] == "preference"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_legacy_chat_stream_skips_extraction_when_auto_memory_disabled(client):
     """app_settings.autoMemory=false 时不写记忆。"""
     from backend.data.settings_repo import SettingsRepository
@@ -164,7 +164,7 @@ async def test_legacy_chat_stream_skips_extraction_when_auto_memory_disabled(cli
     assert _episodic_rows() == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_legacy_chat_stream_extraction_failure_does_not_break_stream(client):
     """提取过程抛错只 warning：流照常完成, 不写记忆, 不 500。"""
     session_id = str(uuid.uuid4())
@@ -187,7 +187,7 @@ async def test_legacy_chat_stream_extraction_failure_does_not_break_stream(clien
     assert _episodic_rows() == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_legacy_chat_stream_assistant_persist_failure_skips_extraction(client):
     """assistant 落盘失败时不触发提取（不产生无对应消息的脏记忆）。"""
     session_id = str(uuid.uuid4())

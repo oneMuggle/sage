@@ -22,7 +22,6 @@ import hashlib
 import os
 import socket
 import struct
-from typing import Optional
 
 #: 单条消息上限（CDP 截图/快照可能到 MB 级，64 MiB 足够宽裕）
 MAX_MESSAGE_BYTES = 64 * 1024 * 1024
@@ -147,7 +146,7 @@ def ws_send_pong(sock: socket.socket, payload: bytes) -> None:
 def ws_recv_text(sock: socket.socket) -> str:
     """读一条完整文本消息（自动拼分片、应答 Ping）；Close/二进制报错。"""
     fragments: list = []
-    current_opcode: Optional[int] = None
+    current_opcode: int | None = None
     while True:
         opcode, payload, fin = _read_frame(sock)
         if opcode == _OP_PING:

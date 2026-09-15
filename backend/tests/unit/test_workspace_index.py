@@ -24,7 +24,7 @@ def _fake_embed(config, texts):
     return out
 
 
-@pytest.fixture()
+@pytest.fixture
 def index_env(tmp_path, monkeypatch):
     workspace = tmp_path / "ws"
     workspace.mkdir()

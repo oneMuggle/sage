@@ -24,7 +24,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import FrozenSet, List, Optional
+from typing import FrozenSet, List
 
 # Task 2: 真实 digest 格式化器 (复用 office 纯函数, 不触发 FastAPI endpoint)
 from backend.office.errors import OfficeError, OfficePathError, OfficeSizeLimitError
@@ -343,7 +343,7 @@ _EXT_TO_KIND = {
 class Mention:
     raw: str  # @ 后的整段原文 (含 ext)
     path: str  # 与 raw 相同 (本轮不解析 host/relative)
-    kind: Optional[str]  # 'office-ppt'/'office-word'/'office-excel'/'office-pdf' 或 None
+    kind: str | None  # 'office-ppt'/'office-word'/'office-excel'/'office-pdf' 或 None
 
 
 @dataclass

@@ -12,7 +12,7 @@ Provides high-level operations for lane management:
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 from backend.data.orchestration_repo import LaneRepository
 from backend.orchestration.models import (
@@ -30,14 +30,14 @@ class LaneRegistry:
     specific agent and tracks execution health via heartbeats.
     """
 
-    def __init__(self, repo: Optional[LaneRepository] = None) -> None:
+    def __init__(self, repo: LaneRepository | None = None) -> None:
         self.repo = repo or LaneRepository()
 
     def create_lane(
         self,
         task_id: Union[str, Lane],
-        worktree: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        worktree: str | None = None,
+        metadata: Dict[str, Any] | None = None,
     ) -> Lane:
         """
         Create a new lane for a task.
@@ -135,7 +135,7 @@ class LaneRegistry:
         except ValueError:
             return False
 
-    def mark_failed(self, lane_id: str, error: Optional[str] = None) -> bool:
+    def mark_failed(self, lane_id: str, error: str | None = None) -> bool:
         """Transition lane to FAILED state."""
         lane = self.repo.get(lane_id)
         if not lane:

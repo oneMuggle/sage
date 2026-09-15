@@ -18,7 +18,7 @@ Public surface:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
@@ -122,8 +122,8 @@ class OfficeRepairWordTool(BaseTool):
 
     def execute(
         self,
-        file_path: Optional[str] = None,
-        format_spec: Optional[Dict[str, Any]] = None,
+        file_path: str | None = None,
+        format_spec: Dict[str, Any] | None = None,
         overwrite: bool = False,
         **kwargs: Any,
     ) -> ToolResult:

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 from ..base import BaseSkill, SkillResult, SkillSchema
 from .resources import ResourceIndex, render_body_with_resources
@@ -47,7 +47,7 @@ class DispatchMode:
 
     disable_model_invocation: bool = False
     user_invocable: bool = False
-    user_invocable_name: Optional[str] = None
+    user_invocable_name: str | None = None
     command_dispatch: str = "auto"
 
 
@@ -63,12 +63,12 @@ class SkillMdDocument:
     # 空字符串 = 不参与自动激活 (builtin 与未声明该字段的 SKILL.md)。
     when_to_use: str = ""
     body: str = ""
-    base_dir: Optional[Path] = None
+    base_dir: Path | None = None
     # True when this document came from the root-level ``<root>/SKILL.md``
     # form rather than ``<root>/<name>/SKILL.md``.  Deletion uses this
     # distinction to avoid treating the skills root as a removable skill dir.
     is_root_file: bool = False
-    version: Optional[str] = None
+    version: str | None = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     raw_frontmatter: Dict[str, Any] = field(default_factory=dict)
 
@@ -77,11 +77,11 @@ class SkillMdDocument:
     os: List[str] = field(default_factory=list)  # 平台过滤
     always: bool = False  # 跳过条件加载
     dispatch: DispatchMode = field(default_factory=DispatchMode)
-    resources: Optional[ResourceIndex] = None  # ResourceIndex，由 loader 构建
+    resources: ResourceIndex | None = None  # ResourceIndex，由 loader 构建
 
     # agentskills.io spec optional fields (Task 3)
-    license: Optional[str] = None
-    compatibility: Optional[str] = None
+    license: str | None = None
+    compatibility: str | None = None
     allowed_tools: Tuple[str, ...] = field(default_factory=tuple)
 
 
@@ -100,8 +100,8 @@ class SkillMdSkill(BaseSkill):
     def __init__(
         self,
         doc: SkillMdDocument,
-        base_dir: Optional[Path] = None,
-        script_runner: Optional[ScriptRunner] = None,
+        base_dir: Path | None = None,
+        script_runner: ScriptRunner | None = None,
     ) -> None:
         # 必须先 super().__init__(), 让 BaseSkill 初始化 _schema cache
         super().__init__()
@@ -110,7 +110,7 @@ class SkillMdSkill(BaseSkill):
         if base_dir is not None:
             self._doc.base_dir = base_dir
         # v2: 可选 ScriptRunner 引用 (None = 不支持脚本执行)
-        self._script_runner: Optional[ScriptRunner] = script_runner
+        self._script_runner: ScriptRunner | None = script_runner
 
     def _build_schema(self) -> SkillSchema:
         triggers = self._doc.triggers if self._doc.triggers else [self._doc.name.lower()]

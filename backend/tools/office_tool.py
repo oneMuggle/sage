@@ -26,7 +26,7 @@ Public surface:
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from backend.data.database import get_database
 from backend.office.tool_service import OfficeToolService
@@ -82,8 +82,8 @@ class OfficeListTool(BaseTool):
 
     def execute(
         self,
-        query: Optional[str] = None,
-        doc_type: Optional[str] = None,
+        query: str | None = None,
+        doc_type: str | None = None,
         limit: int = 50,
         **kwargs: Any,
     ) -> ToolResult:

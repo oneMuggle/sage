@@ -6,7 +6,7 @@ Memory Consolidation Pipeline - 记忆压缩管道
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List
 
 from backend.memory.summary import FAILED, READY, SessionSummaryStore, _redact_error_message
 
@@ -28,13 +28,13 @@ class ConsolidationPipeline:
 
     def __init__(
         self,
-        llm_client: Optional[LLMClient] = None,
-        summary_store: Optional[SessionSummaryStore] = None,
+        llm_client: LLMClient | None = None,
+        summary_store: SessionSummaryStore | None = None,
     ):
         self.llm_client = llm_client
         self.summary_store = summary_store
 
-    def compress_working_memory(self, messages: List[Dict[str, Any]]) -> Optional[str]:
+    def compress_working_memory(self, messages: List[Dict[str, Any]]) -> str | None:
         """
         压缩工作记忆为摘要
 
@@ -95,7 +95,7 @@ class ConsolidationPipeline:
         self,
         episodic_memory,
         summary: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         importance: int = 5,
         message_count: int = 0,
     ) -> str:
@@ -124,8 +124,8 @@ class ConsolidationPipeline:
         )
 
     def consolidate(
-        self, memory_manager, session_id: Optional[str] = None, importance_threshold: int = 5
-    ) -> Optional[str]:
+        self, memory_manager, session_id: str | None = None, importance_threshold: int = 5
+    ) -> str | None:
         """
         完整的记忆压缩流程（只处理指定会话的工作记忆）
 

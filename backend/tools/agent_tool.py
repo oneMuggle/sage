@@ -57,7 +57,7 @@ import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 from backend.domain.network_policy import NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
@@ -192,7 +192,7 @@ def _cleanup_subagent_workspace(root: Path | None) -> None:
         logger.warning("Failed to clean sub-agent workspace %s", root, exc_info=True)
 
 
-def _subagent_policy(policy: Optional[ToolPolicy]) -> tuple[ToolPolicy, Path | None]:
+def _subagent_policy(policy: ToolPolicy | None) -> tuple[ToolPolicy, Path | None]:
     parent = policy or ToolPolicy()
     owned_root = None if parent.workspace_root else _new_subagent_workspace()
     root = parent.workspace_root or str(owned_root)
@@ -211,8 +211,8 @@ def _subagent_policy(policy: Optional[ToolPolicy]) -> tuple[ToolPolicy, Path | N
 
 
 def build_readonly_tool_registry(
-    policy: Optional[ToolPolicy] = None,
-    network_policy: Optional[NetworkPolicy] = None,
+    policy: ToolPolicy | None = None,
+    network_policy: NetworkPolicy | None = None,
 ) -> ToolRegistry:
     """Build the restricted read-only registry given to sub-agents.
 
@@ -258,7 +258,7 @@ class AgentTool(BaseTool):
 
     def __init__(
         self,
-        policy: Optional[ToolPolicy] = None,
+        policy: ToolPolicy | None = None,
         llm_client: Any = None,
         subagent_factory: Any = None,
     ) -> None:
@@ -312,7 +312,7 @@ class AgentTool(BaseTool):
         self,
         description: str = "",
         prompt: str = "",
-        subagent_type: Optional[str] = None,  # reserved for future specialization
+        subagent_type: str | None = None,  # reserved for future specialization
         **kwargs: Any,  # forward-compat: tolerate extra LLM-provided params
     ) -> ToolResult:
         """Run the sub-agent synchronously (worker thread) and mirror to a lane."""
@@ -425,8 +425,8 @@ class AgentTool(BaseTool):
         self,
         description: str = "",
         prompt: str = "",
-        subagent_type: Optional[str] = None,  # reserved for future specialization
-        _tool_call_id: Optional[str] = None,  # run_loop 注入的 conductor 工具调用 ID
+        subagent_type: str | None = None,  # reserved for future specialization
+        _tool_call_id: str | None = None,  # run_loop 注入的 conductor 工具调用 ID
         **kwargs: Any,  # forward-compat: tolerate extra LLM-provided params
     ) -> ToolResult:
         """异步执行子代理 —— 原生协程,落在事件循环上（live-events P2）。
@@ -519,7 +519,7 @@ class AgentTool(BaseTool):
 
         # 前端轻量任务板的 run/task 键（与编排 run 空间隔离）
         mirror_run_id = f"agent-{task.task_id}"
-        sink: Optional[SubagentEventSink] = None
+        sink: SubagentEventSink | None = None
         if emitter is not None:
             def _emit_chat(event: Dict[str, Any]) -> None:
                 if event:
@@ -641,7 +641,7 @@ class AgentTool(BaseTool):
         llm_client: Any,
         description: str,
         prompt: str,
-    ) -> Tuple[str, Optional[str]]:
+    ) -> Tuple[str, str | None]:
         """Run the async sub-agent loop on a worker thread (sync façade).
 
         Raises:
@@ -669,9 +669,9 @@ class AgentTool(BaseTool):
         llm_client: Any,
         description: str,
         prompt: str,
-        event_sink: Optional[SubagentEventSink] = None,
-        session_id: Optional[str] = None,
-    ) -> Tuple[str, Optional[str]]:
+        event_sink: SubagentEventSink | None = None,
+        session_id: str | None = None,
+    ) -> Tuple[str, str | None]:
         """Drive ``run_loop`` to completion; return (answer, error).
 
         ``event_sink``（live-events P2）非 None 时逐事件投影转发 —— sink
@@ -696,7 +696,7 @@ class AgentTool(BaseTool):
             ]
 
             answer = ""
-            error: Optional[str] = None
+            error: str | None = None
             saw_done = False
             # O3: session_id 仅在非空且 run_loop 接受时透传 —— 兼容只接受
             # (messages, max_iterations) 的测试桩。惰性导入探测 helper：

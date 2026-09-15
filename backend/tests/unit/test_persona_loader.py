@@ -194,7 +194,7 @@ def test_parse_rejects_non_mapping_frontmatter():
         parse_manifest("---\n- a\n- b\n---\nBody.\n")
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "bad_id",
     ["Alpha", "../evil", "a/b", "-leading-dash", "", "x" * 65],
     ids=["uppercase", "traversal", "slash", "leading-dash", "empty-ish", "too-long"],
@@ -375,7 +375,7 @@ def test_scan_skips_non_utf8_manifest_but_loads_others(tmp_path):
     assert loader.ids() == ["good"]
 
 
-@pytest.mark.skipif(_IS_WINDOWS, reason="POSIX permission bits only")
+@pytest.mark.skipi()f(_IS_WINDOWS, reason="POSIX permission bits only")
 def test_scan_skips_unreadable_manifest_but_loads_others(tmp_path):
     _write_persona(tmp_path, "good")
     locked = _write_persona(tmp_path, "locked")
@@ -391,7 +391,7 @@ def test_scan_skips_unreadable_manifest_but_loads_others(tmp_path):
     assert loader.ids() == ["good"]
 
 
-@pytest.mark.skipif(_IS_WINDOWS, reason="POSIX permission bits only")
+@pytest.mark.skipi()f(_IS_WINDOWS, reason="POSIX permission bits only")
 def test_rescan_removes_persona_whose_file_became_unreadable(tmp_path):
     path = _write_persona(tmp_path, "alpha")
     loader = PersonaLoader(dirs=[tmp_path], include_builtin=False)
@@ -537,7 +537,7 @@ def test_check_for_updates_lists_deleted_ids(tmp_path):
     assert loader.check_for_updates() == ["alpha"]
 
 
-@pytest.mark.skipif(_IS_WINDOWS, reason="POSIX permission bits only")
+@pytest.mark.skipi()f(_IS_WINDOWS, reason="POSIX permission bits only")
 def test_check_for_updates_flags_unreadable_as_stale(tmp_path):
     path = _write_persona(tmp_path, "alpha")
     loader = PersonaLoader(dirs=[tmp_path], include_builtin=False)

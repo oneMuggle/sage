@@ -36,7 +36,7 @@ import tempfile
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ class ServerConfig:
     # L10 (批次 C-3): url 非空 → streamable-HTTP 传输; 否则 command 走 stdio。
     command: str = ""
     args: Tuple[str, ...] = ()
-    url: Optional[str] = None
+    url: str | None = None
     env: Dict[str, str] = field(default_factory=dict)
     enabled: bool = True
     required: bool = False

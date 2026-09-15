@@ -13,7 +13,7 @@ import subprocess
 import sys
 import types
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import pytest
 
@@ -26,7 +26,7 @@ from backend.office.path_safety import is_within
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture()
+@pytest.fixture
 def ws(tmp_path: Path) -> Path:
     """A fresh workspace directory per test."""
     workspace = tmp_path / "workspace"
@@ -40,7 +40,7 @@ def _make_source(workspace: Path, name: str = "report.docx") -> Path:
     return source
 
 
-def _patch_soffice(monkeypatch: pytest.MonkeyPatch, soffice: Optional[str]) -> None:
+def _patch_soffice(monkeypatch: pytest.MonkeyPatch, soffice: str | None) -> None:
     """Pin soffice discovery so host-installed LibreOffice can't interfere."""
     monkeypatch.setattr(export_pdf, "_locate_soffice", lambda: soffice)
 

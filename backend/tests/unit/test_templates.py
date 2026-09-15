@@ -50,7 +50,7 @@ def _planner():
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_decompose_from_template_resolves_stages():
     plan = await _planner().decompose_from_template("research-write", "写一篇报告")
     assert plan.reasoning == "template: research-write"
@@ -63,7 +63,7 @@ async def test_decompose_from_template_resolves_stages():
     assert plan.tasks[1].parameters.get("agent_hint") == "writer"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_decompose_from_template_skips_undispatchable_role():
     """非法角色（F4 回退）→ 不写 agent_hint。"""
     p = _planner()
@@ -86,13 +86,13 @@ async def test_decompose_from_template_skips_undispatchable_role():
     assert "目标" in plan.tasks[0].description
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_decompose_from_template_unknown_raises():
     with pytest.raises(ValueError, match="unknown orchestration template"):
         await _planner().decompose_from_template("nope", "目标")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_decompose_from_template_no_placeholder_appends_goal():
     """stage goal 无 {request} → 追加目标行。"""
     plan = await _planner().decompose_from_template("research-write", "写报告")

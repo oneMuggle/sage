@@ -20,7 +20,7 @@ import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Set
 
 from backend.data.database import get_database
 from backend.domain.orch_events import RunEvent, make_event
@@ -110,7 +110,7 @@ _TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 async def _classify_orchestration_mode(
     message: str,
     orchestration_mode: str,
-    llm_client: Optional[Any] = None,
+    llm_client: Any | None = None,
 ) -> str:
     """语义判定消息是否进编排（multi）还是单 agent（single）。
 
@@ -152,23 +152,23 @@ class ChatTaskState:
     task_id: str
     agent_id: str
     goal: str
-    output_schema: Optional[Dict[str, Any]] = None
-    parent_task_id: Optional[str] = None
+    output_schema: Dict[str, Any] | None = None
+    parent_task_id: str | None = None
     status: str = "queued"  # queued|running|done|failed
-    output: Optional[str] = None
-    error: Optional[str] = None
-    started_at: Optional[float] = None
-    finished_at: Optional[float] = None
+    output: str | None = None
+    error: str | None = None
+    started_at: float | None = None
+    finished_at: float | None = None
     retry_count: int = 0
     # L2 (2026-08-23): followup_of 已携带但无法建立父依赖（不存在/未完成/自指）
     # → 降级为普通新任务并置位，聚合时对 conductor 显式提示不含续聊上下文。
     followup_degraded: bool = False
     # RD2 (round10): 重派原语 —— 本任务重派自哪个已失败/被取消的任务（继承
     # 其 scratch 现场 + error 注入 retry_hint）。None = 普通任务/降级。
-    retry_of: Optional[str] = None
+    retry_of: str | None = None
     # live-events P0: 派发本次批次的 conductor 工具调用 ID —— 前端聊天流内
     # 把 subagent_event 实时步骤关联到 "Delegate <goal>" 卡片的关联键。
-    parent_tool_call_id: Optional[str] = None
+    parent_tool_call_id: str | None = None
 
 
 # P2-9 (2026-08-14): 进程内活动 dispatcher 注册表 —— 供 run 级 cancel 端点
@@ -188,15 +188,15 @@ class ChatDispatcher:
         stream_id: str,
         entry_queue: asyncio.Queue[Dict[str, Any]],
         run_id: str,
-        llm_config: Optional[Dict[str, Any]] = None,
-        lane_registry: Optional[Any] = None,
-        task_registry: Optional[Any] = None,
-        event_recorder: Optional[EventRecorder] = None,
-        total_tasks: Optional[int] = None,
-        settings: Optional[OrchSettings] = None,
-        workspace_root: Optional[str] = None,
-        event_hub: Optional[Any] = None,
-        session_id: Optional[str] = None,
+        llm_config: Dict[str, Any] | None = None,
+        lane_registry: Any | None = None,
+        task_registry: Any | None = None,
+        event_recorder: EventRecorder | None = None,
+        total_tasks: int | None = None,
+        settings: OrchSettings | None = None,
+        workspace_root: str | None = None,
+        event_hub: Any | None = None,
+        session_id: str | None = None,
     ) -> None:
         # 安全修复波 (2026-08-23): 白名单校验必须在任何副作用（DB 连接、
         # worktree 清扫）之前 —— 非法 run_id 直接拒绝构造。
@@ -248,7 +248,7 @@ class ChatDispatcher:
         # IntegrityError（同一 run 二次 review 会撞唯一约束）；_first_dispatch_at
         # 记录首次 dispatch 时间（resume 场景前端展示用）。
         self._reviewed: bool = False
-        self._first_dispatch_at: Optional[float] = None
+        self._first_dispatch_at: float | None = None
         # P2-7 (2026-08-14): 计划权威 —— 首 dispatch 从 orch_runs.plan_json 读权威
         # 计划建索引；_dispatched_plan_ids 记录已派发的计划 task_id（review 门用）。
         self._plan_by_id: Dict[str, dict] = {}
@@ -264,7 +264,7 @@ class ChatDispatcher:
         self._budget_warned = False
         # BD (round12): 后台派发句柄 —— 同一时刻至多一个在飞；collect 侧
         # shield 等待，超时/取消不杀派发本身。
-        self._bg_task: Optional[asyncio.Task] = None
+        self._bg_task: asyncio.Task | None = None
         # B3 (2026-09-09): 单任务跳过 —— task_id → skip 信号（cancel_task 置位）
         # 与 task_id → merged 取消事件（skip ∨ run 级取消，SubagentRunner 的
         # interrupt_event 消费）。_run_one 建档、finally 注销。
@@ -276,7 +276,7 @@ class ChatDispatcher:
         self._event_hub = event_hub
         # live-events P0: 本批次 conductor 工具调用 ID（dispatch_subagents
         # 经 notify_tool_call 注入），落到每个 ChatTaskState.parent_tool_call_id。
-        self._current_tool_call_id: Optional[str] = None
+        self._current_tool_call_id: str | None = None
         # live-events P1: 子代理审批模式（run 级，默认继承全局 orch 设置）。
         self.approval_mode: str = getattr(self.settings, "subagent_approval_mode", "ask")
         # live-events P1: 待决审批表 request_id → task_id，供 answer 路由回填。
@@ -454,7 +454,7 @@ class ChatDispatcher:
 
     def start_background_dispatch(
         self, tasks: List[Dict[str, str]]
-    ) -> Optional[asyncio.Task]:
+    ) -> asyncio.Task | None:
         """BD (round12): 以后台任务启动派发，立即返回句柄（不阻塞）。
 
         已有后台派发在飞（未终态）时返回 None —— conductor 应先 collect。
@@ -496,7 +496,7 @@ class ChatDispatcher:
         snapshot["budget_exceeded"] = self._budget_exceeded
         return snapshot
 
-    async def wait_background(self, timeout: Optional[float] = None) -> str:
+    async def wait_background(self, timeout: float | None = None) -> str:
         """等待后台派发完成，返回聚合 markdown。
 
         ``asyncio.shield`` 保证 collect 的超时/取消不会杀掉派发本身
@@ -947,7 +947,7 @@ class ChatDispatcher:
             await self._remove_worktree_best_effort(state, workspace_dir)
 
     async def _run_subagent_impl(
-        self, state: ChatTaskState, workspace_dir: Optional[Path]
+        self, state: ChatTaskState, workspace_dir: Path | None
     ) -> str:
         """经 LaneExecutor 执行子任务（P0-1）：创建 lane+task，复用重试策略。
 
@@ -1118,7 +1118,7 @@ class ChatDispatcher:
             state.retry_of,
         )
 
-    async def _create_worktree_for(self, state: ChatTaskState) -> Optional[Path]:
+    async def _create_worktree_for(self, state: ChatTaskState) -> Path | None:
         """按配置为任务创建 worktree；任何不可用情况都回落 scratch。
 
         所有 git/路径操作在线程中执行，异常一律降级为 None —— 绝不阻塞聊天。
@@ -1259,7 +1259,7 @@ class ChatDispatcher:
 
     # ==================== live-events P0/P1 ====================
 
-    def notify_tool_call(self, tool_call_id: Optional[str]) -> None:
+    def notify_tool_call(self, tool_call_id: str | None) -> None:
         """记录本批次 conductor 的 dispatch_subagents 工具调用 ID。
 
         由 ``DispatchSubagentsTool.execute_async`` 在 dispatch 前调用；
@@ -1331,7 +1331,7 @@ class ChatDispatcher:
         })
         return True
 
-    def _emit_chat_event(self, event: Optional[Dict[str, Any]]) -> None:
+    def _emit_chat_event(self, event: Dict[str, Any] | None) -> None:
         """聊天流入队（subagent_event / approval_mode 镜像），降级同 task_status。"""
         if not event:
             return
@@ -1435,7 +1435,7 @@ class ChatDispatcher:
         except Exception as exc:  # noqa: BLE001 — 降级铁律
             logger.warning("orch_task 落库失败 task_id=%s err=%s", state.task_id, exc)
 
-    def _preview(self, state: ChatTaskState) -> Optional[str]:
+    def _preview(self, state: ChatTaskState) -> str | None:
         """done → output 前 500 字；failed → error 前 500 字。"""
         if state.status == "done" and state.output:
             return state.output[:MAX_OUTPUT_PREVIEW_CHARS]
@@ -1598,7 +1598,7 @@ class ChatDispatcher:
             logger.debug("task_review 推送失败（队列满/关闭），忽略")
 
 
-def find_dispatcher_for_approval(request_id: str) -> Optional[ChatDispatcher]:
+def find_dispatcher_for_approval(request_id: str) -> ChatDispatcher | None:
     """在活动 dispatcher 注册表中定位持有该审批请求的 run（未命中 → None）。
 
     live-events P1: ``/permissions/{request_id}/answer`` 路由在 gate.answer

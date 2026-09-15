@@ -9,7 +9,7 @@ import ipaddress
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Address, IPv6Address
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Set, Tuple, Union
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -141,7 +141,7 @@ class WebSearchTool(BaseTool):
     # A1: 出网调用 — 最严门禁（只读模式禁止，交互模式询问）
     risk = RiskClass.EXTERNAL
 
-    def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
+    def __init__(self, policy: ToolPolicy | None = None) -> None:
         super().__init__(policy=policy)
         # 兼容保留的常驻 client（UA 头测试引用）；execute 走逐调用现建，
         # 代理等配置改动即时生效。
@@ -363,8 +363,8 @@ class WebFetchTool(BaseTool):
 
     def __init__(
         self,
-        policy: Optional[ToolPolicy] = None,
-        network_policy: Optional[NetworkPolicy] = None,
+        policy: ToolPolicy | None = None,
+        network_policy: NetworkPolicy | None = None,
     ) -> None:
         super().__init__(policy=policy)
         # None 表示"每次 execute 现读 settings"——用户改白名单立即生效，不必
@@ -385,7 +385,7 @@ class WebFetchTool(BaseTool):
         return load_network_policy()
 
     @staticmethod
-    def _literal_ip(url: str) -> Optional[Union[IPv4Address, IPv6Address]]:
+    def _literal_ip(url: str) -> Union[IPv4Address, IPv6Address] | None:
         hostname = urlparse(url).hostname
         if not hostname:
             return None
@@ -405,7 +405,7 @@ class WebFetchTool(BaseTool):
     def _all_public(addresses: Set[Union[IPv4Address, IPv6Address]]) -> bool:
         return bool(addresses) and all(ip.is_global for ip in addresses)
 
-    def _validate_subagent_url(self, url: str) -> Optional[str]:
+    def _validate_subagent_url(self, url: str) -> str | None:
         address = self._literal_ip(url)
         if address is None:
             return "subagent_web_fetch_blocked: 仅允许访问字面量公共 IP 地址"
@@ -413,7 +413,7 @@ class WebFetchTool(BaseTool):
             return "subagent_web_fetch_blocked: 仅允许访问公共网络地址"
         return None
 
-    def _validate_subagent_redirect(self, location: str) -> Optional[str]:
+    def _validate_subagent_redirect(self, location: str) -> str | None:
         address = self._literal_ip(location)
         if address is None:
             return "subagent_web_fetch_blocked: 重定向目标必须是字面量公共 IP 地址"
@@ -535,7 +535,7 @@ class WebFetchTool(BaseTool):
                 content["cached"] = True
                 return ToolResult(success=True, content=content)
 
-        credential_headers: Optional[Dict[str, str]] = None
+        credential_headers: Dict[str, str] | None = None
         if credential_domain.strip():
             from .credential_vault import cookie_domain_matches, resolve_credential
 
@@ -652,7 +652,7 @@ class WebFetchTool(BaseTool):
             return ToolResult(success=False, error=f"获取网页失败: {str(e)}")
 
     @staticmethod
-    def _validate_target_url(url: str) -> Optional[str]:
+    def _validate_target_url(url: str) -> str | None:
         try:
             parsed = urlparse(url)
         except ValueError:
@@ -672,7 +672,7 @@ class WebFetchTool(BaseTool):
         url: str,
         network_policy: NetworkPolicy,
         gated_by_whitelist: bool,
-        credential_headers: Optional[Dict[str, str]] = None,
+        credential_headers: Dict[str, str] | None = None,
         credential_domain: str = "",
     ) -> tuple:
         current_url = url
@@ -822,7 +822,7 @@ class WebFetchTool(BaseTool):
         head = response.content[: content_sniff.SNIFF_BYTES]
         detected = content_sniff.detect_kind(head)
         declared = response.headers.get("content-length", "")
-        length: Optional[int] = None
+        length: int | None = None
         if declared.isdigit():
             length = int(declared)
         elif response.content:
@@ -859,7 +859,7 @@ class WebFetchTool(BaseTool):
 
     def _detect_login_wall(
         self, url: str, final_url: str, response: httpx.Response, credential_domain: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """AU2：带凭据请求被送到登录页 → ``login_required`` 文案；否则 ``None``。"""
         from .credential_vault import looks_like_login_html, looks_like_login_url
 

@@ -19,7 +19,7 @@ import asyncio
 import contextlib
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class ExtractionRequest:
     extractor: Any
     user_text: str
     assistant_text: str
-    session_id: Optional[str]
+    session_id: str | None
     enabled: bool
 
 
@@ -41,7 +41,7 @@ class MemoryExtractionQueue:
 
     def __init__(self) -> None:
         self._queue: asyncio.Queue[ExtractionRequest] = asyncio.Queue()
-        self._worker_task: Optional[asyncio.Task] = None
+        self._worker_task: asyncio.Task | None = None
         self._completed = 0
         self._failed = 0
         self._skipped = 0
@@ -136,7 +136,7 @@ class MemoryExtractionQueue:
 
 
 # 全局单例（与 get_usage_store 同模式）
-_extraction_queue: Optional[MemoryExtractionQueue] = None
+_extraction_queue: MemoryExtractionQueue | None = None
 
 
 def get_memory_extraction_queue() -> MemoryExtractionQueue:

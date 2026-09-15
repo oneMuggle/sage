@@ -62,7 +62,7 @@ def test_bash_declares_exec_risk(tool):
 # ---------- 核心价值：shell 操作符不再被拦截 ----------
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("command", "expected_fragment"),
     [
         ("echo hello | tr a-z A-Z", "HELLO"),
@@ -178,7 +178,7 @@ def test_bash_timeout_kills_and_reports_failure(tool):
     assert "超时" in result.error
 
 
-@pytest.mark.skipif(os.name == "nt", reason="进程组语义仅在 POSIX 验证")
+@pytest.mark.skipi()f(os.name == "nt", reason="进程组语义仅在 POSIX 验证")
 def test_bash_timeout_kills_grandchild_process(tool, tmp_path):
     """超时杀整个进程组：后台孙进程不得存活写 marker。"""
     # Arrange

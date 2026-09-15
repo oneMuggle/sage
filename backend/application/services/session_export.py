@@ -24,7 +24,7 @@ import time
 from dataclasses import dataclass
 from html import escape as html_escape
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.data.session_repo import (
     Message,
@@ -68,7 +68,7 @@ class SessionExport:
 # ==================== 载荷构建(纯函数) ====================
 
 
-def _parse_tool_calls(raw: Optional[str]) -> List[Dict[str, Any]]:
+def _parse_tool_calls(raw: str | None) -> List[Dict[str, Any]]:
     """``messages.tool_calls`` JSON 字符串 → dict 列表;非法数据降级为 []。
 
     持久化形态由 sqlite_adapter._serialize_tool_calls 约定:
@@ -216,8 +216,8 @@ def render_export_html(payload: Dict[str, Any], theme: str = DEFAULT_THEME) -> s
 def export_session_to_html(
     session_id: str,
     theme: str = DEFAULT_THEME,
-    session_repo: Optional[SessionRepository] = None,
-    message_repo: Optional[MessageRepository] = None,
+    session_repo: SessionRepository | None = None,
+    message_repo: MessageRepository | None = None,
 ) -> SessionExport:
     """导出完整会话为自包含 HTML。
 
@@ -307,8 +307,8 @@ def _build_markdown_filename(session: Session) -> str:
 
 def export_session_to_markdown(
     session_id: str,
-    session_repo: Optional[SessionRepository] = None,
-    message_repo: Optional[MessageRepository] = None,
+    session_repo: SessionRepository | None = None,
+    message_repo: MessageRepository | None = None,
 ) -> SessionExport:
     """导出完整会话为 Markdown(结构同 export_session_to_html)。"""
     sess_repo = session_repo or SessionRepository()

@@ -147,7 +147,7 @@ def test_format_authors_empty() -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("numbers", "expected"),
     [
         ([1], "[1]"),

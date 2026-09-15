@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 class RuntimeSource(str, Enum):
@@ -70,7 +70,7 @@ class RuntimeInfo:
     version: str
     source: RuntimeSource = RuntimeSource.UNKNOWN
     is_default: bool = False
-    is_compatible: Optional[bool] = None
+    is_compatible: bool | None = None
     compatibility_notes: tuple[str, ...] = field(default_factory=tuple)
     capabilities: RuntimeCapability = field(default_factory=RuntimeCapability)
     diagnostics: tuple[str, ...] = field(default_factory=tuple)
@@ -83,7 +83,7 @@ class ProbeRequest:
 
     languages: tuple[str, ...] = ()
     include_tools: bool = True
-    target_version: Optional[str] = None
+    target_version: str | None = None
     include_paths: tuple[str, ...] = ()
 
 
@@ -92,7 +92,7 @@ class ProbeResult:
     """runtime_probe 工具的领域结果。"""
 
     runtimes: List[RuntimeInfo]
-    recommended: Optional[str] = None
+    recommended: str | None = None
     errors: tuple[str, ...] = ()
 
     def to_dict(self) -> Dict[str, Any]:
@@ -110,7 +110,7 @@ class ExecutionRequest:
     language: str
     runtime_path: str
     code: str
-    cwd: Optional[str] = None
+    cwd: str | None = None
     timeout: int = 60
     run_in_background: bool = False
     env_overrides: Dict[str, str] = field(default_factory=dict)
@@ -120,14 +120,14 @@ class ExecutionRequest:
 class ExecutionResult:
     """runtime_exec 工具的领域结果。"""
 
-    exit_code: Optional[int]
+    exit_code: int | None
     stdout: str
     stderr: str
     duration_seconds: float
     timed_out: bool = False
     output_truncated: bool = False
-    error: Optional[str] = None
-    command: Optional[List[str]] = None
+    error: str | None = None
+    command: List[str] | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -160,8 +160,8 @@ class Diagnostic:
     code: str
     severity: DiagnosticSeverity
     message: str
-    remediation: Optional[str] = None
-    related_path: Optional[str] = None
+    remediation: str | None = None
+    related_path: str | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -180,7 +180,7 @@ class ProjectDiagnosis:
     level: DiagnosticLevel
     diagnostics: List[Diagnostic]
     manifests: List[ProjectManifest]
-    recommended_runtime: Optional[str] = None
+    recommended_runtime: str | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {

@@ -19,7 +19,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.domain.risk import RiskClass
 
@@ -152,7 +152,7 @@ def _fallback_head(text: str, total_lines: int) -> Dict[str, Any]:
     }
 
 
-def _detect_language(path: str, hint: Optional[str]) -> str:
+def _detect_language(path: str, hint: str | None) -> str:
     """检测文件语言：显式 hint 优先；否则按后缀映射；未知后缀返回 'unknown'。"""
     if hint:
         return hint.lower()
@@ -227,7 +227,7 @@ class FileSummaryTool(BaseTool):
         encoding = detect_bom_encoding(file_path) or "utf-8"
         return file_path, original_bytes, encoding
 
-    def execute(self, path: str, language: Optional[str] = None, **kwargs) -> ToolResult:
+    def execute(self, path: str, language: str | None = None, **kwargs) -> ToolResult:
         """
         提取文件结构摘要
 

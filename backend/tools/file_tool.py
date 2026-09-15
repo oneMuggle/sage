@@ -15,7 +15,7 @@ M1 工具安全加固（移植 claw-code file_ops.rs 的边界/限额设计）:
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 
 from backend.data import artifact_repo
 from backend.domain.risk import RiskClass
@@ -60,7 +60,7 @@ _BOM_ENCODINGS: Tuple[Tuple[bytes, str], ...] = (
 )
 
 
-def detect_bom_encoding(file_path: Path) -> Optional[str]:
+def detect_bom_encoding(file_path: Path) -> str | None:
     """嗅探文件头 BOM；命中返回对应 Python 编码名，否则 ``None``。"""
     try:
         with open(file_path, "rb") as f:
@@ -144,7 +144,7 @@ def _record_artifact_safely(resolved_path: str, size: int) -> None:
         logger.debug("write_file: 记录产物失败", exc_info=True)
 
 
-def _pre_read_checks(file_path: Path, original_bytes: int) -> Optional[ToolResult]:
+def _pre_read_checks(file_path: Path, original_bytes: int) -> ToolResult | None:
     """M1 读取前置检查: 硬限额 + 二进制嗅探。
 
     返回 ``ToolResult(success=False)`` 表示拒绝（调用方直接返回）；
@@ -169,7 +169,7 @@ def _pre_read_checks(file_path: Path, original_bytes: int) -> Optional[ToolResul
 class ReadFileTool(BaseTool):
     """读取文件工具"""
 
-    def __init__(self, policy: Optional[ToolPolicy] = None, *, enforce_workspace: bool = False) -> None:
+    def __init__(self, policy: ToolPolicy | None = None, *, enforce_workspace: bool = False) -> None:
         super().__init__(policy=policy)
         self._enforce_read_workspace = enforce_workspace
 
@@ -398,7 +398,7 @@ class WriteFileTool(BaseTool):
 class ListDirTool(BaseTool):
     """列出目录工具"""
 
-    def __init__(self, policy: Optional[ToolPolicy] = None, *, enforce_workspace: bool = False) -> None:
+    def __init__(self, policy: ToolPolicy | None = None, *, enforce_workspace: bool = False) -> None:
         super().__init__(policy=policy)
         self._enforce_read_workspace = enforce_workspace
 

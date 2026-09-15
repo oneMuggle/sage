@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +72,9 @@ class SkillAuditLog:
         action: str,
         *,
         actor: str = "system",
-        before_content: Optional[str] = None,
-        after_content: Optional[str] = None,
-        source: Optional[str] = None,
+        before_content: str | None = None,
+        after_content: str | None = None,
+        source: str | None = None,
     ) -> bool:
         """追加一条审计记录。best-effort: 失败仅告警，不拖垮调用方。
 
@@ -112,7 +112,7 @@ class SkillAuditLog:
             logger.warning("skill audit 记录失败 (name=%s): %s", skill_name, exc)
             return False
 
-    def last_note_at(self, action: str = "consolidation_note") -> Optional[int]:
+    def last_note_at(self, action: str = "consolidation_note") -> int | None:
         """最近一次指定 action 的台账时间戳（ms）；无记录返回 None。
 
         巡检增量水位：每次 scan 都会写一条 consolidation_note，该值即
@@ -131,7 +131,7 @@ class SkillAuditLog:
             return None
 
     def list_entries(
-        self, skill_name: Optional[str] = None, limit: int = 50
+        self, skill_name: str | None = None, limit: int = 50
     ) -> List[Dict[str, Any]]:
         """按技能名（可选）倒序查询台账条目"""
         try:
@@ -166,7 +166,7 @@ class SkillAuditLog:
             logger.warning("skill audit 查询失败: %s", exc)
             return []
 
-    def latest_before_snapshot(self, skill_name: str) -> Optional[str]:
+    def latest_before_snapshot(self, skill_name: str) -> str | None:
         """取该技能最近一条带 before_content 的记录（回滚数据源）"""
         try:
             self._ensure_table()
@@ -186,7 +186,7 @@ class SkillAuditLog:
 # Global singleton（与 get_lifecycle_store 同模式）
 # ------------------------------------------------------------------ #
 
-_skill_audit_log: Optional[SkillAuditLog] = None
+_skill_audit_log: SkillAuditLog | None = None
 
 
 def get_skill_audit_log(db=None) -> SkillAuditLog:

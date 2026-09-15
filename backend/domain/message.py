@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 class Role(str, Enum):
@@ -37,7 +37,7 @@ class ToolCall:
 
     name: str
     args: Dict[str, Any]
-    id: Optional[str] = None
+    id: str | None = None
 
 
 @dataclass
@@ -54,4 +54,4 @@ class Message:
     role: Role
     content: str
     tool_calls: List[ToolCall] = field(default_factory=list)
-    tool_call_id: Optional[str] = None
+    tool_call_id: str | None = None

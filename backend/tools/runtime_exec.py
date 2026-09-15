@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from backend.domain.risk import RiskClass
 from backend.domain.runtime import (
@@ -88,10 +88,10 @@ class RuntimeExecTool(BaseTool):
         language: str,
         runtime_path: str,
         code: str,
-        cwd: Optional[str] = None,
-        timeout: Optional[int] = None,
-        env_overrides: Optional[Dict[str, str]] = None,
-        workspace_root: Optional[str] = None,
+        cwd: str | None = None,
+        timeout: int | None = None,
+        env_overrides: Dict[str, str] | None = None,
+        workspace_root: str | None = None,
         **_kwargs: Any,
     ) -> ToolResult:
         try:

@@ -24,7 +24,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from sage_core import Message
 from sage_core.exceptions import SessionNotFoundError
@@ -128,8 +128,8 @@ class SessionService:
         self,
         session_id: str,
         *,
-        title: Optional[str] = None,
-        is_pinned: Optional[bool] = None,
+        title: str | None = None,
+        is_pinned: bool | None = None,
     ) -> Dict[str, Any]:
         """局部更新会话字段;全 ``None`` 等于 no-op(返当前快照)。
 

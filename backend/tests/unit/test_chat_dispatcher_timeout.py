@@ -42,7 +42,7 @@ class _SlowAgent:
         yield AgentEvent(state=AgentState.DONE, content="late")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_task_timeout_marks_failed():
     """超时任务置 failed，error 带 task_timeout 前缀；协程被真正取消。"""
     queue = _make_queue()
@@ -64,7 +64,7 @@ async def test_task_timeout_marks_failed():
     assert "task_timeout" in events[-1]["error"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_task_timeout_cascades_to_downstream():
     """t1 超时 → 依赖 t1 的 t2 级联 failed（blocked_by_failed 前缀）。"""
     queue = _make_queue()
@@ -100,7 +100,7 @@ async def test_task_timeout_cascades_to_downstream():
     assert status_by_task["t2"]["error"].startswith("blocked_by_failed:")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_task_timeout_disabled_when_zero():
     """timeout=0 → 不包装 wait_for，慢任务跑完正常 done。"""
     queue = _make_queue()

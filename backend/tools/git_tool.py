@@ -18,7 +18,7 @@ import logging
 import os
 import re
 import subprocess
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from backend.domain.risk import RiskClass
 
@@ -48,8 +48,8 @@ _BRANCH_RE = re.compile(r"^## (?P<branch>[^\s.]+)(?:\.\.\.(?P<upstream>\S+))?(?:
 def _run_git(
     args: List[str],
     cwd: str,
-    input_bytes: Optional[bytes] = None,
-) -> Tuple[Optional[str], Optional[str]]:
+    input_bytes: bytes | None = None,
+) -> Tuple[str | None, str | None]:
     """执行 git 子命令；返回 (stdout, error)。error 非 None 时 stdout 无意义。
 
     ``input_bytes`` 供给 stdin（U19: ``git apply`` 补丁经 stdin 传入，
@@ -84,7 +84,7 @@ def _run_git(
 class GitToolBase(BaseTool):
     """git 工具公共基座：仓库根解析 + 路径守卫。"""
 
-    def _resolve_repo_root(self) -> Tuple[Optional[str], Optional[ToolResult]]:
+    def _resolve_repo_root(self) -> Tuple[str | None, ToolResult | None]:
         """返回 (repo_root, None) 或 (None, 拒绝结果)。"""
         root = self._policy.workspace_root
         if not root:
@@ -94,7 +94,7 @@ class GitToolBase(BaseTool):
             )
         return root, None
 
-    def _guard_path(self, root: str, path: str) -> Optional[ToolResult]:
+    def _guard_path(self, root: str, path: str) -> ToolResult | None:
         """path 参数既过 workspace 守卫，也保证按仓库根解析（防 cwd 漂移）。"""
         absolute = os.path.abspath(os.path.join(root, path))
         return self._enforce_workspace(absolute)
@@ -331,7 +331,7 @@ class GitCommitTool(GitToolBase):
         self,
         message: str = "",
         add_all: bool = False,
-        paths: Optional[List[str]] = None,
+        paths: List[str] | None = None,
         **kwargs: Any,
     ) -> ToolResult:
         if kwargs:
@@ -357,8 +357,8 @@ class GitCommitTool(GitToolBase):
         return self._commit_and_hash(root, message)
 
     def _validated_paths(
-        self, root: str, paths: Optional[List[str]]
-    ) -> Tuple[List[str], Optional[ToolResult]]:
+        self, root: str, paths: List[str] | None
+    ) -> Tuple[List[str], ToolResult | None]:
         """校验 paths 类型 + 逐路径 workspace 守卫；返回 (路径列表, 拒绝结果)。"""
         if paths is None:
             return [], None
@@ -373,7 +373,7 @@ class GitCommitTool(GitToolBase):
         return checked, None
 
     @staticmethod
-    def _stage(root: str, add_all: bool, checked_paths: List[str]) -> Optional[ToolResult]:
+    def _stage(root: str, add_all: bool, checked_paths: List[str]) -> ToolResult | None:
         """暂存变更；失败返回携带原因的 ToolResult。"""
         if add_all:
             _, error = _run_git(["add", "-A"], root)

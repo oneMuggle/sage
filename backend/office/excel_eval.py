@@ -34,7 +34,7 @@ import concurrent.futures
 import contextlib
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ def _split_solution_key(
     key: str,
     book_name: str,
     sheets_by_upper: Dict[str, str],
-) -> Optional[Tuple[str, str]]:
+) -> Tuple[str, str] | None:
     """把 ``formulas`` 输出键归一化为 ``(sheet标题, 单元格坐标)``.
 
     键形如 ``"'[book.xlsx]SHEET1'!B4"``：``!`` 前是 ``'<book>]SHEET'``
@@ -141,7 +141,7 @@ def _calculate(file_path: Path) -> Dict[str, Any]:
     return model.calculate()
 
 
-def _guarded_calculate(file_path: Path) -> Optional[Dict[str, Any]]:
+def _guarded_calculate(file_path: Path) -> Dict[str, Any] | None:
     """跑求值线程并施加墙钟超时；超时 / 异常 → ``None``（含 warning log）。
 
     不用 ``with`` 管理 executor —— 退出时会 ``shutdown(wait=True)``，把
@@ -165,7 +165,7 @@ def _guarded_calculate(file_path: Path) -> Optional[Dict[str, Any]]:
         executor.shutdown(wait=False)
 
 
-def evaluate_workbook(file_path: Path) -> Optional[Dict[str, Dict[str, Any]]]:
+def evaluate_workbook(file_path: Path) -> Dict[str, Dict[str, Any]] | None:
     """本地求值工作簿里的公式单元格。
 
     Returns:

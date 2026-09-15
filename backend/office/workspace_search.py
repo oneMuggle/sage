@@ -7,7 +7,7 @@ import os
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, List, Optional, Set
+from typing import Iterator, List, Set
 
 from backend.office.errors import OfficePathError
 from backend.office.models import OfficeDocType
@@ -35,11 +35,11 @@ class WorkspaceSearchResult:
 
     name: str
     kind: str
-    doc_type: Optional[OfficeDocType]
-    doc_id: Optional[str]
+    doc_type: OfficeDocType | None
+    doc_id: str | None
     size_bytes: int
     needs_import: bool
-    source_path: Optional[str]
+    source_path: str | None
 
 
 def _validate_search(query: str, limit: int) -> str:
@@ -50,7 +50,7 @@ def _validate_search(query: str, limit: int) -> str:
     return query.strip().casefold()
 
 
-def _directory_identity(path: Path) -> Optional[tuple]:
+def _directory_identity(path: Path) -> tuple | None:
     try:
         stat = path.lstat()
     except OSError:

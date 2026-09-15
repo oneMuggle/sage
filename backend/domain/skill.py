@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -43,4 +43,4 @@ class SkillResult:
     success: bool
     content: Any = None
     metadata: Dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
+    error: str | None = None

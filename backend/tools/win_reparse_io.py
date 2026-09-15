@@ -18,7 +18,6 @@ from __future__ import annotations
 import ctypes
 import os
 from ctypes import wintypes
-from typing import Optional
 
 # ---- Win32 常量（对照 shell_resolver.py / WinBase.h） ----
 _GENERIC_READ = 0x80000000
@@ -166,7 +165,7 @@ def ntpath_splitdrive(path: str):
 
 def _open_handle(
     path: str, *, write: bool, overwrite: bool
-) -> Optional[ctypes.c_void_p]:
+) -> ctypes.c_void_p | None:
     desired = _GENERIC_WRITE if write else _GENERIC_READ
     share = _FILE_SHARE_NONE if write else (_FILE_SHARE_READ | _FILE_SHARE_WRITE)
     # 读：OPEN_EXISTING；写：CREATE_NEW（overwrite=False 原子建）/

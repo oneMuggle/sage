@@ -17,7 +17,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 # ---------------------------------------------------------------------------
 # 状态枚举
@@ -320,7 +320,7 @@ class RunEvent:
     payload: Dict[str, Any]
     visibility: str = Visibility.USER.value
     schema_version: str = SCHEMA_VERSION
-    command_id: Optional[str] = None
+    command_id: str | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为 dict（用于 JSON 持久化和 NDJSON 传输）。"""
@@ -367,10 +367,10 @@ def make_event(
     event_type: str,
     producer: str,
     producer_generation: int = 0,
-    entity: Optional[Dict[str, Any]] = None,
-    payload: Optional[Dict[str, Any]] = None,
+    entity: Dict[str, Any] | None = None,
+    payload: Dict[str, Any] | None = None,
     visibility: str = Visibility.USER.value,
-    command_id: Optional[str] = None,
+    command_id: str | None = None,
 ) -> RunEvent:
     """便捷构造函数，自动生成 event_id 和 occurred_at。"""
     return RunEvent(
@@ -398,16 +398,16 @@ class TaskSummary:
     """Task 摘要（用于 RunSnapshot 和 observe_subagents 返回）。"""
 
     task_id: str
-    agent_id: Optional[str]
+    agent_id: str | None
     status: str
-    current_step_id: Optional[str] = None
-    current_step_name: Optional[str] = None
-    current_step_status: Optional[str] = None
-    last_progress_at: Optional[int] = None
-    output_preview: Optional[str] = None
+    current_step_id: str | None = None
+    current_step_name: str | None = None
+    current_step_status: str | None = None
+    last_progress_at: int | None = None
+    output_preview: str | None = None
     retry_count: int = 0
     revision: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)

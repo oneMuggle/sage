@@ -56,11 +56,11 @@ class Task:
     blocked_by: List[str] = field(default_factory=list)  # Tasks that block this task
 
     # Execution metadata
-    result: Optional[Any] = None
+    result: Any | None = None
     created_at: int = field(default_factory=lambda: int(time.time() * 1000))
-    started_at: Optional[int] = None
-    completed_at: Optional[int] = None
-    team_id: Optional[str] = None
+    started_at: int | None = None
+    completed_at: int | None = None
+    team_id: str | None = None
 
     def mark_running(self) -> None:
         """Transition to RUNNING state."""
@@ -77,7 +77,7 @@ class Task:
         self.completed_at = int(time.time() * 1000)
         self.result = result
 
-    def mark_failed(self, error: Optional[str] = None) -> None:
+    def mark_failed(self, error: str | None = None) -> None:
         """Transition to FAILED state."""
         if self.status != TaskStatus.RUNNING:
             raise ValueError(f"Cannot fail: task is {self.status}")
@@ -138,7 +138,7 @@ class TaskPacket:
     acceptance_tests: List[str] = field(default_factory=list)  # Tests that must pass
 
     # Execution constraints
-    model: Optional[str] = None  # LLM model to use
+    model: str | None = None  # LLM model to use
     permission_profile: str = "workspace-write"  # "read-only" / "workspace-write" / "full"
     timeout_secs: int = 600
 
@@ -208,16 +208,16 @@ class Lane:
 
     lane_id: str
     task_id: str
-    agent_id: Optional[str] = None
+    agent_id: str | None = None
     status: LaneStatus = LaneStatus.CREATED
     created_at: int = field(default_factory=lambda: int(time.time() * 1000))
-    started_at: Optional[int] = None
-    completed_at: Optional[int] = None
+    started_at: int | None = None
+    completed_at: int | None = None
 
     # Execution context
-    worktree: Optional[str] = None  # Isolated filesystem workspace
-    heartbeat: Optional[LaneHeartbeat] = None
-    error: Optional[str] = None
+    worktree: str | None = None  # Isolated filesystem workspace
+    heartbeat: LaneHeartbeat | None = None
+    error: str | None = None
     permission_preset: str = "implement"  # "audit" / "explain" / "implement"
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -248,7 +248,7 @@ class Lane:
         self.status = LaneStatus.SUCCEEDED
         self.completed_at = int(time.time() * 1000)
 
-    def mark_failed(self, error: Optional[str] = None) -> None:
+    def mark_failed(self, error: str | None = None) -> None:
         """Transition to FAILED state."""
         if self.status != LaneStatus.RUNNING:
             raise ValueError(f"Cannot fail: lane is {self.status}")

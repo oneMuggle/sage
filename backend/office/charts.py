@@ -29,7 +29,7 @@ import io
 import logging
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from .errors import OfficeGenerateError
 from .models import ChartSpec
@@ -306,7 +306,7 @@ def decode_image_base64(encoded: str) -> bytes:
     return payload
 
 
-def resolve_image_payload(source: str, *, search_dirs: Optional[List[Path]] = None) -> bytes:
+def resolve_image_payload(source: str, *, search_dirs: List[Path] | None = None) -> bytes:
     """把 ``source``（data URI base64 或图片路径）解析为图片字节。
 
     路径解析顺序：绝对路径直接使用；相对路径依次尝试 ``search_dirs``

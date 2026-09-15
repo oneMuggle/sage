@@ -18,7 +18,7 @@ import socket
 import struct
 import threading
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pytest
 
@@ -54,7 +54,7 @@ class _MiniWSServer:
         self._listener.bind(("127.0.0.1", 0))
         self._listener.listen(1)
         self.port = self._listener.getsockname()[1]
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
     def __enter__(self):
         ready = threading.Event()
@@ -240,7 +240,7 @@ def test_manager_cap():
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def stubbed(monkeypatch):
     """固定一个活会话 + 可编程的 cdp_command 假体。
 

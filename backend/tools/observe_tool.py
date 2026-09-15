@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.orchestration.snapshot_store import SnapshotStore
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
@@ -43,7 +43,7 @@ class ObserveSubagentsTool(BaseTool):
     def __init__(
         self,
         snapshot_store: SnapshotStore,
-        default_run_id: Optional[str] = None,
+        default_run_id: str | None = None,
     ) -> None:
         super().__init__()
         self._snapshot_store = snapshot_store
@@ -59,7 +59,7 @@ class ObserveSubagentsTool(BaseTool):
     def _read_snapshot(
         self,
         run_id: str,
-        task_ids: Optional[List[str]],
+        task_ids: List[str] | None,
     ) -> tuple:
         """O4 (2026-09-08): 同步读取 run 快照 —— 纯内存读，无需事件循环。
 

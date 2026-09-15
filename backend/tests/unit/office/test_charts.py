@@ -62,7 +62,7 @@ def _require_matplotlib() -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("chart_type", ["line", "bar", "hbar", "pie"])
+@pytest.mark.parametriz()e("chart_type", ["line", "bar", "hbar", "pie"])
 def test_render_chart_png_produced_for_all_types(tmp_path: Path, chart_type: str) -> None:
     _require_matplotlib()
     spec = ChartSpec(

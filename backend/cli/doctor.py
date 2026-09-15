@@ -30,7 +30,7 @@ import os
 import platform
 import sys
 from pathlib import Path
-from typing import Optional, Protocol, Union, runtime_checkable
+from typing import Protocol, Union, runtime_checkable
 
 
 class Severity(str, enum.Enum):
@@ -51,7 +51,7 @@ class CheckResult:
     name: str
     severity: Severity
     message: str
-    fix_hint: Optional[str] = None
+    fix_hint: str | None = None
 
     def to_dict(self) -> dict:
         """序列化为 JSON 友好 dict。"""
@@ -145,7 +145,7 @@ def _format_text(results: list) -> str:
 
 def _format_json(
     results: list,
-    runtime: Optional[Union[dict, DoctorRuntime]] = None,
+    runtime: Union[dict, DoctorRuntime] | None = None,
 ) -> str:
     """JSON 报告(机器可读)。"""
     payload: dict = {
@@ -186,9 +186,9 @@ class DoctorRuntime:
 def run_doctor(
     interpreter: Union[Path, str, None] = None,
     package_root: Union[Path, str, None] = None,
-    backend_command: Optional[list] = None,
-    backend_cwd: Optional[Union[Path, str]] = None,
-    backend_env: Optional[dict] = None,
+    backend_command: list | None = None,
+    backend_cwd: Union[Path, str] | None = None,
+    backend_env: dict | None = None,
 ) -> DoctorRuntime:
     """Resolve and report the interpreter/package-root contract.
 
@@ -256,7 +256,7 @@ def _try_import_backend(
     interpreter_path: Path,
     package_root_path: Path,
     pythonpath: str,
-    extra_env: Optional[dict] = None,
+    extra_env: dict | None = None,
 ) -> bool:
     """Run ``<interpreter> -c "import backend.main"`` and report success.
 
@@ -465,7 +465,7 @@ def _resolve_backend_context(
     return backend_command, backend_cwd, backend_env
 
 
-def main(argv: Optional[list] = None) -> int:
+def main(argv: list | None = None) -> int:
     """CLI 入口,返回退出码(0/1/2)。"""
     # Win7 cmd 默认 GBK (cp936) —— 中文 hint/消息被 print 时会乱码并可能
     # UnicodeEncodeError 杀掉进程。强制 stdout/stderr 走 UTF-8, 与 electron

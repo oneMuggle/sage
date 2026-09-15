@@ -24,7 +24,7 @@ def _git(*args: str, cwd: Path) -> None:
     subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True)
 
 
-@pytest.fixture()
+@pytest.fixture
 def repo(tmp_path: Path) -> Path:
     _git("init", cwd=tmp_path)
     _git("config", "user.name", "Sage Test", cwd=tmp_path)

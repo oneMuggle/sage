@@ -68,7 +68,7 @@ def _make_service(events, preset, *, allowed_paths=None, denied_tools=None, work
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_audit_preset_denies_write_file():
     events = _RecordingEvents()
     svc = _make_service(events, PermissionPreset.AUDIT)
@@ -86,7 +86,7 @@ async def test_audit_preset_denies_write_file():
     assert tool_results[0]["permission_decision"] == "denied"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_implement_preset_allows_write_file():
     events = _RecordingEvents()
     svc = _make_service(events, PermissionPreset.IMPLEMENT)
@@ -101,7 +101,7 @@ async def test_implement_preset_allows_write_file():
     assert tool_results[0]["permission_decision"] == "allowed"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_allowed_paths_outside_workspace_denied(tmp_path):
     """IMPLEMENT 预设 + allowed_paths=[tmp_path] + write_file 到 tmp_path.parent → 拒绝。"""
     events = _RecordingEvents()
@@ -151,7 +151,7 @@ async def test_allowed_paths_outside_workspace_denied(tmp_path):
         target.unlink(missing_ok=True)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_denied_tools_blacklist_denies_read_file():
     """IMPLEMENT 预设 + denied_tools=[read_file] → read_file 被拒。"""
     events = _RecordingEvents()
@@ -188,7 +188,7 @@ async def test_denied_tools_blacklist_denies_read_file():
     assert tool_results[0]["permission_decision"] == "denied"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_default_preset_is_implement_allows_write():
     """缺省 permission_preset=None → 等价 IMPLEMENT（向后兼容）。"""
     events = _RecordingEvents()
@@ -223,7 +223,7 @@ async def test_default_preset_is_implement_allows_write():
     assert tool_results[0]["success"] is True
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_tool_result_event_carries_resolved_path():
     """M3: tool_result 事件 payload 补 resolved_path + permission_decision（审计可查）。"""
     events = _RecordingEvents()

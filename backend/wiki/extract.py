@@ -37,7 +37,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -289,11 +289,11 @@ def _time_limited_call(
 def extract_text_for_ingest(
     file_path: Path,
     *,
-    max_file_bytes: Optional[int] = None,
-    max_text_chars: Optional[int] = None,
-    max_seconds: Optional[float] = None,
+    max_file_bytes: int | None = None,
+    max_text_chars: int | None = None,
+    max_seconds: float | None = None,
     return_meta: bool = False,
-    opened_fd: Optional[int] = None,
+    opened_fd: int | None = None,
 ):
     """Extract bounded text from a file the Wiki ingest pipeline accepts.
 

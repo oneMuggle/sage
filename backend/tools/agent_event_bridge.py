@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def unregister_stream_emitter(session_id: str) -> None:
     _STREAM_EMITTERS.pop(session_id, None)
 
 
-def get_stream_emitter(session_id: Optional[str]) -> Optional[Callable[[Dict[str, Any]], None]]:
+def get_stream_emitter(session_id: str | None) -> Callable[[Dict[str, Any]], None] | None:
     """查会话的入队回调；未登记/无 session 返回 ``None``（转发降级关闭）。"""
     if not session_id:
         return None

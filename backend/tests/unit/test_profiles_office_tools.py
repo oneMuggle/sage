@@ -132,7 +132,7 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
     assert "office_delete" not in visible
 
 
-@pytest.mark.parametrize("agent_id", ["coder", "researcher", "memory_manager", "reviewer"])
+@pytest.mark.parametriz()e("agent_id", ["coder", "researcher", "memory_manager", "reviewer"])
 def test_other_profiles_see_no_office_tools(registry, bound_ctx, agent_id):
     assert _visible_office_tools(registry, bound_ctx, _profile(agent_id).tools) == []
 

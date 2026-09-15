@@ -17,7 +17,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from backend.orchestration.llm_factory import build_llm_client_from_settings
 from backend.orchestration.models import Task, Team
@@ -109,7 +109,7 @@ class Planner:
     async def decompose_request(
         self,
         request: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: Dict[str, Any] | None = None,
     ) -> Plan:
         """
         Decompose a user request into a team of tasks.
@@ -272,7 +272,7 @@ class Planner:
     async def _decompose_with_llm(
         self,
         request: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: Dict[str, Any] | None = None,
     ) -> Tuple[List[Dict[str, Any]], str]:
         """Decompose request via the LLM; any failure → single-task fallback."""
         prompt = self._build_decomposition_prompt(request, context)
@@ -299,7 +299,7 @@ class Planner:
     def _build_decomposition_prompt(
         self,
         request: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: Dict[str, Any] | None = None,
     ) -> str:
         """Build the JSON-DAG decomposition prompt."""
         context_str = json.dumps(context, indent=2, ensure_ascii=False) if context else "None"
@@ -333,7 +333,7 @@ Output format — return ONLY valid JSON, no markdown fences, no extra text:
     def _parse_llm_response(
         self,
         response: str,
-    ) -> Optional[Tuple[List[Dict[str, Any]], str]]:
+    ) -> Tuple[List[Dict[str, Any]], str] | None:
         """Parse + sanitize the LLM response.
 
         Returns:

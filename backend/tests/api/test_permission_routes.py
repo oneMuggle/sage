@@ -251,7 +251,7 @@ async def test_remember_with_wildcard_tool_name_is_not_persisted(gate, client):
     assert SettingsRepository().get(SETTINGS_KEY_RULES) is None
 
 
-@pytest.mark.parametrize("bad_name", ["*", "term?", "[t]erminal", "wr]ite"])
+@pytest.mark.parametriz()e("bad_name", ["*", "term?", "[t]erminal", "wr]ite"])
 async def test_remember_rejects_fnmatch_metacharacters(gate, client, bad_name):
     """fnmatch 元字符 (* ? [ ]) 一律静默降级为不记住。"""
     # Arrange

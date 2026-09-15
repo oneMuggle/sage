@@ -19,14 +19,14 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from backend.tools.git_tool import _run_git
 
 logger = logging.getLogger(__name__)
 
 
-def guard_rel_path(root: str, path: str) -> Optional[str]:
+def guard_rel_path(root: str, path: str) -> str | None:
     """校验 path 是仓库根下的相对路径且不越界;返回错误文案或 None。"""
     if not path or not path.strip():
         return "path 不能为空"
@@ -50,7 +50,7 @@ def split_hunks(diff_text: str) -> List[str]:
     """
     hunks: List[str] = []
     header_lines: List[str] = []
-    current: Optional[List[str]] = None
+    current: List[str] | None = None
 
     def _flush() -> None:
         nonlocal current
@@ -73,7 +73,7 @@ def split_hunks(diff_text: str) -> List[str]:
     return hunks
 
 
-def build_hunk_patch(diff_text: str, hunk_indices: List[int]) -> Tuple[str, Optional[str]]:
+def build_hunk_patch(diff_text: str, hunk_indices: List[int]) -> Tuple[str, str | None]:
     """按 0-based 序号取 hunk 子集重建补丁;越界返回 ("" , 错误文案)。"""
     hunks = split_hunks(diff_text)
     if not hunks:
@@ -154,7 +154,7 @@ def revert_hunks(
     root: str,
     path: str,
     hunk_indices: List[int],
-) -> Tuple[int, Optional[str]]:
+) -> Tuple[int, str | None]:
     """按 hunk 子集反向应用未暂存 diff;返回 (成功 hunk 数, 错误文案)。
 
     序号 0-based，与 GET /changes/diff 输出的 hunk 顺序一致。git apply

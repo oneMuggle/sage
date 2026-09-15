@@ -49,7 +49,7 @@ def test_agent_state_enum_string_inheritance():
     assert AgentState.DONE in {"done", "failed"}
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("state", "raw"),
     [
         (AgentState.IDLE, "idle"),

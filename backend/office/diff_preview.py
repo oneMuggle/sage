@@ -52,7 +52,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -96,12 +96,12 @@ class DiffPreviewChange(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     op: str = Field(description="Op name, e.g. 'replace_text' / 'set_cells'")
-    target: Optional[str] = Field(
+    target: str | None = Field(
         default=None, description="Where the change lands: 'Sheet!A1', 'slide[2]', 'table[0]'…"
     )
-    before: Optional[str] = Field(default=None, description="Content before the op (snippet)")
-    after: Optional[str] = Field(default=None, description="Content after the op (snippet)")
-    summary: Optional[str] = Field(
+    before: str | None = Field(default=None, description="Content before the op (snippet)")
+    after: str | None = Field(default=None, description="Content after the op (snippet)")
+    summary: str | None = Field(
         default=None, description="One-line description when before/after don't tell the story"
     )
 
@@ -116,7 +116,7 @@ class DiffPreviewResult(BaseModel):
     truncated: bool = Field(
         default=False, description="True when len(changes) was capped at MAX_CHANGES"
     )
-    error: Optional[str] = Field(
+    error: str | None = Field(
         default=None, description="Why the real update would fail (set when ok=False)"
     )
 
@@ -127,10 +127,10 @@ class OfficeUpdatePreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     workspace_path: str = Field(description="Absolute path to the workspace dir")
-    file_path: Optional[str] = Field(
+    file_path: str | None = Field(
         default=None, description="Absolute path to the document inside the workspace"
     )
-    doc_id: Optional[str] = Field(
+    doc_id: str | None = Field(
         default=None, description="Managed document id (resolved via office_documents)"
     )
     ops: List[Dict[str, Any]] = Field(
@@ -144,7 +144,7 @@ class OfficeExportPdfRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
-    task_id: Optional[str] = Field(default=None, max_length=100)
+    task_id: str | None = Field(default=None, max_length=100)
 
     workspace_path: str = Field(description="Absolute path to the workspace dir")
     file_path: str = Field(description="Absolute path to the document inside the workspace")
@@ -155,7 +155,7 @@ class OfficeExportPdfRequest(BaseModel):
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _clamp(text: Any, limit: int = _SNIPPET_LIMIT) -> Optional[str]:
+def _clamp(text: Any, limit: int = _SNIPPET_LIMIT) -> str | None:
     """Stringify + ellipsize to ``limit`` chars; None in, None out."""
     if text is None:
         return None
@@ -255,7 +255,7 @@ def _xlsx_cell_map(path: Path) -> Dict[str, Dict[str, str]]:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _word_snippet(before: Any, find: str) -> Optional[str]:
+def _word_snippet(before: Any, find: str) -> str | None:
     """First body-paragraph or table-cell text containing ``find``."""
     for para in before.paragraphs:
         if find in para.text:
@@ -319,7 +319,7 @@ def _word_changes(  # noqa: PLR0911 — op 分发表
         ti = int(op.get("table_index", -1))
         ri = int(op.get("row", -1))
         ci = int(op.get("col", -1))
-        before_val: Optional[str] = None
+        before_val: str | None = None
         if 0 <= ti < len(before.tables):
             rows = before.tables[ti].rows
             if 0 <= ri < len(rows) and 0 <= ci < len(rows[ri]):
@@ -380,7 +380,7 @@ def _word_changes(  # noqa: PLR0911 — op 分发表
 def _excel_changes(  # noqa: PLR0911 — op 分发表
     op: Dict[str, Any],
     result: Dict[str, Any],
-    cell_map: Optional[Dict[str, Dict[str, str]]],
+    cell_map: Dict[str, Dict[str, str]] | None,
 ) -> List[DiffPreviewChange]:
     name = str(op.get("op"))
 
@@ -454,7 +454,7 @@ def _excel_changes(  # noqa: PLR0911 — op 分发表
     return []
 
 
-def _ppt_snippet(before: Any, find: str) -> Tuple[Optional[int], Optional[str]]:
+def _ppt_snippet(before: Any, find: str) -> Tuple[int | None, str | None]:
     """First slide whose joined text contains ``find`` → (index, text)."""
     for slide in before.slides:
         parts = [slide.title or ""] + list(slide.text_blocks)
@@ -616,7 +616,7 @@ def preview_update(source: Path, ops: List[Dict[str, Any]]) -> DiffPreviewResult
             tmp_path.unlink()
 
     # Excel set_cells needs address-accurate before-values from the source.
-    cell_map: Optional[Dict[str, Dict[str, str]]] = None
+    cell_map: Dict[str, Dict[str, str]] | None = None
     if doc_type == "excel":
         try:
             cell_map = _xlsx_cell_map(source)

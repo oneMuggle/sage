@@ -32,7 +32,7 @@ def _drain(queue):
     return events
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_skip_queued_task_short_circuits(tmp_path, monkeypatch):
     """queued 任务跳过 → 不执行、状态 cancelled、error=skipped by user。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -65,7 +65,7 @@ async def test_skip_queued_task_short_circuits(tmp_path, monkeypatch):
     assert d._states["t2"].error == "skipped by user"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_skip_running_task_interrupts(tmp_path, monkeypatch):
     """running 任务跳过 → 该任务事件置位（软中断通道），run 级取消不受影响。"""
     _init_tmp_db(tmp_path, monkeypatch)
@@ -102,7 +102,7 @@ async def test_skip_running_task_interrupts(tmp_path, monkeypatch):
     assert d._states["t2"].status == "done"  # 其余任务不受影响
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_cancel_task_terminal_or_unknown_returns_false(tmp_path, monkeypatch):
     _init_tmp_db(tmp_path, monkeypatch)
     d = ChatDispatcher(stream_id="s1", entry_queue=asyncio.Queue(), run_id="orch-x")
@@ -119,7 +119,7 @@ async def test_cancel_task_terminal_or_unknown_returns_false(tmp_path, monkeypat
     assert d.cancel_task("t1") is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_skip_cascades_to_downstream(tmp_path, monkeypatch):
     """跳过 t1 → 依赖 t1 的 t2 级联 failed（blocked_by_failed 前缀）。"""
     _init_tmp_db(tmp_path, monkeypatch)

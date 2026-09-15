@@ -23,14 +23,14 @@ from backend.tools.checkpoint_tool import (
 pytestmark = [pytest.mark.unit]
 
 
-@pytest.fixture()
+@pytest.fixture
 def user_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     data = tmp_path / "userdata"
     monkeypatch.setenv("SAGE_USER_DATA_DIR", str(data))
     return data
 
 
-@pytest.fixture()
+@pytest.fixture
 def workspace(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     ws.mkdir()

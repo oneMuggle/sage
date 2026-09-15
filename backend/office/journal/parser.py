@@ -18,7 +18,7 @@ from __future__ import annotations
 import hashlib
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from docx import Document
 from docx.enum.text import WD_LINE_SPACING
@@ -74,7 +74,7 @@ _FONT_FAMILY_ALIASES: Dict[str, str] = {
 }
 
 
-def _normalize_font(name: Optional[str]) -> str:
+def _normalize_font(name: str | None) -> str:
     if not name:
         return ""
     return _FONT_FAMILY_ALIASES.get(name.strip(), name.strip())
@@ -192,7 +192,7 @@ def _detect_citation_style(doc: Document) -> CitationStyle:  # noqa: PLR0911
     return CitationStyle.UNKNOWN
 
 
-def _resolve_input(input_path: Path, cache_dir: Optional[Path]) -> Path:
+def _resolve_input(input_path: Path, cache_dir: Path | None) -> Path:
     """处理 .doc 输入；.docx 透传；失败包装为 JournalParseError。"""
     if not input_path.exists():
         raise JournalParseError(f"模板文件不存在: {input_path}")
@@ -208,7 +208,7 @@ def _resolve_input(input_path: Path, cache_dir: Optional[Path]) -> Path:
 
 
 def parse_journal_spec(
-    input_path: Path, *, cache_dir: Optional[Path] = None
+    input_path: Path, *, cache_dir: Path | None = None
 ) -> JournalSpec:
     """从 .doc / .docx 模板抽取 JournalSpec。"""
     docx_path = _resolve_input(input_path, cache_dir)

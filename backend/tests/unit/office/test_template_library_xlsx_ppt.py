@@ -98,7 +98,7 @@ def test_list_templates_includes_office_builtins():
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "spec", BUILTIN_EXCEL_TEMPLATES, ids=[spec.id for spec in BUILTIN_EXCEL_TEMPLATES]
 )
 def test_builtin_xlsx_build_reopens_with_markers(spec):
@@ -169,7 +169,7 @@ def _deck_frame_texts(prs):
     return texts
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "spec",
     BUILTIN_PPT_TEMPLATES,
     ids=[spec.id for spec in BUILTIN_PPT_TEMPLATES],

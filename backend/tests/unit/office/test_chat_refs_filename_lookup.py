@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 import pytest
 
@@ -53,14 +52,14 @@ from backend.office.workspace_errors import (
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture()
+@pytest.fixture
 def work_a(fixture_dir: Path) -> Path:
     ws = fixture_dir / "work-a"
     ws.mkdir()
     return ws
 
 
-@pytest.fixture()
+@pytest.fixture
 def conn() -> sqlite3.Connection:
     db = Database(":memory:")
     db.init_db()
@@ -80,10 +79,10 @@ def _make_doc(
     doc_id: str,
     workspace_path: str,
     doc_type: OfficeDocType,
-    original_filename: Optional[str],
+    original_filename: str | None,
     generated_filename: str,
-    archived_at: Optional[int] = None,
-    derived_from: Optional[str] = None,
+    archived_at: int | None = None,
+    derived_from: str | None = None,
 ) -> OfficeDocumentSummary:
     return OfficeDocumentSummary(
         id=doc_id,
@@ -100,7 +99,7 @@ def _make_doc(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def binding_a(conn: sqlite3.Connection, work_a: Path):
     """Active binding for session-a -> work-a, generation=1."""
     _insert_session(conn, "session-a")

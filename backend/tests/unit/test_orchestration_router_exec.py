@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_execute_plan_lanes_parallel_terminal_states(tmp_path, monkeypatch):
     """_execute_plan_lanes：全部 lane 终态落库 + 聚合后跑 review。"""
     # _execute_plan_lanes 内部经 get_database().db_path 派生 scratch 根 + 读
@@ -50,7 +50,7 @@ async def test_execute_plan_lanes_parallel_terminal_states(tmp_path, monkeypatch
     assert review == {"verdict": "pass", "block": "", "assertion_count": 1}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_create_lanes_router_exposes_wait_query():
     """路由层：/lanes POST 存在，且 handler 接受 wait query。
 
@@ -73,7 +73,7 @@ async def test_create_lanes_router_exposes_wait_query():
     assert "wait" in signature(lanes_post[0].endpoint).parameters
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_execute_plan_lanes_wires_goal_and_scratch_dir_into_task_params(tmp_path, monkeypatch):
     """P0-3 工作区隔离接线：SubagentRunner 收到的 task 必须带 goal + scratch_dir。
 
@@ -128,7 +128,7 @@ async def test_execute_plan_lanes_wires_goal_and_scratch_dir_into_task_params(tm
     assert "l1" in captured["scratch_dir"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_execute_plan_lanes_failure_evidence_reaches_review(tmp_path, monkeypatch):
     """P2-9 聚合：失败 lane 的错误必须进聚合（task.parameters["error"]）。
 

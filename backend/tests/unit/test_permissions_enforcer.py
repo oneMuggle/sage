@@ -36,7 +36,7 @@ def _enforcer(mode, rules=()):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("mode", "tool", "args", "expect_allowed", "expect_approval"),
     [
         # FULL_ACCESS 普通调用全放行

@@ -20,7 +20,7 @@ import contextlib
 import logging
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import pymupdf
 
@@ -64,7 +64,7 @@ MAX_TABLE_CELLS_PER_PAGE = 20_000
 _CJK_PDF_FONT = "STSong-Light"
 
 
-def _register_cjk_font() -> Optional[str]:
+def _register_cjk_font() -> str | None:
     """Register the CJK CID font and return its name, or ``None`` on failure.
 
     Guarded: a reportlab build without Asian font packs (or any other
@@ -197,7 +197,7 @@ def read_pdf(
     file_path: Path,
     *,
     workspace_path: str,
-    document_id: Optional[str] = None,
+    document_id: str | None = None,
 ) -> PdfReadResult:
     """Read a PDF file and extract text, tables, images, and metadata.
 

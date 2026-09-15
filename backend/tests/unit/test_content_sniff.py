@@ -7,7 +7,7 @@ from backend.tools import content_sniff as cs
 pytestmark = [pytest.mark.unit]
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("head", "kind"),
     [
         (b"%PDF-1.7\n%\xe2\xe3", "pdf"),
@@ -32,7 +32,7 @@ def test_detect_kind(head, kind):
     assert cs.detect_kind(head) == kind
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("name", "kind"),
     [
         ("paper.pdf", "pdf"),
@@ -49,7 +49,7 @@ def test_expected_kind_from_name(name, kind):
     assert cs.expected_kind_from_name(name) == kind
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("ct", "kind"),
     [
         ("application/pdf", "pdf"),
@@ -97,7 +97,7 @@ def test_sniff_binary_kind_differs_is_not_mismatch():
     assert result.mismatch is False
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("ct", "expected"),
     [
         ("application/pdf", True),

@@ -40,7 +40,6 @@ the construction happens once, on first ``async with``.
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 
 class LazyLock:
@@ -62,7 +61,7 @@ class LazyLock:
 
     def __init__(self) -> None:
         # Intentionally NOT calling asyncio.Lock() — defer until first await.
-        self._lock: Optional[asyncio.Lock] = None
+        self._lock: asyncio.Lock | None = None
 
     def _ensure_lock(self) -> asyncio.Lock:
         """Return the underlying lock, constructing it on first call.

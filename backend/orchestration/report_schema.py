@@ -27,7 +27,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 SCHEMA_VERSION = "1.0"
 
@@ -56,7 +56,7 @@ class Assertion:
     type: AssertionType
     statement: str
     confidence: float  # 0.0 - 1.0
-    source_ref: Optional[str] = None  # lane_id / event_id / test name
+    source_ref: str | None = None  # lane_id / event_id / test name
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.confidence <= 1.0):
@@ -93,7 +93,7 @@ class ProjectionRef:
 
     view: str  # "ui_minimal" / "ops_full" / "audit_only" / ...
     source_hash: str  # MUST equal the parent report's content_hash
-    downgrade_reason: Optional[str] = None  # "compatibility" / "redaction" / "source_absence"
+    downgrade_reason: str | None = None  # "compatibility" / "redaction" / "source_absence"
 
     def to_dict(self) -> Dict[str, Any]:
         return {

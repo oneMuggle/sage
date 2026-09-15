@@ -43,7 +43,7 @@ def _sample_spec(spec_id="spec_abc123", filename="simple.docx") -> JournalSpec:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def workspace(tmp_path: Path) -> Path:
     # 使用临时目录作为 workspace；SQLite 由 setup_test_db 注入临时 DB
     (tmp_path / "office" / "journal" / "specs").mkdir(parents=True)

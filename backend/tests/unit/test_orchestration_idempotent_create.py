@@ -18,7 +18,7 @@ from backend.orchestration.models import (
 )
 
 
-@pytest.fixture()
+@pytest.fixture
 def task_repo(tmp_path, monkeypatch):
     """TaskRepository backed by a temp SQLite DB."""
     from backend.data import database as db_mod
@@ -30,7 +30,7 @@ def task_repo(tmp_path, monkeypatch):
     return TaskRepository()
 
 
-@pytest.fixture()
+@pytest.fixture
 def lane_repo(tmp_path, monkeypatch):
     """LaneRepository backed by a temp SQLite DB."""
     from backend.data import database as db_mod

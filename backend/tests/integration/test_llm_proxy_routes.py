@@ -23,7 +23,7 @@ UPSTREAM = "http://upstream.example.com"
 PROXY_BASE = "/api/v1/llm"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_get_models_forwards_to_upstream(client):
     """GET /v1/models 应转发到上游 GET /v1/models,响应 JSON 透传。"""
     with respx.mock(assert_all_called=False) as mock:
@@ -49,7 +49,7 @@ async def test_get_models_forwards_to_upstream(client):
     assert route.calls[0].request.url.path == "/v1/models"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_oversized_request_body_is_rejected_before_upstream(client, monkeypatch):
     """请求体超过代理上限时 fail-closed,且不得触达上游。"""
     import backend.api.llm_proxy_routes as proxy_routes
@@ -71,7 +71,7 @@ async def test_oversized_request_body_is_rejected_before_upstream(client, monkey
     assert not route.called
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_non_streaming_response_over_limit_returns_safe_error(client, monkeypatch):
     """非流式上游响应超过上限时不得在 proxy 内无限累积。"""
     import backend.api.llm_proxy_routes as proxy_routes
@@ -92,7 +92,7 @@ async def test_non_streaming_response_over_limit_returns_safe_error(client, monk
     assert route.called
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_non_streaming_decoded_response_does_not_forward_content_encoding(client):
     """解码后的非流式响应不能继续声明上游的压缩编码。"""
     body = b'{"object":"list","data":[]}'
@@ -114,7 +114,7 @@ async def test_non_streaming_decoded_response_does_not_forward_content_encoding(
     assert "content-encoding" not in resp.headers
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_streaming_response_stops_at_cumulative_limit(client, monkeypatch):
     """流式响应累计越过上限时截断并关闭,不继续转发。"""
     import backend.api.llm_proxy_routes as proxy_routes
@@ -131,7 +131,7 @@ async def test_streaming_response_stops_at_cumulative_limit(client, monkeypatch)
     assert resp.content == b"123456"[:4]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_streaming_decoded_response_does_not_forward_content_encoding(client):
     """解码后的流不能继续声明上游的压缩编码。"""
     chunks = b'data: {"choices": []}\n\n'
@@ -158,7 +158,7 @@ async def test_streaming_decoded_response_does_not_forward_content_encoding(clie
     assert "content-encoding" not in resp.headers
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_post_chat_forwards_body(client):
     """POST /v1/chat/completions 应携带 body 字节级转发。"""
     sent_body = {
@@ -188,7 +188,7 @@ async def test_post_chat_forwards_body(client):
     assert received == sent_body
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_missing_header_returns_400(client):
     """缺 X-LLM-Provider-Url 应返 400 + missing_provider_url。"""
     resp = await client.get(f"{PROXY_BASE}/v1/models")
@@ -199,7 +199,7 @@ async def test_missing_header_returns_400(client):
     assert "X-LLM-Provider-Url" in detail["message"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_invalid_url_returns_400(client):
     """X-LLM-Provider-Url 不是 http/https 应返 400 + invalid_provider_url。"""
     resp = await client.get(
@@ -212,7 +212,7 @@ async def test_invalid_url_returns_400(client):
     assert detail["type"] == "invalid_provider_url"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_authorization_header_reaches_upstream(client):
     """Authorization 头应原样转发到上游(API key 透传)。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -232,7 +232,7 @@ async def test_authorization_header_reaches_upstream(client):
     assert route.calls[0].request.headers.get("authorization") == "Bearer sk-test-xyz"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_local_capability_header_not_forwarded_but_provider_authorization_is(client):
     """本地 capability header 不得到达上游,provider Authorization 必须保留。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -255,7 +255,7 @@ async def test_local_capability_header_not_forwarded_but_provider_authorization_
     assert "x-sage-local-authorization" not in upstream_headers
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_canonical_local_authorization_is_not_forwarded(client):
     """本地 canonical Bearer capability 不得泄露到公网 provider。"""
     local_token = "test-local-auth-token"
@@ -278,7 +278,7 @@ async def test_canonical_local_authorization_is_not_forwarded(client):
     assert local_token not in str(route.calls[0].request.headers)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_local_compatibility_authorization_preserves_provider_authorization(client):
     """兼容本地 header 认证时，独立的 provider Authorization 仍应透传。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -301,7 +301,7 @@ async def test_local_compatibility_authorization_preserves_provider_authorizatio
     assert "x-sage-local-authorization" not in upstream_headers
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_canonical_provider_authorization_is_forwarded(client):
     """不是本地 capability 的 canonical Authorization 应作为 provider key 透传。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -321,7 +321,7 @@ async def test_canonical_provider_authorization_is_forwarded(client):
     assert route.calls[0].request.headers.get("authorization") == "Bearer provider-key"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_query_string_forwarded(client):
     """查询串应原样转发到上游。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -340,7 +340,7 @@ async def test_query_string_forwarded(client):
     assert route.calls[0].request.url.params.get("limit") == "10"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_upstream_4xx_returns_safe_error(client):
     """上游 401 保留状态码和错误类型,但不回显敏感 body。"""
     sensitive_body = '{"error":"invalid key sk-upstream-secret"}'
@@ -362,7 +362,7 @@ async def test_upstream_4xx_returns_safe_error(client):
     assert "sk-upstream-secret" not in resp.text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_upstream_5xx_returns_safe_error(client):
     """上游 500 保留状态码和错误类型,但不回显错误 body。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -379,7 +379,7 @@ async def test_upstream_5xx_returns_safe_error(client):
     assert "upstream-secret" not in resp.text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_provider_url_header_not_forwarded(client):
     """X-LLM-Provider-Url 不应被转发到上游(避免循环引用)。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -396,7 +396,7 @@ async def test_provider_url_header_not_forwarded(client):
     assert "x-llm-provider-url" not in route.calls[0].request.headers
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_dotdot_path_normalized_to_root(client):
     """``..`` 路径段经 ``posixpath.normpath`` 折叠 — 永远不会逃出上游根(根级变 ``/``)。
 
@@ -416,7 +416,7 @@ async def test_dotdot_path_normalized_to_root(client):
     assert route.calls[0].request.url.path == "/"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_userinfo_in_provider_url_rejected(client):
     """带 userinfo 的 URL(``user:pass@host``)应被拒绝(防止凭据泄露到 log)。"""
     resp = await client.get(
@@ -430,7 +430,7 @@ async def test_userinfo_in_provider_url_rejected(client):
     assert "userinfo" in detail["message"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_malformed_provider_url_returns_safe_detail(client):
     """URL 解析异常不得把凭据或完整 URL 放入客户端 detail。"""
     provider = "http://user:pass@upstream.example.com:bad-port?token=bad-url-secret"
@@ -447,7 +447,7 @@ async def test_malformed_provider_url_returns_safe_detail(client):
     assert "bad-url-secret" not in resp.text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_provider_url_is_redacted_in_proxy_logs(client, caplog):
     """日志不得包含 provider URL 的 userinfo 或完整路径/query。"""
     import logging
@@ -464,7 +464,7 @@ async def test_provider_url_is_redacted_in_proxy_logs(client, caplog):
     assert "X-LLM-Provider-Url=" not in caplog.text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_upstream_timeout_returns_504(client):
     """httpx.TimeoutException 应映射为 504 upstream_timeout。"""
     import httpx as _httpx
@@ -480,7 +480,7 @@ async def test_upstream_timeout_returns_504(client):
     assert resp.json()["detail"]["type"] == "upstream_timeout"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_upstream_connect_error_returns_502(client):
     """httpx.ConnectError 应映射为 502 upstream_unreachable。"""
     import httpx as _httpx
@@ -496,7 +496,7 @@ async def test_upstream_connect_error_returns_502(client):
     assert resp.json()["detail"]["type"] == "upstream_unreachable"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_upstream_transport_error_returns_502(client):
     """其它 httpx.TransportError(half-close 等)应映射为 502 upstream_transport_error。"""
     import httpx as _httpx
@@ -512,7 +512,7 @@ async def test_upstream_transport_error_returns_502(client):
     assert resp.json()["detail"]["type"] == "upstream_transport_error"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_transport_failure_does_not_log_or_return_sensitive_exception_text(client, caplog):
     """传输异常中的 URL/query/token 不得进入日志或客户端 detail。"""
     import logging
@@ -545,7 +545,7 @@ async def test_transport_failure_does_not_log_or_return_sensitive_exception_text
         assert secret not in caplog.text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_nested_path_normalized(client):
     """path 含 ``..`` 但最终不逃出根(``v1/../v1/models`` → ``/v1/models``)应正常转发。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -568,7 +568,7 @@ async def test_nested_path_normalized(client):
 # ============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_streaming_detected_by_accept_header_routes_to_streaming(client):
     """v2: ``Accept: text/event-stream`` 应触发流式分支,proxy 走 httpx.stream().
 
@@ -606,7 +606,7 @@ async def test_streaming_detected_by_accept_header_routes_to_streaming(client):
     assert resp.content == chunks
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_streaming_detected_by_query_param_routes_to_streaming(client):
     """v2: query string ``?stream=true`` 应触发流式分支(OpenAI 流式约定)."""
     sent_body = {
@@ -637,7 +637,7 @@ async def test_streaming_detected_by_query_param_routes_to_streaming(client):
     assert resp.content == chunks
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_streaming_upstream_error_returns_status_code(client):
     """v2: 流式分支遇到上游 4xx/5xx,应在 yield 任何 chunk 之前抛 HTTPException,
     让调用方拿到正确的 status code(不是 200)。"""
@@ -665,7 +665,7 @@ async def test_streaming_upstream_error_returns_status_code(client):
     assert "401" in detail["message"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_non_streaming_path_unchanged(client):
     """回归门禁: 非流式请求(Accept: application/json, 无 stream=true)
     仍然走原有非流式分支 — 不会被误判成 streaming。
@@ -695,7 +695,7 @@ async def test_non_streaming_path_unchanged(client):
     assert route.called
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_dns_rebinding_does_not_connect_to_later_private_answer(client, monkeypatch):
     """Validation and connect use the same public address, never a later private DNS answer."""
     import socket
@@ -722,7 +722,7 @@ async def test_dns_rebinding_does_not_connect_to_later_private_answer(client, mo
     assert seen == ["8.8.8.8"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_allowlisted_local_host_is_pinned_and_allowed(client, monkeypatch):
     import socket
 
@@ -747,7 +747,7 @@ async def test_allowlisted_local_host_is_pinned_and_allowed(client, monkeypatch)
     assert calls == ["local.example.com"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_public_https_preserves_hostname_for_host_and_sni(client, monkeypatch):
     import socket
 
@@ -805,7 +805,7 @@ def _resolve_mock_provider_names(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_blocked_local_target_requires_explicit_allowlist(client, monkeypatch):
     monkeypatch.delenv("SAGE_LLM_PROXY_ALLOWED_HOSTS", raising=False)
     resp = await client.get(
@@ -819,7 +819,7 @@ async def test_blocked_local_target_requires_explicit_allowlist(client, monkeypa
     }
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_rfc1918_and_metadata_targets_are_blocked(client):
     for host in ("10.0.0.1", "192.168.1.5", "169.254.169.254", "[::1]"):
         resp = await client.get(
@@ -829,7 +829,7 @@ async def test_rfc1918_and_metadata_targets_are_blocked(client):
         assert resp.status_code == 403
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_public_provider_remains_allowed(client):
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
         route = mock.get("/v1/models").mock(return_value=Response(200, json={"data": []}))
@@ -868,7 +868,7 @@ async def test_public_provider_remains_allowed(client):
     assert auth is None or auth == ""
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_baseurl_with_v1_suffix_does_not_double_v1_in_path(client):
     """LM Studio baseURL 已含 ``/v1``, 浏览器拉 ``/v1/models`` → 上游不应收到 ``/v1/v1/models``.
 
@@ -890,7 +890,7 @@ async def test_baseurl_with_v1_suffix_does_not_double_v1_in_path(client):
     assert route.calls[0].request.url.path == "/v1/models"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_lm_studio_non_streaming_chat_with_empty_authorization(client):
     """LM Studio 非流式 POST /v1/chat/completions: 空 Authorization → 上游收到空."""
     with respx.mock(base_url=LM_STUDIO_BASE, assert_all_called=False) as mock:
@@ -919,7 +919,7 @@ async def test_lm_studio_non_streaming_chat_with_empty_authorization(client):
     assert auth is None or auth == ""
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_lm_studio_streaming_sse_chunks_preserved(client):
     """LM Studio 流式 SSE: 完整 ``data: {...}\\n\\n`` chunk 序列应字节级透传."""
     chunks = (
@@ -952,7 +952,7 @@ async def test_lm_studio_streaming_sse_chunks_preserved(client):
     assert b"data: [DONE]\n\n" in resp.content
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_streaming_upstream_disconnect_after_first_chunk_closes_context(client, monkeypatch):
     """首个 chunk 已发出后上游传输异常只能截断流, 但必须 close 且不二次写 status."""
     import backend.api.llm_proxy_routes as proxy_routes
@@ -1022,7 +1022,7 @@ async def test_streaming_upstream_disconnect_after_first_chunk_closes_context(cl
     assert isinstance(exc, RuntimeError)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_proxy_uses_certifi_ca_bundle_for_https(client):
     """Task 1 §4: 代理始终启用证书校验 — ``httpx.AsyncClient`` 走 ``SSL_CERT_FILE``
     / ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE`` 任一环境变量, 由 ``main.py``
@@ -1045,7 +1045,7 @@ async def test_proxy_uses_certifi_ca_bundle_for_https(client):
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_tls_certificate_error_returns_structured_detail(client):
     """Task 1 §4: 上游 TLS 证书校验失败应映射为 ``tls_certificate_failed``
     结构化 detail (状态码 502) — 不应被映射成 ``upstream_unreachable`` 把 TLS 错误淹没."""
@@ -1089,7 +1089,7 @@ def _clean_recorder():
     LlmTraceRecorder.clear()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_non_streaming_upstream_401_records_trace(client):
     """非流式上游 401 应在 raise HTTPException 前记录 TraceRecord。"""
     error_body = {"error": {"message": "Invalid API key"}}
@@ -1122,7 +1122,7 @@ async def test_non_streaming_upstream_401_records_trace(client):
     assert "authorization" in {k.lower() for k in rec.request_headers}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_streaming_upstream_500_records_trace(client):
     """流式上游 5xx(在 chunk 前)应在关闭资源前记录 TraceRecord。"""
     error_body = {"error": {"message": "Internal server error"}}

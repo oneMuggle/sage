@@ -9,7 +9,7 @@ pytestmark = pytest.mark.integration
 PREFIX = "/api/v1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_search_empty(client):
     """空数据库上 /memory/search 返回空列表。"""
     resp = await client.get(f"{PREFIX}/memory/search", params={"query": "nothing"})
@@ -17,7 +17,7 @@ async def test_memory_search_empty(client):
     assert resp.json() == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_search_returns_saved_content(client):
     """保存后 /memory/search 能查到。"""
     save_resp = await client.post(
@@ -43,7 +43,7 @@ async def test_memory_search_returns_saved_content(client):
     assert any("火锅" in r.get("content", "") for r in results)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_save_default_type(client):
     """默认 memory_type=episodic 时保存成功。"""
     resp = await client.post(
@@ -56,7 +56,7 @@ async def test_memory_save_default_type(client):
     assert body["id"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_save_semantic(client):
     """memory_type=semantic 时保存成功。"""
     resp = await client.post(
@@ -73,7 +73,7 @@ async def test_memory_save_semantic(client):
     assert body["id"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_delete_episodic(client):
     """删除已保存的 episodic 记忆返回 ok。"""
     save_resp = await client.post(
@@ -90,7 +90,7 @@ async def test_memory_delete_episodic(client):
     assert resp.json() == {"status": "ok"}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_delete_not_found_returns_404(client):
     """删除不存在的记忆返回 404。"""
     resp = await client.post(
@@ -101,7 +101,7 @@ async def test_memory_delete_not_found_returns_404(client):
     assert resp.json()["detail"] == "记忆不存在"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_list_empty(client):
     """空库上 /memory/list 返回 envelope(无 items)。"""
     resp = await client.get(f"{PREFIX}/memory/list")
@@ -114,7 +114,7 @@ async def test_memory_list_empty(client):
     assert body["layer"] == "all"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_list_returns_saved(client):
     """保存后 /memory/list 能查到, envelope 含 layer/source_breakdown。"""
     await client.post(
@@ -134,7 +134,7 @@ async def test_memory_list_returns_saved(client):
     assert all(r.get("layer") == "episodic" for r in items)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_list_default_type_is_episodic(client):
     """不指定 type 时默认查询所有层(layer=='all')。"""
     await client.post(
@@ -150,7 +150,7 @@ async def test_memory_list_default_type_is_episodic(client):
     assert any(r.get("content") == "默认类型列表" for r in items)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_list_type_semantic(client):
     """type=semantic 时查询语义记忆。"""
     await client.post(
@@ -167,7 +167,7 @@ async def test_memory_list_type_semantic(client):
     assert all(r.get("source") == "semantic" for r in items)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_list_pagination_envelope(client):
     """``page`` / ``page_size`` clamp + envelope 字段。"""
     await client.post(
@@ -193,7 +193,7 @@ async def test_memory_list_pagination_envelope(client):
     assert "source_breakdown" in body
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_list_clamps_invalid_page_size(client):
     """``page_size > 100`` 必须 clamp 到 100。"""
     resp = await client.get(
@@ -205,7 +205,7 @@ async def test_memory_list_clamps_invalid_page_size(client):
     assert body["page_size"] == 100
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_memory_list_clamps_invalid_page(client):
     """``page > 10`` 必须 clamp 到 10,避免无界取数。"""
     resp = await client.get(

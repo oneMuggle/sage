@@ -99,7 +99,7 @@ def test_body_documents_full_pipeline_tools() -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("message", "expected"),
     [
         ("帮我写论文，题目是大模型幻觉", {"paper-writing"}),

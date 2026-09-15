@@ -23,7 +23,7 @@ def _write_skill(root: Path, directory: str, name: str = "") -> None:
     )
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipi()f(
     os.name == "nt",
     reason="技能根目录发现在 Windows 语义不同（另行批次定性）",
 )

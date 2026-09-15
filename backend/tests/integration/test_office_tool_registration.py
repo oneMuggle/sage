@@ -101,7 +101,7 @@ def test_new_tools_declare_expected_risk_and_context(registry):
 # ── 3. profile 白名单归属 ─────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "agent_id", ["primary", "writer"]
 )
 def test_primary_and_writer_include_new_tools(agent_id):
@@ -114,7 +114,7 @@ def test_writer_still_has_no_office_delete():
     assert "office_delete" not in set(_profile("writer").tools)
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "agent_id", ["researcher", "coder", "memory_manager", "reviewer"]
 )
 def test_restricted_profiles_exclude_new_tools(agent_id):

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
 import pytest
 
@@ -46,8 +45,8 @@ def _make_doc(
     workspace_path: str,
     doc_type: OfficeDocType = OfficeDocType.WORD,
     original_filename: str = "doc.docx",
-    generated_filename: Optional[str] = None,
-    archived_at: Optional[int] = None,
+    generated_filename: str | None = None,
+    archived_at: int | None = None,
     file_size_bytes: int = 1024,
 ) -> OfficeDocumentSummary:
     return OfficeDocumentSummary(

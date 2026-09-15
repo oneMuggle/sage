@@ -33,7 +33,7 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.domain.tool_policy import ToolPolicy
 from backend.office.errors import OfficeContentShapeError, OfficeError
@@ -191,7 +191,7 @@ class OfficeToolService:
     are passed per call so the same instance can serve multiple requests.
     """
 
-    def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
+    def __init__(self, policy: ToolPolicy | None = None) -> None:
         self._policy = policy or ToolPolicy()
 
     # ──────────────────────────────────────────────────────────────
@@ -203,8 +203,8 @@ class OfficeToolService:
         conn: sqlite3.Connection,
         session_id: str,
         binding_generation: int,
-        query: Optional[str] = None,
-        doc_type: Optional[str] = None,
+        query: str | None = None,
+        doc_type: str | None = None,
         limit: int = 50,
     ) -> List[Dict[str, Any]]:
         """Return a bounded, workspace-scoped list of live Office documents.
@@ -293,7 +293,7 @@ class OfficeToolService:
         session_id: str,
         binding_generation: int,
         doc_id: str,
-    ) -> Optional[OfficeDocumentSummary]:
+    ) -> OfficeDocumentSummary | None:
         """Re-verify the binding and look up the document.
 
         Returns ``None`` when the binding is stale, revoked, or the

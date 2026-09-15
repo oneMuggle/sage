@@ -29,7 +29,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal
 
 from pydantic import BaseModel
 
@@ -263,7 +263,7 @@ def record_recent(path: str, name: str, intent: Literal["create", "open"]) -> No
     conn.commit()
 
 
-def most_recent_parent() -> Optional[str]:
+def most_recent_parent() -> str | None:
     """Parent directory of the most recent entry, or None if empty/missing."""
     items = load_recent()
     if not items:

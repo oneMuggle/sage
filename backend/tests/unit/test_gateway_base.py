@@ -56,7 +56,7 @@ class _FakeLLM:
         return SimpleNamespace(content=self.reply)
 
 
-@pytest.fixture()
+@pytest.fixture
 def tmp_db(monkeypatch):
     from backend.data.database import Database
 

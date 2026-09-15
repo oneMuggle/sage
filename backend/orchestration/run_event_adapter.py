@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from backend.domain.orch_events import RunEvent, TaskEventType, make_event
 from backend.orchestration.events import EventProvenance, LaneEvent
@@ -22,7 +22,7 @@ def lane_event_to_run_event(
     lane: Lane,
     event: LaneEvent,
     provenance: EventProvenance,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: Dict[str, Any] | None = None,
     producer_generation: int = 0,
 ) -> RunEvent:
     """Translate one legacy lane event without changing lane state."""

@@ -10,7 +10,7 @@ import importlib.util
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from backend.skills.base import BaseSkill
 from backend.skills.registry import SkillRegistry
@@ -28,7 +28,7 @@ class SkillHotLoader:
     - 与 SkillRegistry 集成
     """
 
-    def __init__(self, registry: SkillRegistry, skill_dirs: Optional[List[str]] = None):
+    def __init__(self, registry: SkillRegistry, skill_dirs: List[str] | None = None):
         self.registry = registry
         self._skill_dirs = skill_dirs or [str(Path(__file__).parent.parent / "skills" / "builtin")]
         self._file_hashes: Dict[str, str] = {}

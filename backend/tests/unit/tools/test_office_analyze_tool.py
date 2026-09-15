@@ -21,7 +21,6 @@ from __future__ import annotations
 import builtins
 import zipfile
 from pathlib import Path
-from typing import Optional
 from unittest.mock import patch
 
 import pytest
@@ -110,7 +109,7 @@ def _make_xlsx(path: Path, rows: int = 30) -> Path:
 class _BoundWorkspace:
     """一台测试机：in-memory DB + 绑定工作区 + patch 过的 get_database。"""
 
-    def __init__(self, tmp_path: Path, workspace_root: Optional[str] = None):
+    def __init__(self, tmp_path: Path, workspace_root: str | None = None):
         self.db = Database(db_path=str(tmp_path / "t.db"))
         self.db.init_db()
         self.conn = self.db.get_connection()

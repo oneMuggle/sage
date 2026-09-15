@@ -31,7 +31,7 @@ and a configurable passive threshold.
 
 from __future__ import annotations
 
-from typing import Any, Dict, FrozenSet, Iterable, List, Optional
+from typing import Any, Dict, FrozenSet, Iterable, List
 
 # Sage 中只读（无副作用）的工具名
 DEFAULT_PASSIVE_READ_TOOLS: FrozenSet[str] = frozenset({
@@ -82,9 +82,9 @@ class NudgeGuard:
 
     def __init__(
         self,
-        passive_tools: Optional[Iterable[str]] = None,
-        action_keywords: Optional[Iterable[str]] = None,
-        nudge_message: Optional[str] = None,
+        passive_tools: Iterable[str] | None = None,
+        action_keywords: Iterable[str] | None = None,
+        nudge_message: str | None = None,
         passive_threshold: int = 1,
     ) -> None:
         """
@@ -122,7 +122,7 @@ class NudgeGuard:
         self,
         user_message: str,
         tool_calls: List[Dict[str, Any]],
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         检查一轮工具调用是否陷入被动读取循环。
 

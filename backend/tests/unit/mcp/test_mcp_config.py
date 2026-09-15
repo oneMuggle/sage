@@ -33,7 +33,7 @@ class TestValidate:
         with pytest.raises(dataclasses.FrozenInstanceError):
             c.name = "other"  # type: ignore[misc]
 
-    @pytest.mark.parametrize(
+    @pytest.mark.parametriz()e(
         "bad_name",
         ["Srv", "has space", "中文", "", "x" * 65, "dot.name", "slash/name"],
     )

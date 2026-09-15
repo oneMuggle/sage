@@ -35,7 +35,7 @@ def _req(memory="default", enabled=True, text="用户想吃火锅"):
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_submit_is_non_blocking(queue):
     """submit 立即返回，提取在后台 worker 执行（不在 submit 内）。"""
     with patch(
@@ -48,7 +48,7 @@ async def test_submit_is_non_blocking(queue):
         assert mock_extract.await_count == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_worker_passes_request_through(queue):
     """worker 把请求原样透传给 extract_and_store_memory。"""
     req = _req()
@@ -64,7 +64,7 @@ async def test_worker_passes_request_through(queue):
         assert call["session_id"] == "s1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_submits_processed_in_order(queue):
     """多请求按提交顺序消费。"""
     order = []
@@ -84,7 +84,7 @@ async def test_submits_processed_in_order(queue):
     assert order == ["第一", "第二", "第三"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_single_worker_serial(queue):
     """并发 submit 不并发执行（单 worker 串行）。"""
     active = 0
@@ -108,7 +108,7 @@ async def test_single_worker_serial(queue):
     assert max_active == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_worker_survives_single_failure(queue):
     """单条失败不杀 worker，后续项继续，failed 计数 +1。"""
 
@@ -128,7 +128,7 @@ async def test_worker_survives_single_failure(queue):
     assert queue.completed == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_drain_waits_and_times_out_gracefully(queue):
     """drain 等待完成；超时返回不抛，worker 存活继续处理。"""
 
@@ -146,7 +146,7 @@ async def test_drain_waits_and_times_out_gracefully(queue):
     assert queue.completed == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_submit_filters_disabled_and_none(queue):
     """memory_port=None / enabled=False → skipped，不入队。"""
     with patch(
@@ -161,7 +161,7 @@ async def test_submit_filters_disabled_and_none(queue):
     assert mock_extract.await_count == 0
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_worker_survives_idle_timeout(queue):
     """worker 空闲超过 wait_for(get, 0.5s) 超时后仍存活（回归 C1：UP041）。"""
     with patch(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from fastapi import HTTPException
 
@@ -32,7 +32,7 @@ def _projects_registry_paths() -> List[Path]:
         return []
 
 
-def canonical_project_path(project_path: str) -> Optional[Path]:
+def canonical_project_path(project_path: str) -> Path | None:
     """Return a canonical absolute path, or ``None`` for invalid input.
 
     The path supplied by the caller itself may not be a symlink. Resolution is

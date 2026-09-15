@@ -186,7 +186,7 @@ def test_footer_page_number_field(tmp_path: Path) -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "payload",
     [
         {"unknown_key": 1},

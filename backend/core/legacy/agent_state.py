@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 class AgentState(str, Enum):
@@ -80,18 +80,18 @@ class AgentEvent:
 
     state: AgentState
     iteration: int = 0
-    content: Optional[str] = None
-    reasoning: Optional[str] = None  # LLM 思考/推理过程内容
-    tool_call: Optional[ToolCallRequest] = None
-    tool_result: Optional[ToolCallResult] = None
-    error: Optional[str] = None
-    agent_id: Optional[str] = None  # 当前执行 agent 的 ID(供前端显示"当前处理 agent")
+    content: str | None = None
+    reasoning: str | None = None  # LLM 思考/推理过程内容
+    tool_call: ToolCallRequest | None = None
+    tool_result: ToolCallResult | None = None
+    error: str | None = None
+    agent_id: str | None = None  # 当前执行 agent 的 ID(供前端显示"当前处理 agent")
     # M1: state=PERMISSION_REQUEST 时携带审批请求快照(ApprovalRequest.to_dict),
     # 含 request_id / tool_name / args_summary / risk / message / created_at 字段
-    permission_request: Optional[Dict[str, Any]] = None
+    permission_request: Dict[str, Any] | None = None
     # M2 part B: state=ASK_USER_QUESTION 时携带提问快照(QuestionRequest.to_dict),
     # 含 request_id / question / header / options / multi_select / created_at 字段
-    user_question: Optional[Dict[str, Any]] = None
+    user_question: Dict[str, Any] | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为 JSON 友好的字典。"""

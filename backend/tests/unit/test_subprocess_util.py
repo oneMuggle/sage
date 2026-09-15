@@ -209,7 +209,7 @@ def test_read_capped_output_closes_fd_when_fstat_fails(tmp_path, monkeypatch):
     assert closed_fds == opened_fds
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("cap", "offset"),
     [(-1, 0), (0, -1)],
 )
@@ -239,7 +239,7 @@ def test_read_capped_output_rejects_extremely_large_offset():
         read_capped_output("/unused", cap=0, offset=10**100)
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("parameter", "value"),
     [("cap", True), ("cap", False), ("offset", True), ("offset", False)],
 )

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict, Field, conlist, field_validator
 
@@ -62,12 +62,12 @@ class OfficeDocumentMetadata(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    page_count: Optional[int] = Field(
+    page_count: int | None = Field(
         default=None, description="Slide count (PPT) or page count (Word)"
     )
-    sheet_count: Optional[int] = Field(default=None, description="Sheet count (Excel)")
-    paragraph_count: Optional[int] = Field(default=None, description="Paragraph count (Word)")
-    table_count: Optional[int] = Field(default=None, description="Table count (Word/PPT)")
+    sheet_count: int | None = Field(default=None, description="Sheet count (Excel)")
+    paragraph_count: int | None = Field(default=None, description="Paragraph count (Word)")
+    table_count: int | None = Field(default=None, description="Table count (Word/PPT)")
     file_size_bytes: int = Field(ge=0, description="Output file size in bytes")
 
 
@@ -79,7 +79,7 @@ class OfficeDocumentSummary(BaseModel):
     id: str = Field(description="UUIDv4 assigned by storage layer")
     workspace_path: str = Field(description="Absolute path to the user's workspace dir")
     doc_type: OfficeDocType
-    original_filename: Optional[str] = Field(
+    original_filename: str | None = Field(
         default=None, description="User's uploaded filename (None when generated from scratch)"
     )
     generated_filename: str = Field(description="On-disk filename in workspace/office/<id>/")
@@ -90,14 +90,14 @@ class OfficeDocumentSummary(BaseModel):
     # M0 Task 3: nullable lineage + soft-delete columns. Both default to
     # ``None`` so Phase 1.2 callers (which only know status + paths) keep
     # working without supplying the extra fields.
-    derived_from: Optional[str] = Field(
+    derived_from: str | None = Field(
         default=None,
         description=(
             "Source document id for edited/copied documents. NULL when this row "
             "is a fresh read or generation with no upstream parent."
         ),
     )
-    archived_at: Optional[int] = Field(
+    archived_at: int | None = Field(
         default=None,
         description=(
             "Unix timestamp (ms) when the document was soft-deleted. When set, "
@@ -117,11 +117,11 @@ class PptSlideContent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     index: int = Field(ge=0)
-    title: Optional[str] = None
+    title: str | None = None
     text_blocks: List[str] = Field(default_factory=list)
     table_count: int = Field(ge=0, default=0)
     image_count: int = Field(ge=0, default=0)
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 class OfficePptReadResult(BaseModel):
@@ -164,8 +164,8 @@ class WordCommentContent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(description="批注 id（w:comment/@w:id，十进制字符串）")
-    author: Optional[str] = Field(default=None, description="批注作者（w:author）")
-    date: Optional[str] = Field(default=None, description="ISO 8601 时间（w:date）")
+    author: str | None = Field(default=None, description="批注作者（w:author）")
+    date: str | None = Field(default=None, description="ISO 8601 时间（w:date）")
     text: str = Field(description="批注正文（w:comment 内各段文本）")
     anchor_text: str = Field(default="", description="批注锚定的正文文本")
 
@@ -225,14 +225,14 @@ class ExcelSheetContent(BaseModel):
     max_col: int = Field(ge=0)
     # Item 1.4 公式视图：仅 read_xlsx(include_formulas=True) 时填充，默认
     # None 保持既有 IPC 契约不变（additive 字段，前端可忽略）。
-    formulas: Optional[List[str]] = Field(
+    formulas: List[str] | None = Field(
         default=None,
         description=(
             "公式单元格列表，格式 'B4=SUM(B2:B3)'；有缓存值时为 "
             "'B4=SUM(B2:B3) → 30'。None 表示未启用公式视图或无公式。"
         ),
     )
-    note: Optional[str] = Field(
+    note: str | None = Field(
         default=None,
         description="公式缺缓存值时的一行提示（openpyxl 无法计算公式）。",
     )
@@ -267,7 +267,7 @@ class OfficeReadRequest(BaseModel):
     # already imported an external file into the managed directory this is
     # the user-visible name; ``None`` keeps the Phase 1.2 contract for
     # back-compat with tests and existing IPC callers that don't track it.
-    original_filename: Optional[str] = Field(
+    original_filename: str | None = Field(
         default=None,
         description=(
             "User's original filename (before managed import). When None the "
@@ -302,8 +302,8 @@ class ImageSourceSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source: str = Field(min_length=1, max_length=20_000_000)
-    width_inches: Optional[float] = Field(default=None, gt=0, le=24)
-    height_inches: Optional[float] = Field(default=None, gt=0, le=24)
+    width_inches: float | None = Field(default=None, gt=0, le=24)
+    height_inches: float | None = Field(default=None, gt=0, le=24)
 
 
 class WordImageSpec(ImageSourceSpec):
@@ -316,8 +316,8 @@ class WordImageSpec(ImageSourceSpec):
 
     model_config = ConfigDict(extra="forbid")
 
-    caption: Optional[str] = Field(default=None, max_length=200)
-    after_paragraph: Optional[int] = Field(default=None, ge=0)
+    caption: str | None = Field(default=None, max_length=200)
+    after_paragraph: int | None = Field(default=None, ge=0)
 
 
 class PptSlideSpec(BaseModel):
@@ -327,14 +327,14 @@ class PptSlideSpec(BaseModel):
 
     title: str = Field(min_length=1, max_length=200)
     bullets: _constrained_list(str, max_length=20) = Field(default_factory=list)
-    notes: Optional[str] = Field(default=None, max_length=2000)
+    notes: str | None = Field(default=None, max_length=2000)
     # 批次 2.3：版式选择。None 保持既有 Blank+文本框行为不变。
-    layout: Optional[PptLayoutName] = Field(
+    layout: PptLayoutName | None = Field(
         default=None,
         description="'title' | 'title_content' | 'blank'；模板中找不到对应版式时回退现有几何",
     )
     # 批次 2.1：可选插图（追加在文本之后）。
-    image: Optional[ImageSourceSpec] = None
+    image: ImageSourceSpec | None = None
 
 
 class OfficePptGenerateRequest(BaseModel):
@@ -343,7 +343,7 @@ class OfficePptGenerateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
-    task_id: Optional[str] = Field(default=None, max_length=100)
+    task_id: str | None = Field(default=None, max_length=100)
 
     workspace_path: str
     filename: str = Field(
@@ -363,23 +363,23 @@ class WordParagraphSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    heading: Optional[Literal["h1", "h2", "h3", "h4", "h5"]] = Field(
+    heading: Literal["h1", "h2", "h3", "h4", "h5"] | None = Field(
         default=None, description="'h1' | 'h2' | 'h3' | 'h4' | 'h5' or None"
     )
-    style: Optional[Literal["bullet", "numbered"]] = Field(
+    style: Literal["bullet", "numbered"] | None = Field(
         default=None,
         description="'bullet' 或 'numbered' 列表样式（与 heading 二选一）",
     )
     text: str = Field(min_length=1, max_length=10000)
     # 批次 2.3 样式分级（round a）：作用于该段落全部 runs 的可选样式。
-    font_size: Optional[float] = Field(default=None, gt=0, le=400, description="磅值，如 12 / 14.5")
-    bold: Optional[bool] = None
-    italic: Optional[bool] = None
-    color: Optional[str] = Field(
+    font_size: float | None = Field(default=None, gt=0, le=400, description="磅值，如 12 / 14.5")
+    bold: bool | None = None
+    italic: bool | None = None
+    color: str | None = Field(
         default=None,
         description="字体颜色，6 位 RGB 十六进制（如 'FF0000'，可带 #）",
     )
-    align: Optional[Literal["left", "center", "right", "justify"]] = None
+    align: Literal["left", "center", "right", "justify"] | None = None
     # Round 9：文中引用（references 条目的 key 列表）。渲染为段落尾部
     # 上标标记（"[1]" / 连续编号合并 "[1-3]"），编号=全文首次出现顺序。
     citations: _constrained_list(str, max_length=10) = Field(default_factory=list)
@@ -419,21 +419,21 @@ class ReferenceSpec(BaseModel):
     ref_type: ReferenceType = "journal"
     title: str = Field(min_length=1, max_length=500)
     authors: _constrained_list(str, max_length=50) = Field(default_factory=list)
-    year: Optional[str] = Field(default=None, max_length=20)
-    source: Optional[str] = Field(
+    year: str | None = Field(default=None, max_length=20)
+    source: str | None = Field(
         default=None, max_length=300, description="刊名/会议名/机构/报纸名"
     )
-    volume: Optional[str] = Field(default=None, max_length=30)
-    issue: Optional[str] = Field(default=None, max_length=30)
-    pages: Optional[str] = Field(default=None, max_length=50)
-    publisher: Optional[str] = Field(default=None, max_length=300)
-    address: Optional[str] = Field(default=None, max_length=300)
-    url: Optional[str] = Field(default=None, max_length=2000)
-    doi: Optional[str] = Field(default=None, max_length=200)
-    access_date: Optional[str] = Field(
+    volume: str | None = Field(default=None, max_length=30)
+    issue: str | None = Field(default=None, max_length=30)
+    pages: str | None = Field(default=None, max_length=50)
+    publisher: str | None = Field(default=None, max_length=300)
+    address: str | None = Field(default=None, max_length=300)
+    url: str | None = Field(default=None, max_length=2000)
+    doi: str | None = Field(default=None, max_length=200)
+    access_date: str | None = Field(
         default=None, max_length=30, description="电子资源引用日期，如 2026-09-11"
     )
-    language: Optional[Literal["zh", "en"]] = Field(
+    language: Literal["zh", "en"] | None = Field(
         default=None, description="缺省按 title CJK 自动判定"
     )
 
@@ -444,8 +444,8 @@ class BibliographySpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     heading_text: str = Field(default="参考文献", max_length=50)
-    font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
-    hanging_indent_cm: Optional[float] = Field(default=None, ge=0.0, le=5.0)
+    font_size_pt: float | None = Field(default=None, ge=1.0, le=72.0)
+    hanging_indent_cm: float | None = Field(default=None, ge=0.0, le=5.0)
 
 
 class WordTocSpec(BaseModel):
@@ -524,13 +524,13 @@ class WordTableSpec(BaseModel):
 
     headers: _constrained_list(str, min_length=1, max_length=50)
     rows: _constrained_list(_constrained_list(str), max_length=1000) = Field(default_factory=list)
-    caption: Optional[str] = Field(default=None, max_length=200)
-    style: Optional[Literal["grid", "three_line"]] = Field(
+    caption: str | None = Field(default=None, max_length=200)
+    style: Literal["grid", "three_line"] | None = Field(
         default=None,
         description="None/'grid' = 默认网格；'three_line' = 学术三线表",
     )
     header_repeat: bool = Field(default=False, description="表头跨页重复")
-    column_widths_cm: Optional[_constrained_list(float, max_length=50)] = Field(
+    column_widths_cm: _constrained_list(float, max_length=50) | None = Field(
         default=None,
         description="各列列宽（厘米）；None 不设置，长度须等于列数",
     )
@@ -555,10 +555,10 @@ class WordPageMarginsSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    top: Optional[float] = Field(default=None, ge=0.0, le=10.0)
-    bottom: Optional[float] = Field(default=None, ge=0.0, le=10.0)
-    left: Optional[float] = Field(default=None, ge=0.0, le=10.0)
-    right: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    top: float | None = Field(default=None, ge=0.0, le=10.0)
+    bottom: float | None = Field(default=None, ge=0.0, le=10.0)
+    left: float | None = Field(default=None, ge=0.0, le=10.0)
+    right: float | None = Field(default=None, ge=0.0, le=10.0)
 
 
 class WordPageSetupSpec(BaseModel):
@@ -566,9 +566,9 @@ class WordPageSetupSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    size: Optional[Literal["A4", "letter"]] = Field(default=None)
-    orientation: Optional[Literal["portrait", "landscape"]] = Field(default=None)
-    margins_cm: Optional[WordPageMarginsSpec] = Field(default=None)
+    size: Literal["A4", "letter"] | None = Field(default=None)
+    orientation: Literal["portrait", "landscape"] | None = Field(default=None)
+    margins_cm: WordPageMarginsSpec | None = Field(default=None)
 
 
 class WordBodyStyleSpec(BaseModel):
@@ -576,11 +576,11 @@ class WordBodyStyleSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
-    line_spacing: Optional[float] = Field(default=None, ge=1.0, le=3.0)
-    first_line_indent_cm: Optional[float] = Field(default=None, ge=0.0, le=5.0)
-    space_after_pt: Optional[float] = Field(default=None, ge=0.0, le=48.0)
-    align: Optional[Literal["left", "center", "right", "justify"]] = None
+    font_size_pt: float | None = Field(default=None, ge=1.0, le=72.0)
+    line_spacing: float | None = Field(default=None, ge=1.0, le=3.0)
+    first_line_indent_cm: float | None = Field(default=None, ge=0.0, le=5.0)
+    space_after_pt: float | None = Field(default=None, ge=0.0, le=48.0)
+    align: Literal["left", "center", "right", "justify"] | None = None
 
 
 class WordHeadingStyleSpec(BaseModel):
@@ -588,17 +588,17 @@ class WordHeadingStyleSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
-    bold: Optional[bool] = None
-    color: Optional[str] = Field(
+    font_size_pt: float | None = Field(default=None, ge=1.0, le=72.0)
+    bold: bool | None = None
+    color: str | None = Field(
         default=None,
         description="字体颜色，6 位 RGB 十六进制（如 '2F5496'，可带 #）",
         pattern=r"^#?[0-9A-Fa-f]{6}$",
         max_length=7,
     )
-    align: Optional[Literal["left", "center", "right", "justify"]] = None
-    space_before_pt: Optional[float] = Field(default=None, ge=0.0, le=96.0)
-    space_after_pt: Optional[float] = Field(default=None, ge=0.0, le=96.0)
+    align: Literal["left", "center", "right", "justify"] | None = None
+    space_before_pt: float | None = Field(default=None, ge=0.0, le=96.0)
+    space_after_pt: float | None = Field(default=None, ge=0.0, le=96.0)
 
 
 class WordHeaderFooterSpec(BaseModel):
@@ -606,8 +606,8 @@ class WordHeaderFooterSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    text: Optional[str] = Field(default=None, max_length=200)
-    align: Optional[Literal["left", "center", "right", "justify"]] = None
+    text: str | None = Field(default=None, max_length=200)
+    align: Literal["left", "center", "right", "justify"] | None = None
     page_number: bool = False
 
 
@@ -621,30 +621,28 @@ class WordFormatSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    page: Optional[WordPageSetupSpec] = None
-    body: Optional[WordBodyStyleSpec] = None
+    page: WordPageSetupSpec | None = None
+    body: WordBodyStyleSpec | None = None
     # Round 20：headings 键扩展到 h4/h5（Heading 4/5 样式覆盖）。
-    headings: Optional[
-        Dict[Literal["h1", "h2", "h3", "h4", "h5"], WordHeadingStyleSpec]
-    ] = None
-    title: Optional[WordHeadingStyleSpec] = None
-    header: Optional[WordHeaderFooterSpec] = None
-    footer: Optional[WordHeaderFooterSpec] = None
+    headings: Dict[Literal["h1", "h2", "h3", "h4", "h5"], WordHeadingStyleSpec] | None = None
+    title: WordHeadingStyleSpec | None = None
+    header: WordHeaderFooterSpec | None = None
+    footer: WordHeaderFooterSpec | None = None
     # Round 8：多级标题自动编号（h1-h5 计数器，字面 "N.M.K" 文本前缀）。
     # Round 20：编号级别扩展到 5 级。
     numbering: bool = Field(default=False, description="为 h1-h5 生成 1 / 1.1 / 1.1.1 … 编号前缀")
     # Round 9：文末参考文献节样式。None 时仍生成参考文献节（默认样式），
     # 仅当请求不带 references 时该子项才完全不生效。
-    bibliography: Optional[BibliographySpec] = None
+    bibliography: BibliographySpec | None = None
     # Round 13：目录域。None = 不插入目录。
-    toc: Optional[WordTocSpec] = None
+    toc: WordTocSpec | None = None
     # Round 33：首页不同页眉页脚（封面页场景）。启用后首页用
     # first_page_header/first_page_footer 的独立内容。
     first_page_different: bool = Field(
         default=False, description="启用首页不同的页眉页脚"
     )
-    first_page_header: Optional[WordHeaderFooterSpec] = None
-    first_page_footer: Optional[WordHeaderFooterSpec] = None
+    first_page_header: WordHeaderFooterSpec | None = None
+    first_page_footer: WordHeaderFooterSpec | None = None
     # Round 26：横排/分节。每个 break 在 start_paragraph（0-based）前
     # 插入 NEW_PAGE 分节并对新节应用 page_setup；按列表顺序依次生效。
     section_breaks: _constrained_list("WordSectionBreakSpec", max_length=20) = Field(
@@ -669,7 +667,7 @@ class OfficeWordGenerateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
-    task_id: Optional[str] = Field(default=None, max_length=100)
+    task_id: str | None = Field(default=None, max_length=100)
 
     workspace_path: str
     filename: str = Field(min_length=1, max_length=200)
@@ -684,7 +682,7 @@ class OfficeWordGenerateRequest(BaseModel):
         default_factory=list
     )
     # Round 7 FormatSpec：显式版式（页边距/正文/标题/页眉页脚）。
-    format_spec: Optional[WordFormatSpec] = Field(
+    format_spec: WordFormatSpec | None = Field(
         default=None,
         description="版式规范；None 保持默认版式（行为与历史版本一致）",
     )
@@ -695,11 +693,11 @@ class OfficeWordGenerateRequest(BaseModel):
         default="gbt7714",
         description="参考文献格式；gbt7714=GB/T 7714-2015 顺序编码制",
     )
-    font_family: Optional[str] = Field(
+    font_family: str | None = Field(
         default=None,
         description="中文正文字体名（如'宋体'/'微软雅黑'/'等线'），默认宋体",
     )
-    ascii_font: Optional[str] = Field(
+    ascii_font: str | None = Field(
         default=None,
         description="西文字体名，默认 Times New Roman",
     )
@@ -718,7 +716,7 @@ class ExcelSheetSpec(BaseModel):
     headers: _constrained_list(str, max_length=100) = Field(default_factory=list)
     rows: _constrained_list(_constrained_list(str), max_length=10000) = Field(default_factory=list)
     # 批次 2.3：按列序号给出列宽（index 0 = A 列），单位为 Excel 字符宽度。
-    column_widths: Optional[_constrained_list(float, max_length=200)] = Field(
+    column_widths: _constrained_list(float, max_length=200) | None = Field(
         default=None,
         description="列宽列表，如 [20, 12, 30] 对应 A/B/C 列；None 不设置",
     )
@@ -734,7 +732,7 @@ class ExcelSheetSpec(BaseModel):
         default=False,
         description="按内容自适应列宽（显式 column_widths 的列优先）",
     )
-    number_formats: Optional[Dict[str, str]] = Field(
+    number_formats: Dict[str, str] | None = Field(
         default=None,
         description="按列名映射 Excel 数字格式，如 {'金额': '#,##0.00'}；未知列名忽略",
     )
@@ -743,7 +741,7 @@ class ExcelSheetSpec(BaseModel):
         default_factory=list
     )
     # Round 23：打印设置（方向/缩放/打印区域），全部可选。
-    print_setup: Optional[ExcelPrintSetupSpec] = None
+    print_setup: ExcelPrintSetupSpec | None = None
     # Round 18：下拉数据验证（状态/分类列防手输错值），全部可选。
     data_validations: _constrained_list(ExcelDataValidationSpec, max_length=20) = Field(
         default_factory=list
@@ -769,8 +767,8 @@ class ExcelDataValidationSpec(BaseModel):
         description="下拉选项列表（每项 ≤50 字符）"
     )
     allow_blank: bool = Field(default=True, description="允许空值")
-    prompt_title: Optional[str] = Field(default=None, max_length=60)
-    prompt: Optional[str] = Field(default=None, max_length=200)
+    prompt_title: str | None = Field(default=None, max_length=60)
+    prompt: str | None = Field(default=None, max_length=200)
 
 
 class ExcelConditionalFormatSpec(BaseModel):
@@ -789,39 +787,29 @@ class ExcelConditionalFormatSpec(BaseModel):
         pattern=r"^[A-Za-z]{1,3}[0-9]+:[A-Za-z]{1,3}[0-9]+$",
         description="应用范围，A1 记法，如 'B2:B100'",
     )
-    icon_style: Optional[Literal[
-        "3Arrows",
-        "3TrafficLights1",
-        "3Signs",
-        "3Symbols",
-        "4Arrows",
-        "4RedToBlack",
-        "4Rating",
-        "5Arrows",
-        "5Rating",
-    ]] = Field(
+    icon_style: Literal["3Arrows", "3TrafficLights1", "3Signs", "3Symbols", "4Arrows", "4RedToBlack", "4Rating", "5Arrows", "5Rating"] | None = Field(
         default="3Arrows",
         description="icon_set 图标样式（Round 19）；其他规则类型忽略",
     )
-    color: Optional[str] = Field(
+    color: str | None = Field(
         default=None,
         description="data_bar 条形颜色，6 位 RGB hex（默认 638EC6）",
         pattern=r"^#?[0-9A-Fa-f]{6}$",
         max_length=7,
     )
-    min_color: Optional[str] = Field(
+    min_color: str | None = Field(
         default=None,
         description="color_scale 最小值端颜色（默认 F8696B 红）",
         pattern=r"^#?[0-9A-Fa-f]{6}$",
         max_length=7,
     )
-    max_color: Optional[str] = Field(
+    max_color: str | None = Field(
         default=None,
         description="color_scale 最大值端颜色（默认 63BE7B 绿）",
         pattern=r"^#?[0-9A-Fa-f]{6}$",
         max_length=7,
     )
-    fill_color: Optional[str] = Field(
+    fill_color: str | None = Field(
         default=None,
         description="duplicate 重复值填充色（默认 FFFF00 黄）",
         pattern=r"^#?[0-9A-Fa-f]{6}$",
@@ -834,26 +822,26 @@ class ExcelPrintSetupSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    orientation: Optional[Literal["portrait", "landscape"]] = Field(
+    orientation: Literal["portrait", "landscape"] | None = Field(
         default=None, description="纸张方向（默认纵向）"
     )
-    fit_to_width: Optional[int] = Field(
+    fit_to_width: int | None = Field(
         default=None, ge=1, le=20, description="缩放到 N 页宽（1 = 单页宽）"
     )
-    print_area: Optional[str] = Field(
+    print_area: str | None = Field(
         default=None,
         max_length=50,
         pattern=r"^[A-Za-z]{1,3}[0-9]+:[A-Za-z]{1,3}[0-9]+$",
         description="打印区域，A1 记法，如 'A1:F40'",
     )
-    title_rows: Optional[str] = Field(
+    title_rows: str | None = Field(
         default=None,
         max_length=20,
         pattern=r"^\$?[0-9]+:\$?[0-9]+$",
         description="每页重复的标题行，如 '1:1'（长表打印每页带表头）",
     )
     # Round 31：打印页边距（厘米），全可选；None 用 Excel 默认。
-    margins_cm: Optional[ExcelPrintMarginsSpec] = None
+    margins_cm: ExcelPrintMarginsSpec | None = None
 
 
 class ExcelPrintMarginsSpec(BaseModel):
@@ -861,10 +849,10 @@ class ExcelPrintMarginsSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    top: Optional[float] = Field(default=None, ge=0.0, le=10.0)
-    bottom: Optional[float] = Field(default=None, ge=0.0, le=10.0)
-    left: Optional[float] = Field(default=None, ge=0.0, le=10.0)
-    right: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    top: float | None = Field(default=None, ge=0.0, le=10.0)
+    bottom: float | None = Field(default=None, ge=0.0, le=10.0)
+    left: float | None = Field(default=None, ge=0.0, le=10.0)
+    right: float | None = Field(default=None, ge=0.0, le=10.0)
 
 
 class ExcelCellRange(BaseModel):
@@ -887,14 +875,14 @@ class ExcelChartSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    sheet: Optional[str] = Field(default=None, max_length=31)
+    sheet: str | None = Field(default=None, max_length=31)
     type: Literal["line", "bar", "pie"]
     anchor: str = Field(min_length=2, max_length=10, description="左上角锚点单元格，如 'A10'")
     data_ref: ExcelCellRange
     titles_from_data: bool = False
     from_rows: bool = False
-    categories_ref: Optional[ExcelCellRange] = None
-    title: Optional[str] = Field(default=None, max_length=200)
+    categories_ref: ExcelCellRange | None = None
+    title: str | None = Field(default=None, max_length=200)
 
 
 class OfficeExcelGenerateRequest(BaseModel):
@@ -903,7 +891,7 @@ class OfficeExcelGenerateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
-    task_id: Optional[str] = Field(default=None, max_length=100)
+    task_id: str | None = Field(default=None, max_length=100)
 
     workspace_path: str
     filename: str = Field(min_length=1, max_length=200)
@@ -918,7 +906,7 @@ class ChartSeriesSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=100)
-    x: Optional[List[Union[str, float]]] = Field(
+    x: List[Union[str, float]] | None = Field(
         default=None,
         description="横轴取值（数值或类别文本）；bar/pie 常省略",
     )
@@ -931,9 +919,9 @@ class ChartSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["line", "bar", "hbar", "pie"]
-    title: Optional[str] = Field(default=None, max_length=200)
+    title: str | None = Field(default=None, max_length=200)
     series: _constrained_list(ChartSeriesSpec, min_length=1, max_length=10)
-    labels: Optional[_constrained_list(str, max_length=10000)] = Field(
+    labels: _constrained_list(str, max_length=10000) | None = Field(
         default=None,
         description="类别标签（bar/hbar/pie 或 line 分类轴）；series 无 x 时必选",
     )
@@ -1026,11 +1014,11 @@ class TemplatePlaceholder(BaseModel):
     raw_tag: str
     type: TemplatePlaceholderType
     location: PlaceholderLocation
-    paragraph_index: Optional[int] = None
-    table_index: Optional[int] = None
-    row_index: Optional[int] = None
-    col_index: Optional[int] = None
-    format_hint: Optional[str] = None
+    paragraph_index: int | None = None
+    table_index: int | None = None
+    row_index: int | None = None
+    col_index: int | None = None
+    format_hint: str | None = None
 
 
 class WordTemplateAnalysis(BaseModel):
@@ -1062,7 +1050,7 @@ class WordTemplateFillRequest(BaseModel):
     template_path: str
     output_filename: str
     data: Dict[str, Any]
-    images: Optional[Dict[str, str]] = None
+    images: Dict[str, str] | None = None
 
 
 class WordTemplateFillResult(BaseModel):
@@ -1108,7 +1096,7 @@ class TemplateLibraryEntry(BaseModel):
     doc_type: OfficeDocType = OfficeDocType.WORD
     placeholders: List[TemplateLibraryPlaceholder] = Field(default_factory=list)
     source: Literal["builtin", "workspace"]
-    filename: Optional[str] = Field(
+    filename: str | None = Field(
         default=None,
         description=(
             "workspace 模板专用：office/templates/ 下的文件名；"
@@ -1136,13 +1124,13 @@ class OfficeTemplateInstantiateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
-    task_id: Optional[str] = Field(default=None, max_length=100)
+    task_id: str | None = Field(default=None, max_length=100)
 
     workspace_path: str
-    template_id: Optional[str] = Field(
+    template_id: str | None = Field(
         default=None, description="builtin 模板 id，如 'weekly_report'（word）、'budget_sheet'（excel）、'kickoff_deck'（ppt）"
     )
-    workspace_template: Optional[str] = Field(
+    workspace_template: str | None = Field(
         default=None,
         description=(
             "workspace 模板文件名（office/templates/ 内，支持 .docx/.xlsx/.pptx；"
@@ -1155,7 +1143,7 @@ class OfficeTemplateInstantiateRequest(BaseModel):
         description="输出文件名（缺扩展名时自动补全，须与模板 doc_type 一致：.docx/.xlsx/.pptx）",
     )
     data: Dict[str, Any] = Field(default_factory=dict)
-    images: Optional[Dict[str, str]] = Field(
+    images: Dict[str, str] | None = Field(
         default=None,
         description="占位符名 → 图片路径或 data:image URI（与 /word/fill-template 一致，≤10MB）",
     )
@@ -1201,7 +1189,7 @@ class PdfPageSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    title: Optional[str] = None
+    title: str | None = None
     paragraphs: List[str] = Field(default_factory=list)
     tables: List[List[List[str]]] = Field(default_factory=list)
 
@@ -1212,7 +1200,7 @@ class PdfGenerateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # P7 (2026-09-14): 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询）
-    task_id: Optional[str] = Field(default=None, max_length=100)
+    task_id: str | None = Field(default=None, max_length=100)
 
     workspace_path: str
     filename: str
@@ -1239,8 +1227,8 @@ class PdfFormField(BaseModel):
 
     name: str
     type: str
-    value: Optional[Any] = None
-    options: Optional[List[str]] = None
+    value: Any | None = None
+    options: List[str] | None = None
     required: bool = False
     read_only: bool = False
 

@@ -20,7 +20,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Tuple
+from typing import Any, AsyncIterator, Callable, Dict, List, Tuple
 
 from . import frontmatter, llm_prompts
 from .embeddings import EmbeddingConfig, build_embed_request, chunk_markdown, parse_embed_response
@@ -89,10 +89,10 @@ async def ingest_source(
     source_file_path: Path,
     llm_call: Callable[[List[dict], float], Any],
     http_post: Callable[[str, Dict[str, str], dict], Any],
-    progress_callback: Optional[Callable[[IngestProgress], None]] = None,
-    logical_filename: Optional[str] = None,
-    source_content: Optional[bytes] = None,
-    processed_content: Optional[str] = None,
+    progress_callback: Callable[[IngestProgress], None] | None = None,
+    logical_filename: str | None = None,
+    source_content: bytes | None = None,
+    processed_content: str | None = None,
 ) -> IngestResult:
     """Ingest 源文档。
 
@@ -108,7 +108,7 @@ async def ingest_source(
         IngestResult: Ingest 结果
     """
 
-    def _report(stage: str, percent: int, message: Optional[str] = None) -> None:
+    def _report(stage: str, percent: int, message: str | None = None) -> None:
         if progress_callback:
             progress_callback(IngestProgress(stage=stage, percent=percent, message=message))
 
@@ -194,8 +194,8 @@ async def ingest_source(
 async def copy_to_raw(
     project_root: Path,
     source_file: Path,
-    logical_filename: Optional[str] = None,
-    source_content: Optional[bytes] = None,
+    logical_filename: str | None = None,
+    source_content: bytes | None = None,
 ) -> Path:
     """复制源文件到 ``raw/sources/``，并拒绝 symlink/junction 越界。
 
@@ -341,7 +341,7 @@ def _copy_to_raw_windows(
 
 
 def _bounded_source_content(
-    project_root: Path, target: Path, source_content: Optional[bytes]
+    project_root: Path, target: Path, source_content: bytes | None
 ) -> bytes:
     """Obtain a stable source snapshot without exceeding the ingest cap."""
     if source_content is not None:
@@ -352,7 +352,7 @@ def _bounded_source_content(
 
 
 def _read_source_content(
-    project_root: Path, target: Path, source_content: Optional[bytes] = None
+    project_root: Path, target: Path, source_content: bytes | None = None
 ) -> str:
     """Read immutable source bytes, using a held fd only for binary parsers."""
     payload = _bounded_source_content(project_root, target, source_content)
@@ -377,7 +377,7 @@ def _read_source_content(
 
 
 def _source_bytes_for_cache(
-    project_root: Path, target: Path, source_content: Optional[bytes]
+    project_root: Path, target: Path, source_content: bytes | None
 ) -> bytes:
     """Return the complete bounded raw bytes used as cache identity."""
     if source_content is not None:
@@ -395,9 +395,9 @@ def _compute_source_sha256(content: bytes) -> str:
 def cache_get(
     project_root: Path,
     target: Path,
-    source_name: Optional[str] = None,
-    source_content: Optional[bytes] = None,
-) -> Optional[IngestResult]:
+    source_name: str | None = None,
+    source_content: bytes | None = None,
+) -> IngestResult | None:
     """SHA256 缓存命中检查。
 
     命中时返回缓存的 ``IngestResult``(保留上次的 ``wiki_page_path`` + ``page_type``),
@@ -422,9 +422,9 @@ def cache_get(
 async def analyze_source(
     target: Path,
     llm_call: Callable[[List[dict], float], Any],
-    project_root: Optional[Path] = None,
-    source_content: Optional[bytes] = None,
-    processed_content: Optional[str] = None,
+    project_root: Path | None = None,
+    source_content: bytes | None = None,
+    processed_content: str | None = None,
 ) -> Analysis:
     """Step 1: LLM 分析源内容,返回结构化 ``Analysis``。
 
@@ -453,9 +453,9 @@ async def generate_pages(
     target: Path,
     analysis: Analysis,
     llm_call: Callable[[List[dict], float], Any],
-    source_name: Optional[str] = None,
-    source_content: Optional[bytes] = None,
-    processed_content: Optional[str] = None,
+    source_name: str | None = None,
+    source_content: bytes | None = None,
+    processed_content: str | None = None,
 ) -> Tuple[Path, str, str]:
     """Step 2 + 5: LLM 写作 → 解析 frontmatter → 原子落盘到 ``wiki/sources/``。
 
@@ -549,8 +549,8 @@ def cache_put(
     target: Path,
     wiki_page_path: str,
     page_type: str,
-    source_name: Optional[str] = None,
-    source_content: Optional[bytes] = None,
+    source_name: str | None = None,
+    source_content: bytes | None = None,
 ) -> None:
     """Step 7: 写入缓存条目(原子保存 ingest-cache.json)。
 
@@ -580,7 +580,7 @@ async def ingest_source_stream(
     project_root: Path,
     source_file: Path,
     ctx: LLMContext,
-    logical_filename: Optional[str] = None,
+    logical_filename: str | None = None,
 ) -> AsyncIterator[bytes]:
     """Streaming variant of :func:`ingest_source`.
 
@@ -598,7 +598,7 @@ async def ingest_source_stream(
     关闭流。
     """
 
-    def emit(stage: str, percent: int, message: Optional[object] = None) -> bytes:
+    def emit(stage: str, percent: int, message: object | None = None) -> bytes:
         return (
             json.dumps(
                 {

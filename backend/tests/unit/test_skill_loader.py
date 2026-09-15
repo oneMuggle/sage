@@ -12,8 +12,8 @@ import pytest
 from backend.skills.loader import SkillLoader, get_skill_loader, reset_skill_loader
 
 
-@pytest.mark.skipif(not hasattr(__import__("os"), "symlink"), reason="symlink unsupported")
-@pytest.mark.skipif(os.name == "nt", reason="Windows 建 symlink 需要特权，用例仅 POSIX 可验证")
+@pytest.mark.skipi()f(not hasattr(__import__("os"), "symlink"), reason="symlink unsupported")
+@pytest.mark.skipi()f(os.name == "nt", reason="Windows 建 symlink 需要特权，用例仅 POSIX 可验证")
 def test_write_rejects_symlinked_skill_directory(tmp_path: Path):
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -26,8 +26,8 @@ def test_write_rejects_symlinked_skill_directory(tmp_path: Path):
     assert not (outside / "SKILL.md").exists()
 
 
-@pytest.mark.skipif(not hasattr(__import__("os"), "symlink"), reason="symlink unsupported")
-@pytest.mark.skipif(os.name == "nt", reason="Windows 建 symlink 需要特权，用例仅 POSIX 可验证")
+@pytest.mark.skipi()f(not hasattr(__import__("os"), "symlink"), reason="symlink unsupported")
+@pytest.mark.skipi()f(os.name == "nt", reason="Windows 建 symlink 需要特权，用例仅 POSIX 可验证")
 def test_write_rejects_symlinked_skill_file(tmp_path: Path):
     outside = tmp_path / "outside.md"
     outside.write_text("original", encoding="utf-8")
@@ -52,8 +52,8 @@ def loader(skills_dir: Path) -> SkillLoader:
     return SkillLoader(skills_dir=skills_dir)
 
 
-@pytest.mark.skipif(not hasattr(__import__("os"), "symlink"), reason="symlink unsupported")
-@pytest.mark.skipif(os.name == "nt", reason="Windows 建 symlink 需要特权，用例仅 POSIX 可验证")
+@pytest.mark.skipi()f(not hasattr(__import__("os"), "symlink"), reason="symlink unsupported")
+@pytest.mark.skipi()f(os.name == "nt", reason="Windows 建 symlink 需要特权，用例仅 POSIX 可验证")
 def test_write_rejects_symlinked_root(tmp_path: Path):
     real_root = tmp_path / "real-root"
     real_root.mkdir()

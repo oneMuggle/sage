@@ -7,7 +7,7 @@ READ 级零副作用，无需审批。
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 
@@ -15,7 +15,7 @@ from backend.tools.base import BaseTool, ToolResult, ToolSchema
 class SessionSearchTool(BaseTool):
     """跨会话检索历史对话原文（FTS5 全文索引 + LIKE 回退）"""
 
-    def __init__(self, index: Any = None, policy: Optional[Any] = None) -> None:
+    def __init__(self, index: Any = None, policy: Any | None = None) -> None:
         super().__init__(policy=policy)
         self.index = index  # MessageSearchIndex；None 时 execute 惰性取全局单例
 
@@ -66,7 +66,7 @@ class SessionSearchTool(BaseTool):
     def execute(
         self,
         query: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         limit: Any = 10,
         **kwargs: Any,
     ) -> ToolResult:

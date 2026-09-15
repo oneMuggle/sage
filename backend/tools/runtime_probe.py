@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List
 
 from backend.domain.risk import RiskClass
 from backend.domain.runtime import (
@@ -69,11 +69,11 @@ class RuntimeProbeTool(BaseTool):
     def execute(  # type: ignore[override]
         self,
         *,
-        languages: Optional[List[str]] = None,
+        languages: List[str] | None = None,
         include_tools: bool = True,
-        target_version: Optional[str] = None,
-        include_paths: Optional[List[str]] = None,
-        workspace_root: Optional[str] = None,
+        target_version: str | None = None,
+        include_paths: List[str] | None = None,
+        workspace_root: str | None = None,
         **_kwargs: Any,
     ) -> ToolResult:
         request = ProbeRequest(

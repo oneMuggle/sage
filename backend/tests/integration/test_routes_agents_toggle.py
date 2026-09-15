@@ -25,7 +25,7 @@ pytestmark = pytest.mark.integration
 PREFIX = "/api/v1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_toggle_agent_disable_persists(client):
     """PATCH /toggle 关闭一个默认启用的 agent → enabled=false, 后续 GET 反映新值."""
     resp = await client.patch(f"{PREFIX}/agents/coder/toggle", json={"enabled": False})
@@ -38,7 +38,7 @@ async def test_toggle_agent_disable_persists(client):
     assert follow.json()["enabled"] is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_toggle_agent_enable_after_disable(client):
     """先关再开 → 状态恢复, GET 反映 true."""
     off = await client.patch(f"{PREFIX}/agents/coder/toggle", json={"enabled": False})
@@ -52,7 +52,7 @@ async def test_toggle_agent_enable_after_disable(client):
     assert (await client.get(f"{PREFIX}/agents/coder")).json()["enabled"] is True
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_toggle_agent_not_found_returns_404(client):
     """不存在的 agent_id → 404 + 结构化 detail (与 update_agent 风格一致)."""
     resp = await client.patch(
@@ -64,14 +64,14 @@ async def test_toggle_agent_not_found_returns_404(client):
     assert detail["type"] == "agent_not_found"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_toggle_agent_missing_enabled_field_returns_422(client):
     """缺 enabled 字段 → 422 (Pydantic 必填)."""
     resp = await client.patch(f"{PREFIX}/agents/coder/toggle", json={})
     assert resp.status_code == 422
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_toggle_agent_wrong_type_returns_422(client):
     """enabled 必须是 bool, 字符串/数字应 422 (StrictBool 拒绝 lax 强转)."""
     # "yes" — Pydantic lax 模式会强转 True, StrictBool 应拒绝
@@ -87,7 +87,7 @@ async def test_toggle_agent_wrong_type_returns_422(client):
     assert resp_null.status_code == 422
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_toggle_agent_idempotent_same_value(client):
     """连发两次同值 toggle → 第二次也 200 (幂等), enabled 不变."""
     first = await client.patch(f"{PREFIX}/agents/coder/toggle", json={"enabled": False})
@@ -99,7 +99,7 @@ async def test_toggle_agent_idempotent_same_value(client):
     assert second.json()["enabled"] is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_toggle_agent_bumps_updated_at(client):
     """toggle 状态变化 → updated_at 必变."""
     import asyncio
@@ -113,7 +113,7 @@ async def test_toggle_agent_bumps_updated_at(client):
     assert after["updated_at"] > before["updated_at"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_toggle_agent_does_not_affect_other_agents(client):
     """toggle 一个 agent 不应影响其它 agent."""
     before_primary = (await client.get(f"{PREFIX}/agents/primary")).json()
@@ -128,7 +128,7 @@ async def test_toggle_agent_does_not_affect_other_agents(client):
     assert after_researcher == before_researcher
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_toggle_agent_returns_full_profile(client):
     """toggle 返回的 body 应包含 list_agents 输出的所有字段, 便于前端 setState 一次过."""
     resp = await client.patch(f"{PREFIX}/agents/coder/toggle", json={"enabled": False})
@@ -151,7 +151,7 @@ async def test_toggle_agent_returns_full_profile(client):
     assert required_fields.issubset(body.keys())
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_toggle_agent_preserves_other_fields(client):
     """toggle 只动 enabled + updated_at — 其它字段全部保留原值."""
     before = (await client.get(f"{PREFIX}/agents/coder")).json()

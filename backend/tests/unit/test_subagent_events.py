@@ -118,7 +118,7 @@ def _observing(tool_id: str = "tc-1", content: str = "file content",
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_sink_projects_tool_call_and_result():
     """acting/observing → 镜像 subagent_event ×2 + canonical step started/completed。"""
     publisher = _RecordingPublisher()
@@ -150,7 +150,7 @@ async def test_sink_projects_tool_call_and_result():
     assert isinstance(completed.payload["duration_ms"], int)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_sink_budget_exhausted_but_approval_passes():
     """预算耗尽后普通镜像被丢弃；审批请求/提问转发不受预算限制。"""
     publisher = _RecordingPublisher()
@@ -183,7 +183,7 @@ async def test_sink_budget_exhausted_but_approval_passes():
     assert "task.waiting_approval" in publisher.types
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_sink_approval_resolved_roundtrip():
     """emit_approval_resolved → 镜像 + task.approval_resolved + task.started 恢复。"""
     publisher = _RecordingPublisher()
@@ -197,7 +197,7 @@ async def test_sink_approval_resolved_roundtrip():
     assert publisher.types == ["task.approval_resolved", "task.started"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_sink_without_publisher_only_mirrors_chat():
     """canonical 通道未装配（publisher=None）→ 只发聊天镜像，不抛错。"""
     sink, mirror, _ = _make_sink(publisher=None)
@@ -208,7 +208,7 @@ async def test_sink_without_publisher_only_mirrors_chat():
     ]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_sink_swallows_publisher_errors():
     """publisher 抛错 → sink 不向外传播（观测绝不杀死执行）。"""
     class _Boom:
@@ -338,7 +338,7 @@ def _drain(queue: asyncio.Queue) -> List[Dict[str, Any]]:
     return out
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_dispatch_forwards_subagent_events_and_parent_tool_call_id():
     """dispatch → 聊天流出现 subagent_event 镜像；task_status 带关联键。"""
     queue = asyncio.Queue()
@@ -371,7 +371,7 @@ async def test_dispatch_forwards_subagent_events_and_parent_tool_call_id():
     assert step.entity["task_id"] == "t1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_dispatch_without_publisher_still_mirrors_chat():
     """未装配 event_hub → 子代理镜像照发（双通道缺一不阻塞另一）。"""
     queue = asyncio.Queue()

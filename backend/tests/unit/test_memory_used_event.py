@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pytest
 
@@ -19,13 +19,13 @@ pytestmark = pytest.mark.unit
 
 
 class _FakeMemoryManager:
-    def __init__(self, hits: Optional[Dict[str, List[Dict[str, Any]]]] = None,
-                 error: Optional[Exception] = None) -> None:
+    def __init__(self, hits: Dict[str, List[Dict[str, Any]]] | None = None,
+                 error: Exception | None = None) -> None:
         self._hits = hits or {}
         self._error = error
 
     def recall(self, query: str, limit: int = 5,
-               session_id: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
+               session_id: str | None = None) -> Dict[str, List[Dict[str, Any]]]:
         if self._error is not None:
             raise self._error
         return self._hits

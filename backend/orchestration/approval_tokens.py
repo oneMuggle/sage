@@ -25,7 +25,7 @@ import threading
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 class DenyReason(str, Enum):
@@ -52,7 +52,7 @@ class ApprovalToken:
     action: str
     scope_repo: str
     scope_branch: str
-    scope_commit: Optional[str]
+    scope_commit: str | None
     issued_at: int
     expires_at: int
     max_uses: int = 1
@@ -82,7 +82,7 @@ class TokenUseResult:
 
     granted: bool
     token_id: str
-    reason: Optional[DenyReason] = None
+    reason: DenyReason | None = None
     message: str = ""
 
 
@@ -109,7 +109,7 @@ class ApprovalTokenStore:
         action: str,
         scope_repo: str,
         scope_branch: str,
-        scope_commit: Optional[str] = None,
+        scope_commit: str | None = None,
         ttl_ms: int = 60_000,
         max_uses: int = 1,
     ) -> ApprovalToken:
@@ -161,7 +161,7 @@ class ApprovalTokenStore:
         action: str,
         repo: str,
         branch: str,
-        commit: Optional[str] = None,
+        commit: str | None = None,
     ) -> TokenUseResult:
         """Attempt to consume an approval token.
 

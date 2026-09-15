@@ -55,7 +55,7 @@ async def _collect(agent: SageAgent) -> Tuple[List[AgentEvent], List[dict]]:
     return events, messages
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_pre_hook_deny_blocks_tool_and_loop_continues(tmp_path):
     """deny 钩子 → 工具不执行、错误结果进消息、循环继续到 DONE。"""
     cmd = _write_hook(
@@ -90,7 +90,7 @@ async def test_pre_hook_deny_blocks_tool_and_loop_continues(tmp_path):
     assert "hook 拒绝" in tool_msgs[0]["content"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_pre_hook_modify_replaces_args_after_schema_revalidation(tmp_path):
     """modify 钩子 → 参数被替换 (1+1 → 2+2), 工具执行替换后的参数。"""
     cmd = _write_hook(
@@ -111,7 +111,7 @@ async def test_pre_hook_modify_replaces_args_after_schema_revalidation(tmp_path)
     assert content["result"] == 4
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_pre_hook_modify_failing_revalidation_keeps_original_args(tmp_path):
     """modify 出的参数缺 required → 忽略修改, 仍用原参数执行。"""
     cmd = _write_hook(
@@ -132,7 +132,7 @@ async def test_pre_hook_modify_failing_revalidation_keeps_original_args(tmp_path
     assert content["result"] == 9
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_failing_hook_is_fail_open(tmp_path):
     """非零退出的钩子 → no-op, 工具照常执行。"""
     _install_hooks([{"event": "pre_tool_use", "matcher": "*", "command": "exit 2"}])
@@ -147,7 +147,7 @@ async def test_failing_hook_is_fail_open(tmp_path):
     assert any(e.state == AgentState.DONE for e in events)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_post_hook_observes_result(tmp_path):
     """post_tool_use 钩子收到工具输出 (写到文件验证 payload)。"""
     marker = tmp_path / "post_seen.txt"

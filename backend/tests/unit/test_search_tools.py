@@ -105,7 +105,7 @@ def test_glob_caps_results_and_flags_truncated(tmp_path):
     assert result.content["total_matches"] == GLOB_MAX_RESULTS + 5
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     "ignored_dir",
     ["node_modules", ".git", "__pycache__", "dist"],
 )

@@ -33,7 +33,7 @@ import logging
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from backend.domain.risk import RiskClass
 
@@ -84,8 +84,8 @@ class BashTool(BaseTool):
 
     def __init__(
         self,
-        policy: Optional[ToolPolicy] = None,
-        config: Optional[BashConfig] = None,
+        policy: ToolPolicy | None = None,
+        config: BashConfig | None = None,
     ) -> None:
         # config=None → 读 preferences KV（无配置时 = 模块常量，行为同硬编码时代）。
         # 先于 super()：schema 惰性构建时已需读 cfg 的超时值。
@@ -135,8 +135,8 @@ class BashTool(BaseTool):
     def execute(
         self,
         command: str = "",
-        cwd: Optional[str] = None,
-        timeout: Optional[float] = None,
+        cwd: str | None = None,
+        timeout: float | None = None,
         run_in_background: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
@@ -176,7 +176,7 @@ class BashTool(BaseTool):
             return self._run_background(command, resolved_cwd, shell)
         return self._run_foreground(command, resolved_cwd, shell, self._clamp_timeout(timeout))
 
-    def _resolve_cwd(self, cwd: Optional[str]) -> Tuple[Optional[str], Optional[ToolResult]]:
+    def _resolve_cwd(self, cwd: str | None) -> Tuple[str | None, ToolResult | None]:
         """确定工作目录；越界返回拒绝结果。
 
         显式传入的 cwd 走 workspace 守卫；未传时用 ``policy.workspace_root``
@@ -190,7 +190,7 @@ class BashTool(BaseTool):
             return None, guard
         return cwd, None
 
-    def _decorate(self, content: Dict[str, Any], shell: ShellSpec, cwd: Optional[str]) -> Dict[str, Any]:
+    def _decorate(self, content: Dict[str, Any], shell: ShellSpec, cwd: str | None) -> Dict[str, Any]:
         """给结果补上执行环境元数据。"""
         import os
 
@@ -204,8 +204,8 @@ class BashTool(BaseTool):
 
     @staticmethod
     def _docker_maybe_wrap(
-        command: str, cwd: Optional[str], shell: ShellSpec
-    ) -> Tuple[Optional[List[str]], Optional[str]]:
+        command: str, cwd: str | None, shell: ShellSpec
+    ) -> Tuple[List[str] | None, str | None]:
         """docker 沙箱执行后端（Round 13, 对标 hermes terminal backends）。
 
         ``SAGE_BASH_EXEC_BACKEND=docker`` 时把命令包装进一次性容器：
@@ -229,7 +229,7 @@ class BashTool(BaseTool):
         return argv, None
 
     def _spawn(
-        self, command: str, cwd: Optional[str], shell: ShellSpec
+        self, command: str, cwd: str | None, shell: ShellSpec
     ) -> Tuple[VerifiedProcess, str, str]:
         """启动子进程，输出重定向到临时文件。
 
@@ -270,7 +270,7 @@ class BashTool(BaseTool):
         return verified, stdout_path, stderr_path
 
     def _run_foreground(
-        self, command: str, cwd: Optional[str], shell: ShellSpec, timeout: float
+        self, command: str, cwd: str | None, shell: ShellSpec, timeout: float
     ) -> ToolResult:
         started = time.monotonic()
         try:
@@ -326,7 +326,7 @@ class BashTool(BaseTool):
             unlink_quietly(stderr_path)
 
     def _run_background(
-        self, command: str, cwd: Optional[str], shell: ShellSpec
+        self, command: str, cwd: str | None, shell: ShellSpec
     ) -> ToolResult:
         """启动后台 shell 并登记，立即返回 shell_id。
 
@@ -399,8 +399,8 @@ class BashOutputTool(BaseTool):
 
     def __init__(
         self,
-        policy: Optional[ToolPolicy] = None,
-        config: Optional[BashConfig] = None,
+        policy: ToolPolicy | None = None,
+        config: BashConfig | None = None,
     ) -> None:
         self._cfg = config if config is not None else load_bash_config()
         super().__init__(policy=policy)
@@ -457,8 +457,8 @@ class KillShellTool(BaseTool):
 
     def __init__(
         self,
-        policy: Optional[ToolPolicy] = None,
-        config: Optional[BashConfig] = None,
+        policy: ToolPolicy | None = None,
+        config: BashConfig | None = None,
     ) -> None:
         self._cfg = config if config is not None else load_bash_config()
         super().__init__(policy=policy)

@@ -4,7 +4,7 @@
 """
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -23,7 +23,7 @@ class FileNode:
     name: str
     path: str
     is_dir: bool
-    children: Optional[List["FileNode"]] = None
+    children: List["FileNode"] | None = None
 
 
 @dataclass
@@ -84,7 +84,7 @@ class GraphNode:
 
     id: str  # 相对路径: "wiki/sources/albert-einstein.md"
     label: str  # frontmatter title 或文件名
-    page_type: Optional[str] = None  # "source"/"entity"/"concept"/...
+    page_type: str | None = None  # "source"/"entity"/"concept"/...
     sources: List[str] = field(default_factory=list)  # frontmatter sources:[]
     wikilinks: List[str] = field(default_factory=list)  # [[X]] 链接
 
@@ -158,7 +158,7 @@ class IngestProgress:
 
     stage: str  # "copy_source"|"step1_analyze"|"step2_write"|"embedding"|"finalize"
     percent: int  # 0-100
-    message: Optional[str] = None
+    message: str | None = None
 
 
 @dataclass

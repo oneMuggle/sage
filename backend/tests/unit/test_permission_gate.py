@@ -46,7 +46,7 @@ def _make_request(tool_name="terminal"):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_gate_answer_resolves_pending_request_future():
     """并发任务调用 answer() → request() 的 await 被解析为 gui 应答。"""
     # Arrange
@@ -68,7 +68,7 @@ async def test_gate_answer_resolves_pending_request_future():
     assert answer.answered_by == "gui"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_gate_answer_false_propagates_denial():
     """answer(approved=False) → request() 收到拒绝应答。"""
     # Arrange
@@ -98,7 +98,7 @@ def test_gate_answer_unknown_id_returns_false():
     assert gate.answer("no-such-id", approved=True) is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_gate_answer_after_expiry_returns_false():
     """超时清理后, 迟到的 answer() → False。"""
     # Arrange
@@ -115,7 +115,7 @@ async def test_gate_answer_after_expiry_returns_false():
     assert late is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_gate_timeout_returns_default_deny_without_answer():
     """无应答超时 → ApprovalAnswer(False, False, "timeout")（fail-closed）。"""
     # Arrange
@@ -132,7 +132,7 @@ async def test_gate_timeout_returns_default_deny_without_answer():
     assert answer.answered_by == "timeout"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_gate_double_answer_second_call_returns_false():
     """同一请求被应答两次 → 第二次 False。"""
     # Arrange
@@ -157,7 +157,7 @@ async def test_gate_double_answer_second_call_returns_false():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_gate_pending_lists_only_unanswered_requests():
     """pending() 只返回未应答请求; 应答后即消失。"""
     # Arrange

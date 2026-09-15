@@ -32,7 +32,7 @@ import threading
 import time
 from collections import OrderedDict, deque
 from dataclasses import asdict, dataclass
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, List
 
 #: 每个 session 保留的最近写入条数
 PER_SESSION_LIMIT = 50
@@ -84,10 +84,10 @@ class MemoryWriteLedger:
         memory_id: str,
         kind: str,
         content: str,
-        session_id: Optional[str],
+        session_id: str | None,
         category: str = "fact",
         memory_type: str = "",
-    ) -> Optional[WriteRecord]:
+    ) -> WriteRecord | None:
         """登记一次写入；无效参数（空 id / 空 session / 未知 kind）静默忽略。"""
         if not memory_id or not session_id or kind not in VALID_KINDS:
             return None
@@ -132,7 +132,7 @@ class MemoryWriteLedger:
             bucket = self._buckets.get(session_id)
             return bucket[-1].seq if bucket else 0
 
-    def find(self, session_id: str, memory_id: str) -> Optional[WriteRecord]:
+    def find(self, session_id: str, memory_id: str) -> WriteRecord | None:
         with self._lock:
             bucket = self._buckets.get(session_id)
             if not bucket:
@@ -157,7 +157,7 @@ class MemoryWriteLedger:
                 bucket.extend(kept)
             return removed
 
-    def clear(self, session_id: Optional[str] = None) -> None:
+    def clear(self, session_id: str | None = None) -> None:
         with self._lock:
             if session_id is None:
                 self._buckets.clear()
@@ -166,7 +166,7 @@ class MemoryWriteLedger:
 
 
 # 全局单例（与 get_memory_manager / get_user_profile 同模式）
-_ledger: Optional[MemoryWriteLedger] = None
+_ledger: MemoryWriteLedger | None = None
 _ledger_lock = threading.Lock()
 
 

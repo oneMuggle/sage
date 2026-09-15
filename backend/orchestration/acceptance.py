@@ -24,7 +24,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field as dc_field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Tuple
 
 from backend.orchestration.events import EventProvenance, LaneEvent
 
@@ -152,7 +152,7 @@ def _decode_bytes(data: bytes | None) -> str:
         return data.decode(errors="replace")
 
 
-def _resolve_argv(argv: List[str]) -> Optional[List[str]]:
+def _resolve_argv(argv: List[str]) -> List[str] | None:
     """解析可执行文件；缺失返回 None（记 skip）；Windows 脚本经 cmd /c。"""
     target = shutil.which(argv[0])
     if target is None:
@@ -255,7 +255,7 @@ def _run_diff_stat(cwd: Path) -> CheckResult:
 
 
 def run_acceptance_checks(
-    workdir: Optional[str],
+    workdir: str | None,
     configured: Any = None,
     *,
     check_timeout_s: int = CHECK_TIMEOUT_S,
@@ -273,7 +273,7 @@ def run_acceptance_checks(
 
 
 def _run_acceptance_checks_inner(
-    workdir: Optional[str], configured: Any, check_timeout_s: int
+    workdir: str | None, configured: Any, check_timeout_s: int
 ) -> AcceptanceReport:
     report = AcceptanceReport()
     if not workdir:
@@ -307,7 +307,7 @@ def _run_acceptance_checks_inner(
 
 def record_acceptance_event(
     event_recorder: EventRecorder, lane: Lane, report: AcceptanceReport
-) -> Optional[str]:
+) -> str | None:
     """落 lane.acceptance.completed 事件；失败返 None，永不抛错。"""
     try:
         return event_recorder.record(

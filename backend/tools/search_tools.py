@@ -26,7 +26,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Tuple
 
 from .base import BaseTool, ToolResult, ToolSchema
 from .file_tool import MAX_READ_SIZE_BYTES, _contains_binary_marker, detect_bom_encoding
@@ -56,7 +56,7 @@ def _walk_files(root: str) -> Iterator[str]:
             yield os.path.join(dirpath, name)
 
 
-def _resolve_search_root(tool: BaseTool, path: Optional[str]) -> Tuple[Optional[str], Optional[ToolResult]]:
+def _resolve_search_root(tool: BaseTool, path: str | None) -> Tuple[str | None, ToolResult | None]:
     """解析搜索根目录: 显式 ``path`` 优先，否则绑定 workspace / cwd。
 
     返回 ``(root, None)`` 表示放行；``(None, ToolResult)`` 表示路径非法，
@@ -116,7 +116,7 @@ class GlobSearchTool(BaseTool):
             },
         )
 
-    def execute(self, pattern: str = "", path: Optional[str] = None, **kwargs) -> ToolResult:
+    def execute(self, pattern: str = "", path: str | None = None, **kwargs) -> ToolResult:
         """
         执行 glob 搜索
 
@@ -179,7 +179,7 @@ class GlobSearchTool(BaseTool):
 
 def _validate_grep_params(
     kwargs: Dict[str, Any], pattern: str, output_mode: str
-) -> Optional[ToolResult]:
+) -> ToolResult | None:
     """grep 调用形态检查：未知参数 / output_mode / pattern 非空 / 长度上限。
 
     pattern 长度上限是 ReDoS 缓解的一部分（见模块 docstring）：超长正则
@@ -246,7 +246,7 @@ class GrepSearchTool(BaseTool):
     def execute(
         self,
         pattern: str = "",
-        path: Optional[str] = None,
+        path: str | None = None,
         case_insensitive: bool = False,
         output_mode: str = "content",
         **kwargs,

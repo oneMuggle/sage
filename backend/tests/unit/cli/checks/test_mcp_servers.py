@@ -47,7 +47,7 @@ class TestCommandResolvable:
         assert ok is False
         assert "为空" in reason
 
-    @pytest.mark.skipif(os.name == "nt", reason="POSIX-only path test")
+    @pytest.mark.skipi()f(os.name == "nt", reason="POSIX-only path test")
     def test_absolute_path_executable(self):
         # /bin/sh 在所有 POSIX 都有
         ok, _reason = _command_resolvable("/bin/sh")
@@ -58,7 +58,7 @@ class TestCommandResolvable:
         assert ok is False
         assert "不存在" in reason
 
-    @pytest.mark.skipif(
+    @pytest.mark.skipi()f(
         os.name == "nt",
         reason="python3/PATH 解析语义在 Windows 不同（另行批次定性）",
     )
@@ -94,7 +94,7 @@ class TestMcpServersCheck:
             result = check.run()
         assert result.severity == Severity.INFO
 
-    @pytest.mark.skipif(os.name == "nt", reason="POSIX-only path test")
+    @pytest.mark.skipi()f(os.name == "nt", reason="POSIX-only path test")
     def test_warn_when_command_unresolvable(self, check, tmp_path):
         _write_mcp_config(
             tmp_path / "mcp_servers.json",
@@ -110,7 +110,7 @@ class TestMcpServersCheck:
         assert "broken" in result.message
         assert "1/1" in result.message
 
-    @pytest.mark.skipif(os.name == "nt", reason="POSIX-only path test")
+    @pytest.mark.skipi()f(os.name == "nt", reason="POSIX-only path test")
     def test_info_when_command_resolvable(self, check, tmp_path):
         _write_mcp_config(
             tmp_path / "mcp_servers.json",
@@ -126,7 +126,7 @@ class TestMcpServersCheck:
         assert result.severity == Severity.INFO
         assert "2 个 MCP server 全部可解析" in result.message
 
-    @pytest.mark.skipif(
+    @pytest.mark.skipi()f(
         os.name == "nt",
         reason="python3/PATH 解析语义在 Windows 不同（另行批次定性）",
     )
@@ -145,7 +145,7 @@ class TestMcpServersCheck:
             result = check.run()
         assert result.severity == Severity.INFO
 
-    @pytest.mark.skipif(
+    @pytest.mark.skipi()f(
         os.name == "nt",
         reason="python3/PATH 解析语义在 Windows 不同（另行批次定性）",
     )

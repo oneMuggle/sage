@@ -109,7 +109,7 @@ class TestEngineConstruction:
 class TestHasShellOperators:
     """shell 操作符检测测试套件"""
 
-    @pytest.mark.parametrize(
+    @pytest.mark.parametriz()e(
         "command",
         [
             "ls; rm -rf /",
@@ -127,7 +127,7 @@ class TestHasShellOperators:
         """各类操作符均被检出"""
         assert has_shell_operators(command) is True
 
-    @pytest.mark.parametrize("command", ["git status", "pytest -x", "ls -la /tmp"])
+    @pytest.mark.parametriz()e("command", ["git status", "pytest -x", "ls -la /tmp"])
     def test_plain_commands_clean(self, command):
         """普通命令不误报"""
         assert has_shell_operators(command) is False
@@ -145,7 +145,7 @@ class TestHasShellOperators:
 class TestReadOnlyModes:
     """DISCUSS / PLAN 只读模式测试套件"""
 
-    @pytest.mark.parametrize("mode", [PermissionMode.DISCUSS, PermissionMode.PLAN])
+    @pytest.mark.parametriz()e("mode", [PermissionMode.DISCUSS, PermissionMode.PLAN])
     def test_read_tool_allowed(self, mode, tmp_path):
         """只读模式下 READ 工具放行"""
         engine = PermissionEngine(tmp_path, mode=mode)
@@ -154,7 +154,7 @@ class TestReadOnlyModes:
         assert decision.allowed is True
         assert decision.reason == "low risk"
 
-    @pytest.mark.parametrize("mode", [PermissionMode.DISCUSS, PermissionMode.PLAN])
+    @pytest.mark.parametriz()e("mode", [PermissionMode.DISCUSS, PermissionMode.PLAN])
     def test_write_denied_without_asking(self, mode, tmp_path):
         """只读模式下写工具直接拒绝（不询问用户）"""
         engine = PermissionEngine(tmp_path, mode=mode)
@@ -164,7 +164,7 @@ class TestReadOnlyModes:
         assert decision.needs_user is False
         assert "read-only" in decision.reason
 
-    @pytest.mark.parametrize("mode", [PermissionMode.DISCUSS, PermissionMode.PLAN])
+    @pytest.mark.parametriz()e("mode", [PermissionMode.DISCUSS, PermissionMode.PLAN])
     def test_exec_and_external_denied(self, mode, tmp_path):
         """只读模式下 EXEC / EXTERNAL 一律拒绝"""
         engine = PermissionEngine(tmp_path, mode=mode)

@@ -75,7 +75,7 @@ import re
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 from .errors import OfficeEditError, OfficeFileNotFoundError, OfficeParseError
 
@@ -174,7 +174,7 @@ def _coerce_scalar(value: Any) -> Any:
     return value
 
 
-def _require_fields(op: Dict[str, Any], fields: Tuple[str, ...]) -> Optional[str]:
+def _require_fields(op: Dict[str, Any], fields: Tuple[str, ...]) -> str | None:
     """Return an error string when any required field is missing/None."""
     for name in fields:
         if op.get(name) is None:
@@ -200,7 +200,7 @@ def _image_search_dirs(doc_path: Path) -> List[Path]:
     return dirs
 
 
-def _image_payload_from_op(op: Dict[str, Any], doc_path: Optional[Path]) -> bytes:
+def _image_payload_from_op(op: Dict[str, Any], doc_path: Path | None) -> bytes:
     """按 op 的 ``base64`` / ``path`` 键解析图片字节（二者必传其一）。
 
     Raises ValueError with a stable message (折算为该 op 的失败结果)。
@@ -312,7 +312,7 @@ def _apply_docx_set_paragraph_style(doc: Any, op: Dict[str, Any], op_name: Any) 
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _docx_find_comments_part(doc: Any) -> Optional[Any]:
+def _docx_find_comments_part(doc: Any) -> Any | None:
     """定位已打开文档的 ``word/comments.xml`` part，没有则返回 None。
 
     python-docx 1.1.2 把未知 part（comments.xml 未注册 PartFactory）载入为
@@ -381,7 +381,7 @@ def _docx_sync_comments_part(part: Any, root: Any) -> None:
     part._blob = serialize_part_xml(root)
 
 
-def _docx_locate_paragraph_with_text(doc: Any, find: str) -> Optional[Any]:
+def _docx_locate_paragraph_with_text(doc: Any, find: str) -> Any | None:
     """首个正文包含 ``find``（大小写敏感、contains）的段落，含表格单元格。"""
     for para in doc.paragraphs:
         if find in para.text:
@@ -558,7 +558,7 @@ def _apply_docx_delete_comment(doc: Any, op: Dict[str, Any], op_name: Any) -> Di
     return {"op": op_name, "ok": True, "comment_id": cid, "removed": removed}
 
 
-def _apply_docx_op(doc: Any, op: Dict[str, Any], doc_path: Optional[Path] = None) -> Dict[str, Any]:  # noqa: PLR0911 — op 分发表
+def _apply_docx_op(doc: Any, op: Dict[str, Any], doc_path: Path | None = None) -> Dict[str, Any]:  # noqa: PLR0911 — op 分发表
     op_name = op.get("op")
 
     if op_name == "replace_text":
@@ -708,7 +708,7 @@ def update_docx(file_path: Path, ops: List[Dict[str, Any]]) -> Tuple[bool, List[
 _CELL_REF_RE = re.compile(r"^[A-Za-z]{1,3}[1-9][0-9]*$")
 
 
-def _normalize_argb(color: Any) -> Optional[str]:
+def _normalize_argb(color: Any) -> str | None:
     """'FF0000' / '#FF0000' / 8 位 ARGB → openpyxl aRGB 字符串；非法返回 None。"""
     if not isinstance(color, str):
         return None
@@ -987,7 +987,7 @@ def _fill_text_frame(tf: Any, lines: List[str]) -> None:
         tf.add_paragraph().text = line
 
 
-def _apply_pptx_op(prs: Any, op: Dict[str, Any], doc_path: Optional[Path] = None) -> Dict[str, Any]:  # noqa: PLR0911 — op 分发表
+def _apply_pptx_op(prs: Any, op: Dict[str, Any], doc_path: Path | None = None) -> Dict[str, Any]:  # noqa: PLR0911 — op 分发表
     op_name = op.get("op")
     slides = prs.slides
 

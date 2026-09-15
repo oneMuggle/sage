@@ -16,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_create_lanes_wait_true_returns_terminal(client):
     """wait=true：POST /orchestration/lanes?wait=true → lanes 终态 + review 字段。"""
     # 需要 app_settings 配置 LLM（否则 lane failed with 明确错误 —— 仍为终态）。

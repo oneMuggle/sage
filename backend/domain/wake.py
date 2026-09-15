@@ -25,7 +25,6 @@ import uuid
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
 
 
 def utc_now_iso() -> str:
@@ -84,12 +83,12 @@ class Wake:
     session_id: str
     kind: WakeKind
     state: WakeState = WakeState.PENDING
-    fire_at: Optional[str] = None
-    job_id: Optional[str] = None
-    event_key: Optional[str] = None
+    fire_at: str | None = None
+    job_id: str | None = None
+    event_key: str | None = None
     note: str = ""
     created_at: str = field(default_factory=utc_now_iso)
-    fired_at: Optional[str] = None
+    fired_at: str | None = None
 
     # ------------------------------------------------------------------ #
     # 工厂
@@ -101,9 +100,9 @@ class Wake:
         session_id: str,
         kind: WakeKind,
         *,
-        fire_at: Optional[str] = None,
-        job_id: Optional[str] = None,
-        event_key: Optional[str] = None,
+        fire_at: str | None = None,
+        job_id: str | None = None,
+        event_key: str | None = None,
         note: str = "",
     ) -> Wake:
         """生成带新 uuid 的 Wake，并按 kind 校验必要字段。
@@ -139,7 +138,7 @@ class Wake:
             )
         return replace(self, state=WakeState.DUE)
 
-    def mark_fired(self, fired_at: Optional[str] = None) -> Wake:
+    def mark_fired(self, fired_at: str | None = None) -> Wake:
         """PENDING / DUE → FIRED（scheduler 已消费，终态）。"""
         if self.state is WakeState.FIRED:
             raise ValueError(f"wake {self.id} already fired")

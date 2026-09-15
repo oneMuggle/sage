@@ -12,7 +12,6 @@ Covers:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 from unittest.mock import patch
 
 import pytest
@@ -73,7 +72,7 @@ def _seed_session(conn, session_id: str) -> None:
 def _ctx(
     session_id: str = "sess-x",
     binding_generation: int = 1,
-    doc_scope: Optional[frozenset] = None,
+    doc_scope: frozenset | None = None,
 ) -> ToolExecutionContext:
     return ToolExecutionContext(
         session_id=session_id,

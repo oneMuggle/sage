@@ -10,7 +10,7 @@ from backend.api import wiki_routes
 from backend.api.wiki_routes import review
 
 
-@pytest.fixture()
+@pytest.fixture
 def project_root(tmp_path: Path) -> Path:
     """创建临时 Wiki 项目。"""
     project = tmp_path / "wiki-project"

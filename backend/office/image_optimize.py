@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 from importlib.util import find_spec
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ def is_pillow_available() -> bool:
     return find_spec("PIL") is not None
 
 
-def _reencode_jpeg(source: bytes, max_bytes: int) -> Optional[bytes]:
+def _reencode_jpeg(source: bytes, max_bytes: int) -> bytes | None:
     """Pillow 重编码 JPEG（降采样 + 质量阶梯）。失败返回 None。"""
     try:
         from PIL import Image

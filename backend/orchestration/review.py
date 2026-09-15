@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List
 
 from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.models import Lane, Task
@@ -82,7 +82,7 @@ async def run_review(
     event_recorder: Any,
     llm_config: Any,
     max_chars: int = 50 * 1024,
-    emit_review: Optional[Callable[[str, str, int, str], None]] = None,
+    emit_review: Callable[[str, str, int, str], None] | None = None,
 ) -> Dict[str, Any]:
     """reviewer 复核聚合 → ReviewReport + markdown 块（ChatDispatcher/API lane 共用）。"""
     review_goal = (

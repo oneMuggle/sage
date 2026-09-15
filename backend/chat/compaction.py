@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Awaitable, Callable, List, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, List, Sequence, Tuple
 
 from backend.memory.working import estimate_tokens
 
@@ -153,7 +153,7 @@ def default_compact_threshold() -> int:
 
 def should_compact(
     messages: Sequence[MessageLike],
-    threshold: Optional[int] = None,
+    threshold: int | None = None,
 ) -> bool:
     """判断消息列表是否值得压缩。
 

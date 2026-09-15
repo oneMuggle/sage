@@ -52,7 +52,7 @@ def test_relative_links_are_absolutized():
     assert {"text": "论文 A 详情", "url": "https://mirror.example.internal/detail?id=1"} in links
 
 
-@pytest.mark.parametrize("noise", ["javascript:void(0)", "#frag"])
+@pytest.mark.parametriz()e("noise", ["javascript:void(0)", "#frag"])
 def test_non_navigational_links_are_skipped(noise):
     urls = [link["url"] for link in extract(_PAGE, _BASE).links]
     assert all(noise not in url for url in urls)
@@ -69,7 +69,7 @@ def test_empty_html_yields_empty_page():
     assert page == ExtractedPage(title="", text="", links=[], tables=[])
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("html", "expected"),
     [
         ('<table><tr><td>单元格<a href="/x">链</table>', [[["单元格链"]]]),
@@ -100,12 +100,12 @@ def test_charset_from_content_type_reads_param():
     assert charset_from_content_type("text/html; charset=GBK") == "GBK"
 
 
-@pytest.mark.parametrize("value", [None, "", "text/html"])
+@pytest.mark.parametriz()e("value", [None, "", "text/html"])
 def test_charset_from_content_type_absent(value):
     assert charset_from_content_type(value) is None
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametriz()e(
     ("encoding", "content_type"),
     [
         ("gbk", "text/html; charset=GBK"),

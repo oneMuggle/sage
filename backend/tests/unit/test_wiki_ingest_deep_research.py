@@ -27,7 +27,7 @@ def ingest_config() -> IngestConfig:
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_ingest_source_uses_supplied_bytes_after_source_path_disappears(
     tmp_path, ingest_config, monkeypatch
 ):
@@ -86,7 +86,7 @@ async def test_ingest_source_uses_supplied_bytes_after_source_path_disappears(
     assert ingest_module.cache_put.call_args.kwargs["source_content"] == supplied
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_ingest_source_stream_reuses_one_source_snapshot(
     tmp_path, ingest_config, monkeypatch
 ):
@@ -142,7 +142,7 @@ async def test_ingest_source_stream_reuses_one_source_snapshot(
     assert ingest_module.cache_put.call_args.kwargs["source_content"] == supplied
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_ingest_source_rejects_oversized_supplied_bytes(tmp_path, ingest_config):
     """Caller-provided snapshots obey the same byte cap as file inputs."""
     with pytest.raises(FileTooLargeError):
@@ -180,7 +180,7 @@ async def _run_research(
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_deep_research_passes_http_post_to_automatic_ingest(tmp_path, monkeypatch):
     """Automatic ingest receives the caller's real embedding callback."""
     callback = AsyncMock()
@@ -198,7 +198,7 @@ async def test_deep_research_passes_http_post_to_automatic_ingest(tmp_path, monk
     assert callable(captured["http_post"])
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_deep_research_ingest_failure_reports_error(tmp_path, monkeypatch):
     """An ingest exception must not be reported as a completed research task."""
     monkeypatch.setattr(deep_research_module, "ingest_source", AsyncMock(side_effect=RuntimeError("provider failure")))
@@ -212,7 +212,7 @@ async def test_deep_research_ingest_failure_reports_error(tmp_path, monkeypatch)
     }
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_deep_research_missing_http_post_reports_error(tmp_path, monkeypatch):
     """Missing embedding capability cannot be reported as successful ingest."""
     ingest = AsyncMock()
@@ -228,7 +228,7 @@ async def test_deep_research_missing_http_post_reports_error(tmp_path, monkeypat
     ingest.assert_not_awaited()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asynci()o()
 async def test_deep_research_cancelled_ingest_cleans_up_report(tmp_path, monkeypatch):
     """Cancellation must remove the private report before propagating."""
     temp_file = tmp_path / "report.md"

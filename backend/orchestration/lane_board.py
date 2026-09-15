@@ -31,7 +31,7 @@ import hashlib
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Set, Tuple
+from typing import Any, Dict, List, Literal, Set, Tuple
 
 # ============================================================================
 # Errors
@@ -66,8 +66,8 @@ class LaneFreshness:
     """
 
     lane_id: str
-    last_heartbeat_at: Optional[int]
-    age_ms: Optional[int]
+    last_heartbeat_at: int | None
+    age_ms: int | None
     level: _FreshnessLevel
     reasons: List[str] = field(default_factory=list)
 
@@ -75,9 +75,9 @@ class LaneFreshness:
     def from_age(
         cls,
         lane_id: str,
-        age_ms: Optional[int],
-        last_heartbeat_at: Optional[int] = None,
-        now_ms: Optional[int] = None,  # noqa: ARG003 — kept for API symmetry
+        age_ms: int | None,
+        last_heartbeat_at: int | None = None,
+        now_ms: int | None = None,  # noqa: ARG003 — kept for API symmetry
     ) -> LaneFreshness:
         """Compute freshness from an explicit age in ms (or None = no heartbeat)."""
         if age_ms is None:
@@ -116,8 +116,8 @@ class LaneFreshness:
     def from_heartbeat(
         cls,
         lane_id: str,
-        last_heartbeat_at: Optional[int],
-        now_ms: Optional[int] = None,
+        last_heartbeat_at: int | None,
+        now_ms: int | None = None,
     ) -> LaneFreshness:
         """Compute freshness from a heartbeat timestamp."""
         if last_heartbeat_at is None:
@@ -186,12 +186,12 @@ class BoardEntry:
 
     lane_id: str
     task_id: str
-    agent_id: Optional[str]
+    agent_id: str | None
     status: str
     freshness: LaneFreshness
     last_event_at: int
     last_event_type: str
-    heartbeat_status: Optional[str] = None
+    heartbeat_status: str | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -350,7 +350,7 @@ class LaneBoardBuilder:
     - `lane.heartbeat.last_heartbeat_at` (optional)
     """
 
-    def __init__(self, lane_registry: Any, event_stream: Optional[Any] = None) -> None:
+    def __init__(self, lane_registry: Any, event_stream: Any | None = None) -> None:
         self.lane_registry = lane_registry
         self.event_stream = event_stream
 
@@ -367,15 +367,15 @@ class LaneBoardBuilder:
         event = max(events, key=lambda item: int(item["timestamp"]))
         return int(event["timestamp"]), str(event["event_type"])
 
-    def freshness_for(self, lane: Any, now_ms: Optional[int] = None) -> LaneFreshness:
-        last_hb: Optional[int] = None
+    def freshness_for(self, lane: Any, now_ms: int | None = None) -> LaneFreshness:
+        last_hb: int | None = None
         if getattr(lane, "heartbeat", None) is not None:
             last_hb = getattr(lane.heartbeat, "last_heartbeat_at", None)
         return LaneFreshness.from_heartbeat(
             lane_id=lane.lane_id, last_heartbeat_at=last_hb, now_ms=now_ms
         )
 
-    def build_snapshot(self, actor: str, now_ms: Optional[int] = None) -> LaneBoardSnapshot:
+    def build_snapshot(self, actor: str, now_ms: int | None = None) -> LaneBoardSnapshot:
         lanes = self.lane_registry.list_all_lanes()
         now = now_ms if now_ms is not None else int(time.time() * 1000)
 
@@ -468,7 +468,7 @@ class ProjectionRequest:
     consumer: str
     requested_view: str
     accepted_field_families: List[str] = field(default_factory=list)
-    max_schema_version: Optional[str] = None
+    max_schema_version: str | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {

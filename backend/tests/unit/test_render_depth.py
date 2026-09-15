@@ -25,7 +25,7 @@ class _FakeClock:
         self.now += seconds
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_time(monkeypatch):
     clock = _FakeClock()
     monkeypatch.setattr(web_render, "time", clock)

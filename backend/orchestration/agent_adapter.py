@@ -15,7 +15,7 @@ router (lane creation endpoint).
 from __future__ import annotations
 
 import json
-from typing import List, Optional
+from typing import List
 
 from backend.orchestration.models import Agent
 
@@ -39,7 +39,7 @@ class SeededAgentRegistry:
             agents.append(self._to_agent(profile))
         return agents
 
-    def get_agent(self, agent_id: str) -> Optional[Agent]:
+    def get_agent(self, agent_id: str) -> Agent | None:
         """Fetch a single enabled agent, or None (missing/disabled)."""
         profile = self._repo.get(agent_id)
         if profile is None or not profile.get("enabled", True):

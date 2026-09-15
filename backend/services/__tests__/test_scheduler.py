@@ -12,13 +12,13 @@ import pytest
 from backend.services.scheduler import SchedulerService, TaskNotFoundError, ValidationError
 
 
-@pytest.fixture()
+@pytest.fixture
 def store_path(tmp_path: Path) -> Path:
     """Per-test JSON store path (file does not yet exist)."""
     return tmp_path / "scheduled_tasks.json"
 
 
-@pytest.fixture()
+@pytest.fixture
 def message_repo() -> MagicMock:
     """Mock message repo that records inserted messages."""
     repo = MagicMock()
@@ -26,7 +26,7 @@ def message_repo() -> MagicMock:
     return repo
 
 
-@pytest.fixture()
+@pytest.fixture
 def session_repo() -> MagicMock:
     """Mock session repo that confirms session exists."""
     repo = MagicMock()
@@ -34,7 +34,7 @@ def session_repo() -> MagicMock:
     return repo
 
 
-@pytest.fixture()
+@pytest.fixture
 def scheduler(
     store_path: Path, message_repo: MagicMock, session_repo: MagicMock
 ) -> SchedulerService:
