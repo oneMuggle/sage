@@ -12,7 +12,7 @@ import logging
 import os
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ class CliConfirmationAdapter:
         self,
         *,
         timeout_s: float = 60.0,
-        callback: Optional[Callable[..., Any]] = None,
+        callback: Callable[..., Any] | None = None,
     ) -> None:
         self._timeout_s = timeout_s
         self._callback = callback

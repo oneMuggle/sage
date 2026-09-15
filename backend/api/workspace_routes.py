@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -37,7 +37,7 @@ class WorkspaceBindingModel(BaseModel):
     workspace_path: str
     generation: int
     activated_at: int
-    revoked_at: Optional[int]
+    revoked_at: int | None
 
 
 class WorkspaceBindRequest(BaseModel):
@@ -47,7 +47,7 @@ class WorkspaceBindRequest(BaseModel):
 
 class WorkspaceBindingResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    binding: Optional[WorkspaceBindingModel]
+    binding: WorkspaceBindingModel | None
 
 
 class WorkspaceRevokeResponse(BaseModel):
@@ -60,11 +60,11 @@ class WorkspaceSearchResultModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str
     kind: str
-    doc_type: Optional[OfficeDocType]
-    doc_id: Optional[str]
+    doc_type: OfficeDocType | None
+    doc_id: str | None
     size_bytes: int
     needs_import: bool
-    source_path: Optional[str]
+    source_path: str | None
 
 
 class WorkspaceSearchResponse(BaseModel):
@@ -288,7 +288,7 @@ class WorkspaceCheckpointModel(BaseModel):
     checkpoint_id: str
     created_at: str
     bytes: int
-    files: Optional[int]
+    files: int | None
 
 
 class WorkspaceCheckpointsResponse(BaseModel):
@@ -314,7 +314,7 @@ class WorkspaceCheckpointRestoreResponse(BaseModel):
     checkpoint_id: str
     restored: int
     # C-3 (round5 批次 C): restore 前自动为当前状态留底; 创建失败为 None
-    pre_restore_checkpoint_id: Optional[str] = None
+    pre_restore_checkpoint_id: str | None = None
 
 
 def _checkpoint_tool_error(result: object) -> HTTPException:
@@ -390,7 +390,7 @@ def restore_workspace_checkpoint(
         raise _error(400, "invalid_checkpoint_id", "checkpoint_id 格式非法")
     root = _bound_workspace_or_raise(_connection(), session_id)
 
-    pre_restore_id: Optional[str] = None
+    pre_restore_id: str | None = None
     try:
         pre = CheckpointCreateTool(ToolPolicy(workspace_root=root)).execute()
         if pre.success:

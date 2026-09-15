@@ -28,7 +28,7 @@ import asyncio
 import json
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from sage_core import Message, Role, ToolCall
 from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)
@@ -58,7 +58,7 @@ def _serialize_tool_calls(tool_calls: List[ToolCall]) -> str | None:
     )
 
 
-def _deserialize_tool_calls(raw: Optional[str]) -> List[ToolCall]:
+def _deserialize_tool_calls(raw: str | None) -> List[ToolCall]:
     """messages.tool_calls JSON 字符串 → ``[ToolCall, ...]``；非法 JSON 降级为 ``[]``。"""
     if not raw:
         return []
@@ -124,8 +124,8 @@ class SqliteStorageAdapter:
 
     def __init__(
         self,
-        session_repo: Optional[SessionRepository] = None,
-        message_repo: Optional[MessageRepository] = None,
+        session_repo: SessionRepository | None = None,
+        message_repo: MessageRepository | None = None,
     ) -> None:
         # 默认使用全局仓储（向后兼容）；依赖注入便于单测替换。
         self._sessions: SessionRepository = session_repo or SessionRepository()

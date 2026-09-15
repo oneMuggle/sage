@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List
 
 from sage_core import ToolResult, ToolSpec
 from sage_core.repositories import ToolPort  # noqa: F401  (structural typing target)
@@ -57,9 +57,9 @@ class InprocToolAdapter:
 
     def __init__(
         self,
-        registry: Optional[_ToolRegistry] = None,
-        policy: Optional[ToolPolicy] = None,
-        enforcer_factory: Optional[Callable[[], PermissionEnforcer]] = None,
+        registry: _ToolRegistry | None = None,
+        policy: ToolPolicy | None = None,
+        enforcer_factory: Callable[[], PermissionEnforcer] | None = None,
     ) -> None:
         # 接受外部注入（用于测试）或使用新建 registry
         self._registry = registry if registry is not None else _ToolRegistry()
@@ -158,7 +158,7 @@ class InprocToolAdapter:
             output_str, self._policy.max_output_bytes
         )
 
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Dict[str, Any] | None = None
         if truncation_meta:
             metadata = dict(truncation_meta)
 
@@ -174,7 +174,7 @@ class InprocToolAdapter:
     # M1 工具安全加固: 权限执行 choke point
     # ------------------------------------------------------------------
 
-    def _enforce_permission(self, name: str, args: Dict[str, Any]) -> Optional[ToolResult]:
+    def _enforce_permission(self, name: str, args: Dict[str, Any]) -> ToolResult | None:
         """分发前许可检查；放行返回 ``None``，拒绝返回错误 ``ToolResult``。
 
         本 adapter 层没有流式审批通道（审批对话框只存在于 legacy agent

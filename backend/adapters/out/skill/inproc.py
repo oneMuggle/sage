@@ -26,7 +26,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Set, Tuple, Union
 
 from sage_core import SkillResult, SkillSpec
 from sage_core.repositories import SkillPort  # noqa: F401  (structural typing target)
@@ -65,8 +65,8 @@ class InprocSkillAdapter:
 
     def __init__(
         self,
-        registry: Optional[_SkillRegistry] = None,
-        enforcer_factory: Optional[Callable[[], PermissionEnforcer]] = None,
+        registry: _SkillRegistry | None = None,
+        enforcer_factory: Callable[[], PermissionEnforcer] | None = None,
     ) -> None:
         # 接受外部注入(用于测试)或使用新建 registry 并装载 builtin
         if registry is not None:
@@ -226,7 +226,7 @@ class InprocSkillAdapter:
 
         return isinstance(skill, SkillMdSkill) and args.get("script") is not None
 
-    def _enforce_permission(self, args: Dict[str, Any]) -> Optional[SkillResult]:
+    def _enforce_permission(self, args: Dict[str, Any]) -> SkillResult | None:
         """Check skill EXECUTE permission; no HTTP approval channel exists."""
         try:
             try:
@@ -730,7 +730,7 @@ class InprocSkillAdapter:
 #: 注: 故意放在 ``InprocSkillAdapter`` class 之后, 让类型注解可以直接引用
 #: class 本身, 满足 ruff UP037 (在 ``from __future__ import annotations``
 #: 下禁止带引号的 type annotation).
-_skill_adapter_singleton: Optional[InprocSkillAdapter] = None
+_skill_adapter_singleton: InprocSkillAdapter | None = None
 
 
 def get_singleton() -> InprocSkillAdapter:

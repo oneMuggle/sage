@@ -43,7 +43,7 @@ import re
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import yaml
 
@@ -95,7 +95,7 @@ class PersonaManifest:
     recommended_models: Tuple[str, ...] = ()
     default_mode: str = PermissionMode.WORKSPACE_WRITE.value
     builtin: bool = False
-    source: Optional[str] = None
+    source: str | None = None
 
 
 # =====================================================================
@@ -172,9 +172,9 @@ def _strlist(meta: Dict[str, Any], key: str) -> Tuple[str, ...]:
 def parse_manifest(
     text: str,
     *,
-    fallback_id: Optional[str] = None,
+    fallback_id: str | None = None,
     builtin: bool = False,
-    source: Optional[str] = None,
+    source: str | None = None,
 ) -> PersonaManifest:
     """解析 persona manifest 文本。
 
@@ -341,7 +341,7 @@ class PersonaLoader:
 
     def __init__(
         self,
-        dirs: Optional[List[Path]] = None,
+        dirs: List[Path] | None = None,
         *,
         include_builtin: bool = True,
     ) -> None:
@@ -482,7 +482,7 @@ class PersonaLoader:
 
     # ===== queries =====
 
-    def get(self, persona_id: str) -> Optional[PersonaManifest]:
+    def get(self, persona_id: str) -> PersonaManifest | None:
         """按 id 取 persona，未知 id 返回 None。"""
         with self._lock:
             return self._manifests.get(persona_id)

@@ -19,7 +19,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ PRICING_PER_MILLION_TOKENS: Dict[str, Tuple[float, float]] = {
 CACHE_INPUT_PRICE_FACTOR = 0.1
 
 
-def pricing_for_model(model: str) -> Optional[Tuple[float, float]]:
+def pricing_for_model(model: str) -> Tuple[float, float] | None:
     """返回模型的 (input, output) USD/1M 定价; 未知模型 → None。
 
     先精确匹配, 再最长前缀匹配 (让 ``gpt-4o-mini`` 优先于 ``gpt-4o``,
@@ -67,7 +67,7 @@ def pricing_for_model(model: str) -> Optional[Tuple[float, float]]:
     normalized = model.strip().lower()
     if normalized in PRICING_PER_MILLION_TOKENS:
         return PRICING_PER_MILLION_TOKENS[normalized]
-    best: Optional[str] = None
+    best: str | None = None
     for key in PRICING_PER_MILLION_TOKENS:
         if normalized.startswith(key) and (best is None or len(key) > len(best)):
             best = key
@@ -81,7 +81,7 @@ def estimate_cost_usd(
     prompt_tokens: int,
     completion_tokens: int,
     cached_tokens: int = 0,
-) -> Optional[float]:
+) -> float | None:
     """估算单次请求的美元成本; 未知模型 → None。
 
     L4: ``cached_tokens`` 是 prompt 中命中缓存的部分（各家 usage 口径中
@@ -105,7 +105,7 @@ class UsageRecord:
     model: str
     prompt_tokens: int
     completion_tokens: int
-    estimated_cost_usd: Optional[float]
+    estimated_cost_usd: float | None
     at: str  # ISO-8601 (UTC)
     cached_tokens: int = 0  # L4: prompt 中命中缓存的部分（兼容旧字段）
     # L8 (2026-09-09 PR-A): cache 维度拆分 — Anthropic cache_read 命中极便宜
@@ -114,8 +114,8 @@ class UsageRecord:
     cache_creation_tokens: int = 0
     # L8 (2026-09-09 PR-C): 流式首字节延迟与总延迟 — None 表示未采样
     # (同步调用 / 旧调用方), 避免与 0 歧义。
-    first_token_ms: Optional[int] = None
-    latency_ms: Optional[int] = None
+    first_token_ms: int | None = None
+    latency_ms: int | None = None
 
 
 def _empty_bucket() -> Dict[str, Any]:
@@ -134,7 +134,7 @@ def _accumulate(
     bucket: Dict[str, Any],
     prompt_tokens: int,
     completion_tokens: int,
-    cost: Optional[float],
+    cost: float | None,
     cached_tokens: int = 0,
     cache_read_tokens: int = 0,
     cache_creation_tokens: int = 0,
@@ -165,12 +165,12 @@ class UsageTracker:
         model: str,
         prompt_tokens: int,
         completion_tokens: int,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         cached_tokens: int = 0,
         cache_read_tokens: int = 0,
         cache_creation_tokens: int = 0,
-        first_token_ms: Optional[int] = None,
-        latency_ms: Optional[int] = None,
+        first_token_ms: int | None = None,
+        latency_ms: int | None = None,
     ) -> UsageRecord:
         """记录一次 LLM 调用; 返回生成的 UsageRecord。
 
@@ -191,7 +191,7 @@ class UsageTracker:
         # L8 PR-C (2026-09-09): 流式首字节延迟与总延迟——负值/None 视为未采样,
         # 字符串数字尽力 int() 转换 (兼容 LLMClient 偶发 str 字段)。
         # 落库时存 None 而不是 -1, 便于 SQL `WHERE first_token_ms IS NOT NULL` 过滤。
-        def _norm_latency(value: Any) -> Optional[int]:
+        def _norm_latency(value: Any) -> int | None:
             if value is None:
                 return None
             if isinstance(value, bool):  # bool 是 int 子类, 排除 True/False
@@ -260,7 +260,7 @@ class UsageTracker:
         return entry
 
     @staticmethod
-    def _persist(entry: UsageRecord, session_id: Optional[str]) -> None:
+    def _persist(entry: UsageRecord, session_id: str | None) -> None:
         """单行落库 (L8)。任何失败静默——用量是增强信息, 不是关键路径。"""
         try:
             import uuid
@@ -373,7 +373,7 @@ class UsageTracker:
             logger.warning("session_usage_since 读取失败（预算守门降级）: %s", exc)
             return 0
 
-    def last_request(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def last_request(self, session_id: str) -> Dict[str, Any] | None:
         """U17: 该会话最近一次 LLM 请求的用量行。
 
         上一轮请求的 ``prompt_tokens`` 是"当前上下文占用"的最佳可得代理:

@@ -14,7 +14,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 from backend.domain.agent_event import envelope
 
@@ -88,7 +88,7 @@ def _default_audit_log_path() -> Path:
 class FileEventAdapter:
     """EventPort 的文件实现：每个事件一行 JSON。"""
 
-    def __init__(self, log_path: Optional[Union[Path, str]] = None) -> None:
+    def __init__(self, log_path: Union[Path, str] | None = None) -> None:
         if log_path is None:
             log_path = _default_audit_log_path()
         self._log_path = Path(log_path)

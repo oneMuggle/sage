@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from sage_core import (
     ComputeError,
@@ -28,9 +28,9 @@ class MockComputeAdapter:
 
     def __init__(
         self,
-        specs: Optional[List[ComputeSpec]] = None,
-        responses: Optional[Dict[str, ComputeResult]] = None,
-        default_result: Optional[ComputeResult] = None,
+        specs: List[ComputeSpec] | None = None,
+        responses: Dict[str, ComputeResult] | None = None,
+        default_result: ComputeResult | None = None,
     ) -> None:
         self._specs: List[ComputeSpec] = list(specs or [])
         self._responses: Dict[str, ComputeResult] = dict(responses or {})

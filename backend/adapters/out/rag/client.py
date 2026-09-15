@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import httpx
 
@@ -29,7 +29,7 @@ class RAGServiceClient:
         """
         self.base_url = base_url
         self.timeout = timeout
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self):
         """异步上下文管理器入口。"""
@@ -49,7 +49,7 @@ class RAGServiceClient:
         self,
         query: str,
         top_k: int = 5,
-        filters: Optional[dict] = None,
+        filters: dict | None = None,
     ) -> List[Dict[str, Any]]:
         """检索记忆。
 

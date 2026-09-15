@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from sage_core import ComputeRequest, ComputeResult, ToolResult, ToolSpec
 from sage_core.repositories import (
@@ -51,7 +51,7 @@ class ComputeToolAdapter:
         self,
         compute: ComputePort,
         inner: ToolPort,
-        policy: Optional[ToolPolicy] = None,
+        policy: ToolPolicy | None = None,
     ) -> None:
         self._compute = compute
         self._inner = inner

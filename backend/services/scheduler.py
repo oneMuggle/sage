@@ -19,7 +19,7 @@ from contextlib import suppress
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal
 
 if TYPE_CHECKING:
     from backend.scheduler.evolution import BaseEvolutionTask
@@ -64,8 +64,8 @@ class ScheduledTask:
     content: str
     enabled: bool
     created_at: int
-    last_run: Optional[int] = None
-    next_run: Optional[int] = None
+    last_run: int | None = None
+    next_run: int | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -225,11 +225,11 @@ class SchedulerService:
         self,
         name: str,
         task: "BaseEvolutionTask",  # noqa: UP037
-        cron_expr: Optional[str] = None,
+        cron_expr: str | None = None,
         *,
-        hour: Optional[int] = None,
-        minute: Optional[int] = None,
-        day_of_week: Optional[str] = None,
+        hour: int | None = None,
+        minute: int | None = None,
+        day_of_week: str | None = None,
     ) -> None:
         """注册一个 evolution 任务到 BackgroundScheduler (不写 JSON 持久化)。
 
@@ -290,7 +290,7 @@ class SchedulerService:
         self._fire_evolution(name, task)
         return True
 
-    def run_evolution_task_now(self, name: str) -> Optional[Dict[str, Any]]:
+    def run_evolution_task_now(self, name: str) -> Dict[str, Any] | None:
         """同步运行一个 evolution 任务并返回其统计结果(手动触发 API 用, R17-B)。
 
         与 trigger_evolution_task 的区别:任务返回值(如 MemoryConsolidationTask
@@ -459,7 +459,7 @@ class SchedulerService:
         tmp.replace(self._store_path)
 
 
-_global_service: Optional[SchedulerService] = None
+_global_service: SchedulerService | None = None
 
 
 def get_scheduler_service() -> SchedulerService | None:

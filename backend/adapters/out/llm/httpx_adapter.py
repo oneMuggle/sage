@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 from sage_core import Message, Role, ToolCall
 
@@ -120,8 +120,8 @@ class HttpxLLMAdapter:
     async def chat(
         self,
         messages: List[Message],
-        tools: Optional[List[Any]] = None,
-        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        tools: List[Any] | None = None,
+        tool_choice: Union[str, Dict[str, Any]] | None = None,
     ) -> Message:
         """非流式对话：把 ``domain.Message`` 列表翻译成 LLMClient 输入并委派。
 
@@ -136,7 +136,7 @@ class HttpxLLMAdapter:
         raw_messages = [_from_domain_message(m) for m in messages]
         # LLMClient.tool_choice 签名是 str | None；dict[str, Any] 形式由调用方自行
         # 解析为 provider-specific 形式，adapter 不做猜测。
-        tc: Optional[str] = tool_choice if isinstance(tool_choice, str) else None
+        tc: str | None = tool_choice if isinstance(tool_choice, str) else None
 
         # P3.3: 整个 chat 调用包一层 OTel span，便于后端看 LLM 调用耗时
         with _tracer.start_as_current_span("llm.chat") as span:

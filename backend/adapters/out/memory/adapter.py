@@ -10,7 +10,7 @@ import asyncio
 import logging
 import os
 import threading
-from typing import List, Optional
+from typing import List
 
 from backend.domain.memory import MemoryContext
 from backend.memory import ConsolidationPipeline, MemoryManager
@@ -265,7 +265,7 @@ class MemoryAdapter:
         )
 
     async def store(
-        self, content: str, session_id: str, importance: int = 5, tags: Optional[List[str]] = None
+        self, content: str, session_id: str, importance: int = 5, tags: List[str] | None = None
     ) -> str:
         """存储记忆
 
@@ -330,7 +330,7 @@ class MemoryAdapter:
         content: str,
         category: str = "preference",
         importance: int = 5,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> str:
         """存储用户画像（USER.md 概念, MemoryPort 协议外的扩展方法）。
 

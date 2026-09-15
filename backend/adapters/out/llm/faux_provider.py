@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from sage_core import Message, Role
 
@@ -31,8 +31,8 @@ from sage_core import Message, Role
 class CompletionRequest:
     """Completion 请求"""
     messages: list[Message]
-    tools: Optional[list[Any]] = None
-    tool_choice: Optional[Any] = None
+    tools: list[Any] | None = None
+    tool_choice: Any | None = None
     temperature: float = 0.7
     max_tokens: int = 2048
 
@@ -74,7 +74,7 @@ class FauxProvider:
 
     def __init__(
         self,
-        responses: Optional[list[str]] = None,
+        responses: list[str] | None = None,
         default_response: str = "This is a faux response.",
     ) -> None:
         """
@@ -139,8 +139,8 @@ class FauxProvider:
     async def chat(
         self,
         messages: list[Message],
-        tools: Optional[list[Any]] = None,
-        tool_choice: Optional[Any] = None,
+        tools: list[Any] | None = None,
+        tool_choice: Any | None = None,
     ) -> Message:
         """LLMPort.chat 兼容接口"""
         req = CompletionRequest(
@@ -162,6 +162,6 @@ class FauxProvider:
 
 
 # 便捷函数
-def create_faux_provider(responses: Optional[list[str]] = None) -> FauxProvider:
+def create_faux_provider(responses: list[str] | None = None) -> FauxProvider:
     """创建 FauxProvider（便捷函数）"""
     return FauxProvider(responses=responses)

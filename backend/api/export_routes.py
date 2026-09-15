@@ -15,8 +15,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
@@ -52,8 +50,8 @@ class ExportSessionRequest(BaseModel):
 @router.post("/sessions/{session_id}/export")
 def export_session(
     session_id: str,
-    body: Optional[ExportSessionRequest] = None,
-    accept: Optional[str] = Header(default=None),
+    body: ExportSessionRequest | None = None,
+    accept: str | None = Header(default=None),
 ):
     """导出会话为自包含 HTML。
 

@@ -24,7 +24,7 @@ from __future__ import annotations
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Set
 
 from backend.domain.permission import READ_ONLY_MODES, Decision, PermissionMode
 from backend.domain.risk import RiskClass, RiskOverrides, classify, is_consequential
@@ -63,7 +63,7 @@ class PermissionEngine:
     session_allow_tools: Set[str] = field(default_factory=set)
     session_allow_commands: Set[str] = field(default_factory=set)
     declared_risks: Dict[str, RiskClass] = field(default_factory=dict)
-    risk_overrides: Optional[RiskOverrides] = None
+    risk_overrides: RiskOverrides | None = None
 
     def __post_init__(self) -> None:
         self.workspace_root = Path(self.workspace_root).expanduser().resolve()
@@ -140,7 +140,7 @@ class PermissionEngine:
 
     def _exemption_decision(
         self, tool_name: str, arguments: Dict[str, Any], is_shell: bool
-    ) -> Optional[Decision]:
+    ) -> Decision | None:
         """检查调用是否命中豁免名单；命中返回放行裁决，否则返回 None。
 
         豁免来源（按检查顺序）：命令 allowlist、会话命令记忆、
@@ -176,7 +176,7 @@ class PermissionEngine:
             self.session_allow_commands.add(command)
 
     # -- 辅助 -------------------------------------------------------------
-    def _write_path_violation(self, path: Any) -> Optional[str]:
+    def _write_path_violation(self, path: Any) -> str | None:
         """校验写入路径边界；违规返回拒绝理由，合规/无路径参数返回 None。
 
         仅接受绝对路径（``~`` 展开后）：相对路径在引擎（按 workspace

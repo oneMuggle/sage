@@ -16,7 +16,7 @@ Claude Code 项目 → 会话归属）。路由面刻意保持最小：
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -48,7 +48,7 @@ class ProjectModel(BaseModel):
     created_at: int
     last_opened_at: int
     session_count: int = 0
-    last_session_id: Optional[str] = None
+    last_session_id: str | None = None
 
 
 class ProjectListResponse(BaseModel):

@@ -19,7 +19,7 @@ import socket
 import sys
 import zipfile
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List
 
 from backend.services.llm_trace.recorder import TraceRecord
 from backend.services.llm_trace.redactor import (
@@ -176,9 +176,9 @@ def _serialize_record(rec: TraceRecord, *, include_prompts: bool) -> str:
 
     if rec_size > MAX_RECORD_BYTES:
         # 整条 record > 1MB → body 全丢弃,headers + status 保留
-        req_body_text: Optional[str] = None
+        req_body_text: str | None = None
         req_encoding: str = "utf-8"
-        resp_body_text: Optional[str] = None
+        resp_body_text: str | None = None
         resp_encoding: str = "utf-8"
         req_truncated = True
         resp_truncated = True
@@ -245,7 +245,7 @@ def _serialize_record(rec: TraceRecord, *, include_prompts: bool) -> str:
     return json.dumps(obj, ensure_ascii=False)
 
 
-def _extract_error_message(body: bytes, status: Optional[int]) -> Optional[str]:
+def _extract_error_message(body: bytes, status: int | None) -> str | None:
     """从 JSON 响应体里抽出 error.message 字段(若有)。
 
     只接受 str 类型的 message;非 str(如嵌套 dict)走 JSON 序列化 + redact_text,
@@ -256,7 +256,7 @@ def _extract_error_message(body: bytes, status: Optional[int]) -> Optional[str]:
     try:
         parsed = json.loads(body.decode("utf-8"))
         if isinstance(parsed, dict):
-            raw: Optional[object] = None
+            raw: object | None = None
             err = parsed.get("error")
             if isinstance(err, dict) and "message" in err:
                 raw = err["message"]

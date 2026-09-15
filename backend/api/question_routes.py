@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
@@ -39,7 +39,7 @@ class QuestionAnswerBody(BaseModel):
     """
 
     answers: List[str] = []
-    custom: Optional[str] = None
+    custom: str | None = None
 
     class Config:
         # pydantic v1/v2 双兼容写法（Win7 LTS 分支用 v1）；

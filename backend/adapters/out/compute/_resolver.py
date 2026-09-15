@@ -31,7 +31,7 @@ import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 
 @dataclass
@@ -49,8 +49,8 @@ class ResolvedExecutable:
     """
 
     argv_prefix: List[str]
-    working_dir: Optional[str] = None
-    env: Optional[Dict[str, str]] = None
+    working_dir: str | None = None
+    env: Dict[str, str] | None = None
     source: str = ""
 
 
@@ -80,7 +80,7 @@ class ExecutableResolver:
     """
 
     config: Dict[str, Any] = field(default_factory=dict)
-    _cached: Optional[ResolvedExecutable] = field(default=None, init=False, repr=False)
+    _cached: ResolvedExecutable | None = field(default=None, init=False, repr=False)
 
     def resolve(self) -> ResolvedExecutable:
         """按优先级查找并返回首个可用入口。多次调用使用缓存。
