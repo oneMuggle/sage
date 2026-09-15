@@ -137,9 +137,11 @@ const electronAPI = {
    * EMBEDDER_MODEL_MANIFEST。
    */
   modelDownload: {
-    download: (
-      payload?: { baseUrl?: string; dirName?: string; files?: { name: string; sha256: string }[] },
-    ) => ipcRenderer.invoke('models:embedder:download', payload ?? {}),
+    download: (payload?: {
+      baseUrl?: string;
+      dirName?: string;
+      files?: { name: string; sha256: string }[];
+    }) => ipcRenderer.invoke('models:embedder:download', payload ?? {}),
     cancel: (dirName: string) => ipcRenderer.invoke('models:embedder:cancel', dirName),
   },
 
@@ -398,6 +400,9 @@ const electronAPI = {
   },
   setLogLevel(level: LogLevel): Promise<{ ok: true }> {
     return ipcRenderer.invoke('sage:log:set-level', { level }) as Promise<{ ok: true }>;
+  },
+  getLogLevel(): Promise<LogLevel> {
+    return ipcRenderer.invoke('sage:log:get-level') as Promise<LogLevel>;
   },
 
   /**

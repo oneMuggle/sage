@@ -332,6 +332,12 @@ export interface ElectronAPI {
   /** T13: Update SAGE_LOG_LEVEL for the main process logger. */
   setLogLevel?: (level: LogLevel) => Promise<{ ok: true }>;
   /**
+   * 2026-09-15: 读取当前生效的 SAGE_LOG_LEVEL。渲染端组件挂载时拉取一次,
+   * 避免在 Diagnostics 卡片切到其他级别 → 切走页面 → 切回来时被硬编码的
+   * 默认值 'info' 覆盖。无值/无效值返回 DEFAULT_LOG_LEVEL ('info')。
+   */
+  getLogLevel?: () => Promise<LogLevel>;
+  /**
    * 2026-08-27: 演示模式开关持久化. 用户在 Settings → 通用 切换后,
    * 写入 <userData>/sage-demo-mode.json, 下次启动 main 进程读取生效.
    */
