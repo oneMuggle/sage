@@ -21,6 +21,9 @@ const ROW = {
   cache_read_tokens: 70,
   cache_creation_tokens: 30,
   estimated_cost_usd: 0.001,
+  known_cost: true,
+  endpoint_id: 'ep-openai',
+  has_price_snapshot: true,
   created_at_ms: 1700000000000,
   created_at_iso: '2023-11-14T22:13:20Z',
 };

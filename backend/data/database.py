@@ -912,6 +912,20 @@ class Database:
                 "ALTER TABLE usage_events ADD COLUMN latency_ms INTEGER"
             )
             conn.commit()
+        # Task 5 (2026-09-15): model catalog endpoint identity and price snapshot.
+        # Nullable columns — old records keep NULL, only new records get values.
+        cursor.execute("PRAGMA table_info(usage_events)")
+        _usage_cols = [row["name"] for row in cursor.fetchall()]
+        if "endpoint_id" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN endpoint_id TEXT"
+            )
+            conn.commit()
+        if "price_snapshot" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN price_snapshot TEXT"
+            )
+            conn.commit()
         # L8 PR-B (2026-09-09): 用量日聚合表 — 7d/30d 时间范围查询的预聚合层,
         # 避免每次都扫 usage_events 全量。days_bucket 0=今天, 1=昨天 ... 6=6 天前
         # (7d 范围), >=7 即 30d 范围折叠到月聚合。模型维度另算。
@@ -935,6 +949,20 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_usage_daily_rollups_scope_day
             ON usage_daily_rollups(scope, day DESC)
         """)
+        # Task 5 (2026-09-15): known/unknown request counters on rollup.
+        # 让 summary_with_range 能区分"全已知"vs"部分估算", 无需回查 usage_events。
+        cursor.execute("PRAGMA table_info(usage_daily_rollups)")
+        _rollup_cols = {row["name"] for row in cursor.fetchall()}
+        if "known_requests" not in _rollup_cols:
+            cursor.execute(
+                "ALTER TABLE usage_daily_rollups"
+                " ADD COLUMN known_requests INTEGER NOT NULL DEFAULT 0"
+            )
+        if "unknown_requests" not in _rollup_cols:
+            cursor.execute(
+                "ALTER TABLE usage_daily_rollups"
+                " ADD COLUMN unknown_requests INTEGER NOT NULL DEFAULT 0"
+            )
 
         # Agent 配置表 (PR-3)
         # 4 个默认 agent (primary/researcher/coder/memory_manager) 在 lifespan

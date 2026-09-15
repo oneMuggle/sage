@@ -24,7 +24,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, Set, Union
+from typing import Any, Dict, Optional, Sequence, Set, Union
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
@@ -40,6 +40,7 @@ from backend.api.orch_routes import router as orch_routes_router
 from backend.api.settings_models import LegacySettingsPayload, model_dump_compat
 from backend.chat.compaction import (
     compact_messages,
+    estimate_messages_tokens,
     should_compact,
 )
 from backend.chat.executors import resolve_attachments
@@ -72,6 +73,138 @@ from backend.orchestration.chat_dispatcher import (
     _classify_orchestration_mode,
 )
 from backend.orchestration.llm_factory import load_llm_config_for_chat
+
+def _resolve_effective_window(
+    model_id: Optional[str] = None,
+    max_context: Optional[int] = None,
+    request_endpoint_id: Optional[str] = None,
+    auto_context: Optional[bool] = None,
+) -> Optional[int]:
+    """Task 5: Resolve effective context window from model catalog.
+
+    Priority for ``endpoint_id``: request > persisted settings > None.
+    Behaviour by ``auto_context`` flag (after catalog resolve):
+
+    - ``auto_context=True``  → resolve from catalog; ``max_context``, if
+      set, is applied as a safety upper bound (``min(catalog, max)``).
+      This is the path that lets the UI's ``autoContext`` switch actually
+      turn on catalog-driven window sizing.
+    - ``auto_context=False`` → fixed cap at ``max_context`` (user pinned
+      a value). Catalog caps still apply via effective_window.
+    - ``auto_context=None``  → resolve from catalog (the default for
+      callers that do not yet pass the field), 4096 default cap.
+
+    Returns ``max_context`` if the catalog cannot be resolved, else
+    ``None`` so callers can decide how to fall back.
+    """
+    try:
+        from backend.model_catalog.context import effective_window
+        from backend.model_catalog.repository import CatalogRepository
+        from backend.model_catalog.schemas import EndpointKey
+        from backend.data.database import get_database
+        from backend.data.settings_canonicalizer import to_camel
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get_json("app_settings")
+        if not isinstance(raw, dict):
+            return max_context if max_context else None
+        settings = to_camel(raw)
+        endpoints = settings.get("endpoints") or []
+        if not isinstance(endpoints, list):
+            return max_context if max_context else None
+
+        # Priority: request endpoint_id > persisted settings
+        endpoint_id = None
+        if request_endpoint_id:
+            # Verify the request endpoint_id exists in the endpoints list
+            ep = next(
+                (e for e in endpoints if isinstance(e, dict) and e.get("id") == request_endpoint_id),
+                None,
+            )
+            if ep is not None:
+                endpoint_id = request_endpoint_id
+
+        if not endpoint_id:
+            # Fallback to persisted settings
+            selections = settings.get("modelSelections") or {}
+            chat_sel = selections.get("chatModel") if isinstance(selections, dict) else None
+            if isinstance(chat_sel, dict) and chat_sel.get("endpointId"):
+                ep_id = chat_sel["endpointId"]
+                ep = next(
+                    (e for e in endpoints if isinstance(e, dict) and e.get("id") == ep_id),
+                    None,
+                )
+                if ep is not None:
+                    endpoint_id = ep_id
+
+        if not endpoint_id or not model_id:
+            return max_context if max_context else None
+
+        repo = CatalogRepository(get_database())
+        resolved = repo.resolve(EndpointKey(endpoint_id=endpoint_id, model_id=model_id))
+        # auto_context=True (UI toggle on): catalog-driven window with
+        # max_context as a safety upper bound. This is the only branch
+        # where the UI's autoContext switch actually reaches catalog
+        # resolution — without it, the previous logic made max_context
+        # always win and the toggle was inert.
+        if auto_context is True:
+            # effective_window(automatic=True) ignores ``fixed`` per the
+            # schema contract, so the natural catalog window is returned
+            # first and only then clamped to max_context. 4096 is a
+            # stand-in positive int — its value is discarded.
+            window = effective_window(
+                resolved.limits, automatic=True, fixed=4096,
+            )
+            if max_context:
+                window = min(window, max_context)
+            return window
+        # auto_context=False: user explicitly pinned a value, treat as cap.
+        if auto_context is False and max_context:
+            return effective_window(
+                resolved.limits, automatic=False, fixed=max_context,
+            )
+        # auto_context=None (or False without max_context): resolve from
+        # catalog, 4096 default ceiling.
+        return effective_window(
+            resolved.limits, automatic=True, fixed=4096,
+        )
+    except Exception:
+        return max_context if max_context else None
+
+
+def _check_request_within_window(
+    messages: Sequence[Dict[str, Any]],
+    effective_window: Optional[int],
+) -> None:
+    """Brief line 16: explicit reject when required content overshoots window.
+
+    The history was already truncated to ``max(0, effective_window - reserve)``,
+    so this guard only fires when system / attachments / trailing_system /
+    current user input alone exceed the resolved window (e.g., a 1 MB
+    attachment + a long system prompt against a 4K-window model). Without
+    this check the producer would silently send an over-budget request that
+    the upstream LLM truncates or errors on — this gives the caller a
+    deterministic 400 instead.
+
+    No-op when the catalog has not resolved a window (``effective_window``
+    is None or non-positive) so callers without catalog data keep the legacy
+    behaviour.
+    """
+    if effective_window is None or effective_window <= 0:
+        return
+    total = estimate_messages_tokens(messages)
+    if total > effective_window:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"required content (system + history + attachments + current "
+                f"input) ~{total} tokens exceeds resolved context window "
+                f"({effective_window} tokens); reduce input length, drop "
+                f"attachments, or pick a larger-context model"
+            ),
+        )
+
+
 from backend.orchestration.orch_settings import load_orch_settings
 from backend.scheduler import get_evolution_logs
 from backend.skills.draft_store import get_skill_draft_store
@@ -187,7 +320,15 @@ class ChatRequest(BaseModel):
 
     max_context: int | None = None
 
-    temperature: float | None = None
+    # Task 5 (2026-09-15): auto-context resolution flag.
+    # true = backend resolves effective window from catalog; false = use max_context as fixed cap.
+    auto_context: Optional[bool] = None
+
+    # Task 5 (2026-09-15): endpoint identifier from the request.
+    # Takes priority over persisted settings when resolving context window / usage attribution.
+    endpoint_id: Optional[str] = None
+
+    temperature: Optional[float] = None
 
     # 透传字段:provider 让后端不再硬写,reasoning_effort/thinking_budget
     # 让上游 LLM 启用 thinking 输出(provider 决定哪种 key 会被接受)
@@ -2041,6 +2182,28 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 fallback_pref = SettingsRepository().get("fallback_model")
                 if fallback_pref and fallback_pref != (data.model or ""):
                     llm_config["fallback_model"] = fallback_pref
+                # Task 5: resolve endpoint_id for usage attribution
+                # Priority: request data.endpoint_id > persisted settings
+                if data.endpoint_id:
+                    # Request provided endpoint_id directly — use it
+                    llm_config["endpoint_id"] = data.endpoint_id
+                else:
+                    # Fallback to persisted settings
+                    try:
+                        from backend.data.settings_canonicalizer import to_camel
+                        _raw_settings = SettingsRepository().get_json("app_settings")
+                        if isinstance(_raw_settings, dict):
+                            _camel = to_camel(_raw_settings)
+                            _eps = _camel.get("endpoints") or []
+                            _sel = (_camel.get("modelSelections") or {}).get("chatModel") or {}
+                            _ep_id = _sel.get("endpointId")
+                            if _ep_id:
+                                for _ep in _eps:
+                                    if isinstance(_ep, dict) and _ep.get("id") == _ep_id:
+                                        llm_config["endpoint_id"] = _ep_id
+                                        break
+                    except Exception:
+                        pass  # fail-open: endpoint_id is best-effort
                 logger.info(
                     f"[REQ {request_id}] /chat/stream producer using custom LLM: "
                     f"model={_safe_log_field(llm_config['model'])}"
@@ -2665,12 +2828,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"[REQ {request_id}] 历史消息加载失败(降级为无历史): {hist_err}"
                 )
                 history_rows = []
-            # L9-lite (批次 C-3): 历史预算感知模型窗口 —— 前端上报的
-            # max_context 有效时, 历史预算 = 窗口 - 16k 预留(system/工具
-            # schema/回复), 下限 4k; 否则用默认推导(history_token_budget)。
-            l9_budget = history_token_budget()
-            if data.max_context is not None and data.max_context >= 20000:
-                l9_budget = max(4000, int(data.max_context) - 16384)
+            # Task 5 (2026-09-15): catalog-based context budget.
+            # Resolve effective window from model catalog, then compute budget
+            # as window - reserve. Old >=20000 gate removed.
+            effective_window = _resolve_effective_window(
+                model_id=data.model,
+                max_context=data.max_context,
+                request_endpoint_id=data.endpoint_id,
+                auto_context=data.auto_context,
+            )
+            l9_budget = history_token_budget(effective_window=effective_window)
             messages, omitted_history = build_request_messages(
                 system_content=system_content,
                 user_text=data.message,
@@ -2688,7 +2855,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.info(
                     "[REQ %s] 历史超过预算(%s tokens),已省略最早 %s 条",
                     request_id,
-                    history_token_budget(),
+                    l9_budget,
                     omitted_history,
                 )
 
@@ -2705,6 +2872,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         ],
                     ],
                 }
+
+            # Task 5 (round 2): explicit reject when the assembled request
+            # exceeds the catalog-resolved window. History was already
+            # truncated to ``l9_budget`` (= effective_window - reserve), so
+            # this only fires when system / attachments / trailing_system /
+            # current user input alone overshoot the reserve. Brief line 16
+            # requires this guard; without it we silently send an over-budget
+            # request the upstream LLM truncates or errors on.
+            _check_request_within_window(messages, effective_window)
 
             # PR-7: 流式 chat 持久化。run_loop() 自身不写库(保持通用 ReAct
             # 迭代器纯净),由 producer 整合层负责落 user+assistant 消息 + 更新

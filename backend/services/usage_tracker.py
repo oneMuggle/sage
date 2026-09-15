@@ -18,8 +18,8 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Deque, Dict, List, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,37 @@ PRICING_PER_MILLION_TOKENS: Dict[str, Tuple[float, float]] = {
 CACHE_INPUT_PRICE_FACTOR = 0.1
 
 
-def pricing_for_model(model: str) -> Tuple[float, float] | None:
+@dataclass(frozen=True)
+class PriceSnapshot:
+    """Task 5: Immutable pricing snapshot captured at request start.
+
+    Uses string prices to avoid Decimal serialization complexity.
+    method is always 'basic_io' for the first version.
+    """
+
+    input_per_million: Optional[str] = None
+    output_per_million: Optional[str] = None
+    scope: str = ""
+    revision: int = 0
+    source: str = ""
+    currency: str = "USD"
+    method: str = "basic_io"
+    computed_at: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "input_per_million": self.input_per_million,
+            "output_per_million": self.output_per_million,
+            "scope": self.scope,
+            "revision": self.revision,
+            "source": self.source,
+            "currency": self.currency,
+            "method": self.method,
+            "computed_at": self.computed_at,
+        }
+
+
+def pricing_for_model(model: str) -> Optional[Tuple[float, float]]:
     """返回模型的 (input, output) USD/1M 定价; 未知模型 → None。
 
     先精确匹配, 再最长前缀匹配 (让 ``gpt-4o-mini`` 优先于 ``gpt-4o``,
@@ -114,8 +144,11 @@ class UsageRecord:
     cache_creation_tokens: int = 0
     # L8 (2026-09-09 PR-C): 流式首字节延迟与总延迟 — None 表示未采样
     # (同步调用 / 旧调用方), 避免与 0 歧义。
-    first_token_ms: int | None = None
-    latency_ms: int | None = None
+    first_token_ms: Optional[int] = None
+    latency_ms: Optional[int] = None
+    # Task 5 (2026-09-15): endpoint identity and immutable pricing snapshot.
+    endpoint_id: Optional[str] = None
+    price_snapshot: Optional[PriceSnapshot] = None
 
 
 def _empty_bucket() -> Dict[str, Any]:
@@ -127,6 +160,11 @@ def _empty_bucket() -> Dict[str, Any]:
         "cache_read_tokens": 0,
         "cache_creation_tokens": 0,
         "estimated_cost_usd": None,
+        # Task 5 (2026-09-15): count of requests with known/unknown cost.
+        # Supports has_partial_estimates flag — surfaces when catalog pricing
+        # only covers some of the requests in the range.
+        "known_requests": 0,
+        "unknown_requests": 0,
     }
 
 
@@ -148,6 +186,26 @@ def _accumulate(
     if cost is not None:
         base = bucket["estimated_cost_usd"] or 0.0
         bucket["estimated_cost_usd"] = round(base + cost, 8)
+        bucket["known_requests"] = int(bucket.get("known_requests") or 0) + 1
+    else:
+        bucket["unknown_requests"] = int(bucket.get("unknown_requests") or 0) + 1
+
+
+
+def _cost_from_snapshot(
+    snap: PriceSnapshot, prompt_tokens: int, output_tokens: int
+) -> Optional[float]:
+    """Calculate basic_io cost from a PriceSnapshot. No cache discount."""
+    if snap.input_per_million is None or snap.output_per_million is None:
+        return None
+    try:
+        inp = float(snap.input_per_million)
+        out = float(snap.output_per_million)
+    except (TypeError, ValueError):
+        return None
+    return round(
+        (inp * int(prompt_tokens) + out * int(output_tokens)) / 1_000_000, 8
+    )
 
 
 class UsageTracker:
@@ -169,8 +227,10 @@ class UsageTracker:
         cached_tokens: int = 0,
         cache_read_tokens: int = 0,
         cache_creation_tokens: int = 0,
-        first_token_ms: int | None = None,
-        latency_ms: int | None = None,
+        first_token_ms: Optional[int] = None,
+        latency_ms: Optional[int] = None,
+        endpoint_id: Optional[str] = None,
+        price_snapshot: Optional[PriceSnapshot] = None,
     ) -> UsageRecord:
         """记录一次 LLM 调用; 返回生成的 UsageRecord。
 
@@ -187,7 +247,12 @@ class UsageTracker:
         # 兼容旧调用方: 若只传 cached_tokens, 把全部归到 cache_read (命中态)
         if cached and not read and not creation:
             read = cached
-        cost = estimate_cost_usd(model, prompt_tokens, completion_tokens, cached_tokens=cached)
+        # Task 5: Use price_snapshot for cost if provided (catalog pricing),
+        # otherwise fall back to hardcoded prefix pricing.
+        if price_snapshot is not None:
+            cost = _cost_from_snapshot(price_snapshot, prompt_tokens, completion_tokens)
+        else:
+            cost = estimate_cost_usd(model, prompt_tokens, completion_tokens, cached_tokens=cached)
         # L8 PR-C (2026-09-09): 流式首字节延迟与总延迟——负值/None 视为未采样,
         # 字符串数字尽力 int() 转换 (兼容 LLMClient 偶发 str 字段)。
         # 落库时存 None 而不是 -1, 便于 SQL `WHERE first_token_ms IS NOT NULL` 过滤。
@@ -220,6 +285,8 @@ class UsageTracker:
             cache_creation_tokens=creation,
             first_token_ms=ft,
             latency_ms=lt,
+            endpoint_id=endpoint_id,
+            price_snapshot=price_snapshot,
         )
         day = datetime.now().strftime("%Y-%m-%d")
         with self._lock:
@@ -267,6 +334,10 @@ class UsageTracker:
 
             from backend.data.database import _SQLITE_LOCK, get_database
 
+            snapshot_json = None
+            if entry.price_snapshot is not None:
+                import json as _json
+                snapshot_json = _json.dumps(entry.price_snapshot.to_dict(), ensure_ascii=False)
             row = (
                 str(uuid.uuid4()),
                 session_id,
@@ -281,14 +352,16 @@ class UsageTracker:
                 entry.cache_creation_tokens,
                 entry.first_token_ms,
                 entry.latency_ms,
+                entry.endpoint_id,
+                snapshot_json,
             )
             with _SQLITE_LOCK:
                 get_database().get_connection().execute(
                     "INSERT INTO usage_events (id, session_id, model, prompt_tokens,"
                     " completion_tokens, total_tokens, estimated_cost_usd, created_at,"
                     " cached_tokens, cache_read_tokens, cache_creation_tokens,"
-                    " first_token_ms, latency_ms)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " first_token_ms, latency_ms, endpoint_id, price_snapshot)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     row,
                 )
                 get_database().get_connection().commit()
@@ -307,47 +380,104 @@ class UsageTracker:
 
         每个 (day, scope, model) 一行, 每次 record() 增量 UPDATE。
         失败静默——用量是增强信息。
+
+        Task 5 (2026-09-15): 增 ``known_requests`` / ``unknown_requests``
+        计数器；cost 累加改为保留 null 语义 — 仅当本次 cost 非 null 才
+        增加 estimated_cost_usd，避免把"未知成本"折合成 0。老库未迁移时
+        SQL 会触发 no such column, 走 fallback SQL (不含新列) 兜底。
         """
         try:
             from backend.data.database import _SQLITE_LOCK, get_database
 
             now_ms = int(time.time() * 1000)
+            cost = entry.estimated_cost_usd
+            known_delta = 1 if cost is not None else 0
+            unknown_delta = 0 if cost is not None else 1
             with _SQLITE_LOCK:
                 conn = get_database().get_connection()
                 for scope in ("today", "7d", "30d", "total"):
-                    conn.execute(
-                        """
-                        INSERT INTO usage_daily_rollups
-                            (day, scope, model, requests, prompt_tokens,
-                             completion_tokens, cached_tokens,
-                             cache_read_tokens, cache_creation_tokens,
-                             estimated_cost_usd, updated_at)
-                        VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(day, scope, model) DO UPDATE SET
-                            requests = requests + 1,
-                            prompt_tokens = prompt_tokens + excluded.prompt_tokens,
-                            completion_tokens = completion_tokens + excluded.completion_tokens,
-                            cached_tokens = cached_tokens + excluded.cached_tokens,
-                            cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens,
-                            cache_creation_tokens = cache_creation_tokens + excluded.cache_creation_tokens,
-                            estimated_cost_usd = COALESCE(
-                                estimated_cost_usd, 0
-                            ) + COALESCE(excluded.estimated_cost_usd, 0),
-                            updated_at = excluded.updated_at
-                        """,
-                        (
-                            day,
-                            scope,
-                            entry.model,
-                            entry.prompt_tokens,
-                            entry.completion_tokens,
-                            entry.cached_tokens,
-                            entry.cache_read_tokens,
-                            entry.cache_creation_tokens,
-                            entry.estimated_cost_usd,
-                            now_ms,
-                        ),
-                    )
+                    try:
+                        conn.execute(
+                            """
+                            INSERT INTO usage_daily_rollups
+                                (day, scope, model, requests, prompt_tokens,
+                                 completion_tokens, cached_tokens,
+                                 cache_read_tokens, cache_creation_tokens,
+                                 estimated_cost_usd,
+                                 known_requests, unknown_requests,
+                                 updated_at)
+                            VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(day, scope, model) DO UPDATE SET
+                                requests = requests + 1,
+                                prompt_tokens = prompt_tokens + excluded.prompt_tokens,
+                                completion_tokens = completion_tokens + excluded.completion_tokens,
+                                cached_tokens = cached_tokens + excluded.cached_tokens,
+                                cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens,
+                                cache_creation_tokens = cache_creation_tokens + excluded.cache_creation_tokens,
+                                estimated_cost_usd = CASE
+                                    WHEN excluded.estimated_cost_usd IS NULL
+                                        THEN usage_daily_rollups.estimated_cost_usd
+                                    ELSE COALESCE(usage_daily_rollups.estimated_cost_usd, 0)
+                                         + excluded.estimated_cost_usd
+                                END,
+                                known_requests = known_requests + excluded.known_requests,
+                                unknown_requests = unknown_requests + excluded.unknown_requests,
+                                updated_at = excluded.updated_at
+                            """,
+                            (
+                                day,
+                                scope,
+                                entry.model,
+                                entry.prompt_tokens,
+                                entry.completion_tokens,
+                                entry.cached_tokens,
+                                entry.cache_read_tokens,
+                                entry.cache_creation_tokens,
+                                cost,
+                                known_delta,
+                                unknown_delta,
+                                now_ms,
+                            ),
+                        )
+                    except Exception as col_exc:  # noqa: BLE001
+                        # 老库 rollup 表未迁移 (无 known/unknown 列) → 退回原 SQL
+                        logger.debug(
+                            "rollup upsert new-schema 失败, 回退旧 SQL: %s",
+                            col_exc,
+                        )
+                        conn.execute(
+                            """
+                            INSERT INTO usage_daily_rollups
+                                (day, scope, model, requests, prompt_tokens,
+                                 completion_tokens, cached_tokens,
+                                 cache_read_tokens, cache_creation_tokens,
+                                 estimated_cost_usd, updated_at)
+                            VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(day, scope, model) DO UPDATE SET
+                                requests = requests + 1,
+                                prompt_tokens = prompt_tokens + excluded.prompt_tokens,
+                                completion_tokens = completion_tokens + excluded.completion_tokens,
+                                cached_tokens = cached_tokens + excluded.cached_tokens,
+                                cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens,
+                                cache_creation_tokens = cache_creation_tokens + excluded.cache_creation_tokens,
+                                estimated_cost_usd = COALESCE(
+                                    estimated_cost_usd, 0
+                                ) + COALESCE(excluded.estimated_cost_usd, 0),
+                                updated_at = excluded.updated_at
+                            """,
+                            (
+                                day,
+                                scope,
+                                entry.model,
+                                entry.prompt_tokens,
+                                entry.completion_tokens,
+                                entry.cached_tokens,
+                                entry.cache_read_tokens,
+                                entry.cache_creation_tokens,
+                                cost,
+                                now_ms,
+                            ),
+                        )
                 conn.commit()
         except Exception as exc:  # noqa: BLE001
             logger.debug("daily_rollup upsert 失败: %s", exc)
@@ -469,12 +599,42 @@ class UsageTracker:
                 "estimated_cost_usd": float(row["estimated_cost_usd"]) if row else 0.0,
             }
             last = self.last_request(session_id)
+        # Task 5: resolve effective context window for the last used model
+        eff_window = None
+        if last and last.get("model"):
+            try:
+                from backend.model_catalog.context import effective_window
+                from backend.model_catalog.repository import CatalogRepository
+                from backend.model_catalog.schemas import EndpointKey, ContextLimits
+                from backend.data.database import get_database
+                from backend.data.settings_canonicalizer import to_camel
+                from backend.data.settings_repo import SettingsRepository
+
+                raw = SettingsRepository().get_json("app_settings")
+                if isinstance(raw, dict):
+                    settings = to_camel(raw)
+                    endpoints = settings.get("endpoints") or []
+                    selections = settings.get("modelSelections") or {}
+                    chat_sel = selections.get("chatModel") if isinstance(selections, dict) else None
+                    ep_id = None
+                    if isinstance(chat_sel, dict) and chat_sel.get("endpointId"):
+                        ep_id = chat_sel["endpointId"]
+                    if ep_id:
+                        repo = CatalogRepository(get_database())
+                        resolved = repo.resolve(
+                            EndpointKey(endpoint_id=ep_id, model_id=last["model"])
+                        )
+                        eff_window = effective_window(resolved.limits, True, 4096)
+            except Exception:
+                pass  # fail-open: catalog unavailable
+
         summary.update(
             {
                 "last_model": last["model"] if last else None,
                 "last_prompt_tokens": last["prompt_tokens"] if last else None,
                 "last_cached_tokens": last["cached_tokens"] if last else None,
                 "last_at_ms": last["at_ms"] if last else None,
+                "effective_context_window": eff_window,
             }
         )
         return summary
@@ -502,6 +662,8 @@ class UsageTracker:
 
         L8 PR-A (2026-09-09): 派生 ``cache_hit_rate`` = cache_read /
         (prompt + cache_creation)。为 0 时返回 0.0 (避免除零)。
+        Task 5 (2026-09-15): 追加 ``known_requests`` / ``unknown_requests``
+        / ``has_partial_estimates`` 聚合，用于前端标记部分估算。
         """
         day = datetime.now().strftime("%Y-%m-%d")
         with self._lock:
@@ -525,11 +687,21 @@ class UsageTracker:
             cached_legacy = int(totals_snapshot.get("cached_tokens") or 0)
             if cached_legacy and prompt_total:
                 hit_rate = round(cached_legacy / prompt_total, 6)
+        # Task 5: known/unknown 聚合 (内存态覆盖 totals + today 两个 bucket)
+        known_total = int(totals_snapshot.get("known_requests") or 0)
+        unknown_total = int(totals_snapshot.get("unknown_requests") or 0)
+        known_today = int(today_snapshot.get("known_requests") or 0)
+        unknown_today = int(today_snapshot.get("unknown_requests") or 0)
         return {
             "totals": totals_snapshot,
             "by_model": by_model,
             "today": today_snapshot,
             "cache_hit_rate": hit_rate,
+            "known_requests": known_total,
+            "unknown_requests": unknown_total,
+            "has_partial_estimates": known_total > 0 and unknown_total > 0,
+            "known_requests_today": known_today,
+            "unknown_requests_today": unknown_today,
         }
 
     def summary_with_range(self, range_: str) -> Dict[str, Any]:
@@ -541,6 +713,10 @@ class UsageTracker:
         - ``total``: 从 usage_daily_rollups 全表 SUM 聚合
 
         DB 异常时降级返回内存态 summary — 避免面板白屏。
+
+        Task 5 (2026-09-15): 追加 ``known_requests`` / ``unknown_requests``
+        / ``has_partial_estimates`` — 让前端能标出"部分估算"。所有 range
+        都从 rollup 聚合或内存态直接产出这三个字段，不再有路径差异。
         """
         if range_ == "today":
             data = dict(self.summary())
@@ -566,10 +742,16 @@ class UsageTracker:
                         (range_,),
                     ).fetchall()
             agg = _empty_bucket()
-            agg["estimated_cost_usd"] = 0.0
+            agg["known_requests"] = 0
+            agg["unknown_requests"] = 0
             by_model: Dict[str, Dict[str, Any]] = {}
             cache_read = 0
             cache_creation = 0
+            # Task 5: preserve null cost semantics — if all rows have null
+            # cost, aggregated estimated_cost_usd stays None (not 0.0).
+            # Rollup rows store null when the underlying request had unknown
+            # cost; summing null as 0 would silently invent pricing.
+            any_cost_known = False
             for row in rows:
                 agg["requests"] += int(row["requests"] or 0)
                 agg["prompt_tokens"] += int(row["prompt_tokens"] or 0)
@@ -579,12 +761,17 @@ class UsageTracker:
                 cache_creation += int(row["cache_creation_tokens"] or 0)
                 cost = row["estimated_cost_usd"]
                 if cost is not None:
+                    current = agg["estimated_cost_usd"]
                     agg["estimated_cost_usd"] = (
-                        float(agg["estimated_cost_usd"] or 0) + float(cost)
+                        float(current or 0) + float(cost)
                     )
+                    any_cost_known = True
+                # Task 5: rollup 表带 known/unknown 列 (迁移后), 兼容老库无列
+                # 时回退 0 — 此时 has_partial_estimates 会 false, 安全降级。
+                agg["known_requests"] += int(row["known_requests"] or 0)
+                agg["unknown_requests"] += int(row["unknown_requests"] or 0)
                 model = str(row["model"] or "")
                 bucket = by_model.setdefault(model, _empty_bucket())
-                bucket["estimated_cost_usd"] = 0.0
                 bucket["requests"] += int(row["requests"] or 0)
                 bucket["prompt_tokens"] += int(row["prompt_tokens"] or 0)
                 bucket["completion_tokens"] += int(row["completion_tokens"] or 0)
@@ -597,25 +784,50 @@ class UsageTracker:
                     int(bucket.get("cache_creation_tokens") or 0)
                     + int(row["cache_creation_tokens"] or 0)
                 )
+                bucket["known_requests"] = (
+                    int(bucket.get("known_requests") or 0)
+                    + int(row["known_requests"] or 0)
+                )
+                bucket["unknown_requests"] = (
+                    int(bucket.get("unknown_requests") or 0)
+                    + int(row["unknown_requests"] or 0)
+                )
                 if cost is not None:
+                    bucket_current = bucket["estimated_cost_usd"]
                     bucket["estimated_cost_usd"] = (
-                        float(bucket["estimated_cost_usd"] or 0) + float(cost)
+                        float(bucket_current or 0) + float(cost)
                     )
+            # If no rollup row had a non-null cost, force aggregate back to None
+            # (_empty_bucket default is None; only flip to 0.0 happened above)
+            if not any_cost_known:
+                agg["estimated_cost_usd"] = None
             prompt_total = agg["prompt_tokens"]
             eligible = prompt_total + cache_creation
             hit_rate = round(cache_read / eligible, 6) if eligible > 0 else 0.0
+            known_total = int(agg["known_requests"] or 0)
+            unknown_total = int(agg["unknown_requests"] or 0)
             return {
                 "totals": agg,
                 "by_model": [
-                    {"model": m, **b} for m, b in sorted(by_model.items(), key=lambda kv: kv[1]["requests"], reverse=True)
+                    {"model": m, **b}
+                    for m, b in sorted(
+                        by_model.items(),
+                        key=lambda kv: kv[1]["requests"],
+                        reverse=True,
+                    )
                 ],
                 # 7d/30d/total 没有 today 字段, 用 totals 填占位, 前端按 range 渲染
                 "today": agg if range_ == "today" else _empty_bucket(),
                 "cache_hit_rate": hit_rate,
                 "range": range_,
+                "known_requests": known_total,
+                "unknown_requests": unknown_total,
+                "has_partial_estimates": known_total > 0 and unknown_total > 0,
             }
         except Exception as exc:  # noqa: BLE001
-            logger.debug("summary_with_range(%s) DB 异常, 降级到内存态: %s", range_, exc)
+            logger.debug(
+                "summary_with_range(%s) DB 异常, 降级到内存态: %s", range_, exc
+            )
             data = dict(self.summary())
             data["range"] = range_
             return data
