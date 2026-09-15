@@ -10,9 +10,9 @@
 | 维度 | 目标 | 基线 | B1 后 | B3 后 / B6 后 | 差距 |
 |------|------|------|-------|-------|------|
 | 功能对齐 | >=95% | ~62% | ~72%（Office 100%） | ~93%（main 728 commits 全部并入；win7 独有：记忆可追溯/SSE/auto_memory 保留） | B4-B6 ✅：残差全为必要差异 → 功能对齐 ~95% |
-| 代码同源 | >=80% | ~54% | ~58% | ~88%（235/1937 文件仍异）→ **226**（B6 清理死代码后，全部为必要差异） | Phase 3 自动守门 |
-| 发布同构 | 同构 | 差异 67 文件 (D) | 不变 | 不变（D 类保持 win7） | Phase 3 |
-| 约束隔离 | >=90% 集中 | 散弹 | `backend/compat/win7` 建立 | memory/chat/tools 域经 `_run_db_sync` / run_in_executor 替代 `asyncio.to_thread`，pydantic `class Config` 走垫片 | 其余域 |
+| 代码同源 | >=80% | ~54% | ~58% | ~88%（235/1937 文件仍异）→ **226**（B6 清理死代码后，全部为必要差异） | ✅ `parity_report.py --fail-on` 守门，`parity-allow.txt` 124 项台账 |
+| 发布同构 | 同构 | 差异 67 文件 (D) | 不变 | 15 个 D 类冻结件（classify_diff 已登记，auto_sync 冲突自动 ours） | ✅ Phase 3 |
+| 约束隔离 | >=90% 集中 | 散弹 | `backend/compat/win7` 建立 | memory/chat/tools 域经 `_run_db_sync` / run_in_executor 替代 `asyncio.to_thread`，pydantic `class Config` 走垫片 | py38 typing 差异由 `py38_compat_rewrite` 机器产生（auto_sync 内置），不再手写 |
 
 ## 批次进度
 
@@ -47,6 +47,16 @@
 4. 测试文件同样 3 路归并：main 测试为底，追加 win7 专属断言（可追溯字段、async handler 白名单 +3）。
 5. 宿主环境性失败清单（非回归，基线同样失败）：WinError 1314 符号链接、doctor CLI gbk/`O_NONBLOCK`、
    test_hooks_system、test_skill_delete、vitest officePaths/officeIpc/updateManager 的 POSIX 路径断言。
+
+| Phase 3 | 自动化：`auto_sync.py` + `parity_report.py` 分级/守门 + `win7-sync.yml` | ✅ | （本提交） | dry-run：up-to-date / 365 冲突分类报告（B2 基线 vs main）/ 合成 PEP604 文件 → rewrite+门禁通过；`--commit` 路径产出 `Optional[int]`/`List[str]` 回写提交；parity 守门 226 文件 0 actionable |
+
+## Phase 3 交付
+- `scripts/win7/auto_sync.py`：整体 merge → D 类 ours → py38 回写(+CRLF 还原) → `check_py38_compat` → 提交/报告；exit 0/1/2
+- `scripts/win7/parity_report.py`：typing-only / frozen / intentional / win7-only / main-only / real 六级；`--fail-on`、`--write-allow`
+- `scripts/win7/classify_diff.py`：D 类清单补齐为 15 个冻结件（requirements*、environment.yml、electron-builder.yml、package*.json、backendLauncher、bundle-python、py38 脚本）
+- `docs/win7-sync/parity-allow.txt`：124 项已审计必要差异台账
+- `.github/workflows/win7-sync.yml`：parity（main push/每日/手动）+ sync（每日/手动 → PR / draft PR）
+- `docs/win7-sync/README.md`：操作手册 + 冲突接手 SOP + EOL 归档预案
 
 ## B4-B6 经验（残差审计）
 1. 整体 merge 之后，剩余批次改为**残差审计**：`git diff HEAD origin/main -- <域>`，过滤 typing 回写行

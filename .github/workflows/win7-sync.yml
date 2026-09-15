@@ -1,0 +1,150 @@
+# Win7 LTS ← main 自动同步（Phase 3 · 对齐固化）
+#
+# 两个 job：
+#   parity  : 每次 main push / 每日 / 手动 —— 生成 parity 看板 artifact，并在
+#             出现 "main-only"（漏合入）或 "real"（实质差异）时 fail，提醒 owner。
+#   sync    : 每日定时 / 手动 —— 用 scripts/win7/auto_sync.py 把 main 整体 merge 到
+#             release/win7：D 类冻结件自动 ours、py38 回写 + 门禁；无冲突就开 PR，
+#             有冲突则把带冲突标记的分支推上去并开 draft PR 附报告，由人接手。
+#
+# 与 B1-B6 手工批次的关系：B3 之后残差已收敛到 win7 必要差异（见 docs/win7-sync/parity.md），
+# 后续 main 的增量走本 workflow；EOL 2027-12-13 后随 release/win7 一起归档。
+
+name: Win7 Sync
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  schedule:
+    - cron: '30 19 * * *'   # 03:30 Asia/Shanghai
+  workflow_dispatch:
+    inputs:
+      do_sync:
+        description: '执行 merge 并开 PR（否则只出 parity 看板）'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: win7-sync
+  cancel-in-progress: false
+
+jobs:
+  parity:
+    name: Parity 看板（main vs release/win7）
+    runs-on: ubuntu-latest
+    outputs:
+      unmerged: ${{ steps.report.outputs.unmerged }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Generate parity report
+        id: report
+        run: |
+          git fetch origin main release/win7
+          python scripts/win7/parity_report.py \
+            --base origin/main --head origin/release/win7 \
+            --out parity-auto.md --json parity-auto.json \
+            --fail-on main-only,real,win7-only || echo "parity_failed=1" >> "$GITHUB_OUTPUT"
+          echo "unmerged=$(python -c 'import json;print(json.load(open("parity-auto.json"))["unmerged"])')" >> "$GITHUB_OUTPUT"
+          cat parity-auto.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win7-parity
+          path: |
+            parity-auto.md
+            parity-auto.json
+      - name: Fail on actionable drift
+        if: steps.report.outputs.parity_failed == '1'
+        run: |
+          echo "::error::release/win7 与 main 出现需处理的差异（main-only / real），见 artifact win7-parity"
+          exit 1
+
+  sync:
+    name: main → release/win7 自动 merge
+    needs: parity
+    if: >-
+      always() &&
+      needs.parity.outputs.unmerged != '0' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && inputs.do_sync))
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: release/win7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'     # py38_compat_rewrite 本身用 PEP 604 语法，需 3.10+
+      - run: pip install libcst
+      - name: Configure git
+        run: |
+          git config user.name "win7-sync-bot"
+          git config user.email "win7-sync-bot@users.noreply.github.com"
+      - name: Run auto_sync
+        id: sync
+        run: |
+          BR="sync/win7-main-$(date +%Y%m%d)"
+          echo "branch=$BR" >> "$GITHUB_OUTPUT"
+          set +e
+          python scripts/win7/auto_sync.py --commit --branch "$BR" \
+            --report sync-report.md --report-json sync-report.json
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          cat sync-report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win7-sync-report
+          path: |
+            sync-report.md
+            sync-report.json
+
+      # rc=0：已提交 → 推分支 + 开 PR（CI 会跑 backend-py38 全套）
+      - name: Push & open PR (clean merge)
+        if: steps.sync.outputs.rc == '0'
+        run: |
+          BR="${{ steps.sync.outputs.branch }}"
+          git push -f origin "HEAD:$BR"
+          if gh pr view "$BR" --json number >/dev/null 2>&1; then
+            gh pr edit "$BR" --body-file sync-report.md
+          else
+            gh pr create --base release/win7 --head "$BR" \
+              --title "chore(win7-sync): merge main → release/win7 ($(date +%Y-%m-%d))" \
+              --body-file sync-report.md --label win7-sync
+          fi
+
+      # rc=2：有冲突 → 把冲突现场提交到分支（含 <<<< 标记）并开 draft PR，@owner 接手
+      - name: Push conflict branch & open draft PR
+        if: steps.sync.outputs.rc == '2'
+        run: |
+          BR="${{ steps.sync.outputs.branch }}"
+          git add -A
+          git -c core.autocrlf=false commit -q -m "WIP(win7-sync): 冲突现场，待人工解决（勿合并）" || true
+          git push -f origin "HEAD:$BR"
+          if ! gh pr view "$BR" --json number >/dev/null 2>&1; then
+            gh pr create --draft --base release/win7 --head "$BR" \
+              --title "[需人工] win7-sync: main → release/win7 冲突 ($(date +%Y-%m-%d))" \
+              --body-file sync-report.md --label win7-sync --label needs-human
+          else
+            gh pr edit "$BR" --body-file sync-report.md
+          fi
+          echo "::warning::合并存在冲突，已开 draft PR $BR"
+
+      - name: Fail on gate error
+        if: steps.sync.outputs.rc == '1'
+        run: |
+          echo "::error::auto_sync 门禁失败（py38 或 merge 异常），见 artifact win7-sync-report"
+          exit 1

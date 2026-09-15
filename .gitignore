@@ -163,3 +163,7 @@ r[0-9]*-*.log
 
 # 本地 CI 复现用虚拟环境
 .venv-ci/
+
+# win7-sync: generated parity report (see docs/win7-sync/README.md)
+docs/win7-sync/parity-auto.md
+docs/win7-sync/parity-auto.json

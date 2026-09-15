@@ -3,7 +3,11 @@
 classify_diff.py — 将 main...release/win7 的 1,937 异动文件自动分拣为 A/B/C/D 四类
 产出: docs/win7-sync/classify.csv + 控制台摘要
 """
-import subprocess, pathlib, csv, re, sys, argparse
+import argparse
+import csv
+import pathlib
+import re
+import subprocess
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 C_PATTERNS = [
@@ -17,9 +21,15 @@ B_PATTERNS = [
     r"^backend/adapters/out/llm", r"^backend/mcp", r"^backend/data/",
 ]
 B_RE = re.compile("|".join(f"({p})" for p in B_PATTERNS))
+# D 类 = 发布/打包冻结件：永远保持 win7 侧（auto_sync 冲突时自动 --ours）。
+# 与 docs/win7-sync/parity.md「D 类保持 win7」清单一致。
 D_PATTERNS = [
     r"^\.github/workflows/release-win7", r"^scripts/bundle-python\.ps1",
-    r"^resources/build-manifest", r"^backend/requirements-py38",
+    r"^scripts/bundle-python\.Tests\.ps1", r"^scripts/py38_compat_rewrite\.py",
+    r"^scripts/check_py38_compat\.py",
+    r"^resources/build-manifest", r"^backend/requirements", r"^backend/environment\.yml",
+    r"^electron-builder\.yml$", r"^package\.json$", r"^package-lock\.json$",
+    r"^electron/backendLauncher\.ts$", r"^electron/__tests__/backendLauncher\.test\.ts$",
 ]
 D_RE = re.compile("|".join(f"({p})" for p in D_PATTERNS))
 
@@ -39,7 +49,7 @@ def get_diff(diff_file=None):
         ["git", "diff", "--name-only", "origin/main...origin/release/win7"],
         cwd=REPO, text=True
     )
-    return [l.strip() for l in out.splitlines() if l.strip()]
+    return [line.strip() for line in out.splitlines() if line.strip()]
 
 def main():
     ap = argparse.ArgumentParser()
