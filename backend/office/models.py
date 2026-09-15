@@ -68,7 +68,6 @@ class OfficeDocStatus(str, Enum):
 class OfficeDocumentMetadata(BaseModel):
     """Per-document metadata captured at read/generate time."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -84,7 +83,6 @@ class OfficeDocumentMetadata(BaseModel):
 class OfficeDocumentSummary(BaseModel):
     """Compact document record — used in list API and as a sub-field in read results."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -126,7 +124,6 @@ class OfficeDocumentSummary(BaseModel):
 class PptSlideContent(BaseModel):
     """One PPT slide's extracted content."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -141,7 +138,6 @@ class PptSlideContent(BaseModel):
 class OfficePptReadResult(BaseModel):
     """Result of POST /api/v1/office/ppt/read."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -152,7 +148,6 @@ class OfficePptReadResult(BaseModel):
 class WordParagraphContent(BaseModel):
     """One Word paragraph."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -164,7 +159,6 @@ class WordParagraphContent(BaseModel):
 class WordTableContent(BaseModel):
     """One Word table."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -181,7 +175,6 @@ class WordCommentContent(BaseModel):
     range, falling back to the anchor's paragraph text when the range is empty.
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -200,7 +193,6 @@ class WordCommentsResult(BaseModel):
     :class:`WordCommentContent` items directly via its ``comments`` field.
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -210,7 +202,6 @@ class WordCommentsResult(BaseModel):
 class WordHeaderFooterContent(BaseModel):
     """单节的页眉/页脚提取结果（section 为 1-based 节号）。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -223,7 +214,6 @@ class WordHeaderFooterContent(BaseModel):
 class OfficeWordReadResult(BaseModel):
     """Result of POST /api/v1/office/word/read."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -245,7 +235,6 @@ class OfficeWordReadResult(BaseModel):
 class ExcelSheetContent(BaseModel):
     """One Excel sheet."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -271,7 +260,6 @@ class ExcelSheetContent(BaseModel):
 class OfficeExcelReadResult(BaseModel):
     """Result of POST /api/v1/office/excel/read."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -287,7 +275,6 @@ class OfficeExcelReadResult(BaseModel):
 class OfficeReadRequest(BaseModel):
     """Common shape for all three read endpoints."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -333,7 +320,6 @@ class ImageSourceSpec(BaseModel):
     图片文件路径。解码后强制 ≤10MB（与 word_template._MAX_IMAGE_BYTES 对齐）。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -350,7 +336,6 @@ class WordImageSpec(ImageSourceSpec):
     ``caption`` 非空时生成居中题注（"图N　caption"），图号全文独立计数。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -361,7 +346,6 @@ class WordImageSpec(ImageSourceSpec):
 class PptSlideSpec(BaseModel):
     """One slide to generate in a PPT."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -380,7 +364,6 @@ class PptSlideSpec(BaseModel):
 class OfficePptGenerateRequest(BaseModel):
     """POST /api/v1/office/ppt/generate."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -403,7 +386,6 @@ class WordParagraphSpec(BaseModel):
     模型层拒绝，而非生成期静默跳过）。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -457,7 +439,6 @@ class ReferenceSpec(BaseModel):
     CJK 自动判定（影响"等/et al"截断词）。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -487,7 +468,6 @@ class ReferenceSpec(BaseModel):
 class BibliographySpec(BaseModel):
     """文末参考文献节样式（Round 9）。全字段可选。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -503,7 +483,6 @@ class WordTocSpec(BaseModel):
     生成器只负责插入域与占位提示——与"标题编号交给引擎"同一思路。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -535,7 +514,6 @@ class WordTocSpec(BaseModel):
 class BibTeXParseRequest(BaseModel):
     """POST /api/v1/office/word/parse-bibtex（Round 9）。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -545,7 +523,6 @@ class BibTeXParseRequest(BaseModel):
 class BibTeXParseResponse(BaseModel):
     """BibTeX 解析结果（Round 9）。条目可直接传入 word generate references。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -559,7 +536,6 @@ class WordCellMergeSpec(BaseModel):
     """表格合并区域（Round 8）：0-based 含端点矩形（与 rows/headers 下标
     心智模型一致，区别于 ExcelCellRange 的 1-based）。生成期校验越界。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -576,7 +552,6 @@ class WordTableSpec(BaseModel):
     重复、列宽、合并单元格；全部可选，None/false 保持既有默认网格行为。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -611,7 +586,6 @@ class WordTableSpec(BaseModel):
 class WordPageMarginsSpec(BaseModel):
     """页边距（厘米）。None 的边保持 Word 默认。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -624,7 +598,6 @@ class WordPageMarginsSpec(BaseModel):
 class WordPageSetupSpec(BaseModel):
     """页面设置：纸张/方向/页边距。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -636,7 +609,6 @@ class WordPageSetupSpec(BaseModel):
 class WordBodyStyleSpec(BaseModel):
     """正文（Normal 样式）默认排版。行距为倍数（如 1.5 倍）。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -650,7 +622,6 @@ class WordBodyStyleSpec(BaseModel):
 class WordHeadingStyleSpec(BaseModel):
     """标题样式覆盖（作用于 Title / Heading 1-3 样式定义本身）。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -670,7 +641,6 @@ class WordHeadingStyleSpec(BaseModel):
 class WordHeaderFooterSpec(BaseModel):
     """页眉/页脚设置。``page_number`` 仅在 footer 上生效（居中 PAGE 域）。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -687,7 +657,6 @@ class WordFormatSpec(BaseModel):
     里"口头约定"。全字段可选，None 项不触碰。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -720,7 +689,6 @@ class WordSectionBreakSpec(BaseModel):
     新节应用 page_setup（横排宽表/财务页场景）。复用 WordPageSetupSpec。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -731,7 +699,6 @@ class WordSectionBreakSpec(BaseModel):
 class OfficeWordGenerateRequest(BaseModel):
     """POST /api/v1/office/word/generate."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -779,7 +746,6 @@ class ExcelSheetSpec(BaseModel):
     冻结首行 / 自适应列宽 / 按列名数字格式。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -826,7 +792,6 @@ class ExcelDataValidationSpec(BaseModel):
     硬限制）时该条跳过（warning），不阻断生成。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -851,7 +816,6 @@ class ExcelConditionalFormatSpec(BaseModel):
     COUNTIF 公式 + 纯色填充。range 为 A1 记法（如 "B2:B100"）。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -905,7 +869,6 @@ class ExcelConditionalFormatSpec(BaseModel):
 class ExcelPrintSetupSpec(BaseModel):
     """打印设置（Round 23）。全字段可选，None = 不设置。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -934,7 +897,6 @@ class ExcelPrintSetupSpec(BaseModel):
 class ExcelPrintMarginsSpec(BaseModel):
     """打印页边距（厘米，Round 31）。全字段可选。"""
 
-    model_config = ConfigDict(extra="forbid")
 
     top: Optional[float] = Field(default=None, ge=0.0, le=10.0)
     bottom: Optional[float] = Field(default=None, ge=0.0, le=10.0)
@@ -945,7 +907,6 @@ class ExcelPrintMarginsSpec(BaseModel):
 class ExcelCellRange(BaseModel):
     """openpyxl Reference 风格的矩形单元格区域（1-based，含端点）。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -962,7 +923,6 @@ class ExcelChartSpec(BaseModel):
     （``titles_from_data=True`` 时首行/首列按 ``from_rows`` 解释为系列名）。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -979,7 +939,6 @@ class ExcelChartSpec(BaseModel):
 class OfficeExcelGenerateRequest(BaseModel):
     """POST /api/v1/office/excel/generate."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -996,7 +955,6 @@ class OfficeExcelGenerateRequest(BaseModel):
 class ChartSeriesSpec(BaseModel):
     """matplotlib 图表的一条数据系列。``x`` 可省略（bar/pie 用 labels 补位）。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1011,7 +969,6 @@ class ChartSeriesSpec(BaseModel):
 class ChartSpec(BaseModel):
     """批次 2.1：matplotlib 图表渲染规格（render_chart_png 输入）。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1032,7 +989,6 @@ class ChartSpec(BaseModel):
 class OfficeDocumentListResponse(BaseModel):
     """GET /api/v1/office/documents."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1043,7 +999,6 @@ class OfficeDocumentListResponse(BaseModel):
 class OfficeDeleteResponse(BaseModel):
     """DELETE /api/v1/office/documents/{id}."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1054,7 +1009,6 @@ class OfficeDeleteResponse(BaseModel):
 class OfficeSnapshotInfo(BaseModel):
     """One pre-edit snapshot file under ``<managed_dir>/.snapshots/``."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1068,7 +1022,6 @@ class OfficeSnapshotInfo(BaseModel):
 class OfficeSnapshotListResponse(BaseModel):
     """GET /api/v1/office/doc/{doc_id}/snapshots."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1079,7 +1032,6 @@ class OfficeSnapshotListResponse(BaseModel):
 class OfficeDocumentActionResponse(BaseModel):
     """POST /doc/{doc_id}/archive | /restore | /snapshots/{sid}/restore."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1115,7 +1067,6 @@ class PlaceholderLocation(str, Enum):
 class TemplatePlaceholder(BaseModel):
     """One placeholder found in a Word template."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1133,7 +1084,6 @@ class TemplatePlaceholder(BaseModel):
 class WordTemplateAnalysis(BaseModel):
     """Result of analyzing a Word template."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1146,7 +1096,6 @@ class WordTemplateAnalysis(BaseModel):
 class WordTemplateAnalyzeRequest(BaseModel):
     """Request to analyze a Word template."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1157,7 +1106,6 @@ class WordTemplateAnalyzeRequest(BaseModel):
 class WordTemplateFillRequest(BaseModel):
     """Request to fill a Word template with data."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1171,7 +1119,6 @@ class WordTemplateFillRequest(BaseModel):
 class WordTemplateFillResult(BaseModel):
     """Result of filling a Word template."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1190,7 +1137,6 @@ class WordTemplateFillResult(BaseModel):
 class TemplateLibraryPlaceholder(BaseModel):
     """One placeholder advertised by a template-library entry."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1202,7 +1148,6 @@ class TemplateLibraryPlaceholder(BaseModel):
 class TemplateLibraryEntry(BaseModel):
     """One template in the library: builtin 中文办公模板 or workspace user template."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1229,7 +1174,6 @@ class TemplateLibraryEntry(BaseModel):
 class TemplateLibraryResponse(BaseModel):
     """GET /api/v1/office/templates."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1244,7 +1188,6 @@ class OfficeTemplateInstantiateRequest(BaseModel):
     excel / ppt 三种 doc_type，输出文件名扩展名须与模板类型一致。
     """
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1282,7 +1225,6 @@ class OfficeTemplateInstantiateRequest(BaseModel):
 class PdfPageContent(BaseModel):
     """Content of one PDF page."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1295,7 +1237,6 @@ class PdfPageContent(BaseModel):
 class PdfReadResult(BaseModel):
     """Result of reading a PDF file."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1307,7 +1248,6 @@ class PdfReadResult(BaseModel):
 class PdfReadRequest(BaseModel):
     """Request to read a PDF file."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1318,7 +1258,6 @@ class PdfReadRequest(BaseModel):
 class PdfPageSpec(BaseModel):
     """One page in a generated PDF."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1330,7 +1269,6 @@ class PdfPageSpec(BaseModel):
 class PdfGenerateRequest(BaseModel):
     """Request to generate a PDF."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1347,7 +1285,6 @@ class PdfGenerateRequest(BaseModel):
 class PdfGenerateResult(BaseModel):
     """Result of generating a PDF."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1360,7 +1297,6 @@ class PdfGenerateResult(BaseModel):
 class PdfFormField(BaseModel):
     """One PDF form field."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1375,7 +1311,6 @@ class PdfFormField(BaseModel):
 class PdfFormReadResult(BaseModel):
     """Result of reading PDF form fields."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1387,7 +1322,6 @@ class PdfFormReadResult(BaseModel):
 class PdfFormReadRequest(BaseModel):
     """Request to read PDF form fields."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1398,7 +1332,6 @@ class PdfFormReadRequest(BaseModel):
 class PdfFormFillRequest(BaseModel):
     """Request to fill a PDF form."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1412,7 +1345,6 @@ class PdfFormFillRequest(BaseModel):
 class PdfFormFillResult(BaseModel):
     """Result of filling a PDF form."""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1431,7 +1363,6 @@ class PdfFormFillResult(BaseModel):
 class WordLintIssue(BaseModel):
     """单条格式违规。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1447,7 +1378,6 @@ class WordLintIssue(BaseModel):
 class WordLintResult(BaseModel):
     """Linter 汇总结果。``ok`` = 无 error 级违规。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1462,7 +1392,6 @@ class WordLintResult(BaseModel):
 class WordLintRequest(BaseModel):
     """POST /api/v1/office/word/lint。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1477,7 +1406,6 @@ class WordLintRequest(BaseModel):
 class WordRepairResult(BaseModel):
     """自动修复结果（Round 12）。``ok`` = 修复后复检无 error 级违规。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 
@@ -1493,7 +1421,6 @@ class WordRepairResult(BaseModel):
 class WordRepairRequest(BaseModel):
     """POST /api/v1/office/word/repair。"""
 
-    model_config = ConfigDict(extra="forbid")
     class Config:
         extra = "forbid"
 

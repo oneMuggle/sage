@@ -80,7 +80,7 @@ def _cell_value_to_str(value: Any) -> str:
         return repr(value)
 
 
-def _extract_sheet_rows(ws) -> tuple[List[List[str]], int, int]:
+def _extract_sheet_rows(ws) -> Tuple[List[List[str]], int, int]:
     """Extract all rows from a worksheet as List[List[str]] + max_row + max_col.
 
     Merged cells: only the top-left cell has the value; other cells in the
@@ -104,7 +104,7 @@ def _extract_sheet_rows(ws) -> tuple[List[List[str]], int, int]:
     return rows, max_row, max_col
 
 
-def _extract_sheet_formulas(ws_formula, ws_values) -> tuple[List[str], bool]:
+def _extract_sheet_formulas(ws_formula, ws_values) -> Tuple[List[str], bool]:
     """Collect formula cells as ``CELL=formula_text`` entries + missing-cache flag.
 
     ``ws_formula`` is the ``data_only=False`` worksheet (formulas visible),
@@ -683,7 +683,7 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
 
         # Build all DataFrames first so we can detect the all-empty case
         # before opening the writer (avoids writing a file with no sheets).
-        sheet_specs: list[tuple[str, pd.DataFrame, bool]] = []
+        sheet_specs: List[Tuple[str, pd.DataFrame, bool]] = []
         total_sheets = len(req.sheets)
         for sheet_idx, sheet_spec in enumerate(req.sheets):
             name = sheet_spec.name[:31]  # Excel 31-char sheet-name cap

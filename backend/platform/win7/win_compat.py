@@ -4,9 +4,12 @@ win_compat.py — Windows / Python 3.8 兼容原语
 收敛 W4/W5 散在各处的 _win_abspath / reparse-safe / with 重写逻辑，
 供 backend 统一 import。
 """
-import pathlib, os, sys
+import os
+import pathlib
+import sys
+from typing import Union
 
-def win_abspath(p: str | pathlib.Path) -> pathlib.Path:
+def win_abspath(p: Union[str, pathlib.Path]) -> pathlib.Path:
     """W4 遗留：Windows 原子写越界检查前的归一化入口。"""
     pp = pathlib.Path(p)
     try:
