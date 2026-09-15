@@ -59,7 +59,9 @@ interface MessageProps {
 function CodeBlock({ language, children }: { language?: string; children: string }) {
   // Inline code fallback
   if (!language && !children.includes('\n')) {
-    return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{children}</code>;
+    return (
+      <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{children}</code>
+    );
   }
 
   return <ShikiCodeBlock language={language}>{children}</ShikiCodeBlock>;
@@ -95,10 +97,12 @@ function renderTextWithLinks(text: string): ReactNode[] {
 function PlainCodeBlock({ className, children }: { className?: string; children: unknown }) {
   const content = String(children).replace(/\n$/, '');
   if (!className && !content.includes('\n')) {
-    return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{content}</code>;
+    return (
+      <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{content}</code>
+    );
   }
   return (
-    <pre className="bg-[#282c34] text-gray-300 p-3 text-xs leading-relaxed overflow-x-auto rounded-md my-2">
+    <pre className="bg-[#282c34] text-gray-300 p-3 text-code font-mono leading-relaxed overflow-x-auto rounded-md my-2">
       <code>{content}</code>
     </pre>
   );
@@ -114,7 +118,7 @@ const markdownComponents = {
     const isInlineCode = !className && !content.includes('\n');
     if (isInlineCode || !lang) {
       return (
-        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{content}</code>
+        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{content}</code>
       );
     }
     // U7': Mermaid 图表渲染（动态加载，失败回退源码展示）
@@ -139,7 +143,9 @@ const markdownComponents = {
       // P2: 长表格纵向限高滚动 + 表头粘性（此前只能横向滚动，数十行的表
       // 把整条消息拉得极长）
       <div className="overflow-x-auto my-3 max-h-80 overflow-y-auto">
-        <table className="min-w-full text-xs border-collapse border border-border">{children}</table>
+        <table className="min-w-full text-xs border-collapse border border-border">
+          {children}
+        </table>
       </div>
     );
   },
@@ -181,7 +187,12 @@ const markdownComponents = {
   },
   a({ href, children }: { href?: string; children?: ReactNode }) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:underline"
+      >
         {children}
       </a>
     );
@@ -219,9 +230,7 @@ const MarkdownChunk = memo(
   function MarkdownChunk({ md, plainFences }: { md: string; plainFences?: boolean }) {
     // Components 断言: 映射对象是模块级单例，handler 参数用窄化类型
     // （react-markdown 的 ExtraProps 交叉类型过宽，直接标注反而失配）
-    const components = (
-      plainFences ? liveMarkdownComponents : markdownComponents
-    ) as Components;
+    const components = (plainFences ? liveMarkdownComponents : markdownComponents) as Components;
     return (
       <ReactMarkdown
         remarkPlugins={MD_REMARK_PLUGINS}
@@ -567,11 +576,7 @@ function MessageComponent({
                 <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
                 {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
                 {isStreaming && (
-                  <span
-                    className="stream-cursor"
-                    aria-hidden="true"
-                    data-testid="stream-cursor"
-                  />
+                  <span className="stream-cursor" aria-hidden="true" data-testid="stream-cursor" />
                 )}
               </div>
             )
@@ -623,7 +628,14 @@ function MessageComponent({
         )}
 
         {/* Action buttons */}
-        {(canCopy || onFeedback || canFork || canEditResend || canDelete || canRegenerate || canQuote || canSaveToMemory) && (
+        {(canCopy ||
+          onFeedback ||
+          canFork ||
+          canEditResend ||
+          canDelete ||
+          canRegenerate ||
+          canQuote ||
+          canSaveToMemory) && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
             {canCopy && (
               <button

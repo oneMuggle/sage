@@ -51,6 +51,24 @@ describe('settingsClient', () => {
     expect(mockInvoke).toHaveBeenCalledWith('get_preference', { key: 'theme_mode' });
   });
 
+  it('setPreferenceStrict propagates write failures', async () => {
+    mockInvoke.mockRejectedValue(new Error('offline'));
+    await expect(settingsClient.setPreferenceStrict('font_ui', 'inter')).rejects.toThrow('offline');
+  });
+
+  it('setPreferenceStrict sends the existing preference payload', async () => {
+    mockInvoke.mockResolvedValue({});
+    await expect(
+      settingsClient.setPreferenceStrict('font_size_code', '13'),
+    ).resolves.toBeUndefined();
+    expect(mockInvoke).toHaveBeenCalledWith('set_preference', {
+      key: 'font_size_code',
+      value: '13',
+      value_type: 'string',
+      category: 'ui',
+    });
+  });
+
   it('setPreference 走 set_preference cmd', async () => {
     mockInvoke.mockResolvedValue({});
     await settingsClient.setPreference('theme_mode', 'light');
