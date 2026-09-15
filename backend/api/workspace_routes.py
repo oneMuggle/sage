@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
-from backend.office.models import OfficeDocType
+from backend.office.models import OfficeDocType, _constrained_list
 from backend.office.session_workspace import (
     SessionWorkspaceBinding,
     bind_session_workspace,
@@ -268,7 +268,7 @@ def get_workspace_change_diff(
 
 class WorkspaceRevertRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    paths: List[str] = Field(min_length=1, max_length=50)
+    paths: _constrained_list(str, min_length=1, max_length=50) = Field(...)
     delete_untracked: bool = False
 
 
@@ -426,7 +426,7 @@ def restore_workspace_checkpoint(
 class WorkspaceRevertHunksRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     path: str = Field(min_length=1, max_length=1024)
-    hunk_indices: List[int] = Field(min_length=1, max_length=200)
+    hunk_indices: _constrained_list(int, min_length=1, max_length=200) = Field(...)
 
 
 class WorkspaceRevertHunksResponse(BaseModel):
