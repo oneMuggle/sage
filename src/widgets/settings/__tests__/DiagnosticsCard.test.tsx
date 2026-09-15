@@ -10,6 +10,7 @@ const mockElectronAPI = {
   copyLogPath: vi.fn(),
   cleanupLogs: vi.fn(),
   setLogLevel: vi.fn(),
+  getLogLevel: vi.fn(),
 };
 
 beforeEach(() => {
@@ -46,5 +47,26 @@ describe('DiagnosticsCard', () => {
     await waitFor(() => {
       expect(mockElectronAPI.setLogLevel).toHaveBeenCalledWith('debug');
     });
+  });
+
+  // 2026-09-15: 回归 — 切走再切回页面,组件重新挂载时必须从主进程
+  // 拉取当前生效的级别,而不是回到 useState 硬编码的 'info'。
+  it('initializes dropdown from getLogLevel on mount (not hardcoded info)', async () => {
+    mockElectronAPI.listLogFiles.mockResolvedValue([]);
+    mockElectronAPI.getLogLevel.mockResolvedValue('warn');
+    render(<DiagnosticsCard />);
+    const select = await screen.findByRole('combobox', { name: /日志级别/ });
+    await waitFor(() => {
+      expect(mockElectronAPI.getLogLevel).toHaveBeenCalled();
+      expect((select as HTMLSelectElement).value).toBe('warn');
+    });
+  });
+
+  it('falls back to info when getLogLevel rejects', async () => {
+    mockElectronAPI.listLogFiles.mockResolvedValue([]);
+    mockElectronAPI.getLogLevel.mockRejectedValue(new Error('IPC broken'));
+    render(<DiagnosticsCard />);
+    const select = await screen.findByRole('combobox', { name: /日志级别/ });
+    expect((select as HTMLSelectElement).value).toBe('info');
   });
 });

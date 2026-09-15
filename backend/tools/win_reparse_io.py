@@ -14,12 +14,11 @@ POSIX 平台一律抛 OSError（调用方各自决定降级策略），保证 fa
 """
 
 from __future__ import annotations
-from typing import Tuple
 
 import ctypes
 import os
 from ctypes import wintypes
-from typing import Optional
+from typing import Optional, Tuple
 
 # ---- Win32 常量（对照 shell_resolver.py / WinBase.h） ----
 _GENERIC_READ = 0x80000000

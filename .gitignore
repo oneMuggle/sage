@@ -72,13 +72,12 @@ data/
 # Re-include backend/data/ (Python module package) but still ignore
 # runtime SQLite files. The bare `data/` rule would otherwise shadow
 # `backend/data/*.py` for anyone adding a new repo module.
+# （P10 cherry-win7 对齐：与 main 同款守护——此前新模块
+#   backend/data/project_repo.py 曾被此规则静默忽略）
 !backend/data/
 backend/data/*.db
 backend/data/*.sqlite
 backend/data/*.sqlite3
-# Runtime audit/JSONL ledgers written under backend/data/. These are
-# created by the runtime, not part of the source tree.
-backend/data/audit/*.jsonl
 
 # Environment
 .env

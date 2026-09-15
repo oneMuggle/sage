@@ -410,6 +410,9 @@ const electronAPI = {
   setLogLevel(level: LogLevel): Promise<{ ok: true }> {
     return ipcRenderer.invoke('sage:log:set-level', { level }) as Promise<{ ok: true }>;
   },
+  getLogLevel(): Promise<LogLevel> {
+    return ipcRenderer.invoke('sage:log:get-level') as Promise<LogLevel>;
+  },
 
   /**
    * Demo mode toggle (2026-08-27): 用户在 Settings → 通用 开关调用.
