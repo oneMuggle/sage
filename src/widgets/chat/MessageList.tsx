@@ -1,4 +1,4 @@
-import { ChevronUp } from 'lucide-react';
+import { ChevronUp, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { BtwOverlay } from '../../features/chat';
@@ -27,6 +27,8 @@ interface MessageListProps {
   onQuote?: (message: MessageType) => void;
   /** P0-1: 保存此条消息到长期记忆（提供时 user/assistant 消息显示"保存到记忆"） */
   onSaveToMemory?: (message: MessageType) => void;
+  /** R44: 空态建议提示词点击回调 */
+  onSuggestionClick?: (prompt: string) => void;
 }
 
 export function MessageList({
@@ -40,7 +42,7 @@ export function MessageList({
   onDelete,
   onQuote,
   onSaveToMemory,
-}: MessageListProps) {
+  onSuggestionClick,}: MessageListProps) {
   // U11: 只渲染最近 WINDOW_STEP 条, 更早的按需加载 —— 避免长会话全量
   // 重渲染(每条 Message 都可能含 ReactMarkdown/Shiki)。
   const [windowSize, setWindowSize] = useState(WINDOW_STEP);
@@ -54,8 +56,26 @@ export function MessageList({
   if (messages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted">
-        <p className="text-lg mb-2">欢迎使用 Sage</p>
-        <p className="text-sm">开始一段新对话吧</p>
+        <Sparkles className="w-8 h-8 mb-3 text-primary/40" />
+        <p className="text-lg mb-1">欢迎使用 Sage</p>
+        <p className="text-sm mb-4">开始一段新对话吧</p>
+        {onSuggestionClick && (
+          <div className="flex flex-col gap-2 w-full max-w-xs px-4" data-testid="chat-empty-suggestions">
+            {['帮我写一段代码', '帮我搜索最新资讯', '帮我整理一份笔记', '帮我分析一个问题'].map(
+              (prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  data-testid={`chat-suggestion-${prompt.slice(2, 4)}`}
+                  onClick={() => onSuggestionClick(prompt)}
+                  className="px-3 py-2 text-xs text-left rounded-radius-sm border border-border bg-surface hover:bg-bg-hover transition-colors"
+                >
+                  {prompt}
+                </button>
+              ),
+            )}
+          </div>
+        )}
       </div>
     );
   }
