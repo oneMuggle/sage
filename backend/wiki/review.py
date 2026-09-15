@@ -202,7 +202,10 @@ class WikiReview:
             stem = md.stem.lower()
             existing_targets.add(stem)
             rel = _rel(md, self.wiki_dir)
-            existing_targets.add(rel.replace("\\", "/").removesuffix(".md").lower())
+            rel_key = rel.replace("\\", "/")
+            if rel_key.endswith(".md"):  # py3.8: 无 str.removesuffix（3.9+）
+                rel_key = rel_key[: -len(".md")]
+            existing_targets.add(rel_key.lower())
 
         items: List[ReviewItem] = []
         # target → 指向它的源文件列表

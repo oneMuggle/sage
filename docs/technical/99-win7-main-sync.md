@@ -15,6 +15,7 @@
 - [x] B3 Chat/RAG + memory + tools + UI —— `git merge --no-ff origin/main` 全量并入（8d3411d4）
 - [x] B4 Orchestration / B5 Web-access / B6 UI-electron —— 残差审计 + 死代码清理（8cb42cbe）
 - [x] Phase 3 自动化：`scripts/win7/auto_sync.py`、`parity_report.py` 六级分级守门、`parity-allow.txt` 台账、`.github/workflows/win7-sync.yml`（52d93474）
+- [x] PR #850 CI（真 Python 3.8）回归修复：`asyncio.to_thread` 垫片 `backend/compat/win7/asyncio_compat.py`、`with (` 改写并入 `py38_compat_rewrite.py`、`check_py38_compat.py` 增加运行时 API 第二层门禁（含 tests）、9 类 3.9+/3.10+/3.11+ API 调用点收口（明细见 `docs/win7-sync/README.md`「py38 运行时门禁」）
 
 ## 结果
 - 异动文件 1937 → 865 → 832 → 235 → **226**，全部为 win7 必要差异（typing-only 87 / frozen 15 / intentional 128）

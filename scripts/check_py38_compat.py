@@ -16,6 +16,12 @@ What we check:
 - Annotated assignments: x: dict[str, int] = {}
 - Variable annotations in module/class scope
 
+Runtime-API guardrail (regex, ALL files incl. tests — release/win7 CI runs
+backend/tests on Py3.8): str.removesuffix/removeprefix, Path.is_relative_to,
+datetime.UTC, isinstance(x, A | B), write_text(newline=), zip(strict=),
+`except TimeoutError` around asyncio.wait_for, parenthesized multi-item `with (`.
+Mark a deliberately guarded call site with the comment `py38: guarded`.
+
 What we DO NOT check:
 - Runtime expressions using `|` operator (e.g., `{"a": 1} | {"b": 2}` is fine on Py3.9+)
 - Tests are excluded by default (tests run on 3.10+ on main; tests on win7 must use
@@ -36,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -121,6 +128,87 @@ def check_file(path: Path, root: Path) -> list[tuple[int, str]]:
     return visitor.violations
 
 
+# ---------------------------------------------------------------------------
+# Runtime-API guardrail (regex, applies to tests too — backend/tests runs on
+# Py3.8 in the release/win7 CI job). These are *not* annotation issues: they
+# blow up at runtime / import time on Py3.8 even though ast.parse succeeds on
+# 3.11. Lines carrying the marker ``py38: guarded`` are skipped (used where the
+# call sits inside a ``try/except AttributeError`` fallback).
+# ---------------------------------------------------------------------------
+PY38_GUARD_MARKER = "py38: guarded"
+RUNTIME_API_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\.removesuffix\("), "str.removesuffix is Py3.9+ (use endswith + slice)"),
+    (re.compile(r"\.removeprefix\("), "str.removeprefix is Py3.9+ (use startswith + slice)"),
+    (re.compile(r"\.is_relative_to\("), "Path.is_relative_to is Py3.9+ (use backend.office.path_safety.is_within)"),
+    (re.compile(r"from datetime import[^\n]*\bUTC\b|\bdatetime\.UTC\b"), "datetime.UTC is Py3.11+ (use timezone.utc)"),
+    (re.compile(r"isinstance\([^()]*\b[\w.]+\s*\|\s*[\w.]+"), "PEP 604 union inside isinstance() is Py3.10+ (use a tuple)"),
+    (re.compile(r"write_text\([^)]*\bnewline=", re.S), "Path.write_text(newline=) is Py3.10+ (use path.open(newline=''))"),
+    (re.compile(r"\bzip\([^)]*\bstrict=", re.S), "zip(strict=) is Py3.10+"),
+    # Path.stat(follow_symlinks=) is 3.10+; os.stat / DirEntry.stat accept it on 3.8.
+    (re.compile(r"(?<![\w.])(?!os\.)(?!\w*entry\w*\.)[A-Za-z_]\w*\.stat\([^)]*follow_symlinks="), "Path.stat(follow_symlinks=) is Py3.10+ (use os.lstat / os.stat(follow_symlinks=))"),
+]
+# `except TimeoutError` only matters when the module awaits asyncio.wait_for /
+# asyncio.timeout — on Py3.8/3.10 asyncio.TimeoutError is NOT the builtin.
+ASYNCIO_TIMEOUT_EXCEPT = re.compile(r"^\s*except\s+TimeoutError\s*(as\s+\w+\s*)?:")
+PAREN_WITH_OPEN = re.compile(r"^\s*(async\s+)?with\s*\(\s*(#.*)?$")
+PAREN_WITH_CLOSE = re.compile(r"^\s*\)\s*:")
+RUNTIME_SKIP_FRAGMENTS = (
+    "scripts/py38_compat_rewrite.py",
+    "scripts/check_py38_compat.py",
+    "compat/win7/asyncio_compat.py",
+)
+
+
+def check_runtime_apis(path: Path, root: Path) -> list[tuple[int, str]]:
+    rel = str(path.relative_to(root)).replace("\\", "/")
+    if any(frag in rel for frag in RUNTIME_SKIP_FRAGMENTS):
+        return []
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    lines = source.splitlines()
+    uses_asyncio_wait = "asyncio.wait_for(" in source or "asyncio.timeout(" in source
+    out: list[tuple[int, str]] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        lineno = i + 1
+        if PY38_GUARD_MARKER in line:
+            i += 1
+            continue
+        # Drop trailing comments so `# noqa: UP017 — datetime.UTC is 3.11+` notes don't trip the regexes.
+        code = line.split("#", 1)[0] if not line.lstrip().startswith("#") else ""
+        # Multi-line calls: `write_text(\n ..., newline="",\n)` — extend the window to the
+        # closing paren (max 12 lines) for the call-kwarg patterns.
+        window = code
+        if "(" in code and ")" not in code.split("(", 1)[1]:
+            k = i + 1
+            while k < len(lines) and k <= i + 12:
+                window += "\n" + lines[k].split("#", 1)[0]
+                if ")" in lines[k]:
+                    break
+                k += 1
+        for pat, msg in RUNTIME_API_PATTERNS:
+            if pat.search(window if pat.flags & re.S else code):
+                out.append((lineno, f"py38 runtime: {msg}"))
+        if uses_asyncio_wait and ASYNCIO_TIMEOUT_EXCEPT.match(code):
+            out.append((lineno, "py38 runtime: `except TimeoutError` does not catch asyncio.wait_for timeout on Py3.8/3.10 (use `except (TimeoutError, asyncio.TimeoutError)`)"))
+        if PAREN_WITH_OPEN.match(code):
+            # Parenthesized multi-item context manager (PEP 617) → SyntaxError on 3.8.
+            j = i + 1
+            multi = False
+            while j < len(lines) and not PAREN_WITH_CLOSE.match(lines[j]):
+                body = lines[j].split("#", 1)[0].rstrip()
+                if body.endswith(",") or " as " in body:
+                    multi = True
+                j += 1
+            if multi:
+                out.append((lineno, "py38 runtime: parenthesized `with (a as x, b as y):` is Py3.9+ grammar (SyntaxError on 3.8; run scripts/py38_compat_rewrite.py)"))
+        i += 1
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument(
@@ -144,7 +232,7 @@ def main() -> int:
             files = [p for p in target.rglob("*.py") if p.is_file()]
         for f in files:
             files_checked += 1
-            violations = check_file(f, root)
+            violations = check_file(f, root) + check_runtime_apis(f, root)
             if violations:
                 files_with_violations += 1
                 print(f"::error file={f.relative_to(root)}")

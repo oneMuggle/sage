@@ -121,7 +121,7 @@ class FileMutationQueue:
                 # 标记任务完成
                 self._queue.task_done()
 
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):  # noqa: UP041 — py3.8/3.10: asyncio.TimeoutError ≠ builtin TimeoutError; 3.11+ 同一类
                 # 超时检查 _running，继续循环
                 continue
             except asyncio.CancelledError:

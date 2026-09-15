@@ -25,7 +25,9 @@ if TYPE_CHECKING:
     from backend.scheduler.evolution import BaseEvolutionTask
 
 try:  # pragma: no cover — py3.11+ runtime branch
-    from datetime import UTC as _UTC  # type: ignore[attr-defined]
+    from datetime import (
+        UTC as _UTC,  # type: ignore[attr-defined]  # py38: guarded (ImportError fallback below)
+    )
 except ImportError:  # py3.10 fallback
     from datetime import timedelta
 

@@ -40,13 +40,22 @@ class MemoryExtractionQueue:
     """异步记忆提取队列（单 worker 串行消费）。"""
 
     def __init__(self) -> None:
-        self._queue: asyncio.Queue[ExtractionRequest] = asyncio.Queue()
+        # py3.8/3.9: asyncio.Queue() 在构造期绑定 get_event_loop()，若在运行中的
+        # loop 之外（模块导入 / 同步 fixture）创建，worker 会拿到"attached to a
+        # different loop"的 Future。惰性创建，保证首次使用时在运行 loop 内。
+        self._queue_obj: Optional[asyncio.Queue] = None
         self._worker_task: Optional[asyncio.Task] = None
         self._completed = 0
         self._failed = 0
         self._skipped = 0
 
     # ---- 公共 API ------------------------------------------------------- #
+
+    @property
+    def _queue(self) -> asyncio.Queue:
+        if self._queue_obj is None:
+            self._queue_obj = asyncio.Queue()
+        return self._queue_obj
 
     def submit(self, request: ExtractionRequest) -> None:
         """非阻塞投递提取请求；无效请求（None port / disabled）直接跳过。"""
@@ -69,6 +78,8 @@ class MemoryExtractionQueue:
 
     async def drain(self, timeout: float = 5.0) -> None:
         """等待队列清空 + 所有项处理完成；超时返回（best-effort，不抛）。"""
+        if self._queue_obj is None:
+            return
         try:
             await asyncio.wait_for(self._queue.join(), timeout=timeout)
         except Exception:  # noqa: BLE001 - best-effort，超时/异常都不外抛
@@ -76,7 +87,7 @@ class MemoryExtractionQueue:
 
     def pending(self) -> int:
         """当前排队未处理的请求数。"""
-        return self._queue.qsize()
+        return 0 if self._queue_obj is None else self._queue_obj.qsize()
 
     @property
     def completed(self) -> int:

@@ -14,6 +14,10 @@ Why: Win7 LTS bundles Python 3.8.10 (last Win7-supporting version).
 Fix: rewrite annotation expressions to use typing.Optional/Union/List/Dict/etc.
 These work on all Python 3.x versions. Adds needed imports automatically.
 
+Also rewrites PEP 617 parenthesized ``with (a as x, b as y):`` blocks
+(SyntaxError on Py3.8 — kills pytest collection of the whole module) into
+nested ``with`` statements.
+
 Idempotent: running twice produces no further changes.
 
 Run:
@@ -447,6 +451,50 @@ class TypingImportAdder(cst.CSTTransformer):
         return updated_node.with_changes(body=new_body)
 
 
+class ParenWithRewriter(cst.CSTTransformer):
+    """PEP 617 parenthesized context managers (Py3.9+ grammar, official 3.10):
+
+        with (
+            patch("a") as a,
+            patch("b") as b,
+        ):
+            ...
+
+    Py3.8 raises SyntaxError at *parse* time, so a single occurrence in a
+    test module kills collection of the whole file. Rewrite to nested
+    ``with`` statements (semantically identical, comments inside the paren
+    block are dropped).
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.changed = False
+
+    def leave_With(self, original_node: cst.With, updated_node: cst.With) -> cst.With:
+        if isinstance(updated_node.lpar, cst.MaybeSentinel):
+            return updated_node
+        items = [it.with_changes(comma=cst.MaybeSentinel.DEFAULT) for it in updated_node.items]
+        if not items:
+            return updated_node
+        self.changed = True
+        inner = updated_node.with_changes(
+            items=[items[-1]],
+            lpar=cst.MaybeSentinel.DEFAULT,
+            rpar=cst.MaybeSentinel.DEFAULT,
+            leading_lines=[],
+            whitespace_after_with=cst.SimpleWhitespace(" "),
+            whitespace_before_colon=cst.SimpleWhitespace(""),
+        )
+        for it in reversed(items[:-1]):
+            inner = cst.With(
+                items=[it],
+                body=cst.IndentedBlock(body=[inner]),
+                asynchronous=updated_node.asynchronous,
+                leading_lines=[],
+            )
+        return inner.with_changes(leading_lines=updated_node.leading_lines)
+
+
 def transform_file(path: Path) -> bool:
     """Rewrite one .py file in-place. Returns True if changed."""
     source = path.read_text(encoding="utf-8")
@@ -461,8 +509,12 @@ def transform_file(path: Path) -> bool:
     if rewriter.changed:
         adder = TypingImportAdder(rewriter.needs_typing_imports)
         new_tree = new_tree.visit(adder)
+    with_rewriter = ParenWithRewriter()
+    new_tree = new_tree.visit(with_rewriter)
+    changed = rewriter.changed or with_rewriter.changed
+    if changed:
         path.write_text(new_tree.code, encoding="utf-8")
-    return rewriter.changed
+    return changed
 
 
 def main() -> int:
@@ -499,7 +551,9 @@ def main() -> int:
                 continue
             r = AnnotationRewriter()
             tree.visit(r)
-            if r.changed:
+            w = ParenWithRewriter()
+            tree.visit(w)
+            if r.changed or w.changed:
                 print(f"would rewrite: {path}")
                 changed += 1
             else:

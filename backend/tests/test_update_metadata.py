@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone  # py3.8: 无 datetime.UTC（3.11+）
 
 import pytest
 
@@ -18,7 +18,7 @@ def sample_manifest():
     return UpdateManifest(
         version="1.2.3",
         channel="stable",
-        release_date=datetime(2026, 9, 5, 12, 0, 0, tzinfo=UTC),
+        release_date=datetime(2026, 9, 5, 12, 0, 0, tzinfo=timezone.utc),  # noqa: UP017
         release_notes="## What's New\n- Feature A\n- Bug fix B",
         min_upgradable_version="1.0.0",
         files={

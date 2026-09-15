@@ -552,7 +552,7 @@ class AgentTool(BaseTool):
                 ),
                 timeout=SUBAGENT_TIMEOUT_S,
             )
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):  # noqa: UP041 — py3.8/3.10: asyncio.TimeoutError ≠ builtin TimeoutError; 3.11+ 同一类
             # wait_for 已取消内层协程 —— 子 run_loop 在取消点收口,
             # 不存在遗弃线程（异步通路的 L12 根修）。
             logger.warning(

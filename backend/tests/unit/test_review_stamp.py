@@ -7,6 +7,7 @@ run_review 的 verdict 写回各子 lane + review lane 自身 metadata，
 from __future__ import annotations
 
 import asyncio
+import sys
 
 from backend.orchestration.chat_dispatcher import ChatDispatcher, ChatTaskState
 from backend.orchestration.models import Lane
@@ -21,6 +22,10 @@ def _init_tmp_db(tmp_path, monkeypatch):
 
 
 def _dispatcher(run_id="orch-rv"):
+    if sys.version_info < (3, 10):  # noqa: UP036 — win7 运行时是 py3.8
+        # py3.8/3.9: asyncio.Queue() 构造期绑定 get_event_loop()；pytest-asyncio
+        # 结束上一个用例后 set_event_loop(None)，同步用例里需先备好 loop。
+        asyncio.set_event_loop(asyncio.new_event_loop())
     return ChatDispatcher(
         stream_id="s1", entry_queue=asyncio.Queue(), run_id=run_id
     )

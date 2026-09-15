@@ -84,14 +84,14 @@ def _parse_python(text: str) -> Dict[str, Any]:
             methods = [
                 n.name
                 for n in ast.iter_child_nodes(node)
-                if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
+                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
             ]
             classes.append({
                 "name": node.name,
                 "line": node.lineno,
                 "methods": methods,
             })
-        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             params = [arg.arg for arg in node.args.args]
             functions.append({
                 "name": node.name,

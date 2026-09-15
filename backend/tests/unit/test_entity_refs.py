@@ -96,12 +96,10 @@ class TestResolvers:
 
     def test_process_end_to_end_with_failures(self):
         # 所有数据源都坏掉 → 仍然产出块（带说明），不抛
-        with (
-            patch("backend.memory.get_memory_manager", side_effect=RuntimeError),
-            patch.object(entity_refs, "_wiki_project_root", return_value=None),
-            patch("backend.data.agent_repo.AgentRepository", side_effect=RuntimeError),
-        ):
-            out = entity_refs.process("@memory:a @wiki:b @agent:c", "s1")
+        with patch("backend.memory.get_memory_manager", side_effect=RuntimeError):
+            with patch.object(entity_refs, "_wiki_project_root", return_value=None):
+                with patch("backend.data.agent_repo.AgentRepository", side_effect=RuntimeError):
+                    out = entity_refs.process("@memory:a @wiki:b @agent:c", "s1")
         assert "<references>" in out
         assert "=== 记忆: a ===" in out
         assert "=== Wiki: b ===" in out

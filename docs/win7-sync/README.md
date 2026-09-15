@@ -23,6 +23,39 @@ python scripts/win7/auto_sync.py --commit --report sync-report.md
 # 4. 单独的 py38 语法门禁 / 回写
 python scripts/check_py38_compat.py
 python scripts/py38_compat_rewrite.py backend packages/sage-core   # 需 py3.10+ 与 libcst
+
+# 5. 本地复现 CI backend-py38（真 Python 3.8）：见下方「py38 运行时门禁」
+```
+
+## py38 运行时门禁（`check_py38_compat.py` 第二层）
+
+CI `backend-py38` 在 **真实 Python 3.8** 上跑 `backend/tests`，所以光管住 PEP 604/585 注解不够——
+以下 API 在 3.11 上 `ast.parse` 正常、在 3.8 上直接炸（首轮 PR #850 CI 暴露了 82 例失败 + 1 例
+xdist worker 崩溃，全部属于这些类别）。`check_py38_compat.py` 现在对 **backend + packages/sage-core
+含 tests** 做正则守门；`py38_compat_rewrite.py` 自动改写其中的 `with (` 形态：
+
+| 3.9+/3.10+/3.11+ API | 3.8 表现 | 替代 |
+|---|---|---|
+| `asyncio.to_thread` (3.9) | `AttributeError` —— 68 例 | `backend/compat/win7/asyncio_compat.py` 在 `backend/__init__` 注入（源码保持 main 原样） |
+| `with (a as x, b as y):` (PEP 617) | **SyntaxError，整个测试模块无法 collect** | `py38_compat_rewrite.py` → 嵌套 `with`；ruff 关闭 SIM117 |
+| `str.removesuffix/removeprefix` (3.9) | `AttributeError` | `endswith` + 切片 |
+| `Path.is_relative_to` (3.9) | `AttributeError` | `backend.office.path_safety.is_within` |
+| `Path.write_text(newline=)` / `Path.stat(follow_symlinks=)` (3.10) | `TypeError` | `path.open(newline="")` / `os.lstat` |
+| `isinstance(x, A \| B)` (3.10) | `TypeError: unsupported operand` | tuple |
+| `except TimeoutError` 包 `asyncio.wait_for` (3.11 起才是同一个类) | 超时**不被捕获** | `except (TimeoutError, asyncio.TimeoutError)` (`# noqa: UP041`) |
+| `datetime.UTC` (3.11) | `ImportError` | `timezone.utc` (`# noqa: UP017`) |
+| `asyncio.Queue()` 在运行中的 loop 之外构造 (3.8/3.9 绑定 `get_event_loop()`) | worker 拿到别的 loop 的 Future | 惰性创建（`memory/async_extractor.py`） |
+
+刻意保留、且已用 `try/except` 兜底的调用点，在同一行加注释 `py38: guarded` 即可跳过。
+
+本地复现（Windows，conda）：
+```powershell
+conda create -n sage-backend-py38 python=3.8 -y
+# py3.8 conda 自带 OpenSSL 在代理环境下 pip 可能 TLS 握手失败 —— 用 3.11 的 pip 代下 wheel：
+python -m pip download -d wheels38 --python-version 3.8 --platform win_amd64 --implementation cp --abi cp38 --only-binary=:all: -r backend/requirements-py38.txt   # 剔除 jieba/hnswlib（无 wheel）
+conda run -n sage-backend-py38 pip install --no-index --find-links wheels38 -r backend/requirements-py38.txt
+conda run -n sage-backend-py38 pip install -r backend/requirements-dev.txt    # 与 CI 一致：会把 pydantic 升到 2.5.0
+cd backend; conda run -n sage-backend-py38 pytest -n 4 --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py
 ```
 
 ## 脚本一览（`scripts/win7/`）
@@ -31,7 +64,7 @@ python scripts/py38_compat_rewrite.py backend packages/sage-core   # 需 py3.10+
 |------|------|-------------|
 | `classify_diff.py` | 把异动文件分 A/B/C/D 四类；**D 类 = 发布/打包冻结件**，`auto_sync` 冲突时自动取 win7 侧 | `parity_report` / `auto_sync` 内部 import |
 | `parity_report.py` | 生成 `parity-auto.md`：残差分级 typing-only / frozen / intentional / win7-only / main-only / real；`--fail-on` 守门；`--write-allow` 登记 | `win7-sync.yml` → job `parity` |
-| `auto_sync.py` | `git merge --no-ff origin/main` → D 类 ours → `py38_compat_rewrite` → `check_py38_compat` → 提交；冲突时输出分类报告 exit 2 | `win7-sync.yml` → job `sync` |
+| `auto_sync.py` | `git merge --no-ff origin/main` → D 类 ours → `py38_compat_rewrite`（注解 + `with (` 改写）→ ruff --fix → `check_py38_compat`（注解 + 运行时 API 两层）→ `ruff check backend/` → 提交；冲突时输出分类报告 exit 2 | `win7-sync.yml` → job `sync` |
 | `cp.ps1` | 本地 cherry-pick 辅助（B1/B2 时期） | — |
 
 ## 残差分级怎么算

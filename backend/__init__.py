@@ -6,3 +6,11 @@ try:
     _pc.install()
 except Exception:  # pragma: no cover
     pass
+
+# Win7 (py3.8) 兼容垫片：注入 asyncio.to_thread（3.9+ API）；py3.9+ 下 no-op。
+try:
+    from backend.compat.win7 import asyncio_compat as _ac
+
+    _ac.install()
+except Exception:  # pragma: no cover
+    pass

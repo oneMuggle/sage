@@ -48,17 +48,17 @@ def _write_skill_md(
     skill_dir = parent / name
     skill_dir.mkdir(parents=True, exist_ok=True)
     path = skill_dir / "SKILL.md"
-    path.write_text(
-        f"---\n"
-        f"name: {name}\n"
-        f"description: test {name}\n"
-        f"{frontmatter_extra}"
-        f"---\n"
-        f"{body}",
-        encoding="utf-8",
-        # Windows 上禁用 \n → \r\n 翻译，保证磁盘字节与断言一致
-        newline="",
-    )
+    # Windows 上禁用 \n → \r\n 翻译，保证磁盘字节与断言一致
+    # （py3.8 的 Path.write_text 无 newline= 参数，走 open()）
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        fh.write(
+            f"---\n"
+            f"name: {name}\n"
+            f"description: test {name}\n"
+            f"{frontmatter_extra}"
+            f"---\n"
+            f"{body}"
+        )
     return path
 
 
@@ -66,7 +66,8 @@ def _write_bad_skill_md(parent: Path, name: str, text: str) -> Path:
     skill_dir = parent / name
     skill_dir.mkdir(parents=True, exist_ok=True)
     path = skill_dir / "SKILL.md"
-    path.write_text(text, encoding="utf-8", newline="")
+    with path.open("w", encoding="utf-8", newline="") as fh:  # py3.8: write_text 无 newline=
+        fh.write(text)
     return path
 
 
@@ -537,11 +538,8 @@ def test_hot_reload_on_body_change(tmp_path):
     loader.scan_and_load()
 
     # 改 body
-    path.write_text(
-        "---\nname: alpha\ndescription: test alpha\n---\nNEW body\n",
-        encoding="utf-8",
-        newline="",
-    )
+    with path.open("w", encoding="utf-8", newline="") as fh:  # py3.8: write_text 无 newline=
+        fh.write("---\nname: alpha\ndescription: test alpha\n---\nNEW body\n")
 
     assert loader.check_for_updates() == ["alpha"]
     assert loader.hot_reload("alpha") is True

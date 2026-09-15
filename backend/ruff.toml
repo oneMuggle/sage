@@ -53,6 +53,7 @@ ignore = [
     "PTH123",   # builtin open → Path.open
     "B905",     # zip-without-explicit-strict — py38 LTS can't accept strict= kwarg (PEP 618)
     "UP038",    # Use X | Y in isinstance — py38 LTS can't evaluate PEP 604 at runtime
+    "SIM117",   # nested with → single with (a, b): — parenthesized multi-item `with (` is a SyntaxError on py38; py38_compat_rewrite.py emits nested with
         "PLW0602",  # global variable not assigned
     "PLW0603",  # global variable assigned but never used
     # UP006/UP007/UP035 disabled to keep backend/ PEP 604/585 syntax

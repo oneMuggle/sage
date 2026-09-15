@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -104,8 +105,13 @@ def test_read_pdf_size_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
         Python 3.12 新版 pathlib 内部会带 ``follow_symlinks`` 调用 stat——
         桩签名必须兼容，否则 pytest 直接 INTERNALERROR。
+        Python 3.8/3.9 的 ``Path.stat`` 不接受 ``follow_symlinks``（3.10+ 才有），
+        win7 LTS 下只能按位置透传——否则 xdist worker 整体崩溃。
         """
-        st = real_stat(self, follow_symlinks=follow_symlinks)
+        if sys.version_info >= (3, 10):  # noqa: UP036 — win7 LTS 运行时为 py3.8
+            st = real_stat(self, follow_symlinks=follow_symlinks)
+        else:  # pragma: no cover — py3.8/3.9 (win7 LTS)
+            st = real_stat(self)
         if self.suffix == ".pdf":
             # Patch st_size to exceed the limit.
             class _BigStat:
