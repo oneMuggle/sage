@@ -286,6 +286,12 @@ async def create_project(req: CreateProjectRequest) -> ProjectInfo:
     project_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(project_path)))
     record_recent(str(project_path), req.name, "create")
 
+    # P12 对齐 (main P6): 打开/创建过的 wiki 项目同步进侧栏 projects
+    # 注册表（容错，写入失败不影响 wiki 主流程）。
+    from backend.data.project_repo import register_quietly
+
+    register_quietly(str(project_path))
+
     return ProjectInfo(
         id=project_id,
         name=req.name,
@@ -322,6 +328,12 @@ async def open_project(req: OpenProjectRequest) -> ProjectInfo:
     # 生成项目 ID
     project_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(project_path)))
     record_recent(str(project_path), project_path.name, "open")
+
+    # P12 对齐 (main P6): 打开/创建过的 wiki 项目同步进侧栏 projects
+    # 注册表（容错，写入失败不影响 wiki 主流程）。
+    from backend.data.project_repo import register_quietly
+
+    register_quietly(str(project_path))
 
     # 检查是否有内容
     has_content = False
