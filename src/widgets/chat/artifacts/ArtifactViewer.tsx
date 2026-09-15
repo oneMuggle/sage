@@ -1,15 +1,26 @@
 // src/widgets/chat/artifacts/ArtifactViewer.tsx
-import { ArrowLeft, Copy, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Copy, FolderOpen, Pencil, Save, X } from 'lucide-react';
+import { useCallback, useState } from 'react';
 
-import type { Artifact } from '../../../features/artifacts/artifactApi';
-import { revealArtifact } from '../../../features/artifacts/artifactApi';
+import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
+import { revealArtifact, updateArtifactContent } from '../../../features/artifacts/artifactApi';
 import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';
+import { VersionHistory } from './VersionHistory';
 
 interface ArtifactViewerProps {
   artifact: Artifact;
   sessionId: string;
   onBack: () => void;
 }
+
+/** Kinds eligible for the text edit panel. */
+const EDITABLE_KINDS: ReadonlySet<ArtifactKind> = new Set([
+  'markdown',
+  'code',
+  'json',
+  'text',
+  'csv',
+]);
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -78,7 +89,51 @@ function CsvPreview({ text }: { text: string }) {
 }
 
 export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerProps) {
-  const { content, loading } = useArtifactContent(sessionId, artifact.id);
+  const { content, loading, refresh } = useArtifactContent(sessionId, artifact.id);
+  const [editMode, setEditMode] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [editBaseHash, setEditBaseHash] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const isEditable =
+    content?.ok && content.kind && EDITABLE_KINDS.has(content.kind as ArtifactKind);
+
+  const enterEditMode = useCallback(async () => {
+    if (!content?.ok || !content.content) return;
+    setEditContent(content.content);
+    // Compute SHA-256 hash of current content for optimistic concurrency
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(content.content);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+      setEditBaseHash(hashHex);
+    } catch {
+      setEditBaseHash('');
+    }
+    setEditMode(true);
+    setSaveError(null);
+  }, [content]);
+
+  const handleSave = async () => {
+    if (!editBaseHash) {
+      setSaveError('无法保存：缺少内容哈希，请刷新后重试');
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await updateArtifactContent(sessionId, artifact.id, editBaseHash, editContent, 'edit');
+      setEditMode(false);
+      await refresh();
+    } catch (e: unknown) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -91,6 +146,33 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
           <span className="mx-1 text-muted">/</span>
           <span className="text-text">{artifact.name}</span>
         </div>
+        {isEditable && !editMode && (
+          <button className="p-1.5 rounded hover:bg-bg-hover" title="编辑" onClick={enterEditMode}>
+            <Pencil className="w-4 h-4" />
+          </button>
+        )}
+        {editMode && (
+          <>
+            <button
+              className="p-1.5 rounded hover:bg-bg-hover text-text-secondary disabled:opacity-50"
+              title="保存"
+              disabled={saving}
+              onClick={() => void handleSave()}
+            >
+              <Save className="w-4 h-4" />
+            </button>
+            <button
+              className="p-1.5 rounded hover:bg-bg-hover"
+              title="取消编辑"
+              onClick={() => {
+                setEditMode(false);
+                setSaveError(null);
+              }}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </>
+        )}
         <button
           className="p-1.5 rounded hover:bg-bg-hover"
           title="复制路径"
@@ -112,7 +194,17 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
       </div>
 
       <div className="flex-1 overflow-auto p-3">
-        {loading ? (
+        {editMode ? (
+          <div className="flex flex-col h-full">
+            <textarea
+              className="flex-1 w-full p-2 text-sm font-mono bg-bg-input border border-border rounded resize-none focus:outline-none focus:ring-1 focus:ring-accent"
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              spellCheck={false}
+            />
+            {saveError && <div className="mt-2 text-xs text-error">{saveError}</div>}
+          </div>
+        ) : loading ? (
           <div className="text-sm text-muted">加载中...</div>
         ) : !content || !content.ok ? (
           <div className="text-sm text-error">{content?.error ?? '加载失败'}</div>
@@ -153,6 +245,12 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
           <pre className="whitespace-pre-wrap text-sm">{content.content}</pre>
         )}
       </div>
+
+      <VersionHistory
+        sessionId={sessionId}
+        artifactId={artifact.id}
+        onRestoreComplete={() => void refresh()}
+      />
     </div>
   );
 }

@@ -1052,7 +1052,11 @@ async function registerIpcHandlers(): Promise<void> {
       if (payload.cmd === 'wiki_chat_cancel') {
         const id = payload.args?.stream_id;
         const token = payload.args?.owner_token;
-        if (typeof id === 'string' && wikiStreamOwners.get(id)?.token === token && wikiStreamOwners.get(id)?.sender === evt.sender.id) {
+        if (
+          typeof id === 'string' &&
+          wikiStreamOwners.get(id)?.token === token &&
+          wikiStreamOwners.get(id)?.sender === evt.sender.id
+        ) {
           streamControllers.get(id)?.abort();
           streamControllers.delete(id);
           wikiStreamOwners.delete(id);
@@ -1701,7 +1705,8 @@ function startWikiChatStream(
   }
   if (streamControllers.has(streamId)) throw new Error('Wiki stream ID already active');
   const token = args.owner_token;
-  if (typeof token !== 'string' || !/^[a-zA-Z0-9-]{16,80}$/.test(token)) throw new Error('Invalid Wiki owner token');
+  if (typeof token !== 'string' || !/^[a-zA-Z0-9-]{16,80}$/.test(token))
+    throw new Error('Invalid Wiki owner token');
   wikiStreamOwners.set(streamId, { token, sender: sender.id });
   const controller = new AbortController();
   streamControllers.set(streamId, controller);

@@ -66,7 +66,8 @@ export const en: Record<TranslationKey, string> = {
   'chat.perm.careful': 'Careful',
   'chat.perm.careful.desc': 'Ask before writing files, running commands, or using the network',
   'chat.perm.standard': 'Standard',
-  'chat.perm.standard.desc': 'Read/write inside the workspace freely; ask for shell and out-of-workspace',
+  'chat.perm.standard.desc':
+    'Read/write inside the workspace freely; ask for shell and out-of-workspace',
   'chat.perm.auto': 'Auto',
   'chat.perm.auto.desc': 'Allow everything; only destructive commands (delete/overwrite) still ask',
   'chat.perm.custom': 'custom',
@@ -75,11 +76,13 @@ export const en: Record<TranslationKey, string> = {
   'chat.perm.auto_count': '{n} auto-approved',
   'chat.perm.audit_title': 'Auto-approved actions in this session',
   'chat.perm.audit_empty': 'No auto-approved write/execute actions in this session yet',
-  'chat.perm.destructive_note': 'Destructive commands (rm -rf, forced overwrite) always ask, in every mode.',
+  'chat.perm.destructive_note':
+    'Destructive commands (rm -rf, forced overwrite) always ask, in every mode.',
   'chat.nav.opened': 'Opened {page}',
   'chat.atEntity.label': 'Reference',
   'chat.atEntity.memory': 'Memory',
-  'chat.atEntity.memory.desc': '@memory:keyword — inject matching long-term memories into this message',
+  'chat.atEntity.memory.desc':
+    '@memory:keyword — inject matching long-term memories into this message',
   'chat.atEntity.wiki': 'Wiki',
   'chat.atEntity.wiki.desc': '@wiki:keyword — reference a knowledge-base Wiki page',
   'chat.atEntity.skill': 'Skill',
@@ -117,9 +120,11 @@ export const en: Record<TranslationKey, string> = {
   'wizard.save': 'Save & finish',
   'wizard.skip': 'Skip — configure later in Settings',
   'wizard.done.title': 'All set',
-  'wizard.done.desc': 'Endpoint saved and set as chat model. Change it anytime in Settings → Endpoints.',
+  'wizard.done.desc':
+    'Endpoint saved and set as chat model. Change it anytime in Settings → Endpoints.',
   'wizard.done.start': 'Start using Sage',
-  'chat.attachment_not_sent': 'Note: regular file attachments are not sent yet; images are supported, and @-referenced files take effect',
+  'chat.attachment_not_sent':
+    'Note: regular file attachments are not sent yet; images are supported, and @-referenced files take effect',
   'chat.memory_toggle': 'View memories used for this reply',
   'chat.delete_message': 'Delete this message',
   'chat.delete_message_confirm': 'Delete this message?',
@@ -207,13 +212,15 @@ export const en: Record<TranslationKey, string> = {
   'settings.network.error.tls_not_covered':
     'Host is not covered by the allowlist; add it to the host allowlist first',
   'settings.network.proxy': 'Fetch Proxy',
-  'settings.network.proxy.hint': 'Used by web fetch and the built-in browser. Leave empty to disable; supports http://, https://, socks5://.',
+  'settings.network.proxy.hint':
+    'Used by web fetch and the built-in browser. Leave empty to disable; supports http://, https://, socks5://.',
   'settings.network.proxy.http': 'HTTP proxy',
   'settings.network.proxy.https': 'HTTPS proxy',
   'settings.network.proxy.placeholder': 'http://127.0.0.1:7890 (empty = disabled)',
   'settings.network.proxy.error.scheme': 'Proxy URL must start with http://, https:// or socks5://',
   'settings.network.search': 'Search Engines',
-  'settings.network.search.hint': 'Tried in order: when the first engine yields nothing, later engines are used. API engines without a key are skipped.',
+  'settings.network.search.hint':
+    'Tried in order: when the first engine yields nothing, later engines are used. API engines without a key are skipped.',
   'settings.network.search.first': 'Preferred engine',
   'settings.network.search.tavily_key': 'Tavily API Key',
   'settings.network.search.zhipu_key': 'Zhipu API Key',
@@ -356,6 +363,44 @@ export const en: Record<TranslationKey, string> = {
   'sider.project.add_failed': 'Failed to add project: {message}',
   'sider.project.open_failed': 'Failed to open project: {message}',
   'sider.project.remove_failed': 'Failed to remove project: {message}',
+  // ─── P3: Project overview panel ───────────
+  'sider.project.materials_load_failed': 'Failed to load materials: {message}',
+  'sider.project.overview_title': 'Project Overview',
+  'sider.project.overview_description': 'Description',
+  'sider.project.overview_description_placeholder':
+    'Briefly describe this project (goals, stack, etc.)',
+  'sider.project.overview_instructions': 'Instructions',
+  'sider.project.overview_instructions_placeholder':
+    'Project-level system prompt applied to every session (overrides global preferences)',
+  'sider.project.overview_save': 'Save',
+  'sider.project.overview_saving': 'Saving…',
+  'sider.project.overview_saved': 'Project overview saved',
+  'sider.project.overview_save_failed': 'Save failed: {message}',
+  // ─── P3: Materials management panel ───────
+  'sider.project.materials_title': 'Project Materials',
+  'sider.project.materials_loading': 'Loading materials…',
+  'sider.project.materials_empty':
+    'No materials yet. Paste text to add, or save the current answer.',
+  'sider.project.material_input_placeholder': 'Paste Markdown / text as material...',
+  'sider.project.material_add': 'Add',
+  'sider.project.material_add_failed': 'Failed to add material: {message}',
+  'sider.project.material_remove': 'Remove',
+  'sider.project.material_remove_failed': 'Failed to remove material: {message}',
+  'sider.project.material_too_large': 'Material text exceeds the 1 MiB limit; please split it',
+  'sider.project.material_from_message': 'from message #{id}',
+  'sider.project.material_direct': 'manually added',
+  'sider.project.material_status_ready': 'ready',
+  'sider.project.material_status_pending': 'indexing',
+  'sider.project.material_status_failed': 'failed',
+  'sider.project.save_answer': 'Save current answer',
+  'sider.project.save_answer_title':
+    'Save the most recent AI answer in the active session as a project material',
+  'sider.project.save_answer_no_session': 'No active session',
+  'sider.project.save_answer_no_assistant': 'No AI answer in the current session to save',
+  'sider.project.save_answer_ok': 'Saved as project material',
+  'sider.project.save_answer_mismatch': 'Current session is not bound to this project',
+  'sider.project.save_answer_not_found': 'Answer message not found',
+  'sider.project.save_answer_failed': 'Save failed: {message}',
 
   // ─── Titlebar ─────────────────────
   'titlebar.minimize': 'Minimize',

@@ -56,8 +56,33 @@
   - 关键修复：检索前过滤 allowed_paths（HNSW label filter + JSON filter）、
     引用仅在 budget truncation 后从实际 prompt 内容生成、Promise.all 先订阅后启动、
     500 上限前端默认选择 + 提示、locate 端点 line_start > len(lines) 返回 422
-- [ ] M2：产物候选、确认应用、持久版本与恢复闭环。
-- [ ] M3：项目概览、资料管理、上下文注入与回答沉淀闭环。
+- [x] M2 后端：版本历史与 apply-edit 闭环。
+  - `artifact_versions` 表（DDL in `backend/data/database.py`），复合 PK `(artifact_id, version_num)`
+  - `backend/data/artifact_version_repo.py`：create_version / list_versions / get_version / get_latest_version / apply_edit
+  - `backend/api/artifact_routes.py`：4 新端点 GET versions、GET version/{n}、POST restore、PUT 更新
+  - 每产物 asyncio.Lock 串行化写；base_hash 冲突 → 409；1 MiB 文本上限；100 版本上限；原子替换（tmp + rename）
+  - 58 artifact 测试通过（42 已有 + 16 新增，含 7 API / 4 repo / 2 schema）
+  - LLM-based 编辑候选生成（propose endpoint）待实现，不影响版本恢复主路径
+- [x] M2 前端：编辑面板、版本选择器、API client 函数
+  - `artifactApi.ts` 新增 4 个版本 API + 3 个接口（list/get/restore/update）
+  - `useArtifactContent.ts` 新增 `refresh` callback（版本恢复后刷新内容）
+  - `VersionHistory.tsx` 可折叠版本列表面板，展开加载 + 恢复按钮 + loading/error/empty 状态
+  - `ArtifactViewer.tsx` 编辑模式（EDITABLE_KINDS: markdown/code/json/text/csv）+ SHA-256 base_hash + 保存/取消 + VersionHistory 集成
+  - 22 artifact 前端测试全绿，tsc 0 错误
+- [x] M3：项目概览、资料管理、上下文注入与回答沉淀闭环。
+  - `project_materials` 表（DDL in `backend/data/database.py`）+ 复合 UNIQUE INDEX `(project_id, content_hash)`
+  - `backend/data/project_material_repo.py`：add / get / list_by_project / list_active_for_injection / remove
+  - `backend/data/project_repo.py`：PATCH 端点支持 description/instructions（model_fields_set 语义只改传入字段）
+  - `backend/api/project_routes.py`：5 新端点 PATCH /materials/{id}、POST /materials、DELETE /materials/{material_id}、GET /materials、POST /materials/save-answer
+  - `backend/chat/project_context.py`：ProjectMetadata + active materials 注入 chat context，优先级 安全 > 项目指令 > 全局偏好；资料作为不可信内容，标注 `[untrusted]`
+  - `backend/api/legacy_routes.py`：`save_answer_to_project` 路径处理 403 message_project_mismatch
+  - 50 M3 后端测试全绿（repo + routes + metadata context + 集成测试）
+  - `electron/commands.ts` 新增 5 IPC 通道（projects_update / list_materials / add_material / remove_material / save_answer）
+  - `src/shared/api/projectApi.ts` 新增 5 TypeScript 方法 + ProjectMaterial / ProjectUpdatePatch 类型 + mapProject / mapMaterial mapper
+  - `src/widgets/sidebar/sections/ProjectSection.tsx`：项目概览面板（description/instructions textarea + 局部 dirty 检测 + 保存）+ 资料管理面板（status badge + add via textarea + remove + 1 MiB 上限前端拦截）+ 保存回答按钮（从当前会话最近 assistant 消息取 messageId）
+  - i18n：zh.ts + en.ts lockstep 新增 30 keys（materials_*, overview_*, save_answer_*）
+  - ProjectSection.test.tsx：29 测试全绿（17 旧 P1-P5 + 12 新 M3 用例）
+  - tsc 0 错误、eslint 0 错误、build 成功（39.42s）、pre-existing 不相关失败（TemplateFillDialog JSON、WikiChat.sources 超时）已确认与 M3 无关
 - [ ] M4：跨功能回归、桌面验证、安全及代码审查、更新技术/用户手册。
 
 每阶段先写失败测试，再实现；Python 使用 `/home/fz/anaconda3/envs/sage-backend/bin/python`，不向共享环境安装依赖。前端运行 Vitest、类型检查、lint、构建；后端运行针对性 pytest、真实临时数据库集成测试、路径与权限测试。新增关键服务覆盖率目标至少80%。
