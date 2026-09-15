@@ -2,8 +2,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 
-import { useSettings } from '../../../features/manage-settings/useSettings';
 import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
+import { useSettings } from '../../../features/manage-settings/useSettings';
 // TaskStatusValue 定义在 shared/api（Task 7 已 re-export），不从 useChat import
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue } from '../../../shared/api';
