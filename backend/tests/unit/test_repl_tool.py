@@ -224,6 +224,55 @@ def test_repl_pending_cleanup_is_retained_then_retried(monkeypatch, tmp_path):
         repl_module._PENDING_CLEANUPS.clear()
 
 
+def test_repl_pending_cleanup_windows_uses_kill_process_tree(monkeypatch, tmp_path):
+    """Windows 上 observe_process_exit 永远返回 None；必须仍走 kill_process_tree。
+
+    模拟 win7 install 测试场景：上一次 cleanup 的 kill 失败，进程被加进
+    _PENDING_CLEANUPS。后续 retry 时若不在 observed=None 分支调用
+    kill_process_tree，进程永远留在待清理列表 → 后台会话泄漏。
+    """
+    process = Mock()
+    process.pid = 4242
+    process.poll.return_value = None
+    collector = Mock()
+    collector.is_alive = False
+    collector.finish.return_value = True
+    collector.stop.return_value = True
+    stdout_path = tmp_path / "stdout.out"
+    stderr_path = tmp_path / "stderr.out"
+    stdout_path.touch()
+    stderr_path.touch()
+    kill = Mock(return_value=True)
+    reap = Mock(return_value=True)
+    observe = Mock(return_value=None)  # Windows 上 observe_process_exit 的行为
+    monkeypatch.setattr(repl_module, "kill_process_tree", kill)
+    monkeypatch.setattr(repl_module, "reap_process", reap)
+    monkeypatch.setattr(repl_module, "observe_process_exit", observe)
+    repl_module._PENDING_CLEANUPS.clear()
+
+    try:
+        repl_module._retain_pending_cleanup(
+            process=process,
+            collectors=(collector,),
+            stdout_path=str(stdout_path),
+            stderr_path=str(stderr_path),
+            process_group_id=process.pid,
+            stdout_identity=file_identity(str(stdout_path)),
+            stderr_identity=file_identity(str(stderr_path)),
+            process_group_killed=False,
+        )
+        repl_module._retry_pending_cleanups()
+
+        # 必须调用 kill_process_tree（observed=None 分支触发），
+        # 否则后台进程永久泄漏在 _PENDING_CLEANUPS。
+        kill.assert_called_once()
+        assert kill.call_args.kwargs["process_group_id"] == process.pid
+        assert kill.call_args.kwargs["reap"] is False
+        assert [] == repl_module._PENDING_CLEANUPS
+    finally:
+        repl_module._PENDING_CLEANUPS.clear()
+
+
 def test_repl_output_capped_at_100kib(tool):
     """stdout 超 100 KiB → 截断并置 truncated=True。"""
     # Arrange: 打印约 300 KiB
