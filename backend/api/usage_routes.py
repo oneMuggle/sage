@@ -28,7 +28,7 @@ import csv
 import io
 import time
 from datetime import datetime, timedelta, timezone  # datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Query
 from fastapi.responses import PlainTextResponse
@@ -56,7 +56,7 @@ async def get_usage_summary(
 async def list_usage_requests(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    session_id: Optional[str] = Query(None),
+    session_id: str | None = Query(None),
 ) -> Dict[str, Any]:
     """L8 PR-B (2026-09-09): 按 created_at DESC 分页列出 usage_events 行。
 
@@ -152,7 +152,7 @@ async def get_usage_trend(
     range: str = Query(  # noqa: A002
         "7d", pattern="^(today|7d|30d|total)$"
     ),
-    session_id: Optional[str] = Query(None),
+    session_id: str | None = Query(None),
 ) -> Dict[str, Any]:
     """L8 PR-C (2026-09-09): 时间序列, 按桶聚合。
 
@@ -227,7 +227,7 @@ async def get_usage_trend(
 @router.get("/export.csv", response_class=PlainTextResponse)
 async def export_usage_csv(
     range: str = Query("total", pattern="^(today|7d|30d|total)$"),  # noqa: A002
-    session_id: Optional[str] = Query(None),
+    session_id: str | None = Query(None),
 ) -> str:
     """L8 PR-C (2026-09-09): 导出 usage_events 为 CSV。
 

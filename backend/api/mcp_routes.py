@@ -16,7 +16,7 @@ release/win7 LTS branch pins pydantic 1.10 while main pins 2.x.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -70,12 +70,12 @@ class ServerConfigIn(BaseModel):
 class ServerUpdateIn(BaseModel):
     """PATCH /mcp/servers/{name} body — merge-patch, all fields optional."""
 
-    enabled: Optional[bool] = None
-    timeout_seconds: Optional[float] = Field(default=None, gt=0, le=600)
+    enabled: bool | None = None
+    timeout_seconds: float | None = Field(default=None, gt=0, le=600)
     # R20-B: per-tool 级开关 —— 全量替换语义（传空数组 = 清空禁用清单）
-    disabled_tools: Optional[List[str]] = None
+    disabled_tools: List[str] | None = None
     # R34: HTTP 鉴权头 —— 全量替换语义；GET 响应中按敏感键脱敏
-    headers: Optional[Dict[str, str]] = None
+    headers: Dict[str, str] | None = None
 
     class Config:
         extra = "forbid"

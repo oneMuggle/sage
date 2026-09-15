@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
@@ -24,14 +24,14 @@ logger = logging.getLogger(__name__)
 
 class ScheduleIn(BaseModel):
     kind: Literal["once", "recurring"]
-    at: Optional[int] = None
-    cron: Optional[str] = None
+    at: int | None = None
+    cron: str | None = None
 
 
 class ScheduleOut(BaseModel):
     kind: Literal["once", "recurring"]
-    at: Optional[int] = None
-    cron: Optional[str] = None
+    at: int | None = None
+    cron: str | None = None
 
 
 class CreateTaskIn(BaseModel):
@@ -43,8 +43,8 @@ class CreateTaskIn(BaseModel):
 
 
 class UpdateTaskIn(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=80)
-    enabled: Optional[bool] = None
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    enabled: bool | None = None
 
 
 class TaskOut(BaseModel):
@@ -56,8 +56,8 @@ class TaskOut(BaseModel):
     content: str
     enabled: bool
     created_at: int
-    last_run: Optional[int] = None
-    next_run: Optional[int] = None
+    last_run: int | None = None
+    next_run: int | None = None
 
 
 def _task_to_dict(task: Any) -> Dict[str, Any]:

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -264,7 +264,7 @@ def _persist_read_summary(
     *,
     file_path: Path,
     canonical_workspace: str,
-    original_filename: Optional[str],
+    original_filename: str | None,
 ) -> None:
     """Persist a read result's summary into the office_documents table.
 
@@ -763,7 +763,7 @@ def get_progress_endpoint(task_id: str):
 
 
 @router.get("/templates", response_model=TemplateLibraryResponse)
-def list_templates_endpoint(workspace_path: Optional[str] = None) -> TemplateLibraryResponse:
+def list_templates_endpoint(workspace_path: str | None = None) -> TemplateLibraryResponse:
     """List the builtin 中文办公模板 + workspace user templates.
 
     Builtin entries carry curated placeholder metadata and are instantiated by
@@ -951,10 +951,10 @@ class OfficeJournalParseResponse(BaseModel):
 
 class OfficeJournalFillRequest(BaseModel):
     workspace_path: str
-    spec_id: Optional[str] = Field(default=None)
-    file_path: Optional[str] = Field(default=None)
+    spec_id: str | None = Field(default=None)
+    file_path: str | None = Field(default=None)
     content: dict
-    output_filename: Optional[str] = Field(default=None)
+    output_filename: str | None = Field(default=None)
 
 
 class OfficeJournalFillResponse(BaseModel):
@@ -966,7 +966,7 @@ class OfficeJournalFillResponse(BaseModel):
 
 class OfficeJournalValidateRequest(BaseModel):
     workspace_path: str
-    spec_id: Optional[str] = Field(default=None)
+    spec_id: str | None = Field(default=None)
     file_path: str = Field(..., description="Absolute path to the filled .docx.")
 
 
