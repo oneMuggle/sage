@@ -46,7 +46,8 @@ export function TaskTreeSection({
   onRerunFailed,
 }: TaskTreeSectionProps) {
   // BU9 (round20): run 级 token 预算 —— >0 时进度行展示消耗可见性。
-  const runTokenBudget = useSettings().settings.orch.runTokenBudget;
+  // orch?.runTokenBudget 防御旧 mock/旧持久化数据缺 orch 键的场景。
+  const runTokenBudget = useSettings().settings.orch?.runTokenBudget ?? 0;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectTask = useRunControlStore((s) => s.selectTask);
   // B3 (2026-09-09): 单任务跳过 in-flight 集合 —— 防重复点击；终态由
