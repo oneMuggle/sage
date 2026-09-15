@@ -572,7 +572,8 @@ def _windows_kill_process_tree(process: Any) -> bool:
         try:
             process.kill()
             return True
-        except (ProcessLookupError, OSError):
+        except OSError:
+            # ProcessLookupError 是 OSError 子类，Python 3.3+ 起合并到一个 except
             logger.debug("leader kill 也失败", exc_info=True)
             return False
 

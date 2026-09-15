@@ -21,8 +21,9 @@ class _OsProxy:
         object.__setattr__(self, "_name", name)
 
     def __getattr__(self, attribute: str):
-        # Windows 上 os 没有 killpg / getpgid / waitid / setpgid —— 让
+        # Windows 上 os 没有 killpg / getpgid / waitid —— 让
         # hasattr() 检查返回 False，模拟原生 Windows Python 环境。
+        # setpgid 同理（防御性：未来若 Windows 分支扩到 setpgid 调用也能 fail safe）。
         if attribute in {"killpg", "getpgid", "waitid", "setpgid"}:
             raise AttributeError(attribute)
         return getattr(_real_os, attribute)
