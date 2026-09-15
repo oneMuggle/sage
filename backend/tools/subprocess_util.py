@@ -6,9 +6,11 @@
   PIPE 会无限缓冲——命令打印几个 GB 就撑爆后端内存；临时文件把父进程
   内存占用固定为一次读取的上限。
 - **有界读取**：只读前 ``cap`` 字节（可从 ``offset`` 起，供后台增量轮询）。
-- **杀进程组**：POSIX 下 ``os.killpg`` 连孙进程一起收；无法安全验证独立
-  进程组的平台（包括 Windows）直接 fail closed。调用方必须以
-  ``start_new_session=True`` 启动进程，否则 POSIX 上拿不到独立进程组。
+- **杀进程组/进程树**：POSIX 下 ``os.killpg`` 连孙进程一起收；Windows 下
+  ``taskkill.exe /PID /T /F`` 递归终止进程树，不可用时回退到 leader
+  ``process.kill()``。POSIX 不能安全验证独立进程组时 fail closed。
+  调用方必须以 ``start_new_session=True``（POSIX）或
+  ``CREATE_NEW_PROCESS_GROUP``（Windows）启动进程。
 """
 
 from __future__ import annotations
@@ -44,6 +46,14 @@ _OUTPUT_OVERREAD_MARGIN = 1
 #: 杀进程组后回收子进程的宽限超时（秒）
 _REAP_TIMEOUT_SECONDS = 5.0
 
+# Windows 进程创建标志：POSIX Python 没有这个属性，但在 Windows 上它是
+# ``subprocess.Popen`` 的 ``creationflags`` 参数之一。定义一个跨平台常量
+# 让代码不必在每个使用处做 hasattr 检查；POSIX 上永远用不到（Windows 分支
+# 由 ``os.name == "nt"`` 守门）。
+_WINDOWS_CREATE_NEW_PROCESS_GROUP = getattr(
+    subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+)
+
 
 @dataclass(frozen=True)
 class VerifiedProcess:
@@ -72,8 +82,25 @@ def spawn_verified(
     stdout: Any = None,
     stderr: Any = None,
 ) -> VerifiedProcess:
-    """Start a process with a verifiable, dedicated POSIX process group."""
-    if os.name == "nt" or not hasattr(os, "waitid"):
+    """Start a process with a verifiable, dedicated process group.
+
+    POSIX: ``start_new_session=True`` + ``getpgid`` 验证 leader == group。
+    Windows: ``CREATE_NEW_PROCESS_GROUP`` 建立独立进程组，无 getpgid 可验证，
+    直接以进程 PID 作为 group id 返回（与 ``taskkill /T`` 树终止语义对齐）。
+    """
+    if os.name == "nt":
+        # Windows 没有 os.killpg / os.getpgid，但 CREATE_NEW_PROCESS_GROUP
+        # 让子进程脱离父进程控制台组，配合 taskkill /T 实现树终止。
+        process = subprocess.Popen(
+            list(argv),
+            cwd=cwd,
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
+            creationflags=_WINDOWS_CREATE_NEW_PROCESS_GROUP,
+        )
+        return VerifiedProcess(process, process.pid)
+    if not hasattr(os, "waitid"):
         raise RuntimeError("平台不支持安全进程组回收")
     process = subprocess.Popen(
         list(argv),
@@ -478,9 +505,13 @@ def kill_process_tree(  # noqa: PLR0917
 ) -> bool:
     """终止安全归属的进程组/进程，并报告进程是否已回收。
 
-    ``process_group_id`` 必须是在 ``Popen`` 后捕获的、且确认等于进程 PID 的
-    独立组；不能在父进程退出后再依赖 ``getpgid`` 查找。Windows、缺少独立组
-    或无法安全验证时返回 ``False``，绝不退化为只杀 leader。
+    POSIX: ``process_group_id`` 必须是在 ``Popen`` 后捕获的、且确认等于进程
+    PID 的独立组；不能在父进程退出后再依赖 ``getpgid`` 查找。缺少独立组或
+    无法安全验证时 fail closed，绝不退化为只杀 leader。
+
+    Windows: 无 ``os.killpg``，改用 ``taskkill.exe /PID <pid> /T /F`` 递归
+    终止进程树；``taskkill.exe`` 不可用（受限制环境或路径缺失）时回退到
+    ``process.kill()`` 终止 leader，避免后台会话泄漏。
     """
     if leader_exit_observed and not kill_exited_group:
         raise ValueError("leader_exit_observed requires kill_exited_group")
@@ -497,22 +528,51 @@ def kill_process_tree(  # noqa: PLR0917
     killed = not process_running
     should_signal = process_running or (kill_exited_group and leader_exit_observed)
     if should_signal:
-        # 只有启动后捕获并验证的独立组才允许发信号。任何不确定性（包括
-        # Windows、缺少 waitid 的 exited leader、或组验证失败）均 fail closed。
-        if os.name == "nt" or process_group_id is None or process_group_id != process.pid:
+        if os.name == "nt":
+            # Windows: taskkill.exe /T 递归终止进程树；失败回退到 leader kill。
+            killed = _windows_kill_process_tree(process)
+        elif process_group_id is None or process_group_id != process.pid:
+            # POSIX: 只有启动后捕获并验证的独立组才允许发信号。任何不确定性
+            # （包括缺少 waitid 的 exited leader、或组验证失败）均 fail closed。
             return False
-        try:
-            os.killpg(process_group_id, signal.SIGKILL)
-            killed = True
-        except ProcessLookupError:
-            if process_running:
+        else:
+            try:
+                os.killpg(process_group_id, signal.SIGKILL)
+                killed = True
+            except ProcessLookupError:
+                if process_running:
+                    killed = False
+            except Exception:  # noqa: BLE001 — caller retains ownership on failure
+                logger.debug("子进程组终止失败", exc_info=True)
                 killed = False
-        except Exception:  # noqa: BLE001 — caller retains ownership on failure
-            logger.debug("子进程组终止失败", exc_info=True)
-            killed = False
     if reap:
         return reap_process(process)
     return killed
+
+
+def _windows_kill_process_tree(process: Any) -> bool:
+    """Windows: ``taskkill.exe /T`` 递归终止，失败回退到 leader ``kill()``。"""
+    pid = process.pid
+    taskkill_argv = ["taskkill.exe", "/PID", str(pid), "/T", "/F"]
+    try:
+        subprocess.run(
+            taskkill_argv,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=_REAP_TIMEOUT_SECONDS,
+        )
+        return True
+    except (OSError, subprocess.SubprocessError) as exc:
+        # taskkill.exe 缺失 / 超时 / 拒绝 —— 退化为杀 leader，避免泄漏。
+        logger.debug("taskkill 失败，回退到 leader kill: %s", exc)
+        try:
+            process.kill()
+            return True
+        except (ProcessLookupError, OSError):
+            logger.debug("leader kill 也失败", exc_info=True)
+            return False
 
 
 def _unlink_owned(path: str, identity: Optional[Tuple[int, int]]) -> bool:
