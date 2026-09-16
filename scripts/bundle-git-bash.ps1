@@ -1,21 +1,23 @@
-# Bundle MinGit bash for Win7 LTS installer
+# Bundle MSYS2 bash from PortableGit for Win7 LTS installer
 #
-# Downloads a minimal MSYS2 bash environment into resources/tools/git-bash/
-# so the Sage Win7 installer has a usable bash even on machines without
-# Git for Windows (Win7 SP1 ships with PowerShell 2.0 only — see PR #911).
+# Downloads PortableGit into resources/tools/git-bash/ so the Sage Win7
+# installer has a usable bash even on machines without Git for Windows
+# (Win7 SP1 ships with PowerShell 2.0 only — see PR #911).
 #
-# Why MinGit v2.46.2.2 (tag v2.46.2.windows.2):
+# Why PortableGit v2.46.2 (tag v2.46.2.windows.1):
 #   Git for Windows v2.46 is the LAST version to support Windows 7 (confirmed
 #   by release notes: "Git for Windows v2.46 is the last version to support
-#   for Windows 7 and for Windows 8"). v2.46.2.windows.2 is the latest patch
-#   in the v2.46 series. Newer versions (v2.47+) drop Win7 support in the
+#   for Windows 7 and for Windows 8"). v2.46.2.windows.1 is the latest release
+#   with PortableGit assets. Newer versions (v2.47+) drop Win7 support in the
 #   underlying MSYS2 runtime and use BCrypt APIs that fail on Win7 at first spawn.
+#   Note: MinGit does NOT include bash.exe (omits Git Bash entirely), so
+#   PortableGit is required.
 #
-# Why not full MSYS2 base:
-#   MSYS2 base is ~50MB compressed / ~200MB+ expanded. We only need bash + a
-#   few DLLs to satisfy shell_resolver._find_windows_bash() third-priority
-#   candidate. MinGit already ships bash at usr/bin/bash.exe plus all MSYS2
-#   runtime DLLs it needs — we just trim the Git-specific extras.
+# Why not full PortableGit as-is:
+#   PortableGit is ~60MB compressed / ~250MB+ expanded. We only need bash + MSYS2
+#   runtime DLLs to satisfy shell_resolver._find_windows_bash() third-priority
+#   candidate. We trim the mingw64 toolchain, Git binaries, and doc files
+#   down to ~10-15MB.
 #
 # What we keep:
 #   usr/bin/bash.exe              ~2.5MB  (the bash shell)
@@ -30,7 +32,7 @@
 #   usr/share/{doc,man,locale,info}/      (docs/translations — bash doesn't read)
 #   tmp/                                  (writable at runtime — not in installer)
 #
-# Final size target: ~10-15MB (vs ~37MB untrimmed MinGit)
+# Final size target: ~10-15MB (vs ~250MB untrimmed PortableGit)
 #
 # Output: resources/tools/git-bash/{etc/,usr/bin/,usr/share/licenses/,...}
 #
@@ -40,17 +42,17 @@
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$MinGitVersion = "2.46.2.2"
-# Git for Windows release tag format: v2.46.2.windows.2 (note the .windows.N suffix)
-$MinGitTag = "v2.46.2.windows.2"
-$MinGitUrl = "https://github.com/git-for-windows/git/releases/download/$MinGitTag/MinGit-$MinGitVersion-64-bit.zip"
+$GitVersion = "2.46.2"
+$GitTag = "v2.46.2.windows.1"
+$PortableGitExeName = "PortableGit-$GitVersion-64-bit.7z.exe"
+$PortableGitUrl = "https://github.com/git-for-windows/git/releases/download/$GitTag/$PortableGitExeName"
 $ResourcesDir = Join-Path $PSScriptRoot "..\resources"
 $ToolsDir = Join-Path $ResourcesDir "tools"
 $GitBashDir = Join-Path $ToolsDir "git-bash"
-$MinGitZip = Join-Path $ResourcesDir "MinGit.zip"
+$DownloadTarget = Join-Path $ResourcesDir $PortableGitExeName
 
-Write-Host "=== MinGit bash bundler for Win7 LTS ===" -ForegroundColor Cyan
-Write-Host "MinGit version: $MinGitVersion"
+Write-Host "=== Git Bash bundler for Win7 LTS ===" -ForegroundColor Cyan
+Write-Host "PortableGit version: $GitVersion"
 Write-Host "Destination: $GitBashDir"
 Write-Host ""
 
@@ -65,58 +67,34 @@ if (-not (Test-Path $ToolsDir)) {
     New-Item -ItemType Directory -Force -Path $ToolsDir | Out-Null
 }
 
-# Download MinGit
-Write-Host "Downloading MinGit $MinGitVersion (this is ~35MB, may take 1-2 min)..." -ForegroundColor Green
+# Download PortableGit
+Write-Host "Downloading PortableGit $GitVersion (this is ~60MB, may take 1-2 min)..." -ForegroundColor Green
 try {
-    Invoke-WebRequest -Uri $MinGitUrl -OutFile $MinGitZip -UseBasicParsing -TimeoutSec 300
+    Invoke-WebRequest -Uri $PortableGitUrl -OutFile $DownloadTarget -UseBasicParsing -TimeoutSec 300
 } catch {
-    throw "MinGit download failed: $_ (URL: $MinGitUrl)"
+    throw "PortableGit download failed: $_ (URL: $PortableGitUrl)"
 }
-if (-not (Test-Path $MinGitZip)) {
-    throw "MinGit zip not found after download"
+if (-not (Test-Path $DownloadTarget)) {
+    throw "PortableGit installer not found after download"
 }
 
-# Extract MinGit zip into a temp directory
-Write-Host "Extracting MinGit..." -ForegroundColor Green
-$ExtractTemp = Join-Path $ResourcesDir "_mingit_extract"
-if (Test-Path $ExtractTemp) {
-    Remove-Item -Recurse -Force $ExtractTemp
-}
-New-Item -ItemType Directory -Force -Path $ExtractTemp | Out-Null
-Expand-Archive -Path $MinGitZip -DestinationPath $ExtractTemp -Force
-Remove-Item $MinGitZip
+# Extract PortableGit (7z self-extracting archive)
+Write-Host "Extracting PortableGit to tools/git-bash/..." -ForegroundColor Green
+New-Item -ItemType Directory -Force -Path $GitBashDir | Out-Null
 
-# Detect zip layout: older MinGit zips wrap everything in a single subdir
-# (e.g. mingit-2.44.0.2-64-bit/), but v2.46.2.2+ extracts flat (cmd/, usr/,
-# etc/ at the zip root).  Handle both: prefer the single-subdir layout when
-# it exists, otherwise treat the extract temp dir itself as the MinGit root.
-$ChildDirs = @(Get-ChildItem -Path $ExtractTemp -Directory)
-$ChildFiles = @(Get-ChildItem -Path $ExtractTemp -File)
-if ($ChildDirs.Count -eq 1 -and $ChildFiles.Count -eq 0) {
-    # Old-style zip: single parent directory wraps everything
-    $MinGitRootPath = $ChildDirs[0].FullName
-    Write-Host "MinGit zip layout: single parent dir ($($ChildDirs[0].Name))" -ForegroundColor Green
+# Try 7z.exe first (available on GitHub Actions Windows runners), fall back to running the SFX directly
+$7zPath = "C:\Program Files\7-Zip\7z.exe"
+if (Test-Path $7zPath) {
+    Write-Host "Using 7z.exe to extract..." -ForegroundColor DarkGray
+    & $7zPath x -y -o"$GitBashDir" $DownloadTarget | Out-Null
 } else {
-    # Flat zip: files/dirs at root of extract temp
-    $MinGitRootPath = $ExtractTemp
-    Write-Host "MinGit zip layout: flat (files at zip root, $($ChildDirs.Count) dirs, $($ChildFiles.Count) files)" -ForegroundColor Green
-}
-Write-Host "MinGit root: $MinGitRootPath" -ForegroundColor Green
-
-# Move MinGit contents to git-bash/ (which becomes our shipped layout)
-Write-Host "Moving MinGit to tools/git-bash/..." -ForegroundColor Green
-if ($MinGitRootPath -eq $ExtractTemp) {
-    # Flat layout: move all children out of ExtractTemp into GitBashDir
-    New-Item -ItemType Directory -Force -Path $GitBashDir | Out-Null
-    Get-ChildItem -Path $ExtractTemp | ForEach-Object {
-        Move-Item -Path $_.FullName -Destination $GitBashDir -Force
+    Write-Host "Running SFX installer directly..." -ForegroundColor DarkGray
+    $process = Start-Process -FilePath $DownloadTarget -ArgumentList "-y", "-gm2", "-bd", "-o`"$GitBashDir`"" -Wait -PassThru -NoNewWindow
+    if ($process.ExitCode -ne 0) {
+        throw "PortableGit SFX extraction failed with exit code $($process.ExitCode)"
     }
-    Remove-Item -Recurse -Force $ExtractTemp
-} else {
-    # Parent-dir layout: move the single subdir directly
-    Move-Item -Path $MinGitRootPath -Destination $GitBashDir -Force
-    Remove-Item -Recurse -Force $ExtractTemp
 }
+Remove-Item $DownloadTarget -Force
 
 # Trim unneeded directories
 Write-Host "Trimming unneeded files..." -ForegroundColor Green

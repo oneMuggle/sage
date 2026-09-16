@@ -75,7 +75,7 @@ jobs:
 
       - name: Bundle MSYS2 bash (Win7 LTS)
         # shell_resolver._find_windows_bash() third-priority candidate.
-        # MinGit v2.46.2.2 is the last version with Win7 SP1 support;
+        # PortableGit v2.46.2 is the last version with Win7 SP1 support;
         # v2.47+ uses BCrypt APIs absent on Win7 and fails at first spawn.
         shell: pwsh
         run: pwsh scripts/bundle-git-bash.ps1

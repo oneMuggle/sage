@@ -73,7 +73,7 @@ extraResources:
   # MSYS2 bash runtime for Win7 (bundled by scripts/bundle-git-bash.ps1).
   # shell_resolver._find_windows_bash() third-priority candidate falls back
   # to this path when system Git bash is absent (Win7 default).
-  # MinGit v2.46.2.2 is the last version that runs on Win7 SP1; v2.47+ uses
+  # PortableGit v2.46.2 is the last version that runs on Win7 SP1; v2.47+ uses
   # BCrypt APIs absent on Win7 and fails at first bash.exe spawn.
   - from: "resources/tools"
     to: "tools"
