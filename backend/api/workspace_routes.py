@@ -426,7 +426,7 @@ def restore_workspace_checkpoint(
 class WorkspaceRevertHunksRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     path: str = Field(min_length=1, max_length=1024)
-hunk_indices: _constrained_list(int, min_length=1, max_length=200) = Field(...)
+    hunk_indices: _constrained_list(int, min_length=1, max_length=200) = Field(...)
 
 
 class WorkspaceRevertHunksResponse(BaseModel):
