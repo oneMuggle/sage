@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from typing import List
 
 from .schemas import CandidateModel, ModelKey, Price
 
@@ -65,7 +66,7 @@ def _price_per_million(raw) -> Decimal | None:
     return value * _PER_MILLION
 
 
-def map_openrouter(data: dict) -> list[CandidateModel]:
+def map_openrouter(data: dict) -> List[CandidateModel]:
     """Convert OpenRouter /api/v1/models response to CandidateModel records.
 
     Missing prices stay unknown (None), not zero.  pricing_scope='openrouter'.
@@ -78,7 +79,7 @@ def map_openrouter(data: dict) -> list[CandidateModel]:
         raise TypeError("OpenRouter data.data must be a list")
 
     timestamp = _utc_now_z()
-    results: list[CandidateModel] = []
+    results: List[CandidateModel] = []
     for model in models:
         if not isinstance(model, dict):
             continue

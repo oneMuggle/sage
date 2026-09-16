@@ -47,11 +47,10 @@ import socket
 import ssl
 import time as _time
 import uuid as _uuid
-from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from ipaddress import ip_address
-from typing import Dict, FrozenSet, List
+from typing import AsyncIterator, Dict, FrozenSet, List, Optional, Set
 from urllib.parse import urlparse
 
 import httpcore
@@ -100,7 +99,7 @@ _DNS_EXECUTOR = ThreadPoolExecutor(
     max_workers=DNS_MAX_CONCURRENCY,
     thread_name_prefix="sage-dns",
 )
-_DNS_SEMAPHORE: asyncio.Semaphore | None = None
+_DNS_SEMAPHORE: Optional[asyncio.Semaphore] = None
 
 
 def _dns_executor() -> ThreadPoolExecutor:
@@ -145,7 +144,7 @@ LOCAL_PROVIDER_ALLOWLIST_ENV = "SAGE_LLM_PROXY_ALLOWED_HOSTS"
 _DANGEROUS_NETWORK_ERROR = "The upstream target is not allowed."
 
 
-def _configured_allowed_hosts() -> frozenset[str]:
+def _configured_allowed_hosts() -> FrozenSet[str]:
     return frozenset(
         item.strip().lower().rstrip(".")
         for item in os.environ.get(LOCAL_PROVIDER_ALLOWLIST_ENV, "").split(",")
@@ -303,7 +302,7 @@ async def _read_request_body(request: Request) -> bytes:
         except ValueError:
             pass
 
-    chunks: list[bytes] = []
+    chunks: List[bytes] = []
     size = 0
     async for chunk in request.stream():
         size += len(chunk)
@@ -330,7 +329,7 @@ async def _read_response_body_limited(response: httpx.Response) -> bytes:
             if str(exc) == "response exceeds configured limit":
                 raise
 
-    chunks: list[bytes] = []
+    chunks: List[bytes] = []
     size = 0
     async for chunk in response.aiter_bytes():
         size += len(chunk)
@@ -431,14 +430,14 @@ def _is_tls_certificate_error(exc: BaseException) -> bool:
     ``ssl.SSLCertVerificationError`` (Py3.7+); 也有可能挂在 ``ssl.SSLError``
     但 message 含 "CERTIFICATE_VERIFY_FAILED".
     """
-    current: BaseException | None = exc
-    seen: set[int] = set()
+    current: Optional[BaseException] = exc
+    seen: Set[int] = set()
     while current is not None and id(current) not in seen:
         seen.add(id(current))
         if isinstance(current, ssl.SSLCertVerificationError):
             return True
         # 同级: __cause__ (raise X from Y) → __context__ (implicit) → exceptions
-        next_exc: BaseException | None = None
+        next_exc: Optional[BaseException] = None
         if current.__cause__ is not None and current.__cause__ is not current:
             next_exc = current.__cause__
         elif current.__context__ is not None and current.__context__ is not current:
@@ -656,7 +655,7 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
 
     # 4. 透传头部与 body
     fwd_headers = _filter_request_headers(request, get_local_auth_token())
-    body: bytes | None = (
+    body: Optional[bytes] = (
         await _read_request_body(request)
         if request.method in {"POST", "PUT", "PATCH"}
         else None
@@ -881,7 +880,7 @@ async def _proxy_streaming(
     trace_id: str = "",
     trace_start_monotonic: float = 0.0,
     trace_endpoint: str = "",
-    trace_req_headers: dict[str, str] | None = None,
+    trace_req_headers: Dict[str, str] | None = None,
     trace_req_body: bytes = b"",
 ) -> StreamingResponse:
     """v2: SSE/chunked 流式透传。
@@ -1075,8 +1074,8 @@ async def _proxy_streaming(
             # 这样 downstream caller 拿到的 chunk 序列与未改前完全一致,
             # 只是在旁路 copy 一份 bytes。
             _streamed_chunks: List[bytes] = []
-            _streamed_status: int | None = upstream_resp.status_code
-            _streamed_error: str | None = None
+            _streamed_status: Optional[int] = upstream_resp.status_code
+            _streamed_error: Optional[str] = None
             try:
                 # 用 aiter_bytes 透传透明解压后的字节 (2026-09-02 修复):
                 # 上游若无视 Accept-Encoding: identity 仍返回 gzip, aiter_raw

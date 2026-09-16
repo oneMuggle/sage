@@ -14,7 +14,7 @@ import json
 import logging
 import time
 from collections import defaultdict, deque
-from typing import Deque
+from typing import Deque, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -33,10 +33,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orch/runs", tags=["orchestration"])
 
 # Module-level singletons, wired at startup by backend.main
-_snapshot_store: SnapshotStore | None = None
-_event_hub: EventHub | None = None
-_context_repo: OrchestrationContextRepository | None = None
-_task_repo: OrchTaskRepository | None = None
+_snapshot_store: Optional[SnapshotStore] = None
+_event_hub: Optional[EventHub] = None
+_context_repo: Optional[OrchestrationContextRepository] = None
+_task_repo: Optional[OrchTaskRepository] = None
 
 
 def configure(
@@ -144,7 +144,7 @@ _VALID_APPLY_MODES = {"next_boundary", "new_followup"}
 _VALID_SOURCES = {"user", "parent_agent", "system"}
 _STEER_RATE_LIMIT = 10
 _STEER_RATE_WINDOW_SECONDS = 60.0
-_steer_attempts: dict[tuple[str, str], Deque[float]] = defaultdict(deque)
+_steer_attempts: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
 
 
 @router.post("/{run_id}/tasks/{task_id}/steer")

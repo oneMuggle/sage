@@ -16,7 +16,7 @@ release/win7 LTS branch pins pydantic 1.10 while main pins 2.x.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -55,7 +55,7 @@ class ServerConfigIn(BaseModel):
 
     name: str = Field(min_length=1, max_length=64)
     command: str = Field(default="", max_length=512)
-    url: str | None = Field(default=None, max_length=2048)
+    url: Optional[str] = Field(default=None, max_length=2048)
     args: List[str] = Field(default_factory=list)
     env: Dict[str, str] = Field(default_factory=dict)
     # R34: HTTP 传输自定义鉴权头（stdio 服务器忽略）
@@ -71,12 +71,12 @@ class ServerConfigIn(BaseModel):
 class ServerUpdateIn(BaseModel):
     """PATCH /mcp/servers/{name} body — merge-patch, all fields optional."""
 
-    enabled: bool | None = None
-    timeout_seconds: float | None = Field(default=None, gt=0, le=600)
+    enabled: Optional[bool] = None
+    timeout_seconds: Optional[float] = Field(default=None, gt=0, le=600)
     # R20-B: per-tool 级开关 —— 全量替换语义（传空数组 = 清空禁用清单）
-    disabled_tools: List[str] | None = None
+    disabled_tools: Optional[List[str]] = None
     # R34: HTTP 鉴权头 —— 全量替换语义；GET 响应中按敏感键脱敏
-    headers: Dict[str, str] | None = None
+    headers: Optional[Dict[str, str]] = None
 
     class Config:
         extra = "forbid"

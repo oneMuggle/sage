@@ -83,7 +83,7 @@ def truncate_pages(pages: List[Tuple[str, str]], budget: ContextBudget) -> List[
         budget: 上下文预算
 
     Returns:
-        list[PageChunk]: 截断后的页面分块
+        List[PageChunk]: 截断后的页面分块
     """
     chunks = []
     remaining = budget.pages

@@ -2,7 +2,7 @@
 Web 工具 - 网络搜索和网页获取
 """
 
-# win7 py3.8: PEP 604 (X | Y) / PEP 585 (set[...]) 注解惰性化，避免 def 定义时报错
+# win7 py3.8: PEP 604 (X | Y) / PEP 585 (Set[...]) 注解惰性化，避免 def 定义时报错
 from __future__ import annotations
 
 import ipaddress

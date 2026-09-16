@@ -30,7 +30,7 @@ import shutil
 import sqlite3
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .errors import OfficePathError
 from .models import OfficeDocType, OfficeDocumentSummary, OfficeSnapshotInfo
@@ -393,7 +393,7 @@ def _enforce_snapshot_retention(snapshot_dir: Path) -> None:
     edit that just succeeded (same contract as snapshot_pre_edit itself).
     """
     try:
-        entries: List[tuple[int, Path, int]] = []
+        entries: List[Tuple[int, Path, int]] = []
         for entry in snapshot_dir.iterdir():
             if not entry.is_file():
                 continue

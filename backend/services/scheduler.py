@@ -65,8 +65,8 @@ class ScheduledTask:
     content: str
     enabled: bool
     created_at: int
-    last_run: int | None = None
-    next_run: int | None = None
+    last_run: Optional[int] = None
+    next_run: Optional[int] = None
     last_attempt: Optional[int] = None
     last_status: str = "never"
     last_error: Optional[str] = None
@@ -498,7 +498,7 @@ class SchedulerService:
         tmp.replace(self._store_path)
 
 
-_global_service: SchedulerService | None = None
+_global_service: Optional[SchedulerService] = None
 
 
 def get_scheduler_service() -> SchedulerService | None:

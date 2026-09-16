@@ -27,7 +27,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class QuestionAnswer:
     """
 
     answers: Tuple[str, ...]
-    custom: str | None
+    custom: Optional[str]
     answered_by: str
 
 
@@ -65,7 +65,7 @@ class QuestionRequest:
 
     request_id: str
     question: str
-    header: str | None
+    header: Optional[str]
     options: Tuple[Dict[str, Any], ...]
     multi_select: bool
     created_at: float
@@ -187,7 +187,7 @@ class UserQuestionGate:
 # 单例装配（与 backend.services.permission_gate 相同模式）
 # ---------------------------------------------------------------------------
 
-_global_gate: UserQuestionGate | None = None
+_global_gate: Optional[UserQuestionGate] = None
 
 
 def init_question_gate() -> UserQuestionGate:

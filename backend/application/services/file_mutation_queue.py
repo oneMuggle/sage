@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Callable, Coroutine, Optional, Tuple
 
 # 操作类型：返回 Any 的异步函数
 FileOperation = Callable[[], Coroutine[Any, Any, Any]]
@@ -48,7 +48,7 @@ class FileMutationQueue:
     """
 
     def __init__(self) -> None:
-        self._queue: asyncio.Queue[tuple[FileOperation, asyncio.Future]] = asyncio.Queue()
+        self._queue: asyncio.Queue[Tuple[FileOperation, asyncio.Future]] = asyncio.Queue()
         self._running = False
         self._lock = asyncio.Lock()
         self._processor_task: Optional[asyncio.Task] = None

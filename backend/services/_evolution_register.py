@@ -7,7 +7,7 @@ no side effects beyond scheduler_service.register_evolution_task().
 import logging
 import re
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import yaml
 
@@ -53,7 +53,7 @@ _VALID_DAYS = {
 
 
 def _parse_yaml_overrides(
-    config_path: Path | None,
+    config_path: Optional[Path],
 ) -> Dict[str, Tuple[str, str, str]]:
     """Parse config.yaml → {task_name → (minute, hour, dow)}.
 
@@ -112,7 +112,7 @@ def _parse_yaml_overrides(
 
 def _register_evolution_tasks(
     scheduler_service: "SchedulerService",  # type: ignore[name-defined]  # noqa: F821
-    config_path: Path | None = None,
+    config_path: Optional[Path] = None,
 ) -> Dict[str, str]:
     """注册 5 个 evolution 任务到 scheduler_service。返回 name → cron 映射。
 

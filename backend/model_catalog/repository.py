@@ -1,3 +1,5 @@
+from typing import List, Optional
+
 """SQLite catalog storage using the application's connection and shared RLock."""
 
 import json
@@ -182,8 +184,8 @@ class CatalogRepository:
         *,
         adapter: str,
         status: str,
-        error: str | None = None,
-        base_url: str | None = None,
+        error: Optional[str] = None,
+        base_url: Optional[str] = None,
     ) -> None:
         record = ProbeRecord(
             patch=EndpointPatch.model_validate(patch),
@@ -227,7 +229,7 @@ class CatalogRepository:
                 ),
             )
 
-    def get_probe(self, endpoint: EndpointKey) -> ProbeRecord | None:
+    def get_probe(self, endpoint: EndpointKey) -> Optional[ProbeRecord]:
         with _SQLITE_LOCK:
             row = (
                 self.db.get_connection()
@@ -280,7 +282,7 @@ class CatalogRepository:
                     layers.append(self._layer(record, record.source, row["revision"], price))
             return resolve_layers(layers)
 
-    def stage(self, records: list[CandidateModel], source: str) -> str:
+    def stage(self, records: List[CandidateModel], source: str) -> str:
         records = [CandidateModel.model_validate(r) for r in records]
         if (
             not isinstance(source, str)
@@ -326,7 +328,7 @@ class CatalogRepository:
             raise KeyError("snapshot item not found")
         return row
 
-    def diff(self, snapshot_id: str) -> list[SnapshotDiff]:
+    def diff(self, snapshot_id: str) -> List[SnapshotDiff]:
         with _SQLITE_LOCK:
             conn = self.db.get_connection()
             if not conn.execute(
@@ -364,7 +366,7 @@ class CatalogRepository:
         )
 
     def apply(
-        self, snapshot_id: str, item_id: str, fields: list[str], expected_revision: int
+        self, snapshot_id: str, item_id: str, fields: List[str], expected_revision: int
     ) -> None:
         fields = selected_fields(fields)
         with self._transaction() as conn:

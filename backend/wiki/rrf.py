@@ -23,7 +23,7 @@ def rrf_fuse(
         k: RRF 常数（默认 60.0）
 
     Returns:
-        list[tuple[str, float]]: 融合后的 (item, score) 列表，按 score 降序
+        List[Tuple[str, float]]: 融合后的 (item, score) 列表，按 score 降序
     """
     scores: Dict[str, float] = {}
 

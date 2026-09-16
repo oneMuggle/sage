@@ -19,7 +19,7 @@ import re
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from backend.data.database import Database
 
@@ -71,7 +71,7 @@ def list_backups(db_path: str | None = None) -> List[Dict[str, Any]]:
 
 def _rotate(backup_dir: Path, keep: int = RETENTION_COUNT) -> int:
     """超出保留份数时清理最旧的备份，返回删除数。"""
-    backups: List[tuple[float, Path]] = []
+    backups: List[Tuple[float, Path]] = []
     for f in backup_dir.iterdir():
         if _BACKUP_RE.match(f.name):
             try:
