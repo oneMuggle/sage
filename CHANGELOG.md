@@ -19,6 +19,11 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ## [Unreleased]
 
 
+> 🌐 **网页访问能力优化 Round 12：凭据管理 UI + humanize 工具名**（方案 `docs/plans/2026-09-16_web-access-optimization-round12.md`）
+
+### Added(web-access)
+- **凭据管理 UI**：设置→网络新增“网站凭据”区块——凭据列表（域 / 类型 / 剩余时效 / 加密标记 / 来源 profile，沿用脱敏口径不回显值）、删除（二次确认）、`render_persistent` / `auto_refresh_credentials` 两个开关直接可调；后端新路由 `GET|DELETE /api/v1/web-access/credentials` / `GET|PUT /api/v1/web-access/config`（复用 permission_routes 的 Origin 守卫，不回显任何凭据值）
+- **humanize 工具名**：browser_launch/navigate/snapshot/interact/screenshot/cookies/downloads/close 与 http_download 补齐显示名，审批弹窗与时间线不再显示生工具名
 > 🌐 **网页访问能力优化 Round 11：AU3 自动刷新回路 + AU 系列收尾**（方案 `docs/plans/2026-09-16_web-access-optimization-round11.md`）
 
 ### Added(web-access)

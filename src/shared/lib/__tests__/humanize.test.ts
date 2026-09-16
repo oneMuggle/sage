@@ -309,3 +309,58 @@ describe('shortArgs', () => {
     expect(shortArgs(undefined)).toBe('');
   });
 });
+
+describe('humanizeToolCall — browser tools (Round 12)', () => {
+  it('renders browser_launch as "Open browser"', () => {
+    expect(humanizeToolCall('browser_launch', { headless: true })).toEqual({
+      verb: 'Open',
+      object: 'browser',
+      scope: 'local',
+    });
+  });
+
+  it('renders browser_navigate with host only', () => {
+    expect(
+      humanizeToolCall('browser_navigate', { url: 'https://example.com/paper/1' })
+    ).toEqual({ verb: 'Browse', object: 'example.com', scope: 'external' });
+  });
+
+  it('renders browser_snapshot / interact / screenshot / cookies / close', () => {
+    expect(humanizeToolCall('browser_snapshot', {})).toEqual({
+      verb: 'Read',
+      object: 'page',
+      scope: 'local',
+    });
+    expect(humanizeToolCall('browser_interact', { action: 'click' })).toEqual({
+      verb: 'Interact',
+      object: 'click',
+      scope: 'local',
+    });
+    expect(humanizeToolCall('browser_screenshot', {})).toEqual({
+      verb: 'Capture',
+      object: 'screenshot',
+      scope: 'local',
+    });
+    expect(humanizeToolCall('browser_cookies', { action: 'export' })).toEqual({
+      verb: 'Sync',
+      object: 'login state',
+      scope: 'local',
+    });
+    expect(humanizeToolCall('browser_close', {})).toEqual({
+      verb: 'Close',
+      object: 'browser',
+      scope: 'local',
+    });
+  });
+
+  it('renders browser_downloads and http_download', () => {
+    expect(humanizeToolCall('browser_downloads', {})).toEqual({
+      verb: 'Track',
+      object: 'downloads',
+      scope: 'local',
+    });
+    expect(
+      humanizeToolCall('http_download', { url: 'https://cdn.example.com/a.pdf' })
+    ).toEqual({ verb: 'Download', object: 'cdn.example.com', scope: 'external' });
+  });
+});
