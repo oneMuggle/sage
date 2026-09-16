@@ -734,7 +734,7 @@ def merge_cdp_cookies(
         cleaned = _clean_cookie(cleaned_input, domain)
         if cleaned is None:
             continue
-        stored = [c for c in stored if not (c in same_name_path)]
+        stored = [c for c in stored if c not in same_name_path]
         stored.append(cleaned)
         changed.append(name)
     if not changed:
