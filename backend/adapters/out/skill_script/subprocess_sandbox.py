@@ -101,9 +101,12 @@ class SubprocessSandboxAdapter:
 
         if output_exceeded:
             await self._terminate_process_tree(process)
+            # Output overrun is a sandbox policy violation — signal it with
+            # exit_code=-1 regardless of whether the subprocess already exited
+            # cleanly (race: script finishes before _terminate runs).
             return SandboxResult(
                 success=False,
-                exit_code=process.returncode if process.returncode is not None else -1,
+                exit_code=-1,
                 stdout=stdout.decode("utf-8", errors="replace"),
                 stderr=stderr.decode("utf-8", errors="replace"),
                 duration_ms=self._duration_ms(start_time),
