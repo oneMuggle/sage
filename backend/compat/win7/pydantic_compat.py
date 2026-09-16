@@ -79,6 +79,7 @@ def _model_copy(self: Any, *, update: Any = None, deep: bool = False) -> Any:
     return self.copy(update=update, deep=deep)
 
 
+@classmethod  # type: ignore[misc]
 def _model_construct(cls: Any, **kwargs: Any) -> Any:
     """Pydantic v2 `BaseModel.model_construct(**kw)` → v1 `cls.construct(**kw)`.
 
@@ -159,6 +160,20 @@ def install() -> bool:
 
         meta.__new__ = staticmethod(__new__)  # type: ignore[assignment]
         meta._win7_model_config_hook = True  # type: ignore[attr-defined]
+
+    # ── Field(pattern=...) → regex= shim (v2 → v1) ─────────────────────
+    # pydantic v1 的 Field 接受 regex= 而非 pattern=. v2 业务代码用 pattern=,
+    # v1 下被吞进 **extra 元数据不验证. 这里 monkey-patch pydantic.Field
+    # 把 pattern 转译成 regex, 必须在任何 model 导入前完成 (backend/__init__.py
+    # 调 install() 时已经早于业务 model 导入).
+    _orig_field = pydantic.Field
+
+    def _field_shim(*args: Any, **kwargs: Any) -> Any:
+        if "pattern" in kwargs:
+            kwargs.setdefault("regex", kwargs.pop("pattern"))
+        return _orig_field(*args, **kwargs)
+
+    pydantic.Field = _field_shim  # type: ignore[assignment]
 
     _INSTALLED = True
 
