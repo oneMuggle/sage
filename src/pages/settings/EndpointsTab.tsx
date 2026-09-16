@@ -105,7 +105,9 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
   };
 
   const handleProbe = async (ep: EndpointConfig) => {
-    const modelId = ep.modelId || ep.discoveredModels[0]?.id;
+    // 防御性检查: discoveredModels 可能在旧数据中缺失
+    const discoveredModels = ep.discoveredModels ?? [];
+    const modelId = ep.modelId || discoveredModels[0]?.id;
     if (!modelId) return;
     setProbingId(ep.id);
     try {
@@ -153,17 +155,17 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
         const modelId = form.modelId ?? ep.modelId ?? '';
         const result = testResult[ep.id];
         const probeResult = probeResults[ep.id];
-        const probeModelId = ep.modelId || ep.discoveredModels[0]?.id;
+        // 防御性检查: discoveredModels 可能在旧数据中缺失
+        const discoveredModels = ep.discoveredModels ?? [];
+        const probeModelId = ep.modelId || discoveredModels[0]?.id;
 
         return (
           <div key={ep.id} className="p-4 border rounded-radius-sm bg-surface">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-text">{name}</span>
-                {ep.discoveredModels.length > 0 && (
-                  <span className="text-[11px] text-muted">
-                    {ep.discoveredModels.length} 个模型
-                  </span>
+                {discoveredModels.length > 0 && (
+                  <span className="text-[11px] text-muted">{discoveredModels.length} 个模型</span>
                 )}
               </div>
               <div className="flex items-center gap-1.5">
