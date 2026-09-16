@@ -210,11 +210,17 @@ export const useStore = create<StoreState>((set, _get) => ({
     }
   },
 
-  // 添加消息
+  // 添加消息。
+  // 会话守卫 (2026-09 修复): 只把属于当前会话的消息追加进可见列表。
+  // messages 是单数组而非按会话分桶, 后台会话 (忙时队列 flush / 并行流 /
+  // reattach) 的乐观消息若无条件 append, 会实时"长"进用户正在看的会话;
+  // 这些消息由后端持久化, 切回时经 loadMessages 正常装载。
   addMessage: (message) => {
-    set((state) => ({
-      messages: [...state.messages, message],
-    }));
+    set((state) =>
+      state.currentSessionId != null && message.session_id !== state.currentSessionId
+        ? state
+        : { messages: [...state.messages, message] },
+    );
   },
 
   // PR-6: 按 id 替换 (流式 chat 把占位 assistant 写回最终 content)

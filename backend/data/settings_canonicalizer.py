@@ -49,6 +49,19 @@ ALIASES: Dict[str, str] = {
     # ModelSelection 子层
     "endpoint_id": "endpointId",
     "model_id": "modelId",
+    # orch 子层 (2026-09 修复): relay 的 camelToSnakeKeys 会把前端发送的
+    # orch 对象整体转成 snake, ALIASES 缺对的话 _translate_key 翻不回 camel,
+    # validate_settings_shape 白名单报 400 —— 设置页编排段任一保存都失败。
+    "max_concurrent_subagents": "maxConcurrentSubagents",
+    "max_aggregate_chars": "maxAggregateChars",
+    "max_subagent_result_chars": "maxSubagentResultChars",
+    "max_retries": "maxRetries",
+    "max_lane_iterations": "maxLaneIterations",
+    "max_subagent_iterations": "maxSubagentIterations",
+    "worktree_isolation": "worktreeIsolation",
+    "subagent_approval_mode": "subagentApprovalMode",
+    "run_token_budget": "runTokenBudget",
+    "scratch_root": "scratchRoot",
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单
@@ -122,6 +135,10 @@ LEGAL_MODEL_SELECTIONS_KEYS: FrozenSet[str] = frozenset(
 )
 # orch 段 (OrchSettings + scratchRoot). 前端 interface 只暴露 6 个数值;
 # scratchRoot 是后端配置 (spec 偏差, 见 Wave 3 P2-9 plan §3.3).
+# 2026-09 修复: 补齐 worktreeIsolation / subagentApprovalMode / runTokenBudget —
+# 三者早已存在于 OrchSettings (orch_settings.py) 且前端可编辑, 白名单漏掉
+# 导致设置页编排段任一保存都 400 invalid_settings_shape (错误又被前端
+# 静默吞掉), 三个设置永远无法持久化。
 LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
     {
         "maxConcurrentSubagents",
@@ -130,6 +147,9 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "maxRetries",
         "maxLaneIterations",
         "maxSubagentIterations",
+        "worktreeIsolation",
+        "subagentApprovalMode",
+        "runTokenBudget",
         "scratchRoot",
     }
 )
