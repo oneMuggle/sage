@@ -15,6 +15,7 @@ page_path 约定：``chat-attachment/<media_id>``，重复索引幂等替换
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +32,21 @@ from backend.wiki.vectorstore import SearchHit, VectorStore
 logger = logging.getLogger(__name__)
 
 ATTACHMENT_PAGE_PREFIX = "chat-attachment/"
+
+
+def attachment_vector_store_path(data_root: Path) -> Path:
+    """附件向量库统一路径约定：<data_root>/rag/attachments.json（r58）。"""
+    return data_root / "rag" / "attachments.json"
+
+
+def _stored_dim(storage_path: Path) -> Optional[int]:
+    """从存储文件读记录时的向量维度；不可读 → None。"""
+    try:
+        data = json.loads(storage_path.read_text(encoding="utf-8"))
+        dim = data.get("dim") if isinstance(data, dict) else None
+        return int(dim) if dim is not None else None
+    except (OSError, ValueError, TypeError):
+        return None
 
 
 class AttachmentRagError(RuntimeError):
@@ -110,18 +126,22 @@ def search_attachments(
     *,
     query_vector: List[float],
     storage_path: Path,
-    dim: int,
+    dim: Optional[int] = None,
     limit: int = 5,
     media_ids: Optional[List[str]] = None,
 ) -> List[SearchHit]:
     """向量检索附件 chunk。
 
-    存储不存在 → 空列表（未索引不是错误）。media_ids 给定时只在
+    存储不存在 → 空列表（未索引不是错误）。dim 缺省时从存储文件读取
+    （r58：删除/检索路由不要求调用方知道维度）。media_ids 给定时只在
     这些附件的 page_path 范围内取命中（跨附件全局排序后过滤）。
     """
     if not storage_path.exists():
         return []
-    store = VectorStore.open_at(storage_path, dim)
+    resolved_dim = dim if dim is not None else _stored_dim(storage_path)
+    if resolved_dim is None:
+        return []
+    store = VectorStore.open_at(storage_path, resolved_dim)
     hits = store.search(list(query_vector), limit)
     if media_ids is None:
         return hits
@@ -129,9 +149,12 @@ def search_attachments(
     return [hit for hit in hits if hit.page_path in wanted]
 
 
-def remove_attachment(*, media_id: str, storage_path: Path, dim: int) -> int:
+def remove_attachment(*, media_id: str, storage_path: Path, dim: Optional[int] = None) -> int:
     """删除附件的全部向量；返回移除的记录数（未索引 → 0）。"""
     if not storage_path.exists():
         return 0
-    store = VectorStore.open_at(storage_path, dim)
+    resolved_dim = dim if dim is not None else _stored_dim(storage_path)
+    if resolved_dim is None:
+        return 0
+    store = VectorStore.open_at(storage_path, resolved_dim)
     return store.delete_by_page(attachment_page_path(media_id))
