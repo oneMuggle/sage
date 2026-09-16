@@ -10,6 +10,7 @@ import { settingsClient } from '../../shared/api/settingsClient';
 import { deepMerge } from './deepMerge';
 import {
   AppSettings,
+  DEFAULT_ENDPOINT,
   DEFAULT_ORCH_SETTINGS,
   DEFAULT_SETTINGS,
   EndpointConfig,
@@ -228,12 +229,23 @@ export function mergeWithDefaults(partial: Partial<AppSettings>): AppSettings {
   // - DEFAULT 独有 id (用户在老 partial 没的) → 保留
   // 这与 loadSettings 的 remote + local 合并策略一致 (deepMerge remote-wins).
   const partialEndpoints = partial.endpoints;
-  const mergedEndpoints =
+  const deepMergedEndpoints =
     partialEndpoints === undefined
       ? DEFAULT_SETTINGS.endpoints
       : deepMerge<EndpointConfig[]>(DEFAULT_SETTINGS.endpoints, partialEndpoints, {
           policy: 'remote-wins',
         });
+
+  // 2026-09-16: 为每个 endpoint 补全 DEFAULT_ENDPOINT 字段 (Win7 安装包旧数据兼容).
+  // deepMerge 与空数组合并时只会把用户端点追加进来, 不会为每条端点补充缺失字段
+  // (如 discoveredModels / protocol / localModelPath). 下游代码 (SessionModelPicker
+  // .map, ModelsTab.filter, EndpointsTab.map) 直接调用 array 方法就会抛
+  // "C.map is not a function". 这里做最后一道防线, 把 DEFAULT_ENDPOINT 作为
+  // 字段级 fallback (remote-wins: 用户值优先, 缺则用 DEFAULT).
+  const mergedEndpoints = deepMergedEndpoints.map((ep) => ({
+    ...DEFAULT_ENDPOINT,
+    ...ep,
+  }));
 
   const partialModelSelections = partial.modelSelections;
   const mergedModelSelections =
