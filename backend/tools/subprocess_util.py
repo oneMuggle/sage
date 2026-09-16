@@ -269,7 +269,13 @@ class BoundedOutputCollector:
             expected = Path(self.path).lstat()
         except FileNotFoundError:
             expected = None
-        flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NONBLOCK
+        flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT
+        # ``os.O_NONBLOCK`` is POSIX-only (missing on Windows). The collector
+        # never blocks on writes — output is a regular file, not a PIPE — so
+        # we simply skip it there.  See :func:`read_capped_output` for the
+        # matching read-side guard.
+        if hasattr(os, "O_NONBLOCK"):
+            flags |= os.O_NONBLOCK
         if expected is None:
             flags |= os.O_EXCL
         if hasattr(os, "O_NOFOLLOW"):
@@ -409,7 +415,14 @@ def read_capped_output(file_path: str, cap: int, offset: int = 0) -> Tuple[str, 
             expected = None
         except OSError as exc:
             return f"[读取子进程输出失败: {exc}]", False, offset
-        flags = os.O_RDONLY | os.O_NONBLOCK
+        flags = os.O_RDONLY
+        # ``os.O_NONBLOCK`` is POSIX-only (missing on Windows). Without it
+        # Windows falls back to blocking reads on regular files, which is fine
+        # for our use case (capped read at offset, not PIPE polling).  See
+        # :meth:`BoundedOutputCollector._open_output` for the matching
+        # write-side guard.
+        if hasattr(os, "O_NONBLOCK"):
+            flags |= os.O_NONBLOCK
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         fd = os.open(file_path, flags)
