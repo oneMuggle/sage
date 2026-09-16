@@ -1,3 +1,5 @@
+from typing import List
+
 """Tests for background-review storage schema (review_events + skill_drafts).
 
 Task 4 of 2026-08-02-background-review: verify both tables are created by
@@ -21,7 +23,7 @@ def _init_fresh_db() -> str:
     return db_path
 
 
-def _table_columns(db_path: str, table_name: str) -> list[dict]:
+def _table_columns(db_path: str, table_name: str) -> List[dict]:
     """Return PRAGMA table_info rows for *table_name* as dicts."""
     with sqlite3.connect(db_path) as conn:
         cursor = conn.execute(f"PRAGMA table_info({table_name})")

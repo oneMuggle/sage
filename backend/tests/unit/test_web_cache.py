@@ -77,14 +77,12 @@ class TestAntibotGuidance:
             def search(self, query, limit, client):
                 raise RuntimeError("Client error '403 Forbidden'")
 
-        with (
-            patch(
-                "backend.tools.web_tool.resolve_engine_chain",
-                return_value=[_Forbidden()],
-            ),
-            patch("backend.tools.web_tool.load_search_config", return_value=SearchConfig()),
+        with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+            "backend.tools.web_tool.resolve_engine_chain",
+            return_value=[_Forbidden()],
         ):
-            result = WebSearchTool().execute(query="q")
+            with patch("backend.tools.web_tool.load_search_config", return_value=SearchConfig()):
+                result = WebSearchTool().execute(query="q")
 
         assert result.success is False
         assert "browser_launch" in result.error or "代理" in result.error
@@ -211,19 +209,17 @@ class TestWebFetchCache:
         )
         import unittest.mock
 
-        with (
-            unittest.mock.patch("backend.data.settings_repo.SettingsRepository", return_value=repo),
-            respx.mock(base_url="https://www.example.com", assert_all_called=False) as mock,
-        ):
-            route = mock.get("/paper").mock(
-                return_value=Response(200, text=_HTML_OK, headers={"content-type": "text/html"})
-            )
-            _fetch_tool().execute(
-                url="https://www.example.com/paper", credential_domain=".example.com"
-            )
-            _fetch_tool().execute(
-                url="https://www.example.com/paper", credential_domain=".example.com"
-            )
+        with unittest.mock.patch("backend.data.settings_repo.SettingsRepository", return_value=repo):  # noqa: SIM117 — py38 不支持括号多上下文 with
+            with respx.mock(base_url="https://www.example.com", assert_all_called=False) as mock:
+                route = mock.get("/paper").mock(
+                    return_value=Response(200, text=_HTML_OK, headers={"content-type": "text/html"})
+                )
+                _fetch_tool().execute(
+                    url="https://www.example.com/paper", credential_domain=".example.com"
+                )
+                _fetch_tool().execute(
+                    url="https://www.example.com/paper", credential_domain=".example.com"
+                )
 
         assert route.call_count == 2  # 凭据请求每次真抓
 
