@@ -324,7 +324,7 @@ class TestSubagentIterationBudget:
         assert captured["max_iterations"] == 11
 
     def test_falls_back_to_constant_when_settings_unreadable(self, monkeypatch):
-        """配置读取抛错 → 回落模块常量 6，绝不抛穿到调用方。"""
+        """配置读取抛错 → 回落模块常量 10，绝不抛穿到调用方。"""
 
         def _boom():
             raise RuntimeError("settings backend down")
@@ -335,7 +335,7 @@ class TestSubagentIterationBudget:
         result = self._capturing_tool(captured).execute(description="d", prompt="p")
 
         assert result.success is True
-        assert captured["max_iterations"] == agent_tool_module.SUBAGENT_MAX_ITERATIONS == 6
+        assert captured["max_iterations"] == agent_tool_module.SUBAGENT_MAX_ITERATIONS == 10
 
 
 class TestSubagentTimeout:
