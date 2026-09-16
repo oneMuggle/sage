@@ -31,6 +31,7 @@ except ImportError:  # py3.10 fallback
 
     _UTC = timezone(timedelta(0))
 
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
@@ -351,7 +352,8 @@ class SchedulerService:
             self._schedule_job(task)
 
     def _reschedule_one(self, task: ScheduledTask) -> None:
-        suppress(Exception, self._scheduler.remove_job, task.id)
+        with suppress(JobLookupError):
+            self._scheduler.remove_job(task.id)
         self._schedule_job(task)
 
     def _schedule_job(self, task: ScheduledTask) -> None:
@@ -362,7 +364,7 @@ class SchedulerService:
         else:
             trigger = CronTrigger.from_crontab(task.schedule["cron"])
         self._scheduler.add_job(
-            self._fire,
+            self._fire_scheduled,
             trigger=trigger,
             args=[task],
             id=task.id,
@@ -370,6 +372,14 @@ class SchedulerService:
             max_instances=1,
             coalesce=True,
         )
+
+    def _fire_scheduled(self, task: ScheduledTask) -> None:
+        """Ignore stale queued callbacks for deleted/disabled tasks."""
+        with self._lock:
+            current = self._tasks.get(task.id)
+            if current is None or not current.enabled:
+                return
+        self._fire(current)
 
     def _fire(self, task: ScheduledTask) -> None:
         """Insert the task's content as a system message into the target session."""
@@ -408,7 +418,8 @@ class SchedulerService:
                     last_run=last_run,
                     next_run=None,
                 )
-                suppress(Exception, self._scheduler.remove_job, current.id)
+                with suppress(JobLookupError):
+                    self._scheduler.remove_job(current.id)
             else:
                 next_run = self._compute_next_cron_run(current.schedule["cron"])
                 self._tasks[task.id] = ScheduledTask(

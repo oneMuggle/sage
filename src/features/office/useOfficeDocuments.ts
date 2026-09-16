@@ -168,7 +168,7 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     }
   }, [workspacePath, fetchDocuments, view]);
 
-  // Workspace entry: list first, then sweep with the known id set.
+  // Workspace entry is read-only. Filtered views must never drive file deletion.
   // Cancellation guard prevents a stale resolution from a prior
   // workspace from clobbering the new workspace's documents.
   useEffect(() => {
@@ -186,17 +186,6 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
         const documents = await fetchDocuments(view);
         if (cancelled) return;
         setDocuments(documents);
-        // Best-effort: a sweep failure surfaces via setError but does
-        // not undo the documents we just listed.
-        try {
-          await window.electronAPI?.office.sweepOrphanStaging({
-            workspacePath,
-            knownDocIds: documents.map((d) => d.id),
-          });
-        } catch (sweepErr) {
-          if (cancelled) return;
-          setError(sweepErr instanceof Error ? sweepErr.message : String(sweepErr));
-        }
       } catch (listErr) {
         if (cancelled) return;
         setError(listErr instanceof Error ? listErr.message : String(listErr));

@@ -128,7 +128,9 @@ export class UpdateManager {
   private lastNormalisedRelease: NormalisedRelease | null = null;
 
   constructor(
-    optionsOrUpdater: UpdateManagerOptions | UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary,
+    optionsOrUpdater:
+      | UpdateManagerOptions
+      | UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary,
   ) {
     // Backward-compat: old callers do `new UpdateManager(updaterBoundary)`,
     // new callers do `new UpdateManager({ providerStore, providerRegistry })`.
@@ -172,18 +174,14 @@ export class UpdateManager {
     const def = list.find((c) => c.isDefault && c.enabled);
     if (def) {
       this.activeProvider = this.deps.providerRegistry.build(def);
-      logger.info(
-        `active provider = user-configured ${def.displayName} (${def.type})`,
-      );
+      logger.info(`active provider = user-configured ${def.displayName} (${def.type})`);
     } else {
       this.activeProvider = createGenericHttpProvider({
         id: BUILTIN_GENERIC_CONFIG.id,
         displayName: BUILTIN_GENERIC_CONFIG.displayName,
         config: BUILTIN_GENERIC_CONFIG.config,
       });
-      logger.warn(
-        'No user default provider, falling back to built-in updates.sage.app',
-      );
+      logger.warn('No user default provider, falling back to built-in updates.sage.app');
     }
   }
 
@@ -216,9 +214,7 @@ export class UpdateManager {
    * Task 1.8 (preflight): ping a named provider without mutating activeProvider.
    * Builds a transient provider from store config and invokes `ping()`.
    */
-  async pingProvider(
-    id: string,
-  ): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+  async pingProvider(id: string): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
     if (!this.deps.providerStore || !this.deps.providerRegistry) {
       throw new Error('Provider system not initialised');
     }
@@ -680,16 +676,21 @@ export class UpdateManager {
     // remain retryable rather than being recorded as already installed.
     const prepared = await this.prepareForUpgrade();
     const preparedAt = new Date().toISOString();
-    await this.stateManager.setState({
-      ...state,
-      pendingInstallAttempt: {
-        version: state.pendingUpdate.version,
-        startedAt: preparedAt,
-        phase: 'prepared',
-        previousVersion: state.currentVersion,
-        pendingUpdate: state.pendingUpdate,
-      },
-    });
+    try {
+      await this.stateManager.setState({
+        ...state,
+        pendingInstallAttempt: {
+          version: state.pendingUpdate.version,
+          startedAt: preparedAt,
+          phase: 'prepared',
+          previousVersion: state.currentVersion,
+          pendingUpdate: state.pendingUpdate,
+        },
+      });
+    } catch (error) {
+      if (prepared?.wasRenamed) await this.restorePreparedUpgrade(prepared);
+      throw error;
+    }
 
     // CRITICAL: persist the post-install state BEFORE calling quitAndInstall().
     // quitAndInstall() hands off to the native installer and may exit the
@@ -823,7 +824,7 @@ export class UpdateManager {
     const state = await this.stateManager.getState();
 
     // 1. Report rollback event (non-blocking)
-    await this.reportRollbackEvent(reason, state);
+    void this.reportRollbackEvent(reason, state);
 
     // 2. Check if .prev exists
     const installDir = path.dirname(process.execPath);
@@ -915,10 +916,13 @@ export class UpdateManager {
   }
 
   private async reportRollbackEvent(reason: string, state: UpdateState): Promise<void> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
     try {
       const config = await this.configManager.getConfig();
       await fetchCompat(`${config.updateServerUrl}/api/v1/updates/rollbacks`, {
         method: 'POST',
+        signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           from_version: state.currentVersion,
@@ -929,7 +933,9 @@ export class UpdateManager {
         }),
       });
     } catch {
-      // Non-blocking: ignore reporting failures
+      // Telemetry never blocks local recovery.
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
