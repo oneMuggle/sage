@@ -113,7 +113,18 @@ async function downloadVerified(
   const tmpPath = join(targetDir, `${saveName}.part`);
   const finalPath = join(targetDir, saveName);
 
-  await downloadToFile(url, tmpPath, download);
+  try {
+    await downloadToFile(url, tmpPath, download);
+  } catch (err) {
+    // 2026-09 修复: 取消/网络中断残留 .part —— 只在 sha256 不匹配分支清理
+    // 覆盖不到这些路径, 磁盘会累积孤儿分片文件。
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      // 文件可能尚未创建
+    }
+    throw err;
+  }
 
   const actual = await sha256File(tmpPath);
   if (actual !== file.sha256.toLowerCase()) {

@@ -47,6 +47,19 @@ export class ProviderStore {
     const idx = list.findIndex((c) => c.id === id);
     if (idx === -1) throw new Error(`Provider not found: ${id}`);
     const merged = { ...list[idx], ...patch, id, updatedAt: new Date().toISOString() };
+    // 2026-09 修复: UI 的编辑流程是 get(返回 mask 后的 '***masked***') →
+    // 改其它字段 → update 整包回传。不识别哨兵值会把密文覆盖成加密后的
+    // '***masked***', 真实 token 永久丢失, provider 从此 401。
+    const MASKED = '***masked***';
+    const mergedToken = (merged.config as unknown as { token?: string } | undefined)?.token;
+    const patchToken = (patch.config as { token?: string } | undefined)?.token;
+    const storedToken = (list[idx].config as unknown as { token?: string } | undefined)?.token;
+    if (mergedToken === MASKED && patchToken !== MASKED && storedToken) {
+      merged.config = {
+        ...(merged.config as unknown as Record<string, unknown>),
+        token: storedToken,
+      } as typeof merged.config;
+    }
     list[idx] = this.encryptSensitive(merged);
     if (patch.isDefault) {
       list.forEach((c, i) => { if (i !== idx) c.isDefault = false; });

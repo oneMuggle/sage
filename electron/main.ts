@@ -50,7 +50,7 @@ logger.info('main: process started', {
 
 import { spawn, ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { join, dirname } from 'node:path';
+import { basename, join, dirname, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   constants as fsConstants,
@@ -1343,8 +1343,19 @@ async function registerIpcHandlers(): Promise<void> {
     if (!isTrustedRenderer(evt.sender)) {
       throw new Error('未授权的窗口请求');
     }
+    // 2026-09 修复: filename 此前未校验, `..\\..\\..` 可穿越读任意文件。
+    // 只允许白名单扩展名的裸文件名, 且 resolve 后必须落在手册目录内。
+    const SAFE_MANUAL_EXT = /\.(html?|md)$/i;
+    const base = basename(String(filename));
+    if (!base || base !== String(filename) || !SAFE_MANUAL_EXT.test(base)) {
+      throw new Error('非法的文档文件名');
+    }
+    const manualDir = join(__dirname, '..', 'docs', 'user-manual');
+    const filePath = join(manualDir, base);
+    if (!filePath.startsWith(manualDir + sep)) {
+      throw new Error('非法的文档路径');
+    }
     try {
-      const filePath = join(__dirname, '..', 'docs', 'user-manual', filename);
       return readFileSync(filePath, 'utf-8');
     } catch (err) {
       logger.error('main: failed to read user manual', { filename, error: String(err) });
@@ -1624,7 +1635,8 @@ async function registerIpcHandlers(): Promise<void> {
     await updateManager.init();
 
     if (ENABLE_UPDATE_PROVIDERS_UI()) {
-      cleanupProviderIpc = registerProviderIpc(ipcMain, { providerStore, updateManager });
+      cleanupProviderIpc = registerProviderIpc(ipcMain, {
+    isTrustedSender: (sender) => isTrustedRenderer(sender), providerStore, updateManager });
     }
   }
   cleanupUpdateIpc?.();
