@@ -14,9 +14,9 @@
 """
 
 from __future__ import annotations
-from typing import List
 
 import json
+from typing import List
 
 import pytest
 
