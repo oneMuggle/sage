@@ -86,3 +86,27 @@ class TestRealPillowIfInstalled:
             pytest.skip("合成图未超阈值")
         result = optimize_image_bytes(data)
         assert len(result) <= image_optimize.OPTIMIZE_THRESHOLD_BYTES
+
+    def test_reencode_saves_once_per_quality(self, monkeypatch) -> None:
+        """回归：JPEG 重编码每个质量档只 save 一次（旧实现每档重复 save 两次）。"""
+        pytest.importorskip("PIL")
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.new("RGB", (200, 120), color=(10, 200, 30)).save(
+            buf, format="JPEG", quality=95
+        )
+        data = buf.getvalue()
+
+        calls: list = []
+        original_save = Image.Image.save
+
+        def spy_save(self, fp, *args, **kwargs):
+            calls.append(kwargs.get("quality"))
+            return original_save(self, fp, *args, **kwargs)
+
+        monkeypatch.setattr(Image.Image, "save", spy_save)
+        # max_bytes=1 → 三个质量档全部走满（无一达标）
+        result = image_optimize._reencode_jpeg(data, max_bytes=1)
+        assert result is not None
+        assert calls == list(image_optimize._JPEG_QUALITIES)

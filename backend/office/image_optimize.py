@@ -74,17 +74,17 @@ def _reencode_jpeg(source: bytes, max_bytes: int) -> Optional[bytes]:
                 img = img.resize(
                     (max(1, int(width * scale)), max(1, int(height * scale)))
                 )
+            lowest_quality: Optional[bytes] = None
             for quality in _JPEG_QUALITIES:
                 buf = _io.BytesIO()
                 img.save(buf, format="JPEG", quality=quality, optimize=True)
-                if buf.tell() <= max_bytes:
-                    return buf.getvalue()
-                buf = _io.BytesIO()
-                img.save(buf, format="JPEG", quality=quality, optimize=True)
-                if buf.tell() <= max_bytes:
-                    return buf.getvalue()
+                payload = buf.getvalue()
+                if lowest_quality is None:
+                    lowest_quality = payload
+                if len(payload) <= max_bytes:
+                    return payload
             # 最低质量仍超限 → 返回最低质量版本（可能仍超限，上层兜底）
-            return buf.getvalue()
+            return lowest_quality
     except Exception:  # noqa: BLE001 — 图片数据损坏/格式怪异
         logger.warning("Pillow 重编码失败，原样返回", exc_info=True)
         return None

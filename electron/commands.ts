@@ -261,7 +261,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/active?session_id=${encodeURIComponent(String(a.sessionId))}`,
   },
-    system_backups_list: {
+  system_backups_list: {
     method: 'GET',
     path: () => '/api/v1/system/backups',
   },
@@ -792,6 +792,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // NOTE: PdfReadRequest is extra="forbid" — officeApi.readPdf must send
   // ONLY workspacePath + filePath (no max_size_bytes / original_filename).
   office_pdf_read: { method: 'POST', path: () => '/api/v1/office/pdf/read' },
+  // F3 (office-p0): 受管 PDF 原文 base64 预览 —— /office 页"原文预览"
+  // 开关用，返回 data:application/pdf URL 交给 Chromium 内置 viewer。
+  // NOTE: PdfDataRequest is extra="forbid" — officeApi.readPdfData must
+  // send ONLY workspacePath + filePath.
+  office_pdf_data: { method: 'POST', path: () => '/api/v1/office/pdf/data' },
   // include_archived (item 1.7): archive-restore UI lists soft-deleted rows.
   // Path builder reads the raw camelCase arg and serializes snake_case into
   // the query string (query args are NOT auto-translated by invokeBackend).

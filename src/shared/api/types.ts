@@ -75,7 +75,12 @@ export interface SessionWorkspaceBinding {
   revokedAt: number | null;
 }
 
-export type WorkspaceSearchKind = 'file' | 'office-ppt' | 'office-word' | 'office-excel';
+export type WorkspaceSearchKind =
+  | 'file'
+  | 'office-ppt'
+  | 'office-word'
+  | 'office-excel'
+  | 'office-pdf';
 
 export interface WorkspaceSearchResult {
   name: string;
@@ -95,13 +100,13 @@ export interface WorkspaceSearchResponse {
 export interface ChatOfficeRef {
   docId: string;
   /**
-   * Deliberately the narrow 3-union (NOT OfficeDocType): the chat @-menu
-   * chip surface does not render pdf refs yet — a managed pdf doc falls
-   * back to the plain-file path in workspace search results
-   * (fileSearchClient coalesces docType 'pdf' → null). Widen together
-   * with widgets/chat InputCard.OfficeRefChipType when chat gains pdf.
+   * B4 (office-p0): widened to include 'pdf' — the backend chat_refs
+   * DocTypeLiteral accepts pdf refs (OfficeToolService.read dispatches
+   * read_pdf) and the workspace search no longer coalesces managed pdf
+   * docs to the plain-file path. Must stay in sync with
+   * widgets/chat InputCard.OfficeRefChipType.
    */
-  docType: 'ppt' | 'word' | 'excel';
+  docType: 'ppt' | 'word' | 'excel' | 'pdf';
   filename: string;
 }
 
@@ -1228,6 +1233,18 @@ export interface OfficePdfReadResult {
   summary: OfficeDocumentSummary;
   pages: OfficePdfPageContent[];
   metadata: Record<string, unknown>;
+}
+
+/**
+ * F3 (office-p0): result of POST /api/v1/office/pdf/data — raw-PDF
+ * base64 preview for the /office page's 原文预览 toggle (backend
+ * `PdfDataResult`). Expected failures (oversize / path escape) come
+ * back as `{ok:false,error}` rather than HTTP errors.
+ */
+export interface OfficePdfDataResult {
+  ok: boolean;
+  data_url?: string | null;
+  error?: string | null;
 }
 
 /**

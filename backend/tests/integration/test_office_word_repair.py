@@ -132,6 +132,34 @@ def test_heading_numbering_repair(tmp_path: Path) -> None:
     assert result.ok
 
 
+def test_heading_numbering_repair_covers_h4_h5(tmp_path: Path) -> None:
+    """修复端与 lint/生成端同级差对齐：h4/h5 编号同样参与重排。"""
+    path = _generate(
+        tmp_path,
+        "num45.docx",
+        {"numbering": True},
+        paragraphs=[
+            {"text": "第一章", "heading": "h1"},
+            {"text": "小节", "heading": "h2"},
+            {"text": "子目", "heading": "h3"},
+            {"text": "条目", "heading": "h4"},
+            {"text": "款项", "heading": "h5"},
+        ],
+    )
+    doc = Document(str(path))
+    # paragraphs[0] 是 Title 段，第 6 个段落是 h5（款项）
+    doc.paragraphs[5].text = "9.9.9.9.9 破坏的五级标题"
+    doc.save(str(path))
+    assert not lint_docx(path, WordFormatSpec(**{"numbering": True})).ok
+
+    result = repair_docx(path, WordFormatSpec(**{"numbering": True}))
+    assert "numbering/sequence" in result.repaired_rules
+    texts = [p.text for p in Document(str(result.output_path)).paragraphs]
+    assert "1.1.1.1.1 破坏的五级标题" in texts  # 旧前缀剥离后按 h1-h4 链重排
+    assert "1.1.1.1 条目" in texts
+    assert result.ok
+
+
 def test_bibliography_heading_not_renumbered(tmp_path: Path) -> None:
     path = _generate(
         tmp_path,

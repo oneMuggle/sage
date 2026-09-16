@@ -22,6 +22,7 @@ from pydantic import ValidationError
 
 from backend.main import app
 from backend.office.models import (
+    PdfDataRequest,
     PdfFormFillRequest,
     PdfFormReadRequest,
     PdfGenerateRequest,
@@ -199,6 +200,57 @@ def test_read_pdf_endpoint(workspace: Path) -> None:
     assert result.summary.doc_type == "pdf"
     assert len(result.pages) == 1
     assert "Hello PDF world" in result.pages[0].text
+
+
+def test_pdf_data_endpoint_returns_data_url(workspace: Path) -> None:
+    """F3 (office-p0): POST /office/pdf/data returns a base64 data URL."""
+    from backend.api.office_routes import pdf_data_endpoint
+
+    pdf_path = _make_pdf(workspace)
+
+    result = pdf_data_endpoint(
+        PdfDataRequest(workspace_path=str(workspace), file_path=str(pdf_path))
+    )
+
+    assert result.ok is True
+    assert result.error is None
+    assert result.data_url is not None
+    assert result.data_url.startswith("data:application/pdf;base64,")
+
+
+def test_pdf_data_endpoint_rejects_path_escape(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F3: workspace 外路径 → ok=False + 泛化错误（不泄露路径）。"""
+    from backend.api.office_routes import pdf_data_endpoint
+
+    pdf_path = _make_pdf(workspace)
+    outside = workspace.parent / "outside.pdf"
+    outside.write_bytes(pdf_path.read_bytes())
+
+    result = pdf_data_endpoint(
+        PdfDataRequest(workspace_path=str(workspace), file_path=str(outside))
+    )
+    assert result.ok is False
+    assert result.data_url is None
+    assert str(workspace) not in (result.error or "")
+
+
+def test_pdf_data_endpoint_rejects_oversize(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F3: 超过 MAX_PDF_DATA_BYTES → ok=False + 20MB 提示。"""
+    from backend.api import office_routes
+    from backend.api.office_routes import pdf_data_endpoint
+
+    pdf_path = _make_pdf(workspace)
+    monkeypatch.setattr(office_routes, "MAX_PDF_DATA_BYTES", 10)
+
+    result = pdf_data_endpoint(
+        PdfDataRequest(workspace_path=str(workspace), file_path=str(pdf_path))
+    )
+    assert result.ok is False
+    assert "20MB" in (result.error or "")
 
 
 def test_read_pdf_missing_file(workspace: Path) -> None:

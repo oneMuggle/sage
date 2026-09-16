@@ -1243,6 +1243,36 @@ class PdfReadRequest(BaseModel):
     file_path: str
 
 
+class PdfDataRequest(BaseModel):
+    """Request for the raw-PDF base64 preview (F3, office-p0).
+
+    Serves the /office page's 原文预览 toggle: the renderer embeds the
+    returned ``data:application/pdf`` URL in an iframe and Chromium's
+    built-in viewer renders it — same fidelity path as the chat artifact
+    viewer.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str
+
+
+class PdfDataResult(BaseModel):
+    """Raw-PDF base64 preview result.
+
+    Never raises for expected conditions: oversize / escape / unreadable
+    files return ``ok=False`` + a user-presentable ``error`` so the UI
+    can fall back to the structured page cards.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    data_url: Optional[str] = None
+    error: Optional[str] = None
+
+
 class PdfPageSpec(BaseModel):
     """One page in a generated PDF."""
 
