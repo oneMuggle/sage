@@ -80,6 +80,18 @@ def _model_copy(self: Any, *, update: Any = None, deep: bool = False) -> Any:
 
 
 @classmethod  # type: ignore[misc]
+def _model_construct(cls: Any, **kwargs: Any) -> Any:
+    """Pydantic v2 `BaseModel.model_construct(**kw)` → v1 `cls.construct(**kw)`.
+
+    v1 的 `construct` 不跑 validator — 行为与 v2 `model_construct` 一致
+    (v2 `__init__` 才会跑 validator, v2 `model_construct` 也跳过). 用于
+    单元测试需要构造一个**故意绕过校验**的实例的场景 (例如注入非法
+    Literal 值来验证运行时守卫).
+    """
+    return cls.construct(**kwargs)
+
+
+@classmethod  # type: ignore[misc]
 def _model_validate(cls: Any, obj: Any, **_: Any) -> Any:
     if isinstance(obj, cls):
         return obj
@@ -100,6 +112,19 @@ def _model_fields(cls: Any) -> Dict[str, Any]:
     return getattr(cls, "__fields__", {})
 
 
+def _validation_error_error_count(self: Any) -> int:
+    """Pydantic v2 `ValidationError.error_count()` → v1 `len(self.errors())`.
+
+    v1 的 ValidationError 没有 `.error_count()` 方法, 业务代码用
+    `exc.error_count()` 在 v1 上 AttributeError. 这层 shim 装到
+    `pydantic.ValidationError` 上, 跨版本统一返回错误条数.
+    """
+    errors = getattr(self, "errors", None)
+    if callable(errors):
+        return len(errors())
+    return 0
+
+
 def install() -> bool:
     """在 pydantic 1.x 上安装 v2 兼容方法。返回是否执行了安装。"""
     global _INSTALLED
@@ -110,6 +135,7 @@ def install() -> bool:
         "model_dump": _model_dump,
         "model_dump_json": _model_dump_json,
         "model_copy": _model_copy,
+        "model_construct": _model_construct,
         "model_validate": _model_validate,
         "model_validate_json": _model_validate_json,
         "model_json_schema": _model_json_schema,
@@ -135,7 +161,29 @@ def install() -> bool:
         meta.__new__ = staticmethod(__new__)  # type: ignore[assignment]
         meta._win7_model_config_hook = True  # type: ignore[attr-defined]
 
+    # ── Field(pattern=...) → regex= shim (v2 → v1) ─────────────────────
+    # pydantic v1 的 Field 接受 regex= 而非 pattern=. v2 业务代码用 pattern=,
+    # v1 下被吞进 **extra 元数据不验证. 这里 monkey-patch pydantic.Field
+    # 把 pattern 转译成 regex, 必须在任何 model 导入前完成 (backend/__init__.py
+    # 调 install() 时已经早于业务 model 导入).
+    _orig_field = pydantic.Field
+
+    def _field_shim(*args: Any, **kwargs: Any) -> Any:
+        if "pattern" in kwargs:
+            kwargs.setdefault("regex", kwargs.pop("pattern"))
+        return _orig_field(*args, **kwargs)
+
+    pydantic.Field = _field_shim  # type: ignore[assignment]
+
     _INSTALLED = True
+
+    # ── ValidationError.error_count() shim (v2 → v1) ──────────────────
+    # v1 的 ValidationError 没有 `.error_count()` 方法, 业务代码在 v1 上
+    # AttributeError. 给 ValidationError 类挂一个 `.error_count()` 装饰器
+    # 走 `len(self.errors())` 即可跨版本一致.
+    if not hasattr(pydantic.ValidationError, "error_count"):
+        pydantic.ValidationError.error_count = _validation_error_error_count  # type: ignore[attr-defined]
+
     return True
 
 
@@ -146,12 +194,23 @@ def model_to_dict(m: Any) -> Dict[str, Any]:
 
 BaseModelCompat = BaseModel
 
+# ── Auto-install on import (win7 / pydantic v1 only) ─────────────────────────
+#
+# 历史教训 (2026-09-16): docstring 写 "用法（任何使用 v2 API 的包在 __init__
+# 顶部 import 后调 install()）", 但实际项目里**没有任何一个调用点** → metaclass
+# hook 没生效, `model_config = ConfigDict(extra="forbid")` / `model_validate`
+# / `model_construct` 全部不工作, 导致 PR #892 CI py38 9 个 pytest 失败。
+#
+# 修复: 模块顶层自动 install(). 幂等 (`_INSTALLED` flag), main 分支 pydantic v2
+# 下 install() 早返回 False, 不会污染 main。 任何 `from backend.compat.win7
+# .pydantic_compat import ...` 都隐式触发 install。
+install()
+
 __all__ = [
     "PYDANTIC_V2",
     "BaseModelCompat",
     "ConfigDict",
     "field_validator",
-    "model_validator",
-    "model_to_dict",
     "install",
+    "model_to_dict",
 ]

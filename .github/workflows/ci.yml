@@ -33,7 +33,8 @@ jobs:
     name: Backend (Python 3.8, Win7 LTS)
     if: |
       github.ref == 'refs/heads/release/win7' ||
-      (github.event_name == 'pull_request' && github.base_ref == 'release/win7')
+      (github.event_name == 'pull_request' && github.base_ref == 'release/win7') ||
+      (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/fix/'))
     runs-on: ubuntu-latest
 
     steps:
@@ -52,10 +53,53 @@ jobs:
           conda run -n sage-backend-py38 pip install --upgrade pip
 
       - name: Install backend deps (py38, locked)
+        id: install-py38-deps
         shell: bash -el {0}
         run: |
           conda run -n sage-backend-py38 pip install -r backend/requirements-py38.txt
-          conda run -n sage-backend-py38 pip install -r backend/requirements-dev.txt
+
+      - name: Install pip-audit (py38)
+        id: py38-pip-install
+        if: always()
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend-py38 pip install --disable-pip-version-check pip-audit==2.7.3
+        continue-on-error: true
+
+      - name: pip-audit (Win7 Python 3.8 requirements)
+        id: py38-pip-audit
+        if: always()
+        shell: bash -el {0}
+        run: |
+          if ! conda run -n sage-backend-py38 python -c "import pip_audit"; then
+            printf '%s\n' '{"error":"pip-audit was not installed in the py38 environment"}' > pip-audit-py38.json
+            exit 1
+          fi
+          conda run -n sage-backend-py38 pip-audit \
+            -r backend/requirements-py38.txt --format=json > pip-audit-py38.json
+        continue-on-error: true
+
+      - name: Enforce Win7 dependency audit gate
+        if: always()
+        shell: bash -el {0}
+        env:
+          PYTHON_INSTALL_OUTCOME: ${{ steps.install-py38-deps.outcome }}
+          PIP_INSTALL_OUTCOME: ${{ steps.py38-pip-install.outcome }}
+          PIP_AUDIT_OUTCOME: ${{ steps.py38-pip-audit.outcome }}
+        run: |
+          python scripts/check_dependency_audit.py \
+            --pip pip-audit-py38.json \
+            --policy .github/dependency-audit-policy.json \
+            --pip-only \
+            --pip-affected-path "Win7 LTS Python 3.8 production path"
+
+      - name: Upload Win7 dependency audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-reports-py38
+          path: pip-audit-py38.json
+          if-no-files-found: warn
 
       - name: Ruff check
         shell: bash -el {0}
@@ -84,6 +128,11 @@ jobs:
         timeout-minutes: 10
         run: |
           conda run -n sage-backend-py38 bash -c "cd backend && pytest tests/integration/test_event_loop_blocking.py --cov --cov-append --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
+
+      - name: Dependency audit gate tests
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend-py38 pytest scripts/tests/test_check_dependency_audit.py
 
       - name: Upload coverage
         if: always()

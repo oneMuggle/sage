@@ -230,8 +230,8 @@ def test_fill_from_content_invalid_shape(tmp_path: Path):
     _setup_workspace(tmp_path)
     token = set_tool_context(_ctx())
     try:
-        # title 期望 str，传 int → Pydantic ValidationError
-        r = _tool_fill().execute(content={"title": 12345, "abstract": "x", "sections": {}})
+        # title 期望 str，传 list → Pydantic ValidationError
+        r = _tool_fill().execute(content={"title": [1, 2, 3], "abstract": "x", "sections": {}})
         assert r.success is False
         assert "content_shape_invalid" in r.error
     finally:
