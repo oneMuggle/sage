@@ -256,10 +256,17 @@ export const en: Record<TranslationKey, string> = {
   'settings.mcp.required': 'Required server',
   'settings.mcp.delete': 'Delete',
   'settings.mcp.builtin_hint': 'Built-in server, cannot be deleted',
+  'settings.mcp.add.transport': 'Transport',
+  'settings.mcp.add.url': 'HTTP endpoint URL',
+  'settings.mcp.add.headers': 'Headers (JSON object; optional)',
+  'settings.mcp.error.url_invalid': 'Enter a valid HTTP or HTTPS URL.',
+  'settings.mcp.error.args_invalid':
+    'Arguments must be a JSON array of strings. Each item is one argument, including spaces and empty strings.',
+  'settings.mcp.error.headers_invalid': 'Headers must be a JSON object with string values.',
   'settings.mcp.add.title': 'Add server',
   'settings.mcp.add.name': 'Name',
   'settings.mcp.add.command': 'Command',
-  'settings.mcp.add.args': 'Arguments (space separated)',
+  'settings.mcp.add.args': 'Arguments (JSON string array)',
   'settings.mcp.add.required': 'Required',
   'settings.mcp.add.submit': 'Add',
   'settings.mcp.error.name_invalid':

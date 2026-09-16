@@ -35,13 +35,24 @@ const STATE_LABEL_KEYS: Record<McpServerState, TranslationKey> = {
 };
 
 interface AddFormState {
+  transport: 'stdio' | 'http';
+  url: string;
+  headers: string;
   name: string;
   command: string;
   args: string;
   required: boolean;
 }
 
-const EMPTY_FORM: AddFormState = { name: '', command: '', args: '', required: false };
+const EMPTY_FORM: AddFormState = {
+  transport: 'stdio',
+  url: '',
+  headers: '',
+  name: '',
+  command: '',
+  args: '',
+  required: false,
+};
 
 export function McpTab() {
   const { t } = useI18n();
@@ -95,7 +106,17 @@ export function McpTab() {
 
   const validateForm = (): string | null => {
     if (!MCP_NAME_REGEX.test(form.name)) return t('settings.mcp.error.name_invalid');
-    if (form.command.trim().length === 0) return t('settings.mcp.error.command_required');
+    if (form.transport === 'http') {
+      try {
+        const url = new URL(form.url);
+        if (!['http:', 'https:'].includes(url.protocol) || !url.hostname)
+          return t('settings.mcp.error.url_invalid');
+      } catch {
+        return t('settings.mcp.error.url_invalid');
+      }
+    }
+    if (form.transport === 'stdio' && form.command.trim().length === 0)
+      return t('settings.mcp.error.command_required');
     return null;
   };
 
@@ -106,16 +127,46 @@ export function McpTab() {
     setAdding(true);
     setActionError(null);
     try {
-      const args = form.args
-        .split(/\s+/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-      await mcpClient.addServer({
-        name: form.name,
-        command: form.command.trim(),
-        args,
-        required: form.required,
-      });
+      if (form.transport === 'http') {
+        let headers: unknown;
+        try {
+          headers = JSON.parse(form.headers.trim() || '{}');
+        } catch {
+          throw new Error(t('settings.mcp.error.headers_invalid'));
+        }
+        if (
+          !headers ||
+          Array.isArray(headers) ||
+          typeof headers !== 'object' ||
+          Object.entries(headers).some(([key, value]) => !key.trim() || typeof value !== 'string')
+        ) {
+          throw new Error(t('settings.mcp.error.headers_invalid'));
+        }
+        await mcpClient.addServer({
+          name: form.name,
+          command: '',
+          args: [],
+          required: form.required,
+          url: form.url.trim(),
+          headers: headers as Record<string, string>,
+        });
+      } else {
+        let args: unknown;
+        try {
+          args = JSON.parse(form.args.trim() || '[]');
+        } catch {
+          throw new Error(t('settings.mcp.error.args_invalid'));
+        }
+        if (!Array.isArray(args) || args.some((arg) => typeof arg !== 'string')) {
+          throw new Error(t('settings.mcp.error.args_invalid'));
+        }
+        await mcpClient.addServer({
+          name: form.name,
+          command: form.command.trim(),
+          args,
+          required: form.required,
+        });
+      }
       setForm(EMPTY_FORM);
       await refresh();
     } catch (e) {
@@ -234,6 +285,17 @@ export function McpTab() {
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.mcp.add.title')}</h3>
         <div className="grid grid-cols-2 gap-3">
           <label className="text-xs text-muted space-y-1">
+            <span>{t('settings.mcp.add.transport')}</span>
+            <select
+              value={form.transport}
+              onChange={(e) => setForm({ ...form, transport: e.target.value as 'stdio' | 'http' })}
+              className={clsx(inputClass, 'w-full')}
+            >
+              <option value="stdio">stdio</option>
+              <option value="http">Streamable HTTP</option>
+            </select>
+          </label>
+          <label className="text-xs text-muted space-y-1">
             <span>{t('settings.mcp.add.name')}</span>
             <input
               type="text"
@@ -243,26 +305,54 @@ export function McpTab() {
               className={clsx(inputClass, 'w-full')}
             />
           </label>
-          <label className="text-xs text-muted space-y-1">
-            <span>{t('settings.mcp.add.command')}</span>
-            <input
-              type="text"
-              value={form.command}
-              onChange={(e) => setForm({ ...form, command: e.target.value })}
-              placeholder="node"
-              className={clsx(inputClass, 'w-full')}
-            />
-          </label>
-          <label className="text-xs text-muted space-y-1">
-            <span>{t('settings.mcp.add.args')}</span>
-            <input
-              type="text"
-              value={form.args}
-              onChange={(e) => setForm({ ...form, args: e.target.value })}
-              placeholder="/path/to/server.js --flag"
-              className={clsx(inputClass, 'w-full')}
-            />
-          </label>
+          {form.transport === 'stdio' ? (
+            <>
+              <label className="text-xs text-muted space-y-1">
+                <span>{t('settings.mcp.add.command')}</span>
+                <input
+                  type="text"
+                  value={form.command}
+                  onChange={(e) => setForm({ ...form, command: e.target.value })}
+                  placeholder="node"
+                  className={clsx(inputClass, 'w-full')}
+                />
+              </label>
+              <label className="text-xs text-muted space-y-1">
+                <span>{t('settings.mcp.add.args')}</span>
+                <input
+                  type="text"
+                  value={form.args}
+                  onChange={(e) => setForm({ ...form, args: e.target.value })}
+                  placeholder={'["/path with spaces/server.js", "--flag"]'}
+                  className={clsx(inputClass, 'w-full')}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="text-xs text-muted space-y-1">
+                <span>{t('settings.mcp.add.url')}</span>
+                <input
+                  type="url"
+                  value={form.url}
+                  onChange={(e) => setForm({ ...form, url: e.target.value })}
+                  placeholder="https://server.example/mcp"
+                  className={clsx(inputClass, 'w-full')}
+                />
+              </label>
+              <label className="text-xs text-muted space-y-1">
+                <span>{t('settings.mcp.add.headers')}</span>
+                <textarea
+                  value={form.headers}
+                  onChange={(e) => setForm({ ...form, headers: e.target.value })}
+                  placeholder={'{"Authorization":"Bearer ..."}'}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className={clsx(inputClass, 'w-full')}
+                />
+              </label>
+            </>
+          )}
           <label className="text-xs text-muted flex items-center gap-2 self-end pb-1.5">
             <input
               type="checkbox"
