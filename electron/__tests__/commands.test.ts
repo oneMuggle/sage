@@ -759,6 +759,17 @@ describe('MCP management IPC routes (M3)', () => {
       timeout_seconds: 45,
     });
     expect(r.body!({ name: 'srv', enabled: true })).toEqual({ enabled: true });
+    // r53-B: disabled_tools 走全量替换（数组原样透传，undefined 时省略）
+    expect(r.body!({ name: 'srv', disabled_tools: ['b', 'a'] })).toEqual({
+      disabled_tools: ['b', 'a'],
+    });
+    expect(r.body!({ name: 'srv', enabled: true })).not.toHaveProperty('disabled_tools');
+  });
+
+  it('mcp_server_tools reads the per-tool payload (r53-B)', () => {
+    const r = COMMAND_ROUTES.mcp_server_tools;
+    expect(r.method).toBe('GET');
+    expect(r.path({ name: 'a b' })).toBe('/api/v1/mcp/servers/a%20b/tools');
   });
 
   it('mcp_server_delete encodes the server name', () => {

@@ -265,6 +265,46 @@ class TestUpdateServer:
         assert resp.status_code == 422
 
 
+class TestServerTools:
+    def test_tools_listed_for_ready_server(self, client):
+        client.post("/api/v1/mcp/servers", json={"name": "srv", "command": "node"})
+        resp = client.get("/api/v1/mcp/servers/srv/tools")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body == {
+            "server": "srv",
+            "state": "ready",
+            "tools": [{"name": "echo", "description": "echo"}],
+            "disabled_tools": [],
+        }
+
+    def test_disabled_tools_echoed_after_patch(self, client):
+        client.post("/api/v1/mcp/servers", json={"name": "srv", "command": "node"})
+        patch = client.patch(
+            "/api/v1/mcp/servers/srv", json={"disabled_tools": ["echo"]}
+        )
+        assert patch.status_code == 200
+        body = client.get("/api/v1/mcp/servers/srv/tools").json()
+        assert body["disabled_tools"] == ["echo"]
+        # raw spec list is unaffected — filtering happens at registration
+        assert [t["name"] for t in body["tools"]] == ["echo"]
+
+    def test_unknown_server_404(self, client):
+        resp = client.get("/api/v1/mcp/servers/ghost/tools")
+        assert resp.status_code == 404
+
+    def test_disabled_server_reports_empty_tools_with_state(self, client):
+        client.post(
+            "/api/v1/mcp/servers",
+            json={"name": "srv", "command": "node", "enabled": False},
+        )
+        resp = client.get("/api/v1/mcp/servers/srv/tools")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["state"] == "disabled"
+        assert body["tools"] == []
+
+
 class TestDeleteServer:
     def test_delete_user_server(self, client, tmp_path):
         client.post("/api/v1/mcp/servers", json={"name": "srv", "command": "node"})
