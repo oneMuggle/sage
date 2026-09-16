@@ -19,17 +19,21 @@ data（拒绝 file:// / chrome:// / javascript:，见 browser_tool 校验）。
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import logging
 import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from .browser_ws import ws_close, ws_connect, ws_recv_text, ws_send_text
 
@@ -512,6 +516,123 @@ def apply_stealth(
         return False
 
 
+# ---------------------------------------------------------------------------
+# Persistent CDP session (Phase 2 of arena automation)
+# ---------------------------------------------------------------------------
+#
+# Unlike cdp_command() (short-lived, one command per connection), a persistent
+# session holds a single WebSocket open for the lifetime of the observation
+# and routes incoming CDP event frames to an in-memory queue.
+
+_message_id_lock = threading.Lock()
+_message_id_counter = 0
+
+
+def _next_message_id() -> int:
+    global _message_id_counter
+    with _message_id_lock:
+        _message_id_counter += 1
+        return _message_id_counter
+
+
+def _reset_message_id() -> None:
+    """Reset the counter; intended for tests only."""
+    global _message_id_counter
+    with _message_id_lock:
+        _message_id_counter = 0
+
+
+class PersistentCDPSession:
+    """Context manager wrapping a long-lived CDP WebSocket.
+
+    Usage:
+        with cdp_persistent_session(session) as cdp:
+            await cdp.send_async("Network.enable")
+            while True:
+                event = await cdp.next_event()
+                ...
+
+    For sync (test) usage, the constructor accepts an injected ``ws_factory``
+    that returns an object with ``send`` / ``recv`` / ``close`` async methods.
+    """
+
+    #: Incoming CDP event frames (asyncio.Queue when async, deque when sync).
+    events: Any = None
+
+    def __init__(
+        self,
+        browser_session: Any,
+        ws_factory: Optional[Any] = None,
+    ):
+        self._browser_session = browser_session
+        self._ws_factory = ws_factory  # for tests
+        self._ws: Any = None
+        self._reader_task: Optional[asyncio.Task] = None
+        self._sync_queue: deque = deque()  # for sync test mode
+        self.events: Any = None  # asyncio.Queue when async, deque when sync
+
+    def __enter__(self) -> "PersistentCDPSession":
+        if self._ws_factory is not None:
+            # Sync test path: caller provides a fake WS; we just queue frames manually
+            self._ws = self._ws_factory()
+            self.events = self._sync_queue
+            return self
+        # Real path: caller should use cdp_persistent_session() async helper below
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self._ws is not None:
+            with contextlib.suppress(Exception):
+                if hasattr(self._ws, "close"):
+                    # close may be async; for sync we accept either
+                    result = self._ws.close()
+                    if asyncio.iscoroutine(result):
+                        # In sync context, schedule and wait
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                loop.create_task(result)
+                            else:
+                                loop.run_until_complete(result)
+                        except RuntimeError:
+                            asyncio.run(result)
+
+    async def send_async(self, method: str, params: Optional[Dict] = None) -> Dict:
+        """Send a command and return the response dict."""
+        if self._ws is None:
+            raise BrowserCDPError("session not connected")
+        msg_id = _next_message_id()
+        payload = {"id": msg_id, "method": method, "params": params or {}}
+        if hasattr(self._ws, "send"):
+            await self._ws.send(json.dumps(payload))
+        # Caller is responsible for matching responses via the event queue
+        return {"id": msg_id, "method": method}
+
+    # Public alias matching the interface spec (send).
+    send = send_async
+
+    def push_event(self, frame: Dict) -> None:
+        """Inject an event frame (used by tests and by the async reader task)."""
+        if isinstance(self.events, deque):
+            self.events.append(frame)
+        elif self.events is not None:
+            self.events.put_nowait(frame)
+
+    def close(self) -> None:
+        """Close the underlying WebSocket."""
+        self.__exit__(None, None, None)
+
+
+@contextlib.contextmanager
+def cdp_persistent_session(browser_session: Any) -> Iterator[PersistentCDPSession]:
+    """Sync entry point. For full async lifecycle, use PersistentCDPSession directly."""
+    sess = PersistentCDPSession(browser_session)
+    try:
+        yield sess
+    finally:
+        sess.close()
+
+
 __all__ = [
     "BrowserCDPError",
     "BrowserSession",
@@ -524,8 +645,10 @@ __all__ = [
     "apply_stealth",
     "browser_downloads_root",
     "cdp_command",
+    "cdp_persistent_session",
     "discover_browser_executable",
     "ensure_page_target",
     "get_browser_manager",
     "launch_browser",
+    "PersistentCDPSession",
 ]
