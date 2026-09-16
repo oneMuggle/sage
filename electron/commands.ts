@@ -865,6 +865,15 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
   office_pdf_preview: { method: 'POST', path: () => '/api/v1/office/pdf-preview' },
 
+  // Office display round B (P2): snapshot vs current structured diff.
+  // Backend: GET /office/doc/{doc_id}/snapshots/{snapshot_id}/diff →
+  // DiffPreviewResult (snapshot=before, current=after). Read-only.
+  office_snapshot_diff: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/snapshots/${encodeURIComponent(String(a.snapshotId))}/diff`,
+  },
+
   // Office parity round 2 (R1): page-level apply-update — closes the
   // edit-preview loop opened by office_update_preview. Backend contract:
   // POST /api/v1/office/doc/{doc_id}/update body {ops} (same op dicts the

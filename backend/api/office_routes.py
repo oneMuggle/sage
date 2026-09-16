@@ -515,6 +515,22 @@ def restore_snapshot_endpoint(doc_id: str, snapshot_id: str) -> OfficeDocumentAc
     return OfficeDocumentActionResponse(ok=True, summary=updated)
 
 
+@router.get("/doc/{doc_id}/snapshots/{snapshot_id}/diff", response_model=DiffPreviewResult)
+def diff_snapshot_endpoint(doc_id: str, snapshot_id: str) -> DiffPreviewResult:
+    """Round B P2: 对比快照与当前版本，返回结构化差异清单。
+
+    快照=before，当前=after —— 「恢复到这份快照会失去/找回什么」一目了
+    然。响应复用 DiffPreviewResult（前端红绿渲染与编辑预览共享）；快照
+    缺失/解析失败折叠为 ``ok=False``（HTTP 200），未知 doc_id 仍走 404。
+    Patch point：``backend.office.snapshot_diff.diff_snapshot``。
+    """
+    conn = _db().get_connection()
+    doc = _require_document(conn, doc_id)
+    from backend.office import snapshot_diff
+
+    return snapshot_diff.diff_snapshot(doc, snapshot_id)
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Generate endpoints (Phase 1.4 step 19, plan §4.1.4)
 # ──────────────────────────────────────────────────────────────────────

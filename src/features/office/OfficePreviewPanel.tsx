@@ -452,7 +452,11 @@ function CappedTable({ rows, numericCells = false }: { rows: string[][]; numeric
   );
 }
 
-function PptPreview({ data }: { data: OfficePptReadResult }) {
+// Round B P3: PptPreview/WordPreview/ExcelPreview are exported — the chat
+// ArtifactViewer renders the same structured previews from the artifact
+// content's `structured` payload (formula view / header styling / render
+// caps all inherited). PdfPreview stays private (chat PDFs use data_url).
+export function PptPreview({ data }: { data: OfficePptReadResult }) {
   const { t } = useI18n();
   if (data.slides.length === 0) {
     return <p className="text-muted text-sm">{t('office.preview.emptyPresentation')}</p>;
@@ -536,7 +540,7 @@ function PdfPreview({ data }: { data: OfficePdfReadResult }) {
   );
 }
 
-function WordPreview({ data }: { data: OfficeWordReadResult }) {
+export function WordPreview({ data }: { data: OfficeWordReadResult }) {
   const { t } = useI18n();
   const shown = data.paragraphs.slice(0, PARAGRAPH_RENDER_CAP);
   const hidden = data.paragraphs.length - shown.length;
@@ -671,7 +675,7 @@ function ExcelSheetTable({ sheet }: { sheet: OfficeExcelSheetContent }) {
   );
 }
 
-function ExcelPreview({ data }: { data: OfficeExcelReadResult }) {
+export function ExcelPreview({ data }: { data: OfficeExcelReadResult }) {
   const { t } = useI18n();
   const [activeSheet, setActiveSheet] = useState(0);
   if (data.sheets.length === 0) {

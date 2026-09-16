@@ -488,7 +488,9 @@ function formatSelfCheckSummary(
   return parts.join(' · ');
 }
 
-function DiffChangeRow({ change }: { change: OfficeDiffPreviewChange }) {
+// Round B P2: exported — the snapshot panel's 与当前版本对比 view renders
+// the same red/green change rows (snapshot diff reuses DiffPreviewResult).
+export function DiffChangeRow({ change }: { change: OfficeDiffPreviewChange }) {
   const { t } = useI18n();
   const hasDiff = change.before != null || change.after != null;
   return (

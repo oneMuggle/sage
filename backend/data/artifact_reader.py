@@ -202,6 +202,11 @@ def read_office(artifact_id: str, kind: str, max_bytes: int = 0) -> dict:
 
     ``max_bytes<=0`` 时用模块级 ``MAX_OFFICE_BYTES``（运行时读取,测试可覆盖）;
     超限/解析失败返回 ok=False,引导用户走"在文件管理器中查看"。
+
+    Round B P3（统一预览组件）: 额外返回 ``structured`` —— read_* 结果的
+    JSON 序列化,与 /office/{kind}/read 端点同形状。chat 端 ArtifactViewer
+    据此复用 Office 页的结构化预览组件（公式视图/表头样式/渲染上限全部
+    继承）;``html`` 保留为降级路径（旧客户端/结构化序列化失败时）。
     """
     effective_max = max_bytes if max_bytes > 0 else MAX_OFFICE_BYTES
     artifact = artifact_repo.get_artifact(artifact_id)
@@ -218,16 +223,40 @@ def read_office(artifact_id: str, kind: str, max_bytes: int = 0) -> dict:
     try:
         if kind == "docx":
             html = _docx_to_html(path)
+            structured = _structured_or_none("docx", path)
         elif kind == "xlsx":
             html = _xlsx_to_html(path)
+            structured = _structured_or_none("xlsx", path)
         elif kind == "pptx":
             html = _pptx_to_html(path)
+            structured = _structured_or_none("pptx", path)
         else:
             return {"ok": False, "error": f"unsupported office kind: {kind}"}
     except Exception as exc:  # noqa: BLE001 — 解析失败降级为不可预览
         return {"ok": False, "error": f"文件解析失败: {exc}"}
 
-    return {"ok": True, "kind": kind, "html": html}
+    result = {"ok": True, "kind": kind, "html": html}
+    if structured is not None:
+        result["structured"] = structured
+    return result
+
+
+def _structured_or_none(kind: str, path: Path):
+    """read_* 结果的 JSON 序列化；失败返回 None（html 仍可渲染,不降级整体）。"""
+    try:
+        if kind == "docx":
+            from backend.office.word import read_docx
+
+            return read_docx(path).model_dump(mode="json")
+        if kind == "xlsx":
+            from backend.office.excel import read_xlsx
+
+            return read_xlsx(path).model_dump(mode="json")
+        from backend.office.ppt import read_ppt
+
+        return read_ppt(path).model_dump(mode="json")
+    except Exception:  # noqa: BLE001 — structured 尽力而为
+        return None
 
 
 def reveal_in_file_manager(artifact_id: str) -> dict:

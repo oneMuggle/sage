@@ -714,6 +714,12 @@ export const en: Record<TranslationKey, string> = {
   'office.caps.install.pillow': 'Pillow not installed: pip install -r backend/requirements-optional.txt to auto-compress images >8MB',
   'office.caps.install.formulas': 'formulas not installed: pip install -r backend/requirements-optional.txt to evaluate Excel formulas locally',
 
+  // ─── Office display round B: P2 snapshot visual diff ─────
+  'office.snapshot.diff': 'Compare with current',
+  'office.snapshot.diffFailed': 'Snapshot diff failed',
+  'office.snapshot.diffIdentical': 'Identical to the current version',
+  'office.snapshot.diffTruncated': 'Too many changes — showing the first 200',
+
   // ─── Office parity batch 3: Word template library (item 3.2) ─────
   'office.template.modeFreeform': 'Free-form',
   'office.template.modeTemplate': 'From template',

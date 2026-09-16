@@ -212,6 +212,27 @@ export const officeApi = {
   },
 
   /**
+   * Round B P2: structured diff between a pre-edit snapshot and the
+   * current document (snapshot=before, current=after) — same
+   * DiffPreviewResult shape the edit-preview dialog renders. Parse
+   * failures fold to `{ok:false, error}`; unknown doc still throws 404.
+   *
+   * Bounded retry — read-only and idempotent.
+   */
+  async diffSnapshot(docId: string, snapshotId: string): Promise<OfficeUpdatePreviewResult> {
+    return withRetry(async () => {
+      try {
+        return await invoke<OfficeUpdatePreviewResult>('office_snapshot_diff', {
+          docId,
+          snapshotId,
+        });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
    * Restore a document's managed file from a snapshot (item 1.7).
    *
    * Overwrites the current managed file with the snapshot's bytes. No

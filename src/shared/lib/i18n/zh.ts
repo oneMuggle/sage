@@ -699,6 +699,12 @@ export const zh = {
   'office.caps.install.pillow': '未安装 Pillow：pip install -r backend/requirements-optional.txt 后 >8MB 图片将自动压缩',
   'office.caps.install.formulas': '未安装 formulas：pip install -r backend/requirements-optional.txt 后 Excel 公式可本地求值',
 
+  // ─── Office display round B: P2 快照可视 diff ─────
+  'office.snapshot.diff': '与当前版本对比',
+  'office.snapshot.diffFailed': '快照对比失败',
+  'office.snapshot.diffIdentical': '与当前版本内容一致',
+  'office.snapshot.diffTruncated': '差异条目过多，仅显示前 200 条',
+
   // ─── Office parity batch 3: Word 模板库 (item 3.2 从模板创建) ─────
   'office.template.modeFreeform': '自由创建',
   'office.template.modeTemplate': '从模板创建',

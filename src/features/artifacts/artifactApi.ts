@@ -34,6 +34,12 @@ export interface ArtifactContent {
   data_url?: string;
   /** C-2 (round5 批次 C): office 三件套预览——后端已全转义的 HTML 片段 */
   html?: string;
+  /**
+   * Round B P3: read_* 结果的 JSON 序列化（与 /office/{kind}/read 同形状）。
+   * 存在时 ArtifactViewer 用 Office 页的结构化预览组件渲染；缺失/序列化
+   * 失败时回退 `html`。类型在消费端按 kind 收窄。
+   */
+  structured?: unknown;
   truncated?: boolean;
 }
 
