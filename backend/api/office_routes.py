@@ -744,6 +744,35 @@ def read_pdf_endpoint(req: PdfReadRequest) -> PdfReadResult:
     return result
 
 
+#: P2-B (office-p2b): docx 原文 base64 上限（docx-preview 原生渲染用，
+#: 与 PDF 原文口径一致）
+MAX_DOCX_DATA_BYTES = 20_000_000
+
+
+@router.post("/word/data", response_model=PdfDataResult)
+def word_data_endpoint(req: PdfDataRequest) -> PdfDataResult:
+    """受管 docx 原文 base64（/office 页 docx-preview 原生渲染用）。
+
+    失败契约同 /pdf/data：预期内失败返回 ``ok=False``，不抛 HTTP 异常。
+    """
+    try:
+        file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+        if file_path.stat().st_size > MAX_DOCX_DATA_BYTES:
+            return PdfDataResult(
+                ok=False, error="文件超过 20MB 预览上限，请在文件管理器中查看"
+            )
+        data = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        return PdfDataResult(
+            ok=True, data_url=f"data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,{data}"
+        )
+    except OfficeError as exc:
+        logger.warning("word/data preview rejected: %s", exc)
+        return PdfDataResult(ok=False, error="文件不可预览（路径无效或超出工作区）")
+    except OSError:
+        logger.warning("word/data preview failed to read: %s", req.file_path)
+        return PdfDataResult(ok=False, error="文件读取失败")
+
+
 #: F3 (office-p0): 原文预览上限 —— 与 chat 产物侧 artifact_reader.MAX_PDF_BYTES
 #: 同口径（过大 PDF base64 化既撑爆响应也拖垮 renderer）。
 MAX_PDF_DATA_BYTES = 20_000_000
