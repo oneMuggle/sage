@@ -122,6 +122,7 @@ class SubagentRunner:
         session_id: Optional[str] = None,
         context_repo: Optional[Any] = None,
         context_task_id: Optional[str] = None,
+        max_iterations: Optional[int] = None,
     ) -> None:
         self._llm_config = llm_config
         # P0-3 (2026-08-20): 取消事件 —— ChatDispatcher._cancelled 传入，
@@ -146,6 +147,7 @@ class SubagentRunner:
         # 不是 lane 的 "task-<id>" 前缀空间。
         self._context_repo = context_repo
         self._context_task_id = context_task_id
+        self._max_iterations = max_iterations
 
     async def __call__(self, task: Any, agent_id: Optional[str]) -> Dict[str, Any]:
         """Run one subtask via SageAgent.run_loop; return executor-usable dict.
@@ -233,6 +235,8 @@ class SubagentRunner:
         run_kwargs: Dict[str, Any] = {"llm_config": self._llm_config}
         if self._session_id and run_loop_accepts_session_id(child):
             run_kwargs["session_id"] = self._session_id
+        if self._max_iterations is not None:
+            run_kwargs["max_iterations"] = self._max_iterations
 
         # P0-3 (2026-08-20): interrupt watcher —— 与 child.run_loop 并发，
         # 取消事件到达即置位子 agent 中断标志；正常结束时 finally 撤销。
