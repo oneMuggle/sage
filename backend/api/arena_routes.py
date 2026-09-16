@@ -11,7 +11,7 @@ import threading
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from backend.config.arena_automation import ArenaAutomationConfig
 from backend.services.arena_accounts import (
