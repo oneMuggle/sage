@@ -1228,6 +1228,18 @@ export interface OfficePdfReadResult {
 }
 
 /**
+ * P1-C (office-p1c): result of POST /api/v1/office/import/convert-legacy
+ * (backend `LegacyImportResult`).
+ */
+export interface OfficeLegacyImportResult {
+  ok: boolean;
+  converted_path?: string | null;
+  converted_filename?: string | null;
+  doc_type?: string | null;
+  error?: string | null;
+}
+
+/**
  * F3 (office-p0): result of POST /api/v1/office/pdf/data — raw-PDF
  * base64 preview for the /office page's 原文预览 toggle (backend
  * `PdfDataResult`). Expected failures (oversize / path escape) come
