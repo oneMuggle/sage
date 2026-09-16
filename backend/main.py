@@ -93,6 +93,7 @@ from backend.api.local_auth import (
 )
 from backend.api.mcp_routes import router as mcp_router
 from backend.api.media_routes import router as media_router
+from backend.api.model_catalog_routes import build_router as build_model_catalog_router
 from backend.api.office_routes import (
     register_office_exception_handlers,
     router as office_router,
@@ -116,6 +117,7 @@ from backend.data.database import Database
 from backend.data.session_repo import MessageRepository, SessionRepository
 from backend.domain.wake import Wake
 from backend.memory import get_memory_manager
+from backend.model_catalog.repository import CatalogRepository
 from backend.orchestration.wake_scheduler import WakeScheduler
 from backend.services.scheduler import (
     get_scheduler_service,
@@ -286,6 +288,17 @@ async def lifespan(app: FastAPI):
     db = Database()
     db.init_db()
     app.state.db = db
+    app.state.catalog_repo = CatalogRepository(db)
+    # Task 4: load builtin seed data if catalog is empty (no network access)
+    # fail-safe — must not crash startup if seed parsing or DB write fails
+    try:
+        from backend.model_catalog.seed import seed_if_empty
+
+        seed_count = seed_if_empty(app.state.catalog_repo)
+        if seed_count:
+            logger.info("Loaded %d builtin seed records", seed_count)
+    except Exception:
+        logger.exception("builtin seed failed (ignored)")
     if __name__ == "__main__":
         _elapsed_db = time.monotonic() - _startup_t0
         print(  # noqa: T201
@@ -841,6 +854,9 @@ app.include_router(diagnostic_router, prefix="/api/v1")
 # Multimodal: media file serving + chat attachment upload
 app.include_router(media_router, prefix="/api/v1")
 app.include_router(chat_attachment_router, prefix="/api/v1")
+
+# Model catalog: candidate review, overrides, snapshot import/export, OpenRouter sync
+app.include_router(build_model_catalog_router(), prefix="/api/v1/model-catalog")
 
 
 @app.get("/health/proof")

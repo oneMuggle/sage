@@ -16,8 +16,10 @@ import { useI18n } from '../../shared/lib/i18n';
 
 const PAGE_SIZE = 20;
 
-function formatCost(cost: number | null): string {
-  return cost === null ? '—' : `$${cost.toFixed(4)}`;
+function formatCost(cost: number | null, unknownLabel: string): string {
+  if (cost === null) return unknownLabel;
+  if (cost === 0) return '$0.0000';
+  return `$${cost.toFixed(4)}`;
 }
 
 function formatTokens(prompt: number, completion: number): string {
@@ -107,6 +109,7 @@ export function UsageRequestsTable() {
             <tr className="text-text-muted text-left">
               <th className="font-normal pr-2">{t('settings.usage.requestsTable.col.time')}</th>
               <th className="font-normal pr-2">{t('settings.usage.requestsTable.col.model')}</th>
+              <th className="font-normal pr-2">{t('settings.usage.requestsTable.col.endpoint')}</th>
               <th className="font-normal pr-2 text-right">
                 {t('settings.usage.requestsTable.col.tokens')}
               </th>
@@ -116,8 +119,11 @@ export function UsageRequestsTable() {
               <th className="font-normal pr-2 text-right">
                 {t('settings.usage.requestsTable.col.cacheCreation')}
               </th>
-              <th className="font-normal text-right">
+              <th className="font-normal pr-2 text-right">
                 {t('settings.usage.requestsTable.col.cost')}
+              </th>
+              <th className="font-normal text-right">
+                {t('settings.usage.requestsTable.col.priceSnapshot')}
               </th>
             </tr>
           </thead>
@@ -128,6 +134,11 @@ export function UsageRequestsTable() {
                   {formatTime(row.created_at_iso, row.created_at_ms)}
                 </td>
                 <td className="font-mono pr-2 py-0.5">{row.model || '—'}</td>
+                <td className="font-mono pr-2 py-0.5">
+                  {row.endpoint_id ?? (
+                    <span aria-label={t('settings.usage.requestsTable.no')}>—</span>
+                  )}
+                </td>
                 <td className="pr-2 py-0.5 text-right">
                   {formatTokens(row.prompt_tokens, row.completion_tokens)}
                 </td>
@@ -135,7 +146,14 @@ export function UsageRequestsTable() {
                 <td className="pr-2 py-0.5 text-right">
                   {row.cache_creation_tokens.toLocaleString()}
                 </td>
-                <td className="py-0.5 text-right">{formatCost(row.estimated_cost_usd)}</td>
+                <td className="py-0.5 text-right">
+                  {formatCost(row.estimated_cost_usd, t('settings.usage.costUnknown'))}
+                </td>
+                <td className="py-0.5 text-right">
+                  {row.has_price_snapshot
+                    ? t('settings.usage.requestsTable.yes')
+                    : t('settings.usage.requestsTable.no')}
+                </td>
               </tr>
             ))}
           </tbody>

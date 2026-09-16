@@ -53,6 +53,8 @@ export const chatApi = {
             apiUrl: config?.apiUrl ?? null,
             model: config?.model ?? null,
             maxContext: config?.maxContext ?? null,
+            // Task 5 (2026-09-15): auto-context resolution flag.
+            autoContext: config?.autoContext ?? null,
             temperature: config?.temperature ?? null,
             provider: config?.provider ?? null,
             reasoningEffort: config?.reasoningEffort ?? null,
@@ -153,6 +155,8 @@ export const chatApi = {
       apiUrl: config?.apiUrl ?? null,
       model: config?.model ?? null,
       maxContext: config?.maxContext ?? null,
+      // Task 5 (2026-09-15): auto-context resolution flag.
+      autoContext: config?.autoContext ?? null,
       temperature: config?.temperature ?? null,
       provider: config?.provider ?? null,
       reasoningEffort: config?.reasoningEffort ?? null,

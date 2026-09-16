@@ -21,7 +21,7 @@ Task 1 round 1 (2026-08-24): ``EndpointPayload`` + ``SettingsPayload`` 必须
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -105,10 +105,11 @@ class SettingsPayload(BaseModel):
     autoMemory: bool | None = None  # noqa: N815
     confirmDelete: bool | None = None  # noqa: N815
     # Task 1 round 1: 强类型而非 List[dict]
-    endpoints: List[EndpointPayload] | None = None
-    modelSelections: dict | None = None  # noqa: N815
-    maxContext: int | None = None  # noqa: N815
-    temperature: float | None = None
+    endpoints: Optional[List[EndpointPayload]] = None
+    modelSelections: Optional[dict] = None  # noqa: N815
+    maxContext: Optional[int] = None  # noqa: N815
+    autoContext: Optional[bool] = None  # noqa: N815
+    temperature: Optional[float] = None
     # Task 1 (2026-08-23): IANA timezone 字符串 — 校验下沉到 canonicalizer.
     timezone: str | None = None
     wiki: dict | None = None
@@ -145,10 +146,11 @@ class LegacySettingsPayload(BaseModel):
     autoMemory: bool | None = None  # noqa: N815
     confirmDelete: bool | None = None  # noqa: N815
     # Task 1 round 1: 强类型而非 List[dict]
-    endpoints: List[EndpointPayload] | None = None
-    modelSelections: dict | None = None  # noqa: N815
-    maxContext: int | None = None  # noqa: N815
-    temperature: float | None = None
+    endpoints: Optional[List[EndpointPayload]] = None
+    modelSelections: Optional[dict] = None  # noqa: N815
+    maxContext: Optional[int] = None  # noqa: N815
+    autoContext: Optional[bool] = None  # noqa: N815
+    temperature: Optional[float] = None
     # Task 1 (2026-08-23): IANA timezone 字符串 — 校验下沉到 canonicalizer.
     timezone: str | None = None
     wiki: dict | None = None

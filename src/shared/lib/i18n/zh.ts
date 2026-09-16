@@ -525,11 +525,15 @@ export const zh = {
   'settings.usage.requestsTable.col.cacheRead': '缓存读',
   'settings.usage.requestsTable.col.cacheCreation': '缓存写',
   'settings.usage.requestsTable.col.cost': '成本',
+  'settings.usage.requestsTable.col.endpoint': '端点',
+  'settings.usage.requestsTable.col.priceSnapshot': '价格快照',
   'settings.usage.requestsTable.empty': '暂无请求记录',
   'settings.usage.requestsTable.loadFailed': '请求明细加载失败',
   'settings.usage.requestsTable.prevPage': '上一页',
   'settings.usage.requestsTable.nextPage': '下一页',
   'settings.usage.requestsTable.pageInfo': '第 {offset}-{end} 条 / 共 {total} 条',
+  'settings.usage.requestsTable.yes': '是',
+  'settings.usage.requestsTable.no': '—',
   // L8 PR-C (2026-09-09): 趋势图与 CSV 导出
   'settings.usage.trend.title': '用量趋势',
   'settings.usage.trend.loading': '趋势数据加载中…',
@@ -538,6 +542,11 @@ export const zh = {
   'settings.usage.trend.legendCost': '成本',
   'settings.usage.trend.loadFailed': '趋势数据加载失败',
   'settings.usage.exportCsv': '导出 CSV',
+  // Task 6 (2026-09-15): cost 未知 vs 0, 部分估算脚注
+  'settings.usage.costUnknown': '未知',
+  'settings.usage.costNote': '基础估算不含缓存和阶梯折扣',
+  'settings.usage.partialEstimate': '部分估算',
+  'settings.usage.partialEstimateHint': '部分请求成本未知, 总数含估算偏差',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
   'office.title': 'Office 文档',

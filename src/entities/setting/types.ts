@@ -120,6 +120,9 @@ export interface AppSettings {
   endpoints: EndpointConfig[];
   modelSelections: ModelSelections;
   maxContext: number;
+  // Task 5 (2026-09-15): auto context window from catalog resolution.
+  // false = use maxContext as manual fixed value; true = resolve from catalog.
+  autoContext: boolean;
   temperature: number;
 
   // Task 1 (2026-08-23): IANA 时区 — 用户报告时区与本地不一致时排查用.
@@ -195,6 +198,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   endpoints: [],
   modelSelections: DEFAULT_MODEL_SELECTIONS,
   maxContext: 4096,
+  autoContext: false,
   temperature: 0.7,
 
   // Task 1 (2026-08-23): 时区默认 'Asia/Shanghai' — 与后端 canonicalizer
