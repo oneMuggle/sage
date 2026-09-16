@@ -128,11 +128,11 @@ describe('UsagePanel', () => {
     });
     expect(screen.getByTestId('usage-total-tokens').textContent).toBe('150');
     expect(screen.getByTestId('usage-total-cost').textContent).toBe('$0.0010');
-    // by-model 表格: 两行, null 成本 → 占位符
+    // by-model 表格: 两行, null 成本 → 「未知」 (Task 6 brief: 区分未知与 0)
     const table = screen.getByTestId('usage-by-model');
     expect(table.textContent).toContain('gpt-4o');
     expect(table.textContent).toContain('local-model');
-    expect(table.textContent).toContain('—');
+    expect(table.textContent).toContain('未知');
     expect(summarySpy).toHaveBeenCalledWith('today');
   });
 

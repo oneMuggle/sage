@@ -23,6 +23,7 @@ from .schemas import (
 from .snapshots import (
     FIELDS,
     CatalogConflict,
+    CatalogNotFound,
     canonical_json,
     digest,
     field_value,
@@ -91,21 +92,48 @@ class CatalogRepository:
 
     def get_override(self, endpoint: EndpointKey) -> OverrideRecord:
         with _SQLITE_LOCK:
-            row = (
-                self.db.get_connection()
-                .execute(
-                    "SELECT data, revision FROM model_catalog_overrides WHERE endpoint_id=? AND model_id=?",
-                    (endpoint.endpoint_id, endpoint.model_id),
+            conn = self.db.get_connection()
+            row = conn.execute(
+                "SELECT data, revision FROM model_catalog_overrides "
+                "WHERE endpoint_id=? AND model_id=?",
+                (endpoint.endpoint_id, endpoint.model_id),
+            ).fetchone()
+            if row:
+                return OverrideRecord(
+                    patch=EndpointPatch.model_validate_json(row["data"]),
+                    revision=row["revision"],
                 )
-                .fetchone()
+            generation = conn.execute(
+                "SELECT revision FROM model_catalog_override_generations "
+                "WHERE endpoint_id=? AND model_id=?",
+                (endpoint.endpoint_id, endpoint.model_id),
+            ).fetchone()
+            return OverrideRecord(revision=generation["revision"] if generation else 0)
+
+    def delete_override(self, endpoint: EndpointKey, expected_revision: int) -> int:
+        """Delete an override while retaining a monotonic revision tombstone."""
+        with self._transaction() as conn:
+            current = self.get_override(endpoint)
+            if current.revision == 0 or not conn.execute(
+                "SELECT 1 FROM model_catalog_overrides WHERE endpoint_id=? AND model_id=?",
+                (endpoint.endpoint_id, endpoint.model_id),
+            ).fetchone():
+                raise CatalogNotFound("no override to delete")
+            if current.revision != expected_revision:
+                raise CatalogConflict("override revision changed")
+            revision = current.revision + 1
+            conn.execute(
+                "DELETE FROM model_catalog_overrides "
+                "WHERE endpoint_id=? AND model_id=?",
+                (endpoint.endpoint_id, endpoint.model_id),
             )
-            return (
-                OverrideRecord(
-                    patch=EndpointPatch.model_validate_json(row["data"]), revision=row["revision"]
-                )
-                if row
-                else OverrideRecord()
+            conn.execute(
+                "INSERT INTO model_catalog_override_generations VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(endpoint_id, model_id) DO UPDATE SET revision=excluded.revision, "
+                "updated_at=excluded.updated_at",
+                (endpoint.endpoint_id, endpoint.model_id, revision, utc_now()),
             )
+            return revision
 
     def set_override(self, endpoint: EndpointKey, patch: dict, expected_revision: int) -> int:
         validated = EndpointPatch.model_validate(patch)
@@ -126,6 +154,12 @@ class CatalogRepository:
                     revision,
                     utc_now(),
                 ),
+            )
+            conn.execute(
+                "INSERT INTO model_catalog_override_generations VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(endpoint_id, model_id) DO UPDATE SET revision=excluded.revision, "
+                "updated_at=excluded.updated_at",
+                (endpoint.endpoint_id, endpoint.model_id, revision, utc_now()),
             )
             return revision
 

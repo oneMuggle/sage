@@ -32,6 +32,10 @@ def resolve_layers(layers: list[LayerValues]) -> EffectiveModel:
                 values[field] = value
                 provenance[f"{group}.{field}"] = layer.source
                 break
+    revision = next(
+        (layer.revision for layer in layers if layer.source == "user_override"),
+        0,
+    )
     return EffectiveModel(
         limits=ContextLimits(native=values.get("native"), service=values.get("service")),
         price=Price(
@@ -39,4 +43,5 @@ def resolve_layers(layers: list[LayerValues]) -> EffectiveModel:
             output_per_million=values.get("output_per_million"),
         ),
         provenance=provenance,
+        revision=revision,
     )

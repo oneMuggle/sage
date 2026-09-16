@@ -124,6 +124,236 @@ class TestGetModels:
         assert resp.status_code == 200
         assert len(resp.json()["items"]) == 1
 
+    def test_endpoint_filter_returns_only_bound_models(self, client, repo):
+        first = _candidate(
+            model_key={"provider": "vendor", "model_id": "first"},
+        )
+        second = _candidate(
+            model_key={"provider": "vendor", "model_id": "second"},
+        )
+        _publish(repo, first)
+        _publish(repo, second)
+        repo.bind(
+            EndpointKey(endpoint_id="ep-a", model_id="first"),
+            first.model_key,
+            first.pricing_scope,
+        )
+        repo.bind(
+            EndpointKey(endpoint_id="ep-b", model_id="second"),
+            second.model_key,
+            second.pricing_scope,
+        )
+
+        resp = client.get(
+            "/api/v1/model-catalog/models",
+            params={"endpoint_id": "ep-a"},
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert [item["model_key"]["model_id"] for item in body["items"]] == ["first"]
+
+    def test_endpoint_filter_derives_from_persisted_discovered_models(self, client, repo):
+        from backend.data.settings_repo import SettingsRepository
+
+        first = _candidate(
+            model_key={"provider": "vendor", "model_id": "first"},
+        )
+        second = _candidate(
+            model_key={"provider": "vendor", "model_id": "second"},
+        )
+        _publish(repo, first)
+        _publish(repo, second)
+        SettingsRepository(repo.db).set_json(
+            "app_settings",
+            {
+                "endpoints": [
+                    {
+                        "id": "ep-a",
+                        "discoveredModels": [
+                            {
+                                "id": "first",
+                                "capabilities": ["chat"],
+                                "endpointId": "ep-a",
+                            }
+                        ],
+                    },
+                    {
+                        "id": "ep-b",
+                        "discoveredModels": [
+                            {
+                                "id": "second",
+                                "capabilities": ["chat"],
+                                "endpointId": "ep-b",
+                            }
+                        ],
+                    },
+                ]
+            },
+        )
+
+        first_resp = client.get(
+            "/api/v1/model-catalog/models",
+            params={"endpoint_id": "ep-a"},
+        )
+        second_resp = client.get(
+            "/api/v1/model-catalog/models",
+            params={"endpoint_id": "ep-b"},
+        )
+
+        assert first_resp.status_code == 200
+        assert second_resp.status_code == 200
+        assert [item["model_key"]["model_id"] for item in first_resp.json()["items"]] == [
+            "first"
+        ]
+        assert [item["model_key"]["model_id"] for item in second_resp.json()["items"]] == [
+            "second"
+        ]
+
+    def test_endpoint_filter_applies_pagination(self, client, repo):
+        records = [
+            _candidate(model_key={"provider": "vendor", "model_id": f"model-{i}"})
+            for i in range(3)
+        ]
+        for record in records:
+            _publish(repo, record)
+            repo.bind(
+                EndpointKey(endpoint_id="ep", model_id=record.model_key.model_id),
+                record.model_key,
+                record.pricing_scope,
+            )
+
+        resp = client.get(
+            "/api/v1/model-catalog/models",
+            params={"endpoint_id": "ep", "limit": 2, "offset": 1},
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 3
+        assert len(body["items"]) == 2
+
+    def test_discovery_with_provider_prefix_selects_exact_provider(self, client, repo):
+        from backend.data.settings_repo import SettingsRepository
+
+        vendor = _candidate(
+            model_key={"provider": "vendor-a", "model_id": "shared"},
+            pricing_scope="direct",
+        )
+        other = _candidate(
+            model_key={"provider": "vendor-b", "model_id": "shared"},
+            pricing_scope="openrouter",
+        )
+        _publish(repo, vendor)
+        _publish(repo, other)
+        SettingsRepository(repo.db).set_json(
+            "app_settings",
+            {
+                "endpoints": [
+                    {
+                        "id": "ep",
+                        "discoveredModels": [{"id": "vendor-a/shared"}],
+                    }
+                ]
+            },
+        )
+
+        resp = client.get(
+            "/api/v1/model-catalog/models", params={"endpoint_id": "ep"}
+        )
+
+        assert resp.status_code == 200
+        assert [item["model_key"] for item in resp.json()["items"]] == [
+            {"provider": "vendor-a", "model_id": "shared"}
+        ]
+
+    def test_ambiguous_discovery_does_not_guess_provider_or_pricing_scope(
+        self, client, repo
+    ):
+        from backend.data.settings_repo import SettingsRepository
+
+        first = _candidate(
+            model_key={"provider": "vendor-a", "model_id": "shared"},
+            pricing_scope="direct",
+        )
+        second = _candidate(
+            model_key={"provider": "vendor-b", "model_id": "shared"},
+            pricing_scope="openrouter",
+        )
+        third = _candidate(
+            model_key={"provider": "vendor-a", "model_id": "scoped"},
+            pricing_scope="openrouter",
+        )
+        fourth = _candidate(
+            model_key={"provider": "vendor-a", "model_id": "scoped"},
+            pricing_scope="direct",
+        )
+        for record in (first, second, third, fourth):
+            _publish(repo, record)
+        SettingsRepository(repo.db).set_json(
+            "app_settings",
+            {
+                "endpoints": [
+                    {
+                        "id": "ep",
+                        "discoveredModels": [
+                            {"id": "shared"},
+                            {"id": "scoped"},
+                        ],
+                    }
+                ]
+            },
+        )
+
+        resp = client.get(
+            "/api/v1/model-catalog/models", params={"endpoint_id": "ep"}
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["items"] == []
+
+    def test_explicit_binding_takes_priority_over_derived_discovery(
+        self, client, repo
+    ):
+        from backend.data.settings_repo import SettingsRepository
+
+        target = _candidate(
+            model_key={"provider": "vendor", "model_id": "target"},
+            pricing_scope="direct",
+        )
+        discovered = _candidate(
+            model_key={"provider": "vendor", "model_id": "discovered"},
+            pricing_scope="direct",
+        )
+        _publish(repo, target)
+        _publish(repo, discovered)
+        repo.bind(
+            EndpointKey(endpoint_id="ep", model_id="alias"),
+            target.model_key,
+            target.pricing_scope,
+        )
+        SettingsRepository(repo.db).set_json(
+            "app_settings",
+            {
+                "endpoints": [
+                    {
+                        "id": "ep",
+                        "discoveredModels": [{"id": "discovered"}],
+                    }
+                ]
+            },
+        )
+
+        resp = client.get(
+            "/api/v1/model-catalog/models", params={"endpoint_id": "ep"}
+        )
+
+        assert resp.status_code == 200
+        assert [item["model_key"]["model_id"] for item in resp.json()["items"]] == [
+            "target"
+        ]
+
 
 # ---------------------------------------------------------------------------
 # GET /effective
@@ -140,6 +370,7 @@ class TestGetEffective:
         body = resp.json()
         assert body["limits"]["native"] is None
         assert body["price"]["input_per_million"] is None
+        assert body["revision"] == 0
 
     def test_resolved_endpoint(self, client, repo):
         _publish(repo)
@@ -156,6 +387,7 @@ class TestGetEffective:
         body = resp.json()
         assert body["limits"]["native"] == 32000
         assert body["price"]["input_per_million"] == "1.25"
+        assert body["revision"] == 0
 
     def test_missing_params_422(self, client):
         resp = client.get("/api/v1/model-catalog/effective")
@@ -212,6 +444,57 @@ class TestPutOverrides:
                 "expected_revision": 0,
             },
         )
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# DELETE /overrides
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteOverrides:
+    def test_delete_override_returns_new_revision(self, client, repo):
+        # Set an override first
+        client.put(
+            "/api/v1/model-catalog/overrides",
+            json={
+                "endpoint_id": "ep",
+                "model_id": "m",
+                "patch": {"native": 8000},
+                "expected_revision": 0,
+            },
+        )
+        # Delete it with correct revision
+        resp = client.delete(
+            "/api/v1/model-catalog/overrides",
+            params={"endpoint_id": "ep", "model_id": "m", "expected_revision": 1},
+        )
+        assert resp.status_code == 200
+        # Monotonic tombstone — revision keeps climbing across delete/recreate cycles
+        # so a stale client holding revision 0 cannot blindly re-create an override.
+        assert resp.json()["revision"] == 2
+        # The override row is gone, but the generation tombstone retains revision=2.
+        assert repo.get_override(EndpointKey(endpoint_id="ep", model_id="m")).revision == 2
+
+    def test_delete_override_cas_conflict_409(self, client):
+        client.put(
+            "/api/v1/model-catalog/overrides",
+            json={
+                "endpoint_id": "ep",
+                "model_id": "m",
+                "patch": {"native": 8000},
+                "expected_revision": 0,
+            },
+        )
+        # Wrong expected_revision
+        resp = client.delete(
+            "/api/v1/model-catalog/overrides",
+            params={"endpoint_id": "ep", "model_id": "m", "expected_revision": 99},
+        )
+        assert resp.status_code == 409
+
+    def test_delete_missing_params_422(self, client):
+        resp = client.delete("/api/v1/model-catalog/overrides")
         assert resp.status_code == 422
 
 

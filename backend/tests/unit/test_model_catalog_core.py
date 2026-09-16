@@ -15,7 +15,7 @@ from backend.model_catalog.schemas import ContextLimits, EndpointKey, LayerValue
 def test_fields_inherit_independently_and_keep_sources():
     user = LayerValues(
         limits=ContextLimits(native=32768),
-        price=Price(input_per_million="0"), source="user", revision=1,
+        price=Price(input_per_million="0"), source="user_override", revision=1,
     )
     seed = LayerValues(
         limits=ContextLimits(native=4096, service=8192),
@@ -42,6 +42,7 @@ def test_empty_layers_have_unknown_values_and_no_sources():
     assert result.limits == ContextLimits()
     assert result.price == Price()
     assert result.provenance == {}
+    assert result.revision == 0
 
 
 def test_identity_and_aliases_are_exact_not_fuzzy():

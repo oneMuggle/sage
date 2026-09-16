@@ -120,3 +120,4 @@ class EffectiveModel(CatalogValue):
     limits: ContextLimits
     price: Price
     provenance: dict[str, str]
+    revision: NonnegativeInteger = 0

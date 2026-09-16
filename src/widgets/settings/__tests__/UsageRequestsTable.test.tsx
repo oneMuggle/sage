@@ -51,9 +51,9 @@ describe('UsageRequestsTable', () => {
     await waitFor(() => {
       expect(screen.getByTestId('usage-requests-rows')).toBeDefined();
     });
-    // 6 个表头
+    // Task 6 (2026-09-15): 8 个表头 (新增 endpoint + priceSnapshot)
     const headers = screen.getAllByRole('columnheader');
-    expect(headers).toHaveLength(6);
+    expect(headers).toHaveLength(8);
     // 2 行数据 + thead
     const rows = screen.getAllByRole('row');
     expect(rows.length).toBe(2 + 1);

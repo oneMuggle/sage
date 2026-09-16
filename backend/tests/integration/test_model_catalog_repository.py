@@ -172,6 +172,7 @@ def test_override_cas_and_probe_failure_preserve_user_and_last_success(repo):
     assert result.limits.native == 64000
     assert result.price.input_per_million == 0
     assert repo.get_override(endpoint()).revision == 1
+    assert repo.resolve(endpoint()).revision == 1
     repo.db.close()
     assert repo.resolve(endpoint()) == result
 
@@ -355,3 +356,88 @@ def test_probe_same_url_merges_effective(repo):
     effective = EndpointPatch.model_validate_json(row[0])
     assert effective.native == 4096
     assert effective.service == 2048
+
+
+def test_delete_override_restores_inheritance(repo):
+    """Deleting a user override restores values from the next layer."""
+    publish(repo)
+    repo.bind(endpoint(), candidate().model_key, "openrouter")
+    # Set an override
+    rev = repo.set_override(endpoint(), {"native": 128000}, 0)
+    assert rev == 1
+    assert repo.resolve(endpoint()).limits.native == 128000
+    # Delete the override
+    new_rev = repo.delete_override(endpoint(), expected_revision=rev)
+    # Monotonic tombstone — revision keeps climbing so stale clients holding
+    # revision 0 cannot resurrect an override that another client already deleted.
+    assert new_rev == 2
+    # Should fall back to the catalog entry (native=32000 from publish())
+    result = repo.resolve(endpoint())
+    assert result.limits.native == 32000
+    # The override row is gone, but the tombstone retains revision=2.
+    assert repo.get_override(endpoint()).revision == 2
+
+
+def test_override_aba_protection_after_delete(repo):
+    """ABA: a client holding revision 0 must NOT be able to resurrect an override
+    after another client creates and then deletes it within the same revision=0
+    window — the monotonic tombstone bumps revision past 0, so a stale write
+    using expected_revision=0 collides with the tombstone (current=2)."""
+    from backend.model_catalog.snapshots import CatalogConflict
+
+    ep = endpoint()
+    # 1. Client A reads: state is fresh, revision=0.
+    initial = repo.get_override(ep)
+    assert initial.revision == 0
+    assert initial.patch.native is None
+
+    # 2. Client B creates an override (revision 0 → 1).
+    rev_b = repo.set_override(ep, {"native": 4096}, expected_revision=0)
+    assert rev_b == 1
+
+    # 3. Client B deletes (revision 1 → 2, tombstone retained).
+    rev_after_delete = repo.delete_override(ep, expected_revision=1)
+    assert rev_after_delete == 2
+    assert repo.get_override(ep).revision == 2  # tombstone
+
+    # 4. Client A — still holding the stale revision=0 token — attempts to
+    #    set an override. With a non-monotonic revision, current would also
+    #    be 0 and Client A's stale write would silently clobber Client B's
+    #    delete. The tombstone blocks this: current=2 != expected=0 → 409.
+    with pytest.raises(CatalogConflict):
+        repo.set_override(ep, {"native": 8192}, expected_revision=0)
+
+
+def test_override_tombstone_survives_set_delete_cycles(repo):
+    """The tombstone revision must keep climbing across multiple
+    create/delete cycles — never reset to 0 — so any client reading the
+    post-delete revision can safely use it as the next CAS token."""
+    ep = endpoint()
+    rev = 0
+    for expected_native in (1000, 2000, 3000):
+        rev = repo.set_override(ep, {"native": expected_native}, expected_revision=rev)
+    assert rev == 3
+    rev = repo.delete_override(ep, expected_revision=rev)
+    assert rev == 4
+    assert repo.get_override(ep).revision == 4
+    # A fresh set with the tombstone token succeeds (no resurrection).
+    new_rev = repo.set_override(ep, {"native": 4000}, expected_revision=rev)
+    assert new_rev == 5
+    assert repo.get_override(ep).patch.native == 4000
+
+
+def test_delete_nonexistent_override_raises(repo):
+    """Deleting when no override exists raises CatalogNotFound."""
+    from backend.model_catalog.snapshots import CatalogNotFound
+
+    with pytest.raises(CatalogNotFound):
+        repo.delete_override(endpoint(), expected_revision=0)
+
+
+def test_delete_override_stale_revision_raises(repo):
+    """Deleting with a stale expected_revision raises CatalogConflict."""
+    from backend.model_catalog.snapshots import CatalogConflict
+
+    repo.set_override(endpoint(), {"native": 64000}, 0)
+    with pytest.raises(CatalogConflict):
+        repo.delete_override(endpoint(), expected_revision=0)  # stale: current is 1

@@ -20,6 +20,10 @@ class CatalogConflict(Exception):  # noqa: N818 - public contract from the catal
     """Stale revision or terminal review; API callers may map this to HTTP 409."""
 
 
+class CatalogNotFound(Exception):
+    """Override or entity not found; API callers may map this to HTTP 404."""
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")  # noqa: UP017 - Python 3.10 runtime
 

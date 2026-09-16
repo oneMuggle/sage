@@ -407,6 +407,13 @@ class Database:
             )
         """)
         cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_override_generations (
+                endpoint_id TEXT NOT NULL, model_id TEXT NOT NULL,
+                revision INTEGER NOT NULL CHECK(revision >= 0),
+                updated_at TEXT NOT NULL, PRIMARY KEY(endpoint_id, model_id)
+            )
+        """)
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS model_catalog_snapshots (
                 id TEXT PRIMARY KEY, source TEXT NOT NULL,
                 digest TEXT NOT NULL, created_at TEXT NOT NULL

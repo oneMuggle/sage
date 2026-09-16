@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ValidationError
 
 from backend.api.local_auth import require_local_auth
+from backend.data.settings_repo import SettingsRepository
 from backend.api.upstream_security import (
     client_for_resolved_address,
     read_response_body_limited,
@@ -24,7 +26,7 @@ from backend.api.upstream_security import (
 )
 from backend.model_catalog.repository import CatalogRepository
 from backend.model_catalog.schemas import CandidateModel, EndpointKey
-from backend.model_catalog.snapshots import CatalogConflict
+from backend.model_catalog.snapshots import CatalogConflict, CatalogNotFound
 from backend.model_catalog.sources import map_openrouter
 from backend.model_catalog.transfer import (
     BundleValidationError,
@@ -64,20 +66,40 @@ def build_router(repo: Optional[CatalogRepository] = None) -> APIRouter:
         request: Request,
         limit: int = Query(default=50, ge=1, le=1000),
         offset: int = Query(default=0, ge=0),
+        endpoint_id: Optional[str] = Query(default=None),
     ):
         require_local_auth(request)
         repository = _repo(request)
         effective_limit = min(limit, _MAX_PAGE_LIMIT)
         with _read_lock(repository):
             conn = repository.db.get_connection()
-            total = conn.execute(
-                "SELECT COUNT(*) FROM model_catalog_entries"
-            ).fetchone()[0]
-            rows = conn.execute(
-                "SELECT data FROM model_catalog_entries ORDER BY updated_at DESC "
-                "LIMIT ? OFFSET ?",
-                (effective_limit, offset),
-            ).fetchall()
+            if endpoint_id:
+                catalog_filter = _endpoint_catalog_filter(repository, endpoint_id)
+                count_query = (
+                    "SELECT COUNT(*) FROM model_catalog_entries e "
+                    f"WHERE {catalog_filter.sql}"
+                )
+                rows_query = (
+                    "SELECT e.data FROM model_catalog_entries e "
+                    f"WHERE {catalog_filter.sql} "
+                    "ORDER BY e.updated_at DESC LIMIT ? OFFSET ?"
+                )
+                total = conn.execute(
+                    count_query, catalog_filter.parameters
+                ).fetchone()[0]
+                rows = conn.execute(
+                    rows_query,
+                    (*catalog_filter.parameters, effective_limit, offset),
+                ).fetchall()
+            else:
+                total = conn.execute(
+                    "SELECT COUNT(*) FROM model_catalog_entries"
+                ).fetchone()[0]
+                rows = conn.execute(
+                    "SELECT data FROM model_catalog_entries ORDER BY updated_at DESC "
+                    "LIMIT ? OFFSET ?",
+                    (effective_limit, offset),
+                ).fetchall()
         items = [CandidateModel.model_validate_json(r["data"]) for r in rows]
         return {
             "items": [i.model_dump(mode="json") for i in items],
@@ -125,6 +147,27 @@ def build_router(repo: Optional[CatalogRepository] = None) -> APIRouter:
             raise HTTPException(status_code=409, detail="override revision changed")
         except (ValidationError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc))
+        return {"revision": revision}
+
+    # ---- DELETE /overrides -----------------------------------------------
+
+    @router.delete("/overrides")
+    async def delete_override(
+        request: Request,
+        endpoint_id: str = Query(...),
+        model_id: str = Query(...),
+        expected_revision: int = Query(...),
+    ):
+        """Delete a user override, restoring inherited values from lower layers."""
+        require_local_auth(request)
+        repository = _repo(request)
+        endpoint = EndpointKey(endpoint_id=endpoint_id, model_id=model_id)
+        try:
+            revision = repository.delete_override(endpoint, expected_revision)
+        except CatalogNotFound:
+            raise HTTPException(status_code=404, detail="override not found")
+        except CatalogConflict:
+            raise HTTPException(status_code=409, detail="override revision changed")
         return {"revision": revision}
 
     # ---- POST /snapshots/import ----------------------------------------
@@ -295,6 +338,103 @@ def build_router(repo: Optional[CatalogRepository] = None) -> APIRouter:
         return result.model_dump()
 
     return router
+
+
+@dataclass(frozen=True)
+class _CatalogFilter:
+    sql: str
+    parameters: tuple[str, ...]
+
+
+def _endpoint_catalog_filter(repository: CatalogRepository, endpoint_id: str) -> _CatalogFilter:
+    """Build one endpoint filter from explicit bindings and persisted discovery.
+
+    Explicit bindings are authoritative for the corresponding endpoint model ID.
+    Discovery is only used when one provider and pricing scope can be determined
+    from the catalog; ambiguous bare IDs are deliberately excluded.
+    """
+    conn = repository.db.get_connection()
+    bindings = conn.execute(
+        "SELECT model_id, provider, catalog_model_id, pricing_scope "
+        "FROM model_catalog_bindings WHERE endpoint_id=?",
+        (endpoint_id,),
+    ).fetchall()
+    clauses: list[str] = []
+    parameters: list[str] = []
+    if bindings:
+        return _CatalogFilter(
+            sql=(
+                "EXISTS (SELECT 1 FROM model_catalog_bindings b "
+                "WHERE b.endpoint_id=? AND e.provider=b.provider "
+                "AND e.model_id=b.catalog_model_id "
+                "AND e.pricing_scope=b.pricing_scope)"
+            ),
+            parameters=(endpoint_id,),
+        )
+
+    settings = SettingsRepository(repository.db).get_json("app_settings")
+    discovered: list[str] = []
+    if isinstance(settings, dict):
+        endpoints = settings.get("endpoints")
+        if isinstance(endpoints, list):
+            endpoint = next(
+                (
+                    value
+                    for value in endpoints
+                    if isinstance(value, dict) and value.get("id") == endpoint_id
+                ),
+                None,
+            )
+            models = endpoint.get("discoveredModels") if isinstance(endpoint, dict) else None
+            if isinstance(models, list):
+                discovered = [
+                    value["id"]
+                    for value in models
+                    if isinstance(value, dict)
+                    and isinstance(value.get("id"), str)
+                    and value["id"].strip()
+                ]
+
+    explicit_model_ids = {row["model_id"] for row in bindings}
+    catalog_keys = conn.execute(
+        "SELECT DISTINCT provider, model_id, pricing_scope "
+        "FROM model_catalog_entries"
+    ).fetchall()
+    catalog_by_model: dict[str, set[tuple[str, str]]] = {}
+    for row in catalog_keys:
+        catalog_by_model.setdefault(row["model_id"], set()).add(
+            (row["provider"], row["pricing_scope"])
+        )
+
+    derived: set[tuple[str, str, str]] = set()
+    for raw_id in discovered:
+        if raw_id in explicit_model_ids:
+            continue
+        if "/" in raw_id:
+            provider, model_id = raw_id.split("/", 1)
+            candidates = {
+                (candidate_provider, pricing_scope)
+                for candidate_provider, pricing_scope in catalog_by_model.get(model_id, set())
+                if candidate_provider == provider and model_id
+            }
+        else:
+            model_id = raw_id
+            candidates = catalog_by_model.get(model_id, set())
+        if len(candidates) != 1:
+            continue
+        provider, pricing_scope = next(iter(candidates))
+        derived.add((provider, model_id, pricing_scope))
+
+    for provider, model_id, pricing_scope in sorted(derived):
+        clauses.append(
+            "(e.provider=? AND e.model_id=? AND e.pricing_scope=?)"
+        )
+        parameters.extend((provider, model_id, pricing_scope))
+
+    return _CatalogFilter(
+        sql=" OR ".join(clauses) if clauses else "0",
+        parameters=tuple(parameters),
+    )
 
 
 # ---------------------------------------------------------------------------
