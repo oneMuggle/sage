@@ -20,7 +20,8 @@ interface GroupedModel {
 export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
   // Task 6 (2026-09-15): 跳转到 /model-catalog 管理页
   const navigate = useNavigate();
-  // 防御性检查: discoveredModels 可能在旧数据中缺失
+  // 防御性检查: 旧数据/绕过 mergeWithDefaults 的代码路径可能让 discoveredModels 为 null
+  //   (data layer mergeWithDefaults 已用 DEFAULT_ENDPOINT 兜底, 此处为 belt-and-suspenders).
   const endpointsWithModels = settings.endpoints.filter(
     (ep) => (ep.discoveredModels ?? []).length > 0,
   );
