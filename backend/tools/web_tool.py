@@ -23,7 +23,7 @@ from backend.tools.search_config import load_search_config
 from backend.tools.search_engines import SearchEngine, resolve_engine_chain
 from backend.wiki.html_extract import decode_html, extract
 
-from . import content_sniff, web_render
+from . import content_sniff, file_links, web_render
 from .base import BaseTool, ToolResult, ToolSchema
 from .web_render import RenderError
 
@@ -344,7 +344,9 @@ class WebFetchTool(BaseTool):
     risk = RiskClass.EXTERNAL
 
     #: mode 合法取值。text 只给正文，links/tables 额外带对应段，raw 给原始 HTML
-    VALID_MODES = ("text", "links", "tables", "raw")
+    VALID_MODES = ("text", "links", "tables", "raw", "files")
+    #: mode=files 对 top-N 候选做首块探测（流式 GET 读首块即关）
+    FILES_PROBE_TOP_N = 5
 
     #: render 合法取值：auto=检出 JS 壳自动渲染（默认）；always=强制；never=仅静态
     VALID_RENDER_MODES = ("auto", "never", "always")
@@ -442,7 +444,12 @@ class WebFetchTool(BaseTool):
                     "mode": {
                         "type": "string",
                         "enum": list(self.VALID_MODES),
-                        "description": "抽取模式 (默认 text)",
+                        "description": (
+                            "抽取模式 (默认 text)。files：嗅探页面内候选文件链接"
+                            "（citation_pdf_url / <a download> / .pdf|.zip|.docx 后缀 / iframe|embed / "
+                            "meta refresh / 「下载|全文|PDF」锚文本）并对 top 候选探测真实类型，"
+                            "结果 files[] 可直接喂 http_download"
+                        ),
                     },
                     "render": {
                         "type": "string",
@@ -632,6 +639,8 @@ class WebFetchTool(BaseTool):
                 # AB1：静态通道被拦 → 经渲染池（真 Chrome 指纹 + 代理 + 可选持久
                 # profile）重放一次；仍被拦才返回指引。
                 content = self._escalate(url, network_policy, mode, wait_for, blocked)
+            if mode == "files" and content.get("kind") != "binary":
+                self._finalize_files(content, network_policy)
             if use_cache:
                 # 剥离易变 note / cached 标记后存全文副本
                 from .web_cache import put as _cache_put
@@ -820,7 +829,111 @@ class WebFetchTool(BaseTool):
             result["links"] = page.links[: self._policy.max_result_items]
         elif mode == "tables":
             result["tables"] = page.tables[: self._policy.max_result_items]
+        elif mode == "files":
+            result["files"] = file_links.extract_file_links(text, url)
         return result
+
+    def _finalize_files(self, content: Dict[str, Any], network_policy: NetworkPolicy) -> None:
+        """SN2：对 top-N 候选做首块探测（真实 content-type / 魔数 / 大小），原地更新 ``files``。"""
+        candidates = list(content.get("files") or [])
+        limit = max(1, self._policy.max_result_items)
+        candidates = candidates[:limit]
+        probed = 0
+        for item in candidates:
+            if probed >= self.FILES_PROBE_TOP_N:
+                break
+            probe = self._probe_file_url(str(item.get("url", "")), network_policy)
+            if probe is None:
+                continue
+            probed += 1
+            item.update(probe)
+            if probe.get("probe") == "html":
+                item["score"] = int(item.get("score", 0)) - 50
+            elif probe.get("probe") == "file":
+                item["score"] = int(item.get("score", 0)) + 20
+        candidates.sort(key=lambda c: (-int(c.get("score", 0)), str(c.get("url"))))
+        content["files"] = candidates
+        content["files_total"] = len(content.get("files") or [])
+        content["hint"] = (
+            "files[] 按可能性降序；probe=file 的条目已确认是文件（detected_type / content_length 可用），"
+            "直接 http_download url=<url>；probe=html 说明该链接是网页（登录页 / 中转页），"
+            "可对其再做一次 web_fetch mode=files 或改走 credential_domain / 浏览器通道。"
+            if candidates
+            else "页面未发现候选文件链接：若是 JS 渲染后才出现的按钮，试 render=always；"
+            "或经 browser_launch + browser_navigate + browser_interact 点击后用 browser_downloads 取文件。"
+        )
+
+    def _probe_file_url(  # noqa: PLR0911 — 各探测结论独立 return
+        self, url: str, network_policy: NetworkPolicy
+    ) -> Optional[Dict[str, Any]]:
+        """流式 GET 读首块即关：→ {probe: file|html|other, detected_type, content_type, content_length}。"""
+        if not url.startswith(("http://", "https://")):
+            return None
+        if self._validate_target_url(url) or network_policy.check_host(url):
+            return None
+        if self._policy.subagent_only and self._validate_subagent_url(url):
+            return None
+        try:
+            # 不自动跟随重定向：每一跳都必须过 check_host（与 _get_with_redirects 同口径），
+            # 探测只是"看一眼"，302 直接回报 location 让模型决定。
+            with build_client(
+                timeout=15.0,
+                follow_redirects=False,
+                verify=not network_policy.allows_insecure_tls(url),
+                trust_env=not self._policy.subagent_only,
+                headers=default_headers(),
+            ) as client:
+                request = client.build_request("GET", url, headers={"Accept": "*/*"})
+                response = client.send(request, stream=True)
+                try:
+                    if response.is_redirect:
+                        location = urljoin(url, response.headers.get("location", ""))
+                        return {
+                            "probe": "redirect",
+                            "status_code": response.status_code,
+                            "final_url": location,
+                        }
+                    if response.status_code >= 400:
+                        return {"probe": "error", "status_code": response.status_code}
+                    head = b""
+                    for chunk in response.iter_bytes(content_sniff.SNIFF_BYTES):
+                        head = chunk
+                        break
+                    content_type = response.headers.get("content-type", "")
+                    declared = response.headers.get("content-length", "")
+                    detected = content_sniff.detect_kind(head)
+                    is_html = content_sniff.looks_like_html(head) or (
+                        detected == "text"
+                        and any(m in content_type.lower() for m in self._HTML_CONTENT_TYPES)
+                    )
+                    probe = (
+                        "html"
+                        if is_html
+                        else (
+                            "file"
+                            if content_sniff.is_binary_payload(head, content_type)
+                            else "other"
+                        )
+                    )
+                    result: Dict[str, Any] = {
+                        "probe": probe,
+                        "status_code": response.status_code,
+                        "content_type": content_type or None,
+                        "detected_type": detected,
+                        "content_length": int(declared) if declared.isdigit() else None,
+                    }
+                    disposition = response.headers.get("content-disposition")
+                    if disposition:
+                        from .download_tool import derive_filename
+
+                        result["suggested_filename"] = derive_filename(
+                            str(response.url), disposition
+                        )
+                    return result
+                finally:
+                    response.close()
+        except (httpx.HTTPError, ValueError, OSError) as exc:
+            return {"probe": "error", "error": f"{type(exc).__name__}: {exc}"[:200]}
 
     @staticmethod
     def _binary_result(url: str, response: httpx.Response, base: Dict[str, Any]) -> Dict[str, Any]:
@@ -940,6 +1053,10 @@ class WebFetchTool(BaseTool):
             content["links"] = list(rendered.get("links") or [])[: self._policy.max_result_items]
         elif mode == "tables":
             content["tables"] = list(rendered.get("tables") or [])[: self._policy.max_result_items]
+        elif mode == "files":
+            content["files"] = file_links.extract_file_links(
+                str(rendered.get("html") or ""), str(content.get("url") or url)
+            )
         return content
 
     def _should_render(
@@ -983,10 +1100,18 @@ class WebFetchTool(BaseTool):
         """
         rendered = web_render.render_page(url, network_policy, wait_for=wait_for)
         content = dict(static_content)  # 保留 status_code / content_type / encoding / mode
-        content.update(rendered)
+        content.update({k: v for k, v in rendered.items() if k != "html"})
         content["content"] = str(rendered.get("content", ""))[:max_length]
         if mode == "links":
             content["links"] = list(rendered.get("links") or [])[: self._policy.max_result_items]
         elif mode == "tables":
             content["tables"] = list(rendered.get("tables") or [])[: self._policy.max_result_items]
+        elif mode == "files":
+            # 渲染后 DOM 里的候选（SPA 站的下载按钮常在 JS 之后才出现）与静态候选合并
+            rendered_files = file_links.extract_file_links(
+                str(rendered.get("html") or ""), str(content.get("url") or url)
+            )
+            content["files"] = file_links.merge_file_links(
+                rendered_files, list(static_content.get("files") or [])
+            )
         return content
