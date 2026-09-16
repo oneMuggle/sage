@@ -777,6 +777,8 @@ export const en: Record<TranslationKey, string> = {
   'office.edit.fillCells': 'Cell / range',
   'office.edit.fillColor': 'Fill color (hex, e.g. FFD966)',
   'office.edit.freezeCell': 'Freeze above-left of cell',
+  'office.edit.kindSetNumberFormat': 'Number format',
+  'office.edit.numFormatValue': 'Format code (e.g. 0.00%)',
   'office.form.title': 'Fill PDF form',
   'office.form.close': 'Close',
   'office.form.load': 'Read form fields',

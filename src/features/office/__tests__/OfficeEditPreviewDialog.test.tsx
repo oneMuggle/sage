@@ -424,6 +424,8 @@ describe('buildUpdateOps — op composition table', () => {
     fillCells: '',
     fillColor: '',
     freezeCell: '',
+    numFormatCells: '',
+    numFormatValue: '',
     styleMatch: '',
     styleIndex: '',
     styleFontSize: '',
@@ -609,6 +611,26 @@ describe('buildUpdateOps — op composition table', () => {
         freezeCell: ' b2 ',
       }),
     ).toEqual([{ op: 'freeze_panes', sheet: 'S', cell: 'B2' }]);
+  });
+
+  it('excel set_number_format: cells + format required', () => {
+    expect(
+      buildUpdateOps('excel', {
+        ...base,
+        excelKind: 'set_number_format',
+        sheet: 'S',
+        numFormatCells: ' b2:b10 ',
+        numFormatValue: ' 0.00% ',
+      }),
+    ).toEqual([{ op: 'set_number_format', sheet: 'S', cells: 'B2:B10', format: '0.00%' }]);
+    expect(
+      buildUpdateOps('excel', {
+        ...base,
+        excelKind: 'set_number_format',
+        sheet: 'S',
+        numFormatCells: 'B2',
+      }),
+    ).toBeNull();
   });
 
   it('pdf is not editable via this dialog', () => {
