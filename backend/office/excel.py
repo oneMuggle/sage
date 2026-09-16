@@ -420,7 +420,9 @@ def _apply_sheet_formats(writer, req) -> None:
                 cell.fill = header_fill
                 cell.alignment = center
 
-        if sheet_spec.freeze_header:
+        if getattr(sheet_spec, "freeze_panes", None):
+            ws.freeze_panes = sheet_spec.freeze_panes
+        elif sheet_spec.freeze_header:
             ws.freeze_panes = "A2"
 
         if sheet_spec.autofit_columns:

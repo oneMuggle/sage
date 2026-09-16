@@ -830,6 +830,14 @@ class OfficeCreateTool(BaseTool):
                                                 "冻结首行，滚动长表时表头保持可见（Round 14）"
                                             ),
                                         },
+                                        "freeze_panes": {
+                                            "type": "string",
+                                            "description": (
+                                                "冻结窗格 A1 记法（Round 31），如 'B2' "
+                                                "冻结首行+首列；与 freeze_header 同给时"
+                                                "本字段优先"
+                                            ),
+                                        },
                                         "autofit_columns": {
                                             "type": "boolean",
                                             "description": (
