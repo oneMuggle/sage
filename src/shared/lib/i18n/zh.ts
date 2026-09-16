@@ -657,6 +657,7 @@ export const zh = {
   'office.preview.originalView': '原文预览',
   'office.preview.structuredView': '结构视图',
   'office.preview.originalFailed': '原文预览失败',
+  'office.preview.nativeFailed': '原生预览加载失败，请使用结构视图',
 
   // ─── Office parity batch 2: 编辑预览对话框 (item 2.5) ─────
   'office.edit.title': '编辑预览',

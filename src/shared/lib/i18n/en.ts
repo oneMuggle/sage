@@ -672,6 +672,7 @@ export const en: Record<TranslationKey, string> = {
   'office.preview.originalView': 'Original view',
   'office.preview.structuredView': 'Structured view',
   'office.preview.originalFailed': 'Original view failed',
+  'office.preview.nativeFailed': 'Native preview failed to load — use the structured view',
 
   // ─── Office parity batch 2: edit preview dialog (item 2.5) ─────
   'office.edit.title': 'Edit Preview',

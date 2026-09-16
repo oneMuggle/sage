@@ -202,6 +202,25 @@ def test_read_pdf_endpoint(workspace: Path) -> None:
     assert "Hello PDF world" in result.pages[0].text
 
 
+def test_word_data_endpoint_returns_docx_data_url(workspace: Path) -> None:
+    """P2-B (office-p2b): POST /office/word/data 返回 docx base64 data URL。"""
+    from docx import Document
+
+    from backend.api.office_routes import PdfDataRequest, word_data_endpoint
+
+    staged = workspace / "doc.docx"
+    Document().save(str(staged))
+
+    result = word_data_endpoint(
+        PdfDataRequest(workspace_path=str(workspace), file_path=str(staged))
+    )
+    assert result.ok is True
+    assert result.data_url is not None
+    assert result.data_url.startswith(
+        "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,"
+    )
+
+
 def test_pdf_data_endpoint_returns_data_url(workspace: Path) -> None:
     """F3 (office-p0): POST /office/pdf/data returns a base64 data URL."""
     from backend.api.office_routes import pdf_data_endpoint
