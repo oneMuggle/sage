@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, List, Optional
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import Database, get_database
 from backend.office import progress as office_progress
@@ -515,6 +515,77 @@ def restore_snapshot_endpoint(doc_id: str, snapshot_id: str) -> OfficeDocumentAc
     return OfficeDocumentActionResponse(ok=True, summary=updated)
 
 
+@router.get("/doc/{doc_id}/snapshots/{snapshot_id}/diff", response_model=DiffPreviewResult)
+def diff_snapshot_endpoint(doc_id: str, snapshot_id: str) -> DiffPreviewResult:
+    """Round B P2: 对比快照与当前版本，返回结构化差异清单。
+
+    快照=before，当前=after —— 「恢复到这份快照会失去/找回什么」一目了
+    然。响应复用 DiffPreviewResult（前端红绿渲染与编辑预览共享）；快照
+    缺失/解析失败折叠为 ``ok=False``（HTTP 200），未知 doc_id 仍走 404。
+    Patch point：``backend.office.snapshot_diff.diff_snapshot``。
+    """
+    conn = _db().get_connection()
+    doc = _require_document(conn, doc_id)
+    from backend.office import snapshot_diff
+
+    return snapshot_diff.diff_snapshot(doc, snapshot_id)
+
+
+class OfficeTemplateThumbnailRequest(BaseModel):
+    """POST /office/templates/thumbnail（Round C P5）。
+
+    builtin 模板传 ``template_id``；workspace 模板传 ``workspace_template``
+    （office/templates/ 下文件名，同 instantiate 的口径）。二者互斥。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    template_id: Optional[str] = None
+    workspace_template: Optional[str] = None
+
+
+@router.post("/templates/thumbnail")
+def template_thumbnail_endpoint(req: OfficeTemplateThumbnailRequest) -> dict:
+    """Round C P5: 模板首页 PNG 缩略图（PDF 管线 + PyMuPDF，磁盘缓存）。
+
+    一切生成失败折叠为 ``ok=False``（HTTP 200）——缩略图是装饰性信息，
+    前端静默降级。Patch point：
+    ``backend.office.template_thumbnail.render_template_thumbnail``。
+    """
+    from backend.office import template_thumbnail
+    from backend.office.template_library import (
+        _BUILTIN_BY_ID,
+        WORKSPACE_TEMPLATES_SUBDIR,
+        builtin_template_path,
+    )
+
+    workspace = Path(req.workspace_path)
+    if req.template_id:
+        spec = _BUILTIN_BY_ID.get(req.template_id)
+        if spec is None:
+            return {"ok": False, "error": f"未知的内置模板: {req.template_id}"}
+        source = builtin_template_path(spec)
+        cache_key = "builtin:" + req.template_id
+    elif req.workspace_template:
+        # 文件名围栏：与 instantiate 同口径（拒绝路径分隔符/父目录）
+        if any(sep in req.workspace_template for sep in ("/", "\\", "..")):
+            return {"ok": False, "error": f"非法模板文件名: {req.workspace_template}"}
+        source = workspace / WORKSPACE_TEMPLATES_SUBDIR / req.workspace_template
+        try:
+            mtime_ns = source.stat().st_mtime_ns
+        except OSError:
+            return {"ok": False, "error": f"模板文件不存在: {req.workspace_template}"}
+        cache_key = f"ws:{req.workspace_template}|{mtime_ns}"
+    else:
+        return {"ok": False, "error": "template_id 与 workspace_template 必须传其一"}
+
+    result = template_thumbnail.render_template_thumbnail(
+        source, workspace, cache_key=cache_key
+    )
+    return result.model_dump(mode="json")
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Generate endpoints (Phase 1.4 step 19, plan §4.1.4)
 # ──────────────────────────────────────────────────────────────────────
@@ -740,6 +811,42 @@ def export_pdf_endpoint(req: OfficeExportPdfRequest):
     with office_progress.track(req.task_id, "导出 PDF") as prog:
         prog.report("转换 PDF", 30)
         result = export_pdf.export_to_pdf(file_path, Path(req.workspace_path).resolve())
+        prog.report("完成", 95)
+    return result
+
+
+@router.get("/capabilities")
+def get_capabilities_endpoint(force: bool = False):
+    """Round A P6: 探测本机 Office 环境能力（转换器 / 可选依赖）。
+
+    前端 Office 页加载时调用一次，用于能力徽章与安装引导；
+    ``force=true`` 跳过 30s 缓存强制重探（用户点「重新检测」）。
+    Patch point（同 export-pdf 口径）：``backend.office.capabilities``
+    模块对象上的 ``probe_capabilities``。
+    """
+    from backend.office import capabilities
+
+    return capabilities.probe_capabilities(force=force)
+
+
+@router.post("/pdf-preview")
+def pdf_preview_endpoint(req: OfficeExportPdfRequest):
+    """Round A P1: 高保真预览 —— docx/xlsx/pptx → 缓存 PDF → data URL。
+
+    请求体复用 OfficeExportPdfRequest（workspace_path + file_path +
+    可选 task_id）——语义相同：定位工作区内一份托管文档。区别在产物
+    去向：导出写在源文件旁，预览写进 office/.preview-cache/ 并以
+    data URL 返回。失败契约同 export：HTTP 200 + ``ok=False``。
+    Patch point：``backend.office.pdf_preview.render_pdf_preview``。
+    """
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    from backend.office import pdf_preview
+
+    with office_progress.track(req.task_id, "高保真预览") as prog:
+        prog.report("转换 PDF", 30)
+        result = pdf_preview.render_pdf_preview(
+            file_path, Path(req.workspace_path).resolve()
+        )
         prog.report("完成", 95)
     return result
 

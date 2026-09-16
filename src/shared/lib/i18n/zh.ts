@@ -692,6 +692,36 @@ export const zh = {
   'office.export.failed': '导出失败',
   'office.export.noConverter': '未找到本机转换器（需要 LibreOffice 或 MS Word）',
   'office.export.openFolder': '打开所在文件夹',
+  'office.export.openPdf': '打开 PDF',
+
+  // ─── Office display round A: P1 高保真预览 + P6 能力徽章 ─────
+  'office.fidelity.toggle': '高保真',
+  'office.fidelity.loading': '转换中…',
+  'office.fidelity.failed': '高保真预览失败',
+  'office.caps.pdf': 'PDF 导出',
+  'office.caps.image': '图片压缩',
+  'office.caps.formula': '公式求值',
+  'office.caps.refresh': '重新检测',
+  'office.caps.install.pdf.win': '未检测到转换器：安装 LibreOffice（libreoffice.org/download）或 MS Word 后可导出/高保真预览 PDF',
+  'office.caps.install.pdf.mac': '未检测到转换器：brew install --cask libreoffice 后可导出/高保真预览 PDF',
+  'office.caps.install.pdf.linux': '未检测到转换器：sudo apt install libreoffice（或发行版等价命令）后可导出/高保真预览 PDF',
+  'office.caps.install.pillow': '未安装 Pillow：pip install -r backend/requirements-optional.txt 后 >8MB 图片将自动压缩',
+  'office.caps.install.formulas': '未安装 formulas：pip install -r backend/requirements-optional.txt 后 Excel 公式可本地求值',
+
+  // ─── Office display round B: P2 快照可视 diff ─────
+  'office.snapshot.diff': '与当前版本对比',
+  'office.snapshot.diffFailed': '快照对比失败',
+  'office.snapshot.diffIdentical': '与当前版本内容一致',
+  'office.snapshot.diffTruncated': '差异条目过多，仅显示前 200 条',
+
+  // ─── Office display round C: P4 图片/批注呈现 + P7 预览分页 ─────
+  'office.preview.imagesTitle': '文档图片',
+  'office.preview.imagesOmitted': '另有 {n} 张图片未内联（过大或超出数量上限）',
+  'office.preview.commentsTitle': '批注',
+  'office.preview.commentAnonymous': '匿名',
+  'office.preview.loadMore': '加载更多',
+  'office.preview.loadingMore': '加载中…',
+  'office.template.thumbnailLoading': '正在生成模板预览…',
 
   // ─── Office parity batch 3: Word 模板库 (item 3.2 从模板创建) ─────
   'office.template.modeFreeform': '自由创建',

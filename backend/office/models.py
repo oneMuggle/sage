@@ -214,6 +214,32 @@ class OfficeWordReadResult(BaseModel):
     headers_footers: List[WordHeaderFooterContent] = Field(default_factory=list)
     # Round 15：文档中的目录域 instr 列表。
     toc_fields: List[str] = Field(default_factory=list)
+    # Office display round C (P4)：内嵌图片缩略预览。additive field ——
+    # default_factory 保持旧 payload 在 extra="forbid" 下有效（win7 回流
+    # 与旧客户端可整体忽略）。上限/降级策略见 word._extract_image_previews。
+    image_previews: List[WordImagePreview] = Field(default_factory=list)
+
+
+class WordImagePreview(BaseModel):
+    """One inline image thumbnail for preview (office display round C, P4).
+
+    ``data_url`` 是缩略后的 base64 data URL（Pillow 可用时最长边缩到
+    480px；不可用时仅 ≤150KB 的原图直接内联）。超限/无法内联的图片不产
+    生条目 —— ``OfficeWordReadResult.images``（总数）与
+    ``len(image_previews)`` 的差即被省略的数量。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(ge=0, description="文内出现顺序（0-based）")
+    content_type: str = Field(description="MIME，如 image/png")
+    data_url: str = Field(description="data:<mime>;base64,… 缩略图")
+    thumbnail: bool = Field(
+        default=False, description="True=经 Pillow 缩略；False=原图直接内联"
+    )
+
+
+OfficeWordReadResult.model_rebuild()
 
 
 class ExcelSheetContent(BaseModel):
