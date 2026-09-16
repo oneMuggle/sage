@@ -6,11 +6,11 @@ Date: 2026-09-16. This is a partial implementation, not closure of all 18 audit 
 
 - Main worktree: `.worktrees/audit-reliability-main`, branch `fix/audit-reliability-main`.
 - Win7 worktree: `.worktrees/audit-reliability-win7`, branch `fix/audit-reliability-win7`.
-- Bases: cached `origin/main` at `c4edb78a`; cached `origin/release/win7` at `defe04eb`.
-- A network fetch failed with a connection reset. Refresh remote refs and review subsequent changes before merging; these bases are NOT asserted to be the latest remote heads.
-- Main code commit: `54ef07c6`; Win7 code commit: `1d5d4064` (cherry-pick -x).
+- Bases: refreshed `origin/main` at `91d5dd96`; refreshed `origin/release/win7` at `770857e0`.
+- Initial fetch failed; a subsequent fetch succeeded before PR creation. Both private repair branches were rebased onto the refreshed remote bases without conflicts.
+- Main code commit after rebase: `99e18ae7`; Win7 code commit after rebase: `a11aeb81`. Original paired commits were `54ef07c6` / `1d5d4064`; the Win7 cherry-pick provenance retains that original source.
 - `git range-diff` shows the same code patch; only the cherry-pick provenance message differs.
-- Original main checkout and its pre-existing uncommitted changes were left untouched. No release branch was merged or pushed.
+- Original main checkout and its pre-existing uncommitted changes were left untouched. No release branch was merged or directly pushed; repair branches are submitted through separate PRs.
 - No dependency versions, Python compatibility shims, release channels, or packaging configuration were changed.
 
 ## Status by audit finding
