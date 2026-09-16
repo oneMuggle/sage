@@ -33,7 +33,7 @@ def test_overrides_from_app_settings_orch_section():
     assert s.scratch_root == "custom_scratch"
     # 未覆盖键回落默认
     assert s.max_aggregate_chars == 120 * 1024
-    assert s.max_lane_iterations == 8
+    assert s.max_lane_iterations == 12  # alpha.36 (Bug #2): 8 → 12
 
 
 def test_bad_typed_keys_fall_back_per_key():
@@ -75,12 +75,12 @@ def test_worktree_isolation_bool_override_and_bad_value_falls_back():
 # --------------------------------------------------------------------------- #
 
 
-def test_max_subagent_iterations_default_is_6():
-    """无 app_settings → 回落 6，与原硬编码常量保持一致（不改变既有行为）。"""
+def test_max_subagent_iterations_default_is_10():
+    """无 app_settings → 回落 10 (alpha.36: 6 → 10, 减少"复杂度超上限"误报)。"""
     with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
         repo_cls.return_value.get_json.return_value = None
         s = load_orch_settings()
-    assert s.max_subagent_iterations == 6
+    assert s.max_subagent_iterations == 10
 
 
 def test_max_subagent_iterations_override():
@@ -92,7 +92,7 @@ def test_max_subagent_iterations_override():
         s = load_orch_settings()
     assert s.max_subagent_iterations == 12
     # 同段其他键不受影响
-    assert s.max_lane_iterations == 8
+    assert s.max_lane_iterations == 12  # alpha.36 (Bug #2): 8 → 12
 
 
 def test_max_subagent_iterations_bad_value_falls_back():
@@ -102,7 +102,7 @@ def test_max_subagent_iterations_bad_value_falls_back():
             "orch": {"maxSubagentIterations": "12", "maxRetries": 5}
         }
         s = load_orch_settings()
-    assert s.max_subagent_iterations == 6
+    assert s.max_subagent_iterations == 10  # alpha.36 (Bug #2): 6 → 10
     assert s.max_retries == 5
 
     # bool 是 int 子类 —— 必须显式排除，否则 True 会被当成 1
@@ -111,4 +111,4 @@ def test_max_subagent_iterations_bad_value_falls_back():
             "orch": {"maxSubagentIterations": True}
         }
         s = load_orch_settings()
-    assert s.max_subagent_iterations == 6
+    assert s.max_subagent_iterations == 10  # alpha.36 (Bug #2): 6 → 10
