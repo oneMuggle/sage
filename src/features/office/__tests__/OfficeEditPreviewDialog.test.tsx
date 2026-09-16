@@ -419,6 +419,11 @@ describe('buildUpdateOps — op composition table', () => {
     chartMaxCol: '',
     chartMaxRow: '',
     chartTitle: '',
+    colWidthColumn: '',
+    colWidthValue: '',
+    fillCells: '',
+    fillColor: '',
+    freezeCell: '',
     styleMatch: '',
     styleIndex: '',
     styleFontSize: '',
@@ -557,6 +562,53 @@ describe('buildUpdateOps — op composition table', () => {
         chartMaxRow: '4',
       }),
     ).toBeNull(); // 非整数拒绝
+  });
+
+  it('excel set_column_width / set_fill / freeze_panes validation', () => {
+    expect(
+      buildUpdateOps('excel', {
+        ...base,
+        excelKind: 'set_column_width',
+        sheet: 'S',
+        colWidthColumn: ' a ',
+        colWidthValue: '18.5',
+      }),
+    ).toEqual([{ op: 'set_column_width', sheet: 'S', column: 'A', width: 18.5 }]);
+    expect(
+      buildUpdateOps('excel', {
+        ...base,
+        excelKind: 'set_column_width',
+        sheet: 'S',
+        colWidthColumn: 'A',
+        colWidthValue: '-1',
+      }),
+    ).toBeNull();
+    expect(
+      buildUpdateOps('excel', {
+        ...base,
+        excelKind: 'set_fill',
+        sheet: 'S',
+        fillCells: ' b2:b10 ',
+        fillColor: '#FFD966',
+      }),
+    ).toEqual([{ op: 'set_fill', sheet: 'S', cells: 'B2:B10', color: 'FFD966' }]);
+    expect(
+      buildUpdateOps('excel', {
+        ...base,
+        excelKind: 'set_fill',
+        sheet: 'S',
+        fillCells: 'B2',
+        fillColor: 'red',
+      }),
+    ).toBeNull(); // 非 hex 拒绝
+    expect(
+      buildUpdateOps('excel', {
+        ...base,
+        excelKind: 'freeze_panes',
+        sheet: 'S',
+        freezeCell: ' b2 ',
+      }),
+    ).toEqual([{ op: 'freeze_panes', sheet: 'S', cell: 'B2' }]);
   });
 
   it('pdf is not editable via this dialog', () => {
