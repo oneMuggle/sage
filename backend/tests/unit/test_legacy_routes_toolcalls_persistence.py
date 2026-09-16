@@ -14,6 +14,7 @@
 """
 
 from __future__ import annotations
+from typing import List
 
 import json
 
@@ -24,7 +25,7 @@ pytestmark = pytest.mark.unit
 
 def test_tool_calls_accumulator_empty_when_no_acting_events():
     """没有 ACTING 事件时,累积器应为空列表,DbMessage.tool_calls 为 None。"""
-    accumulated: list[dict] = []
+    accumulated: List[dict] = []
 
     # 模拟无 ACTING 事件
     tool_calls_json = (
@@ -42,7 +43,7 @@ def test_tool_calls_accumulator_captures_acting_events():
         ToolCallRequest,
     )
 
-    accumulated: list[dict] = []
+    accumulated: List[dict] = []
 
     # 模拟 ACTING 事件
     evt = AgentEvent(
@@ -80,7 +81,7 @@ def test_tool_calls_accumulator_backfills_result_from_observing():
         ToolCallResult,
     )
 
-    accumulated: list[dict] = []
+    accumulated: List[dict] = []
 
     # ACTING
     evt_act = AgentEvent(
@@ -150,7 +151,7 @@ def test_tool_calls_multiple_acting_events():
         ToolCallRequest,
     )
 
-    accumulated: list[dict] = []
+    accumulated: List[dict] = []
 
     for i in range(3):
         evt = AgentEvent(
@@ -185,7 +186,7 @@ def test_tool_calls_observing_no_match_doesnt_crash():
         ToolCallResult,
     )
 
-    accumulated: list[dict] = []
+    accumulated: List[dict] = []
 
     # OBSERVING 没有对应的 ACTING(可能 ACTING 事件丢失或 id 不匹配)
     evt_obs = AgentEvent(
