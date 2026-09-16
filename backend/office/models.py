@@ -894,6 +894,13 @@ class ExcelPrintSetupSpec(BaseModel):
     )
     # Round 31：打印页边距（厘米），全可选；None 用 Excel 默认。
     margins_cm: Optional[ExcelPrintMarginsSpec] = None
+    # Round 32：打印页眉/页脚文本（页码用 &P 占位，Excel HeaderFooter 语法）。
+    print_header: Optional[str] = Field(
+        default=None, max_length=200, description="打印页眉文本"
+    )
+    print_footer: Optional[str] = Field(
+        default=None, max_length=200, description="打印页脚文本（&P = 页码）"
+    )
 
 
 class ExcelPrintMarginsSpec(BaseModel):

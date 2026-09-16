@@ -979,6 +979,18 @@ class OfficeCreateTool(BaseTool):
                                                         "right": {"type": "number"},
                                                     },
                                                 },
+                                                "print_header": {
+                                                    "type": "string",
+                                                    "description": (
+                                                        "打印页眉文本（Round 32，&P 为页码占位）"
+                                                    ),
+                                                },
+                                                "print_footer": {
+                                                    "type": "string",
+                                                    "description": (
+                                                        "打印页脚文本（Round 32，&P 为页码占位）"
+                                                    ),
+                                                },
                                             },
                                         },
                                     },

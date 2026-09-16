@@ -1559,6 +1559,9 @@ export interface ExcelPrintSetupSpec {
     left?: number;
     right?: number;
   };
+  // Round 32：打印页眉/页脚文本（&P 为页码占位）
+  print_header?: string;
+  print_footer?: string;
 }
 
 export interface ExcelDataValidationSpec {
