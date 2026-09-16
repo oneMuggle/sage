@@ -31,6 +31,8 @@ import type {
   OfficePdfReadRequest,
   OfficeLegacyImportResult,
   OfficePdfDataResult,
+  OfficePdfFormFillResult,
+  OfficePdfFormReadResult,
   OfficePdfReadResult,
   OfficePptGenerateRequest,
   OfficePptReadResult,
@@ -168,6 +170,44 @@ export const officeApi = {
       return await invoke<OfficePdfDataResult>('office_word_data', {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P2-D (office-p2d): read PDF AcroForm fields for the form-fill dialog.
+   */
+  async readPdfForm(req: OfficePdfReadRequest): Promise<OfficePdfFormReadResult> {
+    try {
+      return await invoke<OfficePdfFormReadResult>('office_pdf_read_form', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P2-D (office-p2d): fill PDF AcroForm fields; output lands next to the
+   * source as `<stem>-filled.pdf` (backend default naming).
+   */
+  async fillPdfForm(req: {
+    workspace_path: string;
+    template_path: string;
+    output_filename: string;
+    data: Record<string, string>;
+    flatten: boolean;
+  }): Promise<OfficePdfFormFillResult> {
+    try {
+      return await invoke<OfficePdfFormFillResult>('office_pdf_fill_form', {
+        workspacePath: req.workspace_path,
+        templatePath: req.template_path,
+        outputFilename: req.output_filename,
+        data: req.data,
+        flatten: req.flatten,
       });
     } catch (error) {
       throw handleApiError(error);
