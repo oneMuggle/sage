@@ -33,6 +33,20 @@
   - surprising_connections 非空；节点 label 取自 frontmatter title
 - 不断言具体社区划分（Louvain 在微型图上不稳定），只断言结构不变量
 
+## 附带修复：wiki 路由签名 py38 兼容
+
+`import backend.wiki.community` 触发 `wiki/__init__ → mcp_server → api/wiki_routes`
+导入链，FastAPI 在装饰期求值路由签名、pydantic 在类创建期求值字段注解——
+`str | None` 在 win7/py3.8 下导入即崩（main 上已烂，会随 win7 同步炸过去）。修复：
+
+- `queue_tasks` / `get_graph` 路由签名 `str | None` → `Optional[str]`
+- `ProjectCheckResponse` 字段注解同改
+
+**范围外（另立审计批次）**：conftest → backend.main → orch/legacy_routes 导入链
+的 py38 烂点（main.py L45、orch_routes 3 处、legacy_session_routes 3 处、
+legacy_routes 74 处 `| None`——其中仅 FastAPI 签名 / pydantic 字段为真破点，
+本地变量注解因 future import 无害）。
+
 ## 纪律
 
 py3.8 兼容；networkx 仅经现有 community.detect_communities 间接使用。
