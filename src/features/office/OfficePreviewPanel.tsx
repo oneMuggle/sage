@@ -53,6 +53,7 @@ import { useI18n } from '../../shared/lib/i18n';
 import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
 
 import { DocxNativePreview } from './DocxNativePreview';
+import { PdfFormFillDialog } from './PdfFormFillDialog';
 import { pollOfficeProgress } from './officeProgress';
 
 export type OfficePreviewData =
@@ -81,6 +82,11 @@ export interface OfficePreviewPanelProps {
    * and tests keep the button.
    */
   fidelityAvailable?: boolean;
+  /**
+   * P2-D (office-p2d): refresh hook — e.g. after a PDF form fill produced
+   * a new managed copy. Absent → no form button (nothing to refresh).
+   */
+  onRefresh?: () => void;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -119,6 +125,7 @@ export function OfficePreviewPanel({
   preview,
   workspacePath,
   onEditPreview,
+  onRefresh,
   fidelityAvailable = true,
 }: OfficePreviewPanelProps) {
   const { t } = useI18n();
@@ -139,6 +146,8 @@ export function OfficePreviewPanel({
     setLoadingOriginal(false);
   }, [summaryId]);
 
+  // P2-D (office-p2d): PDF AcroForm 表单填写对话框
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
   // Round A P1: 高保真视图（docx/xlsx/pptx → 缓存 PDF → 内嵌 viewer）。
   // data URL 以 summary.id + updated_at 为 key 缓存在组件状态里 —— 文档
   // 一变 key 即不同，重开视图会重新拉取（后端另有 mtime 级缓存兜底）。
@@ -368,6 +377,17 @@ export function OfficePreviewPanel({
             {originalPdfUrl ? t('office.preview.structuredView') : t('office.preview.originalView')}
           </button>
         )}
+        {preview.docType === 'pdf' && onRefresh && (
+          <button
+            type="button"
+            onClick={() => setFormDialogOpen(true)}
+            className="flex items-center gap-1 px-2 py-1 rounded border border-border text-xs text-text-secondary hover:bg-bg-hover transition-colors shrink-0"
+            data-testid="office-pdf-form-button"
+            aria-label={t('office.form.title')}
+          >
+            {t('office.form.title')}
+          </button>
+        )}
         {isEditableDocType(preview.docType) && (
           <div className="flex items-center gap-1 shrink-0">
             {/* P2-B: word 无 soffice 时开关仍可用 —— 走 docx-preview 原生渲染 */}
@@ -454,6 +474,17 @@ export function OfficePreviewPanel({
           <div
             className="h-full bg-primary rounded-full transition-[width] duration-500"
             style={{ width: `${taskPercent}%` }}
+          />
+        </div>
+      )}
+
+      {formDialogOpen && preview.docType === 'pdf' && (
+        <div className="p-4 border-t border-border">
+          <PdfFormFillDialog
+            workspacePath={workspacePath ?? summary.workspace_path ?? ''}
+            managedPath={buildManagedPath(workspacePath ?? summary.workspace_path ?? '')}
+            onFilled={onRefresh}
+            onClose={() => setFormDialogOpen(false)}
           />
         </div>
       )}

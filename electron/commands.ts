@@ -806,6 +806,9 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
   // P2-B (office-p2b): 受管 docx 原文 base64（docx-preview 原生渲染）。
   office_word_data: { method: 'POST', path: () => '/api/v1/office/word/data' },
+  // P2-D (office-p2d): PDF AcroForm 表单读取/填写（OfficePreviewPanel 表单对话框）。
+  office_pdf_read_form: { method: 'POST', path: () => '/api/v1/office/pdf/read-form' },
+  office_pdf_fill_form: { method: 'POST', path: () => '/api/v1/office/pdf/fill-form' },
   // include_archived (item 1.7): archive-restore UI lists soft-deleted rows.
   // Path builder reads the raw camelCase arg and serializes snake_case into
   // the query string (query args are NOT auto-translated by invokeBackend).
