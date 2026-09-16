@@ -989,6 +989,22 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}`,
   },
+  // r59: 附件向量索引三端点透传（backend/api/chat_attachment_routes.py r58）。
+  // embed 配置 / query_vector 由调用方构造，body 原样透传（键已 snake）。
+  attachment_rag_index: {
+    method: 'POST',
+    path: (a) => `/api/v1/chat/attachments/${encodeURIComponent(String(a.mediaId))}/index`,
+    body: (a) => {
+      const body: Record<string, unknown> = { embed: a.embed };
+      if (a.target_chunk_size !== undefined) body.target_chunk_size = a.target_chunk_size;
+      return body;
+    },
+  },
+  attachment_rag_search: { method: 'POST', path: () => '/api/v1/chat/attachments/search', rawBody: true },
+  attachment_rag_delete_index: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/chat/attachments/${encodeURIComponent(String(a.mediaId))}/index`,
+  },
   // M6 生态扩展: 用量/成本面板 (backend/services/usage_tracker.py 内存态)
   // L8 PR-A (2026-09-09): 支持 range=today|total 查询参数, 默认 today。
   // L8 PR-B (2026-09-09): range 扩到 today|7d|30d|total。

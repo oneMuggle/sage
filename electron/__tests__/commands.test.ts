@@ -782,6 +782,32 @@ describe('MCP management IPC routes (M3)', () => {
   });
 });
 
+describe('Attachment RAG IPC routes (r59)', () => {
+  it('attachment_rag_index puts mediaId in path and embed in body', () => {
+    const r = COMMAND_ROUTES.attachment_rag_index;
+    expect(r.method).toBe('POST');
+    expect(r.path({ mediaId: 'm 1' })).toBe('/api/v1/chat/attachments/m%201/index');
+    const embed = { base_url: 'https://e/v1', api_key: 'k', model: 'emb-1', dim: 1536 };
+    expect(r.body!({ mediaId: 'm1', embed, target_chunk_size: 500 })).toEqual({
+      embed,
+      target_chunk_size: 500,
+    });
+    expect(r.body!({ mediaId: 'm1', embed })).toEqual({ embed });
+  });
+
+  it('attachment_rag_search posts to the search route', () => {
+    const r = COMMAND_ROUTES.attachment_rag_search;
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/chat/attachments/search');
+  });
+
+  it('attachment_rag_delete_index encodes the mediaId', () => {
+    const r = COMMAND_ROUTES.attachment_rag_delete_index;
+    expect(r.method).toBe('DELETE');
+    expect(r.path({ mediaId: 'a/b' })).toBe('/api/v1/chat/attachments/a%2Fb/index');
+  });
+});
+
 describe('UnknownIpcCommandError', () => {
   it('names the offending command and references the source of truth', () => {
     const err = new UnknownIpcCommandError('foo_bar');
