@@ -49,7 +49,18 @@ class BroadcastQueue(asyncio.Queue):
         """广播消息，不让慢订阅者阻塞 producer。"""
         self.last_activity_at = time.time()
         if not self._subscribers:
+            # 2026-09 修复: subscribe() 会在挂起期间清空父队列并注册
+            # subscriber; 恢复后写回父队列的事件在 3.11 上滞留在无人消费的
+            # 队列里 (3.12+ 经 asyncio.Queue.put 的虚分派 put_nowait 直达
+            # subscriber —— 行为随版本不同)。统一兜底: 恢复后若父队列仍有
+            # 积压且有 subscriber, 全部转投, 保证恰好一次送达。
             await super().put(item)
+            if self._subscribers and not self.empty():
+                residue = []
+                while not self.empty():
+                    residue.append(super().get_nowait())
+                for pending_item in residue:
+                    self.put_nowait(pending_item)
             return
         self.put_nowait(item)
 
