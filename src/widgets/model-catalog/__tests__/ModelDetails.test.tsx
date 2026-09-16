@@ -8,7 +8,6 @@
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import type { CandidateModel, EffectiveModel } from '../../../entities/model-catalog/types';
 
 const mocks = vi.hoisted(() => ({

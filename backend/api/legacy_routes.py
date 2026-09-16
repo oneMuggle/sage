@@ -74,7 +74,8 @@ from backend.orchestration.chat_dispatcher import (
 )
 from backend.orchestration.llm_factory import load_llm_config_for_chat
 
-def _resolve_effective_window(
+
+def _resolve_effective_window(  # noqa: PLR0911 — Task 5 priority cascade, each branch is a distinct user-facing mode
     model_id: Optional[str] = None,
     max_context: Optional[int] = None,
     request_endpoint_id: Optional[str] = None,
@@ -98,12 +99,12 @@ def _resolve_effective_window(
     ``None`` so callers can decide how to fall back.
     """
     try:
-        from backend.model_catalog.context import effective_window
-        from backend.model_catalog.repository import CatalogRepository
-        from backend.model_catalog.schemas import EndpointKey
         from backend.data.database import get_database
         from backend.data.settings_canonicalizer import to_camel
         from backend.data.settings_repo import SettingsRepository
+        from backend.model_catalog.context import effective_window
+        from backend.model_catalog.repository import CatalogRepository
+        from backend.model_catalog.schemas import EndpointKey
 
         raw = SettingsRepository().get_json("app_settings")
         if not isinstance(raw, dict):
