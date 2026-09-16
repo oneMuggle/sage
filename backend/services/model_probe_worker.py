@@ -13,7 +13,7 @@ import json
 import logging
 import shutil
 import subprocess
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from .model_probe_py.classify import (
     SOURCE_WEIGHTS, resolveEvidence, vendorFromUrl,
