@@ -62,14 +62,17 @@ describe('usePermissionState', () => {
     expect(usePermissionState.getState().currentRequest).toBeNull();
   });
 
-  it('updates immutably: setFromEvent produces a new object per session slot', () => {
-    usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'a' }));
+  it('same-session replace yields a new object; cross-session keeps displayed', () => {
+    usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'a' }), 'sess-A');
     const first = usePermissionState.getState().currentRequest;
-    usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'b' }));
-    // 已展示的请求保持原引用; 新请求进入 pendingBySession 新槽位
-    expect(usePermissionState.getState().currentRequest).toBe(first);
-    const second = usePermissionState.getState().pendingBySession['__global__'];
-    expect(second.request_id).toBe('b');
-    expect(second).not.toBe(first);
+    // 同会话: 替换显示, 不可变新对象
+    usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'b' }), 'sess-A');
+    const replaced = usePermissionState.getState().currentRequest;
+    expect(replaced).not.toBe(first);
+    expect(replaced?.request_id).toBe('b');
+    // 异会话: 不抢夺已展示的, 新请求只入槽位
+    usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'c' }), 'sess-B');
+    expect(usePermissionState.getState().currentRequest).toBe(replaced);
+    expect(usePermissionState.getState().pendingBySession['sess-B'].request_id).toBe('c');
   });
 });
