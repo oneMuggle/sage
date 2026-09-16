@@ -1,6 +1,6 @@
-# Audit reliability remediation — batch 1
+# Audit reliability remediation — findings and evidence
 
-Date: 2026-09-16. This is a partial implementation, not closure of all 18 audit findings.
+Date: 2026-09-16. Batches 1–5 address the audit findings; #10 remains a deliberate destructive-path mitigation, not a new garbage collector. Final CI and packaged-platform verification are separate release gates.
 
 ## Branch isolation and provenance
 
@@ -23,16 +23,16 @@ Date: 2026-09-16. This is a partial implementation, not closure of all 18 audit 
 | 4 | Fixed in batch 2 | Create enabled and PATCH type/schedule/content/session fields are aligned end-to-end. |
 | 5 | Fixed in batch 2 | Persist attempted/failed/succeeded outcomes; failed one-shots pause for explicit, warned manual retry (no automatic replay or exactly-once claim). |
 | 6 | Fixed | Wiki failed/cancelled events end the task and release listeners; listener registration errors surface visibly; reserve pending subscriptions to prevent duplicate registration. |
-| 7 | Pending | Single-flight chat stream reattachment. |
-| 8 | Pending | Store real reattachment cancel/finish handles and enforce exactly-once cleanup. |
-| 9 | Pending | Resolve backend stream ID before cancelling a session without a frontend handle. |
+| 7 | Fixed | Reserve chat reattachment in the shared registry before awaiting active-stream lookup; release failed/idle reservations. |
+| 8 | Fixed | Retain cancel/finish handles, dispose late listeners, guard terminal cleanup, and ignore late events; accumulated deltas are no longer appended twice. |
+| 9 | Fixed | Without a frontend stream ID, resolve only the requested session via activeStream and then interrupt that exact ID. An idle/failed lookup does not issue an unscoped interrupt. |
 | 10 | Mitigated / destructive path closed | Remove page-driven sweep. Retain old IPC as a no-op so stale callers cannot delete managed files. Explicit tracked import discard remains functional. A new lease/age-aware staging collector is NOT implemented. |
 | 11 | Fixed | Lock spans snapshot replacement; SAVEPOINT rolls back only this operation on failure and preserves an outer transaction. Outermost RELEASE commits the replacement. |
-| 12 | Partially fixed | HTTP URL preserved during pool PATCH, including disable. URL-based REST creation and full UI/config capability alignment are still pending. |
-| 13 | Pending | Structured MCP arguments or correct quoting parser. |
-| 14 | Pending | HTTP session-invalid/transport failure state and bounded reconnection without replaying ambiguous side-effecting calls. |
-| 15 | Pending | Real DB/IPC readiness probes instead of health-check stubs. |
-| 16 | Pending | Route pre-window backend startup failures through update recovery accounting. |
+| 12 | Fixed | HTTP URL/header creation now works through settings, IPC and REST; readback redacts sensitive headers and pool PATCH retains transport. |
+| 13 | Fixed | MCP arguments use an explicit JSON string array, preserving paths with spaces, quoting and empty arguments; malformed input is rejected before IPC. |
+| 14 | Fixed | Serialize HTTP lifecycle; clear expired session state and reinitialize without stale session headers. Read operations have one recovery attempt; tools/call is not automatically replayed. |
+| 15 | Fixed | Authenticated read-only session repository probe plus real renderer/preload/main/backend IPC round trip; both are bounded and independently reported. |
+| 16 | Fixed | Broken installer, synchronous spawn failure and exhausted pre-window backend readiness now enter post-install failure accounting before quit dialogs. Matching installed-version marker required; one boot counts once. |
 | 17 | Fixed | Rollback does not await telemetry; reporting has a 2-second abort signal and timer cleanup. |
 | 18 | Fixed | Restore prepared installation if the first pending-install state write fails. |
 
@@ -42,7 +42,7 @@ The old sweep could not prove orphanhood: both archive-filtered lists and active
 
 Back up any potentially affected Office workspace before recovery investigation. This patch prevents future deletion; it cannot recover files already removed by older builds.
 
-## Validation
+## Batch 1 validation (historical)
 
 - Office regression tests were run BEFORE the production patch: six failures reproduced unsafe cleanup and page-driven deletion.
 - After fixing, each branch passed 99 frontend/Electron tests across:
@@ -82,12 +82,7 @@ Select the appropriate Python interpreter:
 
 This does not certify packaged Windows 7 execution, real installers/rollback, macOS/Linux installations, full backend suites, or full application E2E. Python 3.8 tests ran on the current Windows host, not a Windows 7 machine. Existing dependency deprecation warnings remain.
 
-Next batches should preserve paired main/Win7 commits and tests:
+Latest combined validation, paired commits, CI regression and remaining release gates:
+[implementation and validation summary](2026-09-16-audit-reliability-final.md).
 
-1. Scheduled task contracts and failed-execution lifecycle (#2–5).
-2. Chat reattachment/cancellation state machine (#7–9).
-3. MCP creation/configuration and HTTP recovery (#12–14).
-4. Genuine startup health checks and early-failure recovery (#15–16).
-5. Safe staging collector (follow-up to #10), followed by packaging and platform E2E.
-
-Batch 2 verification and PR scope: [scheduled contracts](2026-09-16-scheduled-contracts.md).
+Batch 2 historical detail: [scheduled contracts](2026-09-16-scheduled-contracts.md).
