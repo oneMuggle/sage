@@ -340,12 +340,11 @@ class StreamRegistry:
                     expired.append(sid)
             elif entry.status == "suspended":
                 continue
-            else:  # pending / running
-                if (
-                    not entry.queue.has_subscribers()
-                    and now - entry.last_activity_at > running_idle_seconds
-                ):
-                    expired.append(sid)
+            elif (  # pending / running
+                not entry.queue.has_subscribers()
+                and now - entry.last_activity_at > running_idle_seconds
+            ):
+                expired.append(sid)
         for sid in expired:
             entry = self._entries.pop(sid)
             if entry.task is not None and not entry.task.done():
