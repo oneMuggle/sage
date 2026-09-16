@@ -2805,6 +2805,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             done_reasoning: Optional[str] = None
 
+            # alpha.36 (Bug #4): 累积本次 run 的工具调用,持久化到 assistant 消息的
+            # tool_calls 字段。用户切会话再切回时,前端 loadMessages 从 DB 读到
+            # tool_calls 就能恢复中间步骤(否则只有最终 content,中间信息全丢)。
+            # 形状对齐前端 ToolCall: {id, name, args, result?}
+            accumulated_tool_calls: List[Dict[str, Any]] = []
+
             # L2 真流式 (2026-09-06): run_loop 在 THINKING 段实时发 CONTENT_DELTA
             # 事件时置位 —— 此时 DONE.content 已实时下发过,不再做假切块,
             # 否则前端会收到两遍内容。
@@ -2900,6 +2906,26 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             "reasoning": done_reasoning,
                         }
                     )
+                # alpha.36 (Bug #4): 累积工具调用请求(ACTING)和结果(OBSERVING),
+                # 持久化时写入 assistant 消息的 tool_calls 字段。
+                elif evt.state.value == "acting" and evt.tool_call:
+                    tc = evt.tool_call
+                    accumulated_tool_calls.append(
+                        {
+                            "id": tc.id,
+                            "name": tc.name,
+                            "args": dict(tc.arguments) if isinstance(tc.arguments, dict) else {},
+                        }
+                    )
+                    await entry.queue.put(evt.to_dict())
+                elif evt.state.value == "observing" and evt.tool_result:
+                    # 把结果回填到最后一条匹配的 tool_call(按 id)
+                    tr = evt.tool_result
+                    for tc in reversed(accumulated_tool_calls):
+                        if tc.get("id") == tr.tool_call_id:
+                            tc["result"] = tr.content
+                            break
+                    await entry.queue.put(evt.to_dict())
                 else:
                     await entry.queue.put(evt.to_dict())
 
@@ -2917,6 +2943,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             role="assistant",
                             content=done_content,
                             reasoning_content=done_reasoning,
+                            # alpha.36 (Bug #4): 持久化工具调用中间信息,
+                            # 切会话再切回时前端 loadMessages 能恢复。
+                            tool_calls=(
+                                json.dumps(accumulated_tool_calls, ensure_ascii=False)
+                                if accumulated_tool_calls
+                                else None
+                            ),
                             created_at=assistant_now,
                             model=(llm_config.get("model") if llm_config else "local"),
                         ),
@@ -3062,6 +3095,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 role="assistant",
                                 content=partial_text + "\n\n[已中断]",
                                 reasoning_content=None,
+                                # alpha.36 (Bug #4): 中断时也持久化已累积的工具调用,
+                                # 切会话再切回能看到中断前已发生的工具步骤。
+                                tool_calls=(
+                                    json.dumps(accumulated_tool_calls, ensure_ascii=False)
+                                    if accumulated_tool_calls
+                                    else None
+                                ),
                                 created_at=int(time.time() * 1000),
                                 model=(llm_config.get("model") if llm_config else "local"),
                             ),
