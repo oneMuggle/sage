@@ -95,3 +95,112 @@ def test_enable_account_resets_state(client):
     assert r2.status_code == 200
     r3 = client.get(f"/api/v1/arena/accounts/{acc_id}")
     assert r3.json()["state"] == "available"
+
+
+def test_get_service_raises_503_when_uninitialized():
+    """Line 58: get_service() raises 503 if init_arena_service was never called."""
+    import backend.api.arena_routes as routes_mod
+
+    old_svc = routes_mod._service
+    try:
+        routes_mod._service = None
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as excinfo:
+            routes_mod.get_service()
+        assert excinfo.value.status_code == 503
+    finally:
+        routes_mod._service = old_svc
+
+
+def test_max_accounts_returns_409():
+    """Line 74: creating account beyond max_accounts limit returns 409."""
+    fd, path = tempfile.mkstemp(suffix=".sqlite")
+    os.close(fd)
+    key = Fernet.generate_key()
+    cfg = ArenaAutomationConfig(enabled=True, max_accounts=1)
+    init_arena_service(db_path=path, encryption_key=key, config=cfg)
+    app = FastAPI()
+    app.include_router(router)
+    tc = TestClient(app)
+    try:
+        r1 = tc.post(
+            "/api/v1/arena/accounts",
+            json={"email": "first@example.com", "password": "p"},
+        )
+        assert r1.status_code == 201
+        r2 = tc.post(
+            "/api/v1/arena/accounts",
+            json={"email": "second@example.com", "password": "p"},
+        )
+        assert r2.status_code == 409
+    finally:
+        os.unlink(path)
+
+
+def test_duplicate_email_returns_409(client):
+    """Lines 80-81: duplicate email raises HTTPException 409."""
+    client.post(
+        "/api/v1/arena/accounts",
+        json={"email": "dup@example.com", "password": "p"},
+    )
+    r = client.post(
+        "/api/v1/arena/accounts",
+        json={"email": "dup@example.com", "password": "p2"},
+    )
+    assert r.status_code == 409
+
+
+def test_list_accounts_with_state_filter(client):
+    """Lines 91-95: valid state filter returns filtered list."""
+    client.post(
+        "/api/v1/arena/accounts",
+        json={"email": "s1@example.com", "password": "p"},
+    )
+    r = client.get("/api/v1/arena/accounts?state=available")
+    assert r.status_code == 200
+    # Invalid state returns 400
+    r2 = client.get("/api/v1/arena/accounts?state=garbage")
+    assert r2.status_code == 400
+
+
+def test_get_nonexistent_account_returns_404(client):
+    """Line 107: get_account returns 404 when id doesn't exist."""
+    r = client.get("/api/v1/arena/accounts/nonexistent-id")
+    assert r.status_code == 404
+
+
+def test_delete_nonexistent_account_returns_404(client):
+    """Line 118: soft_delete returns 404 when id doesn't exist."""
+    r = client.delete("/api/v1/arena/accounts/nonexistent-id")
+    assert r.status_code == 404
+
+
+def test_isolate_nonexistent_account_returns_404(client):
+    """Line 130: isolate returns 404 when id doesn't exist."""
+    r = client.post("/api/v1/arena/accounts/nonexistent-id/isolate")
+    assert r.status_code == 404
+
+
+def test_enable_nonexistent_account_returns_404(client):
+    """Line 145: enable returns 404 when id doesn't exist."""
+    r = client.post("/api/v1/arena/accounts/nonexistent-id/enable")
+    assert r.status_code == 404
+
+
+def test_get_stats_endpoint(client):
+    """Lines 155-159: stats endpoint returns state and failure count."""
+    r1 = client.post(
+        "/api/v1/arena/accounts",
+        json={"email": "stats@example.com", "password": "p"},
+    )
+    acc_id = r1.json()["id"]
+    r = client.get(f"/api/v1/arena/accounts/{acc_id}/stats")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id"] == acc_id
+    assert body["state"] == "available"
+    assert "failure_count" in body
+    # nonexistent account returns 404
+    r2 = client.get("/api/v1/arena/accounts/nonexistent-id/stats")
+    assert r2.status_code == 404
