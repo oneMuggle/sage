@@ -48,6 +48,7 @@ import type {
   OfficeUpdatePreviewResult,
 } from '../../shared/api/types';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { diffSpans } from '../../shared/lib/textDiff';
 
 export type OfficeEditPreviewPhase = 'compose' | 'previewing' | 'result' | 'applying' | 'applied';
 
@@ -876,8 +877,20 @@ export function DiffChangeRow({ change }: { change: OfficeDiffPreviewChange }) {
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <div className="min-w-0">
             <div className="text-xs text-muted">{t('office.edit.before')}</div>
-            <div className="text-xs text-error bg-error/10 rounded px-2 py-1 break-all line-through decoration-error/60">
-              {change.before ?? ''}
+            <div
+              className="text-xs text-error bg-error/10 rounded px-2 py-1 break-all line-through decoration-error/60"
+              data-testid="office-edit-before"
+            >
+              {/* P1-A: 字符级 diff —— 删除片段加深底色，公共部分不再陪染 */}
+              {diffSpans(change.before ?? '', change.after ?? '').before.map((sp, si) =>
+                sp.kind === 'del' ? (
+                  <span key={si} className="bg-error/25 rounded-sm" data-testid="office-diff-del">
+                    {sp.text}
+                  </span>
+                ) : (
+                  <span key={si}>{sp.text}</span>
+                ),
+              )}
             </div>
           </div>
           <span className="text-muted text-xs" aria-hidden>
@@ -885,8 +898,19 @@ export function DiffChangeRow({ change }: { change: OfficeDiffPreviewChange }) {
           </span>
           <div className="min-w-0">
             <div className="text-xs text-muted">{t('office.edit.after')}</div>
-            <div className="text-xs text-success bg-success/10 rounded px-2 py-1 break-all">
-              {change.after ?? ''}
+            <div
+              className="text-xs text-success bg-success/10 rounded px-2 py-1 break-all"
+              data-testid="office-edit-after"
+            >
+              {diffSpans(change.before ?? '', change.after ?? '').after.map((sp, si) =>
+                sp.kind === 'add' ? (
+                  <span key={si} className="bg-success/25 rounded-sm" data-testid="office-diff-add">
+                    {sp.text}
+                  </span>
+                ) : (
+                  <span key={si}>{sp.text}</span>
+                ),
+              )}
             </div>
           </div>
         </div>

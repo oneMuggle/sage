@@ -120,8 +120,12 @@ describe('OfficeEditPreviewDialog — state machine', () => {
     // Result phase: diff row with before/after styling hooks.
     expect(await screen.findByTestId('office-edit-result')).toBeInTheDocument();
     expect(screen.getByTestId('office-edit-change')).toBeInTheDocument();
-    expect(screen.getByText('大模型')).toBeInTheDocument();
-    expect(screen.getByText('上下文 …LLM… 医学')).toBeInTheDocument();
+    // P1-A: 字符级 diff —— del/add 片段独立染色，公共边不再陪染
+    expect(screen.getByTestId('office-diff-del')).toHaveTextContent('大模型');
+    expect(screen.getByTestId('office-diff-add')).toHaveTextContent('LLM');
+    const afterCell = screen.getByTestId('office-edit-after');
+    expect(afterCell.textContent).toContain('上下文 …LLM… 医学');
+    expect(afterCell.textContent).not.toContain('大模型');
     // Dialog reports its phase for e2e hooks.
     expect(screen.getByTestId('office-edit-preview-dialog').dataset.phase).toBe('result');
   });
