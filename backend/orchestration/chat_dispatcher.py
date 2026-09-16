@@ -262,6 +262,9 @@ class ChatDispatcher:
         self._budget_limit = 0
         # BU7 (round18): 80% 预警一次性标志。
         self._budget_warned = False
+        # BU11 (round21): run 级墙钟上限触发标志 + 记录值（分钟）。
+        self._wall_clock_exceeded = False
+        self._wall_clock_limit_min = 0
         # BD (round12): 后台派发句柄 —— 同一时刻至多一个在飞；collect 侧
         # shield 等待，超时/取消不杀派发本身。
         self._bg_task: Optional[asyncio.Task] = None
@@ -549,6 +552,11 @@ class ChatDispatcher:
                 f"budget_exceeded: 本 run token 预算（{self._budget_limit}）已耗尽，"
                 "派发被拒绝。请直接基于已有结果输出最终汇总。"
             )
+        if self._wall_clock_exceeded:
+            raise ValueError(
+                f"wall_clock_exceeded: 本 run 墙钟上限（{self._wall_clock_limit_min} 分钟）"
+                "已到，派发被拒绝。请直接基于已有结果输出最终汇总。"
+            )
         # Wave 2 P1-4: 首次 dispatch 时间戳（放函数开头，resume 场景多轮
         # dispatch 只记第一次）。P1-5: 同步落库 dispatched_at —— update_plan
         # 据此返回 409（编辑生效窗口 = 首次派发前）。落库失败降级不阻塞。
@@ -720,6 +728,11 @@ class ChatDispatcher:
                             f"budget_exceeded: 本 run token 预算"
                             f"（{self._budget_limit}）已耗尽"
                         )
+                    elif self._wall_clock_exceeded:
+                        state.error = (
+                            f"wall_clock_exceeded: 本 run 墙钟上限"
+                            f"（{self._wall_clock_limit_min} 分钟）已到"
+                        )
                     elif self._cancelled.is_set():
                         state.error = "cancelled by user"
                     else:
@@ -785,6 +798,8 @@ class ChatDispatcher:
                     # BU2 (round11): 每任务终态后预算守门 —— 超限置位
                     # _cancelled，同批 queued 任务经既有 merged 守卫收口。
                     self._check_run_budget()
+                    # BU11 (round21): 墙钟守门 —— run 整体时长超限同款收口。
+                    self._check_run_wall_clock()
 
         # P1 拓扑调度 (spec 2026-08-21): 依 depends_on 分波执行。
         # - 波内 asyncio.gather 全并行（信号量限流不变）
@@ -1213,6 +1228,54 @@ class ChatDispatcher:
                     budget,
                 )
 
+    def _check_run_wall_clock(self) -> None:
+        """BU11 (round21): run 级墙钟守门 —— 超限时触发与预算同款收口。
+
+        预算键 ``OrchSettings.run_wall_clock_limit_min``（分钟，0 = 关闭）。
+        窗口 = 首次派发起的墙钟时长（每个任务都正常也可能整体跑飞，token
+        预算管不住这种失控形态）。触发后经 ``_cancelled`` 传播收口；任务级
+        归因 ``wall_clock_exceeded: …``（先于用户取消判断，避免误归因）。
+        """
+        limit_min = getattr(self.settings, "run_wall_clock_limit_min", 0)
+        if limit_min <= 0 or self._wall_clock_exceeded:
+            return
+        if not self._first_dispatch_at:
+            return
+        elapsed_ms = int(time.time() * 1000) - int(self._first_dispatch_at * 1000)
+        if elapsed_ms >= limit_min * 60_000:
+            self._wall_clock_exceeded = True
+            self._wall_clock_limit_min = limit_min
+            logger.warning(
+                "run %s 触发墙钟上限：%d 分钟，剩余任务停止派发",
+                self.run_id,
+                limit_min,
+            )
+            self._cancelled.set()
+
+    def _check_run_wall_clock(self) -> None:
+        """BU11 (round21): run 级墙钟守门 —— 超限时触发与预算同款收口。
+
+        预算键 ``OrchSettings.run_wall_clock_limit_min``（分钟，0 = 关闭）。
+        窗口 = 首次派发起的墙钟时长（每个任务都正常也可能整体跑飞，token
+        预算管不住这种失控形态）。触发后经 ``_cancelled`` 传播收口；任务级
+        归因 ``wall_clock_exceeded: …``（先于用户取消判断，避免误归因）。
+        """
+        limit_min = getattr(self.settings, "run_wall_clock_limit_min", 0)
+        if limit_min <= 0 or self._wall_clock_exceeded:
+            return
+        if not self._first_dispatch_at:
+            return
+        elapsed_ms = int(time.time() * 1000) - int(self._first_dispatch_at * 1000)
+        if elapsed_ms >= limit_min * 60_000:
+            self._wall_clock_exceeded = True
+            self._wall_clock_limit_min = limit_min
+            logger.warning(
+                "run %s 触发墙钟上限：%d 分钟，剩余任务停止派发",
+                self.run_id,
+                limit_min,
+            )
+            self._cancelled.set()
+
     def _emit_task_status(self, state: ChatTaskState) -> None:
         """推 task_status 事件；队列满/关闭静默降级（进度尽力而为）。"""
         event: Dict[str, Any] = {
@@ -1480,9 +1543,15 @@ class ChatDispatcher:
             )
         # BU3 (round11): 预算触顶提示 —— 让 conductor 知道取消原因是预算
         # 而非失败，直接基于已有结果汇总。
+        # BU11 (round21): 墙钟触顶标注 —— 与预算触顶同款措辞（互斥时墙钟优先）。
         if self._budget_exceeded:
             header += (
                 f"- ⚠ 已触发 run 级 token 预算上限（>{self._budget_limit} tokens），"
+                "剩余任务已停止派发。请基于以上已有结果直接给出最终汇总。\n"
+            )
+        elif self._wall_clock_exceeded:
+            header += (
+                f"- ⚠ 已触发 run 级墙钟上限（{self._wall_clock_limit_min} 分钟），"
                 "剩余任务已停止派发。请基于以上已有结果直接给出最终汇总。\n"
             )
         # BU8 (round19): 预算开启时头部展示消耗进度 —— conductor 判断"是否
