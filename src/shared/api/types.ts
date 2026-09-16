@@ -1240,6 +1240,32 @@ export interface OfficeLegacyImportResult {
 }
 
 /**
+ * P2-D (office-p2d): PDF AcroForm field + read/fill results
+ * (backend `PdfFormField` / `PdfFormReadResult` / `PdfFormFillResult`).
+ */
+export interface OfficePdfFormField {
+  name: string;
+  type: string;
+  value?: unknown;
+  options?: string[] | null;
+  required: boolean;
+  read_only: boolean;
+}
+
+export interface OfficePdfFormReadResult {
+  file_path: string;
+  fields: OfficePdfFormField[];
+  has_xfa: boolean;
+}
+
+export interface OfficePdfFormFillResult {
+  output_path: string;
+  filename: string;
+  file_size_bytes: number;
+  filled_count: number;
+}
+
+/**
  * F3 (office-p0): result of POST /api/v1/office/pdf/data — raw-PDF
  * base64 preview for the /office page's 原文预览 toggle (backend
  * `PdfDataResult`). Expected failures (oversize / path escape) come

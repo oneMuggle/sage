@@ -410,6 +410,8 @@ describe('buildUpdateOps — op composition table', () => {
     tableText: '',
     deleteFind: '',
     deleteAll: false,
+    commentText: '',
+    commentAuthor: '',
     sheet: '',
     cell: '',
     value: '',
@@ -517,6 +519,29 @@ describe('buildUpdateOps — op composition table', () => {
         deleteAll: true,
       }),
     ).toEqual([{ op: 'delete_paragraph', find: '旧句', all: true }]);
+  });
+
+  it('word add_comment: find + comment required, optional author', () => {
+    expect(buildUpdateOps('word', { ...base, wordKind: 'add_comment' })).toBeNull();
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'add_comment',
+        deleteFind: '旧句',
+        commentText: ' 这里要补引用 ',
+        commentAuthor: '张三',
+      }),
+    ).toEqual([
+      { op: 'add_comment', find: '旧句', comment: '这里要补引用', author: '张三' },
+    ]);
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'add_comment',
+        deleteFind: '旧句',
+        commentText: '批注',
+      }),
+    ).toEqual([{ op: 'add_comment', find: '旧句', comment: '批注' }]);
   });
 
   it('excel append_rows: csv lines → rows', () => {
