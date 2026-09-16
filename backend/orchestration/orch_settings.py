@@ -33,10 +33,11 @@ class OrchSettings:
     max_aggregate_chars: int = 120 * 1024
     max_subagent_result_chars: int = 50 * 1024
     max_retries: int = 2
-    max_lane_iterations: int = 8
-    #: 子代理（agent_tool）单次委派的 ReAct 迭代预算。默认 6 与原
-    #: ``agent_tool.SUBAGENT_MAX_ITERATIONS`` 常量一致，仅开放可配。
-    max_subagent_iterations: int = 6
+    max_lane_iterations: int = 12
+    #: 子代理（agent_tool）单次委派的 ReAct 迭代预算。alpha.36 默认由 6 上调至 10
+    #: 与 ``max_lane_iterations`` 同步（用户反馈"任务复杂度超出当前迭代上限"
+    #: 集中在中等规模任务，6 次不足以完成多步工具链调用）。
+    max_subagent_iterations: int = 10
     scratch_root: str = "orch_scratch"
     worktree_isolation: bool = False
     #: live-events P1: 新 run 的子代理审批模式默认值 —— "ask"（逐次审批，
