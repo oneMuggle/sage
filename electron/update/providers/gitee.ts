@@ -2,6 +2,7 @@
 import type { UpdateProvider, NormalisedRelease, ProviderChannel } from './base';
 import type { GiteeConfig } from '../providerConfig';
 import { ProviderError } from './genericHttp';
+import { fetchCompat } from '../../fetchCompat';
 
 const CHANNELS: ProviderChannel[] = [
   { id: 'stable', label: 'Stable', description: '正式版（pre=false）' },
@@ -30,7 +31,7 @@ export function createGiteeReleasesProvider(config: {
       const base = wantPrerelease
         ? `https://gitee.com/api/v5/repos/${cfg.owner}/${cfg.repo}/releases?per_page=10&${tokenParam}`
         : `https://gitee.com/api/v5/repos/${cfg.owner}/${cfg.repo}/releases/latest?${tokenParam}`;
-      const res = await fetch(base, { signal: opts?.signal });
+      const res = await fetchCompat(base, { signal: opts?.signal });
       if (res.status === 401 || res.status === 403) {
         throw new ProviderError(`凭证无效（HTTP ${res.status}）`, res.status);
       }
@@ -49,7 +50,7 @@ export function createGiteeReleasesProvider(config: {
     async downloadAsset(release, assetId, opts) {
       const asset = release.assets.find((a) => a.id === assetId);
       if (!asset) throw new ProviderError(`Asset 不存在：${assetId}`, 404);
-      const res = await fetch(asset.downloadUrl, { signal: opts?.signal });
+      const res = await fetchCompat(asset.downloadUrl, { signal: opts?.signal });
       if (!res.ok) {
         throw new ProviderError(`下载失败 HTTP ${res.status}`, res.status);
       }
@@ -65,7 +66,7 @@ export function createGiteeReleasesProvider(config: {
     async ping(opts) {
       const start = Date.now();
       try {
-        const res = await fetch(
+        const res = await fetchCompat(
           `https://gitee.com/api/v5/repos/${cfg.owner}/${cfg.repo}?${tokenParam}`,
           { signal: opts?.signal },
         );

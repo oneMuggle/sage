@@ -38,6 +38,7 @@ export function UpdatesTab() {
     available: boolean;
     version?: string;
     error?: boolean;
+    errorMessage?: string;
   } | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
 
@@ -80,6 +81,15 @@ export function UpdatesTab() {
     setCheckResult(null);
     try {
       const result = await window.electronAPI?.updates.check();
+      if (result?.error) {
+        // 主进程返回了检查失败原因 (如网络不可达 / 源配置错误) — 展示而非静默当作"无更新"
+        setCheckResult({
+          available: false,
+          error: true,
+          errorMessage: result.error,
+        });
+        return;
+      }
       setCheckResult({
         available: result?.updateAvailable ?? false,
         version: result?.version,
@@ -162,7 +172,7 @@ export function UpdatesTab() {
         )}
         {checkResult?.error && (
           <p className="text-xs text-error mt-2" role="alert">
-            {t('updates.checkFailed')}
+            {checkResult.errorMessage ? `${t('updates.checkFailed')}: ${checkResult.errorMessage}` : t('updates.checkFailed')}
           </p>
         )}
         {checkResult && !checkResult.error && checkResult.available && checkResult.version && (

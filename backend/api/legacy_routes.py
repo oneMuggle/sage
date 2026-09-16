@@ -1892,7 +1892,8 @@ async def chat(
                 "api_key": data.api_key,
                 "base_url": data.api_url,
                 "model": data.model or "gpt-3.5-turbo",
-                "temperature": data.temperature or 0.7,
+                # temperature=0 是合法值 (确定性输出), 不能用 or 兜底
+                "temperature": 0.7 if data.temperature is None else data.temperature,
             }
             logger.info(
                 f"[REQ {request_id}] using custom LLM config: model={_safe_log_field(llm_config['model'])}"
@@ -2226,7 +2227,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     "api_key": data.api_key,
                     "base_url": data.api_url,
                     "model": data.model or "gpt-3.5-turbo",
-                    "temperature": data.temperature or 0.7,
+                    # temperature=0 是合法值 (确定性输出), 不能用 or 兜底
+                    "temperature": 0.7 if data.temperature is None else data.temperature,
                 }
                 # 推理参数:None 时不传,避免污染老 LLM
                 if data.reasoning_effort is not None:

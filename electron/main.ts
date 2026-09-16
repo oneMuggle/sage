@@ -95,6 +95,7 @@ import { ENABLE_UPDATE_PROVIDERS_UI } from './update/featureFlag';
 import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backendLauncher';
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
 import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
+import { parseOrchEventName } from './eventRouting';
 import { killOrphanedBackendOnPort } from './orphanBackendKiller';
 import { createIncrementalUtf8Decoder } from './incrementalUtf8Decoder';
 import { BackendNotReadyError, invokeBackend } from './invoke';
@@ -612,7 +613,17 @@ export function scheduleBackendRestart(): void {
         if (ready) {
           restartCount = 0;
           mainWindow?.webContents.send('sage:event:backend:reconnected', {});
+          return;
         }
+        // Health check never passed: without this branch the lifecycle stayed
+        // 'starting' forever — every IPC request rejected with
+        // BackendNotReadyError and the renderer never got a final failure.
+        // Kill the unhealthy process; the proc 'exit' handler resets the
+        // lifecycle to idle and schedules the next capped restart attempt.
+        logger.error('main: backend restart failed health check', {
+          attempt: restartCount,
+        });
+        void shutdownBackend();
       });
     });
   }, delay);
@@ -1192,10 +1203,10 @@ async function registerIpcHandlers(): Promise<void> {
 
       // orch-events-{runId}-{afterSeq} dynamic events: relay orchestration run events
       // Format: orch-events-{runId} or orch-events-{runId}-seq-{afterSeq}
-      const orchEventsMatch = event.match(/^orch-events-([^-]+?)(?:-seq-(\d+))?$/);
+      const orchEventsMatch = parseOrchEventName(event);
       if (orchEventsMatch) {
-        const runId = orchEventsMatch[1];
-        const afterSeq = orchEventsMatch[2] ? parseInt(orchEventsMatch[2], 10) : 0;
+        const runId = orchEventsMatch.runId;
+        const afterSeq = orchEventsMatch.afterSeq;
         const abort = new AbortController();
         eventSubscriptions.set(event, abort);
         relayOrchEventsStream(
