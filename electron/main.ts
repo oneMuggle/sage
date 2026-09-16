@@ -1220,6 +1220,13 @@ async function registerIpcHandlers(): Promise<void> {
         ).catch((e) => {
           if (e instanceof Error && e.name !== 'AbortError') {
             logger.error('ipc: orch relay error', { event, err: e.message });
+            // 2026-09 修复 (同步 #957): relay 失败必须通知渲染端, 否则编排
+            // 订阅永久卡 connecting (渲染端监听 {event}-error 终结生成器)。
+            if (!senderWebContents.isDestroyed()) {
+              senderWebContents.send(`sage:event:${event}-error`, {
+                message: e.message,
+              });
+            }
           }
         });
         return { ok: true, event };

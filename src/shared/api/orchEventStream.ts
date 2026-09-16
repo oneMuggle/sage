@@ -90,7 +90,16 @@ export async function* subscribeOrchEvents(
     const eventQueue: RunEvent[] = [];
     let resolveNext: (() => void) | null = null;
     let done = false;
-    const error: Error | null = null;
+    // 2026-09 修复 (同步 #957): error 此前从未被赋值(死代码) —— 主进程
+    // relay 失败时生成器永远 await resolveNext, 连接状态卡 connecting。
+    let error: Error | null = null;
+
+    const wakeup = () => {
+      if (resolveNext) {
+        resolveNext();
+        resolveNext = null;
+      }
+    };
 
     const unsubscribe = await window.electronAPI.listen(
       eventName,
@@ -98,13 +107,20 @@ export async function* subscribeOrchEvents(
         const parsed = parseOrchEventFromIpc(rawEvent);
         if (parsed) {
           eventQueue.push(parsed);
-          if (resolveNext) {
-            resolveNext();
-            resolveNext = null;
-          }
+          wakeup();
         }
       },
     );
+    const unsubscribeError = await window.electronAPI
+      .listen(`${eventName}-error`, (rawEvent: unknown) => {
+        const msg =
+          typeof rawEvent === 'object' && rawEvent !== null && 'message' in rawEvent
+            ? String((rawEvent as { message?: unknown }).message)
+            : String(rawEvent);
+        error = new Error(msg || 'orchestration event relay failed');
+        wakeup();
+      })
+      .catch(() => null);
 
     const cleanup = () => {
       done = true;
@@ -113,6 +129,7 @@ export async function* subscribeOrchEvents(
         resolveNext = null;
       }
       unsubscribe?.();
+      unsubscribeError?.();
     };
 
     signal?.addEventListener('abort', cleanup, { once: true });

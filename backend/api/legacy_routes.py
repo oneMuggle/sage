@@ -2199,7 +2199,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 刻意 new 一个独立实例而非用下方 producer 内的 session_repo 变量 ——
             # 那个变量在数百行之后才绑定，早期失败路径 finally 会 UnboundLocalError。
             try:
-                SessionRepository().update_run_status(data.session_id, "running")
+                await _run_db_sync(
+                    SessionRepository().update_run_status, data.session_id, "running"
+                )
             except Exception as status_err:  # noqa: BLE001 — fail-open
                 logger.debug("会话运行态(running)写入失败: %s", status_err)
 
@@ -3328,8 +3330,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         str(_exc_info[1]) if _exc_info and _exc_info[0] else "运行失败"
                     )
             try:
-                SessionRepository().update_run_status(
-                    data.session_id, _terminal_status, _terminal_error
+                await _run_db_sync(
+                    SessionRepository().update_run_status,
+                    data.session_id,
+                    _terminal_status,
+                    _terminal_error,
                 )
             except Exception as status_err:  # noqa: BLE001 — fail-open
                 logger.debug("会话运行态(%s)写入失败: %s", _terminal_status, status_err)
