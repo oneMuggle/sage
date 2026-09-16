@@ -37,8 +37,8 @@ def test_tool_calls_accumulator_empty_when_no_acting_events():
 def test_tool_calls_accumulator_captures_acting_events():
     """ACTING 事件应被累积,包含 id/name/args。"""
     from backend.core.legacy.agent_state import (
-        AgentState,
         AgentEvent,
+        AgentState,
         ToolCallRequest,
     )
 
@@ -74,8 +74,8 @@ def test_tool_calls_accumulator_captures_acting_events():
 def test_tool_calls_accumulator_backfills_result_from_observing():
     """OBSERVING 事件应把 result 回填到匹配的 tool_call(按 id)。"""
     from backend.core.legacy.agent_state import (
-        AgentState,
         AgentEvent,
+        AgentState,
         ToolCallRequest,
         ToolCallResult,
     )
@@ -144,7 +144,11 @@ def test_tool_calls_json_serialization_roundtrip():
 
 def test_tool_calls_multiple_acting_events():
     """多个 ACTING 事件应按顺序累积。"""
-    from backend.core.legacy.agent_state import AgentState, AgentEvent, ToolCallRequest
+    from backend.core.legacy.agent_state import (
+        AgentEvent,
+        AgentState,
+        ToolCallRequest,
+    )
 
     accumulated: list[dict] = []
 
@@ -176,8 +180,8 @@ def test_tool_calls_multiple_acting_events():
 def test_tool_calls_observing_no_match_doesnt_crash():
     """OBSERVING 事件找不到匹配的 tool_call 时不应崩溃(容错)。"""
     from backend.core.legacy.agent_state import (
-        AgentState,
         AgentEvent,
+        AgentState,
         ToolCallResult,
     )
 
