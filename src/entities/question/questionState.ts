@@ -27,7 +27,9 @@ import type { UserQuestion } from '../../shared/api';
 export type PendingUserQuestion = UserQuestion & { /** 事件来源会话（S4） */ session_id?: string };
 
 export interface QuestionState {
-  /** 当前待应答提问；null 表示无挂起提问（对话框隐藏） */
+  /** 按会话归档的挂起请求 (2026-09 修复: 并行会话互不覆盖) */
+  pendingBySession: Record<string, PendingUserQuestion>;
+  /** 当前待待应答提问；null 表示无挂起提问（对话框隐藏） */
   currentQuestion: PendingUserQuestion | null;
   /** 流事件到达 → 弹出对话框（不可变替换，不 mutate 旧对象）；sessionId 记录归属 */
   setFromEvent: (payload: UserQuestion, sessionId?: string) => void;
@@ -35,18 +37,50 @@ export interface QuestionState {
   resolve: (sessionId?: string) => void;
 }
 
+function pickDisplayedQuestion(
+  pending: Record<string, PendingUserQuestion>,
+): PendingUserQuestion | null {
+  const list = Object.values(pending);
+  return list.length > 0 ? list[0] : null;
+}
+
 export const useQuestionState = create<QuestionState>((set) => ({
   currentQuestion: null,
+  pendingBySession: {},
   // 浅拷贝载荷：流事件对象来自 IPC 反序列化，复制一份避免调用方
   // 后续 mutate 同一引用造成 UI 与 store 不一致。
   setFromEvent: (payload, sessionId) =>
-    set({ currentQuestion: { ...payload, session_id: sessionId } }),
+    set((prev) => {
+      const question: PendingUserQuestion = { ...payload, session_id: sessionId };
+      // 2026-09 修复: 同 permissionState —— 按会话归档, 后到者不顶掉已展示的
+      const key = sessionId ?? '__global__';
+      const pending = { ...prev.pendingBySession, [key]: question };
+      const displayed = prev.currentQuestion;
+      // 同会话的后续请求 = 替换已展示的(保留旧语义, 对话框随之重置);
+      // 异会话请求不抢夺已展示的 —— 这是 2026-09 修复的核心:
+      // A 卡提问时 B 的请求此前会把 A 顶掉且永不恢复。
+      const currentQuestion =
+        displayed == null ||
+        (displayed.session_id ?? null) === (sessionId ?? null)
+          ? question
+          : displayed;
+      return { pendingBySession: pending, currentQuestion };
+      return { pendingBySession: pending, currentQuestion };
+    }),
   resolve: (sessionId) =>
     set((prev) => {
       // 未指定会话 = 全清（QuestionDialog 提交后调用）
-      if (sessionId == null) return { currentQuestion: null };
-      // 指定会话但当前提问属于其它会话 → 不动（并行会话隔离）
-      if (prev.currentQuestion?.session_id !== sessionId) return prev;
-      return { currentQuestion: null };
+      if (sessionId == null) return { currentQuestion: null, pendingBySession: {} };
+      const pending: Record<string, PendingUserQuestion> = {};
+      let removedDisplayed = false;
+      for (const [k, q] of Object.entries(prev.pendingBySession)) {
+        if (q.session_id === sessionId) {
+          if (prev.currentQuestion === q) removedDisplayed = true;
+          continue;
+        }
+        pending[k] = q;
+      }
+      if (!removedDisplayed) return { pendingBySession: pending };
+      return { pendingBySession: pending, currentQuestion: pickDisplayedQuestion(pending) };
     }),
 }));

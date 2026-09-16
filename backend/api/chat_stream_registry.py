@@ -23,7 +23,8 @@ import asyncio
 import contextlib
 import time
 from dataclasses import dataclass, field
-from typing import (  # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscript
+from typing import (
+    # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscript
     Any,
     Callable,
     Dict,
@@ -47,7 +48,14 @@ class BroadcastQueue(asyncio.Queue):
         self.last_activity_at: float = time.time()
 
     async def put(self, item: Any) -> None:
-        """广播消息，不让慢订阅者阻塞 producer。"""
+        """广播消息，不让慢订阅者阻塞 producer。
+
+        已知边界 (2026-09 审计记录): 无 subscriber 且父队列满时 put 挂起,
+        期间 subscribe() 注册 subscriber 并清空父队列 —— 恢复后事件的去向
+        依赖 CPython 版本 (3.12+ 经虚分派直达 subscriber; 3.11 写回父队列
+        滞留或因订阅队列满被丢弃)。窗口极窄 (attach 与满队列竞态), 跨版本
+        统一语义需要重做挂起机制 (自管理 waiter), 暂不做局部补丁。
+        """
         self.last_activity_at = time.time()
         if not self._subscribers:
             await super().put(item)
