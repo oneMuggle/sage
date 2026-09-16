@@ -53,19 +53,27 @@ class VectorStore:
 
     @classmethod
     def open(cls, project_root: Path, dim: int) -> "VectorStore":
-        """打开或创建向量存储。
+        """打开或创建向量存储（wiki 默认路径 .llm-wiki/vectors.json）。"""
+        return cls.open_at(project_root / ".llm-wiki" / "vectors.json", dim, project_root)
+
+    @classmethod
+    def open_at(cls, storage_path: Path, dim: int, project_root: Optional[Path] = None) -> "VectorStore":
+        """在任意路径打开或创建向量存储（r57：附件向量库与 wiki 库分存）。
 
         Args:
-            project_root: 项目根目录
+            storage_path: 存储文件路径（由调用方决定，不在构造时才落盘）
             dim: 向量维度
+            project_root: 传给 secure_read_text 的包含根；None 时直接读
+                （调用方为后端自身代码，路径非用户输入）
 
         Returns:
             VectorStore: 向量存储实例
         """
-        storage_path = project_root / ".llm-wiki" / "vectors.json"
-
         try:
-            data = json.loads(secure_read_text(project_root, storage_path))
+            if project_root is not None:
+                data = json.loads(secure_read_text(project_root, storage_path))
+            else:
+                data = json.loads(storage_path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             data = None
         if data is not None:
