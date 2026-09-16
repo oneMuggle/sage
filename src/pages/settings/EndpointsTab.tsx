@@ -12,6 +12,8 @@ import {
 } from '../../entities/setting/types';
 import {
   type ConnectionTestResult,
+  type ProbeResult,
+  probeModel,
   testEndpointConnection,
 } from '../../features/manage-endpoints/api';
 
@@ -34,6 +36,8 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
   const [editForm, setEditForm] = useState<Partial<EndpointConfig>>({});
   const [testResult, setTestResult] = useState<Record<string, ConnectionTestResult>>({});
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [probingId, setProbingId] = useState<string | null>(null);
+  const [probeResults, setProbeResults] = useState<Record<string, ProbeResult>>({});
 
   const handleAdd = () => {
     const newEndpoint: EndpointConfig = {
@@ -100,6 +104,27 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
     }
   };
 
+  const handleProbe = async (ep: EndpointConfig) => {
+    const modelId = ep.modelId || ep.discoveredModels[0]?.id;
+    if (!modelId) return;
+    setProbingId(ep.id);
+    try {
+      const result = await probeModel(ep.id, modelId);
+      setProbeResults((prev) => ({ ...prev, [ep.id]: result }));
+    } catch {
+      setProbeResults((prev) => ({
+        ...prev,
+        [ep.id]: {
+          status: 'error',
+          adapter: 'unknown',
+          data: null,
+          error: '探测请求失败',
+        },
+      }));
+    }
+    setProbingId(null);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -127,6 +152,8 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
         const protocol: EndpointProtocol = form.protocol ?? ep.protocol ?? 'openai-compatible';
         const modelId = form.modelId ?? ep.modelId ?? '';
         const result = testResult[ep.id];
+        const probeResult = probeResults[ep.id];
+        const probeModelId = ep.modelId || ep.discoveredModels[0]?.id;
 
         return (
           <div key={ep.id} className="p-4 border rounded-radius-sm bg-surface">
@@ -264,6 +291,21 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                       {testingId === ep.id ? '测试中...' : '测试连接'}
                     </button>
                   )}
+                  {baseUrl && probeModelId && (
+                    <button
+                      onClick={() => handleProbe({ ...ep, ...form })}
+                      disabled={probingId === ep.id}
+                      className={clsx(
+                        'px-3 py-1.5 text-xs rounded-radius-sm border transition-colors',
+                        probingId === ep.id
+                          ? 'border-border text-muted cursor-wait'
+                          : 'border-purple-400 text-purple-500 hover:bg-purple-50',
+                      )}
+                      title="探测模型元数据（上下文窗口、架构、量化等）"
+                    >
+                      {probingId === ep.id ? '探测中...' : '探测模型'}
+                    </button>
+                  )}
                 </div>
                 {result && (
                   <span
@@ -276,6 +318,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                     {result.latency > 0 && ` (${result.latency}ms)`}
                   </span>
                 )}
+                {probeResult && <ProbeStatusDisplay result={probeResult} />}
               </div>
             ) : (
               <div className="flex flex-col gap-1">
@@ -297,6 +340,21 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                       {testingId === ep.id ? '测试中...' : '测试连接'}
                     </button>
                   )}
+                  {ep.baseUrl && probeModelId && (
+                    <button
+                      onClick={() => handleProbe(ep)}
+                      disabled={probingId === ep.id}
+                      className={clsx(
+                        'px-2 py-1 text-xs rounded-radius-sm border transition-colors',
+                        probingId === ep.id
+                          ? 'border-border text-muted cursor-wait'
+                          : 'border-purple-400 text-purple-500 hover:bg-purple-50',
+                      )}
+                      title="探测模型元数据"
+                    >
+                      {probingId === ep.id ? '探测中...' : '探测模型'}
+                    </button>
+                  )}
                   {result && (
                     <span
                       className={clsx(
@@ -312,11 +370,57 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                   <span>协议: {ep.protocol}</span>
                   {ep.modelId && <span>模型(高级): {ep.modelId}</span>}
                 </div>
+                {probeResult && <ProbeStatusDisplay result={probeResult} />}
               </div>
             )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Render probe status and metadata below the endpoint info.
+ *
+ * Displays:
+ * - status badge (success / unsupported / error)
+ * - metadata (native context, architecture, quantization) when available
+ * - error message when probe failed
+ */
+function ProbeStatusDisplay({ result }: { result: ProbeResult }) {
+  const statusConfig = {
+    success: { label: '探测成功', color: 'text-green-600', bg: 'bg-green-50' },
+    unsupported: { label: '不支持探测', color: 'text-yellow-600', bg: 'bg-yellow-50' },
+    error: { label: '探测失败', color: 'text-red-600', bg: 'bg-red-50' },
+  } as const;
+
+  const config = statusConfig[result.status];
+
+  return (
+    <div className={clsx('mt-2 px-2 py-1.5 rounded-radius-sm text-[11px]', config.bg)}>
+      <span className={clsx('font-medium', config.color)}>{config.label}</span>
+      {result.adapter !== 'unknown' && (
+        <span className="text-muted ml-2">适配器: {result.adapter}</span>
+      )}
+      {result.status === 'success' && result.data && (
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-muted">
+          {result.data.native != null && (
+            <span>上下文(native): {result.data.native.toLocaleString()}</span>
+          )}
+          {result.data.service != null && (
+            <span>上下文(service): {result.data.service.toLocaleString()}</span>
+          )}
+          {result.data.architecture && <span>架构: {result.data.architecture}</span>}
+          {result.data.quantization && <span>量化: {result.data.quantization}</span>}
+        </div>
+      )}
+      {result.status === 'error' && result.error && (
+        <div className="mt-0.5 text-red-500">{result.error}</div>
+      )}
+      {result.status === 'unsupported' && result.error && (
+        <div className="mt-0.5 text-yellow-600">{result.error}</div>
+      )}
     </div>
   );
 }

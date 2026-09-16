@@ -36,6 +36,7 @@ EXPECTED_TOP_KEYS = frozenset(
     {
         "streaming",
         "autoMemory",
+        "autoContext",  # Task 5 (2026-09-15): context window resolver toggle
         "confirmDelete",
         "endpoints",
         "modelSelections",
@@ -50,7 +51,7 @@ EXPECTED_TOP_KEYS = frozenset(
 
 
 def test_legal_top_keys_matches_appsettings_interface() -> None:
-    """LEGAL_TOP_KEYS 必须与 AppSettings 13 顶层字段 1:1 对齐."""
+    """LEGAL_TOP_KEYS 必须与 AppSettings 12 顶层字段 1:1 对齐."""
     assert LEGAL_TOP_KEYS == EXPECTED_TOP_KEYS
 
 

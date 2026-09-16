@@ -30,6 +30,8 @@ const SUMMARY = {
     cache_read_tokens: 600,
     cache_creation_tokens: 400,
     estimated_cost_usd: 0.0125,
+    known_requests: 2,
+    unknown_requests: 1,
   },
   by_model: [
     {
@@ -41,6 +43,8 @@ const SUMMARY = {
       cache_read_tokens: 500,
       cache_creation_tokens: 300,
       estimated_cost_usd: 0.01,
+      known_requests: 2,
+      unknown_requests: 0,
     },
     {
       model: 'local-model',
@@ -51,6 +55,8 @@ const SUMMARY = {
       cache_read_tokens: 0,
       cache_creation_tokens: 0,
       estimated_cost_usd: null,
+      known_requests: 0,
+      unknown_requests: 1,
     },
   ],
   today: {
@@ -61,9 +67,16 @@ const SUMMARY = {
     cache_read_tokens: 70,
     cache_creation_tokens: 30,
     estimated_cost_usd: 0.001,
+    known_requests: 1,
+    unknown_requests: 0,
   },
   cache_hit_rate: 0.6,
   range: 'today' as const,
+  known_requests: 2,
+  unknown_requests: 1,
+  has_partial_estimates: true,
+  known_requests_today: 1,
+  unknown_requests_today: 0,
 };
 
 function cloneSummary() {
@@ -115,11 +128,11 @@ describe('UsagePanel', () => {
     });
     expect(screen.getByTestId('usage-total-tokens').textContent).toBe('150');
     expect(screen.getByTestId('usage-total-cost').textContent).toBe('$0.0010');
-    // by-model 表格: 两行, null 成本 → 占位符
+    // by-model 表格: 两行, null 成本 → 「未知」 (Task 6 brief: 区分未知与 0)
     const table = screen.getByTestId('usage-by-model');
     expect(table.textContent).toContain('gpt-4o');
     expect(table.textContent).toContain('local-model');
-    expect(table.textContent).toContain('—');
+    expect(table.textContent).toContain('未知');
     expect(summarySpy).toHaveBeenCalledWith('today');
   });
 

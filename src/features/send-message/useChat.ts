@@ -18,15 +18,12 @@ import {
   type LLMErrorResponse,
 } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
-import { historyBudgetFor } from '../../shared/lib/modelWindows';
+// Task 5: modelWindows imports removed — frontend no longer computes history budget.
+// Backend now resolves effective window from catalog and computes budget.
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
 import { useSettings } from '../manage-settings/useSettings';
 
-import {
-  selectSessionSlots,
-  useChatStreamStore,
-  type TaskBoardState,
-} from './chatStreamStore';
+import { selectSessionSlots, useChatStreamStore, type TaskBoardState } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
 import { notifySession, shouldNotify } from './sessionNotify';
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
@@ -320,13 +317,11 @@ export function useChat() {
         apiKey: chatEndpoint.apiKey,
         apiUrl: chatEndpoint.baseUrl,
         model: settings.modelSelections.chatModel.modelId ?? undefined,
-        // U17 (round4): L9-lite 历史预算——按模型窗口推导(窗口 × 0.75)。
-        // settings.maxContext 默认 4096 达不到后端 20000 有效性阈值而被忽略,
-        // 这里统一走推导;用户显式配置 ≥20000 时推导函数原样透传。
-        maxContext: historyBudgetFor(
-          settings.modelSelections.chatModel.modelId,
-          settings.maxContext,
-        ),
+        // Task 5 (2026-09-15): send raw maxContext + autoContext to backend.
+        // Backend resolves effective window from catalog and computes history budget.
+        // No longer sending computed historyBudgetFor() — that was the bug.
+        maxContext: settings.maxContext,
+        autoContext: settings.autoContext,
         temperature: settings.temperature,
         // 从 baseUrl 推导 provider,后端不再硬写 "custom"。
         // TODO(PR-7a+): 给 EndpointConfig 加 provider 字段,这里直接读,
@@ -794,14 +789,9 @@ export function useChat() {
               useChatStreamStore.getState().appendContent(sid, assistantId, acc);
               return;
             }
-            if (
-              (evt.state === 'reasoning_delta' || evt.state === 'reasoning') &&
-              evt.reasoning
-            ) {
+            if ((evt.state === 'reasoning_delta' || evt.state === 'reasoning') && evt.reasoning) {
               accReasoning += evt.reasoning;
-              useChatStreamStore
-                .getState()
-                .appendReasoning(sid, assistantId, accReasoning);
+              useChatStreamStore.getState().appendReasoning(sid, assistantId, accReasoning);
               return;
             }
             if (evt.state === 'permission_request' && evt.permission_request) {
@@ -893,6 +883,7 @@ export function useChat() {
             apiUrl: chatEndpoint?.baseUrl,
             model: settings.modelSelections.chatModel.modelId ?? undefined,
             maxContext: settings.maxContext,
+            autoContext: settings.autoContext,
             temperature: settings.temperature,
             provider: chatEndpoint?.baseUrl
               ? (() => {

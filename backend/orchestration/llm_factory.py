@@ -96,13 +96,18 @@ def load_llm_config_from_settings() -> Optional[Dict[str, Any]]:
     if not model_id:
         model_id = DEFAULT_MODEL
 
-    return {
+    result = {
         "provider": "custom",
         "api_key": endpoint["apiKey"],
         "base_url": endpoint["baseUrl"],
         "model": model_id,
         "temperature": 0.3,
     }
+    # Task 5: include endpoint_id for usage attribution
+    ep_id = endpoint.get("id")
+    if isinstance(ep_id, str) and ep_id.strip():
+        result["endpoint_id"] = ep_id
+    return result
 
 
 def _endpoint_has_required_api_key(
