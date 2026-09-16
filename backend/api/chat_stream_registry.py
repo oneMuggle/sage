@@ -23,11 +23,13 @@ import asyncio
 import contextlib
 import time
 from dataclasses import dataclass, field
-from typing import (  # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscript
+from typing import (
+    # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscript
     Any,
     Callable,
     Dict,
-    List,
+    List,,
+    Optional,
 )
 
 
@@ -137,13 +139,13 @@ class StreamEntry:
     """
 
     queue: BroadcastQueue = field(default_factory=lambda: BroadcastQueue(maxsize=1000))
-    task: asyncio.Task | None = None
+    task: Optional[asyncio.Task] = None
     status: str = "pending"
     created_at: float = field(default_factory=time.time)
     # 最近一次事件入队时间(秒)。长 LLM 调用/编排确认门会长时间静默,
     # sweep 必须 按"最后事件"而非"创建时间"判断, 否则会强杀活跃流。
     last_activity_at: float = field(default_factory=time.time)
-    session_id: str | None = None
+    session_id: Optional[str] = None
     suspended: bool = False
     wake_id: str | None = None
 
@@ -166,8 +168,8 @@ class StreamRegistry:
         self,
         stream_id: str,
         queue_maxsize: int = 1000,
-        producer: ProducerFn | None = None,
-        session_id: str | None = None,
+        producer: Optional[ProducerFn] = None,
+        session_id: Optional[str] = None,
     ) -> StreamEntry:
         """注册新 stream,可选启动 producer task。
 
@@ -277,10 +279,10 @@ class StreamRegistry:
         await entry.queue.put({"state": "suspended", "wake_id": wake_id, "note": note})
         return True
 
-    def get(self, stream_id: str) -> StreamEntry | None:
+    def get(self, stream_id: str) -> Optional[StreamEntry]:
         return self._entries.get(stream_id)
 
-    async def subscribe(self, stream_id: str) -> asyncio.Queue | None:
+    async def subscribe(self, stream_id: str) -> Optional[asyncio.Queue]:
         """为 stream 创建独立消费游标；stream 不存在时返回 None。"""
         entry = self._entries.get(stream_id)
         if entry is None:
