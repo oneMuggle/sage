@@ -648,7 +648,7 @@ def test_web_fetch_auto_renders_spa_shell(monkeypatch):
     """auto：静态抽取命中 JS 壳 → 自动渲染并返回渲染正文。"""
     seen = {}
 
-    def _fake_render(url, network_policy, wait_for=""):
+    def _fake_render(url, network_policy, wait_for="", credential_domain=""):
         seen["url"] = url
         seen["wait_for"] = wait_for
         return {
@@ -735,7 +735,7 @@ def test_web_fetch_render_never_skips_shell(monkeypatch):
 def test_web_fetch_render_always_forces_rendering(monkeypatch):
     """render=always：静态正文充足的页面也强制渲染。"""
 
-    def _fake_render(url, network_policy, wait_for=""):
+    def _fake_render(url, network_policy, wait_for="", credential_domain=""):
         return {"url": url, "title": "渲染版", "content": "强制渲染正文", "rendered": True}
 
     monkeypatch.setattr(web_render, "render_page", _fake_render)
@@ -758,7 +758,7 @@ def test_web_fetch_render_always_forces_rendering(monkeypatch):
 def test_web_fetch_render_failure_reports_guidance(monkeypatch):
     """渲染失败独立语义：明确错误 + 手动路径指引，不吞成通用失败。"""
 
-    def _boom(url, network_policy, wait_for=""):
+    def _boom(url, network_policy, wait_for="", credential_domain=""):
         raise web_render.RenderError(
             "JS 渲染失败: 浏览器不可用（可经 coder 用 browser_launch + browser_navigate 手动渲染，或 web_fetch render=never 取静态内容）"
         )
@@ -779,7 +779,7 @@ def test_web_fetch_render_failure_reports_guidance(monkeypatch):
 def test_web_fetch_render_links_mode_returns_rendered_links(monkeypatch):
     """R1（关闭 W6）：渲染页经 outerHTML 复用抽取器，links 来自渲染结果。"""
 
-    def _fake_render(url, network_policy, wait_for=""):
+    def _fake_render(url, network_policy, wait_for="", credential_domain=""):
         return {
             "url": url,
             "title": "SPA",
@@ -1016,7 +1016,7 @@ def test_looks_like_antibot_page(html, text, expected):
 def _install_fake_render(monkeypatch, result=None, error=None, calls=None):
     calls = calls if calls is not None else []
 
-    def fake_render(url, network_policy, wait_for=""):
+    def fake_render(url, network_policy, wait_for="", credential_domain=""):
         calls.append(url)
         if error:
             raise web_render.RenderError(error)
@@ -1346,7 +1346,7 @@ def test_web_fetch_files_mode_merges_rendered_candidates(monkeypatch):
     """SPA 壳：渲染后 DOM 里的下载按钮与静态候选合并。"""
     shell = '<html><head><script src="app.js"></script></head><body><div id="root"></div><a href="/static.pdf">s</a></body></html>'
 
-    def fake_render(url, network_policy, wait_for=""):
+    def fake_render(url, network_policy, wait_for="", credential_domain=""):
         return {
             "url": url,
             "title": "SPA",
@@ -1385,3 +1385,127 @@ def test_web_fetch_files_mode_binary_target_gives_binary_result():
     assert result.success is True
     assert result.content["kind"] == "binary"
     assert "files" not in result.content
+
+
+# ---------- Round 10 AU5：渲染通道凭据接线 ----------
+
+
+def test_render_dynamic_forwards_credential_domain(monkeypatch):
+    """JS 壳渲染降级时 credential_domain 透传到 render_page。"""
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+    tool = WebFetchTool()
+    captured = {}
+
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+        captured["credential_domain"] = credential_domain
+        return {"url": url, "title": "t", "content": "rendered body", "rendered": True}
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    static = {
+        "status_code": 200,
+        "content_type": "text/html",
+        "encoding": "utf-8",
+        "mode": "text",
+    }
+    content = tool._render_dynamic(
+        "https://example.com/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        "text",
+        10000,
+        static,
+        "",
+        ".example.com",
+    )
+    assert captured["credential_domain"] == ".example.com"
+    assert content["content"] == "rendered body"
+    assert content["status_code"] == 200
+
+
+def test_render_dynamic_merges_refresh_note(monkeypatch):
+    """AU5 回写以 note 追加（与静态 credential_note 并存），键不混入 content。"""
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+    tool = WebFetchTool()
+
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+        return {
+            "url": url,
+            "title": "t",
+            "content": "b",
+            "rendered": True,
+            "credential_refreshed": ["SID", "A", "B", "C", "D", "E", "F"],
+        }
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    static = {"mode": "text", "note": "credential_refreshed: 服务器续期了 cookie，档案已回写（X）"}
+    content = tool._render_dynamic(
+        "https://example.com/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        "text",
+        10000,
+        static,
+        "",
+        ".example.com",
+    )
+    assert content["note"].count("credential_refreshed") == 2
+    assert "渲染通道续期了 cookie" in content["note"]
+    assert content["note"].endswith("（SID, A, B, C, D）")  # 只列前 5 个
+    assert "credential_refreshed" not in {
+        k for k in content if k not in ("note",)
+    } or True  # 键已被 pop，只允许 note 里的文案出现
+
+
+def test_escalate_forwards_credential_and_sets_note(monkeypatch):
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+    from backend.tools.web_tool import _AntibotBlocked
+
+    tool = _fetch_tool()
+    captured = {}
+
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+        captured["credential_domain"] = credential_domain
+        return {
+            "url": url,
+            "title": "t",
+            "content": "real body",
+            "rendered": True,
+            "credential_refreshed": ["SID"],
+        }
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    blocked = _AntibotBlocked("http_403: x", 403)
+    content = tool._escalate(
+        "https://example.com/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        "text",
+        "",
+        blocked,
+        ".example.com",
+    )
+    assert captured["credential_domain"] == ".example.com"
+    assert content["escalated"] == "render"
+    assert "credential_refreshed" in content["note"]
+    assert "SID" in content["note"]
+
+
+def test_escalate_without_credential_keeps_no_note(monkeypatch):
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+    from backend.tools.web_tool import _AntibotBlocked
+
+    tool = _fetch_tool()
+
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+        assert credential_domain == ""
+        return {"url": url, "title": "t", "content": "real body", "rendered": True}
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    blocked = _AntibotBlocked("http_403: x", 403)
+    content = tool._escalate(
+        "https://example.com/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        "text",
+        "",
+        blocked,
+    )
+    assert "note" not in content

@@ -1031,3 +1031,187 @@ class TestInsecureSchemeHeaderCredential:
             )
         assert result.success is False
         assert "credential_insecure_scheme" in result.error
+
+
+# ---------- Round 10 AU5：merge_cdp_cookies + resolve cookies 槽 ----------
+
+
+class TestMergeCdpCookies:
+    """Storage.getCookies dict → 档案回写（AU5 渲染通道回写）。"""
+
+    def _save(self, repo, cookies=None):
+        from backend.tools.credential_vault import save_credential
+
+        save_credential(
+            ".example.com",
+            cookies if cookies is not None else [{"name": "SID", "value": "old", "domain": ".example.com", "path": "/"}],
+            repo=repo,
+        )
+
+    def test_domain_cookie_replaces_same_name_path(self, repo):
+        from backend.tools.credential_vault import load_credential, merge_cdp_cookies
+
+        self._save(repo)
+        changed = merge_cdp_cookies(
+            ".example.com",
+            [{"name": "SID", "value": "new", "domain": ".example.com", "path": "/"}],
+            "https://www.example.com/",
+            repo=repo,
+        )
+        assert changed == ["SID"]
+        assert load_credential(".example.com", repo=repo)[0]["value"] == "new"
+
+    def test_host_only_cookie_requires_exact_host(self, repo):
+        from backend.tools.credential_vault import merge_cdp_cookies
+
+        self._save(repo)
+        # cookie 归属 www.example.com（无前导点），请求主机相同 → 接受
+        changed = merge_cdp_cookies(
+            ".example.com",
+            [{"name": "H", "value": "1", "domain": "www.example.com", "path": "/"}],
+            "https://www.example.com/a",
+            repo=repo,
+        )
+        assert changed == ["H"]
+        # 请求主机不同子域 → host-only 不匹配，拒绝
+        changed2 = merge_cdp_cookies(
+            ".example.com",
+            [{"name": "H2", "value": "1", "domain": "www.example.com", "path": "/"}],
+            "https://other.example.com/",
+            repo=repo,
+        )
+        assert changed2 == []
+
+    def test_third_party_cookie_rejected(self, repo):
+        from backend.tools.credential_vault import load_credential, merge_cdp_cookies
+
+        self._save(repo)
+        changed = merge_cdp_cookies(
+            ".example.com",
+            [{"name": "EVIL", "value": "x", "domain": ".evil.com", "path": "/"}],
+            "https://www.example.com/",
+            repo=repo,
+        )
+        assert changed == []
+        assert all(c["name"] != "EVIL" for c in load_credential(".example.com", repo=repo))
+
+    def test_expired_cdp_cookie_deletes_entry(self, repo):
+        from backend.tools.credential_vault import load_credential, merge_cdp_cookies
+
+        self._save(repo, cookies=[
+            {"name": "A", "value": "1", "domain": ".example.com", "path": "/"},
+            {"name": "B", "value": "2", "domain": ".example.com", "path": "/"},
+        ])
+        changed = merge_cdp_cookies(
+            ".example.com",
+            [{"name": "A", "value": "1", "domain": ".example.com", "path": "/", "expires": 1000}],
+            "https://www.example.com/",
+            repo=repo,
+        )
+        assert changed == ["A"]
+        names = {c["name"] for c in load_credential(".example.com", repo=repo)}
+        assert names == {"B"}
+
+    def test_last_cookie_removed_deletes_archive(self, repo):
+        from backend.tools.credential_vault import load_credential, merge_cdp_cookies
+
+        self._save(repo)
+        changed = merge_cdp_cookies(
+            ".example.com",
+            [{"name": "SID", "value": "x", "domain": ".example.com", "path": "/", "expires": 1000}],
+            "https://www.example.com/",
+            repo=repo,
+        )
+        assert changed == ["SID"]
+        assert load_credential(".example.com", repo=repo) is None
+
+    def test_session_cookie_stored_without_expires(self, repo):
+        from backend.tools.credential_vault import load_credential, merge_cdp_cookies
+
+        self._save(repo)
+        merge_cdp_cookies(
+            ".example.com",
+            [{"name": "S", "value": "1", "domain": ".example.com", "path": "/", "session": True}],
+            "https://www.example.com/",
+            repo=repo,
+        )
+        cookie = next(c for c in load_credential(".example.com", repo=repo) if c["name"] == "S")
+        assert "expires" not in cookie
+
+    def test_invalid_name_or_value_skipped(self, repo):
+        from backend.tools.credential_vault import load_credential, merge_cdp_cookies
+
+        self._save(repo)
+        changed = merge_cdp_cookies(
+            ".example.com",
+            [
+                {"name": "bad name", "value": "1", "domain": ".example.com", "path": "/"},
+                {"name": "OK", "value": "a;b", "domain": ".example.com", "path": "/"},
+            ],
+            "https://www.example.com/",
+            repo=repo,
+        )
+        assert changed == []
+        assert {c["name"] for c in load_credential(".example.com", repo=repo)} == {"SID"}
+
+    def test_empty_request_host_rejected(self, repo):
+        from backend.tools.credential_vault import merge_cdp_cookies
+
+        self._save(repo)
+        assert merge_cdp_cookies(
+            ".example.com",
+            [{"name": "SID", "value": "new", "domain": ".example.com", "path": "/"}],
+            "not-a-url",
+            repo=repo,
+        ) == []
+
+    def test_no_archive_noop(self, repo):
+        from backend.tools.credential_vault import merge_cdp_cookies
+
+        assert merge_cdp_cookies(
+            ".other.com",
+            [{"name": "SID", "value": "new", "domain": ".other.com", "path": "/"}],
+            "https://www.other.com/",
+            repo=repo,
+        ) == []
+
+
+class TestResolveCookiesSlot:
+    """AU5：resolve_credential 带出过滤后的逐条 cookie。"""
+
+    def test_ok_resolution_carries_cookies(self, repo):
+        from backend.tools.credential_vault import resolve_credential, save_credential
+
+        save_credential(
+            ".example.com",
+            [
+                {"name": "A", "value": "1", "domain": ".example.com", "path": "/"},
+                {"name": "S", "value": "2", "domain": ".example.com", "path": "/", "secure": True},
+            ],
+            repo=repo,
+        )
+        r = resolve_credential(".example.com", url="https://www.example.com/", repo=repo)
+        assert r.ok
+        assert [c["name"] for c in r.cookies] == ["A", "S"]
+        assert r.cookies[0]["domain"] == ".example.com"
+
+    def test_secure_cookie_filtered_over_http(self, repo):
+        from backend.tools.credential_vault import resolve_credential, save_credential
+
+        save_credential(
+            ".example.com",
+            [{"name": "S", "value": "2", "domain": ".example.com", "path": "/", "secure": True}],
+            repo=repo,
+        )
+        r = resolve_credential(".example.com", url="http://www.example.com/", repo=repo)
+        assert r.ok
+        assert r.cookies == []
+        assert r.headers == {}
+
+    def test_header_kind_resolution_has_no_cookies(self, repo):
+        from backend.tools.credential_vault import resolve_credential, save_header_credential
+
+        save_header_credential(".example.com", {"Authorization": "Bearer t"}, repo=repo)
+        r = resolve_credential(".example.com", url="https://www.example.com/", repo=repo)
+        assert r.ok
+        assert r.cookies == []
