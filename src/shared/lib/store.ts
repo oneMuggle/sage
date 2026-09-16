@@ -18,6 +18,7 @@ export interface Session {
   last_message_at: number | null;
   message_count: number;
   is_pinned: boolean;
+  is_archived?: boolean;
   metadata?: Record<string, unknown>;
   /** M4: 分叉源会话 id（非分叉会话为 null），侧栏 fork 徽标依赖此字段 */
   fork_root?: string | null;
