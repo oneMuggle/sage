@@ -20,7 +20,10 @@ interface GroupedModel {
 export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
   // Task 6 (2026-09-15): 跳转到 /model-catalog 管理页
   const navigate = useNavigate();
-  const endpointsWithModels = settings.endpoints.filter((ep) => ep.discoveredModels.length > 0);
+  // 防御性检查: discoveredModels 可能在旧数据中缺失
+  const endpointsWithModels = settings.endpoints.filter(
+    (ep) => (ep.discoveredModels ?? []).length > 0,
+  );
 
   if (endpointsWithModels.length === 0) {
     return (
@@ -31,9 +34,10 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
   }
 
   // Build grouped model lists per capability
+  // 防御性检查: discoveredModels 可能在旧数据中缺失
   const groupModels = (capability: DiscoveredModel['capabilities'][number]): GroupedModel[] =>
     endpointsWithModels.flatMap((ep) =>
-      ep.discoveredModels
+      (ep.discoveredModels ?? [])
         .filter((m) => m.capabilities.includes(capability))
         .map((model) => ({ endpointId: ep.id, endpointName: ep.name, model })),
     );
@@ -60,7 +64,8 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
           <h3 className="text-sm font-semibold text-text">模型选择</h3>
           <p className="text-xs text-muted mt-0.5">
             {endpointsWithModels.length} 个端点，共{' '}
-            {endpointsWithModels.reduce((sum, ep) => sum + ep.discoveredModels.length, 0)} 个模型
+            {endpointsWithModels.reduce((sum, ep) => sum + (ep.discoveredModels ?? []).length, 0)}{' '}
+            个模型
           </p>
         </div>
       </div>

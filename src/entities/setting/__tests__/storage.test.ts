@@ -199,4 +199,29 @@ describe('mergeWithDefaults (endpoints / modelSelections deepMerge)', () => {
       DEFAULT_SETTINGS.modelSelections.embeddingModel,
     );
   });
+
+  // 2026-09-16: Win7 安装包旧数据兼容. deepMerge 与空 DEFAULT_SETTINGS.endpoints
+  // 合并时不会补缺失字段; 此处补一次 DEFAULT_ENDPOINT 兜底, 防止
+  // "C.map is not a function" (SessionModelPicker 等下游代码假设 discoveredModels 是数组).
+  it('endpoint 缺 discoveredModels 等字段时补 DEFAULT_ENDPOINT 默认值', () => {
+    const legacyEndpoint = {
+      id: 'ep-old',
+      name: 'Old Endpoint',
+      baseUrl: 'http://legacy',
+      apiKey: 'k',
+      // 故意缺失: protocol, modelId, localModelPath, discoveredModels, lastDiscoveredAt
+    } as unknown as AppSettings['endpoints'][number];
+    const merged = mergeWithDefaults({
+      endpoints: [legacyEndpoint],
+    } as Partial<AppSettings>);
+    const out = merged.endpoints[0];
+    expect(out.discoveredModels).toEqual([]);
+    expect(out.protocol).toBe('openai-compatible');
+    expect(out.modelId).toBe('');
+    expect(out.localModelPath).toBe('');
+    expect(out.lastDiscoveredAt).toBeNull();
+    // 用户值必须保留
+    expect(out.id).toBe('ep-old');
+    expect(out.apiKey).toBe('k');
+  });
 });
