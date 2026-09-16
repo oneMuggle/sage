@@ -66,7 +66,8 @@ export interface Message {
   created_at: number;
   model?: string;
   provider?: string;
-  tool_calls?: ToolCall[];
+  /** wire 上是 JSON 字符串 (session_repo 原样存取), 流式路径是数组 */
+  tool_calls?: ToolCall[] | string | null;
   tool_call_id?: string;
   memory_applied?: number;
   /** R17-E: 记忆召回明细（memory_used 流事件携带，可展开查看） */

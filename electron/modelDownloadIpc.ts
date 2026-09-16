@@ -84,7 +84,13 @@ async function downloadToFile(
       if (download.cancelled) throw new Error('cancelled');
       const buf = chunk as Buffer;
       bytes += buf.length;
-      ws.write(buf);
+      // 2026-09 修复: 无视 write 返回值会把整个文件缓冲进内存 (94MB 模型
+      // 在慢盘上) —— 写缓冲满时等待 drain, 保持稳定背压。
+      if (!ws.write(buf)) {
+        await new Promise<void>((resolve) => {
+          ws.once('drain', resolve);
+        });
+      }
     }
     ws.end();
   } catch (err) {
