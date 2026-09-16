@@ -222,7 +222,10 @@ def test_fill_rejects_output_path_boundaries(simple_template: Path, tmp_path: Pa
     outside = tmp_path.parent / "outside-output.docx"
     outside.write_bytes(b"existing")
     symlink = simple_template.parent / "link.docx"
-    symlink.symlink_to(outside)
+    try:
+        symlink.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not supported")
     req = WordTemplateFillRequest(
         workspace_path=str(simple_template.parent),
         template_path=str(simple_template),
