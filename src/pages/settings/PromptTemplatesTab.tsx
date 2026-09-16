@@ -4,12 +4,17 @@
  * 用户自定义提示词模板的查看/新建/编辑/删除。数据经 promptApi
  * 走后端 /prompts/templates CRUD（KV 存储，上限 100 条）。
  * 斜杠面板（/tpl-<名称>）与该列表共享同一数据源，保存后重载即可见。
+ * r55: 导入同名冲突从"全量覆盖与否"升级为条目级勾选覆盖。
  */
 
 import { Download, Pencil, Plus, RefreshCw, Search, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { promptApi, type PromptTemplate } from '../../shared/api/promptApi';
+import {
+  promptApi,
+  type PromptTemplate,
+  type PromptTemplateEnvelope,
+} from '../../shared/api/promptApi';
 import { tplStorageKey } from '../../widgets/chat/TemplateFillDialog';
 
 const MAX_NAME_LEN = 60;
@@ -130,40 +135,68 @@ export function PromptTemplatesTab() {
   // R30: 模板导入（文件选择 → JSON 解析 → 报告）
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  // r55: 冲突条目级覆盖选择 —— skip 导入发现同名后挂起，面板里挑覆盖谁
+  // （信封来自用户文件，条目由后端逐条校验，这里只关心 templates 形状）
+  const [pendingImport, setPendingImport] = useState<{
+    envelope: PromptTemplateEnvelope;
+    conflicts: string[];
+  } | null>(null);
+  const [conflictSelection, setConflictSelection] = useState<Set<string>>(new Set());
+
+  const reportImport = (r: { imported: number; skipped: number; failed: number }) =>
+    `导入完成：新增 ${r.imported} 条，跳过 ${r.skipped} 条，失败 ${r.failed} 条`;
+
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
     setImporting(true);
     try {
-      const envelope = JSON.parse(await file.text());
-      const report = (r: {
-        imported: number;
-        skipped: number;
-        failed: number;
-      }) => `导入完成：新增 ${r.imported} 条，跳过 ${r.skipped} 条，失败 ${r.failed} 条`;
-      // R32 两阶段：先 skip 导入；有同名冲突时询问是否覆盖重导
+      const envelope = JSON.parse(await file.text()) as PromptTemplateEnvelope;
+      // R32 两阶段 + r55 条目级选择：先 skip 导入；同名冲突挂起待用户挑选
       const first = await promptApi.importTemplates(envelope, 'skip');
       if (first.conflicts && first.conflicts.length > 0) {
-        const ok = window.confirm(
-          `发现 ${first.conflicts.length} 条同名模板（${first.conflicts.join('、')}）。是否用导入内容覆盖现有模板？`,
-        );
-        if (!ok) {
-          window.alert(report(first));
-          await load();
-          return;
-        }
-        const second = await promptApi.importTemplates(envelope, 'overwrite');
-        window.alert(report(second));
-      } else {
-        window.alert(report(first));
+        setPendingImport({ envelope, conflicts: first.conflicts });
+        setConflictSelection(new Set(first.conflicts));
+        return;
       }
+      window.alert(reportImport(first));
       await load();
     } catch {
       setError('导入失败：文件需为 Sage 导出的模板 JSON');
     } finally {
       setImporting(false);
     }
+  };
+
+  // 覆盖选中项：信封过滤为勾选条目，overwrite 重导（保留现有 id 不断链）
+  const handleConflictOverwrite = async () => {
+    if (!pendingImport) return;
+    setImporting(true);
+    try {
+      const subset = {
+        ...pendingImport.envelope,
+        templates: (pendingImport.envelope.templates ?? []).filter(
+          (t) =>
+            !!t &&
+            typeof t === 'object' &&
+            conflictSelection.has(String((t as { name?: unknown }).name ?? '')),
+        ),
+      } as PromptTemplateEnvelope;
+      const second = await promptApi.importTemplates(subset, 'overwrite');
+      window.alert(reportImport(second));
+      setPendingImport(null);
+      await load();
+    } catch {
+      setError('覆盖导入失败');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleConflictSkip = () => {
+    setPendingImport(null);
+    setConflictSelection(new Set());
   };
 
   return (
@@ -238,6 +271,55 @@ export function PromptTemplatesTab() {
         <p className="text-xs text-error" data-testid="prompts-error">
           {error}
         </p>
+      )}
+
+      {pendingImport && (
+        <div
+          className="p-3 rounded-radius-sm border border-amber-500/40 bg-amber-500/5 space-y-2"
+          data-testid="prompts-conflict-panel"
+        >
+          <p className="text-xs text-text">
+            发现 {pendingImport.conflicts.length} 条同名模板。勾选要用导入内容覆盖的条目，
+            未勾选的保留现有版本：
+          </p>
+          <ul className="space-y-1">
+            {pendingImport.conflicts.map((name) => (
+              <li key={name} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  data-testid={`prompts-conflict-check-${name}`}
+                  checked={conflictSelection.has(name)}
+                  onChange={(e) => {
+                    const next = new Set(conflictSelection);
+                    if (e.target.checked) next.add(name);
+                    else next.delete(name);
+                    setConflictSelection(next);
+                  }}
+                />
+                <span className="text-xs text-text font-mono">{name}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              data-testid="prompts-conflict-overwrite"
+              disabled={importing || conflictSelection.size === 0}
+              onClick={() => void handleConflictOverwrite()}
+              className="px-2.5 py-1 text-xs rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover disabled:opacity-50"
+            >
+              覆盖选中项（{conflictSelection.size}）
+            </button>
+            <button
+              type="button"
+              data-testid="prompts-conflict-skip"
+              onClick={handleConflictSkip}
+              className="px-2.5 py-1 text-xs rounded-radius-sm border border-border text-muted hover:text-text"
+            >
+              保留现有
+            </button>
+          </div>
+        </div>
       )}
 
       {form && (
