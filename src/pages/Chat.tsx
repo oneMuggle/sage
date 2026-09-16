@@ -52,6 +52,7 @@ export function Chat() {
     messages,
     isLoading,
     error,
+    errorSessionId,
     clearError,
     sendMessage,
     interrupt,
@@ -752,8 +753,10 @@ export function Chat() {
             />
           )}
 
-          {/* R17-D: 顶层错误内联条 —— 保留历史可见（替代旧整页 ErrorState） */}
-          {error && (
+          {/* R17-D: 顶层错误内联条 —— 保留历史可见（替代旧整页 ErrorState）
+              2026-09 修复: 只渲染归属当前会话的错误, 后台会话失败不再串台;
+              且"重试"因此必然作用于出错会话本身 */}
+          {error && errorSessionId === currentSessionId && (
             <div
               className="mx-4 mt-2 flex items-start justify-between gap-3 px-3 py-2 rounded border border-error/40 bg-error/5"
               data-testid="chat-inline-error"

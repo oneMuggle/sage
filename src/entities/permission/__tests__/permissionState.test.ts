@@ -18,7 +18,7 @@ function makeRequest(overrides: Partial<PermissionRequest> = {}): PermissionRequ
 
 describe('usePermissionState', () => {
   beforeEach(() => {
-    usePermissionState.setState({ currentRequest: null });
+    usePermissionState.setState({ currentRequest: null, pendingBySession: {} });
   });
 
   it('initial state: no pending request', () => {
@@ -39,9 +39,15 @@ describe('usePermissionState', () => {
     expect(usePermissionState.getState().currentRequest?.tool_name).toBe('terminal');
   });
 
-  it('setFromEvent() replaces an in-flight request (后到者覆盖)', () => {
-    usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'req-1' }));
-    usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'req-2' }));
+  it('setFromEvent() keeps displayed request; later requests queue per session (2026-09 修复)', () => {
+    // 后到者不再覆盖已展示的请求 —— 并行会话 A 卡审批时 B 的请求此前会把
+    // A 顶掉且永不恢复(后端 gate 300s fail-closed, 任务静默失败)。
+    // 现按会话归档: 已展示的保持; 全清后展示最老的剩余请求。
+    usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'req-1' }), 'sess-A');
+    usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'req-2' }), 'sess-B');
+    expect(usePermissionState.getState().currentRequest?.request_id).toBe('req-1');
+    expect(Object.keys(usePermissionState.getState().pendingBySession)).toHaveLength(2);
+    usePermissionState.getState().resolve('sess-A');
     expect(usePermissionState.getState().currentRequest?.request_id).toBe('req-2');
   });
 
@@ -56,11 +62,14 @@ describe('usePermissionState', () => {
     expect(usePermissionState.getState().currentRequest).toBeNull();
   });
 
-  it('updates immutably: setState produces a new request object reference', () => {
+  it('updates immutably: setFromEvent produces a new object per session slot', () => {
     usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'a' }));
     const first = usePermissionState.getState().currentRequest;
     usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'b' }));
-    const second = usePermissionState.getState().currentRequest;
+    // 已展示的请求保持原引用; 新请求进入 pendingBySession 新槽位
+    expect(usePermissionState.getState().currentRequest).toBe(first);
+    const second = usePermissionState.getState().pendingBySession['__global__'];
+    expect(second.request_id).toBe('b');
     expect(second).not.toBe(first);
   });
 });
