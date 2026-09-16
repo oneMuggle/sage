@@ -30,9 +30,7 @@ def telegram_gateway_status():
     bound_chats = 0
     if gateway is not None:
         try:
-            row = gateway._conn().execute(
-                "SELECT COUNT(*) FROM telegram_chats"
-            ).fetchone()
+            row = gateway._conn().execute("SELECT COUNT(*) FROM telegram_chats").fetchone()
             bound_chats = row[0] if row else 0
         except Exception:  # noqa: BLE001 — 统计失败不影响状态上报
             bound_chats = 0
@@ -63,20 +61,20 @@ def list_telegram_binds():
             },
         )
     try:
-        rows = gateway._conn().execute(
-            "SELECT chat_id, session_id, created_at FROM telegram_chats "
-            "ORDER BY created_at DESC"
-        ).fetchall()
+        rows = (
+            gateway._conn()
+            .execute(
+                "SELECT chat_id, session_id, created_at FROM telegram_chats "
+                "ORDER BY created_at DESC"
+            )
+            .fetchall()
+        )
     except Exception as exc:  # noqa: BLE001 — 查询失败按 500 上报
         raise HTTPException(
             status_code=500,
             detail={"type": "bind_query_failed", "message": str(exc)},
         ) from exc
-    return {
-        "binds": [
-            {"chat_id": r[0], "session_id": r[1], "created_at": r[2]} for r in rows
-        ]
-    }
+    return {"binds": [{"chat_id": r[0], "session_id": r[1], "created_at": r[2]} for r in rows]}
 
 
 @router.delete("/gateway/telegram/binds/{chat_id}")
@@ -98,9 +96,7 @@ def unbind_telegram_chat(chat_id: str):
             },
         )
     try:
-        cursor = gateway._conn().execute(
-            "DELETE FROM telegram_chats WHERE chat_id = ?", (chat_id,)
-        )
+        cursor = gateway._conn().execute("DELETE FROM telegram_chats WHERE chat_id = ?", (chat_id,))
         gateway._conn().commit()
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
@@ -142,7 +138,6 @@ def get_telegram_config():
       "allowed_chat_ids": [...], "source": "settings"|"env"|"none"}``
     """
     import os
-
 
     env_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
     node = _read_telegram_settings()
@@ -201,10 +196,140 @@ def update_telegram_config(data: TelegramConfigUpdate):
         app_settings = {}
     app_settings["telegram"] = {
         "bot_token": data.bot_token.strip(),
-        "allowed_chat_ids": [
-            str(c).strip() for c in data.allowed_chat_ids if str(c).strip()
-        ],
+        "allowed_chat_ids": [str(c).strip() for c in data.allowed_chat_ids if str(c).strip()],
         "enabled": bool(data.enabled),
     }
     repo.set_json("app_settings", app_settings)
+    return {"saved": True, "restart_required": True}
+
+
+# ---------------------------------------------------------------------------
+# Round 16: Discord / Slack 平台适配器（状态 + 配置，与 telegram 同形）
+# ---------------------------------------------------------------------------
+
+
+def _platform_status(getter, table: str) -> dict:
+    """平台网关状态统一形状：configured / running / bound_chats / stats。"""
+    gateway = getter()
+    configured = gateway is not None
+    bound_chats = 0
+    if gateway is not None:
+        try:
+            row = gateway._conn().execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+            bound_chats = row[0] if row else 0
+        except Exception:  # noqa: BLE001 — 统计失败不影响状态上报
+            bound_chats = 0
+    return {
+        "configured": configured,
+        "running": configured,
+        "bound_chats": bound_chats,
+        "stats": gateway.stats.__dict__ if gateway else {},
+    }
+
+
+def _read_platform_settings(platform: str) -> dict:
+    from backend.data.settings_repo import SettingsRepository
+
+    app_settings = SettingsRepository().get_json("app_settings") or {}
+    node = app_settings.get(platform) if isinstance(app_settings, dict) else None
+    return node if isinstance(node, dict) else {}
+
+
+def _platform_config(platform: str, token_env: str, ids_env: str) -> dict:
+    """平台网关配置读取（token 打码）；形状与 telegram GET config 一致。"""
+    import os
+
+    env_token = (os.getenv(token_env) or "").strip()
+    node = _read_platform_settings(platform)
+    settings_token = str(node.get("bot_token") or "").strip()
+    if env_token:
+        source = "env"
+        token = env_token
+        enabled = True
+    elif settings_token and node.get("enabled") is not False:
+        source = "settings"
+        token = settings_token
+        enabled = True
+    else:
+        source = "none"
+        token = settings_token or env_token
+        enabled = False
+    raw_ids = node.get("allowed_channel_ids")
+    if env_token:
+        raw_env = (os.getenv(ids_env) or "").strip()
+        raw_ids = raw_env.split(",") if raw_env else []
+    if isinstance(raw_ids, str):
+        raw_ids = raw_ids.split(",")
+    return {
+        "configured": bool(token),
+        "enabled": enabled,
+        "source": source,
+        "bot_token_masked": _mask_token(token),
+        "allowed_channel_ids": [str(c).strip() for c in raw_ids if str(c).strip()],
+    }
+
+
+def _save_platform_config(
+    platform: str, bot_token: str, allowed_channel_ids: List[str], enabled: bool
+) -> None:
+    from backend.data.settings_repo import SettingsRepository
+
+    repo = SettingsRepository()
+    app_settings = repo.get_json("app_settings") or {}
+    if not isinstance(app_settings, dict):
+        app_settings = {}
+    app_settings[platform] = {
+        "bot_token": bot_token.strip(),
+        "allowed_channel_ids": [str(c).strip() for c in allowed_channel_ids if str(c).strip()],
+        "enabled": bool(enabled),
+    }
+    repo.set_json("app_settings", app_settings)
+
+
+class PlatformGatewayConfigUpdate(BaseModel):
+    """``PUT /gateway/{platform}/config`` 请求体（Round 16）。
+
+    bot_token 传空串 = 清除（关闭网关）。
+    """
+
+    bot_token: str = ""
+    allowed_channel_ids: List[str] = []
+    enabled: bool = True
+
+
+@router.get("/gateway/discord/status")
+def discord_gateway_status():
+    """Discord 网关运行状态（形状同 telegram/status）。"""
+    from backend.gateway.discord import get_discord_gateway
+
+    return _platform_status(get_discord_gateway, "gateway_binds")
+
+
+@router.get("/gateway/discord/config")
+def get_discord_config():
+    return _platform_config("discord", "DISCORD_BOT_TOKEN", "DISCORD_ALLOWED_CHANNEL_IDS")
+
+
+@router.put("/gateway/discord/config")
+def update_discord_config(data: PlatformGatewayConfigUpdate):
+    _save_platform_config("discord", data.bot_token, data.allowed_channel_ids, data.enabled)
+    return {"saved": True, "restart_required": True}
+
+
+@router.get("/gateway/slack/status")
+def slack_gateway_status():
+    """Slack 网关运行状态（形状同 telegram/status）。"""
+    from backend.gateway.slack import get_slack_gateway
+
+    return _platform_status(get_slack_gateway, "gateway_binds")
+
+
+@router.get("/gateway/slack/config")
+def get_slack_config():
+    return _platform_config("slack", "SLACK_BOT_TOKEN", "SLACK_ALLOWED_CHANNEL_IDS")
+
+
+@router.put("/gateway/slack/config")
+def update_slack_config(data: PlatformGatewayConfigUpdate):
+    _save_platform_config("slack", data.bot_token, data.allowed_channel_ids, data.enabled)
     return {"saved": True, "restart_required": True}
