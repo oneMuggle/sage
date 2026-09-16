@@ -1835,7 +1835,8 @@ async def chat(
                 "api_key": data.api_key,
                 "base_url": data.api_url,
                 "model": data.model or "gpt-3.5-turbo",
-                "temperature": data.temperature or 0.7,
+                # temperature=0 是合法值 (确定性输出), 不能用 or 兜底
+                "temperature": 0.7 if data.temperature is None else data.temperature,
             }
             logger.info(
                 f"[REQ {request_id}] using custom LLM config: model={_safe_log_field(llm_config['model'])}"
@@ -2169,7 +2170,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     "api_key": data.api_key,
                     "base_url": data.api_url,
                     "model": data.model or "gpt-3.5-turbo",
-                    "temperature": data.temperature or 0.7,
+                    # temperature=0 是合法值 (确定性输出), 不能用 or 兜底
+                    "temperature": 0.7 if data.temperature is None else data.temperature,
                 }
                 # 推理参数:None 时不传,避免污染老 LLM
                 if data.reasoning_effort is not None:
@@ -3055,6 +3057,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         await _extract_legacy_chat_memory(
                             request_id, data.session_id, data.message, done_content
                         )
+                # win7 分支同款防御 (回流): sess 先初始化为 None。否则
+                # session_repo.get 抛错时 except 吞掉后, 下方标题生成判断行
+                # `if done_event and sess` 触发 UnboundLocalError, 一路冒穿
+                # producer —— 用户在内容已全部生成后收到 state=failed,
+                # DONE 事件/标题/session_updated 全部丢失。
+                sess = None
                 try:
                     sess = session_repo.get(data.session_id)
                     if sess is not None:

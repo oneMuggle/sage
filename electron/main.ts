@@ -95,6 +95,7 @@ import { ENABLE_UPDATE_PROVIDERS_UI } from './update/featureFlag';
 import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backendLauncher';
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
 import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
+import { parseOrchEventName } from './eventRouting';
 import { killOrphanedBackendOnPort } from './orphanBackendKiller';
 import { createIncrementalUtf8Decoder } from './incrementalUtf8Decoder';
 import { BackendNotReadyError, invokeBackend } from './invoke';
@@ -620,7 +621,17 @@ export function scheduleBackendRestart(): void {
         if (ready) {
           restartCount = 0;
           mainWindow?.webContents.send('sage:event:backend:reconnected', {});
+          return;
         }
+        // Health check never passed: without this branch the lifecycle stayed
+        // 'starting' forever — every IPC request rejected with
+        // BackendNotReadyError and the renderer never got a final failure.
+        // Kill the unhealthy process; the proc 'exit' handler resets the
+        // lifecycle to idle and schedules the next capped restart attempt.
+        logger.error('main: backend restart failed health check', {
+          attempt: restartCount,
+        });
+        void shutdownBackend();
       });
     });
   }, delay);
@@ -1200,10 +1211,10 @@ async function registerIpcHandlers(): Promise<void> {
 
       // orch-events-{runId}-{afterSeq} dynamic events: relay orchestration run events
       // Format: orch-events-{runId} or orch-events-{runId}-seq-{afterSeq}
-      const orchEventsMatch = event.match(/^orch-events-([^-]+?)(?:-seq-(\d+))?$/);
+      const orchEventsMatch = parseOrchEventName(event);
       if (orchEventsMatch) {
-        const runId = orchEventsMatch[1];
-        const afterSeq = orchEventsMatch[2] ? parseInt(orchEventsMatch[2], 10) : 0;
+        const runId = orchEventsMatch.runId;
+        const afterSeq = orchEventsMatch.afterSeq;
         const abort = new AbortController();
         eventSubscriptions.set(event, abort);
         relayOrchEventsStream(
@@ -2301,7 +2312,27 @@ app.whenReady().then(async () => {
   void updateManager
     ?.onAppStartup(() => mainWindow, BACKEND_URL, () => backendAuthToken)
     .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
-});
+})
+  // Any uncaught exception in the async chain (e.g. a TypeError in startup
+  // code, IPC-handler init hitting an unreadable userData dir) would
+  // otherwise be swallowed and leave the app at a blank splash forever.
+  // Surface it through the same startup-failure dialog so the user sees
+  // what happened and can open the log for the full traceback.
+  .catch(async (err) => {
+    logger.error('main: app.whenReady chain threw', {
+      error: String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    try {
+      updateSplashStage('启动过程发生异常');
+    } catch {
+      // splash may already be closed; the dialog below still must show
+    }
+    await showStartupFailureDialog({
+      reason: '启动过程发生未捕获异常',
+      detail: `启动时检测到未捕获异常:\n${err instanceof Error ? err.message : String(err)}\n\n详情请查看日志文件。`,
+    });
+  });
 
 app.on('window-all-closed', () => {
   // On all platforms (incl. macOS), quit when last window closes.

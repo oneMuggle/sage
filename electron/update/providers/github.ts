@@ -2,6 +2,7 @@
 import type { UpdateProvider, NormalisedRelease, ProviderChannel } from './base';
 import type { GithubConfig } from '../providerConfig';
 import { ProviderError } from './genericHttp';
+import { fetchCompat } from '../../fetchCompat';
 
 const CHANNELS: ProviderChannel[] = [
   { id: 'stable', label: 'Stable', description: '正式版（pre=false）' },
@@ -29,7 +30,7 @@ export function createGithubReleasesProvider(config: {
       const url = wantPrerelease
         ? `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/releases?per_page=10`
         : `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/releases/latest`;
-      const res = await fetch(url, { headers, signal: opts?.signal });
+      const res = await fetchCompat(url, { headers, signal: opts?.signal });
       if (res.status === 401 || res.status === 403) {
         throw new ProviderError(`凭证无效（HTTP ${res.status}）`, res.status);
       }
@@ -48,7 +49,7 @@ export function createGithubReleasesProvider(config: {
     async downloadAsset(release, assetId, opts) {
       const asset = release.assets.find((a) => a.id === assetId);
       if (!asset) throw new ProviderError(`Asset 不存在：${assetId}`, 404);
-      const res = await fetch(asset.downloadUrl, { signal: opts?.signal });
+      const res = await fetchCompat(asset.downloadUrl, { signal: opts?.signal });
       if (!res.ok) {
         throw new ProviderError(`下载失败 HTTP ${res.status}`, res.status);
       }
@@ -64,7 +65,7 @@ export function createGithubReleasesProvider(config: {
     async ping(opts) {
       const start = Date.now();
       try {
-        const res = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}`, {
+        const res = await fetchCompat(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}`, {
           headers,
           signal: opts?.signal,
         });

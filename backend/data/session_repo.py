@@ -461,7 +461,10 @@ def fork_session(
         from backend.data.message_search import get_message_search_index
 
         index = get_message_search_index()
-        for m in session_repo.get_by_session(new_session_id):
+        # win7 分支同款修复 (回流): 必须用 message_repo.get_by_session —
+        # SessionRepository 没有该方法, AttributeError 会被下面的 except
+        # 吞成一条 warning, fork 会话从此永远搜不到。
+        for m in message_repo.get_by_session(new_session_id, limit=100000):
             index.index_message(
                 m.id, m.session_id, m.role, m.content, m.created_at
             )
