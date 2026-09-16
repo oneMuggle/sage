@@ -26,6 +26,8 @@ export interface McpServerStatusEntry {
   last_error: string | null;
   since: number;
   required: boolean;
+  /** R53: 已禁用的工具 id 列表 */
+  disabled_tools?: string[];
 }
 
 export interface McpStatusReport {
@@ -61,6 +63,8 @@ export interface AddMcpServerInput {
 export interface UpdateMcpServerChanges {
   enabled?: boolean;
   timeoutSeconds?: number;
+  /** R53: 工具禁用列表（全量替换语义） */
+  disabledTools?: string[];
 }
 
 export const MCP_NAME_REGEX = /^[a-z0-9_-]{1,64}$/;
@@ -100,6 +104,7 @@ export const mcpClient = {
       name,
       enabled: changes.enabled,
       timeout_seconds: changes.timeoutSeconds,
+      disabled_tools: changes.disabledTools,
     });
   },
 
