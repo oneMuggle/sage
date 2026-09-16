@@ -22,14 +22,19 @@ These omissions are intentional per plan §1.3 "non-goals".
 
 from __future__ import annotations
 
+import contextlib
+import csv
+import io
 import logging
+import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from openpyxl import load_workbook
 
-from .errors import OfficeFileNotFoundError, OfficeParseError
+from .errors import OfficeFileNotFoundError, OfficeParseError, OfficeSizeLimitError
 from .models import (
     ExcelSheetContent,
     OfficeDocStatus,
@@ -46,6 +51,202 @@ logger = logging.getLogger(__name__)
 #: 先尝试 formulas 本地求值（excel_eval.evaluate_workbook），全部公式都
 #: 解析出值的 sheet 不再附此提示；仍有未解析公式时保留。
 _FORMULA_CACHE_NOTE = "公式计算值需在 Excel 中打开后生效"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# CSV（P1-B, office-p1b）—— excel doc_type 下的 .csv 双扩展支持
+#
+# 设计要点：
+# - **标准库 csv 模块**，零第三方依赖 —— win7/py38 bundled 通道没有
+#   pandas，走 openpyxl/pandas 都不可行；
+# - 所有单元格按**字符串**读写（CSV 没有类型系统，不做写回类型推断，
+#   避免 pandas 往返的引号/类型漂移）；
+# - 编码：utf-8-sig（兼容带 BOM）→ gbk（中文 Excel 导出常见）依次
+#   尝试，全失败抛 OfficeParseError；写回统一 utf-8-sig + excel 方言
+#   （QUOTE_MINIMAL, CRLF），Excel/WPS 双击可开；
+# - 行数硬上限 MAX_CSV_ROWS（读超限抛 OfficeSizeLimitError，防炸预览
+#   与 LLM 上下文）；写回超限同样拒绝。
+# ──────────────────────────────────────────────────────────────────────
+
+#: CSV 读取/写回的行数上限（含表头）
+MAX_CSV_ROWS = 10_000
+
+
+def _read_csv_grid(file_path: Path) -> List[List[str]]:
+    """读 CSV 为字符串网格（utf-8-sig → gbk），行数超限抛 OfficeSizeLimitError。"""
+    raw = file_path.read_bytes()
+    text: Optional[str] = None
+    for encoding in ("utf-8-sig", "gbk"):
+        try:
+            text = raw.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        raise OfficeParseError(
+            f"Failed to decode CSV (tried utf-8/gbk): {file_path.name}",
+            file_path=file_path,
+        )
+    # io.StringIO 而非 splitlines()：splitlines 会把引号字段内的换行
+    # 拆成两行，破坏 CSV 嵌入换行语义。字段内的 CRLF 归一化为 LF
+    # （预览/摘要跨平台一致；写回统一 CRLF 行尾由 csv excel 方言负责）。
+    rows = [
+        [cell.replace(chr(13) + chr(10), chr(10)) for cell in row]
+        for row in csv.reader(io.StringIO(text))
+    ]
+    if len(rows) > MAX_CSV_ROWS:
+        from .errors import OfficeSizeLimitError
+
+        raise OfficeSizeLimitError(
+            actual_size=len(rows),
+            max_size=MAX_CSV_ROWS,
+            file_path=file_path,
+        )
+    return rows
+
+
+def _write_csv_grid(file_path: Path, rows: List[List[str]]) -> None:
+    """原子写回 CSV（utf-8-sig + excel 方言）。"""
+    file_path = Path(file_path)
+    if len(rows) > MAX_CSV_ROWS:
+        from .errors import OfficeSizeLimitError
+
+        raise OfficeSizeLimitError(
+            actual_size=len(rows),
+            max_size=MAX_CSV_ROWS,
+            file_path=file_path,
+        )
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=file_path.name + ".", suffix=".csv-tmp", dir=str(file_path.parent)
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8-sig", newline="") as f:
+            csv.writer(f).writerows(rows)
+        Path(tmp_name).replace(file_path)
+    except Exception:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
+
+
+def read_csv(
+    file_path: Path,
+    *,
+    workspace_path: str = "",
+    document_id: Optional[str] = None,
+    generated_filename: Optional[str] = None,
+    original_filename: Optional[str] = None,
+) -> OfficeExcelReadResult:
+    """读 CSV 为 excel 形状的结构化结果（单 sheet，字符串网格）。
+
+    复用 :class:`OfficeExcelReadResult` 形状 —— 前端 ExcelPreview、
+    chat 摘要与 artifact 结构化预览零改动即可渲染。
+    """
+    file_path = Path(file_path)
+    if not file_path.exists():
+        raise OfficeFileNotFoundError(file_path)
+    if not file_path.is_file():
+        raise OfficeParseError(f"Path is not a regular file: {file_path}", file_path=file_path)
+
+    rows = _read_csv_grid(file_path)
+    max_row = len(rows)
+    max_col = max((len(r) for r in rows), default=0)
+
+    summary = OfficeDocumentSummary(
+        id=document_id or file_path.stem,
+        workspace_path=workspace_path,
+        doc_type=OfficeDocType.EXCEL,
+        original_filename=original_filename or file_path.name,
+        generated_filename=generated_filename or file_path.name,
+        status=OfficeDocStatus.PARSED,
+        created_at=int(time.time() * 1000),
+        updated_at=int(time.time() * 1000),
+        metadata=OfficeDocumentMetadata(file_size_bytes=file_path.stat().st_size),
+        archived_at=None,
+    )
+    sheet = ExcelSheetContent(
+        name=file_path.stem or "csv",
+        rows=rows,
+        max_row=max_row,
+        max_col=max_col,
+    )
+    return OfficeExcelReadResult(summary=summary, sheets=[sheet])
+
+
+def _parse_a1(addr: str) -> Tuple[int, int]:
+    """A1 记法 → (row, col)，均 0-based；非法地址抛 ValueError。"""
+    addr = (addr or "").strip().upper()
+    if not addr:
+        raise ValueError("empty cell address")
+    i = 0
+    while i < len(addr) and addr[i].isalpha():
+        i += 1
+    if i == 0 or i == len(addr):
+        raise ValueError(f"invalid cell address: {addr!r}")
+    col = 0
+    for ch in addr[:i]:
+        col = col * 26 + (ord(ch) - ord("A") + 1)
+    row = int(addr[i:])
+    if row < 1:
+        raise ValueError(f"invalid cell row: {addr!r}")
+    return row - 1, col - 1
+
+
+def update_csv(file_path: Path, ops: List[Dict[str, Any]]) -> Tuple[bool, List[Dict[str, Any]]]:
+    """CSV 编辑器：支持 ``set_cells`` / ``append_rows``（字符串网格语义）。
+
+    op 形状与 xlsx 一致；``=`` 前缀在 CSV 中**不**作公式处理（CSV 没有
+    公式系统，写什么是什么）。all-or-nothing：任一 op 失败不落盘。
+    """
+    file_path = Path(file_path)
+    if not file_path.is_file():
+        raise OfficeFileNotFoundError(file_path)
+    rows = _read_csv_grid(file_path)
+
+    results: List[Dict[str, Any]] = []
+    all_ok = True
+    for op in ops:
+        op_name = str(op.get("op", ""))
+        try:
+            if op_name == "set_cells":
+                cells = op.get("cells")
+                if not isinstance(cells, list) or not cells:
+                    raise ValueError("cells_required")
+                for cell in cells:
+                    r, c = _parse_a1(str(cell.get("addr", "")))
+                    while len(rows) <= r:
+                        rows.append([])
+                    while len(rows[r]) <= c:
+                        rows[r].append("")
+                    rows[r][c] = str(cell.get("value", ""))
+                results.append({"op": op_name, "ok": True, "cells": len(cells)})
+            elif op_name == "append_rows":
+                new_rows = op.get("rows")
+                if not isinstance(new_rows, list) or not new_rows:
+                    raise ValueError("rows_required")
+                for row in new_rows:
+                    if not isinstance(row, list):
+                        raise ValueError("row_must_be_array")
+                    rows.append([str(v) for v in row])
+                results.append({"op": op_name, "ok": True, "rows": len(new_rows)})
+            else:
+                all_ok = False
+                results.append(
+                    {"op": op_name, "ok": False, "error": f"unsupported_op: {op_name}"}
+                )
+                break
+        except ValueError as exc:
+            all_ok = False
+            results.append({"op": op_name, "ok": False, "error": str(exc)})
+            break
+
+    if all_ok:
+        try:
+            _write_csv_grid(file_path, rows)
+        except OfficeSizeLimitError as exc:
+            all_ok = False
+            results.append({"op": "write_back", "ok": False, "error": str(exc)})
+    return all_ok, results
 
 #: 数值类型元组常量：py38 兼容（isinstance 的 ``int | float`` 写法需 3.10+），
 #: 同时绕开 ruff UP038（同 errors.py 的 _WRITE_FAILURE_ERRORS 惯例）。

@@ -44,6 +44,8 @@ import {
   buildManagedPath,
   extensionForDocType,
   getOpenDialogFilters,
+  isAllowedExtensionForDocType,
+  isLegacyExtensionForDocType,
   isPathWithinWorkspace,
   type ImportedOfficeFile,
   type OfficeDocType,
@@ -139,7 +141,16 @@ async function stageImportedFile(
 
   const ext = extensionForDocType(docType);
   const originalName = path.basename(sourcePath);
-  const finalName = replaceExtension(originalName, ext);
+  // P1-B/P1-C: 原始扩展名已是该 docType 合法扩展（excel + .csv）或旧格式
+  // （.doc/.xls/.ppt，staging 后就地转换）时保留原名 —— 字节与扩展名必须
+  // 一致，改名会导致读取端解析失败。
+  const originalExt = path.extname(originalName).replace(/^\./, '');
+  const finalName =
+    isAllowedExtensionForDocType(docType, originalExt) ||
+    isLegacyExtensionForDocType(docType, originalExt)
+
+    ? originalName
+    : replaceExtension(originalName, ext);
   const stagingDir = path.join(workspacePath, 'office', docType, importToken);
   // Await both calls: without `await`, the `mkdir` promise can reject
   // asynchronously (e.g. permission denied) AFTER `copyFile` has already

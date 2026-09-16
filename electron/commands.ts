@@ -789,6 +789,13 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // NOTE: PdfDataRequest is extra="forbid" — officeApi.readPdfData must
   // send ONLY workspacePath + filePath.
   office_pdf_data: { method: 'POST', path: () => '/api/v1/office/pdf/data' },
+  // P1-C (office-p1c): 旧格式 (.doc/.xls/.ppt) staging 副本 → 现代格式
+  // 就地转换（soffice）。LegacyImportRequest extra=forbid — 只发
+  // workspacePath + filePath。
+  office_import_convert_legacy: {
+    method: 'POST',
+    path: () => '/api/v1/office/import/convert-legacy',
+  },
   // include_archived (item 1.7): archive-restore UI lists soft-deleted rows.
   // Path builder reads the raw camelCase arg and serializes snake_case into
   // the query string (query args are NOT auto-translated by invokeBackend).

@@ -61,6 +61,11 @@ from backend.office.journal.persistence import (
     save_spec,
 )
 from backend.office.journal.validator import validate_document
+from backend.office.legacy_import import (
+    LegacyImportRequest,
+    LegacyImportResult,
+    convert_legacy_import,
+)
 from backend.office.models import (
     BibTeXParseRequest,
     BibTeXParseResponse,
@@ -742,6 +747,16 @@ def read_pdf_endpoint(req: PdfReadRequest) -> PdfReadResult:
 #: F3 (office-p0): 原文预览上限 —— 与 chat 产物侧 artifact_reader.MAX_PDF_BYTES
 #: 同口径（过大 PDF base64 化既撑爆响应也拖垮 renderer）。
 MAX_PDF_DATA_BYTES = 20_000_000
+
+
+@router.post("/import/convert-legacy", response_model=LegacyImportResult)
+def convert_legacy_import_endpoint(req: LegacyImportRequest) -> LegacyImportResult:
+    """P1-C: 旧格式 (.doc/.xls/.ppt) 暂存文件 → 现代格式就地转换。
+
+    源文件必须是 workspace 内的 staging 副本（导入网关先复制、后转换，
+    因此不产生工作区外任意读）。失败契约与 export_pdf 一致：永不 raise。
+    """
+    return convert_legacy_import(req)
 
 
 @router.post("/pdf/data", response_model=PdfDataResult)

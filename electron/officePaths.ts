@@ -72,18 +72,18 @@ export interface OfficeDialogFilterMap {
 }
 
 const PPTX_FILTER: OfficeDialogFilter = {
-  name: 'PowerPoint Presentation (.pptx)',
-  extensions: ['pptx'],
+  name: 'PowerPoint Presentation (.pptx, .ppt)',
+  extensions: ['pptx', 'ppt'],
 };
 
 const DOCX_FILTER: OfficeDialogFilter = {
-  name: 'Word Document (.docx)',
-  extensions: ['docx'],
+  name: 'Word Document (.docx, .doc)',
+  extensions: ['docx', 'doc'],
 };
 
 const XLSX_FILTER: OfficeDialogFilter = {
-  name: 'Excel Workbook (.xlsx)',
-  extensions: ['xlsx'],
+  name: 'Excel Workbook (.xlsx, .xls)',
+  extensions: ['xlsx', 'xls'],
 };
 
 const PDF_FILTER: OfficeDialogFilter = {
@@ -140,6 +140,29 @@ const DOC_TYPE_EXTENSION: Record<OfficeDocType, string> = {
   excel: 'xlsx',
   pdf: 'pdf',
 };
+
+/**
+ * P1-C (office-p1c): legacy extensions importable per doc type. A staged
+ * legacy copy KEEPS its original extension (renaming .doc → .docx would
+ * desync bytes from extension); the backend converts it in place right
+ * after staging (POST /office/import/convert-legacy, soffice-backed).
+ */
+const DOC_TYPE_LEGACY_EXTENSIONS: Partial<Record<OfficeDocType, readonly string[]>> = {
+  word: ['doc'],
+  excel: ['xls'],
+  ppt: ['ppt'],
+};
+
+/** Legacy extension (no dot) this docType accepts on import, if any. */
+export function legacyExtensionForDocType(docType: OfficeDocType): string | null {
+  const list = DOC_TYPE_LEGACY_EXTENSIONS[docType];
+  return list && list.length > 0 ? list[0] : null;
+}
+
+/** Whether `ext` is a legacy extension importable for this docType. */
+export function isLegacyExtensionForDocType(docType: OfficeDocType, ext: string): boolean {
+  return DOC_TYPE_LEGACY_EXTENSIONS[docType]?.includes(ext.toLowerCase()) ?? false;
+}
 
 function assertSafeDocId(documentId: string): void {
   if (!DOC_ID_PATTERN.test(documentId)) {
@@ -257,4 +280,24 @@ export function isPathWithinWorkspace(workspacePath: string, targetPath: string)
  */
 export function extensionForDocType(docType: OfficeDocType): string {
   return DOC_TYPE_EXTENSION[docType];
+}
+
+/**
+ * P1-B (office-p1b): extra allowed extensions per doc type — mirrors
+ * backend/office/path_safety._DOC_TYPE_EXTRA_EXTENSIONS. A csv file
+ * imported under the excel docType keeps its .csv extension (renaming
+ * it to .xlsx would desync the bytes from the extension and openpyxl
+ * would reject it on read).
+ */
+const DOC_TYPE_EXTRA_EXTENSIONS: Partial<Record<OfficeDocType, readonly string[]>> = {
+  excel: ['csv'],
+};
+
+/** Whether `ext` (no leading dot) is a valid on-disk extension for docType. */
+export function isAllowedExtensionForDocType(docType: OfficeDocType, ext: string): boolean {
+  const lowered = ext.toLowerCase();
+  return (
+    lowered === DOC_TYPE_EXTENSION[docType] ||
+    (DOC_TYPE_EXTRA_EXTENSIONS[docType]?.includes(lowered) ?? false)
+  );
 }

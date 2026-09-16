@@ -29,6 +29,7 @@ import type {
   OfficePdfGenerateResult,
   OfficePdfPreviewResult,
   OfficePdfReadRequest,
+  OfficeLegacyImportResult,
   OfficePdfDataResult,
   OfficePdfReadResult,
   OfficePptGenerateRequest,
@@ -129,6 +130,23 @@ export const officeApi = {
    * artifact viewer; expected failures come back as `{ok:false,error}`
    * instead of a thrown transport error.
    */
+  /**
+   * P1-C (office-p1c): convert a staged legacy (.doc/.xls/.ppt) copy
+   * inside the managed workspace into the modern format in place.
+   * Expected failures (soffice missing / conversion error) come back as
+   * `{ok:false,error}` — callers drive the import-discard flow from it.
+   */
+  async convertLegacyImport(req: OfficePdfReadRequest): Promise<OfficeLegacyImportResult> {
+    try {
+      return await invoke<OfficeLegacyImportResult>('office_import_convert_legacy', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
   async readPdfData(req: OfficePdfReadRequest): Promise<OfficePdfDataResult> {
     try {
       return await invoke<OfficePdfDataResult>('office_pdf_data', {
