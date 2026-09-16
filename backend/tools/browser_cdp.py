@@ -465,8 +465,11 @@ def cdp_command(
     connection = _CDPConnection(session)
     try:
         # 浏览器级方法不带 sessionId（Target.* 自身即浏览器级；Browser.* 如
-        # setDownloadBehavior 走浏览器作用域，attach 页面反而可能报错）。
-        if method.startswith(("Target.", "Browser.")) and method not in ("Target.attachToTarget",):
+        # setDownloadBehavior、Storage.* 如 setCookies/getCookies（AU5 渲染
+        # 通道 cookie 注入 / 回写）都走浏览器作用域，attach 页面反而可能报错）。
+        if method.startswith(("Target.", "Browser.", "Storage.")) and method not in (
+            "Target.attachToTarget",
+        ):
             return connection.command(method, params)
         resolved_target = ensure_page_target(session, target_id)
         attached = connection.command(
