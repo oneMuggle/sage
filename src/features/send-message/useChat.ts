@@ -759,15 +759,17 @@ export function useChat() {
       };
 
       handle.finish = () => finishReattach(acc || null);
-      markStreamActive(sid, handle);
+      // A lookup reservation is not a running reply: do not disable idle chat actions.
+      activeStreamRegistry.set(sid, handle);
       try {
         const streamId = await chatApi.activeStream(sid);
-        if (finished) return;
+        if (finished || activeStreamRegistry.get(sid) !== handle) return;
         if (!streamId) {
           finishReattach(null);
           return;
         }
         handle.streamId = streamId;
+        markStreamActive(sid, handle);
         const messageId = crypto.randomUUID();
         assistantId = messageId;
         addMessage({

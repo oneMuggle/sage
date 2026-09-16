@@ -67,6 +67,7 @@ describe('reattach ownership and teardown', () => {
       const first = a.result.current.reattachActiveStream(sid);
       await b.result.current.reattachActiveStream(sid);
       expect(chatApi.activeStream).toHaveBeenCalledTimes(1);
+      expect(a.result.current.isLoading).toBe(false);
       probe.resolve('stream-one');
       await first;
     });
