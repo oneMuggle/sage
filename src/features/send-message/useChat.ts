@@ -80,6 +80,23 @@ const activeStreamRegistry = new Map<string, ActiveStreamHandle>();
  * handle exists (e.g. after a renderer reload) it still best-effort notifies
  * the backend and returns false. Never throws.
  */
+/**
+ * 2026-09 修复: 删除会话的级联清理 —— 旧路径只删 store 里的会话与消息:
+ * 1) 后端 agent 流继续跑, 白白消耗 token; 2) chatStreamStore 的会话槽位
+ * (streaming/toolCalls/taskBoard/todos)永久残留, 迟到事件可能复活死会话
+ * (clearSession 此前全仓库零调用)。顺序: 先取消流(防迟到事件重填),
+ * 再清槽位, 最后删会话记录。
+ */
+export async function deleteSessionCascade(sid: string): Promise<void> {
+  try {
+    await cancelSessionStream(sid);
+  } catch {
+    // 非活跃会话 / 后端未起 —— 忽略, 继续清理本地状态
+  }
+  useChatStreamStore.getState().clearSession(sid);
+  await useStore.getState().deleteSession(sid);
+}
+
 export async function cancelSessionStream(sid: string): Promise<boolean> {
   const handle = activeStreamRegistry.get(sid);
   if (!handle) {

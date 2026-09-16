@@ -624,8 +624,11 @@ async def lifespan(app: FastAPI):
     # 矛盾默认值的巧合而非设计); hex /chat 是否挂载由模块级 API_MODE 决定。
     from backend.api.hex_routes import get_chat_service
 
-    app.dependency_overrides[get_chat_service] = _build_chat_service
+    # 2026-09 修复: 覆盖工厂此前每个请求都新建 ChatService —— prompt
+    # 快照缓存(_system_prompt_snapshots)跨请求永不命中, app.state 上的
+    # 单例反而无人使用。注入单例访问器。
     app.state.chat_service = _build_chat_service()
+    app.dependency_overrides[get_chat_service] = lambda: app.state.chat_service
     # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
     # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
     app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
