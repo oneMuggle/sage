@@ -427,10 +427,10 @@ def test_override_tombstone_survives_set_delete_cycles(repo):
 
 
 def test_delete_nonexistent_override_raises(repo):
-    """Deleting when no override exists raises CatalogNotFound."""
-    from backend.model_catalog.snapshots import CatalogNotFound
+    """Deleting when no override exists raises CatalogNotFoundError."""
+    from backend.model_catalog.snapshots import CatalogNotFoundError
 
-    with pytest.raises(CatalogNotFound):
+    with pytest.raises(CatalogNotFoundError):
         repo.delete_override(endpoint(), expected_revision=0)
 
 

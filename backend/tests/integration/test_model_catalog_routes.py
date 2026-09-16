@@ -583,7 +583,7 @@ class TestGetSnapshots:
 
 
 # ---------------------------------------------------------------------------
-# GET /snapshots/{id}/diff
+# GET /snapshots/{id}/diff  # noqa: ERA001 - section heading, not commented-out code
 # ---------------------------------------------------------------------------
 
 
@@ -653,7 +653,7 @@ class TestApplyAndIgnore:
 
 
 # ---------------------------------------------------------------------------
-# GET /snapshots/{id}/export
+# GET /snapshots/{id}/export  # noqa: ERA001 - section heading, not commented-out code
 # ---------------------------------------------------------------------------
 
 

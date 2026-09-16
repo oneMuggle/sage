@@ -115,9 +115,9 @@ from backend.application.services.chat_service import ChatService
 from backend.application.services.wake_store import get_wake_store
 from backend.data.database import Database
 from backend.data.session_repo import MessageRepository, SessionRepository
-from backend.model_catalog.repository import CatalogRepository
 from backend.domain.wake import Wake
 from backend.memory import get_memory_manager
+from backend.model_catalog.repository import CatalogRepository
 from backend.orchestration.wake_scheduler import WakeScheduler
 from backend.services.scheduler import (
     get_scheduler_service,

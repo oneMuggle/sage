@@ -6,6 +6,7 @@
  * - 409 后应刷新 effective 拿回最新 revision + 字段
  * - delete 返回的 revision 是 monotonic tombstone (current+1), 不是 0
  */
+/* eslint-disable import/order -- test fixture (vi.hoisted + parent type import require this exact ordering) */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CandidateModel, EffectiveModel } from '../../../entities/model-catalog/types';

@@ -101,7 +101,7 @@ async def resolve_and_validate_upstream_host(parsed) -> str:
                 loop.run_in_executor(executor, _resolve_addresses, host, port),
                 timeout=DNS_TIMEOUT_SECONDS,
             )
-        except (asyncio.TimeoutError, TimeoutError, socket.gaierror, OSError):
+        except (TimeoutError, socket.gaierror, OSError):
             raise ValueError("DNS resolution failed") from None
     finally:
         semaphore.release()

@@ -525,7 +525,6 @@ describe('R33: 协议级模型发现 (anthropic / gemini / ollama)', () => {
   });
 });
 
-
 describe('R49: 非 openai 协议级补充测试', () => {
   it('anthropic 对话连通：POST /v1/messages 解析 content[0].text', async () => {
     mockFetch(async (url, init) => {
@@ -583,12 +582,7 @@ describe('R49: 非 openai 协议级补充测试', () => {
       expect(body.stream).toBe(false);
       return makeJsonResponse(200, { message: { content: 'pong from ollama' } });
     });
-    const result = await testEndpointConnection(
-      'http://localhost:11434',
-      '',
-      'llama3',
-      'ollama',
-    );
+    const result = await testEndpointConnection('http://localhost:11434', '', 'llama3', 'ollama');
     expect(result.success).toBe(true);
     expect(result.message).toContain('对话连通');
   });

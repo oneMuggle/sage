@@ -18,7 +18,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -603,17 +603,16 @@ class UsageTracker:
         eff_window = None
         if last and last.get("model"):
             try:
-                from backend.model_catalog.context import effective_window
-                from backend.model_catalog.repository import CatalogRepository
-                from backend.model_catalog.schemas import EndpointKey, ContextLimits
                 from backend.data.database import get_database
                 from backend.data.settings_canonicalizer import to_camel
                 from backend.data.settings_repo import SettingsRepository
+                from backend.model_catalog.context import effective_window
+                from backend.model_catalog.repository import CatalogRepository
+                from backend.model_catalog.schemas import EndpointKey
 
                 raw = SettingsRepository().get_json("app_settings")
                 if isinstance(raw, dict):
                     settings = to_camel(raw)
-                    endpoints = settings.get("endpoints") or []
                     selections = settings.get("modelSelections") or {}
                     chat_sel = selections.get("chatModel") if isinstance(selections, dict) else None
                     ep_id = None

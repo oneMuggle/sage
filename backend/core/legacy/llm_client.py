@@ -13,6 +13,7 @@ import re
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
+from datetime import timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -219,11 +220,12 @@ def _capture_price_snapshot(
     if not endpoint_id or not model_id:
         return None
     try:
+        from datetime import datetime
+
+        from backend.data.database import get_database
         from backend.model_catalog.repository import CatalogRepository
         from backend.model_catalog.schemas import EndpointKey
-        from backend.data.database import get_database
         from backend.services.usage_tracker import PriceSnapshot
-        from datetime import datetime, timezone
 
         repo = CatalogRepository(get_database())
         resolved = repo.resolve(EndpointKey(endpoint_id=endpoint_id, model_id=model_id))
@@ -239,7 +241,7 @@ def _capture_price_snapshot(
             source="catalog",
             currency=getattr(price, "currency", "USD") or "USD",
             method="basic_io",
-            computed_at=datetime.now(timezone.utc).isoformat(),
+            computed_at=datetime.now(timezone.utc).isoformat(),  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10
         )
     except Exception:
         return None  # fail-open: catalog unavailable

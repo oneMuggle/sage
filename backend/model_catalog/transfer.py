@@ -54,7 +54,7 @@ def _identity_tuple(record: CandidateModel) -> tuple:
 
 def _utc_now_z() -> str:
     return (
-        datetime.now(timezone.utc)
+        datetime.now(timezone.utc)  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10, win7 跑 3.8
         .isoformat(timespec="microseconds")
         .replace("+00:00", "Z")
     )
@@ -131,7 +131,7 @@ def encode_bundle(records: list[CandidateModel], source: str) -> bytes:
 
 def decode_bundle(data: bytes | str) -> list[CandidateModel]:
     """Verify the envelope and return the validated records."""
-    if not isinstance(data, (bytes, str)):
+    if not isinstance(data, (bytes, str)):  # noqa: UP038 - Py3.8 win7 LTS requires tuple form
         raise BundleValidationError("bundle must be bytes or str")
     try:
         raw = data if isinstance(data, bytes) else data.encode("utf-8")

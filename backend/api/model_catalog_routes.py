@@ -18,15 +18,15 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ValidationError
 
 from backend.api.local_auth import require_local_auth
-from backend.data.settings_repo import SettingsRepository
 from backend.api.upstream_security import (
     client_for_resolved_address,
     read_response_body_limited,
     resolve_and_validate_upstream_host,
 )
+from backend.data.settings_repo import SettingsRepository
 from backend.model_catalog.repository import CatalogRepository
 from backend.model_catalog.schemas import CandidateModel, EndpointKey
-from backend.model_catalog.snapshots import CatalogConflict, CatalogNotFound
+from backend.model_catalog.snapshots import CatalogConflict, CatalogNotFoundError
 from backend.model_catalog.sources import map_openrouter
 from backend.model_catalog.transfer import (
     BundleValidationError,
@@ -164,7 +164,7 @@ def build_router(repo: Optional[CatalogRepository] = None) -> APIRouter:
         endpoint = EndpointKey(endpoint_id=endpoint_id, model_id=model_id)
         try:
             revision = repository.delete_override(endpoint, expected_revision)
-        except CatalogNotFound:
+        except CatalogNotFoundError:
             raise HTTPException(status_code=404, detail="override not found")
         except CatalogConflict:
             raise HTTPException(status_code=409, detail="override revision changed")

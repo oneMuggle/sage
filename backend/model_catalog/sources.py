@@ -28,7 +28,7 @@ _PER_MILLION = Decimal("1000000")
 
 def _utc_now_z() -> str:
     return (
-        datetime.now(timezone.utc)
+        datetime.now(timezone.utc)  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10, win7 跑 3.8
         .isoformat(timespec="microseconds")
         .replace("+00:00", "Z")
     )
@@ -52,7 +52,7 @@ def _price_per_million(raw) -> Decimal | None:
         return None
     if isinstance(raw, bool):
         return None
-    if isinstance(raw, (int, float)):
+    if isinstance(raw, (int, float)):  # noqa: UP038 - Py3.8 win7 LTS requires tuple form
         raw = str(raw)
     if not isinstance(raw, str) or not raw.strip():
         return None

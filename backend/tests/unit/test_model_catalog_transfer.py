@@ -146,8 +146,8 @@ class TestBundleValidation:
 
     def test_decode_rejects_oversized_input(self):
         from backend.model_catalog.transfer import (
-            BundleValidationError,
             MAX_BUNDLE_BYTES,
+            BundleValidationError,
             decode_bundle,
         )
 

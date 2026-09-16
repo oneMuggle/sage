@@ -9,6 +9,7 @@ Tests verify:
 """
 
 import pytest
+from pydantic import ValidationError
 
 from backend.model_catalog.probes import (
     ProbeResult,
@@ -16,7 +17,6 @@ from backend.model_catalog.probes import (
     detect_service,
     parse_probe,
 )
-
 
 # ---------------------------------------------------------------------------
 # parse_probe: Ollama adapter
@@ -242,7 +242,7 @@ class TestProbeResultModel:
 
     @pytest.mark.parametrize("bad_status", ["failed", "unknown", "", None])
     def test_invalid_status_rejected(self, bad_status):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             ProbeResult(status=bad_status, adapter="test")  # type: ignore[arg-type]
 
 

@@ -20,7 +20,7 @@ class CatalogConflict(Exception):  # noqa: N818 - public contract from the catal
     """Stale revision or terminal review; API callers may map this to HTTP 409."""
 
 
-class CatalogNotFound(Exception):
+class CatalogNotFoundError(Exception):
     """Override or entity not found; API callers may map this to HTTP 404."""
 
 

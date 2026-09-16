@@ -5,10 +5,10 @@ price_snapshot, that old records are not affected by catalog price
 changes, and that unknown prices remain None (not zero).
 """
 
-import pytest
-from decimal import Decimal
 
-from backend.services.usage_tracker import UsageTracker, UsageRecord
+import pytest
+
+from backend.services.usage_tracker import UsageRecord, UsageTracker
 
 
 class TestPriceSnapshot:

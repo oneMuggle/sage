@@ -23,7 +23,7 @@ from .schemas import (
 from .snapshots import (
     FIELDS,
     CatalogConflict,
-    CatalogNotFound,
+    CatalogNotFoundError,
     canonical_json,
     digest,
     field_value,
@@ -118,7 +118,7 @@ class CatalogRepository:
                 "SELECT 1 FROM model_catalog_overrides WHERE endpoint_id=? AND model_id=?",
                 (endpoint.endpoint_id, endpoint.model_id),
             ).fetchone():
-                raise CatalogNotFound("no override to delete")
+                raise CatalogNotFoundError("no override to delete")
             if current.revision != expected_revision:
                 raise CatalogConflict("override revision changed")
             revision = current.revision + 1
