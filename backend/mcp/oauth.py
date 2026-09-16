@@ -19,6 +19,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import secrets
+import time
 from typing import Dict, List, Optional
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -41,6 +42,8 @@ __all__ = [
     "build_authorization_url",
     "validate_authorization_callback",
     "parse_token_response",
+    "is_token_expired",
+    "build_refresh_request",
 ]
 
 
@@ -239,3 +242,48 @@ def parse_token_response(data: object) -> Dict[str, object]:
     if expires is not None and (not isinstance(expires, int) or expires <= 0):
         raise OAuthMetadataError("expires_in 必须是正整数")
     return token
+
+
+def is_token_expired(
+    record: object,
+    now: Optional[float] = None,
+    skew_seconds: int = 60,
+) -> bool:
+    """判定 TokenRecord 是否已过期（expires_at=0 视为不过期）。
+
+    skew_seconds 提前量：剩余寿命不足该值即视为过期，避免把"即将过期"
+    的 token 注入请求后在途中失效。record 为 None 视为无 token（未过期
+    无意义，调用方先判 None）；鸭子类型只读 expires_at，便于测试。
+    """
+    expires_at = float(getattr(record, "expires_at", 0.0) or 0.0)
+    if expires_at <= 0:
+        return False
+    current = time.time() if now is None else float(now)
+    return current >= expires_at - skew_seconds
+
+
+def build_refresh_request(
+    token_endpoint: str,
+    client_id: str,
+    refresh_token: str,
+    scope: Optional[str] = None,
+) -> tuple:
+    """构造刷新请求（RFC 6749 §6）：(url, headers, form 编码 body)。
+
+    token 端点要求 application/x-www-form-urlencoded。
+    """
+    if not token_endpoint:
+        raise OAuthMetadataError("token_endpoint 不能为空")
+    if not client_id:
+        raise OAuthMetadataError("client_id 不能为空")
+    if not refresh_token:
+        raise OAuthMetadataError("refresh_token 不能为空")
+    body: List[tuple] = [
+        ("grant_type", "refresh_token"),
+        ("refresh_token", refresh_token),
+        ("client_id", client_id),
+    ]
+    if scope:
+        body.append(("scope", scope))
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    return token_endpoint, headers, urlencode(body)

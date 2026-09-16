@@ -17,6 +17,7 @@ fail-fast 语义与 stdio 版一致: 通信失败抛 McpClientError。
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import threading
@@ -40,8 +41,17 @@ class _SessionExpiredError(McpClientError):
 class HttpClientMcpClient:
     """Streamable-HTTP 传输的 MCP 客户端（同步接口）。"""
 
-    def __init__(self, config: ServerConfig, http_client: Optional[httpx.Client] = None):
-        """``http_client`` 仅供测试注入 (httpx.MockTransport)。"""
+    def __init__(
+        self,
+        config: ServerConfig,
+        http_client: Optional[httpx.Client] = None,
+        oauth_store: Optional[object] = None,
+    ):
+        """``http_client`` 仅供测试注入 (httpx.MockTransport)。
+
+        ``oauth_store``：OAuth token 存储句柄（r61 切片 2）；None →
+        进程级单例。注入 fake store 便于测试。
+        """
         self._config = config
         self._timeout = max(float(getattr(config, "timeout_seconds", 30.0) or 30.0), _MIN_TIMEOUT)
         self._url = getattr(config, "url", None) or ""
@@ -51,6 +61,13 @@ class HttpClientMcpClient:
         self._started = False
         self._lock = threading.RLock()
         self._client = http_client
+        # r61: OAuth token 存储（None → 进程级单例）；记录不存在 = 无 OAuth
+        if oauth_store is None:
+            from backend.mcp.oauth_store import get_oauth_token_store
+
+            self._oauth_store = get_oauth_token_store()
+        else:
+            self._oauth_store = oauth_store
 
     # ---- 生命周期 ---------------------------------------------------------
 
@@ -132,6 +149,64 @@ class HttpClientMcpClient:
 
     # ---- 内部 ---------------------------------------------------------------
 
+    def _oauth_authorization_header(self) -> Optional[str]:
+        """从 token 存储解析 Authorization 头（r61）。
+
+        过期且可刷新（refresh_token + client_id + token_endpoint 齐备）→
+        同步刷新并回存；刷新失败 → 删除记录、按无 token 继续（fail-open，
+        401 重授权属切片 3）。任何存储异常都不影响普通请求。
+        """
+        try:
+            record = self._oauth_store.load(self._config.name)
+        except Exception as exc:  # 存储故障不阻断请求
+            logger.warning("[MCP-HTTP:%s] OAuth token 读取失败: %s", self._config.name, exc)
+            return None
+        if record is None:
+            return None
+        from backend.mcp.oauth import build_refresh_request, is_token_expired, parse_token_response
+
+        if is_token_expired(record):
+            if not (record.refresh_token and record.client_id and record.token_endpoint):
+                return None
+            try:
+                url, req_headers, body = build_refresh_request(
+                    record.token_endpoint, record.client_id, record.refresh_token, record.scope or None
+                )
+                client = self._client
+                owned = False
+                if client is None:
+                    client = httpx.Client(timeout=self._timeout)
+                    owned = True
+                try:
+                    resp = client.post(url, content=body, headers=req_headers)
+                    resp.raise_for_status()
+                finally:
+                    if owned:
+                        client.close()
+                token = parse_token_response(json.loads(resp.text))
+            except Exception as exc:
+                logger.warning(
+                    "[MCP-HTTP:%s] OAuth token 刷新失败，移除记录: %s", self._config.name, exc
+                )
+                with contextlib.suppress(Exception):
+                    self._oauth_store.delete(self._config.name)
+                return None
+            import time as _time
+
+            expires_in = token.get("expires_in") or 0
+            record.access_token = str(token["access_token"])
+            record.token_type = str(token.get("token_type", "Bearer"))
+            record.expires_at = (
+                float(_time.time()) + float(expires_in) if expires_in else 0.0
+            )
+            if isinstance(token.get("refresh_token"), str) and token["refresh_token"]:
+                record.refresh_token = token["refresh_token"]
+            try:
+                self._oauth_store.save(record)
+            except Exception as exc:
+                logger.warning("[MCP-HTTP:%s] OAuth token 回存失败: %s", self._config.name, exc)
+        return f"{record.token_type} {record.access_token}".strip()
+
     def _ensure_started(self) -> None:
         if not self._started:
             raise McpClientError(f"MCP server '{self._config.name}' is not started")
@@ -168,6 +243,12 @@ class HttpClientMcpClient:
             if (isinstance(h_key, str) and isinstance(h_value, str)
                     and h_key.lower() != "mcp-session-id"):
                 headers[h_key] = h_value
+        # r61: OAuth bearer token —— 在 config.headers 之后合并（覆盖静态
+        # Authorization：授权动作晚于配置，新凭据优先）；无 token 记录时
+        # 完全等价于现状。
+        oauth_header = self._oauth_authorization_header()
+        if oauth_header:
+            headers["Authorization"] = oauth_header
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
 
