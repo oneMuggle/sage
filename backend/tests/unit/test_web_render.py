@@ -540,3 +540,142 @@ def test_render_page_writeback_filters_by_domain(monkeypatch):
 
     # OTHER 域不匹配被过滤；HIT 是档案里没有的新 cookie → 回写新增
     assert result["credential_refreshed"] == ["HIT"]
+
+
+# ---------- Round 11 AU3：refresh_credentials + auto_refresh 开关 ----------
+
+
+class _FakeSettingsRepo:
+    def __init__(self, payload: str) -> None:
+        self._payload = payload
+
+    def get(self, key: str):
+        return self._payload
+
+
+def test_auto_refresh_flag(monkeypatch):
+    import json as _json
+
+    from backend.data import settings_repo
+
+    monkeypatch.setattr(
+        settings_repo,
+        "SettingsRepository",
+        lambda: _FakeSettingsRepo(_json.dumps({"auto_refresh_credentials": True})),
+    )
+    assert web_render._auto_refresh_enabled() is True
+    monkeypatch.setattr(
+        settings_repo, "SettingsRepository", lambda: _FakeSettingsRepo("{}")
+    )
+    assert web_render._auto_refresh_enabled() is False
+    monkeypatch.setattr(
+        settings_repo, "SettingsRepository", lambda: _FakeSettingsRepo(None)
+    )
+    assert web_render._auto_refresh_enabled() is False
+
+
+class _RefreshFakeSession:
+    browser_id = "refresh-pool"
+    user_data_dir = "/tmp/unused"
+    profile_name = "default"
+    process = SimpleNamespace(
+        terminate=lambda: None, wait=lambda timeout=None: 0, kill=lambda: None
+    )
+
+    def is_alive(self):
+        return False
+
+
+def _install_refresh(monkeypatch, page: Dict[str, Any], storage_cookies):
+    calls: List[Dict[str, Any]] = []
+
+    def fake_launch(headless, browser_id=None, persistent=False, profile_name="default", **kw):
+        calls.append(
+            {"launch": browser_id, "profile": profile_name, "persistent": persistent}
+        )
+        return _RefreshFakeSession()
+
+    def fake_cdp(session, method, params=None, target_id=None):
+        calls.append({"method": method, "params": params or {}})
+        if method == "Target.createTarget":
+            return {"targetId": "t-refresh"}
+        if method == "Page.navigate":
+            return {}
+        if method == "Storage.setCookies":
+            return {}
+        if method == "Storage.getCookies":
+            return {"cookies": storage_cookies}
+        if method in ("Target.closeTarget", "Page.addScriptToEvaluateOnNewDocument"):
+            return {}
+        raise AssertionError(f"unexpected method {method}")
+
+    def fake_eval(session, expression, target_id):
+        return json.dumps(page)
+
+    monkeypatch.setattr(web_render, "launch_browser", fake_launch)
+    monkeypatch.setattr(web_render, "cdp_command", fake_cdp)
+    monkeypatch.setattr(web_render, "_evaluate_json", fake_eval)
+    return calls
+
+
+def test_refresh_credentials_success(monkeypatch):
+    page = {"url": "https://spa.example/dash", "html": "<html><body>hello</body></html>", "text": "hello"}
+    calls = _install_refresh(
+        monkeypatch,
+        page,
+        [{"name": "SID", "value": "v2", "domain": ".spa.example", "path": "/"}],
+    )
+    repo = _MemRepo()
+    _seed_credential(repo, ".spa.example")
+
+    ok, refreshed = web_render.refresh_credentials(
+        ".spa.example", "https://spa.example/dash", "default", repo=repo
+    )
+
+    assert ok is True
+    assert refreshed == ["SID"]
+    assert calls[0] == {"launch": "refresh-pool", "profile": "default", "persistent": True}
+    assert load_credential_value(repo, ".spa.example") == "v2"
+
+
+def load_credential_value(repo, domain):
+    from backend.tools.credential_vault import load_credential
+
+    return load_credential(domain, repo=repo)[0]["value"]
+
+
+def test_refresh_credentials_login_wall_page_fails(monkeypatch):
+    page = {
+        "url": "https://spa.example/login",
+        "html": "<html><body><input type=password></body></html>",
+        "text": "login",
+    }
+    _install_refresh(
+        monkeypatch,
+        page,
+        [{"name": "SID", "value": "v2", "domain": ".spa.example", "path": "/"}],
+    )
+    repo = _MemRepo()
+    _seed_credential(repo, ".spa.example")
+
+    ok, refreshed = web_render.refresh_credentials(
+        ".spa.example", "https://spa.example/", "default", repo=repo
+    )
+    assert ok is False
+    assert refreshed == []
+
+
+def test_refresh_credentials_skip_injection_when_no_cookies(monkeypatch):
+    page = {"url": "https://spa.example/dash", "html": "<html><body>hi</body></html>", "text": "hi"}
+    calls = _install_refresh(monkeypatch, page, [])
+    repo = _MemRepo()
+    _seed_credential(repo, ".spa.example")
+
+    ok, refreshed = web_render.refresh_credentials(
+        ".spa.example", "https://spa.example/dash", "default", repo=repo
+    )
+    # 档案有 cookie 会注入（remember-me 续期路径）
+    methods = [call.get("method") for call in calls]
+    assert "Storage.setCookies" in methods
+    assert ok is False  # Storage.getCookies 无 cookie → 失败
+    assert refreshed == []

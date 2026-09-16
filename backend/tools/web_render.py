@@ -24,7 +24,7 @@ import json
 import re
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .browser_cdp import (
     RESERVED_BROWSER_ID,
@@ -75,8 +75,31 @@ RENDER_IDLE_TIMEOUT_SECONDS = 300.0
 #: 渲染池持久 profile 的保留目录名（web_access_config.render_persistent 开启时用）
 RENDER_PROFILE_NAME = "render-default"
 
+#: AU3 自动刷新专用保留 browser_id（launch 后立即移出会话表，非用户实例）
+REFRESH_POOL_ID = "refresh-pool"
+
 #: preferences 表的 key（web_access_config，需在 SettingsRepository.KEYS 白名单内）
 SETTINGS_KEY_WEB_ACCESS_CONFIG = "web_access_config"
+
+
+def _auto_refresh_enabled() -> bool:
+    """读 ``web_access_config.auto_refresh_credentials``（AU3，默认关）。
+
+    开启后：带凭据请求被踢到登录页时，若档案记录了来源持久 profile
+    （AU6），用该 profile 静默重导 cookie 并重放一次请求。
+    """
+    try:
+        import json
+
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get(SETTINGS_KEY_WEB_ACCESS_CONFIG)
+        if not raw:
+            return False
+        parsed = json.loads(raw)
+        return bool(isinstance(parsed, dict) and parsed.get("auto_refresh_credentials"))
+    except Exception:  # noqa: BLE001 — 配置失败按关闭处理
+        return False
 
 
 def _render_persistent_enabled() -> bool:
@@ -348,6 +371,107 @@ def _writeback_render_cookies(
     return sorted(set(changed)) or None
 
 
+def refresh_credentials(  # noqa: PLR0911 — 各失败路径独立 return，扁平更直读
+    credential_domain: str,
+    url: str,
+    profile_name: str,
+    repo: Any = None,
+) -> Tuple[bool, List[str]]:
+    """AU3：用来源持久 profile 静默重访 ``url``，把有效 cookie 重导回档案。
+
+    流程：独立持久会话（保留 id ``REFRESH_POOL_ID``，注册后立即移出会话表，
+    不干扰用户实例解析）→ 注入现有档案 cookie（remember-me 场景可直接续期）
+    → 导航 → 登录墙页判定（密码框 + 正文极短）→ ``Storage.getCookies`` 按域
+    ``merge_cdp_cookies`` 回写 → 关标签页并终止会话。
+
+    Returns:
+        (ok, refreshed_names)：ok=False 时 refreshed_names 为空；任何异常吞掉
+        返回失败（调用方回退为原 ``login_required`` 报错，不改变失败语义）。
+    """
+    from urllib.parse import urlparse
+
+    from .credential_vault import (
+        KIND_COOKIE,
+        cookie_domain_matches,
+        looks_like_login_html,
+        merge_cdp_cookies,
+        resolve_credential,
+    )
+
+    credential_domain = (credential_domain or "").strip().lower()
+    profile_name = (profile_name or "").strip()
+    if not credential_domain or not profile_name:
+        return False, []
+
+    resolution = resolve_credential(credential_domain, url=url, repo=repo)
+    inject = list(resolution.cookies) if resolution.ok and resolution.kind == KIND_COOKIE else []
+
+    session: Optional[BrowserSession] = None
+    target_id: Optional[str] = None
+    try:
+        session = launch_browser(
+            headless=True,
+            browser_id=REFRESH_POOL_ID,
+            persistent=True,
+            profile_name=profile_name,
+        )
+        get_browser_manager().remove(REFRESH_POOL_ID)  # 不进会话表：非用户实例
+        created = cdp_command(session, "Target.createTarget", {"url": "about:blank"})
+        target_id = created.get("targetId")
+        if not target_id:
+            return False, []
+        if inject:
+            cdp_command(session, "Storage.setCookies", {"cookies": inject})
+        apply_stealth(session, target_id, command=cdp_command)
+        result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
+        if result.get("errorText"):
+            return False, []
+        wait_page_ready(session, target_id)
+        expression = (
+            "JSON.stringify({url:location.href,"
+            "html:document.documentElement.outerHTML.slice(0,60000),"
+            "text:(document.body&&document.body.innerText||'').slice(0,2000)})"
+        )
+        info = _evaluate_json(session, expression, target_id)
+        page: Dict[str, Any] = {}
+        if isinstance(info, str):
+            try:
+                page = json.loads(info)
+            except ValueError:
+                return False, []
+        html = str(page.get("html") or "")
+        text = str(page.get("text") or "")
+        if looks_like_login_html(html) and len(text.strip()) < 500:
+            return False, []  # profile 也未登录：刷新失败，回退原语义
+        cookies_result = cdp_command(session, "Storage.getCookies", {})
+        host = (urlparse(url or "").hostname or "").lower()
+        if not host:
+            return False, []
+        matched = [
+            c
+            for c in (cookies_result.get("cookies") or [])
+            if isinstance(c, dict)
+            and cookie_domain_matches(host, str(c.get("domain") or ""))
+        ]
+        if not matched:
+            return False, []
+        changed = merge_cdp_cookies(credential_domain, matched, url, repo=repo)
+        return (bool(changed), sorted(set(changed)))
+    except BrowserCDPError:
+        return False, []
+    except Exception:  # noqa: BLE001 — 刷新失败不影响原报错语义
+        return False, []
+    finally:
+        if target_id and session is not None:
+            with contextlib.suppress(BrowserCDPError):
+                cdp_command(session, "Target.closeTarget", {"targetId": target_id})
+        if session is not None:
+            get_browser_manager().remove(REFRESH_POOL_ID)
+            from .browser_cdp import _terminate_session
+
+            _terminate_session(session)
+
+
 def render_page(
     url: str,
     network_policy: Any,
@@ -378,7 +502,11 @@ def render_page(
     credential_domain = (credential_domain or "").strip().lower()
     credential_cookies: List[Dict[str, Any]] = []
     if credential_domain:
-        from .credential_vault import KIND_COOKIE, resolve_credential
+        from .credential_vault import (
+            KIND_COOKIE,
+            looks_like_login_html,
+            resolve_credential,
+        )
 
         resolution = resolve_credential(credential_domain, url=url, repo=repo)
         if resolution.ok and resolution.kind == KIND_COOKIE:
@@ -465,6 +593,13 @@ def render_page(
         rendered["rendered_status"] = status
     if refreshed:
         rendered["credential_refreshed"] = refreshed
+    # AU7：带凭据渲染却落在密码框页（正文极短）→ 登录墙标记
+    if (
+        credential_cookies
+        and looks_like_login_html(html)
+        and len(content_text.strip()) < 500
+    ):
+        rendered["login_wall"] = True
     if html:
         # SN2：渲染后 DOM 交给调用方做候选文件链接嗅探（web_tool 不把它回传给模型）
         rendered["html"] = html
@@ -480,6 +615,7 @@ __all__ = [
     "RenderError",
     "get_renderer_pool",
     "looks_like_js_shell",
+    "refresh_credentials",
     "render_page",
     "wait_page_ready",
 ]

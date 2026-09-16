@@ -1217,3 +1217,70 @@ class TestResolveCookiesSlot:
         r = resolve_credential(".example.com", url="https://www.example.com/", repo=repo)
         assert r.ok
         assert r.cookies == []
+
+
+# ---------- Round 11 AU6/X4：source_profile + encrypted 标记 ----------
+
+
+class TestSourceProfile:
+    def test_save_and_get_source_profile(self, repo):
+        from backend.tools.credential_vault import get_source_profile, save_credential
+
+        save_credential(
+            ".example.com",
+            [{"name": "SID", "value": "v", "domain": ".example.com", "path": "/"}],
+            repo=repo,
+            source_profile="default",
+        )
+        assert get_source_profile(".example.com", repo=repo) == "default"
+
+    def test_no_source_profile_returns_none(self, repo):
+        from backend.tools.credential_vault import get_source_profile, save_credential
+
+        save_credential(
+            ".example.com",
+            [{"name": "SID", "value": "v", "domain": ".example.com", "path": "/"}],
+            repo=repo,
+        )
+        assert get_source_profile(".example.com", repo=repo) is None
+        assert get_source_profile(".missing.com", repo=repo) is None
+
+    def test_list_shows_source_profile(self, repo):
+        from backend.tools.credential_vault import list_credentials, save_credential
+
+        save_credential(
+            ".example.com",
+            [{"name": "SID", "value": "v", "domain": ".example.com", "path": "/"}],
+            repo=repo,
+            source_profile="work",
+        )
+        records = {r["domain"]: r for r in list_credentials(repo=repo)}
+        assert records[".example.com"]["source_profile"] == "work"
+
+
+class TestEncryptedFlag:
+    def test_wrapped_archive_reports_encrypted(self, repo):
+        from backend.tools.credential_vault import list_credentials, save_credential
+
+        save_credential(
+            ".example.com",
+            [{"name": "SID", "value": "v", "domain": ".example.com", "path": "/"}],
+            repo=repo,
+        )
+        records = list_credentials(repo=repo)
+        assert records[0]["encrypted"] is True
+
+    def test_plaintext_downgrade_reports_not_encrypted(self, repo, monkeypatch):
+        from backend.tools import credential_vault
+
+        monkeypatch.setattr(credential_vault, "current_scheme", lambda: "none")
+        monkeypatch.setattr(
+            credential_vault, "encrypt_secret", lambda plaintext, account="default": plaintext
+        )
+        save_credential(
+            ".example.com",
+            [{"name": "SID", "value": "v", "domain": ".example.com", "path": "/"}],
+            repo=repo,
+        )
+        records = credential_vault.list_credentials(repo=repo)
+        assert records[0]["encrypted"] is False
