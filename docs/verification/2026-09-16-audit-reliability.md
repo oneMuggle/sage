@@ -18,10 +18,10 @@ Date: 2026-09-16. This is a partial implementation, not closure of all 18 audit 
 | ID | Status | Implementation / remaining work |
 | --- | --- | --- |
 | 1 | Fixed | Use `with suppress(JobLookupError)` to actually remove jobs; queued automatic callbacks recheck current enabled/existence state. Manual run semantics preserved. |
-| 2 | Pending | Bind scheduled tasks to real selectable sessions rather than `default`. |
-| 3 | Pending | Reset scheduled edit form on open/task changes. |
-| 4 | Pending | Align editable fields and create-enabled state across UI, API, service and persistence. |
-| 5 | Pending | Separate attempted/failed/succeeded one-shot executions and define idempotent retry/manual retry semantics. |
+| 2 | Fixed in batch 2 | Real session selector and server-side existence validation; no default placeholder ID. |
+| 3 | Fixed in batch 2 | Form fields rehydrate on open/task changes; preserved unchanged one-shot timestamps. |
+| 4 | Fixed in batch 2 | Create enabled and PATCH type/schedule/content/session fields are aligned end-to-end. |
+| 5 | Fixed in batch 2 | Persist attempted/failed/succeeded outcomes; failed one-shots pause for explicit, warned manual retry (no automatic replay or exactly-once claim). |
 | 6 | Fixed | Wiki failed/cancelled events end the task and release listeners; listener registration errors surface visibly; reserve pending subscriptions to prevent duplicate registration. |
 | 7 | Pending | Single-flight chat stream reattachment. |
 | 8 | Pending | Store real reattachment cancel/finish handles and enforce exactly-once cleanup. |
@@ -89,3 +89,5 @@ Next batches should preserve paired main/Win7 commits and tests:
 3. MCP creation/configuration and HTTP recovery (#12–14).
 4. Genuine startup health checks and early-failure recovery (#15–16).
 5. Safe staging collector (follow-up to #10), followed by packaging and platform E2E.
+
+Batch 2 verification and PR scope: [scheduled contracts](2026-09-16-scheduled-contracts.md).
