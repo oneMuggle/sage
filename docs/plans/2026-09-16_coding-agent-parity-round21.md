@@ -33,4 +33,8 @@ token 预算（BU2）管"花多少"，任务级 wall-clock（O2）管"单任务�
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A（run 级墙钟上限） | PR #887（squash c4edb78a） | PR #889（cherry-win7-r21，经 e25a859f 落位 9e68bc6a） |
+
+win7 对齐说明：零冲突落位；py3.8 纪律照旧；wall_clock 4 例本地绿。并行流的 #919（alpha39 bump）合并时顺带将本批对齐内容带入 win7 tip。
