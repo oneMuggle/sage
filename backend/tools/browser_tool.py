@@ -37,6 +37,13 @@ from .browser_cdp import (
     get_browser_manager,
     launch_browser,
 )
+from .browser_events import (
+    DEFAULT_WAIT_TIMEOUT,
+    MAX_WAIT_TIMEOUT,
+    get_download_tracker,
+    list_download_dir,
+    start_download_tracking,
+)
 from .file_tool import _record_artifact_safely
 from .network_config import load_network_policy
 from .web_render import wait_page_ready
@@ -295,6 +302,15 @@ class BrowserLaunchTool(BaseTool):
         except BrowserCDPError as exc:
             logger.warning("setDownloadBehavior 失败（不影响启动）: %s", exc)
 
+        # SN3：常驻事件通道跟踪下载（downloadWillBegin / downloadProgress）
+        tracker = start_download_tracking(
+            session.browser_id, session.port, session.ws_path, str(download_dir)
+        )
+        if not tracker.connected:
+            logger.warning(
+                "下载事件通道未建立（browser_downloads 将退化为目录列举）: %s", tracker.error
+            )
+
         return ToolResult(
             success=True,
             content={
@@ -304,6 +320,7 @@ class BrowserLaunchTool(BaseTool):
                 "persistent": session.persistent,
                 "profile_dir": session.user_data_dir,
                 "download_dir": str(download_dir),
+                "download_tracking": bool(tracker.connected),
                 "note": (
                     "用 browser_navigate 打开页面；browser_close 结束会话。"
                     + ("持久 profile 关闭后登录态保留。" if session.persistent else "")
@@ -649,6 +666,135 @@ class BrowserCloseTool(BaseTool):
         )
 
 
+class BrowserDownloadsTool(BaseTool):
+    """列出 / 等待浏览器内触发的下载（Round 5 SN3）。
+
+    ``browser_interact click`` 点了下载按钮之后，模型需要知道：文件叫什么、
+    下完没有、落在哪。事件通道（``browser_events``）把 CDP 的
+    ``Browser.downloadWillBegin/downloadProgress`` 落成状态表；本工具读表、
+    可选阻塞等待全部完成，并把完成文件登记为 artifact。事件通道不可用时
+    退化为列举下载目录（``.crdownload`` 视为进行中）。
+    """
+
+    risk = RiskClass.READ
+    is_blocking = True
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="browser_downloads",
+            description=(
+                "查看受控浏览器里触发的下载（browser_interact 点击下载按钮后调用）："
+                "返回每个下载的 url / 文件名 / 状态 / 字节数 / 最终路径。"
+                "wait_for_complete=true 时阻塞直到全部完成或超时（timeout 秒，默认 60）。"
+                "路径可直接交给 read_file / office 工具。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "browser_id": {"type": "string", "description": "单实例可省略"},
+                    "wait_for_complete": {
+                        "type": "boolean",
+                        "description": "等待进行中的下载全部完成（默认 false）",
+                    },
+                    "timeout": {
+                        "type": "number",
+                        "description": f"等待上限秒数（默认 {DEFAULT_WAIT_TIMEOUT:.0f}，最大 {MAX_WAIT_TIMEOUT:.0f}）",
+                    },
+                },
+                "required": [],
+            },
+        )
+
+    def execute(
+        self,
+        browser_id: str = "",
+        wait_for_complete: bool = False,
+        timeout: float = DEFAULT_WAIT_TIMEOUT,
+        **kwargs: Any,
+    ) -> ToolResult:
+        if kwargs:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: browser_id, wait_for_complete, timeout）"
+                ),
+            )
+        try:
+            session = _resolve_session(browser_id or None)
+        except BrowserCDPError as exc:
+            return _error(exc)
+        try:
+            wait_seconds = float(timeout)
+        except (TypeError, ValueError):
+            return ToolResult(success=False, error="timeout 必须是数字")
+        wait_seconds = max(0.0, min(wait_seconds, MAX_WAIT_TIMEOUT))
+
+        tracker = get_download_tracker(session.browser_id)
+        if tracker is None or not tracker.connected:
+            root = self._policy.workspace_root
+            download_dir = (
+                tracker.download_dir
+                if tracker is not None
+                else str(Path(root) / "downloads" if root else browser_downloads_root())
+            )
+            items = list_download_dir(download_dir)
+            if wait_for_complete and any(i["state"] == "inProgress" for i in items):
+                deadline = time.monotonic() + wait_seconds
+                while time.monotonic() < deadline:
+                    time.sleep(0.5)
+                    items = list_download_dir(download_dir)
+                    if not any(i["state"] == "inProgress" for i in items):
+                        break
+            return ToolResult(
+                success=True,
+                content={
+                    "browser_id": session.browser_id,
+                    "download_dir": download_dir,
+                    "tracking": False,
+                    "downloads": items,
+                    "note": (
+                        "下载事件通道不可用"
+                        + (f"（{tracker.error}）" if tracker is not None and tracker.error else "")
+                        + "，以上为下载目录列举（.crdownload = 进行中）。"
+                    ),
+                },
+            )
+
+        completed_all = True
+        if wait_for_complete:
+            completed_all = tracker.wait_for_complete(wait_seconds)
+        downloads = tracker.snapshot()
+        for record in downloads:
+            if record.get("state") != "completed":
+                continue
+            path = record.get("path") or tracker.resolve_completed_path(record["guid"])
+            record["path"] = path
+            if path and tracker.mark_artifact_recorded(record["guid"]):
+                try:
+                    _record_artifact_safely(str(path), int(record.get("received_bytes") or 0))
+                except Exception:  # noqa: BLE001 — artifact 记录失败不影响结果
+                    logger.warning("browser_downloads artifact 记录失败", exc_info=True)
+        pending = [r for r in downloads if r.get("state") == "inProgress"]
+        content: Dict[str, Any] = {
+            "browser_id": session.browser_id,
+            "download_dir": tracker.download_dir,
+            "tracking": True,
+            "downloads": downloads,
+            "pending": len(pending),
+        }
+        if wait_for_complete and not completed_all:
+            content["note"] = (
+                f"等待 {wait_seconds:.0f}s 后仍有 {len(pending)} 个下载进行中（可再次调用继续等待）"
+            )
+        elif not downloads:
+            content["note"] = (
+                "尚未观察到下载：先用 browser_interact 点击下载按钮 / 链接；"
+                "若链接是直接的文件 URL，也可改用 http_download。"
+            )
+        return ToolResult(success=True, content=content)
+
+
 class BrowserCookiesTool(BaseTool):
     """导出/管理站点凭据档案（cookie 桥，方案 2026-09-13 §2.5；Round 5 AU1/AU4）。
 
@@ -829,6 +975,7 @@ __all__ = [
     "BROWSER_TOOL_NAMES",
     "BrowserCloseTool",
     "BrowserCookiesTool",
+    "BrowserDownloadsTool",
     "BrowserInteractTool",
     "BrowserLaunchTool",
     "BrowserNavigateTool",
@@ -845,5 +992,6 @@ BROWSER_TOOL_NAMES = (
     "browser_interact",
     "browser_screenshot",
     "browser_cookies",
+    "browser_downloads",
     "browser_close",
 )
