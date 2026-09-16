@@ -15,7 +15,10 @@ import {
   type PromptTemplate,
   type PromptTemplateEnvelope,
 } from '../../shared/api/promptApi';
-import { tplStorageKey } from '../../widgets/chat/TemplateFillDialog';
+import {
+  listTplMemoryEntries,
+  tplStorageKey,
+} from '../../widgets/chat/TemplateFillDialog';
 
 const MAX_NAME_LEN = 60;
 const MAX_CONTENT_LEN = 8000;
@@ -467,6 +470,73 @@ export function PromptTemplatesTab() {
           ))}
         </ul>
       )}
+
+      {(() => {
+        // r56: 失联变量记忆 —— 模板已修改/删除后残留的 sage:tplfill: 键
+        const boundKeys = new Set(templates.map((tpl) => tplStorageKey(tpl.content)));
+        const orphans = listTplMemoryEntries().filter((e) => !boundKeys.has(e.key));
+        // loading 中模板清单未就绪，避免把绑定记忆误判成失联
+        if (loading || orphans.length === 0) return null;
+        const remove = (key: string) => {
+          try {
+            window.localStorage.removeItem(key);
+          } catch {
+            // ignore
+          }
+          setMemoryTick((n) => n + 1);
+        };
+        return (
+          <div
+            className="p-3 rounded-radius-sm border border-border space-y-2"
+            data-testid="tplmem-orphans"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-text">
+                失联变量记忆（{orphans.length} 条）—— 对应模板已修改或删除，记忆不再被使用
+              </p>
+              <button
+                type="button"
+                data-testid="tplmem-orphan-clear-all"
+                onClick={() => {
+                  orphans.forEach((e) => remove(e.key));
+                }}
+                className="px-2 py-0.5 text-[11px] rounded-radius-sm border border-border text-muted hover:text-error shrink-0"
+              >
+                全部清除
+              </button>
+            </div>
+            <ul className="space-y-1">
+              {orphans.map((e) => {
+                const preview =
+                  e.values !== null
+                    ? Object.entries(e.values)
+                        .map(([k, v]) => `${k}=${v}`)
+                        .join('，')
+                        .slice(0, 120)
+                    : e.rawPreview || '(值损坏)';
+                return (
+                  <li key={e.key} className="flex items-start justify-between gap-2">
+                    <span className="min-w-0 text-[11px]">
+                      <span className="font-mono text-muted">#{e.hash.slice(0, 8)}</span>
+                      <span className="ml-2 text-text-secondary font-mono break-all">
+                        {preview}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      data-testid={`tplmem-orphan-remove-${e.hash}`}
+                      onClick={() => remove(e.key)}
+                      className="text-[11px] text-error hover:underline shrink-0"
+                    >
+                      删除
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })()}
     </div>
   );
 }
