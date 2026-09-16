@@ -344,3 +344,199 @@ def test_render_page_survives_stealth_failure(fake_time, monkeypatch):
 
     assert result["content"] == "x"
     assert "Page.navigate" in [call["method"] for call in calls]
+
+
+# ---------- Round 10 AU5：渲染通道 cookie 注入 / 回写 ----------
+
+
+class _MemRepo:
+    def __init__(self) -> None:
+        self.data = {}
+
+    def get(self, key):
+        return self.data.get(key)
+
+    def set(self, key, value, value_type="string", category="general"):
+        self.data[key] = value
+
+
+def _install_au5_render(
+    monkeypatch,
+    page_json: str,
+    storage_cookies: List[Dict[str, Any]] = None,
+    fail_method: str = "",
+) -> tuple:
+    """AU5 假体：标准渲染链 + Storage.* 支持，返回 (调用记录, repo)。"""
+    storage_cookies = storage_cookies if storage_cookies is not None else []
+    calls: List[Dict[str, Any]] = []
+    repo = _MemRepo()
+
+    class _StubPool:
+        def acquire(self):
+            return SimpleNamespace()
+
+    def _fake_cdp(session, method, params=None, target_id=None):
+        calls.append({"method": method, "params": params or {}, "target": target_id})
+        if method == fail_method:
+            raise browser_cdp.BrowserCDPError("cdp boom")
+        if method == "Target.createTarget":
+            return {"targetId": "t-render"}
+        if method == "Storage.setCookies":
+            return {"count": len(params.get("cookies") or [])}
+        if method == "Storage.getCookies":
+            return {"cookies": storage_cookies}
+        if method in (
+            "Page.navigate",
+            "Target.closeTarget",
+            "Page.addScriptToEvaluateOnNewDocument",
+        ):
+            return {}
+        raise AssertionError(f"unexpected method {method}")
+
+    def _fake_eval(session, expression, target_id):
+        if "readyState" in expression:
+            return "complete"
+        if "JSON.stringify" in expression:
+            return page_json
+        return 5
+
+    monkeypatch.setattr(web_render, "_pool", _StubPool())
+    monkeypatch.setattr(web_render, "cdp_command", _fake_cdp)
+    monkeypatch.setattr(web_render, "_evaluate_json", _fake_eval)
+    return calls, repo
+
+
+def _seed_credential(repo, domain=".example.com"):
+    from backend.tools.credential_vault import save_credential
+
+    save_credential(
+        domain,
+        [{"name": "SID", "value": "v1", "domain": domain, "path": "/"}],
+        repo=repo,
+    )
+
+
+def test_render_page_injects_cookies_before_navigation(monkeypatch):
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    calls, repo = _install_au5_render(monkeypatch, page_json)
+    _seed_credential(repo, ".spa.example")
+
+    render_page(
+        "https://spa.example/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        credential_domain=".spa.example",
+        repo=repo,
+    )
+
+    methods = [call["method"] for call in calls]
+    assert "Storage.setCookies" in methods
+    assert methods.index("Target.createTarget") < methods.index("Storage.setCookies")
+    assert methods.index("Storage.setCookies") < methods.index("Page.navigate")
+    inject = next(call for call in calls if call["method"] == "Storage.setCookies")
+    cookie = inject["params"]["cookies"][0]
+    assert cookie["name"] == "SID"
+    assert cookie["domain"] == ".spa.example"
+    assert cookie["path"] == "/"
+
+
+def test_render_page_without_credential_skips_storage(monkeypatch):
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    calls, repo = _install_au5_render(monkeypatch, page_json)
+
+    render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE), repo=repo)
+
+    assert "Storage.setCookies" not in [call["method"] for call in calls]
+    assert "Storage.getCookies" not in [call["method"] for call in calls]
+
+
+def test_render_page_header_credential_skips_injection(monkeypatch):
+    from backend.tools.credential_vault import save_header_credential
+
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    calls, repo = _install_au5_render(monkeypatch, page_json)
+    save_header_credential(".spa.example", {"Authorization": "Bearer t"}, repo=repo)
+
+    render_page(
+        "https://spa.example/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        credential_domain=".spa.example",
+        repo=repo,
+    )
+
+    assert "Storage.setCookies" not in [call["method"] for call in calls]
+
+
+def test_render_page_injection_failure_is_render_error(monkeypatch):
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    calls, repo = _install_au5_render(monkeypatch, page_json, fail_method="Storage.setCookies")
+    _seed_credential(repo, ".spa.example")
+
+    with pytest.raises(RenderError, match="cdp boom"):
+        render_page(
+            "https://spa.example/",
+            NetworkPolicy(mode=NetworkMode.ONLINE),
+            credential_domain=".spa.example",
+            repo=repo,
+        )
+
+
+def test_render_page_writeback_merges_refreshed_cookies(monkeypatch):
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    calls, repo = _install_au5_render(
+        monkeypatch,
+        page_json,
+        storage_cookies=[{"name": "SID", "value": "v2", "domain": ".spa.example", "path": "/"}],
+    )
+    _seed_credential(repo, ".spa.example")
+
+    result = render_page(
+        "https://spa.example/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        credential_domain=".spa.example",
+        repo=repo,
+    )
+
+    assert result["credential_refreshed"] == ["SID"]
+    assert "Storage.getCookies" in [call["method"] for call in calls]
+    from backend.tools.credential_vault import load_credential
+
+    assert load_credential(".spa.example", repo=repo)[0]["value"] == "v2"
+
+
+def test_render_page_writeback_failure_is_silent(monkeypatch):
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    calls, repo = _install_au5_render(monkeypatch, page_json, fail_method="Storage.getCookies")
+    _seed_credential(repo, ".spa.example")
+
+    result = render_page(
+        "https://spa.example/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        credential_domain=".spa.example",
+        repo=repo,
+    )
+
+    assert "credential_refreshed" not in result
+    assert result["rendered"] is True
+
+
+def test_render_page_writeback_filters_by_domain(monkeypatch):
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    calls, repo = _install_au5_render(
+        monkeypatch,
+        page_json,
+        storage_cookies=[
+            {"name": "OTHER", "value": "o", "domain": ".other.example", "path": "/"},
+            {"name": "HIT", "value": "h", "domain": ".spa.example", "path": "/"},
+        ],
+    )
+    _seed_credential(repo, ".spa.example")
+
+    result = render_page(
+        "https://spa.example/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        credential_domain=".spa.example",
+        repo=repo,
+    )
+
+    # OTHER 域不匹配被过滤；HIT 是档案里没有的新 cookie → 回写新增
+    assert result["credential_refreshed"] == ["HIT"]
