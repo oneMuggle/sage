@@ -159,6 +159,22 @@ export const officeApi = {
   },
 
   /**
+   * P2-B (office-p2b): raw managed docx base64 for the native docx-preview
+   * renderer (no soffice required). Same 20MB cap and `{ok:false,error}`
+   * failure contract as the PDF original view.
+   */
+  async readWordData(req: OfficePdfReadRequest): Promise<OfficePdfDataResult> {
+    try {
+      return await invoke<OfficePdfDataResult>('office_word_data', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
    * List all office documents in a workspace.
    *
    * Bounded retry is retained here — list is read-only and idempotent,
