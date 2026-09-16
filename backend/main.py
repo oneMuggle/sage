@@ -112,6 +112,7 @@ from backend.api.system_routes import router as system_router
 from backend.api.theme_router import router as theme_router
 from backend.api.usage_routes import router as usage_router
 from backend.api.v1 import updates as updates_router_module
+from backend.api.web_access_routes import router as web_access_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.application.services.chat_service import ChatService
@@ -979,6 +980,7 @@ app.include_router(workspace_router, prefix="/api/v1")
 app.include_router(project_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
 app.include_router(permission_router, prefix="/api/v1")
+app.include_router(web_access_router, prefix="/api/v1")
 # M2 part B: /api/v1/questions/{pending, <id>/answer}（AskUserQuestion）
 app.include_router(question_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")
