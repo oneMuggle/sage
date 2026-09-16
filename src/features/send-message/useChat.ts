@@ -542,7 +542,10 @@ export function useChat() {
                 const streamSnapshot = slots.streaming;
                 const toolCallsSnapshot = slots.streamingToolCalls;
                 // 优先用 lastDoneContent(本步 done.content 全量),否则退回 streaming 累积
-                const stepContent = lastDoneContent ?? streamSnapshot?.content ?? '';
+                // 2026-09 step-by-step: 过滤 THINKING_PLACEHOLDER — 若该步无 content_delta,
+                // streaming.content 仍是初始占位 '🤔 思考中…',不应作为静态内容渲染到气泡
+                const rawContent = lastDoneContent ?? streamSnapshot?.content ?? '';
+                const stepContent = rawContent === THINKING_PLACEHOLDER ? '' : rawContent;
                 const stepReasoning = streamSnapshot?.reasoning ?? '';
                 const completedMessage: Message = {
                   id: assistantId,

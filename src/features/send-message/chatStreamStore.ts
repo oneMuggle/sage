@@ -35,6 +35,7 @@ import type {
   TodoItem,
 } from '../../shared/api';
 import type { Message, ToolCall } from '../../shared/lib/store';
+
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 
 /** 流式消息的临时覆盖层（'🤔 思考中…' + LLM 累积的 content/reasoning） */

@@ -2914,6 +2914,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 内容落盘（DONE 才落盘的旧语义会留下无回复的悬空 user 消息，
             # 已渲染内容重载即丢）。
             streamed_partial_parts: List[str] = []
+            # 2026-09 step-by-step: 当前迭代的 tool_calls 累积,STEP_DONE 时落盘并重置
+            accumulated_tool_calls: list = []
 
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
@@ -3049,8 +3051,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             if accumulated_tool_calls
                             else None
                         )
-                        await _run_db_sync(
-                            message_repo.save,
+                        message_repo.save(
                             DbMessage(
                                 id=str(uuid.uuid4()),
                                 session_id=data.session_id,
