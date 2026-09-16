@@ -28,6 +28,7 @@ ALIASES: Dict[str, str] = {
     # 顶层 snake 历史字段 (legacy schema 残留)
     "model_selections": "modelSelections",
     "max_context": "maxContext",
+    "auto_context": "autoContext",
     "auto_memory": "autoMemory",
     "confirm_delete": "confirmDelete",
     # modelSelections 子层
@@ -59,6 +60,8 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         "endpoints",
         "modelSelections",
         "maxContext",
+        # Task 5 (2026-09-15): auto context window toggle.
+        "autoContext",
         "temperature",
         # Task 1 (2026-08-23): IANA timezone, 默认 Asia/Shanghai, 后端 zoneinfo 校验
         "timezone",

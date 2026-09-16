@@ -473,6 +473,10 @@ export interface ChatConfig {
   apiUrl?: string;
   model?: string;
   maxContext?: number;
+  /** Task 5 (2026-09-15): auto-context resolution flag.
+   * true = backend resolves effective window from catalog; false = use maxContext as fixed cap.
+   */
+  autoContext?: boolean;
   temperature?: number;
   // 推理参数（PR-7a 透传到后端 → LLMConfig → 请求体）
   // - provider: 前端在 settings 选的真实 provider,后端用它路由
@@ -1324,9 +1328,7 @@ export interface WordFormatSpec {
   page?: WordPageSetupSpec;
   body?: WordBodyStyleSpec;
   // Round 20：headings 键扩展到 h4/h5
-  headings?: Partial<
-    Record<'h1' | 'h2' | 'h3' | 'h4' | 'h5', WordHeadingStyleSpec>
-  >;
+  headings?: Partial<Record<'h1' | 'h2' | 'h3' | 'h4' | 'h5', WordHeadingStyleSpec>>;
   title?: WordHeadingStyleSpec;
   header?: WordHeaderFooterSpec;
   footer?: WordHeaderFooterSpec;

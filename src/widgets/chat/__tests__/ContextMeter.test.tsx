@@ -28,6 +28,10 @@ function usageFixture(overrides: Partial<SessionUsage>): SessionUsage {
     last_prompt_tokens: 100_000,
     last_cached_tokens: 0,
     last_at_ms: 1,
+    // Task 5 (2026-09-15): catalog-resolved window for claude-sonnet-4.
+    // Backend resolves via model_catalog and stores in usage_events.last_effective_window
+    // so ContextMeter mirrors the request's actual cap.
+    effective_context_window: 200_000,
     ...overrides,
   };
 }

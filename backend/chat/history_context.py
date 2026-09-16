@@ -47,11 +47,20 @@ _TRUNCATION_NOTICE = (
 )
 
 
-def history_token_budget() -> int:
-    """读取历史 token 预算：env > max(compact 阈值 × 3, 18000)。
+def history_token_budget(
+    effective_window: Optional[int] = None,
+    reserve: int = 16384,
+) -> int:
+    """Task 5: catalog-based history budget.
 
-    任何一层解析失败都静默降级到下一层，本函数永不抛错。
+    Budget = max(0, effective_window - reserve).
+    Falls back to env override or compact_threshold * 3 when no window given.
+
+    Args:
+        effective_window: catalog-resolved context window; None = use legacy fallback.
+        reserve: tokens reserved for system/tools/output (default 16384).
     """
+    # Env override still wins for backward compatibility
     env_raw = os.environ.get(_ENV_HISTORY_BUDGET)
     if env_raw:
         try:
@@ -62,6 +71,12 @@ def history_token_budget() -> int:
             logger.warning(
                 "env %s=%r 不是合法正整数，回退默认预算", _ENV_HISTORY_BUDGET, env_raw
             )
+
+    # Task 5: use catalog-resolved window if available
+    if effective_window is not None and effective_window > 0:
+        return max(0, int(effective_window) - int(reserve))
+
+    # Legacy fallback: compact_threshold * 3, min 18000
     try:
         from backend.chat.compaction import get_compact_threshold
 

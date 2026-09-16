@@ -108,6 +108,7 @@ class SettingsPayload(BaseModel):
     endpoints: Optional[List[EndpointPayload]] = None
     modelSelections: Optional[dict] = None  # noqa: N815
     maxContext: Optional[int] = None  # noqa: N815
+    autoContext: Optional[bool] = None  # noqa: N815
     temperature: Optional[float] = None
     # Task 1 (2026-08-23): IANA timezone 字符串 — 校验下沉到 canonicalizer.
     timezone: Optional[str] = None
@@ -148,6 +149,7 @@ class LegacySettingsPayload(BaseModel):
     endpoints: Optional[List[EndpointPayload]] = None
     modelSelections: Optional[dict] = None  # noqa: N815
     maxContext: Optional[int] = None  # noqa: N815
+    autoContext: Optional[bool] = None  # noqa: N815
     temperature: Optional[float] = None
     # Task 1 (2026-08-23): IANA timezone 字符串 — 校验下沉到 canonicalizer.
     timezone: Optional[str] = None

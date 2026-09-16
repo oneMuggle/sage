@@ -3,6 +3,7 @@
  */
 
 import { clsx } from 'clsx';
+import { useNavigate } from 'react-router-dom';
 
 import type { DiscoveredModel, ModelSelection } from '../../entities/setting/types';
 
@@ -17,6 +18,8 @@ interface GroupedModel {
 }
 
 export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
+  // Task 6 (2026-09-15): 跳转到 /model-catalog 管理页
+  const navigate = useNavigate();
   const endpointsWithModels = settings.endpoints.filter((ep) => ep.discoveredModels.length > 0);
 
   if (endpointsWithModels.length === 0) {
@@ -130,6 +133,23 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
             className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
           />
         </SettingRow>
+        {/* Task 6 (2026-09-15): 自动上下文开关 — 保留固定值 / 未知显示未知 */}
+        <SettingRow
+          label="自动推断上下文窗口"
+          desc="开启时根据模型目录自动选择; 关闭时使用上方的固定值 (catalog 已知时取最小值)"
+        >
+          <label className="text-xs flex items-center gap-2">
+            <input
+              type="checkbox"
+              data-testid="settings-auto-context"
+              checked={settings.autoContext}
+              onChange={(e) => updateSettings({ autoContext: e.target.checked })}
+            />
+            <span className="text-text">
+              {settings.autoContext ? '自动 (目录优先)' : '固定 (使用上方值)'}
+            </span>
+          </label>
+        </SettingRow>
         <SettingRow label="Temperature" desc="控制输出的随机性，0 最确定，1 最随机">
           <input
             type="number"
@@ -140,6 +160,24 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
             onChange={(e) => updateSettings({ temperature: Number(e.target.value) })}
             className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
           />
+        </SettingRow>
+      </div>
+
+      {/* Task 6 (2026-09-15): 跳转到模型目录管理 */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-text">模型目录管理</h3>
+        <SettingRow
+          label="模型目录 (catalog)"
+          desc="管理跨端点的模型价格/上下文窗口/能力标签 — 用户覆盖、快照审核、OpenRouter 同步"
+        >
+          <button
+            type="button"
+            data-testid="settings-open-catalog"
+            onClick={() => navigate('/model-catalog')}
+            className="px-3 py-1.5 text-xs border border-border rounded-radius-sm bg-primary text-text-inverse hover:opacity-90"
+          >
+            打开模型目录
+          </button>
         </SettingRow>
       </div>
     </div>

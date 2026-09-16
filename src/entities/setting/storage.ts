@@ -34,6 +34,7 @@ const TOP_KEYS: ReadonlySet<keyof AppSettings> = new Set([
   'endpoints',
   'modelSelections',
   'maxContext',
+  'autoContext',
   'temperature',
   'timezone',
   'wiki',

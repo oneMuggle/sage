@@ -539,11 +539,15 @@ export const en: Record<TranslationKey, string> = {
   'settings.usage.requestsTable.col.cacheRead': 'Cache read',
   'settings.usage.requestsTable.col.cacheCreation': 'Cache creation',
   'settings.usage.requestsTable.col.cost': 'Cost',
+  'settings.usage.requestsTable.col.endpoint': 'Endpoint',
+  'settings.usage.requestsTable.col.priceSnapshot': 'Price snapshot',
   'settings.usage.requestsTable.empty': 'No request records yet',
   'settings.usage.requestsTable.loadFailed': 'Failed to load request details',
   'settings.usage.requestsTable.prevPage': 'Previous',
   'settings.usage.requestsTable.nextPage': 'Next',
   'settings.usage.requestsTable.pageInfo': '{offset}-{end} of {total}',
+  'settings.usage.requestsTable.yes': 'Yes',
+  'settings.usage.requestsTable.no': '—',
   // L8 PR-C (2026-09-09): trend chart + CSV export
   'settings.usage.trend.title': 'Usage trend',
   'settings.usage.trend.loading': 'Loading trend data…',
@@ -552,6 +556,11 @@ export const en: Record<TranslationKey, string> = {
   'settings.usage.trend.legendCost': 'Cost',
   'settings.usage.trend.loadFailed': 'Failed to load trend data',
   'settings.usage.exportCsv': 'Export CSV',
+  // Task 6 (2026-09-15): cost unknown vs 0, partial-estimate footnote
+  'settings.usage.costUnknown': 'Unknown',
+  'settings.usage.costNote': 'Estimate excludes cache & tier discounts',
+  'settings.usage.partialEstimate': 'Partial',
+  'settings.usage.partialEstimateHint': 'Some requests have unknown cost; total is approximate',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
   'office.title': 'Office Documents',

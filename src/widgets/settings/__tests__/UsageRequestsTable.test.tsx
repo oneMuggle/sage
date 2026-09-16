@@ -21,6 +21,9 @@ const ROW = {
   cache_read_tokens: 70,
   cache_creation_tokens: 30,
   estimated_cost_usd: 0.001,
+  known_cost: true,
+  endpoint_id: 'ep-openai',
+  has_price_snapshot: true,
   created_at_ms: 1700000000000,
   created_at_iso: '2023-11-14T22:13:20Z',
 };
@@ -48,9 +51,9 @@ describe('UsageRequestsTable', () => {
     await waitFor(() => {
       expect(screen.getByTestId('usage-requests-rows')).toBeDefined();
     });
-    // 6 个表头
+    // Task 6 (2026-09-15): 8 个表头 (新增 endpoint + priceSnapshot)
     const headers = screen.getAllByRole('columnheader');
-    expect(headers).toHaveLength(6);
+    expect(headers).toHaveLength(8);
     // 2 行数据 + thead
     const rows = screen.getAllByRole('row');
     expect(rows.length).toBe(2 + 1);
