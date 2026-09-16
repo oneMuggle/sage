@@ -166,10 +166,8 @@ def install() -> bool:
     # v1 的 ValidationError 没有 `.error_count()` 方法, 业务代码在 v1 上
     # AttributeError. 给 ValidationError 类挂一个 `.error_count()` 装饰器
     # 走 `len(self.errors())` 即可跨版本一致.
-    from pydantic import ValidationError as _VE
-
-    if not hasattr(_VE, "error_count"):
-        _VE.error_count = _validation_error_error_count  # type: ignore[attr-defined]
+    if not hasattr(pydantic.ValidationError, "error_count"):
+        pydantic.ValidationError.error_count = _validation_error_error_count  # type: ignore[attr-defined]
 
     return True
 
