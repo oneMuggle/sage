@@ -797,6 +797,8 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // NOTE: PdfDataRequest is extra="forbid" — officeApi.readPdfData must
   // send ONLY workspacePath + filePath.
   office_pdf_data: { method: 'POST', path: () => '/api/v1/office/pdf/data' },
+  // P2-B (office-p2b): 受管 docx 原文 base64（docx-preview 原生渲染）。
+  office_word_data: { method: 'POST', path: () => '/api/v1/office/word/data' },
   // include_archived (item 1.7): archive-restore UI lists soft-deleted rows.
   // Path builder reads the raw camelCase arg and serializes snake_case into
   // the query string (query args are NOT auto-translated by invokeBackend).

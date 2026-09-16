@@ -51,6 +51,7 @@ import type {
 import { useI18n } from '../../shared/lib/i18n';
 import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
 
+import { DocxNativePreview } from './DocxNativePreview';
 import { pollOfficeProgress } from './officeProgress';
 
 export type OfficePreviewData =
@@ -164,6 +165,11 @@ export function OfficePreviewPanel({
     if (fidelityLoading) return;
     if (fidelityOn) {
       setFidelityOn(false);
+      return;
+    }
+    // P2-B: word + 无本机转换器 → 原生渲染模式（不请求 soffice 转换）。
+    if (!fidelityAvailable && preview?.docType === 'word') {
+      setFidelityOn(true);
       return;
     }
     // Cached data URL for the same doc state → instant toggle.
@@ -363,7 +369,8 @@ export function OfficePreviewPanel({
         )}
         {isEditableDocType(preview.docType) && (
           <div className="flex items-center gap-1 shrink-0">
-            {fidelityAvailable && (
+            {/* P2-B: word 无 soffice 时开关仍可用 —— 走 docx-preview 原生渲染 */}
+            {(fidelityAvailable || preview.docType === 'word') && (
               <button
                 type="button"
                 onClick={() => void handleToggleFidelity()}
@@ -459,6 +466,11 @@ export function OfficePreviewPanel({
           title={summary.generated_filename}
           className="w-full h-[32rem] border-0"
           data-testid="office-fidelity-frame"
+        />
+      ) : fidelityOn && preview.docType === 'word' ? (
+        <DocxNativePreview
+          workspacePath={workspacePath ?? summary.workspace_path ?? ''}
+          managedPath={buildManagedPath(workspacePath ?? summary.workspace_path ?? '')}
         />
       ) : (
         <div className="p-4 max-h-96 overflow-y-auto">
