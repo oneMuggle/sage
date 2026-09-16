@@ -78,6 +78,23 @@ describe('GatewayCard', () => {
     });
   });
 
+  it('sends masked token back unchanged when token untouched', async () => {
+    // 回归：保存白名单时 token 框保持打码值 → 原样传回（后端保留已存 token）
+    mockedApi.updateConfig.mockResolvedValue({ saved: true, restart_required: false });
+    render(<GatewayCard />);
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('****ABCD')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('保存'));
+    await waitFor(() => {
+      expect(mockedApi.updateConfig).toHaveBeenCalledWith({
+        bot_token: '****ABCD',
+        allowed_chat_ids: ['42'],
+        enabled: true,
+      });
+    });
+  });
+
   it('unbinds a chat after click', async () => {
     mockedApi.unbind.mockResolvedValue({ chat_id: '42', unbound: true });
     render(<GatewayCard />);
