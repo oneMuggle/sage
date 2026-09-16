@@ -483,6 +483,15 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: python scripts/verify-office-paths.py
 
+      - name: Bundle MSYS2 bash (Win7 installer validation)
+        # Validates scripts/bundle-git-bash.ps1 end-to-end so desktop-build's
+        # electron-builder step finds the expected resources/tools/ tree.
+        # MinGit v2.44.0.2 is the last version with Win7 SP1 support.
+        # CI-only validation; main releases do not bundle this (it's Win7-only).
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: pwsh scripts/bundle-git-bash.ps1
+
       - name: Package (Windows NSIS)
         if: matrix.os == 'windows-latest'
         env:

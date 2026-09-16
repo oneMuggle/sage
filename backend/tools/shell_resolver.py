@@ -15,7 +15,7 @@ from typing import Optional, Tuple
 _POSIX_CANDIDATES: Tuple[Tuple[str, str], ...] = (("/bin/bash", "bash"), ("/bin/sh", "sh"))
 _GIT_BASH_RELATIVE = ntpath.join("Git", "bin", "bash.exe")
 _POWERSHELL_RELATIVE = ntpath.join("System32", "WindowsPowerShell", "v1.0", "powershell.exe")
-_SAGE_BUNDLED_BASH_RELATIVE = ntpath.join("tools", "git-bash", "bin", "bash.exe")
+_SAGE_BUNDLED_BASH_RELATIVE = ntpath.join("resources", "tools", "git-bash", "usr", "bin", "bash.exe")
 _PROGRAM_FILES_CSIDL = (0x0026, 0x002A)
 _FILE_READ_ATTRIBUTES = 0x0080
 _FILE_SHARE_ALL = 0x00000007

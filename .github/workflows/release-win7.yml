@@ -73,6 +73,13 @@ jobs:
         shell: pwsh
         run: pwsh scripts/bundle-python.ps1
 
+      - name: Bundle MSYS2 bash (Win7 LTS)
+        # shell_resolver._find_windows_bash() third-priority candidate.
+        # MinGit v2.44.0.2 is the last version with Win7 SP1 support;
+        # newer versions use BCrypt APIs absent on Win7.
+        shell: pwsh
+        run: pwsh scripts/bundle-git-bash.ps1
+
       - name: Verify build manifest
         shell: pwsh
         run: |
