@@ -43,6 +43,8 @@ def test_default_seed_coder_uses_current_tool_names():
     / symbol_search / browser_*（Phase-2 + G7）。
     2026-09-09 (round5 批次 D): git 扩面三件——branch/checkout/stash
     （coder 的多分支/实验现场管理刚需，*GIT_TOOLS 展开自动带上）。
+    alpha.36 (Bug #5): 沙箱代码执行 —— repl / execute_code 进 coder 白名单
+    （coder 是 executor，沙箱工具天然属执行域）。
     """
     coder = next(a for a in profiles.create_default_agents() if a.id == "coder")
     assert coder.tools == [
@@ -75,6 +77,9 @@ def test_default_seed_coder_uses_current_tool_names():
         "browser_screenshot",
         "browser_cookies",
         "browser_close",
+        # alpha.36 (Bug #5): 沙箱代码执行
+        "repl",
+        "execute_code",
     ]
 
 
