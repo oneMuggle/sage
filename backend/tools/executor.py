@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.tools.base import BaseTool
 
@@ -48,7 +48,7 @@ def truncate_output(output: str, max_output_bytes: int) -> Tuple[str, dict]:
     }
 
 
-def required_args_error(tool: BaseTool, missing: list[str]) -> str:
+def required_args_error(tool: BaseTool, missing: List[str]) -> str:
     """required 参数缺失的统一错误文案（中文 + JSON-schema 风格）。"""
     name = getattr(tool, "name", type(tool).__name__)
     if len(missing) == 1:
@@ -57,7 +57,7 @@ def required_args_error(tool: BaseTool, missing: list[str]) -> str:
 
 
 def validate_required_args(
-    tool: BaseTool, args: dict[str, Any]
+    tool: BaseTool, args: Dict[str, Any]
 ) -> Optional[str]:
     """校验 args 是否满足 tool 的 required 参数契约。
 
@@ -96,7 +96,7 @@ def validate_required_args(
     required = params.get("required")
     if not isinstance(required, (list, tuple)) or not required:
         return None
-    missing: list[str] = []
+    missing: List[str] = []
     for key in required:
         if key not in args or args[key] is None:
             missing.append(key)
