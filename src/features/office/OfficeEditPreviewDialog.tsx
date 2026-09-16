@@ -71,7 +71,8 @@ export type WordEditKind =
   | 'replace_text'
   | 'append_paragraphs'
   | 'set_table_cell'
-  | 'delete_paragraph';
+  | 'delete_paragraph'
+  | 'add_comment';
 export type ExcelEditKind = 'set_cells' | 'append_rows';
 export type PptEditKind =
   | 'set_slide_title'
@@ -98,6 +99,9 @@ interface ComposeState {
   // word delete_paragraph
   deleteFind: string;
   deleteAll: boolean;
+  // word add_comment
+  commentText: string;
+  commentAuthor: string;
   // excel set_cells
   sheet: string;
   cell: string;
@@ -129,6 +133,8 @@ const INITIAL_COMPOSE: ComposeState = {
   tableText: '',
   deleteFind: '',
   deleteAll: false,
+  commentText: '',
+  commentAuthor: '',
   sheet: '',
   cell: '',
   value: '',
@@ -178,6 +184,14 @@ export function buildUpdateOps(
       if (!Number.isInteger(col) || col < 0) return null;
       if (!text) return null;
       return [{ op: 'set_table_cell', table_index: tableIndex, row, col, text }];
+    }
+    if (state.wordKind === 'add_comment') {
+      const find = state.deleteFind.trim();
+      const comment = state.commentText.trim();
+      if (!find || !comment) return null;
+      const op: OfficeUpdateOp = { op: 'add_comment', find, comment };
+      if (state.commentAuthor.trim()) op.author = state.commentAuthor.trim();
+      return [op];
     }
     if (state.wordKind === 'delete_paragraph') {
       const find = state.deleteFind.trim();
@@ -365,6 +379,7 @@ export function OfficeEditPreviewDialog({
                     </option>
                     <option value="set_table_cell">{t('office.edit.kindSetTableCell')}</option>
                     <option value="delete_paragraph">{t('office.edit.kindDeleteParagraph')}</option>
+                    <option value="add_comment">{t('office.edit.kindAddComment')}</option>
                   </select>
                 </div>
                 {compose.wordKind === 'replace_text' && (
@@ -484,6 +499,47 @@ export function OfficeEditPreviewDialog({
                         onChange={(e) => setField('tableText')(e.target.value)}
                         className={inputClass}
                         data-testid="office-edit-table-text"
+                      />
+                    </div>
+                  </>
+                )}
+                {compose.wordKind === 'add_comment' && (
+                  <>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.wordFind')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.deleteFind}
+                        onChange={(e) => setField('deleteFind')(e.target.value)}
+                        placeholder={t('office.edit.deleteFindPlaceholder')}
+                        className={inputClass}
+                        data-testid="office-edit-delete-find"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.commentText')}
+                      </label>
+                      <textarea
+                        value={compose.commentText}
+                        onChange={(e) => setField('commentText')(e.target.value)}
+                        rows={3}
+                        className={inputClass}
+                        data-testid="office-edit-comment-text"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.commentAuthor')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.commentAuthor}
+                        onChange={(e) => setField('commentAuthor')(e.target.value)}
+                        className={inputClass}
+                        data-testid="office-edit-comment-author"
                       />
                     </div>
                   </>
