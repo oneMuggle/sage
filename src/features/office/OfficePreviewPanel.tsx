@@ -52,6 +52,7 @@ import { renderInlineMarks } from '../../shared/lib/InlineMarks';
 import { useI18n } from '../../shared/lib/i18n';
 import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
 
+import { DocxNativePreview } from './DocxNativePreview';
 import { pollOfficeProgress } from './officeProgress';
 
 export type OfficePreviewData =
@@ -80,6 +81,11 @@ export interface OfficePreviewPanelProps {
    * and tests keep the button.
    */
   fidelityAvailable?: boolean;
+  /**
+   * P2-C (office-p2c): re-read the current document after an in-place
+   * mutation (e.g. excel formula-cache recalc). Absent → no recalc button.
+   */
+  onRefresh?: () => void;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -118,6 +124,7 @@ export function OfficePreviewPanel({
   preview,
   workspacePath,
   onEditPreview,
+  onRefresh,
   fidelityAvailable = true,
 }: OfficePreviewPanelProps) {
   const { t } = useI18n();
@@ -137,6 +144,35 @@ export function OfficePreviewPanel({
     setOriginalPdfUrl(null);
     setLoadingOriginal(false);
   }, [summaryId]);
+
+  // P2-C (office-p2c): excel 公式缓存重算（soffice 重算回写，重算前服务端自动快照）
+  const [recalcing, setRecalcing] = useState(false);
+  const handleRecalcExcel = async () => {
+    if (recalcing) return;
+    const ws = workspacePath ?? summary.workspace_path;
+    if (!ws) {
+      toast.error(t('office.recalc.failed'));
+      return;
+    }
+    setRecalcing(true);
+    try {
+      const res = await officeApi.recalcExcel({
+        workspace_path: ws,
+        file_path: buildManagedPath(ws),
+      });
+      if (res.ok) {
+        toast.success(t('office.recalc.success'));
+        onRefresh?.();
+      } else {
+        toast.error(`${t('office.recalc.failed')}: ${res.error ?? ''}`.trimEnd());
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`${t('office.recalc.failed')}: ${msg}`);
+    } finally {
+      setRecalcing(false);
+    }
+  };
 
   // Round A P1: 高保真视图（docx/xlsx/pptx → 缓存 PDF → 内嵌 viewer）。
   // data URL 以 summary.id + updated_at 为 key 缓存在组件状态里 —— 文档
@@ -165,6 +201,11 @@ export function OfficePreviewPanel({
     if (fidelityLoading) return;
     if (fidelityOn) {
       setFidelityOn(false);
+      return;
+    }
+    // P2-B: word + 无本机转换器 → 原生渲染模式（不请求 soffice 转换）。
+    if (!fidelityAvailable && preview?.docType === 'word') {
+      setFidelityOn(true);
       return;
     }
     // Cached data URL for the same doc state → instant toggle.
@@ -364,7 +405,8 @@ export function OfficePreviewPanel({
         )}
         {isEditableDocType(preview.docType) && (
           <div className="flex items-center gap-1 shrink-0">
-            {fidelityAvailable && (
+            {/* P2-B: word 无 soffice 时开关仍可用 —— 走 docx-preview 原生渲染 */}
+            {(fidelityAvailable || preview.docType === 'word') && (
               <button
                 type="button"
                 onClick={() => void handleToggleFidelity()}
@@ -406,6 +448,20 @@ export function OfficePreviewPanel({
               >
                 <Pencil className="w-3.5 h-3.5" />
                 {t('office.edit.open')}
+              </button>
+            )}
+            {preview.docType === 'excel' && onRefresh && (
+              <button
+                type="button"
+                onClick={() => void handleRecalcExcel()}
+                disabled={recalcing}
+                className="flex items-center gap-1 px-2 py-1 rounded border border-border text-xs text-text-secondary hover:bg-bg-hover transition-colors disabled:opacity-50 shrink-0"
+                data-testid="office-excel-recalc-button"
+                aria-label={t('office.recalc.button')}
+              >
+                {recalcing
+                  ? t('office.recalc.recalcing')
+                  : t('office.recalc.button')}
               </button>
             )}
             <button
@@ -460,6 +516,11 @@ export function OfficePreviewPanel({
           title={summary.generated_filename}
           className="w-full h-[32rem] border-0"
           data-testid="office-fidelity-frame"
+        />
+      ) : fidelityOn && preview.docType === 'word' ? (
+        <DocxNativePreview
+          workspacePath={workspacePath ?? summary.workspace_path ?? ''}
+          managedPath={buildManagedPath(workspacePath ?? summary.workspace_path ?? '')}
         />
       ) : (
         <div className="p-4 max-h-96 overflow-y-auto">

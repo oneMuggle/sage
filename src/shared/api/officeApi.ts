@@ -35,6 +35,7 @@ import type {
   OfficePptGenerateRequest,
   OfficePptReadResult,
   OfficeReadRequest,
+  OfficeRecalcResult,
   OfficeRestoreResponse,
   OfficeSnapshotListResponse,
   OfficeSnapshotRestoreResponse,
@@ -150,6 +151,37 @@ export const officeApi = {
   async readPdfData(req: OfficePdfReadRequest): Promise<OfficePdfDataResult> {
     try {
       return await invoke<OfficePdfDataResult>('office_pdf_data', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P2-B (office-p2b): raw managed docx base64 for the native docx-preview
+   * renderer (no soffice required). Same 20MB cap and `{ok:false,error}`
+   * failure contract as the PDF original view.
+   */
+  async readWordData(req: OfficePdfReadRequest): Promise<OfficePdfDataResult> {
+    try {
+      return await invoke<OfficePdfDataResult>('office_word_data', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P2-C (office-p2c): recalc formula cache of a managed .xlsx in place
+   * via local soffice (a pre-recalc snapshot is taken server-side).
+   */
+  async recalcExcel(req: OfficePdfReadRequest): Promise<OfficeRecalcResult> {
+    try {
+      return await invoke<OfficeRecalcResult>('office_excel_recalc', {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
       });

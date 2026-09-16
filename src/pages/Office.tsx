@@ -421,6 +421,7 @@ export function Office() {
                 preview={preview}
                 workspacePath={workspacePath}
                 fidelityAvailable={capabilities?.pdf_export_available ?? true}
+                onRefresh={() => void refresh()}
                 onEditPreview={
                   preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined
                 }

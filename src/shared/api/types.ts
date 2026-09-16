@@ -1248,6 +1248,14 @@ export interface OfficeLegacyImportResult {
 }
 
 /**
+ * P2-C (office-p2c): result of POST /api/v1/office/excel/recalc.
+ */
+export interface OfficeRecalcResult {
+  ok: boolean;
+  error?: string | null;
+}
+
+/**
  * F3 (office-p0): result of POST /api/v1/office/pdf/data — raw-PDF
  * base64 preview for the /office page's 原文预览 toggle (backend
  * `PdfDataResult`). Expected failures (oversize / path escape) come
