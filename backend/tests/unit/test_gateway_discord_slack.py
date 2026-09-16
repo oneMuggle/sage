@@ -450,3 +450,103 @@ class TestGatewayRoutes:
         assert resp.json() == {"saved": True, "restart_required": True}
         assert saved["app_settings"]["slack"]["bot_token"] == "new-tok"
         assert saved["app_settings"]["slack"]["allowed_channel_ids"] == ["C7"]
+
+
+# --------------------------------------------------------------------------- #
+# token 保留契约（打码回传 ≠ 清除）
+# --------------------------------------------------------------------------- #
+
+
+class TestTokenPreserveContract:
+    def test_telegram_masked_token_keeps_stored(self, monkeypatch, client, tmp_db):
+        monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+        _seed_settings(
+            monkeypatch,
+            "telegram",
+            {"bot_token": "real-token", "allowed_chat_ids": ["1"], "enabled": True},
+        )
+        resp = client.put(
+            "/gateway/telegram/config",
+            json={"bot_token": "****token", "allowed_chat_ids": ["1", "2"], "enabled": True},
+        )
+        assert resp.status_code == 200
+        # 回读：真实 token 保留，白名单已更新
+        view = client.get("/gateway/telegram/config").json()
+        assert view["bot_token_masked"] == "****oken"  # real-token 尾 4 位
+        assert view["allowed_chat_ids"] == ["1", "2"]
+
+    def test_telegram_empty_token_clears(self, monkeypatch, client, tmp_db):
+        monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+        _seed_settings(
+            monkeypatch,
+            "telegram",
+            {"bot_token": "real-token", "allowed_chat_ids": ["1"], "enabled": True},
+        )
+        resp = client.put(
+            "/gateway/telegram/config",
+            json={"bot_token": "", "allowed_chat_ids": ["1"], "enabled": False},
+        )
+        assert resp.status_code == 200
+        view = client.get("/gateway/telegram/config").json()
+        assert view["configured"] is False
+
+    def test_discord_masked_token_keeps_stored(self, monkeypatch, client, tmp_db):
+        monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
+        _seed_settings(
+            monkeypatch,
+            "discord",
+            {"bot_token": "real-discord", "allowed_channel_ids": ["42"], "enabled": True},
+        )
+        resp = client.put(
+            "/gateway/discord/config",
+            json={"bot_token": "****cord", "allowed_channel_ids": ["42"], "enabled": True},
+        )
+        assert resp.status_code == 200
+        view = client.get("/gateway/discord/config").json()
+        assert view["bot_token_masked"].endswith("cord")
+        assert view["configured"] is True
+
+
+# --------------------------------------------------------------------------- #
+# binds 路由（discord / slack）
+# --------------------------------------------------------------------------- #
+
+
+class TestPlatformBindsRoutes:
+    def test_discord_binds_503_when_unconfigured(self, monkeypatch, client, tmp_db):
+        monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
+        _seed_settings(monkeypatch, "discord", None)
+        resp = client.get("/gateway/discord/binds")
+        assert resp.status_code == 503
+        assert resp.json()["detail"]["type"] == "gateway_disabled"
+
+    def test_slack_unbind_404_when_gateway_alive_but_no_bind(self, monkeypatch, client, tmp_db):
+        import backend.gateway.slack as slack_mod
+
+        monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+        _seed_settings(monkeypatch, "slack", None)
+        gateway, _ = _slack_gateway(tmp_db, allowed=("C111",))
+        monkeypatch.setattr(slack_mod, "get_slack_gateway", lambda: gateway)
+        resp = client.delete("/gateway/slack/binds/C999")
+        assert resp.status_code == 404
+        assert resp.json()["detail"]["type"] == "bind_not_found"
+
+    def test_discord_binds_lists_and_unbinds(self, monkeypatch, client, tmp_db):
+        import backend.gateway.discord as discord_mod
+
+        monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
+        _seed_settings(monkeypatch, "discord", None)
+        gateway, _ = _discord_gateway(tmp_db, allowed=("111",))
+        conn = tmp_db.get_connection()
+        conn.execute(
+            "INSERT INTO gateway_binds (chat_id, session_id, created_at) VALUES (?, ?, ?)",
+            ("111", "sess-1", 123),
+        )
+        conn.commit()
+        monkeypatch.setattr(discord_mod, "get_discord_gateway", lambda: gateway)
+
+        listed = client.get("/gateway/discord/binds").json()
+        assert listed["binds"][0]["chat_id"] == "111"
+
+        removed = client.delete("/gateway/discord/binds/111").json()
+        assert removed == {"chat_id": "111", "unbound": True}

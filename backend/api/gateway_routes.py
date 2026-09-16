@@ -180,10 +180,23 @@ class TelegramConfigUpdate(BaseModel):
     enabled: bool = True
 
 
+def _resolve_saved_token(incoming: str, stored_node: dict) -> str:
+    """打码回传（``****`` 前缀）= 保留已存 token；空串 = 清除；其余 = 新值。
+
+    前端 token 框读回的是打码值，原样传回表示「未修改」——直接落库会把
+    真实 token 清掉（bug：只改白名单保存即清空 token），这里统一兜住。
+    """
+    token = (incoming or "").strip()
+    if token.startswith("****"):
+        return str(stored_node.get("bot_token") or "").strip()
+    return token
+
+
 @router.put("/gateway/telegram/config")
 def update_telegram_config(data: TelegramConfigUpdate):
     """保存网关配置到 app_settings.telegram（settings 持久化）。
 
+    ``bot_token`` 语义：新值=更新；``****`` 打码回传=保留已存；空串=清除。
     - 200 + ``{"saved": true, "restart_required": true}``
       （轮询线程在 lifespan 启动时创建，改配置后需重启后端生效——
       restart_required 提示前端）
@@ -194,8 +207,10 @@ def update_telegram_config(data: TelegramConfigUpdate):
     app_settings = repo.get_json("app_settings") or {}
     if not isinstance(app_settings, dict):
         app_settings = {}
+    stored = app_settings.get("telegram")
+    stored = stored if isinstance(stored, dict) else {}
     app_settings["telegram"] = {
-        "bot_token": data.bot_token.strip(),
+        "bot_token": _resolve_saved_token(data.bot_token, stored),
         "allowed_chat_ids": [str(c).strip() for c in data.allowed_chat_ids if str(c).strip()],
         "enabled": bool(data.enabled),
     }
@@ -278,8 +293,10 @@ def _save_platform_config(
     app_settings = repo.get_json("app_settings") or {}
     if not isinstance(app_settings, dict):
         app_settings = {}
+    stored = app_settings.get(platform)
+    stored = stored if isinstance(stored, dict) else {}
     app_settings[platform] = {
-        "bot_token": bot_token.strip(),
+        "bot_token": _resolve_saved_token(bot_token, stored),
         "allowed_channel_ids": [str(c).strip() for c in allowed_channel_ids if str(c).strip()],
         "enabled": bool(enabled),
     }
@@ -289,7 +306,7 @@ def _save_platform_config(
 class PlatformGatewayConfigUpdate(BaseModel):
     """``PUT /gateway/{platform}/config`` 请求体（Round 16）。
 
-    bot_token 传空串 = 清除（关闭网关）。
+    bot_token：新值=更新；``****`` 打码回传=保留已存；空串=清除（关闭网关）。
     """
 
     bot_token: str = ""
@@ -333,3 +350,85 @@ def get_slack_config():
 def update_slack_config(data: PlatformGatewayConfigUpdate):
     _save_platform_config("slack", data.bot_token, data.allowed_channel_ids, data.enabled)
     return {"saved": True, "restart_required": True}
+
+
+def _list_platform_binds(getter, table: str, platform_label: str) -> dict:
+    gateway = getter()
+    if gateway is None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "type": "gateway_disabled",
+                "message": f"{platform_label} gateway not configured",
+            },
+        )
+    try:
+        rows = (
+            gateway._conn()
+            .execute(
+                f"SELECT chat_id, session_id, created_at FROM {table} " "ORDER BY created_at DESC"
+            )
+            .fetchall()
+        )
+    except Exception as exc:  # noqa: BLE001 — 查询失败按 500 上报
+        raise HTTPException(
+            status_code=500,
+            detail={"type": "bind_query_failed", "message": str(exc)},
+        ) from exc
+    return {"binds": [{"chat_id": r[0], "session_id": r[1], "created_at": r[2]} for r in rows]}
+
+
+def _unbind_platform_chat(getter, table: str, platform_label: str, chat_id: str) -> dict:
+    gateway = getter()
+    if gateway is None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "type": "gateway_disabled",
+                "message": f"{platform_label} gateway not configured",
+            },
+        )
+    try:
+        cursor = gateway._conn().execute(f"DELETE FROM {table} WHERE chat_id = ?", (chat_id,))
+        gateway._conn().commit()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=500,
+            detail={"type": "unbind_failed", "message": str(exc)},
+        ) from exc
+    if cursor.rowcount == 0:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "bind_not_found", "message": "bind not found"},
+        )
+    return {"chat_id": chat_id, "unbound": True}
+
+
+@router.get("/gateway/discord/binds")
+def list_discord_binds():
+    """列出 Discord channel↔session 绑定（形状同 telegram/binds）。"""
+    from backend.gateway.discord import get_discord_gateway
+
+    return _list_platform_binds(get_discord_gateway, "gateway_binds", "Discord")
+
+
+@router.delete("/gateway/discord/binds/{chat_id}")
+def unbind_discord_chat(chat_id: str):
+    from backend.gateway.discord import get_discord_gateway
+
+    return _unbind_platform_chat(get_discord_gateway, "gateway_binds", "Discord", chat_id)
+
+
+@router.get("/gateway/slack/binds")
+def list_slack_binds():
+    """列出 Slack channel↔session 绑定（形状同 telegram/binds）。"""
+    from backend.gateway.slack import get_slack_gateway
+
+    return _list_platform_binds(get_slack_gateway, "gateway_binds", "Slack")
+
+
+@router.delete("/gateway/slack/binds/{chat_id}")
+def unbind_slack_chat(chat_id: str):
+    from backend.gateway.slack import get_slack_gateway
+
+    return _unbind_platform_chat(get_slack_gateway, "gateway_binds", "Slack", chat_id)
