@@ -58,7 +58,8 @@ jobs:
         shell: bash -el {0}
         timeout-minutes: 40
         run: |
-          conda run -n sage-backend-py38 bash -c "cd backend && pytest -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
+          # --durations=20：报告用埋点，与 main backend hex 步骤对齐
+          conda run -n sage-backend-py38 bash -c "cd backend && pytest -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80 --durations=20"
 
       - name: Pytest serial (latency-sensitive file)
         shell: bash -el {0}
@@ -148,7 +149,9 @@ jobs:
         shell: bash -el {0}
         timeout-minutes: 40
         run: |
-          conda run -n sage-backend bash -c "cd backend && pytest -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
+          # --durations=20：只报告不改变行为。输出最慢 20 个测试到 job log，
+          # 为后续按目录分片（shard）提供依据 —— loadfile 下总时长由最慢文件决定
+          conda run -n sage-backend bash -c "cd backend && pytest -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80 --durations=20"
 
       - name: Pytest hex serial (latency-sensitive file)
         shell: bash -el {0}
@@ -213,18 +216,21 @@ jobs:
         # 显形为红 job，需给足真实运行时长（≥10.2 min，上限留一倍余量）。
         timeout-minutes: 20
         run: |
-          conda run -n sage-backend bash -c "cd backend && API_MODE=legacy pytest --no-cov -q -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py"
+          # --durations=20：报告用埋点，与 hex 步骤对齐（legacy 实测 ~14 min，
+          # 已接近关键路径，同样需要分片依据）
+          conda run -n sage-backend bash -c "cd backend && API_MODE=legacy pytest --no-cov -q -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --durations=20"
 
   # ========== Backend: Windows 本地 unit 基线（非阻塞信号） ==========
   # 产品主平台是 Windows 桌面（Electron + win7 LTS），而上面两个 Backend job
   # 都只跑 ubuntu。本 job 在 windows-latest 上跑 unit 套件，长期锁定
   # #712/#715/#722 治理后的 Windows 基线（POSIX-only 簇已 skipif(nt)）。
   # continue-on-error：信号不阻塞 PR；红 了说明有新的 Windows 回归。
+  # 仅 push main 触发（2026-09-17）：实测本 job ~16-18 min 且偶发 flaky
+  # （PR #924 两轮一绿一红），作为非门禁信号在每次 PR 上烧最贵的
+  # Windows runner 不划算 —— 回归在 merge 后的 main push 上仍会被捕获。
   backend-windows-unit:
     name: Backend unit (Windows, non-blocking)
-    if: |
-      github.ref == 'refs/heads/main' ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main')
+    if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     continue-on-error: true
 
