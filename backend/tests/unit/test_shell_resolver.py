@@ -17,12 +17,23 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture()
 def _clean_shell_cache():
-    shell_resolver.resolve_shell.cache_clear()
+    shell_resolver._resolve_shell_cached.cache_clear()
+    shell_resolver._detect_powershell_version.cache_clear()
     yield
-    shell_resolver.resolve_shell.cache_clear()
+    shell_resolver._resolve_shell_cached.cache_clear()
+    shell_resolver._detect_powershell_version.cache_clear()
 
 
-def _fake_os(monkeypatch, name, isfile=None, access=None, environ=None):
+def _fake_os(monkeypatch, name, isfile=None, access=None, environ=None, getenv=None):
+    """Mock os module for shell_resolver tests.
+
+    getenv: optional function to mock os.getenv. Defaults to reading from environ dict.
+    """
+    environ_dict = dict(os.environ if environ is None else environ)
+
+    def default_getenv(key, default=None):
+        return environ_dict.get(key, default)
+
     monkeypatch.setattr(
         shell_resolver,
         "os",
@@ -30,22 +41,30 @@ def _fake_os(monkeypatch, name, isfile=None, access=None, environ=None):
             name=name,
             path=SimpleNamespace(
                 isfile=isfile or (lambda _path: False),
+                isdir=(lambda _path: False),
                 access=access or (lambda _path, _mode: False),
                 dirname=shell_resolver.ntpath.dirname,
             ),
-            environ=dict(os.environ if environ is None else environ),
+            environ=environ_dict,
             access=access or (lambda _path, _mode: False),
             X_OK=os.X_OK,
+            getenv=getenv or default_getenv,
         ),
     )
 
 
-def _windows(monkeypatch, *, isfile, known_roots=(), system_root=None, identity=True):
+def _windows(monkeypatch, *, isfile, known_roots=(), system_root=None, identity=True, sage_root=None):
+    """Mock Windows environment for shell_resolver tests.
+
+    sage_root: return value for _get_sage_install_root. Defaults to None.
+    """
     _fake_os(monkeypatch, "nt", isfile=isfile)
     monkeypatch.setattr(shell_resolver.shutil, "which", lambda _name: None)
     monkeypatch.setattr(shell_resolver, "_get_windows_program_files_roots", lambda: tuple(known_roots))
     monkeypatch.setattr(shell_resolver, "_get_windows_system_directory", lambda: system_root)
     monkeypatch.setattr(shell_resolver, "_verify_windows_file_identity", lambda _path, _expected: identity)
+    # Mock _get_sage_install_root to avoid needing real Sage installation
+    monkeypatch.setattr(shell_resolver, "_get_sage_install_root", lambda: sage_root)
 
 
 def test_posix_prefers_bin_bash(monkeypatch):
@@ -296,3 +315,171 @@ def test_resolve_shell_caches_result(monkeypatch):
     second = shell_resolver.resolve_shell()
     assert first == second
     assert len(calls) == 1
+
+
+# === 新增测试：Win7 PowerShell 2.0 兼容性修复 (2026-09-16) ===
+
+
+def test_detect_powershell_version_returns_none_on_non_windows(monkeypatch):
+    """非 Windows 平台返回 None。"""
+    _fake_os(monkeypatch, "posix")
+    shell_resolver._detect_powershell_version.cache_clear()
+    assert shell_resolver._detect_powershell_version() is None
+    shell_resolver._detect_powershell_version.cache_clear()
+
+
+def test_detect_powershell_version_returns_version_on_windows(monkeypatch):
+    """Windows 平台返回 PS 版本号。"""
+    powershell = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    _windows(monkeypatch, isfile=lambda p: p == powershell, system_root=r"C:\Windows")
+
+    # Mock subprocess.run to return a version string
+    def fake_run(cmd, **kwargs):
+        return SimpleNamespace(returncode=0, stdout="5.1.12345\n", stderr="")
+
+    monkeypatch.setattr(shell_resolver.subprocess, "run", fake_run)
+    shell_resolver._detect_powershell_version.cache_clear()
+    result = shell_resolver._detect_powershell_version()
+    assert result == "5.1.12345"
+    shell_resolver._detect_powershell_version.cache_clear()
+
+
+def test_build_shell_fallback_note_ps2_includes_warning(monkeypatch):
+    """PS 2.0 时消息包含 -Directory 不可用警告。"""
+    monkeypatch.setattr(shell_resolver, "_detect_powershell_version", lambda: "2.0")
+    monkeypatch.setattr(shell_resolver, "_get_bundled_python_path", lambda: None)
+    note = shell_resolver.build_shell_fallback_note()
+    assert "PowerShell 2.0" in note
+    assert "-Directory" in note
+    assert "Where-Object" in note
+
+
+def test_build_shell_fallback_note_ps5_no_warning(monkeypatch):
+    """PS 5.1 时消息不包含 -Directory 不可用警告。"""
+    monkeypatch.setattr(shell_resolver, "_detect_powershell_version", lambda: "5.1.12345")
+    monkeypatch.setattr(shell_resolver, "_get_bundled_python_path", lambda: None)
+    note = shell_resolver.build_shell_fallback_note()
+    assert "PowerShell 5.1.12345" in note
+    # PS 5.1 should not mention -Directory being unavailable
+    assert "-Directory" not in note or "不支持" not in note
+
+
+def test_build_shell_fallback_note_includes_bundled_python(monkeypatch):
+    """消息包含 Sage 自带 Python 路径。"""
+    monkeypatch.setattr(shell_resolver, "_detect_powershell_version", lambda: "5.1")
+    monkeypatch.setattr(shell_resolver, "_get_bundled_python_path", lambda: r"C:\Program Files\Sage\resources\python\python.exe")
+    note = shell_resolver.build_shell_fallback_note()
+    assert r"C:\Program Files\Sage\resources\python\python.exe" in note
+    assert "无需扫描系统" in note
+
+
+def test_get_bundled_python_path_from_env(monkeypatch):
+    """优先从 SAGE_BUNDLED_PYTHON 环境变量读取。"""
+    monkeypatch.setenv("SAGE_BUNDLED_PYTHON", r"C:\custom\python.exe")
+    _fake_os(monkeypatch, "nt", isfile=lambda p: p == r"C:\custom\python.exe")
+    result = shell_resolver._get_bundled_python_path()
+    assert result == r"C:\custom\python.exe"
+
+
+def test_get_bundled_python_path_from_sage_install(monkeypatch):
+    """Sage 安装路径下的默认位置。"""
+    monkeypatch.delenv("SAGE_BUNDLED_PYTHON", raising=False)
+    _fake_os(monkeypatch, "nt", isfile=lambda p: p == r"C:\Program Files\Sage\resources\python\python.exe")
+    monkeypatch.setattr(shell_resolver, "_get_sage_install_root", lambda: r"C:\Program Files\Sage")
+    result = shell_resolver._get_bundled_python_path()
+    assert result == r"C:\Program Files\Sage\resources\python\python.exe"
+
+
+def test_get_bundled_python_path_returns_none_on_non_windows(monkeypatch):
+    """非 Windows 平台返回 None。"""
+    _fake_os(monkeypatch, "posix")
+    assert shell_resolver._get_bundled_python_path() is None
+
+
+def test_find_windows_bash_prefers_sage_bundled_bash(monkeypatch):
+    """Sage 自带 bash 路径作为第三优先级候选。"""
+    roots = (r"C:\Program Files",)
+    sage_bash = r"C:\Program Files\Sage\tools\git-bash\bin\bash.exe"
+    sage_root = r"C:\Program Files\Sage"
+
+    # Mock: Git bash not found, Sage bundled bash found
+    def isfile(p):
+        return p == sage_bash
+
+    _windows(monkeypatch, isfile=isfile, known_roots=roots, system_root=r"C:\Windows", sage_root=sage_root)
+
+    result = shell_resolver._find_windows_bash()
+    assert result == sage_bash
+
+
+def test_find_windows_bash_prefers_git_bash_over_sage_bundled(monkeypatch):
+    """Git for Windows bash 优先级高于 Sage 自带 bash。"""
+    roots = (r"C:\Program Files",)
+    git_bash = r"C:\Program Files\Git\bin\bash.exe"
+    sage_bash = r"C:\Program Files\Sage\tools\git-bash\bin\bash.exe"
+    sage_root = r"C:\Program Files\Sage"
+
+    # Mock: both exist, Git bash should be preferred
+    def isfile(p):
+        return p in (git_bash, sage_bash)
+
+    _windows(monkeypatch, isfile=isfile, known_roots=roots, system_root=r"C:\Windows", sage_root=sage_root)
+
+    result = shell_resolver._find_windows_bash()
+    assert result == git_bash
+
+
+@pytest.mark.usefixtures("_clean_shell_cache")
+def test_resolve_shell_no_cache_on_fallback(monkeypatch):
+    """fallback 时不缓存，下次调用重新探测。"""
+    powershell = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    call_count = []
+
+    def isfile(p):
+        call_count.append(p)
+        return p == powershell
+
+    _windows(monkeypatch, isfile=isfile, system_root=r"C:\Windows")
+
+    # First call: should probe and return powershell (fallback)
+    first = shell_resolver.resolve_shell()
+    assert first.kind == "powershell"
+
+    # Second call: should probe again (no cache)
+    second = shell_resolver.resolve_shell()
+    assert second.kind == "powershell"
+
+    # Should have probed twice (no caching on fallback)
+    assert len(call_count) >= 2
+
+
+@pytest.mark.usefixtures("_clean_shell_cache")
+def test_resolve_shell_caches_bash(monkeypatch):
+    """找到 bash 时缓存，下次调用不重新探测。"""
+    root = r"C:\Program Files"
+    bash_path = root + r"\Git\bin\bash.exe"
+    call_count = []
+
+    def isfile(p):
+        call_count.append(p)
+        return p == bash_path
+
+    _windows(monkeypatch, isfile=isfile, known_roots=(root,))
+    monkeypatch.setattr(shell_resolver.shutil, "which", lambda name: bash_path if name == "bash" else None)
+
+    # First call: should probe and return bash
+    first = shell_resolver.resolve_shell()
+    assert first.kind == "bash"
+    first_count = len(call_count)
+
+    # Second call: should use cache (no new probes)
+    second = shell_resolver.resolve_shell()
+    assert second.kind == "bash"
+    assert len(call_count) == first_count  # no new probes
+
+
+def test_build_shell_fallback_note_with_explicit_version():
+    """ps_version 参数用于测试时注入。"""
+    note = shell_resolver.build_shell_fallback_note(ps_version="7.2.0")
+    assert "PowerShell 7.2.0" in note
+    assert "-Directory" not in note or "不支持" not in note
