@@ -970,6 +970,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       return body;
     },
   },
+  // r53-B: per-tool 开关面板的只读清单（工具名 + 截断描述 + 当前禁用项）
+  mcp_server_tools: {
+    method: 'GET',
+    path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}/tools`,
+  },
   mcp_server_delete: {
     method: 'DELETE',
     path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}`,

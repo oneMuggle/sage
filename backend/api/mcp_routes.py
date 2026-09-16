@@ -192,6 +192,33 @@ def update_mcp_server(name: str, payload: ServerUpdateIn) -> Dict[str, Any]:
     return {"ok": True, "name": name, "state": record.state.value}
 
 
+@router.get("/mcp/servers/{name}/tools")
+def list_mcp_server_tools(name: str) -> Dict[str, Any]:
+    """Per-tool management payload: sanitized specs + current disabled list.
+
+    Read-only — never triggers discovery; a server that is not READY simply
+    reports an empty tool list alongside its state. Only name + a truncated
+    description are exposed (inputSchema never leaves the backend).
+    """
+    record = _pool().get_record(name)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"unknown MCP server: {name}")
+    tools = [
+        {
+            "name": str(spec.get("name", "")),
+            "description": str(spec.get("description") or "")[:200],
+        }
+        for spec in record.tool_specs
+        if isinstance(spec, dict) and spec.get("name")
+    ]
+    return {
+        "server": name,
+        "state": record.state.value,
+        "tools": tools,
+        "disabled_tools": list(record.config.disabled_tools),
+    }
+
+
 @router.delete("/mcp/servers/{name}")
 def delete_mcp_server(name: str) -> Dict[str, Any]:
     """Remove a user server entry + unregister its tools.

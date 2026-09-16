@@ -272,6 +272,13 @@ export const en: Record<TranslationKey, string> = {
   'settings.mcp.error.name_invalid':
     'Name may only contain lowercase letters, digits, underscores, hyphens (≤64 chars)',
   'settings.mcp.error.command_required': 'Command is required',
+  'settings.mcp.tools.expand': 'Tools',
+  'settings.mcp.tools.collapse': 'Collapse',
+  'settings.mcp.tools.loading': 'Loading tools…',
+  'settings.mcp.tools.none': 'No tools discovered (server not ready, or it exposes none)',
+  'settings.mcp.tools.error': 'Failed to load tool list',
+  'settings.mcp.tools.hint': 'Uncheck a tool to disable it; check to re-enable.',
+  'settings.mcp.tools.disabled_tag': 'Disabled',
 
   // ─── Settings · Updates ────────────────
   'updates.strategy': 'Update strategy',

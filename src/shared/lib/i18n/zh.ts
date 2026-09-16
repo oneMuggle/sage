@@ -264,6 +264,13 @@ export const zh = {
   'settings.mcp.add.submit': '添加',
   'settings.mcp.error.name_invalid': '名称只能包含小写字母、数字、下划线、连字符（≤64 字符）',
   'settings.mcp.error.command_required': '命令不能为空',
+  'settings.mcp.tools.expand': '工具',
+  'settings.mcp.tools.collapse': '收起',
+  'settings.mcp.tools.loading': '工具加载中…',
+  'settings.mcp.tools.none': '未发现工具（服务器未就绪或没有工具）',
+  'settings.mcp.tools.error': '工具列表加载失败',
+  'settings.mcp.tools.hint': '取消勾选即禁用该工具，勾选即重新启用。',
+  'settings.mcp.tools.disabled_tag': '已禁用',
 
   // ─── 设置页 · 更新 ────────────────
   'updates.strategy': '更新策略',
