@@ -13,7 +13,7 @@ PR B §1.2 设计要点
 
 其他要点
 --------
-- 会话存储为 dict[session_id, _SessionState],每会话内消息按追加顺序保存。
+- 会话存储为 Dict[session_id, _SessionState],每会话内消息按追加顺序保存。
 - get_messages(limit) 返回"最后" limit 条且保持时间正序。
 - create_session 生成 ID 形如 mem-<uuid4>,避免与真实 UUID 格式冲突。
   (原自增计数器实现有 RMW 竞态:`self._counter += 1` 是 4 条字节码,

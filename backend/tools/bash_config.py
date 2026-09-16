@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class BashConfig:
     max_sessions: int = 32
 
     @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> BashConfig:
+    def from_config(cls, cfg: Dict[str, Any]) -> BashConfig:
         """从已解析的 dict 构造，缺字段回退默认。
 
         字段类型不对抛 ``TypeError``、取值越界抛 ``ValueError``；两者都由

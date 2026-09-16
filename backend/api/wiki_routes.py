@@ -11,7 +11,7 @@ import re
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import AsyncIterator, List, Tuple
+from typing import AsyncIterator, List, Optional, Tuple
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -359,7 +359,7 @@ async def list_projects(base_path: str = "") -> List[ProjectInfo]:
         base_path: 父目录路径（可选）
 
     Returns:
-        list[ProjectInfo]: 项目列表
+        List[ProjectInfo]: 项目列表
     """
     import uuid
     from datetime import datetime
@@ -479,7 +479,7 @@ async def list_directory(path: str, project_path: str) -> List[dict]:
         project_path: 项目根目录
 
     Returns:
-        list[dict]: 文件节点列表
+        List[dict]: 文件节点列表
 
     Raises:
         HTTPException: 如果目标路径不存在
@@ -746,9 +746,9 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
     authorize_registered_project(req.project_path)
     project_root, source_file = _resolve_source_file(req.project_path, req.source_file)
 
-    source_snapshot: Path | None = None
-    temp_md: Path | None = None
-    parse_path: Path | None = None
+    source_snapshot: Optional[Path] = None
+    temp_md: Optional[Path] = None
+    parse_path: Optional[Path] = None
     try:
         payload = secure_read_file_bounded(project_root, source_file, MAX_FILE_BYTES)
         suffix = source_file.suffix.lower() or ".bin"
@@ -867,7 +867,7 @@ async def queue_status(project_path: str):
 
 
 @router.get("/ingest/queue/tasks")
-async def queue_tasks(project_path: str, status: str | None = None):
+async def queue_tasks(project_path: str, status: Optional[str] = None):
     """获取队列中的任务列表。
 
     Args:
@@ -1044,7 +1044,7 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
 
 
 @router.get("/graph")
-async def get_graph(project_path: str, query: str | None = None, limit: int = 100) -> GraphData:
+async def get_graph(project_path: str, query: Optional[str] = None, limit: int = 100) -> GraphData:
     """获取知识图谱。
 
     Args:
@@ -1345,7 +1345,7 @@ async def clip_webpage(req: ClipRequest) -> dict:
 
     # 如果启用自动 Ingest
     if req.auto_ingest:
-        source_snapshot: Path | None = None
+        source_snapshot: Optional[Path] = None
         try:
             # Snapshot the authorized file before handing a pathname to ingest.
             # The saved source may be replaced after this point; ingest only sees
@@ -1507,8 +1507,8 @@ class ProjectCheckResponse(BaseModel):
     writable: bool
     is_project: bool
     parent_writable: bool
-    warning: str | None = None
-    error: str | None = None
+    warning: Optional[str] = None
+    error: Optional[str] = None
 
 
 class RecordRecentRequest(BaseModel):

@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, AsyncIterator, Callable, Dict, List, Tuple
 
 from . import llm_prompts
 from .context_budget import ContextBudget, truncate_pages
@@ -99,7 +98,7 @@ async def _build_chat_context(
     """构建聊天上下文。
 
     Returns:
-        tuple[str, list[str], RetrievalStats]: (context, citations, stats)
+        Tuple[str, List[str], RetrievalStats]: (context, citations, stats)
     """
     # Step 1: Token 搜索
     token_results = search_wiki(project_root, query, limit=RETRIEVAL_LIMIT)

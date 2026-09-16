@@ -8,8 +8,7 @@ mocked repos.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
@@ -24,14 +23,14 @@ logger = logging.getLogger(__name__)
 
 class ScheduleIn(BaseModel):
     kind: Literal["once", "recurring"]
-    at: int | None = None
-    cron: str | None = None
+    at: Optional[int] = None
+    cron: Optional[str] = None
 
 
 class ScheduleOut(BaseModel):
     kind: Literal["once", "recurring"]
-    at: int | None = None
-    cron: str | None = None
+    at: Optional[int] = None
+    cron: Optional[str] = None
 
 
 class CreateTaskIn(BaseModel):
@@ -44,8 +43,8 @@ class CreateTaskIn(BaseModel):
 
 
 class UpdateTaskIn(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=80)
-    enabled: bool | None = None
+    name: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    enabled: Optional[bool] = None
     type: Optional[Literal["once", "recurring"]] = None
     schedule: Optional[ScheduleIn] = None
     session_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
@@ -64,8 +63,8 @@ class TaskOut(BaseModel):
     content: str
     enabled: bool
     created_at: int
-    last_run: int | None = None
-    next_run: int | None = None
+    last_run: Optional[int] = None
+    next_run: Optional[int] = None
     last_attempt: Optional[int] = None
     last_status: str = "never"
     last_error: Optional[str] = None

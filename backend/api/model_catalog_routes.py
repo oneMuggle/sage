@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ValidationError
@@ -221,7 +221,7 @@ def build_router(repo: Optional[CatalogRepository] = None) -> APIRouter:
     # ---- POST /snapshots/{id}/items/{item}/apply -----------------------
 
     class ApplyRequest(BaseModel):
-        fields: list[str]
+        fields: List[str]
         expected_revision: int
 
     @router.post("/snapshots/{snapshot_id}/items/{item_id}/apply")
@@ -343,7 +343,7 @@ def build_router(repo: Optional[CatalogRepository] = None) -> APIRouter:
 @dataclass(frozen=True)
 class _CatalogFilter:
     sql: str
-    parameters: tuple[str, ...]
+    parameters: Tuple[str, ...]
 
 
 def _endpoint_catalog_filter(repository: CatalogRepository, endpoint_id: str) -> _CatalogFilter:
@@ -359,8 +359,8 @@ def _endpoint_catalog_filter(repository: CatalogRepository, endpoint_id: str) ->
         "FROM model_catalog_bindings WHERE endpoint_id=?",
         (endpoint_id,),
     ).fetchall()
-    clauses: list[str] = []
-    parameters: list[str] = []
+    clauses: List[str] = []
+    parameters: List[str] = []
     if bindings:
         return _CatalogFilter(
             sql=(
@@ -373,7 +373,7 @@ def _endpoint_catalog_filter(repository: CatalogRepository, endpoint_id: str) ->
         )
 
     settings = SettingsRepository(repository.db).get_json("app_settings")
-    discovered: list[str] = []
+    discovered: List[str] = []
     if isinstance(settings, dict):
         endpoints = settings.get("endpoints")
         if isinstance(endpoints, list):
@@ -400,13 +400,13 @@ def _endpoint_catalog_filter(repository: CatalogRepository, endpoint_id: str) ->
         "SELECT DISTINCT provider, model_id, pricing_scope "
         "FROM model_catalog_entries"
     ).fetchall()
-    catalog_by_model: dict[str, set[tuple[str, str]]] = {}
+    catalog_by_model: Dict[str, Set[Tuple[str, str]]] = {}
     for row in catalog_keys:
         catalog_by_model.setdefault(row["model_id"], set()).add(
             (row["provider"], row["pricing_scope"])
         )
 
-    derived: set[tuple[str, str, str]] = set()
+    derived: Set[Tuple[str, str, str]] = set()
     for raw_id in discovered:
         if raw_id in explicit_model_ids:
             continue
@@ -458,7 +458,7 @@ async def _read_body_limited(request: Request, max_bytes: int) -> bytes:
                 raise HTTPException(status_code=413, detail="payload too large")
         except ValueError:
             pass
-    chunks: list[bytes] = []
+    chunks: List[bytes] = []
     total = 0
     async for chunk in request.stream():
         total += len(chunk)

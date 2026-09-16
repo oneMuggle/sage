@@ -1,6 +1,6 @@
 # ruff: noqa: UP006, UP007, UP035 — pydantic v1 + Python 3.8 兼容：
 # pydantic v1 resolve_annotations 用 eval() 处理 forward refs，
-# eval 在 Python 3.8 上无法解析 PEP 585 (list[X]) 和 PEP 604 (X | Y)，
+# eval 在 Python 3.8 上无法解析 PEP 585 (List[X]) 和 PEP 604 (X | Y)，
 # 所以本文件保留 typing.List/Optional/Union 写法
 """新六边形 API 路由 — 调用 ChatService。
 
@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -55,7 +55,7 @@ class ChatRequest(BaseModel):
     message: str
     # Office @-mention 解析的工作区根路径 (与 legacy /chat/stream 一致,
     # 缺省为空串 → attachment_resolver.process 跳过所有 mention).
-    workspace_path: str | None = None
+    workspace_path: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -81,7 +81,7 @@ class SettingsResponse(BaseModel):
 
     status: str = "ok"
     changed_fields: List[str] = []
-    data: dict | None = None  # GET 时填这里
+    data: Optional[dict] = None  # GET 时填这里
 
 
 # ==================== 依赖注入 ====================
@@ -128,7 +128,7 @@ async def chat(
     # 旧实现用 svc.storage.append_message(...) 会让后续 turn 重发同一块,
     # 重复污染 context. 现在走 run_turn 的 extra_system_messages 参数,
     # 在 build_system_base() 之后、history 之前 inline prepend, 不留痕.
-    extra_system_messages: List[Message] | None = None
+    extra_system_messages: Optional[List[Message]] = None
     if attachment_block:
         extra_system_messages = [
             Message(
@@ -287,7 +287,7 @@ async def update_settings(
 
 
 @router.get("/settings")
-async def get_settings() -> dict | None:
+async def get_settings() -> Optional[dict]:
     """读取持久化 settings，并把历史 snake_case 残留翻译为 camelCase。
 
     不存在或 JSON 损坏时返回 null，前端继续使用 DEFAULT_SETTINGS。
@@ -342,7 +342,7 @@ def _migrate_default_protocol(settings: dict) -> None:
 class PreferenceItem(BaseModel):
     """通用 KV /preferences/{key} 请求/响应体。"""
 
-    value: str | None = None
+    value: Optional[str] = None
     value_type: str = "string"
     category: str = "general"
 
@@ -419,14 +419,14 @@ class SessionCreate(BaseModel):
     """Hex 路径 POST /sessions 请求体。"""
 
     title: str = "新对话"
-    parent_id: str | None = None
+    parent_id: Optional[str] = None
 
 
 class SessionUpdate(BaseModel):
     """Hex 路径 PATCH /sessions/{id} 请求体(局部更新,字段均可选)。"""
 
-    title: str | None = None
-    is_pinned: bool | None = None
+    title: Optional[str] = None
+    is_pinned: Optional[bool] = None
 
 
 # ==================== 依赖注入 ====================

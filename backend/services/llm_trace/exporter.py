@@ -19,7 +19,7 @@ import socket
 import sys
 import zipfile
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 from backend.services.llm_trace.recorder import TraceRecord
 from backend.services.llm_trace.redactor import (
@@ -176,9 +176,9 @@ def _serialize_record(rec: TraceRecord, *, include_prompts: bool) -> str:
 
     if rec_size > MAX_RECORD_BYTES:
         # 整条 record > 1MB → body 全丢弃,headers + status 保留
-        req_body_text: str | None = None
+        req_body_text: Optional[str] = None
         req_encoding: str = "utf-8"
-        resp_body_text: str | None = None
+        resp_body_text: Optional[str] = None
         resp_encoding: str = "utf-8"
         req_truncated = True
         resp_truncated = True
@@ -256,7 +256,7 @@ def _extract_error_message(body: bytes, status: int | None) -> str | None:
     try:
         parsed = json.loads(body.decode("utf-8"))
         if isinstance(parsed, dict):
-            raw: object | None = None
+            raw: Optional[object] = None
             err = parsed.get("error")
             if isinstance(err, dict) and "message" in err:
                 raw = err["message"]

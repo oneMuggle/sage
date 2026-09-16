@@ -44,7 +44,7 @@ async def generate_search_queries(topic: str, llm_call: Callable) -> List[str]:
         llm_call: LLM 调用函数
 
     Returns:
-        list[str]: 生成的搜索查询列表
+        List[str]: 生成的搜索查询列表
     """
     prompt = f"""你是一个研究助手。针对以下研究主题，生成 3-5 个不同的搜索查询，以获取全面的信息。
 

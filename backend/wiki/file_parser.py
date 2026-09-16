@@ -219,7 +219,7 @@ def extract_images(
         opened_fd: 可选的、由调用方持有的 regular-file descriptor
 
     Returns:
-        list[tuple[bytes, str]]: 图片数据和格式的列表 [(data, format), ...]
+        List[Tuple[bytes, str]]: 图片数据和格式的列表 [(data, format), ...]
     """
     original_path = Path(file_path)
     parser_path = _parser_path(original_path, opened_fd)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import io as _io
 import logging
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
@@ -25,8 +25,8 @@ router = APIRouter(prefix="/diagnostic", tags=["diagnostic"])
 
 class PreviewResponse(BaseModel):
     count: int
-    oldestTs: str | None = None  # noqa: N815 — camelCase 对齐前端
-    newestTs: str | None = None  # noqa: N815
+    oldestTs: Optional[str] = None  # noqa: N815 — camelCase 对齐前端
+    newestTs: Optional[str] = None  # noqa: N815
     sampleUrls: List[str] = []  # noqa: N815
     version: str = "1"
 

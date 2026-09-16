@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -11,7 +11,7 @@ class FileMeta(BaseModel):
     url: str = Field(..., description="HTTPS URL to download file")
     sha512: str = Field(..., description="SHA-512 hex digest for integrity check")
     size: int = Field(..., ge=0, description="File size in bytes")
-    signature: str | None = Field(None, description="Code signature (Authenticode/GPG)")
+    signature: Optional[str] = Field(None, description="Code signature (Authenticode/GPG)")
 
     @field_validator("url")
     @classmethod

@@ -6,7 +6,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import httpx
 
@@ -46,7 +46,7 @@ class AIHttpResponse:
     """标准化的响应"""
     status_code: int
     content: bytes
-    json: Dict | None = None
+    json: Optional[Dict] = None
     content_type: str = ""
 
 

@@ -1,6 +1,6 @@
 # ruff: noqa: UP006, UP007, UP035 — pydantic v1 + Python 3.8 兼容：
 # pydantic v1 resolve_annotations 用 eval() 处理 forward refs，
-# eval 在 Python 3.8 上无法解析 PEP 585 (list[X]) 和 PEP 604 (X | Y)，
+# eval 在 Python 3.8 上无法解析 PEP 585 (List[X]) 和 PEP 604 (X | Y)，
 # 所以本文件保留 typing.List/Optional/Union 写法
 """
 API 路由定义
@@ -283,13 +283,13 @@ def _safe_log_field(value: object, max_length: int = 64) -> str:
 
 class SessionCreate(BaseModel):
     title: str = "新对话"
-    parent_id: str | None = None
+    parent_id: Optional[str] = None
 
 
 class SessionUpdate(BaseModel):
-    title: str | None = None
+    title: Optional[str] = None
 
-    is_pinned: bool | None = None
+    is_pinned: Optional[bool] = None
 
 
 #: PM1 (round8): 计划模式 system 指令 —— 只读调研 + 结构化计划产出；
@@ -307,19 +307,19 @@ _PLAN_MODE_DIRECTIVE = (
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    workspace_path: str | None = None
+    workspace_path: Optional[str] = None
     # 2026-07-30: 选 agent 的入口。None / 空字符串 → 端点 fallback 到 "primary"。
     # 真正的路由由 SageAgent(agent_id=...) 内部完成:从 SQLite 读 profile,
     # 透传到 get_available_tools → ToolRegistry.get_schemas_for_llm(allowed_tools=...)
     # 这样 memory_manager 之类的窄权限 agent 不会拿到 list_dir/read_file。
-    agent_id: str | None = None
-    api_key: str | None = None
+    agent_id: Optional[str] = None
+    api_key: Optional[str] = None
 
-    api_url: str | None = None
+    api_url: Optional[str] = None
 
-    model: str | None = None
+    model: Optional[str] = None
 
-    max_context: int | None = None
+    max_context: Optional[int] = None
 
     # Task 5 (2026-09-15): auto-context resolution flag.
     # true = backend resolves effective window from catalog; false = use max_context as fixed cap.
@@ -336,11 +336,11 @@ class ChatRequest(BaseModel):
     # - provider: openai / claude / gemini / deepseek / ollama / custom
     # - reasoning_effort: OpenAI o1/o3/5 + DeepSeek OpenAI 兼容代理
     # - thinking_budget: Gemini 2.5 OpenAI 兼容模式
-    provider: str | None = None
+    provider: Optional[str] = None
 
-    reasoning_effort: str | None = None
+    reasoning_effort: Optional[str] = None
 
-    thinking_budget: int | None = None
+    thinking_budget: Optional[int] = None
 
     # Task 6 (M1-M2 chat-read): frontend 把 @mention 解析成
     # ``backend.office.chat_refs.ChatOfficeRef`` 列表,``chat_stream_create``
@@ -365,21 +365,21 @@ class ChatRequest(BaseModel):
     # Optional: 兼容渲染进程 IPC payload 里显式 null(undefined ?? null 序列化的产物)。
     # Pydantic 默认值只在字段缺失时生效，显式 null 仍按类型校验 →
     # 不加 Optional 会被 422 拒绝。业务层 `data.orchestration_mode or "auto"` 已兜底。
-    orchestration_mode: str | None = "auto"
+    orchestration_mode: Optional[str] = "auto"
 
     # Wave 3 A10 (2026-08-14): resume 恢复流 —— plan_override 非空时跳过 LLM
     # 拆解，直接用存储计划建 dispatcher；run_id 复用 resume 返回的 new_run_id。
-    plan_override: List[Dict[str, Any]] | None = None
-    run_id: str | None = None
+    plan_override: Optional[List[Dict[str, Any]]] = None
+    run_id: Optional[str] = None
 
     # PM1 (round8): 单 agent 计划模式 —— 本次 run 只读（权限执行器 override
     # READ_ONLY）+ 计划指令 system 块；DONE 后前端出批准条，批准后普通执行。
-    plan_mode: bool | None = False
+    plan_mode: Optional[bool] = False
 
     # 对标 S2（2026-09-13）：临时聊天（无记忆）模式。``"off"`` 时本轮
     # 既不注入 L13 记忆上下文，也不做对话后记忆提取；与 ChatGPT
     # "Temporary chat" / Claude 无记忆会话对齐。缺省 ``"on"``。
-    memory_mode: str | None = "on"
+    memory_mode: Optional[str] = "on"
 
 
 class MessageResponse(BaseModel):
@@ -388,9 +388,9 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     created_at: int
-    model: str | None = None
+    model: Optional[str] = None
 
-    tool_calls: str | None = None
+    tool_calls: Optional[str] = None
 
 
 class ChatErrorInfo(BaseModel):
@@ -401,19 +401,19 @@ class ChatErrorInfo(BaseModel):
 
     type: str
     message: str
-    status_code: int | None = None
+    status_code: Optional[int] = None
 
-    retry_after: int | None = None
+    retry_after: Optional[int] = None
 
 
 class ChatResponse(BaseModel):
     """聊天响应：成功时含 message+session，失败时含 error+null message。"""
 
-    message: MessageResponse | None = None
+    message: Optional[MessageResponse] = None
 
-    session: Dict | None = None
+    session: Optional[Dict] = None
 
-    error: ChatErrorInfo | None = None
+    error: Optional[ChatErrorInfo] = None
 
 
 class EvolutionLogResponse(BaseModel):
@@ -422,20 +422,20 @@ class EvolutionLogResponse(BaseModel):
     id: str
     evolution_type: str
     description: str
-    before_state: str | None = None
+    before_state: Optional[str] = None
 
-    after_state: str | None = None
+    after_state: Optional[str] = None
 
     trigger_type: str
-    trigger_condition: str | None = None
+    trigger_condition: Optional[str] = None
 
     status: str
-    error_message: str | None = None
+    error_message: Optional[str] = None
 
-    tokens_used: int | None = None
+    tokens_used: Optional[int] = None
 
     created_at: int
-    completed_at: int | None = None
+    completed_at: Optional[int] = None
 
 
 #: agent role 白名单（PATCH/POST 共用）。
@@ -475,25 +475,25 @@ class AgentUpdate(BaseModel):
     # 我们在类内用 model_config 字段, 通过 ConfigDict 关掉该保护.
     model_config = {"protected_namespaces": ()}
 
-    name: str | None = None
+    name: Optional[str] = None
 
     role: Union[str, None] = None  # 校验放在路由层 (依赖 Pydantic Literal 不直观)
 
-    system_prompt: str | None = None
+    system_prompt: Optional[str] = None
 
-    tools: List[str] | None = None
+    tools: Optional[List[str]] = None
 
-    memory_access: List[str] | None = None
+    memory_access: Optional[List[str]] = None
 
     model_config_data: Union[dict, None] = (
         None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
     )
 
-    max_iterations: int | None = None  # 路由层校验 1..50
+    max_iterations: Optional[int] = None  # 路由层校验 1..50
 
-    enabled: bool | None = None
+    enabled: Optional[bool] = None
 
-    description: str | None = None
+    description: Optional[str] = None
 
 
 class AgentCreate(BaseModel):
@@ -509,12 +509,12 @@ class AgentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     role: str = "general"
     system_prompt: str = ""
-    tools: List[str] | None = None
-    memory_access: List[str] | None = None
-    model_config_data: Dict | None = None
-    max_iterations: int | None = None
-    enabled: bool | None = None
-    description: str | None = None
+    tools: Optional[List[str]] = None
+    memory_access: Optional[List[str]] = None
+    model_config_data: Optional[Dict] = None
+    max_iterations: Optional[int] = None
+    enabled: Optional[bool] = None
+    description: Optional[str] = None
 
 
 # ==================== 依赖注入 ====================
@@ -538,7 +538,7 @@ _RUN_CONFIRM_EVENTS: Dict[str, asyncio.Event] = {}
 class InterruptRequest(BaseModel):
     """/interrupt 请求体 —— stream_id 可选，兼容不带 body 的旧调用方。"""
 
-    stream_id: str | None = None
+    stream_id: Optional[str] = None
 
 
 def interrupt_stream(stream_id: str | None) -> str:
@@ -1598,7 +1598,7 @@ class LegacySettingsResponse(BaseModel):
 class LegacyPreferenceItem(BaseModel):
     """GET/PUT /preferences/{key} 请求/响应体。"""
 
-    value: str | None = None
+    value: Optional[str] = None
 
     value_type: str = "string"
     category: str = "general"
@@ -1606,7 +1606,7 @@ class LegacyPreferenceItem(BaseModel):
 
 @router.get("/settings")
 @with_db_lock
-def legacy_get_settings() -> Dict | None:
+def legacy_get_settings() -> Optional[Dict]:
     """读取持久化的 settings；不存在返回 null。
 
     翻译历史 snake_case 残留到 camelCase 返回，与 AppSettings 类型对齐。
@@ -2131,10 +2131,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
             # CancelledError）会让 finally 触发 UnboundLocalError，既掩盖原始异常
             # 又跳过后续的 reset_tool_context 清理。
-            done_content: str | None = None
+            done_content: Optional[str] = None
             run_outcome = "failed"
             # S1 (2026-09-06): 失败原因摘要 —— finally 落库 sessions.last_error。
-            _producer_error: str | None = None
+            _producer_error: Optional[str] = None
 
             # S1 (2026-09-06): 会话运行态落库（running）。写库点收敛两处：
             # 此处置 running，finally 落终态；失败 fail-open 只 debug，不影响主流。
@@ -2255,7 +2255,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 限额时拒绝本次聊天。限额 0/未配置 = 不限。DB 故障 fail-open
             # (today_cost_usd 返回 0 → 永不拦截)。注: run_id/dispatcher 前置
             # 初始化 —— 此处可能提前 return, finally 无条件读取它们 (P0-4)。
-            run_id: str | None = None
+            run_id: Optional[str] = None
             dispatcher = None
             try:
                 from backend.data.settings_repo import SettingsRepository
@@ -2905,7 +2905,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
-            done_reasoning: str | None = None
+            done_reasoning: Optional[str] = None
 
             # L2 真流式 (2026-09-06): run_loop 在 THINKING 段实时发 CONTENT_DELTA
             # 事件时置位 —— 此时 DONE.content 已实时下发过,不再做假切块,
@@ -3293,7 +3293,7 @@ def _ndjson(d: dict) -> str:
 
 @router.post("/interrupt")
 @with_db_lock
-def interrupt(data: InterruptRequest | None = Body(default=None)):
+def interrupt(data: Optional[InterruptRequest] = Body(default=None)):
     """中断 Agent（P0-2: 经 stream_id 定位真实运行的 agent）"""
     stream_id = data.stream_id if data is not None else None
     target = interrupt_stream(stream_id)
@@ -3743,7 +3743,7 @@ async def scan_skill_consolidation(auto_draft: bool = True, mode: str = "full"):
         )
 
     scan_mode = "auto" if mode == "auto" else "full"
-    candidate_names: Set[str] | None = None
+    candidate_names: Optional[Set[str]] = None
     if scan_mode == "auto":
         watermark = last_scan_watermark()
         if watermark is not None:
@@ -3883,7 +3883,7 @@ _MEMORY_LIST_MAX_PAGE = _MEMORY_LIST_MAX_FETCH // _MEMORY_LIST_MAX_PAGE_SIZE
 
 class MemorySearchRequest(BaseModel):
     query: str
-    memory_type: str | None = None
+    memory_type: Optional[str] = None
 
     limit: int = 20
 
@@ -3914,9 +3914,9 @@ class UserProfileCreateRequest(BaseModel):
 
 
 class UserProfileUpdateRequest(BaseModel):
-    content: str | None = None
-    category: str | None = None
-    importance: int | None = None
+    content: Optional[str] = None
+    category: Optional[str] = None
+    importance: Optional[int] = None
 
 
 @router.get("/memory/recent-writes")
@@ -4059,7 +4059,7 @@ def delete_user_profile(profile_id: str):
 
 @router.get("/memory/search")
 @with_db_lock
-def search_memory(query: str, limit: int = 20, type: str | None = None):
+def search_memory(query: str, limit: int = 20, type: Optional[str] = None):
     """搜索记忆"""
     try:
         mm = get_memory_manager()
@@ -4107,9 +4107,9 @@ def delete_memory(data: MemoryDeleteRequest):
 def list_memories(
     page: int = 1,
     page_size: int = 20,
-    offset: int | None = None,
-    type: str | None = None,
-    session_id: str | None = None,
+    offset: Optional[int] = None,
+    type: Optional[str] = None,
+    session_id: Optional[str] = None,
 ):
     """获取记忆列表（带 layer / source / 分页 envelope）。
 
@@ -4396,7 +4396,7 @@ def _enrich_summary_records(
 @router.get("/memory/summaries")
 @with_db_lock
 def list_session_summaries(
-    session_id: str | None = None,
+    session_id: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,
 ):

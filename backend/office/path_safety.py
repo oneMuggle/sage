@@ -16,7 +16,7 @@ boundary — we delegate to it on the **resolved** path and never compare
 strings.
 
 All helpers are pure stdlib. **Python 3.8-compatible syntax** (no PEP 604
-``X | None``, no ``list[int]`` annotation, no ``:=`` walrus) so this
+``X | None``, no ``List[int]`` annotation, no ``:=`` walrus) so this
 module can be cherry-picked to ``release/win7`` later without a separate
 backport branch.
 """

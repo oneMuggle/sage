@@ -192,7 +192,7 @@ def _tokenize_query(query: str) -> List[str]:
         query: 查询字符串
 
     Returns:
-        list[str]: token 列表（已过滤停止词）
+        List[str]: token 列表（已过滤停止词）
     """
     tokens = []
     current_word = []

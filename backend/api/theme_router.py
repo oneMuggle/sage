@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -27,7 +27,7 @@ class ThemeCssPayload(BaseModel):
 
     id: str
     name: str = Field(min_length=1, max_length=32)
-    cover: str | None = None
+    cover: Optional[str] = None
     css: str = Field(min_length=1, max_length=8192)
     appearance: str = Field(pattern="^(light|dark)$")
     created_at: int

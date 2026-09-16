@@ -144,7 +144,7 @@ class VectorStore:
             limit: 返回数量上限
 
         Returns:
-            list[SearchHit]: 搜索结果（按相似度降序）
+            List[SearchHit]: 搜索结果（按相似度降序）
         """
         if len(query_vec) != self.dim:
             raise ValueError(f"向量维度不匹配: 期望 {self.dim}, 实际 {len(query_vec)}")
