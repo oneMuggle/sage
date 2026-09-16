@@ -239,7 +239,11 @@ class WordImagePreview(BaseModel):
     )
 
 
-OfficeWordReadResult.model_rebuild()
+# pydantic v1（win7/py38 通道）用 update_forward_refs，v2 用 model_rebuild
+if hasattr(OfficeWordReadResult, "update_forward_refs"):
+    OfficeWordReadResult.update_forward_refs()
+elif hasattr(OfficeWordReadResult, "model_rebuild"):
+    OfficeWordReadResult.model_rebuild()
 
 
 class ExcelSheetContent(BaseModel):
