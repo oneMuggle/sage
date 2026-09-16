@@ -71,6 +71,7 @@ python-pptx==0.6.23
 lxml==6.1.0
 python-docx==1.1.2
 openpyxl==3.1.5
+pandas<2.1            # DataFrame Excel ops; 2.1+ yanked from PyPI, 2.0.3 is last working (cp38 wheel 确认)
 
 # --- Task 1 round 1 (2026-08-24): Win7 LTS 平台补包 ---
 # backports.zoneinfo 提供 py3.8 的 IANA timezone 校验 (Python 3.9+ 用内置 zoneinfo);

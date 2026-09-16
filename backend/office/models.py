@@ -1362,3 +1362,19 @@ class WordRepairRequest(BaseModel):
     max_size_bytes: int = Field(
         default=50 * 1024 * 1024, ge=1024, description="Reject files larger than this"
     )
+
+
+# ── Forward-reference resolution (pydantic v1 + `from __future__ import annotations`) ──
+#
+# ExcelSheetSpec (line 703) references ExcelDataValidationSpec /
+# ExcelConditionalFormatSpec / ExcelPrintSetupSpec which are defined AFTER it.
+# ExcelPrintSetupSpec (line 827) references ExcelPrintMarginsSpec (line 854).
+#
+# On pydantic v1 these annotations stay as unresolved ForwardRefs at class-
+# creation time → ConfigError on first model use.  v2 resolves lazily so the
+# call is a no-op (model_rebuild).  The guard keeps the code dual-version.
+for _cls in (ExcelSheetSpec, ExcelPrintSetupSpec):
+    if hasattr(_cls, "update_forward_refs"):
+        _cls.update_forward_refs()
+    elif hasattr(_cls, "model_rebuild"):
+        _cls.model_rebuild()

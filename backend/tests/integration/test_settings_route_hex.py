@@ -83,12 +83,10 @@ async def test_hex_put_settings_prevalidation_error_is_fixed_and_non_echoing(cli
     for payload in cases:
         response = await client.put("/api/v1/settings", json=payload)
         assert response.status_code == 422
-        assert response.json() == {
-            "detail": {
-                "type": "invalid_settings_payload",
-                "message": "设置内容无效，请检查字段格式",
-            }
-        }
+        body = response.json()
+        assert body["detail"]["type"] == "invalid_settings_payload"
+        assert body["detail"]["message"] == "设置内容无效，请检查字段格式"
+        assert "field" in body["detail"]
         assert secret not in response.text
         assert path not in response.text
 
