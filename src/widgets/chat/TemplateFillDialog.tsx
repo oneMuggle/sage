@@ -72,6 +72,44 @@ export function clearRememberedValues(content: string): void {
   }
 }
 
+/** r56: 变量记忆条目（扫描结果；hash 为 key 中 sage:tplfill: 之后的短标识）。 */
+export interface TplMemoryEntry {
+  key: string;
+  hash: string;
+  values: Record<string, string> | null; // null = 值损坏（非 JSON 对象）
+  rawPreview: string;
+}
+
+/** r56: 扫描全部模板变量记忆条目（失联清理面板的数据源）。
+ * localStorage 不可用时返回空表，与既有读写口径一致。 */
+export function listTplMemoryEntries(): TplMemoryEntry[] {
+  const prefix = 'sage:tplfill:';
+  const entries: TplMemoryEntry[] = [];
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(prefix)) continue;
+      const hash = key.slice(prefix.length);
+      let values: Record<string, string> | null = null;
+      let rawPreview = '';
+      try {
+        const raw = window.localStorage.getItem(key) ?? '';
+        rawPreview = raw.slice(0, 120);
+        const parsed: unknown = JSON.parse(raw);
+        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          values = parsed as Record<string, string>;
+        }
+      } catch {
+        // 值损坏：保留 rawPreview 供展示，values 置 null
+      }
+      entries.push({ key, hash, values, rawPreview });
+    }
+  } catch {
+    return [];
+  }
+  return entries;
+}
+
 /** 用填写的值解析模板；留空的变量保留 {{占位}} 原样。 */
 export function resolveTemplate(
   content: string,
