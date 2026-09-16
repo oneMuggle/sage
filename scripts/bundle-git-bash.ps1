@@ -4,11 +4,12 @@
 # so the Sage Win7 installer has a usable bash even on machines without
 # Git for Windows (Win7 SP1 ships with PowerShell 2.0 only — see PR #911).
 #
-# Why MinGit v2.44.0.2:
-#   Git for Windows DROPPED Win7 support after v2.44.0 (2024-03). v2.44.0.2
-#   is the last version that runs on Win7 SP1. We pin to this version because
-#   newer MinGit ships against Win8+ APIs (BCrypt, etc.) that fail on Win7
-#   at first spawn (verified by Git for Windows release notes).
+# Why MinGit v2.46.2.2 (tag v2.46.2.windows.2):
+#   Git for Windows v2.46 is the LAST version to support Windows 7 (confirmed
+#   by release notes: "Git for Windows v2.46 is the last version to support
+#   for Windows 7 and for Windows 8"). v2.46.2.windows.2 is the latest patch
+#   in the v2.46 series. Newer versions (v2.47+) drop Win7 support in the
+#   underlying MSYS2 runtime and use BCrypt APIs that fail on Win7 at first spawn.
 #
 # Why not full MSYS2 base:
 #   MSYS2 base is ~50MB compressed / ~200MB+ expanded. We only need bash + a
@@ -39,9 +40,9 @@
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$MinGitVersion = "2.44.0.2"
-# Git for Windows release tag format: v2.44.0.windows.2 (note the .windows.N suffix)
-$MinGitTag = "v2.44.0.windows.2"
+$MinGitVersion = "2.46.2.2"
+# Git for Windows release tag format: v2.46.2.windows.2 (note the .windows.N suffix)
+$MinGitTag = "v2.46.2.windows.2"
 $MinGitUrl = "https://github.com/git-for-windows/git/releases/download/$MinGitTag/MinGit-$MinGitVersion-64-bit.zip"
 $ResourcesDir = Join-Path $PSScriptRoot "..\resources"
 $ToolsDir = Join-Path $ResourcesDir "tools"
