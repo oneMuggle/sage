@@ -324,3 +324,29 @@ async def test_create_without_session_id_never_busy():
     await reg.create("sid-a", queue_maxsize=10, session_id=None)
     e2 = await reg.create("sid-b", queue_maxsize=10, session_id=None)
     assert e2 is not None
+
+
+@pytest.mark.asyncio()
+async def test_put_blocked_then_subscribe_delivers_all_events():
+    """不变量守卫 (2026-09 审计复核): put 在满队列挂起期间 subscribe() 清空
+    父队列并注册 subscriber; put 恢复后事件必须到达 subscriber 而非滞留
+    父队列。实测成立 —— asyncio.Queue.put 内部调用的 self.put_nowait 是
+    虚分派, 命中 BroadcastQueue 覆写后直接广播给 subscriber。此测试钉住
+    该行为, 防止未来重写 put/subscribe 时引入真实丢失。"""
+    reg = StreamRegistry()
+    entry = await reg.create("race", queue_maxsize=1)
+    q = entry.queue
+    await q.put(_make_event("x", content="a"))  # 父队列: [a]
+    blocked = asyncio.create_task(q.put(_make_event("x", content="b")))
+    await asyncio.sleep(0.01)
+    assert not blocked.done()  # 父队列满, put 挂起中
+    sub = await q.subscribe()  # 清空父队列取走 a
+    got = []
+
+    async def _drain():
+        for _ in range(2):
+            got.append(await sub.get())
+
+    await asyncio.wait_for(_drain(), timeout=2)
+    assert [e["content"] for e in got] == ["a", "b"]
+    await asyncio.wait_for(blocked, timeout=2)
