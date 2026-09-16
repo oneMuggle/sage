@@ -97,7 +97,27 @@ export interface SavedOfficeFile {
   savedPath: string;
 }
 
+export type OfficeStagingStatus =
+  | 'completed'
+  | 'active'
+  | 'recent'
+  | 'review'
+  | 'untracked'
+  | 'unreadable';
+export interface OfficeStagingReport {
+  readOnly: true;
+  truncated: boolean;
+  items: Array<{
+    documentId: string;
+    docType: OfficeDocType;
+    status: OfficeStagingStatus;
+    createdAt?: number;
+  }>;
+}
+
 export interface OfficeElectronApiBridge {
+  /** Read-only evidence, not deletion authorization; optional for old desktop builds. */
+  previewStaging?: (workspacePath: string) => Promise<OfficeStagingReport>;
   /** Legacy Phase 1.3 channels — kept for compat with the /office page UI. */
   pickOfficeFile: (docType: OfficeDocType) => Promise<PickedOfficeFile | null>;
   pickSavePath: (defaultName: string) => Promise<string | null>;
@@ -121,8 +141,8 @@ export interface OfficeElectronApiBridge {
   /** Discard an import; the staged file is deleted. Idempotent on unknown tokens. */
   discardOfficeImport: (importToken: string) => Promise<void>;
   /**
-   * Sweep orphan staging directories not present in `knownDocIds`.
-   * Returns the count of directories removed.
+   * Deprecated no-op. Renderer document lists cannot establish orphanhood.
+   * Always returns swept=0; use previewStaging for read-only evidence.
    */
   sweepOrphanStaging: (opts: {
     workspacePath: string;
