@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🌐 **网页访问能力优化 Round 11：AU3 自动刷新回路 + AU 系列收尾**（方案 `docs/plans/2026-09-16_web-access-optimization-round11.md`）
+
+### Added(web-access)
+- **登录态自愈（AU3+AU6）**：`browser_cookies export` 在持久会话导出时在档案记录来源 profile（`BrowserSession` 新增 `profile_name` 字段）；`web_access_config.auto_refresh_credentials` 开启后（默认关），带凭据请求被踢到登录墙时自动用该 profile 静默重访原 URL（先注入旧 cookie 走 remember-me 续期），重导成功则重放请求并以 `credential_auto_refreshed` note 提示；失败严格回退原 `login_required` 语义；静态与下载通道均接入
+- **渲染通道登录墙检测（AU7）**：AU5 注入后渲染结果若仍是密码框页（且正文极短）→ 先走 AU3 自愈重渋一次，仍墙则报 `login_required`，不再把登录页当正文返回
+- **降级可观测（X4）**：平台加密不可用（scheme=none）时写入凭据档案会 `logger.warning`，`list_credentials` 每条增 `encrypted` 标记，明示哪些档案是明文落库
 > 🌐 **网页访问能力优化 Round 10：AU5 渲染池 ↔ 凭据档案双向互通**（方案 `docs/plans/2026-09-16_web-access-optimization-round10.md`）
 
 ### Added(web-access)

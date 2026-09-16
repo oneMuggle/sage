@@ -944,7 +944,11 @@ class BrowserCookiesTool(BaseTool):
             by_domain.setdefault(cookie_domain, []).append(item)
         saved = []
         for cookie_domain, cookies in sorted(by_domain.items()):
-            save_credential(cookie_domain, cookies)
+            save_credential(
+                cookie_domain,
+                cookies,
+                source_profile=str(getattr(session, "profile_name", "") or ""),
+            )
             # AU1：告知最短剩余时效，模型 / 用户可预知失效
             expiries = [
                 int(c["expires"] - now)
