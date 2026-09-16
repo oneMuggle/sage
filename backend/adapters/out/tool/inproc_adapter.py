@@ -101,7 +101,7 @@ class InprocToolAdapter:
             )
         return specs
 
-    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:  # noqa: PLR0911 (router/dispatcher: 7 returns justified)
         """按名称执行工具并返回端口侧的 ``ToolResult``。
 
         M2 增强：
