@@ -18,6 +18,16 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+
+> 🌐 **网页访问能力优化 Round 10：AU5 渲染池 ↔ 凭据档案双向互通**（方案 `docs/plans/2026-09-16_web-access-optimization-round10.md`）
+
+### Added(web-access)
+- **渲染通道登录态注入（AU5）**：`web_fetch credential_domain=` 命中 JS 壳渲染降级或反爬升级时，先把档案 cookie 经 `Storage.setCookies` 注入渲染浏览器（导航前生效，浏览器内重定向自动按域携带），渲染完成经 `Storage.getCookies` 按域取回并合并回档案（`credential_refreshed` note 提示）——“一次导出，静态 / 渲染 / 交互三条通道共用”成立；注入失败报 `RenderError`（宁失败不静默降级为未登录正文），回写失败静默（与 AU2 同口径）；header 型档案渲染通道不支持，跳过不报错
+- **`credential_vault`**：`CredentialResolution` 新增 `cookies` 槽（cookie 档案 ok 时带出过滤后逐条 cookie，供 CDP 逐条注入——host-only cookie 无法从 Cookie 头串重建）；新增 `merge_cdp_cookies`（`Storage.getCookies` dict → 档案，与 `merge_set_cookies` 同守卫：host 亲和 fail-closed / 归属域 ∈ 档案域 / 同 name+path 替换 / 过期删除 / 清空删档）
+
+### Changed(web-access)
+- `browser_cdp.cdp_command` 浏览器级方法前缀新增 `Storage.*`（免 attach，Chrome 97+）
+- `web_fetch` schema `credential_domain` 描述补渲染通道语义
 > 🌐 **网页访问能力优化 Round 5 批次 4：文件嗅探与浏览器下载跟踪**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.2 SN2/SN3）
 
 ### Added(web-access)
@@ -303,8 +313,6 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - **fix(win7-office): `office_create` binding-aware delegation 越界守卫** (T7.5) — 当用户显式把 `output_dir` 指到 binding workspace 之外(如桌面)时不再 delegation,留给 legacy `output_dir` 路径走 `_enforce_workspace` + ApprovalGate 触发"越界写"权限提示。否则文件会被静默改写到 managed workspace, 用户找不到且 doc 也只在 binding 内可见,双重反直觉
 - **fix(win7-test): `test_no_list_dir_hyphen_anywhere_in_source` cwd 来源去硬编码** — 改用 `git rev-parse --show-toplevel` 子进程动态定位仓库根,任意 worktree / 干净 CI runner 都能跑
 - **fix(ci): base CI 修复 cherry-pick (PR #367)** — `ci-write-manifest` 转 .mjs, `build-manifest` 路径校正, vitest 排除 .claude/worktrees
-
-## [Unreleased]
 
 ## [v0.4.9-alpha.4-win7] - 2026-08-25
 

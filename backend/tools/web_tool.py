@@ -465,7 +465,8 @@ class WebFetchTool(BaseTool):
                         "description": (
                             "凭据档案 domain（如 .cnki.net）：browser_cookies 导出的 "
                             "cookie 或 credential_set 设置的头部凭据（Bearer / API key），"
-                            "命中域自动附加、跨域剥离；过期报 credential_expired，"
+                            "命中域自动附加、跨域剥离；JS 渲染降级 / 反爬升级时"
+                            "同样注入渲染浏览器（AU5）；过期报 credential_expired，"
                             "被踢到登录页报 login_required"
                         ),
                     },
@@ -631,14 +632,22 @@ class WebFetchTool(BaseTool):
                     raise _AntibotBlocked("antibot_page: 静态响应是反爬验证 / 拦截页", status)
                 if self._should_render(render, response, content, max_length):
                     content = self._render_dynamic(
-                        final_url, network_policy, mode, self._UNCAPPED_LENGTH, content, wait_for
+                        final_url,
+                        network_policy,
+                        mode,
+                        self._UNCAPPED_LENGTH,
+                        content,
+                        wait_for,
+                        credential_domain.strip(),
                     )
             except _AntibotBlocked as blocked:
                 if not can_escalate:
                     return ToolResult(success=False, error=f"{blocked.reason}{_ANTIBOT_GUIDANCE}")
                 # AB1：静态通道被拦 → 经渲染池（真 Chrome 指纹 + 代理 + 可选持久
                 # profile）重放一次；仍被拦才返回指引。
-                content = self._escalate(url, network_policy, mode, wait_for, blocked)
+                content = self._escalate(
+                    url, network_policy, mode, wait_for, blocked, credential_domain.strip()
+                )
             if mode == "files" and content.get("kind") != "binary":
                 self._finalize_files(content, network_policy)
             if use_cache:
@@ -1020,10 +1029,16 @@ class WebFetchTool(BaseTool):
         mode: str,
         wait_for: str,
         blocked: _AntibotBlocked,
+        credential_domain: str = "",
     ) -> Dict[str, Any]:
-        """AB1 升级链：渲染池重放；渲染结果仍是盾页 / 拒绝状态 → 抛 RenderError 附指引。"""
+        """AB1 升级链：渲染池重放；渲染结果仍是盾页 / 拒绝状态 → 抛 RenderError 附指引。
+
+        AU5：携带 ``credential_domain`` 时渲染通道同样注入档案 cookie。
+        """
         try:
-            rendered = web_render.render_page(url, network_policy, wait_for=wait_for)
+            rendered = web_render.render_page(
+                url, network_policy, wait_for=wait_for, credential_domain=credential_domain
+            )
         except RenderError as exc:
             raise RenderError(
                 f"{blocked.reason}；已尝试真浏览器通道仍失败：{exc}{_ANTIBOT_GUIDANCE}"
@@ -1049,6 +1064,12 @@ class WebFetchTool(BaseTool):
             "escalated": "render",
             "escalated_from": blocked.reason,
         }
+        refreshed = rendered.get("credential_refreshed")
+        if refreshed:
+            content["note"] = (
+                "credential_refreshed: 渲染通道续期了 cookie，档案已回写"
+                f"（{', '.join(refreshed[:5])}）"
+            )
         if mode == "links":
             content["links"] = list(rendered.get("links") or [])[: self._policy.max_result_items]
         elif mode == "tables":
@@ -1091,16 +1112,25 @@ class WebFetchTool(BaseTool):
         max_length: int,
         static_content: Dict[str, Any],
         wait_for: str = "",
+        credential_domain: str = "",
     ) -> Dict[str, Any]:
         """JS 壳命中后的渲染降级：headless 取渲染后正文（W1）。
 
-        渲染失败抛 ``RenderError``（execute 单独捕获，不吞成通用失败）。
-        渲染分支自 R1 起经 outerHTML 复用 html_extract，links/tables 与
-        静态分支同构 —— 静态壳的残缺值被渲染值整体替换。
+        AU5：携带 ``credential_domain`` 时渲染通道同样注入档案 cookie，
+        渲染后 cookie 续期回写档案并以 note 提示。
         """
-        rendered = web_render.render_page(url, network_policy, wait_for=wait_for)
+        rendered = web_render.render_page(
+            url, network_policy, wait_for=wait_for, credential_domain=credential_domain
+        )
+        refreshed = rendered.pop("credential_refreshed", None)
         content = dict(static_content)  # 保留 status_code / content_type / encoding / mode
         content.update({k: v for k, v in rendered.items() if k != "html"})
+        if refreshed:
+            note = (
+                "credential_refreshed: 渲染通道续期了 cookie，档案已回写"
+                f"（{', '.join(refreshed[:5])}）"
+            )
+            content["note"] = f"{content['note']}；{note}" if content.get("note") else note
         content["content"] = str(rendered.get("content", ""))[:max_length]
         if mode == "links":
             content["links"] = list(rendered.get("links") or [])[: self._policy.max_result_items]
