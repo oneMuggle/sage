@@ -525,7 +525,9 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">诊断</h3>
         <DiagnosticsCard />
-        <GatewayCard />
+        <GatewayCard platform="telegram" />
+        <GatewayCard platform="discord" />
+        <GatewayCard platform="slack" />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">高级</h3>
