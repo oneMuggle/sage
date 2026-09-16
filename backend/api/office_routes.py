@@ -48,6 +48,7 @@ from backend.office.errors import (
     office_error_to_http_status,
 )
 from backend.office.excel import generate_xlsx, read_xlsx
+from backend.office.excel_recalc import ExcelRecalcRequest, ExcelRecalcResult, refresh_formula_cache
 from backend.office.journal.generator import generate_structured
 from backend.office.journal.models import (
     JournalContent,
@@ -776,6 +777,15 @@ def word_data_endpoint(req: PdfDataRequest) -> PdfDataResult:
 #: F3 (office-p0): 原文预览上限 —— 与 chat 产物侧 artifact_reader.MAX_PDF_BYTES
 #: 同口径（过大 PDF base64 化既撑爆响应也拖垮 renderer）。
 MAX_PDF_DATA_BYTES = 20_000_000
+
+
+@router.post("/excel/recalc", response_model=ExcelRecalcResult)
+def excel_recalc_endpoint(req: ExcelRecalcRequest) -> ExcelRecalcResult:
+    """P2-C: 受管 .xlsx 公式缓存重算（soffice 就地刷新，重算前自动快照）。
+
+    失败契约同 export_pdf：永不 raise，预期内失败返回 ``ok=False``。
+    """
+    return refresh_formula_cache(req)
 
 
 @router.post("/import/convert-legacy", response_model=LegacyImportResult)

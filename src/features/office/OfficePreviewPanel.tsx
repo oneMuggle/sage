@@ -83,8 +83,9 @@ export interface OfficePreviewPanelProps {
    */
   fidelityAvailable?: boolean;
   /**
-   * P2-D (office-p2d): refresh hook — e.g. after a PDF form fill produced
-   * a new managed copy. Absent → no form button (nothing to refresh).
+   * P2-C/P2-D (office-p2c/p2d): re-read the current document after an
+   * in-place mutation (excel formula-cache recalc / PDF form fill producing
+   * a new managed copy). Absent → recalc/form buttons are hidden.
    */
   onRefresh?: () => void;
 }
@@ -148,6 +149,35 @@ export function OfficePreviewPanel({
 
   // P2-D (office-p2d): PDF AcroForm 表单填写对话框
   const [formDialogOpen, setFormDialogOpen] = useState(false);
+  // P2-C (office-p2c): excel 公式缓存重算（soffice 重算回写，重算前服务端自动快照）
+  const [recalcing, setRecalcing] = useState(false);
+  const handleRecalcExcel = async () => {
+    if (recalcing) return;
+    const ws = workspacePath ?? summary.workspace_path;
+    if (!ws) {
+      toast.error(t('office.recalc.failed'));
+      return;
+    }
+    setRecalcing(true);
+    try {
+      const res = await officeApi.recalcExcel({
+        workspace_path: ws,
+        file_path: buildManagedPath(ws),
+      });
+      if (res.ok) {
+        toast.success(t('office.recalc.success'));
+        onRefresh?.();
+      } else {
+        toast.error(`${t('office.recalc.failed')}: ${res.error ?? ''}`.trimEnd());
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`${t('office.recalc.failed')}: ${msg}`);
+    } finally {
+      setRecalcing(false);
+    }
+  };
+
   // Round A P1: 高保真视图（docx/xlsx/pptx → 缓存 PDF → 内嵌 viewer）。
   // data URL 以 summary.id + updated_at 为 key 缓存在组件状态里 —— 文档
   // 一变 key 即不同，重开视图会重新拉取（后端另有 mtime 级缓存兜底）。
@@ -433,6 +463,18 @@ export function OfficePreviewPanel({
               >
                 <Pencil className="w-3.5 h-3.5" />
                 {t('office.edit.open')}
+              </button>
+            )}
+            {preview.docType === 'excel' && onRefresh && (
+              <button
+                type="button"
+                onClick={() => void handleRecalcExcel()}
+                disabled={recalcing}
+                className="flex items-center gap-1 px-2 py-1 rounded border border-border text-xs text-text-secondary hover:bg-bg-hover transition-colors disabled:opacity-50 shrink-0"
+                data-testid="office-excel-recalc-button"
+                aria-label={t('office.recalc.button')}
+              >
+                {recalcing ? t('office.recalc.recalcing') : t('office.recalc.button')}
               </button>
             )}
             <button
