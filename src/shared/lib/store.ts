@@ -106,18 +106,34 @@ interface StoreState {
 const messageLoadGenerations = new Map<string, number>();
 let latestMessageLoadToken = 0;
 
-function mergeLoadedMessages(
+export function mergeLoadedMessages(
   loadedMessages: Message[],
   localMessages: Message[],
   sessionId: string,
 ): Message[] {
   const sessionMessages = loadedMessages.filter((message) => message.session_id === sessionId);
   const loadedIds = new Set(sessionMessages.map((message) => message.id));
+  // 2026-09 修复 (计数感知去重): 流自然结束后, 后端已用服务端 id 持久化本轮,
+  // 而本地乐观副本用前端随机 UUID —— 仅按 id 去重会把两份拼在一起, 最后一轮
+  // 消息重复显示。按 (role, content) 匹配且计数感知: 服务端每有一条同内容
+  // 消息, 只允许"认领"一份本地副本; 服务端确实没有的(如本轮未落库)才保留。
+  const serverKeyCount = new Map<string, number>();
+  for (const m of sessionMessages) {
+    const key = `${m.role}\u0000${m.content}`;
+    serverKeyCount.set(key, (serverKeyCount.get(key) ?? 0) + 1);
+  }
   const mergedMessages = [
     ...sessionMessages,
-    ...localMessages.filter(
-      (message) => message.session_id === sessionId && !loadedIds.has(message.id),
-    ),
+    ...localMessages.filter((message) => {
+      if (message.session_id !== sessionId || loadedIds.has(message.id)) return false;
+      const key = `${message.role}\u0000${message.content}`;
+      const remaining = serverKeyCount.get(key) ?? 0;
+      if (remaining > 0) {
+        serverKeyCount.set(key, remaining - 1);
+        return false;
+      }
+      return true;
+    }),
   ];
 
   return mergedMessages;

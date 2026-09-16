@@ -119,6 +119,9 @@ export function useChat() {
   // sid → 活跃流句柄（S3: cancelRef/streamIdRef/finishStreamRef 单例的键控版）
   const activeHandleRef = useRef<Map<string, ActiveStreamHandle>>(new Map());
   const [error, setError] = useState<string | null>(null);
+  // 2026-09 修复: 记录错误归属会话 —— 后台会话 A 失败时, 横幅不应出现在
+  // 用户正在看的会话 B (且旧实现的"重试"按钮会重发 B 的消息)。
+  const [errorSessionId, setErrorSessionId] = useState<string | null>(null);
   // PM2 (round8): 计划模式完成的会话 ID —— 非空时 Chat 渲染"按计划执行"批准条。
   const [planApprovalFor, setPlanApprovalFor] = useState<string | null>(null);
   const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
@@ -271,6 +274,7 @@ export function useChat() {
 
       markStreamActive(sid, { streamId: null, cancel: null, finish: null });
       setError(null);
+      setErrorSessionId(null);
 
       const userMessage: Message = {
         id: crypto.randomUUID(),
@@ -284,12 +288,14 @@ export function useChat() {
       if (!chatEndpoint?.baseUrl) {
         // 仍记录错误供上层展示,但消息已经进 store
         setError('未配置 API 地址，请在设置中配置');
+        setErrorSessionId(sid);
         markStreamIdle(sid);
         return;
       }
 
       if (!settings.modelSelections.chatModel.modelId) {
         setError('未选择对话模型，请在设置中配置');
+        setErrorSessionId(sid);
         markStreamIdle(sid);
         return;
       }
@@ -364,6 +370,7 @@ export function useChat() {
         logger.error(requestId, 'useChat.send.failed', err);
         if (err instanceof ApiException && err.llmError) {
           setError(mapLLMErrorToText(err.llmError));
+          setErrorSessionId(sid);
           return;
         }
         const apiErr = err as {
@@ -373,6 +380,7 @@ export function useChat() {
         };
         if (apiErr.llmError || apiErr.error) {
           setError(mapLLMErrorToText(apiErr.llmError ?? apiErr.error!));
+          setErrorSessionId(sid);
           return;
         }
         // 后端 agent.run_loop / agent_tool 在 FAILED 收尾时把 ``payload.error``
@@ -383,6 +391,7 @@ export function useChat() {
         const raw = err instanceof Error ? err.message : String(err ?? '');
         const agentText = mapAgentErrorToText(raw);
         setError(agentText ?? raw ?? '发送消息失败');
+        setErrorSessionId(sid);
       };
 
       // 把流式最终 content 写回 store.messages,让 derivedMessages 退回
@@ -919,9 +928,13 @@ export function useChat() {
     [chatEndpoint, settings],
   );
 
-  const clearError = useCallback(() => setError(null), []);
+  const clearError = useCallback(() => {
+    setError(null);
+    setErrorSessionId(null);
+  }, []);
 
   return {
+    errorSessionId,
     messages: derivedMessages,
     isLoading,
     error,

@@ -88,6 +88,8 @@ describe('ApprovalDialog', () => {
     expect(screen.getByTestId('permission-risk-badge')).toHaveTextContent('可疑');
     unmount();
 
+    // 2026-09 修复: 后到者不再覆盖已展示请求 —— 先 resolve 再投递新请求
+    usePermissionState.getState().resolve();
     usePermissionState.getState().setFromEvent(makeRequest({ risk: 'safe' }));
     render(
       <I18nProvider>

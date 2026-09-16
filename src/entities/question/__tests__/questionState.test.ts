@@ -21,7 +21,7 @@ function makeQuestion(overrides: Partial<UserQuestion> = {}): UserQuestion {
 
 describe('useQuestionState', () => {
   beforeEach(() => {
-    useQuestionState.setState({ currentQuestion: null });
+    useQuestionState.setState({ currentQuestion: null, pendingBySession: {} });
   });
 
   it('initial state: no pending question', () => {
@@ -42,9 +42,13 @@ describe('useQuestionState', () => {
     expect(useQuestionState.getState().currentQuestion?.question).toBe('选择输出格式?');
   });
 
-  it('setFromEvent() replaces an in-flight question (后到者覆盖)', () => {
-    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'q-1' }));
-    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'q-2' }));
+  it('setFromEvent() keeps displayed question; later ones queue per session (2026-09 修复)', () => {
+    // 同 permissionState —— 后到者不覆盖已展示的提问, 按会话归档。
+    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'q-1' }), 'sess-A');
+    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'q-2' }), 'sess-B');
+    expect(useQuestionState.getState().currentQuestion?.request_id).toBe('q-1');
+    expect(Object.keys(useQuestionState.getState().pendingBySession)).toHaveLength(2);
+    useQuestionState.getState().resolve('sess-A');
     expect(useQuestionState.getState().currentQuestion?.request_id).toBe('q-2');
   });
 
@@ -59,11 +63,15 @@ describe('useQuestionState', () => {
     expect(useQuestionState.getState().currentQuestion).toBeNull();
   });
 
-  it('updates immutably: setState produces a new question object reference', () => {
-    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'a' }));
+  it('same-session replace yields a new object; cross-session keeps displayed', () => {
+    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'a' }), 'sess-A');
     const first = useQuestionState.getState().currentQuestion;
-    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'b' }));
-    const second = useQuestionState.getState().currentQuestion;
-    expect(second).not.toBe(first);
+    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'b' }), 'sess-A');
+    const replaced = useQuestionState.getState().currentQuestion;
+    expect(replaced).not.toBe(first);
+    expect(replaced?.request_id).toBe('b');
+    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'c' }), 'sess-B');
+    expect(useQuestionState.getState().currentQuestion).toBe(replaced);
+    expect(useQuestionState.getState().pendingBySession['sess-B'].request_id).toBe('c');
   });
 });
