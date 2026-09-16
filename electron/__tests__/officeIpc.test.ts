@@ -158,6 +158,7 @@ describe('office:pick-and-import', () => {
     fs.unlinkSync(tmpSrc);
   });
 
+  it('filter catalog includes legacy .ppt/.doc/.xls for in-place conversion (P1-C); no All Files', async () => {
     mocks.dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
 
     const handler = registeredHandlers.get('office:pick-and-import')!;
