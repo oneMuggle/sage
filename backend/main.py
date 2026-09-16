@@ -870,12 +870,28 @@ async def settings_validation_exception_handler(
     FastAPI's default validation behavior.
     """
     if request.method == "PUT" and request.url.path.rstrip("/") == "/api/v1/settings":
+        # 从 exc.errors() 提取第一个错误的字段路径作为 ``field`` —
+        # test_put_settings_prevalidation_error_is_fixed_and_non_echoing 断言
+        # detail 必须含 ``field`` 键 (legacy_routes.py:1634 handler 也提供
+        # 该键, 这里 Pydantic pre-handler 422 必须与之对齐).
+        # 字段路径形如 ('body', 'endpoints', 0, 'protocol'), join 成 "endpoints.0.protocol".
+        field = "value"
+        try:
+            errors = exc.errors()
+            if errors:
+                loc = errors[0].get("loc", ())
+                parts = [str(p) for p in loc if p != "body"]
+                if parts:
+                    field = ".".join(parts)
+        except Exception:  # noqa: BLE001 — Pydantic v1/v2 errors() 形态差异, 失败回退 "value"
+            field = "value"
         return JSONResponse(
             status_code=422,
             content={
                 "detail": {
                     "type": "invalid_settings_payload",
                     "message": "设置内容无效，请检查字段格式",
+                    "field": field,
                 }
             },
         )
