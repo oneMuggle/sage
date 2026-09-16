@@ -2,6 +2,7 @@
 Sage - 记忆型 AI 桌面助手
 FastAPI 后端入口
 """
+
 import asyncio
 import logging
 import os
@@ -25,6 +26,8 @@ def _startup_mark(step: str) -> None:
     """R22-D7: 启动逐步耗时埋点 —— 此前只有 4 个时点，db init 与
     lifespan-complete 之间的 ~20 步串行初始化是耗时黑盒。"""
     logger.info("[sage-startup] t=%.1fs %s complete", time.monotonic() - _startup_t0, step)
+
+
 if __name__ == "__main__":
     print(  # noqa: T201
         f"[sage-startup] t=0.0s module load begin (pid={os.getpid()})",
@@ -332,9 +335,7 @@ async def lifespan(app: FastAPI):
 
     _stale_orch_runs = OrchRunRepository().fail_stale_running_runs()
     if _stale_orch_runs:
-        logger.info(
-            "启动恢复: %d 个遗留 running 编排 run 已标记为 failed", _stale_orch_runs
-        )
+        logger.info("启动恢复: %d 个遗留 running 编排 run 已标记为 failed", _stale_orch_runs)
 
     # C2 (2026-09-09): 审批决策 run/task 归属解析器注册（依赖反转）——
     # services 层不得 import orchestration（六边形 import 契约），故由
@@ -455,10 +456,7 @@ async def lifespan(app: FastAPI):
 
     _threading.Thread(target=_startup_backup, name="startup-backup", daemon=True).start()
     try:
-
-        scheduler_service.register_system_task(
-            "daily-backup", _create_backup_daily, "10 3 * * *"
-        )
+        scheduler_service.register_system_task("daily-backup", _create_backup_daily, "10 3 * * *")
     except Exception:
         logger.exception("daily backup job registration failed (ignored)")
 
@@ -488,9 +486,7 @@ async def lifespan(app: FastAPI):
             )
             return
         content = f"[系统唤醒: {wake.kind.value}] {wake.note or '继续之前挂起的任务。'}"
-        await chat_service.run_turn(
-            wake.session_id, Message(role=Role.USER, content=content)
-        )
+        await chat_service.run_turn(wake.session_id, Message(role=Role.USER, content=content))
 
     app.state.wake_scheduler = WakeScheduler(
         store=app.state.wake_store,
@@ -510,11 +506,35 @@ async def lifespan(app: FastAPI):
         if _tg_gateway is not None:
             _tg_gateway.start_polling()
             app.state.telegram_gateway = _tg_gateway
-            logger.info("Telegram 网关已启动（长轮询，白名单 %d 个 chat）",
-                        len(_tg_gateway.config.allowed_chat_ids))
+            logger.info(
+                "Telegram 网关已启动（长轮询，白名单 %d 个 chat）",
+                len(_tg_gateway.config.allowed_chat_ids),
+            )
         _startup_mark("telegram-gateway")
     except Exception as exc:  # noqa: BLE001 — 网关失败不阻塞后端启动
         logger.warning("Telegram 网关启动失败（忽略）: %s", exc)
+
+    # Round 16: Discord / Slack 网关（同 telegram 模式，未配置零开销）
+    for _platform, _getter in (
+        ("Discord", "backend.gateway.discord:get_discord_gateway"),
+        ("Slack", "backend.gateway.slack:get_slack_gateway"),
+    ):
+        try:
+            import importlib
+
+            _mod_name, _fn_name = _getter.split(":")
+            _gateway = getattr(importlib.import_module(_mod_name), _fn_name)()
+            if _gateway is not None:
+                _gateway.start_polling()
+                setattr(app.state, f"{_platform.lower()}_gateway", _gateway)
+                logger.info(
+                    "%s 网关已启动（轮询，白名单 %d 个 channel）",
+                    _platform,
+                    len(_gateway.config.allowed_channel_ids),
+                )
+            _startup_mark(f"{_platform.lower()}-gateway")
+        except Exception as exc:  # noqa: BLE001 — 网关失败不阻塞后端启动
+            logger.warning("%s 网关启动失败（忽略）: %s", _platform, exc)
 
     # M1 工具安全加固: 全局审批闸口 — agent 循环 await 审批, 路由解析应答
     from backend.services.permission_gate import init_permission_gate
@@ -630,6 +650,11 @@ async def lifespan(app: FastAPI):
     if _tg is not None:
         with suppress(Exception):
             _tg.stop_polling()
+    for _platform in ("discord", "slack"):
+        _gw = getattr(app.state, f"{_platform}_gateway", None)
+        if _gw is not None:
+            with suppress(Exception):
+                _gw.stop_polling()
     _shutdown_bash_sessions()
     _shutdown_browser_sessions()
     _shutdown_repl_cleanups()
