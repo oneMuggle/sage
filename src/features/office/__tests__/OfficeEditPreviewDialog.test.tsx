@@ -412,6 +412,13 @@ describe('buildUpdateOps — op composition table', () => {
     deleteAll: false,
     commentText: '',
     commentAuthor: '',
+    chartType: 'bar' as const,
+    chartAnchor: '',
+    chartMinCol: '',
+    chartMinRow: '',
+    chartMaxCol: '',
+    chartMaxRow: '',
+    chartTitle: '',
     styleMatch: '',
     styleIndex: '',
     styleFontSize: '',
@@ -500,6 +507,56 @@ describe('buildUpdateOps — op composition table', () => {
     expect(
       buildUpdateOps('word', { ...base, wordKind: 'delete_comment', commentId: ' 2 ' }),
     ).toEqual([{ op: 'delete_comment', comment_id: '2' }]);
+  });
+
+  it('excel add_chart: type/anchor/data_ref validation', () => {
+    expect(
+      buildUpdateOps('excel', {
+        ...base,
+        excelKind: 'add_chart',
+        sheet: 'S',
+        chartType: 'bar',
+        chartAnchor: ' a10 ',
+        chartMinCol: '1',
+        chartMinRow: '2',
+        chartMaxCol: '3',
+        chartMaxRow: '4',
+      }),
+    ).toEqual([
+      {
+        op: 'add_chart',
+        sheet: 'S',
+        type: 'bar',
+        anchor: 'A10',
+        data_ref: { min_col: 1, min_row: 2, max_col: 3, max_row: 4 },
+      },
+    ]);
+    expect(
+      buildUpdateOps('excel', {
+        ...base,
+        excelKind: 'add_chart',
+        sheet: 'S',
+        chartType: 'pie',
+        chartAnchor: 'B2',
+        chartMinCol: '2',
+        chartMinRow: '2',
+        chartMaxCol: '1',
+        chartMaxRow: '4',
+      }),
+    ).toBeNull(); // min>max 拒绝
+    expect(
+      buildUpdateOps('excel', {
+        ...base,
+        excelKind: 'add_chart',
+        sheet: 'S',
+        chartType: 'line',
+        chartAnchor: 'A1',
+        chartMinCol: 'x',
+        chartMinRow: '2',
+        chartMaxCol: '3',
+        chartMaxRow: '4',
+      }),
+    ).toBeNull(); // 非整数拒绝
   });
 
   it('pdf is not editable via this dialog', () => {
