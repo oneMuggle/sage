@@ -1144,10 +1144,35 @@ export interface OfficeWordReadResult {
   paragraphs: OfficeWordParagraphContent[];
   tables: OfficeWordTableContent[];
   images: number;
-  comments?: unknown[];
+  // Round C P4: typed — the preview renders author/date/anchor bubbles.
+  // Backend: WordCommentContent in backend/office/models.py.
+  comments?: OfficeWordComment[];
   // Round 15：每节页眉/页脚与目录域 instr 列表
   headers_footers?: WordHeaderFooterContent[];
   toc_fields?: string[];
+  /**
+   * Round C P4: bounded inline-image thumbnails (≤10 entries, backend
+   * caps each data URL). `images - image_previews.length` = omitted count.
+   * Backend: WordImagePreview in backend/office/models.py.
+   */
+  image_previews?: OfficeWordImagePreview[];
+}
+
+/** One Word comment (backend WordCommentContent). */
+export interface OfficeWordComment {
+  id: string;
+  author?: string | null;
+  date?: string | null;
+  text: string;
+  anchor_text?: string;
+}
+
+/** One inline-image thumbnail (backend WordImagePreview, round C P4). */
+export interface OfficeWordImagePreview {
+  index: number;
+  content_type: string;
+  data_url: string;
+  thumbnail: boolean;
 }
 
 export interface OfficeExcelSheetContent {
@@ -1752,6 +1777,19 @@ export interface OfficeCapabilities {
  */
 export interface OfficePdfPreviewResult {
   ok: boolean;
+  data_url?: string | null;
+  cached?: boolean;
+  error?: string | null;
+}
+
+/**
+ * Round C P5: POST /office/templates/thumbnail — first-page PNG thumbnail
+ * of a library template (builtin or workspace). Failures fold to ok=false
+ * and the picker degrades silently (thumbnails are decorative).
+ */
+export interface OfficeTemplateThumbnailResult {
+  ok: boolean;
+  /** data:image/png;base64,… */
   data_url?: string | null;
   cached?: boolean;
   error?: string | null;

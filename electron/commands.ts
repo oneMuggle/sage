@@ -865,6 +865,14 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
   office_pdf_preview: { method: 'POST', path: () => '/api/v1/office/pdf-preview' },
 
+  // Office display round C (P5): template first-page thumbnail (PNG data
+  // URL, disk-cached server-side). POST — generation has side effects
+  // (cache write) and the request carries a body.
+  office_template_thumbnail: {
+    method: 'POST',
+    path: () => '/api/v1/office/templates/thumbnail',
+  },
+
   // Office display round B (P2): snapshot vs current structured diff.
   // Backend: GET /office/doc/{doc_id}/snapshots/{snapshot_id}/diff →
   // DiffPreviewResult (snapshot=before, current=after). Read-only.

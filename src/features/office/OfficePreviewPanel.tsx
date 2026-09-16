@@ -542,7 +542,11 @@ function PdfPreview({ data }: { data: OfficePdfReadResult }) {
 
 export function WordPreview({ data }: { data: OfficeWordReadResult }) {
   const { t } = useI18n();
-  const shown = data.paragraphs.slice(0, PARAGRAPH_RENDER_CAP);
+  // Round C P7: read results already carry the FULL document (the backend
+  // never truncates) — the old hard slice was purely a render guard. 加载
+  // 更多 grows the render window instead of hiding the tail forever.
+  const [renderCap, setRenderCap] = useState(PARAGRAPH_RENDER_CAP);
+  const shown = data.paragraphs.slice(0, renderCap);
   const hidden = data.paragraphs.length - shown.length;
   return (
     <div className="space-y-2">
@@ -577,22 +581,89 @@ export function WordPreview({ data }: { data: OfficeWordReadResult }) {
         })}
       </div>
       {hidden > 0 && (
-        <p className="text-xs text-muted">
-          {t('office.preview.paragraphsTruncated').replace('{n}', String(hidden))}
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-muted">
+            {t('office.preview.paragraphsTruncated').replace('{n}', String(hidden))}
+          </p>
+          <button
+            type="button"
+            onClick={() => setRenderCap((c) => c + PARAGRAPH_RENDER_CAP)}
+            className="text-xs text-primary hover:underline"
+            data-testid="office-word-load-more"
+          >
+            {t('office.preview.loadMore')}
+          </button>
+        </div>
       )}
       {data.tables.map((table, i) => (
         <div key={i} className="mt-3">
           <CappedTable rows={table.rows} />
         </div>
       ))}
+      {/* Round C P4: 内嵌图片缩略网格。后端限量（≤10 张、有界 data URL），
+          images 总数与 previews 数之差 = 被省略的图片。 */}
+      {(data.image_previews?.length ?? 0) > 0 && (
+        <div className="mt-3" data-testid="office-word-images">
+          <div className="text-xs text-muted mb-1.5">{t('office.preview.imagesTitle')}</div>
+          <div className="flex flex-wrap gap-2">
+            {data.image_previews!.map((img) => (
+              <img
+                key={img.index}
+                src={img.data_url}
+                alt={`image ${img.index + 1}`}
+                loading="lazy"
+                className="h-24 w-auto max-w-[12rem] object-contain rounded border border-border bg-white"
+              />
+            ))}
+          </div>
+          {data.images > data.image_previews!.length && (
+            <p className="text-xs text-muted mt-1">
+              {t('office.preview.imagesOmitted').replace(
+                '{n}',
+                String(data.images - data.image_previews!.length),
+              )}
+            </p>
+          )}
+        </div>
+      )}
+      {/* Round C P4: 批注气泡（作者/时间/锚文本 + 正文）。read_docx 早已
+          返回 comments，此前预览侧一直未呈现。 */}
+      {(data.comments?.length ?? 0) > 0 && (
+        <div className="mt-3 space-y-2" data-testid="office-word-comments">
+          <div className="text-xs text-muted">
+            {t('office.preview.commentsTitle')} ({data.comments!.length})
+          </div>
+          {data.comments!.map((comment) => (
+            <div
+              key={comment.id}
+              className="border-l-2 border-warning bg-warning/5 rounded-r px-3 py-2 text-xs space-y-1"
+            >
+              <div className="flex items-center gap-2 text-muted">
+                <span className="font-medium text-text-secondary">
+                  {comment.author ?? t('office.preview.commentAnonymous')}
+                </span>
+                {comment.date && <span>{new Date(comment.date).toLocaleString()}</span>}
+              </div>
+              {comment.anchor_text && (
+                <div className="text-muted italic break-all">“{comment.anchor_text}”</div>
+              )}
+              <div className="text-text-secondary whitespace-pre-wrap break-words">
+                {comment.text}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 function ExcelSheetTable({ sheet }: { sheet: OfficeExcelSheetContent }) {
   const { t } = useI18n();
-  const shownRows = sheet.rows.slice(0, ROW_RENDER_CAP);
+  // Round C P7: render-window paging（同 WordPreview——数据已全量在手，
+  // 只放宽渲染窗口）。sheet 切换时由 ExcelPreview 的 key 重置。
+  const [rowCap, setRowCap] = useState(ROW_RENDER_CAP);
+  const shownRows = sheet.rows.slice(0, rowCap);
   const hiddenRows = sheet.rows.length - shownRows.length;
   const shownCols = COLUMN_RENDER_CAP;
   const clippedRows = shownRows.map((row) => {
@@ -650,6 +721,16 @@ function ExcelSheetTable({ sheet }: { sheet: OfficeExcelSheetContent }) {
                 <span>
                   {t('office.preview.cellsTruncated').replace('{n}', String(hiddenCols))}
                 </span>
+              )}
+              {hiddenRows > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setRowCap((c) => c + ROW_RENDER_CAP)}
+                  className="ml-3 text-primary hover:underline"
+                  data-testid="office-excel-load-more"
+                >
+                  {t('office.preview.loadMore')}
+                </button>
               )}
             </div>
           )}
@@ -712,7 +793,8 @@ export function ExcelPreview({ data }: { data: OfficeExcelReadResult }) {
             {t('office.preview.colUnit')})
           </span>
         </h3>
-        <ExcelSheetTable sheet={sheet} />
+        {/* key 保证切换 sheet 时重置 P7 渲染窗口 */}
+        <ExcelSheetTable key={sheet.name} sheet={sheet} />
       </div>
     </div>
   );

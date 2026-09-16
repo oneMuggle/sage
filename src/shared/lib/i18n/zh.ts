@@ -705,6 +705,15 @@ export const zh = {
   'office.snapshot.diffIdentical': '与当前版本内容一致',
   'office.snapshot.diffTruncated': '差异条目过多，仅显示前 200 条',
 
+  // ─── Office display round C: P4 图片/批注呈现 + P7 预览分页 ─────
+  'office.preview.imagesTitle': '文档图片',
+  'office.preview.imagesOmitted': '另有 {n} 张图片未内联（过大或超出数量上限）',
+  'office.preview.commentsTitle': '批注',
+  'office.preview.commentAnonymous': '匿名',
+  'office.preview.loadMore': '加载更多',
+  'office.preview.loadingMore': '加载中…',
+  'office.template.thumbnailLoading': '正在生成模板预览…',
+
   // ─── Office parity batch 3: Word 模板库 (item 3.2 从模板创建) ─────
   'office.template.modeFreeform': '自由创建',
   'office.template.modeTemplate': '从模板创建',

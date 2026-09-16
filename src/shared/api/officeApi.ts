@@ -39,6 +39,7 @@ import type {
   OfficeTemplateInstantiateRequest,
   OfficeTemplateInstantiateResult,
   OfficeTemplateListResponse,
+  OfficeTemplateThumbnailResult,
   OfficeUpdatePreviewRequest,
   OfficeUpdatePreviewResult,
   OfficeWordGenerateRequest,
@@ -465,6 +466,29 @@ export const officeApi = {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
         task_id: req.task_id,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Round C P5: template first-page thumbnail (PNG data URL). Server-side
+   * disk cache makes repeats cheap; failures fold to `{ok:false}` and the
+   * caller degrades silently (thumbnails are decorative).
+   *
+   * No retry — first render spawns a converter subprocess.
+   */
+  async templateThumbnail(req: {
+    workspace_path: string;
+    template_id?: string;
+    workspace_template?: string;
+  }): Promise<OfficeTemplateThumbnailResult> {
+    try {
+      return await invoke<OfficeTemplateThumbnailResult>('office_template_thumbnail', {
+        workspacePath: req.workspace_path,
+        templateId: req.template_id,
+        workspaceTemplate: req.workspace_template,
       });
     } catch (error) {
       throw handleApiError(error);

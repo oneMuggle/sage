@@ -19,11 +19,11 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import Database, get_database
 from backend.office import progress as office_progress
@@ -529,6 +529,61 @@ def diff_snapshot_endpoint(doc_id: str, snapshot_id: str) -> DiffPreviewResult:
     from backend.office import snapshot_diff
 
     return snapshot_diff.diff_snapshot(doc, snapshot_id)
+
+
+class OfficeTemplateThumbnailRequest(BaseModel):
+    """POST /office/templates/thumbnail（Round C P5）。
+
+    builtin 模板传 ``template_id``；workspace 模板传 ``workspace_template``
+    （office/templates/ 下文件名，同 instantiate 的口径）。二者互斥。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    template_id: Optional[str] = None
+    workspace_template: Optional[str] = None
+
+
+@router.post("/templates/thumbnail")
+def template_thumbnail_endpoint(req: OfficeTemplateThumbnailRequest) -> dict:
+    """Round C P5: 模板首页 PNG 缩略图（PDF 管线 + PyMuPDF，磁盘缓存）。
+
+    一切生成失败折叠为 ``ok=False``（HTTP 200）——缩略图是装饰性信息，
+    前端静默降级。Patch point：
+    ``backend.office.template_thumbnail.render_template_thumbnail``。
+    """
+    from backend.office import template_thumbnail
+    from backend.office.template_library import (
+        _BUILTIN_BY_ID,
+        WORKSPACE_TEMPLATES_SUBDIR,
+        builtin_template_path,
+    )
+
+    workspace = Path(req.workspace_path)
+    if req.template_id:
+        spec = _BUILTIN_BY_ID.get(req.template_id)
+        if spec is None:
+            return {"ok": False, "error": f"未知的内置模板: {req.template_id}"}
+        source = builtin_template_path(spec)
+        cache_key = "builtin:" + req.template_id
+    elif req.workspace_template:
+        # 文件名围栏：与 instantiate 同口径（拒绝路径分隔符/父目录）
+        if any(sep in req.workspace_template for sep in ("/", "\\", "..")):
+            return {"ok": False, "error": f"非法模板文件名: {req.workspace_template}"}
+        source = workspace / WORKSPACE_TEMPLATES_SUBDIR / req.workspace_template
+        try:
+            mtime_ns = source.stat().st_mtime_ns
+        except OSError:
+            return {"ok": False, "error": f"模板文件不存在: {req.workspace_template}"}
+        cache_key = f"ws:{req.workspace_template}|{mtime_ns}"
+    else:
+        return {"ok": False, "error": "template_id 与 workspace_template 必须传其一"}
+
+    result = template_thumbnail.render_template_thumbnail(
+        source, workspace, cache_key=cache_key
+    )
+    return result.model_dump(mode="json")
 
 
 # ──────────────────────────────────────────────────────────────────────

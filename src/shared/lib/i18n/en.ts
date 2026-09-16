@@ -720,6 +720,15 @@ export const en: Record<TranslationKey, string> = {
   'office.snapshot.diffIdentical': 'Identical to the current version',
   'office.snapshot.diffTruncated': 'Too many changes — showing the first 200',
 
+  // ─── Office display round C: P4 images/comments + P7 preview paging ─────
+  'office.preview.imagesTitle': 'Document images',
+  'office.preview.imagesOmitted': '{n} more image(s) not inlined (too large or over the count cap)',
+  'office.preview.commentsTitle': 'Comments',
+  'office.preview.commentAnonymous': 'Anonymous',
+  'office.preview.loadMore': 'Load more',
+  'office.preview.loadingMore': 'Loading…',
+  'office.template.thumbnailLoading': 'Generating template preview…',
+
   // ─── Office parity batch 3: Word template library (item 3.2) ─────
   'office.template.modeFreeform': 'Free-form',
   'office.template.modeTemplate': 'From template',
