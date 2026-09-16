@@ -11,7 +11,7 @@ import re
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import AsyncIterator, List, Tuple
+from typing import AsyncIterator, List, Optional, Tuple
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -142,7 +142,9 @@ def _resolve_source_file(project_path: str, source_file: str) -> Tuple[Path, Pat
             try:
                 lexical.relative_to(root)
             except ValueError as containment_exc:
-                raise HTTPException(status_code=400, detail="源文件必须位于项目目录内") from containment_exc
+                raise HTTPException(
+                    status_code=400, detail="源文件必须位于项目目录内"
+                ) from containment_exc
             raise HTTPException(status_code=404, detail="源文件不存在") from exc
         raise HTTPException(status_code=400, detail="源文件必须位于项目目录内") from exc
     return root, resolved
@@ -867,7 +869,8 @@ async def queue_status(project_path: str):
 
 
 @router.get("/ingest/queue/tasks")
-async def queue_tasks(project_path: str, status: str | None = None):
+# noqa py38: FastAPI 在装饰期求值路由签名，``str | None`` 会让 win7/py3.8 导入即崩
+async def queue_tasks(project_path: str, status: Optional[str] = None):
     """获取队列中的任务列表。
 
     Args:
@@ -939,7 +942,9 @@ async def queue_retry(task_id: str, project_path: str):
     success = queue.retry(task_id)
 
     if not success:
-        raise HTTPException(status_code=400, detail="无法重试任务（任务不存在、非失败状态或已达最大重试次数）")
+        raise HTTPException(
+            status_code=400, detail="无法重试任务（任务不存在、非失败状态或已达最大重试次数）"
+        )
 
     return {"success": True}
 
@@ -1044,7 +1049,7 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
 
 
 @router.get("/graph")
-async def get_graph(project_path: str, query: str | None = None, limit: int = 100) -> GraphData:
+async def get_graph(project_path: str, query: Optional[str] = None, limit: int = 100) -> GraphData:
     """获取知识图谱。
 
     Args:
@@ -1503,12 +1508,13 @@ from backend.storage.recent_projects import (  # noqa: E402
 
 
 class ProjectCheckResponse(BaseModel):
+    # noqa py38: pydantic 在类创建期求值字段注解，win7/py3.8 需 Optional
     exists: bool
     writable: bool
     is_project: bool
     parent_writable: bool
-    warning: str | None = None
-    error: str | None = None
+    warning: Optional[str] = None
+    error: Optional[str] = None
 
 
 class RecordRecentRequest(BaseModel):
