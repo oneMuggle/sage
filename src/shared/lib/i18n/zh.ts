@@ -788,6 +788,7 @@ export const zh = {
   'office.preview.commentsTitle': '批注',
   'office.preview.commentAnonymous': '匿名',
   'office.preview.loadMore': '加载更多',
+  'office.preview.loadMorePages': '加载更多（还有 {n} 页）',
   'office.preview.loadingMore': '加载中…',
   'office.template.thumbnailLoading': '正在生成模板预览…',
 

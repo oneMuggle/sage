@@ -805,6 +805,7 @@ export const en: Record<TranslationKey, string> = {
   'office.preview.commentsTitle': 'Comments',
   'office.preview.commentAnonymous': 'Anonymous',
   'office.preview.loadMore': 'Load more',
+  'office.preview.loadMorePages': 'Load more ({n} more pages)',
   'office.preview.loadingMore': 'Loading…',
   'office.template.thumbnailLoading': 'Generating template preview…',
 

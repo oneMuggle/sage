@@ -48,6 +48,7 @@ import type {
   OfficePptReadResult,
   OfficeWordReadResult,
 } from '../../shared/api/types';
+import { renderInlineMarks } from '../../shared/lib/InlineMarks';
 import { useI18n } from '../../shared/lib/i18n';
 import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
 
@@ -590,37 +591,56 @@ export function PptPreview({ data }: { data: OfficePptReadResult }) {
   );
 }
 
+// P1-A: PDF 页渐进渲染窗口（对齐 Round C P7 的 word/excel 模式 ——
+// 数据后端本就全量在手，渲染窗口只管 DOM 规模）。
+const PDF_PAGE_WINDOW = 20;
+
 function PdfPreview({ data }: { data: OfficePdfReadResult }) {
   const { t } = useI18n();
+  const [pageCap, setPageCap] = useState(PDF_PAGE_WINDOW);
   if (data.pages.length === 0) {
     return <p className="text-muted text-sm">{t('office.preview.emptyPdf')}</p>;
   }
+  const shownPages = data.pages.slice(0, pageCap);
+  const hiddenPages = data.pages.length - shownPages.length;
   return (
-    <ol className="space-y-3">
-      {data.pages.map((page) => (
-        <li key={page.page_number} className="border border-border rounded-lg p-3 bg-surface">
-          <div className="text-xs text-muted mb-1">
-            {t('office.preview.pagePrefix')}
-            {page.page_number}
-            {t('office.preview.pageSuffix')}
-          </div>
-          {page.text ? (
-            <pre className="text-sm text-text-secondary whitespace-pre-wrap font-sans leading-relaxed">
-              {page.text}
-            </pre>
-          ) : (
-            <p className="text-xs text-muted italic">{t('office.preview.emptyPage')}</p>
-          )}
-          {page.tables.length > 0 && (
-            <div className="mt-2 space-y-2">
-              {page.tables.map((rows, ti) => (
-                <CappedTable key={ti} rows={rows} />
-              ))}
+    <div className="space-y-3">
+      <ol className="space-y-3">
+        {shownPages.map((page) => (
+          <li key={page.page_number} className="border border-border rounded-lg p-3 bg-surface">
+            <div className="text-xs text-muted mb-1">
+              {t('office.preview.pagePrefix')}
+              {page.page_number}
+              {t('office.preview.pageSuffix')}
             </div>
-          )}
-        </li>
-      ))}
-    </ol>
+            {page.text ? (
+              <pre className="text-sm text-text-secondary whitespace-pre-wrap font-sans leading-relaxed">
+                {page.text}
+              </pre>
+            ) : (
+              <p className="text-xs text-muted italic">{t('office.preview.emptyPage')}</p>
+            )}
+            {page.tables.length > 0 && (
+              <div className="mt-2 space-y-2">
+                {page.tables.map((rows, ti) => (
+                  <CappedTable key={ti} rows={rows} />
+                ))}
+              </div>
+            )}
+          </li>
+        ))}
+      </ol>
+      {hiddenPages > 0 && (
+        <button
+          type="button"
+          onClick={() => setPageCap((c) => c + PDF_PAGE_WINDOW)}
+          className="w-full px-3 py-2 rounded border border-border text-xs text-text-secondary hover:bg-bg-hover transition-colors"
+          data-testid="office-pdf-load-more"
+        >
+          {t('office.preview.loadMorePages').replace('{n}', String(hiddenPages))}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -655,13 +675,13 @@ export function WordPreview({ data }: { data: OfficeWordReadResult }) {
             return (
               <div key={i} className="flex items-start gap-2 text-sm text-text-secondary">
                 <span className="mt-[7px] w-1 h-1 rounded-full bg-current shrink-0" aria-hidden />
-                <span className="min-w-0">{para.text}</span>
+                <span className="min-w-0">{renderInlineMarks(para.text)}</span>
               </div>
             );
           }
           return (
             <p key={i} className="text-sm text-text-secondary leading-relaxed">
-              {para.text}
+              {renderInlineMarks(para.text)}
             </p>
           );
         })}
