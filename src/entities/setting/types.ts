@@ -91,6 +91,10 @@ export interface OrchSettings {
   // 子代理（agent tool）单次委派的 ReAct 迭代预算。默认 10 与后端
   // ``OrchSettings.max_subagent_iterations`` 默认对齐；用户可在此调整。
   maxSubagentIterations: number; // 10 (alpha.36: 6 → 10, 减少"复杂度超上限"误报)
+  maxPrimaryIterations: number; // 15 (与 profiles.py primary 对齐)
+  maxCoderIterations: number; // 15 (与 profiles.py coder 对齐)
+  maxReviewerIterations: number; // 8 (与 profiles.py reviewer 对齐)
+  maxWriterIterations: number; // 5 (与 profiles.py writer 对齐)
   worktreeIsolation: boolean; // false
   // live-events P1 (2026-09-06): 新 run 子代理审批模式默认值。
   // "ask" = 风险工具逐次审批（子代理审批请求转发前端弹窗）;
@@ -179,6 +183,10 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   maxRetries: 2,
   maxLaneIterations: 12,
   maxSubagentIterations: 10,
+  maxPrimaryIterations: 15,
+  maxCoderIterations: 15,
+  maxReviewerIterations: 8,
+  maxWriterIterations: 5,
   worktreeIsolation: false,
   subagentApprovalMode: 'ask',
   runTokenBudget: 0,
