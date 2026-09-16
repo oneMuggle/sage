@@ -16,10 +16,10 @@ import threading
 import time
 import uuid
 from contextlib import suppress
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 if TYPE_CHECKING:
     from backend.scheduler.evolution import BaseEvolutionTask
@@ -67,6 +67,9 @@ class ScheduledTask:
     created_at: int
     last_run: int | None = None
     next_run: int | None = None
+    last_attempt: Optional[int] = None
+    last_status: str = "never"
+    last_error: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -84,6 +87,9 @@ class ScheduledTask:
             created_at=int(raw["created_at"]),
             last_run=int(raw["last_run"]) if raw.get("last_run") is not None else None,
             next_run=int(raw["next_run"]) if raw.get("next_run") is not None else None,
+            last_attempt=raw.get("last_attempt"),
+            last_status=str(raw.get("last_status", "succeeded" if raw.get("last_run") else "never")),
+            last_error=raw.get("last_error"),
         )
 
 
@@ -109,6 +115,7 @@ class SchedulerService:
         self._session_repo = session_repo
         self._lock = threading.Lock()
         self._tasks: Dict[str, ScheduledTask] = {}
+        self._running = set()
         self._scheduler = BackgroundScheduler(daemon=True)
         self._evolution_tasks: Dict[str, "BaseEvolutionTask"] = {}  # noqa: UP037
         self._load_from_disk()
@@ -126,6 +133,31 @@ class SchedulerService:
                 raise TaskNotFoundError(task_id)
             return self._tasks[task_id]
 
+    def _validate_schedule(self, task_type: str, schedule: Dict[str, Any], require_future: bool = True) -> Dict[str, Any]:
+        if task_type not in ("once", "recurring") or schedule.get("kind") != task_type:
+            raise ValidationError("type must match schedule.kind")
+        if task_type == "once":
+            try:
+                at_ms = int(schedule["at"])
+            except (KeyError, TypeError, ValueError, OverflowError) as exc:
+                raise ValidationError("one-shot 'at' must be a timestamp") from exc
+            if require_future and at_ms <= int(time.time() * 1000):
+                raise ValidationError("one-shot 'at' must be in the future")
+            return {"kind": "once", "at": at_ms}
+        cron_expr = str(schedule.get("cron") or "").strip()
+        try:
+            CronTrigger.from_crontab(cron_expr)
+        except (ValueError, TypeError) as exc:
+            raise ValidationError("invalid five-field cron expression") from exc
+        if not croniter.is_valid(cron_expr):
+            raise ValidationError("invalid cron expression")
+        return {"kind": "recurring", "cron": cron_expr}
+
+    def _next_run_for(self, schedule: Dict[str, Any], enabled: bool) -> Optional[int]:
+        if not enabled:
+            return None
+        return schedule["at"] if schedule["kind"] == "once" else self._compute_next_cron_run(schedule["cron"])
+
     def add_task(
         self,
         name: str,
@@ -133,37 +165,22 @@ class SchedulerService:
         schedule: Dict[str, Any],
         session_id: str,
         content: str,
+        enabled: bool = True,
     ) -> ScheduledTask:
         if not name or not name.strip():
             raise ValidationError("name must not be empty")
-        if not content:
+        if not content or not content.strip():
             raise ValidationError("content must not be empty")
+        if not isinstance(enabled, bool):
+            raise ValidationError("enabled must be bool")
         if not self._session_repo_exists(session_id):
             raise ValidationError(f"session not found: {session_id}")
-
-        if task_type == "once":
-            at_ms = int(schedule["at"])
-            if at_ms <= int(time.time() * 1000):
-                raise ValidationError("one-shot 'at' must be in the future")
-            validated_schedule: Dict[str, Any] = {"kind": "once", "at": at_ms}
-            next_run = at_ms
-        else:
-            cron_expr = str(schedule["cron"]).strip()
-            if not cron_expr or not croniter.is_valid(cron_expr):
-                raise ValidationError(f"invalid cron expression: {cron_expr!r}")
-            validated_schedule = {"kind": "recurring", "cron": cron_expr}
-            next_run = self._compute_next_cron_run(cron_expr)
-
+        validated_schedule = self._validate_schedule(task_type, schedule)
         task = ScheduledTask(
-            id=f"task-{uuid.uuid4().hex[:8]}",
-            name=name.strip(),
-            type=task_type,
-            schedule=validated_schedule,
-            session_id=session_id,
-            content=content,
-            enabled=True,
-            created_at=int(time.time() * 1000),
-            next_run=next_run,
+            id=f"task-{uuid.uuid4().hex[:8]}", name=name.strip(), type=task_type,
+            schedule=validated_schedule, session_id=session_id, content=content,
+            enabled=enabled, created_at=int(time.time() * 1000),
+            next_run=self._next_run_for(validated_schedule, enabled),
         )
         with self._lock:
             self._tasks[task.id] = task
@@ -176,24 +193,37 @@ class SchedulerService:
         with self._lock:
             if task_id not in self._tasks:
                 raise TaskNotFoundError(task_id)
+            if task_id in self._running:
+                raise ValidationError("task is running; retry editing after it finishes")
             current = self._tasks[task_id]
+            allowed = {"name", "enabled", "type", "schedule", "content", "session_id"}
+            if set(changes) - allowed:
+                raise ValidationError("unknown task field")
             new_name = changes.get("name", current.name)
             new_enabled = changes.get("enabled", current.enabled)
+            new_content = changes.get("content", current.content)
+            new_session = changes.get("session_id", current.session_id)
+            new_type = changes.get("type", current.type)
+            schedule = changes.get("schedule", current.schedule)
             if not isinstance(new_name, str) or not new_name.strip():
                 raise ValidationError("name must not be empty")
+            if not isinstance(new_content, str) or not new_content.strip():
+                raise ValidationError("content must not be empty")
             if not isinstance(new_enabled, bool):
                 raise ValidationError("enabled must be bool")
-            updated = ScheduledTask(
-                id=current.id,
-                name=new_name.strip(),
-                type=current.type,
-                schedule=current.schedule,
-                session_id=current.session_id,
-                content=current.content,
-                enabled=new_enabled,
-                created_at=current.created_at,
-                last_run=current.last_run,
-                next_run=current.next_run,
+            if new_session != current.session_id and not self._session_repo_exists(new_session):
+                raise ValidationError(f"session not found: {new_session}")
+            if not isinstance(schedule, dict):
+                raise ValidationError("schedule must be an object")
+            schedule_changed = new_type != current.type or schedule != current.schedule
+            validated = self._validate_schedule(
+                new_type, schedule,
+                require_future=schedule_changed or (new_enabled and not current.enabled),
+            )
+            updated = replace(
+                current, name=new_name.strip(), enabled=new_enabled, type=new_type,
+                schedule=validated, content=new_content, session_id=new_session,
+                next_run=self._next_run_for(validated, new_enabled),
             )
             self._tasks[task_id] = updated
             self._save_to_disk()
@@ -374,66 +404,62 @@ class SchedulerService:
         )
 
     def _fire_scheduled(self, task: ScheduledTask) -> None:
-        """Ignore stale queued callbacks for deleted/disabled tasks."""
+        """Ignore stale queued callbacks; explicit manual attempts stay separate."""
         with self._lock:
             current = self._tasks.get(task.id)
-            if current is None or not current.enabled:
+            if current is None or not current.enabled or current.schedule != task.schedule:
                 return
-        self._fire(current)
+        try:
+            self._fire(current)
+        except ValidationError:
+            logger.info("task %s already running; skip overlapping automatic callback", task.id)
 
     def _fire(self, task: ScheduledTask) -> None:
-        """Insert the task's content as a system message into the target session."""
+        """Record delivery success separately from failures; never blindly retry."""
+        with self._lock:
+            if task.id in self._running:
+                raise ValidationError("task is already running")
+            if task.id not in self._tasks:
+                return
+            self._running.add(task.id)
+        error = None
         try:
             if not self._session_repo_exists(task.session_id):
-                logger.warning("task %s: session %s gone, skipping", task.id, task.session_id)
-                self._record_run(task)
-                return
-            self._message_repo.insert(
-                session_id=task.session_id,
-                role="system",
-                content=task.content,
-                created_at=int(time.time() * 1000),
-            )
-            logger.info("task %s fired into session %s", task.id, task.session_id)
-        except Exception:  # noqa: BLE001
+                error = "Target session no longer exists. Select a valid session before retrying."
+            else:
+                self._message_repo.insert(
+                    session_id=task.session_id, role="system", content=task.content,
+                    created_at=int(time.time() * 1000),
+                )
+                logger.info("task %s fired into session %s", task.id, task.session_id)
+        except Exception:  # noqa: BLE001 — failed delivery is persisted and shown in UI
             logger.exception("task %s fire failed", task.id)
-        self._record_run(task)
+            error = "Delivery failed. Check the target session and backend logs before retrying."
+        finally:
+            try:
+                self._record_run(task, error)
+            finally:
+                with self._lock:
+                    self._running.discard(task.id)
 
-    def _record_run(self, task: ScheduledTask) -> None:
+    def _record_run(self, task: ScheduledTask, error: Optional[str] = None) -> None:
         with self._lock:
             if task.id not in self._tasks:
                 return
             current = self._tasks[task.id]
-            last_run = int(time.time() * 1000)
+            now = int(time.time() * 1000)
+            # Failed one-shots are paused, NOT completed. No automatic replay:
+            # a failed response can be ambiguous after a successful commit.
+            enabled = current.enabled if current.type == "recurring" else False
+            self._tasks[task.id] = replace(
+                current, enabled=enabled,
+                last_attempt=now, last_status="failed" if error else "succeeded",
+                last_error=error, last_run=current.last_run if error else now,
+                next_run=self._next_run_for(current.schedule, enabled),
+            )
             if current.type == "once":
-                self._tasks[task.id] = ScheduledTask(
-                    id=current.id,
-                    name=current.name,
-                    type=current.type,
-                    schedule=current.schedule,
-                    session_id=current.session_id,
-                    content=current.content,
-                    enabled=False,
-                    created_at=current.created_at,
-                    last_run=last_run,
-                    next_run=None,
-                )
                 with suppress(JobLookupError):
                     self._scheduler.remove_job(current.id)
-            else:
-                next_run = self._compute_next_cron_run(current.schedule["cron"])
-                self._tasks[task.id] = ScheduledTask(
-                    id=current.id,
-                    name=current.name,
-                    type=current.type,
-                    schedule=current.schedule,
-                    session_id=current.session_id,
-                    content=current.content,
-                    enabled=current.enabled,
-                    created_at=current.created_at,
-                    last_run=last_run,
-                    next_run=next_run,
-                )
             self._save_to_disk()
 
     # ---------- persistence ----------

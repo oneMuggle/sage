@@ -436,6 +436,11 @@ export const zh = {
   'scheduled.toast.create_fail': '创建失败',
   'scheduled.toast.update_fail': '更新失败',
   'scheduled.toast.delete_fail': '删除失败',
+  'scheduled.session.required': '请选择目标会话',
+  'scheduled.session.empty': '请先创建会话，再返回设置定时任务。',
+  'scheduled.run_failed': '投递失败，重试前请检查目标会话',
+  'scheduled.run_succeeded': '上次投递成功',
+  'scheduled.confirm.retry': '请先检查目标会话：上次投递可能在报错前已成功。确认再次投递？',
   'scheduled.confirm.delete': '确定要删除这个定时任务吗？',
 
   // ─── M1 工具审批 ──────────────────
