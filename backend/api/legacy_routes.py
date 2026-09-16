@@ -2928,7 +2928,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 2026-09 step-by-step: 追踪最近一次 agent 事件 — RT7 中断落盘 partial
             # 行时,partial 内容是"当前 step 的累加器",step_index 需对齐这次事件的
             # iteration 范围。
-            last_evt: Optional[AgentEvent] = None
+            last_evt = None
 
             # P0-2 (2026-08-20): registration is created immediately after agent.
             # Keep the same entry and only refresh late-bound fields here.

@@ -95,10 +95,10 @@ async def test_single_step_run_writes_one_user_and_one_final_assistant():
     assert len(rows) == 2, f"expected 2 messages, got {len(rows)}: {rows}"
     assert rows[0]["role"] == "user"
     assert rows[1]["role"] == "assistant"
-    # 单步 run: final 行 step_index == done_event.iteration == 0
+    # 单步 run — final 行 step_index 应当等于 done 事件的 iteration
     assert rows[1]["step_index"] == 0
 
-    # message_count == 2
+    # 验证 message_count 应当等于 2
     updated = repo.get(session_id)
     assert updated is not None
     assert updated.message_count == 2
@@ -210,7 +210,7 @@ async def test_two_step_run_writes_one_step_and_one_final_assistant():
     assert rows[2]["content"] == "最终答案"
     assert rows[2]["tool_calls"] is None
 
-    # message_count == 3
+    # 验证 message_count 应当等于 3
     updated = repo.get(session_id)
     assert updated is not None
     assert updated.message_count == 3
@@ -309,7 +309,7 @@ async def test_three_step_run_writes_two_steps_and_one_final_assistant():
     assistant_step_indices = {r["step_index"] for r in rows if r["role"] == "assistant"}
     assert assistant_step_indices == {0, 1, 2}
 
-    # message_count == 4
+    # 验证 message_count 应当等于 4
     updated = repo.get(session_id)
     assert updated is not None
     assert updated.message_count == 4
