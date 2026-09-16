@@ -28,7 +28,6 @@ from typing import (  # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscr
     Callable,
     Dict,
     List,
-    Optional,
 )
 
 
@@ -50,7 +49,18 @@ class BroadcastQueue(asyncio.Queue):
         """广播消息，不让慢订阅者阻塞 producer。"""
         self.last_activity_at = time.time()
         if not self._subscribers:
+            # 2026-09 修复: subscribe() 会在挂起期间清空父队列并注册
+            # subscriber; 恢复后写回父队列的事件在 3.11 上滞留在无人消费的
+            # 队列里 (3.12+ 经 asyncio.Queue.put 的虚分派 put_nowait 直达
+            # subscriber —— 行为随版本不同)。统一兜底: 恢复后若父队列仍有
+            # 积压且有 subscriber, 全部转投, 保证恰好一次送达。
             await super().put(item)
+            if self._subscribers and not self.empty():
+                residue = []
+                while not self.empty():
+                    residue.append(super().get_nowait())
+                for pending_item in residue:
+                    self.put_nowait(pending_item)
             return
         self.put_nowait(item)
 
@@ -131,15 +141,15 @@ class StreamEntry:
     """
 
     queue: BroadcastQueue = field(default_factory=lambda: BroadcastQueue(maxsize=1000))
-    task: Optional[asyncio.Task] = None
+    task: asyncio.Task | None = None
     status: str = "pending"
     created_at: float = field(default_factory=time.time)
     # 最近一次事件入队时间(秒)。长 LLM 调用/编排确认门会长时间静默,
     # sweep 必须 按"最后事件"而非"创建时间"判断, 否则会强杀活跃流。
     last_activity_at: float = field(default_factory=time.time)
-    session_id: Optional[str] = None
+    session_id: str | None = None
     suspended: bool = False
-    wake_id: Optional[str] = None
+    wake_id: str | None = None
 
 
 class StreamRegistry:
@@ -160,8 +170,8 @@ class StreamRegistry:
         self,
         stream_id: str,
         queue_maxsize: int = 1000,
-        producer: Optional[ProducerFn] = None,
-        session_id: Optional[str] = None,
+        producer: ProducerFn | None = None,
+        session_id: str | None = None,
     ) -> StreamEntry:
         """注册新 stream,可选启动 producer task。
 
@@ -222,7 +232,7 @@ class StreamRegistry:
             with contextlib.suppress(asyncio.CancelledError):
                 await entry.queue.put(SENTINEL)
 
-    def find_active_by_session(self, session_id: str) -> Optional[str]:
+    def find_active_by_session(self, session_id: str) -> str | None:
         """R25-D4: 返回该会话当前活跃（pending/running 且未挂起）的 streamId。
 
         与 create 的 busy 仲裁同口径（挂起与终态不占位）。无活跃流返回
@@ -241,7 +251,7 @@ class StreamRegistry:
         self,
         stream_id: str,
         *,
-        wake_id: Optional[str] = None,
+        wake_id: str | None = None,
         note: str = "",
     ) -> bool:
         """A4 Suspend-Resume: 挂起一个活跃流。
@@ -271,10 +281,10 @@ class StreamRegistry:
         await entry.queue.put({"state": "suspended", "wake_id": wake_id, "note": note})
         return True
 
-    def get(self, stream_id: str) -> Optional[StreamEntry]:
+    def get(self, stream_id: str) -> StreamEntry | None:
         return self._entries.get(stream_id)
 
-    async def subscribe(self, stream_id: str) -> Optional[asyncio.Queue]:
+    async def subscribe(self, stream_id: str) -> asyncio.Queue | None:
         """为 stream 创建独立消费游标；stream 不存在时返回 None。"""
         entry = self._entries.get(stream_id)
         if entry is None:
