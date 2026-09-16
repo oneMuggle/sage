@@ -134,7 +134,9 @@ class SchedulerService:
             return self._tasks[task_id]
 
     def _validate_schedule(self, task_type: str, schedule: Dict[str, Any], require_future: bool = True) -> Dict[str, Any]:
-        if task_type not in ("once", "recurring") or schedule.get("kind") != task_type:
+        # Legacy service callers omit kind; normalize it from task_type while
+        # still rejecting an explicit mismatch. REST ScheduleIn requires kind.
+        if task_type not in ("once", "recurring") or schedule.get("kind", task_type) != task_type:
             raise ValidationError("type must match schedule.kind")
         if task_type == "once":
             try:
