@@ -1,6 +1,8 @@
 // Markdown Preview - render markdown with code highlighting
 import ReactMarkdown from 'react-markdown';
+import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 
 export function MarkdownPreview({ content }: { content: string }) {
   return (
@@ -8,7 +10,10 @@ export function MarkdownPreview({ content }: { content: string }) {
       <ReactMarkdown
         // P3: 补 remark-gfm —— 组件层早已映射 table/th/td，但插件缺失导致
         // GFM 表格/任务列表/删除线语法根本不解析，映射是死代码
-        remarkPlugins={[remarkGfm]}
+        // alpha.36 (Bug #6): Wiki 笔记里的 $math$ / $$math$$ 也要走 KaTeX，
+        // 缺这两个 plugin 时 KaTeX 找不到 math AST，整段以纯文本出现
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         components={{
           h1: ({ children }) => (
             <h1 className="text-2xl font-bold text-text mt-6 mb-3">{children}</h1>
