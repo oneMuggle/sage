@@ -29,6 +29,7 @@ import type {
   OfficePdfGenerateResult,
   OfficePdfPreviewResult,
   OfficePdfReadRequest,
+  OfficePdfDataResult,
   OfficePdfReadResult,
   OfficePptGenerateRequest,
   OfficePptReadResult,
@@ -112,6 +113,25 @@ export const officeApi = {
   async readPdf(req: OfficePdfReadRequest): Promise<OfficePdfReadResult> {
     try {
       return await invoke<OfficePdfReadResult>('office_pdf_read', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * F3 (office-p0): raw-PDF base64 preview for the /office page's
+   * 原文预览 toggle — returns a `data:application/pdf` URL the renderer
+   * embeds in an iframe (Chromium built-in viewer). Backend validates
+   * the managed path and enforces the same 20MB cap as the chat
+   * artifact viewer; expected failures come back as `{ok:false,error}`
+   * instead of a thrown transport error.
+   */
+  async readPdfData(req: OfficePdfReadRequest): Promise<OfficePdfDataResult> {
+    try {
+      return await invoke<OfficePdfDataResult>('office_pdf_data', {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
       });

@@ -41,7 +41,8 @@ export interface KnowledgeDocType {
  */
 export interface OfficeRefChipType {
   docId: string;
-  docType: 'ppt' | 'word' | 'excel';
+  /** B4 (office-p0): widened with 'pdf' alongside ChatOfficeRef. */
+  docType: 'ppt' | 'word' | 'excel' | 'pdf';
   filename: string;
 }
 
@@ -325,7 +326,14 @@ function InputCardInner({
       {officeRefs.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2" data-testid="office-ref-chips">
           {officeRefs.map((ref) => {
-            const kindLabel = ref.docType === 'ppt' ? '📊' : ref.docType === 'word' ? '📝' : '📈';
+            const kindLabel =
+              ref.docType === 'ppt'
+                ? '📊'
+                : ref.docType === 'word'
+                  ? '📝'
+                  : ref.docType === 'pdf'
+                    ? '📄'
+                    : '📈';
             return (
               <span
                 key={ref.docId}

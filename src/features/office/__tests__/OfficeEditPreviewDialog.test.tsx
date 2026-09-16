@@ -160,7 +160,9 @@ describe('OfficeEditPreviewDialog — state machine', () => {
     renderDialog({ docType: 'ppt' });
 
     fireEvent.change(screen.getByTestId('office-edit-slide-number'), { target: { value: '3' } });
-    fireEvent.change(screen.getByTestId('office-edit-slide-title'), { target: { value: '新标题' } });
+    fireEvent.change(screen.getByTestId('office-edit-slide-title'), {
+      target: { value: '新标题' },
+    });
     fireEvent.click(screen.getByTestId('office-edit-preview-submit'));
 
     await waitFor(() => {
@@ -218,7 +220,12 @@ describe('OfficeEditPreviewDialog — state machine', () => {
   });
 
   it('shows the no-changes note when ok=true but nothing changed', async () => {
-    mockPreviewUpdate.mockResolvedValueOnce({ ok: true, changes: [], truncated: false, error: null });
+    mockPreviewUpdate.mockResolvedValueOnce({
+      ok: true,
+      changes: [],
+      truncated: false,
+      error: null,
+    });
     renderDialog({ docType: 'ppt' });
     fireEvent.change(screen.getByTestId('office-edit-slide-title'), { target: { value: '标题' } });
     fireEvent.click(screen.getByTestId('office-edit-preview-submit'));
@@ -370,9 +377,7 @@ describe('OfficeEditPreviewDialog — apply loop (round 2, R1)', () => {
     fireEvent.click(screen.getByTestId('office-edit-apply'));
 
     await waitFor(() => {
-      expect(toastMock.error).toHaveBeenCalledWith(
-        '应用失败: Backend POST → 422: invalid ops',
-      );
+      expect(toastMock.error).toHaveBeenCalledWith('应用失败: Backend POST → 422: invalid ops');
     });
     // Back in result phase — the confirm step is offered again so the
     // user can retry the same ops.
@@ -384,24 +389,33 @@ describe('OfficeEditPreviewDialog — apply loop (round 2, R1)', () => {
 });
 
 describe('buildUpdateOps — op composition table', () => {
-  type ComposeStateInput = {
-    find: string;
-    replace: string;
-    sheet: string;
-    cell: string;
-    value: string;
-    slideNumber: string;
-    slideTitle: string;
-  };
-
-  const base: ComposeStateInput = {
+  // F2 (office-p0): ComposeState gained op-kind selectors + per-kind
+  // fields; this base mirrors INITIAL_COMPOSE (default kinds) so the
+  // legacy single-op cases keep exercising the same code paths.
+  const base = {
+    wordKind: 'replace_text' as const,
+    excelKind: 'set_cells' as const,
+    pptKind: 'set_slide_title' as const,
     find: '',
     replace: '',
+    paragraphsText: '',
+    paraHeading: '' as '' | 'h1' | 'h2' | 'h3',
+    tableIndex: '0',
+    tableRow: '',
+    tableCol: '',
+    tableText: '',
+    deleteFind: '',
+    deleteAll: false,
     sheet: '',
     cell: '',
     value: '',
+    rowsText: '',
     slideNumber: '1',
     slideTitle: '',
+    bulletsText: '',
+    notesText: '',
+    appendTitle: '',
+    appendNotes: '',
   };
 
   it('word: requires find; empty replace means delete', () => {
@@ -413,9 +427,9 @@ describe('buildUpdateOps — op composition table', () => {
 
   it('excel: requires sheet, addr and value', () => {
     expect(buildUpdateOps('excel', { ...base, sheet: 'S' })).toBeNull();
-    expect(
-      buildUpdateOps('excel', { ...base, sheet: 'S', cell: 'B2', value: ' v ' }),
-    ).toEqual([{ op: 'set_cells', sheet: 'S', cells: [{ addr: 'B2', value: 'v' }] }]);
+    expect(buildUpdateOps('excel', { ...base, sheet: 'S', cell: 'B2', value: ' v ' })).toEqual([
+      { op: 'set_cells', sheet: 'S', cells: [{ addr: 'B2', value: 'v' }] },
+    ]);
   });
 
   it('ppt: 1-based number → 0-based index; rejects 0 and non-integers', () => {
@@ -428,5 +442,140 @@ describe('buildUpdateOps — op composition table', () => {
 
   it('pdf is not editable via this dialog', () => {
     expect(buildUpdateOps('pdf', { ...base, find: 'x' })).toBeNull();
+  });
+
+  // ── F2 (office-p0): op-kind selector exposes more backend ops ──────
+
+  it('word append_paragraphs: lines → paragraphs, optional heading', () => {
+    expect(buildUpdateOps('word', { ...base, wordKind: 'append_paragraphs' })).toBeNull();
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'append_paragraphs',
+        paragraphsText: '第一段\n\n第二段 ',
+      }),
+    ).toEqual([
+      {
+        op: 'append_paragraphs',
+        paragraphs: [{ text: '第一段' }, { text: '第二段' }],
+      },
+    ]);
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'append_paragraphs',
+        paragraphsText: '标题段',
+        paraHeading: 'h2',
+      }),
+    ).toEqual([{ op: 'append_paragraphs', paragraphs: [{ text: '标题段', heading: 'h2' }] }]);
+  });
+
+  it('word set_table_cell: integer indices + non-empty text required', () => {
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'set_table_cell',
+        tableRow: '1',
+        tableCol: '2',
+        tableText: '新值',
+      }),
+    ).toEqual([{ op: 'set_table_cell', table_index: 0, row: 1, col: 2, text: '新值' }]);
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'set_table_cell',
+        tableRow: '1.5',
+        tableCol: '2',
+        tableText: 'x',
+      }),
+    ).toBeNull();
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'set_table_cell',
+        tableRow: '1',
+        tableCol: '2',
+        tableText: '',
+      }),
+    ).toBeNull();
+  });
+
+  it('word delete_paragraph: find required; all flag forwarded', () => {
+    expect(buildUpdateOps('word', { ...base, wordKind: 'delete_paragraph' })).toBeNull();
+    expect(
+      buildUpdateOps('word', { ...base, wordKind: 'delete_paragraph', deleteFind: ' 旧句 ' }),
+    ).toEqual([{ op: 'delete_paragraph', find: '旧句' }]);
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'delete_paragraph',
+        deleteFind: '旧句',
+        deleteAll: true,
+      }),
+    ).toEqual([{ op: 'delete_paragraph', find: '旧句', all: true }]);
+  });
+
+  it('excel append_rows: csv lines → rows', () => {
+    expect(buildUpdateOps('excel', { ...base, excelKind: 'append_rows', sheet: 'S' })).toBeNull();
+    expect(
+      buildUpdateOps('excel', {
+        ...base,
+        excelKind: 'append_rows',
+        sheet: ' S ',
+        rowsText: '苹果, 3\n香蕉,12',
+      }),
+    ).toEqual([
+      {
+        op: 'append_rows',
+        sheet: 'S',
+        rows: [
+          ['苹果', '3'],
+          ['香蕉', '12'],
+        ],
+      },
+    ]);
+  });
+
+  it('ppt set_slide_bullets / set_slide_notes / append_slide', () => {
+    expect(
+      buildUpdateOps('ppt', {
+        ...base,
+        pptKind: 'set_slide_bullets',
+        slideNumber: '2',
+        bulletsText: '甲\n乙',
+      }),
+    ).toEqual([{ op: 'set_slide_bullets', index: 1, bullets: ['甲', '乙'] }]);
+    expect(
+      buildUpdateOps('ppt', {
+        ...base,
+        pptKind: 'set_slide_bullets',
+        slideNumber: '2',
+      }),
+    ).toBeNull();
+    expect(
+      buildUpdateOps('ppt', {
+        ...base,
+        pptKind: 'set_slide_notes',
+        slideNumber: '1',
+        notesText: ' 口播备注 ',
+      }),
+    ).toEqual([{ op: 'set_slide_notes', index: 0, notes: '口播备注' }]);
+    expect(
+      buildUpdateOps('ppt', {
+        ...base,
+        pptKind: 'append_slide',
+        appendTitle: '结尾页',
+        bulletsText: '总结\nQ&A',
+        appendNotes: ' 感谢聆听 ',
+      }),
+    ).toEqual([
+      {
+        op: 'append_slide',
+        title: '结尾页',
+        bullets: ['总结', 'Q&A'],
+        notes: '感谢聆听',
+      },
+    ]);
+    expect(buildUpdateOps('ppt', { ...base, pptKind: 'append_slide' })).toBeNull();
   });
 });
