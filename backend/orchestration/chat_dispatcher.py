@@ -268,6 +268,9 @@ class ChatDispatcher:
         # BD (round12): 后台派发句柄 —— 同一时刻至多一个在飞；collect 侧
         # shield 等待，超时/取消不杀派发本身。
         self._bg_task: Optional[asyncio.Task] = None
+        # RD14 (round22): 每 run 重派（retry_of）计数 —— 超过
+        # max_retry_of_chains 后降级普通任务。
+        self._redeploy_count = 0
         # B3 (2026-09-09): 单任务跳过 —— task_id → skip 信号（cancel_task 置位）
         # 与 task_id → merged 取消事件（skip ∨ run 级取消，SubagentRunner 的
         # interrupt_event 消费）。_run_one 建档、finally 注销。
@@ -648,6 +651,20 @@ class ChatDispatcher:
                 and self._states[retry_of_raw].status != "done"
                 else None
             )
+            # RD14 (round22): 重派链防失控上限 —— 每 run 重派次数超
+            # max_retry_of_chains 时降级普通任务，防止 conductor 误判时
+            # 无限链式重派（t3←t2←t1…）导致 token/时长成本失控。
+            _retry_cap = getattr(self.settings, "max_retry_of_chains", 10)
+            if state.retry_of is not None:
+                self._redeploy_count += 1
+                if self._redeploy_count > _retry_cap:
+                    logger.warning(
+                        "重派次数 %d 超过上限 %d，任务 %s 降级为普通新任务",
+                        self._redeploy_count,
+                        _retry_cap,
+                        task_id,
+                    )
+                    state.retry_of = None
             if retry_of_raw is not None and state.retry_of is None:
                 logger.warning(
                     "无效 retry_of=%r，任务 %s 降级为普通新任务",
