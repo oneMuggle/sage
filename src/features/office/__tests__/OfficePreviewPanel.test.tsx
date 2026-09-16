@@ -322,6 +322,56 @@ describe('OfficePreviewPanel — rich rendering (item 2.6)', () => {
     expect(screen.queryByTestId('office-pdf-original-frame')).toBeNull();
     expect(screen.getByText('页面文本')).toBeInTheDocument();
   });
+  // ── P1-A: PDF 页渐进窗口 + Word 内联粗斜体 ──────────────────────────
+
+  it('pdf: renders pages in a 20-page window and grows via 加载更多', () => {
+    const pages = Array.from({ length: 25 }, (_, i) => ({
+      page_number: i + 1,
+      text: `第${i + 1}页文本`,
+      tables: [],
+      images: [],
+    }));
+    renderPanel({
+      docType: 'pdf',
+      data: {
+        summary: {
+          ...WORD_SUMMARY,
+          id: 'doc-pdf-big',
+          doc_type: 'pdf',
+          generated_filename: 'big.pdf',
+        },
+        pages,
+        metadata: {},
+      } satisfies OfficePdfReadResult,
+    });
+    expect(screen.getByText('第1页文本')).toBeInTheDocument();
+    expect(screen.queryByText('第21页文本')).toBeNull();
+    const btn = screen.getByTestId('office-pdf-load-more');
+    expect(btn.textContent).toContain('还有 5 页');
+    fireEvent.click(btn);
+    expect(screen.getByText('第21页文本')).toBeInTheDocument();
+    expect(screen.queryByTestId('office-pdf-load-more')).toBeNull();
+  });
+
+  it('word: renders run-level bold/italic markers instead of literal asterisks', () => {
+    renderPanel({
+      docType: 'word',
+      data: {
+        ...WORD_PREVIEW.data,
+        paragraphs: [
+          { style: 'Normal', text: '普通**加粗**和*斜体*混排', level: 0 },
+          { style: 'Normal', text: '星号不成对 3*4 保持字面', level: 0 },
+        ],
+      },
+    });
+    const bold = screen.getByText('加粗').closest('strong');
+    expect(bold).not.toBeNull();
+    const italic = screen.getByText('斜体').closest('em');
+    expect(italic).not.toBeNull();
+    // 成对标记不再以字面星号出现；未配对星号保持字面
+    expect(screen.queryByText(/\*\*加粗\*\*/)).toBeNull();
+    expect(screen.getByText('星号不成对 3*4 保持字面')).toBeInTheDocument();
+  });
 });
 
 describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
