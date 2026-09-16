@@ -81,7 +81,8 @@ export type ExcelEditKind =
   | 'add_chart'
   | 'set_column_width'
   | 'set_fill'
-  | 'freeze_panes';
+  | 'freeze_panes'
+  | 'set_number_format';
 export type PptEditKind =
   | 'set_slide_title'
   | 'set_slide_bullets'
@@ -142,6 +143,9 @@ interface ComposeState {
   fillColor: string;
   // excel freeze_panes
   freezeCell: string;
+  // excel set_number_format
+  numFormatCells: string;
+  numFormatValue: string;
   // ppt set_slide_title
   slideNumber: string;
   slideTitle: string;
@@ -193,6 +197,8 @@ const INITIAL_COMPOSE: ComposeState = {
   fillCells: '',
   fillColor: '',
   freezeCell: '',
+  numFormatCells: '',
+  numFormatValue: '',
   slideNumber: '1',
   slideTitle: '',
   bulletsText: '',
@@ -312,6 +318,12 @@ export function buildUpdateOps(
       const cell = state.freezeCell.trim().toUpperCase();
       if (!sheet || !cell) return null;
       return [{ op: 'freeze_panes', sheet, cell }];
+    }
+    if (state.excelKind === 'set_number_format') {
+      const cells = state.numFormatCells.trim().toUpperCase();
+      const format = state.numFormatValue.trim();
+      if (!sheet || !cells || !format) return null;
+      return [{ op: 'set_number_format', sheet, cells, format }];
     }
     if (state.excelKind === 'add_chart') {
       const anchor = state.chartAnchor.trim().toUpperCase();
@@ -829,6 +841,9 @@ export function OfficeEditPreviewDialog({
                     <option value="set_column_width">{t('office.edit.kindSetColumnWidth')}</option>
                     <option value="set_fill">{t('office.edit.kindSetFill')}</option>
                     <option value="freeze_panes">{t('office.edit.kindFreezePanes')}</option>
+                    <option value="set_number_format">
+                      {t('office.edit.kindSetNumberFormat')}
+                    </option>
                   </select>
                 </div>
                 <div>
@@ -962,6 +977,36 @@ export function OfficeEditPreviewDialog({
                       className={inputClass}
                       data-testid="office-edit-freeze-cell"
                     />
+                  </div>
+                )}
+                {compose.excelKind === 'set_number_format' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.fillCells')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.numFormatCells}
+                        onChange={(e) => setField('numFormatCells')(e.target.value)}
+                        placeholder="B2:B10"
+                        className={inputClass}
+                        data-testid="office-edit-numfmt-cells"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.numFormatValue')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.numFormatValue}
+                        onChange={(e) => setField('numFormatValue')(e.target.value)}
+                        placeholder="0.00%"
+                        className={inputClass}
+                        data-testid="office-edit-numfmt-value"
+                      />
+                    </div>
                   </div>
                 )}
                 {compose.excelKind === 'add_chart' && (

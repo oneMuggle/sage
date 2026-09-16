@@ -791,6 +791,8 @@ export const zh = {
   'office.edit.fillCells': '单元格/区域',
   'office.edit.fillColor': '填充色（hex，如 FFD966）',
   'office.edit.freezeCell': '冻结到该单元格左上',
+  'office.edit.kindSetNumberFormat': '数字格式',
+  'office.edit.numFormatValue': '格式代码（如 0.00%）',
   'office.form.title': '填写 PDF 表单',
   'office.form.close': '关闭',
   'office.form.load': '读取表单字段',
