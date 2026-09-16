@@ -39,6 +39,8 @@ export interface McpStatusReport {
 export interface McpServerConfig {
   name: string;
   command: string;
+  url?: string | null;
+  headers?: Record<string, string>;
   args: string[];
   env: Record<string, string>;
   enabled: boolean;
@@ -50,6 +52,8 @@ export interface McpServerConfig {
 export interface AddMcpServerInput {
   name: string;
   command: string;
+  url?: string | null;
+  headers?: Record<string, string>;
   args: string[];
   required: boolean;
 }
@@ -71,11 +75,15 @@ export const mcpClient = {
     return resp.servers;
   },
 
-  async addServer(input: AddMcpServerInput): Promise<{ ok: boolean; name: string; state: McpServerState }> {
+  async addServer(
+    input: AddMcpServerInput,
+  ): Promise<{ ok: boolean; name: string; state: McpServerState }> {
     // rawBody route: keys already snake_case, env omitted (no UI field).
     return invoke('mcp_server_add', {
       name: input.name,
       command: input.command,
+      ...(input.url ? { url: input.url } : {}),
+      ...(input.headers ? { headers: input.headers } : {}),
       args: input.args,
       env: {},
       enabled: true,

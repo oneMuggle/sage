@@ -12,6 +12,7 @@ interface CreateTaskModalProps {
   open: boolean;
   onClose: () => void;
   sessionId: string;
+  sessions?: Array<{ id: string; title?: string }>;
   task?: ScheduledTask;
 }
 
@@ -25,7 +26,13 @@ function fromLocalDatetimeInput(value: string): number {
   return new Date(value).getTime();
 }
 
-export function CreateTaskModal({ open, onClose, sessionId, task }: CreateTaskModalProps) {
+export function CreateTaskModal({
+  open,
+  onClose,
+  sessionId,
+  task,
+  sessions = [{ id: sessionId }],
+}: CreateTaskModalProps) {
   const { t } = useI18n();
   const store = useScheduledTaskStore();
   const isEdit = Boolean(task);
@@ -42,28 +49,62 @@ export function CreateTaskModal({ open, onClose, sessionId, task }: CreateTaskMo
   );
   const [content, setContent] = useState(task?.content ?? '');
   const [enabled, setEnabled] = useState(task?.enabled ?? true);
+  const [targetSession, setTargetSession] = useState(task?.session_id ?? sessionId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    setName(task?.name ?? '');
+    setType(task?.type ?? 'recurring');
+    setCron(task?.schedule.kind === 'recurring' ? task.schedule.cron : '0 8 * * *');
+    setAtLocal(
+      toLocalDatetimeInput(task?.schedule.kind === 'once' ? task.schedule.at : Date.now() + 60_000),
+    );
+    setContent(task?.content ?? '');
+    setEnabled(task?.enabled ?? true);
+    setTargetSession(task?.session_id ?? sessionId);
     setError(null);
     setSubmitting(false);
-  }, [open]);
+  }, [open, task, sessionId]);
 
   const cronValidation = useMemo(() => validateCronExpression(cron), [cron]);
-  const atMs = useMemo(() => fromLocalDatetimeInput(atLocal), [atLocal]);
-  const atValidation = useMemo(() => validateOneShotTimestamp(atMs), [atMs]);
+  // Preserve seconds/milliseconds when the minute-precision input is unchanged.
+  const atMs =
+    task?.schedule.kind === 'once' && atLocal === toLocalDatetimeInput(task.schedule.at)
+      ? task.schedule.at
+      : fromLocalDatetimeInput(atLocal);
+  const scheduleChanged =
+    !task ||
+    type !== task.type ||
+    (type === 'once'
+      ? task.schedule.kind !== 'once' || atMs !== task.schedule.at
+      : task.schedule.kind !== 'recurring' || cron !== task.schedule.cron);
+  const requireFuture = !task || scheduleChanged || (enabled && !task.enabled);
+  const atValidation =
+    !requireFuture && Number.isFinite(atMs)
+      ? { ok: true as const }
+      : validateOneShotTimestamp(atMs);
 
   const canSubmit =
     name.trim().length > 0 &&
-    content.length > 0 &&
+    content.trim().length > 0 &&
+    targetSession.length > 0 &&
+    sessions.some((s) => s.id === targetSession) &&
     (type === 'recurring' ? cronValidation.ok : atValidation.ok) &&
     !submitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
+    // Wall-clock validation must run at submit time, not only when input changes.
+    if (type === 'once' && requireFuture) {
+      const validation = validateOneShotTimestamp(atMs);
+      if (!validation.ok) {
+        setError(validation.reason);
+        return;
+      }
+    }
     setSubmitting(true);
     setError(null);
     const schedule: CreateTaskInput['schedule'] =
@@ -71,10 +112,17 @@ export function CreateTaskModal({ open, onClose, sessionId, task }: CreateTaskMo
 
     try {
       if (isEdit && task) {
-        await store.update(task.id, { name, enabled });
+        await store.update(task.id, {
+          name,
+          enabled,
+          type,
+          schedule,
+          content,
+          session_id: targetSession,
+        });
         toast.success(t('scheduled.edit'));
       } else {
-        await store.create({ name, type, schedule, session_id: sessionId, content });
+        await store.create({ name, type, schedule, session_id: targetSession, content, enabled });
         toast.success(t('scheduled.create'));
       }
       onClose();
@@ -115,6 +163,26 @@ export function CreateTaskModal({ open, onClose, sessionId, task }: CreateTaskMo
             placeholder={t('scheduled.field.name')}
             required
           />
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs text-text-secondary">
+          <span>{t('scheduled.field.session')}</span>
+          <select
+            value={targetSession}
+            onChange={(e) => setTargetSession(e.target.value)}
+            required
+            className="border border-border rounded-radius-sm px-2 py-1.5 text-sm bg-bg"
+          >
+            <option value="">{t('scheduled.session.required')}</option>
+            {sessions
+              .filter((s) => s.id)
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title || s.id}
+                </option>
+              ))}
+          </select>
+          {sessions.length === 0 && <p>{t('scheduled.session.empty')}</p>}
         </label>
 
         <div className="flex gap-2 text-xs">

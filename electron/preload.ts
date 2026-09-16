@@ -208,6 +208,10 @@ const electronAPI = {
    * reconstructs managed paths from `OfficeManagedRef` tuples.
    */
   office: {
+    previewStaging: (workspacePath: string) =>
+      ipcRenderer.invoke('office:staging-preview', { workspacePath }) as Promise<
+        import('../src/shared/types/electron-api').OfficeStagingReport
+      >,
     pickOfficeFile: (docType: OfficeDocType) =>
       ipcRenderer.invoke('office:pick-file', { docType }) as Promise<PickedOfficeFile | null>,
     pickSavePath: (defaultName: string) =>

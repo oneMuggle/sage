@@ -265,6 +265,15 @@ let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let backendAuthToken: string | null = null;
 let updateManager: UpdateManager | null = null;
+async function reportUpdateStartupFailure(reason: string): Promise<boolean> {
+  try {
+    return (await updateManager?.onAppStartupFailure(reason)) ?? false;
+  } catch (err) {
+    logger.warn('main: startup recovery failed', { error: String(err) });
+    return false;
+  }
+}
+
 let cleanupUpdateIpc: (() => void) | null = null;
 let cleanupProviderIpc: (() => void) | null = null;
 
@@ -401,9 +410,8 @@ function spawnBackend(): ChildProcess {
     // this, the user sees two stacked modal dialogs about the same problem.
     reportedBrokenInstaller = true;
     updateSplashStage('安装包不完整，无法启动后端');
-    void showStartupFailureDialog({
-      reason: plan.title,
-      detail: plan.detail,
+    void reportUpdateStartupFailure('broken-installer').then(async (rolledBack) => {
+      if (!rolledBack) await showStartupFailureDialog({ reason: plan.title, detail: plan.detail });
     });
     // Return a no-op stub proc that exits immediately so the rest of the
     // startup flow (health probe → timeout) still works predictably.
@@ -2191,7 +2199,14 @@ app.whenReady().then(async () => {
     return;
   }
   updateSplashStage('正在启动后端服务…');
-  backendProc = spawnBackend();
+  try {
+    backendProc = spawnBackend();
+  } catch (err) {
+    if (!(await reportUpdateStartupFailure('backend-spawn-failed'))) {
+      await showStartupFailureDialog({ reason: '后端进程启动失败', detail: String(err) });
+    }
+    return;
+  }
   // If the resolver already fired the broken-installer dialog (because
   // bundled Python is missing or the platform is unsupported), suppress the
   // generic health-timeout dialog below so the user doesn't see two stacked
@@ -2229,10 +2244,13 @@ app.whenReady().then(async () => {
       createMainWindow();
       buildApplicationMenu();
       void updateManager
-        ?.onAppStartup(() => mainWindow, BACKEND_URL)
+        ?.onAppStartup(() => mainWindow, BACKEND_URL, () => backendAuthToken)
         .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
       return;
     }
+
+    // A post-install failure must be counted BEFORE a dialog can quit the app.
+    if (await reportUpdateStartupFailure('backend-startup-timeout')) return;
 
     // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
     // User can open logs, retry the health check, or quit.
@@ -2265,7 +2283,7 @@ app.whenReady().then(async () => {
       // and drive the crash counter / auto-rollback path; they must not
       // block the UI from appearing.
       void updateManager
-        ?.onAppStartup(() => mainWindow, BACKEND_URL)
+        ?.onAppStartup(() => mainWindow, BACKEND_URL, () => backendAuthToken)
         .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
       return;
     }
@@ -2281,7 +2299,7 @@ app.whenReady().then(async () => {
   // increments the crash counter and may trigger auto-rollback; it must not
   // block the UI. Errors are logged for diagnostics.
   void updateManager
-    ?.onAppStartup(() => mainWindow, BACKEND_URL)
+    ?.onAppStartup(() => mainWindow, BACKEND_URL, () => backendAuthToken)
     .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
 });
 

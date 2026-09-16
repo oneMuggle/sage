@@ -101,12 +101,8 @@ describe('McpTab', () => {
     render(<McpTab />);
     await waitFor(() => expect(mocks.status).toHaveBeenCalled());
 
-    expect(screen.getByTestId('state-badge-alpha').textContent).toBe(
-      'settings.mcp.state.ready',
-    );
-    expect(screen.getByTestId('state-badge-bravo').textContent).toBe(
-      'settings.mcp.state.failed',
-    );
+    expect(screen.getByTestId('state-badge-alpha').textContent).toBe('settings.mcp.state.ready');
+    expect(screen.getByTestId('state-badge-bravo').textContent).toBe('settings.mcp.state.failed');
     expect(screen.getByTestId('state-badge-drawio').textContent).toBe(
       'settings.mcp.state.disabled',
     );
@@ -147,9 +143,7 @@ describe('McpTab', () => {
     fireEvent.change(screen.getByPlaceholderText('node'), { target: { value: 'node' } });
     fireEvent.click(screen.getByText('settings.mcp.add.submit'));
 
-    await waitFor(() =>
-      expect(screen.getByText('settings.mcp.error.name_invalid')).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText('settings.mcp.error.name_invalid')).toBeTruthy());
     expect(mocks.addServer).not.toHaveBeenCalled();
   });
 
@@ -172,8 +166,8 @@ describe('McpTab', () => {
 
     fireEvent.change(screen.getByPlaceholderText('my-server'), { target: { value: 'srv' } });
     fireEvent.change(screen.getByPlaceholderText('node'), { target: { value: 'node' } });
-    fireEvent.change(screen.getByPlaceholderText('/path/to/server.js --flag'), {
-      target: { value: '  a.js   b.js ' },
+    fireEvent.change(screen.getByPlaceholderText('["/path with spaces/server.js", "--flag"]'), {
+      target: { value: '["a.js", "b.js"]' },
     });
     fireEvent.click(screen.getByText('settings.mcp.add.submit'));
 
@@ -210,4 +204,63 @@ describe('McpTab', () => {
     await waitFor(() => expect(mocks.status).toHaveBeenCalledTimes(2));
     expect(mocks.listServers).toHaveBeenCalledTimes(2);
   });
+  it('submits an HTTP URL and headers without requiring a command', async () => {
+    render(<McpTab />);
+    await waitFor(() => expect(mocks.status).toHaveBeenCalled());
+    fireEvent.change(screen.getByPlaceholderText('my-server'), { target: { value: 'remote' } });
+    fireEvent.change(screen.getByLabelText('settings.mcp.add.transport'), {
+      target: { value: 'http' },
+    });
+    fireEvent.change(screen.getByLabelText('settings.mcp.add.url'), {
+      target: { value: 'https://example.test/mcp' },
+    });
+    fireEvent.change(screen.getByLabelText('settings.mcp.add.headers'), {
+      target: { value: '{"Authorization":"Bearer secret"}' },
+    });
+    fireEvent.click(screen.getByText('settings.mcp.add.submit'));
+    await waitFor(() =>
+      expect(mocks.addServer).toHaveBeenCalledWith({
+        name: 'remote',
+        command: '',
+        args: [],
+        required: false,
+        url: 'https://example.test/mcp',
+        headers: { Authorization: 'Bearer secret' },
+      }),
+    );
+  });
+
+  it('preserves whitespace, empty arguments and Windows paths through JSON input', async () => {
+    render(<McpTab />);
+    await waitFor(() => expect(mocks.status).toHaveBeenCalled());
+    const args = ['C:\\Program Files\\server.js', '--name', 'two words', '', 'quote"inside'];
+    fireEvent.change(screen.getByPlaceholderText('my-server'), { target: { value: 'local' } });
+    fireEvent.change(screen.getByPlaceholderText('node'), { target: { value: 'node' } });
+    fireEvent.change(screen.getByLabelText('settings.mcp.add.args'), {
+      target: { value: JSON.stringify(args) },
+    });
+    fireEvent.click(screen.getByText('settings.mcp.add.submit'));
+    await waitFor(() =>
+      expect(mocks.addServer).toHaveBeenCalledWith({
+        name: 'local',
+        command: 'node',
+        args,
+        required: false,
+      }),
+    );
+  });
+
+  it.each(['[1]', '["unterminated]', 'a.js b.js'])(
+    'rejects invalid argument input %s without sending',
+    async (args) => {
+      render(<McpTab />);
+      await waitFor(() => expect(mocks.status).toHaveBeenCalled());
+      fireEvent.change(screen.getByPlaceholderText('my-server'), { target: { value: 'local' } });
+      fireEvent.change(screen.getByPlaceholderText('node'), { target: { value: 'node' } });
+      fireEvent.change(screen.getByLabelText('settings.mcp.add.args'), { target: { value: args } });
+      fireEvent.click(screen.getByText('settings.mcp.add.submit'));
+      await waitFor(() => expect(screen.getByText('settings.mcp.error.args_invalid')).toBeTruthy());
+      expect(mocks.addServer).not.toHaveBeenCalled();
+    },
+  );
 });

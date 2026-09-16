@@ -256,10 +256,17 @@ export const en: Record<TranslationKey, string> = {
   'settings.mcp.required': 'Required server',
   'settings.mcp.delete': 'Delete',
   'settings.mcp.builtin_hint': 'Built-in server, cannot be deleted',
+  'settings.mcp.add.transport': 'Transport',
+  'settings.mcp.add.url': 'HTTP endpoint URL',
+  'settings.mcp.add.headers': 'Headers (JSON object; optional)',
+  'settings.mcp.error.url_invalid': 'Enter a valid HTTP or HTTPS URL.',
+  'settings.mcp.error.args_invalid':
+    'Arguments must be a JSON array of strings. Each item is one argument, including spaces and empty strings.',
+  'settings.mcp.error.headers_invalid': 'Headers must be a JSON object with string values.',
   'settings.mcp.add.title': 'Add server',
   'settings.mcp.add.name': 'Name',
   'settings.mcp.add.command': 'Command',
-  'settings.mcp.add.args': 'Arguments (space separated)',
+  'settings.mcp.add.args': 'Arguments (JSON string array)',
   'settings.mcp.add.required': 'Required',
   'settings.mcp.add.submit': 'Add',
   'settings.mcp.error.name_invalid':
@@ -447,6 +454,12 @@ export const en: Record<TranslationKey, string> = {
   'scheduled.toast.create_fail': 'Failed to create task',
   'scheduled.toast.update_fail': 'Failed to update task',
   'scheduled.toast.delete_fail': 'Failed to delete task',
+  'scheduled.session.required': 'Select a target session',
+  'scheduled.session.empty': 'Create a conversation first, then return to schedule a task.',
+  'scheduled.run_failed': 'Delivery failed — review the target session before retrying',
+  'scheduled.run_succeeded': 'Last delivery succeeded',
+  'scheduled.confirm.retry':
+    'Check the target conversation first: the previous delivery may have succeeded before the error. Retry now?',
   'scheduled.confirm.delete': 'Delete this scheduled task?',
 
   // ─── M1 tool approval ─────────────
@@ -563,6 +576,18 @@ export const en: Record<TranslationKey, string> = {
   'settings.usage.partialEstimateHint': 'Some requests have unknown cost; total is approximate',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
+  'office.staging.inspect': 'Inspect staging (read-only)',
+  'office.staging.notice':
+    'Nothing is moved or deleted. Review candidates are not proven orphans: verify database references before any cleanup. Unknown directories and live owners are retained.',
+  'office.staging.unavailable': 'This desktop build does not support staging inspection.',
+  'office.staging.empty': 'No inspectable staging entries found.',
+  'office.staging.truncated': 'Report limited to 1000 entries; this is not a complete inventory.',
+  'office.staging.completed': 'Completed import — retain',
+  'office.staging.active': 'Live import owner — retain',
+  'office.staging.recent': 'Less than seven days old — retain',
+  'office.staging.review': 'Old import with no live owner — manual review only',
+  'office.staging.untracked': 'No trustworthy staging evidence — retain',
+  'office.staging.unreadable': 'Evidence unavailable — retain',
   'office.title': 'Office Documents',
   'office.selectWorkspace': 'Select Workspace',
   'office.emptyState': 'Select a workspace directory to get started',

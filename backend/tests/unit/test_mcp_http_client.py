@@ -200,3 +200,81 @@ def test_prompt_tool_execute():
     result = tool.execute()
     assert result.success
     assert "prompt review" in result.content
+
+
+@pytest.mark.parametrize("operation", ["tools/list", "tools/call"])
+def test_expired_session_rehandshakes_without_replaying_side_effects(operation):
+    from backend.mcp.client import McpClientError
+
+    seen = []
+    initializations = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        method = body["method"]
+        session = request.headers.get("mcp-session-id")
+        seen.append((method, session))
+        if method == "initialize":
+            initializations.append(session)
+            return httpx.Response(200, headers={"Mcp-Session-Id": f"s{len(initializations)}"},
+                                  json={"id": 1, "result": {"serverInfo": {"name": "fake"}}})
+        if method == operation and session == "s1":
+            return httpx.Response(404)
+        return httpx.Response(200, json={"id": 1, "result": {"tools": []}})
+
+    client = HttpClientMcpClient(validate_server_config("srv", url="https://mcp.test"),
+                                http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    client.start()
+    if operation == "tools/call":
+        with pytest.raises(McpClientError, match="not replayed"):
+            client.call_tool("write", {})
+        assert [m for m, _ in seen].count("tools/call") == 1
+    else:
+        assert client.list_tools() == []
+        assert [m for m, _ in seen].count("tools/list") == 2
+    assert initializations == [None, None]
+    assert client.is_running
+    assert client._session_id == "s2"
+
+
+def test_recovery_is_bounded_and_stop_clears_session():
+    from backend.mcp.client import McpClientError
+
+    initializations = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        if body["method"] == "initialize":
+            initializations.append(request.headers.get("mcp-session-id"))
+            return httpx.Response(200, headers={"Mcp-Session-Id": "expired"},
+                                  json={"result": {"serverInfo": {"name": "fake"}}})
+        if body["method"] == "notifications/initialized":
+            return httpx.Response(202)
+        return httpx.Response(404)
+
+    client = HttpClientMcpClient(validate_server_config("srv", url="https://mcp.test"),
+                                http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    client.start()
+    with pytest.raises(McpClientError):
+        client.list_tools()
+    assert initializations == [None, None]
+    assert not client.is_running
+    assert client._session_id is None
+    client.start()
+    client.stop()
+    client.start()
+    assert initializations == [None, None, None, None]
+
+
+def test_network_failure_invalidates_state_but_does_not_replay_tool():
+    from backend.mcp.client import McpClientError
+
+    client, seen = _make_client({"tools/call": httpx.ReadTimeout("ambiguous outcome")})
+    client.start()
+    with pytest.raises(McpClientError):
+        client.call_tool("write", {})
+    assert not client.is_running
+    assert client._session_id is None
+    assert seen.init_count == 1
+    client.start()
+    assert seen.init_count == 2

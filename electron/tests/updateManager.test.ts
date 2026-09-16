@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import * as fs from 'fs/promises';
+import * as path from 'path';
 import * as crypto from 'crypto';
 
 const mockUserData = '/tmp/test-user-data-update-manager';
@@ -87,7 +88,7 @@ vi.doMock('fs/promises', () => ({
     if (
       renameFailWhenOldPathStartsWith !== null &&
       typeof oldPath === 'string' &&
-      oldPath.startsWith(renameFailWhenOldPathStartsWith)
+      path.resolve(oldPath).startsWith(path.resolve(renameFailWhenOldPathStartsWith))
     ) {
       throw new Error('simulated rename failure');
     }
@@ -673,6 +674,22 @@ describe('UpdateManager', () => {
       expect(updater.quitAndInstall).not.toHaveBeenCalled();
     });
 
+    it('restores installation if the first prepared-state write fails (audit #18)', async () => {
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+      await seedPendingUpdate('1.3.0');
+      const write = vi
+        .spyOn(StateManager.prototype, 'setState')
+        .mockRejectedValueOnce(new Error('disk full'));
+      try {
+        await expect(updateManager.installUpdate()).rejects.toThrow('disk full');
+        await expect(fs.access(tempInstallDir)).resolves.toBeUndefined();
+        await expect(fs.access(tempPrevDir)).rejects.toThrow();
+        expect(updater.quitAndInstall).not.toHaveBeenCalled();
+      } finally {
+        write.mockRestore();
+      }
+    });
+
     it('calls quitAndInstall after preparing for upgrade', async () => {
       await seedPendingUpdate('1.3.0');
 
@@ -1099,7 +1116,7 @@ describe('UpdateManager', () => {
 
       await freshManager.rollback('test-rollback');
 
-      expect(mockSpawn).toHaveBeenCalledWith(`${cacheDir}/Sage-Setup-1.0.0.exe`, [
+      expect(mockSpawn).toHaveBeenCalledWith(path.resolve(`${cacheDir}/Sage-Setup-1.0.0.exe`), [
         '/S',
         `/D=${tempInstallDir}`,
       ]);
@@ -1515,6 +1532,67 @@ describe('UpdateManager', () => {
 
       // .prev should still be intact (rename failed before it could be moved)
       await expect(fs.access(tempPrevDir)).resolves.toBeUndefined();
+    });
+  });
+});
+
+it('rollback reaches local recovery while telemetry never settles (audit #17)', async () => {
+  const localRecovery = vi.fn().mockResolvedValue(undefined);
+  const fake = {
+    stateManager: { getState: vi.fn().mockResolvedValue({}) },
+    reportRollbackEvent: vi.fn(() => new Promise<void>(() => {})),
+    pathExists: vi.fn().mockResolvedValue(false),
+    reinstallFromPackage: localRecovery,
+  };
+  const action = UpdateManager.prototype.rollback.call(
+    fake as unknown as InstanceType<typeof UpdateManager>,
+    'audit',
+  );
+  await vi.waitFor(() => expect(localRecovery).toHaveBeenCalledOnce());
+  await action;
+  describe('startup failure before backend/renderer readiness', () => {
+    it('counts one failed launch once and rolls back at threshold without running health probes', async () => {
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        crashCount: 2,
+        lastRecordedVersion: base.currentVersion,
+        postInstallMarker: { version: base.currentVersion, installedAt: new Date().toISOString() },
+      });
+      const rollback = vi.spyOn(updateManager, 'rollback').mockResolvedValue(undefined);
+      const result = await Promise.all([
+        updateManager.onAppStartupFailure('backend-startup-timeout'),
+        updateManager.onAppStartupFailure('broken-installer'),
+      ]);
+      expect(result).toEqual([true, true]);
+      expect(rollback).toHaveBeenCalledTimes(1);
+      expect(rollback).toHaveBeenCalledWith('auto-rollback:backend-startup-timeout');
+      expect((await stateManager.getState()).crashCount).toBe(3);
+    });
+
+    it('does not count ordinary non-update launch failures', async () => {
+      const rollback = vi.spyOn(updateManager, 'rollback').mockResolvedValue(undefined);
+      expect(await updateManager.onAppStartupFailure('backend-spawn-failed')).toBe(false);
+      expect(rollback).not.toHaveBeenCalled();
+      expect((await new StateManager().getState()).crashCount).toBe(0);
+    });
+
+    it('counts a failed post-install launch below threshold but does not roll back', async () => {
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        postInstallMarker: {
+          version: base.currentVersion,
+          installedAt: new Date().toISOString(),
+        },
+      });
+      const rollback = vi.spyOn(updateManager, 'rollback').mockResolvedValue(undefined);
+      expect(await updateManager.onAppStartupFailure('backend-spawn-failed')).toBe(false);
+      expect(await updateManager.onAppStartupFailure('retry-failed')).toBe(false);
+      expect(rollback).not.toHaveBeenCalled();
+      expect((await stateManager.getState()).crashCount).toBe(1);
     });
   });
 });
