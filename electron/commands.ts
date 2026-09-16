@@ -81,6 +81,8 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // /api/v1 下 —— 去掉前缀会全部 404。commands.test.ts 有 guard 测试
   // 防止漏前缀。
   agent_chat_stream: { method: 'POST', path: () => '/api/v1/chat/stream' },
+  // 2026-09 修复 (同步 #957): chatApi.chat() 调用 agent_chat 但映射表缺项。
+  agent_chat: { method: 'POST', path: () => '/api/v1/chat' },
   list_agents: { method: 'GET', path: () => '/api/v1/agents' },
   get_agent: {
     method: 'GET',

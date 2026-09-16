@@ -264,22 +264,27 @@ const electronAPI = {
    */
   journal: {
     parseTemplate: (filePath: string) =>
-      ipcRenderer.invoke('office_journal_parse_template', {
-        file_path: filePath,
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'office_journal_parse_template',
+        args: { file_path: filePath },
       }) as Promise<JournalParseTemplateResponse>,
     listSpecs: () =>
-      ipcRenderer.invoke('office_journal_list_specs', {}) as Promise<JournalListSpecsResponse>,
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'office_journal_list_specs',
+        args: {},
+      }) as Promise<JournalListSpecsResponse>,
     getSpec: (specId: string) =>
-      ipcRenderer.invoke('office_journal_get_spec', {
-        spec_id: specId,
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'office_journal_get_spec',
+        args: { spec_id: specId },
       }) as Promise<JournalGetSpecResponse>,
     validate: (args: { spec_id?: string; file_path?: string }) =>
-      ipcRenderer.invoke('office_journal_validate', args) as Promise<JournalValidateResponse>,
+      ipcRenderer.invoke('sage:invoke', { cmd: 'office_journal_validate', args }) as Promise<JournalValidateResponse>,
     fillFromContent: (req: JournalFillFromContentRequest) =>
-      ipcRenderer.invoke(
-        'office_journal_fill_from_content',
-        req,
-      ) as Promise<JournalFillFromContentResponse>,
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'office_journal_fill_from_content',
+        args: req,
+      }) as Promise<JournalFillFromContentResponse>,
   } satisfies JournalElectronApiBridge,
 
   updates: {

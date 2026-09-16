@@ -746,10 +746,10 @@ async def lifespan(app: FastAPI):
     # set_current_turn (F4 — production caller for source_turn_id).
     from backend.api.hex_routes import get_chat_service
 
-    app.dependency_overrides[get_chat_service] = lambda: _build_chat_service(
-        lifecycle=lifecycle
-    )
+    # 2026-09 修复 (同步 #957): 覆盖工厂此前每请求新建 ChatService ——
+    # prompt 快照缓存跨请求永不命中。注入单例访问器。
     app.state.chat_service = _build_chat_service(lifecycle=lifecycle)
+    app.dependency_overrides[get_chat_service] = lambda: app.state.chat_service
     # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
     # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
     app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
