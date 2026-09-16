@@ -138,7 +138,26 @@ describe('office:pick-and-import', () => {
     fs.unlinkSync(tmpSrc);
   });
 
-  it('filter catalog includes legacy .ppt/.doc/.xls for in-place conversion (P1-C); no All Files', async () => {
+  it('keeps the .csv extension when importing csv under excel docType (P1-B)', async () => {
+    const tmpSrc = path.join(os.tmpdir(), `sage-source-${Date.now()}.csv`);
+    fs.writeFileSync(tmpSrc, Buffer.from('h1,h2\nv1,v2\n'));
+    mocks.dialog.showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: [tmpSrc],
+    });
+
+    const handler = registeredHandlers.get('office:pick-and-import')!;
+    const result = (await handler({}, { workspacePath: '/tmp/ws', docType: 'excel' })) as {
+      managedPath: string;
+    } | null;
+
+    expect(result, 'expected non-null import').not.toBeNull();
+    expect(result!.managedPath).toContain('.csv');
+    expect(result!.managedPath).not.toContain('.xlsx');
+
+    fs.unlinkSync(tmpSrc);
+  });
+
     mocks.dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
 
     const handler = registeredHandlers.get('office:pick-and-import')!;

@@ -281,3 +281,23 @@ export function isPathWithinWorkspace(workspacePath: string, targetPath: string)
 export function extensionForDocType(docType: OfficeDocType): string {
   return DOC_TYPE_EXTENSION[docType];
 }
+
+/**
+ * P1-B (office-p1b): extra allowed extensions per doc type — mirrors
+ * backend/office/path_safety._DOC_TYPE_EXTRA_EXTENSIONS. A csv file
+ * imported under the excel docType keeps its .csv extension (renaming
+ * it to .xlsx would desync the bytes from the extension and openpyxl
+ * would reject it on read).
+ */
+const DOC_TYPE_EXTRA_EXTENSIONS: Partial<Record<OfficeDocType, readonly string[]>> = {
+  excel: ['csv'],
+};
+
+/** Whether `ext` (no leading dot) is a valid on-disk extension for docType. */
+export function isAllowedExtensionForDocType(docType: OfficeDocType, ext: string): boolean {
+  const lowered = ext.toLowerCase();
+  return (
+    lowered === DOC_TYPE_EXTENSION[docType] ||
+    (DOC_TYPE_EXTRA_EXTENSIONS[docType]?.includes(lowered) ?? false)
+  );
+}

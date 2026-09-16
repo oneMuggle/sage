@@ -1170,6 +1170,12 @@ def update_document(
     editor = editors.get((doc_type or "").lower())
     if editor is None:
         raise OfficeEditError(f"unsupported doc_type: {doc_type}", file_path=file_path)
+    # P1-B: excel doc_type 的 .csv 双扩展 —— 写路径分流到字符串网格编辑器
+    # （CSV 没有公式/样式系统，openpyxl 不适用）。
+    if doc_type.lower() == "excel" and file_path.suffix.lower() == ".csv":
+        from .excel import update_csv
+
+        return update_csv(file_path, ops)
     return editor(file_path, ops)
 
 
