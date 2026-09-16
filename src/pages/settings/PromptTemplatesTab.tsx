@@ -6,7 +6,7 @@
  * 斜杠面板（/tpl-<名称>）与该列表共享同一数据源，保存后重载即可见。
  */
 
-import { Download, Pencil, Plus, RefreshCw, Upload } from 'lucide-react';
+import { Download, Pencil, Plus, RefreshCw, Search, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { promptApi, type PromptTemplate } from '../../shared/api/promptApi';
@@ -32,6 +32,8 @@ export function PromptTemplatesTab() {
   const [error, setError] = useState<string | null>(null);
   // R38: 记忆清除后触发重渲染（localStorage 不经过 React，需手动 tick）
   const [, setMemoryTick] = useState(0);
+  // R52: 模板搜索过滤
+  const [searchQuery, setSearchQuery] = useState('');
   // R42: 拖拽排序状态
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -175,7 +177,17 @@ export function PromptTemplatesTab() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button
+          <div className="relative flex-1 min-w-[160px]">
+            <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
+            <input
+              data-testid="prompts-search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索模板…"
+              className="w-full pl-7 pr-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text"
+            />
+          </div>
+                    <button
             type="button"
             data-testid="prompts-refresh"
             onClick={() => void load()}
@@ -284,7 +296,13 @@ export function PromptTemplatesTab() {
         </p>
       ) : (
         <ul className="space-y-2" data-testid="prompts-list">
-          {templates.map((tpl, idx) => (
+          {templates
+            .filter((tpl) => {
+              if (!searchQuery.trim()) return true;
+              const q = searchQuery.toLowerCase();
+              return tpl.name.toLowerCase().includes(q) || (tpl.description ?? '').toLowerCase().includes(q) || tpl.content.toLowerCase().includes(q);
+            })
+            .map((tpl, idx) => (
             <li
               key={tpl.id}
               draggable
