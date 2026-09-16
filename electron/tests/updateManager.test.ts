@@ -1550,4 +1550,49 @@ it('rollback reaches local recovery while telemetry never settles (audit #17)', 
   );
   await vi.waitFor(() => expect(localRecovery).toHaveBeenCalledOnce());
   await action;
+  describe('startup failure before backend/renderer readiness', () => {
+    it('counts one failed launch once and rolls back at threshold without running health probes', async () => {
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        crashCount: 2,
+        lastRecordedVersion: base.currentVersion,
+        postInstallMarker: { version: base.currentVersion, installedAt: new Date().toISOString() },
+      });
+      const rollback = vi.spyOn(updateManager, 'rollback').mockResolvedValue(undefined);
+      const result = await Promise.all([
+        updateManager.onAppStartupFailure('backend-startup-timeout'),
+        updateManager.onAppStartupFailure('broken-installer'),
+      ]);
+      expect(result).toEqual([true, true]);
+      expect(rollback).toHaveBeenCalledTimes(1);
+      expect(rollback).toHaveBeenCalledWith('auto-rollback:backend-startup-timeout');
+      expect((await stateManager.getState()).crashCount).toBe(3);
+    });
+
+    it('does not count ordinary non-update launch failures', async () => {
+      const rollback = vi.spyOn(updateManager, 'rollback').mockResolvedValue(undefined);
+      expect(await updateManager.onAppStartupFailure('backend-spawn-failed')).toBe(false);
+      expect(rollback).not.toHaveBeenCalled();
+      expect((await new StateManager().getState()).crashCount).toBe(0);
+    });
+
+    it('counts a failed post-install launch below threshold but does not roll back', async () => {
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        postInstallMarker: {
+          version: base.currentVersion,
+          installedAt: new Date().toISOString(),
+        },
+      });
+      const rollback = vi.spyOn(updateManager, 'rollback').mockResolvedValue(undefined);
+      expect(await updateManager.onAppStartupFailure('backend-spawn-failed')).toBe(false);
+      expect(await updateManager.onAppStartupFailure('retry-failed')).toBe(false);
+      expect(rollback).not.toHaveBeenCalled();
+      expect((await stateManager.getState()).crashCount).toBe(1);
+    });
+  });
 });

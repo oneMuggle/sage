@@ -10,17 +10,19 @@ const { LauncherHealthChecker } = await import('../updateHealthChecker');
 interface MockWindow {
   isDestroyed: ReturnType<typeof vi.fn>;
   isVisible: ReturnType<typeof vi.fn>;
+  webContents: { executeJavaScript: ReturnType<typeof vi.fn> };
 }
 
 function createMockWindow(overrides: { visible?: boolean; destroyed?: boolean } = {}): MockWindow {
   return {
+    webContents: { executeJavaScript: vi.fn().mockResolvedValue(true) },
     isDestroyed: vi.fn().mockReturnValue(overrides.destroyed ?? false),
     isVisible: vi.fn().mockReturnValue(overrides.visible ?? true),
   };
 }
 
 function createOkResponse(): Response {
-  return { ok: true, status: 200 } as Response;
+  return { ok: true, status: 200, json: async () => [] } as unknown as Response;
 }
 
 describe('LauncherHealthChecker', () => {
@@ -84,8 +86,10 @@ describe('LauncherHealthChecker', () => {
     await vi.runAllTimersAsync();
     await promise;
 
-    // 10 retries means 10 fetch calls
-    expect(fetch).toHaveBeenCalledTimes(10);
+    // Ten backend probes plus one independent authenticated database probe.
+    expect(
+      vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/health')),
+    ).toHaveLength(10);
   });
 
   it('times out main window check after 3 seconds', async () => {
@@ -146,7 +150,7 @@ describe('LauncherHealthChecker', () => {
     expect(mainWindowDetail?.passed).toBe(true);
   });
 
-  it('database and ipc checks always pass (stubs)', async () => {
+  it('probes the database with auth and invokes the real renderer IPC bridge', async () => {
     const mockWin = createMockWindow({ visible: true });
     vi.mocked(fetch).mockResolvedValue(createOkResponse());
 
@@ -158,11 +162,64 @@ describe('LauncherHealthChecker', () => {
     await vi.runAllTimersAsync();
     const result = await promise;
 
+    expect(mockWin.webContents.executeJavaScript).toHaveBeenCalledWith(
+      expect.stringContaining("api.invoke('list_sessions'"),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/sessions?limit=1'),
+      expect.any(Object),
+    );
     const dbDetail = result.details.find((d) => d.name === 'database');
     const ipcDetail = result.details.find((d) => d.name === 'ipc');
     expect(dbDetail?.passed).toBe(true);
     expect(ipcDetail?.passed).toBe(true);
     expect(dbDetail?.error).toBeUndefined();
     expect(ipcDetail?.error).toBeUndefined();
+  });
+  it('reports database failure and hung IPC independently, clearing all timers', async () => {
+    const mockWin = createMockWindow();
+    mockWin.webContents.executeJavaScript.mockReturnValue(new Promise(() => {}));
+    vi.mocked(fetch).mockImplementation(async (url) =>
+      String(url).includes('/sessions')
+        ? ({ ok: false, status: 500 } as Response)
+        : createOkResponse(),
+    );
+    const checker = new LauncherHealthChecker({
+      getWindow: () => mockWin as unknown as Electron.BrowserWindow,
+      getAuthToken: () => 'test-capability',
+      ipcTimeout: 50,
+    });
+    const pending = checker.runPostStartupChecks();
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    expect(result.details.find((d) => d.name === 'database')?.passed).toBe(false);
+    expect(result.details.find((d) => d.name === 'ipc')?.error).toContain('timed out');
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/sessions'),
+      expect.objectContaining({
+        headers: { 'X-Sage-Local-Authorization': 'Bearer test-capability' },
+      }),
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('fails a malformed database response and a rejected renderer bridge', async () => {
+    const mockWin = createMockWindow();
+    mockWin.webContents.executeJavaScript.mockRejectedValue(new Error('bridge unavailable'));
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    } as Response);
+    const checker = new LauncherHealthChecker({
+      getWindow: () => mockWin as unknown as Electron.BrowserWindow,
+    });
+    const pending = checker.runPostStartupChecks();
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    expect(result.passed).toBe(false);
+    expect(result.details.find((d) => d.name === 'database')?.error).toContain('Invalid database');
+    expect(result.details.find((d) => d.name === 'ipc')?.error).toContain('bridge unavailable');
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
