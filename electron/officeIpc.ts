@@ -42,6 +42,7 @@ import {
   buildManagedPath,
   extensionForDocType,
   getOpenDialogFilters,
+  isAllowedExtensionForDocType,
   isLegacyExtensionForDocType,
   isPathWithinWorkspace,
   type ImportedOfficeFile,
@@ -140,10 +141,14 @@ async function stageImportedFile(
 
   const ext = extensionForDocType(docType);
   const originalName = path.basename(sourcePath);
-  // P1-C: 旧格式 (.doc/.xls/.ppt) 原样暂存、保留原名 —— 字节与扩展名
-  // 必须一致；staging 之后由 /office/import/convert-legacy 就地转换。
+  // P1-B/P1-C: 原始扩展名已是该 docType 合法扩展（excel + .csv）或旧格式
+  // （.doc/.xls/.ppt，staging 后就地转换）时保留原名 —— 字节与扩展名必须
+  // 一致，改名会导致读取端解析失败。
   const originalExt = path.extname(originalName).replace(/^\./, '');
-  const finalName = isLegacyExtensionForDocType(docType, originalExt)
+  const finalName =
+    isAllowedExtensionForDocType(docType, originalExt) ||
+    isLegacyExtensionForDocType(docType, originalExt)
+
     ? originalName
     : replaceExtension(originalName, ext);
   const stagingDir = path.join(workspacePath, 'office', docType, importToken);
