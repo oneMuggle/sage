@@ -159,6 +159,7 @@ export type AgentState =
   | 'acting'
   | 'permission_request' // M1: 工具审批卡点 — 等待用户批准/拒绝
   | 'ask_user_question' // M2 part B: AskUserQuestion 卡点 — 等待用户选择/填写
+  | 'suspended' // A4 Suspend-Resume: producer 主动让出, 等 wake 触发下一轮 (2026-09 补齐, 与后端 chat_stream_registry 一致)
   | 'observing'
   | 'content_delta'
   | 'done'

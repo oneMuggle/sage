@@ -392,7 +392,21 @@ class SchedulerService:
         if not task.enabled:
             return
         if task.type == "once":
-            trigger = DateTrigger(run_date=_epoch_ms_to_dt(task.schedule["at"]))
+            run_dt = _epoch_ms_to_dt(task.schedule["at"])
+            # 2026-09 修复: 后端停机跨过触发点的一次性任务 —— APScheduler
+            # misfire 会静默跳过, 任务停留 enabled 且 next_run 是过去值,
+            # 提醒永久丢失且 UI 无法察觉。重启登记时已过期的直接记为
+            # missed, 用户在任务列表能看到失败原因并可手动重跑。
+            if run_dt.timestamp() * 1000 <= time.time() * 1000:
+                logger.warning(
+                    "task %s: one-shot 触发点 (%s) 已在停机期间错过, 标记 missed",
+                    task.id,
+                    run_dt.isoformat(),
+                )
+                with self._lock:
+                    self._record_run(task, error="missed: backend was down at fire time")
+                return
+            trigger = DateTrigger(run_date=run_dt)
         else:
             trigger = CronTrigger.from_crontab(task.schedule["cron"])
         self._scheduler.add_job(
