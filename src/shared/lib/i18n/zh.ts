@@ -689,6 +689,10 @@ export const zh = {
   'office.preview.structuredView': '结构视图',
   'office.preview.originalFailed': '原文预览失败',
   'office.preview.nativeFailed': '原生预览加载失败，请使用结构视图',
+  'office.recalc.button': '刷新公式缓存',
+  'office.recalc.recalcing': '重算中…',
+  'office.recalc.success': '公式缓存已刷新',
+  'office.recalc.failed': '公式重算失败',
 
   // ─── Office parity batch 2: 编辑预览对话框 (item 2.5) ─────
   'office.edit.title': '编辑预览',
