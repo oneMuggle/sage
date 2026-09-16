@@ -1031,6 +1031,7 @@ class ChatDispatcher:
                 # O1: 投递用 canonical task_id（t1..tN，与 steer 端点一致），
                 # 不是 lane 空间的 "task-tN"。
                 context_task_id=state.task_id,
+                max_iterations=self.settings.max_subagent_iterations,
             ),
         )
         # O5 (2026-09-08): 子代理执行期间置位嵌套深度 —— AgentTool 据此
