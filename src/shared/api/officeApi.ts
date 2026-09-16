@@ -37,6 +37,7 @@ import type {
   OfficePptGenerateRequest,
   OfficePptReadResult,
   OfficeReadRequest,
+  OfficeRecalcResult,
   OfficeRestoreResponse,
   OfficeSnapshotListResponse,
   OfficeSnapshotRestoreResponse,
@@ -182,6 +183,21 @@ export const officeApi = {
   async readPdfForm(req: OfficePdfReadRequest): Promise<OfficePdfFormReadResult> {
     try {
       return await invoke<OfficePdfFormReadResult>('office_pdf_read_form', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P2-C (office-p2c): recalc formula cache of a managed .xlsx in place
+   * via local soffice (a pre-recalc snapshot is taken server-side).
+   */
+  async recalcExcel(req: OfficePdfReadRequest): Promise<OfficeRecalcResult> {
+    try {
+      return await invoke<OfficeRecalcResult>('office_excel_recalc', {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
       });
