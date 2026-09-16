@@ -782,7 +782,15 @@ class BrowserCookiesTool(BaseTool):
         raw_cookies = result.get("cookies") or []
         if not raw_cookies:
             return ToolResult(
-                success=False, error="no_cookies: 当前页面没有可导出的 cookie（先登录？）"
+                success=False,
+                error=(
+                    "no_cookies: 当前页面没有可导出的 cookie。"
+                    "常见原因：(1) 尚未在受控浏览器中登录目标站点；"
+                    "(2) 当前页面域名确实无 cookie。"
+                    "流程：先用 browser_launch headless=false 让浏览器窗口出现，"
+                    "手动登录后再调用 browser_cookies action=export。"
+                    "注：cookie 导出走 CDP 协议，不需要任何浏览器扩展。"
+                ),
             )
         # 当前页 cookie 按 domain 分组存档（一个页面可能带多 domain 的 cookie）
         from .credential_vault import save_credential

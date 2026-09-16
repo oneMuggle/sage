@@ -511,3 +511,31 @@ def test_apply_stealth_swallows_cdp_errors(monkeypatch):
 
     monkeypatch.setattr(browser_cdp, "cdp_command", boom)
     assert browser_cdp.apply_stealth(SimpleNamespace(browser_id="b")) is False
+
+
+def test_browser_cookies_no_cookies_error_mentions_cdp_workflow(monkeypatch):
+    """alpha.36 (Bug #3): no_cookies 错误应明确说明不需要浏览器扩展，
+    并指出正确的 headless=false 流程，防止 LLM 二次解释时幻觉出'需要扩展'。"""
+    from backend.tools.browser_tool import BrowserCookiesTool
+
+    def fake_resolve_session(browser_id):
+        return SimpleNamespace(browser_id="b")
+
+    def fake_cdp(session, method, params=None, target_id=None):
+        return {"cookies": []}  # 模拟空 cookie 列表
+
+    # browser_tool.py 顶部 `from .browser_cdp import cdp_command`，
+    # 必须 patch browser_tool 模块的引用而非 browser_cdp 模块的源
+    monkeypatch.setattr(browser_tool, "_resolve_session", fake_resolve_session)
+    monkeypatch.setattr(browser_tool, "cdp_command", fake_cdp)
+
+    tool = BrowserCookiesTool()
+    result = tool.execute(action="export", browser_id="b")
+
+    assert result.success is False
+    assert "no_cookies" in result.error
+    # 关键文案：必须明确说明不需要扩展
+    assert "不需要任何浏览器扩展" in result.error
+    # 必须说明正确的流程
+    assert "browser_launch headless=false" in result.error
+    assert "手动登录" in result.error
