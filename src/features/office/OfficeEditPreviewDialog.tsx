@@ -72,7 +72,9 @@ export type WordEditKind =
   | 'append_paragraphs'
   | 'set_table_cell'
   | 'delete_paragraph'
-  | 'add_comment';
+  | 'add_comment'
+  | 'set_paragraph_style'
+  | 'delete_comment';
 export type ExcelEditKind = 'set_cells' | 'append_rows';
 export type PptEditKind =
   | 'set_slide_title'
@@ -102,6 +104,16 @@ interface ComposeState {
   // word add_comment
   commentText: string;
   commentAuthor: string;
+  // word set_paragraph_style
+  styleMatch: string;
+  styleIndex: string;
+  styleFontSize: string;
+  styleBold: boolean;
+  styleItalic: boolean;
+  styleColor: string;
+  styleAlign: string;
+  // word delete_comment
+  commentId: string;
   // excel set_cells
   sheet: string;
   cell: string;
@@ -135,6 +147,14 @@ const INITIAL_COMPOSE: ComposeState = {
   deleteAll: false,
   commentText: '',
   commentAuthor: '',
+  styleMatch: '',
+  styleIndex: '',
+  styleFontSize: '',
+  styleBold: false,
+  styleItalic: false,
+  styleColor: '',
+  styleAlign: '',
+  commentId: '',
   sheet: '',
   cell: '',
   value: '',
@@ -192,6 +212,34 @@ export function buildUpdateOps(
       const op: OfficeUpdateOp = { op: 'add_comment', find, comment };
       if (state.commentAuthor.trim()) op.author = state.commentAuthor.trim();
       return [op];
+    }
+    if (state.wordKind === 'set_paragraph_style') {
+      const match = state.styleMatch.trim();
+      const indexRaw = state.styleIndex.trim();
+      if (!match && !indexRaw) return null;
+      const op: OfficeUpdateOp = { op: 'set_paragraph_style' };
+      if (match) op.match = match;
+      if (indexRaw) {
+        const index = Number(indexRaw);
+        if (!Number.isInteger(index) || index < 0) return null;
+        op.index = index;
+      }
+      const fontSize = Number(state.styleFontSize.trim());
+      if (state.styleFontSize.trim() && Number.isFinite(fontSize) && fontSize > 0) {
+        op.font_size = fontSize;
+      }
+      if (state.styleBold) op.bold = true;
+      if (state.styleItalic) op.italic = true;
+      if (state.styleColor.trim()) op.color = state.styleColor.trim();
+      if (state.styleAlign) op.align = state.styleAlign;
+      // 至少一个样式属性才构成有效编辑
+      if (Object.keys(op).length <= 2) return null;
+      return [op];
+    }
+    if (state.wordKind === 'delete_comment') {
+      const id = state.commentId.trim();
+      if (!id) return null;
+      return [{ op: 'delete_comment', comment_id: id }];
     }
     if (state.wordKind === 'delete_paragraph') {
       const find = state.deleteFind.trim();
@@ -380,6 +428,8 @@ export function OfficeEditPreviewDialog({
                     <option value="set_table_cell">{t('office.edit.kindSetTableCell')}</option>
                     <option value="delete_paragraph">{t('office.edit.kindDeleteParagraph')}</option>
                     <option value="add_comment">{t('office.edit.kindAddComment')}</option>
+                    <option value="set_paragraph_style">{t('office.edit.kindSetStyle')}</option>
+                    <option value="delete_comment">{t('office.edit.kindDeleteComment')}</option>
                   </select>
                 </div>
                 {compose.wordKind === 'replace_text' && (
@@ -502,6 +552,124 @@ export function OfficeEditPreviewDialog({
                       />
                     </div>
                   </>
+                )}
+                {compose.wordKind === 'set_paragraph_style' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.styleMatch')}
+                        </label>
+                        <input
+                          type="text"
+                          value={compose.styleMatch}
+                          onChange={(e) => setField('styleMatch')(e.target.value)}
+                          placeholder={t('office.edit.styleMatchPlaceholder')}
+                          className={inputClass}
+                          data-testid="office-edit-style-match"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.styleIndex')}
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={compose.styleIndex}
+                          onChange={(e) => setField('styleIndex')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-style-index"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.styleFontSize')}
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={compose.styleFontSize}
+                          onChange={(e) => setField('styleFontSize')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-style-font-size"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.styleColor')}
+                        </label>
+                        <input
+                          type="text"
+                          value={compose.styleColor}
+                          onChange={(e) => setField('styleColor')(e.target.value)}
+                          placeholder="FF0000"
+                          className={inputClass}
+                          data-testid="office-edit-style-color"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.styleAlign')}
+                        </label>
+                        <select
+                          value={compose.styleAlign}
+                          onChange={(e) => setField('styleAlign')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-style-align"
+                        >
+                          <option value="">{t('office.edit.headingNone')}</option>
+                          <option value="left">left</option>
+                          <option value="center">center</option>
+                          <option value="right">right</option>
+                          <option value="justify">justify</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 text-xs text-text-secondary">
+                        <input
+                          type="checkbox"
+                          checked={compose.styleBold}
+                          onChange={(e) =>
+                            setCompose((pr) => ({ ...pr, styleBold: e.target.checked }))
+                          }
+                          className="accent-primary"
+                          data-testid="office-edit-style-bold"
+                        />
+                        {t('office.edit.styleBold')}
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-text-secondary">
+                        <input
+                          type="checkbox"
+                          checked={compose.styleItalic}
+                          onChange={(e) =>
+                            setCompose((pr) => ({ ...pr, styleItalic: e.target.checked }))
+                          }
+                          className="accent-primary"
+                          data-testid="office-edit-style-italic"
+                        />
+                        {t('office.edit.styleItalic')}
+                      </label>
+                    </div>
+                  </>
+                )}
+                {compose.wordKind === 'delete_comment' && (
+                  <div>
+                    <label className="block text-xs text-muted mb-1">
+                      {t('office.edit.commentId')}
+                    </label>
+                    <input
+                      type="text"
+                      value={compose.commentId}
+                      onChange={(e) => setField('commentId')(e.target.value)}
+                      placeholder={t('office.edit.commentIdPlaceholder')}
+                      className={inputClass}
+                      data-testid="office-edit-comment-id"
+                    />
+                  </div>
                 )}
                 {compose.wordKind === 'add_comment' && (
                   <>

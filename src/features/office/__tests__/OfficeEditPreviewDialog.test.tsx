@@ -412,6 +412,14 @@ describe('buildUpdateOps — op composition table', () => {
     deleteAll: false,
     commentText: '',
     commentAuthor: '',
+    styleMatch: '',
+    styleIndex: '',
+    styleFontSize: '',
+    styleBold: false,
+    styleItalic: false,
+    styleColor: '',
+    styleAlign: '',
+    commentId: '',
     sheet: '',
     cell: '',
     value: '',
@@ -444,6 +452,54 @@ describe('buildUpdateOps — op composition table', () => {
     expect(buildUpdateOps('ppt', { ...base, slideNumber: '2', slideTitle: ' t ' })).toEqual([
       { op: 'set_slide_title', index: 1, title: 't' },
     ]);
+  });
+
+  it('word set_paragraph_style: locator + at least one style prop', () => {
+    expect(buildUpdateOps('word', { ...base, wordKind: 'set_paragraph_style' })).toBeNull();
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'set_paragraph_style',
+        styleMatch: '旧文本',
+        styleFontSize: '14',
+        styleBold: true,
+        styleColor: ' FF0000 ',
+        styleAlign: 'center',
+      }),
+    ).toEqual([
+      {
+        op: 'set_paragraph_style',
+        match: '旧文本',
+        font_size: 14,
+        bold: true,
+        color: 'FF0000',
+        align: 'center',
+      },
+    ]);
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'set_paragraph_style',
+        styleIndex: '3',
+        styleItalic: true,
+      }),
+    ).toEqual([{ op: 'set_paragraph_style', index: 3, italic: true }]);
+    // 非法 index / 无样式属性 → null
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'set_paragraph_style',
+        styleIndex: '-1',
+        styleItalic: true,
+      }),
+    ).toBeNull();
+  });
+
+  it('word delete_comment: comment_id required', () => {
+    expect(buildUpdateOps('word', { ...base, wordKind: 'delete_comment' })).toBeNull();
+    expect(
+      buildUpdateOps('word', { ...base, wordKind: 'delete_comment', commentId: ' 2 ' }),
+    ).toEqual([{ op: 'delete_comment', comment_id: '2' }]);
   });
 
   it('pdf is not editable via this dialog', () => {
@@ -531,9 +587,7 @@ describe('buildUpdateOps — op composition table', () => {
         commentText: ' 这里要补引用 ',
         commentAuthor: '张三',
       }),
-    ).toEqual([
-      { op: 'add_comment', find: '旧句', comment: '这里要补引用', author: '张三' },
-    ]);
+    ).toEqual([{ op: 'add_comment', find: '旧句', comment: '这里要补引用', author: '张三' }]);
     expect(
       buildUpdateOps('word', {
         ...base,
