@@ -2,20 +2,25 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { gatewayApi } from '../../../shared/api/gatewayApi';
+import { gatewayApiFor } from '../../../shared/api/gatewayApi';
 import { GatewayCard } from '../GatewayCard';
 
 vi.mock('../../../shared/api/gatewayApi', () => ({
-  gatewayApi: {
-    getConfig: vi.fn(),
-    updateConfig: vi.fn(),
-    status: vi.fn(),
-    listBinds: vi.fn(),
-    unbind: vi.fn(),
-  },
+  gatewayApiFor: vi.fn(),
+  gatewayAllowedIds: (cfg: Record<string, unknown>) =>
+    (cfg.allowed_chat_ids ?? cfg.allowed_channel_ids) as string[],
+  gatewayPlatformLabel: { telegram: 'Telegram', discord: 'Discord', slack: 'Slack' },
 }));
 
-const mockedApi = vi.mocked(gatewayApi);
+const apiMocks = {
+  getConfig: vi.fn(),
+  updateConfig: vi.fn(),
+  status: vi.fn(),
+  listBinds: vi.fn(),
+  unbind: vi.fn(),
+};
+vi.mocked(gatewayApiFor).mockImplementation(() => apiMocks as never);
+const mockedApi = apiMocks;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -38,13 +43,46 @@ beforeEach(() => {
 });
 
 describe('GatewayCard', () => {
-  it('renders masked token and binds', async () => {
-    render(<GatewayCard />);
+  it('renders masked token and binds (telegram)', async () => {
+    render(<GatewayCard platform="telegram" />);
     await waitFor(() => {
       expect(screen.getByDisplayValue('****ABCD')).toBeInTheDocument();
     });
     expect(screen.getByText(/chat 42 → session/)).toBeInTheDocument();
     expect(screen.getByText(/绑定 1 个会话/)).toBeInTheDocument();
+    expect(vi.mocked(gatewayApiFor)).toHaveBeenCalledWith('telegram');
+  });
+
+  it('renders discord card with channel ids', async () => {
+    mockedApi.getConfig.mockResolvedValue({
+      configured: true,
+      enabled: true,
+      source: 'settings',
+      bot_token_masked: '****DCRD',
+      allowed_channel_ids: ['9001'],
+    });
+    render(<GatewayCard platform="discord" />);
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('****DCRD')).toBeInTheDocument();
+    });
+    expect(screen.getByDisplayValue('9001')).toBeInTheDocument();
+    expect(screen.getByText(/消息网关（Discord）/)).toBeInTheDocument();
+    expect(vi.mocked(gatewayApiFor)).toHaveBeenCalledWith('discord');
+  });
+
+  it('renders slack card', async () => {
+    mockedApi.getConfig.mockResolvedValue({
+      configured: true,
+      enabled: true,
+      source: 'none',
+      bot_token_masked: '',
+      allowed_channel_ids: [],
+    });
+    render(<GatewayCard platform="slack" />);
+    await waitFor(() => {
+      expect(screen.getByText(/消息网关（Slack）/)).toBeInTheDocument();
+    });
+    expect(vi.mocked(gatewayApiFor)).toHaveBeenCalledWith('slack');
   });
 
   it('saves via PUT with edited values', async () => {
@@ -52,7 +90,7 @@ describe('GatewayCard', () => {
       saved: true,
       restart_required: true,
     });
-    render(<GatewayCard />);
+    render(<GatewayCard platform="telegram" />);
     await waitFor(() => {
       expect(screen.getByDisplayValue('****ABCD')).toBeInTheDocument();
     });
@@ -81,7 +119,7 @@ describe('GatewayCard', () => {
   it('sends masked token back unchanged when token untouched', async () => {
     // 回归：保存白名单时 token 框保持打码值 → 原样传回（后端保留已存 token）
     mockedApi.updateConfig.mockResolvedValue({ saved: true, restart_required: false });
-    render(<GatewayCard />);
+    render(<GatewayCard platform="telegram" />);
     await waitFor(() => {
       expect(screen.getByDisplayValue('****ABCD')).toBeInTheDocument();
     });
@@ -95,9 +133,32 @@ describe('GatewayCard', () => {
     });
   });
 
+  it('discord save sends allowed_channel_ids payload', async () => {
+    mockedApi.getConfig.mockResolvedValue({
+      configured: true,
+      enabled: true,
+      source: 'settings',
+      bot_token_masked: '****DCRD',
+      allowed_channel_ids: ['9001'],
+    });
+    mockedApi.updateConfig.mockResolvedValue({ saved: true, restart_required: false });
+    render(<GatewayCard platform="discord" />);
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('9001')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('保存'));
+    await waitFor(() => {
+      expect(mockedApi.updateConfig).toHaveBeenCalledWith({
+        bot_token: '****DCRD',
+        allowed_channel_ids: ['9001'],
+        enabled: true,
+      });
+    });
+  });
+
   it('unbinds a chat after click', async () => {
     mockedApi.unbind.mockResolvedValue({ chat_id: '42', unbound: true });
-    render(<GatewayCard />);
+    render(<GatewayCard platform="telegram" />);
     await waitFor(() => {
       expect(screen.getByTitle('解绑')).toBeInTheDocument();
     });
