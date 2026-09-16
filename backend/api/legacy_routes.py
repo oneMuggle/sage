@@ -2343,10 +2343,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     # S1: finally 落库 failed + 原因
                     _producer_error = "今日花费已达限额（spend_limit_exceeded）"
+                    # 2026-09 修复: 失败信封统一为 dict {type, message} ——
+                    # 与 _run_producer 的 LLMError.to_dict() 同构, 前端已双态兼容。
                     await entry.queue.put(
                         {
                             "state": "failed",
-                            "error": "spend_limit_exceeded",
+                            "error": {
+                                "type": "spend_limit_exceeded",
+                                "message": _producer_error,
+                            },
                         }
                     )
                     return
