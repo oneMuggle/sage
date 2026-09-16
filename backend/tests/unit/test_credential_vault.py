@@ -850,3 +850,184 @@ class TestBrowserCookiesSetHeader:
         assert result.content["saved"][0]["expires_in_seconds"] > 0
         cookies = load_credential(".example.com", repo=repo)
         assert cookies[0]["expires"] == _FUTURE
+
+
+# ---------- Round 15：RFC 6265 合规加固 ----------
+
+
+class TestCookieNameValueValidation:
+    def test_save_drops_entries_with_bad_name(self, repo):
+        save_credential(
+            ".example.com",
+            [
+                {"name": "ok", "value": "v", "domain": ".example.com", "path": "/"},
+                {"name": "bad;name", "value": "v", "domain": ".example.com", "path": "/"},
+                {"name": "bad name", "value": "v", "domain": ".example.com", "path": "/"},
+            ],
+            repo=repo,
+        )
+        cookies = load_credential(".example.com", repo=repo)
+        assert [c["name"] for c in cookies] == ["ok"]
+
+    def test_save_drops_entries_with_control_or_semicolon_value(self, repo):
+        save_credential(
+            ".example.com",
+            [
+                {"name": "ok", "value": "v", "domain": ".example.com", "path": "/"},
+                {"name": "inj", "value": "x\r\nSet-Cookie: p=1", "domain": ".example.com"},
+                {"name": "semi", "value": "a;b", "domain": ".example.com"},
+                {"name": "ctl", "value": "a\x00b", "domain": ".example.com"},
+            ],
+            repo=repo,
+        )
+        cookies = load_credential(".example.com", repo=repo)
+        assert [c["name"] for c in cookies] == ["ok"]
+
+    def test_save_all_invalid_raises(self, repo):
+        with pytest.raises(ValueError, match="没有可保存的条目"):
+            save_credential(
+                ".example.com",
+                [{"name": "bad;name", "value": "v", "domain": ".example.com"}],
+                repo=repo,
+            )
+
+    def test_parse_rejects_bad_name_and_value(self):
+        assert parse_set_cookie("bad;name=v", "https://www.example.com/") is None
+        assert parse_set_cookie("n=a\x00b", "https://www.example.com/") is None
+
+    def test_stored_dirty_cookie_skipped_at_header_assembly(self, repo):
+        """旧档案里的脏条目在拼头时被跳过，合法条目照常发送。"""
+        save_credential(".example.com", _COOKIES, repo=repo)
+        from backend.tools.credential_vault import _load_vault, _save_vault
+
+        vault = _load_vault(repo)
+        cookies = load_credential(".example.com", repo=repo)
+        cookies.append({"name": "bad;name", "value": "x", "domain": ".example.com", "path": "/"})
+        entry = vault[".example.com"]
+        from backend.services.secret_box import encrypt_secret
+
+        entry["cookies_enc"] = encrypt_secret(
+            json.dumps(cookies, ensure_ascii=False), account="browser-cookie:.example.com"
+        )
+        _save_vault(repo, vault)
+        header = cookie_header_for(".example.com", repo=repo)
+        assert header == "SID=s3cret; AUTH=token1"
+
+
+class TestCookiePrefixes:
+    def test_secure_prefix_requires_secure_attr(self):
+        assert parse_set_cookie("__Secure-a=1", "https://www.example.com/") is None
+        ok = parse_set_cookie("__Secure-a=1; Secure", "https://www.example.com/")
+        assert ok is not None
+        assert ok["name"] == "__Secure-a"
+
+    def test_host_prefix_requirements(self):
+        # 缺 Secure → 拒
+        assert parse_set_cookie("__Host-a=1; Path=/", "https://www.example.com/") is None
+        # 带 Domain → 拒
+        assert (
+            parse_set_cookie(
+                "__Host-a=1; Secure; Domain=example.com; Path=/", "https://www.example.com/"
+            )
+            is None
+        )
+        # Path 非 / → 拒
+        assert parse_set_cookie("__Host-a=1; Secure; Path=/app", "https://www.example.com/") is None
+        # 合规 → 通过
+        ok = parse_set_cookie("__Host-a=1; Secure; Path=/", "https://www.example.com/")
+        assert ok is not None
+        assert ok["host_only"] is True
+
+    def test_prefix_match_case_insensitive(self):
+        assert parse_set_cookie("__secure-a=1", "https://www.example.com/") is None
+        assert parse_set_cookie("__HOST-a=1; Path=/", "https://www.example.com/") is None
+
+
+class TestMergeHostAffinity:
+    def test_cross_host_domain_injection_rejected(self, repo):
+        """evil.com 的响应带 Domain=.example.com 的 Set-Cookie → 拒收。"""
+        save_credential(".example.com", _COOKIES, repo=repo)
+        changed = merge_set_cookies(
+            ".example.com",
+            ["SID=fixed; Domain=.example.com; Path=/; Max-Age=600"],
+            "https://evil.com/attack",
+            repo=repo,
+        )
+        assert changed == []
+        assert load_credential(".example.com", repo=repo) == _COOKIES
+
+    def test_sibling_host_only_cookie_accepted_within_profile(self, repo):
+        """子域响应的 host-only cookie（域=请求主机）RFC 合法，档案域覆盖子域 → 收。"""
+        save_credential(".example.com", _COOKIES, repo=repo)
+        changed = merge_set_cookies(
+            ".example.com",
+            ["X=1"],
+            "https://other.example.com/page",
+            repo=repo,
+        )
+        assert changed == ["X"]
+
+    def test_matched_host_still_merges(self, repo):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        changed = merge_set_cookies(
+            ".example.com",
+            [
+                "SID=rotated; Path=/; Max-Age=600",
+                "D=n; Domain=example.com; Path=/",
+            ],
+            "https://www.example.com/paper",
+            repo=repo,
+        )
+        assert changed == ["SID", "D"]
+
+    def test_missing_request_host_fails_closed(self, repo):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        assert merge_set_cookies(".example.com", ["SID=x"], "", repo=repo) == []
+        assert merge_set_cookies(".example.com", ["SID=x"], "not-a-url", repo=repo) == []
+
+
+class TestInsecureSchemeHeaderCredential:
+    def _save_header(self, repo):
+        save_header_credential("api.example.com", {"Authorization": "Bearer tok"}, repo=repo)
+
+    def test_http_target_is_insecure_scheme(self, repo):
+        self._save_header(repo)
+        res = resolve_credential("api.example.com", url="http://api.example.com/v1", repo=repo)
+        assert res.status == "insecure_scheme"
+        assert not res.ok
+        assert res.headers == {}
+
+    def test_https_target_ok(self, repo):
+        self._save_header(repo)
+        res = resolve_credential("api.example.com", url="https://api.example.com/v1", repo=repo)
+        assert res.ok
+        assert res.headers == {"Authorization": "Bearer tok"}
+
+    def test_local_loopback_http_allowed(self, repo):
+        self._save_header(repo)
+        for host in ("localhost", "127.0.0.1", "[::1]", "mesh.localhost"):
+            res = resolve_credential("api.example.com", url=f"http://{host}:8080/v1", repo=repo)
+            assert res.ok, host
+
+    def test_cookie_kind_unaffected_by_http(self, repo):
+        save_credential(".example.com", _COOKIES, repo=repo)
+        res = resolve_credential(".example.com", url="http://www.example.com/paper", repo=repo)
+        assert res.ok  # cookie 通道按 secure 位过滤，非 secure cookie 允许 http
+
+    def test_web_fetch_reports_insecure_scheme(self, repo):
+        self._save_header(repo)
+        with patch_vault_repo(repo):
+            result = _fetch_tool().execute(
+                url="http://api.example.com/v1", credential_domain="api.example.com"
+            )
+        assert result.success is False
+        assert "credential_insecure_scheme" in result.error
+
+    def test_download_reports_insecure_scheme(self, repo, tmp_path):
+        self._save_header(repo)
+        with patch_vault_repo(repo):
+            result = HttpDownloadTool(policy=ToolPolicy(workspace_root=str(tmp_path))).execute(
+                url="http://api.example.com/file.bin", credential_domain="api.example.com"
+            )
+        assert result.success is False
+        assert "credential_insecure_scheme" in result.error
