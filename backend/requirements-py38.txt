@@ -134,6 +134,8 @@ openpyxl==3.1.5       # XLSX read/write (low-level), ~1MB wheel; py38 兼容
 pytest==7.4.4
 pytest-asyncio==0.23.3
 pytest-cov==5.0.0
+pytest-timeout==2.3.1     # 单测 >120s 直接失败, 防静默挂起 (Py3.8 兼容)
+pytest-xdist==3.6.1       # CI 并行 (Py3.8 兼容; 原 requirements-dev.txt 经 `-r requirements.txt` 引入会污染 Py3.8 prod deps, 故钉入 py38 lockfile)
 respx==0.21.1
 
 # Quality
