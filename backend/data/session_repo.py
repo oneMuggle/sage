@@ -270,6 +270,9 @@ class Message:
     tool_calls: Optional[str] = None
     tool_call_id: Optional[str] = None
     reasoning_content: Optional[str] = None  # LLM 思考/推理过程
+    # 2026-09 step-by-step: 同一 session 内 assistant 行的步序号（从 0 开始）。
+    # user/tool/system 行 → None。多步 run 时每个 ReAct 迭代产生一行 step_index=N。
+    step_index: Optional[int] = None
 
     @classmethod
     def from_row(cls, row) -> Message:
@@ -284,6 +287,7 @@ class Message:
             tool_calls=row["tool_calls"],
             tool_call_id=row["tool_call_id"],
             reasoning_content=row["reasoning_content"],
+            step_index=row["step_index"] if "step_index" in row.keys() else None,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -298,6 +302,7 @@ class Message:
             "tool_calls": self.tool_calls,
             "tool_call_id": self.tool_call_id,
             "reasoning_content": self.reasoning_content,
+            "step_index": self.step_index,
         }
 
 
@@ -321,8 +326,8 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
     """
     cursor.execute(
         """
-        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             f"msg-{uuid.uuid4().hex[:12]}",  # 新 id，避免与源消息主键冲突
@@ -334,6 +339,7 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
             src_msg.tool_calls,
             src_msg.tool_call_id,
             src_msg.reasoning_content,
+            src_msg.step_index,
             src_msg.created_at,  # 保留原时间戳 → ORDER BY created_at ASC 保序
         ),
     )
@@ -484,8 +490,8 @@ class MessageRepository:
 
         cursor.execute(
             """
-            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 message.id,
@@ -497,6 +503,7 @@ class MessageRepository:
                 message.tool_calls,
                 message.tool_call_id,
                 message.reasoning_content,
+                message.step_index,
                 message.created_at,
             ),
         )
@@ -566,8 +573,8 @@ class MessageRepository:
                 cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
             cursor.execute(
                 """
-                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     continuation_message.id,
@@ -579,6 +586,7 @@ class MessageRepository:
                     continuation_message.tool_calls,
                     continuation_message.tool_call_id,
                     continuation_message.reasoning_content,
+                    continuation_message.step_index,
                     continuation_message.created_at,
                 ),
             )

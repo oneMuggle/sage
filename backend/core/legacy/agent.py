@@ -1247,6 +1247,15 @@ class SageAgent:
                                 is_error=err_p,
                             ),
                         )
+                    # 2026-09 step-by-step: 并行迭代边界，legacy_routes 收到后
+                    # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
+                    # 消息，并重置累加器准备下一步。
+                    yield AgentEvent(
+                        state=AgentState.STEP_DONE,
+                        iteration=i,
+                        step_index=i,
+                        agent_id=self.agent_id,
+                    )
                     continue
                 # ===== L6 并行只读批次 END =====
 
@@ -1603,6 +1612,16 @@ class SageAgent:
                         ),
                     )
                     # ===== M6 HOOKS END =====
+
+                # 2026-09 step-by-step: 串行迭代边界，legacy_routes 收到后
+                # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
+                # 消息，并重置累加器准备下一步。
+                yield AgentEvent(
+                    state=AgentState.STEP_DONE,
+                    iteration=i,
+                    step_index=i,
+                    agent_id=self.agent_id,
+                )
 
             yield AgentEvent(
                 state=AgentState.FAILED,

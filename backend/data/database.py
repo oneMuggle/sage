@@ -477,6 +477,10 @@ class Database:
                 tool_calls TEXT,
                 tool_call_id TEXT,
                 reasoning_content TEXT,
+                -- 2026-09 step-by-step: 同一 session 内 assistant 行的步序号（从 0 开始）。
+                -- 单步 run → step_index=0；多步 run → 每个 ReAct 迭代产生一行 step_index=N。
+                -- user/tool 行 step_index=NULL。
+                step_index INTEGER,
                 created_at INTEGER NOT NULL,
                 latency_ms INTEGER,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
@@ -488,6 +492,10 @@ class Database:
         columns = [row["name"] for row in cursor.fetchall()]
         if "reasoning_content" not in columns:
             cursor.execute("ALTER TABLE messages ADD COLUMN reasoning_content TEXT")
+            conn.commit()
+        # 2026-09 step-by-step: 老库加 step_index 列；已有 assistant 行 NULL → 历史视图按 0 处理。
+        if "step_index" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN step_index INTEGER")
             conn.commit()
 
         # 会话摘要表（批次三 step 3，spec §4.3）
