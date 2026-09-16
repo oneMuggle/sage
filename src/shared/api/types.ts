@@ -123,7 +123,11 @@ export interface Message {
   created_at: number;
   model?: string;
   provider?: string;
-  tool_calls?: ToolCall[];
+  /**
+   * wire 上是 JSON 字符串 (session_repo 原样存取, 不做 parse), 流式路径
+   * 是数组 —— 消费方必须双态兼容 (见 Message.tsx 的归一化)。
+   */
+  tool_calls?: ToolCall[] | string | null;
   tool_call_id?: string;
 }
 
@@ -402,7 +406,8 @@ export interface AgentEvent {
   reasoning?: string; // LLM 思考/推理过程内容
   tool_call?: AgentToolCall;
   tool_result?: AgentToolResult;
-  error?: string;
+  /** producer 失败信封: LLMError.to_dict() 为 dict; 旧路径/限额拦截为 str */
+  error?: string | { type?: string; message?: string; status_code?: number };
   /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
   agent_id?: string;
   /** M1: state === 'permission_request' 时携带的审批请求详情 */

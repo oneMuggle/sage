@@ -105,6 +105,11 @@ export function QuestionDialog() {
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
       role="presentation"
+      /* 2026-09 修复 (同步 #971): overlay 可聚焦, 保证弹出后直接按 Esc 生效 */
+      tabIndex={-1}
+      ref={(node) => {
+        if (node && document.activeElement === document.body) node.focus();
+      }}
       onKeyDown={onKeyDown}
     >
       <div

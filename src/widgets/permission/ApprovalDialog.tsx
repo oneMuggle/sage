@@ -105,6 +105,13 @@ export function ApprovalDialog() {
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
       role="presentation"
+      /* 2026-09 修复: overlay 此前不可聚焦, Esc 处理器只有焦点落入对话框才
+         生效 —— 弹出后直接按 Esc 无响应 (与快捷键注册表宣称行为不符)。 */
+      tabIndex={-1}
+      data-autofocus-overlay=""
+      ref={(node) => {
+        if (node && document.activeElement === document.body) node.focus();
+      }}
       onKeyDown={(e) => {
         // Escape = 拒绝（显式决定，不做静默关闭；后端 fail-closed 语义一致）
         if (e.key === 'Escape') void answer(false);
