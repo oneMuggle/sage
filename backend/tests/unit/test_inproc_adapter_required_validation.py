@@ -150,7 +150,8 @@ class TestValidateRequiredArgsHelper:
         err = validate_required_args(tool, {})
         assert err is not None
         assert "missing_required_arguments" in err
-        assert "a" in err and "b" in err
+        assert "a" in err
+        assert "b" in err
 
     def test_none_value_treated_as_missing(self):
         """LLM 偶尔发 {"doc_id": null}，JSON-schema required 语义上等同于缺失。"""
