@@ -291,3 +291,28 @@ class TestDeleteServer:
     def test_delete_unknown_404(self, client):
         resp = client.delete("/api/v1/mcp/servers/ghost")
         assert resp.status_code == 404
+
+
+def test_http_url_create_roundtrip_and_patch_preserves_transport(client, tmp_path):
+    url = "https://mcp.example/rpc"
+    response = client.post("/api/v1/mcp/servers", json={
+        "name": "remote", "url": url, "headers": {"Authorization": "Bearer secret"},
+    })
+    assert response.status_code == 200
+    config = client.get("/api/v1/mcp/servers").json()["servers"][0]
+    assert config["url"] == url
+    assert config["command"] == ""
+    assert config["headers"]["Authorization"] == "***"
+    patch = client.patch("/api/v1/mcp/servers/remote", json={"enabled": False})
+    assert patch.status_code == 200
+    persisted = json.loads(_config_path(tmp_path).read_text())
+    assert persisted["servers"][0]["url"] == url
+    assert persisted["servers"][0]["headers"]["Authorization"] == "Bearer secret"
+    config = client.get("/api/v1/mcp/servers").json()["servers"][0]
+    assert config["url"] == url
+    assert config["enabled"] is False
+
+
+@pytest.mark.parametrize("payload", [{"name": "empty"}, {"name": "bad", "url": "ftp://host"}])
+def test_invalid_transport_is_rejected(client, payload):
+    assert client.post("/api/v1/mcp/servers", json=payload).status_code == 400
