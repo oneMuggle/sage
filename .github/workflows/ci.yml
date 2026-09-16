@@ -112,6 +112,7 @@ jobs:
       # scripts/check_py38_compat.py docstring for the failure modes.
       - name: PEP 604/585 py38 compat guardrail
         shell: bash -el {0}
+        timeout-minutes: 40
         run: |
           conda run -n sage-backend-py38 python scripts/check_py38_compat.py
 
@@ -202,9 +203,11 @@ jobs:
         run: |
           conda run -n sage-backend bash -c "cd backend && PYTHONPATH=.. lint-imports"
 
-      # PG2.12：双轨回归
-      # - 主路径：API_MODE=hex（默认），强制 coverage ≥ 80%，并上传 codecov
-      # - 兜底路径：API_MODE=legacy，no-cov 冒烟（continue-on-error，作为安全网）
+      # PG2.12：hex 主路径回归
+      # - API_MODE=hex（默认），强制 coverage ≥ 80%，并上传 codecov
+      # - 兜底路径（API_MODE=legacy 冒烟）已拆到下方 backend-legacy 并行 job：
+      #   它是 continue-on-error 安全网不阻塞合并，但此前串行追加在本 job
+      #   里，一步独占 ~10 min，把 CI 关键路径顶到 ~26 min
       # - xdist 并行：-n auto --dist loadfile —— 按文件分worker,避免跨文件
       #   全局单例(App registry/DB)互踩; pytest-cov 自动合并各 worker 覆盖率
       # - test_event_loop_blocking 除外：P99 延迟断言(500ms 阈值)在 CPU 争用
@@ -222,13 +225,6 @@ jobs:
         run: |
           conda run -n sage-backend bash -c "cd backend && pytest tests/integration/test_event_loop_blocking.py --cov --cov-append --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
 
-      - name: Pytest legacy (smoke, no-cov)
-        shell: bash -el {0}
-        timeout-minutes: 10
-        run: |
-          conda run -n sage-backend bash -c "cd backend && API_MODE=legacy pytest --no-cov -q -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py"
-        continue-on-error: true # 兜底：legacy 仅作安全网，单测不一致不阻塞 PR
-
       - name: Upload coverage
         if: always()
         uses: codecov/codecov-action@v4
@@ -236,6 +232,53 @@ jobs:
           file: backend/coverage.xml
           flags: backend
           fail_ci_if_error: false
+
+  # ========== Backend legacy 兜底冒烟（独立并行 job，非门禁信号） ==========
+  # - 原 PG2.12 兜底路径（API_MODE=legacy 冒烟）从 backend job 拆出
+  # - continue-on-error 安全网：单测双轨不一致不阻塞 PR（与拆分前语义一致）
+  # - 与 backend job 并行跑，墙钟 = max(hex, legacy) 而非两者之和
+  #   （拆分前 legacy 一步串行占 ~10 min，是 CI 关键路径的主要组成）
+  # - 与 backend-windows-unit 一致：非门禁信号 job，不进 all-green needs
+  # - 环境只需 requirements.txt + environment.yml 自带的 pytest 套件，
+  #   不装 ruff/mypy/import-linter（本 job 不跑 lint/type）
+  backend-legacy:
+    name: Backend legacy smoke (non-blocking)
+    if: |
+      github.ref == 'refs/heads/main' ||
+      github.ref == 'refs/heads/develop' ||
+      (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'develop'))
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: backend/environment.yml
+          python-version: '3.11'
+          activate-environment: sage-backend
+          channels: conda-forge
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install backend deps
+        shell: bash -el {0}
+        run: |
+          # 从仓库根运行: requirements.txt 中 -e ./packages/sage-core 路径
+          conda run -n sage-backend pip install -r backend/requirements.txt
+
+      - name: Pytest legacy (smoke, no-cov)
+        shell: bash -el {0}
+        timeout-minutes: 10
+        run: |
+          conda run -n sage-backend bash -c "cd backend && API_MODE=legacy pytest --no-cov -q -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py"
 
   # ========== Dependency audit: read-only npm + Python reports ==========
   # This job intentionally does not mutate package manifests or fix findings.
@@ -619,6 +662,8 @@ jobs:
 
   # ========== All-checks aggregator ==========
   # - 强门禁：backend + frontend + electron-smoke 全部 success 才算通过
+  # - 非门禁信号 job（不进 needs，红了不阻塞合并）：backend-legacy（API_MODE
+  #   兜底冒烟）、backend-windows-unit（Windows 基线）
   # - desktop-build 暂不强制门禁（首次跑通优先，后续加 continue-on-error → required）
   # - PR 也能在 backend job 上跑（见 backend/backend-py38 的 if: 改 PR + push 都触发）
   all-green:
