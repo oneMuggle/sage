@@ -242,9 +242,13 @@ export function mergeWithDefaults(partial: Partial<AppSettings>): AppSettings {
   // .map, ModelsTab.filter, EndpointsTab.map) 直接调用 array 方法就会抛
   // "C.map is not a function". 这里做最后一道防线, 把 DEFAULT_ENDPOINT 作为
   // 字段级 fallback (remote-wins: 用户值优先, 缺则用 DEFAULT).
+  // 注意: 对象 spread 不会移除已存在的 null/undefined — 它会覆盖 DEFAULT 的
+  // 兜底. 对已知数组字段 (discoveredModels) 显式 `?? DEFAULT` 兜底, 防止
+  // legacy 数据里 corrupt 的 null 穿透到 UI .map() 又崩一次.
   const mergedEndpoints = deepMergedEndpoints.map((ep) => ({
     ...DEFAULT_ENDPOINT,
     ...ep,
+    discoveredModels: ep.discoveredModels ?? DEFAULT_ENDPOINT.discoveredModels,
   }));
 
   const partialModelSelections = partial.modelSelections;
