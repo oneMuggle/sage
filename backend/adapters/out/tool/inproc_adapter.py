@@ -39,8 +39,10 @@ from backend.domain.tool_policy import ToolPolicy
 from backend.tools.bash_validation import validate_bash
 from backend.tools.executor import (
     TIMEOUT_EXCEPTIONS,
+    _format_typeerror_message,
     tool_timeout_message,
     truncate_output as _truncate_output,
+    validate_required_args,
 )
 from backend.tools.permissions import (
     DEFAULT_PERMISSION_MODE,
@@ -99,7 +101,7 @@ class InprocToolAdapter:
             )
         return specs
 
-    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:  # noqa: PLR0911 (router/dispatcher: 7 returns justified)
         """按名称执行工具并返回端口侧的 ``ToolResult``。
 
         M2 增强：
@@ -127,6 +129,21 @@ class InprocToolAdapter:
                 metadata=None,
             )
 
+        # alpha.36 (Bug #1): 分发前先过 schema.required 校验 —— 把
+        # TypeError "execute() missing 1 required positional argument"
+        # 收敛为中文 + tool_name 错误文案，不再泄漏 Python 内部错误到
+        # LLM 输出。原校验只挂在 SageAgent._await_tool_execution 与
+        # execute_tool（agent.py:689 / :1782），hex 路径与并行只读批次
+        # 直接调 tool.execute(**args) 跳过校验。
+        required_error = validate_required_args(tool, args)
+        if required_error is not None:
+            return ToolResult(
+                success=False,
+                output="",
+                error=required_error,
+                metadata=None,
+            )
+
         try:
             raw = await asyncio.wait_for(
                 asyncio.to_thread(tool.execute, **args),
@@ -141,6 +158,16 @@ class InprocToolAdapter:
                     "timeout_seconds": self._policy.timeout_seconds,
                     "truncated": False,
                 },
+            )
+        except TypeError as exc:
+            # 兜底：schema 没声明 required 但 execute() 签名仍因缺参抛
+            # TypeError（旧工具/未声明 required 的工具）。不泄漏 Python
+            # 原始文本，只给 tool_name + signature 概要。
+            return ToolResult(
+                success=False,
+                output="",
+                error=_format_typeerror_message(tool, exc),
+                metadata=None,
             )
         except Exception as exc:  # noqa: BLE001  (按契约收敛所有错误)
             return ToolResult(
