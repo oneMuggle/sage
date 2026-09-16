@@ -27,8 +27,8 @@ def test_fields_inherit_independently_and_keep_sources():
     assert result.limits == ContextLimits(native=32768, service=8192)
     assert result.price == Price(input_per_million="0", output_per_million="8")
     assert result.provenance == {
-        "limits.native": "user", "limits.service": "seed",
-        "price.input_per_million": "user", "price.output_per_million": "seed",
+        "limits.native": "user_override", "limits.service": "seed",
+        "price.input_per_million": "user_override", "price.output_per_million": "seed",
     }
     assert effective_window(result.limits, True, 128000) == 8192
     assert [item.model_dump() for item in [user, seed]] == before
