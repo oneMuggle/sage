@@ -76,7 +76,7 @@ if (-not (Test-Path $MinGitZip)) {
     throw "MinGit zip not found after download"
 }
 
-# Extract (MinGit zip has a single top-level dir containing all files)
+# Extract MinGit zip into a temp directory
 Write-Host "Extracting MinGit..." -ForegroundColor Green
 $ExtractTemp = Join-Path $ResourcesDir "_mingit_extract"
 if (Test-Path $ExtractTemp) {
@@ -86,18 +86,37 @@ New-Item -ItemType Directory -Force -Path $ExtractTemp | Out-Null
 Expand-Archive -Path $MinGitZip -DestinationPath $ExtractTemp -Force
 Remove-Item $MinGitZip
 
-# Find the extracted MinGit root (MinGit zip puts files in a subdir like "mingit-2.44.0.2-64-bit/")
-$MinGitRoot = Get-ChildItem -Path $ExtractTemp -Directory | Select-Object -First 1
-if (-not $MinGitRoot) {
-    throw "Could not find extracted MinGit root directory"
+# Detect zip layout: older MinGit zips wrap everything in a single subdir
+# (e.g. mingit-2.44.0.2-64-bit/), but v2.46.2.2+ extracts flat (cmd/, usr/,
+# etc/ at the zip root).  Handle both: prefer the single-subdir layout when
+# it exists, otherwise treat the extract temp dir itself as the MinGit root.
+$ChildDirs = @(Get-ChildItem -Path $ExtractTemp -Directory)
+$ChildFiles = @(Get-ChildItem -Path $ExtractTemp -File)
+if ($ChildDirs.Count -eq 1 -and $ChildFiles.Count -eq 0) {
+    # Old-style zip: single parent directory wraps everything
+    $MinGitRootPath = $ChildDirs[0].FullName
+    Write-Host "MinGit zip layout: single parent dir ($($ChildDirs[0].Name))" -ForegroundColor Green
+} else {
+    # Flat zip: files/dirs at root of extract temp
+    $MinGitRootPath = $ExtractTemp
+    Write-Host "MinGit zip layout: flat (files at zip root, $($ChildDirs.Count) dirs, $($ChildFiles.Count) files)" -ForegroundColor Green
 }
-$MinGitRootPath = $MinGitRoot.FullName
-Write-Host "MinGit extracted to: $MinGitRootPath" -ForegroundColor Green
+Write-Host "MinGit root: $MinGitRootPath" -ForegroundColor Green
 
 # Move MinGit contents to git-bash/ (which becomes our shipped layout)
 Write-Host "Moving MinGit to tools/git-bash/..." -ForegroundColor Green
-Move-Item -Path $MinGitRootPath -Destination $GitBashDir -Force
-Remove-Item -Recurse -Force $ExtractTemp
+if ($MinGitRootPath -eq $ExtractTemp) {
+    # Flat layout: move all children out of ExtractTemp into GitBashDir
+    New-Item -ItemType Directory -Force -Path $GitBashDir | Out-Null
+    Get-ChildItem -Path $ExtractTemp | ForEach-Object {
+        Move-Item -Path $_.FullName -Destination $GitBashDir -Force
+    }
+    Remove-Item -Recurse -Force $ExtractTemp
+} else {
+    # Parent-dir layout: move the single subdir directly
+    Move-Item -Path $MinGitRootPath -Destination $GitBashDir -Force
+    Remove-Item -Recurse -Force $ExtractTemp
+}
 
 # Trim unneeded directories
 Write-Host "Trimming unneeded files..." -ForegroundColor Green
