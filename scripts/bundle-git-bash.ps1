@@ -135,7 +135,7 @@ if (Test-Path $binDir) {
     )
     $removed = 0
     $kept = 0
-    Get-ChildItem -Path $binDir -File | ForEach-Object {
+    Get-ChildItem -LiteralPath $binDir -File | ForEach-Object {
         $matched = $false
         foreach ($pattern in $keepPatterns) {
             if ($_.Name -match $pattern) {
@@ -146,7 +146,9 @@ if (Test-Path $binDir) {
         if ($matched) {
             $kept++
         } else {
-            Remove-Item -Path $_.FullName -Force
+            # Use -LiteralPath to prevent PowerShell treating filenames like '[.exe'
+            # (the MSYS2 POSIX test alias) as wildcard character sets.
+            Remove-Item -LiteralPath $_.FullName -Force
             $removed++
         }
     }
