@@ -1,22 +1,40 @@
 // src/widgets/settings/GatewayCard.tsx
 // Round 20: 「消息网关」设置卡 —— token/白名单/启用开关 + 状态与绑定列表。
+// Round 16b: 平台参数化（Telegram / Discord / Slack 三卡）。
 
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import {
-  gatewayApi,
-  type TelegramGatewayBind,
-  type TelegramGatewayConfigView,
-  type TelegramGatewayStatus,
+  gatewayAllowedIds,
+  gatewayApiFor,
+  gatewayPlatformLabel,
+  type GatewayBind,
+  type GatewayConfigView,
+  type GatewayPlatform,
+  type GatewayStatus,
 } from '../../shared/api/gatewayApi';
 
-export function GatewayCard(): JSX.Element | null {
-  const [config, setConfig] = useState<TelegramGatewayConfigView | null>(null);
-  const [status, setStatus] = useState<TelegramGatewayStatus | null>(null);
-  const [binds, setBinds] = useState<TelegramGatewayBind[]>([]);
+const PLATFORM_DESCRIPTION: Record<GatewayPlatform, string> = {
+  telegram: '在 Telegram 上远程与 Sage 对话、远程审批危险操作。',
+  discord: '在 Discord 频道远程与 Sage 对话、远程审批危险操作。',
+  slack: '在 Slack 频道远程与 Sage 对话、远程审批危险操作。',
+};
+
+const IDS_PLACEHOLDER: Record<GatewayPlatform, string> = {
+  telegram: '123456789, 987654321',
+  discord: '频道 ID（开发者模式右键复制），逗号分隔',
+  slack: 'C0123456789, C9876543210',
+};
+
+export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.Element | null {
+  const api = gatewayApiFor(platform);
+  const label = gatewayPlatformLabel[platform];
+  const [config, setConfig] = useState<GatewayConfigView | null>(null);
+  const [status, setStatus] = useState<GatewayStatus | null>(null);
+  const [binds, setBinds] = useState<GatewayBind[]>([]);
   const [token, setToken] = useState('');
-  const [chatIds, setChatIds] = useState('');
+  const [ids, setIds] = useState('');
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string>('');
@@ -26,20 +44,20 @@ export function GatewayCard(): JSX.Element | null {
     setLoadError('');
     try {
       const [cfg, st, bd] = await Promise.all([
-        gatewayApi.getConfig(),
-        gatewayApi.status(),
-        gatewayApi.listBinds().catch(() => ({ binds: [] })),
+        api.getConfig(),
+        api.status(),
+        api.listBinds().catch(() => ({ binds: [] })),
       ]);
       setConfig(cfg);
       setStatus(st);
       setBinds(bd.binds);
       setToken(cfg.bot_token_masked);
-      setChatIds(cfg.allowed_chat_ids.join(', '));
+      setIds(gatewayAllowedIds(cfg).join(', '));
       setEnabled(cfg.enabled);
     } catch (exc) {
       setLoadError(String(exc));
     }
-  }, []);
+  }, [api]);
 
   useEffect(() => {
     void reload();
@@ -49,13 +67,16 @@ export function GatewayCard(): JSX.Element | null {
     setSaving(true);
     setNotice('');
     try {
-      const result = await gatewayApi.updateConfig({
+      const idList = ids
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean);
+      const result = await api.updateConfig({
         // 打码值原样传回 = 未修改（后端保留已存 token）；清空 = 清除；新值 = 更新
         bot_token: token,
-        allowed_chat_ids: chatIds
-          .split(',')
-          .map((c) => c.trim())
-          .filter(Boolean),
+        ...(platform === 'telegram'
+          ? { allowed_chat_ids: idList }
+          : { allowed_channel_ids: idList }),
         enabled,
       });
       setNotice(
@@ -74,7 +95,7 @@ export function GatewayCard(): JSX.Element | null {
   const handleUnbind = async (chatId: string) => {
     setNotice('');
     try {
-      await gatewayApi.unbind(chatId);
+      await api.unbind(chatId);
       setBinds((prev) => prev.filter((b) => b.chat_id !== chatId));
     } catch (exc) {
       setNotice(`解绑失败: ${String(exc)}`);
@@ -87,11 +108,11 @@ export function GatewayCard(): JSX.Element | null {
 
   return (
     <div
-      data-testid="gateway-card"
+      data-testid={`gateway-card-${platform}`}
       className="border border-border rounded-radius-md p-4 mb-4 bg-surface"
     >
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold">消息网关（Telegram）</h3>
+        <h3 className="text-sm font-semibold">消息网关（{label}）</h3>
         <button
           type="button"
           className="p-1 rounded hover:bg-bg-hover text-text-secondary"
@@ -103,7 +124,7 @@ export function GatewayCard(): JSX.Element | null {
       </div>
 
       <p className="text-xs text-muted mb-2">
-        在 Telegram 上远程与 Sage 对话、远程审批危险操作。
+        {PLATFORM_DESCRIPTION[platform]}
         {status
           ? ` 运行中: ${status.running ? '是' : '否'}，绑定 ${status.bound_chats} 个会话。`
           : ''}
@@ -112,7 +133,7 @@ export function GatewayCard(): JSX.Element | null {
       <div className="space-y-2 mb-2">
         <label className="block text-xs">
           <span className="text-text-secondary">
-            Bot Token（读回为打码值；保持打码值 = 不修改）
+            Bot Token（读回为打码值；保持打码值 = 不修改，清空 = 清除）
           </span>
           <input
             type="text"
@@ -123,13 +144,15 @@ export function GatewayCard(): JSX.Element | null {
           />
         </label>
         <label className="block text-xs">
-          <span className="text-text-secondary">允许的 Chat ID（逗号分隔白名单）</span>
+          <span className="text-text-secondary">
+            {platform === 'telegram' ? '允许的 Chat ID（逗号分隔白名单）' : '允许的频道 ID（逗号分隔白名单）'}
+          </span>
           <input
             type="text"
             className="mt-1 w-full text-xs border border-border rounded-radius-sm px-2 py-1 bg-surface text-text font-mono"
-            value={chatIds}
-            placeholder="123456789, 987654321"
-            onChange={(e) => setChatIds(e.target.value)}
+            value={ids}
+            placeholder={IDS_PLACEHOLDER[platform]}
+            onChange={(e) => setIds(e.target.value)}
           />
         </label>
         <label className="flex items-center gap-2 text-xs">
