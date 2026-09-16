@@ -43,7 +43,9 @@ describe('useWikiIngest × taskCenterStore (P4)', () => {
     expect(useTaskCenterStore.getState().tasks[TASK_ID]?.phase).toBe('parsing');
 
     act(() => {
-      handlers.get('wiki-ingest-ing-1-progress')!({ payload: { stage: 'completed', percent: 100 } });
+      handlers.get('wiki-ingest-ing-1-progress')!({
+        payload: { stage: 'completed', percent: 100 },
+      });
     });
     await waitFor(() => {
       expect(result.current.done).toBe(true);
@@ -64,4 +66,26 @@ describe('useWikiIngest × taskCenterStore (P4)', () => {
     });
     expect(useTaskCenterStore.getState().tasks['wiki:ingest:ing-2']).toBeDefined();
   });
+});
+
+describe('Wiki failure terminal cleanup (audit #6)', () => {
+  it.each(['failed', 'cancelled'])(
+    'cleans %s subscriptions and reports the error',
+    async (stage) => {
+      const id = `terminal-${stage}`;
+      const { result } = renderHook(() => useWikiIngest(id));
+      await waitFor(() => expect(handlers.has(`wiki-ingest-${id}-progress`)).toBe(true));
+      // Wait for asynchronous unlisten registration before delivering the terminal.
+      await act(async () => {});
+      const before = unlistenCalls;
+      act(() =>
+        handlers.get(`wiki-ingest-${id}-progress`)!({
+          payload: { stage, percent: 0, message: 'network down' },
+        }),
+      );
+      expect(result.current.error).toBe('network down');
+      expect(useTaskCenterStore.getState().tasks[`wiki:ingest:${id}`]).toBeUndefined();
+      expect(unlistenCalls).toBe(before + 1);
+    },
+  );
 });

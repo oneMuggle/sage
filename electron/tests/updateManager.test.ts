@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import * as fs from 'fs/promises';
+import * as path from 'path';
 import * as crypto from 'crypto';
 
 const mockUserData = '/tmp/test-user-data-update-manager';
@@ -87,7 +88,7 @@ vi.doMock('fs/promises', () => ({
     if (
       renameFailWhenOldPathStartsWith !== null &&
       typeof oldPath === 'string' &&
-      oldPath.startsWith(renameFailWhenOldPathStartsWith)
+      path.resolve(oldPath).startsWith(path.resolve(renameFailWhenOldPathStartsWith))
     ) {
       throw new Error('simulated rename failure');
     }
@@ -673,6 +674,22 @@ describe('UpdateManager', () => {
       expect(updater.quitAndInstall).not.toHaveBeenCalled();
     });
 
+    it('restores installation if the first prepared-state write fails (audit #18)', async () => {
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+      await seedPendingUpdate('1.3.0');
+      const write = vi
+        .spyOn(StateManager.prototype, 'setState')
+        .mockRejectedValueOnce(new Error('disk full'));
+      try {
+        await expect(updateManager.installUpdate()).rejects.toThrow('disk full');
+        await expect(fs.access(tempInstallDir)).resolves.toBeUndefined();
+        await expect(fs.access(tempPrevDir)).rejects.toThrow();
+        expect(updater.quitAndInstall).not.toHaveBeenCalled();
+      } finally {
+        write.mockRestore();
+      }
+    });
+
     it('calls quitAndInstall after preparing for upgrade', async () => {
       await seedPendingUpdate('1.3.0');
 
@@ -1099,7 +1116,7 @@ describe('UpdateManager', () => {
 
       await freshManager.rollback('test-rollback');
 
-      expect(mockSpawn).toHaveBeenCalledWith(`${cacheDir}/Sage-Setup-1.0.0.exe`, [
+      expect(mockSpawn).toHaveBeenCalledWith(path.resolve(`${cacheDir}/Sage-Setup-1.0.0.exe`), [
         '/S',
         `/D=${tempInstallDir}`,
       ]);
@@ -1517,4 +1534,20 @@ describe('UpdateManager', () => {
       await expect(fs.access(tempPrevDir)).resolves.toBeUndefined();
     });
   });
+});
+
+it('rollback reaches local recovery while telemetry never settles (audit #17)', async () => {
+  const localRecovery = vi.fn().mockResolvedValue(undefined);
+  const fake = {
+    stateManager: { getState: vi.fn().mockResolvedValue({}) },
+    reportRollbackEvent: vi.fn(() => new Promise<void>(() => {})),
+    pathExists: vi.fn().mockResolvedValue(false),
+    reinstallFromPackage: localRecovery,
+  };
+  const action = UpdateManager.prototype.rollback.call(
+    fake as unknown as InstanceType<typeof UpdateManager>,
+    'audit',
+  );
+  await vi.waitFor(() => expect(localRecovery).toHaveBeenCalledOnce());
+  await action;
 });
