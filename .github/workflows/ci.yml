@@ -276,7 +276,11 @@ jobs:
 
       - name: Pytest legacy (smoke, no-cov)
         shell: bash -el {0}
-        timeout-minutes: 10
+        # 20 min 而非原来的 10：旧 backend job 里本步实测三次均为 613s 整
+        # （600s 超时 + 收尾），即 10 min 超时每次都把套件截断、再被 step 级
+        # continue-on-error 静默吞掉 —— 安全网从未完整跑完。拆出后失败会
+        # 显形为红 job，需给足真实运行时长（≥10.2 min，上限留一倍余量）。
+        timeout-minutes: 20
         run: |
           conda run -n sage-backend bash -c "cd backend && API_MODE=legacy pytest --no-cov -q -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py"
 
