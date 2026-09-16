@@ -138,7 +138,7 @@ describe('office:pick-and-import', () => {
     fs.unlinkSync(tmpSrc);
   });
 
-  it('uses modern-only filter catalog (no .ppt/.doc/.xls; no All Files)', async () => {
+  it('filter catalog includes legacy .ppt/.doc/.xls for in-place conversion (P1-C); no All Files', async () => {
     mocks.dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
 
     const handler = registeredHandlers.get('office:pick-and-import')!;
@@ -149,9 +149,7 @@ describe('office:pick-and-import', () => {
     };
     expect(opts.filters, 'dialog filters must be set').toBeDefined();
     const flat = opts.filters.flatMap((f) => f.extensions);
-    expect(flat, 'filters must not include legacy .ppt').not.toContain('ppt');
-    expect(flat, 'filters must not include legacy .doc').not.toContain('doc');
-    expect(flat, 'filters must not include legacy .xls').not.toContain('xls');
+    expect(flat, 'filters must include legacy .ppt (converted on import)').toContain('ppt');
     expect(flat, 'filters must not include "*" All Files').not.toContain('*');
   });
 });
