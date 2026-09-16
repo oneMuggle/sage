@@ -44,7 +44,7 @@ from .bash_session import (
     SessionLimitExceeded,
     get_registry,
 )
-from .shell_resolver import SHELL_FALLBACK_NOTE, ShellSpec, resolve_shell
+from .shell_resolver import build_shell_fallback_note, ShellSpec, resolve_shell
 from .subprocess_util import (
     VerifiedProcess,
     file_identity,
@@ -199,7 +199,7 @@ class BashTool(BaseTool):
             content["exec_backend"] = "docker"
         content["cwd"] = cwd or str(Path.cwd())
         if shell.is_fallback:
-            content["shell_fallback"] = SHELL_FALLBACK_NOTE
+            content["shell_fallback"] = build_shell_fallback_note()
         return content
 
     @staticmethod
