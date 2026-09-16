@@ -16,6 +16,7 @@
 import { invoke } from './desktopInvoke';
 import type {
   OfficeArchiveResponse,
+  OfficeCapabilities,
   OfficeDeleteResponse,
   OfficeDocUpdateRequest,
   OfficeDocUpdateResponse,
@@ -26,6 +27,7 @@ import type {
   OfficeExportPdfResult,
   OfficePdfGenerateRequest,
   OfficePdfGenerateResult,
+  OfficePdfPreviewResult,
   OfficePdfReadRequest,
   OfficePdfReadResult,
   OfficePptGenerateRequest,
@@ -37,6 +39,7 @@ import type {
   OfficeTemplateInstantiateRequest,
   OfficeTemplateInstantiateResult,
   OfficeTemplateListResponse,
+  OfficeTemplateThumbnailResult,
   OfficeUpdatePreviewRequest,
   OfficeUpdatePreviewResult,
   OfficeWordGenerateRequest,
@@ -203,6 +206,27 @@ export const officeApi = {
     return withRetry(async () => {
       try {
         return await invoke<OfficeSnapshotListResponse>('office_list_snapshots', { docId });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * Round B P2: structured diff between a pre-edit snapshot and the
+   * current document (snapshot=before, current=after) — same
+   * DiffPreviewResult shape the edit-preview dialog renders. Parse
+   * failures fold to `{ok:false, error}`; unknown doc still throws 404.
+   *
+   * Bounded retry — read-only and idempotent.
+   */
+  async diffSnapshot(docId: string, snapshotId: string): Promise<OfficeUpdatePreviewResult> {
+    return withRetry(async () => {
+      try {
+        return await invoke<OfficeUpdatePreviewResult>('office_snapshot_diff', {
+          docId,
+          snapshotId,
+        });
       } catch (error) {
         throw handleApiError(error);
       }
@@ -403,6 +427,68 @@ export const officeApi = {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
         task_id: req.task_id,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Probe local Office environment capabilities (round A, P6) —
+   * LibreOffice / Word COM / Pillow / formulas availability for the
+   * capability badges + install guidance on the Office page.
+   *
+   * Bounded retry — read-only and idempotent (the backend caches the
+   * probe for 30s anyway). Pass force=true to bypass that cache when
+   * the user clicks 重新检测.
+   */
+  async getCapabilities(force = false): Promise<OfficeCapabilities> {
+    try {
+      return await withRetry(() =>
+        invoke<OfficeCapabilities>('office_capabilities', force ? { force: true } : {}),
+      );
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * High-fidelity PDF preview (round A, P1) — converts a managed
+   * docx/xlsx/pptx to PDF in the workspace preview cache and returns a
+   * data URL for the embedded Chromium viewer. Converter problems come
+   * back as `{ok: false, error}` (HTTP failures still throw).
+   *
+   * No retry — conversion spawns a subprocess; the user can re-toggle.
+   */
+  async pdfPreview(req: OfficeExportPdfRequest): Promise<OfficePdfPreviewResult> {
+    try {
+      return await invoke<OfficePdfPreviewResult>('office_pdf_preview', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+        task_id: req.task_id,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Round C P5: template first-page thumbnail (PNG data URL). Server-side
+   * disk cache makes repeats cheap; failures fold to `{ok:false}` and the
+   * caller degrades silently (thumbnails are decorative).
+   *
+   * No retry — first render spawns a converter subprocess.
+   */
+  async templateThumbnail(req: {
+    workspace_path: string;
+    template_id?: string;
+    workspace_template?: string;
+  }): Promise<OfficeTemplateThumbnailResult> {
+    try {
+      return await invoke<OfficeTemplateThumbnailResult>('office_template_thumbnail', {
+        workspacePath: req.workspace_path,
+        templateId: req.template_id,
+        workspaceTemplate: req.workspace_template,
       });
     } catch (error) {
       throw handleApiError(error);
