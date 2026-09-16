@@ -3017,8 +3017,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 elif stream_entry.get("cancelled") and dispatcher is not None:
                     dispatcher.cancel()
 
+            # 从 settings 读 profile 迭代上限（用户可配），不回退到 profile 硬编码值
+            from backend.orchestration.orch_settings import load_orch_settings
+            _orch = load_orch_settings()
+            _profile_name = agent.profile.get("name", "primary") if agent.profile else "primary"
+            _profile_max_iter = {
+                "primary": _orch.max_primary_iterations,
+                "coder": _orch.max_coder_iterations,
+                "reviewer": _orch.max_reviewer_iterations,
+                "writer": _orch.max_writer_iterations,
+            }.get(_profile_name, _orch.max_primary_iterations)
+
             async for evt in agent.run_loop(
-                messages, llm_config=llm_config, session_id=data.session_id
+                messages, llm_config=llm_config, session_id=data.session_id,
+                max_iterations=_profile_max_iter,
             ):
                 # L2 真流式: run_loop 流式 THINKING 产出的内容增量直接转发
                 # (事件结构与旧 fake stream 的 content_delta 完全一致,前端无感)。
