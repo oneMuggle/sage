@@ -41,6 +41,9 @@ import type {
   OfficeWordReadResult,
 } from '../../shared/api/types';
 
+/** P1-C: legacy extensions that go through staged in-place conversion. */
+const LEGACY_EXTENSIONS = new Set(['doc', 'xls', 'ppt']);
+
 /** Read result union — same shape as `useOfficeDocuments.OfficeReadResult`. */
 export type OfficeReadResult =
   | OfficePptReadResult
@@ -140,7 +143,21 @@ export async function importOfficeByType(
 
   const imported = await gateway.importDroppedOfficeFile(workspacePath, docType, sourcePath);
   try {
-    const readResult = await readByType(docType, workspacePath, imported.managedPath);
+    // P1-C (office-p1c): 旧格式 (.doc/.xls/.ppt) 已原样暂存 —— 就地转换为
+    // 现代格式后再读取；转换失败走 discard 并把错误抛给调用方。
+    let managedPath = imported.managedPath;
+    const stagedExt = managedPath.slice(managedPath.lastIndexOf('.') + 1).toLowerCase();
+    if (LEGACY_EXTENSIONS.has(stagedExt)) {
+      const converted = await officeApi.convertLegacyImport({
+        workspace_path: workspacePath,
+        file_path: managedPath,
+      });
+      if (!converted.ok || !converted.converted_path) {
+        throw new Error(converted.error ?? 'legacy import conversion failed');
+      }
+      managedPath = converted.converted_path;
+    }
+    const readResult = await readByType(docType, workspacePath, managedPath);
     await gateway.completeOfficeImport(imported.importToken);
     return { documentId: imported.documentId, readResult };
   } catch (e) {

@@ -42,6 +42,7 @@ import {
   buildManagedPath,
   extensionForDocType,
   getOpenDialogFilters,
+  isLegacyExtensionForDocType,
   isPathWithinWorkspace,
   type ImportedOfficeFile,
   type OfficeDocType,
@@ -139,7 +140,12 @@ async function stageImportedFile(
 
   const ext = extensionForDocType(docType);
   const originalName = path.basename(sourcePath);
-  const finalName = replaceExtension(originalName, ext);
+  // P1-C: 旧格式 (.doc/.xls/.ppt) 原样暂存、保留原名 —— 字节与扩展名
+  // 必须一致；staging 之后由 /office/import/convert-legacy 就地转换。
+  const originalExt = path.extname(originalName).replace(/^\./, '');
+  const finalName = isLegacyExtensionForDocType(docType, originalExt)
+    ? originalName
+    : replaceExtension(originalName, ext);
   const stagingDir = path.join(workspacePath, 'office', docType, importToken);
   // Await both calls: without `await`, the `mkdir` promise can reject
   // asynchronously (e.g. permission denied) AFTER `copyFile` has already
