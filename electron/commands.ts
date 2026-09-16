@@ -852,6 +852,19 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   office_update_preview: { method: 'POST', path: () => '/api/v1/office/update/preview' },
   office_export_pdf: { method: 'POST', path: () => '/api/v1/office/export-pdf' },
 
+  // Office display round A (P6/P1): capability probe + high-fidelity
+  // PDF preview. Backend: backend/api/office_routes.py — GET
+  // /capabilities (converter/optional-dep badges, 30s server-side
+  // cache, force=true to re-probe) and POST /pdf-preview (docx/xlsx/
+  // pptx → cached PDF in office/.preview-cache/ → data URL; body reuses
+  // the export-pdf shape: workspacePath/filePath/taskId through the
+  // normal camelToSnakeKeys).
+  office_capabilities: {
+    method: 'GET',
+    path: (a) => `/api/v1/office/capabilities${a.force ? '?force=true' : ''}`,
+  },
+  office_pdf_preview: { method: 'POST', path: () => '/api/v1/office/pdf-preview' },
+
   // Office parity round 2 (R1): page-level apply-update — closes the
   // edit-preview loop opened by office_update_preview. Backend contract:
   // POST /api/v1/office/doc/{doc_id}/update body {ops} (same op dicts the

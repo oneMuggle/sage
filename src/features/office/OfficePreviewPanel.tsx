@@ -26,7 +26,7 @@
  * gateway (the exported `<stem>.pdf` sits next to the managed source).
  */
 
-import { FileDown, FileSpreadsheet, FileText, FileType, Pencil, Presentation } from 'lucide-react';
+import { Eye, FileDown, FileSpreadsheet, FileText, FileType, Pencil, Presentation } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -65,6 +65,13 @@ export interface OfficePreviewPanelProps {
    * Absent → no 编辑预览 button (e.g. pdf previews).
    */
   onEditPreview?: () => void;
+  /**
+   * Round A P1: whether the 高保真 toggle is offered at all — wired to
+   * capabilities.pdf_export_available (no local converter → no toggle,
+   * the badge bar explains why). Defaults to true so existing callers
+   * and tests keep the button.
+   */
+  fidelityAvailable?: boolean;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -99,7 +106,12 @@ function isEditableDocType(docType: OfficeDocType): boolean {
   return docType === 'word' || docType === 'excel' || docType === 'ppt';
 }
 
-export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: OfficePreviewPanelProps) {
+export function OfficePreviewPanel({
+  preview,
+  workspacePath,
+  onEditPreview,
+  fidelityAvailable = true,
+}: OfficePreviewPanelProps) {
   const { t } = useI18n();
   const [exporting, setExporting] = useState(false);
   // P2: 导出已耗时（spinner + 秒表，统一按钮 busy 规范）
@@ -108,6 +120,15 @@ export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: Of
   const taskPercent = useTaskCenterStore(
     (s) => (exporting ? s.tasks['office:export']?.percent ?? null : null),
   );
+
+  // Round A P1: 高保真视图（docx/xlsx/pptx → 缓存 PDF → 内嵌 viewer）。
+  // data URL 以 summary.id + updated_at 为 key 缓存在组件状态里 —— 文档
+  // 一变 key 即不同，重开视图会重新拉取（后端另有 mtime 级缓存兜底）。
+  const [fidelityOn, setFidelityOn] = useState(false);
+  const [fidelityLoading, setFidelityLoading] = useState(false);
+  const [fidelityUrl, setFidelityUrl] = useState<string | null>(null);
+  const [fidelityKey, setFidelityKey] = useState<string | null>(null);
+  const fidelityElapsed = useElapsedSeconds(fidelityLoading);
 
   if (!preview) {
     return (
@@ -118,6 +139,52 @@ export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: Of
   }
 
   const summary = preview.data.summary;
+  const currentFidelityKey = `${summary.id}:${summary.metadata.file_size_bytes}`;
+
+  const buildManagedPath = (ws: string) =>
+    [ws, 'office', summary.doc_type, summary.id, summary.generated_filename].join('/');
+
+  const handleToggleFidelity = async () => {
+    if (fidelityLoading) return;
+    if (fidelityOn) {
+      setFidelityOn(false);
+      return;
+    }
+    // Cached data URL for the same doc state → instant toggle.
+    if (fidelityUrl && fidelityKey === currentFidelityKey) {
+      setFidelityOn(true);
+      return;
+    }
+    const ws = workspacePath ?? summary.workspace_path;
+    if (!ws) {
+      toast.error(t('office.fidelity.failed'));
+      return;
+    }
+    setFidelityLoading(true);
+    try {
+      const res = await officeApi.pdfPreview({
+        workspace_path: ws,
+        file_path: buildManagedPath(ws),
+      });
+      if (res.ok && res.data_url) {
+        setFidelityUrl(res.data_url);
+        setFidelityKey(currentFidelityKey);
+        setFidelityOn(true);
+        return;
+      }
+      const noConverter = typeof res.error === 'string' && res.error.includes('soffice');
+      toast.error(
+        noConverter
+          ? t('office.export.noConverter')
+          : `${t('office.fidelity.failed')}: ${res.error ?? ''}`.trimEnd(),
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`${t('office.fidelity.failed')}: ${msg}`);
+    } finally {
+      setFidelityLoading(false);
+    }
+  };
 
   const handleExportPdf = async () => {
     if (exporting) return;
@@ -128,13 +195,7 @@ export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: Of
     }
     // Managed layout `<workspace>/office/<docType>/<docId>/<filename>` —
     // the same reconstruction readDocument uses (useOfficeDocuments).
-    const managedPath = [
-      ws,
-      'office',
-      summary.doc_type,
-      summary.id,
-      summary.generated_filename,
-    ].join('/');
+    const managedPath = buildManagedPath(ws);
     setExporting(true);
     // P7: 进度追踪任务 id + 轮询（同 OfficeGenerateForm）
     const taskId = crypto.randomUUID();
@@ -170,6 +231,27 @@ export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: Of
                     .catch(() => {
                       // Gateway failure is non-fatal here — the export
                       // itself already succeeded.
+                    });
+                },
+              }
+            : undefined,
+          // Round A 快速修补：第二动作「打开 PDF」直达产物本身（sonner 的
+          // cancel 槽渲染为次级按钮）。导出产物 <stem>.pdf 与源文件同目录，
+          // 走同一 managed-file 网关校验。
+          cancel: window.electronAPI
+            ? {
+                label: t('office.export.openPdf'),
+                onClick: () => {
+                  const stem = summary.generated_filename.replace(/\.[^.]+$/, '');
+                  void window.electronAPI?.office
+                    .openOfficeDocument({
+                      workspacePath: ws,
+                      docType: summary.doc_type,
+                      documentId: summary.id,
+                      filename: `${stem}.pdf`,
+                    })
+                    .catch(() => {
+                      // Non-fatal — the export itself already succeeded.
                     });
                 },
               }
@@ -210,6 +292,38 @@ export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: Of
         </span>
         {isEditableDocType(preview.docType) && (
           <div className="flex items-center gap-1 shrink-0">
+            {fidelityAvailable && (
+              <button
+                type="button"
+                onClick={() => void handleToggleFidelity()}
+                disabled={fidelityLoading}
+                className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors disabled:opacity-50 ${
+                  fidelityOn
+                    ? 'border-primary text-primary bg-primary/10'
+                    : 'border-border text-text-secondary hover:bg-bg-hover'
+                }`}
+                data-testid="office-fidelity-toggle"
+                aria-pressed={fidelityOn}
+                aria-label={t('office.fidelity.toggle')}
+              >
+                {fidelityLoading ? (
+                  <>
+                    <span
+                      className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"
+                      aria-hidden
+                    />
+                    <span className="tabular-nums">
+                      {t('office.fidelity.loading')} · {fidelityElapsed}s
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-3.5 h-3.5" />
+                    {t('office.fidelity.toggle')}
+                  </>
+                )}
+              </button>
+            )}
             {onEditPreview && (
               <button
                 type="button"
@@ -265,12 +379,22 @@ export function OfficePreviewPanel({ preview, workspacePath, onEditPreview }: Of
         </div>
       )}
 
-      <div className="p-4 max-h-96 overflow-y-auto">
-        {preview.docType === 'ppt' && <PptPreview data={preview.data} />}
-        {preview.docType === 'word' && <WordPreview data={preview.data} />}
-        {preview.docType === 'excel' && <ExcelPreview key={summary.id} data={preview.data} />}
-        {preview.docType === 'pdf' && <PdfPreview data={preview.data} />}
-      </div>
+      {/* Round A P1: 高保真开 → 内嵌 Chromium PDF viewer；关 → 结构化预览 */}
+      {fidelityOn && fidelityUrl ? (
+        <iframe
+          src={fidelityUrl}
+          title={summary.generated_filename}
+          className="w-full h-[32rem] border-0"
+          data-testid="office-fidelity-frame"
+        />
+      ) : (
+        <div className="p-4 max-h-96 overflow-y-auto">
+          {preview.docType === 'ppt' && <PptPreview data={preview.data} />}
+          {preview.docType === 'word' && <WordPreview data={preview.data} />}
+          {preview.docType === 'excel' && <ExcelPreview key={summary.id} data={preview.data} />}
+          {preview.docType === 'pdf' && <PdfPreview data={preview.data} />}
+        </div>
+      )}
     </div>
   );
 }

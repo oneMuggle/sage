@@ -100,6 +100,18 @@ def _esc(value: object) -> str:
     return _html_mod.escape(str(value), quote=False)
 
 
+def _is_numeric_cell(cell: object) -> bool:
+    """Excel 数字单元格判定 —— 与前端 OfficePreviewPanel.isNumericCell 同口径。"""
+    text = str(cell).strip()
+    if not text:
+        return False
+    try:
+        float(text)
+        return True
+    except ValueError:
+        return False
+
+
 def _docx_to_html(path: Path) -> str:
     from backend.office.word import read_docx
 
@@ -126,11 +138,11 @@ def _docx_to_html(path: Path) -> str:
             continue
         parts.append("<table>")
         for i, row in enumerate(rows):
-            cells = "".join(f"<td>{_esc(cell)}</td>" for cell in row)
-            if i == 0:
-                parts.append(f"<tr>{cells}</tr>")
-            else:
-                parts.append(f"<tr>{cells}</tr>")
+            # Round A 快速修补：首行渲染为表头 <th>（此前 if/else 两分支
+            # 代码相同，均为 <td> —— 死代码顺带清理）。
+            tag = "th" if i == 0 else "td"
+            cells = "".join(f"<{tag}>{_esc(cell)}</{tag}>" for cell in row)
+            parts.append(f"<tr>{cells}</tr>")
         parts.append("</table>")
     return "".join(parts) or "<p>（空文档）</p>"
 
@@ -147,8 +159,16 @@ def _xlsx_to_html(path: Path) -> str:
             parts.append("<p>（空表）</p>")
             continue
         parts.append("<table>")
-        for row in rows[:MAX_SHEET_PREVIEW_ROWS]:
-            cells = "".join(f"<td>{_esc(cell)}</td>" for cell in row)
+        for i, row in enumerate(rows[:MAX_SHEET_PREVIEW_ROWS]):
+            # Round A 快速修补：首行 <th> 表头；数字单元格右对齐（与
+            # OfficePreviewPanel 的 isNumericCell 视觉口径一致）。
+            tag = "th" if i == 0 else "td"
+            cells = "".join(
+                f'<{tag} style="text-align:right">{_esc(cell)}</{tag}>'
+                if _is_numeric_cell(cell)
+                else f"<{tag}>{_esc(cell)}</{tag}>"
+                for cell in row
+            )
             parts.append(f"<tr>{cells}</tr>")
         parts.append("</table>")
         if len(rows) > MAX_SHEET_PREVIEW_ROWS:

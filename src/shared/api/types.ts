@@ -1729,6 +1729,35 @@ export interface OfficeExportPdfResult {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Office display round A — P6 capability probe + P1 high-fidelity preview
+// Backend counterpart: backend/office/capabilities.py (OfficeCapabilities)
+// and backend/office/pdf_preview.py (PdfPreviewResult).
+// ──────────────────────────────────────────────────────────────────────
+
+/** Result of GET /office/capabilities (backend OfficeCapabilities). */
+export interface OfficeCapabilities {
+  platform: string;
+  soffice_available: boolean;
+  soffice_path?: string | null;
+  word_com_available: boolean;
+  pdf_export_available: boolean;
+  pillow_available: boolean;
+  formulas_available: boolean;
+}
+
+/**
+ * Result of POST /office/pdf-preview (backend PdfPreviewResult).
+ * `data_url` is a data:application/pdf;base64 URL rendered by the
+ * embedded Chromium PDF viewer; `cached=true` means no converter ran.
+ */
+export interface OfficePdfPreviewResult {
+  ok: boolean;
+  data_url?: string | null;
+  cached?: boolean;
+  error?: string | null;
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Document template library (Office parity batch 3, item 3.2 — 从模板创建;
 // round 3 N2 extends it to excel/ppt). Backend counterpart: GET
 // /office/templates + POST /office/templates/instantiate in

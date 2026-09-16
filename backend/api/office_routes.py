@@ -744,6 +744,42 @@ def export_pdf_endpoint(req: OfficeExportPdfRequest):
     return result
 
 
+@router.get("/capabilities")
+def get_capabilities_endpoint(force: bool = False):
+    """Round A P6: 探测本机 Office 环境能力（转换器 / 可选依赖）。
+
+    前端 Office 页加载时调用一次，用于能力徽章与安装引导；
+    ``force=true`` 跳过 30s 缓存强制重探（用户点「重新检测」）。
+    Patch point（同 export-pdf 口径）：``backend.office.capabilities``
+    模块对象上的 ``probe_capabilities``。
+    """
+    from backend.office import capabilities
+
+    return capabilities.probe_capabilities(force=force)
+
+
+@router.post("/pdf-preview")
+def pdf_preview_endpoint(req: OfficeExportPdfRequest):
+    """Round A P1: 高保真预览 —— docx/xlsx/pptx → 缓存 PDF → data URL。
+
+    请求体复用 OfficeExportPdfRequest（workspace_path + file_path +
+    可选 task_id）——语义相同：定位工作区内一份托管文档。区别在产物
+    去向：导出写在源文件旁，预览写进 office/.preview-cache/ 并以
+    data URL 返回。失败契约同 export：HTTP 200 + ``ok=False``。
+    Patch point：``backend.office.pdf_preview.render_pdf_preview``。
+    """
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    from backend.office import pdf_preview
+
+    with office_progress.track(req.task_id, "高保真预览") as prog:
+        prog.report("转换 PDF", 30)
+        result = pdf_preview.render_pdf_preview(
+            file_path, Path(req.workspace_path).resolve()
+        )
+        prog.report("完成", 95)
+    return result
+
+
 @router.get("/progress/{task_id}")
 def get_progress_endpoint(task_id: str):
     """P7: 查询 office 长任务进度（前端 500ms 轮询）。

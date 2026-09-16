@@ -698,6 +698,21 @@ export const en: Record<TranslationKey, string> = {
   'office.export.failed': 'Export failed',
   'office.export.noConverter': 'No local converter found (LibreOffice or MS Word required)',
   'office.export.openFolder': 'Show in Folder',
+  'office.export.openPdf': 'Open PDF',
+
+  // ─── Office display round A: P1 high-fidelity preview + P6 capability badges ─────
+  'office.fidelity.toggle': 'High fidelity',
+  'office.fidelity.loading': 'Converting…',
+  'office.fidelity.failed': 'High-fidelity preview failed',
+  'office.caps.pdf': 'PDF export',
+  'office.caps.image': 'Image compression',
+  'office.caps.formula': 'Formula evaluation',
+  'office.caps.refresh': 'Re-detect',
+  'office.caps.install.pdf.win': 'No converter detected: install LibreOffice (libreoffice.org/download) or MS Word to enable PDF export / high-fidelity preview',
+  'office.caps.install.pdf.mac': 'No converter detected: brew install --cask libreoffice to enable PDF export / high-fidelity preview',
+  'office.caps.install.pdf.linux': 'No converter detected: sudo apt install libreoffice (or your distro equivalent) to enable PDF export / high-fidelity preview',
+  'office.caps.install.pillow': 'Pillow not installed: pip install -r backend/requirements-optional.txt to auto-compress images >8MB',
+  'office.caps.install.formulas': 'formulas not installed: pip install -r backend/requirements-optional.txt to evaluate Excel formulas locally',
 
   // ─── Office parity batch 3: Word template library (item 3.2) ─────
   'office.template.modeFreeform': 'Free-form',

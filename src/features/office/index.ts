@@ -20,3 +20,5 @@ export type {
 export { buildUpdateOps } from './OfficeEditPreviewDialog';
 export { OfficeGenerateForm } from './OfficeGenerateForm';
 export type { OfficeGenerateFormProps } from './OfficeGenerateForm';
+export { OfficeCapabilityBar } from './OfficeCapabilityBar';
+export type { OfficeCapabilityBarProps } from './OfficeCapabilityBar';

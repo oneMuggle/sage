@@ -16,6 +16,7 @@
 import { invoke } from './desktopInvoke';
 import type {
   OfficeArchiveResponse,
+  OfficeCapabilities,
   OfficeDeleteResponse,
   OfficeDocUpdateRequest,
   OfficeDocUpdateResponse,
@@ -26,6 +27,7 @@ import type {
   OfficeExportPdfResult,
   OfficePdfGenerateRequest,
   OfficePdfGenerateResult,
+  OfficePdfPreviewResult,
   OfficePdfReadRequest,
   OfficePdfReadResult,
   OfficePptGenerateRequest,
@@ -400,6 +402,45 @@ export const officeApi = {
   async exportPdf(req: OfficeExportPdfRequest): Promise<OfficeExportPdfResult> {
     try {
       return await invoke<OfficeExportPdfResult>('office_export_pdf', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+        task_id: req.task_id,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Probe local Office environment capabilities (round A, P6) —
+   * LibreOffice / Word COM / Pillow / formulas availability for the
+   * capability badges + install guidance on the Office page.
+   *
+   * Bounded retry — read-only and idempotent (the backend caches the
+   * probe for 30s anyway). Pass force=true to bypass that cache when
+   * the user clicks 重新检测.
+   */
+  async getCapabilities(force = false): Promise<OfficeCapabilities> {
+    try {
+      return await withRetry(() =>
+        invoke<OfficeCapabilities>('office_capabilities', force ? { force: true } : {}),
+      );
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * High-fidelity PDF preview (round A, P1) — converts a managed
+   * docx/xlsx/pptx to PDF in the workspace preview cache and returns a
+   * data URL for the embedded Chromium viewer. Converter problems come
+   * back as `{ok: false, error}` (HTTP failures still throw).
+   *
+   * No retry — conversion spawns a subprocess; the user can re-toggle.
+   */
+  async pdfPreview(req: OfficeExportPdfRequest): Promise<OfficePdfPreviewResult> {
+    try {
+      return await invoke<OfficePdfPreviewResult>('office_pdf_preview', {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
         task_id: req.task_id,
