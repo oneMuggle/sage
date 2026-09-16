@@ -224,4 +224,52 @@ describe('mergeWithDefaults (endpoints / modelSelections deepMerge)', () => {
     expect(out.id).toBe('ep-old');
     expect(out.apiKey).toBe('k');
   });
+
+  // 2026-09-16: 对象 spread 不会移除已存在的 null. legacy corrupt 数据
+  // 把 discoveredModels 显式设为 null 时, 必须用 `?? DEFAULT` 兜底, 否则
+  // 下游 UI .map() 仍会崩.
+  it('endpoint.discoveredModels 为 null 时也补成空数组', () => {
+    const corruptEndpoint = {
+      id: 'ep-corrupt',
+      name: 'Corrupt Endpoint',
+      baseUrl: 'http://corrupt',
+      apiKey: 'k',
+      discoveredModels: null,
+    } as unknown as AppSettings['endpoints'][number];
+    const merged = mergeWithDefaults({
+      endpoints: [corruptEndpoint],
+    } as Partial<AppSettings>);
+    expect(merged.endpoints[0].discoveredModels).toEqual([]);
+  });
+
+  // 2026-09-16: 现代 endpoint 与 legacy endpoint 混合时, 必须每条独立兜底.
+  it('混合 modern + legacy endpoint 时 fallback 仅作用于 legacy 那条', () => {
+    const modern = {
+      id: 'ep-modern',
+      name: 'Modern',
+      baseUrl: 'http://modern',
+      apiKey: '',
+      protocol: 'anthropic',
+      modelId: 'claude-3',
+      discoveredModels: [{ id: 'm1', capabilities: ['chat'], lastSeen: 1 }],
+      lastDiscoveredAt: 12345,
+    } as unknown as AppSettings['endpoints'][number];
+    const legacy = {
+      id: 'ep-legacy',
+      name: 'Legacy',
+      baseUrl: 'http://legacy',
+      apiKey: '',
+    } as unknown as AppSettings['endpoints'][number];
+    const merged = mergeWithDefaults({
+      endpoints: [modern, legacy],
+    } as Partial<AppSettings>);
+    // modern 保留用户字段
+    expect(merged.endpoints[0].discoveredModels).toHaveLength(1);
+    expect(merged.endpoints[0].protocol).toBe('anthropic');
+    expect(merged.endpoints[0].lastDiscoveredAt).toBe(12345);
+    // legacy 全部用 DEFAULT 兜底
+    expect(merged.endpoints[1].discoveredModels).toEqual([]);
+    expect(merged.endpoints[1].protocol).toBe('openai-compatible');
+    expect(merged.endpoints[1].lastDiscoveredAt).toBeNull();
+  });
 });

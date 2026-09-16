@@ -44,7 +44,8 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
   }, [sessionId]);
 
   // 候选项:全部端点的已发现模型(与设置页 ModelsTab 同一数据源)
-  // 防御性检查: discoveredModels 可能在旧数据中缺失 (升级场景)
+  // 防御性检查: 旧数据/绕过 mergeWithDefaults 的代码路径可能让 discoveredModels 为 null
+  //   (data layer mergeWithDefaults 已用 DEFAULT_ENDPOINT 兜底, 此处为 belt-and-suspenders).
   const options = settings.endpoints.flatMap((ep) =>
     (ep.discoveredModels ?? []).map((m) => ({
       modelId: m.id,
