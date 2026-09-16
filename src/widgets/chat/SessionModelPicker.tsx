@@ -44,8 +44,9 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
   }, [sessionId]);
 
   // 候选项:全部端点的已发现模型(与设置页 ModelsTab 同一数据源)
+  // 防御性检查: discoveredModels 可能在旧数据中缺失 (升级场景)
   const options = settings.endpoints.flatMap((ep) =>
-    ep.discoveredModels.map((m) => ({
+    (ep.discoveredModels ?? []).map((m) => ({
       modelId: m.id,
       endpointName: ep.name,
     })),
@@ -79,9 +80,7 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
         onChange={(e) => handleChange(e.target.value)}
         className="max-w-56 text-xs text-text-secondary bg-surface border border-border rounded-radius-sm px-1.5 py-1 outline-none hover:bg-bg-hover focus:border-primary disabled:opacity-50 truncate"
       >
-        <option value="">
-          跟随全局{globalModelId ? ` (${globalModelId})` : '（未设置）'}
-        </option>
+        <option value="">跟随全局{globalModelId ? ` (${globalModelId})` : '（未设置）'}</option>
         {options.map((opt) => (
           <option key={`${opt.endpointName}/${opt.modelId}`} value={opt.modelId}>
             {opt.modelId} · {opt.endpointName}
