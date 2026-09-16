@@ -965,6 +965,8 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const body: Record<string, unknown> = {};
       if (a.enabled !== undefined) body.enabled = a.enabled;
       if (a.timeout_seconds !== undefined) body.timeout_seconds = a.timeout_seconds;
+      // R53: 工具禁用列表（全量替换）
+      if (a.disabled_tools !== undefined) body.disabled_tools = a.disabled_tools;
       return body;
     },
   },

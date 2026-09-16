@@ -16,7 +16,7 @@ release/win7 LTS branch pins pydantic 1.10 while main pins 2.x.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -55,7 +55,7 @@ class ServerConfigIn(BaseModel):
 
     name: str = Field(min_length=1, max_length=64)
     command: str = Field(default="", max_length=512)
-    url: Optional[str] = Field(default=None, max_length=2048)
+    url: str | None = Field(default=None, max_length=2048)
     args: List[str] = Field(default_factory=list)
     env: Dict[str, str] = Field(default_factory=dict)
     # R34: HTTP 传输自定义鉴权头（stdio 服务器忽略）
