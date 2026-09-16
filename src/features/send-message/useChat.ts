@@ -17,6 +17,7 @@ import {
   mapLLMErrorToText,
   type LLMErrorResponse,
 } from '../../shared/lib/errorMapping';
+import { clearSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { logger } from '../../shared/lib/logger';
 // Task 5: modelWindows imports removed — frontend no longer computes history budget.
 // Backend now resolves effective window from catalog and computes budget.
@@ -94,6 +95,7 @@ export async function deleteSessionCascade(sid: string): Promise<void> {
     // 非活跃会话 / 后端未起 —— 忽略, 继续清理本地状态
   }
   useChatStreamStore.getState().clearSession(sid);
+  clearSessionDraft(sid);
   await useStore.getState().deleteSession(sid);
 }
 
