@@ -49,10 +49,9 @@ export function GatewayCard(): JSX.Element | null {
     setSaving(true);
     setNotice('');
     try {
-      const tokenChanged = !token.startsWith('****');
       const result = await gatewayApi.updateConfig({
-        // 打码值原样传回 = 未修改（后端保留已存 token）；写新值即更新
-        bot_token: tokenChanged ? token : '',
+        // 打码值原样传回 = 未修改（后端保留已存 token）；清空 = 清除；新值 = 更新
+        bot_token: token,
         allowed_chat_ids: chatIds
           .split(',')
           .map((c) => c.trim())
