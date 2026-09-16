@@ -561,6 +561,18 @@ export const zh = {
   'settings.usage.partialEstimateHint': '部分请求成本未知, 总数含估算偏差',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
+  'office.staging.inspect': '检查暂存目录（只读）',
+  'office.staging.notice':
+    '不会移动或删除文件。待核查项不代表孤儿文件；清理前仍须核对文档库引用。未知目录和活跃进程所属目录均保留。',
+  'office.staging.unavailable': '当前桌面版本不支持暂存检查。',
+  'office.staging.empty': '没有可检查的暂存条目。',
+  'office.staging.truncated': '报告最多显示 1000 项，并非完整目录清单。',
+  'office.staging.completed': '导入已完成 — 保留',
+  'office.staging.active': '导入归属进程仍活跃 — 保留',
+  'office.staging.recent': '暂存未满七天 — 保留',
+  'office.staging.review': '过期暂存且归属进程不在运行 — 仅供人工核查',
+  'office.staging.untracked': '无可信暂存记录 — 保留',
+  'office.staging.unreadable': '无法读取暂存记录 — 保留',
   'office.title': 'Office 文档',
   'office.selectWorkspace': '选择工作区',
   'office.emptyState': '请先选择工作区目录以开始使用',

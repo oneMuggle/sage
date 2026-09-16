@@ -48,6 +48,8 @@ import {
   type OfficeManagedRef,
 } from './officePaths';
 
+import { previewOfficeStaging, recordCompletedImport, recordStagedImport } from './officeStaging';
+
 /**
  * Register signature: same shape as Electron's `ipcMain.handle`.
  *
@@ -147,6 +149,11 @@ async function stageImportedFile(
   await mkdir(stagingDir, { recursive: true });
   const managedPath = path.join(stagingDir, finalName);
   await copyFile(sourcePath, managedPath, fsConstants.COPYFILE_EXCL);
+  try {
+    await recordStagedImport(stagingDir, importToken, finalName);
+  } catch {
+    /* Missing evidence must retain the directory, not fail a successful import. */
+  }
 
   let sizeBytes = 0;
   try {
@@ -214,6 +221,10 @@ export async function sweepOrphanStaging(
 // ----------------------------------------------------------------------------
 
 export function registerOfficeIpc(register: RegisterIpcHandler): void {
+  register('office:staging-preview', (async (_event: unknown, opts: { workspacePath: string }) => {
+    return previewOfficeStaging(opts.workspacePath, new Set(pendingImports.keys()));
+  }) as (...args: unknown[]) => unknown);
+
   // ── office:pick-and-import ────────────────────────────────────────────
   // Atomic dialog → copy → token. Returns ImportedOfficeFile | null.
   register('office:pick-and-import', (async (
@@ -273,7 +284,16 @@ export function registerOfficeIpc(register: RegisterIpcHandler): void {
     _event: unknown,
     opts: { importToken: string },
   ): Promise<void> => {
+    const pending = pendingImports.get(opts.importToken);
+    // Consume before the first await: a concurrent discard must be a no-op.
     pendingImports.delete(opts.importToken);
+    if (pending) {
+      try {
+        await recordCompletedImport(pending.stagingDir);
+      } catch {
+        /* A completion metadata failure must never trigger destructive discard. */
+      }
+    }
   }) as (...args: unknown[]) => unknown);
 
   // ── office:discard-import ─────────────────────────────────────────────

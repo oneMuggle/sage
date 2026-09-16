@@ -283,6 +283,39 @@ describe('office:complete-import and office:discard-import (token lifecycle)', (
     fs.unlinkSync(tmpSrc);
   });
 
+  it('completion consumes ownership before async metadata work so concurrent discard cannot delete', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sage-complete-race-'));
+    try {
+      const sourcePath = path.join(root, 'source.docx');
+      fs.writeFileSync(sourcePath, 'KEEP');
+      const picked = (await registeredHandlers.get('office:import-dropped')!(
+        {},
+        {
+          workspacePath: root,
+          docType: 'word',
+          sourcePath,
+        },
+      )) as PendingImport;
+      const completion = registeredHandlers.get('office:complete-import')!(
+        {},
+        { importToken: picked.importToken },
+      );
+      await registeredHandlers.get('office:discard-import')!(
+        {},
+        { importToken: picked.importToken },
+      );
+      await completion;
+      expect(fs.readFileSync(picked.managedPath, 'utf8')).toBe('KEEP');
+      const report = (await registeredHandlers.get('office:staging-preview')!(
+        {},
+        { workspacePath: root },
+      )) as { items: { status: string }[] };
+      expect(report.items[0].status).toBe('completed');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('discard-import with an unknown token is a no-op (no delete)', async () => {
     // Pre-create a victim file at the same place a real import would
     // land. A forged token must NOT delete it.

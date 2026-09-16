@@ -576,6 +576,18 @@ export const en: Record<TranslationKey, string> = {
   'settings.usage.partialEstimateHint': 'Some requests have unknown cost; total is approximate',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
+  'office.staging.inspect': 'Inspect staging (read-only)',
+  'office.staging.notice':
+    'Nothing is moved or deleted. Review candidates are not proven orphans: verify database references before any cleanup. Unknown directories and live owners are retained.',
+  'office.staging.unavailable': 'This desktop build does not support staging inspection.',
+  'office.staging.empty': 'No inspectable staging entries found.',
+  'office.staging.truncated': 'Report limited to 1000 entries; this is not a complete inventory.',
+  'office.staging.completed': 'Completed import — retain',
+  'office.staging.active': 'Live import owner — retain',
+  'office.staging.recent': 'Less than seven days old — retain',
+  'office.staging.review': 'Old import with no live owner — manual review only',
+  'office.staging.untracked': 'No trustworthy staging evidence — retain',
+  'office.staging.unreadable': 'Evidence unavailable — retain',
   'office.title': 'Office Documents',
   'office.selectWorkspace': 'Select Workspace',
   'office.emptyState': 'Select a workspace directory to get started',
