@@ -683,6 +683,20 @@ export const en: Record<TranslationKey, string> = {
   'office.preview.paragraphsTruncated': '…{n} more paragraphs hidden',
   'office.preview.cellsTruncated': '…{n} more columns hidden',
   'office.preview.sheetTab': 'Sheets',
+  // F1 (office-p0): render comments/headers-footers/TOC fields already
+  // extracted by the backend reader
+  'office.preview.headersFooters': 'Headers / footers',
+  'office.preview.headerLabel': 'Header: ',
+  'office.preview.footerLabel': 'Footer: ',
+  'office.preview.emptyLabel': '(empty)',
+  'office.preview.pageNumberField': 'has page number field',
+  'office.preview.comments': 'Comments',
+  'office.preview.commentUnknownAuthor': 'Unknown author',
+  'office.preview.tocFields': 'TOC fields',
+  // F3 (office-p0): /office page PDF original-view toggle (data URL + iframe)
+  'office.preview.originalView': 'Original view',
+  'office.preview.structuredView': 'Structured view',
+  'office.preview.originalFailed': 'Original view failed',
 
   // ─── Office parity batch 2: edit preview dialog (item 2.5) ─────
   'office.edit.title': 'Edit Preview',
@@ -710,6 +724,32 @@ export const en: Record<TranslationKey, string> = {
   'office.edit.rejected': 'This edit cannot be applied',
   'office.edit.noChanges': 'No changes produced',
   'office.edit.required': 'Please complete the edit fields',
+  // F2 (office-p0): op-kind selector exposing more of the backend op surface
+  'office.edit.opKind': 'Edit type',
+  'office.edit.kindReplaceText': 'Find & replace',
+  'office.edit.kindAppendParagraphs': 'Append paragraphs',
+  'office.edit.kindSetTableCell': 'Set table cell',
+  'office.edit.kindDeleteParagraph': 'Delete paragraph',
+  'office.edit.kindSetCells': 'Set cell',
+  'office.edit.kindAppendRows': 'Append rows',
+  'office.edit.kindSetTitle': 'Set slide title',
+  'office.edit.kindSetBullets': 'Set slide bullets',
+  'office.edit.kindSetNotes': 'Set slide notes',
+  'office.edit.kindAppendSlide': 'Append slide',
+  'office.edit.paragraphs': 'Paragraphs (one per line)',
+  'office.edit.paraHeading': 'Paragraph level',
+  'office.edit.headingNone': 'Body text',
+  'office.edit.tableIndex': 'Table #',
+  'office.edit.tableRow': 'Row',
+  'office.edit.tableCol': 'Column',
+  'office.edit.tableText': 'Cell text',
+  'office.edit.deleteFindPlaceholder': 'Text contained in the paragraph (case-insensitive)…',
+  'office.edit.deleteAll': 'Delete all matching paragraphs',
+  'office.edit.rows': 'Rows (one per line, cells separated by commas)',
+  'office.edit.bullets': 'Bullets (one per line)',
+  'office.edit.notes': 'Notes',
+  'office.edit.appendTitle': 'New slide title',
+  'office.edit.appendNotes': 'Speaker notes',
   // Round 2 (R1): in-page apply — secondary confirm after a successful
   // preview + apply feedback + self-check summary line.
   'office.edit.apply': 'Apply changes',
@@ -742,11 +782,16 @@ export const en: Record<TranslationKey, string> = {
   'office.caps.image': 'Image compression',
   'office.caps.formula': 'Formula evaluation',
   'office.caps.refresh': 'Re-detect',
-  'office.caps.install.pdf.win': 'No converter detected: install LibreOffice (libreoffice.org/download) or MS Word to enable PDF export / high-fidelity preview',
-  'office.caps.install.pdf.mac': 'No converter detected: brew install --cask libreoffice to enable PDF export / high-fidelity preview',
-  'office.caps.install.pdf.linux': 'No converter detected: sudo apt install libreoffice (or your distro equivalent) to enable PDF export / high-fidelity preview',
-  'office.caps.install.pillow': 'Pillow not installed: pip install -r backend/requirements-optional.txt to auto-compress images >8MB',
-  'office.caps.install.formulas': 'formulas not installed: pip install -r backend/requirements-optional.txt to evaluate Excel formulas locally',
+  'office.caps.install.pdf.win':
+    'No converter detected: install LibreOffice (libreoffice.org/download) or MS Word to enable PDF export / high-fidelity preview',
+  'office.caps.install.pdf.mac':
+    'No converter detected: brew install --cask libreoffice to enable PDF export / high-fidelity preview',
+  'office.caps.install.pdf.linux':
+    'No converter detected: sudo apt install libreoffice (or your distro equivalent) to enable PDF export / high-fidelity preview',
+  'office.caps.install.pillow':
+    'Pillow not installed: pip install -r backend/requirements-optional.txt to auto-compress images >8MB',
+  'office.caps.install.formulas':
+    'formulas not installed: pip install -r backend/requirements-optional.txt to evaluate Excel formulas locally',
 
   // ─── Office display round B: P2 snapshot visual diff ─────
   'office.snapshot.diff': 'Compare with current',

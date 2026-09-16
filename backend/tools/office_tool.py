@@ -48,7 +48,7 @@ class OfficeListTool(BaseTool):
         return ToolSchema(
             name="office_list",
             description=(
-                "List Office documents (ppt/word/excel) in the active "
+                "List Office documents (ppt/word/excel/pdf) in the active "
                 "chat workspace. Results are scoped to the current "
                 "session's binding; documents from other workspaces or "
                 "archived documents are not visible."
@@ -65,7 +65,7 @@ class OfficeListTool(BaseTool):
                     },
                     "doc_type": {
                         "type": "string",
-                        "enum": ["ppt", "word", "excel"],
+                        "enum": ["ppt", "word", "excel", "pdf"],
                         "description": "Optional document type filter.",
                     },
                     "limit": {

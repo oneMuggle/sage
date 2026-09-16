@@ -18,8 +18,10 @@ MAX_IMAGE_BYTES = 10_000_000
 MAX_PDF_BYTES = 20_000_000
 #: C-2 (round5 批次 C): docx/xlsx/pptx 内嵌预览上限（同 PDF 口径）
 MAX_OFFICE_BYTES = 20_000_000
-#: C-2: xlsx 单 sheet 预览行数截断
-MAX_SHEET_PREVIEW_ROWS = 200
+#: C-2: xlsx 单 sheet 预览行数截断（与 /office 页 ROW_RENDER_CAP 对齐）
+MAX_SHEET_PREVIEW_ROWS = 300
+#: docx 预览段落数截断（与 /office 页 PARAGRAPH_RENDER_CAP 对齐）
+MAX_DOCX_PREVIEW_PARAGRAPHS = 300
 
 _IMAGE_MIME = {
     ".png": "image/png",
@@ -117,10 +119,12 @@ def _docx_to_html(path: Path) -> str:
 
     result = read_docx(path)
     parts: list = []
-    for para in result.paragraphs:
+    non_blank = [p for p in result.paragraphs if (p.text or "").strip()]
+    for i, para in enumerate(non_blank):
+        if i >= MAX_DOCX_PREVIEW_PARAGRAPHS:
+            parts.append(f"<p>（预览已截断,共 {len(non_blank)} 段）</p>")
+            break
         text = _esc(para.text)
-        if not text.strip():
-            continue
         style = (para.style or "").lower()
         if style == "title":
             parts.append(f"<h2>{text}</h2>")

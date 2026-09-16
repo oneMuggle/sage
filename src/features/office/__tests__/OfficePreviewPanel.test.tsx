@@ -17,9 +17,11 @@ import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockExportPdf = vi.fn();
+const mockReadPdfData = vi.fn();
 vi.mock('../../../shared/api/officeApi', () => ({
   officeApi: {
     exportPdf: (...args: unknown[]) => mockExportPdf(...args),
+    readPdfData: (...args: unknown[]) => mockReadPdfData(...args),
   },
 }));
 
@@ -33,7 +35,12 @@ import type {
   OfficePptReadResult,
 } from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { OfficePreviewPanel, PARAGRAPH_RENDER_CAP, ROW_RENDER_CAP, type OfficePreviewData } from '../OfficePreviewPanel';
+import {
+  OfficePreviewPanel,
+  PARAGRAPH_RENDER_CAP,
+  ROW_RENDER_CAP,
+  type OfficePreviewData,
+} from '../OfficePreviewPanel';
 
 const toastMock = toast as unknown as {
   success: ReturnType<typeof vi.fn>;
@@ -64,7 +71,15 @@ const WORD_PREVIEW: OfficePreviewData = {
       { style: 'Normal', text: '正文段落。', level: 0 },
       { style: 'List Paragraph', text: '列表项一', level: 0 },
     ],
-    tables: [{ rows: [['名称', '数量'], ['苹果', '3'], ['香蕉', '12']] }],
+    tables: [
+      {
+        rows: [
+          ['名称', '数量'],
+          ['苹果', '3'],
+          ['香蕉', '12'],
+        ],
+      },
+    ],
     images: 2,
   },
 };
@@ -72,7 +87,12 @@ const WORD_PREVIEW: OfficePreviewData = {
 const EXCEL_PREVIEW: OfficePreviewData = {
   docType: 'excel',
   data: {
-    summary: { ...WORD_SUMMARY, id: 'doc-excel', doc_type: 'excel', generated_filename: 'data.xlsx' },
+    summary: {
+      ...WORD_SUMMARY,
+      id: 'doc-excel',
+      doc_type: 'excel',
+      generated_filename: 'data.xlsx',
+    },
     sheets: [
       {
         name: 'Sheet1',
@@ -136,6 +156,7 @@ function renderPanel(preview: OfficePreviewData | null, onEditPreview?: () => vo
 describe('OfficePreviewPanel — rich rendering (item 2.6)', () => {
   beforeEach(() => {
     mockExportPdf.mockReset();
+    mockReadPdfData.mockReset();
     toastMock.success.mockReset();
     toastMock.error.mockReset();
   });
@@ -175,6 +196,39 @@ describe('OfficePreviewPanel — rich rendering (item 2.6)', () => {
       data: { ...WORD_PREVIEW.data, paragraphs },
     });
     expect(screen.getByText(/还有 5 段未显示/)).toBeInTheDocument();
+  });
+
+  it('renders Word comments, headers/footers and TOC fields from the read result', () => {
+    // F1 (office-p0): 后端 read_docx 已提取 comments/headers_footers/toc_fields，
+    // 预览端补渲染——不再只显示"N 个图片"式的计数摘要。
+    renderPanel({
+      docType: 'word',
+      data: {
+        ...WORD_PREVIEW.data,
+        comments: [
+          {
+            id: '1',
+            author: '张三',
+            date: '2026-09-16T10:00:00Z',
+            text: '这句要改',
+            anchor_text: '正文段落',
+          },
+        ],
+        headers_footers: [
+          { section: 1, header_text: '内部资料', footer_text: '', has_page_number_field: true },
+        ],
+        toc_fields: ['TOC \\o "1-3" \\h'],
+      },
+    });
+    const comments = screen.getByTestId('office-word-comments');
+    expect(comments).toBeInTheDocument();
+    expect(comments.textContent).toContain('张三');
+    expect(comments.textContent).toContain('这句要改');
+    expect(comments.textContent).toContain('正文段落');
+    const hf = screen.getByTestId('office-word-headers-footers');
+    expect(hf.textContent).toContain('内部资料');
+    expect(hf.textContent).toContain('含页码域');
+    expect(screen.getByTestId('office-word-toc')).toBeInTheDocument();
   });
 
   it('renders Excel as per-sheet tabs and switches sheets on click', () => {
@@ -226,11 +280,54 @@ describe('OfficePreviewPanel — rich rendering (item 2.6)', () => {
     expect(screen.getByText('页面文本')).toBeInTheDocument();
     expect(screen.getByText(/第\s*1\s*页/)).toBeInTheDocument();
   });
+
+  // ── F3 (office-p0): PDF 原文预览开关（data URL + iframe）─────────
+
+  it('pdf: 原文预览 toggle loads the data URL and renders the iframe', async () => {
+    mockReadPdfData.mockResolvedValueOnce({
+      ok: true,
+      data_url: 'data:application/pdf;base64,AAAA',
+      error: null,
+    });
+    renderPanel(PDF_PREVIEW);
+    expect(screen.queryByTestId('office-pdf-original-frame')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('office-pdf-original-toggle'));
+    await waitFor(() => {
+      expect(mockReadPdfData).toHaveBeenCalledWith({
+        workspace_path: '/tmp/ws',
+        file_path: '/tmp/ws/office/pdf/doc-pdf/scan.pdf',
+      });
+    });
+    const frame = await screen.findByTestId('office-pdf-original-frame');
+    expect(frame).toHaveAttribute('src', 'data:application/pdf;base64,AAAA');
+
+    // 再点一次回到结构视图
+    fireEvent.click(screen.getByTestId('office-pdf-original-toggle'));
+    expect(screen.queryByTestId('office-pdf-original-frame')).toBeNull();
+    expect(screen.getByText('页面文本')).toBeInTheDocument();
+  });
+
+  it('pdf: failed original view toasts and keeps the structured cards', async () => {
+    mockReadPdfData.mockResolvedValueOnce({
+      ok: false,
+      data_url: null,
+      error: 'PDF 超过 20MB 预览上限',
+    });
+    renderPanel(PDF_PREVIEW);
+    fireEvent.click(screen.getByTestId('office-pdf-original-toggle'));
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith('原文预览失败: PDF 超过 20MB 预览上限');
+    });
+    expect(screen.queryByTestId('office-pdf-original-frame')).toBeNull();
+    expect(screen.getByText('页面文本')).toBeInTheDocument();
+  });
 });
 
 describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
   beforeEach(() => {
     mockExportPdf.mockReset();
+    mockReadPdfData.mockReset();
     toastMock.success.mockReset();
     toastMock.error.mockReset();
   });
@@ -279,7 +376,9 @@ describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
     renderPanel(WORD_PREVIEW);
     fireEvent.click(screen.getByTestId('office-export-pdf-button'));
     await waitFor(() => {
-      expect(toastMock.error).toHaveBeenCalledWith('未找到本机转换器（需要 LibreOffice 或 MS Word）');
+      expect(toastMock.error).toHaveBeenCalledWith(
+        '未找到本机转换器（需要 LibreOffice 或 MS Word）',
+      );
     });
     expect(toastMock.success).not.toHaveBeenCalled();
   });

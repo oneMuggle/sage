@@ -7,10 +7,18 @@
  * the ops to a temp COPY — the source file is never touched) and render
  * the resulting change list as a red/green diff.
  *
- * Per doc type (parity scope for this dialog):
- *   Word : replace_text  {find, replace}
- *   Excel: set_cells     {sheet, cells:[{addr, value}]}
- *   PPT  : set_slide_title {index (0-based, from a 1-based input), title}
+ * Per doc type (F2, office-p0: the op-kind selector exposes more of the
+ * backend op surface; the default kind per type keeps parity-batch-2 UX):
+ *   Word : replace_text {find, replace}          (default)
+ *        | append_paragraphs {paragraphs:[{text, heading?}]}
+ *        | set_table_cell {table_index, row, col, text}
+ *        | delete_paragraph {find, all?}
+ *   Excel: set_cells     {sheet, cells:[{addr, value}]}   (default)
+ *        | append_rows   {sheet, rows:[[..],..]}
+ *   PPT  : set_slide_title {index (0-based, from a 1-based input), title} (default)
+ *        | set_slide_bullets {index, bullets}
+ *        | set_slide_notes   {index, notes}
+ *        | append_slide      {title, bullets?, notes?}
  *
  * Apply semantics (round 2, R1): after a successful preview (result.ok)
  * the dialog offers 确认应用 — a deliberate secondary confirm step
@@ -41,12 +49,7 @@ import type {
 } from '../../shared/api/types';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
-export type OfficeEditPreviewPhase =
-  | 'compose'
-  | 'previewing'
-  | 'result'
-  | 'applying'
-  | 'applied';
+export type OfficeEditPreviewPhase = 'compose' | 'previewing' | 'result' | 'applying' | 'applied';
 
 export interface OfficeEditPreviewDialogProps {
   workspacePath: string;
@@ -63,28 +66,87 @@ export interface OfficeEditPreviewDialogProps {
   onClose: () => void;
 }
 
+export type WordEditKind =
+  | 'replace_text'
+  | 'append_paragraphs'
+  | 'set_table_cell'
+  | 'delete_paragraph';
+export type ExcelEditKind = 'set_cells' | 'append_rows';
+export type PptEditKind =
+  | 'set_slide_title'
+  | 'set_slide_bullets'
+  | 'set_slide_notes'
+  | 'append_slide';
+
 interface ComposeState {
+  // op-kind selectors (default per type keeps the batch-2 single-op UX)
+  wordKind: WordEditKind;
+  excelKind: ExcelEditKind;
+  pptKind: PptEditKind;
   // word replace_text
   find: string;
   replace: string;
+  // word append_paragraphs
+  paragraphsText: string;
+  paraHeading: '' | 'h1' | 'h2' | 'h3';
+  // word set_table_cell
+  tableIndex: string;
+  tableRow: string;
+  tableCol: string;
+  tableText: string;
+  // word delete_paragraph
+  deleteFind: string;
+  deleteAll: boolean;
   // excel set_cells
   sheet: string;
   cell: string;
   value: string;
+  // excel append_rows
+  rowsText: string;
   // ppt set_slide_title
   slideNumber: string;
   slideTitle: string;
+  // ppt set_slide_bullets / set_slide_notes
+  bulletsText: string;
+  notesText: string;
+  // ppt append_slide
+  appendTitle: string;
+  appendNotes: string;
 }
 
 const INITIAL_COMPOSE: ComposeState = {
+  wordKind: 'replace_text',
+  excelKind: 'set_cells',
+  pptKind: 'set_slide_title',
   find: '',
   replace: '',
+  paragraphsText: '',
+  paraHeading: '',
+  tableIndex: '0',
+  tableRow: '',
+  tableCol: '',
+  tableText: '',
+  deleteFind: '',
+  deleteAll: false,
   sheet: '',
   cell: '',
   value: '',
+  rowsText: '',
   slideNumber: '1',
   slideTitle: '',
+  bulletsText: '',
+  notesText: '',
+  appendTitle: '',
+  appendNotes: '',
 };
+
+/** 非空行列表 — textarea 多行输入 → string[]（去首尾空白、丢空行）。 */
+function linesOf(text: string): string[] {
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
 
 // Pure op builder exported next to the dialog so tests + callers share
 // one shape (same pattern as useI18n in shared/lib/i18n/index.tsx).
@@ -94,24 +156,82 @@ export function buildUpdateOps(
   state: ComposeState,
 ): OfficeUpdateOp[] | null {
   if (docType === 'word') {
+    if (state.wordKind === 'append_paragraphs') {
+      const lines = linesOf(state.paragraphsText);
+      if (!lines.length) return null;
+      const heading = state.paraHeading;
+      return [
+        {
+          op: 'append_paragraphs',
+          paragraphs: lines.map((text) => (heading ? { text, heading } : { text })),
+        },
+      ];
+    }
+    if (state.wordKind === 'set_table_cell') {
+      const tableIndex = Number(state.tableIndex || '0');
+      const row = Number(state.tableRow);
+      const col = Number(state.tableCol);
+      const text = state.tableText;
+      if (!Number.isInteger(tableIndex) || tableIndex < 0) return null;
+      if (!Number.isInteger(row) || row < 0) return null;
+      if (!Number.isInteger(col) || col < 0) return null;
+      if (!text) return null;
+      return [{ op: 'set_table_cell', table_index: tableIndex, row, col, text }];
+    }
+    if (state.wordKind === 'delete_paragraph') {
+      const find = state.deleteFind.trim();
+      if (!find) return null;
+      const op: OfficeUpdateOp = { op: 'delete_paragraph', find };
+      if (state.deleteAll) op.all = true;
+      return [op];
+    }
     const find = state.find.trim();
     if (!find) return null;
     return [{ op: 'replace_text', find, replace: state.replace }];
   }
   if (docType === 'excel') {
     const sheet = state.sheet.trim();
+    if (state.excelKind === 'append_rows') {
+      const rows = linesOf(state.rowsText).map((line) =>
+        // 一行一条记录；单元格以逗号/中文逗号/Tab 分隔
+        line.split(/[,，\t]/).map((c) => c.trim()),
+      );
+      if (!sheet || !rows.length) return null;
+      return [{ op: 'append_rows', sheet, rows }];
+    }
     const addr = state.cell.trim();
     const value = state.value.trim();
     if (!sheet || !addr || !value) return null;
     return [{ op: 'set_cells', sheet, cells: [{ addr, value }] }];
   }
   if (docType === 'ppt') {
+    if (state.pptKind === 'append_slide') {
+      const title = state.appendTitle.trim();
+      const bullets = linesOf(state.bulletsText);
+      const notes = state.appendNotes.trim();
+      if (!title && !bullets.length && !notes) return null;
+      const op: OfficeUpdateOp = { op: 'append_slide', title, bullets };
+      if (notes) op.notes = notes;
+      return [op];
+    }
     const n = Number(state.slideNumber);
-    const title = state.slideTitle.trim();
-    if (!Number.isInteger(n) || n < 1 || !title) return null;
+    if (!Number.isInteger(n) || n < 1) return null;
     // The UI is 1-based for humans; the backend op index is 0-based
     // (matching read_ppt slide.index).
-    return [{ op: 'set_slide_title', index: n - 1, title }];
+    const index = n - 1;
+    if (state.pptKind === 'set_slide_bullets') {
+      const bullets = linesOf(state.bulletsText);
+      if (!bullets.length) return null;
+      return [{ op: 'set_slide_bullets', index, bullets }];
+    }
+    if (state.pptKind === 'set_slide_notes') {
+      const notes = state.notesText.trim();
+      if (!notes) return null;
+      return [{ op: 'set_slide_notes', index, notes }];
+    }
+    const title = state.slideTitle.trim();
+    if (!title) return null;
+    return [{ op: 'set_slide_title', index, title }];
   }
   return null; // pdf is not editable via this dialog
 }
@@ -190,8 +310,7 @@ export function OfficeEditPreviewDialog({
     setApplied(null);
   };
 
-  const inputClass =
-    'w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text';
+  const inputClass = 'w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text';
 
   // Post-apply count line, e.g. "段落 3 · 表格 1" — empty when the
   // backend reports no counts at all.
@@ -232,36 +351,186 @@ export function OfficeEditPreviewDialog({
             {doc.doc_type === 'word' && (
               <div className="space-y-2" data-testid="office-edit-form-word">
                 <div>
-                  <label className="block text-xs text-muted mb-1">
-                    {t('office.edit.wordFind')}
-                  </label>
-                  <input
-                    type="text"
-                    value={compose.find}
-                    onChange={(e) => setField('find')(e.target.value)}
-                    placeholder={t('office.edit.wordFindPlaceholder')}
+                  <label className="block text-xs text-muted mb-1">{t('office.edit.opKind')}</label>
+                  <select
+                    value={compose.wordKind}
+                    onChange={(e) => setField('wordKind')(e.target.value as WordEditKind)}
                     className={inputClass}
-                    data-testid="office-edit-find"
-                  />
+                    data-testid="office-edit-word-kind"
+                  >
+                    <option value="replace_text">{t('office.edit.kindReplaceText')}</option>
+                    <option value="append_paragraphs">
+                      {t('office.edit.kindAppendParagraphs')}
+                    </option>
+                    <option value="set_table_cell">{t('office.edit.kindSetTableCell')}</option>
+                    <option value="delete_paragraph">{t('office.edit.kindDeleteParagraph')}</option>
+                  </select>
                 </div>
-                <div>
-                  <label className="block text-xs text-muted mb-1">
-                    {t('office.edit.wordReplace')}
-                  </label>
-                  <input
-                    type="text"
-                    value={compose.replace}
-                    onChange={(e) => setField('replace')(e.target.value)}
-                    placeholder={t('office.edit.wordReplacePlaceholder')}
-                    className={inputClass}
-                    data-testid="office-edit-replace"
-                  />
-                </div>
+                {compose.wordKind === 'replace_text' && (
+                  <>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.wordFind')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.find}
+                        onChange={(e) => setField('find')(e.target.value)}
+                        placeholder={t('office.edit.wordFindPlaceholder')}
+                        className={inputClass}
+                        data-testid="office-edit-find"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.wordReplace')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.replace}
+                        onChange={(e) => setField('replace')(e.target.value)}
+                        placeholder={t('office.edit.wordReplacePlaceholder')}
+                        className={inputClass}
+                        data-testid="office-edit-replace"
+                      />
+                    </div>
+                  </>
+                )}
+                {compose.wordKind === 'append_paragraphs' && (
+                  <>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.paragraphs')}
+                      </label>
+                      <textarea
+                        value={compose.paragraphsText}
+                        onChange={(e) => setField('paragraphsText')(e.target.value)}
+                        rows={4}
+                        className={inputClass}
+                        data-testid="office-edit-paragraphs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.paraHeading')}
+                      </label>
+                      <select
+                        value={compose.paraHeading}
+                        onChange={(e) =>
+                          setField('paraHeading')(e.target.value as ComposeState['paraHeading'])
+                        }
+                        className={inputClass}
+                        data-testid="office-edit-para-heading"
+                      >
+                        <option value="">{t('office.edit.headingNone')}</option>
+                        <option value="h1">h1</option>
+                        <option value="h2">h2</option>
+                        <option value="h3">h3</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+                {compose.wordKind === 'set_table_cell' && (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.tableIndex')}
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={compose.tableIndex}
+                          onChange={(e) => setField('tableIndex')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-table-index"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.tableRow')}
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={compose.tableRow}
+                          onChange={(e) => setField('tableRow')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-table-row"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.tableCol')}
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={compose.tableCol}
+                          onChange={(e) => setField('tableCol')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-table-col"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.tableText')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.tableText}
+                        onChange={(e) => setField('tableText')(e.target.value)}
+                        className={inputClass}
+                        data-testid="office-edit-table-text"
+                      />
+                    </div>
+                  </>
+                )}
+                {compose.wordKind === 'delete_paragraph' && (
+                  <>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.wordFind')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.deleteFind}
+                        onChange={(e) => setField('deleteFind')(e.target.value)}
+                        placeholder={t('office.edit.deleteFindPlaceholder')}
+                        className={inputClass}
+                        data-testid="office-edit-delete-find"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-xs text-text-secondary">
+                      <input
+                        type="checkbox"
+                        checked={compose.deleteAll}
+                        onChange={(e) => setCompose((p) => ({ ...p, deleteAll: e.target.checked }))}
+                        className="accent-primary"
+                        data-testid="office-edit-delete-all"
+                      />
+                      {t('office.edit.deleteAll')}
+                    </label>
+                  </>
+                )}
               </div>
             )}
 
             {doc.doc_type === 'excel' && (
               <div className="space-y-2" data-testid="office-edit-form-excel">
+                <div>
+                  <label className="block text-xs text-muted mb-1">{t('office.edit.opKind')}</label>
+                  <select
+                    value={compose.excelKind}
+                    onChange={(e) => setField('excelKind')(e.target.value as ExcelEditKind)}
+                    className={inputClass}
+                    data-testid="office-edit-excel-kind"
+                  >
+                    <option value="set_cells">{t('office.edit.kindSetCells')}</option>
+                    <option value="append_rows">{t('office.edit.kindAppendRows')}</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs text-muted mb-1">
                     {t('office.edit.excelSheet')}
@@ -289,64 +558,165 @@ export function OfficeEditPreviewDialog({
                     />
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                {compose.excelKind === 'set_cells' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.excelCell')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.cell}
+                        onChange={(e) => setField('cell')(e.target.value)}
+                        placeholder={t('office.edit.excelCellPlaceholder')}
+                        className={inputClass}
+                        data-testid="office-edit-cell"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.excelValue')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.value}
+                        onChange={(e) => setField('value')(e.target.value)}
+                        placeholder={t('office.edit.excelValuePlaceholder')}
+                        className={inputClass}
+                        data-testid="office-edit-value"
+                      />
+                    </div>
+                  </div>
+                )}
+                {compose.excelKind === 'append_rows' && (
                   <div>
-                    <label className="block text-xs text-muted mb-1">
-                      {t('office.edit.excelCell')}
-                    </label>
-                    <input
-                      type="text"
-                      value={compose.cell}
-                      onChange={(e) => setField('cell')(e.target.value)}
-                      placeholder={t('office.edit.excelCellPlaceholder')}
+                    <label className="block text-xs text-muted mb-1">{t('office.edit.rows')}</label>
+                    <textarea
+                      value={compose.rowsText}
+                      onChange={(e) => setField('rowsText')(e.target.value)}
+                      rows={4}
                       className={inputClass}
-                      data-testid="office-edit-cell"
+                      data-testid="office-edit-rows"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs text-muted mb-1">
-                      {t('office.edit.excelValue')}
-                    </label>
-                    <input
-                      type="text"
-                      value={compose.value}
-                      onChange={(e) => setField('value')(e.target.value)}
-                      placeholder={t('office.edit.excelValuePlaceholder')}
-                      className={inputClass}
-                      data-testid="office-edit-value"
-                    />
-                  </div>
-                </div>
+                )}
               </div>
             )}
 
             {doc.doc_type === 'ppt' && (
               <div className="space-y-2" data-testid="office-edit-form-ppt">
                 <div>
-                  <label className="block text-xs text-muted mb-1">
-                    {t('office.edit.pptSlideNumber')}
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={compose.slideNumber}
-                    onChange={(e) => setField('slideNumber')(e.target.value)}
+                  <label className="block text-xs text-muted mb-1">{t('office.edit.opKind')}</label>
+                  <select
+                    value={compose.pptKind}
+                    onChange={(e) => setField('pptKind')(e.target.value as PptEditKind)}
                     className={inputClass}
-                    data-testid="office-edit-slide-number"
-                  />
+                    data-testid="office-edit-ppt-kind"
+                  >
+                    <option value="set_slide_title">{t('office.edit.kindSetTitle')}</option>
+                    <option value="set_slide_bullets">{t('office.edit.kindSetBullets')}</option>
+                    <option value="set_slide_notes">{t('office.edit.kindSetNotes')}</option>
+                    <option value="append_slide">{t('office.edit.kindAppendSlide')}</option>
+                  </select>
                 </div>
-                <div>
-                  <label className="block text-xs text-muted mb-1">
-                    {t('office.edit.pptTitle')}
-                  </label>
-                  <input
-                    type="text"
-                    value={compose.slideTitle}
-                    onChange={(e) => setField('slideTitle')(e.target.value)}
-                    className={inputClass}
-                    data-testid="office-edit-slide-title"
-                  />
-                </div>
+                {compose.pptKind === 'append_slide' ? (
+                  <>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.appendTitle')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.appendTitle}
+                        onChange={(e) => setField('appendTitle')(e.target.value)}
+                        className={inputClass}
+                        data-testid="office-edit-append-title"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.bullets')}
+                      </label>
+                      <textarea
+                        value={compose.bulletsText}
+                        onChange={(e) => setField('bulletsText')(e.target.value)}
+                        rows={3}
+                        className={inputClass}
+                        data-testid="office-edit-bullets"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.notes')}
+                      </label>
+                      <textarea
+                        value={compose.appendNotes}
+                        onChange={(e) => setField('appendNotes')(e.target.value)}
+                        rows={2}
+                        className={inputClass}
+                        data-testid="office-edit-append-notes"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.pptSlideNumber')}
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={compose.slideNumber}
+                        onChange={(e) => setField('slideNumber')(e.target.value)}
+                        className={inputClass}
+                        data-testid="office-edit-slide-number"
+                      />
+                    </div>
+                    {compose.pptKind === 'set_slide_title' && (
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.pptTitle')}
+                        </label>
+                        <input
+                          type="text"
+                          value={compose.slideTitle}
+                          onChange={(e) => setField('slideTitle')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-slide-title"
+                        />
+                      </div>
+                    )}
+                    {compose.pptKind === 'set_slide_bullets' && (
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.bullets')}
+                        </label>
+                        <textarea
+                          value={compose.bulletsText}
+                          onChange={(e) => setField('bulletsText')(e.target.value)}
+                          rows={4}
+                          className={inputClass}
+                          data-testid="office-edit-bullets"
+                        />
+                      </div>
+                    )}
+                    {compose.pptKind === 'set_slide_notes' && (
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.notes')}
+                        </label>
+                        <textarea
+                          value={compose.notesText}
+                          onChange={(e) => setField('notesText')(e.target.value)}
+                          rows={3}
+                          className={inputClass}
+                          data-testid="office-edit-notes"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
@@ -405,9 +775,7 @@ export function OfficeEditPreviewDialog({
                   className="w-full px-4 py-2 bg-primary text-text-inverse rounded text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
                   data-testid="office-edit-apply"
                 >
-                  {phase === 'applying'
-                    ? t('office.edit.applying')
-                    : t('office.edit.apply')}
+                  {phase === 'applying' ? t('office.edit.applying') : t('office.edit.apply')}
                 </button>
               </div>
             )}

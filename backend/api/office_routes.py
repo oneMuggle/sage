@@ -17,6 +17,7 @@ startup so other routers aren't affected.
 
 from __future__ import annotations
 
+import base64
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
@@ -79,6 +80,8 @@ from backend.office.models import (
     OfficeTemplateInstantiateRequest,
     OfficeWordGenerateRequest,
     OfficeWordReadResult,
+    PdfDataRequest,
+    PdfDataResult,
     PdfFormFillRequest,
     PdfFormFillResult,
     PdfFormReadRequest,
@@ -734,6 +737,38 @@ def read_pdf_endpoint(req: PdfReadRequest) -> PdfReadResult:
         original_filename=None,
     )
     return result
+
+
+#: F3 (office-p0): 原文预览上限 —— 与 chat 产物侧 artifact_reader.MAX_PDF_BYTES
+#: 同口径（过大 PDF base64 化既撑爆响应也拖垮 renderer）。
+MAX_PDF_DATA_BYTES = 20_000_000
+
+
+@router.post("/pdf/data", response_model=PdfDataResult)
+def pdf_data_endpoint(req: PdfDataRequest) -> PdfDataResult:
+    """受管 PDF 原文 base64 预览（/office 页面"原文预览"开关）。
+
+    返回 ``data:application/pdf`` URL，前端 iframe 交给 Chromium 内置
+    viewer 渲染——与聊天产物侧同一条高保真通路。预期内失败（越界 /
+    超限 / 不可读）返回 ``ok=False``，不抛 HTTP 异常，前端回落结构化
+    页卡片视图。路径校验复用 ``_validate_file_in_workspace``（renderer
+    IPC 与任意本地文件读之间的唯一屏障）。
+    """
+    try:
+        file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+        if file_path.stat().st_size > MAX_PDF_DATA_BYTES:
+            return PdfDataResult(
+                ok=False, error="PDF 超过 20MB 预览上限，请在文件管理器中查看"
+            )
+        data = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        return PdfDataResult(ok=True, data_url=f"data:application/pdf;base64,{data}")
+    except OfficeError as exc:
+        # 泛化错误信息防路径泄露（与 pdf.py 的错误口径一致）。
+        logger.warning("pdf/data preview rejected: %s", exc)
+        return PdfDataResult(ok=False, error="文件不可预览（路径无效或超出工作区）")
+    except OSError:
+        logger.warning("pdf/data preview failed to read: %s", req.file_path)
+        return PdfDataResult(ok=False, error="文件读取失败")
 
 
 @router.post("/pdf/generate", response_model=PdfGenerateResult)
