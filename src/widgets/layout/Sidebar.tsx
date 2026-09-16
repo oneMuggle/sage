@@ -20,6 +20,7 @@ import { useQuestionState } from '../../entities/question/questionState';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { testEndpointConnection } from '../../features/manage-endpoints/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
+import { deleteSessionCascade } from '../../features/send-message/useChat';
 import { sessionApi } from '../../shared/api/sessionApi';
 import { useStoredSiderOrder } from '../../shared/lib/dnd/useStoredSiderOrder';
 import { unlockFeature, useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
@@ -93,7 +94,6 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
     currentSessionId,
     setCurrentSessionId,
     loadSessions,
-    deleteSession,
     updateSession,
   } = useStore();
   const { settings } = useSettings();
@@ -230,7 +230,7 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
             collapsed={isCollapsed}
             onToggleCollapsed={() => toggleCollapsed(key)}
             onSelect={handleOpenSession}
-            onDelete={(id) => deleteSession(id)}
+            onDelete={(id) => void deleteSessionCascade(id)}
             onNewSession={handleNewSession}
             onRename={handleRenameSession}
             onOrderChange={(newOrder) => {

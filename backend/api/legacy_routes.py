@@ -840,7 +840,11 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
     统一 try/except：压缩失败只记日志，绝不阻塞聊天。
     """
     message_repo = MessageRepository()
-    messages = message_repo.get_by_session(session_id, limit=100000)
+    # 2026-09 修复: producer 是 async task, 全量历史读是秒级同步 IO,
+    # 直接跑在事件循环上会冻结所有并发流的 NDJSON attach 与 HTTP 路由。
+    messages = await asyncio.to_thread(
+        lambda: message_repo.get_by_session(session_id, limit=100000)
+    )
     if not should_compact(messages):
         return
 
@@ -858,7 +862,9 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
         return
 
     new_messages, removed_count = await compact_messages(messages, llm_complete)
-    after = _persist_compaction(session_id, messages, new_messages, removed_count)
+    after = await asyncio.to_thread(
+        lambda: _persist_compaction(session_id, messages, new_messages, removed_count)
+    )
     logger.info(
         "[M4] session=%s 自动压缩完成: removed=%s after=%s",
         _safe_log_field(session_id),
@@ -2142,7 +2148,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 刻意 new 一个独立实例而非用下方 producer 内的 session_repo 变量 ——
             # 那个变量在数百行之后才绑定，早期失败路径 finally 会 UnboundLocalError。
             try:
-                SessionRepository().update_run_status(data.session_id, "running")
+                await asyncio.to_thread(
+                    SessionRepository().update_run_status, data.session_id, "running"
+                )
             except Exception as status_err:  # noqa: BLE001 — fail-open
                 logger.debug("会话运行态(running)写入失败: %s", status_err)
 
@@ -2823,8 +2831,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 消息尚未落盘(落盘在下方),历史天然不含本轮消息。历史加载失败时
             # 降级为无历史的旧行为,绝不阻断聊天。
             try:
-                history_rows = MessageRepository().get_by_session(
-                    data.session_id, limit=100000
+                history_rows = await asyncio.to_thread(
+                    lambda: MessageRepository().get_by_session(
+                        data.session_id, limit=100000
+                    )
                 )
             except Exception as hist_err:
                 logger.warning(
@@ -3169,8 +3179,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         str(_exc_info[1]) if _exc_info and _exc_info[0] else "运行失败"
                     )
             try:
-                SessionRepository().update_run_status(
-                    data.session_id, _terminal_status, _terminal_error
+                await asyncio.to_thread(
+                    SessionRepository().update_run_status,
+                    data.session_id,
+                    _terminal_status,
+                    _terminal_error,
                 )
             except Exception as status_err:  # noqa: BLE001 — fail-open
                 logger.debug("会话运行态(%s)写入失败: %s", _terminal_status, status_err)
