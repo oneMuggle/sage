@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import abc
-import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, ClassVar, Dict, List, Optional
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
