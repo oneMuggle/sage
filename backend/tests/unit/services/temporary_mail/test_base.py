@@ -43,3 +43,17 @@ def test_code_extraction_regex_finds_6_digit_code():
     assert pattern.search("Your verification code is 123456")
     assert pattern.search("Verify your email")
     assert pattern.search("Your Arena code: 987654")
+
+
+def test_mailbox_repr_hides_credentials():
+    """VULN-02 regression: Mailbox repr must not expose password/provider_token."""
+    m = Mailbox(
+        email="user@temp.example",
+        password="sekret",
+        provider_token="provider_tok_xyz",
+        provider="mailtm",
+    )
+    text = repr(m)
+    assert "sekret" not in text
+    assert "provider_tok_xyz" not in text
+    assert "user@temp.example" in text

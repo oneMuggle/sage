@@ -20,8 +20,27 @@ from enum import Enum
 from typing import Dict, List, Optional
 
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 logger = logging.getLogger(__name__)
+
+
+def derive_arena_key(token: str, machine_id: str) -> bytes:
+    """Derive a Fernet-compatible key per Spec §7.1.
+
+    Uses PBKDF2-HMAC-SHA256 with the machine_id as salt and 480,000 iterations,
+    producing a 32-byte key that is urlsafe-base64 encoded for Fernet consumption.
+    """
+    import base64
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=machine_id.encode("utf-8"),
+        iterations=480_000,
+    )
+    raw = kdf.derive(token.encode("utf-8"))
+    return base64.urlsafe_b64encode(raw)
 
 
 class AccountState(Enum):

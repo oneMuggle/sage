@@ -9,10 +9,10 @@ from cryptography.fernet import Fernet
 
 from backend.services.arena_accounts import ArenaAccountService
 from backend.services.arena_adapter import ArenaAdapter, ThinkingFilter
-from backend.services.temporary_mail.base import Mailbox
+from backend.services.temporary_mail.base import Mailbox, TemporaryMailProvider
 
 
-class FakeMailProvider:
+class FakeMailProvider(TemporaryMailProvider):
     """Returns a fixed mailbox and a pre-canned code after one poll."""
     name = "fake"
 
@@ -36,6 +36,9 @@ class FakeMailProvider:
 
     async def destroy_mailbox(self, mailbox):
         self.destroyed.append(mailbox)
+
+    async def _fetch_messages(self, mailbox, since_timestamp=None):
+        return []
 
 
 class FakeBrowserSession:

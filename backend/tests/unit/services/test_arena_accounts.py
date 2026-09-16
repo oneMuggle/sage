@@ -78,3 +78,18 @@ def test_soft_delete_sets_destroyed(svc):
     svc.soft_delete_account(acc["id"])
     final = svc.get_account(acc["id"])
     assert final["state"] == AccountState.DESTROYED.value
+
+
+def test_derive_arena_key_is_stable_and_fernet_compatible():
+    """SPEC-GAP-01 regression: PBKDF2 derivation produces stable Fernet keys."""
+    from backend.services.arena_accounts import derive_arena_key
+    from cryptography.fernet import Fernet
+
+    k1 = derive_arena_key(token="shared-token", machine_id="machine-abc")
+    k2 = derive_arena_key(token="shared-token", machine_id="machine-abc")
+    assert k1 == k2
+    # Different inputs → different keys
+    k3 = derive_arena_key(token="other", machine_id="machine-abc")
+    assert k1 != k3
+    # Fernet must accept the derived key
+    Fernet(k1)

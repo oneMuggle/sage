@@ -13,7 +13,7 @@ import json
 import logging
 import shutil
 import subprocess
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from .model_probe_py.classify import (
     SOURCE_WEIGHTS, resolveEvidence, vendorFromUrl,
@@ -49,7 +49,7 @@ class ModelProbeWorker:
         self._node_command = node_command or ["node"]
         self._proc: Optional[subprocess.Popen] = None
 
-    def classify(self, evidence: Dict) -> Dict:
+    def classify(self, evidence: Union[Dict, List[Dict]]) -> Dict:
         if self._backend == "node":
             return self._classify_via_node(evidence)
         return self._classify_in_process(evidence)
@@ -71,12 +71,24 @@ class ModelProbeWorker:
 
     # -- internal ----------------------------------------------------------
 
-    def _classify_in_process(self, evidence: Dict) -> Dict:
+    def _classify_in_process(self, evidence: Union[Dict, List[Dict]]) -> Dict:
         if not evidence:
             return {
                 "modelId": None, "family": None, "confidence": 0.0,
                 "source": None, "evidence_count": 0,
             }
+        if isinstance(evidence, list):
+            # Resolve UUIDs in any evidence items that have modelId
+            processed = []
+            for item in evidence:
+                if isinstance(item, dict):
+                    ev = dict(item)
+                    if ev.get("modelId"):
+                        ev["modelId"] = resolveModelId(ev["modelId"])
+                    processed.append(ev)
+            return resolveEvidence(processed)
+
+        # Single Dict flow
         # Resolve UUID to model name via idmap
         if evidence.get("modelId"):
             evidence = dict(evidence)
@@ -98,7 +110,7 @@ class ModelProbeWorker:
             "source": evidence.get("source"), "evidence_count": 0,
         }
 
-    def _classify_via_node(self, evidence: Dict) -> Dict:
+    def _classify_via_node(self, evidence: Union[Dict, List[Dict]]) -> Dict:
         if self._proc is None or self._proc.poll() is not None:
             self._start_node_proc()
         assert self._proc is not None

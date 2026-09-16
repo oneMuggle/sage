@@ -58,7 +58,9 @@ def test_get_account_returns_decrypted(client):
     acc_id = r.json()["id"]
     r2 = client.get(f"/api/v1/arena/accounts/{acc_id}")
     assert r2.status_code == 200
-    assert r2.json()["password"] == "secret"
+    # password is stripped from API responses (VULN-01 fix)
+    assert "password" not in r2.json()
+    assert r2.json()["email"] == "y@example.com"
 
 
 def test_soft_delete_account(client):
@@ -204,3 +206,25 @@ def test_get_stats_endpoint(client):
     # nonexistent account returns 404
     r2 = client.get("/api/v1/arena/accounts/nonexistent-id/stats")
     assert r2.status_code == 404
+
+
+def test_api_responses_never_leak_password(client):
+    """VULN-01 regression: password must be stripped from every endpoint."""
+    r1 = client.post(
+        "/api/v1/arena/accounts",
+        json={"email": "leak@example.com", "password": "sekret"},
+    )
+    assert "password" not in r1.json()
+    acc_id = r1.json()["id"]
+    # list
+    r2 = client.get("/api/v1/arena/accounts")
+    assert all("password" not in a for a in r2.json())
+    # get
+    r3 = client.get(f"/api/v1/arena/accounts/{acc_id}")
+    assert "password" not in r3.json()
+    # isolate
+    r4 = client.post(f"/api/v1/arena/accounts/{acc_id}/isolate")
+    assert "password" not in r4.json()
+    # enable
+    r5 = client.post(f"/api/v1/arena/accounts/{acc_id}/enable")
+    assert "password" not in r5.json()

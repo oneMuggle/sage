@@ -48,3 +48,15 @@ def test_python_backend_resolves_uuid_via_idmap():
         assert verdict["modelId"] in ("uuid-test-1234-5678-9abc-def012345678", "gpt-6-astra-high")
     finally:
         idmap._model_map.clear()
+
+
+def test_python_backend_classify_accepts_list_input():
+    """CONTRACT-01 regression: classify() accepts Union[Dict, List[Dict]]."""
+    w = ModelProbeWorker(backend="python")
+    evidence = [
+        {"source": "request.body.model", "modelId": "gpt-4o"},
+        {"source": "protocol.framing", "family": "openai"},
+    ]
+    verdict = w.classify(evidence)
+    assert verdict["modelId"] == "gpt-4o" or verdict["family"] == "openai"
+    assert verdict["confidence"] >= 0.0

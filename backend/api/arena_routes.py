@@ -36,6 +36,12 @@ class CreateAccountRequest(BaseModel):
     notes: Optional[str] = None
 
 
+def _strip_password(acc: Optional[dict]) -> Optional[dict]:
+    if acc is None:
+        return None
+    return {k: v for k, v in acc.items() if k != "password"}
+
+
 def init_arena_service(
     db_path: str,
     encryption_key: bytes,
@@ -76,9 +82,10 @@ def create_account(
             detail=f"max_accounts ({_config.max_accounts}) reached",
         )
     try:
-        return svc.create_account(email=body.email, password=body.password, notes=body.notes)
+        acc = svc.create_account(email=body.email, password=body.password, notes=body.notes)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    return _strip_password(acc)
 
 
 @router.get("/accounts")
@@ -92,8 +99,8 @@ def list_accounts(
             state_enum = AccountState(state)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"invalid state: {state}")
-        return svc.list_accounts(state=state_enum)
-    return svc.list_accounts()
+        return [_strip_password(a) for a in svc.list_accounts(state=state_enum)]
+    return [_strip_password(a) for a in svc.list_accounts()]
 
 
 @router.get("/accounts/{account_id}")
@@ -105,7 +112,7 @@ def get_account(
     acc = svc.get_account(account_id)
     if acc is None:
         raise HTTPException(status_code=404, detail="account not found")
-    return acc
+    return _strip_password(acc)
 
 
 @router.delete("/accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -132,7 +139,7 @@ def isolate_account(
     # bump count past threshold
     while svc.get_account(account_id)["state"] != AccountState.DISABLED.value:
         svc.record_failure(account_id, reason="manual_isolate")
-    return svc.get_account(account_id)
+    return _strip_password(svc.get_account(account_id))
 
 
 @router.post("/accounts/{account_id}/enable")
@@ -144,7 +151,7 @@ def enable_account(
     if svc.get_account(account_id) is None:
         raise HTTPException(status_code=404, detail="account not found")
     svc.enable_account(account_id)
-    return svc.get_account(account_id)
+    return _strip_password(svc.get_account(account_id))
 
 
 @router.get("/accounts/{account_id}/stats")

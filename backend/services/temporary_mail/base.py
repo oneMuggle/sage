@@ -13,8 +13,8 @@ from typing import Any, ClassVar, Dict, List, Optional
 class Mailbox:
     """A disposable email address obtained from a provider."""
     email: str
-    password: str
-    provider_token: str
+    password: str = field(repr=False)
+    provider_token: str = field(repr=False)
     provider: str
     created_at: datetime = field(default_factory=datetime.utcnow)
 
