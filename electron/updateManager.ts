@@ -23,6 +23,8 @@ export interface CheckResult {
   version?: string;
   releaseNotes?: string;
   downloadUrl?: string;
+  /** Provider/legacy check failure message — surfaced to the settings UI. */
+  error?: string;
 }
 
 interface SemVer {
@@ -311,7 +313,7 @@ export class UpdateManager {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       logger.error?.('Provider checkForUpdates failed', e);
-      return { updateAvailable: false, error: message } as CheckResult;
+      return { updateAvailable: false, error: message };
     }
   }
 

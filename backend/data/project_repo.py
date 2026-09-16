@@ -250,6 +250,39 @@ def open_project(
     return project, session, True
 
 
+def create_session_for_project(
+    project_id: str, now_ms: Optional[int] = None
+) -> Tuple[Project, Session]:
+    """在项目下显式新建一个绑定会话（项目行 hover + 「新建会话」按钮）。
+
+    与 ``open_project`` 的区别：不做「最近活跃会话复用」，永远新建。
+    其余语义（目录缺失 → ProjectPathMissingError → 路由层 410、绑定
+    工作区、刷新 last_opened_at）与 open_project 同口径。
+    """
+    repo = ProjectRepository()
+    project = repo.get(project_id)
+    if project is None:
+        raise ProjectNotFoundError(f"Project '{project_id}' is not registered")
+
+    try:
+        validate_workspace(Path(project.path))
+    except OfficePathError as exc:
+        raise ProjectPathMissingError(
+            f"Project directory is missing on disk: {project.path}"
+        ) from exc
+
+    repo.touch(project_id, now_ms)
+
+    session = SessionRepository().create(title=project.name)
+    bind_session_workspace(
+        get_database().get_connection(), session.id, project.path, now_ms=now_ms
+    )
+    logger.info(
+        "project create_session: 新建会话 %s 绑定项目 %s", session.id, project.path
+    )
+    return project, session
+
+
 def register_quietly(path: str, now_ms: Optional[int] = None) -> Optional[Project]:
     """容错登记：失败记日志返回 None，绝不抛（供跨域写侧联动使用）。
 
@@ -270,6 +303,7 @@ __all__ = [
     "ProjectNotFoundError",
     "ProjectPathMissingError",
     "ProjectRepository",
+    "create_session_for_project",
     "open_project",
     "register_quietly",
 ]

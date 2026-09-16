@@ -56,6 +56,10 @@ _CONTEXT_OVERFLOW_MARKERS = (
     "exceeds the maximum",
     "reduce the length",
     "input length exceeds",
+    # LLM 代理(llm_proxy_routes)对上游 4xx 做脱敏后只保留结构化的
+    # detail.type;命中溢出特征串时代理把它标为 "context_overflow"。
+    # 这里认得该标记, 走代理的链路才能触发溢出急救压缩。
+    "context_overflow",
 )
 
 
@@ -569,7 +573,9 @@ class LLMClient:
         if msg_data.get("tool_calls"):
             tool_calls = self._parse_tool_calls(msg_data["tool_calls"])
 
-        usage = data.get("usage", {})
+        # 部分网关/内容过滤响应会带 "usage": null — `data.get("usage", {})`
+        # 拿到 None, 下方 usage.get(...) 抛 AttributeError 绕过全部重试分类。
+        usage = data.get("usage") or {}
 
         # ===== M6 USAGE BEGIN: 规范化 usage + 记录到全局 tracker =====
         # tracker 故障永不影响 chat 返回 (fail-open)。
@@ -811,17 +817,20 @@ class LLMClient:
                         and self.config.fallback_model
                         and self.config.fallback_model != body.get("model")
                     )
+                    # 已产出增量后失败无法安全重放：调用方（agent.run_loop 的
+                    # _saw_content_delta 契约）已把前一段增量实时下发给用户，
+                    # 换模型从零重放会造成内容重复/拼接错乱 — 无条件终止。
+                    if not nothing_yielded:
+                        raise
                     if (
                         attempt >= max_attempts
                         or llm_err.type not in _RETRYABLE_ERROR_TYPES
-                        or not nothing_yielded
                     ):
                         # D-1 (round5 批次 D): 主模型重试耗尽且未产出任何增量 →
                         # 降级 fallback_model 再来一轮（每实例至多一次）。
-                        if (
-                            not nothing_yielded
-                            or llm_err.type not in _RETRYABLE_ERROR_TYPES
-                        ) and can_fallback:
+                        # 与 chat() 同口径：仅对可重试类型的失败降级；
+                        # 鉴权/参数类错误换模型也无济于事，直接 raise。
+                        if can_fallback and llm_err.type in _RETRYABLE_ERROR_TYPES:
                             fallback_used = True
                             body["model"] = self.config.fallback_model
                             attempt = 0

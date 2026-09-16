@@ -116,7 +116,12 @@ def test_legal_model_selections_obj_keys_is_stable() -> None:
 
 
 def test_legal_orch_keys_is_stable() -> None:
-    """LEGAL_ORCH_KEYS 是前端 OrchSettings 7 键（含 scratchRoot，后端存）。"""
+    """LEGAL_ORCH_KEYS 是前端 OrchSettings 10 键（含 scratchRoot，后端存）。
+
+    2026-09 修复: 前端 OrchSettings 演进出 worktreeIsolation /
+    subagentApprovalMode / runTokenBudget 三键, 白名单未跟导致编排设置
+    保存整体 400 (且被前端静默吞掉)。此测试钉住同步义务。
+    """
     assert frozenset(
         {
             "maxConcurrentSubagents",
@@ -125,6 +130,9 @@ def test_legal_orch_keys_is_stable() -> None:
             "maxRetries",
             "maxLaneIterations",
             "maxSubagentIterations",
+            "worktreeIsolation",
+            "subagentApprovalMode",
+            "runTokenBudget",
             "scratchRoot",
         }
     ) == LEGAL_ORCH_KEYS
@@ -142,6 +150,9 @@ def test_aliases_camel_side_subset_of_legal_keys() -> None:
         | LEGAL_MODEL_SELECTIONS_KEYS
         | LEGAL_DISCOVERED_MODEL_KEYS
         | LEGAL_WIKI_KEYS
+        # 2026-09 修复: orch 子层键进入 ALIASES (worktree_isolation 等),
+        # 并集必须包含 LEGAL_ORCH_KEYS, 否则合法翻译被判为非法。
+        | LEGAL_ORCH_KEYS
     )
     aliases_camel_side = frozenset(ALIASES.values())
     missing = aliases_camel_side - all_legal_camel

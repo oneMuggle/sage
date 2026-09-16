@@ -192,6 +192,7 @@ async def test_sweep_expired_removes_stale_entries():
     reg = StreamRegistry()
     old_entry = await reg.create("old", queue_maxsize=10)
     old_entry.created_at = time.time() - 1000  # 假装 1000 秒前创建
+    old_entry.last_activity_at = time.time() - 1000
     fresh_entry = await reg.create("fresh", queue_maxsize=10)
     # 标记为 done 防止 pop_if_done 的 done 检查干预
     old_entry.status = "done"
@@ -199,6 +200,62 @@ async def test_sweep_expired_removes_stale_entries():
     await reg.sweep_expired(max_age_seconds=60)
     assert reg.get("old") is None
     assert reg.get("fresh") is not None
+
+
+@pytest.mark.asyncio()
+async def test_sweep_does_not_kill_active_running_stream():
+    """修复回归：running 流按"最后事件"而非"创建时间"判断。
+
+    深度 agent run / 编排确认门(600s)期间合法静默 >300s，
+    旧实现按 created_at 300s 强杀 → 前端无声断流。
+    """
+    reg = StreamRegistry()
+    entry = await reg.create("long-run", queue_maxsize=10)
+    entry.status = "running"
+    entry.created_at = time.time() - 3600  # 创建于 1 小时前
+    entry.last_activity_at = time.time() - 400  # 但 400s 前仍有事件
+    await reg.sweep_expired(max_age_seconds=300, running_idle_seconds=900)
+    assert reg.get("long-run") is not None
+
+
+@pytest.mark.asyncio()
+async def test_sweep_exempts_suspended_streams():
+    """A4 挂起的流在等 wake，不属于孤儿，不得回收。"""
+    reg = StreamRegistry()
+    entry = await reg.create("nap", queue_maxsize=10)
+    entry.status = "suspended"
+    entry.suspended = True
+    entry.created_at = time.time() - 7200
+    entry.last_activity_at = time.time() - 7200
+    await reg.sweep_expired(max_age_seconds=300, running_idle_seconds=900)
+    assert reg.get("nap") is not None
+
+
+@pytest.mark.asyncio()
+async def test_sweep_reaps_unclaimed_zombie_running_stream():
+    """无人认领(无 subscriber)且长时间无事件的 running 流才被回收。"""
+    reg = StreamRegistry()
+    zombie = await reg.create("zombie", queue_maxsize=10)
+    zombie.status = "running"
+    zombie.last_activity_at = time.time() - 1800
+    attached = await reg.create("attached", queue_maxsize=10)
+    attached.status = "running"
+    attached.last_activity_at = time.time() - 1800
+    q = await reg.subscribe("attached")  # 有订阅者的不被回收
+    assert q is not None
+    removed = await reg.sweep_expired(max_age_seconds=300, running_idle_seconds=900)
+    assert removed == 1
+    assert reg.get("zombie") is None
+    assert reg.get("attached") is not None
+
+
+@pytest.mark.asyncio()
+async def test_queue_put_updates_last_activity():
+    reg = StreamRegistry()
+    entry = await reg.create("act", queue_maxsize=10)
+    entry.last_activity_at = time.time() - 500
+    await entry.queue.put(_make_event("x"))
+    assert entry.queue.last_activity_at > time.time() - 5
 
 
 @pytest.mark.asyncio()

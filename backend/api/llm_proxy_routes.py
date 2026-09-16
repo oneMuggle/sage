@@ -37,7 +37,9 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import contextlib
 import hmac
+import json
 import logging
 import os
 import posixpath
@@ -59,6 +61,7 @@ from fastapi.responses import StreamingResponse
 from httpcore._backends.auto import AutoBackend
 
 from backend.api.local_auth import get_local_auth_token
+from backend.core.legacy.llm_client import _is_context_overflow_text
 from backend.services.llm_trace.recorder import LlmTraceRecorder, TraceRecord
 
 logger = logging.getLogger(__name__)
@@ -675,9 +678,20 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
     # 触发条件(任一):
     #   1. Accept 头含 text/event-stream (SSE 标准)
     #   2. query string `stream=true` (OpenAI 流式 chat completion 约定)
+    #   3. JSON body 里 "stream": true —— v3 修复: LLMClient.chat_stream 只把
+    #      stream 标记放在 body 里, 不设 Accept 头也不带 query; 旧判定两者都
+    #      看唯独不看 body, 导致生产链路所有流式请求被静默降级为整包缓冲。
     accept = request.headers.get("accept", "")
+    body_wants_stream = False
+    if body:
+        with contextlib.suppress(Exception):
+            body_wants_stream = bool(
+                json.loads(body.decode("utf-8", errors="replace")).get("stream")
+            )
     is_streaming = (
-        "text/event-stream" in accept.lower() or request.query_params.get("stream") == "true"
+        "text/event-stream" in accept.lower()
+        or request.query_params.get("stream") == "true"
+        or body_wants_stream
     )
 
     # 5. 代理请求
@@ -811,10 +825,20 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
         ) from exc
 
     if not upstream_resp.is_success:
+        # v3: 上游 4xx/5xx 的原始 body 被脱敏丢弃, LLMClient 侧的溢出特征串
+        # 分类因此永远命不中, 上下文溢出急救压缩在生产链路失效。这里对
+        # 响应体做特征串检测, 命中则把结构化 type 升级为 context_overflow
+        # (message 仍保持脱敏), LLMClient 认得该标记并映射 CONTEXT_OVERFLOW。
+        error_type = "upstream_error"
+        with contextlib.suppress(Exception):
+            if _is_context_overflow_text(
+                response_body.decode("utf-8", errors="replace")
+            ):
+                error_type = "context_overflow"
         raise HTTPException(
             status_code=upstream_resp.status_code,
             detail={
-                "type": "upstream_error",
+                "type": error_type,
                 "message": _safe_upstream_error_message(upstream_resp.status_code),
             },
         )
