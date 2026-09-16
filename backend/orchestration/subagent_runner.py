@@ -221,7 +221,7 @@ class SubagentRunner:
                 {"role": "system", "content": child_system},
                 {"role": "user", "content": user_content},
             ]
-        collected: list[str] = []
+        collected: List[str] = []
         last_error: Optional[str] = None
 
         # O1: run 启动前投递一次 —— 捕获任务启动前（排队/确认窗口期）

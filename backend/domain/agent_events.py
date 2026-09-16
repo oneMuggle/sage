@@ -31,7 +31,7 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 
 class AgentEventType(Enum):
@@ -61,7 +61,7 @@ class AgentEvent:
     """Agent 事件"""
 
     type: AgentEventType
-    data: dict[str, Any] = field(default_factory=dict)
+    data: Dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
 
     def __str__(self) -> str:
@@ -86,9 +86,9 @@ class AgentEventBus:
     """
 
     def __init__(self) -> None:
-        self._subscribers: dict[AgentEventType, list[SubscriberCallback]] = {}
-        self._steering_queue: list[str] = []
-        self._follow_up_queue: list[str] = []
+        self._subscribers: Dict[AgentEventType, List[SubscriberCallback]] = {}
+        self._steering_queue: List[str] = []
+        self._follow_up_queue: List[str] = []
 
     def subscribe(
         self,

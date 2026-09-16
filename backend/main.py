@@ -11,7 +11,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 # ── Startup diagnostic timer (module-level) ───────────────────────────────
 # 2026-09-10 (slow-startup incident): record monotonic start BEFORE any
@@ -42,7 +42,7 @@ from fastapi.responses import JSONResponse
 from sage_core import Message, Role
 
 
-def configure_ssl_ca_bundle(where: Callable[[], str]) -> str | None:
+def configure_ssl_ca_bundle(where: Callable[[], str]) -> Optional[str]:
     """为 ``httpx`` / ``requests`` / ``curl`` 兜底注入 certifi 的 CA bundle。
 
     返回最终选中的 CA 路径；任何异常（certifi 缺失、文件不存在、文件为空）

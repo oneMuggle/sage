@@ -97,7 +97,7 @@ def pricing_for_model(model: str) -> Optional[Tuple[float, float]]:
     normalized = model.strip().lower()
     if normalized in PRICING_PER_MILLION_TOKENS:
         return PRICING_PER_MILLION_TOKENS[normalized]
-    best: str | None = None
+    best: Optional[str] = None
     for key in PRICING_PER_MILLION_TOKENS:
         if normalized.startswith(key) and (best is None or len(key) > len(best)):
             best = key
@@ -135,7 +135,7 @@ class UsageRecord:
     model: str
     prompt_tokens: int
     completion_tokens: int
-    estimated_cost_usd: float | None
+    estimated_cost_usd: Optional[float]
     at: str  # ISO-8601 (UTC)
     cached_tokens: int = 0  # L4: prompt 中命中缓存的部分（兼容旧字段）
     # L8 (2026-09-09 PR-A): cache 维度拆分 — Anthropic cache_read 命中极便宜

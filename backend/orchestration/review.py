@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def parse_assertions(raw: str) -> List[Assertion]:
-    """解析 reviewer 输出的 assertion 行 → ``list[Assertion]``（见原 dispatcher 文档）。"""
+    """解析 reviewer 输出的 assertion 行 → ``List[Assertion]``（见原 dispatcher 文档）。"""
     pattern = re.compile(
         r"^\[(FACT|HYPOTHESIS|NEGATIVE_EVIDENCE)\]\s*(.+?)"
         r"(?:\s*\(confidence:\s*([0-9.]+)\))?\s*$"

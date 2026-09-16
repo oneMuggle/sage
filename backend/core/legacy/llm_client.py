@@ -11,10 +11,9 @@ import logging
 import os
 import re
 import time
-from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from datetime import timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 import httpx
 

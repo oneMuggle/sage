@@ -19,7 +19,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.domain.risk import RiskClass
 
@@ -202,7 +202,7 @@ class FileSummaryTool(BaseTool):
             },
         )
 
-    def _validate_file(self, path: str) -> tuple[Path, int, str]:
+    def _validate_file(self, path: str) -> Tuple[Path, int, str]:
         """验证文件路径并返回 (file_path, original_bytes, encoding)，失败抛 ValueError"""
         if not isinstance(path, str) or not path.strip():
             raise ValueError("path 不能为空")

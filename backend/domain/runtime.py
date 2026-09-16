@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class RuntimeSource(str, Enum):
@@ -71,9 +71,9 @@ class RuntimeInfo:
     source: RuntimeSource = RuntimeSource.UNKNOWN
     is_default: bool = False
     is_compatible: Optional[bool] = None
-    compatibility_notes: tuple[str, ...] = field(default_factory=tuple)
+    compatibility_notes: Tuple[str, ...] = field(default_factory=tuple)
     capabilities: RuntimeCapability = field(default_factory=RuntimeCapability)
-    diagnostics: tuple[str, ...] = field(default_factory=tuple)
+    diagnostics: Tuple[str, ...] = field(default_factory=tuple)
     raw: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -81,10 +81,10 @@ class RuntimeInfo:
 class ProbeRequest:
     """runtime_probe 工具的领域表示。"""
 
-    languages: tuple[str, ...] = ()
+    languages: Tuple[str, ...] = ()
     include_tools: bool = True
     target_version: Optional[str] = None
-    include_paths: tuple[str, ...] = ()
+    include_paths: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -93,7 +93,7 @@ class ProbeResult:
 
     runtimes: List[RuntimeInfo]
     recommended: Optional[str] = None
-    errors: tuple[str, ...] = ()
+    errors: Tuple[str, ...] = ()
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -149,7 +149,7 @@ class ProjectManifest:
     language: str
     path: str
     kind: str
-    requires: tuple[str, ...] = ()
+    requires: Tuple[str, ...] = ()
     extras: Dict[str, Any] = field(default_factory=dict)
 
 

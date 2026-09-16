@@ -30,7 +30,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -269,7 +269,7 @@ class ApprovalRequest:
     risk: str
     message: str
     created_at: float
-    diff_preview: str | None = None
+    diff_preview: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """流事件 / REST 响应共用的 JSON 形态。"""
@@ -310,8 +310,8 @@ class ApprovalRequest:
 #: ``set_approval_context_resolver`` 注册（依赖反转）。services 层不得直接
 #: import orchestration（六边形 import 契约），故经此回调解耦；未注册时
 #: run/task 归属为空（主会话审批本就无编排归属）。
-ApprovalContextResolver = Callable[[str], Tuple[str | None, str | None]]
-_approval_context_resolver: ApprovalContextResolver | None = None
+ApprovalContextResolver = Callable[[str], Tuple[Optional[str], Optional[str]]]
+_approval_context_resolver: Optional[ApprovalContextResolver] = None
 
 
 def set_approval_context_resolver(resolver: ApprovalContextResolver) -> None:
@@ -365,9 +365,9 @@ class ApprovalGate:
                 ApprovalDecisionRepository,
             )
 
-            session_id: str | None = None
-            run_id: str | None = None
-            task_id: str | None = None
+            session_id: Optional[str] = None
+            run_id: Optional[str] = None
+            task_id: Optional[str] = None
             try:
                 from backend.tools.context import current_tool_context
 
@@ -433,7 +433,7 @@ class ApprovalGate:
 # 单例装配（与 backend.services.scheduler 相同模式）
 # ---------------------------------------------------------------------------
 
-_global_gate: ApprovalGate | None = None
+_global_gate: Optional[ApprovalGate] = None
 
 
 def init_permission_gate() -> ApprovalGate:

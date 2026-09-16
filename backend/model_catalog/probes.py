@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Literal
+from typing import Literal, Optional
 from urllib.parse import urlparse
 
 from pydantic import BaseModel
@@ -37,10 +37,10 @@ class ProbeValues(BaseModel):
     pass them to ``repository.save_probe`` without translation.
     """
 
-    native: int | None = None
-    service: int | None = None
-    architecture: str | None = None
-    quantization: str | None = None
+    native: Optional[int] = None
+    service: Optional[int] = None
+    architecture: Optional[str] = None
+    quantization: Optional[str] = None
 
 
 class ProbeResult(BaseModel):
@@ -54,8 +54,8 @@ class ProbeResult(BaseModel):
 
     status: Literal["success", "unsupported", "error"]
     adapter: str = "unknown"
-    data: dict | None = None
-    error: str | None = None
+    data: Optional[dict] = None
+    error: Optional[str] = None
 
 
 def parse_probe(service: str, response: dict) -> ProbeValues:

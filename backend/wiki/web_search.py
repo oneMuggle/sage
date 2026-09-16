@@ -229,7 +229,7 @@ async def multi_query_search(
         max_results_per_query: 每个查询的最大结果数
 
     Returns:
-        list[WebSearchResult]: 合并后的搜索结果（去重）
+        List[WebSearchResult]: 合并后的搜索结果（去重）
     """
     client = WebSearchClient(provider, api_key, base_url)
 

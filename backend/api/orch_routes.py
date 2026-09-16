@@ -12,7 +12,7 @@ ResumeResponse)。
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
@@ -46,7 +46,7 @@ class OrchRunDetail(BaseModel):
     plan: List[Dict[str, Any]]
     tasks: List[Dict[str, Any]]
     # Wave 3 A9: resume 恢复流原始请求
-    original_request: str | None = None
+    original_request: Optional[str] = None
 
 
 class SessionRunsResponse(BaseModel):
@@ -125,7 +125,7 @@ class RerunFailedResponse(BaseModel):
     """RV2 (round8): rerun-failed 响应 —— 前端拿 plan_override 走既有
     chatStream planOverride 通道重发（Wave 3 A10）。"""
 
-    session_id: str | None = None
+    session_id: Optional[str] = None
     goal: str
     plan_override: List[Dict[str, Any]]
 
@@ -253,7 +253,7 @@ def set_approval_mode(run_id: str, body: ApprovalModeRequest) -> Dict[str, Any]:
 
 @router.post("/runs/{run_id}/cancel", response_model=CancelRunResponse)
 @with_db_lock
-def cancel_run(run_id: str, body: CancelRunRequest | None = None) -> CancelRunResponse:
+def cancel_run(run_id: str, body: Optional[CancelRunRequest] = None) -> CancelRunResponse:
     """Run 级取消：置 cancelled + 停 dispatcher 新任务（running 不硬杀）。"""
     repo = OrchRunRepository()
     run = repo.get(run_id)

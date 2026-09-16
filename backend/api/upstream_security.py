@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import socket
 from ipaddress import ip_address
+from typing import FrozenSet, List, Optional
 
 import httpcore
 import httpx
@@ -23,7 +24,7 @@ MAX_RESPONSE_BODY_BYTES: int = 10 * 1024 * 1024
 # Error message for blocked dangerous targets (deliberately vague)
 _DANGEROUS_NETWORK_ERROR = "Upstream target is not reachable from this network."
 
-_dns_semaphore: asyncio.Semaphore | None = None
+_dns_semaphore: Optional[asyncio.Semaphore] = None
 _dns_executor_instance = None
 
 
@@ -40,7 +41,7 @@ def _get_dns_executor():
     return _dns_executor_instance
 
 
-def _configured_allowed_hosts() -> frozenset[str]:
+def _configured_allowed_hosts() -> FrozenSet[str]:
     """Hosts explicitly allowed (e.g., localhost for testing). Empty by default."""
     import os
 
@@ -199,7 +200,7 @@ async def read_response_body_limited(
             if "response exceeds configured limit" in str(exc):
                 raise
 
-    chunks: list[bytes] = []
+    chunks: List[bytes] = []
     size = 0
     async for chunk in response.aiter_bytes():
         size += len(chunk)

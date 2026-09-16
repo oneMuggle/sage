@@ -45,7 +45,7 @@ import weakref
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.mcp.client import McpClient, McpClientError
 from backend.mcp.config import (
@@ -138,10 +138,10 @@ class ServerRecord:
     state: ServerState = ServerState.DISCOVERING
     tool_count: int = 0
     tool_specs: List[Dict[str, Any]] = field(default_factory=list)
-    last_error: str | None = None
+    last_error: Optional[str] = None
     last_state_change: float = field(default_factory=time.time)
     attempts: int = 0
-    client: Any | None = None  # McpClient (or test fake)
+    client: Optional[Any] = None  # McpClient (or test fake)
     #: Discovery gate — True while a thread is inside _discover_record
     #: for this record. Concurrent attempts see it and fail fast instead
     #: of double-spawning subprocesses (last-writer-wins orphans N-1).
@@ -163,7 +163,7 @@ class ServerStatusEntry:
     name: str
     state: str
     tool_count: int
-    last_error: str | None
+    last_error: Optional[str]
     since: float
     required: bool
 
@@ -893,7 +893,7 @@ class McpServerPool:
 
 # ---- module-level singleton --------------------------------------------------
 
-_pool: McpServerPool | None = None
+_pool: Optional[McpServerPool] = None
 _pool_lock = threading.Lock()
 
 
