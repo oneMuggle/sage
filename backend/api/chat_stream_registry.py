@@ -147,7 +147,7 @@ class StreamEntry:
     last_activity_at: float = field(default_factory=time.time)
     session_id: Optional[str] = None
     suspended: bool = False
-    wake_id: str | None = None
+    wake_id: Optional[str] = None
 
 
 class StreamRegistry:
@@ -230,7 +230,7 @@ class StreamRegistry:
             with contextlib.suppress(asyncio.CancelledError):
                 await entry.queue.put(SENTINEL)
 
-    def find_active_by_session(self, session_id: str) -> str | None:
+    def find_active_by_session(self, session_id: str) -> Optional[str]:
         """R25-D4: 返回该会话当前活跃（pending/running 且未挂起）的 streamId。
 
         与 create 的 busy 仲裁同口径（挂起与终态不占位）。无活跃流返回
@@ -249,7 +249,7 @@ class StreamRegistry:
         self,
         stream_id: str,
         *,
-        wake_id: str | None = None,
+        wake_id: Optional[str] = None,
         note: str = "",
     ) -> bool:
         """A4 Suspend-Resume: 挂起一个活跃流。
