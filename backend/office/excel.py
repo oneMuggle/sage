@@ -605,6 +605,15 @@ def _apply_print_setup(writer, req) -> None:
                 ws.print_area = print_setup.print_area
             if getattr(print_setup, "title_rows", None):
                 ws.print_title_rows = print_setup.title_rows
+            # Round 32：打印页眉/页脚文本（&P 为页码占位；转义 & 为 &&）
+            header_text = getattr(print_setup, "print_header", None)
+            footer_text = getattr(print_setup, "print_footer", None)
+            if header_text is not None or footer_text is not None:
+
+                if header_text is not None:
+                    ws.oddHeader.center.text = header_text
+                if footer_text is not None:
+                    ws.oddFooter.center.text = footer_text
             # Round 31：打印页边距（厘米）——openpyxl 单位为英寸，需换算
             margins = getattr(print_setup, "margins_cm", None)
             if margins is not None:
