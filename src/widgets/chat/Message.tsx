@@ -417,7 +417,21 @@ function MessageComponent({
     () => isStreaming === true && hasUnclosedFence(displayContent),
     [displayContent, isStreaming],
   );
-  const toolCalls: ToolCall[] = message.tool_calls ?? [];
+  // 2026-09 修复: 历史消息的 tool_calls 从后端原样加载时是 JSON 字符串
+  // (session_repo 不做 parse), 直接 .map 会崩。双态归一化。
+  const toolCalls: ToolCall[] = useMemo(() => {
+    const raw = message.tool_calls;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string' && raw) {
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        return Array.isArray(parsed) ? (parsed as ToolCall[]) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }, [message.tool_calls]);
   // M4: 只有 user/assistant 消息可分叉（system/tool 行没有分叉语义）
   const canFork = Boolean(onFork) && (isUser || isAssistant);
   // U5': 编辑重发只对 user 消息有意义（重写用户输入，而非模型回答）

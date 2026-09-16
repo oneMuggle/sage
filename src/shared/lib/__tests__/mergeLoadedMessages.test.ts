@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Message } from '../../../shared/api/types';
+import type { Message } from '../store';
 import { mergeLoadedMessages } from '../store';
 
 function msg(id: string, role: 'user' | 'assistant', content: string): Message {

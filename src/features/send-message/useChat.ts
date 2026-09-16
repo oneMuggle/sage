@@ -842,7 +842,13 @@ export function useChat() {
               return;
             }
             if (evt.state === 'failed') {
-              finishReattach(null, evt.error ?? '流式失败');
+              // 2026-09 修复: error 信封统一为 dict | string 双态, 提取 message
+              const raw = evt.error;
+              const errText =
+                typeof raw === 'string'
+                  ? raw
+                  : (raw?.message ?? '流式失败');
+              finishReattach(null, errText);
               return;
             }
             // R35: 编排/任务板事件走共享应用器 —— 重放时任务板/live 态
