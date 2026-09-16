@@ -19,6 +19,10 @@ _RAW_KEYS = {
     "maxRetries": "max_retries",
     "maxLaneIterations": "max_lane_iterations",
     "maxSubagentIterations": "max_subagent_iterations",
+    "maxPrimaryIterations": "max_primary_iterations",
+    "maxCoderIterations": "max_coder_iterations",
+    "maxReviewerIterations": "max_reviewer_iterations",
+    "maxWriterIterations": "max_writer_iterations",
     "taskTimeoutSeconds": "subagent_task_timeout_s",
     "scratchRoot": "scratch_root",
     "worktreeIsolation": "worktree_isolation",
@@ -37,6 +41,15 @@ class OrchSettings:
     #: 子代理（agent_tool）单次委派的 ReAct 迭代预算。默认 10 与原
     #: ``agent_tool.SUBAGENT_MAX_ITERATIONS`` 常量一致，仅开放可配。
     max_subagent_iterations: int = 10  # alpha.36 (Bug #2): 6 → 10, 减少"复杂度超上限"误报
+    #: 主助手（primary profile）迭代上限。legacy_routes.py 调 run_loop 时读取。
+    #: 默认 15 与 profiles.py primary profile 对齐。
+    max_primary_iterations: int = 15
+    #: coder profile 迭代上限。默认 15 与 profiles.py 对齐。
+    max_coder_iterations: int = 15
+    #: reviewer profile 迭代上限。默认 8 与 profiles.py 对齐。
+    max_reviewer_iterations: int = 8
+    #: writer profile 迭代上限。默认 5 与 profiles.py 对齐。
+    max_writer_iterations: int = 5
     scratch_root: str = "orch_scratch"
     worktree_isolation: bool = False
     #: live-events P1: 新 run 的子代理审批模式默认值 —— "ask"（逐次审批，
