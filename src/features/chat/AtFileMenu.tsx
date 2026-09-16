@@ -16,6 +16,7 @@ const KIND_ICON: Record<FileSearchResult['kind'], string> = {
   'office-ppt': '📊',
   'office-word': '📝',
   'office-excel': '📈',
+  'office-pdf': '📄',
 };
 
 interface AtFileMenuProps {

@@ -214,6 +214,36 @@ class OfficeWordReadResult(BaseModel):
     headers_footers: List[WordHeaderFooterContent] = Field(default_factory=list)
     # Round 15：文档中的目录域 instr 列表。
     toc_fields: List[str] = Field(default_factory=list)
+    # Office display round C (P4)：内嵌图片缩略预览。additive field ——
+    # default_factory 保持旧 payload 在 extra="forbid" 下有效（win7 回流
+    # 与旧客户端可整体忽略）。上限/降级策略见 word._extract_image_previews。
+    image_previews: List[WordImagePreview] = Field(default_factory=list)
+
+
+class WordImagePreview(BaseModel):
+    """One inline image thumbnail for preview (office display round C, P4).
+
+    ``data_url`` 是缩略后的 base64 data URL（Pillow 可用时最长边缩到
+    480px；不可用时仅 ≤150KB 的原图直接内联）。超限/无法内联的图片不产
+    生条目 —— ``OfficeWordReadResult.images``（总数）与
+    ``len(image_previews)`` 的差即被省略的数量。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(ge=0, description="文内出现顺序（0-based）")
+    content_type: str = Field(description="MIME，如 image/png")
+    data_url: str = Field(description="data:<mime>;base64,… 缩略图")
+    thumbnail: bool = Field(
+        default=False, description="True=经 Pillow 缩略；False=原图直接内联"
+    )
+
+
+# pydantic v1（win7/py38 通道）用 update_forward_refs，v2 用 model_rebuild
+if hasattr(OfficeWordReadResult, "update_forward_refs"):
+    OfficeWordReadResult.update_forward_refs()
+elif hasattr(OfficeWordReadResult, "model_rebuild"):
+    OfficeWordReadResult.model_rebuild()
 
 
 class ExcelSheetContent(BaseModel):
@@ -1194,6 +1224,36 @@ class PdfReadRequest(BaseModel):
 
     workspace_path: str
     file_path: str
+
+
+class PdfDataRequest(BaseModel):
+    """Request for the raw-PDF base64 preview (F3, office-p0).
+
+    Serves the /office page's 原文预览 toggle: the renderer embeds the
+    returned ``data:application/pdf`` URL in an iframe and Chromium's
+    built-in viewer renders it — same fidelity path as the chat artifact
+    viewer.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str
+
+
+class PdfDataResult(BaseModel):
+    """Raw-PDF base64 preview result.
+
+    Never raises for expected conditions: oversize / escape / unreadable
+    files return ``ok=False`` + a user-presentable ``error`` so the UI
+    can fall back to the structured page cards.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    data_url: Optional[str] = None
+    error: Optional[str] = None
 
 
 class PdfPageSpec(BaseModel):

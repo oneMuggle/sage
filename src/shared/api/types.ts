@@ -75,7 +75,12 @@ export interface SessionWorkspaceBinding {
   revokedAt: number | null;
 }
 
-export type WorkspaceSearchKind = 'file' | 'office-ppt' | 'office-word' | 'office-excel';
+export type WorkspaceSearchKind =
+  | 'file'
+  | 'office-ppt'
+  | 'office-word'
+  | 'office-excel'
+  | 'office-pdf';
 
 export interface WorkspaceSearchResult {
   name: string;
@@ -95,13 +100,13 @@ export interface WorkspaceSearchResponse {
 export interface ChatOfficeRef {
   docId: string;
   /**
-   * Deliberately the narrow 3-union (NOT OfficeDocType): the chat @-menu
-   * chip surface does not render pdf refs yet — a managed pdf doc falls
-   * back to the plain-file path in workspace search results
-   * (fileSearchClient coalesces docType 'pdf' → null). Widen together
-   * with widgets/chat InputCard.OfficeRefChipType when chat gains pdf.
+   * B4 (office-p0): widened to include 'pdf' — the backend chat_refs
+   * DocTypeLiteral accepts pdf refs (OfficeToolService.read dispatches
+   * read_pdf) and the workspace search no longer coalesces managed pdf
+   * docs to the plain-file path. Must stay in sync with
+   * widgets/chat InputCard.OfficeRefChipType.
    */
-  docType: 'ppt' | 'word' | 'excel';
+  docType: 'ppt' | 'word' | 'excel' | 'pdf';
   filename: string;
 }
 
@@ -1148,10 +1153,35 @@ export interface OfficeWordReadResult {
   paragraphs: OfficeWordParagraphContent[];
   tables: OfficeWordTableContent[];
   images: number;
-  comments?: unknown[];
+  // Round C P4: typed — the preview renders author/date/anchor bubbles.
+  // Backend: WordCommentContent in backend/office/models.py.
+  comments?: OfficeWordComment[];
   // Round 15：每节页眉/页脚与目录域 instr 列表
   headers_footers?: WordHeaderFooterContent[];
   toc_fields?: string[];
+  /**
+   * Round C P4: bounded inline-image thumbnails (≤10 entries, backend
+   * caps each data URL). `images - image_previews.length` = omitted count.
+   * Backend: WordImagePreview in backend/office/models.py.
+   */
+  image_previews?: OfficeWordImagePreview[];
+}
+
+/** One Word comment (backend WordCommentContent). */
+export interface OfficeWordComment {
+  id: string;
+  author?: string | null;
+  date?: string | null;
+  text: string;
+  anchor_text?: string;
+}
+
+/** One inline-image thumbnail (backend WordImagePreview, round C P4). */
+export interface OfficeWordImagePreview {
+  index: number;
+  content_type: string;
+  data_url: string;
+  thumbnail: boolean;
 }
 
 export interface OfficeExcelSheetContent {
@@ -1195,6 +1225,18 @@ export interface OfficePdfReadResult {
   summary: OfficeDocumentSummary;
   pages: OfficePdfPageContent[];
   metadata: Record<string, unknown>;
+}
+
+/**
+ * F3 (office-p0): result of POST /api/v1/office/pdf/data — raw-PDF
+ * base64 preview for the /office page's 原文预览 toggle (backend
+ * `PdfDataResult`). Expected failures (oversize / path escape) come
+ * back as `{ok:false,error}` rather than HTTP errors.
+ */
+export interface OfficePdfDataResult {
+  ok: boolean;
+  data_url?: string | null;
+  error?: string | null;
 }
 
 /**
@@ -1719,6 +1761,48 @@ export interface OfficeExportPdfResult {
   ok: boolean;
   method?: 'libreoffice' | 'word_com' | null;
   output_path?: string | null;
+  error?: string | null;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Office display round A — P6 capability probe + P1 high-fidelity preview
+// Backend counterpart: backend/office/capabilities.py (OfficeCapabilities)
+// and backend/office/pdf_preview.py (PdfPreviewResult).
+// ──────────────────────────────────────────────────────────────────────
+
+/** Result of GET /office/capabilities (backend OfficeCapabilities). */
+export interface OfficeCapabilities {
+  platform: string;
+  soffice_available: boolean;
+  soffice_path?: string | null;
+  word_com_available: boolean;
+  pdf_export_available: boolean;
+  pillow_available: boolean;
+  formulas_available: boolean;
+}
+
+/**
+ * Result of POST /office/pdf-preview (backend PdfPreviewResult).
+ * `data_url` is a data:application/pdf;base64 URL rendered by the
+ * embedded Chromium PDF viewer; `cached=true` means no converter ran.
+ */
+export interface OfficePdfPreviewResult {
+  ok: boolean;
+  data_url?: string | null;
+  cached?: boolean;
+  error?: string | null;
+}
+
+/**
+ * Round C P5: POST /office/templates/thumbnail — first-page PNG thumbnail
+ * of a library template (builtin or workspace). Failures fold to ok=false
+ * and the picker degrades silently (thumbnails are decorative).
+ */
+export interface OfficeTemplateThumbnailResult {
+  ok: boolean;
+  /** data:image/png;base64,… */
+  data_url?: string | null;
+  cached?: boolean;
   error?: string | null;
 }
 

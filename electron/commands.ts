@@ -255,7 +255,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/active?session_id=${encodeURIComponent(String(a.sessionId))}`,
   },
-    system_backups_list: {
+  system_backups_list: {
     method: 'GET',
     path: () => '/api/v1/system/backups',
   },
@@ -784,6 +784,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // NOTE: PdfReadRequest is extra="forbid" — officeApi.readPdf must send
   // ONLY workspacePath + filePath (no max_size_bytes / original_filename).
   office_pdf_read: { method: 'POST', path: () => '/api/v1/office/pdf/read' },
+  // F3 (office-p0): 受管 PDF 原文 base64 预览 —— /office 页"原文预览"
+  // 开关用，返回 data:application/pdf URL 交给 Chromium 内置 viewer。
+  // NOTE: PdfDataRequest is extra="forbid" — officeApi.readPdfData must
+  // send ONLY workspacePath + filePath.
+  office_pdf_data: { method: 'POST', path: () => '/api/v1/office/pdf/data' },
   // include_archived (item 1.7): archive-restore UI lists soft-deleted rows.
   // Path builder reads the raw camelCase arg and serializes snake_case into
   // the query string (query args are NOT auto-translated by invokeBackend).
@@ -843,6 +848,36 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // so the translation is a no-op on them.
   office_update_preview: { method: 'POST', path: () => '/api/v1/office/update/preview' },
   office_export_pdf: { method: 'POST', path: () => '/api/v1/office/export-pdf' },
+
+  // Office display round A (P6/P1): capability probe + high-fidelity
+  // PDF preview. Backend: backend/api/office_routes.py — GET
+  // /capabilities (converter/optional-dep badges, 30s server-side
+  // cache, force=true to re-probe) and POST /pdf-preview (docx/xlsx/
+  // pptx → cached PDF in office/.preview-cache/ → data URL; body reuses
+  // the export-pdf shape: workspacePath/filePath/taskId through the
+  // normal camelToSnakeKeys).
+  office_capabilities: {
+    method: 'GET',
+    path: (a) => `/api/v1/office/capabilities${a.force ? '?force=true' : ''}`,
+  },
+  office_pdf_preview: { method: 'POST', path: () => '/api/v1/office/pdf-preview' },
+
+  // Office display round C (P5): template first-page thumbnail (PNG data
+  // URL, disk-cached server-side). POST — generation has side effects
+  // (cache write) and the request carries a body.
+  office_template_thumbnail: {
+    method: 'POST',
+    path: () => '/api/v1/office/templates/thumbnail',
+  },
+
+  // Office display round B (P2): snapshot vs current structured diff.
+  // Backend: GET /office/doc/{doc_id}/snapshots/{snapshot_id}/diff →
+  // DiffPreviewResult (snapshot=before, current=after). Read-only.
+  office_snapshot_diff: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/snapshots/${encodeURIComponent(String(a.snapshotId))}/diff`,
+  },
 
   // Office parity round 2 (R1): page-level apply-update — closes the
   // edit-preview loop opened by office_update_preview. Backend contract:

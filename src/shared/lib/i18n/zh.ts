@@ -644,6 +644,19 @@ export const zh = {
   'office.preview.paragraphsTruncated': '…还有 {n} 段未显示',
   'office.preview.cellsTruncated': '…还有 {n} 列未显示',
   'office.preview.sheetTab': '工作表',
+  // F1（office-p0）：Word 预览补渲染后端已提取的批注/页眉页脚/TOC 域
+  'office.preview.headersFooters': '页眉 / 页脚',
+  'office.preview.headerLabel': '页眉: ',
+  'office.preview.footerLabel': '页脚: ',
+  'office.preview.emptyLabel': '（空）',
+  'office.preview.pageNumberField': '含页码域',
+  'office.preview.comments': '批注',
+  'office.preview.commentUnknownAuthor': '未知作者',
+  'office.preview.tocFields': '目录域',
+  // F3（office-p0）：/office 页 PDF 原文预览开关（data URL + iframe）
+  'office.preview.originalView': '原文预览',
+  'office.preview.structuredView': '结构视图',
+  'office.preview.originalFailed': '原文预览失败',
 
   // ─── Office parity batch 2: 编辑预览对话框 (item 2.5) ─────
   'office.edit.title': '编辑预览',
@@ -671,6 +684,32 @@ export const zh = {
   'office.edit.rejected': '该编辑无法应用',
   'office.edit.noChanges': '没有产生变更',
   'office.edit.required': '请完整填写编辑内容',
+  // F2（office-p0）：op 类型选择器暴露更多后端编辑 op
+  'office.edit.opKind': '编辑类型',
+  'office.edit.kindReplaceText': '查找替换',
+  'office.edit.kindAppendParagraphs': '追加段落',
+  'office.edit.kindSetTableCell': '修改表格单元格',
+  'office.edit.kindDeleteParagraph': '删除段落',
+  'office.edit.kindSetCells': '设置单元格',
+  'office.edit.kindAppendRows': '追加行',
+  'office.edit.kindSetTitle': '设置页标题',
+  'office.edit.kindSetBullets': '设置页要点',
+  'office.edit.kindSetNotes': '设置页备注',
+  'office.edit.kindAppendSlide': '追加幻灯片',
+  'office.edit.paragraphs': '段落内容（每行一条）',
+  'office.edit.paraHeading': '段落级别',
+  'office.edit.headingNone': '正文',
+  'office.edit.tableIndex': '表格序号',
+  'office.edit.tableRow': '行号',
+  'office.edit.tableCol': '列号',
+  'office.edit.tableText': '单元格内容',
+  'office.edit.deleteFindPlaceholder': '段落包含的文本（大小写不敏感）…',
+  'office.edit.deleteAll': '删除全部匹配段落',
+  'office.edit.rows': '行数据（每行一条，单元格用逗号分隔）',
+  'office.edit.bullets': '要点（每行一条）',
+  'office.edit.notes': '备注',
+  'office.edit.appendTitle': '新页标题',
+  'office.edit.appendNotes': '演讲者备注',
   // Round 2 (R1): 页内应用 —— 预览成功后的二次确认 + 应用反馈 + 自检摘要行。
   'office.edit.apply': '确认应用',
   'office.edit.applying': '正在应用…',
@@ -692,6 +731,41 @@ export const zh = {
   'office.export.failed': '导出失败',
   'office.export.noConverter': '未找到本机转换器（需要 LibreOffice 或 MS Word）',
   'office.export.openFolder': '打开所在文件夹',
+  'office.export.openPdf': '打开 PDF',
+
+  // ─── Office display round A: P1 高保真预览 + P6 能力徽章 ─────
+  'office.fidelity.toggle': '高保真',
+  'office.fidelity.loading': '转换中…',
+  'office.fidelity.failed': '高保真预览失败',
+  'office.caps.pdf': 'PDF 导出',
+  'office.caps.image': '图片压缩',
+  'office.caps.formula': '公式求值',
+  'office.caps.refresh': '重新检测',
+  'office.caps.install.pdf.win':
+    '未检测到转换器：安装 LibreOffice（libreoffice.org/download）或 MS Word 后可导出/高保真预览 PDF',
+  'office.caps.install.pdf.mac':
+    '未检测到转换器：brew install --cask libreoffice 后可导出/高保真预览 PDF',
+  'office.caps.install.pdf.linux':
+    '未检测到转换器：sudo apt install libreoffice（或发行版等价命令）后可导出/高保真预览 PDF',
+  'office.caps.install.pillow':
+    '未安装 Pillow：pip install -r backend/requirements-optional.txt 后 >8MB 图片将自动压缩',
+  'office.caps.install.formulas':
+    '未安装 formulas：pip install -r backend/requirements-optional.txt 后 Excel 公式可本地求值',
+
+  // ─── Office display round B: P2 快照可视 diff ─────
+  'office.snapshot.diff': '与当前版本对比',
+  'office.snapshot.diffFailed': '快照对比失败',
+  'office.snapshot.diffIdentical': '与当前版本内容一致',
+  'office.snapshot.diffTruncated': '差异条目过多，仅显示前 200 条',
+
+  // ─── Office display round C: P4 图片/批注呈现 + P7 预览分页 ─────
+  'office.preview.imagesTitle': '文档图片',
+  'office.preview.imagesOmitted': '另有 {n} 张图片未内联（过大或超出数量上限）',
+  'office.preview.commentsTitle': '批注',
+  'office.preview.commentAnonymous': '匿名',
+  'office.preview.loadMore': '加载更多',
+  'office.preview.loadingMore': '加载中…',
+  'office.template.thumbnailLoading': '正在生成模板预览…',
 
   // ─── Office parity batch 3: Word 模板库 (item 3.2 从模板创建) ─────
   'office.template.modeFreeform': '自由创建',

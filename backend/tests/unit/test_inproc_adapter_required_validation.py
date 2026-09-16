@@ -20,6 +20,8 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 import pytest
 
 from backend.domain.risk import RiskClass
@@ -91,7 +93,7 @@ class NoSchemaTool(BaseTool):
 
     risk = RiskClass.READ
 
-    def _build_schema(self) -> ToolSchema | None:  # type: ignore[override]
+    def _build_schema(self) -> Optional[ToolSchema]:  # type: ignore[override]
         return None  # 故意不返回
 
     def execute(self, **kwargs) -> ToolResult:  # pragma: no cover

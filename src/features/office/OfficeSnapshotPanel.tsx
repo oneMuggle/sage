@@ -15,13 +15,19 @@
  * `onRestored`.
  */
 
-import { History, X } from 'lucide-react';
+import { GitCompare, History, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { officeApi } from '../../shared/api/officeApi';
-import type { OfficeDocumentSummary, OfficeSnapshotMeta } from '../../shared/api/types';
+import type {
+  OfficeDocumentSummary,
+  OfficeSnapshotMeta,
+  OfficeUpdatePreviewResult,
+} from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
+
+import { DiffChangeRow } from './OfficeEditPreviewDialog';
 
 export interface OfficeSnapshotPanelProps {
   /** The document whose snapshots are listed. */
@@ -39,12 +45,19 @@ export function OfficeSnapshotPanel({ doc, onClose, onRestored }: OfficeSnapshot
   // Which row is armed for restore (two-step confirm). Null = none armed.
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+  // Round B P2: 与当前版本对比 — which snapshot's diff is expanded
+  // (null = collapsed) plus its loaded result / in-flight flag.
+  const [diffId, setDiffId] = useState<string | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffResult, setDiffResult] = useState<OfficeUpdatePreviewResult | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     setConfirmingId(null);
+    setDiffId(null);
+    setDiffResult(null);
     officeApi
       .listSnapshots(doc.id)
       .then((res) => {
@@ -69,12 +82,37 @@ export function OfficeSnapshotPanel({ doc, onClose, onRestored }: OfficeSnapshot
       await officeApi.restoreSnapshot(doc.id, snapshotId);
       toast.success(t('office.snapshot.restoreSuccess'));
       setConfirmingId(null);
+      // 恢复改变了当前文件字节 — 任何展开的 diff 均已过期。
+      setDiffId(null);
+      setDiffResult(null);
       await onRestored(doc.id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.snapshot.restoreFailed')}: ${msg}`);
     } finally {
       setRestoring(false);
+    }
+  };
+
+  const handleToggleDiff = async (snapshotId: string) => {
+    if (diffLoading) return;
+    if (diffId === snapshotId) {
+      setDiffId(null);
+      setDiffResult(null);
+      return;
+    }
+    setDiffId(snapshotId);
+    setDiffResult(null);
+    setDiffLoading(true);
+    try {
+      const res = await officeApi.diffSnapshot(doc.id, snapshotId);
+      setDiffResult(res);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`${t('office.snapshot.diffFailed')}: ${msg}`);
+      setDiffId(null);
+    } finally {
+      setDiffLoading(false);
     }
   };
 
@@ -110,8 +148,9 @@ export function OfficeSnapshotPanel({ doc, onClose, onRestored }: OfficeSnapshot
             {snapshots.map((snap) => (
               <li
                 key={snap.snapshot_id}
-                className="flex items-center gap-3 p-2 border border-border rounded"
+                className="p-2 border border-border rounded"
               >
+                <div className="flex items-center gap-3">
                 <div className="flex-1 min-w-0 text-xs text-muted">
                   <div className="text-text text-sm truncate">{snap.snapshot_id}</div>
                   <div className="flex items-center gap-2">
@@ -120,6 +159,22 @@ export function OfficeSnapshotPanel({ doc, onClose, onRestored }: OfficeSnapshot
                     <span>{(snap.size_bytes / 1024).toFixed(1)} KB</span>
                   </div>
                 </div>
+                {/* Round B P2: 与当前版本对比（红绿差异清单，可折叠） */}
+                <button
+                  type="button"
+                  disabled={diffLoading && diffId === snap.snapshot_id}
+                  onClick={() => void handleToggleDiff(snap.snapshot_id)}
+                  data-testid="office-snapshot-diff-button"
+                  aria-expanded={diffId === snap.snapshot_id}
+                  className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors disabled:opacity-50 ${
+                    diffId === snap.snapshot_id
+                      ? 'border-primary text-primary bg-primary/10'
+                      : 'border-border text-text-secondary hover:bg-bg-hover'
+                  }`}
+                >
+                  <GitCompare className="w-3.5 h-3.5" aria-hidden />
+                  {t('office.snapshot.diff')}
+                </button>
                 {confirmingId === snap.snapshot_id ? (
                   <div className="flex items-center gap-1">
                     <button
@@ -147,6 +202,41 @@ export function OfficeSnapshotPanel({ doc, onClose, onRestored }: OfficeSnapshot
                   >
                     {t('office.snapshot.restoreTo')}
                   </button>
+                )}
+                </div>
+
+                {/* 展开的 diff 区块（快照=before，当前=after） */}
+                {diffId === snap.snapshot_id && (
+                  <div className="mt-2 border-t border-border pt-2" data-testid="office-snapshot-diff">
+                    {diffLoading && (
+                      <div className="text-xs text-muted text-center py-2">
+                        {t('common.loading')}
+                      </div>
+                    )}
+                    {!diffLoading && diffResult && !diffResult.ok && (
+                      <div className="text-xs text-error">
+                        {t('office.snapshot.diffFailed')}: {diffResult.error ?? ''}
+                      </div>
+                    )}
+                    {!diffLoading && diffResult?.ok && (
+                      <>
+                        {diffResult.truncated && (
+                          <p className="text-xs text-warning mb-2">
+                            {t('office.snapshot.diffTruncated')}
+                          </p>
+                        )}
+                        {diffResult.changes.length === 0 ? (
+                          <p className="text-xs text-muted">{t('office.snapshot.diffIdentical')}</p>
+                        ) : (
+                          <ul className="space-y-2">
+                            {diffResult.changes.map((change, i) => (
+                              <DiffChangeRow key={i} change={change} />
+                            ))}
+                          </ul>
+                        )}
+                      </>
+                    )}
+                  </div>
                 )}
               </li>
             ))}

@@ -44,6 +44,9 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 // Stub the office feature to keep the integration test focused on the
 // workspace lifecycle. We assert on what the page itself renders.
 vi.mock('../../features/office', () => ({
+  // Round A P6: the page mounts the capability badge bar unconditionally;
+  // stub it out (probe IPC is irrelevant to the workspace lifecycle).
+  OfficeCapabilityBar: () => <div data-testid="office-capability-bar" />,
   OfficeDocumentList: () => <div data-testid="office-document-list" />,
   OfficeFilePicker: ({ children }: { children?: ReactNode }) => (
     <div data-testid="office-file-picker">{children}</div>

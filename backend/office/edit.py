@@ -1083,7 +1083,16 @@ def _apply_pptx_op(prs: Any, op: Dict[str, Any], doc_path: Optional[Path] = None
             return {"op": op_name, "ok": False, "error": f"slide_index_out_of_range: {idx}"}
         sld_id_lst = slides._sldIdLst
         sld_ids = list(sld_id_lst)
-        sld_id_lst.remove(sld_ids[idx])
+        sld_id = sld_ids[idx]
+        # 同步 drop 掉 presentation part 对 slide part 的关系：save 按
+        # 关系图遍历序列化，不 drop 的话 slide part 仍可达，孤儿页会
+        # 继续写进包里（文件越删越大）。
+        from pptx.oxml.ns import qn
+
+        r_id = sld_id.get(qn("r:id"))
+        if r_id:
+            prs.part.drop_rel(r_id)
+        sld_id_lst.remove(sld_id)
         return {"op": op_name, "ok": True, "index": idx, "remaining": len(slides)}
 
     if op_name == "add_picture":

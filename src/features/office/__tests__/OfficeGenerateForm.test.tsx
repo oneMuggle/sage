@@ -24,11 +24,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockListTemplates = vi.fn();
 const mockInstantiate = vi.fn();
 const mockOnGenerated = vi.fn();
+// Round C P5: pickTemplate kicks off a silent thumbnail fetch — default
+// to a benign ok:false so existing tests don't need to await anything.
+const mockTemplateThumbnail = vi.fn().mockResolvedValue({ ok: false });
 
 vi.mock('../../../shared/api/officeApi', () => ({
   officeApi: {
     listTemplates: (...args: unknown[]) => mockListTemplates(...args),
     instantiateTemplate: (...args: unknown[]) => mockInstantiate(...args),
+    templateThumbnail: (...args: unknown[]) => mockTemplateThumbnail(...args),
   },
 }));
 

@@ -130,6 +130,15 @@ def _read_doc(doc: OfficeDocumentSummary, formula_mode: bool = False) -> Dict[st
             include_formulas=formula_mode,
         )
         return result.model_dump(mode="json")
+    if doc_type is OfficeDocType.PDF:
+        from backend.office.pdf import read_pdf
+
+        result = read_pdf(
+            path,
+            workspace_path=doc.workspace_path,
+            document_id=doc.id,
+        )
+        return result.model_dump(mode="json")
     raise ValueError(f"unsupported doc_type: {doc_type}")
 
 
