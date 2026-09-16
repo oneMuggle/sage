@@ -129,6 +129,8 @@ class BrowserSession:
     ws_path: str
     #: 持久 profile（登录态跨会话保留）；False = 临时目录，终止时删除
     persistent: bool = False
+    #: 持久 profile 目录名（persistent=True 时记录；AU3 自动刷新按名复用）
+    profile_name: str = ""
 
     def is_alive(self) -> bool:
         return self.process.poll() is None
@@ -366,6 +368,7 @@ def launch_browser(
                     port=port,
                     ws_path=ws_path,
                     persistent=persistent,
+                    profile_name=str(profile_name or "") if persistent else "",
                 )
                 get_browser_manager().register(session)
                 return session

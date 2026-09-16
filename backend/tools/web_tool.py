@@ -605,24 +605,16 @@ class WebFetchTool(BaseTool):
         can_escalate = bool(escalate) and render != "never" and mode != "raw"
         try:
             try:
-                response, final_url, credential_note = self._get_with_redirects(
+                response, final_url, credential_note, login_error = self._fetch_credentialled(
                     url,
                     network_policy,
                     gated_by_whitelist,
-                    credential_headers,
                     credential_domain.strip(),
+                    credential_headers,
                 )
                 status = response.status_code
-                if status in _ANTIBOT_STATUS_CODES:
-                    raise _AntibotBlocked(f"http_{status}: 站点拒绝访问（状态码 {status}）", status)
-                response.raise_for_status()
-                # AU2：带凭据却被送到登录页 → login_required（不当普通正文返回）
-                if credential_headers:
-                    login_error = self._detect_login_wall(
-                        url, final_url, response, credential_domain
-                    )
-                    if login_error:
-                        return ToolResult(success=False, error=login_error)
+                if login_error:
+                    return ToolResult(success=False, error=login_error)
                 # C1：以 uncapped 抽取（缓存存全文，返回前统一裁剪）——
                 # 不同 max_length 的请求可共享同一份缓存
                 content = self._render(final_url, response, mode, self._UNCAPPED_LENGTH)
@@ -805,6 +797,83 @@ class WebFetchTool(BaseTool):
             return response, current_url, ("；".join(notes) if notes else None)
 
         raise ValueError("redirect_limit_exceeded: 重定向次数超限")
+
+    def _try_auto_refresh(self, credential_domain: str, url: str) -> str:
+        """AU3：用档案来源持久 profile 静默重导 cookie；成功返回 note，否则空串。"""
+        from .credential_vault import get_source_profile
+        from .web_render import _auto_refresh_enabled, refresh_credentials
+
+        source_profile = get_source_profile(credential_domain)
+        if not source_profile or not _auto_refresh_enabled():
+            return ""
+        ok, refreshed = refresh_credentials(credential_domain, url, source_profile)
+        if not ok:
+            return ""
+        return (
+            "credential_auto_refreshed: 已用持久 profile 静默重导登录态"
+            f"（{', '.join(refreshed[:5])}）"
+        )
+
+    def _fetch_credentialled(
+        self,
+        url: str,
+        network_policy: NetworkPolicy,
+        gated_by_whitelist: bool,
+        credential_domain: str,
+        credential_headers: Optional[Dict[str, str]],
+    ) -> tuple:
+        """静态抓取 + AU2 登录墙检测；AU3 命中登录墙时静默刷新并重放一次。
+
+        Returns:
+            ``(response, final_url, note, login_error)``：``login_error`` 为最终
+            结论（None = 通过登录墙），note 已合并刷新提示（如有）。
+        """
+        response, final_url, note = self._get_with_redirects(
+            url,
+            network_policy,
+            gated_by_whitelist,
+            credential_headers,
+            credential_domain,
+        )
+        status = response.status_code
+        if status in _ANTIBOT_STATUS_CODES:
+            raise _AntibotBlocked(f"http_{status}: 站点拒绝访问（状态码 {status}）", status)
+        response.raise_for_status()
+        if not credential_headers:
+            return response, final_url, note, None
+        login_error = self._detect_login_wall(url, final_url, response, credential_domain)
+        if not login_error:
+            return response, final_url, note, None
+        # AU3：档案带来源持久 profile（AU6）且开关开启 → 静默重导 cookie 重放
+        from .credential_vault import resolve_credential
+
+        refresh_note = self._try_auto_refresh(credential_domain, url)
+        if not refresh_note:
+            return response, final_url, note, login_error
+        resolution = resolve_credential(credential_domain, url=url)
+        if not resolution.ok or "Cookie" not in resolution.headers:
+            return response, final_url, note, login_error
+        response, final_url, note2 = self._get_with_redirects(
+            url,
+            network_policy,
+            gated_by_whitelist,
+            resolution.headers,
+            credential_domain,
+        )
+        status = response.status_code
+        if status in _ANTIBOT_STATUS_CODES:
+            raise _AntibotBlocked(f"http_{status}: 站点拒绝访问（状态码 {status}）", status)
+        response.raise_for_status()
+        replay_error = self._detect_login_wall(url, final_url, response, credential_domain)
+        if replay_error:
+            return (
+                response,
+                final_url,
+                note2 or note,
+                f"{login_error}（{refresh_note}，但仍被要求登录）",
+            )
+        merged_note = "；".join(x for x in (note2 or note, refresh_note) if x)
+        return response, final_url, merged_note or None, None
 
     def _render(
         self, url: str, response: httpx.Response, mode: str, max_length: int
@@ -1064,6 +1133,11 @@ class WebFetchTool(BaseTool):
             "escalated": "render",
             "escalated_from": blocked.reason,
         }
+        if rendered.get("login_wall") and credential_domain:
+            raise RenderError(
+                "login_required: 渲染通道访问被要求登录（凭据可能已失效）。"
+                "请重新登录后 browser_cookies action=export 再试"
+            )
         refreshed = rendered.get("credential_refreshed")
         if refreshed:
             content["note"] = (
@@ -1122,9 +1196,27 @@ class WebFetchTool(BaseTool):
         rendered = web_render.render_page(
             url, network_policy, wait_for=wait_for, credential_domain=credential_domain
         )
+        # AU7：渲染落在登录墙 → AU3 自愈重试一次，仍墙则报 login_required
+        auto_refresh_note = ""
+        if rendered.get("login_wall") and credential_domain:
+            auto_refresh_note = self._try_auto_refresh(credential_domain, url)
+            if auto_refresh_note:
+                rendered = web_render.render_page(
+                    url, network_policy, wait_for=wait_for, credential_domain=credential_domain
+                )
+        if rendered.get("login_wall"):
+            raise RenderError(
+                "login_required: 渲染通道访问被要求登录（凭据可能已失效）。"
+                "请重新登录后 browser_cookies action=export 再试；"
+                "或开启 web_access_config.auto_refresh_credentials 用持久 profile 静默续期"
+            )
         refreshed = rendered.pop("credential_refreshed", None)
         content = dict(static_content)  # 保留 status_code / content_type / encoding / mode
         content.update({k: v for k, v in rendered.items() if k != "html"})
+        if auto_refresh_note:
+            content["note"] = (
+                f"{content['note']}；{auto_refresh_note}" if content.get("note") else auto_refresh_note
+            )
         if refreshed:
             note = (
                 "credential_refreshed: 渲染通道续期了 cookie，档案已回写"

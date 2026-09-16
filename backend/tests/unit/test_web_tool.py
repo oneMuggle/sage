@@ -15,6 +15,8 @@ from backend.tools.web_tool import WebFetchTool, WebSearchTool, looks_like_antib
 
 pytestmark = [pytest.mark.unit]
 
+from types import SimpleNamespace as fake_ns  # noqa: E402, N813
+
 
 @pytest.fixture(autouse=True)
 def http_sleeps(monkeypatch):
@@ -1509,3 +1511,137 @@ def test_escalate_without_credential_keeps_no_note(monkeypatch):
         blocked,
     )
     assert "note" not in content
+
+
+# ---------- Round 11 AU3/AU7：自动刷新重放 + 渲染登录墙 ----------
+
+
+def test_fetch_credentialled_auto_refresh_replays(monkeypatch):
+    """AU3：登录墙 → 静默刷新 → 用新 Cookie 头重放一次 → 通过。"""
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+    tool = _fetch_tool()
+    calls = []
+
+    def fake_get(self, url, policy, gated, headers, domain):
+        calls.append(dict(headers or {}))
+        if len(calls) == 1:
+            resp = httpx.Response(
+                200,
+                text="<html><body><input type=password></body></html>",
+                request=httpx.Request("GET", url),
+            )
+            return resp, "https://login.example.com/session", None
+        return (
+            httpx.Response(200, text="welcome back", request=httpx.Request("GET", url)),
+            "https://example.com/dash",
+            None,
+        )
+
+    monkeypatch.setattr(WebFetchTool, "_get_with_redirects", fake_get)
+    monkeypatch.setattr(
+        WebFetchTool,
+        "_try_auto_refresh",
+        lambda self, d, u: "credential_auto_refreshed: 已用持久 profile 静默重导登录态（SID）",
+    )
+    import backend.tools.credential_vault as vault_mod
+
+    monkeypatch.setattr(
+        vault_mod,
+        "resolve_credential",
+        lambda domain, url=None, repo=None, now=None: fake_ns(
+            ok=True, headers={"Cookie": "SID=new"}, cookies=[]
+        ),
+    )
+
+    response, final_url, note, login_error = tool._fetch_credentialled(
+        "https://example.com/dash",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        False,
+        ".example.com",
+        {"Cookie": "SID=old"},
+    )
+    assert len(calls) == 2
+    assert calls[1] == {"Cookie": "SID=new"}
+    assert login_error is None
+    assert "credential_auto_refreshed" in (note or "")
+
+
+def test_fetch_credentialled_refresh_off_keeps_login_error(monkeypatch):
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+    tool = _fetch_tool()
+    calls = []
+
+    def fake_get(self, url, policy, gated, headers, domain):
+        calls.append(1)
+        resp = httpx.Response(
+            200,
+            text="<html><body><input type=password></body></html>",
+            request=httpx.Request("GET", url),
+        )
+        return resp, "https://login.example.com/session", None
+
+    monkeypatch.setattr(WebFetchTool, "_get_with_redirects", fake_get)
+    monkeypatch.setattr(WebFetchTool, "_try_auto_refresh", lambda self, d, u: "")
+
+    response, final_url, note, login_error = tool._fetch_credentialled(
+        "https://example.com/dash",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        False,
+        ".example.com",
+        {"Cookie": "SID=old"},
+    )
+    assert len(calls) == 1
+    assert login_error
+    assert "login_required" in login_error
+
+
+def test_render_dynamic_login_wall_raises(monkeypatch):
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+    tool = WebFetchTool()
+    monkeypatch.setattr(
+        web_render,
+        "render_page",
+        lambda *a, **k: {"url": "u", "title": "t", "content": "x", "rendered": True, "login_wall": True},
+    )
+    monkeypatch.setattr(WebFetchTool, "_try_auto_refresh", lambda self, d, u: "")
+    with pytest.raises(web_render.RenderError, match="login_required"):
+        tool._render_dynamic(
+            "https://example.com/",
+            NetworkPolicy(mode=NetworkMode.ONLINE),
+            "text",
+            1000,
+            {"mode": "text"},
+            "",
+            ".example.com",
+        )
+
+
+def test_render_dynamic_login_wall_retries_after_refresh(monkeypatch):
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+    tool = WebFetchTool()
+    state = {"n": 0}
+
+    def fake_render(*a, **k):
+        state["n"] += 1
+        if state["n"] == 1:
+            return {"url": "u", "title": "t", "content": "x", "rendered": True, "login_wall": True}
+        return {"url": "u", "title": "t", "content": "real body", "rendered": True}
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    monkeypatch.setattr(WebFetchTool, "_try_auto_refresh", lambda self, d, u: "refreshed note")
+    content = tool._render_dynamic(
+        "https://example.com/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        "text",
+        1000,
+        {"mode": "text"},
+        "",
+        ".example.com",
+    )
+    assert state["n"] == 2
+    assert content["content"] == "real body"
+    assert "refreshed note" in (content.get("note") or "")

@@ -36,7 +36,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from backend.services.secret_box import decrypt_secret, encrypt_secret
+from backend.services.secret_box import current_scheme, decrypt_secret, encrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +210,12 @@ def _clean_cookie(item: Dict[str, Any], default_domain: str) -> Optional[Dict[st
     return cleaned
 
 
-def save_credential(domain: str, cookies: List[Dict[str, Any]], repo: Optional[Any] = None) -> None:
+def save_credential(
+    domain: str,
+    cookies: List[Dict[str, Any]],
+    repo: Optional[Any] = None,
+    source_profile: str = "",
+) -> None:
     """把某 cookie domain 的 cookie 列表加密存入档案（覆盖旧值，kind=cookie）。
 
     Args:
@@ -227,7 +232,7 @@ def save_credential(domain: str, cookies: List[Dict[str, Any]], repo: Optional[A
     store = _get_repo(repo)
     vault = _load_vault(store)
     now = _now_ms()
-    vault[domain] = {
+    entry = {
         "kind": KIND_COOKIE,
         "cookies_enc": encrypt_secret(
             json.dumps(cleaned, ensure_ascii=False), account=_VAULT_ACCOUNT_PREFIX + domain
@@ -235,7 +240,14 @@ def save_credential(domain: str, cookies: List[Dict[str, Any]], repo: Optional[A
         "saved_at": now,
         "updated_at": now,
     }
+    source_profile = (source_profile or "").strip()
+    if source_profile:
+        entry["source_profile"] = source_profile
+    vault[domain] = entry
     _save_vault(store, vault)
+    if current_scheme() == "none":
+        # X4：平台加密不可用，诚实降级为明文落库——至少要让用户知道
+        logger.warning("平台加密不可用，凭据档案 %s 以明文落库", domain)
 
 
 def _decrypt_cookies(entry: Dict[str, Any], domain: str) -> Optional[List[Dict[str, Any]]]:
@@ -752,6 +764,18 @@ def merge_cdp_cookies(
     return changed
 
 
+def get_source_profile(domain: str, repo: Optional[Any] = None) -> Optional[str]:
+    """取档案记录的来源持久 profile 名（AU6）；无档案 / 未记录返回 ``None``。"""
+    domain = (domain or "").strip().lower()
+    if not domain:
+        return None
+    entry = _load_vault(_get_repo(repo)).get(domain)
+    if not isinstance(entry, dict):
+        return None
+    source = entry.get("source_profile")
+    return str(source) if source else None
+
+
 def delete_credential(domain: str, repo: Optional[Any] = None) -> bool:
     """删除某 domain 档案；返回是否确有删除。"""
     domain = (domain or "").strip().lower()
@@ -802,6 +826,16 @@ def list_credentials(repo: Optional[Any] = None) -> List[Dict[str, Any]]:
         }
         if kind == KIND_HEADER:
             record["header_names"] = names
+        source_profile = entry.get("source_profile") if isinstance(entry, dict) else None
+        if source_profile:
+            record["source_profile"] = str(source_profile)
+        # X4：档案是否真的密文（scheme=none 平台诚实降级时为 False）
+        enc_value = (
+            entry.get("cookies_enc") if isinstance(entry, dict) else None
+        ) or (
+            entry.get("headers_enc") if isinstance(entry, dict) else None
+        )
+        record["encrypted"] = bool(isinstance(enc_value, str) and enc_value.startswith("enc:"))
         entries.append(record)
     return entries
 
@@ -815,6 +849,7 @@ __all__ = [
     "cookie_header_for",
     "cookie_path_matches",
     "delete_credential",
+    "get_source_profile",
     "list_credentials",
     "load_credential",
     "looks_like_login_html",
