@@ -44,7 +44,7 @@ from .bash_session import (
     SessionLimitExceeded,
     get_registry,
 )
-from .shell_resolver import build_shell_fallback_note, ShellSpec, resolve_shell
+from .shell_resolver import ShellSpec, build_shell_fallback_note, resolve_shell
 from .subprocess_util import (
     VerifiedProcess,
     file_identity,
