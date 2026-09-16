@@ -737,6 +737,13 @@ class ExcelSheetSpec(BaseModel):
         default=False,
         description="冻结首行（滚动长表时表头保持可见）",
     )
+    # Round 31：冻结窗格参数化（A1 记法）。与 freeze_header 同给时本字段优先。
+    freeze_panes: Optional[str] = Field(
+        default=None,
+        max_length=10,
+        pattern=r"^[A-Za-z]{1,3}[0-9]{1,7}$",
+        description="冻结窗格 A1 记法，如 'B2' 冻结首行+首列；None 不设置",
+    )
     autofit_columns: bool = Field(
         default=False,
         description="按内容自适应列宽（显式 column_widths 的列优先）",
