@@ -175,6 +175,53 @@ jobs:
   # - 与 backend-windows-unit 一致：非门禁信号 job，不进 all-green needs
   # - 环境只需 requirements.txt + environment.yml 自带的 pytest 套件，
   #   不装 ruff/mypy/import-linter（本 job 不跑 lint/type）
+  # ========== Backend (py38 collect gate): main PR 的 win7 地雷拦截 ==========
+  # - 只做 Python 3.8 下的「收集」（pytest --collect-only）+ backend.main 导入冒烟
+  #   —— 拦截 py39+/py310+ 语法（括号多上下文 with / PEP585 下标 / union 注解）
+  #     在合并进 main 前即失败，避免地雷随 win7 同步流到 release/win7
+  # - 不跑运行期断言：py38 行为差异由 release/win7 分支自己的 CI 兜底
+  # - 非 all-green 门禁依赖之外的信号 job（失败即合并前可见，无需 win7 回流修复）
+  backend-py38-collect:
+    name: Backend collect (Python 3.8, win7 mine-sweeper)
+    if: |
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Miniconda + Python 3.8
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.8'
+          channels: conda-forge
+
+      - name: Create py38 env
+        shell: bash -el {0}
+        run: |
+          conda create -n sage-collect-py38 python=3.8 -y
+          conda run -n sage-collect-py38 pip install --upgrade pip
+
+      - name: Install backend deps (py38, locked)
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-collect-py38 pip install -r backend/requirements-py38.txt
+          # 只装收集所需的测试工具；dev 文件里的 import-linter/mypy 等不装
+          # （main 的 dev 钉版可能漂移出 py38 支持范围，与本门禁无关）
+          conda run -n sage-collect-py38 pip install pytest==7.4.4 pytest-asyncio==0.23.3 pytest-timeout==2.3.1 pytest-xdist==3.6.1 respx==0.21.1
+
+      - name: backend.main import smoke (py38)
+        shell: bash -el {0}
+        run: conda run -n sage-collect-py38 python -c "import backend.main; print('py38 import ok')"
+
+      - name: Collect unit suite (py38) — zero collection errors
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-collect-py38 python -m pytest backend/tests/unit --collect-only -q -p no:cacheprovider
+
+
   backend-legacy:
     name: Backend legacy smoke (non-blocking)
     if: |
