@@ -75,7 +75,7 @@ export type WordEditKind =
   | 'add_comment'
   | 'set_paragraph_style'
   | 'delete_comment';
-export type ExcelEditKind = 'set_cells' | 'append_rows';
+export type ExcelEditKind = 'set_cells' | 'append_rows' | 'add_chart';
 export type PptEditKind =
   | 'set_slide_title'
   | 'set_slide_bullets'
@@ -120,6 +120,14 @@ interface ComposeState {
   value: string;
   // excel append_rows
   rowsText: string;
+  // excel add_chart
+  chartType: 'line' | 'bar' | 'pie';
+  chartAnchor: string;
+  chartMinCol: string;
+  chartMinRow: string;
+  chartMaxCol: string;
+  chartMaxRow: string;
+  chartTitle: string;
   // ppt set_slide_title
   slideNumber: string;
   slideTitle: string;
@@ -159,6 +167,13 @@ const INITIAL_COMPOSE: ComposeState = {
   cell: '',
   value: '',
   rowsText: '',
+  chartType: 'bar',
+  chartAnchor: '',
+  chartMinCol: '',
+  chartMinRow: '',
+  chartMaxCol: '',
+  chartMaxRow: '',
+  chartTitle: '',
   slideNumber: '1',
   slideTitle: '',
   bulletsText: '',
@@ -261,6 +276,26 @@ export function buildUpdateOps(
       );
       if (!sheet || !rows.length) return null;
       return [{ op: 'append_rows', sheet, rows }];
+    }
+    if (state.excelKind === 'add_chart') {
+      const anchor = state.chartAnchor.trim().toUpperCase();
+      if (!sheet || !anchor) return null;
+      const minCol = Number(state.chartMinCol);
+      const minRow = Number(state.chartMinRow);
+      const maxCol = Number(state.chartMaxCol);
+      const maxRow = Number(state.chartMaxRow);
+      const ints = [minCol, minRow, maxCol, maxRow];
+      if (ints.some((v) => !Number.isInteger(v) || v < 1)) return null;
+      if (minCol > maxCol || minRow > maxRow) return null;
+      const op: OfficeUpdateOp = {
+        op: 'add_chart',
+        sheet,
+        type: state.chartType,
+        anchor,
+        data_ref: { min_col: minCol, min_row: minRow, max_col: maxCol, max_row: maxRow },
+      };
+      if (state.chartTitle.trim()) op.title = state.chartTitle.trim();
+      return [op];
     }
     const addr = state.cell.trim();
     const value = state.value.trim();
@@ -754,6 +789,7 @@ export function OfficeEditPreviewDialog({
                   >
                     <option value="set_cells">{t('office.edit.kindSetCells')}</option>
                     <option value="append_rows">{t('office.edit.kindAppendRows')}</option>
+                    <option value="add_chart">{t('office.edit.kindAddChart')}</option>
                   </select>
                 </div>
                 <div>
@@ -812,6 +848,108 @@ export function OfficeEditPreviewDialog({
                       />
                     </div>
                   </div>
+                )}
+                {compose.excelKind === 'add_chart' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.chartType')}
+                        </label>
+                        <select
+                          value={compose.chartType}
+                          onChange={(e) =>
+                            setField('chartType')(e.target.value as ComposeState['chartType'])
+                          }
+                          className={inputClass}
+                          data-testid="office-edit-chart-type"
+                        >
+                          <option value="bar">bar</option>
+                          <option value="line">line</option>
+                          <option value="pie">pie</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.chartAnchor')}
+                        </label>
+                        <input
+                          type="text"
+                          value={compose.chartAnchor}
+                          onChange={(e) => setField('chartAnchor')(e.target.value)}
+                          placeholder="A10"
+                          className={inputClass}
+                          data-testid="office-edit-chart-anchor"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.chartMinCol')}
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={compose.chartMinCol}
+                          onChange={(e) => setField('chartMinCol')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-chart-min-col"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.chartMinRow')}
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={compose.chartMinRow}
+                          onChange={(e) => setField('chartMinRow')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-chart-min-row"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.chartMaxCol')}
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={compose.chartMaxCol}
+                          onChange={(e) => setField('chartMaxCol')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-chart-max-col"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.chartMaxRow')}
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={compose.chartMaxRow}
+                          onChange={(e) => setField('chartMaxRow')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-chart-max-row"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.chartTitle')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.chartTitle}
+                        onChange={(e) => setField('chartTitle')(e.target.value)}
+                        className={inputClass}
+                        data-testid="office-edit-chart-title"
+                      />
+                    </div>
+                  </>
                 )}
                 {compose.excelKind === 'append_rows' && (
                   <div>
