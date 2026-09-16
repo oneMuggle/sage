@@ -447,6 +447,12 @@ export const en: Record<TranslationKey, string> = {
   'scheduled.toast.create_fail': 'Failed to create task',
   'scheduled.toast.update_fail': 'Failed to update task',
   'scheduled.toast.delete_fail': 'Failed to delete task',
+  'scheduled.session.required': 'Select a target session',
+  'scheduled.session.empty': 'Create a conversation first, then return to schedule a task.',
+  'scheduled.run_failed': 'Delivery failed — review the target session before retrying',
+  'scheduled.run_succeeded': 'Last delivery succeeded',
+  'scheduled.confirm.retry':
+    'Check the target conversation first: the previous delivery may have succeeded before the error. Retry now?',
   'scheduled.confirm.delete': 'Delete this scheduled task?',
 
   // ─── M1 tool approval ─────────────

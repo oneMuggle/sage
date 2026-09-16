@@ -853,6 +853,9 @@ export interface ScheduledTask {
   enabled: boolean;
   last_run?: number | null;
   next_run?: number | null;
+  last_attempt?: number | null;
+  last_status?: 'never' | 'succeeded' | 'failed';
+  last_error?: string | null;
   created_at: number;
 }
 
@@ -862,11 +865,16 @@ export interface CreateTaskInput {
   schedule: Schedule;
   session_id: string;
   content: string;
+  enabled?: boolean;
 }
 
 export interface UpdateTaskInput {
   name?: string;
   enabled?: boolean;
+  type?: ScheduleKind;
+  schedule?: Schedule;
+  session_id?: string;
+  content?: string;
 }
 
 // ============================================================================
