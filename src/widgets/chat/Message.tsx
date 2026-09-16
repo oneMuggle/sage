@@ -399,6 +399,10 @@ function MessageComponent({
   // (思考/调用工具) 会覆盖占位值，覆盖后自动回退 markdown 渲染。
   const isThinkingPlaceholder =
     isAssistant && isStreaming === true && message.content === THINKING_PLACEHOLDER;
+  // 2026-09 step-by-step: 多步 run 中,中间步骤可能 content="" 但有
+  // tool_calls / reasoning_content。气泡只在有内容时渲染;其他部件
+  // (ThinkingPanel / tool_calls) 始终渲染,确保中间步骤不会"空泡"。
+  const showBubble = isUser || (isAssistant && Boolean((message.content ?? '').trim()));
   // P1 流式分块: 已确定前缀切稳定块（memo 化跳过重解析），只有 live 尾块
   // 随 delta 全量 re-parse；非流式整体单块渲染，DOM 与旧实现一致。
   const displayContent = useMemo(
@@ -552,39 +556,45 @@ function MessageComponent({
           </div>
         )}
 
-        {/* 消息气泡 */}
-        <div
-          data-error={isError ? 'true' : undefined}
-          className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
-            isUser
-              ? 'bg-primary text-text-inverse'
-              : isError
-                ? 'bg-error/10 border border-error/40 text-error'
-                : 'bg-surface border border-border'
-          }`}
-        >
-          {/* Message content with Markdown */}
-          {isAssistant ? (
-            isThinkingPlaceholder ? (
-              <ThinkingShimmer />
-            ) : (
-              <div className="max-w-none max-w-3xl mx-auto w-full">
-                {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
+        {/* 消息气泡 — 2026-09 step-by-step: 空内容时不渲染,避免空白气泡 */}
+        {showBubble && (
+          <div
+            data-error={isError ? 'true' : undefined}
+            className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
+              isUser
+                ? 'bg-primary text-text-inverse'
+                : isError
+                  ? 'bg-error/10 border border-error/40 text-error'
+                  : 'bg-surface border border-border'
+            }`}
+          >
+            {/* Message content with Markdown */}
+            {isAssistant ? (
+              isThinkingPlaceholder ? (
+                <ThinkingShimmer />
+              ) : (
+                <div className="max-w-none max-w-3xl mx-auto w-full">
+                  {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
                     长文不再一行拉满；表格/代码块仍在容器内滚动 */}
-                {chunks.stable.map((md, i) => (
-                  <MarkdownChunk key={i} md={md} />
-                ))}
-                <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
-                {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
-                {isStreaming && (
-                  <span className="stream-cursor" aria-hidden="true" data-testid="stream-cursor" />
-                )}
-              </div>
-            )
-          ) : (
-            <p className="whitespace-pre-wrap">{renderTextWithLinks(message.content)}</p>
-          )}
-        </div>
+                  {chunks.stable.map((md, i) => (
+                    <MarkdownChunk key={i} md={md} />
+                  ))}
+                  <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
+                  {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
+                  {isStreaming && (
+                    <span
+                      className="stream-cursor"
+                      aria-hidden="true"
+                      data-testid="stream-cursor"
+                    />
+                  )}
+                </div>
+              )
+            ) : (
+              <p className="whitespace-pre-wrap">{renderTextWithLinks(message.content)}</p>
+            )}
+          </div>
+        )}
 
         {/* 底部信息 */}
         <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">

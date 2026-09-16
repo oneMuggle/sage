@@ -143,7 +143,7 @@ export function useChat() {
   // widget 看到 '🤔 思考中…' 占位符看不到真实 LLM 进度。
   // S2: 读当前会话的槽位 —— 切到会话 B 就看 B 的实时进度(A 的流在后台
   // 继续累积,切回 A 时内容完整可见)。
-  const { streaming, streamingToolCalls, taskBoard } = useChatStreamStore((s) =>
+  const { streaming, streamingToolCalls, taskBoard, completedSteps } = useChatStreamStore((s) =>
     selectSessionSlots(s, currentSessionId),
   );
 
@@ -183,20 +183,53 @@ export function useChat() {
   const streamingReasoning = streaming?.reasoning ?? '';
 
   const derivedMessages = useMemo<Message[]>(() => {
-    if (!streamingMessageId) return messages;
-    return messages.map((m) =>
-      m.id === streamingMessageId
-        ? {
-            ...m,
-            content: streamingContent,
-            reasoning_content: streamingReasoning || undefined,
-            tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
-          }
-        : m,
-    );
+    // 2026-09 step-by-step: 多步 run 时把已完成的步骤消息拼接在 store.messages 之后。
+    // 拼接顺序:store.messages(持久化/加载) → completedSteps(本 run 已完成步骤快照)
+    // → 流式覆盖层(若 streaming.messageId 不在 store.messages / completedSteps 中,
+    //   说明当前正在流的是新一步,需要追加一个虚拟消息承载流式内容)
+    if (!streamingMessageId) {
+      return completedSteps.length > 0 ? [...messages, ...completedSteps] : messages;
+    }
+    const overlay: Partial<Message> = {
+      content: streamingContent,
+      reasoning_content: streamingReasoning || null,
+      tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
+    };
+    const overlayInStore = messages.some((m) => m.id === streamingMessageId);
+    const overlayInCompleted = completedSteps.some((m) => m.id === streamingMessageId);
+    let next = messages.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m));
+    if (completedSteps.length > 0) {
+      next = [
+        ...next,
+        ...completedSteps.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m)),
+      ];
+    }
+    if (!overlayInStore && !overlayInCompleted && streaming) {
+      // 当前流式 messageId 不在 store.messages 也不在 completedSteps(说明是
+      // 刚切到下一步,还没序列化到 store),追加一个虚拟消息承载流式内容
+      next.push({
+        id: streamingMessageId,
+        session_id: currentSessionId ?? '',
+        role: 'assistant',
+        content: streamingContent,
+        reasoning_content: streamingReasoning || null,
+        tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
+        created_at: Date.now(),
+      });
+    }
+    return next;
     // MEDIUM-6: 拆细 deps — 仅依赖 streaming 中实际用到的字段,
     // 避免 currentAgentId/iteration/state 等无关变化触发 messages 数组重建
-  }, [messages, streamingMessageId, streamingContent, streamingReasoning, streamingToolCalls]);
+  }, [
+    messages,
+    streamingMessageId,
+    streamingContent,
+    streamingReasoning,
+    streamingToolCalls,
+    completedSteps,
+    streaming,
+    currentSessionId,
+  ]);
 
   const sendMessage = useCallback(
     async (
@@ -297,7 +330,11 @@ export function useChat() {
       // PR-6: 先占位 assistant message, 流式过程中累积 content
       // 2026-09-13 P0: 哨兵值抽为 THINKING_PLACEHOLDER，Message 据此渲染
       // shimmer 占位而非把占位文案当 markdown 静态文本。
-      const assistantId = crypto.randomUUID();
+      // 2026-09 step-by-step: `let` 而非常量 —— step_done 时会切换到新的
+      // uuid,后续 deltas 路由到新的 messageId(与 chatStreamStore.streaming
+      // 槽位协同)。所有 closure(appendContent / replaceContent / finishStream
+      // / clearStream)按引用捕获,reassign 后 closure 看到最新值。
+      let assistantId = crypto.randomUUID();
       const assistantMessage: Message = {
         id: assistantId,
         session_id: sid,
@@ -494,6 +531,36 @@ export function useChat() {
                   currentAgentId: evt.agent_id ?? null,
                   iteration: evt.iteration ?? 0,
                 });
+              }
+
+              // 2026-09 step-by-step: 收到 step_done → 把当前 streaming 快照成
+              // 一条 Message 推入 completedSteps,然后重置 streaming 并切换
+              // messageId,后续 deltas 路由到新消息。`return` 跳过本事件其余
+              // handler(step_done 无 uiText / content, 不应触发占位或累积)。
+              if (evt.state === 'step_done') {
+                const slots = selectSessionSlots(useChatStreamStore.getState(), sid);
+                const streamSnapshot = slots.streaming;
+                const toolCallsSnapshot = slots.streamingToolCalls;
+                // 优先用 lastDoneContent(本步 done.content 全量),否则退回 streaming 累积
+                const stepContent = lastDoneContent ?? streamSnapshot?.content ?? '';
+                const stepReasoning = streamSnapshot?.reasoning ?? '';
+                const completedMessage: Message = {
+                  id: assistantId,
+                  session_id: sid,
+                  role: 'assistant',
+                  content: stepContent,
+                  reasoning_content: stepReasoning || null,
+                  tool_calls: toolCallsSnapshot.length > 0 ? toolCallsSnapshot : undefined,
+                  created_at: Date.now(),
+                  step_index: typeof evt.step_index === 'number' ? evt.step_index : null,
+                };
+                useChatStreamStore.getState().addCompletedStep(sid, assistantId, completedMessage);
+                const nextAssistantId = crypto.randomUUID();
+                useChatStreamStore.getState().finalizeStep(sid, assistantId, nextAssistantId);
+                assistantId = nextAssistantId;
+                // 下一步有独立的 done.content;重置避免上一步的值污染
+                lastDoneContent = null;
+                return;
               }
 
               // M1 工具审批: permission_request 事件 → 写入 permission store,

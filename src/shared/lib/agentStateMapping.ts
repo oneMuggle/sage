@@ -64,6 +64,7 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
       return null;
     case 'subagent_event': // live-events P0: 子代理镜像进任务板 live 态,不进消息气泡
     case 'approval_mode': // live-events P1: 审批模式回显进任务板,不进消息气泡
+    case 'step_done': // 2026-09 step-by-step: 每步完成信号,前端 store 据此快照气泡,不进消息气泡占位
       return null;
     default:
       return assertNever(state);
@@ -110,6 +111,7 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
       return null;
     case 'subagent_event': // live-events P0: 子代理镜像由任务树/内联面板展示
     case 'approval_mode': // live-events P1: 审批模式由任务树开关回显
+    case 'step_done': // 2026-09 step-by-step: 步完成信号,无独立 UI 阶段(快照进 store 后)
       return null;
     default:
       return assertNever(state);

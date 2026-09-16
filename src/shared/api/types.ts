@@ -120,6 +120,10 @@ export interface Message {
   provider?: string;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
+  /** 2026-09 step-by-step: assistant 行的步序号（0 起；多步 run 时每步一行）。 */
+  step_index?: number | null;
+  /** alpha.36 (Bug #4): 同一 message 行内携带的 LLM 推理过程（持久化在 DB）。 */
+  reasoning_content?: string | null;
 }
 
 export interface ToolCall {
@@ -154,6 +158,9 @@ export type AgentState =
   | 'content_delta'
   | 'done'
   | 'failed'
+  // 2026-09 step-by-step: 每次 ReAct 迭代结束（OBSERVING 之后）由后端产出,
+  // 前端据此把当前 streaming 气泡快照为已完成 step + 准备下一步占位。
+  | 'step_done'
   // Multi-Agent Orchestration (2026-08-11)
   | 'task_plan'
   | 'task_status'
@@ -393,6 +400,8 @@ export interface TodoSnapshotEvent {
 export interface AgentEvent {
   state: AgentState;
   iteration: number;
+  /** 2026-09 step-by-step: 当前事件所属 step 序号（与 iteration 对齐; STEP_DONE 时明确设置）。 */
+  step_index?: number;
   content?: string;
   reasoning?: string; // LLM 思考/推理过程内容
   tool_call?: AgentToolCall;
