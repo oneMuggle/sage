@@ -47,6 +47,11 @@ class SearchConfig:
     engine_order: Tuple[str, ...] = DEFAULT_ENGINE_ORDER
     tavily_key: str = ""
     zhipu_key: str = ""
+    #: 并行聚合（Round 8 P1）：true 时链上前 parallel_first_n 个引擎并发搜索
+    #: 并按优先级合并去重；false 保持串行 fallback。
+    parallel: bool = False
+    #: 并行模式取链上前 N 个引擎（下限 1）
+    parallel_first_n: int = 2
 
 
 def _unwrap_secret(value: Any) -> str:
@@ -103,8 +108,12 @@ def load_search_config(repo: Optional[Any] = None) -> SearchConfig:
         if cleaned:
             engine_order = cleaned
 
+    parallel = parsed.get("parallel")
+    first_n = parsed.get("parallel_first_n")
     return SearchConfig(
         engine_order=engine_order,
         tavily_key=_unwrap_secret(parsed.get("tavily_key")),
         zhipu_key=_unwrap_secret(parsed.get("zhipu_key")),
+        parallel=bool(parallel),
+        parallel_first_n=first_n if isinstance(first_n, int) and first_n >= 1 else 2,
     )

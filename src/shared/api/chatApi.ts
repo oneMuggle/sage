@@ -53,6 +53,8 @@ export const chatApi = {
             apiUrl: config?.apiUrl ?? null,
             model: config?.model ?? null,
             maxContext: config?.maxContext ?? null,
+            // Task 5 (2026-09-15): auto-context resolution flag.
+            autoContext: config?.autoContext ?? null,
             temperature: config?.temperature ?? null,
             provider: config?.provider ?? null,
             reasoningEffort: config?.reasoningEffort ?? null,
@@ -67,8 +69,16 @@ export const chatApi = {
     ); // chat 操作重试次数少一些
   },
 
-  async interrupt(streamId?: string): Promise<void> {
+  async interrupt(streamId?: string, sessionId?: string): Promise<void> {
     try {
+      // A renderer reload may have lost the handle; resolve ONLY this session.
+      if (!streamId && sessionId) {
+        const active = await invoke<{ streamId: string | null }>('chat_stream_active', {
+          sessionId,
+        });
+        if (!active.streamId) return;
+        streamId = active.streamId;
+      }
       // P0-2 (2026-08-20): 带上 streamId 让后端命中真实运行的 agent。
       // Electron relay camelToSnakeKeys 会把 body 转成 { stream_id }。
       await invoke('interrupt_agent', streamId ? { streamId } : {});
@@ -120,6 +130,7 @@ export const chatApi = {
     officeRefs?: readonly ChatOfficeRef[],
     /** R23-D2: 聊天图片输入（base64 data URL），后端限 4 张/单张 5MiB */
     images?: string[],
+    attachmentMediaIds?: string[],
   ): Promise<{ streamId: string; cancel: () => void }> {
     // 消息原文直传,理由同 chat()。
     if (!handlers || typeof handlers.onEvent !== 'function') {
@@ -152,6 +163,8 @@ export const chatApi = {
       apiUrl: config?.apiUrl ?? null,
       model: config?.model ?? null,
       maxContext: config?.maxContext ?? null,
+      // Task 5 (2026-09-15): auto-context resolution flag.
+      autoContext: config?.autoContext ?? null,
       temperature: config?.temperature ?? null,
       provider: config?.provider ?? null,
       reasoningEffort: config?.reasoningEffort ?? null,
@@ -169,6 +182,7 @@ export const chatApi = {
       memory_mode: config?.memoryDisabled ? 'off' : 'on',
       // R23-D2: 聊天图片输入 —— 后端 ChatRequest.images（data URL 列表）
       images: images ?? [],
+      attachment_media_ids: attachmentMediaIds ?? [],
     });
     const eventName = `chat-stream-${streamId}`;
 
@@ -189,6 +203,7 @@ export const chatApi = {
       }
     };
     const feedWatchdog = (): void => {
+      if (settled) return;
       clearWatchdog();
       watchdogTimer = setTimeout(() => {
         if (settled) return;
@@ -210,6 +225,7 @@ export const chatApi = {
     };
 
     const cancel = (): void => {
+      settled = true;
       clearWatchdog();
       if (unlisten) {
         try {
@@ -236,7 +252,8 @@ export const chatApi = {
     const trace: AgentEvent[] = [];
 
     try {
-      unlisten = await listen<AgentEvent>(eventName, (evt) => {
+      const subscribed = await listen<AgentEvent>(eventName, (evt) => {
+        if (settled) return;
         const payload = evt.payload;
         feedWatchdog();
         // DIAG(2026-07-30): 仅在 state=failed 时 dump 整轮事件,定位 max_iterations 根因
@@ -284,6 +301,9 @@ export const chatApi = {
           finishOnce(() => handlers.onDone?.());
         }
       });
+      // Buffered terminal events can arrive before listen() resolves.
+      if (settled) subscribed();
+      else unlisten = subscribed;
     } catch (listenErr) {
       // listen 失败: 后端流可能已经在推,告知用户
       const err = listenErr instanceof Error ? listenErr : new Error('订阅流式事件失败');
@@ -337,6 +357,7 @@ export const chatApi = {
       }
     };
     const cancel = (): void => {
+      settled = true;
       clearWatchdog();
       if (unlisten) {
         try {
@@ -358,6 +379,7 @@ export const chatApi = {
       }
     };
     const feedWatchdog = (): void => {
+      if (settled) return;
       clearWatchdog();
       watchdogTimer = setTimeout(() => {
         if (settled) return;
@@ -379,7 +401,8 @@ export const chatApi = {
     };
 
     try {
-      unlisten = await listen<AgentEvent>(eventName, (evt) => {
+      const subscribed = await listen<AgentEvent>(eventName, (evt) => {
+        if (settled) return;
         const payload = evt.payload;
         feedWatchdog();
         try {
@@ -403,6 +426,9 @@ export const chatApi = {
           finishOnce(() => handlers.onDone?.());
         }
       });
+      // Buffered terminal events can arrive before listen() resolves.
+      if (settled) subscribed();
+      else unlisten = subscribed;
     } catch (listenErr) {
       const err = listenErr instanceof Error ? listenErr : new Error('订阅流式事件失败');
       if (handlers.onError) handlers.onError(err);

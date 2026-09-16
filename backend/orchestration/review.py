@@ -59,6 +59,20 @@ def build_review_block(verdict: str, count: int, note: str = "") -> str:
     )
 
 
+def compute_verdict(assertions: List[Assertion]) -> str:
+    """assertion 列表 → verdict（A4 事件透出与 run_review 共用，不改语义）。"""
+    if len(assertions) == 0:
+        return "fail"
+    return (
+        "fail"
+        if any(
+            a.type == AssertionType.NEGATIVE_EVIDENCE and a.confidence >= 0.7
+            for a in assertions
+        )
+        else "pass"
+    )
+
+
 async def run_review(
     *,
     run_id: str,
@@ -101,20 +115,11 @@ async def run_review(
     raw = result["result"]["output"]
 
     assertions = parse_assertions(raw)
-    executor.submit_with_report(lane_id, task_id, assertions, reviewer_id="reviewer")
-    if len(assertions) == 0:
-        verdict = "fail"
-        review_note = "reviewer 未产出任何可解析 assertion"
-    else:
-        verdict = (
-            "fail"
-            if any(
-                a.type == AssertionType.NEGATIVE_EVIDENCE and a.confidence >= 0.7
-                for a in assertions
-            )
-            else "pass"
-        )
-        review_note = ""
+    verdict = compute_verdict(assertions)
+    executor.submit_with_report(
+        lane_id, task_id, assertions, reviewer_id="reviewer", verdict=verdict
+    )
+    review_note = "reviewer 未产出任何可解析 assertion" if len(assertions) == 0 else ""
     block = build_review_block(verdict, len(assertions), note=review_note)
     if emit_review is not None:
         emit_review(

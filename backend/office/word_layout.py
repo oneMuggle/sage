@@ -86,7 +86,16 @@ def _hex_to_rgb(color: str) -> RGBColor:
 
 
 def _apply_page_setup(doc: Document, page: WordPageSetupSpec) -> None:
-    section = doc.sections[0]
+    """对文档第一节应用 page setup（format_spec.page 的调用入口）。"""
+    _apply_page_setup_to_section(doc.sections[0], page)
+
+
+def _apply_page_setup_to_section(section, page: WordPageSetupSpec) -> None:
+    """对任意节应用 page setup（Round 26 分节复用）。
+
+    仅给 orientation 未给 size 时，若实际宽高方向与期望不符则交换
+    （orientation 标志与宽高是独立属性，必须同步否则渲染仍为原方向）。
+    """
     width = None
     height = None
     if page.size == "A4":
@@ -98,10 +107,17 @@ def _apply_page_setup(doc: Document, page: WordPageSetupSpec) -> None:
             width, height = height, width
         section.page_width = width
         section.page_height = height
-    if page.orientation == "landscape":
-        section.orientation = WD_ORIENT.LANDSCAPE
-    elif page.orientation == "portrait":
-        section.orientation = WD_ORIENT.PORTRAIT
+    if page.orientation is not None:
+        want_landscape = page.orientation == "landscape"
+        is_landscape = section.page_width > section.page_height
+        if want_landscape != is_landscape:
+            section.page_width, section.page_height = (
+                section.page_height,
+                section.page_width,
+            )
+        section.orientation = (
+            WD_ORIENT.LANDSCAPE if want_landscape else WD_ORIENT.PORTRAIT
+        )
     if page.margins_cm is not None:
         margins = page.margins_cm
         if margins.top is not None:
@@ -331,13 +347,16 @@ def heading_number_prefix(counters: Any, level: int) -> str:
     return ".".join(str(counters[i]) for i in range(level) if counters[i] != 0)
 
 
-def insert_toc_field(doc: Document, toc: Any) -> None:
+def insert_toc_field(doc: Document, toc: Any, headings: Any = None) -> None:
     """在文档当前末尾（生成流程中即标题之后）插入目录标题 + TOC 域 + 分页。
 
     - 目录标题用加粗居中普通段落（非 Heading 样式）——避免被目录域
       自我收录、也不参与多级标题编号检查（与参考文献节标题同理）；
-    - TOC 域为 w:fldSimple，instr 形如 'TOC 反斜杠o "1-3" 反斜杠h
-      反斜杠z 反斜杠u'，占位 run 提示用户在 Word/WPS 中更新域生成目录。
+    - TOC 域为 **fldChar 复杂域**（Word 原生目录形态）：begin + instrText
+      （'TOC \\o "1-N" \\h \\z \\u'）+ separate → 缓存结果 → end。缓存
+      结果为静态目录行（按 headings 逐行缩进，无页码——页码由渲染器
+      更新域时计算）；headings 为空时退化为占位提示行；
+    - 之后 add_page_break 使正文另起一页。
     """
     paragraph = doc.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -346,19 +365,115 @@ def insert_toc_field(doc: Document, toc: Any) -> None:
     run.font.size = Pt(16)
 
     first, last = toc.level_range()
-    if first == 1:
-        instr = 'TOC \\o "1-' + str(last) + '" \\h \\z \\u'
-    else:
-        instr = 'TOC \\o "' + str(first) + "-" + str(last) + '" \\h \\z \\u'
+    instr = f'TOC \\o "{first}-{last}" \\h \\z \\u'
 
-    toc_paragraph = doc.add_paragraph()
-    fld = OxmlElement("w:fldSimple")
-    fld.set(qn("w:instr"), instr)
-    placeholder = OxmlElement("w:r")
-    text = OxmlElement("w:t")
-    text.text = str(toc.placeholder_text)
-    placeholder.append(text)
-    fld.append(placeholder)
-    toc_paragraph._p.append(fld)
+    begin_paragraph = doc.add_paragraph()
+    _fld_char(begin_paragraph, "begin")
+    instr_el = OxmlElement("w:instrText")
+    instr_el.set(qn("xml:space"), "preserve")
+    instr_el.text = f" {instr} "
+    begin_paragraph._p.append(instr_el)
+    _fld_char(begin_paragraph, "separate")
+
+    entries = [
+        (level, text)
+        for level, text in (headings or [])
+        if first <= level <= last
+    ]
+    if entries:
+        for level, text in entries:
+            entry = doc.add_paragraph()
+            entry.paragraph_format.left_indent = Cm(0.74 * (level - 1))
+            entry_run = entry.add_run(str(text))
+            if level == (first or 1):
+                entry_run.bold = True
+    else:
+        entry = doc.add_paragraph(str(toc.placeholder_text))
+
+    end_paragraph = doc.add_paragraph()
+    _fld_char(end_paragraph, "end")
 
     doc.add_page_break()
+
+
+def _fld_char(paragraph, char_type: str) -> None:
+    """向段落追加 w:fldChar（begin/separate/end）。"""
+    fld = OxmlElement("w:fldChar")
+    fld.set(qn("w:fldCharType"), char_type)
+    run = OxmlElement("w:r")
+    run.append(fld)
+    paragraph._p.append(run)
+
+
+def _write_hf_text(section, *, kind: str, spec: Any) -> None:
+    """向节的首页页眉/页脚写入 WordHeaderFooterSpec 内容。"""
+    part = section.first_page_header if kind == "header" else section.first_page_footer
+    if part.is_linked_to_previous:
+        part.is_linked_to_previous = False
+    target = part.paragraphs[0] if part.paragraphs else part.add_paragraph()
+    target.text = spec.text or ""
+
+
+def _write_page_number_field(section) -> None:
+    """向首页页脚写 PAGE 域（fldSimple 形态，与主页脚一致）。"""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    footer = section.first_page_footer
+    if footer.is_linked_to_previous:
+        footer.is_linked_to_previous = False
+    paragraph = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+    fld = OxmlElement("w:fldSimple")
+    fld.set(qn("w:instr"), "PAGE")
+    run = OxmlElement("w:r")
+    text = OxmlElement("w:t")
+    text.text = "1"
+    run.append(text)
+    fld.append(run)
+    paragraph._p.append(fld)
+
+
+def apply_first_page_different(doc: Document, header: Any, footer: Any) -> None:
+    """启用首页不同并为首页写独立页眉/页脚（Round 33）。"""
+    section = doc.sections[0]
+    section.different_first_page_header_footer = True
+    if header is not None:
+        _write_hf_text(section, kind="header", spec=header)
+    if footer is not None:
+        _write_hf_text(section, kind="footer", spec=footer)
+    if footer is not None and getattr(footer, "page_number", False):
+        _write_page_number_field(section)
+
+
+def apply_odd_even_different(doc: Document, even_header: Any, even_footer: Any) -> None:
+    """启用奇偶页不同并为偶数页写独立页眉/页脚（Round 34）。
+
+    settings.odd_and_even_pages_header_footer 为全局开关；偶数页内容
+    写入 section.even_page_header/footer（断开 linked）。
+    """
+    doc.settings.odd_and_even_pages_header_footer = True
+    section = doc.sections[0]
+    if even_header is not None:
+        part = section.even_page_header
+        if part.is_linked_to_previous:
+            part.is_linked_to_previous = False
+        target = part.paragraphs[0] if part.paragraphs else part.add_paragraph()
+        target.text = even_header.text or ""
+    if even_footer is not None:
+        part = section.even_page_footer
+        if part.is_linked_to_previous:
+            part.is_linked_to_previous = False
+        target = part.paragraphs[0] if part.paragraphs else part.add_paragraph()
+        target.text = even_footer.text or ""
+
+
+def apply_section_break(doc: Document, page: WordPageSetupSpec) -> None:
+    """插入 NEW_PAGE 分节并对新节应用 page setup（Round 26 横排分节）。
+
+    调用方（word.py body 循环）在写 start_paragraph 段落之前调用；
+    新节页面属性由 page_setup 决定（横排宽表/财务页场景）。
+    """
+    from docx.enum.section import WD_SECTION
+
+    new_section = doc.add_section(WD_SECTION.NEW_PAGE)
+    _apply_page_setup_to_section(new_section, page)

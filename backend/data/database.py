@@ -374,6 +374,68 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
 
+        # Model catalog state is independent of legacy model settings.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_entries (
+                provider TEXT NOT NULL, model_id TEXT NOT NULL,
+                source TEXT NOT NULL, pricing_scope TEXT NOT NULL,
+                data TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision > 0),
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(provider, model_id, source, pricing_scope)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_bindings (
+                endpoint_id TEXT NOT NULL, model_id TEXT NOT NULL,
+                provider TEXT NOT NULL, catalog_model_id TEXT NOT NULL,
+                pricing_scope TEXT NOT NULL, updated_at TEXT NOT NULL,
+                PRIMARY KEY(endpoint_id, model_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_probes (
+                endpoint_id TEXT NOT NULL, model_id TEXT NOT NULL,
+                data TEXT NOT NULL, effective_data TEXT NOT NULL,
+                PRIMARY KEY(endpoint_id, model_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_overrides (
+                endpoint_id TEXT NOT NULL, model_id TEXT NOT NULL,
+                data TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision > 0),
+                updated_at TEXT NOT NULL, PRIMARY KEY(endpoint_id, model_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_override_generations (
+                endpoint_id TEXT NOT NULL, model_id TEXT NOT NULL,
+                revision INTEGER NOT NULL CHECK(revision >= 0),
+                updated_at TEXT NOT NULL, PRIMARY KEY(endpoint_id, model_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_snapshots (
+                id TEXT PRIMARY KEY, source TEXT NOT NULL,
+                digest TEXT NOT NULL, created_at TEXT NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_catalog_snapshot_items (
+                id TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL,
+                candidate TEXT NOT NULL, base_revision INTEGER NOT NULL,
+                before_data TEXT, applied_before TEXT, applied_fields TEXT,
+                clear_fields TEXT NOT NULL DEFAULT '[]',
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN ('pending', 'applied', 'ignored')),
+                reviewed_at TEXT,
+                FOREIGN KEY(snapshot_id) REFERENCES model_catalog_snapshots(id)
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_model_catalog_snapshot_items_snapshot
+            ON model_catalog_snapshot_items(snapshot_id)
+        """)
+
         # 会话表
         # S1 (2026-09-06): run_status/last_error/last_run_at —— 会话级运行态
         # 持久化,侧边栏状态徽章数据源。idle=无运行;running/suspended=活跃流;
@@ -676,6 +738,13 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_projects_recent "
             "ON projects(last_opened_at DESC)"
         )
+        # P8 (2026-09-15): wiki recents 迁移到注册表——intent 保存最近一次
+        # 登记意图（"create"|"open"），NULL = 非 wiki 来源（侧栏登记），
+        # 读侧映射为 "open"。幂等迁移，旧库/旧行兼容（NULL 允许）。
+        cursor.execute("PRAGMA table_info(projects)")
+        _projects_columns = {row["name"] for row in cursor.fetchall()}
+        if "intent" not in _projects_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN intent TEXT")
         conn.commit()
 
         # Office self-check history (round-3 Office parity, N4). Every
@@ -850,6 +919,20 @@ class Database:
                 "ALTER TABLE usage_events ADD COLUMN latency_ms INTEGER"
             )
             conn.commit()
+        # Task 5 (2026-09-15): model catalog endpoint identity and price snapshot.
+        # Nullable columns — old records keep NULL, only new records get values.
+        cursor.execute("PRAGMA table_info(usage_events)")
+        _usage_cols = [row["name"] for row in cursor.fetchall()]
+        if "endpoint_id" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN endpoint_id TEXT"
+            )
+            conn.commit()
+        if "price_snapshot" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN price_snapshot TEXT"
+            )
+            conn.commit()
         # L8 PR-B (2026-09-09): 用量日聚合表 — 7d/30d 时间范围查询的预聚合层,
         # 避免每次都扫 usage_events 全量。days_bucket 0=今天, 1=昨天 ... 6=6 天前
         # (7d 范围), >=7 即 30d 范围折叠到月聚合。模型维度另算。
@@ -873,6 +956,20 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_usage_daily_rollups_scope_day
             ON usage_daily_rollups(scope, day DESC)
         """)
+        # Task 5 (2026-09-15): known/unknown request counters on rollup.
+        # 让 summary_with_range 能区分"全已知"vs"部分估算", 无需回查 usage_events。
+        cursor.execute("PRAGMA table_info(usage_daily_rollups)")
+        _rollup_cols = {row["name"] for row in cursor.fetchall()}
+        if "known_requests" not in _rollup_cols:
+            cursor.execute(
+                "ALTER TABLE usage_daily_rollups"
+                " ADD COLUMN known_requests INTEGER NOT NULL DEFAULT 0"
+            )
+        if "unknown_requests" not in _rollup_cols:
+            cursor.execute(
+                "ALTER TABLE usage_daily_rollups"
+                " ADD COLUMN unknown_requests INTEGER NOT NULL DEFAULT 0"
+            )
 
         # Agent 配置表 (PR-3)
         # 4 个默认 agent (primary/researcher/coder/memory_manager) 在 lifespan

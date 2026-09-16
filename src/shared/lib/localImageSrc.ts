@@ -1,11 +1,15 @@
 /**
- * 本地路径 → sage-file:// URL 转换 — P9 (UI 优化循环, 2026-09-14)。
+ * 本地路径 → sage-file:// URL 转换 — P9/P13 (UI 优化循环, 2026-09-14)。
  *
  * MarkdownImage 把模型输出的本地图片路径（绝对 Windows/POSIX 路径或
- * 相对工作区的路径）转换为 `sage-file://p/<enc(file)>?ws=<enc(ws)>`，
- * 由主进程 registerFileProtocol 校验（工作区包含 + 图片扩展名白名单 +
- * realpath 防符号链接逃逸）后安全读取。http/https/data/blob/sage-file
- * 原样透传；无工作区绑定的相对路径保持原样（与现状一致，仅无法加载）。
+ * 相对工作区的路径）转换为 `sage-file://p/<enc(file)>`，由主进程
+ * registerFileProtocol 校验（工作区注册表包含 + 图片扩展名白名单 +
+ * realpath 防符号链接逃逸）后安全读取。
+ *
+ * P13 收紧：URL 不再携带 ?ws= 自声明——工作区根在绑定/切换时由
+ * SessionWorkspaceProvider 经 IPC 登记到主进程注册表，主进程据此校验。
+ * http/https/data/blob/sage-file 原样透传；无工作区绑定的相对路径
+ * 保持原样（与现状一致，仅无法加载）。
  */
 
 const EXTERNAL_RE = /^(https?|data|blob|sage-file|mailto):/i;
@@ -31,7 +35,5 @@ export function buildLocalImageSrc(src: string, workspacePath?: string): string 
   }
   if (!abs) return src;
 
-  const file = encodeURIComponent(abs);
-  const ws = workspacePath ? `?ws=${encodeURIComponent(toPosix(workspacePath))}` : '';
-  return `sage-file://p/${file}${ws}`;
+  return `sage-file://p/${encodeURIComponent(abs)}`;
 }

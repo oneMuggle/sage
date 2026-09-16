@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import io as _io
 import logging
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
@@ -25,8 +25,8 @@ router = APIRouter(prefix="/diagnostic", tags=["diagnostic"])
 
 class PreviewResponse(BaseModel):
     count: int
-    oldestTs: Optional[str] = None  # noqa: N815 — camelCase 对齐前端
-    newestTs: Optional[str] = None  # noqa: N815
+    oldestTs: str | None = None  # noqa: N815 — camelCase 对齐前端
+    newestTs: str | None = None  # noqa: N815
     sampleUrls: List[str] = []  # noqa: N815
     version: str = "1"
 
@@ -84,3 +84,69 @@ def post_export(
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="diagnostic.zip"'},
     )
+
+
+# ==================== 搜索引擎健康自检（Round 9 R9-2） ====================
+
+
+class EngineHealth(BaseModel):
+    name: str
+    configured: bool
+    ok: bool
+    latencyMs: int = 0  # noqa: N815 — camelCase 对齐前端
+    detail: str = ""
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+class SearchEnginesHealthResponse(BaseModel):
+    engines: List[EngineHealth] = []
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+@router.get("/search-engines", response_model=SearchEnginesHealthResponse)
+def get_search_engines_health() -> SearchEnginesHealthResponse:
+    """逐个探测当前配置的搜索引擎链（设置页"测试连通性"用）。
+
+    对每个引擎发一次最小真实查询（SearchEngine.check）：Bing/DDG 探可达性与
+    解析，Tavily/智谱探 key 有效性；未配置 key 的 API 引擎如实话报"未配置"。
+    全部已知引擎都出现在响应里——用户能看出"哪个引擎没配/哪个引擎不通"。
+    串行执行，总时长受各引擎 30s 超时约束。
+    """
+    from backend.tools.http_factory import build_client
+    from backend.tools.search_config import load_search_config
+    from backend.tools.search_engines import resolve_engine_chain
+
+    config = load_search_config()
+    chain_by_name = {engine.name: engine for engine in resolve_engine_chain(config)}
+
+    engines_report: List[EngineHealth] = []
+    for name in ("bing", "ddg", "tavily", "zhipu"):
+        engine = chain_by_name.get(name)
+        if engine is None:
+            engines_report.append(
+                EngineHealth(
+                    name=name,
+                    configured=False,
+                    ok=False,
+                    latencyMs=0,
+                    detail="未配置（缺 API key 或不在引擎链）",
+                )
+            )
+            continue
+        with build_client(timeout=30.0) as client:
+            outcome = engine.check(client)
+        engines_report.append(
+            EngineHealth(
+                name=engine.name,
+                configured=True,
+                ok=bool(outcome.get("ok")),
+                latencyMs=int(outcome.get("latency_ms", 0)),
+                detail=str(outcome.get("detail", "")),
+            )
+        )
+
+    return SearchEnginesHealthResponse(engines=engines_report)

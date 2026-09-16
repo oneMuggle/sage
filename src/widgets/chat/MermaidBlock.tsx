@@ -186,7 +186,14 @@ export function MermaidBlock({ code }: { code: string }) {
     );
   }
   if (svg === null) {
-    return <div data-testid="mermaid-loading" className="text-xs text-muted p-2">渲染图表…</div>;
+    // P23: 加载骨架屏（对齐 animate-shimmer 模式，替代纯文字）
+    return (
+      <div data-testid="mermaid-loading" className="my-2 p-4 rounded border border-border space-y-2">
+        <div className="h-3 w-1/3 rounded bg-bg-subtle animate-pulse" />
+        <div className="h-24 rounded bg-bg-subtle animate-pulse" />
+        <div className="text-xs text-muted text-center">渲染图表…</div>
+      </div>
+    );
   }
 
   const toolbar = (

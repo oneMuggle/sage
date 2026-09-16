@@ -334,3 +334,59 @@ class TestWebSearchToolChain:
         with self._patch_config(SearchConfig(engine_order=("tavily",))):  # 无 key → 空链
             result = WebSearchTool().execute(query="q")
         assert result.success is False
+
+
+# ---------- R9 引擎健康探测（check） ----------
+
+
+class TestEngineCheck:
+    def test_check_ok_reports_latency_and_count(self):
+        html = (
+            '<li class="b_algo"><h2><a href="https://x/1">结果一</a></h2>'
+            "<div><p>摘要</p></div></li>"
+        )
+        engine = BingEngine()
+        with respx.mock(base_url="https://www.bing.com") as mock:
+            mock.get("/search").mock(return_value=Response(200, text=html))
+            with httpx.Client() as client:
+                outcome = engine.check(client)
+
+        assert outcome["ok"] is True
+        assert isinstance(outcome["latency_ms"], int)
+        assert "1 条结果" in outcome["detail"]
+
+    def test_check_failure_reports_ok_false(self):
+        engine = BingEngine()
+        with respx.mock(base_url="https://www.bing.com") as mock:
+            mock.get("/search").mock(return_value=Response(403, text="denied"))
+            with httpx.Client() as client:
+                outcome = engine.check(client)
+
+        assert outcome["ok"] is False
+        assert "403" in outcome["detail"]
+
+    def test_check_zero_results_is_ok_with_limited_note(self):
+        """可达但解析 0 条 = 被限流信号，如实上报 detail（ok 仍为 True）。"""
+        engine = DuckDuckGoEngine()
+        with respx.mock(base_url="https://html.duckduckgo.com") as mock:
+            mock.get("/html/").mock(return_value=Response(200, text="<html></html>"))
+            with httpx.Client() as client:
+                outcome = engine.check(client)
+
+        assert outcome["ok"] is True
+        assert "0 条结果" in outcome["detail"]
+
+    def test_check_uses_probe_query(self):
+        engine = BingEngine()
+        seen = {}
+
+        def handler(request):
+            seen["q"] = request.url.params.get("q")
+            return httpx.Response(200, text="")
+
+        with respx.mock(base_url="https://www.bing.com") as mock:
+            mock.get("/search").mock(side_effect=handler)
+            with httpx.Client() as client:
+                engine.check(client)
+
+        assert seen["q"] == engine.PROBE_QUERY

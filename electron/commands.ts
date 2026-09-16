@@ -241,6 +241,12 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/prompts/templates/${encodeURIComponent(String(a.id))}`,
   },
+  // R42: 拖拽排序 —— 按新顺序排列的模板 id 列表
+  prompts_reorder: {
+    method: 'PUT',
+    path: () => '/api/v1/prompts/templates/reorder',
+    body: (a) => ({ ordered_ids: a.orderedIds }),
+  },
   // R30: 模板导入/导出（导出无 body；导入信封即 body）
   prompts_export: {
     method: 'GET',
@@ -357,6 +363,8 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const body: Record<string, unknown> = {};
       // R18-B: is_pinned 置顶开关（后端 SessionUpdateIn.is_pinned 已支持）
       if (a.isPinned != null) body.is_pinned = a.isPinned;
+      // R51: is_archived 归档开关
+      if (a.isArchived != null) body.is_archived = a.isArchived;
       // title 缺省不下发 —— PATCH 只更新显式传入的字段
       if (a.title != null) body.title = a.title;
       return body;
@@ -708,6 +716,13 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}/cancel`,
   },
+  // A4: 交付包验收决议 —— POST /lanes/{id}/decision {decision, reason?}。
+  // body 显式构造（reason 透传后端审计）。
+  orchestration_lane_decision: {
+    method: 'POST',
+    path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}/decision`,
+    body: (a) => ({ decision: a.decision, reason: a.reason ?? '' }),
+  },
   // M5: planner-driven lane creation. Body {goal, agent?} — args are
   // auto camelToSnake'd by invokeBackend (both keys stay single-segment).
   orchestration_create_lane: {
@@ -768,6 +783,10 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   office_ppt_read: { method: 'POST', path: () => '/api/v1/office/ppt/read' },
   office_word_read: { method: 'POST', path: () => '/api/v1/office/word/read' },
   office_excel_read: { method: 'POST', path: () => '/api/v1/office/excel/read' },
+  // A4b: Word 交付包格式校验 —— POST /office/word/lint。
+  // NOTE: WordLintRequest is extra="forbid" — officeApi.lintWord must send
+  // ONLY workspacePath + filePath + formatSpec (+ optional maxSizeBytes).
+  office_word_lint: { method: 'POST', path: () => '/api/v1/office/word/lint' },
   // Office parity batch 1 (item 1.2): PDF read/generate.
   // Backend: backend/api/office_routes.py:495-508 (POST /pdf/read, POST /pdf/generate).
   // NOTE: PdfReadRequest is extra="forbid" — officeApi.readPdf must send
@@ -832,6 +851,36 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // so the translation is a no-op on them.
   office_update_preview: { method: 'POST', path: () => '/api/v1/office/update/preview' },
   office_export_pdf: { method: 'POST', path: () => '/api/v1/office/export-pdf' },
+
+  // Office display round A (P6/P1): capability probe + high-fidelity
+  // PDF preview. Backend: backend/api/office_routes.py — GET
+  // /capabilities (converter/optional-dep badges, 30s server-side
+  // cache, force=true to re-probe) and POST /pdf-preview (docx/xlsx/
+  // pptx → cached PDF in office/.preview-cache/ → data URL; body reuses
+  // the export-pdf shape: workspacePath/filePath/taskId through the
+  // normal camelToSnakeKeys).
+  office_capabilities: {
+    method: 'GET',
+    path: (a) => `/api/v1/office/capabilities${a.force ? '?force=true' : ''}`,
+  },
+  office_pdf_preview: { method: 'POST', path: () => '/api/v1/office/pdf-preview' },
+
+  // Office display round C (P5): template first-page thumbnail (PNG data
+  // URL, disk-cached server-side). POST — generation has side effects
+  // (cache write) and the request carries a body.
+  office_template_thumbnail: {
+    method: 'POST',
+    path: () => '/api/v1/office/templates/thumbnail',
+  },
+
+  // Office display round B (P2): snapshot vs current structured diff.
+  // Backend: GET /office/doc/{doc_id}/snapshots/{snapshot_id}/diff →
+  // DiffPreviewResult (snapshot=before, current=after). Read-only.
+  office_snapshot_diff: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/snapshots/${encodeURIComponent(String(a.snapshotId))}/diff`,
+  },
 
   // Office parity round 2 (R1): page-level apply-update — closes the
   // edit-preview loop opened by office_update_preview. Backend contract:

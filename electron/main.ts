@@ -38,7 +38,7 @@ import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electr
 import { logger } from './logger';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
-import { registerSageFileProtocol } from './sageFileProtocol';
+import { registerSageFileProtocol, registerWorkspaceRoot, unregisterWorkspaceRoot } from './sageFileProtocol';
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
 logger.info('main: process started', {
@@ -265,6 +265,15 @@ let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let backendAuthToken: string | null = null;
 let updateManager: UpdateManager | null = null;
+async function reportUpdateStartupFailure(reason: string): Promise<boolean> {
+  try {
+    return (await updateManager?.onAppStartupFailure(reason)) ?? false;
+  } catch (err) {
+    logger.warn('main: startup recovery failed', { error: String(err) });
+    return false;
+  }
+}
+
 let cleanupUpdateIpc: (() => void) | null = null;
 let cleanupProviderIpc: (() => void) | null = null;
 
@@ -401,9 +410,8 @@ function spawnBackend(): ChildProcess {
     // this, the user sees two stacked modal dialogs about the same problem.
     reportedBrokenInstaller = true;
     updateSplashStage('安装包不完整，无法启动后端');
-    void showStartupFailureDialog({
-      reason: plan.title,
-      detail: plan.detail,
+    void reportUpdateStartupFailure('broken-installer').then(async (rolledBack) => {
+      if (!rolledBack) await showStartupFailureDialog({ reason: plan.title, detail: plan.detail });
     });
     // Return a no-op stub proc that exits immediately so the rest of the
     // startup flow (health probe → timeout) still works predictably.
@@ -1945,10 +1953,16 @@ async function isPortReleased(port: number, timeoutMs: number): Promise<void> {
 app.whenReady().then(async () => {
   // Step 3: prune log files older than 7 days on every cold start
   cleanupOlderThan(7);
-  // P9 (2026-09-14): sage-file:// 协议 —— 工作区本地图片经白名单校验后
-  // 安全渲染（MarkdownImage 生成 sage-file://p/<enc>?ws=<enc> URL）。
+  // P9/P13 (2026-09-14): sage-file:// 协议 —— 工作区本地图片经白名单
+  // 校验后安全渲染（MarkdownImage 生成 sage-file://p/<enc> URL）。
   // 必须在窗口加载页面前注册。
   registerSageFileProtocol();
+  ipcMain.handle('sage-file:register-root', (_evt, root: string) => {
+    return registerWorkspaceRoot(String(root ?? ''));
+  });
+  ipcMain.handle('sage-file:unregister-root', (_evt, root: string) => {
+    return unregisterWorkspaceRoot(String(root ?? ''));
+  });
   // 2026-09-13: 启动屏 — 后端冷启动实测 50–65s（健康检查上限 90s），此前
   // 窗口创建排在 waitForBackend() 之后，用户双击图标后近一分钟无任何反馈。
   // CI 冒烟 (SAGE_SKIP_BACKEND) / 演示录屏 / SAGE_NO_SPLASH=1 时不显示。
@@ -2185,7 +2199,14 @@ app.whenReady().then(async () => {
     return;
   }
   updateSplashStage('正在启动后端服务…');
-  backendProc = spawnBackend();
+  try {
+    backendProc = spawnBackend();
+  } catch (err) {
+    if (!(await reportUpdateStartupFailure('backend-spawn-failed'))) {
+      await showStartupFailureDialog({ reason: '后端进程启动失败', detail: String(err) });
+    }
+    return;
+  }
   // If the resolver already fired the broken-installer dialog (because
   // bundled Python is missing or the platform is unsupported), suppress the
   // generic health-timeout dialog below so the user doesn't see two stacked
@@ -2223,10 +2244,13 @@ app.whenReady().then(async () => {
       createMainWindow();
       buildApplicationMenu();
       void updateManager
-        ?.onAppStartup(() => mainWindow, BACKEND_URL)
+        ?.onAppStartup(() => mainWindow, BACKEND_URL, () => backendAuthToken)
         .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
       return;
     }
+
+    // A post-install failure must be counted BEFORE a dialog can quit the app.
+    if (await reportUpdateStartupFailure('backend-startup-timeout')) return;
 
     // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
     // User can open logs, retry the health check, or quit.
@@ -2259,7 +2283,7 @@ app.whenReady().then(async () => {
       // and drive the crash counter / auto-rollback path; they must not
       // block the UI from appearing.
       void updateManager
-        ?.onAppStartup(() => mainWindow, BACKEND_URL)
+        ?.onAppStartup(() => mainWindow, BACKEND_URL, () => backendAuthToken)
         .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
       return;
     }
@@ -2275,7 +2299,7 @@ app.whenReady().then(async () => {
   // increments the crash counter and may trigger auto-rollback; it must not
   // block the UI. Errors are logged for diagnostics.
   void updateManager
-    ?.onAppStartup(() => mainWindow, BACKEND_URL)
+    ?.onAppStartup(() => mainWindow, BACKEND_URL, () => backendAuthToken)
     .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
 });
 

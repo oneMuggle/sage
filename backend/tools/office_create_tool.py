@@ -535,6 +535,43 @@ class OfficeCreateTool(BaseTool):
                                             "文本前缀；标题文本不要再手写编号"
                                         ),
                                     },
+                                    "first_page_different": {
+                                        "type": "boolean",
+                                        "description": (
+                                            "启用首页不同的页眉页脚（Round 33，"
+                                            "封面页场景）"
+                                        ),
+                                    },
+                                    "first_page_header": {
+                                        "type": "object",
+                                        "description": "首页页眉文本",
+                                        "properties": {"text": {"type": "string"}},
+                                    },
+                                    "first_page_footer": {
+                                        "type": "object",
+                                        "description": "首页页脚文本",
+                                        "properties": {
+                                            "text": {"type": "string"},
+                                            "page_number": {"type": "boolean"},
+                                        },
+                                    },
+                                    "odd_even_pages": {
+                                        "type": "boolean",
+                                        "description": (
+                                            "启用奇偶页不同的页眉页脚（Round 34，"
+                                            "书籍排版场景）"
+                                        ),
+                                    },
+                                    "even_page_header": {
+                                        "type": "object",
+                                        "description": "偶数页页眉文本",
+                                        "properties": {"text": {"type": "string"}},
+                                    },
+                                    "even_page_footer": {
+                                        "type": "object",
+                                        "description": "偶数页页脚文本",
+                                        "properties": {"text": {"type": "string"}},
+                                    },
                                     "bibliography": {
                                         "type": "object",
                                         "description": (
@@ -793,6 +830,14 @@ class OfficeCreateTool(BaseTool):
                                                 "冻结首行，滚动长表时表头保持可见（Round 14）"
                                             ),
                                         },
+                                        "freeze_panes": {
+                                            "type": "string",
+                                            "description": (
+                                                "冻结窗格 A1 记法（Round 31），如 'B2' "
+                                                "冻结首行+首列；与 freeze_header 同给时"
+                                                "本字段优先"
+                                            ),
+                                        },
                                         "autofit_columns": {
                                             "type": "boolean",
                                             "description": (
@@ -914,6 +959,25 @@ class OfficeCreateTool(BaseTool):
                                                 "print_area": {
                                                     "type": "string",
                                                     "description": "打印区域 A1 记法，如 'A1:F40'",
+                                                },
+                                                "title_rows": {
+                                                    "type": "string",
+                                                    "description": (
+                                                        "每页重复的标题行，如 '1:1'"
+                                                        "（长表打印每页带表头）"
+                                                    ),
+                                                },
+                                                "margins_cm": {
+                                                    "type": "object",
+                                                    "description": (
+                                                        "打印页边距（厘米，Round 31）"
+                                                    ),
+                                                    "properties": {
+                                                        "top": {"type": "number"},
+                                                        "bottom": {"type": "number"},
+                                                        "left": {"type": "number"},
+                                                        "right": {"type": "number"},
+                                                    },
                                                 },
                                             },
                                         },

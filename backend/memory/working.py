@@ -21,6 +21,8 @@ import time
 from collections import deque
 from typing import Any, Dict, List, Optional
 
+from backend.data.database import _SQLITE_LOCK
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_SESSION_ID = "default"
@@ -49,7 +51,7 @@ def estimate_tokens(text: str) -> int:
     # 简单估算：中文按字符计，英文按单词计
     chinese_chars = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
     other_chars = len(text) - chinese_chars
-    return chinese_chars + other_chars // 4 + len(text) // 4
+    return chinese_chars + other_chars // 4
 
 
 class WorkingMemory:
@@ -392,29 +394,39 @@ class WorkingMemory:
 
         sid = self._resolve(session_id)
         try:
-            conn = self._db.get_connection()
-            # 先清空该会话的旧快照
-            conn.execute(
-                "DELETE FROM working_memory_snapshot WHERE session_id = ?",
-                (sid,),
-            )
-            # 插入该会话当前所有消息
-            now_ms = int(time.time() * 1000)
-            for msg in self._session_messages(sid):
-                conn.execute(
-                    """INSERT INTO working_memory_snapshot
-                       (session_id, role, content, tokens, timestamp, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (
-                        sid,
-                        msg.get("role", "unknown"),
-                        msg.get("content", ""),
-                        msg.get("tokens", 0),
-                        msg.get("timestamp", 0.0),
-                        now_ms,
-                    ),
-                )
-            conn.commit()
+            # One savepoint and one lock span the entire replacement. RELEASE
+            # commits only when outermost; a failure never commits/rolls back
+            # unrelated writes already pending on the shared connection.
+            with _SQLITE_LOCK:
+                conn = self._db.get_connection()
+                conn.execute("SAVEPOINT working_memory_replace")
+                try:
+                    # 先清空该会话的旧快照
+                    conn.execute(
+                        "DELETE FROM working_memory_snapshot WHERE session_id = ?",
+                        (sid,),
+                    )
+                    # 插入该会话当前所有消息
+                    now_ms = int(time.time() * 1000)
+                    for msg in self._session_messages(sid):
+                        conn.execute(
+                            """INSERT INTO working_memory_snapshot
+                               (session_id, role, content, tokens, timestamp, created_at)
+                               VALUES (?, ?, ?, ?, ?, ?)""",
+                            (
+                                sid,
+                                msg.get("role", "unknown"),
+                                msg.get("content", ""),
+                                msg.get("tokens", 0),
+                                msg.get("timestamp", 0.0),
+                                now_ms,
+                            ),
+                        )
+                    conn.execute("RELEASE SAVEPOINT working_memory_replace")
+                except BaseException:
+                    conn.execute("ROLLBACK TO SAVEPOINT working_memory_replace")
+                    conn.execute("RELEASE SAVEPOINT working_memory_replace")
+                    raise
             logger.debug(
                 f"工作记忆快照已保存: session={sid}, 消息数={len(self._session_messages(sid))}"
             )

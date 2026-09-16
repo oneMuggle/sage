@@ -4,6 +4,16 @@ import { ArrowLeft, Copy, FolderOpen } from 'lucide-react';
 import type { Artifact } from '../../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../../features/artifacts/artifactApi';
 import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';
+// Round B P3（统一预览组件）: chat 端 office 产物复用 Office 页的结构化
+// 预览组件——公式视图/表头样式/渲染上限全部继承，两端视觉同源。
+// 后端 read_office 现在随 html 一起返回 structured（read_* 的 JSON 序列
+// 化）；缺失时回退旧的受控 HTML 路径。
+import { ExcelPreview, PptPreview, WordPreview } from '../../../features/office';
+import type {
+  OfficeExcelReadResult,
+  OfficePptReadResult,
+  OfficeWordReadResult,
+} from '../../../shared/api/types';
 
 interface ArtifactViewerProps {
   artifact: Artifact;
@@ -136,15 +146,30 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             data-testid="html-artifact-preview"
           />
         ) : content.kind === 'docx' || content.kind === 'xlsx' || content.kind === 'pptx' ? (
-          // C-2 (round5 批次 C): office 三件套——后端已 html.escape 全转义,
-          // 此处受控渲染预览片段; 白底容器保证 dark 模式下文字可读
-          <div
-            data-testid="office-preview"
-            className="office-preview bg-white text-black text-sm rounded border border-border p-3 [&_h2]:text-base [&_h2]:font-bold [&_h2]:my-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:my-2 [&_p]:my-1 [&_table]:border-collapse [&_table]:w-full [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-0.5 [&_td]:align-top"
-            dangerouslySetInnerHTML={{ __html: content.html ?? '' }}
-          />
+          content.structured ? (
+            // Round B P3: 结构化路径 —— 与 Office 页同一组件渲染
+            <div data-testid="office-structured-preview">
+              {content.kind === 'docx' && (
+                <WordPreview data={content.structured as OfficeWordReadResult} />
+              )}
+              {content.kind === 'xlsx' && (
+                <ExcelPreview data={content.structured as OfficeExcelReadResult} />
+              )}
+              {content.kind === 'pptx' && (
+                <PptPreview data={content.structured as OfficePptReadResult} />
+              )}
+            </div>
+          ) : (
+            // 降级路径（旧后端 / structured 序列化失败）：受控 HTML —— 后端
+            // 已 html.escape 全转义；白底容器保证 dark 模式下文字可读
+            <div
+              data-testid="office-preview"
+              className="office-preview bg-white text-black text-sm rounded border border-border p-3 [&_h2]:text-base [&_h2]:font-bold [&_h2]:my-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:my-2 [&_p]:my-1 [&_table]:border-collapse [&_table]:w-full [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-0.5 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-0.5 [&_td]:align-top"
+              dangerouslySetInnerHTML={{ __html: content.html ?? '' }}
+            />
+          )
         ) : content.kind === 'code' || content.kind === 'json' ? (
-          <pre className="whitespace-pre-wrap text-xs font-mono bg-bg-hover p-2 rounded">
+          <pre className="whitespace-pre-wrap text-code font-mono bg-bg-hover p-2 rounded">
             {content.content}
           </pre>
         ) : content.kind === 'csv' ? (

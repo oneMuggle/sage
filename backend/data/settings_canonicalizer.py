@@ -27,6 +27,7 @@ ALIASES: Dict[str, str] = {
     # 顶层 snake 历史字段 (legacy schema 残留)
     "model_selections": "modelSelections",
     "max_context": "maxContext",
+    "auto_context": "autoContext",
     "auto_memory": "autoMemory",
     "confirm_delete": "confirmDelete",
     # modelSelections 子层
@@ -41,6 +42,9 @@ ALIASES: Dict[str, str] = {
     "api_key": "apiKey",
     "discovered_models": "discoveredModels",
     "last_discovered_at": "lastDiscoveredAt",
+    # 2026-09-14: local_model_path 历史残留 (win7 安装包迁移数据), 不翻译会导致
+    # validate_settings_shape 报 400 (field 不在 LEGAL_ENDPOINT_KEYS 白名单).
+    "local_model_path": "localModelPath",
     # ModelSelection 子层
     "endpoint_id": "endpointId",
     "model_id": "modelId",
@@ -55,6 +59,8 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         "endpoints",
         "modelSelections",
         "maxContext",
+        # Task 5 (2026-09-15): auto context window toggle.
+        "autoContext",
         "temperature",
         # Task 1 (2026-08-23): IANA timezone, 默认 Asia/Shanghai, 后端 zoneinfo 校验
         "timezone",

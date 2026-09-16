@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +19,8 @@ MEDIA_ROOT = Path("data/media")
 class MediaKind(Enum):
     IMAGE = "image"
     AUDIO = "audio"
+    # R37: 聊天文本文档附件（txt/md 直传，内容注入聊天上下文）
+    DOCUMENT = "document"
 
 
 @dataclass(frozen=True)
@@ -50,8 +52,8 @@ class MediaStore:
         content: bytes,
         kind: MediaKind,
         source: str,
-        metadata: Optional[dict] = None,
-        ext: Optional[str] = None,
+        metadata: dict | None = None,
+        ext: str | None = None,
     ) -> MediaRef:
         """存储媒体文件，返回 MediaRef"""
         media_id = uuid.uuid4().hex[:12]
@@ -81,7 +83,7 @@ class MediaStore:
             metadata=metadata or {},
         )
 
-    def load(self, media_id: str) -> Optional[Tuple[MediaRef, bytes]]:
+    def load(self, media_id: str) -> Tuple[MediaRef, bytes] | None:
         """根据 ID 加载媒体文件"""
         for f in self.root.rglob(f"{media_id}.*"):
             content = f.read_bytes()
@@ -89,6 +91,8 @@ class MediaStore:
             kind = (
                 MediaKind.IMAGE
                 if f.suffix in (".png", ".jpg", ".jpeg", ".webp")
+                else MediaKind.DOCUMENT
+                if f.suffix in (".pdf", ".docx", ".txt", ".md")
                 else MediaKind.AUDIO
             )
             return MediaRef(
@@ -126,8 +130,16 @@ class MediaStore:
 
     @staticmethod
     def _default_ext(kind: MediaKind) -> str:
-        return "png" if kind == MediaKind.IMAGE else "mp3"
+        if kind == MediaKind.IMAGE:
+            return "png"
+        if kind == MediaKind.DOCUMENT:
+            return "txt"
+        return "mp3"
 
     @staticmethod
     def _default_mime(kind: MediaKind) -> str:
-        return "image/png" if kind == MediaKind.IMAGE else "audio/mpeg"
+        if kind == MediaKind.IMAGE:
+            return "image/png"
+        if kind == MediaKind.DOCUMENT:
+            return "text/plain"
+        return "audio/mpeg"

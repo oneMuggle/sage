@@ -58,7 +58,7 @@ def _estimate_text_tokens(text: str) -> int:
         return 0
     cjk = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
     other = len(text) - cjk
-    return cjk + other // 4 + len(text) // 4
+    return cjk + other // 4
 
 
 def estimate_messages_tokens(messages: List[Dict[str, Any]]) -> int:

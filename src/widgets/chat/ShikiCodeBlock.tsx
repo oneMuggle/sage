@@ -6,7 +6,7 @@
  * - 延迟加载 highlighter (首次渲染时初始化)
  */
 
-import { ArrowDown, Check, Copy, WrapText } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Copy, WrapText } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
@@ -21,27 +21,36 @@ function getHighlighter(): Promise<import('shiki').Highlighter> {
   if (!highlighterPromise) {
     highlighterPromise = import('shiki').then(({ createHighlighter }) =>
       createHighlighter({
-      themes: ['github-dark', 'github-light'],
-      langs: [
-        'javascript',
-        'typescript',
-        'python',
-        'rust',
-        'go',
-        'java',
-        'cpp',
-        'c',
-        'html',
-        'css',
-        'json',
-        'yaml',
-        'toml',
-        'markdown',
-        'bash',
-        'sql',
-        'dockerfile',
-        'diff',
-      ],
+        themes: ['github-dark', 'github-light'],
+        langs: [
+          'javascript',
+          'typescript',
+          'python',
+          'rust',
+          'go',
+          'java',
+          'cpp',
+          'c',
+          'html',
+          'css',
+          'json',
+          'yaml',
+          'toml',
+          'markdown',
+          'bash',
+          'sql',
+          'dockerfile',
+          'diff',
+          // P22: 扩展语言覆盖
+          'kotlin',
+          'swift',
+          'ruby',
+          'php',
+          'csharp',
+          'xml',
+          'graphql',
+          'make',
+        ],
       }),
     );
   }
@@ -102,6 +111,8 @@ export function ShikiCodeBlock({ language, children }: ShikiCodeBlockProps) {
       {/* 头部栏 */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-[#282c34] rounded-t-md text-xs text-gray-300">
         <span className="font-mono">{language || 'text'}</span>
+        {/* P20: 行数徽章 */}
+        <span className="text-gray-500 text-[10px] ml-1">{lineCount} lines</span>
         <div className="flex items-center gap-1">
           {/* P2: 自动换行切换 —— 长行代码在宽屏上免横向滚动 */}
           <button
@@ -152,7 +163,7 @@ export function ShikiCodeBlock({ language, children }: ShikiCodeBlockProps) {
         ) : (
           <pre
             className={
-              'bg-[#282c34] text-gray-300 p-3 text-xs leading-relaxed overflow-x-auto rounded-b-md ' +
+              'bg-[#282c34] text-gray-300 p-3 text-code font-mono leading-relaxed overflow-x-auto rounded-b-md ' +
               (wrapped ? 'whitespace-pre-wrap break-words' : '')
             }
           >
@@ -173,6 +184,19 @@ export function ShikiCodeBlock({ language, children }: ShikiCodeBlockProps) {
           </button>
         )}
       </div>
+      {/* P18: 展开后底部收起按钮——长代码展开后可收回 */}
+      {!folded && lineCount > FOLD_THRESHOLD_LINES && (
+        <div className="flex justify-center py-1 border-t border-border">
+          <button
+            onClick={() => setFolded(true)}
+            data-testid="code-collapse"
+            className="flex items-center gap-1 px-3 py-0.5 rounded text-[11px] text-muted hover:text-text hover:bg-bg-hover transition-colors"
+          >
+            <ArrowUp className="w-3 h-3" />
+            {t('codeBlock.collapseLines')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

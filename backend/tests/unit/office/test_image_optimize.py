@@ -82,7 +82,7 @@ class TestRealPillowIfInstalled:
         except Exception:  # noqa: BLE001 — 环境缺 Pillow 时跳过
             pytest.skip("Pillow 不可用")
         data = buf.getvalue()
-        if len(data) <= image_optimize.OPTIMIZE_THRESHOLD_BYTES:
+        if len(data) <= image_optimize.DEFAULT_OPTIMIZE_THRESHOLD_BYTES:
             pytest.skip("合成图未超阈值")
         result = optimize_image_bytes(data)
         assert len(result) <= image_optimize.OPTIMIZE_THRESHOLD_BYTES

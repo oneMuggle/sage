@@ -198,7 +198,8 @@ def _validate_info(info: _FileInfo, path: str) -> None:
     if info.dwFileAttributes & _FILE_ATTRIBUTE_DIRECTORY:
         raise NotADirectoryError(f"refusing directory handle: {path}")
     if info.nNumberOfLinks != 1:
-        raise OSError(f"refusing non-private file (links={info.nNumberOfLinks}): {path}")
+        # “多链接”为 wiki/files 安全契约文案（test_wiki_path_security 依赖）
+        raise OSError(f"refusing non-private file (多链接 links={info.nNumberOfLinks}): {path}")
 
 
 def read_file_bound_reparse_safe(path: str) -> tuple[bytes, tuple[int, int, int]]:
@@ -258,7 +259,13 @@ def _open_single(path: str):
     if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
         _kernel32.CloseHandle(handle)
         raise OSError(f"GetFileInformationByHandle failed: {path}")
-    _validate_info(info, path)
+    try:
+        # 校验失败必须关闭句柄：SHARE_NONE 下泄漏会把同 inode 的其他
+        # 硬链接一起锁死（W5 硬链接拒绝用例暴露）。
+        _validate_info(info, path)
+    except BaseException:
+        _kernel32.CloseHandle(handle)
+        raise
     return handle
 
 
@@ -275,12 +282,38 @@ def _read_all(handle, path: str) -> bytes:
     return b"".join(chunks)
 
 
+def verify_regular_file_reparse_safe(path: str) -> None:
+    """句柄级校验：path 必须解析为非 reparse、非目录、单链接的普通文件。
+
+    打开自带 OPEN_REPARSE_POINT（绑定打开时刻的对象），校验在句柄上完成，
+    闭合"元数据 lstat 检查 → 后续打开"之间的 TOCTOU 窗口。失败抛 OSError。
+    """
+    if not _is_windows():
+        raise OSError("reparse-safe verify requires Windows")
+    if not verify_no_reparse(path):
+        raise OSError(f"refusing reparse component in path (no-follow check): {path}")
+    _configure(_kernel32)
+    # 目录预检：无 BACKUP_SEMANTICS 打开目录是 ACCESS_DENIED，
+    # 提前转成语义正确的 NotADirectoryError
+    value = _kernel32.GetFileAttributesW(path)
+    if value != 0xFFFFFFFF and value & _FILE_ATTRIBUTE_DIRECTORY:
+        raise NotADirectoryError(f"refusing directory handle: {path}")
+    handle = _open_handle(path, write=False, overwrite=False)
+    info = _FileInfo()
+    try:
+        if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
+            raise OSError(f"GetFileInformationByHandle failed: {path}")
+        _validate_info(info, path)
+    finally:
+        _kernel32.CloseHandle(handle)
+
+
 def read_file_reparse_safe(path: str) -> bytes:
     """读整文件（Windows reparse-safe）；非 Windows 或验证失败抛 OSError。"""
     if not _is_windows():
         raise OSError("reparse-safe read requires Windows")
     if not verify_no_reparse(path):
-        raise OSError(f"refusing reparse component in path: {path}")
+        raise OSError(f"refusing reparse component in path (no-follow check): {path}")
     _configure(_kernel32)
     # 目录预检：无 BACKUP_SEMANTICS 时打开目录会得到 ACCESS_DENIED，
     # 提前转成语义正确的 NotADirectoryError
@@ -315,27 +348,70 @@ def read_file_reparse_safe(path: str) -> bytes:
         _kernel32.CloseHandle(handle)
 
 
+def _open_validated(path: str, disposition: int):
+    """以指定 disposition 打开并复核（reparse/目录/多链接一律拒绝）。"""
+    handle = _kernel32.CreateFileW(
+        path,
+        _GENERIC_WRITE,
+        _FILE_SHARE_NONE,
+        None,
+        disposition,
+        _FILE_FLAG_OPEN_REPARSE_POINT,
+        None,
+    )
+    handle_value = getattr(handle, "value", handle)
+    if _is_invalid_handle(handle_value):
+        error = ctypes.get_last_error()
+        if error in (_ERROR_FILE_NOT_FOUND, _ERROR_PATH_NOT_FOUND):
+            raise FileNotFoundError(error, os.strerror(error), path)
+        if error in (_ERROR_FILE_EXISTS, _ERROR_ALREADY_EXISTS):
+            raise FileExistsError(error, os.strerror(error), path)
+        if error == _ERROR_ACCESS_DENIED:
+            raise PermissionError(error, os.strerror(error), path)
+        raise OSError(error, f"CreateFileW failed: {path}")
+    info = _FileInfo()
+    if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
+        _kernel32.CloseHandle(handle)
+        raise OSError(f"GetFileInformationByHandle failed: {path}")
+    try:
+        # 校验失败必须关闭句柄：SHARE_NONE 下泄漏会把同 inode 的其他
+        # 硬链接一起锁死（W5 硬链接拒绝用例暴露）。
+        _validate_info(info, path)
+    except BaseException:
+        _kernel32.CloseHandle(handle)
+        raise
+    return handle
+
+
 def write_file_reparse_safe(
     path: str, data: bytes, *, overwrite: bool
 ) -> None:
     """写整文件（Windows reparse-safe）。
 
     overwrite=False → CREATE_NEW 原子建（已存在 → FileExistsError）；
-    overwrite=True → 打开既有 regular 文件并截断（缺失 → FileNotFoundError，
-    多链接/目录/reparse → OSError / NotADirectoryError）。
+    overwrite=True → 缺失即建；已存在则 OPEN_EXISTING 打开链接本体，
+    **复核通过后才截断**（SetFilePointer+SetEndOfFile）——W5 修复：原
+    CREATE_ALWAYS 会在句柄复核之前截断硬链接目标，放行"多链接拒绝"
+    契约本应堵住的越界写入。
     """
     if not _is_windows():
         raise OSError("reparse-safe write requires Windows")
     if not verify_no_reparse(path):
-        raise OSError(f"refusing reparse component in path: {path}")
+        raise OSError(f"refusing reparse component in path (no-follow check): {path}")
     _configure(_kernel32)
-    handle = _open_handle(path, write=True, overwrite=overwrite)
-    info = _FileInfo()
-    if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
-        _kernel32.CloseHandle(handle)
-        raise OSError(f"GetFileInformationByHandle failed: {path}")
+    handle = None
     try:
-        _validate_info(info, path)
+        if not overwrite:
+            handle = _open_validated(path, _CREATE_NEW)
+        else:
+            try:
+                handle = _open_validated(path, _CREATE_NEW)
+            except FileExistsError:
+                handle = _open_validated(path, _OPEN_EXISTING)
+                if _kernel32.SetFilePointer(handle, 0, None, _FILE_BEGIN) == 0xFFFFFFFF:
+                    raise OSError(f"SetFilePointer failed: {path}")
+                if not _kernel32.SetEndOfFile(handle):
+                    raise OSError(f"SetEndOfFile failed: {path}")
         total = len(data)
         written = wintypes.DWORD(0)
         offset = 0
@@ -347,7 +423,8 @@ def write_file_reparse_safe(
                 raise OSError(f"WriteFile wrote 0 bytes: {path}")
             offset += written.value
     finally:
-        _kernel32.CloseHandle(handle)
+        if handle is not None:
+            _kernel32.CloseHandle(handle)
 
 
 def replace_file(src: str, dst: str) -> None:
@@ -359,3 +436,68 @@ def replace_file(src: str, dst: str) -> None:
     move.restype = wintypes.BOOL
     if not move(src, dst, _MOVEFILE_REPLACE_EXISTING):
         raise OSError(ctypes.get_last_error(), f"MoveFileExW failed: {src} -> {dst}")
+
+
+def _open_osfhandle_or_close(handle, access: int) -> int:
+    """把 Win32 句柄转成 CRT fd；失败时关闭句柄并抛 OSError。
+
+    成功后 CRT 接管句柄所有权（os.close(fd) 即 CloseHandle）。
+    """
+    import msvcrt
+
+    fd = msvcrt.open_osfhandle(handle, access | getattr(os, "O_NOINHERIT", 0))
+    if fd == -1:
+        _kernel32.CloseHandle(handle)
+        raise OSError("open_osfhandle failed")
+    return fd
+
+
+def open_read_fd_reparse_safe(path: str) -> int:
+    """打开 regular 文件并返回 CRT fd（reparse-safe，W5）。
+
+    语义对齐 POSIX O_NOFOLLOW 打开：reparse/目录/多链接一律拒绝。
+    返回的 CRT fd 归调用方所有（os.read / os.close）。
+    """
+    if not _is_windows():
+        raise OSError("requires Windows")
+    if not verify_no_reparse(path):
+        raise OSError(f"refusing reparse component in path (no-follow check): {path}")
+    _configure(_kernel32)
+    attributes, _create, _final_path, _close = _configure(_kernel32)
+    value = attributes(path)
+    if value != 0xFFFFFFFF and value & _FILE_ATTRIBUTE_DIRECTORY:
+        raise NotADirectoryError(f"refusing directory handle: {path}")
+    handle = _open_handle(path, write=False, overwrite=False)
+    info = _FileInfo()
+    if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
+        _kernel32.CloseHandle(handle)
+        raise OSError(f"GetFileInformationByHandle failed: {path}")
+    try:
+        _validate_info(info, path)
+        return _open_osfhandle_or_close(handle, os.O_RDONLY)
+    except BaseException:
+        _kernel32.CloseHandle(handle)
+        raise
+
+
+def create_new_write_fd_reparse_safe(path: str) -> int:
+    """CREATE_NEW 原子建并返回 CRT fd（held-temp 契约，W5）。
+
+    已存在 → FileExistsError；reparse/目录/多链接 → OSError。
+    """
+    if not _is_windows():
+        raise OSError("requires Windows")
+    if not verify_no_reparse(path):
+        raise OSError(f"refusing reparse component in path (no-follow check): {path}")
+    _configure(_kernel32)
+    handle = _open_handle(path, write=True, overwrite=False)
+    info = _FileInfo()
+    if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
+        _kernel32.CloseHandle(handle)
+        raise OSError(f"GetFileInformationByHandle failed: {path}")
+    try:
+        _validate_info(info, path)
+        return _open_osfhandle_or_close(handle, os.O_RDWR)
+    except BaseException:
+        _kernel32.CloseHandle(handle)
+        raise

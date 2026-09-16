@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -38,9 +38,9 @@ class PromptTemplateIn(BaseModel):
 class PromptTemplateUpdate(BaseModel):
     """PUT /prompts/templates/{id} body —— 部分更新，全字段可选。"""
 
-    name: Optional[str] = Field(default=None, min_length=1, max_length=_MAX_NAME_LEN)
-    content: Optional[str] = Field(default=None, min_length=1, max_length=_MAX_CONTENT_LEN)
-    description: Optional[str] = Field(default="", max_length=300)
+    name: str | None = Field(default=None, min_length=1, max_length=_MAX_NAME_LEN)
+    content: str | None = Field(default=None, min_length=1, max_length=_MAX_CONTENT_LEN)
+    description: str | None = Field(default="", max_length=300)
 
 
 def _load() -> List[Dict[str, Any]]:
@@ -58,9 +58,32 @@ def _save(templates: List[Dict[str, Any]]) -> None:
 
 @router.get("/templates")
 def list_templates() -> Dict[str, Any]:
-    """列出全部模板（按更新时间新→旧）。"""
-    templates = sorted(_load(), key=lambda t: t.get("updated_at", 0), reverse=True)
-    return {"templates": templates}
+    """列出全部模板（按存储顺序，reorder 端点可控制）。"""
+    return {"templates": _load()}
+
+
+class ReorderIn(BaseModel):
+    """PUT /prompts/templates/reorder body —— 按新顺序排列的模板 id 列表。"""
+
+    ordered_ids: List[str] = Field(min_length=1)
+
+
+@router.put("/templates/reorder")
+def reorder_templates(body: ReorderIn) -> Dict[str, Any]:
+    """R42: 拖拽排序 —— 按 ordered_ids 顺序重排存储数组。
+
+    只保留 ordered_ids 中存在的模板（多余忽略），缺失的 id 追加在尾部。
+    """
+    templates = _load()
+    by_id = {t.get("id"): t for t in templates if isinstance(t, dict)}
+    reordered = [by_id[tid] for tid in body.ordered_ids if tid in by_id]
+    # 未在 ordered_ids 中的模板追加在尾部（防御：API 调用方遗漏时数据不丢）
+    seen = set(body.ordered_ids)
+    for t in templates:
+        if t.get("id") not in seen:
+            reordered.append(t)
+    _save(reordered)
+    return {"ok": True}
 
 
 @router.post("/templates")

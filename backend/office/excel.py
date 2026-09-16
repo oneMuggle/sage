@@ -420,7 +420,9 @@ def _apply_sheet_formats(writer, req) -> None:
                 cell.fill = header_fill
                 cell.alignment = center
 
-        if sheet_spec.freeze_header:
+        if getattr(sheet_spec, "freeze_panes", None):
+            ws.freeze_panes = sheet_spec.freeze_panes
+        elif sheet_spec.freeze_header:
             ws.freeze_panes = "A2"
 
         if sheet_spec.autofit_columns:
@@ -601,6 +603,24 @@ def _apply_print_setup(writer, req) -> None:
                 ws.sheet_properties.pageSetUpPr.fitToPage = True
             if print_setup.print_area:
                 ws.print_area = print_setup.print_area
+            if getattr(print_setup, "title_rows", None):
+                ws.print_title_rows = print_setup.title_rows
+            # Round 31：打印页边距（厘米）——openpyxl 单位为英寸，需换算
+            margins = getattr(print_setup, "margins_cm", None)
+            if margins is not None:
+                from openpyxl.worksheet.page import PageMargins
+
+                def _cm_to_in(value):
+                    return None if value is None else value / 2.54
+
+                ws.page_margins = PageMargins(
+                    left=_cm_to_in(margins.left) or ws.page_margins.left,
+                    right=_cm_to_in(margins.right) or ws.page_margins.right,
+                    top=_cm_to_in(margins.top) or ws.page_margins.top,
+                    bottom=_cm_to_in(margins.bottom) or ws.page_margins.bottom,
+                    header=ws.page_margins.header,
+                    footer=ws.page_margins.footer,
+                )
         except Exception as exc:  # noqa: BLE001 — 单 sheet 失败不阻断
             logger_.warning("打印设置写入失败，跳过: %s (%s)", exc, sheet_spec.name)
 
@@ -625,6 +645,7 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     from .errors import OfficeGenerateError
     from .models import OfficeDocType
     from .path_safety import managed_document_path, resolve_output_path
+    from .progress import report_current
     from .storage import validate_workspace
 
     if output_dir is not None:
@@ -665,11 +686,17 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
         # Build all DataFrames first so we can detect the all-empty case
         # before opening the writer (avoids writing a file with no sheets).
         sheet_specs: list[tuple[str, pd.DataFrame, bool]] = []
-        for sheet_spec in req.sheets:
+        total_sheets = len(req.sheets)
+        for sheet_idx, sheet_spec in enumerate(req.sheets):
             name = sheet_spec.name[:31]  # Excel 31-char sheet-name cap
             headers = sheet_spec.headers
             rows = sheet_spec.rows
 
+            # P12: 逐 sheet 进度上报
+            report_current(
+                f"生成工作表 {sheet_idx + 1}/{total_sheets}",
+                30 + int(50 * (sheet_idx + 1) / total_sheets),
+            )
             if headers or rows:
                 # Build DataFrame. With columns=headers, pandas enforces the
                 # column count and pads/truncates ragged rows with NaN. We

@@ -89,6 +89,12 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   // P4: 任务中心接线 —— 切走页面后全局胶囊仍可见
   const registerTask = useTaskCenterStore((s) => s.registerTask);
   const finishTask = useTaskCenterStore((s) => s.finishTask);
+  // A4b: word 生成成功后交付抽屉验收（lint + 预览 + 接受/打回）。
+  const openDelivery = useTaskCenterStore((s) => s.openDelivery);
+  // P15: 可视化进度条 —— 从任务中心读百分比，生成期间显示细进度条
+  const taskPercent = useTaskCenterStore(
+    (s) => (busy ? s.tasks['office:generate']?.percent ?? null : null),
+  );
   const [result, setResult] = useState<GenerateResult | null>(null);
 
   // PPT
@@ -110,6 +116,11 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   const [templateLoad, setTemplateLoad] = useState<TemplateLoadState>('idle');
   const [selectedTemplate, setSelectedTemplate] = useState<OfficeTemplateMeta | null>(null);
   const [templateData, setTemplateData] = useState<Record<string, string>>({});
+  // Round C P5: 选中模板的首页缩略图。按需加载（选中才请求，避免列表
+  // 全量轰炸转换器）；key=source-id，切换模板即重新拉取；失败静默降级
+  // （缩略图是装饰性信息）。结果缓存到 map，二次选中零等待。
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  const [thumbnailLoading, setThumbnailLoading] = useState(false);
 
   // Excel
   const [sheetName, setSheetName] = useState('Sheet1');
@@ -132,6 +143,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
     setTemplateLoad('idle');
     setSelectedTemplate(null);
     setTemplateData({});
+    setThumbnails({});
   }, [workspacePath]);
 
   const loadTemplates = useCallback(async () => {
@@ -169,6 +181,27 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
     setSelectedTemplate(tpl);
     setTemplateData({});
     setFilename(defaultTemplateFilename(tpl.name, tpl.doc_type));
+    // Round C P5: kick off the thumbnail fetch (cache-first, silent-fail).
+    const thumbKey = `${tpl.source}-${tpl.id}`;
+    if (!thumbnails[thumbKey]) {
+      setThumbnailLoading(true);
+      officeApi
+        .templateThumbnail({
+          workspace_path: workspacePath,
+          ...(tpl.source === 'workspace'
+            ? { workspace_template: tpl.filename ?? tpl.id }
+            : { template_id: tpl.id }),
+        })
+        .then((res) => {
+          if (res.ok && res.data_url) {
+            setThumbnails((prev) => ({ ...prev, [thumbKey]: res.data_url! }));
+          }
+        })
+        .catch(() => {
+          // decorative — degrade silently
+        })
+        .finally(() => setThumbnailLoading(false));
+    }
   };
 
   const setPlaceholderValue = (name: string, value: string) => {
@@ -193,7 +226,13 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
         percent: p.percent,
       }),
     );
-    registerTask('office:generate', 'office', t('office.template.creating'));
+    registerTask(
+      'office:generate',
+      'office',
+      t('office.template.creating'),
+      undefined,
+      filename.trim(),
+    );
     setResult(null);
     try {
       // Image placeholders never contribute text (office.template.hint.image);
@@ -224,6 +263,10 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       if (onGenerated) {
         await onGenerated();
       }
+      // A4b: word 模板产物进交付验收（其余类型保持原 finally 清理）。
+      if (selectedTemplate.doc_type === 'word') {
+        openWordDelivery(out.output_path, out.filename);
+      }
       // Clear the form: blank placeholder fields + default filename.
       setTemplateData({});
       setFilename('my-document');
@@ -232,9 +275,31 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       toast.error(`${t('office.template.failed')}: ${msg}`);
     } finally {
       stopPoll();
-      finishTask('office:generate');
+      finishUnlessAwaiting();
       setBusy(false);
     }
+  };
+
+  /**
+   * A4b: word 产物交付验收 —— 条目切 awaiting_approval（携带交付坐标）
+   * 并打开交付抽屉。生成请求不带 format_spec（generateWord/instantiate
+   * 均未透传），lint 段由抽屉如实展示跳过。
+   */
+  const openWordDelivery = (outputPath: string, filename: string) => {
+    useTaskCenterStore.getState().updateTask('office:generate', {
+      title: filename,
+      phase: t('office.delivery.awaiting'),
+      status: 'awaiting_approval',
+      deliveryRef: { workspacePath, filePath: outputPath, formatSpec: null },
+    });
+    openDelivery({ kind: 'office', entryId: 'office:generate' });
+  };
+
+  /** A4b: 待验收条目保留（finally 不清理），其余沿用原语义。 */
+  const finishUnlessAwaiting = () => {
+    const entry = useTaskCenterStore.getState().tasks['office:generate'];
+    if (entry?.status === 'awaiting_approval') return;
+    finishTask('office:generate');
   };
 
   const handleGenerate = async () => {
@@ -258,7 +323,13 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
         percent: p.percent,
       }),
     );
-    registerTask('office:generate', 'office', t('office.generate.generating'));
+    registerTask(
+      'office:generate',
+      'office',
+      t('office.generate.generating'),
+      undefined,
+      filename.trim(),
+    );
     setResult(null);
     try {
       let out: { output_path: string; filename: string; file_size_bytes: number };
@@ -312,12 +383,16 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       if (onGenerated) {
         await onGenerated();
       }
+      // A4b: word 自由创建产物进交付验收。
+      if (docType === 'word') {
+        openWordDelivery(out.output_path, out.filename);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.generate.failed')}: ${msg}`);
     } finally {
       stopPoll();
-      finishTask('office:generate');
+      finishUnlessAwaiting();
       setBusy(false);
     }
   };
@@ -536,6 +611,32 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
 
         {selectedTemplate && selectedTemplate.doc_type === type && (
           <div className="space-y-2 pt-1" data-testid="office-template-fields">
+            {/* Round C P5: 首页缩略图（按需生成，服务端磁盘缓存；失败静默） */}
+            {(() => {
+              const thumbKey = `${selectedTemplate.source}-${selectedTemplate.id}`;
+              const thumb = thumbnails[thumbKey];
+              if (thumb) {
+                return (
+                  <img
+                    src={thumb}
+                    alt={selectedTemplate.name}
+                    data-testid="office-template-thumbnail"
+                    className="w-40 rounded border border-border shadow-sm bg-white"
+                  />
+                );
+              }
+              if (thumbnailLoading) {
+                return (
+                  <div
+                    className="w-40 h-52 rounded border border-dashed border-border flex items-center justify-center text-xs text-muted"
+                    data-testid="office-template-thumbnail-loading"
+                  >
+                    {t('office.template.thumbnailLoading')}
+                  </div>
+                );
+              }
+              return null;
+            })()}
             {selectedTemplate.placeholders.map((ph) => renderPlaceholderField(ph))}
           </div>
         )}
@@ -697,10 +798,28 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
         )}
       </button>
 
+      {/* P15: 生成期间的可视化进度条（百分比来自任务中心轮询） */}
+      {busy && taskPercent != null && (
+        <div
+          className="h-1 rounded-full bg-bg-subtle overflow-hidden"
+          data-testid="office-generate-progress-bar"
+        >
+          <div
+            className="h-full bg-primary rounded-full transition-[width] duration-500"
+            style={{ width: `${taskPercent}%` }}
+          />
+        </div>
+      )}
+
       {result && (
-        <div className="text-xs text-muted bg-surface border border-border rounded p-2">
-          <div>
-            {t('office.generate.outputPath')} <code className="text-text">{result.path}</code>
+        <div className="text-xs text-muted bg-surface border border-border rounded p-2 space-y-1">
+          <div className="flex items-center gap-1.5 text-text">
+            <span className="text-green-500" aria-hidden>✓</span>
+            <span className="font-medium">{result.path.split(/[\\/]/).pop() ?? result.path}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span>{t('office.generate.outputPath')}</span>
+            <code className="text-text break-all">{result.path}</code>
           </div>
           <div>
             {t('office.generate.size')} {(result.sizeBytes / 1024).toFixed(1)} KB

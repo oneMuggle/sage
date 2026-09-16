@@ -25,11 +25,13 @@
  */
 
 import { Archive, ArchiveRestore, FolderOpen, FileSpreadsheet, FileText, History, Presentation, Save } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+
 
 import type { OfficeDocType, OfficeDocumentSummary } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
+import { useTaskCenterStore } from '../task-center/taskCenterStore';
 
 const DOC_TYPE_ICONS: Record<OfficeDocType, React.ReactNode> = {
   ppt: <Presentation className="w-4 h-4" />,
@@ -175,6 +177,40 @@ export function OfficeDocumentList({
     edited: t('office.doc.status.edited'),
   };
 
+  // P11: 任务中心 office 任务跳转后，定位并高亮对应文档行（8s 自动清除）。
+  const pendingHighlight = useTaskCenterStore((s) => s.pendingHighlight);
+  const clearHighlight = useTaskCenterStore((s) => s.clearHighlight);
+  const highlightDocName = pendingHighlight?.docName ?? null;
+  const [highlightUntil, setHighlightUntil] = useState(0);
+  const highlightRef = useRef<HTMLLIElement | null>(null);
+
+  useEffect(() => {
+    if (!highlightDocName) return;
+    setHighlightUntil(Date.now() + 8000);
+    const timer = setTimeout(() => {
+      setHighlightUntil(0);
+      clearHighlight();
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [highlightDocName, clearHighlight]);
+
+  const highlightedId = (() => {
+    if (Date.now() > highlightUntil || !highlightDocName) return null;
+    const hit = documents.find(
+      (doc) =>
+        doc.generated_filename === highlightDocName ||
+        doc.original_filename === highlightDocName ||
+        (doc.generated_filename ?? '').startsWith(`${highlightDocName}.`),
+    );
+    return hit?.id ?? null;
+  })();
+
+  useEffect(() => {
+    if (highlightedId) {
+      highlightRef.current?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlightedId]);
+
   if (loading) {
     // P2: 加载态从纯文字升级为骨架行（对齐 LoadingState skeleton 约定）
     return (
@@ -234,7 +270,11 @@ export function OfficeDocumentList({
         {documents.map((doc) => (
           <li
             key={doc.id}
-            className="flex items-center gap-3 p-3 border border-border rounded-lg bg-surface"
+            ref={doc.id === highlightedId ? highlightRef : undefined}
+            data-testid={doc.id === highlightedId ? 'office-doc-highlighted' : undefined}
+            className={`flex items-center gap-3 p-3 border border-border rounded-lg bg-surface ${
+              doc.id === highlightedId ? 'ring-2 ring-primary bg-primary/5' : ''
+            }`}
           >
             {batchAction && (
               <input

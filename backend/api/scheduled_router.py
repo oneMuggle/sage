@@ -24,14 +24,14 @@ logger = logging.getLogger(__name__)
 
 class ScheduleIn(BaseModel):
     kind: Literal["once", "recurring"]
-    at: Optional[int] = None
-    cron: Optional[str] = None
+    at: int | None = None
+    cron: str | None = None
 
 
 class ScheduleOut(BaseModel):
     kind: Literal["once", "recurring"]
-    at: Optional[int] = None
-    cron: Optional[str] = None
+    at: int | None = None
+    cron: str | None = None
 
 
 class CreateTaskIn(BaseModel):
@@ -40,11 +40,19 @@ class CreateTaskIn(BaseModel):
     schedule: ScheduleIn
     session_id: str = Field(min_length=1, max_length=64)
     content: str = Field(min_length=1, max_length=4000)
+    enabled: bool = True
 
 
 class UpdateTaskIn(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=80)
-    enabled: Optional[bool] = None
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    enabled: bool | None = None
+    type: Optional[Literal["once", "recurring"]] = None
+    schedule: Optional[ScheduleIn] = None
+    session_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    content: Optional[str] = Field(default=None, min_length=1, max_length=4000)
+
+    class Config:
+        extra = "forbid"
 
 
 class TaskOut(BaseModel):
@@ -56,8 +64,11 @@ class TaskOut(BaseModel):
     content: str
     enabled: bool
     created_at: int
-    last_run: Optional[int] = None
-    next_run: Optional[int] = None
+    last_run: int | None = None
+    next_run: int | None = None
+    last_attempt: Optional[int] = None
+    last_status: str = "never"
+    last_error: Optional[str] = None
 
 
 def _task_to_dict(task: Any) -> Dict[str, Any]:
@@ -72,6 +83,9 @@ def _task_to_dict(task: Any) -> Dict[str, Any]:
         "created_at": task.created_at,
         "last_run": task.last_run,
         "next_run": task.next_run,
+        "last_attempt": getattr(task, "last_attempt", None),
+        "last_status": getattr(task, "last_status", "never"),
+        "last_error": getattr(task, "last_error", None),
     }
 
 
@@ -120,6 +134,7 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
                 schedule=schedule_dict,
                 session_id=payload.session_id,
                 content=payload.content,
+                enabled=payload.enabled,
             )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -136,6 +151,15 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
             changes["name"] = payload.name
         if payload.enabled is not None:
             changes["enabled"] = payload.enabled
+        for field in ("type", "session_id", "content"):
+            value = getattr(payload, field)
+            if value is not None:
+                changes[field] = value
+        if payload.schedule is not None:
+            try:
+                changes["schedule"] = _schedule_in_to_dict(payload.schedule)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
         try:
             return _task_to_dict(svc.update_task(task_id, **changes))
         except TaskNotFoundError as exc:
@@ -159,6 +183,8 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
     def run_task(task_id: str, svc: SchedulerService = Depends(service_dep)) -> Dict[str, Any]:
         try:
             svc.run_now(task_id)
+        except ValidationError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except TaskNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return _task_to_dict(svc.get_task(task_id))

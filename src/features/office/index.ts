@@ -20,3 +20,7 @@ export type {
 export { buildUpdateOps } from './OfficeEditPreviewDialog';
 export { OfficeGenerateForm } from './OfficeGenerateForm';
 export type { OfficeGenerateFormProps } from './OfficeGenerateForm';
+export { OfficeCapabilityBar } from './OfficeCapabilityBar';
+export type { OfficeCapabilityBarProps } from './OfficeCapabilityBar';
+// Round B P3: structured sub-previews shared with the chat ArtifactViewer.
+export { WordPreview, ExcelPreview, PptPreview } from './OfficePreviewPanel';

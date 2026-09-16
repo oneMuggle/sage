@@ -7,7 +7,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Union
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ def _default_storage_dir() -> Path:
 class ThemeStorage:
     """JSON 文件持久化 — 每主题一个文件 <id>.json"""
 
-    def __init__(self, storage_dir: Optional[Union[Path, str]] = None) -> None:
+    def __init__(self, storage_dir: Union[Path, str] | None = None) -> None:
         if storage_dir is None:
             storage_dir = _default_storage_dir()
         self._dir = Path(storage_dir)

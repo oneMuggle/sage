@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Address, IPv6Address
-from typing import Any, Dict, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -170,7 +171,9 @@ class WebSearchTool(BaseTool):
             },
         )
 
-    def execute(self, query: str, limit: int = 5, refresh: bool = False, **kwargs) -> ToolResult:
+    def execute(  # noqa: PLR0911 — 并行/串行/缓存/指引各返回路径独立，扁平更直读
+        self, query: str, limit: int = 5, refresh: bool = False, **kwargs
+    ) -> ToolResult:
         """
         执行搜索
 
@@ -194,13 +197,51 @@ class WebSearchTool(BaseTool):
         engine_errors = []
         saw_completed = False
         try:
+            search_config = load_search_config()
+            engines = resolve_engine_chain(search_config)
             with build_client(
                 timeout=30.0,
                 headers=default_headers(),
                 trust_env=not self._policy.subagent_only,
                 client_class=_RetryingClient,
             ) as client:
-                for engine in resolve_engine_chain(load_search_config()):
+                # P1（Round 8）：并行聚合——链上前 N 个引擎并发搜索、按链序合并
+                # 去重。默认关闭；开启且链长 > 1 时完全替代串行 fallback。
+                if search_config.parallel and len(engines) > 1:
+                    parallel_outcome = self._search_parallel(
+                        query,
+                        limit,
+                        client,
+                        engines[: max(1, int(search_config.parallel_first_n))],
+                    )
+                    if parallel_outcome["results"]:
+                        content = {
+                            "query": query,
+                            "engine": "parallel("
+                            + "+".join(parallel_outcome["engines_used"])
+                            + ")",
+                            "results": parallel_outcome["results"],
+                        }
+                        if parallel_outcome["errors"]:
+                            content["engine_errors"] = parallel_outcome["errors"]
+                        from .web_cache import put as _cache_put
+
+                        _cache_put(cache_key, cache_mode, content)
+                        return ToolResult(success=True, content=content)
+                    saw_completed = parallel_outcome["completed"]
+                    engine_errors.extend(parallel_outcome["errors"])
+                    if saw_completed:
+                        content = {
+                            "query": query,
+                            "results": [],
+                            "note": "搜索源未返回可解析结果（可能被限流），请勿编造结果",
+                            "engine_errors": engine_errors,
+                        }
+                        return ToolResult(success=True, content=content)
+                    return ToolResult(
+                        success=False, error="搜索失败: " + "; ".join(engine_errors)
+                    )
+                for engine in engines:
                     try:
                         results = engine.search(query, limit, client=client)
                     except Exception as engine_exc:  # noqa: BLE001 — 单引擎失败降级下一引擎
@@ -238,6 +279,58 @@ class WebSearchTool(BaseTool):
             # G1：拒绝类失败 → 指引代理 / API 引擎出路
             failure += _ANTIBOT_GUIDANCE
         return ToolResult(success=False, error=failure)
+
+    @staticmethod
+    def _search_parallel(query, limit, client, engines):
+        """并发执行链上前 N 个引擎并按链序合并去重（Round 8 P1）。
+
+        返回 ``{"completed", "results", "engines_used", "errors"}``：
+        completed = 任一引擎无异常完成；results = 去重后合并结果；
+        engines_used = 有产出的引擎（链序）；errors = 各引擎失败/空结果诊断。
+        """
+        errors: List[str] = []
+        collected: List[Tuple[int, str, List[Dict[str, str]]]] = []
+        saw_completed = False
+        with ThreadPoolExecutor(max_workers=len(engines)) as pool:
+            future_map = {
+                pool.submit(engine.search, query, limit, client=client): engine
+                for engine in engines
+            }
+            for future in as_completed(future_map):
+                engine = future_map[future]
+                try:
+                    results = future.result()
+                except Exception as exc:  # noqa: BLE001 — 单引擎失败不影响其他引擎
+                    errors.append(f"{engine.name}: {exc}")
+                    continue
+                saw_completed = True
+                if results:
+                    collected.append((engines.index(engine), engine.name, results))
+                else:
+                    errors.append(f"{engine.name}: 无可解析结果（可能被限流）")
+
+        collected.sort(key=lambda item: item[0])
+        merged = WebSearchTool._merge_parallel_results(collected)
+        return {
+            "completed": saw_completed,
+            "results": merged,
+            "engines_used": [name for _idx, name, _r in collected],
+            "errors": errors,
+        }
+
+    @staticmethod
+    def _merge_parallel_results(collected):
+        """按引擎链序合并各引擎结果，URL 规范化去重（去 fragment、去尾空白）。"""
+        seen = set()
+        merged: List[Dict[str, str]] = []
+        for _idx, _name, results in collected:
+            for item in results:
+                url = str(item.get("url", "")).strip().split("#", 1)[0]
+                if not url or url in seen:
+                    continue
+                seen.add(url)
+                merged.append(item)
+        return merged
 
     def _clean_html(self, text: str) -> str:
         """兼容保留：清理 HTML 标签并解码实体（解析实现已迁入 search_engines）。"""
@@ -463,6 +556,14 @@ class WebFetchTool(BaseTool):
                         f"（{', '.join(resolution.expired_names[:5])}）。"
                         "请在浏览器重新登录后 browser_cookies action=export，"
                         "或 credential_set 重新设置头部凭据"
+                    ),
+                )
+            if resolution.status == "insecure_scheme":
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"credential_insecure_scheme: {credential_domain!r} 的头部凭据"
+                        "不附加到明文 http 请求（仅 https 或本地回环允许）"
                     ),
                 )
             if not resolution.ok or not resolution.headers:

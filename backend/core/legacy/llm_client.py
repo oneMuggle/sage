@@ -13,6 +13,7 @@ import re
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
+from datetime import timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -204,6 +205,46 @@ class LLMConfig:
     # （如 gpt-4o → gpt-4o-mini）。None = 不降级。仅对可重试类错误
     # （限流/服务端错误/超时/网络）生效,每实例至多降级一次。
     fallback_model: Optional[str] = None
+    # Task 5 (2026-09-15): endpoint identity for usage attribution
+    endpoint_id: Optional[str] = None
+
+
+def _capture_price_snapshot(
+    endpoint_id: Optional[str], model_id: Optional[str]
+) -> Optional[Any]:
+    """Task 5: Capture immutable pricing snapshot from model catalog.
+
+    Returns PriceSnapshot if catalog has pricing for the endpoint+model,
+    else None (fail-open: usage tracking falls back to hardcoded pricing).
+    """
+    if not endpoint_id or not model_id:
+        return None
+    try:
+        from datetime import datetime
+
+        from backend.data.database import get_database
+        from backend.model_catalog.repository import CatalogRepository
+        from backend.model_catalog.schemas import EndpointKey
+        from backend.services.usage_tracker import PriceSnapshot
+
+        repo = CatalogRepository(get_database())
+        resolved = repo.resolve(EndpointKey(endpoint_id=endpoint_id, model_id=model_id))
+        price = resolved.price
+        # Only create snapshot if we have at least one price
+        if price.input_per_million is None and price.output_per_million is None:
+            return None
+        return PriceSnapshot(
+            input_per_million=str(price.input_per_million) if price.input_per_million is not None else None,
+            output_per_million=str(price.output_per_million) if price.output_per_million is not None else None,
+            scope=getattr(price, "currency", "USD") or "USD",
+            revision=0,  # TODO: wire revision from catalog layers
+            source="catalog",
+            currency=getattr(price, "currency", "USD") or "USD",
+            method="basic_io",
+            computed_at=datetime.now(timezone.utc).isoformat(),  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10
+        )
+    except Exception:
+        return None  # fail-open: catalog unavailable
 
 
 class StreamToolCallAggregator:
@@ -488,6 +529,11 @@ class LLMClient:
 
         start_time = time.time()
 
+        # Task 5 (2026-09-15): capture pricing snapshot before request
+        price_snapshot = _capture_price_snapshot(
+            self.config.endpoint_id, self.config.model
+        )
+
         # L3 重试退避: 限流/服务端错误/超时/网络失败按指数退避重试
         # （尊重 retry-after）。请求整体重放安全——非流式,无部分产出。
         max_attempts, base_delay = _retry_settings()
@@ -591,6 +637,8 @@ class LLMClient:
                     usage_dict["completion_tokens"],
                     session_id=self.session_id,
                     cached_tokens=usage_dict["cached_tokens"],
+                    endpoint_id=self.config.endpoint_id,
+                    price_snapshot=price_snapshot,
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking skipped: %s", usage_err)
@@ -643,6 +691,10 @@ class LLMClient:
         # ===== M6 USAGE BEGIN: 流式 usage 捕获 (final chunk 若携带 usage) =====
         stream_model: str = self.config.model
         stream_usage: Optional[Dict[str, Any]] = None
+        # Task 5 (2026-09-15): capture pricing snapshot before stream
+        price_snapshot = _capture_price_snapshot(
+            self.config.endpoint_id, self.config.model
+        )
         # ===== M6 USAGE END =====
 
         try:
@@ -685,6 +737,8 @@ class LLMClient:
                         int(stream_usage.get("completion_tokens") or 0),
                         session_id=self.session_id,
                         cached_tokens=extract_cached_tokens(stream_usage),
+                        endpoint_id=self.config.endpoint_id,
+                        price_snapshot=price_snapshot,
                     )
                 except Exception as usage_err:
                     logger.debug("usage tracking (stream) skipped: %s", usage_err)
@@ -746,6 +800,10 @@ class LLMClient:
         finish_reason: Optional[str] = None
         stream_model: str = self.config.model
         stream_usage: Optional[Dict[str, Any]] = None
+        # Task 5 (2026-09-15): capture pricing snapshot before stream
+        price_snapshot = _capture_price_snapshot(
+            self.config.endpoint_id, self.config.model
+        )
 
         # L3 重试退避（流式版）: 仅在"尚未产出任何增量"时重试——此时重放
         # 安全（调用方没收到过任何事件）;已有增量后失败无法安全重放,按原
@@ -882,6 +940,8 @@ class LLMClient:
                     usage_dict["completion_tokens"],
                     session_id=self.session_id,
                     cached_tokens=usage_dict["cached_tokens"],
+                    endpoint_id=self.config.endpoint_id,
+                    price_snapshot=price_snapshot,
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking (stream) skipped: %s", usage_err)

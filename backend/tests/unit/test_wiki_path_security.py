@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import pytest
@@ -16,10 +15,15 @@ from backend.api.wiki_routes import (
 )
 from backend.wiki.files import secure_open_file, secure_read_file, secure_write_file
 
-pytestmark = pytest.mark.skipif(
-    os.name == "nt",
-    reason="wiki 安全用例依赖 POSIX symlink/no-follow 原语（Windows 无可靠等价）",
-)
+
+# W5：移除模块级 Windows skip —— secure_* 已有 reparse-safe Windows 分支。
+# symlink 夹具改为能力探测 skip（本地无 SeCreateSymbolicLinkPrivilege 时
+# 跳过该用例；硬链接/`..` 逃逸用例在 Windows 真实执行）。
+def _symlink_or_skip(link: Path, target: Path, *, target_is_directory: bool = False) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=target_is_directory)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation not permitted (no SeCreateSymbolicLinkPrivilege)")
 
 
 def _make_hardlink_or_skip(source: Path, target: Path) -> None:
@@ -86,7 +90,7 @@ def test_declared_project_symlink_is_rejected(tmp_path):
     root = tmp_path / "project"
     target = tmp_path / "real-project"
     target.mkdir()
-    root.symlink_to(target, target_is_directory=True)
+    _symlink_or_skip(root, target, target_is_directory=True)
     with pytest.raises(HTTPException) as exc:
         _resolve_project_file(str(root), "wiki/page.md")
     assert exc.value.status_code == 400
@@ -97,7 +101,7 @@ def test_nested_symlink_is_rejected_even_when_target_stays_under_root(tmp_path):
     root.mkdir()
     real = root / "real"
     real.mkdir()
-    (root / "alias").symlink_to(real, target_is_directory=True)
+    _symlink_or_skip(root / "alias", real, target_is_directory=True)
     with pytest.raises(HTTPException) as exc:
         _resolve_project_file(str(root), "alias/file.md")
     assert exc.value.status_code == 400
@@ -131,7 +135,7 @@ async def test_file_handlers_reject_symlinked_destination_without_touching_outsi
     monkeypatch.setattr(wiki_routes, "authorize_registered_project", lambda _: root)
     outside = tmp_path / "outside"
     outside.mkdir()
-    (root / "wiki").symlink_to(outside, target_is_directory=True)
+    _symlink_or_skip(root / "wiki", outside, target_is_directory=True)
 
     with pytest.raises(HTTPException) as exc:
         await write_file("wiki/evil.md", "secret", str(root))
@@ -149,7 +153,7 @@ async def test_file_handlers_reject_symlink_delete_and_rename_without_touching_o
     outside_file = outside / "keep.md"
     outside_file.write_text("keep", encoding="utf-8")
     (root / "wiki").mkdir()
-    (root / "wiki" / "link.md").symlink_to(outside_file)
+    _symlink_or_skip(root / "wiki" / "link.md", outside_file)
 
     with pytest.raises(HTTPException) as delete_exc:
         await delete_file("wiki/link.md", str(root))
@@ -170,7 +174,7 @@ async def test_clip_rejects_raw_sources_symlink_without_creating_outside_file(tm
     outside = tmp_path / "outside"
     outside.mkdir()
     (root / "raw").mkdir()
-    (root / "raw" / "sources").symlink_to(outside, target_is_directory=True)
+    _symlink_or_skip(root / "raw" / "sources", outside, target_is_directory=True)
 
     request = wiki_routes.ClipRequest(
         title="unsafe", url="https://example.test", content="payload",

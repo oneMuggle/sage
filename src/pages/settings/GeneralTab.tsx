@@ -15,6 +15,7 @@ import { GatewayCard } from '../../widgets/settings/GatewayCard';
 import { HooksCard } from '../../widgets/settings/HooksCard';
 import { UsagePanel } from '../../widgets/settings/UsagePanel';
 
+import { FontSettingsSection } from './FontSettingsSection';
 import { ThemeSelector } from './ThemeSelector';
 import { SettingRow, Toggle } from './components';
 
@@ -397,6 +398,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">外观</h3>
+        <FontSettingsSection />
         <SettingRow label="流式输出" desc="逐字显示 AI 回复，而非等待全部生成完成">
           <Toggle value={settings.streaming} onChange={(v) => updateSettings({ streaming: v })} />
         </SettingRow>
@@ -523,7 +525,9 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">诊断</h3>
         <DiagnosticsCard />
-        <GatewayCard />
+        <GatewayCard platform="telegram" />
+        <GatewayCard platform="discord" />
+        <GatewayCard platform="slack" />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">高级</h3>

@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed(web-access)
 - `BROWSER_TOOLS` 新增 `browser_downloads`（READ）；coder 默认工具白名单经 `*BROWSER_TOOLS` 自动带上；`browser_launch` 结果新增 `download_tracking`
 
+## [v0.4.9-alpha.43] - 2026-09-14
+
+> 🐛 **win7 安装包日志错误修复** (PR #794)
+
+### Fixed
+- **fetchModels 防御性检查**: 非标准 JSON 上游 (LM Studio 变体) 不再导致 `data.data.map()` TypeError
+- **settings_canonicalizer**: 新增 `local_model_path` → `localModelPath` alias，兼容旧数据迁移
+- **knowledgeApi 死代码清理**: 消除 `list_knowledge_docs` / `search_knowledge_docs` Unknown IPC command 错误日志；删除 4 个废弃组件
+
 > 🌐 **网页访问能力优化 Round 5 批次 3：登录态保持**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.4 AU1/AU2/AU4）
 
 ### Added(web-access)
@@ -59,6 +68,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **Office 配置化(Round 31)**: ExcelSheetSpec.freeze_panes(A1 记法冻结窗格,与 freeze_header 同给时优先)+ SAGE_IMAGE_OPTIMIZE_THRESHOLD_BYTES 环境变量配置 Pillow 压缩阈值(0=禁用);工具 schema + 前端契约同步
+- **Word 奇偶页页眉页脚(Round 34)**: format_spec.odd_even_pages+even_page_header/footer——书籍排版场景,偶数页独立页眉页脚(python-docx settings.odd_and_even_pages_header_footer 全局开关)
+- **Word 首页不同页眉页脚(Round 33)**: format_spec.first_page_different+first_page_header/first_page_footer——封面页独立页眉页脚(文本/PAGE 域),python-docx different_first_page_header_footer 原生开关
+- **Excel 打印页边距(Round 31)**: print_setup.margins_cm(上/下/左/右,厘米,openpyxl 英寸自动换算)——部分给定只动给定边;工具 schema + 前端契约同步
+- **journal 结构化文献清洗(Round 30)**: generate_article 自纠检查与最终校验前先原地清洗 structured_references——次品条目(缺 title/字段非法)剔除+warning、key 冲突自动补唯一后缀;全为次品时回退 references 纯文本;不再让单条次品拖垮整体校验
+- **TOC 静态缓存回填(Round 29)**: 目录域升级为 fldChar 复杂域——打开文档即见按文档标题生成的静态目录行(逐级缩进/levels 过滤),更新域后被真实带页码目录替换;Linter toc/presence 升级为双载体兼容检测
+- **Excel 打印标题行(Round 28)**: print_setup.title_rows('1:1')——长表打印每页重复表头(与 freeze_header 屏幕冻结互补);openpyxl 归一化为绝对引用 $1:$1
+- **Pillow 提升为 main 正式依赖(Round 27)**: requirements.txt 增加 Pillow>=10.0——图片压缩管线(R22)开箱生效,消除"装 optional 才生效"的割裂;requirements-optional 同步移除;win7 bundle 不受影响(bundled 列表本就不含)
+- **Word 横排分节(Round 26)**: format_spec.section_breaks——按 start_paragraph 插入 NEW_PAGE 分节并对新节应用 page_setup(横排/纸张/边距),宽表格/财务页场景;仅给 orientation 未给 size 时自动交换宽高;无 breaks 零变化
 - **journal generate 接入引用引擎(Round 25)**: generate_article 的 LLM prompt schema 新增 structured_references(结构化文献条目)——LLM 产出经 JournalContent 校验后走 R21 的 _write_sections 分支按 GB/T 7714 格式化加 [N] 编号;两轮自纠机制天然兜底次品条目
 - **Excel 打印设置(Round 23)**: ExcelSheetSpec 新增 print_setup——方向(横/纵)/缩放到 N 页宽(fitToWidth+fitToPage)/打印区域(A1 记法);全字段可选缺省零变化
 - **Pillow 图片管线(Round 22)**: resolve_image_payload 接入懒加载压缩——>8MB 的 JPEG/PNG 在 Pillow 可用时自动降采样(最长边 2000px,质量 85→65 阶梯)到阈值内;Pillow 为 requirements-optional 可选依赖,未安装时管线旁路行为零变化;不进 win7 bundle
@@ -89,6 +107,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **归档视图批量操作**;前端纳入 PDF 全流程
 
 ### Added(projects)
+- **项目模块 P13**: 知识搜索范围支持"全部最近 wiki 项目"——knowledge_project 支持逗号分隔多根(逐根授权任一未授权 403 fail-closed;多根逐个 search_wiki 按 score 合并、root::path 去重、截取总 limit;单值向后兼容 P9),命令面板范围分组新增"全部最近 wiki 项目"选项(>=2 个项目时出现,选择持久化逗号拼接范围)(方案 docs/plans/2026-09-16_knowledge-multi-scope-plan.md)
+- **项目模块 P9**: 知识搜索默认域配置化——/search/global 新增可选 knowledge_project（经 authorize_registered_project 校验：未授权 403/非 wiki 404，与 wiki 域同契约），_search_knowledge 显式范围优先、缺省回退最近打开（默认行为零变化）；命令面板新增"知识范围"分组（默认+最近 wiki 项目 ≤5，localStorage 持久化 sage:knowledge-scope:v1，选择不关面板），搜索请求按范围携带参数(方案 docs/plans/2026-09-15_knowledge-scope-p9-plan.md)
+- **项目模块 P8**: wiki recent_projects 存储迁移到 projects 注册表(SQLite)——recent_projects.py 重写为只读投影适配器(公共 API 全保,消费方零改动);projects 表新增可空 intent 列(幂等迁移,NULL 读侧映射 open);MAX_RECENT 为投影截断而非注册表生命周期,save_recent 窗口重写只删上一窗口内行;旧 JSON 一次性导入后改名 .migrated 备份;单调毫秒保证同毫秒 record 顺序可判定;移除 wiki/files 平台原语依赖(方案 docs/plans/2026-09-15_wiki-recents-sqlite-p8-plan.md)
+- **项目模块 P7**: 全局搜索接入项目分组——/search/global 默认含 projects 组(ProjectRepository.search 按 name/path LIKE + 会话计数聚合,types=project 可单选),命令面板搜索模式命中项目名/路径片段可直达(复用 open 流,handleOpenProject 收敛为 {id} 签名)(方案 docs/plans/2026-09-14_projects-search-p7-plan.md)
+- **项目模块 W5**: wiki/files 全量 Windows 解锁——其余 12 个 secure_* 补 reparse-safe 分支(沿用 R32 原语),Windows 上 wiki 项目 create/open/list 从 500 恢复可用;修复两个 R32 原语缺陷(CREATE_ALWAYS 先截断后复核绕过多链接拒绝契约、校验失败句柄泄漏锁死同 inode 文件)+ secure_read_text `..` 逃逸缺口;测试解锁 path_security/security_final_paths/project_context/skill_md 回滚/P6 桥接集成的 Windows skip(symlink 夹具改能力探测);本机全量 unit 5539 过零新增失败(方案 docs/plans/2026-09-14_wiki-files-win-unlock-plan.md §7)
 - **项目模块 P6**: wiki 授权桥接 projects 注册表(recents ∪ registry 并集,约 24 个 wiki 端点门禁 fail-closed 语义不变;MCP 授权面同样并集;wiki open/create 双登记进侧栏清单;前置 #760 解除 POSIX-only 阻塞;全局搜索默认域明确不改,依据 docs/plans/2026-09-14_wiki-projects-bridge-plan.md)
 - **项目模块 P5**: 侧栏项目区块局部拖拽登记——拖文件夹到项目分组即批量登记(拖拽不自动打开,与 + 按钮登记即打开区分;路径取 Electron File.path 与 OfficeFilePicker 同判据,目录有效性走既有 validate_workspace 校验,零新增 IPC;dragOver 高亮提示)(方案 docs/plans/2026-09-13_projects-p5-drag-plan.md;Electron>=32 需迁移 webUtils.getPathForFile,已留注记)
 - **项目模块 P4**: 项目子行就地删除会话(hover 两步确认,联动刷新子列表/计数/会话区)+ 项目清单自动刷新(订阅 store 会话数量变化,400ms 防抖重查后端聚合计数,消除跨区增删后的陈旧显示)(方案 docs/plans/2026-09-13_projects-p4-plan.md)

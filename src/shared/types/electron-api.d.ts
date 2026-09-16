@@ -97,7 +97,27 @@ export interface SavedOfficeFile {
   savedPath: string;
 }
 
+export type OfficeStagingStatus =
+  | 'completed'
+  | 'active'
+  | 'recent'
+  | 'review'
+  | 'untracked'
+  | 'unreadable';
+export interface OfficeStagingReport {
+  readOnly: true;
+  truncated: boolean;
+  items: Array<{
+    documentId: string;
+    docType: OfficeDocType;
+    status: OfficeStagingStatus;
+    createdAt?: number;
+  }>;
+}
+
 export interface OfficeElectronApiBridge {
+  /** Read-only evidence, not deletion authorization; optional for old desktop builds. */
+  previewStaging?: (workspacePath: string) => Promise<OfficeStagingReport>;
   /** Legacy Phase 1.3 channels — kept for compat with the /office page UI. */
   pickOfficeFile: (docType: OfficeDocType) => Promise<PickedOfficeFile | null>;
   pickSavePath: (defaultName: string) => Promise<string | null>;
@@ -121,8 +141,8 @@ export interface OfficeElectronApiBridge {
   /** Discard an import; the staged file is deleted. Idempotent on unknown tokens. */
   discardOfficeImport: (importToken: string) => Promise<void>;
   /**
-   * Sweep orphan staging directories not present in `knownDocIds`.
-   * Returns the count of directories removed.
+   * Deprecated no-op. Renderer document lists cannot establish orphanhood.
+   * Always returns swept=0; use previewStaging for read-only evidence.
    */
   sweepOrphanStaging: (opts: {
     workspacePath: string;
@@ -267,6 +287,11 @@ export interface ElectronAPI {
     }) => Promise<{ ok: boolean; totalBytes?: number; error?: string }>;
     cancel: (dirName: string) => Promise<{ ok: boolean }>;
   };
+  /** P13/P17: sage-file 工作区注册表 —— 渲染端绑定工作区时登记/注销到主进程白名单。 */
+  sageFile?: {
+    registerRoot: (path: string) => Promise<boolean>;
+    unregisterRoot: (path: string) => Promise<boolean>;
+  };
   /**
    * Streaming callers (wiki chat / wiki ingest) pass `options.streamId`
    * so the unlisten payload can abort the in-flight backend fetch via
@@ -331,6 +356,12 @@ export interface ElectronAPI {
   cleanupLogs?: () => Promise<{ removed: number }>;
   /** T13: Update SAGE_LOG_LEVEL for the main process logger. */
   setLogLevel?: (level: LogLevel) => Promise<{ ok: true }>;
+  /**
+   * 2026-09-15: 读取当前生效的 SAGE_LOG_LEVEL。渲染端组件挂载时拉取一次,
+   * 避免在 Diagnostics 卡片切到其他级别 → 切走页面 → 切回来时被硬编码的
+   * 默认值 'info' 覆盖。无值/无效值返回 DEFAULT_LOG_LEVEL ('info')。
+   */
+  getLogLevel?: () => Promise<LogLevel>;
   /**
    * 2026-08-27: 演示模式开关持久化. 用户在 Settings → 通用 切换后,
    * 写入 <userData>/sage-demo-mode.json, 下次启动 main 进程读取生效.

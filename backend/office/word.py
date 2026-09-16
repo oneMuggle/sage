@@ -242,6 +242,102 @@ def _count_images(doc: Document) -> int:
     return len(doc.inline_shapes)
 
 
+# ── Round C P4: inline image thumbnails ────────────────────────────────
+
+#: 最多内联的图片条目数（超出的只计数不内联，防止 payload 爆炸）。
+_IMAGE_PREVIEW_MAX_COUNT = 10
+#: Pillow 缩略的最长边（px）。
+_IMAGE_PREVIEW_MAX_EDGE = 480
+#: 无 Pillow 时允许直接内联的原图上限（bytes）。
+_IMAGE_PREVIEW_RAW_LIMIT = 150 * 1024
+#: 单条 data URL 的硬上限（bytes，base64 前）——缩略后仍超限则跳过。
+_IMAGE_PREVIEW_ENCODED_LIMIT = 300 * 1024
+
+
+def _extract_image_previews(doc: Document) -> List[WordImagePreview]:  # noqa: F821 — call-time import below
+    """Inline picture parts → bounded thumbnail data URLs.
+
+    Pillow available → RGB-convert + thumbnail to ``_IMAGE_PREVIEW_MAX_EDGE``
+    JPEG (small, predictable). Pillow missing → only parts already ≤
+    ``_IMAGE_PREVIEW_RAW_LIMIT`` are inlined as-is; larger ones are skipped
+    (the count field still reports them). Any per-image failure skips just
+    that image.
+    """
+    from .models import WordImagePreview
+
+    previews: List[WordImagePreview] = []
+    for index, shape in enumerate(doc.inline_shapes):
+        if len(previews) >= _IMAGE_PREVIEW_MAX_COUNT:
+            break
+        try:
+            # InlineShape → embedded rId → image part（charts 无 embed，跳过）
+            blip_fill = shape._inline.graphic.graphicData.pic.blipFill
+            r_id = blip_fill.blip.embed
+            # InlineShape 没有 .part —— 关系表挂在 document part 上
+            part = doc.part.related_parts[r_id]
+            blob = part.blob
+            content_type = part.content_type or "image/png"
+        except Exception:  # noqa: BLE001 — 单张图失败只跳过这张
+            continue
+        encoded = _thumbnail_or_none(blob, content_type)
+        if encoded is None:
+            continue
+        data, mime, thumbed = encoded
+        previews.append(
+            WordImagePreview(
+                index=index,
+                content_type=mime,
+                data_url=f"data:{mime};base64,{data}",
+                thumbnail=thumbed,
+            )
+        )
+    return previews
+
+
+def _thumbnail_or_none(blob: bytes, content_type: str):
+    """(base64_str, mime, thumbnailed) or None when the image can't be bounded.
+
+    Pillow path re-encodes to JPEG (RGBA → white matte). No-Pillow path
+    inlines small originals only. EMF/WMF 等 Pillow 打不开的格式走原图
+    小图路径或直接跳过。
+    """
+    import base64
+    import io
+
+    try:
+        from PIL import Image  # noqa: PLC0415 — optional dependency
+    except ImportError:
+        Image = None
+
+    if Image is not None:
+        try:
+            with Image.open(io.BytesIO(blob)) as img:
+                img.thumbnail((_IMAGE_PREVIEW_MAX_EDGE, _IMAGE_PREVIEW_MAX_EDGE))
+                if img.mode in ("RGBA", "LA", "P"):
+                    from PIL import Image as _Image
+
+                    background = _Image.new("RGB", img.size, (255, 255, 255))
+                    converted = img.convert("RGBA")
+                    background.paste(converted, mask=converted.split()[-1])
+                    out = background
+                elif img.mode != "RGB":
+                    out = img.convert("RGB")
+                else:
+                    out = img
+                buf = io.BytesIO()
+                out.save(buf, format="JPEG", quality=80)
+                data = buf.getvalue()
+            if len(data) <= _IMAGE_PREVIEW_ENCODED_LIMIT:
+                return base64.b64encode(data).decode("ascii"), "image/jpeg", True
+            return None
+        except Exception:  # noqa: BLE001 — Pillow 打不开（EMF/WMF 等）→ 原图小图路径
+            pass
+
+    if len(blob) <= _IMAGE_PREVIEW_RAW_LIMIT:
+        return base64.b64encode(blob).decode("ascii"), content_type, False
+    return None
+
+
 def _extract_headers_footers(doc: Document) -> List[WordHeaderFooterContent]:
     """提取每节的页眉/页脚文本与页码域标记（Round 15）。
 
@@ -285,12 +381,23 @@ def _extract_headers_footers(doc: Document) -> List[WordHeaderFooterContent]:
 
 
 def _extract_toc_fields(doc: Document) -> List[str]:
-    """收集正文中 instr 以 TOC 开头的域（Round 13 目录域的读取对偶）。"""
+    """收集正文中 instr 以 TOC 开头的域（Round 13 目录域的读取对偶）。
+
+    Round 29 起兼容两种载体：fldSimple（R13 形态）与 fldChar 复杂域的
+    instrText（R29 静态缓存回填形态）。
+    """
     instrs: List[str] = []
+    seen: set = set()
     for paragraph in doc.paragraphs:
         for fld in paragraph._p.findall(".//" + qn("w:fldSimple")):
             instr = fld.get(qn("w:instr")) or ""
-            if instr.startswith("TOC"):
+            if instr.startswith("TOC") and instr not in seen:
+                seen.add(instr)
+                instrs.append(instr)
+        for instr_el in paragraph._p.findall(".//" + qn("w:instrText")):
+            instr = (instr_el.text or "").strip()
+            if instr.startswith("TOC") and instr not in seen:
+                seen.add(instr)
                 instrs.append(instr)
     return instrs
 
@@ -366,6 +473,17 @@ def read_docx(
     paragraphs = _extract_paragraphs(doc)
     tables = _extract_tables(doc)
     images = _count_images(doc)
+    # Round C P4: inline image thumbnails. Best-effort like comments —
+    # a corrupt image part must not fail the read.
+    try:
+        image_previews = _extract_image_previews(doc)
+    except Exception:  # noqa: BLE001 — 图片部分损坏不阻断正文读取
+        logger.warning(
+            "Failed to extract image previews from %s; previews omitted",
+            file_path.name,
+            exc_info=True,
+        )
+        image_previews = []
     # Round 2 R3: comments ride along in the read result. A corrupt comments
     # part must not fail the whole read (body extraction already succeeded);
     # the dedicated read_docx_comments still surfaces it as OfficeParseError.
@@ -395,6 +513,7 @@ def read_docx(
         tables=tables,
         images=images,
         comments=comments,
+        image_previews=image_previews,
         headers_footers=_extract_headers_footers(doc),
         toc_fields=_extract_toc_fields(doc),
     )
@@ -784,6 +903,7 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
     from .errors import OfficeGenerateError
     from .models import OfficeDocType
     from .path_safety import managed_document_path, resolve_output_path
+    from .progress import report_current
     from .storage import validate_workspace
 
     if output_dir is not None:
@@ -812,12 +932,55 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # Title
         doc.add_heading(req.title, level=0)
 
-        # Round 13：目录域（标题之后、正文之前；分页使正文另起一页）。
+        # Round 13/29：目录域（标题之后、正文之前；分页使正文另起一页）。
         # 目录标题为普通段落，不参与多级标题编号检查（Linter 对偶跳过）。
+        # Round 29：预收集标题清单回填为 TOC 域的静态缓存——打开文档即见
+        # 目录；更新域后被渲染器重算替换。缓存行文本与正文标题的最终形态
+        # 一致（numbering 开启时含编号前缀，否则为纯标题文本）。
+        toc_headings: List[Tuple[int, str]] = []
         if req.format_spec is not None and req.format_spec.toc is not None:
             from .word_layout import insert_toc_field
 
-            insert_toc_field(doc, req.format_spec.toc)
+            numbering_on = bool(req.format_spec.numbering)
+            pre_counters = [0, 0, 0, 0, 0]
+            first_level, last_level = req.format_spec.toc.level_range()
+            for para in req.paragraphs:
+                if para.heading in ("h1", "h2", "h3", "h4", "h5"):
+                    level = int(para.heading[1])
+                    text = para.text
+                    if numbering_on:
+                        text = (
+                            heading_number_prefix(pre_counters, level)
+                            + " "
+                            + text
+                        )
+                    if first_level <= level <= last_level:
+                        toc_headings.append((level, text))
+
+            insert_toc_field(doc, req.format_spec.toc, toc_headings)
+
+        # ── Round 33：首页不同页眉页脚 ────────────────────────────────────
+        # 启用后首页使用独立的页眉/页脚（封面页场景）；正文从第 2 页起
+        # 使用 format_spec.header/footer 的通用内容。
+        if req.format_spec is not None and req.format_spec.first_page_different:
+            from .word_layout import apply_first_page_different
+
+            apply_first_page_different(
+                doc,
+                req.format_spec.first_page_header,
+                req.format_spec.first_page_footer,
+            )
+
+        # ── Round 34：奇偶页不同页眉页脚 ──────────────────────────────────
+        # 启用后偶数页使用 even_page_header/footer 的独立内容。
+        if req.format_spec is not None and req.format_spec.odd_even_pages:
+            from .word_layout import apply_odd_even_different
+
+            apply_odd_even_different(
+                doc,
+                req.format_spec.even_page_header,
+                req.format_spec.even_page_footer,
+            )
 
         # ── Round 9 引用：首现编号 + 文中上标标记 + 文末参考文献节 ────────
         # 编号 = citations key 在正文中的首次出现顺序；标记连续编号合并
@@ -854,8 +1017,30 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         for image in inline_images:
             images_by_position.setdefault(image.after_paragraph or 0, []).append(image)
 
+        # ── Round 26：横排分节（section_breaks 按 start_paragraph 排序） ───
+        pending_breaks: List[Any] = sorted(
+            (req.format_spec.section_breaks if req.format_spec else []) or [],
+            key=lambda b: b.start_paragraph,
+        )
+        break_idx = 0
+
         # Body paragraphs（段落写完后插入锚定在其后的行内插图）
+        total_paras = max(1, len(req.paragraphs))
         for pi, para in enumerate(req.paragraphs):
+            # P12: 每 20 段上报一次（段落粒度太细，避免锁竞争开销）
+            if pi % 20 == 0:
+                report_current(
+                    f"生成正文 {pi + 1}/{total_paras}",
+                    50,
+                )
+            # Round 26：写段落前命中 start_paragraph → 插入分节 + 新节页面设置
+            while break_idx < len(pending_breaks) and pending_breaks[
+                break_idx
+            ].start_paragraph == pi:
+                from .word_layout import apply_section_break
+
+                apply_section_break(doc, pending_breaks[break_idx].page_setup)
+                break_idx += 1
             if para.heading in ("h1", "h2", "h3", "h4", "h5"):
                 level = int(para.heading[1])
                 text = para.text

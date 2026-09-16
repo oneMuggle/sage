@@ -55,6 +55,7 @@ import { toast } from 'sonner';
 import { useWorkspaceContext } from '../app/providers/SessionWorkspaceProvider';
 import { JournalPanel } from '../features/journal';
 import {
+  OfficeCapabilityBar,
   OfficeDocumentList,
   OfficeEditPreviewDialog,
   OfficeFilePicker,
@@ -66,8 +67,9 @@ import {
   type OfficePreviewData,
   type OfficeReadResult,
 } from '../features/office';
+import { OfficeStagingInspector } from '../features/office/OfficeStagingInspector';
 import { WorkspaceBindModal } from '../features/workspace';
-import type { OfficeDocType } from '../shared/api/types';
+import type { OfficeCapabilities, OfficeDocType } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 
@@ -91,6 +93,10 @@ export function Office() {
   // Workspace bind modal is opened by the header button (initial bind)
   // or the workspace-path chip (change).
   const [isBindModalOpen, setIsBindModalOpen] = useState(false);
+
+  // Round A P6: capability probe result (badge bar callback). The preview
+  // panel hides its 高保真 toggle when no local PDF converter exists.
+  const [capabilities, setCapabilities] = useState<OfficeCapabilities | null>(null);
 
   const {
     documents,
@@ -293,6 +299,9 @@ export function Office() {
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-6 overflow-y-auto" data-testid="office-page">
+      {workspacePath && (
+        <OfficeStagingInspector key={workspacePath} workspacePath={workspacePath} />
+      )}
       {/* Header */}
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-semibold text-text">{t('office.title')}</h1>
@@ -331,6 +340,9 @@ export function Office() {
           {workspaceError}
         </div>
       )}
+
+      {/* Round A P6: 环境能力徽章条（探测失败时自隐藏） */}
+      <OfficeCapabilityBar onCapabilities={setCapabilities} />
 
       {!workspacePath ? (
         <div className="flex items-center justify-center p-12 text-muted text-sm border border-dashed border-border rounded-lg">
@@ -408,6 +420,7 @@ export function Office() {
               <OfficePreviewPanel
                 preview={preview}
                 workspacePath={workspacePath}
+                fidelityAvailable={capabilities?.pdf_export_available ?? true}
                 onEditPreview={
                   preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined
                 }

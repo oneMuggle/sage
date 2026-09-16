@@ -6,11 +6,11 @@
  * 斜杠面板（/tpl-<名称>）与该列表共享同一数据源，保存后重载即可见。
  */
 
-import { Pencil, Plus, RefreshCw } from 'lucide-react';
-import { Download, Upload } from 'lucide-react';
+import { Download, Pencil, Plus, RefreshCw, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { promptApi, type PromptTemplate } from '../../shared/api/promptApi';
+import { tplStorageKey } from '../../widgets/chat/TemplateFillDialog';
 
 const MAX_NAME_LEN = 60;
 const MAX_CONTENT_LEN = 8000;
@@ -30,6 +30,32 @@ export function PromptTemplatesTab() {
   const [form, setForm] = useState<FormState | null>(null); // null = 列表态
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // R38: 记忆清除后触发重渲染（localStorage 不经过 React，需手动 tick）
+  const [, setMemoryTick] = useState(0);
+  // R42: 拖拽排序状态
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+
+  const handleDragStart = (index: number) => setDragIndex(index);
+  const handleDragOver = (index: number) => {
+    if (dragIndex !== null && dragIndex !== index) setDropIndex(index);
+  };
+  const handleDrop = async () => {
+    if (dragIndex === null || dropIndex === null || dragIndex === dropIndex) {
+      setDragIndex(null); setDropIndex(null); return;
+    }
+    const reordered = [...templates];
+    const [moved] = reordered.splice(dragIndex, 1);
+    reordered.splice(dropIndex, 0, moved);
+    setTemplates(reordered);
+    setDragIndex(null); setDropIndex(null);
+    try {
+      await promptApi.reorder(reordered.map((t) => t.id));
+    } catch {
+      await load(); // 排序失败回滚
+    }
+  };
+  const handleDragEnd = () => { setDragIndex(null); setDropIndex(null); };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -258,10 +284,15 @@ export function PromptTemplatesTab() {
         </p>
       ) : (
         <ul className="space-y-2" data-testid="prompts-list">
-          {templates.map((tpl) => (
+          {templates.map((tpl, idx) => (
             <li
               key={tpl.id}
-              className="p-3 rounded-radius-sm border border-border"
+              draggable
+              onDragStart={() => handleDragStart(idx)}
+              onDragOver={(e) => { e.preventDefault(); handleDragOver(idx); }}
+              onDrop={() => void handleDrop()}
+              onDragEnd={handleDragEnd}
+              className={`p-3 rounded-radius-sm border ${dropIndex === idx ? 'border-primary' : 'border-border'} ${dragIndex === idx ? 'opacity-50' : ''} cursor-grab active:cursor-grabbing`}
               data-testid="prompts-item"
             >
               <div className="flex items-start justify-between gap-2">
@@ -275,6 +306,36 @@ export function PromptTemplatesTab() {
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
+                  {(() => {
+                    // R38: 变量记忆展示/清除 —— 与填充对话框同键口径
+                    try {
+                      const raw = window.localStorage.getItem(tplStorageKey(tpl.content));
+                      const mem = raw ? (JSON.parse(raw) as Record<string, string>) : null;
+                      const entries = mem ? Object.entries(mem) : [];
+                      if (entries.length === 0) return null;
+                      return (
+                        <span
+                          className="text-[11px] text-text-secondary mr-1"
+                          data-testid={`prompts-memory-${tpl.id}`}
+                        >
+                          记忆 {entries.length} 项
+                          <button
+                            type="button"
+                            data-testid={`prompts-memory-clear-${tpl.id}`}
+                            onClick={() => {
+                              localStorage.removeItem(tplStorageKey(tpl.content));
+                              setMemoryTick((n) => n + 1);
+                            }}
+                            className="ml-1 text-error hover:underline"
+                          >
+                            清除
+                          </button>
+                        </span>
+                      );
+                    } catch {
+                      return null;
+                    }
+                  })()}
                   <button
                     type="button"
                     data-testid={`prompts-edit-${tpl.id}`}

@@ -212,6 +212,32 @@ class OfficeWordReadResult(BaseModel):
     headers_footers: List[WordHeaderFooterContent] = Field(default_factory=list)
     # Round 15：文档中的目录域 instr 列表。
     toc_fields: List[str] = Field(default_factory=list)
+    # Office display round C (P4)：内嵌图片缩略预览。additive field ——
+    # default_factory 保持旧 payload 在 extra="forbid" 下有效（win7 回流
+    # 与旧客户端可整体忽略）。上限/降级策略见 word._extract_image_previews。
+    image_previews: List[WordImagePreview] = Field(default_factory=list)
+
+
+class WordImagePreview(BaseModel):
+    """One inline image thumbnail for preview (office display round C, P4).
+
+    ``data_url`` 是缩略后的 base64 data URL（Pillow 可用时最长边缩到
+    480px；不可用时仅 ≤150KB 的原图直接内联）。超限/无法内联的图片不产
+    生条目 —— ``OfficeWordReadResult.images``（总数）与
+    ``len(image_previews)`` 的差即被省略的数量。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(ge=0, description="文内出现顺序（0-based）")
+    content_type: str = Field(description="MIME，如 image/png")
+    data_url: str = Field(description="data:<mime>;base64,… 缩略图")
+    thumbnail: bool = Field(
+        default=False, description="True=经 Pillow 缩略；False=原图直接内联"
+    )
+
+
+OfficeWordReadResult.model_rebuild()
 
 
 class ExcelSheetContent(BaseModel):
@@ -638,6 +664,36 @@ class WordFormatSpec(BaseModel):
     bibliography: Optional[BibliographySpec] = None
     # Round 13：目录域。None = 不插入目录。
     toc: Optional[WordTocSpec] = None
+    # Round 33：首页不同页眉页脚（封面页场景）。启用后首页用
+    # first_page_header/first_page_footer 的独立内容。
+    first_page_different: bool = Field(
+        default=False, description="启用首页不同的页眉页脚"
+    )
+    first_page_header: Optional[WordHeaderFooterSpec] = None
+    first_page_footer: Optional[WordHeaderFooterSpec] = None
+    # Round 34：奇偶页不同页眉页脚（书籍排版）。启用后偶数页用
+    # even_page_header/even_page_footer 的独立内容。
+    odd_even_pages: bool = Field(
+        default=False, description="启用奇偶页不同的页眉页脚"
+    )
+    even_page_header: Optional[WordHeaderFooterSpec] = None
+    even_page_footer: Optional[WordHeaderFooterSpec] = None
+    # Round 26：横排/分节。每个 break 在 start_paragraph（0-based）前
+    # 插入 NEW_PAGE 分节并对新节应用 page_setup；按列表顺序依次生效。
+    section_breaks: _constrained_list("WordSectionBreakSpec", max_length=20) = Field(
+        default_factory=list
+    )
+
+
+class WordSectionBreakSpec(BaseModel):
+    """分节设置（Round 26）：start_paragraph 前插入 NEW_PAGE 分节，
+    新节应用 page_setup（横排宽表/财务页场景）。复用 WordPageSetupSpec。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_paragraph: int = Field(ge=0, description="该 0-based 段落下标起进入新节")
+    page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
 
 
 class OfficeWordGenerateRequest(BaseModel):
@@ -706,6 +762,13 @@ class ExcelSheetSpec(BaseModel):
     freeze_header: bool = Field(
         default=False,
         description="冻结首行（滚动长表时表头保持可见）",
+    )
+    # Round 31：冻结窗格参数化（A1 记法）。与 freeze_header 同给时本字段优先。
+    freeze_panes: Optional[str] = Field(
+        default=None,
+        max_length=10,
+        pattern=r"^[A-Za-z]{1,3}[0-9]{1,7}$",
+        description="冻结窗格 A1 记法，如 'B2' 冻结首行+首列；None 不设置",
     )
     autofit_columns: bool = Field(
         default=False,
@@ -823,6 +886,25 @@ class ExcelPrintSetupSpec(BaseModel):
         pattern=r"^[A-Za-z]{1,3}[0-9]+:[A-Za-z]{1,3}[0-9]+$",
         description="打印区域，A1 记法，如 'A1:F40'",
     )
+    title_rows: Optional[str] = Field(
+        default=None,
+        max_length=20,
+        pattern=r"^\$?[0-9]+:\$?[0-9]+$",
+        description="每页重复的标题行，如 '1:1'（长表打印每页带表头）",
+    )
+    # Round 31：打印页边距（厘米），全可选；None 用 Excel 默认。
+    margins_cm: Optional[ExcelPrintMarginsSpec] = None
+
+
+class ExcelPrintMarginsSpec(BaseModel):
+    """打印页边距（厘米，Round 31）。全字段可选。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    top: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    bottom: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    left: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+    right: Optional[float] = Field(default=None, ge=0.0, le=10.0)
 
 
 class ExcelCellRange(BaseModel):

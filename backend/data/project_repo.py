@@ -195,6 +195,24 @@ class ProjectRepository:
         ).fetchall()
         return [Session.from_row(row) for row in rows]
 
+    def search(self, query: str, limit: int = 10) -> List[Project]:
+        """按名称/路径模糊搜索项目（P7 全局搜索接入，最近打开优先）。
+
+        与 SessionRepository.search 同约定：LIKE 不转义 ``%``/``_``。
+        """
+        conn = self.db.get_connection()
+        pattern = f"%{query}%"
+        rows = conn.execute(
+            """
+            SELECT * FROM projects
+            WHERE name LIKE ? OR path LIKE ?
+            ORDER BY last_opened_at DESC, id DESC
+            LIMIT ?
+            """,
+            (pattern, pattern, limit),
+        ).fetchall()
+        return [_row_to_project(row) for row in rows]
+
 
 def open_project(
     project_id: str, now_ms: Optional[int] = None

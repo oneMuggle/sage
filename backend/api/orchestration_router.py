@@ -9,6 +9,8 @@ Mount under ``/api/v1`` from ``backend/main.py``. Provides:
   listing/detail (state, agent, metadata, heartbeat).
 - ``GET /orchestration/lanes/{id}/events`` — lane event history.
 - ``POST /orchestration/lanes/{id}/cancel`` — manual cancellation.
+- ``POST /orchestration/lanes/{id}/decision`` — A4 交付包验收决议
+  （accept 合并 worktree / reject 清理归档）。
 - ``GET /orchestration/board`` — LaneBoard 监控快照（active/blocked/finished +
   freshness_summary，Wave 3 B3 暴露 HTTP）。
 
@@ -20,8 +22,11 @@ see fresh state, and no import-time singleton is captured.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
-from typing import Any, Dict, List, Optional
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -50,14 +55,14 @@ class LaneHeartbeatOut(BaseModel):
 class LaneOut(BaseModel):
     lane_id: str
     task_id: str
-    agent_id: Optional[str] = None
+    agent_id: str | None = None
     status: LaneStatus
     created_at: int
-    started_at: Optional[int] = None
-    completed_at: Optional[int] = None
-    worktree: Optional[str] = None
-    heartbeat: Optional[LaneHeartbeatOut] = None
-    error: Optional[str] = None
+    started_at: int | None = None
+    completed_at: int | None = None
+    worktree: str | None = None
+    heartbeat: LaneHeartbeatOut | None = None
+    error: str | None = None
     permission_preset: str
     metadata: dict
 
@@ -69,8 +74,8 @@ class TaskOut(BaseModel):
     task_type: str
     status: str
     blocked_by: List[str]
-    team_id: Optional[str] = None
-    agent_hint: Optional[str] = None
+    team_id: str | None = None
+    agent_hint: str | None = None
 
 
 class LaneEventOut(BaseModel):
@@ -78,7 +83,7 @@ class LaneEventOut(BaseModel):
     event_type: str
     lane_id: str
     task_id: str
-    agent_id: Optional[str] = None
+    agent_id: str | None = None
     timestamp: int
     provenance: str
     metadata: dict
@@ -86,7 +91,7 @@ class LaneEventOut(BaseModel):
 
 class CreateLanesIn(BaseModel):
     goal: str = Field(max_length=MAX_GOAL_LENGTH)
-    agent: Optional[str] = Field(default=None, max_length=100)
+    agent: str | None = Field(default=None, max_length=100)
 
 
 class CreateLanesOut(BaseModel):
@@ -95,11 +100,26 @@ class CreateLanesOut(BaseModel):
     lanes: List[LaneOut]
     tasks: List[TaskOut]
     # Wave 3 B2 (2026-08-14): wait=true 时携带验证环结果（可选）。
-    review: Optional[Dict[str, Any]] = None
+    review: Dict[str, Any] | None = None
 
 
 class CancelIn(BaseModel):
     reason: str = Field(default="user_cancelled", max_length=200)
+
+
+class DecisionIn(BaseModel):
+    decision: Literal["accept", "reject"]
+    reason: str = Field(default="", max_length=500)
+
+
+class DecisionOut(BaseModel):
+    ok: bool
+    lane: LaneOut
+    decision: str
+    merged: bool = False
+    already: bool = False
+    warning: str | None = None
+    merge: Dict[str, Any] | None = None
 
 
 # ---------- serialization helpers ----------
@@ -164,8 +184,8 @@ def build_router() -> APIRouter:
 
     @router.get("/lanes", response_model=List[LaneOut])
     async def list_lanes(
-        status: Optional[LaneStatus] = Query(default=None),
-        team_id: Optional[str] = Query(default=None),
+        status: LaneStatus | None = Query(default=None),
+        team_id: str | None = Query(default=None),
         limit: int = Query(default=100, ge=1, le=500),
     ) -> List[LaneOut]:
         """List lanes with optional filters.
@@ -318,7 +338,7 @@ def build_router() -> APIRouter:
         # TypeError。
         # 另注意：plan.tasks 是 Task（无 lane_id），lane→task 映射必须来自上面
         # 实际创建的 created_lanes，不能从 plan.tasks 反推（brief 原文有该 bug）。
-        review: Optional[Dict[str, Any]] = None
+        review: Dict[str, Any] | None = None
         if wait:
             review = await _execute_plan_lanes(
                 plan=plan,
@@ -394,6 +414,161 @@ def build_router() -> APIRouter:
         assert refreshed is not None  # Just updated, should exist
         return _to_lane_out(refreshed)
 
+    @router.post("/lanes/{lane_id}/decision", response_model=DecisionOut)
+    async def lane_decision(lane_id: str, body: DecisionIn) -> DecisionOut:
+        """A4 交付包验收决议：accept 合并 worktree / reject 清理归档。
+
+        幂等：重复决议返回 already=True，不重复合并。仅 succeeded lane 可决议。
+
+        Raises:
+            HTTPException 404: Lane not found
+            HTTPException 409: 非 succeeded lane；主仓脏；合并冲突
+            HTTPException 500: 合并执行异常
+        """
+        from backend.orchestration import worktree_merge
+        from backend.orchestration.events import EventRecorder
+        from backend.orchestration.worktree import remove_worktree_async
+
+        lane_registry = LaneRegistry()
+        lane = lane_registry.get_lane(lane_id)
+        if lane is None:
+            raise HTTPException(status_code=404, detail=f"Lane {lane_id} not found")
+        meta = dict(lane.metadata or {})
+        now_ms = int(time.time() * 1000)
+
+        if body.decision == "accept":
+            if meta.get("accepted_at"):
+                return DecisionOut(
+                    ok=True,
+                    lane=_to_lane_out(lane),
+                    decision="accept",
+                    merged=bool(meta.get("merge")),
+                    already=True,
+                )
+            if lane.status != LaneStatus.SUCCEEDED:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"仅 succeeded lane 可接受：{lane.status}",
+                )
+            if lane.worktree:
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: worktree_merge.accept_lane_worktree(
+                        lane.worktree, lane_id=lane.lane_id
+                    ),
+                )
+                if result.ok:
+                    meta.update(
+                        accepted_at=now_ms,
+                        acceptance_pending=False,
+                        merge=result.to_dict(),
+                    )
+                    lane.metadata = meta
+                    lane_registry.update_lane(lane)
+                    EventRecorder().record(
+                        LaneEvent.ACCEPTED,
+                        lane_id=lane.lane_id,
+                        task_id=lane.task_id,
+                        agent_id=lane.agent_id,
+                        provenance=EventProvenance.MANUAL,
+                        metadata={"merge": result.to_dict(), "reason": body.reason},
+                    )
+                    with contextlib.suppress(Exception):
+                        await remove_worktree_async(Path(lane.worktree))
+                    return DecisionOut(
+                        ok=True,
+                        lane=_to_lane_out(lane),
+                        decision="accept",
+                        merged=result.code == "merged",
+                        merge=result.to_dict(),
+                    )
+                if result.code == "worktree-missing":
+                    # 不可重试 → 降级纯归档（可重试的 dirty/conflicts 走 409）
+                    warning = "worktree 已被清理（过期/崩溃残留），仅归档不合并"
+                    meta.update(
+                        accepted_at=now_ms,
+                        acceptance_pending=False,
+                        warning=warning,
+                    )
+                    lane.metadata = meta
+                    lane_registry.update_lane(lane)
+                    EventRecorder().record(
+                        LaneEvent.ACCEPTED,
+                        lane_id=lane.lane_id,
+                        task_id=lane.task_id,
+                        agent_id=lane.agent_id,
+                        provenance=EventProvenance.MANUAL,
+                        metadata={
+                            "merged": False,
+                            "warning": warning,
+                            "reason": body.reason,
+                        },
+                    )
+                    refreshed = lane_registry.get_lane(lane_id)
+                    assert refreshed is not None
+                    return DecisionOut(
+                        ok=True,
+                        lane=_to_lane_out(refreshed),
+                        decision="accept",
+                        merged=False,
+                        warning=warning,
+                    )
+                if result.code in ("main-dirty", "conflicts"):
+                    raise HTTPException(status_code=409, detail=result.message)
+                raise HTTPException(status_code=500, detail=result.message)
+            # 无 worktree lane：纯归档
+            meta.update(accepted_at=now_ms, acceptance_pending=False)
+            lane.metadata = meta
+            lane_registry.update_lane(lane)
+            EventRecorder().record(
+                LaneEvent.ACCEPTED,
+                lane_id=lane.lane_id,
+                task_id=lane.task_id,
+                agent_id=lane.agent_id,
+                provenance=EventProvenance.MANUAL,
+                metadata={"merged": False, "note": "no worktree", "reason": body.reason},
+            )
+            refreshed = lane_registry.get_lane(lane_id)
+            assert refreshed is not None
+            return DecisionOut(
+                ok=True, lane=_to_lane_out(refreshed), decision="accept", merged=False
+            )
+
+        # reject：清理留存 worktree 并归档
+        if meta.get("rejected_at"):
+            return DecisionOut(
+                ok=True,
+                lane=_to_lane_out(lane),
+                decision="reject",
+                merged=False,
+                already=True,
+            )
+        if lane.status != LaneStatus.SUCCEEDED:
+            raise HTTPException(
+                status_code=409,
+                detail=f"仅 succeeded lane 可打回：{lane.status}",
+            )
+        if lane.worktree:
+            with contextlib.suppress(Exception):
+                await remove_worktree_async(Path(lane.worktree))
+        meta.update(rejected_at=now_ms, acceptance_pending=False)
+        lane.metadata = meta
+        lane_registry.update_lane(lane)
+        EventRecorder().record(
+            LaneEvent.REJECTED,
+            lane_id=lane.lane_id,
+            task_id=lane.task_id,
+            agent_id=lane.agent_id,
+            provenance=EventProvenance.MANUAL,
+            metadata={"reason": body.reason},
+        )
+        refreshed = lane_registry.get_lane(lane_id)
+        assert refreshed is not None
+        return DecisionOut(
+            ok=True, lane=_to_lane_out(refreshed), decision="reject", merged=False
+        )
+
     @router.get("/board")
     async def board(view: str = Query(default="ops_full")) -> Dict[str, Any]:
         """LaneBoard 监控快照（M4 交付但未暴露 HTTP — P2-10 补暴露）。
@@ -431,7 +606,7 @@ def build_router() -> APIRouter:
 async def _create_lane_for_task(
     task: Task,
     goal: str,
-    explicit_agent: Optional[str],
+    explicit_agent: str | None,
     lane_registry: LaneRegistry,
     capability_router,
 ) -> Lane:
@@ -486,7 +661,7 @@ async def _execute_plan_lanes(
     task_registry: Any,
     event_recorder: Any,
     llm_config: Any,
-) -> Optional[Dict[str, Any]]:
+) -> Dict[str, Any] | None:
     """并行执行 plan 的 lanes（ChatDispatcher._run_subagent 同款语义）。
 
     - 不强制 DAG 拓扑（与 ChatDispatcher 并行语义一致；spec §7.4 同）。

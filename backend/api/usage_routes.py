@@ -28,7 +28,7 @@ import csv
 import io
 import time
 from datetime import datetime, timedelta, timezone  # datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Query
 from fastapi.responses import PlainTextResponse
@@ -56,7 +56,7 @@ async def get_usage_summary(
 async def list_usage_requests(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    session_id: Optional[str] = Query(None),
+    session_id: str | None = Query(None),
 ) -> Dict[str, Any]:
     """L8 PR-B (2026-09-09): 按 created_at DESC 分页列出 usage_events 行。
 
@@ -83,7 +83,8 @@ async def list_usage_requests(
             rows = conn.execute(
                 f"SELECT id, session_id, model, prompt_tokens, completion_tokens,"
                 f" total_tokens, cached_tokens, cache_read_tokens,"
-                f" cache_creation_tokens, estimated_cost_usd, created_at"
+                f" cache_creation_tokens, estimated_cost_usd, created_at,"
+                f" endpoint_id, price_snapshot"
                 f" FROM usage_events{where}"
                 f" ORDER BY created_at DESC LIMIT ? OFFSET ?",
                 (*params, limit, offset),
@@ -91,6 +92,8 @@ async def list_usage_requests(
         items: List[Dict[str, Any]] = []
         for row in rows:
             created_at = int(row["created_at"] or 0)
+            cost = row["estimated_cost_usd"]
+            has_snapshot = row["price_snapshot"] is not None
             items.append(
                 {
                     "id": str(row["id"] or ""),
@@ -102,7 +105,10 @@ async def list_usage_requests(
                     "cached_tokens": int(row["cached_tokens"] or 0),
                     "cache_read_tokens": int(row["cache_read_tokens"] or 0),
                     "cache_creation_tokens": int(row["cache_creation_tokens"] or 0),
-                    "estimated_cost_usd": row["estimated_cost_usd"],
+                    "estimated_cost_usd": cost,
+                    "known_cost": cost is not None,
+                    "endpoint_id": row["endpoint_id"],
+                    "has_price_snapshot": has_snapshot,
                     "created_at_ms": created_at,
                     "created_at_iso": _iso_from_ms(created_at),
                 }
@@ -152,7 +158,7 @@ async def get_usage_trend(
     range: str = Query(  # noqa: A002
         "7d", pattern="^(today|7d|30d|total)$"
     ),
-    session_id: Optional[str] = Query(None),
+    session_id: str | None = Query(None),
 ) -> Dict[str, Any]:
     """L8 PR-C (2026-09-09): 时间序列, 按桶聚合。
 
@@ -227,15 +233,22 @@ async def get_usage_trend(
 @router.get("/export.csv", response_class=PlainTextResponse)
 async def export_usage_csv(
     range: str = Query("total", pattern="^(today|7d|30d|total)$"),  # noqa: A002
-    session_id: Optional[str] = Query(None),
+    session_id: str | None = Query(None),
 ) -> str:
     """L8 PR-C (2026-09-09): 导出 usage_events 为 CSV。
 
     表头固定, 列序: id, session_id, model, prompt_tokens, completion_tokens,
     total_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens,
-    estimated_cost_usd, first_token_ms, latency_ms, created_at_iso。
+    estimated_cost_usd, endpoint_id, known_cost, first_token_ms, latency_ms,
+    created_at_iso。
 
     范围由 ``range`` 限定 (默认 total)。``session_id`` 可选过滤。
+
+    Task 5 (2026-09-15):
+    - 增 ``endpoint_id`` 列 — 让导出可追溯到 model catalog endpoint
+    - 增 ``known_cost`` 布尔列 (TRUE/FALSE) — 区分"未知成本"vs"零成本",
+      避免旧版把 null 折合成 0.0 让使用者误以为已计费
+    - ``estimated_cost_usd`` 为 null 时写空字符串而非 0.0
     """
     try:
         from backend.data.database import _SQLITE_LOCK, get_database
@@ -254,8 +267,8 @@ async def export_usage_csv(
             rows = conn.execute(
                 "SELECT id, session_id, model, prompt_tokens, completion_tokens,"
                 " total_tokens, cached_tokens, cache_read_tokens,"
-                " cache_creation_tokens, estimated_cost_usd, first_token_ms,"
-                " latency_ms, created_at"
+                " cache_creation_tokens, estimated_cost_usd, endpoint_id,"
+                " first_token_ms, latency_ms, created_at"
                 f" FROM usage_events WHERE created_at >= ?{where_session}"
                 " ORDER BY created_at DESC",
                 params,
@@ -274,6 +287,8 @@ async def export_usage_csv(
                 "cache_read_tokens",
                 "cache_creation_tokens",
                 "estimated_cost_usd",
+                "endpoint_id",
+                "known_cost",
                 "first_token_ms",
                 "latency_ms",
                 "created_at_iso",
@@ -281,6 +296,7 @@ async def export_usage_csv(
         )
         for row in rows:
             created_ms = int(row["created_at"] or 0)
+            cost = row["estimated_cost_usd"]
             writer.writerow(
                 [
                     row["id"] or "",
@@ -292,7 +308,9 @@ async def export_usage_csv(
                     int(row["cached_tokens"] or 0),
                     int(row["cache_read_tokens"] or 0),
                     int(row["cache_creation_tokens"] or 0),
-                    float(row["estimated_cost_usd"] or 0),
+                    "" if cost is None else float(cost),
+                    row["endpoint_id"] or "",
+                    "TRUE" if cost is not None else "FALSE",
                     "" if row["first_token_ms"] is None else int(row["first_token_ms"]),
                     "" if row["latency_ms"] is None else int(row["latency_ms"]),
                     _iso_from_ms(created_ms),

@@ -81,6 +81,9 @@ export function SessionWorkspaceProvider({ children }: SessionWorkspaceProviderP
   // operation captures the value at start; only the most-recent
   // capture is allowed to mutate state.
   const requestIdRef = useRef(0);
+  // P17: 追踪最近一次登记到 sage-file 注册表的工作区路径，
+  // 绑定变更时注销旧根（最小权限原则）。
+  const lastRegisteredRoot = useRef<string | null>(null);
 
   // Replace state with a fresh immutable snapshot. Caller is responsible
   // for ensuring `myRequestId === requestIdRef.current`.
@@ -115,6 +118,22 @@ export function SessionWorkspaceProvider({ children }: SessionWorkspaceProviderP
       .get(sessionId)
       .then((res) => {
         applyReady(myRequestId, res.binding);
+        // P13: 绑定的工作区同步登记到主进程 sage-file 注册表，
+        // 使 MarkdownImage 的 sage-file:// URL 可被校验放行。
+        // P17: 同时注销旧工作区根，防止旧路径永久残留在白名单中。
+        const api = window.electronAPI?.sageFile;
+        const ws = res.binding?.workspacePath;
+        if (api) {
+          if (lastRegisteredRoot.current && lastRegisteredRoot.current !== ws) {
+            void api.unregisterRoot(lastRegisteredRoot.current).catch(() => undefined);
+          }
+          if (ws) {
+            lastRegisteredRoot.current = ws;
+            void api.registerRoot(ws).catch(() => undefined);
+          } else {
+            lastRegisteredRoot.current = null;
+          }
+        }
       })
       .catch((err: unknown) => {
         applyError(myRequestId, errorMessage(err));

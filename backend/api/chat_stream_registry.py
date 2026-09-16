@@ -28,7 +28,6 @@ from typing import (  # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscr
     Callable,
     Dict,
     List,
-    Optional,
 )
 
 
@@ -124,12 +123,12 @@ class StreamEntry:
     """
 
     queue: BroadcastQueue = field(default_factory=lambda: BroadcastQueue(maxsize=1000))
-    task: Optional[asyncio.Task] = None
+    task: asyncio.Task | None = None
     status: str = "pending"
     created_at: float = field(default_factory=time.time)
-    session_id: Optional[str] = None
+    session_id: str | None = None
     suspended: bool = False
-    wake_id: Optional[str] = None
+    wake_id: str | None = None
 
 
 class StreamRegistry:
@@ -150,8 +149,8 @@ class StreamRegistry:
         self,
         stream_id: str,
         queue_maxsize: int = 1000,
-        producer: Optional[ProducerFn] = None,
-        session_id: Optional[str] = None,
+        producer: ProducerFn | None = None,
+        session_id: str | None = None,
     ) -> StreamEntry:
         """注册新 stream,可选启动 producer task。
 
@@ -211,7 +210,7 @@ class StreamRegistry:
             with contextlib.suppress(asyncio.CancelledError):
                 await entry.queue.put(SENTINEL)
 
-    def find_active_by_session(self, session_id: str) -> Optional[str]:
+    def find_active_by_session(self, session_id: str) -> str | None:
         """R25-D4: 返回该会话当前活跃（pending/running 且未挂起）的 streamId。
 
         与 create 的 busy 仲裁同口径（挂起与终态不占位）。无活跃流返回
@@ -230,7 +229,7 @@ class StreamRegistry:
         self,
         stream_id: str,
         *,
-        wake_id: Optional[str] = None,
+        wake_id: str | None = None,
         note: str = "",
     ) -> bool:
         """A4 Suspend-Resume: 挂起一个活跃流。
@@ -263,7 +262,7 @@ class StreamRegistry:
     def get(self, stream_id: str) -> StreamEntry | None:
         return self._entries.get(stream_id)
 
-    async def subscribe(self, stream_id: str) -> Optional[asyncio.Queue]:
+    async def subscribe(self, stream_id: str) -> asyncio.Queue | None:
         """为 stream 创建独立消费游标；stream 不存在时返回 None。"""
         entry = self._entries.get(stream_id)
         if entry is None:

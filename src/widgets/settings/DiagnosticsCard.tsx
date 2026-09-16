@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { DEFAULT_LOG_LEVEL } from '../../shared/log/levels';
 import type { LogLevel } from '../../shared/log/levels';
 
 interface LogFile {
@@ -34,13 +35,30 @@ function formatTime(ms: number): string {
 export function DiagnosticsCard() {
   const [files, setFiles] = useState<LogFile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [level, setLevel] = useState<LogLevel>('info');
+  const [level, setLevel] = useState<LogLevel>(DEFAULT_LOG_LEVEL);
 
   useEffect(() => {
     window.electronAPI
       ?.listLogFiles?.()
       .then((r) => setFiles(r ?? []))
       .finally(() => setLoading(false));
+  }, []);
+
+  // 2026-09-15: 挂载时从主进程拉取当前生效的级别,避免切走再切回页面时
+  // 被 useState 硬编码的默认值覆盖上次选择。
+  // 显式检查 getLogLevel 是否存在 — 可选链 ?.()?.then() 在方法缺失时
+  // 返回 undefined,再链上 .then 会抛 TypeError。Promise.resolve 兜底
+  // 处理 fn() 返回非 Promise (如 vi.fn() 默认返回 undefined) 的测试场景。
+  useEffect(() => {
+    const fn = window.electronAPI?.getLogLevel;
+    if (typeof fn !== 'function') return;
+    Promise.resolve(fn())
+      .then((l) => {
+        if (l) setLevel(l);
+      })
+      .catch(() => {
+        /* 主进程返回失败时保留 DEFAULT_LOG_LEVEL */
+      });
   }, []);
 
   const refresh = () => {

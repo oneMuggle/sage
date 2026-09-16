@@ -24,7 +24,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, Optional, Set, Union
+from typing import Any, Dict, Optional, Sequence, Set, Union
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
@@ -40,6 +40,7 @@ from backend.api.orch_routes import router as orch_routes_router
 from backend.api.settings_models import LegacySettingsPayload, model_dump_compat
 from backend.chat.compaction import (
     compact_messages,
+    estimate_messages_tokens,
     should_compact,
 )
 from backend.chat.executors import resolve_attachments
@@ -72,6 +73,139 @@ from backend.orchestration.chat_dispatcher import (
     _classify_orchestration_mode,
 )
 from backend.orchestration.llm_factory import load_llm_config_for_chat
+
+
+def _resolve_effective_window(  # noqa: PLR0911 — Task 5 priority cascade, each branch is a distinct user-facing mode
+    model_id: Optional[str] = None,
+    max_context: Optional[int] = None,
+    request_endpoint_id: Optional[str] = None,
+    auto_context: Optional[bool] = None,
+) -> Optional[int]:
+    """Task 5: Resolve effective context window from model catalog.
+
+    Priority for ``endpoint_id``: request > persisted settings > None.
+    Behaviour by ``auto_context`` flag (after catalog resolve):
+
+    - ``auto_context=True``  → resolve from catalog; ``max_context``, if
+      set, is applied as a safety upper bound (``min(catalog, max)``).
+      This is the path that lets the UI's ``autoContext`` switch actually
+      turn on catalog-driven window sizing.
+    - ``auto_context=False`` → fixed cap at ``max_context`` (user pinned
+      a value). Catalog caps still apply via effective_window.
+    - ``auto_context=None``  → resolve from catalog (the default for
+      callers that do not yet pass the field), 4096 default cap.
+
+    Returns ``max_context`` if the catalog cannot be resolved, else
+    ``None`` so callers can decide how to fall back.
+    """
+    try:
+        from backend.data.database import get_database
+        from backend.data.settings_canonicalizer import to_camel
+        from backend.data.settings_repo import SettingsRepository
+        from backend.model_catalog.context import effective_window
+        from backend.model_catalog.repository import CatalogRepository
+        from backend.model_catalog.schemas import EndpointKey
+
+        raw = SettingsRepository().get_json("app_settings")
+        if not isinstance(raw, dict):
+            return max_context if max_context else None
+        settings = to_camel(raw)
+        endpoints = settings.get("endpoints") or []
+        if not isinstance(endpoints, list):
+            return max_context if max_context else None
+
+        # Priority: request endpoint_id > persisted settings
+        endpoint_id = None
+        if request_endpoint_id:
+            # Verify the request endpoint_id exists in the endpoints list
+            ep = next(
+                (e for e in endpoints if isinstance(e, dict) and e.get("id") == request_endpoint_id),
+                None,
+            )
+            if ep is not None:
+                endpoint_id = request_endpoint_id
+
+        if not endpoint_id:
+            # Fallback to persisted settings
+            selections = settings.get("modelSelections") or {}
+            chat_sel = selections.get("chatModel") if isinstance(selections, dict) else None
+            if isinstance(chat_sel, dict) and chat_sel.get("endpointId"):
+                ep_id = chat_sel["endpointId"]
+                ep = next(
+                    (e for e in endpoints if isinstance(e, dict) and e.get("id") == ep_id),
+                    None,
+                )
+                if ep is not None:
+                    endpoint_id = ep_id
+
+        if not endpoint_id or not model_id:
+            return max_context if max_context else None
+
+        repo = CatalogRepository(get_database())
+        resolved = repo.resolve(EndpointKey(endpoint_id=endpoint_id, model_id=model_id))
+        # auto_context=True (UI toggle on): catalog-driven window with
+        # max_context as a safety upper bound. This is the only branch
+        # where the UI's autoContext switch actually reaches catalog
+        # resolution — without it, the previous logic made max_context
+        # always win and the toggle was inert.
+        if auto_context is True:
+            # effective_window(automatic=True) ignores ``fixed`` per the
+            # schema contract, so the natural catalog window is returned
+            # first and only then clamped to max_context. 4096 is a
+            # stand-in positive int — its value is discarded.
+            window = effective_window(
+                resolved.limits, automatic=True, fixed=4096,
+            )
+            if max_context:
+                window = min(window, max_context)
+            return window
+        # auto_context=False: user explicitly pinned a value, treat as cap.
+        if auto_context is False and max_context:
+            return effective_window(
+                resolved.limits, automatic=False, fixed=max_context,
+            )
+        # auto_context=None (or False without max_context): resolve from
+        # catalog, 4096 default ceiling.
+        return effective_window(
+            resolved.limits, automatic=True, fixed=4096,
+        )
+    except Exception:
+        return max_context if max_context else None
+
+
+def _check_request_within_window(
+    messages: Sequence[Dict[str, Any]],
+    effective_window: Optional[int],
+) -> None:
+    """Brief line 16: explicit reject when required content overshoots window.
+
+    The history was already truncated to ``max(0, effective_window - reserve)``,
+    so this guard only fires when system / attachments / trailing_system /
+    current user input alone exceed the resolved window (e.g., a 1 MB
+    attachment + a long system prompt against a 4K-window model). Without
+    this check the producer would silently send an over-budget request that
+    the upstream LLM truncates or errors on — this gives the caller a
+    deterministic 400 instead.
+
+    No-op when the catalog has not resolved a window (``effective_window``
+    is None or non-positive) so callers without catalog data keep the legacy
+    behaviour.
+    """
+    if effective_window is None or effective_window <= 0:
+        return
+    total = estimate_messages_tokens(messages)
+    if total > effective_window:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"required content (system + history + attachments + current "
+                f"input) ~{total} tokens exceeds resolved context window "
+                f"({effective_window} tokens); reduce input length, drop "
+                f"attachments, or pick a larger-context model"
+            ),
+        )
+
+
 from backend.orchestration.orch_settings import load_orch_settings
 from backend.scheduler import get_evolution_logs
 from backend.skills.draft_store import get_skill_draft_store
@@ -149,13 +283,13 @@ def _safe_log_field(value: object, max_length: int = 64) -> str:
 
 class SessionCreate(BaseModel):
     title: str = "新对话"
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
 
 
 class SessionUpdate(BaseModel):
-    title: Optional[str] = None
+    title: str | None = None
 
-    is_pinned: Optional[bool] = None
+    is_pinned: bool | None = None
 
 
 #: PM1 (round8): 计划模式 system 指令 —— 只读调研 + 结构化计划产出；
@@ -173,19 +307,27 @@ _PLAN_MODE_DIRECTIVE = (
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    workspace_path: Optional[str] = None
+    workspace_path: str | None = None
     # 2026-07-30: 选 agent 的入口。None / 空字符串 → 端点 fallback 到 "primary"。
     # 真正的路由由 SageAgent(agent_id=...) 内部完成:从 SQLite 读 profile,
     # 透传到 get_available_tools → ToolRegistry.get_schemas_for_llm(allowed_tools=...)
     # 这样 memory_manager 之类的窄权限 agent 不会拿到 list_dir/read_file。
-    agent_id: Optional[str] = None
-    api_key: Optional[str] = None
+    agent_id: str | None = None
+    api_key: str | None = None
 
-    api_url: Optional[str] = None
+    api_url: str | None = None
 
-    model: Optional[str] = None
+    model: str | None = None
 
-    max_context: Optional[int] = None
+    max_context: int | None = None
+
+    # Task 5 (2026-09-15): auto-context resolution flag.
+    # true = backend resolves effective window from catalog; false = use max_context as fixed cap.
+    auto_context: Optional[bool] = None
+
+    # Task 5 (2026-09-15): endpoint identifier from the request.
+    # Takes priority over persisted settings when resolving context window / usage attribution.
+    endpoint_id: Optional[str] = None
 
     temperature: Optional[float] = None
 
@@ -194,11 +336,11 @@ class ChatRequest(BaseModel):
     # - provider: openai / claude / gemini / deepseek / ollama / custom
     # - reasoning_effort: OpenAI o1/o3/5 + DeepSeek OpenAI 兼容代理
     # - thinking_budget: Gemini 2.5 OpenAI 兼容模式
-    provider: Optional[str] = None
+    provider: str | None = None
 
-    reasoning_effort: Optional[str] = None
+    reasoning_effort: str | None = None
 
-    thinking_budget: Optional[int] = None
+    thinking_budget: int | None = None
 
     # Task 6 (M1-M2 chat-read): frontend 把 @mention 解析成
     # ``backend.office.chat_refs.ChatOfficeRef`` 列表,``chat_stream_create``
@@ -206,6 +348,10 @@ class ChatRequest(BaseModel):
     # 用 forward ref 避免 route→domain 循环导入; ``model_rebuild`` 在
     # legacy_routes 模块加载完毕时自动被 Pydantic v2 调用.
     office_refs: List[ChatOfficeRef] = Field(default_factory=list)
+
+    # R37: 聊天文本文档附件 —— 已上传媒体 id 列表（POST /chat/attachments
+    # 返回的 media_ref.id）。producer 按 id 读全文，注入上下文附件块。
+    attachment_media_ids: List[str] = Field(default_factory=list)
 
     # G6 (2026-09-06): 聊天图片输入 —— base64 data URL 列表（data:image/png;base64,...）。
     # 非空时 user 消息转 OpenAI 多模态 content（text + image_url 分段），
@@ -219,21 +365,21 @@ class ChatRequest(BaseModel):
     # Optional: 兼容渲染进程 IPC payload 里显式 null(undefined ?? null 序列化的产物)。
     # Pydantic 默认值只在字段缺失时生效，显式 null 仍按类型校验 →
     # 不加 Optional 会被 422 拒绝。业务层 `data.orchestration_mode or "auto"` 已兜底。
-    orchestration_mode: Optional[str] = "auto"
+    orchestration_mode: str | None = "auto"
 
     # Wave 3 A10 (2026-08-14): resume 恢复流 —— plan_override 非空时跳过 LLM
     # 拆解，直接用存储计划建 dispatcher；run_id 复用 resume 返回的 new_run_id。
-    plan_override: Optional[List[Dict[str, Any]]] = None
-    run_id: Optional[str] = None
+    plan_override: List[Dict[str, Any]] | None = None
+    run_id: str | None = None
 
     # PM1 (round8): 单 agent 计划模式 —— 本次 run 只读（权限执行器 override
     # READ_ONLY）+ 计划指令 system 块；DONE 后前端出批准条，批准后普通执行。
-    plan_mode: Optional[bool] = False
+    plan_mode: bool | None = False
 
     # 对标 S2（2026-09-13）：临时聊天（无记忆）模式。``"off"`` 时本轮
     # 既不注入 L13 记忆上下文，也不做对话后记忆提取；与 ChatGPT
     # "Temporary chat" / Claude 无记忆会话对齐。缺省 ``"on"``。
-    memory_mode: Optional[str] = "on"
+    memory_mode: str | None = "on"
 
 
 class MessageResponse(BaseModel):
@@ -242,9 +388,9 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     created_at: int
-    model: Optional[str] = None
+    model: str | None = None
 
-    tool_calls: Optional[str] = None
+    tool_calls: str | None = None
 
 
 class ChatErrorInfo(BaseModel):
@@ -255,19 +401,19 @@ class ChatErrorInfo(BaseModel):
 
     type: str
     message: str
-    status_code: Optional[int] = None
+    status_code: int | None = None
 
-    retry_after: Optional[int] = None
+    retry_after: int | None = None
 
 
 class ChatResponse(BaseModel):
     """聊天响应：成功时含 message+session，失败时含 error+null message。"""
 
-    message: Optional[MessageResponse] = None
+    message: MessageResponse | None = None
 
-    session: Optional[Dict] = None
+    session: Dict | None = None
 
-    error: Optional[ChatErrorInfo] = None
+    error: ChatErrorInfo | None = None
 
 
 class EvolutionLogResponse(BaseModel):
@@ -276,20 +422,20 @@ class EvolutionLogResponse(BaseModel):
     id: str
     evolution_type: str
     description: str
-    before_state: Optional[str] = None
+    before_state: str | None = None
 
-    after_state: Optional[str] = None
+    after_state: str | None = None
 
     trigger_type: str
-    trigger_condition: Optional[str] = None
+    trigger_condition: str | None = None
 
     status: str
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
-    tokens_used: Optional[int] = None
+    tokens_used: int | None = None
 
     created_at: int
-    completed_at: Optional[int] = None
+    completed_at: int | None = None
 
 
 #: agent role 白名单（PATCH/POST 共用）。
@@ -329,25 +475,25 @@ class AgentUpdate(BaseModel):
     # 我们在类内用 model_config 字段, 通过 ConfigDict 关掉该保护.
     model_config = {"protected_namespaces": ()}
 
-    name: Optional[str] = None
+    name: str | None = None
 
     role: Union[str, None] = None  # 校验放在路由层 (依赖 Pydantic Literal 不直观)
 
-    system_prompt: Optional[str] = None
+    system_prompt: str | None = None
 
-    tools: Optional[List[str]] = None
+    tools: List[str] | None = None
 
-    memory_access: Optional[List[str]] = None
+    memory_access: List[str] | None = None
 
     model_config_data: Union[dict, None] = (
         None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
     )
 
-    max_iterations: Optional[int] = None  # 路由层校验 1..50
+    max_iterations: int | None = None  # 路由层校验 1..50
 
-    enabled: Optional[bool] = None
+    enabled: bool | None = None
 
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class AgentCreate(BaseModel):
@@ -363,12 +509,12 @@ class AgentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     role: str = "general"
     system_prompt: str = ""
-    tools: Optional[List[str]] = None
-    memory_access: Optional[List[str]] = None
-    model_config_data: Optional[Dict] = None
-    max_iterations: Optional[int] = None
-    enabled: Optional[bool] = None
-    description: Optional[str] = None
+    tools: List[str] | None = None
+    memory_access: List[str] | None = None
+    model_config_data: Dict | None = None
+    max_iterations: int | None = None
+    enabled: bool | None = None
+    description: str | None = None
 
 
 # ==================== 依赖注入 ====================
@@ -392,10 +538,10 @@ _RUN_CONFIRM_EVENTS: Dict[str, asyncio.Event] = {}
 class InterruptRequest(BaseModel):
     """/interrupt 请求体 —— stream_id 可选，兼容不带 body 的旧调用方。"""
 
-    stream_id: Optional[str] = None
+    stream_id: str | None = None
 
 
-def interrupt_stream(stream_id: Optional[str]) -> str:
+def interrupt_stream(stream_id: str | None) -> str:
     """中断目标流：主 agent interrupt（+ multi 模式 cancel dispatcher）。
 
     返回命中标识（"stream"/"none"）供端点回传与测试断言。
@@ -453,7 +599,7 @@ def interrupt_run(run_id: str) -> str:
 
 
 def _finalize_orch_run(
-    run_id: Optional[str], status: str, final_summary: Optional[str]
+    run_id: str | None, status: str, final_summary: str | None
 ) -> None:
     """P0-4 (2026-08-20): orch run 生命周期闭环（降级型）。
 
@@ -475,10 +621,10 @@ def _build_orchestration_dispatcher(
     stream_id: str,
     entry_queue: Any,
     run_id: str,
-    llm_config: Optional[Dict[str, Any]],
-    total_tasks: Optional[int],
-    workspace_root: Optional[str],
-    session_id: Optional[str] = None,
+    llm_config: Dict[str, Any] | None,
+    total_tasks: int | None,
+    workspace_root: str | None,
+    session_id: str | None = None,
 ) -> ChatDispatcher:
     """构造 ChatDispatcher；非法 run_id 的 ValueError 重抛为前端可读文案。
 
@@ -529,7 +675,7 @@ _CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 _ALLOWED_IMAGE_MIME_PREFIXES = ("data:image/png", "data:image/jpeg", "data:image/webp", "data:image/gif")
 
 
-def _validate_chat_images(images: List[str]) -> Optional[str]:
+def _validate_chat_images(images: List[str]) -> str | None:
     """校验 base64 data URL 图片列表；返回错误文案或 None（全部合法）。"""
     if len(images) > _CHAT_IMAGE_MAX_COUNT:
         return f"图片数量 {len(images)} 超过上限 {_CHAT_IMAGE_MAX_COUNT}"
@@ -679,7 +825,7 @@ def _persist_compaction(
     return after
 
 
-async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict]) -> None:
+async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) -> None:
     """聊天请求层的自动压缩钩子（M4）。
 
     在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
@@ -721,7 +867,7 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
     )
 
 
-def _auto_checkpoint_if_enabled(session_id: str) -> Optional[str]:
+def _auto_checkpoint_if_enabled(session_id: str) -> str | None:
     """round5 批次 B-2: 发送前自动快照（偏好 "auto_checkpoint" = "1" 时）。
 
     在 run 开始前为会话绑定的工作区打一份 checkpoint，提供"整轮改动
@@ -1080,7 +1226,7 @@ def _get_skill_adapter():
 
 
 def _skill_to_dict(
-    ext: dict, enabled: bool, usage_count: int, pinned: Optional[bool] = None
+    ext: dict, enabled: bool, usage_count: int, pinned: bool | None = None
 ) -> dict:
     """把扩展 SkillSpec dict + 路由层 enabled/usage_count 序列化为响应 dict。
 
@@ -1452,7 +1598,7 @@ class LegacySettingsResponse(BaseModel):
 class LegacyPreferenceItem(BaseModel):
     """GET/PUT /preferences/{key} 请求/响应体。"""
 
-    value: Optional[str] = None
+    value: str | None = None
 
     value_type: str = "string"
     category: str = "general"
@@ -1460,7 +1606,7 @@ class LegacyPreferenceItem(BaseModel):
 
 @router.get("/settings")
 @with_db_lock
-def legacy_get_settings() -> Optional[Dict]:
+def legacy_get_settings() -> Dict | None:
     """读取持久化的 settings；不存在返回 null。
 
     翻译历史 snake_case 残留到 camelCase 返回，与 AppSettings 类型对齐。
@@ -1748,7 +1894,7 @@ def _build_memory_used_event(
     memory_manager: Any,
     query: str,
     session_id: str,
-) -> Optional[Dict[str, Any]]:
+) -> Dict[str, Any] | None:
     """R17-E: 构造 memory_used 流事件（记忆召回展示）。
 
     用 ``MemoryManager.recall`` 取本次消息命中的结构化记忆条目（每类
@@ -1984,10 +2130,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
             # CancelledError）会让 finally 触发 UnboundLocalError，既掩盖原始异常
             # 又跳过后续的 reset_tool_context 清理。
-            done_content: Optional[str] = None
+            done_content: str | None = None
             run_outcome = "failed"
             # S1 (2026-09-06): 失败原因摘要 —— finally 落库 sessions.last_error。
-            _producer_error: Optional[str] = None
+            _producer_error: str | None = None
 
             # S1 (2026-09-06): 会话运行态落库（running）。写库点收敛两处：
             # 此处置 running，finally 落终态；失败 fail-open 只 debug，不影响主流。
@@ -2037,6 +2183,28 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 fallback_pref = SettingsRepository().get("fallback_model")
                 if fallback_pref and fallback_pref != (data.model or ""):
                     llm_config["fallback_model"] = fallback_pref
+                # Task 5: resolve endpoint_id for usage attribution
+                # Priority: request data.endpoint_id > persisted settings
+                if data.endpoint_id:
+                    # Request provided endpoint_id directly — use it
+                    llm_config["endpoint_id"] = data.endpoint_id
+                else:
+                    # Fallback to persisted settings
+                    try:
+                        from backend.data.settings_canonicalizer import to_camel
+                        _raw_settings = SettingsRepository().get_json("app_settings")
+                        if isinstance(_raw_settings, dict):
+                            _camel = to_camel(_raw_settings)
+                            _eps = _camel.get("endpoints") or []
+                            _sel = (_camel.get("modelSelections") or {}).get("chatModel") or {}
+                            _ep_id = _sel.get("endpointId")
+                            if _ep_id:
+                                for _ep in _eps:
+                                    if isinstance(_ep, dict) and _ep.get("id") == _ep_id:
+                                        llm_config["endpoint_id"] = _ep_id
+                                        break
+                    except Exception:
+                        pass  # fail-open: endpoint_id is best-effort
                 logger.info(
                     f"[REQ {request_id}] /chat/stream producer using custom LLM: "
                     f"model={_safe_log_field(llm_config['model'])}"
@@ -2085,7 +2253,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 限额时拒绝本次聊天。限额 0/未配置 = 不限。DB 故障 fail-open
             # (today_cost_usd 返回 0 → 永不拦截)。注: run_id/dispatcher 前置
             # 初始化 —— 此处可能提前 return, finally 无条件读取它们 (P0-4)。
-            run_id: Optional[str] = None
+            run_id: str | None = None
             dispatcher = None
             try:
                 from backend.data.settings_repo import SettingsRepository
@@ -2569,6 +2737,41 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
             # ===== R17-E 记忆召回展示事件 END =====
 
+            # ===== R37 文本文档附件注入 BEGIN =====
+            # 已上传文本文档（attachment_media_ids）按 id 读全文，截断后并入
+            # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
+            try:
+                from backend.services.multimodal.media_store import (
+                    MEDIA_ROOT,
+                    MediaKind,
+                    MediaStore,
+                )
+
+                r37_store = MediaStore(root=MEDIA_ROOT)
+                for r37_mid in data.attachment_media_ids[:10]:
+                    try:
+                        _r37_loaded = r37_store.load(r37_mid)
+                    except Exception:
+                        _r37_loaded = None
+                    if _r37_loaded is None:
+                        continue
+                    _r37_ref, r37_bytes = _r37_loaded
+                    if _r37_ref.kind != MediaKind.DOCUMENT:
+                        continue
+                    try:
+                        r37_text = r37_bytes.decode("utf-8")[:100_000]
+                    except UnicodeDecodeError:
+                        continue
+                    if not r37_text.strip():
+                        continue
+                    dynamic_context_parts.append(
+                        "<attached_document id=" + repr(r37_mid) + ">" + chr(10)
+                        + r37_text + chr(10) + "</attached_document>"
+                    )
+            except Exception as r37_att_err:
+                logger.debug(f"[REQ {request_id}] attachment media inject skipped: {r37_att_err}")
+            # ===== R37 文本文档附件注入 END =====
+
             attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
 
             # ===== S3 实体引用 (@memory:/@wiki:/@skill:/@agent:) BEGIN =====
@@ -2626,12 +2829,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"[REQ {request_id}] 历史消息加载失败(降级为无历史): {hist_err}"
                 )
                 history_rows = []
-            # L9-lite (批次 C-3): 历史预算感知模型窗口 —— 前端上报的
-            # max_context 有效时, 历史预算 = 窗口 - 16k 预留(system/工具
-            # schema/回复), 下限 4k; 否则用默认推导(history_token_budget)。
-            l9_budget = history_token_budget()
-            if data.max_context is not None and data.max_context >= 20000:
-                l9_budget = max(4000, int(data.max_context) - 16384)
+            # Task 5 (2026-09-15): catalog-based context budget.
+            # Resolve effective window from model catalog, then compute budget
+            # as window - reserve. Old >=20000 gate removed.
+            effective_window = _resolve_effective_window(
+                model_id=data.model,
+                max_context=data.max_context,
+                request_endpoint_id=data.endpoint_id,
+                auto_context=data.auto_context,
+            )
+            l9_budget = history_token_budget(effective_window=effective_window)
             messages, omitted_history = build_request_messages(
                 system_content=system_content,
                 user_text=data.message,
@@ -2649,7 +2856,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.info(
                     "[REQ %s] 历史超过预算(%s tokens),已省略最早 %s 条",
                     request_id,
-                    history_token_budget(),
+                    l9_budget,
                     omitted_history,
                 )
 
@@ -2666,6 +2873,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         ],
                     ],
                 }
+
+            # Task 5 (round 2): explicit reject when the assembled request
+            # exceeds the catalog-resolved window. History was already
+            # truncated to ``l9_budget`` (= effective_window - reserve), so
+            # this only fires when system / attachments / trailing_system /
+            # current user input alone overshoot the reserve. Brief line 16
+            # requires this guard; without it we silently send an over-budget
+            # request the upstream LLM truncates or errors on.
+            _check_request_within_window(messages, effective_window)
 
             # PR-7: 流式 chat 持久化。run_loop() 自身不写库(保持通用 ReAct
             # 迭代器纯净),由 producer 整合层负责落 user+assistant 消息 + 更新
@@ -2687,7 +2903,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
-            done_reasoning: Optional[str] = None
+            done_reasoning: str | None = None
 
             # L2 真流式 (2026-09-06): run_loop 在 THINKING 段实时发 CONTENT_DELTA
             # 事件时置位 —— 此时 DONE.content 已实时下发过,不再做假切块,
@@ -3069,7 +3285,7 @@ def _ndjson(d: dict) -> str:
 
 @router.post("/interrupt")
 @with_db_lock
-def interrupt(data: Optional[InterruptRequest] = Body(default=None)):
+def interrupt(data: InterruptRequest | None = Body(default=None)):
     """中断 Agent（P0-2: 经 stream_id 定位真实运行的 agent）"""
     stream_id = data.stream_id if data is not None else None
     target = interrupt_stream(stream_id)
@@ -3519,7 +3735,7 @@ async def scan_skill_consolidation(auto_draft: bool = True, mode: str = "full"):
         )
 
     scan_mode = "auto" if mode == "auto" else "full"
-    candidate_names: Optional[Set[str]] = None
+    candidate_names: Set[str] | None = None
     if scan_mode == "auto":
         watermark = last_scan_watermark()
         if watermark is not None:
@@ -3659,7 +3875,7 @@ _MEMORY_LIST_MAX_PAGE = _MEMORY_LIST_MAX_FETCH // _MEMORY_LIST_MAX_PAGE_SIZE
 
 class MemorySearchRequest(BaseModel):
     query: str
-    memory_type: Optional[str] = None
+    memory_type: str | None = None
 
     limit: int = 20
 
@@ -3690,9 +3906,9 @@ class UserProfileCreateRequest(BaseModel):
 
 
 class UserProfileUpdateRequest(BaseModel):
-    content: Optional[str] = None
-    category: Optional[str] = None
-    importance: Optional[int] = None
+    content: str | None = None
+    category: str | None = None
+    importance: int | None = None
 
 
 @router.get("/memory/recent-writes")
@@ -3835,7 +4051,7 @@ def delete_user_profile(profile_id: str):
 
 @router.get("/memory/search")
 @with_db_lock
-def search_memory(query: str, limit: int = 20, type: Optional[str] = None):
+def search_memory(query: str, limit: int = 20, type: str | None = None):
     """搜索记忆"""
     try:
         mm = get_memory_manager()
@@ -3883,9 +4099,9 @@ def delete_memory(data: MemoryDeleteRequest):
 def list_memories(
     page: int = 1,
     page_size: int = 20,
-    offset: Optional[int] = None,
-    type: Optional[str] = None,
-    session_id: Optional[str] = None,
+    offset: int | None = None,
+    type: str | None = None,
+    session_id: str | None = None,
 ):
     """获取记忆列表（带 layer / source / 分页 envelope）。
 
@@ -4109,7 +4325,7 @@ def _enrich_memory_records(
 
 
 def _enrich_working_records(
-    messages: List[Dict[str, Any]], session_id: Optional[str] = None
+    messages: List[Dict[str, Any]], session_id: str | None = None
 ) -> List[Dict[str, Any]]:
     """把工作记忆消息序列化成 ``/memory/list`` 的统一记录格式。
 
@@ -4172,7 +4388,7 @@ def _enrich_summary_records(
 @router.get("/memory/summaries")
 @with_db_lock
 def list_session_summaries(
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     page: int = 1,
     page_size: int = 20,
 ):

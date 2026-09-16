@@ -291,6 +291,9 @@ export interface TaskStatusEvent {
   // RD13+ (round15): 重派来源任务 ID —— conductor 用 retry_of 重派时携带,
   // 任务树据此渲染"重派"徽章（可追溯哪些任务是重做的）。普通任务无此键。
   retry_of?: string;
+  // BU9 (round20): 终态任务附带的 run 窗口累计用量（tokens）—— 预算开启时
+  // 携带；queued/running 不带。任务树进度行渲染消耗可见性。
+  used_tokens?: number;
   // live-events P0 (2026-09-06): 派发本批次的 conductor 工具调用 ID —— 聊天流内
   // 把子代理实时步骤关联到 "Delegate <goal>" 卡片的关联键。
   parent_tool_call_id?: string | null;
@@ -470,6 +473,10 @@ export interface ChatConfig {
   apiUrl?: string;
   model?: string;
   maxContext?: number;
+  /** Task 5 (2026-09-15): auto-context resolution flag.
+   * true = backend resolves effective window from catalog; false = use maxContext as fixed cap.
+   */
+  autoContext?: boolean;
   temperature?: number;
   // 推理参数（PR-7a 透传到后端 → LLMConfig → 请求体）
   // - provider: 前端在 settings 选的真实 provider,后端用它路由
@@ -846,6 +853,9 @@ export interface ScheduledTask {
   enabled: boolean;
   last_run?: number | null;
   next_run?: number | null;
+  last_attempt?: number | null;
+  last_status?: 'never' | 'succeeded' | 'failed';
+  last_error?: string | null;
   created_at: number;
 }
 
@@ -855,11 +865,16 @@ export interface CreateTaskInput {
   schedule: Schedule;
   session_id: string;
   content: string;
+  enabled?: boolean;
 }
 
 export interface UpdateTaskInput {
   name?: string;
   enabled?: boolean;
+  type?: ScheduleKind;
+  schedule?: Schedule;
+  session_id?: string;
+  content?: string;
 }
 
 // ============================================================================
@@ -892,7 +907,10 @@ export type LaneEventType =
   | 'lane.stopped'
   | 'lane.commit.created'
   | 'lane.pr.opened'
-  | 'lane.merged';
+  | 'lane.merged'
+  | 'lane.acceptance.completed'
+  | 'lane.accepted'
+  | 'lane.rejected';
 
 export type EventProvenance = 'LiveLane' | 'Recovery' | 'Retry' | 'Heartbeat' | 'Manual';
 
@@ -1138,10 +1156,35 @@ export interface OfficeWordReadResult {
   paragraphs: OfficeWordParagraphContent[];
   tables: OfficeWordTableContent[];
   images: number;
-  comments?: unknown[];
+  // Round C P4: typed — the preview renders author/date/anchor bubbles.
+  // Backend: WordCommentContent in backend/office/models.py.
+  comments?: OfficeWordComment[];
   // Round 15：每节页眉/页脚与目录域 instr 列表
   headers_footers?: WordHeaderFooterContent[];
   toc_fields?: string[];
+  /**
+   * Round C P4: bounded inline-image thumbnails (≤10 entries, backend
+   * caps each data URL). `images - image_previews.length` = omitted count.
+   * Backend: WordImagePreview in backend/office/models.py.
+   */
+  image_previews?: OfficeWordImagePreview[];
+}
+
+/** One Word comment (backend WordCommentContent). */
+export interface OfficeWordComment {
+  id: string;
+  author?: string | null;
+  date?: string | null;
+  text: string;
+  anchor_text?: string;
+}
+
+/** One inline-image thumbnail (backend WordImagePreview, round C P4). */
+export interface OfficeWordImagePreview {
+  index: number;
+  content_type: string;
+  data_url: string;
+  thumbnail: boolean;
 }
 
 export interface OfficeExcelSheetContent {
@@ -1318,9 +1361,7 @@ export interface WordFormatSpec {
   page?: WordPageSetupSpec;
   body?: WordBodyStyleSpec;
   // Round 20：headings 键扩展到 h4/h5
-  headings?: Partial<
-    Record<'h1' | 'h2' | 'h3' | 'h4' | 'h5', WordHeadingStyleSpec>
-  >;
+  headings?: Partial<Record<'h1' | 'h2' | 'h3' | 'h4' | 'h5', WordHeadingStyleSpec>>;
   title?: WordHeadingStyleSpec;
   header?: WordHeaderFooterSpec;
   footer?: WordHeaderFooterSpec;
@@ -1330,6 +1371,14 @@ export interface WordFormatSpec {
   bibliography?: BibliographySpec;
   // Round 13：目录域（None = 不插入目录）
   toc?: WordTocSpec;
+  // Round 33：首页不同页眉页脚（封面页场景）
+  first_page_different?: boolean;
+  first_page_header?: WordHeaderFooterSpec;
+  first_page_footer?: WordHeaderFooterSpec;
+  // Round 34：奇偶页不同页眉页脚（书籍排版场景）
+  odd_even_pages?: boolean;
+  even_page_header?: WordHeaderFooterSpec;
+  even_page_footer?: WordHeaderFooterSpec;
 }
 
 // Word 插图（Round 8）：支持行内放置与题注自动编号。
@@ -1434,6 +1483,34 @@ export interface WordRepairRequest {
   max_size_bytes?: number;
 }
 
+/**
+ * A4b: Word lint (Round 10 linter) — backend counterpart:
+ * backend/office/models.py WordLintIssue / WordLintResult / WordLintRequest.
+ */
+export interface OfficeWordLintIssue {
+  rule_id: string;
+  severity: 'error' | 'warning';
+  message: string;
+  fix_hint: string;
+}
+
+export interface OfficeWordLintResult {
+  /** ok = no error-level issues. */
+  ok: boolean;
+  issue_count: number;
+  error_count: number;
+  warning_count: number;
+  checked_rules: string[];
+  issues: OfficeWordLintIssue[];
+}
+
+export interface OfficeWordLintRequest {
+  workspace_path: string;
+  file_path: string;
+  format_spec: WordFormatSpec;
+  max_size_bytes?: number;
+}
+
 export interface OfficeWordGenerateRequest {
   /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
   task_id?: string;
@@ -1473,6 +1550,15 @@ export interface ExcelPrintSetupSpec {
   orientation?: 'portrait' | 'landscape';
   fit_to_width?: number;
   print_area?: string;
+  // Round 28：每页重复的标题行，如 '1:1'（长表打印每页带表头）
+  title_rows?: string;
+  // Round 31：打印页边距（厘米）
+  margins_cm?: {
+    top?: number;
+    bottom?: number;
+    left?: number;
+    right?: number;
+  };
 }
 
 export interface ExcelDataValidationSpec {
@@ -1674,6 +1760,48 @@ export interface OfficeExportPdfResult {
   ok: boolean;
   method?: 'libreoffice' | 'word_com' | null;
   output_path?: string | null;
+  error?: string | null;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Office display round A — P6 capability probe + P1 high-fidelity preview
+// Backend counterpart: backend/office/capabilities.py (OfficeCapabilities)
+// and backend/office/pdf_preview.py (PdfPreviewResult).
+// ──────────────────────────────────────────────────────────────────────
+
+/** Result of GET /office/capabilities (backend OfficeCapabilities). */
+export interface OfficeCapabilities {
+  platform: string;
+  soffice_available: boolean;
+  soffice_path?: string | null;
+  word_com_available: boolean;
+  pdf_export_available: boolean;
+  pillow_available: boolean;
+  formulas_available: boolean;
+}
+
+/**
+ * Result of POST /office/pdf-preview (backend PdfPreviewResult).
+ * `data_url` is a data:application/pdf;base64 URL rendered by the
+ * embedded Chromium PDF viewer; `cached=true` means no converter ran.
+ */
+export interface OfficePdfPreviewResult {
+  ok: boolean;
+  data_url?: string | null;
+  cached?: boolean;
+  error?: string | null;
+}
+
+/**
+ * Round C P5: POST /office/templates/thumbnail — first-page PNG thumbnail
+ * of a library template (builtin or workspace). Failures fold to ok=false
+ * and the picker degrades silently (thumbnails are decorative).
+ */
+export interface OfficeTemplateThumbnailResult {
+  ok: boolean;
+  /** data:image/png;base64,… */
+  data_url?: string | null;
+  cached?: boolean;
   error?: string | null;
 }
 

@@ -19,3 +19,18 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: npm run test:nightly
+
+  # P10 (2026-09-14): embedder 下载端到端 —— 真实清单对 hf-mirror 走
+  # download → sha256 校验 → 平铺落盘 → 进度事件全链路，验证清单 URL /
+  # 校验和未腐化。非门禁（nightly 专属；网络抖动重跑即可）。
+  embedder-download-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22.12' }
+      - run: npm ci
+      - name: Embedder download E2E (real manifest → hf-mirror)
+        env:
+          SAGE_NIGHTLY: '1'
+        run: npx vitest run electron/tests/modelDownloadE2E.test.ts --pool=threads

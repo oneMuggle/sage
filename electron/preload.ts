@@ -137,10 +137,23 @@ const electronAPI = {
    * EMBEDDER_MODEL_MANIFEST。
    */
   modelDownload: {
-    download: (
-      payload?: { baseUrl?: string; dirName?: string; files?: { name: string; sha256: string }[] },
-    ) => ipcRenderer.invoke('models:embedder:download', payload ?? {}),
+    download: (payload?: {
+      baseUrl?: string;
+      dirName?: string;
+      files?: { name: string; sha256: string }[];
+    }) => ipcRenderer.invoke('models:embedder:download', payload ?? {}),
     cancel: (dirName: string) => ipcRenderer.invoke('models:embedder:cancel', dirName),
+  },
+
+  /**
+   * P13 (2026-09-14): sage-file 工作区注册表 —— 渲染端绑定工作区时经此
+   * 登记，主进程校验后加入白名单。sage-file:// 协议据此判定文件可读性。
+   */
+  sageFile: {
+    registerRoot: (path: string) =>
+      ipcRenderer.invoke('sage-file:register-root', path) as Promise<boolean>,
+    unregisterRoot: (path: string) =>
+      ipcRenderer.invoke('sage-file:unregister-root', path) as Promise<boolean>,
   },
 
   /**
@@ -195,6 +208,10 @@ const electronAPI = {
    * reconstructs managed paths from `OfficeManagedRef` tuples.
    */
   office: {
+    previewStaging: (workspacePath: string) =>
+      ipcRenderer.invoke('office:staging-preview', { workspacePath }) as Promise<
+        import('../src/shared/types/electron-api').OfficeStagingReport
+      >,
     pickOfficeFile: (docType: OfficeDocType) =>
       ipcRenderer.invoke('office:pick-file', { docType }) as Promise<PickedOfficeFile | null>,
     pickSavePath: (defaultName: string) =>
@@ -398,6 +415,9 @@ const electronAPI = {
   },
   setLogLevel(level: LogLevel): Promise<{ ok: true }> {
     return ipcRenderer.invoke('sage:log:set-level', { level }) as Promise<{ ok: true }>;
+  },
+  getLogLevel(): Promise<LogLevel> {
+    return ipcRenderer.invoke('sage:log:get-level') as Promise<LogLevel>;
   },
 
   /**

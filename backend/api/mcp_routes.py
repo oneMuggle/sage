@@ -54,7 +54,8 @@ class ServerConfigIn(BaseModel):
     """POST /mcp/servers body — full user server definition."""
 
     name: str = Field(min_length=1, max_length=64)
-    command: str = Field(min_length=1, max_length=512)
+    command: str = Field(default="", max_length=512)
+    url: Optional[str] = Field(default=None, max_length=2048)
     args: List[str] = Field(default_factory=list)
     env: Dict[str, str] = Field(default_factory=dict)
     # R34: HTTP 传输自定义鉴权头（stdio 服务器忽略）
@@ -70,12 +71,12 @@ class ServerConfigIn(BaseModel):
 class ServerUpdateIn(BaseModel):
     """PATCH /mcp/servers/{name} body — merge-patch, all fields optional."""
 
-    enabled: Optional[bool] = None
-    timeout_seconds: Optional[float] = Field(default=None, gt=0, le=600)
+    enabled: bool | None = None
+    timeout_seconds: float | None = Field(default=None, gt=0, le=600)
     # R20-B: per-tool 级开关 —— 全量替换语义（传空数组 = 清空禁用清单）
-    disabled_tools: Optional[List[str]] = None
+    disabled_tools: List[str] | None = None
     # R34: HTTP 鉴权头 —— 全量替换语义；GET 响应中按敏感键脱敏
-    headers: Optional[Dict[str, str]] = None
+    headers: Dict[str, str] | None = None
 
     class Config:
         extra = "forbid"
@@ -143,6 +144,7 @@ def add_mcp_server(payload: ServerConfigIn) -> Dict[str, Any]:
         config = validate_server_config(
             name=payload.name,
             command=payload.command,
+            url=payload.url,
             args=tuple(payload.args),
             env=dict(payload.env),
             enabled=payload.enabled,

@@ -5,6 +5,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { ErrorBoundary } from '../../app/providers/ErrorBoundary';
 import { useResizableSidebar } from '../../shared/lib/useResizableSidebar';
 import { PageSkeleton } from '../../shared/ui';
+import { DeliveryDrawerHost } from '../task-center/DeliveryDrawerHost';
 import { TaskCenterWidget } from '../task-center/TaskCenterWidget';
 
 import { ResizeDivider } from './ResizeDivider';
@@ -33,7 +34,21 @@ export function Layout() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // R40: Ctrl+N 新建会话 / Ctrl+F 聚焦搜索
+  useEffect(() => {
+    const onQuickKeys = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (e.key === 'f') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('sage:focus-search'));
+      }
+    };
+    window.addEventListener('keydown', onQuickKeys);
+    return () => window.removeEventListener('keydown', onQuickKeys);
+  }, []);
+
   // Toggle collapse with keyboard shortcut (Ctrl+B / Cmd+B)
+  // R40: Ctrl+N 新建会话 / Ctrl+F 聚焦搜索框 —— 全局键盘快捷键补全
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
@@ -145,6 +160,8 @@ export function Layout() {
       </div>
       {/* P4: 全局任务中心胶囊 —— 跨页面聚合 office/wiki 等长任务与后台聊天流 */}
       <TaskCenterWidget />
+      {/* A4: 全局交付抽屉（lane / office 验收） */}
+      <DeliveryDrawerHost />
     </div>
   );
 }

@@ -5,7 +5,7 @@
 // 由于 preload 的 `{ streamId }` 语义会把 streamId 转发给 `sage:unlisten`，
 // main 进程随之 abort 后端导入流：导入被静默中止且进度永久丢失。
 // 现在：导入进行期间监听器常驻（进度同时上抬到 taskCenterStore 任务中心），
-// 收到 completed 才拆除；组件挂载/卸载只影响组件级 setState 订阅。
+// 收到终态事件才拆除；组件挂载/卸载只影响组件级 setState 订阅。
 import { useEffect, useState, useCallback } from 'react';
 
 import { listen } from '../../shared/api/desktopEvent';
@@ -30,12 +30,15 @@ const componentListeners = new Map<string, Set<(p: IngestProgress) => void>>();
 const moduleUnlistens = new Map<string, () => void>();
 /** 已自然完成的 ingest（listen 异步登记的竞态兜底） */
 const completedIds = new Set<string>();
+const pendingListeners = new Set<string>();
+const isTerminal = (p: IngestProgress) =>
+  p.stage === 'completed' || p.stage === 'failed' || p.stage === 'cancelled';
 
 function broadcast(ingestId: string, p: IngestProgress): void {
   componentListeners.get(ingestId)?.forEach((l) => l(p));
   const taskId = `wiki:ingest:${ingestId}`;
   const store = useTaskCenterStore.getState();
-  if (p.stage === 'completed') {
+  if (isTerminal(p)) {
     store.finishTask(taskId);
     // 流已自然结束，拆除模块级监听（此时 unlisten 的 abort 语义无害）
     moduleUnlistens.get(ingestId)?.();
@@ -48,13 +51,12 @@ function broadcast(ingestId: string, p: IngestProgress): void {
 }
 
 function ensureModuleListener(ingestId: string): void {
-  if (moduleUnlistens.has(ingestId) || completedIds.has(ingestId)) return;
-  useTaskCenterStore.getState().registerTask(
-    `wiki:ingest:${ingestId}`,
-    'wiki',
-    'Wiki 导入',
-    '导入中…',
-  );
+  if (moduleUnlistens.has(ingestId) || pendingListeners.has(ingestId) || completedIds.has(ingestId))
+    return;
+  pendingListeners.add(ingestId);
+  useTaskCenterStore
+    .getState()
+    .registerTask(`wiki:ingest:${ingestId}`, 'wiki', 'Wiki 导入', '导入中…');
   listen<IngestProgress>(
     `wiki-ingest-${ingestId}-progress`,
     (e) => broadcast(ingestId, e.payload),
@@ -63,6 +65,7 @@ function ensureModuleListener(ingestId: string): void {
     { streamId: ingestId },
   )
     .then((fn) => {
+      pendingListeners.delete(ingestId);
       // listen 异步解析期间流可能已完成：直接拆除，避免悬挂监听
       if (completedIds.has(ingestId)) {
         fn();
@@ -70,8 +73,13 @@ function ensureModuleListener(ingestId: string): void {
       }
       moduleUnlistens.set(ingestId, fn);
     })
-    .catch(() => {
-      // listen 失败（无 preload 等环境）——组件级静默降级
+    .catch((error: unknown) => {
+      pendingListeners.delete(ingestId);
+      broadcast(ingestId, {
+        stage: 'failed',
+        percent: 0,
+        message: error instanceof Error ? error.message : String(error),
+      });
     });
 }
 
@@ -83,11 +91,17 @@ export function useWikiIngest(ingestId: string | null) {
   });
 
   useEffect(() => {
+    setState({ progress: null, done: false, error: null });
     if (!ingestId) return;
-    ensureModuleListener(ingestId);
     const listener = (p: IngestProgress) => {
       if (p.stage === 'completed') {
         setState({ progress: p, done: true, error: null });
+      } else if (p.stage === 'failed' || p.stage === 'cancelled') {
+        setState({
+          progress: p,
+          done: false,
+          error: p.message || (p.stage === 'failed' ? '导入失败' : '导入已取消'),
+        });
       } else {
         setState({ progress: p, done: false, error: null });
       }
@@ -98,6 +112,7 @@ export function useWikiIngest(ingestId: string | null) {
       componentListeners.set(ingestId, set);
     }
     set.add(listener);
+    ensureModuleListener(ingestId);
     return () => {
       set!.delete(listener);
     };

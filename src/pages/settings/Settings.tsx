@@ -3,7 +3,8 @@
  */
 
 import { clsx } from 'clsx';
-import { useState } from 'react';
+import { Search } from 'lucide-react';
+import { useCallback, useState } from 'react';
 
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { ENABLE_UPDATE_PROVIDERS_UI } from '../../shared/updateFeatureFlag';
@@ -33,7 +34,22 @@ type SettingsTab =
   | 'providers';
 
 export function Settings() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  // R45: 记住上次访问的 tab —— localStorage 持久化，重开设置页恢复
+  const [activeTab, setActiveTabState] = useState<SettingsTab>(() => {
+    try {
+      const saved = localStorage.getItem('sage:settings-tab');
+      if (saved) return saved as SettingsTab;
+    } catch { /* ignore */ }
+    return 'general';
+  });
+  const setActiveTab = useCallback((tab: SettingsTab) => {
+    setActiveTabState(tab);
+    try {
+      localStorage.setItem('sage:settings-tab', tab);
+    } catch { /* ignore */ }
+  }, []);
+  // R41: 设置搜索 —— 按关键词过滤左侧 tab，纯前端
+  const [searchQuery, setSearchQuery] = useState('');
   const { settings, updateSettings, resetSettings } = useSettings();
 
   const tabs: { key: SettingsTab; label: string }[] = [
@@ -51,6 +67,10 @@ export function Settings() {
     tabs.push({ key: 'providers', label: '更新源' });
   }
 
+  const filteredTabs = searchQuery.trim()
+    ? tabs.filter((tab) => tab.label.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : tabs;
+
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Left sub-nav (U15 from OpenWorker) */}
@@ -58,8 +78,20 @@ export function Settings() {
         <div className="h-12 flex items-center px-4 border-b border-line">
           <h2 className="text-[16px] font-semibold text-ink">设置</h2>
         </div>
+        <div className="px-2 pt-2">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
+            <input
+              data-testid="settings-search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索设置…"
+              className="w-full pl-7 pr-2 py-1.5 text-xs rounded-md border border-border bg-bg text-text placeholder:text-muted"
+            />
+          </div>
+        </div>
         <nav className="p-2 space-y-1">
-          {tabs.map((tab) => (
+          {filteredTabs.map((tab) => (
             <button
               key={tab.key}
               className={clsx(

@@ -28,6 +28,26 @@ export interface ConnectionTestResult {
 }
 
 /**
+ * Probe result from the model catalog service adapters.
+ *
+ * status:
+ * - ``success``: probe returned usable metadata (data populated)
+ * - ``unsupported``: service has no metadata endpoint (e.g. OpenAI-compatible)
+ * - ``error``: network error, timeout, or malformed response
+ */
+export interface ProbeResult {
+  status: 'success' | 'unsupported' | 'error';
+  adapter: string;
+  data: {
+    native: number | null;
+    service: number | null;
+    architecture: string | null;
+    quantization: string | null;
+  } | null;
+  error: string | null;
+}
+
+/**
  * 所有浏览器到 LLM 的请求统一走本机后端代理,避免 CORS。
  * 见 ``docs/technical/21-llm-proxy.md`` 与 ``backend/api/llm_proxy_routes.py``。
  * 可通过 ``VITE_LLM_PROXY_BASE`` 覆盖,默认 ``http://localhost:8765/api/v1/llm``。
@@ -139,8 +159,20 @@ export async function fetchModels(baseUrl: string, apiKey: string): Promise<Disc
     method: 'GET',
     headers: proxyHeaders(baseUrl, apiKey),
   });
-  const data = response;
-  return data.data.map((m) => ({
+  // 防御性检查: 某些上游服务 (LM Studio 变体 / 自定义网关) 可能返回非标准格式,
+  // 缺少 data 字段或 data 不是数组。提前报错, 避免 data.data.map() 抛出
+  // TypeError, 让 _parseUpstreamError 漏斗给出可读提示。
+  if (!response || !Array.isArray(response.data)) {
+    throw new Error(
+      '端点返回格式无效: 期望 { data: [...] } 但收到 ' +
+        (response === null || response === undefined
+          ? '空响应'
+          : Array.isArray(response)
+            ? '裸数组 (缺少 data 包装)'
+            : JSON.stringify(response).slice(0, 120)),
+    );
+  }
+  return response.data.map((m) => ({
     id: m.id,
     capabilities: inferCapabilities(m.id),
     endpointId: '',
@@ -263,11 +295,37 @@ export async function testEndpointConnection(
     const models = await fetchModelsByProtocol(protocol, baseUrl, apiKey);
     const modelDiscovery = `发现 ${models.length} 个模型`;
 
-    // R33: 非 openai 协议只做模型发现（各家对话端点语义不同, 不做对话连通测试）
+    // R36: 非 openai 协议也做对话级连通测试（各家生成端点按协议构造）
     if (protocol !== 'openai-compatible') {
+      let chatTestModel = chatModel;
+      if (!chatTestModel || !models.some((m) => m.id === chatTestModel)) {
+        chatTestModel = models.find((m) => !isEmbeddingModel(m.id))?.id;
+      }
+      if (chatTestModel) {
+        const chatResult = await testChatCompletionByProtocol(
+          protocol,
+          baseUrl,
+          apiKey,
+          chatTestModel,
+        );
+        if (!chatResult.success) {
+          return {
+            success: false,
+            message: `${modelDiscovery}，但对话端点异常: ${chatResult.message}`,
+            latency: Date.now() - start,
+            discoveredModels: models,
+          };
+        }
+        return {
+          success: true,
+          message: `连接成功 · ${modelDiscovery} · ${chatResult.message}`,
+          latency: Date.now() - start,
+          discoveredModels: models,
+        };
+      }
       return {
         success: true,
-        message: `连接成功 · ${modelDiscovery} · 该协议未做对话连通测试`,
+        message: `连接成功，${modelDiscovery}（无可用于对话测试的模型）`,
         latency: Date.now() - start,
         discoveredModels: models,
       };
@@ -320,6 +378,75 @@ export async function testEndpointConnection(
 }
 
 /**
+ * R36: 非 openai 协议的对话级连通测试 —— 各家生成端点语义不同，
+ * 按协议构造最小 completion。全部经本机 LLM 代理透传
+ * （X-LLM-Provider-Url 指定上游 + 协议鉴权头原样转发）。
+ *
+ * 成功消息带模型与"对话连通"标记；上游非 2xx 时抛错（含代理的
+ * 结构化 envelope），由调用方 _parseUpstreamError 统一翻译。
+ */
+async function testChatCompletionByProtocol(
+  protocol: Exclude<EndpointProtocol, 'openai-compatible'>,
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+): Promise<{ success: boolean; message: string }> {
+  const base = baseUrl.replace(/\/+$/, '');
+
+  if (protocol === 'anthropic') {
+    const response = await backendRequest<{ content?: Array<{ text?: string }> }>({
+      path: `${LLM_PROXY_BASE}/v1/messages`,
+      method: 'POST',
+      headers: {
+        'X-LLM-Provider-Url': base,
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: {
+        model,
+        max_tokens: 16,
+        messages: [{ role: 'user', content: 'ping' }],
+      },
+    });
+    const text = response.content?.[0]?.text ?? '';
+    return { success: true, message: `对话连通 · ${model} · ${text.slice(0, 40)}` };
+  }
+
+  if (protocol === 'gemini') {
+    const response = await backendRequest<{
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    }>({
+      path: `${LLM_PROXY_BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      method: 'POST',
+      headers: {
+        'X-LLM-Provider-Url': base,
+        'x-goog-api-key': apiKey,
+      },
+      body: {
+        contents: [{ parts: [{ text: 'ping' }] }],
+        generationConfig: { maxOutputTokens: 16 },
+      },
+    });
+    const text = response.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    return { success: true, message: `对话连通 · ${model} · ${text.slice(0, 40)}` };
+  }
+
+  // ollama
+  const response = await backendRequest<{ message?: { content?: string } }>({
+    path: `${LLM_PROXY_BASE}/api/chat`,
+    method: 'POST',
+    headers: { 'X-LLM-Provider-Url': base },
+    body: {
+      model,
+      messages: [{ role: 'user', content: 'ping' }],
+      stream: false,
+    },
+  });
+  const text = response.message?.content ?? '';
+  return { success: true, message: `对话连通 · ${model} · ${text.slice(0, 40)}` };
+}
+
+/**
  * 判断模型 id 是否为 embedding 模型 (不适合作 chat 连通性测试)。
  *
  * 注意: ``inferCapabilities`` 无条件给所有模型标 ``'chat'``, 所以 fallback 选
@@ -364,4 +491,30 @@ function inferCapabilities(modelId: string): ModelCapability[] {
   }
 
   return caps;
+}
+
+/**
+ * Probe an endpoint for model metadata via the model catalog POST /probe route.
+ *
+ * Reads endpoint configuration from settings storage on the backend side,
+ * calls the service-specific metadata path, and returns a :class:`ProbeResult`.
+ * The backend persists the result via ``repository.save_probe``.
+ *
+ * Unlike ``fetchModels`` which goes through the LLM proxy, this call hits
+ * the model-catalog API directly at ``/api/v1/model-catalog/probe``.
+ */
+export async function probeModel(endpointId: string, modelId: string): Promise<ProbeResult> {
+  if (isDemoMode()) {
+    return {
+      status: 'unsupported',
+      adapter: 'unknown',
+      data: null,
+      error: 'Probing unavailable in demo mode',
+    };
+  }
+  return backendRequest<ProbeResult>({
+    path: '/api/v1/model-catalog/probe',
+    method: 'POST',
+    body: { endpoint_id: endpointId, model_id: modelId },
+  });
 }

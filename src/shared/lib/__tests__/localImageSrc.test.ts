@@ -6,11 +6,11 @@ import { describe, expect, it } from 'vitest';
 import { buildLocalImageSrc } from '../localImageSrc';
 
 describe('buildLocalImageSrc', () => {
-  it('Windows 绝对路径转 sage-file URL 并携带 ws', () => {
+  it('Windows 绝对路径转 sage-file URL（P13 不再携带 ws 参数）', () => {
     const r = buildLocalImageSrc('C:\\ws\\img\\chart.png', 'C:\\workspaces\\demo');
     expect(r.startsWith('sage-file://p/')).toBe(true);
     expect(r).toContain(encodeURIComponent('C:/ws/img/chart.png'));
-    expect(r).toContain(`ws=${encodeURIComponent('C:/workspaces/demo')}`);
+    expect(r).not.toContain('ws=');
   });
 
   it('POSIX 绝对路径转 sage-file URL', () => {

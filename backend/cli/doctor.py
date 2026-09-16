@@ -299,6 +299,17 @@ def _try_import_backend(
                 if os.name == "nt"
                 else {}
             ),
+            # Win32: ``Path.home()`` / expanduser 读取 USERPROFILE（POSIX
+            # 缺 HOME 时有 pwd 兜底而 Windows 没有）。部分后端模块在
+            # import 期调用 Path.home()，缺失会导致探针 import 直接崩溃
+            # → doctor 误报 import_backend=False。
+            **(
+                {
+                    key: os.environ[key]
+                    for key in ("USERPROFILE", "HOMEDRIVE", "HOMEPATH")
+                    if os.environ.get(key)
+                }
+            ),
         }
         # Round 2: merge supervisor launcher context so the probe sees
         # SAGE_BACKEND_GENERATION / SAGE_BACKEND_OWNERSHIP_TOKEN and any

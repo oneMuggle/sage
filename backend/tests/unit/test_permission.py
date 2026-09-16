@@ -4,7 +4,6 @@
 会话记忆、CUSTOM 白名单、风险覆盖、注册表集成。
 """
 
-import os
 
 import pytest
 
@@ -223,14 +222,23 @@ class TestInteractiveMode:
         assert decision.needs_user is False
         assert "not in the workspace" in decision.reason
 
-    @pytest.mark.skipif(
-        os.name == "nt",
-        reason="用例依赖 POSIX 绝对路径语义（/etc/... 在 Windows 非绝对）",
-    )
     def test_write_outside_workspace_hard_denied(self, tmp_path):
-        """workspace 外的写入 → 硬拒绝（不询问）"""
+        r"""workspace 外的写入 → 硬拒绝（不询问）
+
+        使用平台中立的越界绝对路径：POSIX 为 /etc/cron.d/evil，
+        Windows 为 <系统盘>:\Windows\evil（同走 absolute+越界判定）。
+        """
+        import os as _os
+
+        if _os.name == "nt":
+            # Windows 上盘符根（如 C:\）作为越界绝对路径
+            outside = _os.path.join(tmp_path.anchor, "Windows", "evil")
+        else:
+            outside = _os.path.join(
+                _os.path.abspath(_os.sep), "etc", "cron.d", "evil"
+            )
         engine = PermissionEngine(tmp_path)
-        decision = engine.evaluate("write_file", {"path": "/etc/cron.d/evil"})
+        decision = engine.evaluate("write_file", {"path": outside})
 
         assert decision.allowed is False
         assert decision.needs_user is False

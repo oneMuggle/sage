@@ -4,6 +4,20 @@
 import type { TranslationKey } from './zh';
 
 export const en: Record<TranslationKey, string> = {
+  // --- Task center: A1 states & actions (parity-s4) ---
+  'taskCenter.cancel': 'Cancel',
+  'taskCenter.clearFinished': 'Clear finished',
+  'taskCenter.goto': 'Open',
+  'taskCenter.status.queued': 'Queued',
+  'taskCenter.status.running': 'Running',
+  'taskCenter.status.awaiting_approval': 'Awaiting approval',
+  'taskCenter.status.paused': 'Paused',
+  'taskCenter.status.succeeded': 'Done',
+  'taskCenter.status.failed': 'Failed',
+  'taskCenter.status.cancelled': 'Cancelled',
+  'taskCenter.laneFallback': 'Orchestration task',
+  'taskCenter.finishedCount': '{n} recently finished',
+  'taskCenter.cancelFailed': 'Cancel failed, please retry',
   // ─── Sidebar ──────────────────────
   'sidebar.brand': 'Sage',
   'sidebar.nav.chat': 'Chat',
@@ -52,7 +66,8 @@ export const en: Record<TranslationKey, string> = {
   'chat.perm.careful': 'Careful',
   'chat.perm.careful.desc': 'Ask before writing files, running commands, or using the network',
   'chat.perm.standard': 'Standard',
-  'chat.perm.standard.desc': 'Read/write inside the workspace freely; ask for shell and out-of-workspace',
+  'chat.perm.standard.desc':
+    'Read/write inside the workspace freely; ask for shell and out-of-workspace',
   'chat.perm.auto': 'Auto',
   'chat.perm.auto.desc': 'Allow everything; only destructive commands (delete/overwrite) still ask',
   'chat.perm.custom': 'custom',
@@ -61,11 +76,13 @@ export const en: Record<TranslationKey, string> = {
   'chat.perm.auto_count': '{n} auto-approved',
   'chat.perm.audit_title': 'Auto-approved actions in this session',
   'chat.perm.audit_empty': 'No auto-approved write/execute actions in this session yet',
-  'chat.perm.destructive_note': 'Destructive commands (rm -rf, forced overwrite) always ask, in every mode.',
+  'chat.perm.destructive_note':
+    'Destructive commands (rm -rf, forced overwrite) always ask, in every mode.',
   'chat.nav.opened': 'Opened {page}',
   'chat.atEntity.label': 'Reference',
   'chat.atEntity.memory': 'Memory',
-  'chat.atEntity.memory.desc': '@memory:keyword — inject matching long-term memories into this message',
+  'chat.atEntity.memory.desc':
+    '@memory:keyword — inject matching long-term memories into this message',
   'chat.atEntity.wiki': 'Wiki',
   'chat.atEntity.wiki.desc': '@wiki:keyword — reference a knowledge-base Wiki page',
   'chat.atEntity.skill': 'Skill',
@@ -103,9 +120,11 @@ export const en: Record<TranslationKey, string> = {
   'wizard.save': 'Save & finish',
   'wizard.skip': 'Skip — configure later in Settings',
   'wizard.done.title': 'All set',
-  'wizard.done.desc': 'Endpoint saved and set as chat model. Change it anytime in Settings → Endpoints.',
+  'wizard.done.desc':
+    'Endpoint saved and set as chat model. Change it anytime in Settings → Endpoints.',
   'wizard.done.start': 'Start using Sage',
-  'chat.attachment_not_sent': 'Note: regular file attachments are not sent yet; images are supported, and @-referenced files take effect',
+  'chat.attachment_not_sent':
+    'Note: regular file attachments are not sent yet; images are supported, and @-referenced files take effect',
   'chat.memory_toggle': 'View memories used for this reply',
   'chat.delete_message': 'Delete this message',
   'chat.delete_message_confirm': 'Delete this message?',
@@ -193,13 +212,15 @@ export const en: Record<TranslationKey, string> = {
   'settings.network.error.tls_not_covered':
     'Host is not covered by the allowlist; add it to the host allowlist first',
   'settings.network.proxy': 'Fetch Proxy',
-  'settings.network.proxy.hint': 'Used by web fetch and the built-in browser. Leave empty to disable; supports http://, https://, socks5://.',
+  'settings.network.proxy.hint':
+    'Used by web fetch and the built-in browser. Leave empty to disable; supports http://, https://, socks5://.',
   'settings.network.proxy.http': 'HTTP proxy',
   'settings.network.proxy.https': 'HTTPS proxy',
   'settings.network.proxy.placeholder': 'http://127.0.0.1:7890 (empty = disabled)',
   'settings.network.proxy.error.scheme': 'Proxy URL must start with http://, https:// or socks5://',
   'settings.network.search': 'Search Engines',
-  'settings.network.search.hint': 'Tried in order: when the first engine yields nothing, later engines are used. API engines without a key are skipped.',
+  'settings.network.search.hint':
+    'Tried in order: when the first engine yields nothing, later engines are used. API engines without a key are skipped.',
   'settings.network.search.first': 'Preferred engine',
   'settings.network.search.tavily_key': 'Tavily API Key',
   'settings.network.search.zhipu_key': 'Zhipu API Key',
@@ -235,10 +256,17 @@ export const en: Record<TranslationKey, string> = {
   'settings.mcp.required': 'Required server',
   'settings.mcp.delete': 'Delete',
   'settings.mcp.builtin_hint': 'Built-in server, cannot be deleted',
+  'settings.mcp.add.transport': 'Transport',
+  'settings.mcp.add.url': 'HTTP endpoint URL',
+  'settings.mcp.add.headers': 'Headers (JSON object; optional)',
+  'settings.mcp.error.url_invalid': 'Enter a valid HTTP or HTTPS URL.',
+  'settings.mcp.error.args_invalid':
+    'Arguments must be a JSON array of strings. Each item is one argument, including spaces and empty strings.',
+  'settings.mcp.error.headers_invalid': 'Headers must be a JSON object with string values.',
   'settings.mcp.add.title': 'Add server',
   'settings.mcp.add.name': 'Name',
   'settings.mcp.add.command': 'Command',
-  'settings.mcp.add.args': 'Arguments (space separated)',
+  'settings.mcp.add.args': 'Arguments (JSON string array)',
   'settings.mcp.add.required': 'Required',
   'settings.mcp.add.submit': 'Add',
   'settings.mcp.error.name_invalid':
@@ -426,6 +454,12 @@ export const en: Record<TranslationKey, string> = {
   'scheduled.toast.create_fail': 'Failed to create task',
   'scheduled.toast.update_fail': 'Failed to update task',
   'scheduled.toast.delete_fail': 'Failed to delete task',
+  'scheduled.session.required': 'Select a target session',
+  'scheduled.session.empty': 'Create a conversation first, then return to schedule a task.',
+  'scheduled.run_failed': 'Delivery failed — review the target session before retrying',
+  'scheduled.run_succeeded': 'Last delivery succeeded',
+  'scheduled.confirm.retry':
+    'Check the target conversation first: the previous delivery may have succeeded before the error. Retry now?',
   'scheduled.confirm.delete': 'Delete this scheduled task?',
 
   // ─── M1 tool approval ─────────────
@@ -445,6 +479,7 @@ export const en: Record<TranslationKey, string> = {
   'codeBlock.copied': 'Copied',
   'codeBlock.toggleWrap': 'Toggle word wrap',
   'codeBlock.expandLines': 'Expand all {n} lines',
+  'codeBlock.collapseLines': 'Collapse',
   'taskCenter.activeCount': '{n} running',
   'taskCenter.chatFallback': 'Background session generating',
 
@@ -457,6 +492,26 @@ export const en: Record<TranslationKey, string> = {
   'question.toast.failed': 'Failed to submit answer',
 
   // ─── M1 settings: tool permissions ─
+  'settings.font.ui': 'Interface font',
+  'settings.font.code': 'Code font',
+  'settings.font.sizeUi': 'Interface font size',
+  'settings.font.sizeCode': 'Code font size',
+  'settings.font.reset': 'Reset fonts',
+  'settings.font.preview': 'Font preview: Hello, world! 你好，世界！',
+  'settings.font.fallback':
+    'Unavailable fonts fall back to installed system fonts. No fonts are downloaded.',
+  'settings.font.saveError':
+    'Font preferences could not be saved. Changes are visible now; retry or reopen the app later to sync.',
+  'settings.font.loadError': 'Font preferences could not be loaded. Using defaults for now.',
+  'font.option.inter': 'Inter',
+  'font.option.system': 'System Default',
+  'font.option.noto-sans-sc': 'Noto Sans SC',
+  'font.option.pingfang': 'PingFang SC',
+  'font.option.jetbrains-mono': 'JetBrains Mono',
+  'font.option.fira-code': 'Fira Code',
+  'font.option.source-code-pro': 'Source Code Pro',
+  'font.option.consolas': 'Consolas',
+  'font.option.monaco': 'Monaco',
   'settings.section.permission': 'Tool permissions',
   'settings.permission.mode': 'Permission mode',
   'settings.permission.mode.read_only': 'Read-only',
@@ -497,11 +552,15 @@ export const en: Record<TranslationKey, string> = {
   'settings.usage.requestsTable.col.cacheRead': 'Cache read',
   'settings.usage.requestsTable.col.cacheCreation': 'Cache creation',
   'settings.usage.requestsTable.col.cost': 'Cost',
+  'settings.usage.requestsTable.col.endpoint': 'Endpoint',
+  'settings.usage.requestsTable.col.priceSnapshot': 'Price snapshot',
   'settings.usage.requestsTable.empty': 'No request records yet',
   'settings.usage.requestsTable.loadFailed': 'Failed to load request details',
   'settings.usage.requestsTable.prevPage': 'Previous',
   'settings.usage.requestsTable.nextPage': 'Next',
   'settings.usage.requestsTable.pageInfo': '{offset}-{end} of {total}',
+  'settings.usage.requestsTable.yes': 'Yes',
+  'settings.usage.requestsTable.no': '—',
   // L8 PR-C (2026-09-09): trend chart + CSV export
   'settings.usage.trend.title': 'Usage trend',
   'settings.usage.trend.loading': 'Loading trend data…',
@@ -510,8 +569,25 @@ export const en: Record<TranslationKey, string> = {
   'settings.usage.trend.legendCost': 'Cost',
   'settings.usage.trend.loadFailed': 'Failed to load trend data',
   'settings.usage.exportCsv': 'Export CSV',
+  // Task 6 (2026-09-15): cost unknown vs 0, partial-estimate footnote
+  'settings.usage.costUnknown': 'Unknown',
+  'settings.usage.costNote': 'Estimate excludes cache & tier discounts',
+  'settings.usage.partialEstimate': 'Partial',
+  'settings.usage.partialEstimateHint': 'Some requests have unknown cost; total is approximate',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
+  'office.staging.inspect': 'Inspect staging (read-only)',
+  'office.staging.notice':
+    'Nothing is moved or deleted. Review candidates are not proven orphans: verify database references before any cleanup. Unknown directories and live owners are retained.',
+  'office.staging.unavailable': 'This desktop build does not support staging inspection.',
+  'office.staging.empty': 'No inspectable staging entries found.',
+  'office.staging.truncated': 'Report limited to 1000 entries; this is not a complete inventory.',
+  'office.staging.completed': 'Completed import — retain',
+  'office.staging.active': 'Live import owner — retain',
+  'office.staging.recent': 'Less than seven days old — retain',
+  'office.staging.review': 'Old import with no live owner — manual review only',
+  'office.staging.untracked': 'No trustworthy staging evidence — retain',
+  'office.staging.unreadable': 'Evidence unavailable — retain',
   'office.title': 'Office Documents',
   'office.selectWorkspace': 'Select Workspace',
   'office.emptyState': 'Select a workspace directory to get started',
@@ -656,6 +732,36 @@ export const en: Record<TranslationKey, string> = {
   'office.export.failed': 'Export failed',
   'office.export.noConverter': 'No local converter found (LibreOffice or MS Word required)',
   'office.export.openFolder': 'Show in Folder',
+  'office.export.openPdf': 'Open PDF',
+
+  // ─── Office display round A: P1 high-fidelity preview + P6 capability badges ─────
+  'office.fidelity.toggle': 'High fidelity',
+  'office.fidelity.loading': 'Converting…',
+  'office.fidelity.failed': 'High-fidelity preview failed',
+  'office.caps.pdf': 'PDF export',
+  'office.caps.image': 'Image compression',
+  'office.caps.formula': 'Formula evaluation',
+  'office.caps.refresh': 'Re-detect',
+  'office.caps.install.pdf.win': 'No converter detected: install LibreOffice (libreoffice.org/download) or MS Word to enable PDF export / high-fidelity preview',
+  'office.caps.install.pdf.mac': 'No converter detected: brew install --cask libreoffice to enable PDF export / high-fidelity preview',
+  'office.caps.install.pdf.linux': 'No converter detected: sudo apt install libreoffice (or your distro equivalent) to enable PDF export / high-fidelity preview',
+  'office.caps.install.pillow': 'Pillow not installed: pip install -r backend/requirements-optional.txt to auto-compress images >8MB',
+  'office.caps.install.formulas': 'formulas not installed: pip install -r backend/requirements-optional.txt to evaluate Excel formulas locally',
+
+  // ─── Office display round B: P2 snapshot visual diff ─────
+  'office.snapshot.diff': 'Compare with current',
+  'office.snapshot.diffFailed': 'Snapshot diff failed',
+  'office.snapshot.diffIdentical': 'Identical to the current version',
+  'office.snapshot.diffTruncated': 'Too many changes — showing the first 200',
+
+  // ─── Office display round C: P4 images/comments + P7 preview paging ─────
+  'office.preview.imagesTitle': 'Document images',
+  'office.preview.imagesOmitted': '{n} more image(s) not inlined (too large or over the count cap)',
+  'office.preview.commentsTitle': 'Comments',
+  'office.preview.commentAnonymous': 'Anonymous',
+  'office.preview.loadMore': 'Load more',
+  'office.preview.loadingMore': 'Loading…',
+  'office.template.thumbnailLoading': 'Generating template preview…',
 
   // ─── Office parity batch 3: Word template library (item 3.2) ─────
   'office.template.modeFreeform': 'Free-form',
@@ -689,6 +795,26 @@ export const en: Record<TranslationKey, string> = {
   'office.batch.selectedCount': '{n} selected',
   'office.batch.selectRow': 'Select document',
 
+  // ─── A4b Office delivery acceptance ─────
+  'office.delivery.title': 'Delivery acceptance',
+  'office.delivery.close': 'Close',
+  'office.delivery.awaiting': 'Pending acceptance',
+  'office.delivery.archived': 'Archived',
+  'office.delivery.lint': 'Format check',
+  'office.delivery.lintPass': 'Passed',
+  'office.delivery.lintFail': 'Format issues found',
+  'office.delivery.lintSkipped': 'No format spec given, check skipped',
+  'office.delivery.lintFailed': 'Check failed',
+  'office.delivery.retry': 'Retry',
+  'office.delivery.errors': '{n} errors',
+  'office.delivery.warnings': '{n} warnings',
+  'office.delivery.rulesChecked': '{n} rules checked',
+  'office.delivery.moreIssues': '{n} more…',
+  'office.delivery.preview': 'Document preview',
+  'office.delivery.previewFailed': 'Preview failed to load',
+  'office.delivery.accept': 'Accept & archive',
+  'office.delivery.reject': 'Reject',
+
   // ─── M6 生态扩展: 编排看板补充 i18n 键 ─────
   'orchestration.loading': 'Loading…',
   'orchestration.error': 'Error:',
@@ -716,6 +842,32 @@ export const en: Record<TranslationKey, string> = {
   'orchestration.board.level.fresh': 'fresh',
   'orchestration.board.level.stale': 'stale',
   'orchestration.board.level.dead': 'dead',
+
+  // ─── A4 delivery-package decision drawer ─────
+  'orchestration.drawer.close': 'Close',
+  'orchestration.drawer.delivery': 'Delivery package',
+  'orchestration.drawer.acceptancePending': 'Pending acceptance',
+  'orchestration.drawer.accepted': 'Accepted',
+  'orchestration.drawer.rejected': 'Rejected',
+  'orchestration.drawer.worktree': 'Worktree',
+  'orchestration.drawer.noWorktree': 'No isolated worktree',
+  'orchestration.drawer.checks': 'Acceptance checks',
+  'orchestration.drawer.checksEmpty': 'No acceptance record yet',
+  'orchestration.drawer.mergeBranch': 'Audit branch',
+  'orchestration.drawer.mergeCommit': 'Merge commit',
+  'orchestration.drawer.filesChanged': 'Changed files ({n})',
+  'orchestration.drawer.reasonPlaceholder': 'Review note (optional)…',
+  'orchestration.drawer.accept': 'Accept & merge',
+  'orchestration.drawer.reject': 'Reject',
+  'orchestration.drawer.deciding': 'Working…',
+
+  // ─── A4 review verdict + change summary ─────
+  'orchestration.drawer.review': 'Review verdict',
+  'orchestration.drawer.reviewPass': 'Review passed',
+  'orchestration.drawer.reviewFail': 'Review concerns',
+  'orchestration.drawer.reviewAssertions': '{n} assertions',
+  'orchestration.drawer.diff': 'Change summary',
+  'orchestration.drawer.diffEmpty': 'No change summary yet',
 
   // ─── Session export (U18 HTML session export) ──────
   'session.export_failed': 'Export failed: {message}',

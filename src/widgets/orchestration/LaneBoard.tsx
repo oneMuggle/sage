@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
+import { useTaskCenterStore } from '../../features/task-center/taskCenterStore';
 import type {
   FreshnessSummaryInfo,
   Lane,
@@ -30,9 +31,10 @@ const STATUS_COLORS: Record<LaneStatus, string> = {
 interface LaneCardProps {
   lane: Lane;
   onCancel: (laneId: string) => void;
+  onSelect: (laneId: string) => void;
 }
 
-function LaneCard({ lane, onCancel }: LaneCardProps) {
+function LaneCard({ lane, onCancel, onSelect }: LaneCardProps) {
   const { t } = useI18n();
   // Status labels are built inside the component so the translated
   // strings track the active locale (module-level maps can't call t()).
@@ -66,7 +68,8 @@ function LaneCard({ lane, onCancel }: LaneCardProps) {
   return (
     <div
       data-testid={`lane-${lane.lane_id}`}
-      className="p-3 rounded-lg border border-border bg-bg-surface hover:border-border-hover transition-colors"
+      className="p-3 rounded-lg border border-border bg-bg-surface hover:border-border-hover transition-colors cursor-pointer"
+      onClick={() => onSelect(lane.lane_id)}
     >
       <div className="flex items-center justify-between gap-1 mb-1">
         <span className="font-mono text-xs text-text-tertiary truncate">{lane.lane_id}</span>
@@ -110,7 +113,10 @@ function LaneCard({ lane, onCancel }: LaneCardProps) {
       )}
       {!isTerminal && (
         <button
-          onClick={() => onCancel(lane.lane_id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCancel(lane.lane_id);
+          }}
           className="mt-2 text-xs text-red-600 hover:text-red-800"
         >
           {t('common.cancel')}
@@ -124,6 +130,7 @@ interface ColumnProps {
   title: string;
   lanes: Lane[];
   onCancel: (laneId: string) => void;
+  onSelect: (laneId: string) => void;
 }
 
 /** P2-5: overall_level → 色徽章映射（fresh=green / stale=yellow / dead=red）。 */
@@ -167,7 +174,7 @@ function FreshnessBadge({ summary }: { summary: FreshnessSummaryInfo }) {
     </div>
   );
 }
-function Column({ title, lanes, onCancel }: ColumnProps) {
+function Column({ title, lanes, onCancel, onSelect }: ColumnProps) {
   const { t } = useI18n();
   return (
     <div className="flex-1 min-w-0">
@@ -181,7 +188,9 @@ function Column({ title, lanes, onCancel }: ColumnProps) {
             {t('orchestration.column.empty')}
           </div>
         ) : (
-          lanes.map((lane) => <LaneCard key={lane.lane_id} lane={lane} onCancel={onCancel} />)
+          lanes.map((lane) => (
+            <LaneCard key={lane.lane_id} lane={lane} onCancel={onCancel} onSelect={onSelect} />
+          ))
         )}
       </div>
     </div>
@@ -197,6 +206,8 @@ export function LaneBoard() {
   const load = useLaneBoardStore((s) => s.load);
   const cancel = useLaneBoardStore((s) => s.cancel);
   const [teamId] = useState<string | undefined>(undefined);
+  // A4: 点击卡片经全局交付抽屉打开验收（DeliveryDrawerHost 渲染）。
+  const openDelivery = useTaskCenterStore((s) => s.openDelivery);
 
   useEffect(() => {
     void load(teamId);
@@ -224,6 +235,10 @@ export function LaneBoard() {
     });
   };
 
+  const handleSelect = (laneId: string) => {
+    openDelivery({ kind: 'lane', laneId });
+  };
+
   if (loading && lanes.length === 0) {
     return <div className="p-4 text-center text-text-secondary">{t('orchestration.loading')}</div>;
   }
@@ -244,16 +259,19 @@ export function LaneBoard() {
           title={t('orchestration.column.active')}
           lanes={board.active}
           onCancel={handleCancel}
+          onSelect={handleSelect}
         />
         <Column
           title={t('orchestration.column.blocked')}
           lanes={board.blocked}
           onCancel={handleCancel}
+          onSelect={handleSelect}
         />
         <Column
           title={t('orchestration.column.finished')}
           lanes={board.finished}
           onCancel={handleCancel}
+          onSelect={handleSelect}
         />
       </div>
     </div>

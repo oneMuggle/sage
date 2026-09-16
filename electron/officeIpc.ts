@@ -32,13 +32,11 @@
  *     pickOfficeFile + pickSavePath preload bridges still resolve).
  */
 
-import { constants as fsConstants, existsSync, readdirSync, statSync } from 'fs';
-import { copyFile, mkdir, readdir, rm } from 'fs/promises';
+import { constants as fsConstants, existsSync, statSync } from 'fs';
+import { copyFile, mkdir, rm } from 'fs/promises';
 import path from 'path';
 import { BrowserWindow, dialog, shell } from 'electron';
 import { randomUUID } from 'crypto';
-
-import { logger } from './logger';
 
 import {
   buildManagedPath,
@@ -49,6 +47,8 @@ import {
   type OfficeDocType,
   type OfficeManagedRef,
 } from './officePaths';
+
+import { previewOfficeStaging, recordCompletedImport, recordStagedImport } from './officeStaging';
 
 /**
  * Register signature: same shape as Electron's `ipcMain.handle`.
@@ -149,6 +149,11 @@ async function stageImportedFile(
   await mkdir(stagingDir, { recursive: true });
   const managedPath = path.join(stagingDir, finalName);
   await copyFile(sourcePath, managedPath, fsConstants.COPYFILE_EXCL);
+  try {
+    await recordStagedImport(stagingDir, importToken, finalName);
+  } catch {
+    /* Missing evidence must retain the directory, not fail a successful import. */
+  }
 
   let sizeBytes = 0;
   try {
@@ -196,49 +201,19 @@ function resolveManagedFilePath(ref: OfficeManagedRef): string {
   return candidate;
 }
 
-/** Sweep orphan staging directories not present in the known document set. */
+/**
+ * Deprecated compatibility endpoint. Renderer lists are filtered snapshots, not
+ * proof of orphanhood. Never delete managed documents based on their absence.
+ * Explicit discard-import still cleans its own tracked token. Crash leftovers
+ * must await a dedicated, age/lease-aware staging collector (audit #10).
+ */
 export async function sweepOrphanStaging(
   workspacePath: string,
   knownDocIds: ReadonlySet<string>,
 ): Promise<{ swept: number }> {
   if (!workspacePath) throw new Error('workspacePath is required');
-  const officeRoot = path.join(workspacePath, 'office');
-  if (!existsSync(officeRoot)) return { swept: 0 };
-  let swept = 0;
-  for (const docType of readdirSync(officeRoot)) {
-    const typeDir = path.join(officeRoot, docType);
-    try {
-      if (!statSync(typeDir).isDirectory()) continue;
-    } catch {
-      continue;
-    }
-    for (const dirName of await readdir(typeDir)) {
-      if (knownDocIds.has(dirName)) continue;
-      const orphanPath = path.join(typeDir, dirName);
-      // Skip non-directories: a stray file directly under
-      // <office>/<docType>/ would otherwise be rm'd and counted as
-      // a swept orphan, inflating `swept`. Keep candidates to actual
-      // directories only.
-      try {
-        if (!statSync(orphanPath).isDirectory()) continue;
-      } catch {
-        // raced with another process, or disappeared between readdir
-        // and stat — skip silently (best-effort behaviour matches the
-        // outer sweep)
-        continue;
-      }
-      try {
-        await rm(orphanPath, { recursive: true, force: true });
-        swept += 1;
-      } catch (err) {
-        logger.warn('office:staging-sweep: failed to remove orphan', {
-          path: orphanPath,
-          err: String(err),
-        });
-      }
-    }
-  }
-  return { swept };
+  void knownDocIds;
+  return { swept: 0 };
 }
 
 // ----------------------------------------------------------------------------
@@ -246,6 +221,10 @@ export async function sweepOrphanStaging(
 // ----------------------------------------------------------------------------
 
 export function registerOfficeIpc(register: RegisterIpcHandler): void {
+  register('office:staging-preview', (async (_event: unknown, opts: { workspacePath: string }) => {
+    return previewOfficeStaging(opts.workspacePath, new Set(pendingImports.keys()));
+  }) as (...args: unknown[]) => unknown);
+
   // ── office:pick-and-import ────────────────────────────────────────────
   // Atomic dialog → copy → token. Returns ImportedOfficeFile | null.
   register('office:pick-and-import', (async (
@@ -305,7 +284,16 @@ export function registerOfficeIpc(register: RegisterIpcHandler): void {
     _event: unknown,
     opts: { importToken: string },
   ): Promise<void> => {
+    const pending = pendingImports.get(opts.importToken);
+    // Consume before the first await: a concurrent discard must be a no-op.
     pendingImports.delete(opts.importToken);
+    if (pending) {
+      try {
+        await recordCompletedImport(pending.stagingDir);
+      } catch {
+        /* A completion metadata failure must never trigger destructive discard. */
+      }
+    }
   }) as (...args: unknown[]) => unknown);
 
   // ── office:discard-import ─────────────────────────────────────────────

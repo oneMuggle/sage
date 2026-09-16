@@ -41,6 +41,7 @@ from .models import (
     PptSlideContent,
 )
 from .path_safety import managed_document_path, resolve_output_path, validate_supported_filename
+from .progress import report_current
 from .storage import validate_workspace
 
 logger = logging.getLogger(__name__)
@@ -329,7 +330,8 @@ def generate_ppt(req, output_dir: Optional[str] = None) -> Path:
         prs = Presentation()
         # Layout 6 is "Blank" — most flexible for any content
         blank_layout = prs.slide_layouts[6]
-        for spec in req.slides:
+        total_slides = len(req.slides)
+        for slide_idx, spec in enumerate(req.slides):
             # 批次 2.3：可选 layout 字段按模板版式名查找；未指定或模板里
             # 找不到对应版式时，保持既有 Blank + 文本框几何行为不变。
             layout = _resolve_slide_layout(prs, getattr(spec, "layout", None))
@@ -361,6 +363,11 @@ def generate_ppt(req, output_dir: Optional[str] = None) -> Path:
             # Add speaker notes
             if spec.notes:
                 slide.notes_slide.notes_text_frame.text = spec.notes
+            # P12: 逐 slide 进度上报（30→85 区间，路由层负责前后边界）
+            report_current(
+                f"生成幻灯片 {slide_idx + 1}/{total_slides}",
+                30 + int(55 * (slide_idx + 1) / total_slides),
+            )
         prs.save(str(output_path))
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate PPTX: {exc}", file_path=output_path) from exc

@@ -40,6 +40,10 @@ const ScheduledTasks = lazy(() =>
 );
 const Skills = lazy(() => import('./pages/Skills').then((m) => ({ default: m.default })));
 const Help = lazy(() => import('./pages/Help').then((m) => ({ default: m.Help })));
+// Task 6 (2026-09-15): 模型目录管理页面
+const ModelCatalog = lazy(() =>
+  import('./pages/ModelCatalog').then((m) => ({ default: m.default })),
+);
 
 // ChatRoute 内直接调用 hook 形式的 useStore setter 会引入条件调用问题,
 // 用 getState() 命令式写入更直白(与 App useEffect 里的用法一致)。
@@ -133,6 +137,41 @@ function App() {
   // U18 (round4): 快捷键帮助覆盖层（非输入焦点下按 ? 打开）
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
 
+  // R40: Ctrl+N 新建会话 —— 全局快捷键（仅无 modifier 冲突时触发）
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        useStore
+          .getState()
+          .createSession()
+          .then((id) => {
+            useStore.getState().setCurrentSessionId(id);
+            window.location.hash = '#/chat';
+          })
+          .catch(() => {});
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // R47: Ctrl+Shift+D 切换暗色/亮色主题
+  useEffect(() => {
+    const onThemeToggle = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        const root = document.documentElement;
+        const isDark = root.classList.toggle('dark');
+        try {
+          localStorage.setItem('sage:theme-mode', isDark ? 'dark' : 'light');
+        } catch { /* ignore */ }
+      }
+    };
+    window.addEventListener('keydown', onThemeToggle);
+    return () => window.removeEventListener('keydown', onThemeToggle);
+  }, []);
+
   return (
     <HashRouter>
       <NavHistoryProvider>
@@ -165,6 +204,8 @@ function App() {
             <Route path="scheduled" element={<ScheduledTasks />} />
             <Route path="orchestration" element={<Orchestration />} />
             <Route path="help" element={<Help />} />
+            {/* Task 6 (2026-09-15): 模型目录管理 */}
+            <Route path="model-catalog" element={<ModelCatalog />} />
           </Route>
         </Routes>
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />

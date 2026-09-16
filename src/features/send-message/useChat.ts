@@ -18,15 +18,12 @@ import {
   type LLMErrorResponse,
 } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
-import { historyBudgetFor } from '../../shared/lib/modelWindows';
+// Task 5: modelWindows imports removed — frontend no longer computes history budget.
+// Backend now resolves effective window from catalog and computes budget.
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
 import { useSettings } from '../manage-settings/useSettings';
 
-import {
-  selectSessionSlots,
-  useChatStreamStore,
-  type TaskBoardState,
-} from './chatStreamStore';
+import { selectSessionSlots, useChatStreamStore, type TaskBoardState } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
 import { notifySession, shouldNotify } from './sessionNotify';
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
@@ -69,8 +66,48 @@ interface ActiveStreamHandle {
   finish: (() => void) | null;
 }
 
-// R25-D4: 本模块已 reattach 的会话（跨 hook 实例/StrictMode 双挂载去重）
-const reattachedSids = new Set<string>();
+// A1 (parity-s4): module-level registry of live stream handles.
+// Handles used to live only in the hook ref, so a background session stream
+// could be watched but never cancelled after leaving the Chat page.
+// markStreamActive/markStreamIdle keep this map in sync; TaskCenterWidget
+// cancels any session stream via cancelSessionStream (frontend unlisten +
+// finishStream cleanup + backend interrupt, same path as MEDIUM-1).
+const activeStreamRegistry = new Map<string, ActiveStreamHandle>();
+
+/**
+ * Cancel a session stream from outside useChat (e.g. the task-center capsule).
+ * Returns true when a live frontend handle was found and torn down; when no
+ * handle exists (e.g. after a renderer reload) it still best-effort notifies
+ * the backend and returns false. Never throws.
+ */
+export async function cancelSessionStream(sid: string): Promise<boolean> {
+  const handle = activeStreamRegistry.get(sid);
+  if (!handle) {
+    try {
+      await chatApi.interrupt(undefined, sid);
+    } catch {
+      /* best-effort only */
+    }
+    return false;
+  }
+  const cancel = handle.cancel;
+  handle.cancel = null;
+  try {
+    cancel?.();
+  } catch {
+    /* ignore listener teardown errors */
+  }
+  try {
+    handle.finish?.();
+  } catch {
+    /* ignore finish errors */
+  }
+  if (activeStreamRegistry.get(sid) === handle) activeStreamRegistry.delete(sid);
+  chatApi.interrupt(handle.streamId ?? undefined, sid).catch(() => {
+    /* Interrupt failures are non-critical */
+  });
+  return true;
+}
 
 export function useChat() {
   // S3 (2026-09-06) 多会话并行: "在流中"状态从 hook 级单布尔改为 **按会话**
@@ -119,16 +156,19 @@ export function useChat() {
   //  会话 A 流式中切到 B,B 的输入框也被禁用）。Chat 页所有 isLoading 消费
   //  (ChatInput 禁用 / compact / learn / fork 守卫)都是当前会话语义,收窄后
   //  行为恰好正确;流仍在后台跑,不受影响。
-  const isLoading = currentSessionId != null && activeSids.has(currentSessionId);
+  const isLoading =
+    currentSessionId != null && (activeSids.has(currentSessionId) || streaming != null);
 
   const markStreamActive = useCallback((sid: string, handle: ActiveStreamHandle): void => {
     activeHandleRef.current.set(sid, handle);
+    activeStreamRegistry.set(sid, handle);
     activeSidsRef.current.add(sid);
     setActiveSids(new Set(activeSidsRef.current));
   }, []);
 
   const markStreamIdle = useCallback((sid: string): void => {
     activeHandleRef.current.delete(sid);
+    activeStreamRegistry.delete(sid);
     activeSidsRef.current.delete(sid);
     setActiveSids(new Set(activeSidsRef.current));
   }, []);
@@ -172,6 +212,7 @@ export function useChat() {
         memoryDisabled?: boolean;
         /** R23-D2: 聊天图片输入（base64 data URL，≤4 张/单张 5MiB） */
         images?: string[];
+        attachmentMediaIds?: string[];
       },
     ) => {
       const sid = sessionId ?? currentSessionId;
@@ -211,7 +252,7 @@ export function useChat() {
           // MEDIUM-1: 同时通知后端中断正在跑的 stream,避免 cancel 只 unlisten 前端
           // 而后端继续消耗 LLM token。fire-and-forget — interrupt 失败不影响新消息发送
           // P0-2 (2026-08-20): 把 streamId 传给后端,让 /interrupt 命中真实 agent。
-          chatApi.interrupt(prevHandle.streamId ?? undefined).catch(() => {
+          chatApi.interrupt(prevHandle.streamId ?? undefined, sid).catch(() => {
             /* Interrupt failures are non-critical */
           });
         }
@@ -276,13 +317,11 @@ export function useChat() {
         apiKey: chatEndpoint.apiKey,
         apiUrl: chatEndpoint.baseUrl,
         model: settings.modelSelections.chatModel.modelId ?? undefined,
-        // U17 (round4): L9-lite 历史预算——按模型窗口推导(窗口 × 0.75)。
-        // settings.maxContext 默认 4096 达不到后端 20000 有效性阈值而被忽略,
-        // 这里统一走推导;用户显式配置 ≥20000 时推导函数原样透传。
-        maxContext: historyBudgetFor(
-          settings.modelSelections.chatModel.modelId,
-          settings.maxContext,
-        ),
+        // Task 5 (2026-09-15): send raw maxContext + autoContext to backend.
+        // Backend resolves effective window from catalog and computes history budget.
+        // No longer sending computed historyBudgetFor() — that was the bug.
+        maxContext: settings.maxContext,
+        autoContext: settings.autoContext,
         temperature: settings.temperature,
         // 从 baseUrl 推导 provider,后端不再硬写 "custom"。
         // TODO(PR-7a+): 给 EndpointConfig 加 provider 字段,这里直接读,
@@ -432,7 +471,12 @@ export function useChat() {
         }
       };
       // S3: 注册本会话句柄（HIGH-4: interrupt 经句柄触发 finishStream 清理）
-      markStreamActive(sid, { streamId: null, cancel: null, finish: finishStream });
+      const streamHandle: ActiveStreamHandle = {
+        streamId: null,
+        cancel: null,
+        finish: finishStream,
+      };
+      markStreamActive(sid, streamHandle);
 
       try {
         // 解构 cancel/streamId 存入本会话句柄
@@ -442,6 +486,7 @@ export function useChat() {
           content,
           {
             onEvent: (evt) => {
+              if (finished) return;
               // 会话标题更新事件 (producer 在 DONE 前推送)
               // 立即刷新侧栏会话列表, 这样 DONE 到达时标题已可见
               if (evt.type === 'session_updated') {
@@ -599,12 +644,14 @@ export function useChat() {
               }
             },
             onError: (err) => {
+              if (finished) return;
               handleError(err);
               // S8: 后台会话失败提醒（前台当前会话不打扰）
               maybeNotify('failed', err instanceof Error ? err.message.slice(0, 120) : '运行失败');
               finishStream();
             },
             onDone: () => {
+              if (finished) return;
               // S8: 后台会话完成提醒
               maybeNotify('done', (lastDoneContent ?? '').slice(0, 120));
               // PM2: 计划模式 run 自然完成 → 该会话进入"待批准"状态
@@ -618,18 +665,23 @@ export function useChat() {
           config,
           officeRefs,
           opts?.images,
+          opts?.attachmentMediaIds,
         );
-        // S3: 记入本会话句柄（cancel 用于同会话安全网取消 + interrupt 用）
-        const handle = activeHandleRef.current.get(sid);
-        if (handle) {
-          handle.cancel = cancel;
-          handle.streamId = streamId;
+        // Never let a late subscription overwrite a newer run's handle.
+        if (finished || activeStreamRegistry.get(sid) !== streamHandle) {
+          cancel();
+          void chatApi.interrupt(streamId);
+        } else {
+          streamHandle.cancel = cancel;
+          streamHandle.streamId = streamId;
         }
       } catch (err: unknown) {
         // chatStream 启动失败 (validate / listen 失败等)
         // onDone/onError 不会触发,这里兜底
-        handleError(err);
-        finishStream();
+        if (!finished) {
+          handleError(err);
+          finishStream();
+        }
       }
     },
     [
@@ -652,30 +704,7 @@ export function useChat() {
   }, [currentSessionId]);
 
   const interrupt = useCallback(async () => {
-    // S3: 只中断**当前会话**的活跃流(旧实现 cancelRef 单例只能表达一条流)。
-    // 其它会话的后台流不受影响 —— 这正是多会话并行的核心语义。
-    if (currentSessionId == null) return;
-    const handle = activeHandleRef.current.get(currentSessionId);
-    if (!handle) return;
-    // PR-6: 先取消前端 listener, 再请求后端中断
-    if (handle.cancel) {
-      try {
-        handle.cancel();
-      } catch {
-        // ignore
-      }
-    }
-    try {
-      // P0-2 (2026-08-20): 带上 streamId 让后端命中真实运行的 agent。
-      await chatApi.interrupt(handle.streamId ?? undefined);
-    } catch {
-      // Interrupt failures are non-critical
-    }
-    // HIGH-4: 触发 finishStream() 清理 streaming overlay
-    // (之前 interrupt 只调了 cancel + 后端 interrupt,没有清 setStreaming(null),
-    //  导致用户看到 '🤔 思考中…' 占位符永远不消失、ActiveAgentIndicator 不消失、
-    //  isLoading 不重置、streamingToolCallsRef 持有陈旧数据)
-    handle.finish?.();
+    if (currentSessionId != null) await cancelSessionStream(currentSessionId);
   }, [currentSessionId]);
 
   const loadMessagesCallback = useCallback(
@@ -692,34 +721,28 @@ export function useChat() {
   // 转发（R35: 编排任务板经 orchestrationEvents 在重放时完整重建）。
   const reattachActiveStream = useCallback(
     async (sid: string) => {
-      if (!sid || activeSidsRef.current.has(sid)) return;
-      // 模块级守卫: React StrictMode 双挂载/重复调用时只接一次
-      // （Electron main 对重复 listen 早退,双 handler 会重复累积内容）
-      if (reattachedSids.has(sid)) return;
-      let streamId: string | null = null;
-      try {
-        streamId = await chatApi.activeStream(sid);
-      } catch {
-        return; // 查询失败静默（后端未起/演示模式）
-      }
-      if (!streamId) return;
-      reattachedSids.add(sid);
-
-      const assistantId = crypto.randomUUID();
-      addMessage({
-        id: assistantId,
-        session_id: sid,
-        role: 'assistant',
-        content: '',
-        created_at: Date.now(),
-      });
-      useChatStreamStore.getState().startStream(sid, assistantId, {
-        initialContent: '',
-      });
-      markStreamActive(sid, { streamId, cancel: null, finish: () => {} });
-
+      // Reserve synchronously, BEFORE activeStream's first await. The same map
+      // also owns regular sends across hook remounts / StrictMode instances.
+      if (!sid || activeStreamRegistry.has(sid)) return;
+      let assistantId: string | null = null;
+      let finished = false;
+      let acc = '';
+      let accReasoning = '';
+      const handle: ActiveStreamHandle = { streamId: null, cancel: null, finish: null };
       const finishReattach = (finalContent: string | null, errText?: string) => {
-        reattachedSids.delete(sid);
+        if (finished) return;
+        finished = true;
+        try {
+          handle.cancel?.();
+        } catch {
+          // Listener teardown must not prevent clearing session state.
+        }
+        handle.cancel = null;
+        if (activeStreamRegistry.get(sid) !== handle) return;
+        if (assistantId === null) {
+          markStreamIdle(sid);
+          return;
+        }
         if (finalContent !== null) {
           updateMessage(assistantId, { content: finalContent });
         } else if (errText) {
@@ -735,28 +758,48 @@ export function useChat() {
         void useStore.getState().loadSessions();
       };
 
-      let acc = '';
-      let accReasoning = '';
+      handle.finish = () => finishReattach(acc || null);
+      // A lookup reservation is not a running reply: do not disable idle chat actions.
+      activeStreamRegistry.set(sid, handle);
       try {
-        await chatApi.listenStream(streamId, {
+        const streamId = await chatApi.activeStream(sid);
+        if (finished || activeStreamRegistry.get(sid) !== handle) return;
+        if (!streamId) {
+          finishReattach(null);
+          return;
+        }
+        handle.streamId = streamId;
+        markStreamActive(sid, handle);
+        const messageId = crypto.randomUUID();
+        assistantId = messageId;
+        addMessage({
+          id: messageId,
+          session_id: sid,
+          role: 'assistant',
+          content: '',
+          created_at: Date.now(),
+        });
+        useChatStreamStore.getState().startStream(sid, messageId, { initialContent: '' });
+        const { cancel } = await chatApi.listenStream(streamId, {
           onEvent: (evt) => {
+            if (finished) return;
             if (evt.type === 'session_updated') {
               void useStore.getState().loadSessions();
               return;
             }
             if (evt.state === 'content_delta' && evt.content) {
               acc += evt.content;
-              useChatStreamStore.getState().appendContent(sid, assistantId, acc);
+              useChatStreamStore.getState().replaceContent(sid, messageId, acc);
               return;
             }
-            if (
-              (evt.state === 'reasoning_delta' || evt.state === 'reasoning') &&
-              evt.reasoning
-            ) {
+            if ((evt.state === 'reasoning_delta' || evt.state === 'reasoning') && evt.reasoning) {
               accReasoning += evt.reasoning;
-              useChatStreamStore
-                .getState()
-                .appendReasoning(sid, assistantId, accReasoning);
+              useChatStreamStore.getState().replaceReasoning(sid, messageId, accReasoning);
+              return;
+            }
+            if (evt.state === 'reasoning_final') {
+              accReasoning = evt.reasoning ?? accReasoning;
+              useChatStreamStore.getState().replaceReasoning(sid, messageId, accReasoning);
               return;
             }
             if (evt.state === 'permission_request' && evt.permission_request) {
@@ -782,13 +825,15 @@ export function useChat() {
               return;
             }
             // 其余事件（工具 acting/observing 等）降级为 streaming meta 文案
-            useChatStreamStore.getState().setStreamingMeta(sid, assistantId, {
+            useChatStreamStore.getState().setStreamingMeta(sid, messageId, {
               state: evt.state,
             });
           },
           onError: (err) => finishReattach(null, err.message),
           onDone: () => finishReattach(acc || null),
         });
+        if (finished || activeStreamRegistry.get(sid) !== handle) cancel();
+        else handle.cancel = cancel;
       } catch {
         finishReattach(null, '重新接上流失败');
       }
@@ -848,6 +893,7 @@ export function useChat() {
             apiUrl: chatEndpoint?.baseUrl,
             model: settings.modelSelections.chatModel.modelId ?? undefined,
             maxContext: settings.maxContext,
+            autoContext: settings.autoContext,
             temperature: settings.temperature,
             provider: chatEndpoint?.baseUrl
               ? (() => {

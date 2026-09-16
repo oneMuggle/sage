@@ -4,8 +4,12 @@ import { shell, clipboard } from 'electron';
 import { readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LogLevel } from '../../src/shared/log/levels';
+import {
+  LOG_LEVELS,
+  DEFAULT_LOG_LEVEL,
+  RATE_LIMIT_WARN_INTERVAL_MS,
+} from '../../src/shared/log/levels';
 import { logger, setLogLevel } from '../logger';
-import { RATE_LIMIT_WARN_INTERVAL_MS } from '../../src/shared/log/levels';
 import { cleanupOlderThan } from '../logRotate';
 import { getLogDir } from '../logPaths';
 
@@ -107,5 +111,17 @@ export function registerLogIpc(
     setLogLevel(payload.level);
     logger.info('main: log level changed', { level: payload.level });
     return { ok: true };
+  });
+
+  /**
+   * 返回当前生效的日志级别。事实来源是 process.env.SAGE_LOG_LEVEL —
+   * 用户在 Diagnostics 卡片切换时已同步回写。无效值回退到 DEFAULT_LOG_LEVEL,
+   * 保证渲染端拿到的是 LogLevel 字面量。
+   */
+  ipcMain.handle('sage:log:get-level', async (evt) => {
+    if (!isTrustedSender(evt.sender)) return DEFAULT_LOG_LEVEL;
+    const env = process.env.SAGE_LOG_LEVEL;
+    if (env && env in LOG_LEVELS) return env as LogLevel;
+    return DEFAULT_LOG_LEVEL;
   });
 }
