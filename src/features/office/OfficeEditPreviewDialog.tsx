@@ -75,7 +75,13 @@ export type WordEditKind =
   | 'add_comment'
   | 'set_paragraph_style'
   | 'delete_comment';
-export type ExcelEditKind = 'set_cells' | 'append_rows' | 'add_chart';
+export type ExcelEditKind =
+  | 'set_cells'
+  | 'append_rows'
+  | 'add_chart'
+  | 'set_column_width'
+  | 'set_fill'
+  | 'freeze_panes';
 export type PptEditKind =
   | 'set_slide_title'
   | 'set_slide_bullets'
@@ -128,6 +134,14 @@ interface ComposeState {
   chartMaxCol: string;
   chartMaxRow: string;
   chartTitle: string;
+  // excel set_column_width
+  colWidthColumn: string;
+  colWidthValue: string;
+  // excel set_fill
+  fillCells: string;
+  fillColor: string;
+  // excel freeze_panes
+  freezeCell: string;
   // ppt set_slide_title
   slideNumber: string;
   slideTitle: string;
@@ -174,6 +188,11 @@ const INITIAL_COMPOSE: ComposeState = {
   chartMaxCol: '',
   chartMaxRow: '',
   chartTitle: '',
+  colWidthColumn: '',
+  colWidthValue: '',
+  fillCells: '',
+  fillColor: '',
+  freezeCell: '',
   slideNumber: '1',
   slideTitle: '',
   bulletsText: '',
@@ -276,6 +295,23 @@ export function buildUpdateOps(
       );
       if (!sheet || !rows.length) return null;
       return [{ op: 'append_rows', sheet, rows }];
+    }
+    if (state.excelKind === 'set_column_width') {
+      const column = state.colWidthColumn.trim().toUpperCase();
+      const width = Number(state.colWidthValue);
+      if (!sheet || !column || !Number.isFinite(width) || width <= 0) return null;
+      return [{ op: 'set_column_width', sheet, column, width }];
+    }
+    if (state.excelKind === 'set_fill') {
+      const cells = state.fillCells.trim().toUpperCase();
+      const color = state.fillColor.trim().replace(/^#/, '');
+      if (!sheet || !cells || !/^[0-9A-F]{6}$/.test(color)) return null;
+      return [{ op: 'set_fill', sheet, cells, color }];
+    }
+    if (state.excelKind === 'freeze_panes') {
+      const cell = state.freezeCell.trim().toUpperCase();
+      if (!sheet || !cell) return null;
+      return [{ op: 'freeze_panes', sheet, cell }];
     }
     if (state.excelKind === 'add_chart') {
       const anchor = state.chartAnchor.trim().toUpperCase();
@@ -790,6 +826,9 @@ export function OfficeEditPreviewDialog({
                     <option value="set_cells">{t('office.edit.kindSetCells')}</option>
                     <option value="append_rows">{t('office.edit.kindAppendRows')}</option>
                     <option value="add_chart">{t('office.edit.kindAddChart')}</option>
+                    <option value="set_column_width">{t('office.edit.kindSetColumnWidth')}</option>
+                    <option value="set_fill">{t('office.edit.kindSetFill')}</option>
+                    <option value="freeze_panes">{t('office.edit.kindFreezePanes')}</option>
                   </select>
                 </div>
                 <div>
@@ -847,6 +886,82 @@ export function OfficeEditPreviewDialog({
                         data-testid="office-edit-value"
                       />
                     </div>
+                  </div>
+                )}
+                {compose.excelKind === 'set_column_width' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.colWidthColumn')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.colWidthColumn}
+                        onChange={(e) => setField('colWidthColumn')(e.target.value)}
+                        placeholder="A"
+                        className={inputClass}
+                        data-testid="office-edit-col-width-column"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.colWidthValue')}
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={0.5}
+                        value={compose.colWidthValue}
+                        onChange={(e) => setField('colWidthValue')(e.target.value)}
+                        className={inputClass}
+                        data-testid="office-edit-col-width-value"
+                      />
+                    </div>
+                  </div>
+                )}
+                {compose.excelKind === 'set_fill' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.fillCells')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.fillCells}
+                        onChange={(e) => setField('fillCells')(e.target.value)}
+                        placeholder="B2:B10"
+                        className={inputClass}
+                        data-testid="office-edit-fill-cells"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.fillColor')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.fillColor}
+                        onChange={(e) => setField('fillColor')(e.target.value)}
+                        placeholder="FFD966"
+                        className={inputClass}
+                        data-testid="office-edit-fill-color"
+                      />
+                    </div>
+                  </div>
+                )}
+                {compose.excelKind === 'freeze_panes' && (
+                  <div>
+                    <label className="block text-xs text-muted mb-1">
+                      {t('office.edit.freezeCell')}
+                    </label>
+                    <input
+                      type="text"
+                      value={compose.freezeCell}
+                      onChange={(e) => setField('freezeCell')(e.target.value)}
+                      placeholder="B2"
+                      className={inputClass}
+                      data-testid="office-edit-freeze-cell"
+                    />
                   </div>
                 )}
                 {compose.excelKind === 'add_chart' && (
