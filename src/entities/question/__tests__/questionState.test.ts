@@ -63,13 +63,15 @@ describe('useQuestionState', () => {
     expect(useQuestionState.getState().currentQuestion).toBeNull();
   });
 
-  it('updates immutably: setFromEvent produces a new object per session slot', () => {
-    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'a' }));
+  it('same-session replace yields a new object; cross-session keeps displayed', () => {
+    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'a' }), 'sess-A');
     const first = useQuestionState.getState().currentQuestion;
-    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'b' }));
-    expect(useQuestionState.getState().currentQuestion).toBe(first);
-    const second = useQuestionState.getState().pendingBySession['__global__'];
-    expect(second.request_id).toBe('b');
-    expect(second).not.toBe(first);
+    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'b' }), 'sess-A');
+    const replaced = useQuestionState.getState().currentQuestion;
+    expect(replaced).not.toBe(first);
+    expect(replaced?.request_id).toBe('b');
+    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'c' }), 'sess-B');
+    expect(useQuestionState.getState().currentQuestion).toBe(replaced);
+    expect(useQuestionState.getState().pendingBySession['sess-B'].request_id).toBe('c');
   });
 });

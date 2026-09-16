@@ -57,7 +57,15 @@ export const usePermissionState = create<PermissionState>((set) => ({
       // 任务静默失败)。对话框仍展示一条; 已展示的不被后来者抢走。
       const key = sessionId ?? '__global__';
       const pending = { ...prev.pendingBySession, [key]: request };
-      const currentRequest = prev.currentRequest ?? pickDisplayedPermission(pending);
+      const displayed = prev.currentRequest;
+      // 同会话的后续请求 = 替换已展示的(保留旧语义, 对话框随之重置);
+      // 异会话请求不抢夺已展示的 —— 这是 2026-09 修复的核心:
+      // A 卡审批时 B 的请求此前会把 A 顶掉且永不恢复。
+      const currentRequest =
+        displayed == null ||
+        (displayed.session_id ?? null) === (sessionId ?? null)
+          ? request
+          : displayed;
       return { pendingBySession: pending, currentRequest };
     }),
   resolve: (sessionId) =>
