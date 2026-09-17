@@ -950,12 +950,39 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const body: Record<string, unknown> = {};
       if (a.enabled !== undefined) body.enabled = a.enabled;
       if (a.timeout_seconds !== undefined) body.timeout_seconds = a.timeout_seconds;
+      // R53: 工具禁用列表（全量替换）
+      if (a.disabled_tools !== undefined) body.disabled_tools = a.disabled_tools;
       return body;
     },
+  },
+  // r53-B: per-tool 开关面板的只读清单（工具名 + 截断描述 + 当前禁用项）
+  mcp_server_tools: {
+    method: 'GET',
+    path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}/tools`,
   },
   mcp_server_delete: {
     method: 'DELETE',
     path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}`,
+  },
+  // r59: 附件向量索引三端点透传（backend/api/chat_attachment_routes.py r58）。
+  // embed 配置 / query_vector 由调用方构造，body 原样透传（键已 snake）。
+  attachment_rag_index: {
+    method: 'POST',
+    path: (a) => `/api/v1/chat/attachments/${encodeURIComponent(String(a.mediaId))}/index`,
+    body: (a) => {
+      const body: Record<string, unknown> = { embed: a.embed };
+      if (a.target_chunk_size !== undefined) body.target_chunk_size = a.target_chunk_size;
+      return body;
+    },
+  },
+  attachment_rag_search: {
+    method: 'POST',
+    path: () => '/api/v1/chat/attachments/search',
+    rawBody: true,
+  },
+  attachment_rag_delete_index: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/chat/attachments/${encodeURIComponent(String(a.mediaId))}/index`,
   },
   // M6 生态扩展: 用量/成本面板 (backend/services/usage_tracker.py 内存态)
   // L8 PR-A (2026-09-09): 支持 range=today|total 查询参数, 默认 today。

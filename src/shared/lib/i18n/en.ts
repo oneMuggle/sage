@@ -402,6 +402,18 @@ export const en: Record<TranslationKey, string> = {
   'sider.project.save_answer_not_found': 'Answer message not found',
   'sider.project.save_answer_failed': 'Save failed: {message}',
 
+  // allowed_paths extension (P1, 2026-09-17)
+  'sider.project.allowed_paths_label': 'Extra allowed paths',
+  'sider.project.allowed_paths_empty': 'No extra paths configured',
+  'sider.project.allowed_paths_hint': 'Gitignore-like syntax: ~/Documents/** , /tmp/*',
+  'sider.project.allowed_paths_add_placeholder': 'Enter a path rule, e.g. ~/Documents/**',
+  'sider.project.allowed_paths_add': 'Add',
+  'sider.project.allowed_paths_save': 'Save',
+  'sider.project.allowed_paths_cancel': 'Cancel',
+  'sider.project.allowed_paths_saved': 'Saved {count} rule(s)',
+  'sider.project.allowed_paths_failed': 'Save failed: {message}',
+  'sider.project.allowed_paths_remove': 'Remove rule',
+
   // ─── Titlebar ─────────────────────
   'titlebar.minimize': 'Minimize',
   'titlebar.maximize': 'Maximize',
