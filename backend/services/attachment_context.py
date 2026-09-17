@@ -59,29 +59,48 @@ async def build_attachment_context(
     try:
         if len(full_text) <= MAX_TEXT_INJECT_CHARS:
             return full_text[:MAX_TEXT_INJECT_CHARS]
-
         if rag is None or query_embedder is None:
             return full_text[:MAX_TEXT_INJECT_CHARS]
 
-        try:
-            vectors = await query_embedder(
-                query[:_QUERY_EMBED_CHARS],
-                dict(rag.embed),
-            )
-            if not vectors:
-                return full_text[:MAX_TEXT_INJECT_CHARS]
-            hits = search_attachments(
-                query_vector=vectors[0],
-                storage_path=store_path,
-                media_ids=[media_id],
-                limit=rag.top_k,
-            )
-        except Exception as rag_exc:  # noqa: BLE001 — 检索失败回退截断注入
-            logger.debug("附件检索失败，回退截断注入 %s: %s", media_id, rag_exc)
-            return full_text[:MAX_TEXT_INJECT_CHARS]
-        if not hits:
-            return full_text[:MAX_TEXT_INJECT_CHARS]
+        rag_text = await _rag_injection(
+            media_id,
+            full_text=full_text,
+            query=query,
+            rag=rag,
+            store_path=store_path,
+            query_embedder=query_embedder,
+        )
+        if rag_text is not None:
+            return rag_text
+        # 检索不可用（无命中/嵌入失败/无索引）→ 回退现状截断注入
+        return full_text[:MAX_TEXT_INJECT_CHARS]
+    except Exception as exc:  # noqa: BLE001 — fail-safe（R37 口径）
+        logger.debug("附件上下文构建失败（跳过注入）: %s: %s", media_id, exc)
+        return None
 
+
+async def _rag_injection(
+    media_id: str,
+    *,
+    full_text: str,
+    query: str,
+    rag: AttachmentRagOptions,
+    store_path: Any,
+    query_embedder: Callable[[str, Dict[str, str]], Awaitable[List[List[float]]]],
+) -> Optional[str]:
+    """超长文档的检索注入块；不可用（失败/无命中）返回 None。"""
+    try:
+        vectors = await query_embedder(query[:_QUERY_EMBED_CHARS], dict(rag.embed))
+        if not vectors:
+            return None
+        hits = search_attachments(
+            query_vector=vectors[0],
+            storage_path=store_path,
+            media_ids=[media_id],
+            limit=rag.top_k,
+        )
+        if not hits:
+            return None
         parts: List[str] = [
             "[文档超长，已按相关度检索；开头 "
             f"{_HEAD_CHARS} 字符 + top {len(hits)} 片段]",
@@ -91,20 +110,19 @@ async def build_attachment_context(
             parts.append(
                 f"[chunk {hit.chunk_index + 1} 相关度 {hit.score:.2f}]\n{hit.content}"
             )
-        head = (
-            f"<attached_document id={media_id!r} mode=rag>\n"
-            + "\n\n".join(parts)
-            + "\n</attached_document>"
-        )
         logger.info(
             "附件检索注入: %s 超限全文 %d 字符 → top %d chunk",
             media_id,
             len(full_text),
             len(hits),
         )
-        return head
-    except Exception as exc:  # noqa: BLE001 — fail-safe（R37 口径）
-        logger.debug("附件上下文构建失败（跳过注入）: %s: %s", media_id, exc)
+        return (
+            f"<attached_document id={media_id!r} mode=rag>\n"
+            + "\n\n".join(parts)
+            + "\n</attached_document>"
+        )
+    except Exception as rag_exc:  # noqa: BLE001 — 检索失败回退截断注入
+        logger.debug("附件检索失败，回退截断注入 %s: %s", media_id, rag_exc)
         return None
 
 
