@@ -883,6 +883,7 @@ export const en: Record<TranslationKey, string> = {
   'office.caps.ocr': 'OCR',
   'office.caps.install.ocr': 'Install pytesseract + tesseract (with chi_sim) for scanned PDFs',
   'office.edit.kindAddImage': 'Insert image',
+  'office.edit.kindAddPicture': 'Insert image',
   'office.edit.imagePath': 'Image path (relative to workspace)',
   'office.edit.imagePathPlaceholder': 'e.g. images/logo.png',
   'office.edit.imageWidth': 'Width (inches, optional)',

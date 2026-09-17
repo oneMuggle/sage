@@ -864,6 +864,7 @@ export const zh = {
   'office.caps.ocr': 'OCR',
   'office.caps.install.ocr': '安装 pytesseract + tesseract（含 chi_sim）后可用于扫描件',
   'office.edit.kindAddImage': '插入图片',
+  'office.edit.kindAddPicture': '插入图片',
   'office.edit.imagePath': '图片路径（相对工作区）',
   'office.edit.imagePathPlaceholder': '如 images/logo.png',
   'office.edit.imageWidth': '宽（英寸，可选）',
