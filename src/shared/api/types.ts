@@ -1421,6 +1421,16 @@ export interface WordPageSetupSpec {
   margins_cm?: WordPageMarginsSpec;
 }
 
+/**
+ * Round 26/37：分节横排（宽表/财务页场景）。
+ * backend/office/models.py WordSectionBreakSpec 对应。
+ */
+export interface WordSectionBreakSpec {
+  /** 该 0-based 段落下标起进入新节 */
+  start_paragraph: number;
+  page_setup: WordPageSetupSpec;
+}
+
 export interface WordBodyStyleSpec {
   font_size_pt?: number;
   line_spacing?: number;
@@ -1484,6 +1494,8 @@ export interface WordFormatSpec {
   first_page_footer?: WordHeaderFooterSpec;
   // Round 34：奇偶页不同页眉页脚（书籍排版场景）
   odd_even_pages?: boolean;
+  // Round 26/37：分节横排（宽表/财务页场景）
+  section_breaks?: WordSectionBreakSpec[];
   even_page_header?: WordHeaderFooterSpec;
   even_page_footer?: WordHeaderFooterSpec;
 }
