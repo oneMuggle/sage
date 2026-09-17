@@ -3016,6 +3016,48 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"[REQ {request_id}] 历史消息加载失败(降级为无历史): {hist_err}"
                 )
                 history_rows = []
+            # Task 10 (2026-09-17): 自动话题检测 — 用户未显式 context_reset
+            # 且 auto_topic_detection 启用时，扫描最近 N 条 assistant 文本；
+            # 正则层命中或向量层平均相似度 < 阈值即视作话题切换，自动
+            # advance_segment 并推 topic_shifted SSE。设置缺失或 "true" 视为启用。
+            try:
+                from backend.data.settings_repo import SettingsRepository as _SR_T10
+                _auto_detect_raw = _SR_T10().get("auto_topic_detection")
+            except Exception:
+                _auto_detect_raw = None
+            _auto_detect_on = _auto_detect_raw is None or _auto_detect_raw.strip().lower() == "true"
+            if not data.context_reset and _auto_detect_on:
+                recent_assistant = [
+                    r.content for r in (history_rows or [])[-6:]
+                    if getattr(r, "role", None) == "assistant"
+                ]
+                embed_fn = None
+                try:
+                    from backend.memory.embedder_factory import create_embedder
+                    _embedder = create_embedder()
+                    embed_fn = lambda t: _embedder.encode(t)
+                except Exception:
+                    pass
+
+                from backend.chat.topic_detection import detect_topic_shift
+                is_new, _shift_reason = detect_topic_shift(
+                    data.message, recent_assistant, embed_fn=embed_fn
+                )
+                if is_new:
+                    new_seg = await asyncio.to_thread(repo.advance_segment, data.session_id)
+                    history_rows = await asyncio.to_thread(
+                        repo.get_active_segment, data.session_id
+                    )
+                    try:
+                        await entry.queue.put(
+                            {
+                                "state": "topic_shifted",
+                                "segment_id": new_seg,
+                                "reason": _shift_reason,
+                            }
+                        )
+                    except Exception:
+                        logger.warning("failed to emit topic_shifted event")
             # Task 5 (2026-09-15): catalog-based context budget.
             # Resolve effective window from model catalog, then compute budget
             # as window - reserve. Old >=20000 gate removed.
