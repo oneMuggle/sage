@@ -142,16 +142,31 @@ export function Chat() {
   // 由 TopicShiftBanner 在用户点"恢复完整上下文"后调用,组件已先调
   // sessionApi.retreatSegment 删 separator,这里再 loadMessages 重拉并清
   // 掉 store 里的 shiftInfo(防止 banner 重渲染)。
-  const shiftInfo = useChatStreamStore((s) =>
-    currentSessionId != null ? s.sessions[currentSessionId]?.shiftInfo ?? null : null,
+  //
+  // Fix round 1 (2026-09-17): 后台会话触发的 topic_shifted 不会被 banner
+  // 消费,如果一直留在 store 里,用户后续切回该会话就会看到陈旧横幅。
+  // 这里读出时检查 createdAt:超过 30s(> 10s 自动消失时长,留足边界)
+  // 视为过期,清掉 store 并返回 null。
+  const SHIFT_INFO_TTL_MS = 30_000;
+  const rawShiftInfo = useChatStreamStore((s) =>
+    currentSessionId != null ? (s.sessions[currentSessionId]?.shiftInfo ?? null) : null,
   );
+  const shiftInfo = useMemo(() => {
+    if (!rawShiftInfo) return null;
+    if (!currentSessionId) return null;
+    if (Date.now() - rawShiftInfo.createdAt > SHIFT_INFO_TTL_MS) {
+      // 过期:清掉 store,避免下次重渲染再次进入此分支
+      useChatStreamStore.getState().setShiftInfo(currentSessionId, null);
+      return null;
+    }
+    return rawShiftInfo;
+  }, [rawShiftInfo, currentSessionId]);
   const handleRetreat = useCallback(async () => {
     if (!currentSessionId) return;
     useChatStreamStore.getState().setShiftInfo(currentSessionId, null);
     await loadMessages(currentSessionId);
   }, [currentSessionId, loadMessages]);
-  const showTopicShiftBanner =
-    currentSessionId != null && shiftInfo != null && !isLoading;
+  const showTopicShiftBanner = currentSessionId != null && shiftInfo != null && !isLoading;
 
   const { t } = useI18n();
   const isTempChat = currentSessionId != null && tempChatSessions.has(currentSessionId);

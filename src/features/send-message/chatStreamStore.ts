@@ -127,8 +127,11 @@ export interface SessionStreamSlots {
    * Task 11 (2026-09-17): topic_shifted 事件 — 收到自动话题切换通知时
    * 写入,前端 TopicShiftBanner 展示"恢复完整上下文"入口;用户点恢复
    * 或点关闭时调用 clearShiftInfo 清掉;切会话 / startStream 也会清。
+   *
+   * created_at 用于自动过期:后台会话的 shiftInfo 不会被 banner 消费,
+   * 30 秒后读取时自动视为 null,避免用户切回时会话看到陈旧横幅。
    */
-  shiftInfo: { segmentId: number; reason: string } | null;
+  shiftInfo: { segmentId: number; reason: string; createdAt: number } | null;
 }
 
 const EMPTY_SLOTS: SessionStreamSlots = {
@@ -211,7 +214,10 @@ interface ChatStreamStoreState {
 
   // —— Task 11 (2026-09-17): topic_shifted 横幅态 ——
   /** 收到 topic_shifted 事件时写入;前端 TopicShiftBanner 立刻可见。 */
-  setShiftInfo: (sessionId: string, info: { segmentId: number; reason: string } | null) => void;
+  setShiftInfo: (
+    sessionId: string,
+    info: { segmentId: number; reason: string; createdAt: number } | null,
+  ) => void;
 
   // —— 会话删除时清理槽位，防 Map 泄漏 / 迟到事件复活死会话 ——
   clearSession: (sessionId: string) => void;

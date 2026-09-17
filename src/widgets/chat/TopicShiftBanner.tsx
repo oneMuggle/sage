@@ -43,8 +43,13 @@ export function TopicShiftBanner({ sessionId, reason, onRetreat }: TopicShiftBan
     if (pending) return;
     setPending(true);
     try {
-      await sessionApi.retreatSegment(sessionId);
-      onRetreat();
+      const result = await sessionApi.retreatSegment(sessionId);
+      // Fix round 1 (2026-09-17): 后端返回 ok=false 表示没有 separator 可删
+      // (例如用户已手动合并过),此时直接关闭横幅,不再触发 loadMessages
+      // —— 那是一次无意义的网络往返。
+      if (result.ok) {
+        onRetreat();
+      }
     } catch {
       // 失败时保留横幅让用户重试;不在此处弹出 toast,避免打断主流程
     } finally {

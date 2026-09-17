@@ -20,10 +20,7 @@ import type {
 import { bumpArtifactEvent } from '../artifacts/artifactEventsStore';
 import { maybeAutoOpenArtifactPanel } from '../right-panel/rightPanelStore';
 
-import {
-  mergeLiveEvent,
-  useChatStreamStore,
-} from './chatStreamStore';
+import { mergeLiveEvent, useChatStreamStore } from './chatStreamStore';
 
 export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): boolean {
   const board = useChatStreamStore.getState();
@@ -168,7 +165,7 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
   if (evt.state === 'topic_shifted') {
     const segId = typeof evt.segment_id === 'number' ? evt.segment_id : 0;
     const reason = typeof evt.reason === 'string' ? evt.reason : '';
-    board.setShiftInfo(sid, { segmentId: segId, reason });
+    board.setShiftInfo(sid, { segmentId: segId, reason, createdAt: Date.now() });
     return true;
   }
 
