@@ -536,10 +536,23 @@ function webAccessApiUrl(path: string): string {
   return path;
 }
 
+/** 与后端 GET /api/v1/diagnostic/browser 返回形态一致（Round 14） */
+interface BrowserHealth {
+  browserFound: boolean;
+  executable: string;
+  chromeMajor: number | null;
+  uaDeclaredMajor: number | null;
+  warning: string;
+}
+
 function CredentialsSection() {
   const { t } = useI18n();
   const [creds, setCreds] = useState<CredentialRecord[] | null>(null);
   const [config, setConfig] = useState<WebAccessConfig>(DEFAULT_WEB_ACCESS_CONFIG);
+  const [browser, setBrowser] = useState<BrowserHealth | null>(null);
+  const [headerDomain, setHeaderDomain] = useState('');
+  const [headerName, setHeaderName] = useState('');
+  const [headerValue, setHeaderValue] = useState('');
 
   const reload = (): void => {
     fetch(webAccessApiUrl('/api/v1/web-access/credentials'))
@@ -550,6 +563,10 @@ function CredentialsSection() {
 
   useEffect(() => {
     reload();
+    fetch(webAccessApiUrl('/api/v1/diagnostic/browser'))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: BrowserHealth | null) => setBrowser(data))
+      .catch(() => setBrowser(null));
     void settingsClient.getPreference('web_access_config').then((raw) => {
       if (!raw) return;
       try {
@@ -584,6 +601,30 @@ function CredentialsSection() {
       .catch(() => undefined);
   };
 
+  const addHeaderCred = (): void => {
+    if (!headerDomain.trim() || !headerName.trim() || !headerValue.trim()) return;
+    void fetch(webAccessApiUrl('/api/v1/web-access/credentials/header'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        domain: headerDomain.trim(),
+        header_name: headerName.trim(),
+        value: headerValue,
+      }),
+    })
+      .then((r) => {
+        if (r.ok) {
+          setHeaderDomain('');
+          setHeaderName('');
+          setHeaderValue('');
+          reload();
+        } else {
+          window.alert(t('settings.network.creds.add_header.invalid'));
+        }
+      })
+      .catch(() => undefined);
+  };
+
   return (
     <SettingRow label={t('settings.network.creds')} desc={t('settings.network.creds.hint')}>
       <div className="flex flex-col gap-2 w-full" data-testid="web-credentials">
@@ -615,6 +656,52 @@ function CredentialsSection() {
             </span>
           </span>
         </label>
+        {browser && (
+          <div className="text-xs text-text-secondary" data-testid="browser-health">
+            {browser.browserFound
+              ? `${t('settings.network.creds.browser')}: Chrome ${browser.chromeMajor ?? '?'}`
+              : t('settings.network.creds.browser.missing')}
+            {browser.warning && <span className="block text-error">{browser.warning}</span>}
+          </div>
+        )}
+        <div className="flex flex-col gap-1" data-testid="header-cred-form">
+          <div className="text-xs">{t('settings.network.creds.add_header')}</div>
+          <div className="flex gap-1">
+            <input
+              data-testid="header-domain-input"
+              aria-label={t('settings.network.creds.add_header.domain')}
+              value={headerDomain}
+              onChange={(e) => setHeaderDomain(e.target.value)}
+              placeholder={t('settings.network.creds.add_header.domain')}
+              className="flex-1 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+            <input
+              data-testid="header-name-input"
+              aria-label={t('settings.network.creds.add_header.name')}
+              value={headerName}
+              onChange={(e) => setHeaderName(e.target.value)}
+              placeholder={t('settings.network.creds.add_header.name')}
+              className="flex-1 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+            <input
+              data-testid="header-value-input"
+              aria-label={t('settings.network.creds.add_header.value')}
+              type="password"
+              value={headerValue}
+              onChange={(e) => setHeaderValue(e.target.value)}
+              placeholder={t('settings.network.creds.add_header.value')}
+              className="flex-1 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+            <button
+              type="button"
+              data-testid="header-save-btn"
+              className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary"
+              onClick={addHeaderCred}
+            >
+              {t('settings.network.creds.add_header.save')}
+            </button>
+          </div>
+        </div>
         {creds !== null && creds.length === 0 && (
           <div className="text-xs text-text-secondary" data-testid="creds-empty">
             {t('settings.network.creds.empty')}
