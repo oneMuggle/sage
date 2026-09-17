@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
-import { useSettings } from '../../../features/manage-settings/useSettings';
 // TaskStatusValue 定义在 shared/api（Task 7 已 re-export），不从 useChat import
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue } from '../../../shared/api';
@@ -11,6 +10,14 @@ import { orchRunClient } from '../../../shared/api/orchRunClient';
 import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
 
 import { SubagentDetailDrawer } from './SubagentDetailDrawer';
+
+// BU13 (round24): 徽章数值格式化 —— token ≥1k 显 k（1 位小数去尾 0），
+// 时长 <1s 显 ms，其余显秒（1 位小数）。纯展示，不做四舍五入承诺。
+const formatTokens = (tokens: number): string =>
+  tokens >= 1000 ? `${(tokens / 1000).toFixed(1).replace(/\.0$/, '')}k tokens` : `${tokens} tokens`;
+
+const formatDuration = (ms: number): string =>
+  ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1).replace(/\.0$/, '')}s`;
 
 const STATUS_ICON: Record<TaskStatusValue, string> = {
   queued: '○',
@@ -45,9 +52,6 @@ export function TaskTreeSection({
   onCancel,
   onRerunFailed,
 }: TaskTreeSectionProps) {
-  // BU9 (round20): run 级 token 预算 —— >0 时进度行展示消耗可见性。
-  // orch?.runTokenBudget 防御旧 mock/旧持久化数据缺 orch 键的场景。
-  const runTokenBudget = useSettings().settings.orch?.runTokenBudget ?? 0;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectTask = useRunControlStore((s) => s.selectTask);
   // B3 (2026-09-09): 单任务跳过 in-flight 集合 —— 防重复点击；终态由
@@ -118,11 +122,12 @@ export function TaskTreeSection({
   // 进度可视化 L2 修正 (2026-08-12): 全部完成时不再显示"等待结果中"，
   // 避免与下方 "完成 6/6" 自相矛盾。
   const allDone = doneCount + failed + cancelled === total && inFlight === 0;
-  // BU9 (round20): 终态任务携带的 run 窗口累计用量最大值（事件单调递增，
-  // 取最大即最新）—— 预算开启（>0）时进度行展示消耗。
-  const usedTokens = Math.max(
+  // BU13 (round24): 终态任务的 per-task 消耗求和（round24 起 used_tokens 语义
+  // 为本任务归因值，各任务互不重叠 → 求和即 run 总消耗；BU9 时代的累计语义
+  // 取 max 已不适用）。预算关闭也可见，仅在有消耗时展示。
+  const usedTokens = Object.values(board.statuses).reduce(
+    (sum, st) => sum + (st.used_tokens ?? 0),
     0,
-    ...Object.values(board.statuses).map((st) => st.used_tokens ?? 0),
   );
 
   return (
@@ -136,8 +141,8 @@ export function TaskTreeSection({
           {inFlight > 0 && ` · ${inFlight} 个进行中`}
           {failed > 0 && <span className="text-error ml-1">({failed} 失败)</span>}
           {cancelled > 0 && <span className="text-text-secondary ml-1">({cancelled} 已取消)</span>}
-          {/* BU9 (round20): 预算开启时展示累计消耗 —— 数据源终态 task_status.used_tokens */}
-          {runTokenBudget > 0 && usedTokens > 0 && (
+          {/* BU13 (round24): per-task 消耗求和展示 —— 预算关闭也可见 */}
+          {usedTokens > 0 && (
             <span className="ml-1">（已消耗 {usedTokens.toLocaleString()} tokens）</span>
           )}
         </div>
@@ -266,6 +271,18 @@ export function TaskTreeSection({
                   已重试 ×{st?.retry_count}
                 </span>
               )}
+              {/* BU13 (round24): 终态任务消耗/耗时徽章 —— per-task 归因值，
+                  任一存在即展示（对标 Claude Code per-task token + 耗时）。 */}
+              {(st?.used_tokens ?? 0) > 0 || (st?.duration_ms ?? 0) > 0 ? (
+                <span
+                  data-testid={`task-tree-usage-${item.task_id}`}
+                  className="text-text-tertiary text-[10px] shrink-0"
+                >
+                  {(st?.used_tokens ?? 0) > 0 && formatTokens(st!.used_tokens!)}
+                  {(st?.used_tokens ?? 0) > 0 && (st?.duration_ms ?? 0) > 0 && ' · '}
+                  {(st?.duration_ms ?? 0) > 0 && formatDuration(st!.duration_ms!)}
+                </span>
+              ) : null}
               {/* RD13+ (round15): 重派徽章 —— retry_of 重派的任务可追溯 */}
               {st?.retry_of && (
                 <span
