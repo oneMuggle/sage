@@ -32,7 +32,7 @@ RECORD_CAP = 1000
 current_task_id: ContextVar = ContextVar("current_task_id", default=None)
 
 
-def set_current_task_id(task_id: str | None) -> None:
+def set_current_task_id(task_id: Optional[str]) -> None:
     """设置 / 清除当前任务归因 ID（dispatcher 在子任务启停时调用）。"""
     current_task_id.set(task_id)
 
@@ -122,7 +122,7 @@ def estimate_cost_usd(
     prompt_tokens: int,
     completion_tokens: int,
     cached_tokens: int = 0,
-) -> float | None:
+) -> Optional[float]:
     """估算单次请求的美元成本; 未知模型 → None。
 
     L4: ``cached_tokens`` 是 prompt 中命中缓存的部分（各家 usage 口径中
@@ -183,7 +183,7 @@ def _accumulate(
     bucket: Dict[str, Any],
     prompt_tokens: int,
     completion_tokens: int,
-    cost: float | None,
+    cost: Optional[float],
     cached_tokens: int = 0,
     cache_read_tokens: int = 0,
     cache_creation_tokens: int = 0,
@@ -234,7 +234,7 @@ class UsageTracker:
         model: str,
         prompt_tokens: int,
         completion_tokens: int,
-        session_id: str | None = None,
+        session_id: Optional[str] = None,
         cached_tokens: int = 0,
         cache_read_tokens: int = 0,
         cache_creation_tokens: int = 0,
@@ -267,7 +267,7 @@ class UsageTracker:
         # L8 PR-C (2026-09-09): 流式首字节延迟与总延迟——负值/None 视为未采样,
         # 字符串数字尽力 int() 转换 (兼容 LLMClient 偶发 str 字段)。
         # 落库时存 None 而不是 -1, 便于 SQL `WHERE first_token_ms IS NOT NULL` 过滤。
-        def _norm_latency(value: Any) -> int | None:
+        def _norm_latency(value: Any) -> Optional[int]:
             if value is None:
                 return None
             if isinstance(value, bool):  # bool 是 int 子类, 排除 True/False
@@ -338,7 +338,7 @@ class UsageTracker:
         return entry
 
     @staticmethod
-    def _persist(entry: UsageRecord, session_id: str | None) -> None:
+    def _persist(entry: UsageRecord, session_id: Optional[str]) -> None:
         """单行落库 (L8)。任何失败静默——用量是增强信息, 不是关键路径。"""
         try:
             import uuid
@@ -537,7 +537,7 @@ class UsageTracker:
             logger.warning("task_usage_since 读取失败: %s", exc)
             return 0
 
-    def last_request(self, session_id: str) -> Dict[str, Any] | None:
+    def last_request(self, session_id: str) -> Optional[Dict[str, Any]]:
         """U17: 该会话最近一次 LLM 请求的用量行。
 
         上一轮请求的 ``prompt_tokens`` 是"当前上下文占用"的最佳可得代理:
