@@ -51,6 +51,10 @@ class OfficeCapabilities(BaseModel):
     )
     pillow_available: bool = Field(description="Pillow 是否可导入（图片自动压缩）")
     formulas_available: bool = Field(description="formulas 引擎是否可导入（公式本地求值）")
+    ocr_available: bool = Field(
+        default=False,
+        description="OCR 兜底是否可用（pytesseract 已装且 tesseract 在 PATH）",
+    )
 
 
 #: (探测时间戳, 结果)。探测无副作用，进程内共享一份即可。
@@ -70,7 +74,19 @@ def _probe() -> OfficeCapabilities:
         pdf_export_available=soffice_path is not None or word_com,
         pillow_available=find_spec("PIL") is not None,
         formulas_available=find_spec("formulas") is not None,
+        ocr_available=_ocr_available(),
     )
+
+
+def _ocr_available() -> bool:
+    """P4-A: OCR 依赖探测（懒加载，异常归为不可用）。"""
+    try:
+        from .ocr import ocr_available
+
+        ok, _ = ocr_available()
+        return ok
+    except Exception:  # noqa: BLE001 — 探测失败即不可用
+        return False
 
 
 def probe_capabilities(force: bool = False) -> OfficeCapabilities:
