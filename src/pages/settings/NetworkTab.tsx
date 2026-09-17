@@ -599,6 +599,19 @@ function CredentialsSection() {
     }).catch(() => undefined);
   };
 
+  const refreshMetrics = (): void => {
+    fetch(webAccessApiUrl('/api/v1/web-access/metrics'))
+      .then((r) => (r.ok ? r.json() : { metrics: {} }))
+      .then((data: { metrics?: HostMetrics }) => setMetrics(data.metrics ?? {}))
+      .catch(() => setMetrics({}));
+  };
+
+  const resetMetrics = (): void => {
+    void fetch(webAccessApiUrl('/api/v1/web-access/metrics/reset'), { method: 'PUT' })
+      .then(() => setMetrics({}))
+      .catch(() => undefined);
+  };
+
   const removeCred = (domain: string): void => {
     if (!window.confirm(t('settings.network.creds.confirm'))) return;
     void fetch(
@@ -674,7 +687,25 @@ function CredentialsSection() {
         )}
         {metrics !== null && Object.keys(metrics).length > 0 && (
           <div className="flex flex-col gap-1" data-testid="host-metrics">
-            <div className="text-xs">{t('settings.network.creds.metrics')}</div>
+            <div className="flex items-center gap-2 text-xs">
+              <span>{t('settings.network.creds.metrics')}</span>
+              <button
+                type="button"
+                data-testid="metrics-refresh-btn"
+                className="px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary"
+                onClick={refreshMetrics}
+              >
+                {t('settings.network.creds.metrics.refresh')}
+              </button>
+              <button
+                type="button"
+                data-testid="metrics-reset-btn"
+                className="px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary"
+                onClick={resetMetrics}
+              >
+                {t('settings.network.creds.metrics.reset')}
+              </button>
+            </div>
             {Object.entries(metrics).map(([host, m]) => (
               <div key={host} data-testid={`metric-row-${host}`} className="flex items-center gap-2 text-xs">
                 <span className="font-medium">{host}</span>

@@ -248,7 +248,14 @@ class WebSearchTool(BaseTool):
                         results = engine.search(query, limit, client=client)
                     except Exception as engine_exc:  # noqa: BLE001 — 单引擎失败降级下一引擎
                         engine_errors.append(f"{engine.name}: {engine_exc}")
+                        # R18：per-host 指标（伪域 search:<engine>）
+                        from . import web_metrics
+
+                        web_metrics.record(f"search:{engine.name}", False, 0)
                         continue
+                    from . import web_metrics
+
+                    web_metrics.record(f"search:{engine.name}", True, 0)
                     if results:
                         content = {
                             "query": query,
