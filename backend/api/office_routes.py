@@ -111,6 +111,14 @@ from backend.office.pdf import MAX_PDF_SIZE, generate_pdf, read_pdf
 from backend.office.pdf_forms import fill_pdf_form, read_pdf_form
 from backend.office.pdf_to_word import PdfToWordRequest, PdfToWordResult, convert_pdf_to_word
 from backend.office.ppt import generate_ppt, read_ppt
+from backend.office.ppt_template import (
+    PptTemplateAnalyzeRequest,
+    PptTemplateAnalyzeResult,
+    PptTemplateFillRequest,
+    PptTemplateFillResult,
+    analyze_ppt_template,
+    fill_ppt_template,
+)
 from backend.office.storage import (
     archive_document,
     delete_document,
@@ -836,6 +844,18 @@ def generate_pdf_endpoint(req: PdfGenerateRequest) -> PdfGenerateResult:
         result = generate_pdf(req)
         prog.report("完成", 95)
     return result
+
+
+@router.post("/ppt/analyze-template", response_model=PptTemplateAnalyzeResult)
+def ppt_analyze_template_endpoint(req: PptTemplateAnalyzeRequest) -> PptTemplateAnalyzeResult:
+    """P5-A: 枚举 pptx 模板的母版版式与占位符（generate slides[].layout 引用）。"""
+    return analyze_ppt_template(req)
+
+
+@router.post("/ppt/fill-template", response_model=PptTemplateFillResult)
+def ppt_fill_template_endpoint(req: PptTemplateFillRequest) -> PptTemplateFillResult:
+    """P5-A: 以模板副本为基础按占位符填充，另存为新文件（模板原件不动）。"""
+    return fill_ppt_template(req)
 
 
 @router.post("/pdf/read-form", response_model=PdfFormReadResult)
