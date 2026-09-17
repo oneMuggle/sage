@@ -532,6 +532,7 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_messages_segment "
             "ON messages(session_id, segment_id, created_at)"
         )
+        conn.commit()
 
         # 会话摘要表（批次三 step 3，spec §4.3）
         # Dedicated table for compressed session summaries; deliberately
