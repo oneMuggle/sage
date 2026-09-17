@@ -36,4 +36,14 @@ round20 BU9 让 task_status 事件携带 `used_tokens`（run 窗口累计），�
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1049（squash `6f4a169d`，2026-09-17 16:32 UTC merge，CI 全绿）。
+- **win7 对齐**：PR #1055（squash `51038fea`，2026-09-17 merge，py38 16m9s 全绿）。
+- **对齐链路修证记录**（diff-patch 方式的三个踩坑，均为 CI 实证后修复）：
+  1. `usage_tracker.py` PEP 604（`str | None`）→ py38 语法护栏拦截，改 `Optional[str]`；
+  2. `_migrate_memory_traceability(conn)` 误置于 `init_db` 开头——新库首启时
+     `memories_episodic` 尚未建表，`PRAGMA table_info` 返回空集后 `ALTER TABLE`
+     报 "no such table"；移回建表之后（与旧版 205ca972 位置一致）；
+  3. diff-patch 从 main 搬运 hunk 时误删 win7-only 的 `get_connection` 代理身份
+     绑定（de9c6e250），`test_no_hook_emitted_on_failure` 故障注入落空
+     （DID NOT RAISE）——按 `origin/release/win7` 整文件恢复后重放 RT23 hunk。
+- **回填分支**：`docs/r23-backfill`（本提交）。
