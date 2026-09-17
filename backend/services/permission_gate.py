@@ -64,7 +64,7 @@ MAX_SCRUB_DEPTH = 5
 _TARGET_PATH_KEYS: Tuple[str, ...] = ("path", "file_path", "target_path", "directory", "file")
 
 
-def extract_target_path(args: Dict[str, Any] | None) -> Optional[str]:
+def extract_target_path(args: Optional[Dict[str, Any]]) -> Optional[str]:
     """从工具参数中提取目标路径（用于前端"项目级允许"按钮）。
 
     依次检查常见路径键名，返回第一个非空字符串值。
@@ -108,7 +108,7 @@ def _scrub_value(value: Any, depth: int) -> Any:
     return value
 
 
-def _resolve_preview_path(raw: str, workspace_root: str | None) -> Path | None:
+def _resolve_preview_path(raw: str, workspace_root: Optional[str]) -> Optional[Path]:
     """把工具参数里的路径解析为可读路径；相对路径挂在 workspace 下。"""
     if not isinstance(raw, str) or not raw.strip():
         return None
@@ -118,7 +118,7 @@ def _resolve_preview_path(raw: str, workspace_root: str | None) -> Path | None:
     return path
 
 
-def _read_text_capped(path: Path) -> str | None:
+def _read_text_capped(path: Path) -> Optional[str]:
     """读取现文件内容（截到 ``_DIFF_READ_MAX_BYTES``）；不存在/不可读返回 None。"""
     try:
         if not path.is_file():
@@ -145,7 +145,7 @@ def _unified_diff(label: str, before: str, after: str) -> str:
 def _collect_diff_sections(
     tool_name: str,
     args: Dict[str, Any],
-    workspace_root: str | None,
+    workspace_root: Optional[str],
 ) -> List[str]:
     """按工具语义收集各文件的 diff 片段（只读，不落盘）。"""
     sections: List[str] = []
@@ -193,9 +193,9 @@ def _collect_diff_sections(
 
 def build_diff_preview(
     tool_name: str,
-    args: Dict[str, Any] | None,
-    workspace_root: str | None = None,
-) -> str | None:
+    args: Optional[Dict[str, Any]],
+    workspace_root: Optional[str] = None,
+) -> Optional[str]:
     """为写类工具生成将写入内容的 unified diff（U15 审批透明化）。
 
     - ``write_file``: 现文件（不存在视为空）vs ``args["content"]``
@@ -221,7 +221,7 @@ def build_diff_preview(
     return preview
 
 
-def summarize_tool_args(args: Dict[str, Any] | None) -> str:
+def summarize_tool_args(args: Optional[Dict[str, Any]]) -> str:
     """把工具参数压成可展示的 JSON 字符串。
 
     - 键名匹配 key/token/password/secret/credential/auth 的值 → ``"***"``，
@@ -314,10 +314,10 @@ class ApprovalRequest:
     def create(
         cls,
         tool_name: str,
-        args: Dict[str, Any] | None,
+        args: Optional[Dict[str, Any]],
         risk: str,
         message: str,
-        workspace_root: str | None = None,
+        workspace_root: Optional[str] = None,
     ) -> ApprovalRequest:
         """工厂：生成 UUID + 时间戳 + 脱敏参数摘要 + 写类工具 diff 预览。"""
         return cls(
@@ -445,7 +445,7 @@ class ApprovalGate:
         """当前所有挂起请求（快照，按注册顺序）。"""
         return [req for req, future in self._pending.values() if not future.done()]
 
-    def get_request(self, request_id: str) -> ApprovalRequest | None:
+    def get_request(self, request_id: str) -> Optional[ApprovalRequest]:
         """按 id 查挂起请求；未知返回 None。"""
         entry = self._pending.get(request_id)
         return entry[0] if entry is not None else None
@@ -469,7 +469,7 @@ def init_permission_gate() -> ApprovalGate:
     return _global_gate
 
 
-def get_permission_gate() -> ApprovalGate | None:
+def get_permission_gate() -> Optional[ApprovalGate]:
     """取全局 gate；未初始化返回 None（调用方 default-deny）。"""
     return _global_gate
 
