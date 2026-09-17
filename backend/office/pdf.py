@@ -279,6 +279,13 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
     if output_path.exists():
         raise OfficePdfGenerateError("Invalid output filename")
 
+    # P2-A: soffice 可用时优先 HTML 路线（自动换行 + 真表格排版）；
+    # soffice 缺失/失败静默回落 reportlab 直绘 —— 能力降级对用户不可见。
+    from .pdf_html import generate_pdf_via_soffice
+
+    if generate_pdf_via_soffice(req, output_path):
+        return _finalize_pdf_result(output_path, filename, len(req.pages))
+
     page_size_map = {
         "A4": A4,
         "Letter": LETTER,
@@ -342,6 +349,11 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
         # GENERIC message — never interpolate ``exc`` or the path.
         raise OfficePdfGenerateError("PDF generation failed") from exc
 
+    return _finalize_pdf_result(output_path, filename, len(req.pages))
+
+
+def _finalize_pdf_result(output_path: Path, filename: str, page_count: int) -> PdfGenerateResult:
+    """产物校验（存在/大小上限）并组装结果；异常路径清理半成品。"""
     try:
         output_size = output_path.stat().st_size
     except OSError as exc:
@@ -358,5 +370,5 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
         output_path=str(output_path),
         filename=filename,
         file_size_bytes=output_size,
-        page_count=len(req.pages),
+        page_count=page_count,
     )

@@ -44,6 +44,13 @@ _DOC_TYPE_EXTENSIONS = {
     OfficeDocType.PDF: "pdf",
 }
 
+#: P1-B（office-p1b）：excel doc_type 额外接受的扩展名 —— CSV 表格以
+#: excel 类型受管（读/写/预览按扩展名分流到 csv 模块），避免为单一
+#: 格式在整个授权/存储/工具链上新增一个 doc_type 枚举。
+_DOC_TYPE_EXTRA_EXTENSIONS = {
+    OfficeDocType.EXCEL: ("csv",),
+}
+
 
 def is_within(base: PurePath, candidate: PurePath) -> bool:
     """Return ``True`` iff ``candidate`` lies within ``base``.
@@ -123,16 +130,17 @@ def validate_supported_filename(filename: str, doc_type: OfficeDocType) -> str:
         )
 
     expected_ext = _DOC_TYPE_EXTENSIONS[doc_type]
+    allowed_exts = (expected_ext, *_DOC_TYPE_EXTRA_EXTENSIONS.get(doc_type, ()))
     lowered = filename.lower()
 
     # Detect the actual extension (text after the last '.'). If there is
-    # one and it doesn't match the doc type's canonical extension,
+    # one and it doesn't match the doc type's allowed extensions,
     # reject — never silently rewrite a wrong extension. Only auto-append
     # when the basename has no extension at all.
     basename_lower = lowered.rsplit("/", 1)[-1]
     if "." in basename_lower:
         actual_ext = basename_lower.rsplit(".", 1)[1]
-        if actual_ext != expected_ext:
+        if actual_ext not in allowed_exts:
             raise OfficePathError(
                 f"Filename extension {actual_ext!r} does not match "
                 f"doc type {doc_type.value!r} (expected {expected_ext!r}): "

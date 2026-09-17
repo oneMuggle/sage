@@ -116,6 +116,11 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   const [templateLoad, setTemplateLoad] = useState<TemplateLoadState>('idle');
   const [selectedTemplate, setSelectedTemplate] = useState<OfficeTemplateMeta | null>(null);
   const [templateData, setTemplateData] = useState<Record<string, string>>({});
+  // Round C P5: 选中模板的首页缩略图。按需加载（选中才请求，避免列表
+  // 全量轰炸转换器）；key=source-id，切换模板即重新拉取；失败静默降级
+  // （缩略图是装饰性信息）。结果缓存到 map，二次选中零等待。
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  const [thumbnailLoading, setThumbnailLoading] = useState(false);
 
   // Excel
   const [sheetName, setSheetName] = useState('Sheet1');
@@ -138,6 +143,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
     setTemplateLoad('idle');
     setSelectedTemplate(null);
     setTemplateData({});
+    setThumbnails({});
   }, [workspacePath]);
 
   const loadTemplates = useCallback(async () => {
@@ -175,6 +181,27 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
     setSelectedTemplate(tpl);
     setTemplateData({});
     setFilename(defaultTemplateFilename(tpl.name, tpl.doc_type));
+    // Round C P5: kick off the thumbnail fetch (cache-first, silent-fail).
+    const thumbKey = `${tpl.source}-${tpl.id}`;
+    if (!thumbnails[thumbKey]) {
+      setThumbnailLoading(true);
+      officeApi
+        .templateThumbnail({
+          workspace_path: workspacePath,
+          ...(tpl.source === 'workspace'
+            ? { workspace_template: tpl.filename ?? tpl.id }
+            : { template_id: tpl.id }),
+        })
+        .then((res) => {
+          if (res.ok && res.data_url) {
+            setThumbnails((prev) => ({ ...prev, [thumbKey]: res.data_url! }));
+          }
+        })
+        .catch(() => {
+          // decorative — degrade silently
+        })
+        .finally(() => setThumbnailLoading(false));
+    }
   };
 
   const setPlaceholderValue = (name: string, value: string) => {
@@ -584,6 +611,32 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
 
         {selectedTemplate && selectedTemplate.doc_type === type && (
           <div className="space-y-2 pt-1" data-testid="office-template-fields">
+            {/* Round C P5: 首页缩略图（按需生成，服务端磁盘缓存；失败静默） */}
+            {(() => {
+              const thumbKey = `${selectedTemplate.source}-${selectedTemplate.id}`;
+              const thumb = thumbnails[thumbKey];
+              if (thumb) {
+                return (
+                  <img
+                    src={thumb}
+                    alt={selectedTemplate.name}
+                    data-testid="office-template-thumbnail"
+                    className="w-40 rounded border border-border shadow-sm bg-white"
+                  />
+                );
+              }
+              if (thumbnailLoading) {
+                return (
+                  <div
+                    className="w-40 h-52 rounded border border-dashed border-border flex items-center justify-center text-xs text-muted"
+                    data-testid="office-template-thumbnail-loading"
+                  >
+                    {t('office.template.thumbnailLoading')}
+                  </div>
+                );
+              }
+              return null;
+            })()}
             {selectedTemplate.placeholders.map((ph) => renderPlaceholderField(ph))}
           </div>
         )}

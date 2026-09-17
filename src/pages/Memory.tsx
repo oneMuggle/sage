@@ -159,7 +159,7 @@ export function Memory() {
       ? api.memory.search({ query: q, type: typeFilterRef.current || undefined })
       : api.memory.list({ page: 1, page_size: 50, type: typeFilterRef.current || undefined });
     promise
-      .then((data) => {
+      .then((data: unknown) => {
         if (mountedRef.current) setMemories(toItems(data));
       })
       .catch(() => {
@@ -211,7 +211,7 @@ export function Memory() {
             ...prev,
           ]);
         })
-        .then((u) => {
+        .then((u: (() => void) | null | undefined) => {
           if (cancelled) {
             u?.();
             return;
@@ -224,7 +224,7 @@ export function Memory() {
             startPolling();
           }
         })
-        .catch((e) => {
+        .catch((e: unknown) => {
           console.warn('[Memory] SSE subscribe failed, falling back to polling', e);
           startPolling();
         });
@@ -251,7 +251,7 @@ export function Memory() {
     if (tab === 'profile') {
       api.memory
         .getProfile()
-        .then((data) => {
+        .then((data: unknown) => {
           const profile = (data ?? {}) as {
             preferences?: unknown;
             decisions?: unknown;

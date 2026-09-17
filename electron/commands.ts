@@ -81,6 +81,8 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // /api/v1 下 —— 去掉前缀会全部 404。commands.test.ts 有 guard 测试
   // 防止漏前缀。
   agent_chat_stream: { method: 'POST', path: () => '/api/v1/chat/stream' },
+  // 2026-09 修复 (同步 #957): chatApi.chat() 调用 agent_chat 但映射表缺项。
+  agent_chat: { method: 'POST', path: () => '/api/v1/chat' },
   list_agents: { method: 'GET', path: () => '/api/v1/agents' },
   get_agent: {
     method: 'GET',
@@ -185,6 +187,10 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // 项目模块 P1 (2026-09-13): 最近项目注册表 + 项目内会话。
   // open = "复用最近活跃会话或新建并绑定项目目录"（后端原子完成，返回
   // { project, session, created }），前端拿到 session.id 后 setCurrent + 导航。
+  //
+  // 2026-09-17 allowed_paths 扩展:
+  // - register 时可携带 allowed_paths（不传 → 后端默认 []）
+  // - 新增 projects_update_allowed_paths 单独更新项目的允许访问路径规则
   projects_list: {
     method: 'GET',
     path: () => '/api/v1/projects',
@@ -192,7 +198,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   projects_register: {
     method: 'POST',
     path: () => '/api/v1/projects',
-    body: (a) => ({ path: a.path }),
+    body: (a) => {
+      const body: Record<string, unknown> = { path: a.path };
+      if (a.allowed_paths != null) body.allowed_paths = a.allowed_paths;
+      return body;
+    },
   },
   projects_remove: {
     method: 'DELETE',
@@ -211,6 +221,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   projects_list_sessions: {
     method: 'GET',
     path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/sessions`,
+  },
+  projects_update_allowed_paths: {
+    method: 'PUT',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/allowed-paths`,
+    body: (a) => ({ allowed_paths: a.allowed_paths }),
   },
 
   // R19: 数据安全 —— 备份清单/手动备份/记忆导出（system_routes，GET/POST
@@ -255,7 +270,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/active?session_id=${encodeURIComponent(String(a.sessionId))}`,
   },
-    system_backups_list: {
+  system_backups_list: {
     method: 'GET',
     path: () => '/api/v1/system/backups',
   },
@@ -784,6 +799,25 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // NOTE: PdfReadRequest is extra="forbid" — officeApi.readPdf must send
   // ONLY workspacePath + filePath (no max_size_bytes / original_filename).
   office_pdf_read: { method: 'POST', path: () => '/api/v1/office/pdf/read' },
+  // F3 (office-p0): 受管 PDF 原文 base64 预览 —— /office 页"原文预览"
+  // 开关用，返回 data:application/pdf URL 交给 Chromium 内置 viewer。
+  // NOTE: PdfDataRequest is extra="forbid" — officeApi.readPdfData must
+  // send ONLY workspacePath + filePath.
+  office_pdf_data: { method: 'POST', path: () => '/api/v1/office/pdf/data' },
+  // P1-C (office-p1c): 旧格式 (.doc/.xls/.ppt) staging 副本 → 现代格式
+  // 就地转换（soffice）。LegacyImportRequest extra=forbid — 只发
+  // workspacePath + filePath。
+  office_import_convert_legacy: {
+    method: 'POST',
+    path: () => '/api/v1/office/import/convert-legacy',
+  },
+  // P2-B (office-p2b): 受管 docx 原文 base64（docx-preview 原生渲染）。
+  office_word_data: { method: 'POST', path: () => '/api/v1/office/word/data' },
+  // P2-D (office-p2d): PDF AcroForm 表单读取/填写（OfficePreviewPanel 表单对话框）。
+  office_pdf_read_form: { method: 'POST', path: () => '/api/v1/office/pdf/read-form' },
+  office_pdf_fill_form: { method: 'POST', path: () => '/api/v1/office/pdf/fill-form' },
+  // P2-C (office-p2c): 受管 .xlsx 公式缓存重算（soffice，重算前自动快照）。
+  office_excel_recalc: { method: 'POST', path: () => '/api/v1/office/excel/recalc' },
   // include_archived (item 1.7): archive-restore UI lists soft-deleted rows.
   // Path builder reads the raw camelCase arg and serializes snake_case into
   // the query string (query args are NOT auto-translated by invokeBackend).
@@ -843,6 +877,36 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // so the translation is a no-op on them.
   office_update_preview: { method: 'POST', path: () => '/api/v1/office/update/preview' },
   office_export_pdf: { method: 'POST', path: () => '/api/v1/office/export-pdf' },
+
+  // Office display round A (P6/P1): capability probe + high-fidelity
+  // PDF preview. Backend: backend/api/office_routes.py — GET
+  // /capabilities (converter/optional-dep badges, 30s server-side
+  // cache, force=true to re-probe) and POST /pdf-preview (docx/xlsx/
+  // pptx → cached PDF in office/.preview-cache/ → data URL; body reuses
+  // the export-pdf shape: workspacePath/filePath/taskId through the
+  // normal camelToSnakeKeys).
+  office_capabilities: {
+    method: 'GET',
+    path: (a) => `/api/v1/office/capabilities${a.force ? '?force=true' : ''}`,
+  },
+  office_pdf_preview: { method: 'POST', path: () => '/api/v1/office/pdf-preview' },
+
+  // Office display round C (P5): template first-page thumbnail (PNG data
+  // URL, disk-cached server-side). POST — generation has side effects
+  // (cache write) and the request carries a body.
+  office_template_thumbnail: {
+    method: 'POST',
+    path: () => '/api/v1/office/templates/thumbnail',
+  },
+
+  // Office display round B (P2): snapshot vs current structured diff.
+  // Backend: GET /office/doc/{doc_id}/snapshots/{snapshot_id}/diff →
+  // DiffPreviewResult (snapshot=before, current=after). Read-only.
+  office_snapshot_diff: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/snapshots/${encodeURIComponent(String(a.snapshotId))}/diff`,
+  },
 
   // Office parity round 2 (R1): page-level apply-update — closes the
   // edit-preview loop opened by office_update_preview. Backend contract:

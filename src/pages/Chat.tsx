@@ -52,6 +52,7 @@ export function Chat() {
     messages,
     isLoading,
     error,
+    errorSessionId,
     clearError,
     sendMessage,
     interrupt,
@@ -78,7 +79,24 @@ export function Chat() {
   });
   // 对标 S2 (2026-09-13): 临时聊天 —— 按会话记住开关；开启后本会话每轮
   // 都以 memory_mode='off' 发送（不注入记忆、不提取记忆、不弹"记住了"）。
-  const [tempChatSessions, setTempChatSessions] = useState<ReadonlySet<string>>(() => new Set());
+  // 2026-09 修复: 临时聊天开关此前是组件 state, 切到设置页再回来即复位为关,
+  // 之后该会话恢复读写长期记忆 —— 与用户开启时的预期相反。sessionStorage
+  // 持久化: 跨路由保留, 应用重启自然清空 (符合"临时"语义)。
+  const [tempChatSessions, setTempChatSessions] = useState<ReadonlySet<string>>(() => {
+    try {
+      const raw = sessionStorage.getItem('sage:temp-chat-sessions');
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('sage:temp-chat-sessions', JSON.stringify([...tempChatSessions]));
+    } catch {
+      // 隐私模式等场景写入失败可容忍
+    }
+  }, [tempChatSessions]);
 
   const {
     currentSessionId,
@@ -320,10 +338,13 @@ export function Chat() {
     ) {
       pendingSentRef.current = true;
       sendMessage(pendingMessage, currentSessionId);
-      // Clear location state so refresh doesn't re-send
-      window.history.replaceState({}, '');
+      // Clear location state so refresh doesn't re-send.
+      // 2026-09 修复: 裸 replaceState({}, '') 会把 react-router 存在
+      // history.state 里的 {idx, key} 一并抹掉, 破坏后退导航 —— 改走
+      // router API 只清业务 state。
+      navigate(location.pathname + location.search, { replace: true, state: null });
     }
-  }, [pendingMessage, currentSessionId, sendMessage, settingsLoading, storeLoading]);
+  }, [pendingMessage, currentSessionId, sendMessage, settingsLoading, storeLoading, location.pathname, location.search, navigate]);
 
   const handleNewSession = async () => {
     // 与 Sidebar 的 "+ 新对话" 行为对齐:跳到欢迎页由用户输入后再创建会话。
@@ -752,8 +773,10 @@ export function Chat() {
             />
           )}
 
-          {/* R17-D: 顶层错误内联条 —— 保留历史可见（替代旧整页 ErrorState） */}
-          {error && (
+          {/* R17-D: 顶层错误内联条 —— 保留历史可见（替代旧整页 ErrorState）
+              2026-09 修复: 只渲染归属当前会话的错误, 后台会话失败不再串台;
+              且"重试"因此必然作用于出错会话本身 */}
+          {error && errorSessionId === currentSessionId && (
             <div
               className="mx-4 mt-2 flex items-start justify-between gap-3 px-3 py-2 rounded border border-error/40 bg-error/5"
               data-testid="chat-inline-error"

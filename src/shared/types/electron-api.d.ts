@@ -270,37 +270,6 @@ export interface UpdateElectronApiBridge {
   checkWith: (providerId: string, channel?: string) => Promise<CheckResult | null>;
 }
 
-/**
- * Memory bridge exposed at `window.electronAPI.memory`. Task 1 wired the
- * IPC commands; Task 2 (Gap B) types the shape and lands the Settings UI
- * toggle that calls `getAutoMemory` / `setAutoMemory`. The remaining 3
- * methods (`findByTurn`, `getProfile`, `getSummary`) type-stub for T5/T6.
- */
-export interface MemoryElectronApiBridge {
-  search: (args: { query: string; type?: string }) => Promise<unknown>;
-  save: (args: { content: string; importance?: number; category?: string }) => Promise<unknown>;
-  list: (args: { page?: number; page_size?: number; type?: string }) => Promise<unknown>;
-  delete: (args: { memory_id: string }) => Promise<unknown>;
-  /** GET /api/v1/preferences/auto_memory → "true" | "false" | null (default True). */
-  getAutoMemory: () => Promise<unknown>;
-  /** PUT /api/v1/preferences/auto_memory with body { value: boolean }. */
-  setAutoMemory: (args: { value: boolean }) => Promise<unknown>;
-  /** Important-2 — GET /api/v1/preferences/memory_retrieval → "true" | "false" | null (default True). */
-  getMemoryRetrieval: () => Promise<unknown>;
-  /** Important-2 — PUT /api/v1/preferences/memory_retrieval with body { value: boolean }. */
-  setMemoryRetrieval: (args: { value: boolean }) => Promise<unknown>;
-  findByTurn: (args: { turn_id: string }) => Promise<unknown>;
-  getProfile: () => Promise<unknown>;
-  getSummary: (args: { session_id: string }) => Promise<unknown>;
-  /**
-   * Task 6 — subscribe to backend memory_written SSE events (via main relay).
-   * The callback receives the raw JSON string payload of each SSE event.
-   * Resolves to an unsubscribe function, or `null` when the relay could not
-   * be established (caller should fall back to polling).
-   */
-  subscribe: (callback: (event: unknown) => void) => Promise<(() => void) | null>;
-}
-
 export interface ElectronAPI {
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
@@ -322,6 +291,9 @@ export interface ElectronAPI {
   sageFile?: {
     registerRoot: (path: string) => Promise<boolean>;
     unregisterRoot: (path: string) => Promise<boolean>;
+    // P22 (2026-09-17): 项目级 allowed_paths 注册 —— 与工作区根 OR-组合。
+    registerAllowedPaths: (projectId: string, paths: string[]) => Promise<void>;
+    unregisterAllowedPaths: (projectId: string) => Promise<boolean>;
   };
   /**
    * Streaming callers (wiki chat / wiki ingest) pass `options.streamId`
@@ -340,7 +312,6 @@ export interface ElectronAPI {
   journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;
   providers: ProvidersElectronApiBridge;
-  /**
   /**
    * Task 10 (2026-09-11): Diagnostic export bridge for LLM trace bundles.
    * Two methods — exportBundle (native save dialog → zip) and preview
@@ -413,6 +384,9 @@ export interface ElectronAPI {
   /** E-2 (round5 批次 E): 关闭即隐藏到托盘偏好读写 */
   getCloseToTray?: () => Promise<{ enabled: boolean }>;
   setCloseToTray?: (enabled: boolean) => Promise<{ ok: boolean; enabled: boolean }>;
+  /** 日志时区 (2026-09-17): 读写日志时间戳时区设置 */
+  getLogTimezone?: () => Promise<{ logTimezone: string }>;
+  setLogTimezone?: (logTimezone: string) => Promise<{ ok: boolean; error?: string }>;
   /**
    * 2026-08-27: 演示模式同步标志. main 进程激活演示模式时经
    * webPreferences.additionalArguments → preload argv 注入, 首屏请求在

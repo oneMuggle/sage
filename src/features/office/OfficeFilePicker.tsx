@@ -69,14 +69,22 @@ const DOC_TYPE_MODERN_EXT: Record<OfficeDocType, string> = {
 };
 
 /**
- * Returns true iff the file's extension is the modern OOXML type
- * expected for `docType`. We never accept legacy `.doc` / `.xls` / `.ppt`
- * — Sage cannot parse them and silently rejecting at the UI boundary
- * keeps the failure-mode consistent with the native dialog.
+ * Returns true iff the file's extension is acceptable for `docType`:
+ * the modern OOXML type, or (P1-C) its legacy counterpart — .doc/.xls/.ppt
+ * are staged as-is and converted in place by the backend right after
+ * import (soffice-backed `/office/import/convert-legacy`).
  */
+const DOC_TYPE_LEGACY_EXT: Partial<Record<OfficeDocType, string>> = {
+  word: 'doc',
+  excel: 'xls',
+  ppt: 'ppt',
+};
+
 function hasModernExtension(fileName: string, docType: OfficeDocType): boolean {
   const lowered = fileName.toLowerCase();
-  return lowered.endsWith(`.${DOC_TYPE_MODERN_EXT[docType]}`);
+  if (lowered.endsWith(`.${DOC_TYPE_MODERN_EXT[docType]}`)) return true;
+  const legacy = DOC_TYPE_LEGACY_EXT[docType];
+  return legacy !== undefined && lowered.endsWith(`.${legacy}`);
 }
 
 export function OfficeFilePicker({

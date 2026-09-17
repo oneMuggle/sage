@@ -2,6 +2,7 @@
 import type { UpdateProvider, NormalisedRelease, ProviderChannel } from './base';
 import type { GiteeConfig } from '../providerConfig';
 import { ProviderError } from './genericHttp';
+import { fetchCompat } from '../../fetchCompat';
 
 const CHANNELS: ProviderChannel[] = [
   { id: 'stable', label: 'Stable', description: '正式版（pre=false）' },
@@ -16,8 +17,9 @@ export function createGiteeReleasesProvider(config: {
 }): UpdateProvider {
   const { id, displayName, config: cfg } = config;
   // Gitee API v5 uses ?access_token=… for private repos.
-  // Public repos also work without token but we always pass through cfg.token.
-  const tokenParam = `access_token=${encodeURIComponent(cfg.token)}`;
+  // 2026-09 修复: token 缺省时旧代码拼出 access_token=undefined 发到线上,
+  // 公共仓库场景反而 401/400。无 token 时不带参数。
+  const tokenParam = cfg.token ? `access_token=${encodeURIComponent(cfg.token)}` : '';
 
   return {
     type: 'gitee',
@@ -28,9 +30,9 @@ export function createGiteeReleasesProvider(config: {
     async checkForUpdates(channel, opts) {
       const wantPrerelease = cfg.channelMap[channel] ?? false;
       const base = wantPrerelease
-        ? `https://gitee.com/api/v5/repos/${cfg.owner}/${cfg.repo}/releases?per_page=10&${tokenParam}`
-        : `https://gitee.com/api/v5/repos/${cfg.owner}/${cfg.repo}/releases/latest?${tokenParam}`;
-      const res = await fetch(base, { signal: opts?.signal });
+        ? `https://gitee.com/api/v5/repos/${cfg.owner}/${cfg.repo}/releases?per_page=10${tokenParam ? `&${tokenParam}` : ''}`
+        : `https://gitee.com/api/v5/repos/${cfg.owner}/${cfg.repo}/releases/latest${tokenParam ? `?${tokenParam}` : ''}`;
+      const res = await fetchCompat(base, { signal: opts?.signal });
       if (res.status === 401 || res.status === 403) {
         throw new ProviderError(`凭证无效（HTTP ${res.status}）`, res.status);
       }
@@ -49,7 +51,7 @@ export function createGiteeReleasesProvider(config: {
     async downloadAsset(release, assetId, opts) {
       const asset = release.assets.find((a) => a.id === assetId);
       if (!asset) throw new ProviderError(`Asset 不存在：${assetId}`, 404);
-      const res = await fetch(asset.downloadUrl, { signal: opts?.signal });
+      const res = await fetchCompat(asset.downloadUrl, { signal: opts?.signal });
       if (!res.ok) {
         throw new ProviderError(`下载失败 HTTP ${res.status}`, res.status);
       }
@@ -65,8 +67,8 @@ export function createGiteeReleasesProvider(config: {
     async ping(opts) {
       const start = Date.now();
       try {
-        const res = await fetch(
-          `https://gitee.com/api/v5/repos/${cfg.owner}/${cfg.repo}?${tokenParam}`,
+        const res = await fetchCompat(
+          `https://gitee.com/api/v5/repos/${cfg.owner}/${cfg.repo}${tokenParam ? `?${tokenParam}` : ''}`,
           { signal: opts?.signal },
         );
         return { ok: res.ok, latencyMs: Date.now() - start };

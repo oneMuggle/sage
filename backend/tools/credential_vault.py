@@ -36,7 +36,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from backend.services.secret_box import decrypt_secret, encrypt_secret
+from backend.services.secret_box import current_scheme, decrypt_secret, encrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +210,12 @@ def _clean_cookie(item: Dict[str, Any], default_domain: str) -> Optional[Dict[st
     return cleaned
 
 
-def save_credential(domain: str, cookies: List[Dict[str, Any]], repo: Optional[Any] = None) -> None:
+def save_credential(
+    domain: str,
+    cookies: List[Dict[str, Any]],
+    repo: Optional[Any] = None,
+    source_profile: str = "",
+) -> None:
     """把某 cookie domain 的 cookie 列表加密存入档案（覆盖旧值，kind=cookie）。
 
     Args:
@@ -227,7 +232,7 @@ def save_credential(domain: str, cookies: List[Dict[str, Any]], repo: Optional[A
     store = _get_repo(repo)
     vault = _load_vault(store)
     now = _now_ms()
-    vault[domain] = {
+    entry = {
         "kind": KIND_COOKIE,
         "cookies_enc": encrypt_secret(
             json.dumps(cleaned, ensure_ascii=False), account=_VAULT_ACCOUNT_PREFIX + domain
@@ -235,7 +240,14 @@ def save_credential(domain: str, cookies: List[Dict[str, Any]], repo: Optional[A
         "saved_at": now,
         "updated_at": now,
     }
+    source_profile = (source_profile or "").strip()
+    if source_profile:
+        entry["source_profile"] = source_profile
+    vault[domain] = entry
     _save_vault(store, vault)
+    if current_scheme() == "none":
+        # X4：平台加密不可用，诚实降级为明文落库——至少要让用户知道
+        logger.warning("平台加密不可用，凭据档案 %s 以明文落库", domain)
 
 
 def _decrypt_cookies(entry: Dict[str, Any], domain: str) -> Optional[List[Dict[str, Any]]]:
@@ -376,16 +388,28 @@ class CredentialResolution:
     insecure_scheme（头部凭据 + 明文 http 目标）。
 
     ``headers`` 是要附加到命中域请求上的头（cookie 档案 → ``{"Cookie": …}``，
-    头部档案 → 原样头）。``expired_names`` / ``expires_in`` 供文案与 list 使用。
+    头部档案 → 原样头）。``cookies``（AU5）是 cookie 档案 ok 时过滤后的逐条
+    cookie dict（含 domain/path/expires 元数据），供渲染通道经 CDP 逐条注入
+    ——浏览器的域匹配比 Cookie 头串更严格，host-only cookie 无法从头串重建。
+    ``expired_names`` / ``expires_in`` 供文案与 list 使用。
     """
 
-    __slots__ = ("status", "kind", "headers", "expired_names", "expires_in", "domain")
+    __slots__ = (
+        "status",
+        "kind",
+        "headers",
+        "cookies",
+        "expired_names",
+        "expires_in",
+        "domain",
+    )
 
     def __init__(
         self,
         status: str,
         kind: Optional[str] = None,
         headers: Optional[Dict[str, str]] = None,
+        cookies: Optional[List[Dict[str, Any]]] = None,
         expired_names: Optional[List[str]] = None,
         expires_in: Optional[int] = None,
         domain: str = "",
@@ -393,6 +417,7 @@ class CredentialResolution:
         self.status = status
         self.kind = kind
         self.headers = headers or {}
+        self.cookies = cookies or []
         self.expired_names = expired_names or []
         self.expires_in = expires_in
         self.domain = domain
@@ -464,6 +489,7 @@ def resolve_credential(  # noqa: PLR0911 — 各状态独立 return，扁平更�
         "ok",
         kind=kind,
         headers=headers,
+        cookies=usable,
         expired_names=expired_names,
         expires_in=expires_in,
         domain=domain,
@@ -632,6 +658,124 @@ def merge_set_cookies(
 # --------------------------------------------------------------------------- misc
 
 
+def merge_cdp_cookies(
+    domain: str,
+    cookies: List[Dict[str, Any]],
+    request_url: str,
+    repo: Optional[Any] = None,
+    now: Optional[float] = None,
+) -> List[str]:
+    """把 Storage.getCookies 返回的 cookie dict 合并回 cookie 档案（AU5 渲染回写）。
+
+    与 ``merge_set_cookies`` 同守卫：请求主机亲和（host-only 精确匹配 /
+    domain 域匹配，无请求主机一律拒绝，fail-closed）、cookie 归属域必须落在
+    档案域内（第三方 cookie 不混入）、同 name+path 替换、已过期条目视为删除、
+    档案清空则删除整个条目。``Storage.getCookies`` 没有 host_only 字段——
+    前导点即 domain cookie，否则按 host-only 处理。返回被更新 / 删除的名字。
+    """
+    domain = (domain or "").strip().lower()
+    if not domain or not cookies:
+        return []
+    store = _get_repo(repo)
+    vault = _load_vault(store)
+    entry = vault.get(domain)
+    if _entry_kind(entry) != KIND_COOKIE:
+        return []
+    stored = _decrypt_cookies(entry, domain)
+    if stored is None:
+        return []
+    request_host = (urlparse(request_url or "").hostname or "").lower()
+    if not request_host:
+        return []
+    current = time.time() if now is None else now
+    changed: List[str] = []
+    for item in cookies:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "")
+        value = str(item.get("value") or "")
+        if not name or not _valid_cookie_name(name) or not _valid_cookie_value(value):
+            continue
+        cdomain = str(item.get("domain") or "").strip().lower()
+        if cdomain.startswith("."):
+            if not cookie_domain_matches(request_host, cdomain):
+                continue
+        elif cdomain != request_host:
+            continue
+        if not cookie_domain_matches(cdomain.lstrip("."), domain):
+            continue
+        path = str(item.get("path") or "/")
+        expires = item.get("expires")
+        is_session = bool(item.get("session")) or not (
+            isinstance(expires, (int, float)) and expires > 0
+        )
+        same_name_path = [
+            c
+            for c in stored
+            if isinstance(c, dict)
+            and c.get("name") == name
+            and str(c.get("path") or "/") == path
+        ]
+        if not is_session and expires <= current:
+            if same_name_path:
+                stored = [
+                    c
+                    for c in stored
+                    if not (
+                        isinstance(c, dict)
+                        and c.get("name") == name
+                        and str(c.get("path") or "/") == path
+                    )
+                ]
+                changed.append(name)
+            continue
+        cleaned_input: Dict[str, Any] = {
+            "name": name,
+            "value": value,
+            "domain": cdomain,
+            "path": path,
+        }
+        if not is_session:
+            cleaned_input["expires"] = expires
+        if item.get("secure"):
+            cleaned_input["secure"] = True
+        if item.get("httpOnly"):
+            cleaned_input["httpOnly"] = True
+        if item.get("sameSite"):
+            cleaned_input["sameSite"] = str(item.get("sameSite"))
+        cleaned = _clean_cookie(cleaned_input, domain)
+        if cleaned is None:
+            continue
+        stored = [c for c in stored if c not in same_name_path]
+        stored.append(cleaned)
+        changed.append(name)
+    if not changed:
+        return []
+    if stored:
+        entry["cookies_enc"] = encrypt_secret(
+            json.dumps(stored, ensure_ascii=False), account=_VAULT_ACCOUNT_PREFIX + domain
+        )
+        entry["kind"] = KIND_COOKIE
+        entry["updated_at"] = _now_ms()
+        vault[domain] = entry
+    else:
+        vault.pop(domain, None)
+    _save_vault(store, vault)
+    return changed
+
+
+def get_source_profile(domain: str, repo: Optional[Any] = None) -> Optional[str]:
+    """取档案记录的来源持久 profile 名（AU6）；无档案 / 未记录返回 ``None``。"""
+    domain = (domain or "").strip().lower()
+    if not domain:
+        return None
+    entry = _load_vault(_get_repo(repo)).get(domain)
+    if not isinstance(entry, dict):
+        return None
+    source = entry.get("source_profile")
+    return str(source) if source else None
+
+
 def delete_credential(domain: str, repo: Optional[Any] = None) -> bool:
     """删除某 domain 档案；返回是否确有删除。"""
     domain = (domain or "").strip().lower()
@@ -682,6 +826,16 @@ def list_credentials(repo: Optional[Any] = None) -> List[Dict[str, Any]]:
         }
         if kind == KIND_HEADER:
             record["header_names"] = names
+        source_profile = entry.get("source_profile") if isinstance(entry, dict) else None
+        if source_profile:
+            record["source_profile"] = str(source_profile)
+        # X4：档案是否真的密文（scheme=none 平台诚实降级时为 False）
+        enc_value = (
+            entry.get("cookies_enc") if isinstance(entry, dict) else None
+        ) or (
+            entry.get("headers_enc") if isinstance(entry, dict) else None
+        )
+        record["encrypted"] = bool(isinstance(enc_value, str) and enc_value.startswith("enc:"))
         entries.append(record)
     return entries
 
@@ -695,11 +849,13 @@ __all__ = [
     "cookie_header_for",
     "cookie_path_matches",
     "delete_credential",
+    "get_source_profile",
     "list_credentials",
     "load_credential",
     "looks_like_login_html",
     "looks_like_login_url",
     "merge_set_cookies",
+    "merge_cdp_cookies",
     "parse_set_cookie",
     "resolve_credential",
     "save_credential",

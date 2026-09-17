@@ -117,7 +117,7 @@ describe('extension mapping per doc type', () => {
   });
 });
 
-describe('dialog filter catalog (modern formats only)', () => {
+describe('dialog filter catalog (modern + legacy, P1-C)', () => {
   it('returns a filter entry for every doc type', () => {
     const filters = getOpenDialogFilters();
     expect(filters.ppt).toBeDefined();
@@ -134,29 +134,27 @@ describe('dialog filter catalog (modern formats only)', () => {
     }
   });
 
-  it('does not include legacy extensions (.doc, .xls, .ppt)', () => {
+  it('includes legacy counterparts per doc type (P1-C: converted on import)', () => {
     const filters = getOpenDialogFilters();
-    for (const f of Object.values(filters)) {
-      for (const ext of f.extensions) {
-        expect(ext, `${f.name} includes legacy ${ext}`).not.toBe('doc');
-        expect(ext, `${f.name} includes legacy ${ext}`).not.toBe('xls');
-        expect(ext, `${f.name} includes legacy ${ext}`).not.toBe('ppt');
-      }
-    }
+    expect(filters.ppt.extensions).toContain('ppt');
+    expect(filters.word.extensions).toContain('doc');
+    expect(filters.excel.extensions).toContain('xls');
+    // pdf 没有 legacy 对应物
+    expect(filters.pdf.extensions).toEqual(['pdf']);
   });
 
-  it('maps ppt filter to only the modern .pptx extension', () => {
+  it('maps ppt filter to modern + legacy extensions', () => {
     const filters = getOpenDialogFilters();
-    expect(filters.ppt.extensions).toEqual(['pptx']);
+    expect(filters.ppt.extensions).toEqual(['pptx', 'ppt']);
   });
 
-  it('maps word filter to only the modern .docx extension', () => {
+  it('maps word filter to modern + legacy extensions', () => {
     const filters = getOpenDialogFilters();
-    expect(filters.word.extensions).toEqual(['docx']);
+    expect(filters.word.extensions).toEqual(['docx', 'doc']);
   });
 
-  it('maps excel filter to only the modern .xlsx extension', () => {
+  it('maps excel filter to modern + legacy extensions', () => {
     const filters = getOpenDialogFilters();
-    expect(filters.excel.extensions).toEqual(['xlsx']);
+    expect(filters.excel.extensions).toEqual(['xlsx', 'xls']);
   });
 });

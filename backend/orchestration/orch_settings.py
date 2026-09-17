@@ -19,11 +19,17 @@ _RAW_KEYS = {
     "maxRetries": "max_retries",
     "maxLaneIterations": "max_lane_iterations",
     "maxSubagentIterations": "max_subagent_iterations",
+    "maxPrimaryIterations": "max_primary_iterations",
+    "maxCoderIterations": "max_coder_iterations",
+    "maxReviewerIterations": "max_reviewer_iterations",
+    "maxWriterIterations": "max_writer_iterations",
     "taskTimeoutSeconds": "subagent_task_timeout_s",
     "scratchRoot": "scratch_root",
     "worktreeIsolation": "worktree_isolation",
     "subagentApprovalMode": "subagent_approval_mode",
     "runTokenBudget": "run_token_budget",
+    "runWallClockLimitMinutes": "run_wall_clock_limit_min",
+    "maxRetryOfChains": "max_retry_of_chains",
 }
 
 
@@ -37,6 +43,15 @@ class OrchSettings:
     #: 子代理（agent_tool）单次委派的 ReAct 迭代预算。默认 10 与原
     #: ``agent_tool.SUBAGENT_MAX_ITERATIONS`` 常量一致，仅开放可配。
     max_subagent_iterations: int = 10  # alpha.36 (Bug #2): 6 → 10, 减少"复杂度超上限"误报
+    #: 主助手（primary profile）迭代上限。legacy_routes.py 调 run_loop 时读取。
+    #: 默认 15 与 profiles.py primary profile 对齐。
+    max_primary_iterations: int = 15
+    #: coder profile 迭代上限。默认 15 与 profiles.py 对齐。
+    max_coder_iterations: int = 15
+    #: reviewer profile 迭代上限。默认 8 与 profiles.py 对齐。
+    max_reviewer_iterations: int = 8
+    #: writer profile 迭代上限。默认 5 与 profiles.py 对齐。
+    max_writer_iterations: int = 5
     scratch_root: str = "orch_scratch"
     worktree_isolation: bool = False
     #: live-events P1: 新 run 的子代理审批模式默认值 —— "ask"（逐次审批，
@@ -53,6 +68,12 @@ class OrchSettings:
     #: total_tokens 上限）。0 = 关闭（默认，保持现状）。触顶后剩余任务经
     #: run 级取消通道收口，conductor 下一批派发被拒（budget_exceeded）。
     run_token_budget: int = 0
+    #: BU11 (round21): run 级墙钟上限（分钟）。0 = 关闭（默认）。超限时剩余
+    #: 任务经 run 级取消通道收口，归因 wall_clock_exceeded。
+    run_wall_clock_limit_min: int = 0
+    #: RD14 (round22): 每 run 重派（retry_of）上限 —— 防止 conductor 误判
+    #: 时无限链式重派（t3←t2←t1…），token/时长成本失控。超限降级普通任务。
+    max_retry_of_chains: int = 10
 
 
 def load_orch_settings() -> OrchSettings:

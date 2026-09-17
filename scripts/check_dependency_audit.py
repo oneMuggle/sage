@@ -24,6 +24,8 @@ NUMERIC_ADVISORY_PATTERN = re.compile(r"^[0-9]+$")
 PYSEC_PATTERN = re.compile(r"^PYSEC-[0-9]+-[0-9]+$")
 CVE_PATTERN = re.compile(r"^CVE-[0-9]{4}-[0-9]+$")
 PIP_ALIAS_PATTERN = re.compile(r"^X[0-9]+-[0-9]{4}-[0-9]+$")
+BIT_ALIAS_PATTERN = re.compile(r"^BIT-[a-z0-9]+-[0-9]{4}-[0-9]+$")
+MAIN_PIP_AFFECTED_PATH = "main Python 3.11 production path"
 
 
 def report_error(message: str, failures: list[str]) -> None:
@@ -57,7 +59,11 @@ def valid_pip_advisory_id(value: Any) -> bool:
 
 def valid_pip_alias(value: Any) -> bool:
     return valid_pip_advisory_id(value) or (
-        isinstance(value, str) and PIP_ALIAS_PATTERN.fullmatch(value) is not None
+        isinstance(value, str)
+        and (
+            PIP_ALIAS_PATTERN.fullmatch(value) is not None
+            or BIT_ALIAS_PATTERN.fullmatch(value) is not None
+        )
     )
 
 
@@ -312,7 +318,11 @@ def npm_findings(
     return findings, normalized, has_valid_advisory
 
 
-def pip_findings(report: Any, failures: list[str]) -> set[Key]:
+def pip_findings(
+    report: Any,
+    failures: list[str],
+    affected_path: str = MAIN_PIP_AFFECTED_PATH,
+) -> set[Key]:
     dependencies = report if isinstance(report, list) else report.get("dependencies") if isinstance(report, dict) else None
     if not isinstance(dependencies, list):
         report_error("pip-audit.json: expected a JSON list or object with dependencies", failures)
@@ -349,7 +359,6 @@ def pip_findings(report: Any, failures: list[str]) -> set[Key]:
             aliases = vulnerability.get("aliases")
             if aliases is not None and (
                 not isinstance(aliases, list)
-                or not aliases
                 or any(
                     not isinstance(alias, str)
                     or not alias.strip()
@@ -357,9 +366,9 @@ def pip_findings(report: Any, failures: list[str]) -> set[Key]:
                     for alias in aliases
                 )
             ):
-                report_error("pip-audit.json: vulnerability aliases must be a non-empty valid string list", failures)
+                report_error("pip-audit.json: vulnerability aliases must be a valid string list", failures)
                 continue
-            findings.add(("pip", package.strip(), version.strip(), vulnerability["id"].strip(), "main Python 3.11 production path"))
+            findings.add(("pip", package.strip(), version.strip(), vulnerability["id"].strip(), affected_path))
     return findings
 
 
@@ -373,52 +382,63 @@ def outcome(name: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--npm", required=True)
-    parser.add_argument("--npm-prod", required=True)
+    parser.add_argument("--npm")
+    parser.add_argument("--npm-prod")
     parser.add_argument("--pip", required=True)
     parser.add_argument("--policy", required=True)
     parser.add_argument("--package-lock", default="package-lock.json")
+    parser.add_argument("--pip-only", action="store_true")
+    parser.add_argument("--pip-affected-path", default=MAIN_PIP_AFFECTED_PATH)
     args = parser.parse_args()
+    if not args.pip_only and (not args.npm or not args.npm_prod):
+        parser.error("--npm and --npm-prod are required unless --pip-only is set")
     failures: list[str] = []
     policy_keys = validate_policy(read_json(args.policy, failures), failures)
-    lock = read_json(args.package_lock, failures)
-    versions, identities = package_versions(lock, failures)
-    npm_keys_by_report: dict[str, set[Key]] = {}
-    npm_report_has_findings: dict[str, bool] = {}
-    for name, path in (("NPM_AUDIT_ALL_OUTCOME", args.npm), ("NPM_AUDIT_PROD_OUTCOME", args.npm_prod)):
-        report = read_json(path, failures)
-        if report is None:
-            npm_keys_by_report[name] = set()
-            npm_report_has_findings[name] = False
-            continue
-        findings, counts, has_valid_advisory = npm_findings(report, path, versions, identities, failures)
-        npm_keys_by_report[name] = findings
-        npm_report_has_findings[name] = has_valid_advisory
-        print(f"{path}: low={counts['low']} moderate={counts['moderate']} high={counts['high']} critical={counts['critical']}")
-    npm_keys = set().union(*npm_keys_by_report.values())
-    for key in sorted(npm_keys):
-        if key not in policy_keys:
-            report_error(f"npm {key[1]} {key[3]} package_version={key[2]} affected_path={key[4]}: not covered by policy", failures)
+    if not args.pip_only:
+        lock = read_json(args.package_lock, failures)
+        versions, identities = package_versions(lock, failures)
+        npm_keys_by_report: dict[str, set[Key]] = {}
+        npm_report_has_findings: dict[str, bool] = {}
+        for name, path in (("NPM_AUDIT_ALL_OUTCOME", args.npm), ("NPM_AUDIT_PROD_OUTCOME", args.npm_prod)):
+            report = read_json(path, failures)
+            if report is None:
+                npm_keys_by_report[name] = set()
+                npm_report_has_findings[name] = False
+                continue
+            findings, counts, has_valid_advisory = npm_findings(report, path, versions, identities, failures)
+            npm_keys_by_report[name] = findings
+            npm_report_has_findings[name] = has_valid_advisory
+            print(f"{path}: low={counts['low']} moderate={counts['moderate']} high={counts['high']} critical={counts['critical']}")
+        npm_keys = set().union(*npm_keys_by_report.values())
+        for key in sorted(npm_keys):
+            if key not in policy_keys:
+                report_error(f"npm {key[1]} {key[3]} package_version={key[2]} affected_path={key[4]}: not covered by policy", failures)
+        for name in ("NPM_AUDIT_ALL_OUTCOME", "NPM_AUDIT_PROD_OUTCOME"):
+            value = outcome(name)
+            if value not in {"success", "failure"}:
+                report_error(f"{name}: unexpected outcome {value!r}", failures)
+            elif value == "failure" and not npm_report_has_findings[name]:
+                report_error(f"{name}: command failed without findings", failures)
     pip_report = read_json(args.pip, failures)
-    pip_keys = pip_findings(pip_report, failures) if pip_report is not None else set()
+    pip_keys = pip_findings(pip_report, failures, args.pip_affected_path) if pip_report is not None else set()
     print(f"pip findings={len(pip_keys)}")
     for key in sorted(pip_keys):
         if key not in policy_keys:
             report_error(f"pip {key[1]} {key[3]} package_version={key[2]} affected_path={key[4]}: not covered by policy", failures)
-    for name in ("NPM_CI_OUTCOME", "PYTHON_INSTALL_OUTCOME"):
+    outcome_names = ("PYTHON_INSTALL_OUTCOME",) if args.pip_only else ("NPM_CI_OUTCOME", "PYTHON_INSTALL_OUTCOME")
+    for name in outcome_names:
         if outcome(name) != "success":
             report_error(f"{name}: command/environment failed ({outcome(name)})", failures)
-    for name in ("NPM_AUDIT_ALL_OUTCOME", "NPM_AUDIT_PROD_OUTCOME"):
-        value = outcome(name)
-        if value not in {"success", "failure"}:
-            report_error(f"{name}: unexpected outcome {value!r}", failures)
-        elif value == "failure" and not npm_report_has_findings[name]:
-            report_error(f"{name}: command failed without findings", failures)
     pip_outcome = outcome("PIP_AUDIT_OUTCOME")
     if pip_outcome not in {"success", "failure"}:
         report_error(f"PIP_AUDIT_OUTCOME: unexpected outcome {pip_outcome!r}", failures)
     elif pip_outcome == "failure" and not pip_keys:
         report_error("pip-audit command failed without findings", failures)
+    if args.pip_only and outcome("PIP_INSTALL_OUTCOME") != "success":
+        report_error(
+            f"PIP_INSTALL_OUTCOME: pip-audit install step failed ({outcome('PIP_INSTALL_OUTCOME')})",
+            failures,
+        )
     if failures:
         print(f"::error::Dependency audit gate failed ({len(failures)} issue(s))")
         return 1

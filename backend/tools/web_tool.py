@@ -23,7 +23,7 @@ from backend.tools.search_config import load_search_config
 from backend.tools.search_engines import SearchEngine, resolve_engine_chain
 from backend.wiki.html_extract import decode_html, extract
 
-from . import content_sniff, web_render
+from . import content_sniff, file_links, web_render
 from .base import BaseTool, ToolResult, ToolSchema
 from .web_render import RenderError
 
@@ -344,7 +344,9 @@ class WebFetchTool(BaseTool):
     risk = RiskClass.EXTERNAL
 
     #: mode 合法取值。text 只给正文，links/tables 额外带对应段，raw 给原始 HTML
-    VALID_MODES = ("text", "links", "tables", "raw")
+    VALID_MODES = ("text", "links", "tables", "raw", "files")
+    #: mode=files 对 top-N 候选做首块探测（流式 GET 读首块即关）
+    FILES_PROBE_TOP_N = 5
 
     #: render 合法取值：auto=检出 JS 壳自动渲染（默认）；always=强制；never=仅静态
     VALID_RENDER_MODES = ("auto", "never", "always")
@@ -442,7 +444,12 @@ class WebFetchTool(BaseTool):
                     "mode": {
                         "type": "string",
                         "enum": list(self.VALID_MODES),
-                        "description": "抽取模式 (默认 text)",
+                        "description": (
+                            "抽取模式 (默认 text)。files：嗅探页面内候选文件链接"
+                            "（citation_pdf_url / <a download> / .pdf|.zip|.docx 后缀 / iframe|embed / "
+                            "meta refresh / 「下载|全文|PDF」锚文本）并对 top 候选探测真实类型，"
+                            "结果 files[] 可直接喂 http_download"
+                        ),
                     },
                     "render": {
                         "type": "string",
@@ -458,7 +465,8 @@ class WebFetchTool(BaseTool):
                         "description": (
                             "凭据档案 domain（如 .cnki.net）：browser_cookies 导出的 "
                             "cookie 或 credential_set 设置的头部凭据（Bearer / API key），"
-                            "命中域自动附加、跨域剥离；过期报 credential_expired，"
+                            "命中域自动附加、跨域剥离；JS 渲染降级 / 反爬升级时"
+                            "同样注入渲染浏览器（AU5）；过期报 credential_expired，"
                             "被踢到登录页报 login_required"
                         ),
                     },
@@ -597,24 +605,16 @@ class WebFetchTool(BaseTool):
         can_escalate = bool(escalate) and render != "never" and mode != "raw"
         try:
             try:
-                response, final_url, credential_note = self._get_with_redirects(
+                response, final_url, credential_note, login_error = self._fetch_credentialled(
                     url,
                     network_policy,
                     gated_by_whitelist,
-                    credential_headers,
                     credential_domain.strip(),
+                    credential_headers,
                 )
                 status = response.status_code
-                if status in _ANTIBOT_STATUS_CODES:
-                    raise _AntibotBlocked(f"http_{status}: 站点拒绝访问（状态码 {status}）", status)
-                response.raise_for_status()
-                # AU2：带凭据却被送到登录页 → login_required（不当普通正文返回）
-                if credential_headers:
-                    login_error = self._detect_login_wall(
-                        url, final_url, response, credential_domain
-                    )
-                    if login_error:
-                        return ToolResult(success=False, error=login_error)
+                if login_error:
+                    return ToolResult(success=False, error=login_error)
                 # C1：以 uncapped 抽取（缓存存全文，返回前统一裁剪）——
                 # 不同 max_length 的请求可共享同一份缓存
                 content = self._render(final_url, response, mode, self._UNCAPPED_LENGTH)
@@ -624,14 +624,24 @@ class WebFetchTool(BaseTool):
                     raise _AntibotBlocked("antibot_page: 静态响应是反爬验证 / 拦截页", status)
                 if self._should_render(render, response, content, max_length):
                     content = self._render_dynamic(
-                        final_url, network_policy, mode, self._UNCAPPED_LENGTH, content, wait_for
+                        final_url,
+                        network_policy,
+                        mode,
+                        self._UNCAPPED_LENGTH,
+                        content,
+                        wait_for,
+                        credential_domain.strip(),
                     )
             except _AntibotBlocked as blocked:
                 if not can_escalate:
                     return ToolResult(success=False, error=f"{blocked.reason}{_ANTIBOT_GUIDANCE}")
                 # AB1：静态通道被拦 → 经渲染池（真 Chrome 指纹 + 代理 + 可选持久
                 # profile）重放一次；仍被拦才返回指引。
-                content = self._escalate(url, network_policy, mode, wait_for, blocked)
+                content = self._escalate(
+                    url, network_policy, mode, wait_for, blocked, credential_domain.strip()
+                )
+            if mode == "files" and content.get("kind") != "binary":
+                self._finalize_files(content, network_policy)
             if use_cache:
                 # 剥离易变 note / cached 标记后存全文副本
                 from .web_cache import put as _cache_put
@@ -788,6 +798,83 @@ class WebFetchTool(BaseTool):
 
         raise ValueError("redirect_limit_exceeded: 重定向次数超限")
 
+    def _try_auto_refresh(self, credential_domain: str, url: str) -> str:
+        """AU3：用档案来源持久 profile 静默重导 cookie；成功返回 note，否则空串。"""
+        from .credential_vault import get_source_profile
+        from .web_render import _auto_refresh_enabled, refresh_credentials
+
+        source_profile = get_source_profile(credential_domain)
+        if not source_profile or not _auto_refresh_enabled():
+            return ""
+        ok, refreshed = refresh_credentials(credential_domain, url, source_profile)
+        if not ok:
+            return ""
+        return (
+            "credential_auto_refreshed: 已用持久 profile 静默重导登录态"
+            f"（{', '.join(refreshed[:5])}）"
+        )
+
+    def _fetch_credentialled(
+        self,
+        url: str,
+        network_policy: NetworkPolicy,
+        gated_by_whitelist: bool,
+        credential_domain: str,
+        credential_headers: Optional[Dict[str, str]],
+    ) -> tuple:
+        """静态抓取 + AU2 登录墙检测；AU3 命中登录墙时静默刷新并重放一次。
+
+        Returns:
+            ``(response, final_url, note, login_error)``：``login_error`` 为最终
+            结论（None = 通过登录墙），note 已合并刷新提示（如有）。
+        """
+        response, final_url, note = self._get_with_redirects(
+            url,
+            network_policy,
+            gated_by_whitelist,
+            credential_headers,
+            credential_domain,
+        )
+        status = response.status_code
+        if status in _ANTIBOT_STATUS_CODES:
+            raise _AntibotBlocked(f"http_{status}: 站点拒绝访问（状态码 {status}）", status)
+        response.raise_for_status()
+        if not credential_headers:
+            return response, final_url, note, None
+        login_error = self._detect_login_wall(url, final_url, response, credential_domain)
+        if not login_error:
+            return response, final_url, note, None
+        # AU3：档案带来源持久 profile（AU6）且开关开启 → 静默重导 cookie 重放
+        from .credential_vault import resolve_credential
+
+        refresh_note = self._try_auto_refresh(credential_domain, url)
+        if not refresh_note:
+            return response, final_url, note, login_error
+        resolution = resolve_credential(credential_domain, url=url)
+        if not resolution.ok or "Cookie" not in resolution.headers:
+            return response, final_url, note, login_error
+        response, final_url, note2 = self._get_with_redirects(
+            url,
+            network_policy,
+            gated_by_whitelist,
+            resolution.headers,
+            credential_domain,
+        )
+        status = response.status_code
+        if status in _ANTIBOT_STATUS_CODES:
+            raise _AntibotBlocked(f"http_{status}: 站点拒绝访问（状态码 {status}）", status)
+        response.raise_for_status()
+        replay_error = self._detect_login_wall(url, final_url, response, credential_domain)
+        if replay_error:
+            return (
+                response,
+                final_url,
+                note2 or note,
+                f"{login_error}（{refresh_note}，但仍被要求登录）",
+            )
+        merged_note = "；".join(x for x in (note2 or note, refresh_note) if x)
+        return response, final_url, merged_note or None, None
+
     def _render(
         self, url: str, response: httpx.Response, mode: str, max_length: int
     ) -> Dict[str, Any]:
@@ -820,7 +907,111 @@ class WebFetchTool(BaseTool):
             result["links"] = page.links[: self._policy.max_result_items]
         elif mode == "tables":
             result["tables"] = page.tables[: self._policy.max_result_items]
+        elif mode == "files":
+            result["files"] = file_links.extract_file_links(text, url)
         return result
+
+    def _finalize_files(self, content: Dict[str, Any], network_policy: NetworkPolicy) -> None:
+        """SN2：对 top-N 候选做首块探测（真实 content-type / 魔数 / 大小），原地更新 ``files``。"""
+        candidates = list(content.get("files") or [])
+        limit = max(1, self._policy.max_result_items)
+        candidates = candidates[:limit]
+        probed = 0
+        for item in candidates:
+            if probed >= self.FILES_PROBE_TOP_N:
+                break
+            probe = self._probe_file_url(str(item.get("url", "")), network_policy)
+            if probe is None:
+                continue
+            probed += 1
+            item.update(probe)
+            if probe.get("probe") == "html":
+                item["score"] = int(item.get("score", 0)) - 50
+            elif probe.get("probe") == "file":
+                item["score"] = int(item.get("score", 0)) + 20
+        candidates.sort(key=lambda c: (-int(c.get("score", 0)), str(c.get("url"))))
+        content["files"] = candidates
+        content["files_total"] = len(content.get("files") or [])
+        content["hint"] = (
+            "files[] 按可能性降序；probe=file 的条目已确认是文件（detected_type / content_length 可用），"
+            "直接 http_download url=<url>；probe=html 说明该链接是网页（登录页 / 中转页），"
+            "可对其再做一次 web_fetch mode=files 或改走 credential_domain / 浏览器通道。"
+            if candidates
+            else "页面未发现候选文件链接：若是 JS 渲染后才出现的按钮，试 render=always；"
+            "或经 browser_launch + browser_navigate + browser_interact 点击后用 browser_downloads 取文件。"
+        )
+
+    def _probe_file_url(  # noqa: PLR0911 — 各探测结论独立 return
+        self, url: str, network_policy: NetworkPolicy
+    ) -> Optional[Dict[str, Any]]:
+        """流式 GET 读首块即关：→ {probe: file|html|other, detected_type, content_type, content_length}。"""
+        if not url.startswith(("http://", "https://")):
+            return None
+        if self._validate_target_url(url) or network_policy.check_host(url):
+            return None
+        if self._policy.subagent_only and self._validate_subagent_url(url):
+            return None
+        try:
+            # 不自动跟随重定向：每一跳都必须过 check_host（与 _get_with_redirects 同口径），
+            # 探测只是"看一眼"，302 直接回报 location 让模型决定。
+            with build_client(
+                timeout=15.0,
+                follow_redirects=False,
+                verify=not network_policy.allows_insecure_tls(url),
+                trust_env=not self._policy.subagent_only,
+                headers=default_headers(),
+            ) as client:
+                request = client.build_request("GET", url, headers={"Accept": "*/*"})
+                response = client.send(request, stream=True)
+                try:
+                    if response.is_redirect:
+                        location = urljoin(url, response.headers.get("location", ""))
+                        return {
+                            "probe": "redirect",
+                            "status_code": response.status_code,
+                            "final_url": location,
+                        }
+                    if response.status_code >= 400:
+                        return {"probe": "error", "status_code": response.status_code}
+                    head = b""
+                    for chunk in response.iter_bytes(content_sniff.SNIFF_BYTES):
+                        head = chunk
+                        break
+                    content_type = response.headers.get("content-type", "")
+                    declared = response.headers.get("content-length", "")
+                    detected = content_sniff.detect_kind(head)
+                    is_html = content_sniff.looks_like_html(head) or (
+                        detected == "text"
+                        and any(m in content_type.lower() for m in self._HTML_CONTENT_TYPES)
+                    )
+                    probe = (
+                        "html"
+                        if is_html
+                        else (
+                            "file"
+                            if content_sniff.is_binary_payload(head, content_type)
+                            else "other"
+                        )
+                    )
+                    result: Dict[str, Any] = {
+                        "probe": probe,
+                        "status_code": response.status_code,
+                        "content_type": content_type or None,
+                        "detected_type": detected,
+                        "content_length": int(declared) if declared.isdigit() else None,
+                    }
+                    disposition = response.headers.get("content-disposition")
+                    if disposition:
+                        from .download_tool import derive_filename
+
+                        result["suggested_filename"] = derive_filename(
+                            str(response.url), disposition
+                        )
+                    return result
+                finally:
+                    response.close()
+        except (httpx.HTTPError, ValueError, OSError) as exc:
+            return {"probe": "error", "error": f"{type(exc).__name__}: {exc}"[:200]}
 
     @staticmethod
     def _binary_result(url: str, response: httpx.Response, base: Dict[str, Any]) -> Dict[str, Any]:
@@ -907,10 +1098,16 @@ class WebFetchTool(BaseTool):
         mode: str,
         wait_for: str,
         blocked: _AntibotBlocked,
+        credential_domain: str = "",
     ) -> Dict[str, Any]:
-        """AB1 升级链：渲染池重放；渲染结果仍是盾页 / 拒绝状态 → 抛 RenderError 附指引。"""
+        """AB1 升级链：渲染池重放；渲染结果仍是盾页 / 拒绝状态 → 抛 RenderError 附指引。
+
+        AU5：携带 ``credential_domain`` 时渲染通道同样注入档案 cookie。
+        """
         try:
-            rendered = web_render.render_page(url, network_policy, wait_for=wait_for)
+            rendered = web_render.render_page(
+                url, network_policy, wait_for=wait_for, credential_domain=credential_domain
+            )
         except RenderError as exc:
             raise RenderError(
                 f"{blocked.reason}；已尝试真浏览器通道仍失败：{exc}{_ANTIBOT_GUIDANCE}"
@@ -936,10 +1133,25 @@ class WebFetchTool(BaseTool):
             "escalated": "render",
             "escalated_from": blocked.reason,
         }
+        if rendered.get("login_wall") and credential_domain:
+            raise RenderError(
+                "login_required: 渲染通道访问被要求登录（凭据可能已失效）。"
+                "请重新登录后 browser_cookies action=export 再试"
+            )
+        refreshed = rendered.get("credential_refreshed")
+        if refreshed:
+            content["note"] = (
+                "credential_refreshed: 渲染通道续期了 cookie，档案已回写"
+                f"（{', '.join(refreshed[:5])}）"
+            )
         if mode == "links":
             content["links"] = list(rendered.get("links") or [])[: self._policy.max_result_items]
         elif mode == "tables":
             content["tables"] = list(rendered.get("tables") or [])[: self._policy.max_result_items]
+        elif mode == "files":
+            content["files"] = file_links.extract_file_links(
+                str(rendered.get("html") or ""), str(content.get("url") or url)
+            )
         return content
 
     def _should_render(
@@ -974,19 +1186,54 @@ class WebFetchTool(BaseTool):
         max_length: int,
         static_content: Dict[str, Any],
         wait_for: str = "",
+        credential_domain: str = "",
     ) -> Dict[str, Any]:
         """JS 壳命中后的渲染降级：headless 取渲染后正文（W1）。
 
-        渲染失败抛 ``RenderError``（execute 单独捕获，不吞成通用失败）。
-        渲染分支自 R1 起经 outerHTML 复用 html_extract，links/tables 与
-        静态分支同构 —— 静态壳的残缺值被渲染值整体替换。
+        AU5：携带 ``credential_domain`` 时渲染通道同样注入档案 cookie，
+        渲染后 cookie 续期回写档案并以 note 提示。
         """
-        rendered = web_render.render_page(url, network_policy, wait_for=wait_for)
+        rendered = web_render.render_page(
+            url, network_policy, wait_for=wait_for, credential_domain=credential_domain
+        )
+        # AU7：渲染落在登录墙 → AU3 自愈重试一次，仍墙则报 login_required
+        auto_refresh_note = ""
+        if rendered.get("login_wall") and credential_domain:
+            auto_refresh_note = self._try_auto_refresh(credential_domain, url)
+            if auto_refresh_note:
+                rendered = web_render.render_page(
+                    url, network_policy, wait_for=wait_for, credential_domain=credential_domain
+                )
+        if rendered.get("login_wall"):
+            raise RenderError(
+                "login_required: 渲染通道访问被要求登录（凭据可能已失效）。"
+                "请重新登录后 browser_cookies action=export 再试；"
+                "或开启 web_access_config.auto_refresh_credentials 用持久 profile 静默续期"
+            )
+        refreshed = rendered.pop("credential_refreshed", None)
         content = dict(static_content)  # 保留 status_code / content_type / encoding / mode
-        content.update(rendered)
+        content.update({k: v for k, v in rendered.items() if k != "html"})
+        if auto_refresh_note:
+            content["note"] = (
+                f"{content['note']}；{auto_refresh_note}" if content.get("note") else auto_refresh_note
+            )
+        if refreshed:
+            note = (
+                "credential_refreshed: 渲染通道续期了 cookie，档案已回写"
+                f"（{', '.join(refreshed[:5])}）"
+            )
+            content["note"] = f"{content['note']}；{note}" if content.get("note") else note
         content["content"] = str(rendered.get("content", ""))[:max_length]
         if mode == "links":
             content["links"] = list(rendered.get("links") or [])[: self._policy.max_result_items]
         elif mode == "tables":
             content["tables"] = list(rendered.get("tables") or [])[: self._policy.max_result_items]
+        elif mode == "files":
+            # 渲染后 DOM 里的候选（SPA 站的下载按钮常在 JS 之后才出现）与静态候选合并
+            rendered_files = file_links.extract_file_links(
+                str(rendered.get("html") or ""), str(content.get("url") or url)
+            )
+            content["files"] = file_links.merge_file_links(
+                rendered_files, list(static_content.get("files") or [])
+            )
         return content

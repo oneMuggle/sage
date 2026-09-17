@@ -17,6 +17,7 @@ import {
   mapLLMErrorToText,
   type LLMErrorResponse,
 } from '../../shared/lib/errorMapping';
+import { clearSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { logger } from '../../shared/lib/logger';
 // Task 5: modelWindows imports removed — frontend no longer computes history budget.
 // Backend now resolves effective window from catalog and computes budget.
@@ -80,6 +81,22 @@ const activeStreamRegistry = new Map<string, ActiveStreamHandle>();
  * handle exists (e.g. after a renderer reload) it still best-effort notifies
  * the backend and returns false. Never throws.
  */
+/**
+ * 2026-09 修复 (同步 #957): 删除会话的级联清理 —— 先取消活跃流(后端不再
+ * 白白消耗 token), 再清空 chatStreamStore 槽位(clearSession 此前零调用,
+ * 迟到事件可能复活死会话), 最后删会话记录。
+ */
+export async function deleteSessionCascade(sid: string): Promise<void> {
+  try {
+    await cancelSessionStream(sid);
+  } catch {
+    // 非活跃会话 / 后端未起 —— 忽略, 继续清理本地状态
+  }
+  useChatStreamStore.getState().clearSession(sid);
+  clearSessionDraft(sid);
+  await useStore.getState().deleteSession(sid);
+}
+
 export async function cancelSessionStream(sid: string): Promise<boolean> {
   const handle = activeStreamRegistry.get(sid);
   if (!handle) {
@@ -119,6 +136,9 @@ export function useChat() {
   // sid → 活跃流句柄（S3: cancelRef/streamIdRef/finishStreamRef 单例的键控版）
   const activeHandleRef = useRef<Map<string, ActiveStreamHandle>>(new Map());
   const [error, setError] = useState<string | null>(null);
+  // 2026-09 修复: 记录错误归属会话 —— 后台会话 A 失败时, 横幅不应出现在
+  // 用户正在看的会话 B (且旧实现的"重试"按钮会重发 B 的消息)。
+  const [errorSessionId, setErrorSessionId] = useState<string | null>(null);
   // PM2 (round8): 计划模式完成的会话 ID —— 非空时 Chat 渲染"按计划执行"批准条。
   const [planApprovalFor, setPlanApprovalFor] = useState<string | null>(null);
   const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
@@ -271,6 +291,7 @@ export function useChat() {
 
       markStreamActive(sid, { streamId: null, cancel: null, finish: null });
       setError(null);
+      setErrorSessionId(null);
 
       const userMessage: Message = {
         id: crypto.randomUUID(),
@@ -284,12 +305,14 @@ export function useChat() {
       if (!chatEndpoint?.baseUrl) {
         // 仍记录错误供上层展示,但消息已经进 store
         setError('未配置 API 地址，请在设置中配置');
+        setErrorSessionId(sid);
         markStreamIdle(sid);
         return;
       }
 
       if (!settings.modelSelections.chatModel.modelId) {
         setError('未选择对话模型，请在设置中配置');
+        setErrorSessionId(sid);
         markStreamIdle(sid);
         return;
       }
@@ -364,6 +387,7 @@ export function useChat() {
         logger.error(requestId, 'useChat.send.failed', err);
         if (err instanceof ApiException && err.llmError) {
           setError(mapLLMErrorToText(err.llmError));
+          setErrorSessionId(sid);
           return;
         }
         const apiErr = err as {
@@ -373,6 +397,7 @@ export function useChat() {
         };
         if (apiErr.llmError || apiErr.error) {
           setError(mapLLMErrorToText(apiErr.llmError ?? apiErr.error!));
+          setErrorSessionId(sid);
           return;
         }
         // 后端 agent.run_loop / agent_tool 在 FAILED 收尾时把 ``payload.error``
@@ -383,6 +408,7 @@ export function useChat() {
         const raw = err instanceof Error ? err.message : String(err ?? '');
         const agentText = mapAgentErrorToText(raw);
         setError(agentText ?? raw ?? '发送消息失败');
+        setErrorSessionId(sid);
       };
 
       // 把流式最终 content 写回 store.messages,让 derivedMessages 退回
@@ -602,9 +628,15 @@ export function useChat() {
                   } catch {
                     // Not JSON, ignore
                   }
+                  // 防御: 后端历史 bug (execute_code_tool 异常退出返回 dict error)
+                  // 可能让 tr.content 是对象而非字符串,这里强制序列化为字符串以避免
+                  // React 渲染对象时触发 "Objects are not valid as a React child"。
+                  const safeResult = typeof tr.content === 'string'
+                    ? tr.content
+                    : JSON.stringify(tr.content ?? '');
                   useChatStreamStore.getState().appendOrUpdateToolCall(sid, {
                     ...targetTc,
-                    result: tr.content,
+                    result: safeResult,
                     metadata,
                   });
                 }
@@ -816,7 +848,13 @@ export function useChat() {
               return;
             }
             if (evt.state === 'failed') {
-              finishReattach(null, evt.error ?? '流式失败');
+              // 2026-09 修复 (同步 #971): error 信封 dict | string 双态归一化
+              const raw = evt.error;
+              const errText =
+                typeof raw === 'string'
+                  ? raw
+                  : (raw?.message ?? '流式失败');
+              finishReattach(null, errText);
               return;
             }
             // R35: 编排/任务板事件走共享应用器 —— 重放时任务板/live 态
@@ -919,9 +957,13 @@ export function useChat() {
     [chatEndpoint, settings],
   );
 
-  const clearError = useCallback(() => setError(null), []);
+  const clearError = useCallback(() => {
+    setError(null);
+    setErrorSessionId(null);
+  }, []);
 
   return {
+    errorSessionId,
     messages: derivedMessages,
     isLoading,
     error,

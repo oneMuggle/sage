@@ -1,7 +1,7 @@
 // src/shared/api/fileSearchClient.ts
 import { workspaceApi } from './workspaceApi';
 
-export type FileSearchKind = 'file' | 'office-ppt' | 'office-word' | 'office-excel';
+export type FileSearchKind = 'file' | 'office-ppt' | 'office-word' | 'office-excel' | 'office-pdf';
 
 /**
  * Workspace-aware search result.
@@ -26,7 +26,7 @@ export interface FileSearchResult {
   size?: number;
   kind: FileSearchKind;
   docId: string | null;
-  docType: 'ppt' | 'word' | 'excel' | null;
+  docType: 'ppt' | 'word' | 'excel' | 'pdf' | null;
   sourcePath: string | null;
 }
 
@@ -64,7 +64,10 @@ export class FileSearchTimeoutError extends Error {
 export type AtFileSelection =
   | { kind: 'file'; path: string; name: string }
   | { kind: 'office-import'; result: FileSearchResult }
-  | { kind: 'office'; ref: { docId: string; docType: 'ppt' | 'word' | 'excel'; filename: string } };
+  | {
+      kind: 'office';
+      ref: { docId: string; docType: 'ppt' | 'word' | 'excel' | 'pdf'; filename: string };
+    };
 
 /**
  * Build a `ChatOfficeRef` from a workspace search result, or return `null`
@@ -76,7 +79,7 @@ export type AtFileSelection =
  */
 export function fileSearchResultToChatOfficeRef(
   result: FileSearchResult,
-): { docId: string; docType: 'ppt' | 'word' | 'excel'; filename: string } | null {
+): { docId: string; docType: 'ppt' | 'word' | 'excel' | 'pdf'; filename: string } | null {
   if (result.kind === 'file') return null;
   if (!result.docId || !result.docType) return null;
   return {
@@ -137,10 +140,10 @@ export const fileSearchClient = {
         size: r.sizeBytes,
         kind: r.kind,
         docId: r.docId,
-        // Chat @-menu pdf support is deferred (OfficeDocType now carries
-        // 'pdf' for the /office page); coalesce to null so a managed pdf
-        // doc degrades to the plain-file insertion path in chat.
-        docType: r.docType === 'pdf' ? null : r.docType,
+        // B4 (office-p0): managed pdf docs now surface as office refs
+        // (backend chat_refs accepts pdf) instead of degrading to the
+        // plain-file insertion path.
+        docType: r.docType,
         sourcePath: r.sourcePath,
       })),
     );

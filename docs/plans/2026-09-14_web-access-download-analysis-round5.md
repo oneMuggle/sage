@@ -1,7 +1,7 @@
 # Sage 网页访问与文件下载能力分析及优化方案（Round 5 候选）
 
 - **日期**：2026-09-14
-- **状态**：方案完成，**B1 已实施**（分支 `feat/web-access-round5-b1`，基于 origin/main），**B2 已实施**（分支 `feat/web-access-round5-b2`，基于 B1），**B3 已实施**（分支 `feat/web-access-round5-b3`，基于 B2）；B4–B6 待排期
+- **状态**：方案完成，B1–B4 已实施（分支链 `feat/web-access-round5-b1` → `-b2` → `-b3` → `-b4`，逐级基于前一批）；B5/B6 待排期
 - **勘察范围**：`backend/tools/{web_tool,download_tool,browser_tool,browser_cdp,browser_ws,web_render,web_cache,credential_vault,http_factory,network_config}.py`、`backend/domain/network_policy.py`、`docs/plans/2026-09-*_web-access-*.md`（Round 1–4）
 - **方法**：只读代码勘察（附 `file:line`），对照 Round 1–4 已交付项，避免重复提案
 - **编号约定**：AB = 反爬；AU = 登录态；SN = 嗅探；DL = 下载稳定性/续传；X = 横切
@@ -260,6 +260,20 @@ vault 增 `kind: "cookie" | "header"`；`browser_cookies` 之外新增 `credenti
 
 双分支：改动文件 `credential_vault.py` / `web_tool.py` / `download_tool.py` / `browser_tool.py` 在 main 与 win7 同源；stdlib only（`email.utils.parsedate_to_datetime`），py3.8 `ast.parse(feature_version=(3,8))` 通过。
 
+## 2.9 B4 实施记录（2026-09-14）
+
+| 项 | 落点 | 说明 |
+| --- | --- | --- |
+| SN2 候选抽取 | 新模块 `file_links.py`：`_FileLinkCollector(HTMLParser)` / `extract_file_links(html, base_url, limit)` / `merge_file_links` / `classify_url` / `classify_mime` | 基础分：meta citation_pdf_url 80、link alternate 70、iframe/embed/object 40、meta refresh 45、anchor 20（+25 download 属性）；加分：文件后缀 +30（pdf +40）、MIME +15、下载端点特征（`/pdf/`、`/download`、`?attachment=`…）+15、提示锚文本 +10；`login|share|mailto` 等 −30；无后缀且 <25 分丢弃；同 URL（忽略 #fragment）去重取高分并合并 `sources`；未闭合 `<a>` 在下一个 `<a>` 处收口 |
+| SN2 探测 | `WebFetchTool._finalize_files` / `_probe_file_url`；`VALID_MODES` 增 `files`，`FILES_PROBE_TOP_N=5` | 流式 GET 读首块（`SNIFF_BYTES`）即关；`follow_redirects=False`（每跳必须过 `check_host`，302 回报 `probe=redirect` + `final_url`）；探测前逐 URL 过 `_validate_target_url` / `check_host` / subagent 公网校验，拒绝的候选保留但无 `probe`；`probe=file` +20 / `html` −50 后重排；`files_total` + 决策 `hint`；二进制目标本身仍走 SN1 `kind=binary` |
+| SN2 渲染合并 | `web_render.render_page` 结果新增 `html`（渲染后 outerHTML，仅供调用方嗅探）；`_render_dynamic` / `_escalate` 对 `mode=files` 用渲染 HTML 抽候选并与静态候选 `merge_file_links` | `_render_dynamic` 合并 rendered 时剔除 `html` 键，不回传给模型 / 不进缓存 |
+| SN3 事件通道 | 新模块 `browser_events.py`：`DownloadTracker`（线程安全状态表，`MAX_DOWNLOAD_RECORDS=200`，`wait_for_complete(timeout)` 事件驱动等待，`resolve_completed_path` 按 guid → suggestedFilename 解析，`mark_artifact_recorded` 幂等）、`_EventChannel`（常驻 WS 守护线程：握手 → `Browser.setDownloadBehavior{allow, downloadPath, eventsEnabled:true}` 应答 → 循环分发 `Browser.download*`）、`start/get/stop_download_tracking` / `stop_all_tracking` / `list_download_dir` | 连接 / 应答失败 → `tracker.connected=False` + `error`，命令通道不受影响；`browser_cdp._terminate_session` 先停通道再杀进程（覆盖 `browser_close` 与 `close_all` 退出钩子） |
+| SN3 工具 | `BrowserDownloadsTool`（`browser_downloads`，READ）；`BrowserLaunchTool` 启动后 `start_download_tracking`，结果 `download_tracking`；`tool_names.BROWSER_TOOLS` + `tools/__init__` 注册 | 有通道：`downloads[]` / `pending` / 超时 note，完成项 `_record_artifact_safely` 一次；无通道：目录列举（`.crdownload` = inProgress）+ note，`wait_for_complete` 轮询目录 |
+
+测试：`test_file_links.py` 新增 15 组（citation_pdf_url 排首 / download 属性与后缀 / iframe-embed-object-refresh / link alternate / 提示锚文本低分保留 / 去重合并 / 负向降权 / 上限与残缺 HTML / classify 表 / merge），`test_browser_events.py` 新增 8（tracker 状态机 / 文件名回退 / 等待超时与事件唤醒 / 记录上限 / 目录列举 / 迷你 WS 服务端对拍：事件分发 + 幂等复用 + 停止 / 应答错误 / 连接拒绝），`test_browser_tool.py` +7（有通道 / 等待超时 note / 目录回退 / 未知参数 / 无会话 / launch 建通道 / 工具名），`test_web_tool.py` +5（抽取 + 探测 file/html/error / 无候选 hint / 候选越白名单不探测 / SPA 渲染合并且 html 不回传 / 二进制目标仍 binary）；`test_profiles_intranet_web_access_migration.py` coder 白名单期望加 `browser_downloads`。
+
+双分支：新模块 stdlib only（`html.parser` / `threading` / `socket` 经 `browser_ws`），无新依赖；`tool_names.py` 在两分支同源，cherry-pick 不需手工改白名单。已知限制：事件通道只订阅 `Browser.download*`（方案 SN3 提到的 `Network.responseReceived` 主帧状态已由 B2 的 Navigation Timing 方案覆盖，不再重复）；浏览器内 JS 发起的下载仍不受逐跳 `check_host`（§4 口径不变）。
+
 ## 3. 实施批次建议
 
 | 批次 | 内容 | 预估 | 双分支 |
@@ -267,7 +281,7 @@ vault 增 `kind: "cookie" | "header"`；`browser_cookies` 之外新增 `credenti
 | **B1（P0）** ✅ | DL1 重试/续传/`.part`/完整性 + DL3/SN1 魔数嗅探 + download 复用默认头 | 已交付 | main + win7（stdlib+httpx，零新依赖） |
 | **B2（P1）** ✅ | AB1 自动升级链 + AB2 头拟真 + AB4 去自动化痕迹 + AB5 重试/限速 | 已交付 | main + win7 |
 | **B3（P1）** ✅ | AU1 cookie 元数据/过期 + AU2 Set-Cookie 回写/登录墙检测 + AU4 header 凭据 | 已交付 | main + win7（未新增 settings key / 工具名，零手工 cherry） |
-| **B4（P1）** | SN3 浏览器事件长连接 + `browser_downloads` + SN2 `mode=files` | 2 天 | main + win7 |
+| **B4（P1）** ✅ | SN3 浏览器事件长连接 + `browser_downloads` + SN2 `mode=files` | 已交付 | main + win7 |
 | **B5（P2）** | DL2 后台任务/进度/取消 + AU3/AU5 自动刷新与渲染池互通 + AB6 连接复用 | 2–3 天 | main 优先（涉前端进度 UI） |
 | **B6（P2，可选）** | AB3 HTTP/2 / curl_cffi 指纹伪装 | 0.5 天 | main only |
 

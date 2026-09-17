@@ -169,11 +169,13 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
           SAGE_DB_PATH: opts.sageDbPath,
           SAGE_USER_DATA_DIR: opts.sageUserDataDir,
           PYTHON_BACKEND_PORT: String(opts.port),
+          SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
         },
         extraEnv: {
           SAGE_DB_PATH: opts.sageDbPath,
           SAGE_USER_DATA_DIR: opts.sageUserDataDir,
           PYTHON_BACKEND_PORT: String(opts.port),
+          SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
         },
         reason: 'dev-conda-overridden',
       };
@@ -206,11 +208,13 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
             SAGE_DB_PATH: opts.sageDbPath,
             SAGE_USER_DATA_DIR: opts.sageUserDataDir,
             PYTHON_BACKEND_PORT: String(opts.port),
+            SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
           },
           extraEnv: {
             SAGE_DB_PATH: opts.sageDbPath,
             SAGE_USER_DATA_DIR: opts.sageUserDataDir,
             PYTHON_BACKEND_PORT: String(opts.port),
+            SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
           },
           reason: 'dev-conda',
         };
@@ -222,8 +226,24 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
       cmd: 'conda',
       args: ['run', '-n', 'sage-backend', 'python', '-m', 'backend.main'],
       cwd: process.cwd(),
-      env: { SAGE_DB_PATH: opts.sageDbPath, SAGE_USER_DATA_DIR: opts.sageUserDataDir },
-      extraEnv: { SAGE_DB_PATH: opts.sageDbPath, SAGE_USER_DATA_DIR: opts.sageUserDataDir },
+      // 2026-08-26: PYTHON_BACKEND_PORT was missing here, which meant the
+      // dev-conda spawn relied on backend/main.py falling back to its
+      // default port (8765). If main.ts overrides the port via env, the
+      // conda-launched backend silently uses 8765 while the renderer
+      // hits the overridden port → ECONNREFUSED → white screen. Mirror
+      // PYTHON_BACKEND_PORT in dev-conda like every other spawn reason.
+      env: {
+        SAGE_DB_PATH: opts.sageDbPath,
+        SAGE_USER_DATA_DIR: opts.sageUserDataDir,
+        PYTHON_BACKEND_PORT: String(opts.port),
+        SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
+      },
+      extraEnv: {
+        SAGE_DB_PATH: opts.sageDbPath,
+        SAGE_USER_DATA_DIR: opts.sageUserDataDir,
+        PYTHON_BACKEND_PORT: String(opts.port),
+        SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
+      },
       reason: 'dev-conda',
     };
   }
@@ -341,6 +361,7 @@ function packagedEnv(
     SAGE_DB_PATH: sageDbPath,
     SAGE_USER_DATA_DIR: sageUserDataDir,
     SAGE_LOG_LEVEL: process.env.SAGE_LOG_LEVEL ?? 'info',
+    SAGE_LOG_TIMEZONE: process.env.SAGE_LOG_TIMEZONE ?? 'UTC',
     PYTHONPATH: [join(resourcesPath, 'backend'), join(resourcesPath, 'sage-core')].join(sep),
   };
 }

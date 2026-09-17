@@ -41,6 +41,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple
 
@@ -55,6 +56,11 @@ from .storage import validate_workspace
 logger = logging.getLogger(__name__)
 
 __all__ = ["ExportPdfResult", "export_to_pdf"]
+
+#: LibreOffice 并发 ``--convert-to`` 会互相干扰（多实例共享 user profile
+#: 报锁冲突）；导出是显式低频用户动作，进程内串行即可。Word COM 走
+#: DispatchEx 独立实例，一并串行省去并发心智负担。
+_EXPORT_LOCK = threading.Lock()
 
 #: Managed document types that may be exported to PDF.
 _SUPPORTED_EXTENSIONS = (".docx", ".xlsx", ".pptx")
@@ -293,14 +299,15 @@ def export_to_pdf(
     Returns:
         ExportPdfResult with ``method``/``output_path`` set on success.
     """
-    try:
-        return _export_to_pdf_inner(source, workspace, timeout_seconds=timeout_seconds)
-    except Exception as exc:  # noqa: BLE001 — 契约：绝不向路由层抛异常
-        logger.exception("export_to_pdf crashed unexpectedly")
-        return ExportPdfResult(
-            ok=False,
-            error=f"导出 PDF 失败：内部错误（{type(exc).__name__}，详见日志）",
-        )
+    with _EXPORT_LOCK:
+        try:
+            return _export_to_pdf_inner(source, workspace, timeout_seconds=timeout_seconds)
+        except Exception as exc:  # noqa: BLE001 — 契约：绝不向路由层抛异常
+            logger.exception("export_to_pdf crashed unexpectedly")
+            return ExportPdfResult(
+                ok=False,
+                error=f"导出 PDF 失败：内部错误（{type(exc).__name__}，详见日志）",
+            )
 
 
 def _export_to_pdf_inner(  # noqa: PLR0911 — 逐条早退是这套失败契约的可读形式

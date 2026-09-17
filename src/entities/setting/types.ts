@@ -91,6 +91,10 @@ export interface OrchSettings {
   // 子代理（agent tool）单次委派的 ReAct 迭代预算。默认 10 与后端
   // ``OrchSettings.max_subagent_iterations`` 默认对齐；用户可在此调整。
   maxSubagentIterations: number; // 10 (alpha.36: 6 → 10, 减少"复杂度超上限"误报)
+  maxPrimaryIterations: number; // 15 (与 profiles.py primary 对齐)
+  maxCoderIterations: number; // 15 (与 profiles.py coder 对齐)
+  maxReviewerIterations: number; // 8 (与 profiles.py reviewer 对齐)
+  maxWriterIterations: number; // 5 (与 profiles.py writer 对齐)
   worktreeIsolation: boolean; // false
   // live-events P1 (2026-09-06): 新 run 子代理审批模式默认值。
   // "ask" = 风险工具逐次审批（子代理审批请求转发前端弹窗）;
@@ -129,6 +133,12 @@ export interface AppSettings {
   // 默认 'Asia/Shanghai' (与后端 settings_canonicalizer.DEFAULT_TIMEZONE 对齐).
   // 后端 zoneinfo 校验, 非法值 → 422.
   timezone: string;
+
+  // 日志时区 (2026-09-17): 控制日志时间戳使用的时区.
+  // 'UTC' = 使用 UTC 时间 (默认, 历史行为)
+  // 'local' = 使用系统本地时区
+  // IANA 时区字符串 = 使用指定时区 (如 'Asia/Shanghai')
+  logTimezone: string;
 
   // Wiki
   wiki: WikiSettings;
@@ -179,6 +189,10 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   maxRetries: 2,
   maxLaneIterations: 12,
   maxSubagentIterations: 10,
+  maxPrimaryIterations: 15,
+  maxCoderIterations: 15,
+  maxReviewerIterations: 8,
+  maxWriterIterations: 5,
   worktreeIsolation: false,
   subagentApprovalMode: 'ask',
   runTokenBudget: 0,
@@ -205,6 +219,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // DEFAULT_TIMEZONE 对齐. 后端 zoneinfo 校验; 前端只 export 默认值, 由
   // mergeWithDefaults 兜底补值.
   timezone: 'Asia/Shanghai',
+
+  // 日志时区默认 'UTC' — 保持历史行为. 用户可在设置页切换为 'local' 或 IANA 时区.
+  logTimezone: 'UTC',
 
   // Wiki
   wiki: {
@@ -290,7 +307,7 @@ function fillSelection(
   const matchingEndpoint = endpoints.find(
     (endpoint) =>
       hasUsableEndpoint(endpoint) &&
-      endpoint.discoveredModels.some((model) => model.id === fallbackModelId),
+      (endpoint.discoveredModels ?? []).some((model) => model.id === fallbackModelId),
   );
   if (matchingEndpoint) {
     return {

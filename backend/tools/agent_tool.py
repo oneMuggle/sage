@@ -117,7 +117,7 @@ SUBAGENT_TOOL_WHITELIST: Tuple[str, ...] = (
 # ``SUBAGENT_MAX_ITERATIONS`` is the fallback when orch settings are
 # unreadable; the effective budget comes from
 # ``OrchSettings.max_subagent_iterations`` (same default).
-SUBAGENT_MAX_ITERATIONS = 6
+SUBAGENT_MAX_ITERATIONS = 10  # 与 OrchSettings.max_subagent_iterations 默认对齐 (PR#898)
 SUBAGENT_ANSWER_CAP = 20_000
 
 

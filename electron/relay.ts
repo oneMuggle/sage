@@ -27,6 +27,22 @@
 import fetch from 'node-fetch';
 import type { Readable } from 'node:stream';
 
+/**
+ * True while `webContents.send` is safe to call. After a window is closed /
+ * the renderer crashes mid-stream, the pending relay fetch keeps delivering
+ * NDJSON chunks; sending to a destroyed webContents throws
+ * "Object has been destroyed" as an uncaught exception in the main process.
+ */
+function canSend(webContents: WebContentsLike): boolean {
+  const maybe = webContents as unknown as { isDestroyed?: () => boolean };
+  try {
+    return typeof maybe.isDestroyed === 'function' ? !maybe.isDestroyed() : true;
+  } catch {
+    return false;
+  }
+}
+
+
 export type WebContentsLike = {
   send: (channel: string, payload: unknown) => void;
 };
@@ -146,12 +162,12 @@ export async function relayNdjsonToEvent(
     body,
     (rawEvent: unknown) => {
       if (typeof rawEvent !== 'object' || rawEvent === null) {
-        webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
+        if (canSend(webContents)) webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
         return;
       }
       const ev = (rawEvent as { event?: unknown }).event;
       if (typeof ev !== 'string') {
-        webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
+        if (canSend(webContents)) webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
         return;
       }
       let result: { suffix: string; data: unknown } | null;
@@ -166,7 +182,7 @@ export async function relayNdjsonToEvent(
         };
       }
       if (!result) return;
-      webContents.send(`sage:event:${eventPrefix}${result.suffix}`, result.data);
+      if (canSend(webContents)) webContents.send(`sage:event:${eventPrefix}${result.suffix}`, result.data);
     },
     signal,
   );
@@ -211,7 +227,7 @@ export async function relayChatStream(
   await parseNdjsonStream(
     res.body,
     (event) => {
-      webContents.send(`sage:event:${eventName}`, event);
+      if (canSend(webContents)) webContents.send(`sage:event:${eventName}`, event);
     },
     signal,
   );
@@ -262,7 +278,7 @@ export async function relayOrchEventsStream(
   await parseNdjsonStream(
     res.body,
     (event) => {
-      webContents.send(`sage:event:${eventName}`, event);
+      if (canSend(webContents)) webContents.send(`sage:event:${eventName}`, event);
     },
     signal,
   );

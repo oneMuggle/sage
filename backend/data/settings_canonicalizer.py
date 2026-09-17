@@ -49,6 +49,19 @@ ALIASES: Dict[str, str] = {
     # ModelSelection 子层
     "endpoint_id": "endpointId",
     "model_id": "modelId",
+    # orch 子层 (2026-09 修复): relay 的 camelToSnakeKeys 会把前端发送的
+    # orch 对象整体转成 snake, ALIASES 缺对的话 _translate_key 翻不回 camel,
+    # validate_settings_shape 白名单报 400 —— 设置页编排段任一保存都失败。
+    "max_concurrent_subagents": "maxConcurrentSubagents",
+    "max_aggregate_chars": "maxAggregateChars",
+    "max_subagent_result_chars": "maxSubagentResultChars",
+    "max_retries": "maxRetries",
+    "max_lane_iterations": "maxLaneIterations",
+    "max_subagent_iterations": "maxSubagentIterations",
+    "worktree_isolation": "worktreeIsolation",
+    "subagent_approval_mode": "subagentApprovalMode",
+    "run_token_budget": "runTokenBudget",
+    "scratch_root": "scratchRoot",
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单
@@ -65,6 +78,8 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         "temperature",
         # Task 1 (2026-08-23): IANA timezone, 默认 Asia/Shanghai, 后端 zoneinfo 校验
         "timezone",
+        # 日志时区 (2026-09-17): 'UTC' | 'local' | IANA; 校验下沉到 validate_log_timezone().
+        "logTimezone",
         "wiki",
         "version",
         # Wave 3 P2-9 (2026-08-14): 编排执行参数段。
@@ -122,6 +137,10 @@ LEGAL_MODEL_SELECTIONS_KEYS: FrozenSet[str] = frozenset(
 )
 # orch 段 (OrchSettings + scratchRoot). 前端 interface 只暴露 6 个数值;
 # scratchRoot 是后端配置 (spec 偏差, 见 Wave 3 P2-9 plan §3.3).
+# 2026-09 修复: 补齐 worktreeIsolation / subagentApprovalMode / runTokenBudget —
+# 三者早已存在于 OrchSettings (orch_settings.py) 且前端可编辑, 白名单漏掉
+# 导致设置页编排段任一保存都 400 invalid_settings_shape (错误又被前端
+# 静默吞掉), 三个设置永远无法持久化。
 LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
     {
         "maxConcurrentSubagents",
@@ -130,6 +149,9 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "maxRetries",
         "maxLaneIterations",
         "maxSubagentIterations",
+        "worktreeIsolation",
+        "subagentApprovalMode",
+        "runTokenBudget",
         "scratchRoot",
     }
 )
@@ -487,6 +509,53 @@ def detect_legacy_snake_pollution(
 # 层 + 本 helper 在 strip_unknown_fields 之后做, 保证 422 响应一致性.
 
 DEFAULT_TIMEZONE = "Asia/Shanghai"
+# 日志时区 (2026-09-17): 允许 'UTC' | 'local' | IANA 时区字符串.
+# 'UTC' 保持历史行为; 'local' 用系统本地时区; 其他走 zoneinfo.
+DEFAULT_LOG_TIMEZONE = "UTC"
+# 日志时区保留关键字 (非 IANA, 不需要 zoneinfo 校验).
+LOG_TIMEZONE_RESERVED: FrozenSet[str] = frozenset({"UTC", "utc", "local"})
+
+
+def validate_log_timezone(value: Any) -> Any:
+    """日志时区校验 (2026-09-17).
+
+    允许的值:
+    - ``None`` / 空字符串: 视为"未设置", 由 ``_migrate_default_log_timezone`` 兜底补 ``DEFAULT_LOG_TIMEZONE`` (``UTC``).
+    - ``'UTC'`` / ``'utc'``: 关键字, 走 UTC, 不走 zoneinfo.
+    - ``'local'``: 关键字, 走系统本地时区, 不走 zoneinfo.
+    - 其他字符串: IANA 时区, 用 ``zoneinfo`` 校验 (Py3.9+ 标准库, Py3.8 走 backports.zoneinfo).
+
+    非法字符串抛 ``ValueError`` —— FastAPI 通过 handler 翻译成 422.
+    """
+    if value is None or value == "":
+        return value
+    if not isinstance(value, str):
+        raise ValueError(
+            f"logTimezone must be a string, got {type(value).__name__}: {value!r}"
+        )
+    if value in LOG_TIMEZONE_RESERVED:
+        # 标准化 'utc' → 'UTC' (大小写不敏感, 写入 DB 时用 'UTC' 大写)
+        if value == "utc":
+            return "UTC"
+        if value == "local":
+            return "local"
+        return value
+    try:
+        # 延迟导入 zoneinfo — Python 3.9+ 标准库; Win7 走 backports.zoneinfo.
+        from zoneinfo import ZoneInfo
+    except ImportError:  # pragma: no cover — py3.9+ always has zoneinfo
+        try:
+            from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+        except ImportError as exc:  # pragma: no cover — backports is dep
+            raise ValueError(
+                "logTimezone validation requires zoneinfo or backports.zoneinfo"
+            ) from exc
+
+    try:
+        ZoneInfo(value)
+    except Exception as exc:  # ZoneInfoNotFoundError + 其它解析异常
+        raise ValueError(f"invalid logTimezone {value!r}: {exc}") from exc
+    return value
 
 
 def validate_timezone(value: Any) -> Any:
@@ -631,6 +700,8 @@ def validate_settings_payload(
     if not isinstance(settings, dict):
         return  # 非 dict 已经在 validate_settings_shape 里挡掉
     validate_timezone(settings.get("timezone"))
+    # 日志时区 (2026-09-17): 与顶层 timezone 同样的校验路径, 但允许 'UTC' | 'local' 关键字.
+    validate_log_timezone(settings.get("logTimezone"))
     endpoints = settings.get("endpoints")
     if isinstance(endpoints, list):
         for i, ep in enumerate(endpoints):
@@ -651,6 +722,8 @@ def classify_settings_validation_error(exc: ValueError) -> str:
     message = str(exc)
     if "timezone" in message:
         return "timezone"
+    if "logTimezone" in message:
+        return "logTimezone"
     if "protocol" in message:
         return "protocol"
     if "localModelPath" in message:

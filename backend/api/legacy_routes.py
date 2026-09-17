@@ -1892,7 +1892,8 @@ async def chat(
                 "api_key": data.api_key,
                 "base_url": data.api_url,
                 "model": data.model or "gpt-3.5-turbo",
-                "temperature": data.temperature or 0.7,
+                # temperature=0 是合法值 (确定性输出), 不能用 or 兜底
+                "temperature": 0.7 if data.temperature is None else data.temperature,
             }
             logger.info(
                 f"[REQ {request_id}] using custom LLM config: model={_safe_log_field(llm_config['model'])}"
@@ -2198,7 +2199,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 刻意 new 一个独立实例而非用下方 producer 内的 session_repo 变量 ——
             # 那个变量在数百行之后才绑定，早期失败路径 finally 会 UnboundLocalError。
             try:
-                SessionRepository().update_run_status(data.session_id, "running")
+                await _run_db_sync(
+                    SessionRepository().update_run_status, data.session_id, "running"
+                )
             except Exception as status_err:  # noqa: BLE001 — fail-open
                 logger.debug("会话运行态(running)写入失败: %s", status_err)
 
@@ -2226,7 +2229,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     "api_key": data.api_key,
                     "base_url": data.api_url,
                     "model": data.model or "gpt-3.5-turbo",
-                    "temperature": data.temperature or 0.7,
+                    # temperature=0 是合法值 (确定性输出), 不能用 or 兜底
+                    "temperature": 0.7 if data.temperature is None else data.temperature,
                 }
                 # 推理参数:None 时不传,避免污染老 LLM
                 if data.reasoning_effort is not None:
@@ -2339,10 +2343,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     # S1: finally 落库 failed + 原因
                     _producer_error = "今日花费已达限额（spend_limit_exceeded）"
+                    # 2026-09 修复: 失败信封统一为 dict {type, message} ——
+                    # 与 _run_producer 的 LLMError.to_dict() 同构, 前端已双态兼容。
                     await entry.queue.put(
                         {
                             "state": "failed",
-                            "error": "spend_limit_exceeded",
+                            "error": {
+                                "type": "spend_limit_exceeded",
+                                "message": _producer_error,
+                            },
                         }
                     )
                     return
@@ -3017,8 +3026,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 elif stream_entry.get("cancelled") and dispatcher is not None:
                     dispatcher.cancel()
 
+            # 从 settings 读 profile 迭代上限（用户可配），不回退到 profile 硬编码值
+            from backend.orchestration.orch_settings import load_orch_settings
+            _orch = load_orch_settings()
+            _profile_name = agent.profile.get("name", "primary") if agent.profile else "primary"
+            _profile_max_iter = {
+                "primary": _orch.max_primary_iterations,
+                "coder": _orch.max_coder_iterations,
+                "reviewer": _orch.max_reviewer_iterations,
+                "writer": _orch.max_writer_iterations,
+            }.get(_profile_name, _orch.max_primary_iterations)
+
             async for evt in agent.run_loop(
-                messages, llm_config=llm_config, session_id=data.session_id
+                messages, llm_config=llm_config, session_id=data.session_id,
+                max_iterations=_profile_max_iter,
             ):
                 # L2 真流式: run_loop 流式 THINKING 产出的内容增量直接转发
                 # (事件结构与旧 fake stream 的 content_delta 完全一致,前端无感)。
@@ -3314,8 +3335,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         str(_exc_info[1]) if _exc_info and _exc_info[0] else "运行失败"
                     )
             try:
-                SessionRepository().update_run_status(
-                    data.session_id, _terminal_status, _terminal_error
+                await _run_db_sync(
+                    SessionRepository().update_run_status,
+                    data.session_id,
+                    _terminal_status,
+                    _terminal_error,
                 )
             except Exception as status_err:  # noqa: BLE001 — fail-open
                 logger.debug("会话运行态(%s)写入失败: %s", _terminal_status, status_err)

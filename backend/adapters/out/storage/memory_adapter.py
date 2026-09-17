@@ -67,11 +67,11 @@ class MemoryStorageAdapter:
     def _sync_list_sessions(self) -> List[Dict[str, Any]]:
         result = []
         for sid, state in self._sessions.items():
-            # P0-4 (UI 优化方案 2026-09-13): 取最后一条 user/assistant 消息预览(截断 80 字符)
+            # P0-4 (UI 优化方案 2026-09-13): 取最后一条 user/assistant 消息预览(截断 40 字符)
             preview = None
             for msg in reversed(state.messages):
                 if msg.role in ("user", "assistant"):
-                    preview = msg.content[:80] if msg.content else None
+                    preview = msg.content[:40] if msg.content else None
                     break
             result.append(
                 {

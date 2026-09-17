@@ -154,6 +154,12 @@ const electronAPI = {
       ipcRenderer.invoke('sage-file:register-root', path) as Promise<boolean>,
     unregisterRoot: (path: string) =>
       ipcRenderer.invoke('sage-file:unregister-root', path) as Promise<boolean>,
+    // P22 (2026-09-17): 项目级 allowed_paths 注册 —— 与工作区根 OR-组合，
+    // 命中任一即放行。register 接收空数组等同清空（保留 key）。
+    registerAllowedPaths: (projectId: string, paths: string[]) =>
+      ipcRenderer.invoke('sage-file:register-allowed-paths', projectId, paths) as Promise<void>,
+    unregisterAllowedPaths: (projectId: string) =>
+      ipcRenderer.invoke('sage-file:unregister-allowed-paths', projectId) as Promise<boolean>,
   },
 
   /**
@@ -268,22 +274,32 @@ const electronAPI = {
    */
   journal: {
     parseTemplate: (filePath: string) =>
-      ipcRenderer.invoke('office_journal_parse_template', {
-        file_path: filePath,
+      // 2026-09 修复: 这些裸 ipcMain channel 从未注册(实现走 sage:invoke 的
+      // COMMAND_ROUTES → HTTP), 一调用必 rejects 'No handler registered'。
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'office_journal_parse_template',
+        args: { file_path: filePath },
       }) as Promise<JournalParseTemplateResponse>,
     listSpecs: () =>
-      ipcRenderer.invoke('office_journal_list_specs', {}) as Promise<JournalListSpecsResponse>,
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'office_journal_list_specs',
+        args: {},
+      }) as Promise<JournalListSpecsResponse>,
     getSpec: (specId: string) =>
-      ipcRenderer.invoke('office_journal_get_spec', {
-        spec_id: specId,
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'office_journal_get_spec',
+        args: { spec_id: specId },
       }) as Promise<JournalGetSpecResponse>,
     validate: (args: { spec_id?: string; file_path?: string }) =>
-      ipcRenderer.invoke('office_journal_validate', args) as Promise<JournalValidateResponse>,
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'office_journal_validate',
+        args,
+      }) as Promise<JournalValidateResponse>,
     fillFromContent: (req: JournalFillFromContentRequest) =>
-      ipcRenderer.invoke(
-        'office_journal_fill_from_content',
-        req,
-      ) as Promise<JournalFillFromContentResponse>,
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'office_journal_fill_from_content',
+        args: req,
+      }) as Promise<JournalFillFromContentResponse>,
   } satisfies JournalElectronApiBridge,
 
   updates: {
@@ -449,6 +465,22 @@ const electronAPI = {
     return ipcRenderer.invoke('sage:close-to-tray:set', { enabled }) as Promise<{
       ok: boolean;
       enabled: boolean;
+    }>;
+  },
+
+  /**
+   * 日志时区 (2026-09-17): 用户在 Settings → 通用 下拉框选择.
+   * 写入 <userData>/sage-log-timezone.json, 同时更新 main 进程 logger 时区.
+   * 返回 { ok: boolean, error?: string } — 失败时由 renderer 决定是否 toast.
+   */
+  getLogTimezone(): Promise<{ logTimezone: string }> {
+    return ipcRenderer.invoke('sage:log-timezone:get') as Promise<{ logTimezone: string }>;
+  },
+
+  setLogTimezone(logTimezone: string): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke('sage:log-timezone:set', { logTimezone }) as Promise<{
+      ok: boolean;
+      error?: string;
     }>;
   },
 

@@ -371,6 +371,44 @@ def test_read_rejects_file_exceeding_max_read_bytes(tmp_path: Path):
     assert result["error"]["code"] == "file_too_large"
 
 
+def test_read_pdf_doc_returns_parsed_content(tmp_path: Path):
+    """PDF 受管文档可经 office_read 读取（chat_refs pdf 授权闭环的读取端）。"""
+    import pymupdf
+
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-1")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-1", str(work), now_ms=1)
+    doc_summary = _make_doc(
+        doc_id="doc-pdf",
+        workspace_path=binding.workspace_path,
+        doc_type=OfficeDocType.PDF,
+        original_filename="a.pdf",
+        generated_filename="doc-pdf.pdf",
+    )
+    save_document(conn, doc_summary)
+    from backend.office.storage import document_path
+
+    pdf_path = document_path(doc_summary)
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    pdf = pymupdf.open()
+    page = pdf.new_page()
+    page.insert_text((72, 72), "hello pdf")
+    pdf.save(str(pdf_path))
+    pdf.close()
+
+    service = OfficeToolService()
+    result = service.read(conn, "sess-1", binding.generation, "doc-pdf", section="all")
+    assert result["success"] is True
+    content = result["content"]
+    assert content["summary"]["doc_type"] == "pdf"
+    page_texts = "".join(p.get("text", "") for p in content["pages"])
+    assert "hello pdf" in page_texts
+
+
 def test_read_stale_generation_returns_not_found(tmp_path: Path):
     """Stale binding generation -> document_not_found (indistinguishable)."""
     db = Database(db_path=str(tmp_path / "t.db"))

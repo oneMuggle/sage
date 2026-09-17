@@ -28,6 +28,7 @@ from backend.tools import browser_cdp, browser_tool, web_render
 from backend.tools.browser_cdp import BrowserSession, BrowserSessionManager
 from backend.tools.browser_tool import (
     BrowserCloseTool,
+    BrowserDownloadsTool,
     BrowserInteractTool,
     BrowserLaunchTool,
     BrowserNavigateTool,
@@ -539,3 +540,106 @@ def test_browser_cookies_no_cookies_error_mentions_cdp_workflow(monkeypatch):
     # 必须说明正确的流程
     assert "browser_launch headless=false" in result.error
     assert "手动登录" in result.error
+
+
+# ---------- Round 5 B4 / SN3：browser_downloads ----------
+
+
+def test_browser_downloads_with_tracker(stubbed, monkeypatch, tmp_path):
+    from backend.tools import browser_events
+
+    tracker = browser_events.DownloadTracker(str(tmp_path))
+    tracker.connected = True
+    tracker.handle_event(
+        "Browser.downloadWillBegin",
+        {"guid": "g1", "url": "https://s/x.pdf", "suggestedFilename": "x.pdf"},
+    )
+    (tmp_path / "g1").write_bytes(b"%PDF-1.4")
+    tracker.handle_event(
+        "Browser.downloadProgress", {"guid": "g1", "state": "completed", "receivedBytes": 8}
+    )
+    monkeypatch.setattr(browser_tool, "get_download_tracker", lambda browser_id: tracker)
+    recorded = []
+    monkeypatch.setattr(
+        browser_tool, "_record_artifact_safely", lambda p, n: recorded.append((p, n))
+    )
+
+    result = _tool(BrowserDownloadsTool).execute(wait_for_complete=True, timeout=1)
+
+    assert result.success is True
+    assert result.content["tracking"] is True
+    assert result.content["pending"] == 0
+    item = result.content["downloads"][0]
+    assert item["state"] == "completed"
+    assert item["path"] == str(tmp_path / "g1")
+    assert recorded == [(str(tmp_path / "g1"), 8)]
+    # 二次调用不重复登记 artifact
+    _tool(BrowserDownloadsTool).execute()
+    assert len(recorded) == 1
+
+
+def test_browser_downloads_wait_timeout_note(stubbed, monkeypatch, tmp_path):
+    from backend.tools import browser_events
+
+    tracker = browser_events.DownloadTracker(str(tmp_path))
+    tracker.connected = True
+    tracker.handle_event("Browser.downloadWillBegin", {"guid": "g", "url": "u"})
+    monkeypatch.setattr(browser_tool, "get_download_tracker", lambda browser_id: tracker)
+
+    result = _tool(BrowserDownloadsTool).execute(wait_for_complete=True, timeout=0.2)
+
+    assert result.success is True
+    assert result.content["pending"] == 1
+    assert "仍有 1 个下载进行中" in result.content["note"]
+
+
+def test_browser_downloads_falls_back_to_directory_listing(stubbed, monkeypatch, tmp_path):
+    from backend.tools import browser_events
+
+    tracker = browser_events.DownloadTracker(str(tmp_path))
+    tracker.mark_disconnected("boom")
+    (tmp_path / "done.pdf").write_bytes(b"x")
+    monkeypatch.setattr(browser_tool, "get_download_tracker", lambda browser_id: tracker)
+
+    result = _tool(BrowserDownloadsTool).execute()
+
+    assert result.success is True
+    assert result.content["tracking"] is False
+    assert result.content["downloads"][0]["name"] == "done.pdf"
+    assert "boom" in result.content["note"]
+
+
+def test_browser_downloads_rejects_unknown_kwargs(stubbed):
+    result = _tool(BrowserDownloadsTool).execute(bogus=1)
+    assert result.success is False
+    assert "bogus" in result.error
+
+
+def test_browser_downloads_requires_session(monkeypatch):
+    monkeypatch.setattr(browser_cdp, "_manager", BrowserSessionManager())
+    result = _tool(BrowserDownloadsTool).execute()
+    assert result.success is False
+
+
+def test_launch_tool_starts_download_tracking(monkeypatch, tmp_path):
+    session = _fake_session("b-launch")
+    monkeypatch.setattr(browser_cdp, "_manager", BrowserSessionManager())
+    monkeypatch.setattr(browser_tool, "launch_browser", lambda **kw: session)
+    monkeypatch.setattr(browser_tool, "cdp_command", lambda *a, **kw: {})
+    started = []
+
+    def _fake_start(browser_id, port, ws_path, download_dir):
+        started.append((browser_id, port, ws_path, download_dir))
+        return SimpleNamespace(connected=True, error=None)
+
+    monkeypatch.setattr(browser_tool, "start_download_tracking", _fake_start)
+    result = BrowserLaunchTool(policy=ToolPolicy(workspace_root=str(tmp_path))).execute()
+
+    assert result.success is True
+    assert result.content["download_tracking"] is True
+    assert started[0][0] == "b-launch"
+    assert started[0][3] == str(tmp_path / "downloads")
+
+
+def test_browser_tool_names_include_downloads():
+    assert "browser_downloads" in browser_tool.BROWSER_TOOL_NAMES

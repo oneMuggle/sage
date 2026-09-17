@@ -18,6 +18,64 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+
+> 🌐 **网页访问能力优化 Round 12：凭据管理 UI + humanize 工具名**（方案 `docs/plans/2026-09-16_web-access-optimization-round12.md`）
+
+### Added(web-access)
+- **凭据管理 UI**：设置→网络新增“网站凭据”区块——凭据列表（域 / 类型 / 剩余时效 / 加密标记 / 来源 profile，沿用脱敏口径不回显值）、删除（二次确认）、`render_persistent` / `auto_refresh_credentials` 两个开关直接可调；后端新路由 `GET|DELETE /api/v1/web-access/credentials` / `GET|PUT /api/v1/web-access/config`（复用 permission_routes 的 Origin 守卫，不回显任何凭据值）
+- **humanize 工具名**：browser_launch/navigate/snapshot/interact/screenshot/cookies/downloads/close 与 http_download 补齐显示名，审批弹窗与时间线不再显示生工具名
+> 🌐 **网页访问能力优化 Round 11：AU3 自动刷新回路 + AU 系列收尾**（方案 `docs/plans/2026-09-16_web-access-optimization-round11.md`）
+
+### Added(web-access)
+- **登录态自愈（AU3+AU6）**：`browser_cookies export` 在持久会话导出时在档案记录来源 profile（`BrowserSession` 新增 `profile_name` 字段）；`web_access_config.auto_refresh_credentials` 开启后（默认关），带凭据请求被踢到登录墙时自动用该 profile 静默重访原 URL（先注入旧 cookie 走 remember-me 续期），重导成功则重放请求并以 `credential_auto_refreshed` note 提示；失败严格回退原 `login_required` 语义；静态与下载通道均接入
+- **渲染通道登录墙检测（AU7）**：AU5 注入后渲染结果若仍是密码框页（且正文极短）→ 先走 AU3 自愈重渋一次，仍墙则报 `login_required`，不再把登录页当正文返回
+- **降级可观测（X4）**：平台加密不可用（scheme=none）时写入凭据档案会 `logger.warning`，`list_credentials` 每条增 `encrypted` 标记，明示哪些档案是明文落库
+> 🌐 **网页访问能力优化 Round 10：AU5 渲染池 ↔ 凭据档案双向互通**（方案 `docs/plans/2026-09-16_web-access-optimization-round10.md`）
+
+### Added(web-access)
+- **渲染通道登录态注入（AU5）**：`web_fetch credential_domain=` 命中 JS 壳渲染降级或反爬升级时，先把档案 cookie 经 `Storage.setCookies` 注入渲染浏览器（导航前生效，浏览器内重定向自动按域携带），渲染完成经 `Storage.getCookies` 按域取回并合并回档案（`credential_refreshed` note 提示）——“一次导出，静态 / 渲染 / 交互三条通道共用”成立；注入失败报 `RenderError`（宁失败不静默降级为未登录正文），回写失败静默（与 AU2 同口径）；header 型档案渲染通道不支持，跳过不报错
+- **`credential_vault`**：`CredentialResolution` 新增 `cookies` 槽（cookie 档案 ok 时带出过滤后逐条 cookie，供 CDP 逐条注入——host-only cookie 无法从 Cookie 头串重建）；新增 `merge_cdp_cookies`（`Storage.getCookies` dict → 档案，与 `merge_set_cookies` 同守卫：host 亲和 fail-closed / 归属域 ∈ 档案域 / 同 name+path 替换 / 过期删除 / 清空删档）
+
+### Changed(web-access)
+- `browser_cdp.cdp_command` 浏览器级方法前缀新增 `Storage.*`（免 attach，Chrome 97+）
+- `web_fetch` schema `credential_domain` 描述补渲染通道语义
+> 🌐 **网页访问能力优化 Round 5 批次 4：文件嗅探与浏览器下载跟踪**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.2 SN2/SN3）
+
+### Added(web-access)
+- **`web_fetch mode=files`（SN2，新模块 `backend/tools/file_links.py`）**：从静态或渲染后 DOM 抽取候选文件链接并打分——`<meta name=citation_pdf_url>` / `<link rel=alternate type=application/pdf>`（学术站标准位，最高分）、`<a href>` 文件后缀（pdf/zip/docx/xlsx/epub/csv/…）与 `download` 属性 / `type=application/pdf`、`<iframe|embed|object>`、`<meta http-equiv=refresh>`、「下载 / 全文 / PDF / attachment」锚文本；同 URL 去重合并 `sources`；对 top-5 候选做首块探测（不跟随重定向、逐个过 `check_host`）标 `probe=file|html|redirect|error` + `detected_type` / `content_type` / `content_length` / `suggested_filename`，`probe=html`（登录页 / 中转页）降权；SPA 壳自动渲染后把动态 DOM 候选与静态候选合并；结果 `files[]` 可直接喂 `http_download`
+- **浏览器下载跟踪（SN3，新模块 `backend/tools/browser_events.py` + 新工具 `browser_downloads`）**：`browser_launch` 后为会话建立一条常驻 CDP 事件 WS（守护线程），`Browser.setDownloadBehavior{eventsEnabled:true}` 订阅 `downloadWillBegin` / `downloadProgress`，落成线程安全的 `DownloadTracker`（url / 文件名 / 状态 / 字节 / 最终路径，完成时按 guid 或 suggestedFilename 解析落盘路径）；`browser_downloads(browser_id?, wait_for_complete, timeout)` 列出 / 阻塞等待全部完成，完成文件登记 artifact（只登记一次）；事件通道不可用时退化为下载目录列举（`.crdownload` = 进行中）并明示；`browser_close` / 后端退出时停通道
+
+### Changed(web-access)
+- `BROWSER_TOOLS` 新增 `browser_downloads`（READ）；coder 默认工具白名单经 `*BROWSER_TOOLS` 自动带上；`browser_launch` 结果新增 `download_tracking`
+
+
+## [v0.4.9-alpha.43-win7] - 2026-09-17
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 同步 main #1013（项目级 allowed_paths）：后端 allowed_paths 校验 + 新增 `allowed_paths` PUT 路由、Electron `sage-file` 协议层 registerAllowedPaths / unregisterAllowedPaths、前端 `AllowedPathsEditor` 编辑器、新增 67 单测 + 8 集成测试；Phase 5 文档延后合并（#1018 docs-only，等 main PR 整体定稿）。
+
+### Added
+- **Backend allowed_paths 模块**：新增 `backend/office/allowed_paths.py`，实现项目级附加允许访问路径规则（max 50 条 / path）；注册到 `PermissionEnforcer` 校验链：`file_tool` 拒绝 workspace 外、但命中项目 allowed_paths 列表的路径时直接放行，不走审批；路径必须规范化（含 cython / py3.8 不支持），用 `os.path.realpath` 兜底
+- **project_routes 新增 `PUT /api/v1/projects/{id}/allowed-paths`**：用 `_constrained_list(str, max_length=50)` 替换 v1 不支持的 `Field(max_length=)`；Pydantic v1/v2 双兼容走 `backend.compat.win7.pydantic_compat.ConfigDict`
+- **Electron sage-file 协议层 registerAllowedPaths**：解析器把项目级 allowed_paths 纳入 `resolveSageFileUrl` 的合法路径白名单（与 workspace 根并列）；渲染端在 `ProjectSection` 注册时调用 `ipcRenderer.invoke('sage-file:register-allowed-paths', projectId, paths)`，卸载时反向注销
+- **前端 `AllowedPathsEditor` 组件**：侧边栏项目详情面板新增「额外允许访问路径」区块——列表展示 / 单条添加 / 单条删除 / 失焦自动保存（PUT allowed-paths）；i18n 同步中英双语文案
+- **测试覆盖**：新增 `test_allowed_paths.py`（67 单测：路径规范化、realpath 兜底、长度上限、Unicode 路径、Windows 路径分隔符）+ `test_allowed_paths_integration.py`（8 集成测试：permission_gate 接入、file_tool 实际落盘、electron sage-file 协议层解析）
+
+### Changed
+- **Backend `file_tool`**：权限校验链路接入 `PermissionEnforcer.check_allowed_paths()`——workspace 外路径先查项目 allowed_paths 白名单，命中则跳过审批；未命中走原审批流（与 main 行为对齐）
+- **Backend `permission_gate.py`**：`extract_target_path` 改为项目级 allowed_paths 提示用，导出 `target_path` 字段供前端「项目级允许」按钮
+- **Backend `data/project_repo.py`**：`Project` 模型新增 `allowed_paths: List[str]` 字段（默认空），新增 `update_allowed_paths(id, paths)` 方法，DB schema 升级走 `data/database.py` 自适应迁移
+- **Electron `commands.ts` / `main.ts`**：commands 表新增 `projects_update_allowed_paths`（PUT allowed-paths），main.ts 注册 `sage-file:register-allowed-paths` / `unregister-allowed-paths` IPC handlers
+- **Frontend `projectApi.ts`**：`projects_update` 携带 `allowed_paths`，新增 `updateAllowedPaths(projectId, paths)` 方法
+- **Frontend `ProjectSection.tsx`**：render ProjectCard 时附加 `useEffect` 注册/注销 electron protocol allowed_paths；切换项目自动同步协议层白名单
+
+### Fixed
+- **Pydantic v1 List 字段约束绕过**：原 `List[int] = Field(min_length=1, max_length=200)` 在 v1 下 silently 忽略长度约束——本次 `_constrained_list` helper 在 Pydantic v1 / v2 双路径强制 min/max_length 校验，避免越界输入打穿下游 storage
+- **项目级路径未走协议层白名单**：之前 `resolveSageFileUrl` 只接受 workspace 根，渲染端拉取项目目录外的文件（Office 文档外部引用等）一律被拒；本次 allowed_paths 接入后协议层允许经白名单放行
+
+### Skipped（Phase 5 docs 延后）
+- **allowed_paths 文档手册**（main PR #1018，仅 `docs/plans/` + `docs/technical/` + `docs/user-manual/` 文档变更）：与功能 PR #1013 拆分——功能先合并便于安装包内嵌测试，文档等 main 整套 #1014 / #1018 / #1020 PR 全绿后整体 cherry-pick。详见 `docs/plans/2026-09-17_allowed-paths-phase-5-windows.md` 后续步骤
+
+
 ## [v0.4.9-alpha.34-win7] - 2026-09-15
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 收口 7 commits：py3.8 后端 round 3 / Ruff lint 收口 / main 最大化对齐 B1-B6 / UI/Code 字体定制 / Windows bash 工具 + 工具 schema 校验。
@@ -293,8 +351,6 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - **fix(win7-office): `office_create` binding-aware delegation 越界守卫** (T7.5) — 当用户显式把 `output_dir` 指到 binding workspace 之外(如桌面)时不再 delegation,留给 legacy `output_dir` 路径走 `_enforce_workspace` + ApprovalGate 触发"越界写"权限提示。否则文件会被静默改写到 managed workspace, 用户找不到且 doc 也只在 binding 内可见,双重反直觉
 - **fix(win7-test): `test_no_list_dir_hyphen_anywhere_in_source` cwd 来源去硬编码** — 改用 `git rev-parse --show-toplevel` 子进程动态定位仓库根,任意 worktree / 干净 CI runner 都能跑
 - **fix(ci): base CI 修复 cherry-pick (PR #367)** — `ci-write-manifest` 转 .mjs, `build-manifest` 路径校正, vitest 排除 .claude/worktrees
-
-## [Unreleased]
 
 ## [v0.4.9-alpha.4-win7] - 2026-08-25
 

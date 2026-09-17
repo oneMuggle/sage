@@ -14,6 +14,7 @@ const openMock = vi.fn();
 const createSessionMock = vi.fn();
 const listSessionsMock = vi.fn();
 const deleteSessionMock = vi.fn();
+const updateAllowedPathsMock = vi.fn();
 
 vi.mock('../../../shared/api/projectApi', () => ({
   projectApi: {
@@ -23,6 +24,7 @@ vi.mock('../../../shared/api/projectApi', () => ({
     open: (...args: unknown[]) => openMock(...args),
     createSession: (...args: unknown[]) => createSessionMock(...args),
     listSessions: (...args: unknown[]) => listSessionsMock(...args),
+    updateAllowedPaths: (...args: unknown[]) => updateAllowedPathsMock(...args),
   },
 }));
 
@@ -41,6 +43,7 @@ const projects: ProjectSummary[] = [
     lastOpenedAt: 10,
     sessionCount: 2,
     lastSessionId: 's1',
+    allowedPaths: ['~/Documents/**'],
   },
   {
     id: 'p2',
@@ -50,6 +53,7 @@ const projects: ProjectSummary[] = [
     lastOpenedAt: 5,
     sessionCount: 0,
     lastSessionId: null,
+    allowedPaths: [],
   },
 ];
 
@@ -81,6 +85,7 @@ describe('ProjectSection', () => {
       createSessionMock,
       listSessionsMock,
       deleteSessionMock,
+      updateAllowedPathsMock,
     ].forEach((m) => m.mockReset());
     listMock.mockResolvedValue([]);
   });
@@ -382,5 +387,99 @@ describe('ProjectSection', () => {
     // 全部失败：清单不刷新
     await new Promise((r) => setTimeout(r, 50));
     expect(listMock.mock.calls.length).toBe(callsBefore);
+  });
+
+  // ===== P1 (2026-09-17): allowed_paths 内联编辑器 =====
+
+  it('P1: 展开后展示 allowed_paths 只读列表与编辑按钮', async () => {
+    listMock.mockResolvedValue(projects);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    // 展开第一个项目（已有规则）
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => {
+      expect(screen.getByTestId('allowed-paths-editor')).toBeInTheDocument();
+    });
+    // p1 已有规则 '~/Documents/**'
+    const editors = screen.getAllByTestId('allowed-paths-list');
+    expect(editors[0].textContent).toContain('~/Documents/**');
+    // 编辑按钮存在
+    expect(screen.getAllByTestId('allowed-paths-edit')[0]).toBeInTheDocument();
+  });
+
+  it('P1: 展开空规则的第二个项目显示空态提示', async () => {
+    listMock.mockResolvedValue(projects);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[1]); // p2: allowedPaths=[]
+    await waitFor(() => {
+      const empties = screen.getAllByTestId('allowed-paths-empty');
+      expect(empties.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('P1: 编辑态输入新规则 → Add 加入草稿 → Save 调用 updateAllowedPaths', async () => {
+    listMock.mockResolvedValue(projects);
+    updateAllowedPathsMock.mockResolvedValue(['~/Documents/**', '~/Desktop/**']);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[1]); // p2: 空规则
+    await waitFor(() => screen.getByTestId('allowed-paths-edit'));
+
+    fireEvent.click(screen.getAllByTestId('allowed-paths-edit')[0]);
+    await waitFor(() => screen.getByTestId('allowed-paths-input'));
+
+    const input = screen.getByTestId('allowed-paths-input');
+    fireEvent.change(input, { target: { value: '~/Desktop/**' } });
+    fireEvent.click(screen.getAllByTestId('allowed-paths-add')[0]);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('allowed-paths-row')).toHaveLength(1);
+      expect(screen.getByTestId('allowed-paths-row').textContent).toContain('~/Desktop/**');
+    });
+
+    fireEvent.click(screen.getByTestId('allowed-paths-save'));
+    await waitFor(() => {
+      expect(updateAllowedPathsMock).toHaveBeenCalledWith('p2', ['~/Desktop/**']);
+    });
+  });
+
+  it('P1: Save 失败保留编辑态并提示', async () => {
+    listMock.mockResolvedValue(projects);
+    updateAllowedPathsMock.mockRejectedValue(new Error('backend offline'));
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getByTestId('allowed-paths-edit'));
+    fireEvent.click(screen.getAllByTestId('allowed-paths-edit')[0]);
+    await waitFor(() => screen.getByTestId('allowed-paths-save'));
+
+    fireEvent.click(screen.getByTestId('allowed-paths-save'));
+    await waitFor(() => {
+      expect(updateAllowedPathsMock).toHaveBeenCalled();
+      // 编辑态保留：input 仍在
+      expect(screen.getByTestId('allowed-paths-input')).toBeInTheDocument();
+    });
+  });
+
+  it('P1: Cancel 退出编辑态且不调用 updateAllowedPaths', async () => {
+    listMock.mockResolvedValue(projects);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    await waitFor(() => screen.getAllByTestId('project-row'));
+
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
+    await waitFor(() => screen.getByTestId('allowed-paths-edit'));
+    fireEvent.click(screen.getAllByTestId('allowed-paths-edit')[0]);
+    await waitFor(() => screen.getByTestId('allowed-paths-cancel'));
+
+    fireEvent.click(screen.getByTestId('allowed-paths-cancel'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('allowed-paths-cancel')).not.toBeInTheDocument();
+      expect(updateAllowedPathsMock).not.toHaveBeenCalled();
+    });
   });
 });

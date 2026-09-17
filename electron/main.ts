@@ -35,12 +35,21 @@
 // before `electron`, the `app.isPackaged` reference throws a TDZ error at
 // runtime even though tsc --noEmit is happy.
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
+import './crashGuard';
 import { logger } from './logger';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
-import { registerSageFileProtocol, registerWorkspaceRoot, unregisterWorkspaceRoot } from './sageFileProtocol';
+import {
+  registerSageFileProtocol,
+  registerWorkspaceRoot,
+  unregisterWorkspaceRoot,
+  registerAllowedPaths,
+  unregisterAllowedPaths,
+} from './sageFileProtocol';
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
+import { readLogTimezone, writeLogTimezone } from './logTimezone';
+import { setLogTimezone } from './logger';
 logger.info('main: process started', {
   pid: process.pid,
   electronVer: process.versions.electron,
@@ -50,7 +59,7 @@ logger.info('main: process started', {
 
 import { spawn, ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { join, dirname } from 'node:path';
+import { basename, join, dirname, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   constants as fsConstants,
@@ -95,10 +104,12 @@ import { ENABLE_UPDATE_PROVIDERS_UI } from './update/featureFlag';
 import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backendLauncher';
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
 import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
+import { parseOrchEventName } from './eventRouting';
 import { killOrphanedBackendOnPort } from './orphanBackendKiller';
 import { createIncrementalUtf8Decoder } from './incrementalUtf8Decoder';
 import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
+import { runRuntimeChecks, showRuntimeMissingDialog } from './runtime-check';
 import { resolveSageDbPath, resolveSageUserDataDir } from './userDataPaths';
 import { mainWindow, setMainWindow } from './mainWindow';
 import {
@@ -256,8 +267,23 @@ if (NEEDS_NO_SANDBOX) {
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('in-process-gpu');
-app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
+// 2026-09-17: Win7 内网闪退缓解 — 缺 KB2670838 / KB3033929 时 Chromium 106
+// 找不到 DirectWrite/Vulkan 支持, 关 SkiaRenderer + ChromeOS 视频解码 + Vulkan
+// 后降级到软件渲染路径。注意 Chromium 的 appendSwitch('disable-features', ...)
+// 多次调用以最后一次为准, 所以 Win7 分支必须把全部禁用的 feature 写在同一
+// 个 appendSwitch 里, 否则会被后面的 switch 覆盖。
+app.commandLine.appendSwitch(
+  'disable-features',
+  'VizDisplayCompositor,Vulkan,UseSkiaRenderer,CalculateNativeWinOcclusion,UseChromeOSDirectVideoDecoder',
+);
 app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}`);
+// Win7 旧版 Windows 进一步降级: 关闭 GPU 合成 + GPU sandbox + /dev/shm
+// (Chromium 在 Win7 上 /dev/shm 不存在会 fallback 到 tmp, 提前关掉减少日志噪音)
+if (isLegacyWindows()) {
+  app.commandLine.appendSwitch('disable-gpu-compositing');
+  app.commandLine.appendSwitch('disable-gpu-sandbox');
+  app.commandLine.appendSwitch('disable-dev-shm-usage');
+}
 
 let backendProc: ChildProcess | null = null;
 let backendGeneration = 0;
@@ -341,6 +367,17 @@ try {
   }
 } catch (err) {
   logger.warn('main: failed to read demo mode settings', { error: String(err) });
+}
+
+// 日志时区 (2026-09-17): 从 userData JSON 读取, 应用到 Electron logger + 传给 Python 后端.
+let logTimezoneFromSettings = 'UTC';
+try {
+  logTimezoneFromSettings = readLogTimezone();
+  setLogTimezone(logTimezoneFromSettings);
+  // 同时设置 env 变量, spawnBackend 会传给 Python 后端.
+  process.env.SAGE_LOG_TIMEZONE = logTimezoneFromSettings;
+} catch (err) {
+  logger.warn('main: failed to read log timezone settings', { error: String(err) });
 }
 
 // Set by spawnBackend() when the resolver reports a broken installer, so the
@@ -605,7 +642,7 @@ export function scheduleBackendRestart(): void {
     attempt: restartCount,
     delayMs: delay,
   });
-    mainWindow?.webContents.send('sage:event:backend:disconnected', { attempt: restartCount });
+  mainWindow?.webContents.send('sage:event:backend:disconnected', { attempt: restartCount });
   restartTimer = setTimeout(() => {
     restartTimer = null;
     if (appIsQuitting || backendProc || currentBackend || backendLifecycle !== 'idle') return;
@@ -620,7 +657,17 @@ export function scheduleBackendRestart(): void {
         if (ready) {
           restartCount = 0;
           mainWindow?.webContents.send('sage:event:backend:reconnected', {});
+          return;
         }
+        // Health check never passed: without this branch the lifecycle stayed
+        // 'starting' forever — every IPC request rejected with
+        // BackendNotReadyError and the renderer never got a final failure.
+        // Kill the unhealthy process; the proc 'exit' handler resets the
+        // lifecycle to idle and schedules the next capped restart attempt.
+        logger.error('main: backend restart failed health check', {
+          attempt: restartCount,
+        });
+        void shutdownBackend();
       });
     });
   }, delay);
@@ -640,10 +687,30 @@ export function scheduleBackendRestart(): void {
  */
 async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<boolean> {
   const expectedBackend = currentBackend;
-  if (!expectedBackend || backendLifecycle !== 'starting') return false;
+  if (!expectedBackend || backendLifecycle !== 'starting') {
+    logger.warn('main: waitForBackend early exit', {
+      hasExpectedBackend: !!expectedBackend,
+      lifecycle: backendLifecycle,
+    });
+    return false;
+  }
+  logger.info('main: waitForBackend starting health poll', {
+    expectedPid: expectedBackend.pid,
+    generation: expectedBackend.generation,
+    timeoutMs,
+    url: BACKEND_HEALTH,
+  });
   const deadline = Date.now() + timeoutMs;
+  let pollAttempts = 0;
   while (Date.now() < deadline) {
-    if (!isCurrentGeneration(expectedBackend, currentBackend) || appIsQuitting) return false;
+    pollAttempts++;
+    if (!isCurrentGeneration(expectedBackend, currentBackend) || appIsQuitting) {
+      logger.warn('main: waitForBackend generation mismatch or quitting', {
+        pollAttempts,
+        appIsQuitting,
+      });
+      return false;
+    }
     try {
       const health = await new Promise<unknown>((resolve) => {
         const req = http.get(
@@ -659,19 +726,37 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
             });
             res.on('end', () => {
               if (res.statusCode !== 200) {
+                logger.warn('main: health probe non-200', {
+                  statusCode: res.statusCode,
+                  pollAttempts,
+                });
                 resolve(null);
                 return;
               }
               try {
                 resolve(JSON.parse(body) as unknown);
               } catch {
+                logger.warn('main: health probe JSON parse failed', {
+                  bodyPreview: body.slice(0, 200),
+                  pollAttempts,
+                });
                 resolve(null);
               }
             });
             res.resume();
           },
         );
-        req.on('error', () => resolve(null));
+        req.on('error', (err) => {
+          // Log first few errors to help diagnose connection issues
+          if (pollAttempts <= 3) {
+            logger.warn('main: health probe error', {
+              error: err.message,
+              code: (err as NodeJS.ErrnoException).code,
+              pollAttempts,
+            });
+          }
+          resolve(null);
+        });
         req.setTimeout(HTTP_REQUEST_TIMEOUT_MS, () => {
           req.destroy();
           resolve(null);
@@ -686,25 +771,65 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
         //    returning 200 and this recheck; the ownershipToken check above
         //    rules that out, but we still want a structural assertion that
         //    the socket we hit belongs to the expected PID).
-        if (!isCurrentGeneration(expectedBackend, currentBackend)) return false;
+        if (!isCurrentGeneration(expectedBackend, currentBackend)) {
+          logger.warn('main: waitForBackend race-fix: generation changed after ownsBackend');
+          return false;
+        }
         if (!backendProc || backendProc.exitCode !== null || backendProc.signalCode !== null) {
+          logger.warn('main: waitForBackend race-fix: backend process exited', {
+            exitCode: backendProc?.exitCode,
+            signalCode: backendProc?.signalCode,
+          });
           return false;
         }
+        logger.info('main: waitForBackend checking port binding', {
+          port: BACKEND_PORT,
+          expectedPid: expectedBackend.pid,
+          pollAttempts,
+        });
         if (!(await isPortStillBoundByPid(BACKEND_PORT, expectedBackend.pid, 200))) {
+          logger.warn('main: waitForBackend port not bound by expected PID', {
+            port: BACKEND_PORT,
+            expectedPid: expectedBackend.pid,
+            pollAttempts,
+          });
           return false;
         }
+        logger.info('main: waitForBackend all checks passed', { pollAttempts });
         backendLifecycle = 'ready';
         // Task 0 review round 1, finding #6: tell the renderer the backend
         // is ready so BackendStatusBanner can clear the "starting…" state
         // (or never show it, if the spawn-to-ready window was sub-frame).
-        mainWindow?.webContents.send('sage:event:backend:ready', { generation: expectedBackend.generation });
+        mainWindow?.webContents.send('sage:event:backend:ready', {
+          generation: expectedBackend.generation,
+        });
         return true;
       }
-    } catch {
-      /* transient connection or malformed health payload */
+      // Log ownership validation failure for diagnostics
+      if (pollAttempts <= 5 || pollAttempts % 20 === 0) {
+        logger.warn('main: ownsBackend validation failed', {
+          pollAttempts,
+          healthStatus: (health as Record<string, unknown>)?.status,
+          healthPid: (health as Record<string, unknown>)?.pid,
+          expectedPid: expectedBackend.pid,
+          healthGeneration: (health as Record<string, unknown>)?.generation,
+          expectedGeneration: expectedBackend.generation,
+          healthBuildId: (health as Record<string, unknown>)?.buildId,
+          expectedBuildId: buildManifest.buildId,
+        });
+      }
+    } catch (err) {
+      // Log unexpected exceptions
+      if (pollAttempts <= 3) {
+        logger.warn('main: waitForBackend unexpected exception', {
+          error: err instanceof Error ? err.message : String(err),
+          pollAttempts,
+        });
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
+  logger.warn('main: waitForBackend timed out', { pollAttempts, timeoutMs });
   return false;
 }
 
@@ -1200,10 +1325,10 @@ async function registerIpcHandlers(): Promise<void> {
 
       // orch-events-{runId}-{afterSeq} dynamic events: relay orchestration run events
       // Format: orch-events-{runId} or orch-events-{runId}-seq-{afterSeq}
-      const orchEventsMatch = event.match(/^orch-events-([^-]+?)(?:-seq-(\d+))?$/);
+      const orchEventsMatch = parseOrchEventName(event);
       if (orchEventsMatch) {
-        const runId = orchEventsMatch[1];
-        const afterSeq = orchEventsMatch[2] ? parseInt(orchEventsMatch[2], 10) : 0;
+        const runId = orchEventsMatch.runId;
+        const afterSeq = orchEventsMatch.afterSeq;
         const abort = new AbortController();
         eventSubscriptions.set(event, abort);
         relayOrchEventsStream(
@@ -1217,6 +1342,13 @@ async function registerIpcHandlers(): Promise<void> {
         ).catch((e) => {
           if (e instanceof Error && e.name !== 'AbortError') {
             logger.error('ipc: orch relay error', { event, err: e.message });
+            // 2026-09 修复 (同步 #957): relay 失败必须通知渲染端, 否则编排
+            // 订阅永久卡 connecting (渲染端监听 {event}-error 终结生成器)。
+            if (!senderWebContents.isDestroyed()) {
+              senderWebContents.send(`sage:event:${event}-error`, {
+                message: e.message,
+              });
+            }
           }
         });
         return { ok: true, event };
@@ -1335,13 +1467,51 @@ async function registerIpcHandlers(): Promise<void> {
     }
   });
 
+  // 日志时区 (2026-09-17): renderer 在 Settings → 通用 改 logTimezone 后调用此 IPC.
+  // 立即应用到 Electron logger, 同时写盘供下次启动读取. Python 后端通过 env 变量接收.
+  ipcMain.handle('sage:log-timezone:get', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      return { logTimezone: 'UTC' };
+    }
+    return { logTimezone: logTimezoneFromSettings };
+  });
+
+  ipcMain.handle('sage:log-timezone:set', (evt, payload: { logTimezone: string }) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      return { ok: false, error: '未授权的窗口请求' };
+    }
+    const tz = typeof payload?.logTimezone === 'string' ? payload.logTimezone : 'UTC';
+    try {
+      setLogTimezone(tz);
+      process.env.SAGE_LOG_TIMEZONE = tz;
+      writeLogTimezone(tz);
+      logTimezoneFromSettings = tz;
+      logger.info('main: log timezone updated', { logTimezone: tz });
+      return { ok: true };
+    } catch (err) {
+      logger.error('main: failed to persist log timezone', { error: String(err) });
+      return { ok: false, error: '无法保存日志时区设置' };
+    }
+  });
+
   // Help system IPC handlers (2026-09-13)
   ipcMain.handle('sage:help:read-user-manual', (evt, filename: string) => {
     if (!isTrustedRenderer(evt.sender)) {
       throw new Error('未授权的窗口请求');
     }
+    // 2026-09 修复: filename 此前未校验, `..\\..\\..` 可穿越读任意文件。
+    // 只允许白名单扩展名的裸文件名, 且 resolve 后必须落在手册目录内。
+    const SAFE_MANUAL_EXT = /\.(html?|md)$/i;
+    const base = basename(String(filename));
+    if (!base || base !== String(filename) || !SAFE_MANUAL_EXT.test(base)) {
+      throw new Error('非法的文档文件名');
+    }
+    const manualDir = join(__dirname, '..', 'docs', 'user-manual');
+    const filePath = join(manualDir, base);
+    if (!filePath.startsWith(manualDir + sep)) {
+      throw new Error('非法的文档路径');
+    }
     try {
-      const filePath = join(__dirname, '..', 'docs', 'user-manual', filename);
       return readFileSync(filePath, 'utf-8');
     } catch (err) {
       logger.error('main: failed to read user manual', { filename, error: String(err) });
@@ -1621,7 +1791,11 @@ async function registerIpcHandlers(): Promise<void> {
     await updateManager.init();
 
     if (ENABLE_UPDATE_PROVIDERS_UI()) {
-      cleanupProviderIpc = registerProviderIpc(ipcMain, { providerStore, updateManager });
+      cleanupProviderIpc = registerProviderIpc(ipcMain, {
+        isTrustedSender: (sender) => isTrustedRenderer(sender),
+        providerStore,
+        updateManager,
+      });
     }
   }
   cleanupUpdateIpc?.();
@@ -1963,10 +2137,23 @@ app.whenReady().then(async () => {
   ipcMain.handle('sage-file:unregister-root', (_evt, root: string) => {
     return unregisterWorkspaceRoot(String(root ?? ''));
   });
+  // P22 (2026-09-17): 项目级 allowed_paths 注册 — 渲染端在
+  // 协议层 resolveSageFileUrl 会同时检查 workspace 根与各项目 allowed_paths。
+  ipcMain.handle('sage-file:register-allowed-paths', (_evt, projectId: string, paths: unknown) => {
+    const safePaths = Array.isArray(paths) ? paths.map((p) => String(p ?? '')) : [];
+    registerAllowedPaths(String(projectId ?? ''), safePaths);
+  });
+  ipcMain.handle('sage-file:unregister-allowed-paths', (_evt, projectId: string) => {
+    return unregisterAllowedPaths(String(projectId ?? ''));
+  });
   // 2026-09-13: 启动屏 — 后端冷启动实测 50–65s（健康检查上限 90s），此前
   // 窗口创建排在 waitForBackend() 之后，用户双击图标后近一分钟无任何反馈。
   // CI 冒烟 (SAGE_SKIP_BACKEND) / 演示录屏 / SAGE_NO_SPLASH=1 时不显示。
-  if (!isDemoProcess() && process.env.SAGE_SKIP_BACKEND !== '1' && process.env.SAGE_NO_SPLASH !== '1') {
+  if (
+    !isDemoProcess() &&
+    process.env.SAGE_SKIP_BACKEND !== '1' &&
+    process.env.SAGE_NO_SPLASH !== '1'
+  ) {
     createSplashWindow();
   }
   // U12 (round4 批次 E): 系统托盘 + 全局快捷键唤起（Alt+Shift+S toggle）。
@@ -1983,7 +2170,35 @@ app.whenReady().then(async () => {
   // is captured into the NDJSON startup log so the user can diagnose degraded
   // experiences via Show Logs. Default 20s cap lives in doctor.ts and can be
   // tuned per-build via SAGE_DOCTOR_TIMEOUT_MS (CI smoke paths tighten it).
-  updateSplashStage('正在自检运行环境…');
+  updateSplashStage('正在检查运行环境…');
+  // 2026-09-17: Win7 内网闪退根因防御层 — 在 doctor 之前先做 Win32 运行时
+  // 检测 (VC++ Redist / KB3033929 / KB4474419 / KB4490628), 缺哪个弹对话框
+  // 告诉用户去装哪个 + 提供微软官方下载链接. fail-open: 用户选「仍要启动」
+  // 则继续走原 doctor 流程.
+  if (process.env.SAGE_RUNTIME_CHECK_ON_START !== 'false') {
+    try {
+      const runtimeResults = await runRuntimeChecks();
+      const missing = runtimeResults.filter((r) => r.severity === 'critical');
+      if (missing.length > 0) {
+        logger.error('main: runtime check reported CRITICAL', {
+          missing: missing.map((m) => m.name),
+        });
+        const choice = await showRuntimeMissingDialog(missing);
+        if (choice === 'quit') {
+          logger.info('main: user quit after runtime missing dialog');
+          // showRuntimeMissingDialog 内部已 app.quit(), 这里只需跳出启动
+          app.exit(0);
+          return;
+        }
+        logger.info('main: user chose to continue despite runtime missing', {
+          choice,
+        });
+      }
+    } catch (err) {
+      logger.warn('main: runtime check threw', { error: String(err) });
+    }
+  }
+  updateSplashStage('正在自检后端环境…');
   if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
     try {
       // 2026-08-26: use `resolveDoctorLaunchCommand` so the doctor
@@ -2207,6 +2422,12 @@ app.whenReady().then(async () => {
     }
     return;
   }
+  logger.info('main: backend spawn returned', {
+    pid: backendProc?.pid,
+    hasBackendProc: !!backendProc,
+    lifecycle: backendLifecycle,
+    currentBackendPid: currentBackend?.pid,
+  });
   // If the resolver already fired the broken-installer dialog (because
   // bundled Python is missing or the platform is unsupported), suppress the
   // generic health-timeout dialog below so the user doesn't see two stacked
@@ -2244,7 +2465,11 @@ app.whenReady().then(async () => {
       createMainWindow();
       buildApplicationMenu();
       void updateManager
-        ?.onAppStartup(() => mainWindow, BACKEND_URL, () => backendAuthToken)
+        ?.onAppStartup(
+          () => mainWindow,
+          BACKEND_URL,
+          () => backendAuthToken,
+        )
         .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
       return;
     }
@@ -2283,7 +2508,11 @@ app.whenReady().then(async () => {
       // and drive the crash counter / auto-rollback path; they must not
       // block the UI from appearing.
       void updateManager
-        ?.onAppStartup(() => mainWindow, BACKEND_URL, () => backendAuthToken)
+        ?.onAppStartup(
+          () => mainWindow,
+          BACKEND_URL,
+          () => backendAuthToken,
+        )
         .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
       return;
     }
@@ -2299,7 +2528,11 @@ app.whenReady().then(async () => {
   // increments the crash counter and may trigger auto-rollback; it must not
   // block the UI. Errors are logged for diagnostics.
   void updateManager
-    ?.onAppStartup(() => mainWindow, BACKEND_URL, () => backendAuthToken)
+    ?.onAppStartup(
+      () => mainWindow,
+      BACKEND_URL,
+      () => backendAuthToken,
+    )
     .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
 });
 

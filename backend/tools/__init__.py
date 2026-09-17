@@ -16,6 +16,7 @@ from .bash_tool import BashOutputTool, BashTool, KillShellTool
 from .browser_tool import (
     BrowserCloseTool,
     BrowserCookiesTool,
+    BrowserDownloadsTool,
     BrowserInteractTool,
     BrowserLaunchTool,
     BrowserNavigateTool,
@@ -271,6 +272,8 @@ def register_all_tools(
     registry.register(BrowserScreenshotTool(policy=policy))
     # cookie 桥：导出/管理站点 cookie 凭据档案（WRITE_LOCAL，加密落库）
     registry.register(BrowserCookiesTool(policy=policy))
+    # Round 5 SN3：浏览器内下载跟踪（READ，读事件通道状态表）
+    registry.register(BrowserDownloadsTool(policy=policy))
     registry.register(BrowserCloseTool(policy=policy))
     # Academic search skill: 显式触发技能沉淀（WRITE_LOCAL 写本地 SQLite）
     registry.register(SkillSaveTool(policy=policy))
@@ -363,6 +366,7 @@ __all__ = [
     "BrowserSnapshotTool",
     "BrowserInteractTool",
     "BrowserScreenshotTool",
+    "BrowserDownloadsTool",
     "BrowserCloseTool",
     "SkillHotLoader",
     "SkillSaveTool",

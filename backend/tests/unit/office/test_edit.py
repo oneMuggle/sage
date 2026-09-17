@@ -351,6 +351,30 @@ def test_pptx_append_and_delete_slide(tmp_path: Path):
     assert parsed.slides[1].title == "尾页"
 
 
+def test_pptx_delete_slide_drops_orphan_part(tmp_path: Path):
+    """delete_slide 保存后包内不残留被删页的 slide part。
+
+    保存按关系图可达性序列化：关系被 drop 后，孤儿 slide part 不应再
+    写进 zip（旧行为文件越删越大）。
+    """
+    path = tmp_path / "a.pptx"
+    _make_pptx(path)  # 2 slides
+    saved, results = update_pptx(
+        path,
+        [
+            {"op": "append_slide", "title": "第三页"},  # → 3 slides
+            {"op": "delete_slide", "index": 0},
+        ],
+    )
+    assert saved
+    assert all(r["ok"] for r in results)
+    with zipfile.ZipFile(path) as zf:
+        slide_parts = [n for n in zf.namelist() if n.startswith("ppt/slides/slide")]
+    assert len(slide_parts) == 2
+    parsed = read_ppt(path, workspace_path="")
+    assert len(parsed.slides) == 2
+
+
 def test_pptx_replace_text(tmp_path: Path):
     path = tmp_path / "a.pptx"
     _make_pptx(path)

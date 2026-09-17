@@ -1722,6 +1722,9 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
   office_excel_read: () => DEMO_EXCEL_READ,
   office_ppt_read: () => DEMO_PPT_READ,
   office_pdf_read: () => DEMO_PDF_READ,
+  // F3 (office-p0): demo 模式没有真实 PDF 字节可 base64 化 —— 显式
+  // ok:false 让"原文预览"开关走失败回落，而不是未知通道报错。
+  office_pdf_data: () => ({ ok: false, data_url: null, error: '演示模式不支持原文预览' }),
 
   // Round-3 N1: PDF 生成演示路径（生成表单 e2e 的正向用例依赖）
   office_pdf_generate: (args) => {

@@ -242,6 +242,102 @@ def _count_images(doc: Document) -> int:
     return len(doc.inline_shapes)
 
 
+# ── Round C P4: inline image thumbnails ────────────────────────────────
+
+#: 最多内联的图片条目数（超出的只计数不内联，防止 payload 爆炸）。
+_IMAGE_PREVIEW_MAX_COUNT = 10
+#: Pillow 缩略的最长边（px）。
+_IMAGE_PREVIEW_MAX_EDGE = 480
+#: 无 Pillow 时允许直接内联的原图上限（bytes）。
+_IMAGE_PREVIEW_RAW_LIMIT = 150 * 1024
+#: 单条 data URL 的硬上限（bytes，base64 前）——缩略后仍超限则跳过。
+_IMAGE_PREVIEW_ENCODED_LIMIT = 300 * 1024
+
+
+def _extract_image_previews(doc: Document) -> List[WordImagePreview]:  # noqa: F821 — call-time import below
+    """Inline picture parts → bounded thumbnail data URLs.
+
+    Pillow available → RGB-convert + thumbnail to ``_IMAGE_PREVIEW_MAX_EDGE``
+    JPEG (small, predictable). Pillow missing → only parts already ≤
+    ``_IMAGE_PREVIEW_RAW_LIMIT`` are inlined as-is; larger ones are skipped
+    (the count field still reports them). Any per-image failure skips just
+    that image.
+    """
+    from .models import WordImagePreview
+
+    previews: List[WordImagePreview] = []
+    for index, shape in enumerate(doc.inline_shapes):
+        if len(previews) >= _IMAGE_PREVIEW_MAX_COUNT:
+            break
+        try:
+            # InlineShape → embedded rId → image part（charts 无 embed，跳过）
+            blip_fill = shape._inline.graphic.graphicData.pic.blipFill
+            r_id = blip_fill.blip.embed
+            # InlineShape 没有 .part —— 关系表挂在 document part 上
+            part = doc.part.related_parts[r_id]
+            blob = part.blob
+            content_type = part.content_type or "image/png"
+        except Exception:  # noqa: BLE001 — 单张图失败只跳过这张
+            continue
+        encoded = _thumbnail_or_none(blob, content_type)
+        if encoded is None:
+            continue
+        data, mime, thumbed = encoded
+        previews.append(
+            WordImagePreview(
+                index=index,
+                content_type=mime,
+                data_url=f"data:{mime};base64,{data}",
+                thumbnail=thumbed,
+            )
+        )
+    return previews
+
+
+def _thumbnail_or_none(blob: bytes, content_type: str):
+    """(base64_str, mime, thumbnailed) or None when the image can't be bounded.
+
+    Pillow path re-encodes to JPEG (RGBA → white matte). No-Pillow path
+    inlines small originals only. EMF/WMF 等 Pillow 打不开的格式走原图
+    小图路径或直接跳过。
+    """
+    import base64
+    import io
+
+    try:
+        from PIL import Image  # noqa: PLC0415 — optional dependency
+    except ImportError:
+        Image = None
+
+    if Image is not None:
+        try:
+            with Image.open(io.BytesIO(blob)) as img:
+                img.thumbnail((_IMAGE_PREVIEW_MAX_EDGE, _IMAGE_PREVIEW_MAX_EDGE))
+                if img.mode in ("RGBA", "LA", "P"):
+                    from PIL import Image as _Image
+
+                    background = _Image.new("RGB", img.size, (255, 255, 255))
+                    converted = img.convert("RGBA")
+                    background.paste(converted, mask=converted.split()[-1])
+                    out = background
+                elif img.mode != "RGB":
+                    out = img.convert("RGB")
+                else:
+                    out = img
+                buf = io.BytesIO()
+                out.save(buf, format="JPEG", quality=80)
+                data = buf.getvalue()
+            if len(data) <= _IMAGE_PREVIEW_ENCODED_LIMIT:
+                return base64.b64encode(data).decode("ascii"), "image/jpeg", True
+            return None
+        except Exception:  # noqa: BLE001 — Pillow 打不开（EMF/WMF 等）→ 原图小图路径
+            pass
+
+    if len(blob) <= _IMAGE_PREVIEW_RAW_LIMIT:
+        return base64.b64encode(blob).decode("ascii"), content_type, False
+    return None
+
+
 def _extract_headers_footers(doc: Document) -> List[WordHeaderFooterContent]:
     """提取每节的页眉/页脚文本与页码域标记（Round 15）。
 
@@ -377,6 +473,17 @@ def read_docx(
     paragraphs = _extract_paragraphs(doc)
     tables = _extract_tables(doc)
     images = _count_images(doc)
+    # Round C P4: inline image thumbnails. Best-effort like comments —
+    # a corrupt image part must not fail the read.
+    try:
+        image_previews = _extract_image_previews(doc)
+    except Exception:  # noqa: BLE001 — 图片部分损坏不阻断正文读取
+        logger.warning(
+            "Failed to extract image previews from %s; previews omitted",
+            file_path.name,
+            exc_info=True,
+        )
+        image_previews = []
     # Round 2 R3: comments ride along in the read result. A corrupt comments
     # part must not fail the whole read (body extraction already succeeded);
     # the dedicated read_docx_comments still surfaces it as OfficeParseError.
@@ -406,6 +513,7 @@ def read_docx(
         tables=tables,
         images=images,
         comments=comments,
+        image_previews=image_previews,
         headers_footers=_extract_headers_footers(doc),
         toc_fields=_extract_toc_fields(doc),
     )

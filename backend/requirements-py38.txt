@@ -12,7 +12,7 @@
 # - ruff 钉 0.x，mypy 钉 1.x，import-linter 钉 2.0（py3.8 兼容，2.1+ 要 py3.9+）
 
 # Core
-fastapi==0.109.0     # lifespan kwarg 需 0.93+；0.109 支持 py3.8 + pydantic 1.x（与 main 对齐）
+fastapi==0.109.1     # 0.109.1 修复 PYSEC-2024-38（CVE-2024-24762 ReDoS on multipart Content-Type），是 Py3.8 wheel 上限；保持 lifespan kwarg 兼容 + pydantic 1.x
 starlette==0.35.1    # fastapi 0.109 硬依赖 (>=0.35,<0.36)；TestClient 走 httpx2
 uvicorn==0.20.0      # py38 兼容
 pydantic==1.10.13    # 1.x 最后版本, 2.x 要求 3.9+
@@ -28,7 +28,7 @@ sqlite-vec>=0.1.9
 
 # HTTP
 httpx==0.26.0
-python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
+python-multipart==0.0.20  # required for FastAPI File() / Form() in legacy_routes.py; latest Python 3.8-compatible release, target CVE fixes require >=0.0.22
 certifi>=2024.7.4  # CA bundle required by httpx in the Win7 embeddable Python
 # requests 依赖已移除 — starlette 0.35.1 TestClient 走 httpx（上面已 pin），无代码 import requests
 anyio==3.7.1  # fastapi 0.109 / starlette 0.35.1 要求 anyio>=3.7.1,<5.0（沿用已装版本，最小变更）
@@ -66,11 +66,12 @@ hnswlib==0.8.0  # 收紧上界，避免未来版本破坏 ABI
 
 # Office documents
 python-pptx==0.6.23
-# lxml 6.x falls back to a source build on the Windows Python 3.8 runner;
-# pin the last compatible cp38 Windows wheel to avoid requiring libxml2 headers.
-lxml==5.4.0
+# lxml 6.1.0 修复 PYSEC-2026-87（CVE-2026-41066）；cp38 wheel 同时发布于
+# manylinux2014_x86_64 与 win_amd64（实测 2026-09-16，无需源码构建）
+lxml==6.1.0
 python-docx==1.1.2
 openpyxl==3.1.5
+pandas<2.1            # DataFrame Excel ops; 2.1+ yanked from PyPI, 2.0.3 is last working (cp38 wheel 确认)
 
 # --- Task 1 round 1 (2026-08-24): Win7 LTS 平台补包 ---
 # backports.zoneinfo 提供 py3.8 的 IANA timezone 校验 (Python 3.9+ 用内置 zoneinfo);
@@ -134,6 +135,8 @@ openpyxl==3.1.5       # XLSX read/write (low-level), ~1MB wheel; py38 兼容
 pytest==7.4.4
 pytest-asyncio==0.23.3
 pytest-cov==5.0.0
+pytest-timeout==2.3.1     # 单测 >120s 直接失败, 防静默挂起 (Py3.8 兼容)
+pytest-xdist==3.6.1       # CI 并行 (Py3.8 兼容; 原 requirements-dev.txt 经 `-r requirements.txt` 引入会污染 Py3.8 prod deps, 故钉入 py38 lockfile)
 respx==0.21.1
 
 # Quality

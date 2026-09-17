@@ -24,7 +24,7 @@ import json
 import re
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .browser_cdp import (
     RESERVED_BROWSER_ID,
@@ -75,8 +75,31 @@ RENDER_IDLE_TIMEOUT_SECONDS = 300.0
 #: 渲染池持久 profile 的保留目录名（web_access_config.render_persistent 开启时用）
 RENDER_PROFILE_NAME = "render-default"
 
+#: AU3 自动刷新专用保留 browser_id（launch 后立即移出会话表，非用户实例）
+REFRESH_POOL_ID = "refresh-pool"
+
 #: preferences 表的 key（web_access_config，需在 SettingsRepository.KEYS 白名单内）
 SETTINGS_KEY_WEB_ACCESS_CONFIG = "web_access_config"
+
+
+def _auto_refresh_enabled() -> bool:
+    """读 ``web_access_config.auto_refresh_credentials``（AU3，默认关）。
+
+    开启后：带凭据请求被踢到登录页时，若档案记录了来源持久 profile
+    （AU6），用该 profile 静默重导 cookie 并重放一次请求。
+    """
+    try:
+        import json
+
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get(SETTINGS_KEY_WEB_ACCESS_CONFIG)
+        if not raw:
+            return False
+        parsed = json.loads(raw)
+        return bool(isinstance(parsed, dict) and parsed.get("auto_refresh_credentials"))
+    except Exception:  # noqa: BLE001 — 配置失败按关闭处理
+        return False
 
 
 def _render_persistent_enabled() -> bool:
@@ -311,7 +334,151 @@ def get_renderer_pool() -> _RendererPool:
     return _pool
 
 
-def render_page(url: str, network_policy: Any, wait_for: str = "") -> Dict[str, Any]:
+def _writeback_render_cookies(
+    session: Any,
+    credential_domain: str,
+    request_url: str,
+    repo: Any = None,
+) -> Optional[List[str]]:
+    """AU5 回写：Storage.getCookies 按域取回渲染浏览器的 cookie，合并回档案。
+
+    host 亲和与归属域守卫在 ``merge_cdp_cookies`` 内；这里只做域过滤与
+    静默容错——回写是尽力而为，失败不抛（返回 None）。
+    """
+    from urllib.parse import urlparse
+
+    from .credential_vault import cookie_domain_matches, merge_cdp_cookies
+
+    try:
+        result = cdp_command(session, "Storage.getCookies", {})
+    except BrowserCDPError:
+        return None
+    all_cookies = result.get("cookies") or []
+    host = (urlparse(request_url or "").hostname or "").lower()
+    if not host:
+        return None
+    matched = [
+        c
+        for c in all_cookies
+        if isinstance(c, dict) and cookie_domain_matches(host, str(c.get("domain") or ""))
+    ]
+    if not matched:
+        return None
+    try:
+        changed = merge_cdp_cookies(credential_domain, matched, request_url, repo=repo)
+    except Exception:  # noqa: BLE001 — 回写失败不影响本次请求
+        return None
+    return sorted(set(changed)) or None
+
+
+def refresh_credentials(  # noqa: PLR0911 — 各失败路径独立 return，扁平更直读
+    credential_domain: str,
+    url: str,
+    profile_name: str,
+    repo: Any = None,
+) -> Tuple[bool, List[str]]:
+    """AU3：用来源持久 profile 静默重访 ``url``，把有效 cookie 重导回档案。
+
+    流程：独立持久会话（保留 id ``REFRESH_POOL_ID``，注册后立即移出会话表，
+    不干扰用户实例解析）→ 注入现有档案 cookie（remember-me 场景可直接续期）
+    → 导航 → 登录墙页判定（密码框 + 正文极短）→ ``Storage.getCookies`` 按域
+    ``merge_cdp_cookies`` 回写 → 关标签页并终止会话。
+
+    Returns:
+        (ok, refreshed_names)：ok=False 时 refreshed_names 为空；任何异常吞掉
+        返回失败（调用方回退为原 ``login_required`` 报错，不改变失败语义）。
+    """
+    from urllib.parse import urlparse
+
+    from .credential_vault import (
+        KIND_COOKIE,
+        cookie_domain_matches,
+        looks_like_login_html,
+        merge_cdp_cookies,
+        resolve_credential,
+    )
+
+    credential_domain = (credential_domain or "").strip().lower()
+    profile_name = (profile_name or "").strip()
+    if not credential_domain or not profile_name:
+        return False, []
+
+    resolution = resolve_credential(credential_domain, url=url, repo=repo)
+    inject = list(resolution.cookies) if resolution.ok and resolution.kind == KIND_COOKIE else []
+
+    session: Optional[BrowserSession] = None
+    target_id: Optional[str] = None
+    try:
+        session = launch_browser(
+            headless=True,
+            browser_id=REFRESH_POOL_ID,
+            persistent=True,
+            profile_name=profile_name,
+        )
+        get_browser_manager().remove(REFRESH_POOL_ID)  # 不进会话表：非用户实例
+        created = cdp_command(session, "Target.createTarget", {"url": "about:blank"})
+        target_id = created.get("targetId")
+        if not target_id:
+            return False, []
+        if inject:
+            cdp_command(session, "Storage.setCookies", {"cookies": inject})
+        apply_stealth(session, target_id, command=cdp_command)
+        result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
+        if result.get("errorText"):
+            return False, []
+        wait_page_ready(session, target_id)
+        expression = (
+            "JSON.stringify({url:location.href,"
+            "html:document.documentElement.outerHTML.slice(0,60000),"
+            "text:(document.body&&document.body.innerText||'').slice(0,2000)})"
+        )
+        info = _evaluate_json(session, expression, target_id)
+        page: Dict[str, Any] = {}
+        if isinstance(info, str):
+            try:
+                page = json.loads(info)
+            except ValueError:
+                return False, []
+        html = str(page.get("html") or "")
+        text = str(page.get("text") or "")
+        if looks_like_login_html(html) and len(text.strip()) < 500:
+            return False, []  # profile 也未登录：刷新失败，回退原语义
+        cookies_result = cdp_command(session, "Storage.getCookies", {})
+        host = (urlparse(url or "").hostname or "").lower()
+        if not host:
+            return False, []
+        matched = [
+            c
+            for c in (cookies_result.get("cookies") or [])
+            if isinstance(c, dict)
+            and cookie_domain_matches(host, str(c.get("domain") or ""))
+        ]
+        if not matched:
+            return False, []
+        changed = merge_cdp_cookies(credential_domain, matched, url, repo=repo)
+        return (bool(changed), sorted(set(changed)))
+    except BrowserCDPError:
+        return False, []
+    except Exception:  # noqa: BLE001 — 刷新失败不影响原报错语义
+        return False, []
+    finally:
+        if target_id and session is not None:
+            with contextlib.suppress(BrowserCDPError):
+                cdp_command(session, "Target.closeTarget", {"targetId": target_id})
+        if session is not None:
+            get_browser_manager().remove(REFRESH_POOL_ID)
+            from .browser_cdp import _terminate_session
+
+            _terminate_session(session)
+
+
+def render_page(
+    url: str,
+    network_policy: Any,
+    wait_for: str = "",
+    credential_domain: str = "",
+    repo: Any = None,
+) -> Dict[str, Any]:
     """headless 渲染 ``url``，返回与 web_fetch._render 可拼接的 content 片段。
 
     渲染完成后取 ``document.documentElement.outerHTML``（上限
@@ -319,20 +486,45 @@ def render_page(url: str, network_policy: Any, wait_for: str = "") -> Dict[str, 
     tables —— 与静态分支同一抽取器、同一产出结构（R1，关闭 W6 backlog）。
     页面无 HTML 返回时回退 innerText 路径（兼容旧读取形态）。
 
+    AU5：``credential_domain`` 给定时先把档案 cookie 经 ``Storage.setCookies``
+    注入渲染浏览器（导航前生效），渲染完成后经 ``Storage.getCookies`` 按域取回
+    并合并回档案，结果带 ``credential_refreshed``（一次导出，静态 / 渲染 /
+    交互三条通道共用）。header 型档案渲染通道不支持，跳过注入不报错。
+
     Raises:
-        RenderError: 门禁拒绝 / 浏览器不可用 / 导航失败 / 页面读取异常。
+        RenderError: 门禁拒绝 / 浏览器不可用 / 导航失败 / 页面读取异常 /
+            cookie 注入失败（显式给了凭据却建立不了登录态，宁失败不静默降级）。
     """
     rejection = network_policy.check_host(url)
     if rejection:
         raise RenderError(rejection)
 
+    credential_domain = (credential_domain or "").strip().lower()
+    credential_cookies: List[Dict[str, Any]] = []
+    if credential_domain:
+        from .credential_vault import (
+            KIND_COOKIE,
+            looks_like_login_html,
+            resolve_credential,
+        )
+
+        resolution = resolve_credential(credential_domain, url=url, repo=repo)
+        if resolution.ok and resolution.kind == KIND_COOKIE:
+            credential_cookies = list(resolution.cookies or [])
+
     session = _pool.acquire()
     target_id: Optional[str] = None
+    refreshed: Optional[List[str]] = None
     try:
         created = cdp_command(session, "Target.createTarget", {"url": "about:blank"})
         target_id = created.get("targetId")
         if not target_id:
             raise RenderError("渲染标签页创建失败")
+        # AU5：导航前注入档案 cookie（浏览器级命令，无需 attach；浏览器内
+        # 重定向自动按域携带）。注入失败走 RenderError——显式带凭据渲染却
+        # 拿到未登录正文会误导调用方。
+        if credential_cookies:
+            cdp_command(session, "Storage.setCookies", {"cookies": credential_cookies})
         # AB4：文档创建前注入 stealth（失败不阻断渲染）
         apply_stealth(session, target_id, command=cdp_command)
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
@@ -349,6 +541,10 @@ def render_page(url: str, network_policy: Any, wait_for: str = "") -> Dict[str, 
             f"html:document.documentElement.outerHTML.slice(0,{RENDER_HTML_CAP})}})"
         )
         info = _evaluate_json(session, expression, target_id)
+        # AU5：渲染标签页存活期间按域取回 cookie 合并回档案（续期回写；
+        # 任何失败静默——与 AU2"回写失败不影响本次请求"同口径）。
+        if credential_cookies:
+            refreshed = _writeback_render_cookies(session, credential_domain, url, repo=repo)
     except BrowserCDPError as exc:
         raise RenderError(
             f"JS 渲染失败: {exc}"
@@ -395,6 +591,18 @@ def render_page(url: str, network_policy: Any, wait_for: str = "") -> Dict[str, 
     }
     if isinstance(status, int) and status > 0:
         rendered["rendered_status"] = status
+    if refreshed:
+        rendered["credential_refreshed"] = refreshed
+    # AU7：带凭据渲染却落在密码框页（正文极短）→ 登录墙标记
+    if (
+        credential_cookies
+        and looks_like_login_html(html)
+        and len(content_text.strip()) < 500
+    ):
+        rendered["login_wall"] = True
+    if html:
+        # SN2：渲染后 DOM 交给调用方做候选文件链接嗅探（web_tool 不把它回传给模型）
+        rendered["html"] = html
     return rendered
 
 
@@ -407,6 +615,7 @@ __all__ = [
     "RenderError",
     "get_renderer_pool",
     "looks_like_js_shell",
+    "refresh_credentials",
     "render_page",
     "wait_page_ready",
 ]

@@ -185,3 +185,50 @@ async def test_task_status_event_carries_retry_of(tmp_path, monkeypatch):
     # t2（重派）的事件带 retry_of；t1（普通）不带
     assert all("retry_of" not in e for e in by_task["t1"])
     assert all(e.get("retry_of") == "t1" for e in by_task["t2"])
+
+
+# ============================================================================
+# RD14 (round22): 重派链防失控上限 —— max_retry_of_chains
+# ============================================================================
+
+
+@pytest.mark.asyncio()
+async def test_redeploy_over_cap_degrades_to_normal(tmp_path, monkeypatch):
+    """重派次数超过 max_retry_of_chains → 降级普通任务（retry_of=None）。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(stream_id="s10", entry_queue=queue, run_id="orch-rd14-1")
+    d._semaphore = asyncio.Semaphore(4)
+    d.settings.max_retry_of_chains = 2
+
+    async def fail_run(state):
+        raise RuntimeError(f"失败 {state.task_id}")
+
+    d._run_subagent = fail_run
+    # 连续 4 次失败重派：第 3 次重派超上限（cap=2）→ 第 4 次降级
+    for i in range(1, 5):
+        retry_of = f"t{i - 1}" if i > 1 else None
+        await d.dispatch(
+            [
+                {
+                    "task_id": f"t{i}",
+                    "agent_id": "primary",
+                    "goal": f"g{i}",
+                    **({"retry_of": retry_of} if retry_of else {}),
+                }
+            ]
+        )
+    assert d._states["t1"].retry_of is None
+    assert d._states["t2"].retry_of == "t1"
+    assert d._states["t3"].retry_of == "t2"
+    assert d._states["t4"].retry_of is None  # 超上限降级
+
+
+def test_max_retry_of_chains_setting_registered():
+    from backend.orchestration.orch_settings import OrchSettings
+
+    s = OrchSettings()
+    assert s.max_retry_of_chains == 10
+    from backend.orchestration import orch_settings
+
+    assert orch_settings._RAW_KEYS.get("maxRetryOfChains") == "max_retry_of_chains"
