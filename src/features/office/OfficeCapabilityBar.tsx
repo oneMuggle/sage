@@ -91,13 +91,16 @@ export function OfficeCapabilityBar({ onCapabilities }: OfficeCapabilityBarProps
       label: t('office.caps.formula'),
       hint: caps.formulas_available ? 'formulas' : t('office.caps.install.formulas'),
     },
+    {
+      key: 'ocr',
+      ok: caps.ocr_available,
+      label: t('office.caps.ocr'),
+      hint: caps.ocr_available ? 'tesseract' : t('office.caps.install.ocr'),
+    },
   ];
 
   return (
-    <div
-      className="flex items-center gap-2 flex-wrap text-xs"
-      data-testid="office-capability-bar"
-    >
+    <div className="flex items-center gap-2 flex-wrap text-xs" data-testid="office-capability-bar">
       {badges.map((b) => (
         <span
           key={b.key}

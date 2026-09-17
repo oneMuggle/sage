@@ -1872,6 +1872,8 @@ export interface OfficeCapabilities {
   pdf_export_available: boolean;
   pillow_available: boolean;
   formulas_available: boolean;
+  /** P4-A (office-p4a): OCR 兜底可用（pytesseract 已装且 tesseract 在 PATH）。 */
+  ocr_available: boolean;
 }
 
 /**
