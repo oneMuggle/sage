@@ -16,6 +16,18 @@ from backend.core.legacy.llm_client import LLMClient, LLMConfig
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def _fast_llm_retry_backoff(monkeypatch):
+    """429 的 retry-after 退避被生产代码封顶为 _LLM_RETRY_MAX_DELAY_S=15s，
+    首次 + 2 次重试即 30s 纯等待（#1037 durations 实测 30.03s）。本文件
+    断言的是错误映射与 retry_after 的解析值，从不关心退避时长，因此把
+    封顶常量与指数退避基数都压到近零；重试路径本身仍被真实执行。"""
+    monkeypatch.setattr(
+        "backend.core.legacy.llm_client._LLM_RETRY_MAX_DELAY_S", 0.01
+    )
+    monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "0.01")
+
+
 @pytest.fixture()
 def client():
     return LLMClient(
