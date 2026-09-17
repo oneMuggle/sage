@@ -24,7 +24,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, Sequence, Set, Union
+from typing import Any, Dict, Optional, Sequence, Set, Union
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
