@@ -434,6 +434,9 @@ describe('buildUpdateOps — op composition table', () => {
     styleColor: '',
     styleAlign: '',
     commentId: '',
+    imagePath: '',
+    imageWidth: '',
+    imageHeight: '',
     sheet: '',
     cell: '',
     value: '',
@@ -631,6 +634,28 @@ describe('buildUpdateOps — op composition table', () => {
         numFormatCells: 'B2',
       }),
     ).toBeNull();
+  });
+
+  it('word add_image: path required, optional inch dims', () => {
+    expect(buildUpdateOps('word', { ...base, wordKind: 'add_image' })).toBeNull();
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'add_image',
+        imagePath: ' images/logo.png ',
+        imageWidth: '4',
+        imageHeight: '3',
+      }),
+    ).toEqual([
+      { op: 'add_image', path: 'images/logo.png', width_inches: 4, height_inches: 3 },
+    ]);
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'add_image',
+        imagePath: 'images/logo.png',
+      }),
+    ).toEqual([{ op: 'add_image', path: 'images/logo.png' }]);
   });
 
   it('pdf is not editable via this dialog', () => {
