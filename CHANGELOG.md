@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 41：office_update 修订后 TOC 刷新**（方案 `docs/plans/2026-09-18_r41-update-toc-refresh-plan.md`）
+
+### Added(office)
+- **`office_update` 新增 `refresh_toc` 标志**（word 专用）：修订成功后立即用 Word COM 刷新目录域为真页码——增删段落后的页码漂移一次性修复；doc_id 受管路径 upfront 非 word 守卫（修订尚未发生即拒绝，语义准确），file_path 路径同口径
+- **降级契约**：刷新失败/不可用时修订保持 success=True，仅附加 `toc_refresh: {ok: false, error}` 说明（与 R40 生成侧同口径）
+- **横排宽表场景文档（搭车）**：report-writing 技能补 R37 `section_breaks` 分节横排说明与组合示例（技能正文可发现化缺口）
+
 > 📝 **Word 写作能力 Round 40：office_create 一键 TOC 刷新**（方案 `docs/plans/2026-09-18_r40-create-toc-refresh-plan.md`）
 
 ### Added(office)

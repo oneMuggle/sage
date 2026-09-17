@@ -53,6 +53,7 @@
 | 75   | [项目级文件访问控制（Allowed Paths）](./75-allowed-paths.md) | 额外只读路径规则：`~/**` glob 语法 + 读写分离（读放行、写审批）+ 前端搜索集成（allowed-* 类型）+ 项目级持久化 |
 | 76   | [Word 目录真页码（Word COM 刷新域）](./76-word-toc-page-refresh.md) | R29 静态缓存目录收口：office_refresh_toc 可选通道（Word COM Update TOC + AutomationSecurity 禁宏 + finally 防进程泄漏）+ pywin32 进可选依赖 + writer 白名单/技能可发现化 |
 | 77   | [office_create 一键 TOC 刷新](./77-word-create-toc-refresh.md) | R40 编排收口：refresh_toc 标志双路径接线（受管 doc_id 定位不回显路径 / legacy 围栏回退）+ 降级不毁生成 + rollback 遥测竞态测试修复（搭车） |
+| 78   | [office_update 修订后 TOC 刷新](./78-word-update-toc-refresh.md) | R41 修订侧收口：refresh_toc 标志 + upfront 非 word 守卫（修订未发生即拒）+ 受管摘要不回显路径 + 横排宽表场景文档（搭车） |
 
 ---
 
