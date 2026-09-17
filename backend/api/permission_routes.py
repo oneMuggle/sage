@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -144,7 +144,7 @@ def list_session_auto_approvals(
     }
 
 
-def forbidden_origin_response(request: Request) -> Optional[JSONResponse]:
+def forbidden_origin_response(request: Request) -> JSONResponse | None:
     """Origin 守卫：带 Origin 头且不在白名单 → 403 响应；否则 None（放行）。
 
     无 ``Origin`` 头视为同源 / 非浏览器客户端（curl、python、Electron

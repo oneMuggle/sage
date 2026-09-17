@@ -35,7 +35,7 @@ def detect_communities(graph_data: GraphData) -> List[CommunityInfo]:
         graph_data: 图谱数据
 
     Returns:
-        list[CommunityInfo]: 社区信息列表，按凝聚度降序排序
+        List[CommunityInfo]: 社区信息列表，按凝聚度降序排序
     """
     if not graph_data.nodes:
         return []
@@ -139,7 +139,7 @@ def get_communities_with_nodes(
         project_root: 项目根目录
 
     Returns:
-        tuple[list[CommunityInfo], GraphData]: (社区信息列表, 图谱数据)
+        Tuple[List[CommunityInfo], GraphData]: (社区信息列表, 图谱数据)
     """
     graph_data = build_graph(project_root)
     communities = detect_communities(graph_data)

@@ -606,7 +606,7 @@ def build_router() -> APIRouter:
 async def _create_lane_for_task(
     task: Task,
     goal: str,
-    explicit_agent: Optional[str],
+    explicit_agent: str | None,
     lane_registry: LaneRegistry,
     capability_router,
 ) -> Lane:
@@ -661,7 +661,7 @@ async def _execute_plan_lanes(
     task_registry: Any,
     event_recorder: Any,
     llm_config: Any,
-) -> Optional[Dict[str, Any]]:
+) -> Dict[str, Any] | None:
     """并行执行 plan 的 lanes（ChatDispatcher._run_subagent 同款语义）。
 
     - 不强制 DAG 拓扑（与 ChatDispatcher 并行语义一致；spec §7.4 同）。

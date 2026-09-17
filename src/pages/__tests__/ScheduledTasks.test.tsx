@@ -19,6 +19,15 @@ vi.mock('../../entities/scheduled/taskStore', () => {
   };
 });
 
+vi.mock('../../shared/lib/store', () => ({
+  useStore: (selector: (s: unknown) => unknown) => selector(sessionState),
+}));
+const sessionState = {
+  sessions: [{ id: 'real-session', title: 'Actual conversation' }],
+  currentSessionId: 'real-session',
+  loadSessions: vi.fn(),
+};
+
 import { I18nProvider } from '../../shared/lib/i18n';
 import { ScheduledTasks } from '../ScheduledTasks';
 
@@ -45,5 +54,7 @@ describe('ScheduledTasks page', () => {
     );
     fireEvent.click(screen.getAllByText(/scheduled\.create|新建任务|New Task/i)[0]);
     expect(screen.getByRole('dialog')).toBeTruthy();
+    expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('real-session');
+    expect(screen.queryByRole('option', { name: 'default' })).toBeNull();
   });
 });

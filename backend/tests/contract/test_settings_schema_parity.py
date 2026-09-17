@@ -36,12 +36,14 @@ EXPECTED_TOP_KEYS = frozenset(
     {
         "streaming",
         "autoMemory",
+        "autoContext",  # Task 5 (2026-09-15): context window resolver toggle
         "confirmDelete",
         "endpoints",
         "modelSelections",
         "maxContext",
         "temperature",
         "timezone",  # Task 1 (2026-08-23): IANA timezone, 默认 Asia/Shanghai
+        "logTimezone",  # 2026-09-17: 日志时间戳时区 ('UTC' | 'local' | IANA)
         "wiki",
         "version",
         "orch",
@@ -50,7 +52,7 @@ EXPECTED_TOP_KEYS = frozenset(
 
 
 def test_legal_top_keys_matches_appsettings_interface() -> None:
-    """LEGAL_TOP_KEYS 必须与 AppSettings 13 顶层字段 1:1 对齐."""
+    """LEGAL_TOP_KEYS 必须与 AppSettings 顶层字段 1:1 对齐."""
     assert LEGAL_TOP_KEYS == EXPECTED_TOP_KEYS
 
 
@@ -116,7 +118,12 @@ def test_legal_model_selections_obj_keys_is_stable() -> None:
 
 
 def test_legal_orch_keys_is_stable() -> None:
-    """LEGAL_ORCH_KEYS 是前端 OrchSettings 7 键（含 scratchRoot，后端存）。"""
+    """LEGAL_ORCH_KEYS 是前端 OrchSettings 10 键（含 scratchRoot，后端存）。
+
+    2026-09 修复: 前端 OrchSettings 演进出 worktreeIsolation /
+    subagentApprovalMode / runTokenBudget 三键, 白名单未跟导致编排设置
+    保存整体 400 (且被前端静默吞掉)。此测试钉住同步义务。
+    """
     assert frozenset(
         {
             "maxConcurrentSubagents",
@@ -125,6 +132,9 @@ def test_legal_orch_keys_is_stable() -> None:
             "maxRetries",
             "maxLaneIterations",
             "maxSubagentIterations",
+            "worktreeIsolation",
+            "subagentApprovalMode",
+            "runTokenBudget",
             "scratchRoot",
         }
     ) == LEGAL_ORCH_KEYS
@@ -142,6 +152,9 @@ def test_aliases_camel_side_subset_of_legal_keys() -> None:
         | LEGAL_MODEL_SELECTIONS_KEYS
         | LEGAL_DISCOVERED_MODEL_KEYS
         | LEGAL_WIKI_KEYS
+        # 2026-09 修复: orch 子层键进入 ALIASES (worktree_isolation 等),
+        # 并集必须包含 LEGAL_ORCH_KEYS, 否则合法翻译被判为非法。
+        | LEGAL_ORCH_KEYS
     )
     aliases_camel_side = frozenset(ALIASES.values())
     missing = aliases_camel_side - all_legal_camel

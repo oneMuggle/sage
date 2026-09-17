@@ -192,7 +192,7 @@ def _cleanup_subagent_workspace(root: Path | None) -> None:
         logger.warning("Failed to clean sub-agent workspace %s", root, exc_info=True)
 
 
-def _subagent_policy(policy: Optional[ToolPolicy]) -> tuple[ToolPolicy, Path | None]:
+def _subagent_policy(policy: Optional[ToolPolicy]) -> Tuple[ToolPolicy, Path | None]:
     parent = policy or ToolPolicy()
     owned_root = None if parent.workspace_root else _new_subagent_workspace()
     root = parent.workspace_root or str(owned_root)

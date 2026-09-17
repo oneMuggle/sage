@@ -171,7 +171,10 @@ def test_bind_canonicalizes_symlink_workspace_path(
     """A symlinked workspace path is resolved to its canonical absolute form."""
     _insert_session(conn)
     link = fixture_dir / "link-to-a"
-    link.symlink_to(work_a)
+    try:
+        link.symlink_to(work_a)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not supported")
 
     binding = bind_session_workspace(conn, "session-a", str(link), now_ms=1000)
 

@@ -1083,7 +1083,16 @@ def _apply_pptx_op(prs: Any, op: Dict[str, Any], doc_path: Optional[Path] = None
             return {"op": op_name, "ok": False, "error": f"slide_index_out_of_range: {idx}"}
         sld_id_lst = slides._sldIdLst
         sld_ids = list(sld_id_lst)
-        sld_id_lst.remove(sld_ids[idx])
+        sld_id = sld_ids[idx]
+        # 同步 drop 掉 presentation part 对 slide part 的关系：save 按
+        # 关系图遍历序列化，不 drop 的话 slide part 仍可达，孤儿页会
+        # 继续写进包里（文件越删越大）。
+        from pptx.oxml.ns import qn
+
+        r_id = sld_id.get(qn("r:id"))
+        if r_id:
+            prs.part.drop_rel(r_id)
+        sld_id_lst.remove(sld_id)
         return {"op": op_name, "ok": True, "index": idx, "remaining": len(slides)}
 
     if op_name == "add_picture":
@@ -1161,6 +1170,12 @@ def update_document(
     editor = editors.get((doc_type or "").lower())
     if editor is None:
         raise OfficeEditError(f"unsupported doc_type: {doc_type}", file_path=file_path)
+    # P1-B: excel doc_type 的 .csv 双扩展 —— 写路径分流到字符串网格编辑器
+    # （CSV 没有公式/样式系统，openpyxl 不适用）。
+    if doc_type.lower() == "excel" and file_path.suffix.lower() == ".csv":
+        from .excel import update_csv
+
+        return update_csv(file_path, ops)
     return editor(file_path, ops)
 
 

@@ -83,6 +83,7 @@ function baseChat(overrides: Record<string, unknown> = {}) {
     sendMessage: vi.fn(),
     isLoading: false,
     error: null,
+    errorSessionId: null,
     clearError: vi.fn(),
     messages: [],
     loadMessages: vi.fn(),
@@ -141,6 +142,7 @@ describe('Chat — R17-D 错误内联', () => {
     useChatMock.mockReturnValue(
       baseChat({
         error: '上游服务 502',
+        errorSessionId: 'session-1',
         clearError,
         messages: [
           { id: 'u1', session_id: 'session-1', role: 'user', content: '你好', created_at: 1 },
@@ -157,7 +159,7 @@ describe('Chat — R17-D 错误内联', () => {
 
   it('点击关闭回调 clearError', async () => {
     const clearError = vi.fn();
-    useChatMock.mockReturnValue(baseChat({ error: 'boom', clearError }));
+    useChatMock.mockReturnValue(baseChat({ error: 'boom', errorSessionId: 'session-1', clearError }));
     renderChat();
     fireEvent.click(screen.getByTestId('chat-inline-error').querySelector('button')!);
     await waitFor(() => expect(clearError).toHaveBeenCalledTimes(1));

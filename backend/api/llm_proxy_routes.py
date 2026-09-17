@@ -37,7 +37,9 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import contextlib
 import hmac
+import json
 import logging
 import os
 import posixpath
@@ -45,11 +47,10 @@ import socket
 import ssl
 import time as _time
 import uuid as _uuid
-from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from ipaddress import ip_address
-from typing import Dict, FrozenSet, List, Optional
+from typing import AsyncIterator, Dict, FrozenSet, List, Optional, Set
 from urllib.parse import urlparse
 
 import httpcore
@@ -59,6 +60,7 @@ from fastapi.responses import StreamingResponse
 from httpcore._backends.auto import AutoBackend
 
 from backend.api.local_auth import get_local_auth_token
+from backend.core.legacy.llm_client import _is_context_overflow_text
 from backend.services.llm_trace.recorder import LlmTraceRecorder, TraceRecord
 
 logger = logging.getLogger(__name__)
@@ -142,7 +144,7 @@ LOCAL_PROVIDER_ALLOWLIST_ENV = "SAGE_LLM_PROXY_ALLOWED_HOSTS"
 _DANGEROUS_NETWORK_ERROR = "The upstream target is not allowed."
 
 
-def _configured_allowed_hosts() -> frozenset[str]:
+def _configured_allowed_hosts() -> FrozenSet[str]:
     return frozenset(
         item.strip().lower().rstrip(".")
         for item in os.environ.get(LOCAL_PROVIDER_ALLOWLIST_ENV, "").split(",")
@@ -300,7 +302,7 @@ async def _read_request_body(request: Request) -> bytes:
         except ValueError:
             pass
 
-    chunks: list[bytes] = []
+    chunks: List[bytes] = []
     size = 0
     async for chunk in request.stream():
         size += len(chunk)
@@ -327,7 +329,7 @@ async def _read_response_body_limited(response: httpx.Response) -> bytes:
             if str(exc) == "response exceeds configured limit":
                 raise
 
-    chunks: list[bytes] = []
+    chunks: List[bytes] = []
     size = 0
     async for chunk in response.aiter_bytes():
         size += len(chunk)
@@ -429,13 +431,13 @@ def _is_tls_certificate_error(exc: BaseException) -> bool:
     但 message 含 "CERTIFICATE_VERIFY_FAILED".
     """
     current: Optional[BaseException] = exc
-    seen: set[int] = set()
+    seen: Set[int] = set()
     while current is not None and id(current) not in seen:
         seen.add(id(current))
         if isinstance(current, ssl.SSLCertVerificationError):
             return True
         # 同级: __cause__ (raise X from Y) → __context__ (implicit) → exceptions
-        next_exc: BaseException | None = None
+        next_exc: Optional[BaseException] = None
         if current.__cause__ is not None and current.__cause__ is not current:
             next_exc = current.__cause__
         elif current.__context__ is not None and current.__context__ is not current:
@@ -510,7 +512,7 @@ def _is_local_capability_authorization(value: str, local_token: str) -> bool:
 
 
 def _filter_request_headers(
-    request: Request, local_token: Optional[str] = None
+    request: Request, local_token: str | None = None
 ) -> Dict[str, str]:
     """Copy request headers, excluding proxy internals and the local capability."""
     capability = local_token if local_token is not None else get_local_auth_token()
@@ -653,7 +655,7 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
 
     # 4. 透传头部与 body
     fwd_headers = _filter_request_headers(request, get_local_auth_token())
-    body: bytes | None = (
+    body: Optional[bytes] = (
         await _read_request_body(request)
         if request.method in {"POST", "PUT", "PATCH"}
         else None
@@ -675,9 +677,20 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
     # 触发条件(任一):
     #   1. Accept 头含 text/event-stream (SSE 标准)
     #   2. query string `stream=true` (OpenAI 流式 chat completion 约定)
+    #   3. JSON body 里 "stream": true —— v3 修复: LLMClient.chat_stream 只把
+    #      stream 标记放在 body 里, 不设 Accept 头也不带 query; 旧判定两者都
+    #      看唯独不看 body, 导致生产链路所有流式请求被静默降级为整包缓冲。
     accept = request.headers.get("accept", "")
+    body_wants_stream = False
+    if body:
+        with contextlib.suppress(Exception):
+            body_wants_stream = bool(
+                json.loads(body.decode("utf-8", errors="replace")).get("stream")
+            )
     is_streaming = (
-        "text/event-stream" in accept.lower() or request.query_params.get("stream") == "true"
+        "text/event-stream" in accept.lower()
+        or request.query_params.get("stream") == "true"
+        or body_wants_stream
     )
 
     # 5. 代理请求
@@ -811,10 +824,20 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
         ) from exc
 
     if not upstream_resp.is_success:
+        # v3: 上游 4xx/5xx 的原始 body 被脱敏丢弃, LLMClient 侧的溢出特征串
+        # 分类因此永远命不中, 上下文溢出急救压缩在生产链路失效。这里对
+        # 响应体做特征串检测, 命中则把结构化 type 升级为 context_overflow
+        # (message 仍保持脱敏), LLMClient 认得该标记并映射 CONTEXT_OVERFLOW。
+        error_type = "upstream_error"
+        with contextlib.suppress(Exception):
+            if _is_context_overflow_text(
+                response_body.decode("utf-8", errors="replace")
+            ):
+                error_type = "context_overflow"
         raise HTTPException(
             status_code=upstream_resp.status_code,
             detail={
-                "type": "upstream_error",
+                "type": error_type,
                 "message": _safe_upstream_error_message(upstream_resp.status_code),
             },
         )
@@ -857,7 +880,7 @@ async def _proxy_streaming(
     trace_id: str = "",
     trace_start_monotonic: float = 0.0,
     trace_endpoint: str = "",
-    trace_req_headers: dict[str, str] | None = None,
+    trace_req_headers: Dict[str, str] | None = None,
     trace_req_body: bytes = b"",
 ) -> StreamingResponse:
     """v2: SSE/chunked 流式透传。

@@ -54,7 +54,8 @@ class ServerConfigIn(BaseModel):
     """POST /mcp/servers body — full user server definition."""
 
     name: str = Field(min_length=1, max_length=64)
-    command: str = Field(min_length=1, max_length=512)
+    command: str = Field(default="", max_length=512)
+    url: Optional[str] = Field(default=None, max_length=2048)
     args: List[str] = Field(default_factory=list)
     env: Dict[str, str] = Field(default_factory=dict)
     # R34: HTTP 传输自定义鉴权头（stdio 服务器忽略）
@@ -143,6 +144,7 @@ def add_mcp_server(payload: ServerConfigIn) -> Dict[str, Any]:
         config = validate_server_config(
             name=payload.name,
             command=payload.command,
+            url=payload.url,
             args=tuple(payload.args),
             env=dict(payload.env),
             enabled=payload.enabled,
@@ -188,6 +190,33 @@ def update_mcp_server(name: str, payload: ServerUpdateIn) -> Dict[str, Any]:
         logger.error("MCP config persistence failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"config save failed: {exc}")
     return {"ok": True, "name": name, "state": record.state.value}
+
+
+@router.get("/mcp/servers/{name}/tools")
+def list_mcp_server_tools(name: str) -> Dict[str, Any]:
+    """Per-tool management payload: sanitized specs + current disabled list.
+
+    Read-only — never triggers discovery; a server that is not READY simply
+    reports an empty tool list alongside its state. Only name + a truncated
+    description are exposed (inputSchema never leaves the backend).
+    """
+    record = _pool().get_record(name)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"unknown MCP server: {name}")
+    tools = [
+        {
+            "name": str(spec.get("name", "")),
+            "description": str(spec.get("description") or "")[:200],
+        }
+        for spec in record.tool_specs
+        if isinstance(spec, dict) and spec.get("name")
+    ]
+    return {
+        "server": name,
+        "state": record.state.value,
+        "tools": tools,
+        "disabled_tools": list(record.config.disabled_tools),
+    }
 
 
 @router.delete("/mcp/servers/{name}")

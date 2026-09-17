@@ -165,11 +165,16 @@ class SqliteStorageAdapter:
         return await asyncio.to_thread(self._sync_list_sessions)
 
     def _sync_list_sessions(self) -> List[Dict[str, Any]]:
+        # 2026-09 修复: previews 查询移入同一把 _SQLITE_LOCK —— 本 adapter
+        # 约定所有路径共享 database._SQLITE_LOCK 串行化同一 sqlite3.Connection;
+        # 预览查询在锁外裸用 cursor 会与 to_thread worker / @with_db_lock /
+        # APScheduler 线程并发互踩 ("cannot start a transaction within a
+        # transaction"), 会话列表接口随机 500。
         with _SQLITE_LOCK:
             sessions = self._sessions.list(limit=1000, offset=0)
-        # P0-4 (UI 优化方案 2026-09-13): 批量查询每个会话的最后一条消息预览
-        # (最近一条 user/assistant 消息,截断 80 字符)。空会话 → preview 为 None。
-        previews = self._sync_last_message_previews([s.id for s in sessions])
+            # P0-4 (UI 优化方案 2026-09-13): 批量查询每个会话的最后一条消息预览
+            # (最近一条 user/assistant 消息,截断 80 字符)。空会话 → preview 为 None。
+            previews = self._sync_last_message_previews([s.id for s in sessions])
         return [
             {
                 "id": s.id,
@@ -185,7 +190,7 @@ class SqliteStorageAdapter:
         ]
 
     def _sync_last_message_previews(self, session_ids: List[str]) -> Dict[str, str]:
-        """批量获取每个会话的最后一条 user/assistant 消息预览(截断 80 字符)。"""
+        """批量获取每个会话的最后一条 user/assistant 消息预览(截断 40 字符)。"""
         if not session_ids:
             return {}
         conn = self._sessions.db.get_connection()
@@ -195,7 +200,7 @@ class SqliteStorageAdapter:
         cursor.execute(
             f"""
             SELECT m.session_id,
-                   SUBSTR(m.content, 1, 80) AS preview
+                   SUBSTR(m.content, 1, 40) AS preview
             FROM messages m
             INNER JOIN (
                 SELECT session_id, MAX(created_at) AS max_created

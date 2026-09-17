@@ -149,7 +149,7 @@ class ChatService:
         # 以保证 LLM 请求前缀稳定、提升 prefix cache 命中率；动态记忆段
         # 每 turn 拼接在快照之后。key=session_id, value=静态 prompt。
         # session_id 为空的调用不缓存（见 _run_turn_inner）。
-        self._system_prompt_snapshots: dict[str, str] = {}
+        self._system_prompt_snapshots: Dict[str, str] = {}
         # WS-C P0-3: 注册到弱引用登记表，使 legacy_routes 压缩落盘完成后
         # 可通过模块级 invalidate_session_snapshot() 通知所有存活实例失效
         # 对应 session 的快照（WeakSet 不阻止实例被 GC）。

@@ -23,7 +23,8 @@ import asyncio
 import contextlib
 import time
 from dataclasses import dataclass, field
-from typing import (  # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscript
+from typing import (
+    # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscript
     Any,
     Callable,
     Dict,
@@ -43,9 +44,19 @@ class BroadcastQueue(asyncio.Queue):
         super().__init__(maxsize=maxsize)
         self._subscribers: List[asyncio.Queue] = []
         self._lock = asyncio.Lock()
+        # 最近一次事件入队时间(单调挂钟, 秒)。sweep 用它判断流是否"活着"。
+        self.last_activity_at: float = time.time()
 
     async def put(self, item: Any) -> None:
-        """广播消息，不让慢订阅者阻塞 producer。"""
+        """广播消息，不让慢订阅者阻塞 producer。
+
+        已知边界 (2026-09 审计记录): 无 subscriber 且父队列满时 put 挂起,
+        期间 subscribe() 注册 subscriber 并清空父队列 —— 恢复后事件的去向
+        依赖 CPython 版本 (3.12+ 经虚分派直达 subscriber; 3.11 写回父队列
+        滞留或因订阅队列满被丢弃)。窗口极窄 (attach 与满队列竞态), 跨版本
+        统一语义需要重做挂起机制 (自管理 waiter), 暂不做局部补丁。
+        """
+        self.last_activity_at = time.time()
         if not self._subscribers:
             await super().put(item)
             return
@@ -53,6 +64,7 @@ class BroadcastQueue(asyncio.Queue):
 
     def put_nowait(self, item: Any) -> None:
         """非阻塞广播；满队列的订阅者被移除并丢弃其后续事件。"""
+        self.last_activity_at = time.time()
         queues = list(self._subscribers)
         if not queues:
             super().put_nowait(item)
@@ -80,6 +92,9 @@ class BroadcastQueue(asyncio.Queue):
         async with self._lock:
             with contextlib.suppress(ValueError):
                 self._subscribers.remove(queue)
+
+    def has_subscribers(self) -> bool:
+        return bool(self._subscribers)
 
 
 # 当 Queue.get() 收到此 sentinel,attach 端点就关闭 NDJSON 流。
@@ -127,6 +142,9 @@ class StreamEntry:
     task: Optional[asyncio.Task] = None
     status: str = "pending"
     created_at: float = field(default_factory=time.time)
+    # 最近一次事件入队时间(秒)。长 LLM 调用/编排确认门会长时间静默,
+    # sweep 必须 按"最后事件"而非"创建时间"判断, 否则会强杀活跃流。
+    last_activity_at: float = field(default_factory=time.time)
     session_id: Optional[str] = None
     suspended: bool = False
     wake_id: Optional[str] = None
@@ -150,8 +168,8 @@ class StreamRegistry:
         self,
         stream_id: str,
         queue_maxsize: int = 1000,
-        producer: Optional[ProducerFn] = None,
-        session_id: Optional[str] = None,
+        producer: ProducerFn | None = None,
+        session_id: str | None = None,
     ) -> StreamEntry:
         """注册新 stream,可选启动 producer task。
 
@@ -179,6 +197,7 @@ class StreamRegistry:
             queue=BroadcastQueue(maxsize=queue_maxsize),
             status="pending",
             created_at=time.time(),
+            last_activity_at=time.time(),
             session_id=session_id,
         )
         self._entries[stream_id] = entry
@@ -211,7 +230,7 @@ class StreamRegistry:
             with contextlib.suppress(asyncio.CancelledError):
                 await entry.queue.put(SENTINEL)
 
-    def find_active_by_session(self, session_id: str) -> Optional[str]:
+    def find_active_by_session(self, session_id: str) -> str | None:
         """R25-D4: 返回该会话当前活跃（pending/running 且未挂起）的 streamId。
 
         与 create 的 busy 仲裁同口径（挂起与终态不占位）。无活跃流返回
@@ -230,7 +249,7 @@ class StreamRegistry:
         self,
         stream_id: str,
         *,
-        wake_id: Optional[str] = None,
+        wake_id: str | None = None,
         note: str = "",
     ) -> bool:
         """A4 Suspend-Resume: 挂起一个活跃流。
@@ -263,7 +282,7 @@ class StreamRegistry:
     def get(self, stream_id: str) -> StreamEntry | None:
         return self._entries.get(stream_id)
 
-    async def subscribe(self, stream_id: str) -> Optional[asyncio.Queue]:
+    async def subscribe(self, stream_id: str) -> asyncio.Queue | None:
         """为 stream 创建独立消费游标；stream 不存在时返回 None。"""
         entry = self._entries.get(stream_id)
         if entry is None:
@@ -302,16 +321,38 @@ class StreamRegistry:
         if self._entries.get(stream_id) is entry and entry.status in ("done", "failed"):
             self._entries.pop(stream_id, None)
 
-    async def sweep_expired(self, max_age_seconds: float = 300.0) -> int:
-        """清理超过 max_age_seconds 仍未完成(dangling)的 entry。
+    async def sweep_expired(
+        self,
+        max_age_seconds: float = 300.0,
+        running_idle_seconds: float = 900.0,
+    ) -> int:
+        """清理孤儿 entry（pop_if_done 之外的第二道兜底）。
 
-        正常情况下 done/failed 的 entry 会被 pop_if_done 主动删,
-        sweep 是兜底 — 处理 producer 死循环 / 异常路径漏删的孤儿。
+        语义（2026-09 修订 —— 旧实现按 created_at 300s 强杀，会静默杀掉
+        合法的长任务流：编排确认门默认等待 600s，深度 agent run 带多轮
+        工具与退避重试轻松超过 5 分钟，且 CancelledError 不会下发 failed
+        事件，前端表现为无声断流）：
+
+        - 终态 (done/failed): 距最后事件超过 ``max_age_seconds`` 即回收；
+        - suspended: 豁免 —— 等 wake 的流是活流，由 WakeScheduler 管生命周期；
+        - pending/running: 仅当 **同时** 满足 (a) 距最后事件超过
+          ``running_idle_seconds``（须 > 编排确认门 600s 默认值）
+          且 (b) 无 subscriber 时才回收 —— 用户断开后 token 仍要跑完
+          落库的契约不受影响，只回收真正无人认领的僵尸。
         """
         now = time.time()
-        expired = [
-            sid for sid, entry in self._entries.items() if now - entry.created_at > max_age_seconds
-        ]
+        expired: List[str] = []
+        for sid, entry in self._entries.items():
+            if entry.status in ("done", "failed"):
+                if now - entry.last_activity_at > max_age_seconds:
+                    expired.append(sid)
+            elif entry.status == "suspended":
+                continue
+            elif (  # pending / running
+                not entry.queue.has_subscribers()
+                and now - entry.last_activity_at > running_idle_seconds
+            ):
+                expired.append(sid)
         for sid in expired:
             entry = self._entries.pop(sid)
             if entry.task is not None and not entry.task.done():

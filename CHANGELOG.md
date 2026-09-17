@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🌐 **网页访问能力优化 Round 13：AB6 连接复用 + X2 出网可观测**（方案 `docs/plans/2026-09-17_web-access-optimization-round13.md`）
+
+### Changed(web-access)
+- **连接复用（AB6）**：`_get_with_redirects` 整链（含全部重定向 hop）复用同一个 httpx client——TLS 握手 / 代理隧道只建一次，keep-alive 生效；仅当某 hop 的 TLS 校验口径变化时才重建；异常路径经 finally 保证关闭
+- **出网可观测（X2）**：`web_fetch` 成功结果新增 `net: {elapsed_ms, bytes}`（不进缓存），为后续 per-host 调优提供数据
+> 🌐 **网页访问能力优化 Round 12：凭据管理 UI + humanize 工具名**（方案 `docs/plans/2026-09-16_web-access-optimization-round12.md`）
+
+### Added(web-access)
+- **凭据管理 UI**：设置→网络新增“网站凭据”区块——凭据列表（域 / 类型 / 剩余时效 / 加密标记 / 来源 profile，沿用脱敏口径不回显值）、删除（二次确认）、`render_persistent` / `auto_refresh_credentials` 两个开关直接可调；后端新路由 `GET|DELETE /api/v1/web-access/credentials` / `GET|PUT /api/v1/web-access/config`（复用 permission_routes 的 Origin 守卫，不回显任何凭据值）
+- **humanize 工具名**：browser_launch/navigate/snapshot/interact/screenshot/cookies/downloads/close 与 http_download 补齐显示名，审批弹窗与时间线不再显示生工具名
+> 🌐 **网页访问能力优化 Round 11：AU3 自动刷新回路 + AU 系列收尾**（方案 `docs/plans/2026-09-16_web-access-optimization-round11.md`）
+
+### Added(web-access)
+- **登录态自愈（AU3+AU6）**：`browser_cookies export` 在持久会话导出时在档案记录来源 profile（`BrowserSession` 新增 `profile_name` 字段）；`web_access_config.auto_refresh_credentials` 开启后（默认关），带凭据请求被踢到登录墙时自动用该 profile 静默重访原 URL（先注入旧 cookie 走 remember-me 续期），重导成功则重放请求并以 `credential_auto_refreshed` note 提示；失败严格回退原 `login_required` 语义；静态与下载通道均接入
+- **渲染通道登录墙检测（AU7）**：AU5 注入后渲染结果若仍是密码框页（且正文极短）→ 先走 AU3 自愈重渋一次，仍墙则报 `login_required`，不再把登录页当正文返回
+- **降级可观测（X4）**：平台加密不可用（scheme=none）时写入凭据档案会 `logger.warning`，`list_credentials` 每条增 `encrypted` 标记，明示哪些档案是明文落库
+> 🌐 **网页访问能力优化 Round 10：AU5 渲染池 ↔ 凭据档案双向互通**（方案 `docs/plans/2026-09-16_web-access-optimization-round10.md`）
+
+### Added(web-access)
+- **渲染通道登录态注入（AU5）**：`web_fetch credential_domain=` 命中 JS 壳渲染降级或反爬升级时，先把档案 cookie 经 `Storage.setCookies` 注入渲染浏览器（导航前生效，浏览器内重定向自动按域携带），渲染完成经 `Storage.getCookies` 按域取回并合并回档案（`credential_refreshed` note 提示）——“一次导出，静态 / 渲染 / 交互三条通道共用”成立；注入失败报 `RenderError`（宁失败不静默降级为未登录正文），回写失败静默（与 AU2 同口径）；header 型档案渲染通道不支持，跳过不报错
+- **`credential_vault`**：`CredentialResolution` 新增 `cookies` 槽（cookie 档案 ok 时带出过滤后逐条 cookie，供 CDP 逐条注入——host-only cookie 无法从 Cookie 头串重建）；新增 `merge_cdp_cookies`（`Storage.getCookies` dict → 档案，与 `merge_set_cookies` 同守卫：host 亲和 fail-closed / 归属域 ∈ 档案域 / 同 name+path 替换 / 过期删除 / 清空删档）
+
+### Changed(web-access)
+- `browser_cdp.cdp_command` 浏览器级方法前缀新增 `Storage.*`（免 attach，Chrome 97+）
+- `web_fetch` schema `credential_domain` 描述补渲染通道语义
+> 🌐 **网页访问能力优化 Round 5 批次 4：文件嗅探与浏览器下载跟踪**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.2 SN2/SN3）
+
+### Added(web-access)
+- **`web_fetch mode=files`（SN2，新模块 `backend/tools/file_links.py`）**：从静态或渲染后 DOM 抽取候选文件链接并打分——`<meta name=citation_pdf_url>` / `<link rel=alternate type=application/pdf>`（学术站标准位，最高分）、`<a href>` 文件后缀（pdf/zip/docx/xlsx/epub/csv/…）与 `download` 属性 / `type=application/pdf`、`<iframe|embed|object>`、`<meta http-equiv=refresh>`、「下载 / 全文 / PDF / attachment」锚文本；同 URL 去重合并 `sources`；对 top-5 候选做首块探测（不跟随重定向、逐个过 `check_host`）标 `probe=file|html|redirect|error` + `detected_type` / `content_type` / `content_length` / `suggested_filename`，`probe=html`（登录页 / 中转页）降权；SPA 壳自动渲染后把动态 DOM 候选与静态候选合并；结果 `files[]` 可直接喂 `http_download`
+- **浏览器下载跟踪（SN3，新模块 `backend/tools/browser_events.py` + 新工具 `browser_downloads`）**：`browser_launch` 后为会话建立一条常驻 CDP 事件 WS（守护线程），`Browser.setDownloadBehavior{eventsEnabled:true}` 订阅 `downloadWillBegin` / `downloadProgress`，落成线程安全的 `DownloadTracker`（url / 文件名 / 状态 / 字节 / 最终路径，完成时按 guid 或 suggestedFilename 解析落盘路径）；`browser_downloads(browser_id?, wait_for_complete, timeout)` 列出 / 阻塞等待全部完成，完成文件登记 artifact（只登记一次）；事件通道不可用时退化为下载目录列举（`.crdownload` = 进行中）并明示；`browser_close` / 后端退出时停通道
+
+### Changed(web-access)
+- `BROWSER_TOOLS` 新增 `browser_downloads`（READ）；coder 默认工具白名单经 `*BROWSER_TOOLS` 自动带上；`browser_launch` 结果新增 `download_tracking`
+
 ## [v0.4.9-alpha.43] - 2026-09-14
 
 > 🐛 **win7 安装包日志错误修复** (PR #794)
@@ -59,6 +93,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **Office 配置化(Round 31)**: ExcelSheetSpec.freeze_panes(A1 记法冻结窗格,与 freeze_header 同给时优先)+ SAGE_IMAGE_OPTIMIZE_THRESHOLD_BYTES 环境变量配置 Pillow 压缩阈值(0=禁用);工具 schema + 前端契约同步
+- **Word 奇偶页页眉页脚(Round 34)**: format_spec.odd_even_pages+even_page_header/footer——书籍排版场景,偶数页独立页眉页脚(python-docx settings.odd_and_even_pages_header_footer 全局开关)
+- **Word 首页不同页眉页脚(Round 33)**: format_spec.first_page_different+first_page_header/first_page_footer——封面页独立页眉页脚(文本/PAGE 域),python-docx different_first_page_header_footer 原生开关
 - **Excel 打印页边距(Round 31)**: print_setup.margins_cm(上/下/左/右,厘米,openpyxl 英寸自动换算)——部分给定只动给定边;工具 schema + 前端契约同步
 - **journal 结构化文献清洗(Round 30)**: generate_article 自纠检查与最终校验前先原地清洗 structured_references——次品条目(缺 title/字段非法)剔除+warning、key 冲突自动补唯一后缀;全为次品时回退 references 纯文本;不再让单条次品拖垮整体校验
 - **TOC 静态缓存回填(Round 29)**: 目录域升级为 fldChar 复杂域——打开文档即见按文档标题生成的静态目录行(逐级缩进/levels 过滤),更新域后被真实带页码目录替换;Linter toc/presence 升级为双载体兼容检测
@@ -95,6 +132,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **归档视图批量操作**;前端纳入 PDF 全流程
 
 ### Added(projects)
+- **项目模块 P13**: 知识搜索范围支持"全部最近 wiki 项目"——knowledge_project 支持逗号分隔多根(逐根授权任一未授权 403 fail-closed;多根逐个 search_wiki 按 score 合并、root::path 去重、截取总 limit;单值向后兼容 P9),命令面板范围分组新增"全部最近 wiki 项目"选项(>=2 个项目时出现,选择持久化逗号拼接范围)(方案 docs/plans/2026-09-16_knowledge-multi-scope-plan.md)
 - **项目模块 P9**: 知识搜索默认域配置化——/search/global 新增可选 knowledge_project（经 authorize_registered_project 校验：未授权 403/非 wiki 404，与 wiki 域同契约），_search_knowledge 显式范围优先、缺省回退最近打开（默认行为零变化）；命令面板新增"知识范围"分组（默认+最近 wiki 项目 ≤5，localStorage 持久化 sage:knowledge-scope:v1，选择不关面板），搜索请求按范围携带参数(方案 docs/plans/2026-09-15_knowledge-scope-p9-plan.md)
 - **项目模块 P8**: wiki recent_projects 存储迁移到 projects 注册表(SQLite)——recent_projects.py 重写为只读投影适配器(公共 API 全保,消费方零改动);projects 表新增可空 intent 列(幂等迁移,NULL 读侧映射 open);MAX_RECENT 为投影截断而非注册表生命周期,save_recent 窗口重写只删上一窗口内行;旧 JSON 一次性导入后改名 .migrated 备份;单调毫秒保证同毫秒 record 顺序可判定;移除 wiki/files 平台原语依赖(方案 docs/plans/2026-09-15_wiki-recents-sqlite-p8-plan.md)
 - **项目模块 P7**: 全局搜索接入项目分组——/search/global 默认含 projects 组(ProjectRepository.search 按 name/path LIKE + 会话计数聚合,types=project 可单选),命令面板搜索模式命中项目名/路径片段可直达(复用 open 流,handleOpenProject 收敛为 {id} 签名)(方案 docs/plans/2026-09-14_projects-search-p7-plan.md)
@@ -292,13 +330,6 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Changed
 - chore(release): bump version to 0.4.9-alpha.40
 
-## [Unreleased]
-
-### Added
-
-### Fixed
-
-### Changed
 
 
 ## [v0.4.9-alpha.34] - 2026-09-09

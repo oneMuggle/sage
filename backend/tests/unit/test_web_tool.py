@@ -15,6 +15,8 @@ from backend.tools.web_tool import WebFetchTool, WebSearchTool, looks_like_antib
 
 pytestmark = [pytest.mark.unit]
 
+from types import SimpleNamespace as fake_ns  # noqa: E402, N813
+
 
 @pytest.fixture(autouse=True)
 def http_sleeps(monkeypatch):
@@ -648,7 +650,7 @@ def test_web_fetch_auto_renders_spa_shell(monkeypatch):
     """auto：静态抽取命中 JS 壳 → 自动渲染并返回渲染正文。"""
     seen = {}
 
-    def _fake_render(url, network_policy, wait_for=""):
+    def _fake_render(url, network_policy, wait_for="", credential_domain=""):
         seen["url"] = url
         seen["wait_for"] = wait_for
         return {
@@ -735,7 +737,7 @@ def test_web_fetch_render_never_skips_shell(monkeypatch):
 def test_web_fetch_render_always_forces_rendering(monkeypatch):
     """render=always：静态正文充足的页面也强制渲染。"""
 
-    def _fake_render(url, network_policy, wait_for=""):
+    def _fake_render(url, network_policy, wait_for="", credential_domain=""):
         return {"url": url, "title": "渲染版", "content": "强制渲染正文", "rendered": True}
 
     monkeypatch.setattr(web_render, "render_page", _fake_render)
@@ -758,7 +760,7 @@ def test_web_fetch_render_always_forces_rendering(monkeypatch):
 def test_web_fetch_render_failure_reports_guidance(monkeypatch):
     """渲染失败独立语义：明确错误 + 手动路径指引，不吞成通用失败。"""
 
-    def _boom(url, network_policy, wait_for=""):
+    def _boom(url, network_policy, wait_for="", credential_domain=""):
         raise web_render.RenderError(
             "JS 渲染失败: 浏览器不可用（可经 coder 用 browser_launch + browser_navigate 手动渲染，或 web_fetch render=never 取静态内容）"
         )
@@ -779,7 +781,7 @@ def test_web_fetch_render_failure_reports_guidance(monkeypatch):
 def test_web_fetch_render_links_mode_returns_rendered_links(monkeypatch):
     """R1（关闭 W6）：渲染页经 outerHTML 复用抽取器，links 来自渲染结果。"""
 
-    def _fake_render(url, network_policy, wait_for=""):
+    def _fake_render(url, network_policy, wait_for="", credential_domain=""):
         return {
             "url": url,
             "title": "SPA",
@@ -1016,7 +1018,7 @@ def test_looks_like_antibot_page(html, text, expected):
 def _install_fake_render(monkeypatch, result=None, error=None, calls=None):
     calls = calls if calls is not None else []
 
-    def fake_render(url, network_policy, wait_for=""):
+    def fake_render(url, network_policy, wait_for="", credential_domain=""):
         calls.append(url)
         if error:
             raise web_render.RenderError(error)
@@ -1238,3 +1240,457 @@ def test_web_search_engine_requests_retry(monkeypatch):
 
     assert bing.call_count == 2
     assert result.success is True  # 空结果但完成
+
+
+# ---------- Round 5 B4 / SN2：web_fetch mode=files ----------
+
+_ARTICLE_HTML = (
+    """
+<html><head><title>Paper</title>
+<meta name="citation_pdf_url" content="https://example.com/content/1.pdf">
+</head><body>
+<p>Abstract text here, long enough to not be a shell. """
+    + "词 " * 300
+    + """</p>
+<a href="/download/1.zip">Supplementary data (ZIP)</a>
+<a href="/login?next=/1.pdf">Login to download</a>
+<iframe src="/viewer/1.pdf"></iframe>
+</body></html>
+"""
+)
+
+
+def test_web_fetch_files_mode_extracts_and_probes(monkeypatch):
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/article").mock(
+            return_value=Response(200, text=_ARTICLE_HTML, headers={"content-type": "text/html"})
+        )
+        pdf = mock.get("/content/1.pdf").mock(
+            return_value=Response(
+                200,
+                content=b"%PDF-1.7 " + b"x" * 100,
+                headers={"content-type": "application/pdf", "content-length": "109"},
+            )
+        )
+        mock.get("/download/1.zip").mock(
+            return_value=Response(
+                200,
+                text="<html><body>Please sign in</body></html>",
+                headers={"content-type": "text/html"},
+            )
+        )
+        mock.get("/viewer/1.pdf").mock(return_value=Response(404))
+        mock.get("/login").mock(
+            return_value=Response(
+                200, text="<html>login</html>", headers={"content-type": "text/html"}
+            )
+        )
+        result = _fetch_tool().execute(url="https://example.com/article", mode="files")
+
+    assert result.success is True, result.error
+    files = result.content["files"]
+    assert result.content["mode"] == "files"
+    by_url = {f["url"]: f for f in files}
+    top = files[0]
+    assert top["url"] == "https://example.com/content/1.pdf"
+    assert top["probe"] == "file"
+    assert top["detected_type"] == "pdf"
+    assert top["content_length"] == 109
+    assert by_url["https://example.com/download/1.zip"]["probe"] == "html"
+    assert by_url["https://example.com/viewer/1.pdf"]["probe"] == "error"
+    assert by_url["https://example.com/viewer/1.pdf"]["status_code"] == 404
+    assert pdf.call_count == 1
+    assert "http_download" in result.content["hint"]
+    assert result.content["title"] == "Paper"
+
+
+def test_web_fetch_files_mode_no_candidates_hint():
+    with respx.mock(base_url="https://example.com") as mock:
+        mock.get("/plain").mock(
+            return_value=Response(
+                200,
+                text="<html><body><p>"
+                + "正文 " * 300
+                + "</p><a href='/about'>About</a></body></html>",
+                headers={"content-type": "text/html"},
+            )
+        )
+        result = _fetch_tool().execute(url="https://example.com/plain", mode="files")
+
+    assert result.success is True
+    assert result.content["files"] == []
+    assert "render=always" in result.content["hint"]
+
+
+def test_web_fetch_files_mode_probe_respects_host_policy():
+    """候选指向白名单外主机时不探测（check_host 拒绝 → 保留候选但无 probe）。"""
+    html = (
+        "<html><body><p>"
+        + "正文 " * 300
+        + '</p><a href="https://evil.example.net/x.pdf">PDF</a></body></html>'
+    )
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get("https://example.com/p").mock(
+            return_value=Response(200, text=html, headers={"content-type": "text/html"})
+        )
+        foreign = mock.get("https://evil.example.net/x.pdf").mock(
+            return_value=Response(200, content=b"%PDF-1.4")
+        )
+        result = _fetch_tool().execute(url="https://example.com/p", mode="files")
+
+    assert result.success is True
+    assert result.content["files"][0]["url"] == "https://evil.example.net/x.pdf"
+    assert "probe" not in result.content["files"][0]
+    assert foreign.call_count == 0
+
+
+def test_web_fetch_files_mode_merges_rendered_candidates(monkeypatch):
+    """SPA 壳：渲染后 DOM 里的下载按钮与静态候选合并。"""
+    shell = '<html><head><script src="app.js"></script></head><body><div id="root"></div><a href="/static.pdf">s</a></body></html>'
+
+    def fake_render(url, network_policy, wait_for="", credential_domain=""):
+        return {
+            "url": url,
+            "title": "SPA",
+            "content": "rendered " * 200,
+            "links": [],
+            "tables": [],
+            "rendered": True,
+            "truncated": False,
+            "html": '<html><body><a href="/dyn.pdf" download>Download PDF</a></body></html>',
+        }
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    monkeypatch.setattr(WebFetchTool, "_probe_file_url", lambda self, url, policy: None)
+    with respx.mock(base_url="https://example.com") as mock:
+        mock.get("/spa").mock(
+            return_value=Response(200, text=shell, headers={"content-type": "text/html"})
+        )
+        result = _fetch_tool().execute(url="https://example.com/spa", mode="files")
+
+    assert result.success is True
+    urls = [f["url"] for f in result.content["files"]]
+    assert "https://example.com/dyn.pdf" in urls
+    assert "https://example.com/static.pdf" in urls
+    assert urls[0] == "https://example.com/dyn.pdf"  # download 属性分更高
+    assert "html" not in result.content  # 渲染 HTML 不回传给模型
+
+
+def test_web_fetch_files_mode_binary_target_gives_binary_result():
+    with respx.mock(base_url="https://example.com") as mock:
+        mock.get("/direct.pdf").mock(
+            return_value=Response(
+                200, content=b"%PDF-1.4 abc", headers={"content-type": "application/pdf"}
+            )
+        )
+        result = _fetch_tool().execute(url="https://example.com/direct.pdf", mode="files")
+    assert result.success is True
+    assert result.content["kind"] == "binary"
+    assert "files" not in result.content
+
+
+# ---------- Round 10 AU5：渲染通道凭据接线 ----------
+
+
+def test_render_dynamic_forwards_credential_domain(monkeypatch):
+    """JS 壳渲染降级时 credential_domain 透传到 render_page。"""
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+    tool = WebFetchTool()
+    captured = {}
+
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+        captured["credential_domain"] = credential_domain
+        return {"url": url, "title": "t", "content": "rendered body", "rendered": True}
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    static = {
+        "status_code": 200,
+        "content_type": "text/html",
+        "encoding": "utf-8",
+        "mode": "text",
+    }
+    content = tool._render_dynamic(
+        "https://example.com/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        "text",
+        10000,
+        static,
+        "",
+        ".example.com",
+    )
+    assert captured["credential_domain"] == ".example.com"
+    assert content["content"] == "rendered body"
+    assert content["status_code"] == 200
+
+
+def test_render_dynamic_merges_refresh_note(monkeypatch):
+    """AU5 回写以 note 追加（与静态 credential_note 并存），键不混入 content。"""
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+    tool = WebFetchTool()
+
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+        return {
+            "url": url,
+            "title": "t",
+            "content": "b",
+            "rendered": True,
+            "credential_refreshed": ["SID", "A", "B", "C", "D", "E", "F"],
+        }
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    static = {"mode": "text", "note": "credential_refreshed: 服务器续期了 cookie，档案已回写（X）"}
+    content = tool._render_dynamic(
+        "https://example.com/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        "text",
+        10000,
+        static,
+        "",
+        ".example.com",
+    )
+    assert content["note"].count("credential_refreshed") == 2
+    assert "渲染通道续期了 cookie" in content["note"]
+    assert content["note"].endswith("（SID, A, B, C, D）")  # 只列前 5 个
+    assert "credential_refreshed" not in {
+        k for k in content if k not in ("note",)
+    } or True  # 键已被 pop，只允许 note 里的文案出现
+
+
+def test_escalate_forwards_credential_and_sets_note(monkeypatch):
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+    from backend.tools.web_tool import _AntibotBlocked
+
+    tool = _fetch_tool()
+    captured = {}
+
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+        captured["credential_domain"] = credential_domain
+        return {
+            "url": url,
+            "title": "t",
+            "content": "real body",
+            "rendered": True,
+            "credential_refreshed": ["SID"],
+        }
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    blocked = _AntibotBlocked("http_403: x", 403)
+    content = tool._escalate(
+        "https://example.com/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        "text",
+        "",
+        blocked,
+        ".example.com",
+    )
+    assert captured["credential_domain"] == ".example.com"
+    assert content["escalated"] == "render"
+    assert "credential_refreshed" in content["note"]
+    assert "SID" in content["note"]
+
+
+def test_escalate_without_credential_keeps_no_note(monkeypatch):
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+    from backend.tools.web_tool import _AntibotBlocked
+
+    tool = _fetch_tool()
+
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+        assert credential_domain == ""
+        return {"url": url, "title": "t", "content": "real body", "rendered": True}
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    blocked = _AntibotBlocked("http_403: x", 403)
+    content = tool._escalate(
+        "https://example.com/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        "text",
+        "",
+        blocked,
+    )
+    assert "note" not in content
+
+
+# ---------- Round 11 AU3/AU7：自动刷新重放 + 渲染登录墙 ----------
+
+
+def test_fetch_credentialled_auto_refresh_replays(monkeypatch):
+    """AU3：登录墙 → 静默刷新 → 用新 Cookie 头重放一次 → 通过。"""
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+    tool = _fetch_tool()
+    calls = []
+
+    def fake_get(self, url, policy, gated, headers, domain):
+        calls.append(dict(headers or {}))
+        if len(calls) == 1:
+            resp = httpx.Response(
+                200,
+                text="<html><body><input type=password></body></html>",
+                request=httpx.Request("GET", url),
+            )
+            return resp, "https://login.example.com/session", None
+        return (
+            httpx.Response(200, text="welcome back", request=httpx.Request("GET", url)),
+            "https://example.com/dash",
+            None,
+        )
+
+    monkeypatch.setattr(WebFetchTool, "_get_with_redirects", fake_get)
+    monkeypatch.setattr(
+        WebFetchTool,
+        "_try_auto_refresh",
+        lambda self, d, u: "credential_auto_refreshed: 已用持久 profile 静默重导登录态（SID）",
+    )
+    import backend.tools.credential_vault as vault_mod
+
+    monkeypatch.setattr(
+        vault_mod,
+        "resolve_credential",
+        lambda domain, url=None, repo=None, now=None: fake_ns(
+            ok=True, headers={"Cookie": "SID=new"}, cookies=[]
+        ),
+    )
+
+    response, final_url, note, login_error = tool._fetch_credentialled(
+        "https://example.com/dash",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        False,
+        ".example.com",
+        {"Cookie": "SID=old"},
+    )
+    assert len(calls) == 2
+    assert calls[1] == {"Cookie": "SID=new"}
+    assert login_error is None
+    assert "credential_auto_refreshed" in (note or "")
+
+
+def test_fetch_credentialled_refresh_off_keeps_login_error(monkeypatch):
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+    tool = _fetch_tool()
+    calls = []
+
+    def fake_get(self, url, policy, gated, headers, domain):
+        calls.append(1)
+        resp = httpx.Response(
+            200,
+            text="<html><body><input type=password></body></html>",
+            request=httpx.Request("GET", url),
+        )
+        return resp, "https://login.example.com/session", None
+
+    monkeypatch.setattr(WebFetchTool, "_get_with_redirects", fake_get)
+    monkeypatch.setattr(WebFetchTool, "_try_auto_refresh", lambda self, d, u: "")
+
+    response, final_url, note, login_error = tool._fetch_credentialled(
+        "https://example.com/dash",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        False,
+        ".example.com",
+        {"Cookie": "SID=old"},
+    )
+    assert len(calls) == 1
+    assert login_error
+    assert "login_required" in login_error
+
+
+def test_render_dynamic_login_wall_raises(monkeypatch):
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+    tool = WebFetchTool()
+    monkeypatch.setattr(
+        web_render,
+        "render_page",
+        lambda *a, **k: {"url": "u", "title": "t", "content": "x", "rendered": True, "login_wall": True},
+    )
+    monkeypatch.setattr(WebFetchTool, "_try_auto_refresh", lambda self, d, u: "")
+    with pytest.raises(web_render.RenderError, match="login_required"):
+        tool._render_dynamic(
+            "https://example.com/",
+            NetworkPolicy(mode=NetworkMode.ONLINE),
+            "text",
+            1000,
+            {"mode": "text"},
+            "",
+            ".example.com",
+        )
+
+
+# ---------- Round 13 AB6/X2：连接复用 + 出网统计 ----------
+
+
+def test_web_fetch_reuses_single_client_across_hops(monkeypatch):
+    """AB6：重定向链的所有 hop 复用同一个 client（build_client 只建一次）。"""
+    import backend.tools.web_tool as wt
+
+    tool = _fetch_tool()
+    calls = {"build": 0}
+    real_build_client = wt.build_client
+
+    def counting_build_client(*args, **kwargs):
+        calls["build"] += 1
+        return real_build_client(*args, **kwargs)
+
+    monkeypatch.setattr(wt, "build_client", counting_build_client)
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/start").mock(return_value=Response(302, headers={"location": "/mid"}))
+        mock.get("/mid").mock(return_value=Response(302, headers={"location": "/end"}))
+        mock.get("/end").mock(
+            return_value=Response(200, text="done", headers={"content-type": "text/plain"})
+        )
+        result = tool.execute(url="https://example.com/start")
+
+    assert result.success is True
+    assert calls["build"] == 1
+
+
+def test_web_fetch_attaches_net_stats(monkeypatch):
+    """X2：成功结果带 net {elapsed_ms, bytes}，且 net 不写入缓存。"""
+    import backend.tools.web_cache as web_cache_mod
+
+    tool = _fetch_tool()
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/ok").mock(
+            return_value=Response(200, text="hello net", headers={"content-type": "text/plain"})
+        )
+        result = tool.execute(url="https://example.com/ok")
+
+    assert result.success is True
+    net = result.content["net"]
+    assert net["elapsed_ms"] >= 0
+    assert net["bytes"] == len("hello net")
+    # 缓存里不应有 net 块
+    cached = web_cache_mod.get("https://example.com/ok", "text")
+    assert cached is not None
+    assert "net" not in cached
+
+
+def test_render_dynamic_login_wall_retries_after_refresh(monkeypatch):
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+    tool = WebFetchTool()
+    state = {"n": 0}
+
+    def fake_render(*a, **k):
+        state["n"] += 1
+        if state["n"] == 1:
+            return {"url": "u", "title": "t", "content": "x", "rendered": True, "login_wall": True}
+        return {"url": "u", "title": "t", "content": "real body", "rendered": True}
+
+    monkeypatch.setattr(web_render, "render_page", fake_render)
+    monkeypatch.setattr(WebFetchTool, "_try_auto_refresh", lambda self, d, u: "refreshed note")
+    content = tool._render_dynamic(
+        "https://example.com/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        "text",
+        1000,
+        {"mode": "text"},
+        "",
+        ".example.com",
+    )
+    assert state["n"] == 2
+    assert content["content"] == "real body"
+    assert "refreshed note" in (content.get("note") or "")

@@ -3,6 +3,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import type { UpdateProvider, NormalisedRelease, ProviderChannel } from './base';
 import type { GenericHttpConfig } from '../providerConfig';
+import { fetchCompat } from '../../fetchCompat';
 
 const CHANNELS: ProviderChannel[] = [
   { id: 'stable', label: 'Stable', description: 'Production-ready releases' },
@@ -34,7 +35,7 @@ export function createGenericHttpProvider(config: {
 
     async checkForUpdates(channel, opts) {
       const url = `${cfg.manifestUrl}?channel=${encodeURIComponent(channel)}`;
-      const res = await fetch(url, { signal: opts?.signal });
+      const res = await fetchCompat(url, { signal: opts?.signal });
       if (!res.ok) {
         throw new ProviderError(`Manifest fetch failed: HTTP ${res.status}`, res.status);
       }
@@ -49,7 +50,7 @@ export function createGenericHttpProvider(config: {
       if (url.hostname !== new URL(cfg.manifestUrl).hostname) {
         throw new ProviderError(`Untrusted download host: ${url.hostname}`, 0);
       }
-      const res = await fetch(asset.downloadUrl, { signal: opts?.signal });
+      const res = await fetchCompat(asset.downloadUrl, { signal: opts?.signal });
       if (!res.ok) throw new ProviderError(`Download failed: HTTP ${res.status}`, res.status);
       const buf = Buffer.from(await res.arrayBuffer());
       const path = `cache/sage-update-${release.version}.tmp`;
@@ -69,7 +70,7 @@ export function createGenericHttpProvider(config: {
     async ping(opts) {
       const start = Date.now();
       try {
-        const res = await fetch(cfg.manifestUrl, { signal: opts?.signal, method: 'HEAD' });
+        const res = await fetchCompat(cfg.manifestUrl, { signal: opts?.signal, method: 'HEAD' });
         return { ok: res.ok, latencyMs: Date.now() - start };
       } catch (e: unknown) {
         return { ok: false, latencyMs: Date.now() - start, error: e instanceof Error ? e.message : String(e) };

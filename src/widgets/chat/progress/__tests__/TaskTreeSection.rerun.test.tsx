@@ -6,6 +6,16 @@ import { describe, expect, it, vi } from 'vitest';
 import type { TaskBoardState } from '../../../../features/send-message/chatStreamStore';
 import { TaskTreeSection } from '../TaskTreeSection';
 
+vi.mock('../../../../features/manage-settings/useSettings', () => ({
+  useSettings: () => ({
+    settings: { orch: { runTokenBudget: 10000 } },
+    isLoading: false,
+    loadSettings: vi.fn(),
+    updateSettings: vi.fn(),
+    resetSettings: vi.fn(),
+  }),
+}));
+
 function makeBoard(overrides: Partial<TaskBoardState> = {}): TaskBoardState {
   return {
     runId: 'orch-rerun-ui',
@@ -134,5 +144,83 @@ describe('TaskTreeSection — 重派徽章 (RD13+)', () => {
   it('普通任务不显示重派徽章', () => {
     render(<TaskTreeSection board={makeBoard()} />);
     expect(screen.queryByTestId('task-tree-redeploy-t1')).toBeNull();
+  });
+});
+
+// ============================================================================
+// BU9 (round20): 预算开启时进度行展示消耗
+// ============================================================================
+
+describe('TaskTreeSection — 消耗可见性 (BU9)', () => {
+  it('终态任务带 used_tokens 且预算开启 → 进度行显示消耗', () => {
+    render(
+      <TaskTreeSection
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'done',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: null,
+              output_preview: null,
+              retry_count: 0,
+              used_tokens: 4200,
+            },
+            t2: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't2',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g2',
+              error: 'boom',
+              output_preview: null,
+              retry_count: 0,
+              used_tokens: 3800,
+            },
+          } as TaskBoardState['statuses'],
+          progress: { total: 2, done: 1, running: 0, queued: 0, failed: 1, cancelled: 0 },
+        })}
+      />,
+    );
+    expect(screen.getByText(/已消耗/)).toBeInTheDocument();
+    expect(screen.getByText(/已消耗/).textContent).toContain('4,200');
+  });
+
+  it('无 used_tokens 数据 → 不显示消耗', () => {
+    render(
+      <TaskTreeSection
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'done',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: null,
+              output_preview: null,
+              retry_count: 0,
+            },
+            t2: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't2',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g2',
+              error: 'boom',
+              output_preview: null,
+              retry_count: 0,
+            },
+          } as TaskBoardState['statuses'],
+        })}
+      />,
+    );
+    expect(screen.queryByText(/已消耗/)).toBeNull();
   });
 });

@@ -26,6 +26,8 @@ export interface McpServerStatusEntry {
   last_error: string | null;
   since: number;
   required: boolean;
+  /** R53: 已禁用的工具 id 列表 */
+  disabled_tools?: string[];
 }
 
 export interface McpStatusReport {
@@ -39,17 +41,23 @@ export interface McpStatusReport {
 export interface McpServerConfig {
   name: string;
   command: string;
+  url?: string | null;
+  headers?: Record<string, string>;
   args: string[];
   env: Record<string, string>;
   enabled: boolean;
   required: boolean;
   timeout_seconds: number;
+  // R20-B per-tool 禁用清单（全量替换语义；勾选 UI 的数据源）
+  disabled_tools?: string[];
   builtin: boolean;
 }
 
 export interface AddMcpServerInput {
   name: string;
   command: string;
+  url?: string | null;
+  headers?: Record<string, string>;
   args: string[];
   required: boolean;
 }
@@ -57,6 +65,21 @@ export interface AddMcpServerInput {
 export interface UpdateMcpServerChanges {
   enabled?: boolean;
   timeoutSeconds?: number;
+  /** R53: 工具禁用列表（全量替换语义） */
+  disabledTools?: string[];
+}
+
+// r53-B: per-tool 开关面板的读取载荷（GET /mcp/servers/{name}/tools）
+export interface McpToolSpec {
+  name: string;
+  description: string;
+}
+
+export interface McpServerToolsReport {
+  server: string;
+  state: McpServerState;
+  tools: McpToolSpec[];
+  disabled_tools: string[];
 }
 
 export const MCP_NAME_REGEX = /^[a-z0-9_-]{1,64}$/;
@@ -71,11 +94,15 @@ export const mcpClient = {
     return resp.servers;
   },
 
-  async addServer(input: AddMcpServerInput): Promise<{ ok: boolean; name: string; state: McpServerState }> {
+  async addServer(
+    input: AddMcpServerInput,
+  ): Promise<{ ok: boolean; name: string; state: McpServerState }> {
     // rawBody route: keys already snake_case, env omitted (no UI field).
     return invoke('mcp_server_add', {
       name: input.name,
       command: input.command,
+      ...(input.url ? { url: input.url } : {}),
+      ...(input.headers ? { headers: input.headers } : {}),
       args: input.args,
       env: {},
       enabled: true,
@@ -92,7 +119,12 @@ export const mcpClient = {
       name,
       enabled: changes.enabled,
       timeout_seconds: changes.timeoutSeconds,
+      disabled_tools: changes.disabledTools,
     });
+  },
+
+  async serverTools(name: string): Promise<McpServerToolsReport> {
+    return invoke<McpServerToolsReport>('mcp_server_tools', { name });
   },
 
   async deleteServer(name: string): Promise<{ ok: boolean; name: string }> {

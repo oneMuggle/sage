@@ -494,6 +494,170 @@ export function NetworkTab() {
           />
         </div>
       </SettingRow>
+
+      {/* Round 12：网站凭据（browser_cookies 档案 + web_access_config 开关） */}
+      <CredentialsSection />
     </div>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// Round 12：网站凭据（browser_cookies 档案 + web_access_config 开关）
+// ---------------------------------------------------------------------------
+
+/** 与后端 list_credentials 返回形态一致（脱敏后，无任何值） */
+interface CredentialRecord {
+  domain: string;
+  kind: 'cookie' | 'header';
+  cookie_names?: string[];
+  header_names?: string[];
+  expires_in_seconds: number | null;
+  expired: boolean;
+  encrypted: boolean;
+  source_profile?: string;
+}
+
+interface WebAccessConfig {
+  render_persistent: boolean;
+  auto_refresh_credentials: boolean;
+}
+
+const DEFAULT_WEB_ACCESS_CONFIG: WebAccessConfig = {
+  render_persistent: false,
+  auto_refresh_credentials: false,
+};
+
+/** dev 走 Vite 代理；Electron 产物直连后端（与 mediaApi 同口径） */
+function webAccessApiUrl(path: string): string {
+  if (window.electronAPI) {
+    return `http://127.0.0.1:8765${path}`;
+  }
+  return path;
+}
+
+function CredentialsSection() {
+  const { t } = useI18n();
+  const [creds, setCreds] = useState<CredentialRecord[] | null>(null);
+  const [config, setConfig] = useState<WebAccessConfig>(DEFAULT_WEB_ACCESS_CONFIG);
+
+  const reload = (): void => {
+    fetch(webAccessApiUrl('/api/v1/web-access/credentials'))
+      .then((r) => (r.ok ? r.json() : { credentials: [] }))
+      .then((data: { credentials?: CredentialRecord[] }) => setCreds(data.credentials ?? []))
+      .catch(() => setCreds([]));
+  };
+
+  useEffect(() => {
+    reload();
+    void settingsClient.getPreference('web_access_config').then((raw) => {
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as Partial<WebAccessConfig>;
+        setConfig({
+          render_persistent: Boolean(parsed.render_persistent),
+          auto_refresh_credentials: Boolean(parsed.auto_refresh_credentials),
+        });
+      } catch {
+        /* keep defaults */
+      }
+    });
+  }, []);
+
+  const saveConfig = (next: WebAccessConfig): void => {
+    setConfig(next);
+    void settingsClient.setPreference('web_access_config', JSON.stringify(next), 'network');
+    void fetch(webAccessApiUrl('/api/v1/web-access/config'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(next),
+    }).catch(() => undefined);
+  };
+
+  const removeCred = (domain: string): void => {
+    if (!window.confirm(t('settings.network.creds.confirm'))) return;
+    void fetch(
+      webAccessApiUrl(`/api/v1/web-access/credentials/${encodeURIComponent(domain)}`),
+      { method: 'DELETE' },
+    )
+      .then(() => reload())
+      .catch(() => undefined);
+  };
+
+  return (
+    <SettingRow label={t('settings.network.creds')} desc={t('settings.network.creds.hint')}>
+      <div className="flex flex-col gap-2 w-full" data-testid="web-credentials">
+        <label className="flex items-start gap-2 text-xs" data-testid="cred-render-persistent-row">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={config.render_persistent}
+            onChange={(e) => saveConfig({ ...config, render_persistent: e.target.checked })}
+          />
+          <span>
+            {t('settings.network.creds.render_persistent')}
+            <span className="block text-text-secondary">
+              {t('settings.network.creds.render_persistent.desc')}
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2 text-xs" data-testid="cred-auto-refresh-row">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={config.auto_refresh_credentials}
+            onChange={(e) => saveConfig({ ...config, auto_refresh_credentials: e.target.checked })}
+          />
+          <span>
+            {t('settings.network.creds.auto_refresh')}
+            <span className="block text-text-secondary">
+              {t('settings.network.creds.auto_refresh.desc')}
+            </span>
+          </span>
+        </label>
+        {creds !== null && creds.length === 0 && (
+          <div className="text-xs text-text-secondary" data-testid="creds-empty">
+            {t('settings.network.creds.empty')}
+          </div>
+        )}
+        {creds !== null && creds.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {creds.map((c) => (
+              <div
+                key={c.domain}
+                data-testid={`cred-row-${c.domain}`}
+                className="flex items-center gap-2 text-xs"
+              >
+                <span className="font-medium">{c.domain}</span>
+                <span className="text-text-secondary">{c.kind}</span>
+                {!c.encrypted && (
+                  <span className="text-error">{t('settings.network.creds.plaintext')}</span>
+                )}
+                {c.source_profile && (
+                  <span className="text-text-secondary">
+                    {t('settings.network.creds.profile')}: {c.source_profile}
+                  </span>
+                )}
+                <span className="text-text-secondary">
+                  {c.expired
+                    ? t('settings.network.creds.expired')
+                    : c.expires_in_seconds != null
+                      ? `${Math.max(1, Math.floor(c.expires_in_seconds / 3600))}h`
+                      : ''}
+                </span>
+                <button
+                  type="button"
+                  data-testid={`cred-delete-${c.domain}`}
+                  className="ml-auto px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary"
+                  onClick={() => removeCred(c.domain)}
+                >
+                  {t('settings.network.creds.delete')}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </SettingRow>
   );
 }

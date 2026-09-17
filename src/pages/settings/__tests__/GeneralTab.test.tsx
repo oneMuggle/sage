@@ -12,6 +12,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { FontProvider } from '../../../entities/font/useFontSettings';
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { GeneralTab } from '../GeneralTab';
@@ -49,10 +50,22 @@ vi.mock('../ThemeSelector', () => ({
   ThemeSelector: () => <div data-testid="theme-selector-stub" />,
 }));
 
+vi.mock('../../../entities/font/fontStorage', () => ({
+  loadFontSettings: async () => ({
+    fontUi: 'inter',
+    fontCode: 'jetbrains-mono',
+    fontSizeUi: 14,
+    fontSizeCode: 13,
+  }),
+  saveFontSettings: async () => undefined,
+}));
+
 function renderTab(): void {
   render(
     <I18nProvider>
-      <GeneralTab resetSettings={vi.fn()} />
+      <FontProvider>
+        <GeneralTab resetSettings={vi.fn()} />
+      </FontProvider>
     </I18nProvider>,
   );
 }
@@ -62,6 +75,49 @@ beforeEach(() => {
   mocks.setPreference.mockReset();
   mocks.getPreference.mockResolvedValue(null);
   mocks.setPreference.mockResolvedValue(undefined);
+});
+
+describe('GeneralTab font controls', () => {
+  it('labels controls, enforces integer bounds and updates UI/code independently', async () => {
+    renderTab();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '恢复默认字体' })).not.toBeDisabled();
+    });
+    const ui = screen.getByRole('combobox', { name: '界面字体' });
+    const code = screen.getByRole('combobox', { name: '代码字体' });
+    expect(ui).toHaveValue('inter');
+    expect(code).toHaveValue('jetbrains-mono');
+    const size = screen.getByRole('spinbutton', { name: '界面字号' });
+    const slider = screen.getByRole('slider', { name: '代码字号' });
+    expect(size).toHaveAttribute('min', '10');
+    expect(size).toHaveAttribute('max', '24');
+    expect(size).toHaveAttribute('step', '1');
+    expect(slider).toHaveAttribute('step', '1');
+    fireEvent.change(size, { target: { value: '20' } });
+    await waitFor(() =>
+      expect(document.documentElement.style.getPropertyValue('--font-size-ui')).toBe('20px'),
+    );
+    expect(document.documentElement.style.getPropertyValue('--font-size-code')).toBe('13px');
+    fireEvent.change(slider, { target: { value: '24' } });
+    await waitFor(() =>
+      expect(screen.getByRole('spinbutton', { name: '代码字号' })).toHaveValue(24),
+    );
+    fireEvent.change(ui, { target: { value: 'system' } });
+    await waitFor(() =>
+      expect(document.documentElement.style.getPropertyValue('--font-ui')).toContain('system-ui'),
+    );
+    fireEvent.change(code, { target: { value: 'consolas' } });
+    await waitFor(() =>
+      expect(document.documentElement.style.getPropertyValue('--font-code')).toContain('Consolas'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '恢复默认字体' }));
+    await waitFor(() => {
+      expect(screen.getByRole('spinbutton', { name: '界面字号' })).toHaveValue(14);
+      expect(screen.getByRole('slider', { name: '代码字号' })).toHaveValue('13');
+      expect(screen.getByRole('combobox', { name: '界面字体' })).toHaveValue('inter');
+    });
+    expect(screen.getByText(/未安装的字体会自动回退/)).toBeInTheDocument();
+  });
 });
 
 describe('GeneralTab permission mode selector (M1)', () => {

@@ -16,6 +16,7 @@ interface HealthCheckerOptions {
   getWindow: () => BrowserWindow | null;
   backendUrl?: string;
   ipcTimeout?: number;
+  getAuthToken?: () => string | null;
 }
 
 const CHECK_NAMES = ['mainWindow', 'backend', 'database', 'ipc'] as const;
@@ -24,11 +25,13 @@ export class LauncherHealthChecker {
   private getWindow: () => BrowserWindow | null;
   private backendUrl: string;
   private ipcTimeout: number;
+  private getAuthToken: () => string | null;
 
   constructor(options: HealthCheckerOptions) {
     this.getWindow = options.getWindow;
     this.backendUrl = options.backendUrl ?? 'http://127.0.0.1:8765';
     this.ipcTimeout = options.ipcTimeout ?? 5000;
+    this.getAuthToken = options.getAuthToken ?? (() => null);
   }
 
   async runPostStartupChecks(): Promise<HealthCheckResult> {
@@ -74,20 +77,10 @@ export class LauncherHealthChecker {
 
     for (let i = 0; i < maxRetries; i++) {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
-
-        const response = await fetchCompat(`${this.backendUrl}/health`, {
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          return;
-        }
+        await this.request('/health', requestTimeout, async () => undefined);
+        return;
       } catch {
-        // Continue retrying
+        // Continue retrying; each request releases its timer even on rejection.
       }
 
       if (i < maxRetries - 1) {
@@ -99,14 +92,67 @@ export class LauncherHealthChecker {
   }
 
   private async checkDatabaseAccessible(): Promise<void> {
-    // Stub: will be implemented when vector DB integration is added
-    return;
+    // Read one session through the real repository, using the same local
+    // capability as the main-process relay. A status-only /health is not DB proof.
+    await this.request('/api/v1/sessions?limit=1&offset=0', this.ipcTimeout, async (response) => {
+      const sessions: unknown = await response.json();
+      if (!Array.isArray(sessions)) throw new Error('Invalid database probe response');
+    });
   }
 
   private async checkCoreIpcResponsive(): Promise<void> {
-    // Stub: will be implemented in Task 9 when IPC handlers are defined
-    void this.ipcTimeout;
-    return;
+    await this.checkMainWindowLoaded();
+    const win = this.getWindow();
+    if (!win || win.isDestroyed()) throw new Error('Renderer unavailable for IPC probe');
+    // Real renderer -> preload -> main -> authenticated backend round trip.
+    // No token is injected into the renderer and no mutating command is used.
+    const result = await this.bounded(
+      win.webContents.executeJavaScript(`(async () => {
+        const api = window.electronAPI;
+        if (!api || typeof api.invoke !== 'function') throw new Error('IPC bridge unavailable');
+        const sessions = await api.invoke('list_sessions', { limit: 1, offset: 0 });
+        return Array.isArray(sessions);
+      })()`),
+      this.ipcTimeout,
+      'Core IPC probe timed out',
+    );
+    if (result !== true) throw new Error('Invalid core IPC probe response');
+  }
+
+  private async request(
+    path: string,
+    timeout: number,
+    consume: (response: Awaited<ReturnType<typeof fetchCompat>>) => Promise<void>,
+  ): Promise<void> {
+    const controller = new AbortController();
+    const token = this.getAuthToken();
+    const operation = (async () => {
+      const response = await fetchCompat(`${this.backendUrl}${path}`, {
+        signal: controller.signal,
+        headers: token ? { 'X-Sage-Local-Authorization': `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new Error(`Health probe HTTP ${response.status}`);
+      await consume(response);
+    })();
+    try {
+      await this.bounded(operation, timeout, 'Health probe request timed out');
+    } finally {
+      controller.abort();
+    }
+  }
+
+  private async bounded<T>(operation: Promise<T>, timeout: number, message: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        operation,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error(message)), timeout);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   private sleep(ms: number): Promise<void> {

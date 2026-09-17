@@ -16,6 +16,7 @@
 import { invoke } from './desktopInvoke';
 import type {
   OfficeArchiveResponse,
+  OfficeCapabilities,
   OfficeDeleteResponse,
   OfficeDocUpdateRequest,
   OfficeDocUpdateResponse,
@@ -26,17 +27,24 @@ import type {
   OfficeExportPdfResult,
   OfficePdfGenerateRequest,
   OfficePdfGenerateResult,
+  OfficePdfPreviewResult,
   OfficePdfReadRequest,
+  OfficeLegacyImportResult,
+  OfficePdfDataResult,
+  OfficePdfFormFillResult,
+  OfficePdfFormReadResult,
   OfficePdfReadResult,
   OfficePptGenerateRequest,
   OfficePptReadResult,
   OfficeReadRequest,
+  OfficeRecalcResult,
   OfficeRestoreResponse,
   OfficeSnapshotListResponse,
   OfficeSnapshotRestoreResponse,
   OfficeTemplateInstantiateRequest,
   OfficeTemplateInstantiateResult,
   OfficeTemplateListResponse,
+  OfficeTemplateThumbnailResult,
   OfficeUpdatePreviewRequest,
   OfficeUpdatePreviewResult,
   OfficeWordGenerateRequest,
@@ -111,6 +119,111 @@ export const officeApi = {
       return await invoke<OfficePdfReadResult>('office_pdf_read', {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * F3 (office-p0): raw-PDF base64 preview for the /office page's
+   * 原文预览 toggle — returns a `data:application/pdf` URL the renderer
+   * embeds in an iframe (Chromium built-in viewer). Backend validates
+   * the managed path and enforces the same 20MB cap as the chat
+   * artifact viewer; expected failures come back as `{ok:false,error}`
+   * instead of a thrown transport error.
+   */
+  /**
+   * P1-C (office-p1c): convert a staged legacy (.doc/.xls/.ppt) copy
+   * inside the managed workspace into the modern format in place.
+   * Expected failures (soffice missing / conversion error) come back as
+   * `{ok:false,error}` — callers drive the import-discard flow from it.
+   */
+  async convertLegacyImport(req: OfficePdfReadRequest): Promise<OfficeLegacyImportResult> {
+    try {
+      return await invoke<OfficeLegacyImportResult>('office_import_convert_legacy', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  async readPdfData(req: OfficePdfReadRequest): Promise<OfficePdfDataResult> {
+    try {
+      return await invoke<OfficePdfDataResult>('office_pdf_data', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P2-B (office-p2b): raw managed docx base64 for the native docx-preview
+   * renderer (no soffice required). Same 20MB cap and `{ok:false,error}`
+   * failure contract as the PDF original view.
+   */
+  async readWordData(req: OfficePdfReadRequest): Promise<OfficePdfDataResult> {
+    try {
+      return await invoke<OfficePdfDataResult>('office_word_data', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P2-D (office-p2d): read PDF AcroForm fields for the form-fill dialog.
+   */
+  async readPdfForm(req: OfficePdfReadRequest): Promise<OfficePdfFormReadResult> {
+    try {
+      return await invoke<OfficePdfFormReadResult>('office_pdf_read_form', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P2-C (office-p2c): recalc formula cache of a managed .xlsx in place
+   * via local soffice (a pre-recalc snapshot is taken server-side).
+   */
+  async recalcExcel(req: OfficePdfReadRequest): Promise<OfficeRecalcResult> {
+    try {
+      return await invoke<OfficeRecalcResult>('office_excel_recalc', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P2-D (office-p2d): fill PDF AcroForm fields; output lands next to the
+   * source as `<stem>-filled.pdf` (backend default naming).
+   */
+  async fillPdfForm(req: {
+    workspace_path: string;
+    template_path: string;
+    output_filename: string;
+    data: Record<string, string>;
+    flatten: boolean;
+  }): Promise<OfficePdfFormFillResult> {
+    try {
+      return await invoke<OfficePdfFormFillResult>('office_pdf_fill_form', {
+        workspacePath: req.workspace_path,
+        templatePath: req.template_path,
+        outputFilename: req.output_filename,
+        data: req.data,
+        flatten: req.flatten,
       });
     } catch (error) {
       throw handleApiError(error);
@@ -203,6 +316,27 @@ export const officeApi = {
     return withRetry(async () => {
       try {
         return await invoke<OfficeSnapshotListResponse>('office_list_snapshots', { docId });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * Round B P2: structured diff between a pre-edit snapshot and the
+   * current document (snapshot=before, current=after) — same
+   * DiffPreviewResult shape the edit-preview dialog renders. Parse
+   * failures fold to `{ok:false, error}`; unknown doc still throws 404.
+   *
+   * Bounded retry — read-only and idempotent.
+   */
+  async diffSnapshot(docId: string, snapshotId: string): Promise<OfficeUpdatePreviewResult> {
+    return withRetry(async () => {
+      try {
+        return await invoke<OfficeUpdatePreviewResult>('office_snapshot_diff', {
+          docId,
+          snapshotId,
+        });
       } catch (error) {
         throw handleApiError(error);
       }
@@ -403,6 +537,68 @@ export const officeApi = {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
         task_id: req.task_id,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Probe local Office environment capabilities (round A, P6) —
+   * LibreOffice / Word COM / Pillow / formulas availability for the
+   * capability badges + install guidance on the Office page.
+   *
+   * Bounded retry — read-only and idempotent (the backend caches the
+   * probe for 30s anyway). Pass force=true to bypass that cache when
+   * the user clicks 重新检测.
+   */
+  async getCapabilities(force = false): Promise<OfficeCapabilities> {
+    try {
+      return await withRetry(() =>
+        invoke<OfficeCapabilities>('office_capabilities', force ? { force: true } : {}),
+      );
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * High-fidelity PDF preview (round A, P1) — converts a managed
+   * docx/xlsx/pptx to PDF in the workspace preview cache and returns a
+   * data URL for the embedded Chromium viewer. Converter problems come
+   * back as `{ok: false, error}` (HTTP failures still throw).
+   *
+   * No retry — conversion spawns a subprocess; the user can re-toggle.
+   */
+  async pdfPreview(req: OfficeExportPdfRequest): Promise<OfficePdfPreviewResult> {
+    try {
+      return await invoke<OfficePdfPreviewResult>('office_pdf_preview', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+        task_id: req.task_id,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Round C P5: template first-page thumbnail (PNG data URL). Server-side
+   * disk cache makes repeats cheap; failures fold to `{ok:false}` and the
+   * caller degrades silently (thumbnails are decorative).
+   *
+   * No retry — first render spawns a converter subprocess.
+   */
+  async templateThumbnail(req: {
+    workspace_path: string;
+    template_id?: string;
+    workspace_template?: string;
+  }): Promise<OfficeTemplateThumbnailResult> {
+    try {
+      return await invoke<OfficeTemplateThumbnailResult>('office_template_thumbnail', {
+        workspacePath: req.workspace_path,
+        templateId: req.template_id,
+        workspaceTemplate: req.workspace_template,
       });
     } catch (error) {
       throw handleApiError(error);

@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from packaging.version import Version
 
@@ -44,7 +44,7 @@ class UpdateMetadataService:
         self._cache[channel] = manifests
         return manifests
 
-    def get_latest(self, channel: str) -> UpdateManifest | None:
+    def get_latest(self, channel: str) -> Optional[UpdateManifest]:
         """Get the latest manifest for a channel."""
         manifests = self._load_manifests(channel)
         return manifests[0] if manifests else None

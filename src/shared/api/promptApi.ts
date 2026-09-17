@@ -71,6 +71,11 @@ export const promptApi = {
     await invoke('prompts_delete', { id });
   },
 
+  /** R42: 拖拽排序 —— 按新顺序排列的模板 id 列表。 */
+  async reorder(orderedIds: string[]): Promise<void> {
+    await invoke('prompts_reorder', { orderedIds });
+  },
+
   /** R30: 导出模板信封（含 app/version/exported_at 元信息）。 */
   async exportTemplates(): Promise<PromptTemplateEnvelope> {
     try {

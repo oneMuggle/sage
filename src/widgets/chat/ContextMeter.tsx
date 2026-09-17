@@ -3,14 +3,14 @@
 // U17 上下文用量指示 (对标增强第四轮批次 B, docs/plans/2026-09-07_coding-agent-parity-round4.md):
 // 当前会话的模型上下文窗口占用率。数据源: GET /api/v1/usage/session/{id} 的
 // last_prompt_tokens(上一轮请求 prompt = 当前上下文占用的最佳代理) +
-// last_model(经 modelWindows 最长前缀映射出窗口大小)。
+// last_model(经 catalog 解析出有效窗口)。
 // 刷新时机: 流结束跳变(后台会话跑完也刷新) + 60s 兜底轮询 + 外部 refreshKey。
 
 import { useEffect, useRef, useState } from 'react';
 
 import { useChatStreamStore, selectSessionSlots } from '../../features/send-message/chatStreamStore';
 import { fetchSessionUsage, type SessionUsage } from '../../shared/api/usageApi';
-import { contextWindowFor } from '../../shared/lib/modelWindows';
+import { resolvedContextWindow } from '../../shared/lib/modelWindows';
 
 function formatTokens(total: number): string {
   if (total >= 1_000_000) return `${(total / 1_000_000).toFixed(1)}M`;
@@ -68,7 +68,8 @@ export function ContextMeter({ sessionId, refreshKey = 0 }: ContextMeterProps) {
 
   if (!sessionId || !usage || usage.last_prompt_tokens == null) return null;
 
-  const windowTokens = contextWindowFor(usage.last_model);
+  // Task 5: Use catalog-resolved window from backend; falls back to 4096 default.
+  const windowTokens = resolvedContextWindow(usage.effective_context_window);
   const used = usage.last_prompt_tokens;
   const pct = windowTokens > 0 ? Math.min(1, used / windowTokens) : 0;
   const { bar, text } = toneClass(pct);

@@ -21,8 +21,10 @@ import { useI18n } from '../../shared/lib/i18n';
 import { UsageRequestsTable } from './UsageRequestsTable';
 import { UsageTrendChart } from './UsageTrendChart';
 
-function formatCost(cost: number | null): string {
-  return cost === null ? '—' : `$${cost.toFixed(4)}`;
+function formatCost(cost: number | null, unknownLabel: string): string {
+  if (cost === null) return unknownLabel;
+  if (cost === 0) return '$0.0000';
+  return `$${cost.toFixed(4)}`;
 }
 
 function formatTokens(promptTokens: number, completionTokens: number): string {
@@ -166,7 +168,7 @@ export function UsagePanel() {
               <div>
                 <div className="text-text-muted">{t('settings.usage.cost')}</div>
                 <div className="font-mono text-text" data-testid="usage-total-cost">
-                  {formatCost(activeBucket.estimated_cost_usd)}
+                  {formatCost(activeBucket.estimated_cost_usd, t('settings.usage.costUnknown'))}
                 </div>
               </div>
             </div>
@@ -213,12 +215,29 @@ export function UsagePanel() {
                     <td className="pr-2">
                       {formatTokens(entry.prompt_tokens, entry.completion_tokens)}
                     </td>
-                    <td>{formatCost(entry.estimated_cost_usd)}</td>
+                    <td>{formatCost(entry.estimated_cost_usd, t('settings.usage.costUnknown'))}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
+          {/* Task 6 (2026-09-15): 部分估算 badge — 同时存在 known 与 unknown 请求 */}
+          {summary.has_partial_estimates && (
+            <div
+              className="text-[11px] text-text-muted flex items-center gap-1"
+              data-testid="usage-partial-estimate"
+              role="status"
+              aria-live="polite"
+            >
+              <span aria-hidden="true">⚠️</span>
+              <span className="font-medium">{t('settings.usage.partialEstimate')}</span>
+              <span>· {t('settings.usage.partialEstimateHint')}</span>
+            </div>
+          )}
+          {/* Task 6 (2026-09-15): 费用脚注 — 标明基础估算不含缓存和阶梯折扣 */}
+          <p className="text-[11px] text-text-muted" data-testid="usage-cost-note">
+            <span aria-hidden="true">ℹ</span> {t('settings.usage.costNote')}
+          </p>
         </>
       )}
       <div className="flex gap-2 items-center">

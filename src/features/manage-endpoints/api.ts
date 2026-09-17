@@ -28,6 +28,26 @@ export interface ConnectionTestResult {
 }
 
 /**
+ * Probe result from the model catalog service adapters.
+ *
+ * status:
+ * - ``success``: probe returned usable metadata (data populated)
+ * - ``unsupported``: service has no metadata endpoint (e.g. OpenAI-compatible)
+ * - ``error``: network error, timeout, or malformed response
+ */
+export interface ProbeResult {
+  status: 'success' | 'unsupported' | 'error';
+  adapter: string;
+  data: {
+    native: number | null;
+    service: number | null;
+    architecture: string | null;
+    quantization: string | null;
+  } | null;
+  error: string | null;
+}
+
+/**
  * 所有浏览器到 LLM 的请求统一走本机后端代理,避免 CORS。
  * 见 ``docs/technical/21-llm-proxy.md`` 与 ``backend/api/llm_proxy_routes.py``。
  * 可通过 ``VITE_LLM_PROXY_BASE`` 覆盖,默认 ``http://localhost:8765/api/v1/llm``。
@@ -471,4 +491,30 @@ function inferCapabilities(modelId: string): ModelCapability[] {
   }
 
   return caps;
+}
+
+/**
+ * Probe an endpoint for model metadata via the model catalog POST /probe route.
+ *
+ * Reads endpoint configuration from settings storage on the backend side,
+ * calls the service-specific metadata path, and returns a :class:`ProbeResult`.
+ * The backend persists the result via ``repository.save_probe``.
+ *
+ * Unlike ``fetchModels`` which goes through the LLM proxy, this call hits
+ * the model-catalog API directly at ``/api/v1/model-catalog/probe``.
+ */
+export async function probeModel(endpointId: string, modelId: string): Promise<ProbeResult> {
+  if (isDemoMode()) {
+    return {
+      status: 'unsupported',
+      adapter: 'unknown',
+      data: null,
+      error: 'Probing unavailable in demo mode',
+    };
+  }
+  return backendRequest<ProbeResult>({
+    path: '/api/v1/model-catalog/probe',
+    method: 'POST',
+    body: { endpoint_id: endpointId, model_id: modelId },
+  });
 }

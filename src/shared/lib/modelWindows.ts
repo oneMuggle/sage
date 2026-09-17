@@ -1,64 +1,58 @@
 /**
- * 模型上下文窗口映射 (U17, docs/plans/2026-09-07_coding-agent-parity-round4.md)。
+ * 模型上下文窗口 — catalog resolution (Task 5, 2026-09-15).
  *
- * 与 backend/services/usage_tracker.py 的 PRICING_PER_MILLION_TOKENS 同构:
- * 最长前缀匹配 (小写), 未知模型回退默认窗口。数据来自各厂商 2026 公开
- * 规格文档,仅用于 UI 指示与历史预算推导,非硬约束。
+ * 移除旧硬编码前缀映射 (CONTEXT_WINDOWS), 改为由后端 model catalog
+ * 解析后传入 effective window. 前端不再本地猜测模型窗口大小.
+ *
+ * 回退默认: 当 catalog 无数据且无显式 fixed 值时使用 4096 (与后端
+ * effective_window 的 _UNKNOWN_AUTOMATIC_WINDOW 一致).
  */
 
-export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128_000;
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 4096;
 
-/** [模型名前缀(小写), 上下文窗口 tokens] — 匹配时按前缀长度降序 */
-const CONTEXT_WINDOWS: ReadonlyArray<readonly [string, number]> = [
-  // Anthropic
-  ['claude-opus', 200_000],
-  ['claude-sonnet', 200_000],
-  ['claude-haiku', 200_000],
-  ['claude-3', 200_000],
-  // Google
-  ['gemini-2.5-pro', 1_048_576],
-  ['gemini-2.5-flash', 1_048_576],
-  ['gemini-2.0-flash', 1_048_576],
-  ['gemini-1.5-pro', 2_097_152],
-  ['gemini-1.5-flash', 1_048_576],
-  // OpenAI
-  ['o3', 200_000],
-  ['o1', 200_000],
-  ['gpt-4.1', 1_047_576],
-  ['gpt-4o', 128_000],
-  ['gpt-4-turbo', 128_000],
-  ['gpt-4', 8_192],
-  ['gpt-3.5', 16_385],
-  // DeepSeek
-  ['deepseek-reasoner', 128_000],
-  ['deepseek-chat', 128_000],
-];
-
-/** 返回模型上下文窗口 (tokens);未知模型 → DEFAULT_CONTEXT_WINDOW_TOKENS。 */
-export function contextWindowFor(modelId: string | null | undefined): number {
-  if (!modelId) return DEFAULT_CONTEXT_WINDOW_TOKENS;
-  const normalized = String(modelId).trim().toLowerCase();
-  let best: readonly [string, number] | null = null;
-  for (const entry of CONTEXT_WINDOWS) {
-    if (
-      normalized.startsWith(entry[0]) &&
-      (best === null || entry[0].length > best[0].length)
-    ) {
-      best = entry;
-    }
+/**
+ * 返回有效上下文窗口. 优先使用 catalog 解析值, 否则回退到默认.
+ *
+ * @param catalogWindow - 后端 catalog 解析的有效窗口; null/undefined 表示未知
+ * @param fixedWindow - 用户在设置中手动配置的 maxContext; 仅 auto=false 时使用
+ * @param autoContext - 是否自动推断 (true = 忽略 fixedWindow)
+ */
+export function resolvedContextWindow(
+  catalogWindow: number | null | undefined,
+  fixedWindow?: number | null,
+  autoContext: boolean = true,
+): number {
+  if (autoContext) {
+    return catalogWindow ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
   }
-  return best ? best[1] : DEFAULT_CONTEXT_WINDOW_TOKENS;
+  // Manual: use fixed, but cap by catalog if known
+  const fixed = fixedWindow ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
+  if (catalogWindow != null && catalogWindow > 0) {
+    return Math.min(fixed, catalogWindow);
+  }
+  return fixed;
 }
 
 /**
- * L9-lite 历史预算推导: 窗口的 75%,预留 25% 给 system/工具 schema/回复。
- * 用户在设置里显式配置的 maxContext (≥20000) 优先——与后端 ``data.max_context``
- * 的有效性阈值一致,避免小配置值被窗口推导覆盖后反而放大预算。
+ * 历史 token 预算: 有效窗口减去预留 (system/tools/output), 下限 0.
+ *
+ * 不再使用旧 >=20000 门槛或固定 75% 系数. 预留由后端根据实际
+ * system prompt / tool schema 大小计算后传入.
+ *
+ * @param effectiveWindow - resolvedContextWindow 返回的值
+ * @param reserve - system/tool/output 预留 tokens (默认 16384)
  */
 export function historyBudgetFor(
-  modelId: string | null | undefined,
-  userMaxContext?: number | null,
+  effectiveWindow: number,
+  reserve: number = 16384,
 ): number {
-  if (userMaxContext != null && userMaxContext >= 20_000) return userMaxContext;
-  return Math.floor(contextWindowFor(modelId) * 0.75);
+  return Math.max(0, Math.floor(effectiveWindow - reserve));
+}
+
+/**
+ * @deprecated 使用 resolvedContextWindow 替代. 保留仅为兼容过渡,
+ * 始终返回 DEFAULT_CONTEXT_WINDOW_TOKENS.
+ */
+export function contextWindowFor(_modelId: string | null | undefined): number {
+  return DEFAULT_CONTEXT_WINDOW_TOKENS;
 }

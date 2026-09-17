@@ -16,6 +16,7 @@ const createMock = vi.fn();
 const updateMock = vi.fn();
 const removeMock = vi.fn();
 const exportTemplatesMock = vi.fn();
+const importTemplatesMock = vi.fn();
 
 vi.mock('../../../shared/api/promptApi', () => ({
   promptApi: {
@@ -24,7 +25,7 @@ vi.mock('../../../shared/api/promptApi', () => ({
     update: (...args: unknown[]) => updateMock(...args),
     remove: (...args: unknown[]) => removeMock(...args),
     exportTemplates: () => exportTemplatesMock(),
-    importTemplates: vi.fn(),
+    importTemplates: (...args: unknown[]) => importTemplatesMock(...args),
   },
 }));
 
@@ -42,6 +43,7 @@ describe('PromptTemplatesTab — R27-B', () => {
       version: 1,
       templates: [],
     });
+    importTemplatesMock.mockReset();
   });
 
   it('空态提示', async () => {
@@ -144,5 +146,100 @@ describe('PromptTemplatesTab — R27-B', () => {
     listMock.mockRejectedValue(new Error('后端未起'));
     renderTab();
     await waitFor(() => expect(screen.getByTestId('prompts-error')).toHaveTextContent('后端未起'));
+  });
+
+  // ==== r55: 导入冲突条目级覆盖选择 ====
+
+  const uploadEnvelope = (envelope: unknown) => {
+    const { container } = renderTab();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File([JSON.stringify(envelope)], 'tpl.json', {
+      type: 'application/json',
+    });
+    fireEvent.change(input, { target: { files: [file] } });
+  };
+
+  it('无冲突导入：单次 skip 调用，无选择面板', async () => {
+    importTemplatesMock.mockResolvedValue({ imported: 2, skipped: 0, failed: 0 });
+    window.alert = vi.fn();
+    uploadEnvelope({
+      version: 1,
+      templates: [
+        { name: 'a', content: '内容 a' },
+        { name: 'b', content: '内容 b' },
+      ],
+    });
+
+    await waitFor(() => expect(importTemplatesMock).toHaveBeenCalledTimes(1));
+    expect(importTemplatesMock.mock.calls[0][1]).toBe('skip');
+    expect(screen.queryByTestId('prompts-conflict-panel')).not.toBeInTheDocument();
+  });
+
+  it('冲突时展示选择面板；确认后仅用勾选条目 overwrite 重导', async () => {
+    importTemplatesMock
+      .mockResolvedValueOnce({
+        imported: 0,
+        skipped: 2,
+        failed: 0,
+        conflicts: ['alpha', 'beta'],
+      })
+      .mockResolvedValueOnce({ imported: 1, skipped: 0, failed: 0 });
+    window.alert = vi.fn();
+    const envelope = {
+      version: 1,
+      templates: [
+        { name: 'alpha', content: '新 alpha' },
+        { name: 'beta', content: '新 beta' },
+      ],
+    };
+    uploadEnvelope(envelope);
+
+    // 面板列出全部冲突，默认全选
+    await waitFor(() =>
+      expect(screen.getByTestId('prompts-conflict-panel')).toBeInTheDocument(),
+    );
+    expect(
+      (screen.getByTestId('prompts-conflict-check-alpha') as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(
+      (screen.getByTestId('prompts-conflict-check-beta') as HTMLInputElement).checked,
+    ).toBe(true);
+
+    // 取消勾选 beta → 只覆盖 alpha
+    fireEvent.click(screen.getByTestId('prompts-conflict-check-beta'));
+    fireEvent.click(screen.getByTestId('prompts-conflict-overwrite'));
+
+    await waitFor(() => expect(importTemplatesMock).toHaveBeenCalledTimes(2));
+    const [secondEnvelope, secondConflict] = importTemplatesMock.mock.calls[1];
+    expect(secondConflict).toBe('overwrite');
+    expect((secondEnvelope as { templates: unknown[] }).templates).toEqual([
+      { name: 'alpha', content: '新 alpha' },
+    ]);
+    // 重导后面板消失并刷新列表
+    await waitFor(() =>
+      expect(screen.queryByTestId('prompts-conflict-panel')).not.toBeInTheDocument(),
+    );
+    expect(listMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('保留现有：不再发起第二次导入，面板消失', async () => {
+    importTemplatesMock.mockResolvedValue({
+      imported: 0,
+      skipped: 1,
+      failed: 0,
+      conflicts: ['alpha'],
+    });
+    window.alert = vi.fn();
+    uploadEnvelope({ version: 1, templates: [{ name: 'alpha', content: 'x' }] });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('prompts-conflict-panel')).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId('prompts-conflict-skip'));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('prompts-conflict-panel')).not.toBeInTheDocument(),
+    );
+    expect(importTemplatesMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -212,6 +212,32 @@ class OfficeWordReadResult(BaseModel):
     headers_footers: List[WordHeaderFooterContent] = Field(default_factory=list)
     # Round 15：文档中的目录域 instr 列表。
     toc_fields: List[str] = Field(default_factory=list)
+    # Office display round C (P4)：内嵌图片缩略预览。additive field ——
+    # default_factory 保持旧 payload 在 extra="forbid" 下有效（win7 回流
+    # 与旧客户端可整体忽略）。上限/降级策略见 word._extract_image_previews。
+    image_previews: List[WordImagePreview] = Field(default_factory=list)
+
+
+class WordImagePreview(BaseModel):
+    """One inline image thumbnail for preview (office display round C, P4).
+
+    ``data_url`` 是缩略后的 base64 data URL（Pillow 可用时最长边缩到
+    480px；不可用时仅 ≤150KB 的原图直接内联）。超限/无法内联的图片不产
+    生条目 —— ``OfficeWordReadResult.images``（总数）与
+    ``len(image_previews)`` 的差即被省略的数量。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(ge=0, description="文内出现顺序（0-based）")
+    content_type: str = Field(description="MIME，如 image/png")
+    data_url: str = Field(description="data:<mime>;base64,… 缩略图")
+    thumbnail: bool = Field(
+        default=False, description="True=经 Pillow 缩略；False=原图直接内联"
+    )
+
+
+OfficeWordReadResult.model_rebuild()
 
 
 class ExcelSheetContent(BaseModel):
@@ -638,6 +664,20 @@ class WordFormatSpec(BaseModel):
     bibliography: Optional[BibliographySpec] = None
     # Round 13：目录域。None = 不插入目录。
     toc: Optional[WordTocSpec] = None
+    # Round 33：首页不同页眉页脚（封面页场景）。启用后首页用
+    # first_page_header/first_page_footer 的独立内容。
+    first_page_different: bool = Field(
+        default=False, description="启用首页不同的页眉页脚"
+    )
+    first_page_header: Optional[WordHeaderFooterSpec] = None
+    first_page_footer: Optional[WordHeaderFooterSpec] = None
+    # Round 34：奇偶页不同页眉页脚（书籍排版）。启用后偶数页用
+    # even_page_header/even_page_footer 的独立内容。
+    odd_even_pages: bool = Field(
+        default=False, description="启用奇偶页不同的页眉页脚"
+    )
+    even_page_header: Optional[WordHeaderFooterSpec] = None
+    even_page_footer: Optional[WordHeaderFooterSpec] = None
     # Round 26：横排/分节。每个 break 在 start_paragraph（0-based）前
     # 插入 NEW_PAGE 分节并对新节应用 page_setup；按列表顺序依次生效。
     section_breaks: _constrained_list("WordSectionBreakSpec", max_length=20) = Field(
@@ -722,6 +762,13 @@ class ExcelSheetSpec(BaseModel):
     freeze_header: bool = Field(
         default=False,
         description="冻结首行（滚动长表时表头保持可见）",
+    )
+    # Round 31：冻结窗格参数化（A1 记法）。与 freeze_header 同给时本字段优先。
+    freeze_panes: Optional[str] = Field(
+        default=None,
+        max_length=10,
+        pattern=r"^[A-Za-z]{1,3}[0-9]{1,7}$",
+        description="冻结窗格 A1 记法，如 'B2' 冻结首行+首列；None 不设置",
     )
     autofit_columns: bool = Field(
         default=False,
@@ -847,6 +894,13 @@ class ExcelPrintSetupSpec(BaseModel):
     )
     # Round 31：打印页边距（厘米），全可选；None 用 Excel 默认。
     margins_cm: Optional[ExcelPrintMarginsSpec] = None
+    # Round 32：打印页眉/页脚文本（页码用 &P 占位，Excel HeaderFooter 语法）。
+    print_header: Optional[str] = Field(
+        default=None, max_length=200, description="打印页眉文本"
+    )
+    print_footer: Optional[str] = Field(
+        default=None, max_length=200, description="打印页脚文本（&P = 页码）"
+    )
 
 
 class ExcelPrintMarginsSpec(BaseModel):
@@ -1168,6 +1222,9 @@ class PdfPageContent(BaseModel):
     text: str
     tables: List[List[List[str]]] = Field(default_factory=list)
     images: List[Dict[str, Any]] = Field(default_factory=list)
+    # P4-A (office-p4a): 该页文本是否来自 OCR 兜底（SAGE_OCR=1 且 pytesseract
+    # 可用时，扫描/纯图页触发）。additive 字段，前端/摘要可安全忽略。
+    ocr: bool = Field(default=False, description="文本来自 OCR 兜底（扫描页）")
 
 
 class PdfReadResult(BaseModel):
@@ -1187,6 +1244,36 @@ class PdfReadRequest(BaseModel):
 
     workspace_path: str
     file_path: str
+
+
+class PdfDataRequest(BaseModel):
+    """Request for the raw-PDF base64 preview (F3, office-p0).
+
+    Serves the /office page's 原文预览 toggle: the renderer embeds the
+    returned ``data:application/pdf`` URL in an iframe and Chromium's
+    built-in viewer renders it — same fidelity path as the chat artifact
+    viewer.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str
+
+
+class PdfDataResult(BaseModel):
+    """Raw-PDF base64 preview result.
+
+    Never raises for expected conditions: oversize / escape / unreadable
+    files return ``ok=False`` + a user-presentable ``error`` so the UI
+    can fall back to the structured page cards.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    data_url: Optional[str] = None
+    error: Optional[str] = None
 
 
 class PdfPageSpec(BaseModel):

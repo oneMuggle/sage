@@ -1087,6 +1087,8 @@ const DEMO_USAGE: UsageSummary = {
     cache_read_tokens: 1800000,
     cache_creation_tokens: 300000,
     estimated_cost_usd: 12.84,
+    known_requests: 1284,
+    unknown_requests: 0,
   },
   by_model: [
     {
@@ -1098,6 +1100,8 @@ const DEMO_USAGE: UsageSummary = {
       cache_read_tokens: 1450000,
       cache_creation_tokens: 250000,
       estimated_cost_usd: 9.62,
+      known_requests: 962,
+      unknown_requests: 0,
     },
     {
       model: 'qwen2.5-7b-instruct',
@@ -1108,6 +1112,8 @@ const DEMO_USAGE: UsageSummary = {
       cache_read_tokens: 350000,
       cache_creation_tokens: 50000,
       estimated_cost_usd: 3.22,
+      known_requests: 322,
+      unknown_requests: 0,
     },
   ],
   today: {
@@ -1118,9 +1124,16 @@ const DEMO_USAGE: UsageSummary = {
     cache_read_tokens: 74000,
     cache_creation_tokens: 12000,
     estimated_cost_usd: 0.52,
+    known_requests: 47,
+    unknown_requests: 0,
   },
   cache_hit_rate: 0.4848,
   range: 'today',
+  known_requests: 1284,
+  unknown_requests: 0,
+  has_partial_estimates: false,
+  known_requests_today: 47,
+  unknown_requests_today: 0,
 };
 
 /** 文献调研会话的 session_summary 记忆 (get_session_summaries 专用; 含 1 条 failed 展示徽章) */
@@ -1709,6 +1722,9 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
   office_excel_read: () => DEMO_EXCEL_READ,
   office_ppt_read: () => DEMO_PPT_READ,
   office_pdf_read: () => DEMO_PDF_READ,
+  // F3 (office-p0): demo 模式没有真实 PDF 字节可 base64 化 —— 显式
+  // ok:false 让"原文预览"开关走失败回落，而不是未知通道报错。
+  office_pdf_data: () => ({ ok: false, data_url: null, error: '演示模式不支持原文预览' }),
 
   // Round-3 N1: PDF 生成演示路径（生成表单 e2e 的正向用例依赖）
   office_pdf_generate: (args) => {

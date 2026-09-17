@@ -36,7 +36,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from backend.services.secret_box import decrypt_secret, encrypt_secret
+from backend.services.secret_box import current_scheme, decrypt_secret, encrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,36 @@ _FORBIDDEN_CREDENTIAL_HEADERS = frozenset(
     {"cookie", "host", "content-length", "transfer-encoding", "connection", "accept-encoding"}
 )
 _HEADER_NAME_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
+#: RFC 6265 §4.1.1：cookie-name 与 header token 同文法
+_COOKIE_NAME_RE = _HEADER_NAME_RE
+
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _is_local_host(hostname: str) -> bool:
+    host = (hostname or "").strip("[]").lower()
+    return host in _LOCAL_HOSTS or host.endswith(".localhost")
+
+
+def _valid_cookie_name(name: str) -> bool:
+    return bool(_COOKIE_NAME_RE.match(name))
+
+
+def _valid_cookie_value(value: str) -> bool:
+    """控制字符（0x00-0x1F / 0x7F）与 ``;`` 会伪造 Cookie 对 / 破坏头完整性。"""
+    return not any(ord(ch) < 0x20 or ord(ch) == 0x7F or ch == ";" for ch in value)
+
+
+def _sendable_cookie_pairs(cookies: List[Dict[str, Any]]) -> List[Tuple[str, str]]:
+    """拼 ``Cookie`` 头前过滤名/值不合法的存量条目（兜旧档案脏数据）。"""
+    pairs: List[Tuple[str, str]] = []
+    for item in cookies:
+        name = str(item.get("name") or "")
+        value = str(item.get("value") or "")
+        if name and _valid_cookie_name(name) and _valid_cookie_value(value):
+            pairs.append((name, value))
+    return pairs
+
 
 #: 登录墙启发式（AU2）：URL 的 host 前缀 / path 片段 / 页面密码框
 _LOGIN_HOST_RE = re.compile(r"^(?:login|signin|sign-in|sso|passport|auth|idp|accounts?)\.", re.I)
@@ -157,9 +187,13 @@ def looks_like_login_html(html: str) -> bool:
 def _clean_cookie(item: Dict[str, Any], default_domain: str) -> Optional[Dict[str, Any]]:
     if not isinstance(item, dict) or not item.get("name"):
         return None
+    name = str(item.get("name") or "")
+    value = str(item.get("value") or "")
+    if not _valid_cookie_name(name) or not _valid_cookie_value(value):
+        return None
     cleaned: Dict[str, Any] = {
-        "name": str(item.get("name") or ""),
-        "value": str(item.get("value") or ""),
+        "name": name,
+        "value": value,
         "domain": str(item.get("domain") or default_domain),
         "path": str(item.get("path") or "/"),
     }
@@ -176,7 +210,12 @@ def _clean_cookie(item: Dict[str, Any], default_domain: str) -> Optional[Dict[st
     return cleaned
 
 
-def save_credential(domain: str, cookies: List[Dict[str, Any]], repo: Optional[Any] = None) -> None:
+def save_credential(
+    domain: str,
+    cookies: List[Dict[str, Any]],
+    repo: Optional[Any] = None,
+    source_profile: str = "",
+) -> None:
     """把某 cookie domain 的 cookie 列表加密存入档案（覆盖旧值，kind=cookie）。
 
     Args:
@@ -193,7 +232,7 @@ def save_credential(domain: str, cookies: List[Dict[str, Any]], repo: Optional[A
     store = _get_repo(repo)
     vault = _load_vault(store)
     now = _now_ms()
-    vault[domain] = {
+    entry = {
         "kind": KIND_COOKIE,
         "cookies_enc": encrypt_secret(
             json.dumps(cleaned, ensure_ascii=False), account=_VAULT_ACCOUNT_PREFIX + domain
@@ -201,7 +240,14 @@ def save_credential(domain: str, cookies: List[Dict[str, Any]], repo: Optional[A
         "saved_at": now,
         "updated_at": now,
     }
+    source_profile = (source_profile or "").strip()
+    if source_profile:
+        entry["source_profile"] = source_profile
+    vault[domain] = entry
     _save_vault(store, vault)
+    if current_scheme() == "none":
+        # X4：平台加密不可用，诚实降级为明文落库——至少要让用户知道
+        logger.warning("平台加密不可用，凭据档案 %s 以明文落库", domain)
 
 
 def _decrypt_cookies(entry: Dict[str, Any], domain: str) -> Optional[List[Dict[str, Any]]]:
@@ -268,9 +314,10 @@ def cookie_header_for(
     if not cookies:
         return None
     usable, _expired = _split_cookies(cookies, url, time.time() if now is None else now)
-    if not usable:
+    pairs = _sendable_cookie_pairs(usable)
+    if not pairs:
         return None
-    return "; ".join(f"{item['name']}={item['value']}" for item in usable)
+    return "; ".join(f"{name}={value}" for name, value in pairs)
 
 
 # --------------------------------------------------------------------------- header kind
@@ -337,19 +384,32 @@ def _decrypt_headers(entry: Dict[str, Any], domain: str) -> Optional[Dict[str, s
 
 
 class CredentialResolution:
-    """``resolve_credential`` 的结果：``status`` ∈ ok / not_found / expired。
+    """``resolve_credential`` 的结果：``status`` ∈ ok / not_found / expired /
+    insecure_scheme（头部凭据 + 明文 http 目标）。
 
     ``headers`` 是要附加到命中域请求上的头（cookie 档案 → ``{"Cookie": …}``，
-    头部档案 → 原样头）。``expired_names`` / ``expires_in`` 供文案与 list 使用。
+    头部档案 → 原样头）。``cookies``（AU5）是 cookie 档案 ok 时过滤后的逐条
+    cookie dict（含 domain/path/expires 元数据），供渲染通道经 CDP 逐条注入
+    ——浏览器的域匹配比 Cookie 头串更严格，host-only cookie 无法从头串重建。
+    ``expired_names`` / ``expires_in`` 供文案与 list 使用。
     """
 
-    __slots__ = ("status", "kind", "headers", "expired_names", "expires_in", "domain")
+    __slots__ = (
+        "status",
+        "kind",
+        "headers",
+        "cookies",
+        "expired_names",
+        "expires_in",
+        "domain",
+    )
 
     def __init__(
         self,
         status: str,
         kind: Optional[str] = None,
         headers: Optional[Dict[str, str]] = None,
+        cookies: Optional[List[Dict[str, Any]]] = None,
         expired_names: Optional[List[str]] = None,
         expires_in: Optional[int] = None,
         domain: str = "",
@@ -357,6 +417,7 @@ class CredentialResolution:
         self.status = status
         self.kind = kind
         self.headers = headers or {}
+        self.cookies = cookies or []
         self.expired_names = expired_names or []
         self.expires_in = expires_in
         self.domain = domain
@@ -392,6 +453,14 @@ def resolve_credential(  # noqa: PLR0911 — 各状态独立 return，扁平更�
         headers = _decrypt_headers(entry, domain)
         if not headers:
             return CredentialResolution("not_found", kind=kind, domain=domain)
+        # 头部凭据（Authorization 等）没有 cookie 的 secure 位保护：
+        # 明文 http 附加等于 Bearer token 明文出网，本地回环除外。
+        if url is not None:
+            parsed_url = urlparse(url)
+            if (parsed_url.scheme or "").lower() == "http" and not _is_local_host(
+                parsed_url.hostname or ""
+            ):
+                return CredentialResolution("insecure_scheme", kind=kind, domain=domain)
         expires_at = entry.get("expires_at")
         expires_in: Optional[int] = None
         if isinstance(expires_at, (int, float)) and expires_at > 0:
@@ -414,11 +483,13 @@ def resolve_credential(  # noqa: PLR0911 — 各状态独立 return，扁平更�
             "expired", kind=kind, expired_names=expired_names, domain=domain
         )
     expires_in = _min_expires_in(usable, current)
-    headers = {"Cookie": "; ".join(f"{c['name']}={c['value']}" for c in usable)} if usable else {}
+    pairs = _sendable_cookie_pairs(usable)
+    headers = {"Cookie": "; ".join(f"{n}={v}" for n, v in pairs)} if pairs else {}
     return CredentialResolution(
         "ok",
         kind=kind,
         headers=headers,
+        cookies=usable,
         expired_names=expired_names,
         expires_in=expires_in,
         domain=domain,
@@ -437,7 +508,9 @@ def _min_expires_in(cookies: List[Dict[str, Any]], now: float) -> Optional[int]:
 # --------------------------------------------------------------------------- Set-Cookie 回写
 
 
-def parse_set_cookie(value: str, request_url: str) -> Optional[Dict[str, Any]]:
+def parse_set_cookie(  # noqa: PLR0911 — 前缀 / 名值守卫各自独立 return，扁平更直读
+    value: str, request_url: str
+) -> Optional[Dict[str, Any]]:
     """解析一条 ``Set-Cookie``（stdlib 手写，容忍非标值）。
 
     返回 ``{"name","value","domain","path","expires"?,"secure"?,"httpOnly"?,"sameSite"?,
@@ -452,11 +525,14 @@ def parse_set_cookie(value: str, request_url: str) -> Optional[Dict[str, Any]]:
     name = name.strip()
     if not name:
         return None
+    raw_value = raw_value.strip()
+    if not _valid_cookie_name(name) or not _valid_cookie_value(raw_value):
+        return None
     parsed_url = urlparse(request_url or "")
     request_host = (parsed_url.hostname or "").lower()
     cookie: Dict[str, Any] = {
         "name": name,
-        "value": raw_value.strip(),
+        "value": raw_value,
         "domain": request_host,
         "path": "/",
         "host_only": True,
@@ -489,6 +565,14 @@ def parse_set_cookie(value: str, request_url: str) -> Optional[Dict[str, Any]]:
             cookie["httpOnly"] = True
         elif key == "samesite" and val:
             cookie["sameSite"] = val
+    # RFC 6265bis §4.1.3 前缀约束（浏览器拒绝违规，这里同样拒收）
+    lowered = name.lower()
+    if lowered.startswith("__secure-") and not cookie.get("secure"):
+        return None
+    if lowered.startswith("__host-") and (
+        not cookie.get("secure") or not cookie["host_only"] or cookie["path"] != "/"
+    ):
+        return None
     now = int(time.time())
     if max_age is not None:
         if max_age <= 0:
@@ -525,12 +609,21 @@ def merge_set_cookies(
     cookies = _decrypt_cookies(entry, domain)
     if cookies is None:
         return []
+    # RFC 6265 §5.3 step 6：请求主机必须落在 cookie 归属域内（host_only 精确、
+    # domain 域匹配）；否则跨主机响应可向档案域注入 / 固定 cookie。无请求主机
+    # 一律拒绝（fail closed）。
+    request_host = (urlparse(request_url or "").hostname or "").lower()
     changed: List[str] = []
     for raw in set_cookie_values:
         parsed = parse_set_cookie(raw, request_url)
-        if not parsed:
+        if not parsed or not request_host:
             continue
         effective_domain = str(parsed["domain"] or "")
+        if parsed["host_only"]:
+            if effective_domain != request_host:
+                continue
+        elif not cookie_domain_matches(request_host, effective_domain):
+            continue
         if not cookie_domain_matches(effective_domain.lstrip("."), domain):
             continue
         key_name, key_path = parsed["name"], parsed["path"]
@@ -563,6 +656,124 @@ def merge_set_cookies(
 
 
 # --------------------------------------------------------------------------- misc
+
+
+def merge_cdp_cookies(
+    domain: str,
+    cookies: List[Dict[str, Any]],
+    request_url: str,
+    repo: Optional[Any] = None,
+    now: Optional[float] = None,
+) -> List[str]:
+    """把 Storage.getCookies 返回的 cookie dict 合并回 cookie 档案（AU5 渲染回写）。
+
+    与 ``merge_set_cookies`` 同守卫：请求主机亲和（host-only 精确匹配 /
+    domain 域匹配，无请求主机一律拒绝，fail-closed）、cookie 归属域必须落在
+    档案域内（第三方 cookie 不混入）、同 name+path 替换、已过期条目视为删除、
+    档案清空则删除整个条目。``Storage.getCookies`` 没有 host_only 字段——
+    前导点即 domain cookie，否则按 host-only 处理。返回被更新 / 删除的名字。
+    """
+    domain = (domain or "").strip().lower()
+    if not domain or not cookies:
+        return []
+    store = _get_repo(repo)
+    vault = _load_vault(store)
+    entry = vault.get(domain)
+    if _entry_kind(entry) != KIND_COOKIE:
+        return []
+    stored = _decrypt_cookies(entry, domain)
+    if stored is None:
+        return []
+    request_host = (urlparse(request_url or "").hostname or "").lower()
+    if not request_host:
+        return []
+    current = time.time() if now is None else now
+    changed: List[str] = []
+    for item in cookies:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "")
+        value = str(item.get("value") or "")
+        if not name or not _valid_cookie_name(name) or not _valid_cookie_value(value):
+            continue
+        cdomain = str(item.get("domain") or "").strip().lower()
+        if cdomain.startswith("."):
+            if not cookie_domain_matches(request_host, cdomain):
+                continue
+        elif cdomain != request_host:
+            continue
+        if not cookie_domain_matches(cdomain.lstrip("."), domain):
+            continue
+        path = str(item.get("path") or "/")
+        expires = item.get("expires")
+        is_session = bool(item.get("session")) or not (
+            isinstance(expires, (int, float)) and expires > 0
+        )
+        same_name_path = [
+            c
+            for c in stored
+            if isinstance(c, dict)
+            and c.get("name") == name
+            and str(c.get("path") or "/") == path
+        ]
+        if not is_session and expires <= current:
+            if same_name_path:
+                stored = [
+                    c
+                    for c in stored
+                    if not (
+                        isinstance(c, dict)
+                        and c.get("name") == name
+                        and str(c.get("path") or "/") == path
+                    )
+                ]
+                changed.append(name)
+            continue
+        cleaned_input: Dict[str, Any] = {
+            "name": name,
+            "value": value,
+            "domain": cdomain,
+            "path": path,
+        }
+        if not is_session:
+            cleaned_input["expires"] = expires
+        if item.get("secure"):
+            cleaned_input["secure"] = True
+        if item.get("httpOnly"):
+            cleaned_input["httpOnly"] = True
+        if item.get("sameSite"):
+            cleaned_input["sameSite"] = str(item.get("sameSite"))
+        cleaned = _clean_cookie(cleaned_input, domain)
+        if cleaned is None:
+            continue
+        stored = [c for c in stored if c not in same_name_path]
+        stored.append(cleaned)
+        changed.append(name)
+    if not changed:
+        return []
+    if stored:
+        entry["cookies_enc"] = encrypt_secret(
+            json.dumps(stored, ensure_ascii=False), account=_VAULT_ACCOUNT_PREFIX + domain
+        )
+        entry["kind"] = KIND_COOKIE
+        entry["updated_at"] = _now_ms()
+        vault[domain] = entry
+    else:
+        vault.pop(domain, None)
+    _save_vault(store, vault)
+    return changed
+
+
+def get_source_profile(domain: str, repo: Optional[Any] = None) -> Optional[str]:
+    """取档案记录的来源持久 profile 名（AU6）；无档案 / 未记录返回 ``None``。"""
+    domain = (domain or "").strip().lower()
+    if not domain:
+        return None
+    entry = _load_vault(_get_repo(repo)).get(domain)
+    if not isinstance(entry, dict):
+        return None
+    source = entry.get("source_profile")
+    return str(source) if source else None
 
 
 def delete_credential(domain: str, repo: Optional[Any] = None) -> bool:
@@ -615,6 +826,16 @@ def list_credentials(repo: Optional[Any] = None) -> List[Dict[str, Any]]:
         }
         if kind == KIND_HEADER:
             record["header_names"] = names
+        source_profile = entry.get("source_profile") if isinstance(entry, dict) else None
+        if source_profile:
+            record["source_profile"] = str(source_profile)
+        # X4：档案是否真的密文（scheme=none 平台诚实降级时为 False）
+        enc_value = (
+            entry.get("cookies_enc") if isinstance(entry, dict) else None
+        ) or (
+            entry.get("headers_enc") if isinstance(entry, dict) else None
+        )
+        record["encrypted"] = bool(isinstance(enc_value, str) and enc_value.startswith("enc:"))
         entries.append(record)
     return entries
 
@@ -628,11 +849,13 @@ __all__ = [
     "cookie_header_for",
     "cookie_path_matches",
     "delete_credential",
+    "get_source_profile",
     "list_credentials",
     "load_credential",
     "looks_like_login_html",
     "looks_like_login_url",
     "merge_set_cookies",
+    "merge_cdp_cookies",
     "parse_set_cookie",
     "resolve_credential",
     "save_credential",

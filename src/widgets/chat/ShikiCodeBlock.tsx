@@ -21,36 +21,36 @@ function getHighlighter(): Promise<import('shiki').Highlighter> {
   if (!highlighterPromise) {
     highlighterPromise = import('shiki').then(({ createHighlighter }) =>
       createHighlighter({
-      themes: ['github-dark', 'github-light'],
-      langs: [
-        'javascript',
-        'typescript',
-        'python',
-        'rust',
-        'go',
-        'java',
-        'cpp',
-        'c',
-        'html',
-        'css',
-        'json',
-        'yaml',
-        'toml',
-        'markdown',
-        'bash',
-        'sql',
-        'dockerfile',
-        'diff',
-        // P22: 扩展语言覆盖
-        'kotlin',
-        'swift',
-        'ruby',
-        'php',
-        'csharp',
-        'xml',
-        'graphql',
-        'make',
-      ],
+        themes: ['github-dark', 'github-light'],
+        langs: [
+          'javascript',
+          'typescript',
+          'python',
+          'rust',
+          'go',
+          'java',
+          'cpp',
+          'c',
+          'html',
+          'css',
+          'json',
+          'yaml',
+          'toml',
+          'markdown',
+          'bash',
+          'sql',
+          'dockerfile',
+          'diff',
+          // P22: 扩展语言覆盖
+          'kotlin',
+          'swift',
+          'ruby',
+          'php',
+          'csharp',
+          'xml',
+          'graphql',
+          'make',
+        ],
       }),
     );
   }
@@ -163,7 +163,7 @@ export function ShikiCodeBlock({ language, children }: ShikiCodeBlockProps) {
         ) : (
           <pre
             className={
-              'bg-[#282c34] text-gray-300 p-3 text-xs leading-relaxed overflow-x-auto rounded-b-md ' +
+              'bg-[#282c34] text-gray-300 p-3 text-code font-mono leading-relaxed overflow-x-auto rounded-b-md ' +
               (wrapped ? 'whitespace-pre-wrap break-words' : '')
             }
           >

@@ -43,6 +43,8 @@ def test_default_seed_coder_uses_current_tool_names():
     / symbol_search / browser_*（Phase-2 + G7）。
     2026-09-09 (round5 批次 D): git 扩面三件——branch/checkout/stash
     （coder 的多分支/实验现场管理刚需，*GIT_TOOLS 展开自动带上）。
+    alpha.36 (Bug #5): 沙箱代码执行 —— repl / execute_code 进 coder 白名单
+    （coder 是 executor，沙箱工具天然属执行域）。
     """
     coder = next(a for a in profiles.create_default_agents() if a.id == "coder")
     assert coder.tools == [
@@ -74,7 +76,11 @@ def test_default_seed_coder_uses_current_tool_names():
         "browser_interact",
         "browser_screenshot",
         "browser_cookies",
+        "browser_downloads",
         "browser_close",
+        # alpha.36 (Bug #5): 沙箱代码执行
+        "repl",
+        "execute_code",
     ]
 
 
@@ -264,7 +270,9 @@ def test_primary_system_prompt_legacy_two_step_chain_migration(monkeypatch):
     """
     stored = {
         "primary": {
-            "id": "primary", "enabled": True, "tools": [],
+            "id": "primary",
+            "enabled": True,
+            "tools": [],
             "system_prompt": profiles._PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION,
         },
     }
@@ -283,7 +291,9 @@ def test_primary_system_prompt_with_delegation_one_step_migration(monkeypatch):
     """
     stored = {
         "primary": {
-            "id": "primary", "enabled": True, "tools": [],
+            "id": "primary",
+            "enabled": True,
+            "tools": [],
             "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION,
         },
     }
@@ -299,7 +309,9 @@ def test_primary_system_prompt_already_fetch_direct_no_upsert(monkeypatch):
     """DB system_prompt 已是 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT → 0 upsert。"""
     stored = {
         "primary": {
-            "id": "primary", "enabled": True, "tools": [],
+            "id": "primary",
+            "enabled": True,
+            "tools": [],
             "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT,
         },
     }
@@ -320,7 +332,8 @@ def test_legacy_primary_plan_write_pruned(monkeypatch):
     """存量 DB primary 白名单含已退役的 plan_write → ensure_default_agents 清除。"""
     stored = {
         "primary": {
-            "id": "primary", "enabled": True,
+            "id": "primary",
+            "enabled": True,
             "tools": ["calculator", "read_file", "plan_write", "todo_write"],
         },
         "researcher": {"id": "researcher", "enabled": True, "tools": []},

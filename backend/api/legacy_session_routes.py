@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -79,15 +79,15 @@ def list_sessions(
     sessions = repo.list(limit=limit, offset=offset)
     result = [s.to_dict() for s in sessions]
     # P0-4 (UI 优化方案 2026-09-13): 批量附加 last_message_preview(每个会话最后一条
-    # user/assistant 消息截断 80 字符),空会话 → None。
+    # user/assistant 消息截断 40 字符),空会话 → None。
     previews = _batch_last_message_previews([s.id for s in sessions])
     for item in result:
         item["last_message_preview"] = previews.get(item["id"])
     return result
 
 
-def _batch_last_message_previews(session_ids: list[str]) -> dict[str, str]:
-    """批量取每个会话的最后一条 user/assistant 消息预览(截断 80 字符)。"""
+def _batch_last_message_previews(session_ids: List[str]) -> Dict[str, str]:
+    """批量取每个会话的最后一条 user/assistant 消息预览(截断 40 字符)。"""
     if not session_ids:
         return {}
     conn = get_database().get_connection()
@@ -95,7 +95,7 @@ def _batch_last_message_previews(session_ids: list[str]) -> dict[str, str]:
     placeholders = ",".join("?" for _ in session_ids)
     cursor.execute(
         f"""
-        SELECT m.session_id, SUBSTR(m.content, 1, 80) AS preview
+        SELECT m.session_id, SUBSTR(m.content, 1, 40) AS preview
         FROM messages m
         INNER JOIN (
             SELECT session_id, MAX(created_at) AS max_created

@@ -27,7 +27,7 @@ import os
 import shutil
 import subprocess
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -300,7 +300,7 @@ def unwrap_app_settings(data: Any) -> Any:
     return data
 
 
-def wrap_settings_json(raw: Optional[str]) -> Optional[str]:
+def wrap_settings_json(raw: str | None) -> str | None:
     """字符串层包装(SettingsRepository.set 用): 解析 JSON → 加密 → 回写。"""
     if raw is None:
         return raw
@@ -314,7 +314,7 @@ def wrap_settings_json(raw: Optional[str]) -> Optional[str]:
     return json.dumps(wrapped, ensure_ascii=False)
 
 
-def unwrap_settings_json(raw: Optional[str]) -> Optional[str]:
+def unwrap_settings_json(raw: str | None) -> str | None:
     """字符串层解包(SettingsRepository.get 用): 解析 JSON → 解密 → 回写。"""
     if raw is None:
         return raw
@@ -340,7 +340,7 @@ def migrate_plaintext_settings() -> Dict[str, Any]:
 
     repo = SettingsRepository()
 
-    def _read_raw() -> Optional[Dict[str, Any]]:
+    def _read_raw() -> Dict[str, Any] | None:
         try:
             row = repo._conn().execute(
                 "SELECT value FROM preferences WHERE key = ?", ("app_settings",)
@@ -397,7 +397,7 @@ _SEARCH_KEY_FIELDS: List[Tuple[str, str]] = [
 ]
 
 
-def wrap_search_config_json(raw: Optional[str]) -> Optional[str]:
+def wrap_search_config_json(raw: str | None) -> str | None:
     """字符串层包装(preferences "search_config" 写侧): 明文 key 字段就地加密。
 
     与 wrap_settings_json 同法: 解析失败 fail-open 原样返回; 已是 ``enc:``
@@ -425,7 +425,7 @@ def wrap_search_config_json(raw: Optional[str]) -> Optional[str]:
     return json.dumps(data, ensure_ascii=False)
 
 
-def unwrap_search_config_json(raw: Optional[str]) -> Optional[str]:
+def unwrap_search_config_json(raw: str | None) -> str | None:
     """字符串层解包(preferences "search_config" 读侧): key 字段就地解密。
 
     单字段解密失败置空串(search_config._unwrap_secret 按未配置处理, 不投毒)。

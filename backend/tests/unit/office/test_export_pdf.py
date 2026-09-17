@@ -457,3 +457,20 @@ def test_export_pdf_result_rejects_unknown_method() -> None:
 
     with pytest.raises(pydantic.ValidationError):
         ExportPdfResult(ok=True, method="ghostscript")  # type: ignore[arg-type]
+
+
+def test_export_to_pdf_serializes_through_global_lock(
+    monkeypatch: pytest.MonkeyPatch, ws: Path
+) -> None:
+    """并发导出经 _EXPORT_LOCK 串行——inner 执行期间锁必须处于持有态。"""
+    _patch_soffice(monkeypatch, None)
+    lock_state: Dict[str, bool] = {}
+
+    def fake_inner(source: Path, workspace: Path, *, timeout_seconds: int) -> ExportPdfResult:
+        lock_state["held"] = export_pdf._EXPORT_LOCK.locked()
+        return ExportPdfResult(ok=False, error="short-circuit")
+
+    monkeypatch.setattr(export_pdf, "_export_to_pdf_inner", fake_inner)
+    result = export_to_pdf(_make_source(ws), ws)
+    assert result.ok is False
+    assert lock_state["held"] is True

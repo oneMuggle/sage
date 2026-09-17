@@ -250,18 +250,13 @@ def _sheet_numeric_stats(rows) -> List[str]:
     return lines
 
 
-def _digest_excel(file_path: str, workspace: str) -> str:
+def _format_excel_digest(sheets) -> str:
     """Return per-sheet digest: 行列数 + 表头 + 数值列统计 + 自适应行数 TSV。
 
     行数不再硬编码 5: 在 MAX_ATTACHMENT_DIGEST_BYTES 预算内能放多少数据行
     就放多少, 放不下的行数以 `[…已截断，共 N 行]` 标注。
+    P1-B: xlsx 与 csv 摘要共用本格式化器（sheet 形状一致）。
     """
-    result = read_xlsx(
-        file_path=Path(file_path),
-        workspace_path=workspace,
-        generated_filename=os.path.basename(file_path),
-    )
-    sheets = result.sheets
     names = [s.name for s in sheets]
     overview = f"sheets: {', '.join(names)}"
     lines: List[str] = [overview]
@@ -286,6 +281,27 @@ def _digest_excel(file_path: str, workspace: str) -> str:
         if shown < len(data_rows):
             lines.append(f"[…已截断，共 {len(data_rows) - shown} 行]")
     return "\n".join(lines)
+
+
+def _digest_excel(file_path: str, workspace: str) -> str:
+    result = read_xlsx(
+        file_path=Path(file_path),
+        workspace_path=workspace,
+        generated_filename=os.path.basename(file_path),
+    )
+    return _format_excel_digest(result.sheets)
+
+
+def _digest_csv(file_path: str, workspace: str) -> str:
+    """P1-B: CSV 摘要 —— read_csv 与 read_xlsx 同形状，复用格式化器。"""
+    from backend.office.excel import read_csv
+
+    result = read_csv(
+        file_path=Path(file_path),
+        workspace_path=workspace,
+        generated_filename=os.path.basename(file_path),
+    )
+    return _format_excel_digest(result.sheets)
 
 
 def _digest_pdf(file_path: str, workspace: str) -> str:
@@ -320,7 +336,7 @@ logger = logging.getLogger(__name__)
 
 _MENTION_RE = re.compile(r"(?:^|\s)@([^\s]+?)(?=\s|$)")
 
-OFFICE_EXTS: FrozenSet[str] = frozenset({".pptx", ".docx", ".xlsx", ".pdf"})
+OFFICE_EXTS: FrozenSet[str] = frozenset({".pptx", ".docx", ".xlsx", ".csv", ".pdf"})
 MAX_ATTACHMENT_FILE_SIZE_BYTES = 50 * 1024 * 1024
 
 # 单文件 digest 注入 LLM 前的软字节预算 (UTF-8 计)。与上面的磁盘 50MB 硬上限
@@ -335,6 +351,7 @@ _EXT_TO_KIND = {
     ".pptx": "office-ppt",
     ".docx": "office-word",
     ".xlsx": "office-excel",
+    ".csv": "office-excel",
     ".pdf": "office-pdf",
 }
 
@@ -418,6 +435,8 @@ def _digest_for_kind(kind: str, file_path: str, workspace: str) -> str:
         return _digest_word(file_path, workspace)
     if kind == "office-pdf":
         return _digest_pdf(file_path, workspace)
+    if kind == "office-excel" and file_path.lower().endswith(".csv"):
+        return _digest_csv(file_path, workspace)
     return _digest_excel(file_path, workspace)
 
 

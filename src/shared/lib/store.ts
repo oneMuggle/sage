@@ -18,6 +18,7 @@ export interface Session {
   last_message_at: number | null;
   message_count: number;
   is_pinned: boolean;
+  is_archived?: boolean;
   metadata?: Record<string, unknown>;
   /** M4: 分叉源会话 id（非分叉会话为 null），侧栏 fork 徽标依赖此字段 */
   fork_root?: string | null;
@@ -65,12 +66,15 @@ export interface Message {
   created_at: number;
   model?: string;
   provider?: string;
-  tool_calls?: ToolCall[];
+  /** wire 上是 JSON 字符串 (session_repo 原样存取), 流式路径是数组 */
+  tool_calls?: ToolCall[] | string | null;
   tool_call_id?: string;
   memory_applied?: number;
   /** R17-E: 记忆召回明细（memory_used 流事件携带，可展开查看） */
   memory_refs?: { id: string; memory_type: string; preview: string }[];
-  reasoning_content?: string; // LLM 思考/推理过程
+  reasoning_content?: string | null; // LLM 思考/推理过程（2026-09 step-by-step: 允许 null 表示该步无 reasoning 累积）
+  /** 2026-09 step-by-step: 多步 ReAct 中每条 assistant 消息的步序号。null=旧消息/单步。 */
+  step_index?: number | null;
 }
 
 // 状态接口
@@ -105,18 +109,34 @@ interface StoreState {
 const messageLoadGenerations = new Map<string, number>();
 let latestMessageLoadToken = 0;
 
-function mergeLoadedMessages(
+export function mergeLoadedMessages(
   loadedMessages: Message[],
   localMessages: Message[],
   sessionId: string,
 ): Message[] {
   const sessionMessages = loadedMessages.filter((message) => message.session_id === sessionId);
   const loadedIds = new Set(sessionMessages.map((message) => message.id));
+  // 2026-09 修复 (计数感知去重): 流自然结束后, 后端已用服务端 id 持久化本轮,
+  // 而本地乐观副本用前端随机 UUID —— 仅按 id 去重会把两份拼在一起, 最后一轮
+  // 消息重复显示。按 (role, content) 匹配且计数感知: 服务端每有一条同内容
+  // 消息, 只允许"认领"一份本地副本; 服务端确实没有的(如本轮未落库)才保留。
+  const serverKeyCount = new Map<string, number>();
+  for (const m of sessionMessages) {
+    const key = `${m.role}\u0000${m.content}`;
+    serverKeyCount.set(key, (serverKeyCount.get(key) ?? 0) + 1);
+  }
   const mergedMessages = [
     ...sessionMessages,
-    ...localMessages.filter(
-      (message) => message.session_id === sessionId && !loadedIds.has(message.id),
-    ),
+    ...localMessages.filter((message) => {
+      if (message.session_id !== sessionId || loadedIds.has(message.id)) return false;
+      const key = `${message.role}\u0000${message.content}`;
+      const remaining = serverKeyCount.get(key) ?? 0;
+      if (remaining > 0) {
+        serverKeyCount.set(key, remaining - 1);
+        return false;
+      }
+      return true;
+    }),
   ];
 
   return mergedMessages;
@@ -210,11 +230,17 @@ export const useStore = create<StoreState>((set, _get) => ({
     }
   },
 
-  // 添加消息
+  // 添加消息。
+  // 会话守卫 (2026-09 修复): 只把属于当前会话的消息追加进可见列表。
+  // messages 是单数组而非按会话分桶, 后台会话 (U5 忙时队列 flush /
+  // 并行流 / reattach) 的乐观消息若无条件 append, 会实时"长"进用户
+  // 正在看的会话; 这些消息由后端持久化, 切回时经 loadMessages 正常装载。
   addMessage: (message) => {
-    set((state) => ({
-      messages: [...state.messages, message],
-    }));
+    set((state) =>
+      state.currentSessionId != null && message.session_id !== state.currentSessionId
+        ? state
+        : { messages: [...state.messages, message] },
+    );
   },
 
   // PR-6: 按 id 替换 (流式 chat 把占位 assistant 写回最终 content)

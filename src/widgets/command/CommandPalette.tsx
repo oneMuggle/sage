@@ -361,6 +361,26 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                     </div>
                   </div>
                 </Command.Item>
+                {/* P13: 全部最近 wiki 项目（逗号分隔多根，跨项目合并搜索） */}
+                {wikiRecents.length > 1 && (
+                  <Command.Item
+                    value="knowledge-scope-all"
+                    onSelect={() =>
+                      handleSetKnowledgeScope(wikiRecents.map((r) => r.path).join(','))
+                    }
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-radius-sm text-sm text-text cursor-default select-none aria-selected:bg-primary/10 aria-selected:text-primary data-[disabled]:opacity-50 transition-colors"
+                  >
+                    <span className="w-4 shrink-0 text-center text-xs text-primary">
+                      {knowledgeScope === wikiRecents.map((r) => r.path).join(',') && '✓'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate">全部最近 wiki 项目</div>
+                      <div className="text-xs text-text-muted truncate">
+                        跨项目合并搜索（{wikiRecents.length} 个）
+                      </div>
+                    </div>
+                  </Command.Item>
+                )}
                 {wikiRecents.slice(0, 5).map((recent) => (
                   <Command.Item
                     key={recent.path}

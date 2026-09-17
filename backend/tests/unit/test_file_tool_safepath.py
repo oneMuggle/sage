@@ -79,7 +79,10 @@ def test_read_file_symlink_escape_allowed_asymmetry(tmp_path):
     inside = tmp_path / "link.txt"
     outside = tmp_path.parent / "real.txt"
     outside.write_text("secret", encoding="utf-8")
-    inside.symlink_to(outside)
+    try:
+        inside.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not supported")
     tool = ReadFileTool(policy=_policy_with_root(tmp_path))
 
     result = tool.execute(path=str(inside))

@@ -245,7 +245,7 @@ def _serialize_record(rec: TraceRecord, *, include_prompts: bool) -> str:
     return json.dumps(obj, ensure_ascii=False)
 
 
-def _extract_error_message(body: bytes, status: Optional[int]) -> Optional[str]:
+def _extract_error_message(body: bytes, status: int | None) -> str | None:
     """从 JSON 响应体里抽出 error.message 字段(若有)。
 
     只接受 str 类型的 message;非 str(如嵌套 dict)走 JSON 序列化 + redact_text,

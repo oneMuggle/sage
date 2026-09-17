@@ -343,3 +343,51 @@ describe('CommandPalette 知识范围 (P9)', () => {
     });
   });
 });
+
+describe('CommandPalette 知识范围多根 (P13)', () => {
+  beforeEach(() => {
+    useStore.setState({ sessions: [], currentSessionId: null });
+    mockBackendRequest.mockReset();
+    mockBackendRequest.mockResolvedValue({ sessions: [] });
+    getRecentWikiProjectsMock.mockReset();
+    getRecentWikiProjectsMock.mockResolvedValue([
+      { path: 'C:/work/wikia', name: 'wikia', opened_at: 1, intent: 'open' },
+      { path: 'C:/work/wikib', name: 'wikib', opened_at: 2, intent: 'open' },
+    ]);
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('P13: 两个以上最近项目时渲染"全部最近 wiki 项目"选项', async () => {
+    renderPalette();
+
+    await waitFor(() => {
+      expect(screen.getByText('全部最近 wiki 项目')).toBeInTheDocument();
+      expect(screen.getByText('跨项目合并搜索（2 个）')).toBeInTheDocument();
+    });
+  });
+
+  it('P13: 选择"全部"后持久化逗号拼接范围，搜索请求携带多根参数', async () => {
+    renderPalette();
+
+    await waitFor(() => screen.getByText('全部最近 wiki 项目'));
+    fireEvent.click(screen.getByText('全部最近 wiki 项目'));
+    await waitFor(() => {
+      expect(localStorage.getItem('sage:knowledge-scope:v1')).toBe('C:/work/wikia,C:/work/wikib');
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('输入命令或搜索...'), {
+      target: { value: 'zz' },
+    });
+    await waitFor(() => {
+      expect(mockBackendRequest).toHaveBeenCalledWith({
+        path: expect.stringContaining(
+          'knowledge_project=C%3A%2Fwork%2Fwikia%2CC%3A%2Fwork%2Fwikib',
+        ),
+      });
+    });
+  });
+});

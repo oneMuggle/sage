@@ -22,6 +22,10 @@ export interface UsageBucket {
   /** L8 PR-A: 创建缓存条目的 token (成本略高) */
   cache_creation_tokens: number;
   estimated_cost_usd: number | null;
+  /** Task 5 (2026-09-15): 该桶中有已定价的请求数 (catalog 或 prefix pricing) */
+  known_requests: number;
+  /** Task 5 (2026-09-15): 该桶中成本未知的请求数 (无法估算) */
+  unknown_requests: number;
 }
 
 export interface UsageModelBucket extends UsageBucket {
@@ -36,6 +40,16 @@ export interface UsageSummary {
   cache_hit_rate: number;
   /** L8 PR-A/PR-B: 当前面板时间范围 (today | 7d | 30d | total) */
   range: 'today' | '7d' | '30d' | 'total';
+  /** Task 5 (2026-09-15): 该范围内已知成本的请求总数 */
+  known_requests: number;
+  /** Task 5 (2026-09-15): 该范围内未知成本的请求总数 */
+  unknown_requests: number;
+  /** Task 5 (2026-09-15): 同时存在已知与未知请求 → 前端可标"部分估算" */
+  has_partial_estimates: boolean;
+  /** Task 5 (2026-09-15): today 桶的已知成本请求数 (仅 range=today 有值) */
+  known_requests_today: number;
+  /** Task 5 (2026-09-15): today 桶的未知成本请求数 (仅 range=today 有值) */
+  unknown_requests_today: number;
 }
 
 /** L8 PR-B (2026-09-09): 时间范围联合类型 */
@@ -57,6 +71,12 @@ export interface UsageRequestRow {
   cache_read_tokens: number;
   cache_creation_tokens: number;
   estimated_cost_usd: number | null;
+  /** Task 5: true when estimated_cost_usd is known for this request */
+  known_cost: boolean;
+  /** Task 5: originating model catalog endpoint, if available */
+  endpoint_id: string | null;
+  /** Task 5: whether immutable catalog pricing was captured at request start */
+  has_price_snapshot: boolean;
   created_at_ms: number;
   created_at_iso: string;
 }
@@ -97,6 +117,8 @@ export interface SessionUsage {
   last_prompt_tokens: number | null;
   last_cached_tokens: number | null;
   last_at_ms: number | null;
+  // Task 5: catalog-resolved effective context window for ContextMeter
+  effective_context_window: number | null;
 }
 
 export async function fetchSessionUsage(sessionId: string): Promise<SessionUsage> {

@@ -1,6 +1,6 @@
 # ruff: noqa: UP006, UP007, UP035 — pydantic v1 + Python 3.8 兼容：
 # pydantic v1 resolve_annotations 用 eval() 处理 forward refs，
-# eval 在 Python 3.8 上无法解析 PEP 585 (list[X]) 和 PEP 604 (X | Y)，
+# eval 在 Python 3.8 上无法解析 PEP 585 (List[X]) 和 PEP 604 (X | Y)，
 # 所以本文件保留 typing.List/Optional/Union 写法
 """
 API 路由定义
@@ -24,7 +24,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, Optional, Set, Union
+from typing import Any, Dict, Optional, Sequence, Set, Union
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
@@ -40,6 +40,7 @@ from backend.api.orch_routes import router as orch_routes_router
 from backend.api.settings_models import LegacySettingsPayload, model_dump_compat
 from backend.chat.compaction import (
     compact_messages,
+    estimate_messages_tokens,
     should_compact,
 )
 from backend.chat.executors import resolve_attachments
@@ -72,6 +73,139 @@ from backend.orchestration.chat_dispatcher import (
     _classify_orchestration_mode,
 )
 from backend.orchestration.llm_factory import load_llm_config_for_chat
+
+
+def _resolve_effective_window(  # noqa: PLR0911 — Task 5 priority cascade, each branch is a distinct user-facing mode
+    model_id: Optional[str] = None,
+    max_context: Optional[int] = None,
+    request_endpoint_id: Optional[str] = None,
+    auto_context: Optional[bool] = None,
+) -> Optional[int]:
+    """Task 5: Resolve effective context window from model catalog.
+
+    Priority for ``endpoint_id``: request > persisted settings > None.
+    Behaviour by ``auto_context`` flag (after catalog resolve):
+
+    - ``auto_context=True``  → resolve from catalog; ``max_context``, if
+      set, is applied as a safety upper bound (``min(catalog, max)``).
+      This is the path that lets the UI's ``autoContext`` switch actually
+      turn on catalog-driven window sizing.
+    - ``auto_context=False`` → fixed cap at ``max_context`` (user pinned
+      a value). Catalog caps still apply via effective_window.
+    - ``auto_context=None``  → resolve from catalog (the default for
+      callers that do not yet pass the field), 4096 default cap.
+
+    Returns ``max_context`` if the catalog cannot be resolved, else
+    ``None`` so callers can decide how to fall back.
+    """
+    try:
+        from backend.data.database import get_database
+        from backend.data.settings_canonicalizer import to_camel
+        from backend.data.settings_repo import SettingsRepository
+        from backend.model_catalog.context import effective_window
+        from backend.model_catalog.repository import CatalogRepository
+        from backend.model_catalog.schemas import EndpointKey
+
+        raw = SettingsRepository().get_json("app_settings")
+        if not isinstance(raw, dict):
+            return max_context if max_context else None
+        settings = to_camel(raw)
+        endpoints = settings.get("endpoints") or []
+        if not isinstance(endpoints, list):
+            return max_context if max_context else None
+
+        # Priority: request endpoint_id > persisted settings
+        endpoint_id = None
+        if request_endpoint_id:
+            # Verify the request endpoint_id exists in the endpoints list
+            ep = next(
+                (e for e in endpoints if isinstance(e, dict) and e.get("id") == request_endpoint_id),
+                None,
+            )
+            if ep is not None:
+                endpoint_id = request_endpoint_id
+
+        if not endpoint_id:
+            # Fallback to persisted settings
+            selections = settings.get("modelSelections") or {}
+            chat_sel = selections.get("chatModel") if isinstance(selections, dict) else None
+            if isinstance(chat_sel, dict) and chat_sel.get("endpointId"):
+                ep_id = chat_sel["endpointId"]
+                ep = next(
+                    (e for e in endpoints if isinstance(e, dict) and e.get("id") == ep_id),
+                    None,
+                )
+                if ep is not None:
+                    endpoint_id = ep_id
+
+        if not endpoint_id or not model_id:
+            return max_context if max_context else None
+
+        repo = CatalogRepository(get_database())
+        resolved = repo.resolve(EndpointKey(endpoint_id=endpoint_id, model_id=model_id))
+        # auto_context=True (UI toggle on): catalog-driven window with
+        # max_context as a safety upper bound. This is the only branch
+        # where the UI's autoContext switch actually reaches catalog
+        # resolution — without it, the previous logic made max_context
+        # always win and the toggle was inert.
+        if auto_context is True:
+            # effective_window(automatic=True) ignores ``fixed`` per the
+            # schema contract, so the natural catalog window is returned
+            # first and only then clamped to max_context. 4096 is a
+            # stand-in positive int — its value is discarded.
+            window = effective_window(
+                resolved.limits, automatic=True, fixed=4096,
+            )
+            if max_context:
+                window = min(window, max_context)
+            return window
+        # auto_context=False: user explicitly pinned a value, treat as cap.
+        if auto_context is False and max_context:
+            return effective_window(
+                resolved.limits, automatic=False, fixed=max_context,
+            )
+        # auto_context=None (or False without max_context): resolve from
+        # catalog, 4096 default ceiling.
+        return effective_window(
+            resolved.limits, automatic=True, fixed=4096,
+        )
+    except Exception:
+        return max_context if max_context else None
+
+
+def _check_request_within_window(
+    messages: Sequence[Dict[str, Any]],
+    effective_window: Optional[int],
+) -> None:
+    """Brief line 16: explicit reject when required content overshoots window.
+
+    The history was already truncated to ``max(0, effective_window - reserve)``,
+    so this guard only fires when system / attachments / trailing_system /
+    current user input alone exceed the resolved window (e.g., a 1 MB
+    attachment + a long system prompt against a 4K-window model). Without
+    this check the producer would silently send an over-budget request that
+    the upstream LLM truncates or errors on — this gives the caller a
+    deterministic 400 instead.
+
+    No-op when the catalog has not resolved a window (``effective_window``
+    is None or non-positive) so callers without catalog data keep the legacy
+    behaviour.
+    """
+    if effective_window is None or effective_window <= 0:
+        return
+    total = estimate_messages_tokens(messages)
+    if total > effective_window:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"required content (system + history + attachments + current "
+                f"input) ~{total} tokens exceeds resolved context window "
+                f"({effective_window} tokens); reduce input length, drop "
+                f"attachments, or pick a larger-context model"
+            ),
+        )
+
+
 from backend.orchestration.orch_settings import load_orch_settings
 from backend.scheduler import get_evolution_logs
 from backend.skills.draft_store import get_skill_draft_store
@@ -186,6 +320,14 @@ class ChatRequest(BaseModel):
     model: Optional[str] = None
 
     max_context: Optional[int] = None
+
+    # Task 5 (2026-09-15): auto-context resolution flag.
+    # true = backend resolves effective window from catalog; false = use max_context as fixed cap.
+    auto_context: Optional[bool] = None
+
+    # Task 5 (2026-09-15): endpoint identifier from the request.
+    # Takes priority over persisted settings when resolving context window / usage attribution.
+    endpoint_id: Optional[str] = None
 
     temperature: Optional[float] = None
 
@@ -399,7 +541,7 @@ class InterruptRequest(BaseModel):
     stream_id: Optional[str] = None
 
 
-def interrupt_stream(stream_id: Optional[str]) -> str:
+def interrupt_stream(stream_id: str | None) -> str:
     """中断目标流：主 agent interrupt（+ multi 模式 cancel dispatcher）。
 
     返回命中标识（"stream"/"none"）供端点回传与测试断言。
@@ -457,7 +599,7 @@ def interrupt_run(run_id: str) -> str:
 
 
 def _finalize_orch_run(
-    run_id: Optional[str], status: str, final_summary: Optional[str]
+    run_id: str | None, status: str, final_summary: str | None
 ) -> None:
     """P0-4 (2026-08-20): orch run 生命周期闭环（降级型）。
 
@@ -479,10 +621,10 @@ def _build_orchestration_dispatcher(
     stream_id: str,
     entry_queue: Any,
     run_id: str,
-    llm_config: Optional[Dict[str, Any]],
-    total_tasks: Optional[int],
-    workspace_root: Optional[str],
-    session_id: Optional[str] = None,
+    llm_config: Dict[str, Any] | None,
+    total_tasks: int | None,
+    workspace_root: str | None,
+    session_id: str | None = None,
 ) -> ChatDispatcher:
     """构造 ChatDispatcher；非法 run_id 的 ValueError 重抛为前端可读文案。
 
@@ -533,7 +675,7 @@ _CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 _ALLOWED_IMAGE_MIME_PREFIXES = ("data:image/png", "data:image/jpeg", "data:image/webp", "data:image/gif")
 
 
-def _validate_chat_images(images: List[str]) -> Optional[str]:
+def _validate_chat_images(images: List[str]) -> str | None:
     """校验 base64 data URL 图片列表；返回错误文案或 None（全部合法）。"""
     if len(images) > _CHAT_IMAGE_MAX_COUNT:
         return f"图片数量 {len(images)} 超过上限 {_CHAT_IMAGE_MAX_COUNT}"
@@ -683,7 +825,7 @@ def _persist_compaction(
     return after
 
 
-async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict]) -> None:
+async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) -> None:
     """聊天请求层的自动压缩钩子（M4）。
 
     在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
@@ -698,7 +840,11 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
     统一 try/except：压缩失败只记日志，绝不阻塞聊天。
     """
     message_repo = MessageRepository()
-    messages = message_repo.get_by_session(session_id, limit=100000)
+    # 2026-09 修复: producer 是 async task, 全量历史读是秒级同步 IO,
+    # 直接跑在事件循环上会冻结所有并发流的 NDJSON attach 与 HTTP 路由。
+    messages = await asyncio.to_thread(
+        lambda: message_repo.get_by_session(session_id, limit=100000)
+    )
     if not should_compact(messages):
         return
 
@@ -716,7 +862,9 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
         return
 
     new_messages, removed_count = await compact_messages(messages, llm_complete)
-    after = _persist_compaction(session_id, messages, new_messages, removed_count)
+    after = await asyncio.to_thread(
+        lambda: _persist_compaction(session_id, messages, new_messages, removed_count)
+    )
     logger.info(
         "[M4] session=%s 自动压缩完成: removed=%s after=%s",
         _safe_log_field(session_id),
@@ -725,7 +873,7 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
     )
 
 
-def _auto_checkpoint_if_enabled(session_id: str) -> Optional[str]:
+def _auto_checkpoint_if_enabled(session_id: str) -> str | None:
     """round5 批次 B-2: 发送前自动快照（偏好 "auto_checkpoint" = "1" 时）。
 
     在 run 开始前为会话绑定的工作区打一份 checkpoint，提供"整轮改动
@@ -1084,7 +1232,7 @@ def _get_skill_adapter():
 
 
 def _skill_to_dict(
-    ext: dict, enabled: bool, usage_count: int, pinned: Optional[bool] = None
+    ext: dict, enabled: bool, usage_count: int, pinned: bool | None = None
 ) -> dict:
     """把扩展 SkillSpec dict + 路由层 enabled/usage_count 序列化为响应 dict。
 
@@ -1693,7 +1841,8 @@ async def chat(
                 "api_key": data.api_key,
                 "base_url": data.api_url,
                 "model": data.model or "gpt-3.5-turbo",
-                "temperature": data.temperature or 0.7,
+                # temperature=0 是合法值 (确定性输出), 不能用 or 兜底
+                "temperature": 0.7 if data.temperature is None else data.temperature,
             }
             logger.info(
                 f"[REQ {request_id}] using custom LLM config: model={_safe_log_field(llm_config['model'])}"
@@ -1752,7 +1901,7 @@ def _build_memory_used_event(
     memory_manager: Any,
     query: str,
     session_id: str,
-) -> Optional[Dict[str, Any]]:
+) -> Dict[str, Any] | None:
     """R17-E: 构造 memory_used 流事件（记忆召回展示）。
 
     用 ``MemoryManager.recall`` 取本次消息命中的结构化记忆条目（每类
@@ -1999,7 +2148,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 刻意 new 一个独立实例而非用下方 producer 内的 session_repo 变量 ——
             # 那个变量在数百行之后才绑定，早期失败路径 finally 会 UnboundLocalError。
             try:
-                SessionRepository().update_run_status(data.session_id, "running")
+                await asyncio.to_thread(
+                    SessionRepository().update_run_status, data.session_id, "running"
+                )
             except Exception as status_err:  # noqa: BLE001 — fail-open
                 logger.debug("会话运行态(running)写入失败: %s", status_err)
 
@@ -2027,7 +2178,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     "api_key": data.api_key,
                     "base_url": data.api_url,
                     "model": data.model or "gpt-3.5-turbo",
-                    "temperature": data.temperature or 0.7,
+                    # temperature=0 是合法值 (确定性输出), 不能用 or 兜底
+                    "temperature": 0.7 if data.temperature is None else data.temperature,
                 }
                 # 推理参数:None 时不传,避免污染老 LLM
                 if data.reasoning_effort is not None:
@@ -2041,6 +2193,28 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 fallback_pref = SettingsRepository().get("fallback_model")
                 if fallback_pref and fallback_pref != (data.model or ""):
                     llm_config["fallback_model"] = fallback_pref
+                # Task 5: resolve endpoint_id for usage attribution
+                # Priority: request data.endpoint_id > persisted settings
+                if data.endpoint_id:
+                    # Request provided endpoint_id directly — use it
+                    llm_config["endpoint_id"] = data.endpoint_id
+                else:
+                    # Fallback to persisted settings
+                    try:
+                        from backend.data.settings_canonicalizer import to_camel
+                        _raw_settings = SettingsRepository().get_json("app_settings")
+                        if isinstance(_raw_settings, dict):
+                            _camel = to_camel(_raw_settings)
+                            _eps = _camel.get("endpoints") or []
+                            _sel = (_camel.get("modelSelections") or {}).get("chatModel") or {}
+                            _ep_id = _sel.get("endpointId")
+                            if _ep_id:
+                                for _ep in _eps:
+                                    if isinstance(_ep, dict) and _ep.get("id") == _ep_id:
+                                        llm_config["endpoint_id"] = _ep_id
+                                        break
+                    except Exception:
+                        pass  # fail-open: endpoint_id is best-effort
                 logger.info(
                     f"[REQ {request_id}] /chat/stream producer using custom LLM: "
                     f"model={_safe_log_field(llm_config['model'])}"
@@ -2111,10 +2285,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     # S1: finally 落库 failed + 原因
                     _producer_error = "今日花费已达限额（spend_limit_exceeded）"
+                    # 2026-09 修复: 失败信封统一为 dict {type, message} ——
+                    # 与 _run_producer 的 LLMError.to_dict() 同构, 前端已双态兼容。
                     await entry.queue.put(
                         {
                             "state": "failed",
-                            "error": "spend_limit_exceeded",
+                            "error": {
+                                "type": "spend_limit_exceeded",
+                                "message": _producer_error,
+                            },
                         }
                     )
                     return
@@ -2700,20 +2879,26 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 消息尚未落盘(落盘在下方),历史天然不含本轮消息。历史加载失败时
             # 降级为无历史的旧行为,绝不阻断聊天。
             try:
-                history_rows = MessageRepository().get_by_session(
-                    data.session_id, limit=100000
+                history_rows = await asyncio.to_thread(
+                    lambda: MessageRepository().get_by_session(
+                        data.session_id, limit=100000
+                    )
                 )
             except Exception as hist_err:
                 logger.warning(
                     f"[REQ {request_id}] 历史消息加载失败(降级为无历史): {hist_err}"
                 )
                 history_rows = []
-            # L9-lite (批次 C-3): 历史预算感知模型窗口 —— 前端上报的
-            # max_context 有效时, 历史预算 = 窗口 - 16k 预留(system/工具
-            # schema/回复), 下限 4k; 否则用默认推导(history_token_budget)。
-            l9_budget = history_token_budget()
-            if data.max_context is not None and data.max_context >= 20000:
-                l9_budget = max(4000, int(data.max_context) - 16384)
+            # Task 5 (2026-09-15): catalog-based context budget.
+            # Resolve effective window from model catalog, then compute budget
+            # as window - reserve. Old >=20000 gate removed.
+            effective_window = _resolve_effective_window(
+                model_id=data.model,
+                max_context=data.max_context,
+                request_endpoint_id=data.endpoint_id,
+                auto_context=data.auto_context,
+            )
+            l9_budget = history_token_budget(effective_window=effective_window)
             messages, omitted_history = build_request_messages(
                 system_content=system_content,
                 user_text=data.message,
@@ -2731,7 +2916,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.info(
                     "[REQ %s] 历史超过预算(%s tokens),已省略最早 %s 条",
                     request_id,
-                    history_token_budget(),
+                    l9_budget,
                     omitted_history,
                 )
 
@@ -2748,6 +2933,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         ],
                     ],
                 }
+
+            # Task 5 (round 2): explicit reject when the assembled request
+            # exceeds the catalog-resolved window. History was already
+            # truncated to ``l9_budget`` (= effective_window - reserve), so
+            # this only fires when system / attachments / trailing_system /
+            # current user input alone overshoot the reserve. Brief line 16
+            # requires this guard; without it we silently send an over-budget
+            # request the upstream LLM truncates or errors on.
+            _check_request_within_window(messages, effective_window)
 
             # PR-7: 流式 chat 持久化。run_loop() 自身不写库(保持通用 ReAct
             # 迭代器纯净),由 producer 整合层负责落 user+assistant 消息 + 更新
@@ -2780,10 +2974,21 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 内容落盘（DONE 才落盘的旧语义会留下无回复的悬空 user 消息，
             # 已渲染内容重载即丢）。
             streamed_partial_parts: List[str] = []
+            # 2026-09 step-by-step: 当前迭代的 tool_calls 累积,STEP_DONE 时落盘并重置
+            accumulated_tool_calls: list = []
 
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
             done_event = None
+
+            # 2026-09 step-by-step: 本次 run 已落盘为 assistant 行的中间 step 数
+            # (STEP_DONE 触发,不含最终 DONE 行)。message_count 增量 =
+            # 1 (user) + steps_completed (中间 step) + 1 (最终 done)。
+            steps_completed: int = 0
+            # 2026-09 step-by-step: 追踪最近一次 agent 事件 — RT7 中断落盘 partial
+            # 行时,partial 内容是"当前 step 的累加器",step_index 需对齐这次事件的
+            # iteration 范围。
+            last_evt = None
 
             # P0-2 (2026-08-20): registration is created immediately after agent.
             # Keep the same entry and only refresh late-bound fields here.
@@ -2803,6 +3008,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             async for evt in agent.run_loop(
                 messages, llm_config=llm_config, session_id=data.session_id
             ):
+                # 2026-09 step-by-step: 追踪最近一次事件 → RT7 partial 落盘时取
+                # step_index 用。中断发生在 for 循环中,loop 变量 evt 仍存最后一次值,
+                # 但显式存到 last_evt 更稳。
+                last_evt = evt
                 # L2 真流式: run_loop 流式 THINKING 产出的内容增量直接转发
                 # (事件结构与旧 fake stream 的 content_delta 完全一致,前端无感)。
                 if evt.state.value == "content_delta":
@@ -2830,6 +3039,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 暂存 DONE 事件，不立即推入队列 —
                     # 待 post-loop 标题生成 + session_updated 事件后再推送，
                     # 保证前端 onDone → loadSessions() 时标题已落盘。
+                    # 2026-09 step-by-step: 显式把 evt.iteration 写回 step_index,
+                    # 前端消费 DONE 事件时也能拿到该步序号(便于流式气泡定位)。
+                    evt.step_index = evt.iteration
                     done_event = evt
                     run_outcome = "completed"
                 elif evt.state.value == "reasoning" and evt.reasoning:
@@ -2866,6 +3078,67 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             "reasoning": done_reasoning,
                         }
                     )
+                # alpha.36 (Bug #4): 累积工具调用请求(ACTING)和结果(OBSERVING),
+                # 持久化时写入 assistant 消息的 tool_calls 字段。
+                elif evt.state.value == "acting" and evt.tool_call:
+                    tc = evt.tool_call
+                    accumulated_tool_calls.append(
+                        {
+                            "id": tc.id,
+                            "name": tc.name,
+                            "args": dict(tc.arguments) if isinstance(tc.arguments, dict) else {},
+                        }
+                    )
+                    await entry.queue.put(evt.to_dict())
+                elif evt.state.value == "observing" and evt.tool_result:
+                    # 把结果回填到最后一条匹配的 tool_call(按 id)
+                    tr = evt.tool_result
+                    for tc in reversed(accumulated_tool_calls):
+                        if tc.get("id") == tr.tool_call_id:
+                            tc["result"] = tr.content
+                            break
+                    await entry.queue.put(evt.to_dict())
+                # 2026-09 step-by-step: 每完成一次 ReAct 迭代(OBSERVING 之后),
+                # agent.py 在该迭代边界 yield STEP_DONE。这里把"当前 step 的累加器"
+                # 快照成一行 assistant 消息,重置累加器准备下一步。最终步骤由 done
+                # 分支单独处理(无 tool_calls,只含 LLM 终稿 content)。
+                elif evt.state.value == "step_done":
+                    try:
+                        step_now = int(time.time() * 1000)
+                        step_content = "".join(streamed_partial_parts)
+                        step_tool_calls_json = (
+                            json.dumps(accumulated_tool_calls, ensure_ascii=False)
+                            if accumulated_tool_calls
+                            else None
+                        )
+                        message_repo.save(
+                            DbMessage(
+                                id=str(uuid.uuid4()),
+                                session_id=data.session_id,
+                                role="assistant",
+                                content=step_content,
+                                reasoning_content=done_reasoning,
+                                tool_calls=step_tool_calls_json,
+                                # step_index=evt.step_index (== evt.iteration,
+                                # agent.py 在并行/串行路径都同步设置)
+                                step_index=evt.step_index,
+                                created_at=step_now,
+                                model=(llm_config.get("model") if llm_config else "local"),
+                            ),
+                        )
+                        steps_completed += 1
+                    except Exception as step_db_err:
+                        logger.warning(
+                            f"[REQ {request_id}] step {evt.step_index} 持久化失败: {step_db_err}"
+                        )
+                    # 重置 per-step 累加器,让下一步的 delta/reasoning/tool_call
+                    # 累积到空 buffer(后续 STEP_DONE 看到的是干净的当前 step)。
+                    accumulated_tool_calls = []
+                    done_reasoning = None
+                    streamed_partial_parts = []
+                    # STEP_DONE 转发到前端,前端据此把当前 streaming 气泡快照成
+                    # completed step + 重置 streaming 准备下一步。
+                    await entry.queue.put(evt.to_dict())
                 else:
                     await entry.queue.put(evt.to_dict())
 
@@ -2882,6 +3155,22 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             role="assistant",
                             content=done_content,
                             reasoning_content=done_reasoning,
+                            # alpha.36 (Bug #4): 持久化工具调用中间信息,
+                            # 切会话再切回时前端 loadMessages 能恢复。
+                            # 2026-09 step-by-step: 最终步骤 LLM 通常不再发工具调用,
+                            # accumulated_tool_calls 已被前序 STEP_DONE 重置,这里
+                            # 落盘通常为 None。仅在 LLM 在终稿同时含 tool_call 的
+                            # 边界 case 下才会有值,语义上仍正确(那就是该步的 tool calls)。
+                            tool_calls=(
+                                json.dumps(accumulated_tool_calls, ensure_ascii=False)
+                                if accumulated_tool_calls
+                                else None
+                            ),
+                            # 2026-09 step-by-step: 最终步骤的 step_index 即
+                            # done_event.iteration (与 evt.iteration 同步)。
+                            step_index=(
+                                done_event.iteration if done_event is not None else 0
+                            ),
                             created_at=assistant_now,
                             model=(llm_config.get("model") if llm_config else "local"),
                         )
@@ -2921,13 +3210,22 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         await _extract_legacy_chat_memory(
                             request_id, data.session_id, data.message, done_content
                         )
+                # win7 分支同款防御 (回流): sess 先初始化为 None。否则
+                # session_repo.get 抛错时 except 吞掉后, 下方标题生成判断行
+                # `if done_event and sess` 触发 UnboundLocalError, 一路冒穿
+                # producer —— 用户在内容已全部生成后收到 state=failed,
+                # DONE 事件/标题/session_updated 全部丢失。
+                sess = None
                 try:
                     sess = session_repo.get(data.session_id)
                     if sess is not None:
                         session_repo.update(
                             data.session_id,
                             last_message_at=assistant_now,
-                            message_count=sess.message_count + 2,
+                            # 2026-09 step-by-step: 多步 run 产生 (steps_completed+1)
+                            # 条 assistant 行 (中间 step + 最终 done) 加 1 条 user 行,
+                            # 共 steps_completed+2 条新增消息。
+                            message_count=sess.message_count + steps_completed + 2,
                         )
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
@@ -2992,6 +3290,21 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 role="assistant",
                                 content=partial_text + "\n\n[已中断]",
                                 reasoning_content=None,
+                                # alpha.36 (Bug #4): 中断时也持久化已累积的工具调用,
+                                # 切会话再切回能看到中断前已发生的工具步骤。
+                                # 2026-09 step-by-step: 累加器已在 STEP_DONE 时重置,
+                                # 这里只含"当前未完成 step"的 tool calls(等价于
+                                # 旧行为的"最后一次 STEP_DONE 后的剩余部分")。
+                                tool_calls=(
+                                    json.dumps(accumulated_tool_calls, ensure_ascii=False)
+                                    if accumulated_tool_calls
+                                    else None
+                                ),
+                                # 2026-09 step-by-step: partial 行归属到当前
+                                # 中断时正在执行的 iteration(== last_evt.iteration)。
+                                step_index=(
+                                    last_evt.iteration if last_evt is not None else 0
+                                ),
                                 created_at=int(time.time() * 1000),
                                 model=(llm_config.get("model") if llm_config else "local"),
                             )
@@ -3027,8 +3340,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         str(_exc_info[1]) if _exc_info and _exc_info[0] else "运行失败"
                     )
             try:
-                SessionRepository().update_run_status(
-                    data.session_id, _terminal_status, _terminal_error
+                await asyncio.to_thread(
+                    SessionRepository().update_run_status,
+                    data.session_id,
+                    _terminal_status,
+                    _terminal_error,
                 )
             except Exception as status_err:  # noqa: BLE001 — fail-open
                 logger.debug("会话运行态(%s)写入失败: %s", _terminal_status, status_err)
@@ -4191,7 +4507,7 @@ def _enrich_memory_records(
 
 
 def _enrich_working_records(
-    messages: List[Dict[str, Any]], session_id: Optional[str] = None
+    messages: List[Dict[str, Any]], session_id: str | None = None
 ) -> List[Dict[str, Any]]:
     """把工作记忆消息序列化成 ``/memory/list`` 的统一记录格式。
 

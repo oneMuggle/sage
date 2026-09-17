@@ -14,7 +14,7 @@ import json
 import logging
 import time
 from collections import defaultdict, deque
-from typing import Deque, Optional
+from typing import Deque, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -42,8 +42,8 @@ _task_repo: Optional[OrchTaskRepository] = None
 def configure(
     snapshot_store: SnapshotStore,
     event_hub: EventHub,
-    context_repo: Optional[OrchestrationContextRepository] = None,
-    task_repo: Optional[OrchTaskRepository] = None,
+    context_repo: OrchestrationContextRepository | None = None,
+    task_repo: OrchTaskRepository | None = None,
 ) -> None:
     """注入运行时依赖（由 backend.main 启动时调用）。"""
     global _snapshot_store, _event_hub, _context_repo, _task_repo
@@ -54,7 +54,7 @@ def configure(
     _steer_attempts.clear()
 
 
-def get_event_hub() -> Optional[EventHub]:
+def get_event_hub() -> EventHub | None:
     """返回启动时装配的 EventHub（live-events P0）。
 
     ChatDispatcher 发布 canonical ``task.step.*`` 事件时惰性取用 ——
@@ -63,7 +63,7 @@ def get_event_hub() -> Optional[EventHub]:
     return _event_hub
 
 
-def get_snapshot_store() -> Optional[SnapshotStore]:
+def get_snapshot_store() -> SnapshotStore | None:
     """返回启动时装配的 SnapshotStore（O4, 2026-09-08）。
 
     producer 在 multi 模式注册 ``observe_subagents`` 工具时取用 ——
@@ -144,7 +144,7 @@ _VALID_APPLY_MODES = {"next_boundary", "new_followup"}
 _VALID_SOURCES = {"user", "parent_agent", "system"}
 _STEER_RATE_LIMIT = 10
 _STEER_RATE_WINDOW_SECONDS = 60.0
-_steer_attempts: dict[tuple[str, str], Deque[float]] = defaultdict(deque)
+_steer_attempts: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
 
 
 @router.post("/{run_id}/tasks/{task_id}/steer")

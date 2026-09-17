@@ -290,16 +290,20 @@ class ExecuteCodeTool(BaseTool):
                         if payload.get("type") == "done":
                             final = payload
         if final is None:
-            return ToolResult(
-                success=False,
-                error={
-                    "error": "子进程异常退出",
-                    "exit_code": exit_code,
-                    "stderr": err_text[-2000:],
-                }
-                if isinstance(err_text, str)
-                else "子进程异常退出",
+            err_text_str = err_text if isinstance(err_text, str) else ""
+            error_payload = (
+                json.dumps(
+                    {
+                        "error": "子进程异常退出",
+                        "exit_code": exit_code,
+                        "stderr": err_text_str[-2000:],
+                    },
+                    ensure_ascii=False,
+                )
+                if err_text_str
+                else "子进程异常退出"
             )
+            return ToolResult(success=False, error=error_payload)
 
         ok = bool(final.get("ok"))
         content: Dict[str, Any] = {

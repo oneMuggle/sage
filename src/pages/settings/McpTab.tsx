@@ -2,17 +2,19 @@
  * Settings 页面 - MCP Tab (M3)
  *
  * Multi-server MCP 管理:状态表(名称/状态徽章/工具数/错误)、启用开关
- * (PATCH)、添加表单(客户端 slug 校验)、删除(内置禁用)、刷新。
+ * (PATCH)、per-tool 禁用开关(r53-B,展开行 + 全量替换 PATCH)、添加表单
+ * (客户端 slug 校验)、删除(内置禁用)、刷新。
  * 数据走 mcpClient → IPC → backend /api/v1/mcp/*。
  */
 import { clsx } from 'clsx';
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import {
   MCP_NAME_REGEX,
   mcpClient,
   type McpServerConfig,
   type McpServerState,
+  type McpServerToolsReport,
   type McpStatusReport,
 } from '../../shared/api/mcpClient';
 import { useI18n } from '../../shared/lib/i18n';
@@ -35,13 +37,24 @@ const STATE_LABEL_KEYS: Record<McpServerState, TranslationKey> = {
 };
 
 interface AddFormState {
+  transport: 'stdio' | 'http';
+  url: string;
+  headers: string;
   name: string;
   command: string;
   args: string;
   required: boolean;
 }
 
-const EMPTY_FORM: AddFormState = { name: '', command: '', args: '', required: false };
+const EMPTY_FORM: AddFormState = {
+  transport: 'stdio',
+  url: '',
+  headers: '',
+  name: '',
+  command: '',
+  args: '',
+  required: false,
+};
 
 export function McpTab() {
   const { t } = useI18n();
@@ -53,6 +66,12 @@ export function McpTab() {
   const [form, setForm] = useState<AddFormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // r53-B: per-tool 开关面板（一次只展开一行；展开即重新拉取保证最新）
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [toolsReport, setToolsReport] = useState<McpServerToolsReport | null>(null);
+  const [toolsLoading, setToolsLoading] = useState(false);
+  const [toolsError, setToolsError] = useState<string | null>(null);
+  const [toolBusy, setToolBusy] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -93,9 +112,60 @@ export function McpTab() {
     }
   };
 
+  // r53-B: 展开/收起工具面板；每次展开都重新拉取（PATCH 后保持一致）
+  const handleExpand = async (name: string): Promise<void> => {
+    if (expanded === name) {
+      setExpanded(null);
+      setToolsReport(null);
+      setToolsError(null);
+      return;
+    }
+    setExpanded(name);
+    setToolsReport(null);
+    setToolsError(null);
+    setToolsLoading(true);
+    try {
+      setToolsReport(await mcpClient.serverTools(name));
+    } catch (e) {
+      setToolsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setToolsLoading(false);
+    }
+  };
+
+  // 勾选 = 启用；取消勾选 = 加入 disabled_tools（全量替换 PATCH）
+  const handleToolToggle = async (server: string, tool: string, enable: boolean): Promise<void> => {
+    if (!toolsReport) return;
+    const current = new Set(toolsReport.disabled_tools);
+    if (enable) current.delete(tool);
+    else current.add(tool);
+    const next = [...current].sort();
+    setToolBusy(tool);
+    setActionError(null);
+    try {
+      await mcpClient.updateServer(server, { disabledTools: next });
+      setToolsReport(await mcpClient.serverTools(server));
+      await refresh();
+    } catch (e) {
+      setToolsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setToolBusy(null);
+    }
+  };
+
   const validateForm = (): string | null => {
     if (!MCP_NAME_REGEX.test(form.name)) return t('settings.mcp.error.name_invalid');
-    if (form.command.trim().length === 0) return t('settings.mcp.error.command_required');
+    if (form.transport === 'http') {
+      try {
+        const url = new URL(form.url);
+        if (!['http:', 'https:'].includes(url.protocol) || !url.hostname)
+          return t('settings.mcp.error.url_invalid');
+      } catch {
+        return t('settings.mcp.error.url_invalid');
+      }
+    }
+    if (form.transport === 'stdio' && form.command.trim().length === 0)
+      return t('settings.mcp.error.command_required');
     return null;
   };
 
@@ -106,16 +176,46 @@ export function McpTab() {
     setAdding(true);
     setActionError(null);
     try {
-      const args = form.args
-        .split(/\s+/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-      await mcpClient.addServer({
-        name: form.name,
-        command: form.command.trim(),
-        args,
-        required: form.required,
-      });
+      if (form.transport === 'http') {
+        let headers: unknown;
+        try {
+          headers = JSON.parse(form.headers.trim() || '{}');
+        } catch {
+          throw new Error(t('settings.mcp.error.headers_invalid'));
+        }
+        if (
+          !headers ||
+          Array.isArray(headers) ||
+          typeof headers !== 'object' ||
+          Object.entries(headers).some(([key, value]) => !key.trim() || typeof value !== 'string')
+        ) {
+          throw new Error(t('settings.mcp.error.headers_invalid'));
+        }
+        await mcpClient.addServer({
+          name: form.name,
+          command: '',
+          args: [],
+          required: form.required,
+          url: form.url.trim(),
+          headers: headers as Record<string, string>,
+        });
+      } else {
+        let args: unknown;
+        try {
+          args = JSON.parse(form.args.trim() || '[]');
+        } catch {
+          throw new Error(t('settings.mcp.error.args_invalid'));
+        }
+        if (!Array.isArray(args) || args.some((arg) => typeof arg !== 'string')) {
+          throw new Error(t('settings.mcp.error.args_invalid'));
+        }
+        await mcpClient.addServer({
+          name: form.name,
+          command: form.command.trim(),
+          args,
+          required: form.required,
+        });
+      }
       setForm(EMPTY_FORM);
       await refresh();
     } catch (e) {
@@ -174,8 +274,11 @@ export function McpTab() {
               {servers.map((srv) => {
                 const entry = stateByKey.get(srv.name);
                 const state: McpServerState = entry?.state ?? 'discovering';
+                const isExpanded = expanded === srv.name;
+                const disabledSet = new Set(toolsReport?.disabled_tools ?? []);
                 return (
-                  <tr key={srv.name} className="border-b border-border">
+                  <Fragment key={srv.name}>
+                  <tr className="border-b border-border">
                     <td className="py-2 text-text font-mono">
                       {srv.name}
                       {srv.required && (
@@ -195,7 +298,22 @@ export function McpTab() {
                         {t(STATE_LABEL_KEYS[state])}
                       </span>
                     </td>
-                    <td className="py-2 text-text">{entry?.tool_count ?? 0}</td>
+                    <td className="py-2">
+                      <button
+                        type="button"
+                        data-testid={`mcp-tools-toggle-${srv.name}`}
+                        onClick={() => void handleExpand(srv.name)}
+                        className={clsx(
+                          'px-1.5 py-0.5 rounded-radius-sm border text-xs',
+                          isExpanded
+                            ? 'border-primary text-text'
+                            : 'border-transparent text-muted hover:text-text hover:border-border',
+                        )}
+                        title={isExpanded ? t('settings.mcp.tools.collapse') : t('settings.mcp.tools.expand')}
+                      >
+                        {entry?.tool_count ?? 0}
+                      </button>
+                    </td>
                     <td className="py-2 text-muted max-w-[240px]">
                       <span className="block truncate" title={entry?.last_error ?? ''}>
                         {entry?.last_error ?? ''}
@@ -223,6 +341,73 @@ export function McpTab() {
                       </button>
                     </td>
                   </tr>
+                  {isExpanded && (
+                    <tr className="border-b border-border">
+                      <td colSpan={6} className="py-2 px-2 bg-faint/5">
+                        <div data-testid={`mcp-tools-panel-${srv.name}`} className="space-y-1.5">
+                          <p className="text-[11px] text-muted">
+                            {t('settings.mcp.tools.hint')}
+                          </p>
+                          {toolsLoading && (
+                            <p className="text-xs text-muted">
+                              {t('settings.mcp.tools.loading')}
+                            </p>
+                          )}
+                          {toolsError && (
+                            <p
+                              role="alert"
+                              data-testid={`mcp-tools-error-${srv.name}`}
+                              className="text-xs text-red-500"
+                            >
+                              {toolsError || t('settings.mcp.tools.error')}
+                            </p>
+                          )}
+                          {!toolsLoading && !toolsError && toolsReport && toolsReport.tools.length === 0 && (
+                            <p className="text-xs text-muted">{t('settings.mcp.tools.none')}</p>
+                          )}
+                          {!toolsLoading &&
+                            !toolsError &&
+                            toolsReport &&
+                            toolsReport.tools.map((tool) => {
+                              const enabled = !disabledSet.has(tool.name);
+                              return (
+                                <label
+                                  key={tool.name}
+                                  className="flex items-start gap-2 py-0.5 cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    data-testid={`mcp-tool-check-${srv.name}-${tool.name}`}
+                                    className="mt-0.5"
+                                    checked={enabled}
+                                    disabled={toolBusy === tool.name}
+                                    onChange={(e) =>
+                                      void handleToolToggle(srv.name, tool.name, e.target.checked)
+                                    }
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="text-xs font-mono text-text">
+                                      {tool.name}
+                                      {!enabled && (
+                                        <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-red-500/15 text-red-500 font-sans">
+                                          {t('settings.mcp.tools.disabled_tag')}
+                                        </span>
+                                      )}
+                                    </span>
+                                    {tool.description && (
+                                      <span className="block text-[11px] text-muted truncate">
+                                        {tool.description}
+                                      </span>
+                                    )}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -234,6 +419,17 @@ export function McpTab() {
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.mcp.add.title')}</h3>
         <div className="grid grid-cols-2 gap-3">
           <label className="text-xs text-muted space-y-1">
+            <span>{t('settings.mcp.add.transport')}</span>
+            <select
+              value={form.transport}
+              onChange={(e) => setForm({ ...form, transport: e.target.value as 'stdio' | 'http' })}
+              className={clsx(inputClass, 'w-full')}
+            >
+              <option value="stdio">stdio</option>
+              <option value="http">Streamable HTTP</option>
+            </select>
+          </label>
+          <label className="text-xs text-muted space-y-1">
             <span>{t('settings.mcp.add.name')}</span>
             <input
               type="text"
@@ -243,26 +439,54 @@ export function McpTab() {
               className={clsx(inputClass, 'w-full')}
             />
           </label>
-          <label className="text-xs text-muted space-y-1">
-            <span>{t('settings.mcp.add.command')}</span>
-            <input
-              type="text"
-              value={form.command}
-              onChange={(e) => setForm({ ...form, command: e.target.value })}
-              placeholder="node"
-              className={clsx(inputClass, 'w-full')}
-            />
-          </label>
-          <label className="text-xs text-muted space-y-1">
-            <span>{t('settings.mcp.add.args')}</span>
-            <input
-              type="text"
-              value={form.args}
-              onChange={(e) => setForm({ ...form, args: e.target.value })}
-              placeholder="/path/to/server.js --flag"
-              className={clsx(inputClass, 'w-full')}
-            />
-          </label>
+          {form.transport === 'stdio' ? (
+            <>
+              <label className="text-xs text-muted space-y-1">
+                <span>{t('settings.mcp.add.command')}</span>
+                <input
+                  type="text"
+                  value={form.command}
+                  onChange={(e) => setForm({ ...form, command: e.target.value })}
+                  placeholder="node"
+                  className={clsx(inputClass, 'w-full')}
+                />
+              </label>
+              <label className="text-xs text-muted space-y-1">
+                <span>{t('settings.mcp.add.args')}</span>
+                <input
+                  type="text"
+                  value={form.args}
+                  onChange={(e) => setForm({ ...form, args: e.target.value })}
+                  placeholder={'["/path with spaces/server.js", "--flag"]'}
+                  className={clsx(inputClass, 'w-full')}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="text-xs text-muted space-y-1">
+                <span>{t('settings.mcp.add.url')}</span>
+                <input
+                  type="url"
+                  value={form.url}
+                  onChange={(e) => setForm({ ...form, url: e.target.value })}
+                  placeholder="https://server.example/mcp"
+                  className={clsx(inputClass, 'w-full')}
+                />
+              </label>
+              <label className="text-xs text-muted space-y-1">
+                <span>{t('settings.mcp.add.headers')}</span>
+                <textarea
+                  value={form.headers}
+                  onChange={(e) => setForm({ ...form, headers: e.target.value })}
+                  placeholder={'{"Authorization":"Bearer ..."}'}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className={clsx(inputClass, 'w-full')}
+                />
+              </label>
+            </>
+          )}
           <label className="text-xs text-muted flex items-center gap-2 self-end pb-1.5">
             <input
               type="checkbox"

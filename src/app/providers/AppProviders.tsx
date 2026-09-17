@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 
+import { FontProvider } from '../../entities/font/useFontSettings';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { ConfirmDialogHost } from '../../shared/ui/ConfirmDialog/ConfirmDialogHost';
 
@@ -33,16 +34,18 @@ export function AppProviders({ children }: AppProvidersProps) {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <SessionWorkspaceProvider>
-          <I18nProvider>
-            <QueryClientProvider>
-              {children}
-              <ToastProvider />
-              {/* R3: confirmDialog() 服务的全局挂载点, 替代阻塞式 window.confirm */}
-              <ConfirmDialogHost />
-            </QueryClientProvider>
-          </I18nProvider>
-        </SessionWorkspaceProvider>
+        <FontProvider>
+          <SessionWorkspaceProvider>
+            <I18nProvider>
+              <QueryClientProvider>
+                {children}
+                <ToastProvider />
+                {/* R3: confirmDialog() 服务的全局挂载点, 替代阻塞式 window.confirm */}
+                <ConfirmDialogHost />
+              </QueryClientProvider>
+            </I18nProvider>
+          </SessionWorkspaceProvider>
+        </FontProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

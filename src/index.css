@@ -16,6 +16,10 @@
 
 /* CSS Variables for Theming */
 :root {
+  --font-ui: Inter, 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+  --font-code: 'JetBrains Mono', monospace;
+  --font-size-ui: 14px;
+  --font-size-code: 13px;
   /* Primary */
   --color-primary: #4f46e5;
   --color-primary-hover: #4338ca;
@@ -289,12 +293,8 @@
 }
 
 body {
-  font-family:
-    'Inter',
-    'Noto Sans SC',
-    system-ui,
-    -apple-system,
-    sans-serif;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-ui);
   background-color: var(--color-bg);
   color: var(--color-text);
   margin: 0;
@@ -454,8 +454,8 @@ body {
 .shiki-code .shiki,
 .shiki-code code {
   background: transparent !important;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
+  font-family: var(--font-code);
+  font-size: var(--font-size-code);
   line-height: 1.5;
 }
 

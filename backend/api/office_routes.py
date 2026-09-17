@@ -17,13 +17,14 @@ startup so other routers aren't affected.
 
 from __future__ import annotations
 
+import base64
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import Database, get_database
 from backend.office import progress as office_progress
@@ -47,6 +48,7 @@ from backend.office.errors import (
     office_error_to_http_status,
 )
 from backend.office.excel import generate_xlsx, read_xlsx
+from backend.office.excel_recalc import ExcelRecalcRequest, ExcelRecalcResult, refresh_formula_cache
 from backend.office.journal.generator import generate_structured
 from backend.office.journal.models import (
     JournalContent,
@@ -60,6 +62,11 @@ from backend.office.journal.persistence import (
     save_spec,
 )
 from backend.office.journal.validator import validate_document
+from backend.office.legacy_import import (
+    LegacyImportRequest,
+    LegacyImportResult,
+    convert_legacy_import,
+)
 from backend.office.models import (
     BibTeXParseRequest,
     BibTeXParseResponse,
@@ -79,6 +86,8 @@ from backend.office.models import (
     OfficeTemplateInstantiateRequest,
     OfficeWordGenerateRequest,
     OfficeWordReadResult,
+    PdfDataRequest,
+    PdfDataResult,
     PdfFormFillRequest,
     PdfFormFillResult,
     PdfFormReadRequest,
@@ -264,7 +273,7 @@ def _persist_read_summary(
     *,
     file_path: Path,
     canonical_workspace: str,
-    original_filename: Optional[str],
+    original_filename: str | None,
 ) -> None:
     """Persist a read result's summary into the office_documents table.
 
@@ -515,6 +524,77 @@ def restore_snapshot_endpoint(doc_id: str, snapshot_id: str) -> OfficeDocumentAc
     return OfficeDocumentActionResponse(ok=True, summary=updated)
 
 
+@router.get("/doc/{doc_id}/snapshots/{snapshot_id}/diff", response_model=DiffPreviewResult)
+def diff_snapshot_endpoint(doc_id: str, snapshot_id: str) -> DiffPreviewResult:
+    """Round B P2: 对比快照与当前版本，返回结构化差异清单。
+
+    快照=before，当前=after —— 「恢复到这份快照会失去/找回什么」一目了
+    然。响应复用 DiffPreviewResult（前端红绿渲染与编辑预览共享）；快照
+    缺失/解析失败折叠为 ``ok=False``（HTTP 200），未知 doc_id 仍走 404。
+    Patch point：``backend.office.snapshot_diff.diff_snapshot``。
+    """
+    conn = _db().get_connection()
+    doc = _require_document(conn, doc_id)
+    from backend.office import snapshot_diff
+
+    return snapshot_diff.diff_snapshot(doc, snapshot_id)
+
+
+class OfficeTemplateThumbnailRequest(BaseModel):
+    """POST /office/templates/thumbnail（Round C P5）。
+
+    builtin 模板传 ``template_id``；workspace 模板传 ``workspace_template``
+    （office/templates/ 下文件名，同 instantiate 的口径）。二者互斥。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    template_id: Optional[str] = None
+    workspace_template: Optional[str] = None
+
+
+@router.post("/templates/thumbnail")
+def template_thumbnail_endpoint(req: OfficeTemplateThumbnailRequest) -> dict:
+    """Round C P5: 模板首页 PNG 缩略图（PDF 管线 + PyMuPDF，磁盘缓存）。
+
+    一切生成失败折叠为 ``ok=False``（HTTP 200）——缩略图是装饰性信息，
+    前端静默降级。Patch point：
+    ``backend.office.template_thumbnail.render_template_thumbnail``。
+    """
+    from backend.office import template_thumbnail
+    from backend.office.template_library import (
+        _BUILTIN_BY_ID,
+        WORKSPACE_TEMPLATES_SUBDIR,
+        builtin_template_path,
+    )
+
+    workspace = Path(req.workspace_path)
+    if req.template_id:
+        spec = _BUILTIN_BY_ID.get(req.template_id)
+        if spec is None:
+            return {"ok": False, "error": f"未知的内置模板: {req.template_id}"}
+        source = builtin_template_path(spec)
+        cache_key = "builtin:" + req.template_id
+    elif req.workspace_template:
+        # 文件名围栏：与 instantiate 同口径（拒绝路径分隔符/父目录）
+        if any(sep in req.workspace_template for sep in ("/", "\\", "..")):
+            return {"ok": False, "error": f"非法模板文件名: {req.workspace_template}"}
+        source = workspace / WORKSPACE_TEMPLATES_SUBDIR / req.workspace_template
+        try:
+            mtime_ns = source.stat().st_mtime_ns
+        except OSError:
+            return {"ok": False, "error": f"模板文件不存在: {req.workspace_template}"}
+        cache_key = f"ws:{req.workspace_template}|{mtime_ns}"
+    else:
+        return {"ok": False, "error": "template_id 与 workspace_template 必须传其一"}
+
+    result = template_thumbnail.render_template_thumbnail(
+        source, workspace, cache_key=cache_key
+    )
+    return result.model_dump(mode="json")
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Generate endpoints (Phase 1.4 step 19, plan §4.1.4)
 # ──────────────────────────────────────────────────────────────────────
@@ -665,6 +745,86 @@ def read_pdf_endpoint(req: PdfReadRequest) -> PdfReadResult:
     return result
 
 
+#: P2-B (office-p2b): docx 原文 base64 上限（docx-preview 原生渲染用，
+#: 与 PDF 原文口径一致）
+MAX_DOCX_DATA_BYTES = 20_000_000
+
+
+@router.post("/word/data", response_model=PdfDataResult)
+def word_data_endpoint(req: PdfDataRequest) -> PdfDataResult:
+    """受管 docx 原文 base64（/office 页 docx-preview 原生渲染用）。
+
+    失败契约同 /pdf/data：预期内失败返回 ``ok=False``，不抛 HTTP 异常。
+    """
+    try:
+        file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+        if file_path.stat().st_size > MAX_DOCX_DATA_BYTES:
+            return PdfDataResult(
+                ok=False, error="文件超过 20MB 预览上限，请在文件管理器中查看"
+            )
+        data = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        return PdfDataResult(
+            ok=True, data_url=f"data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,{data}"
+        )
+    except OfficeError as exc:
+        logger.warning("word/data preview rejected: %s", exc)
+        return PdfDataResult(ok=False, error="文件不可预览（路径无效或超出工作区）")
+    except OSError:
+        logger.warning("word/data preview failed to read: %s", req.file_path)
+        return PdfDataResult(ok=False, error="文件读取失败")
+
+
+#: F3 (office-p0): 原文预览上限 —— 与 chat 产物侧 artifact_reader.MAX_PDF_BYTES
+#: 同口径（过大 PDF base64 化既撑爆响应也拖垮 renderer）。
+MAX_PDF_DATA_BYTES = 20_000_000
+
+
+@router.post("/excel/recalc", response_model=ExcelRecalcResult)
+def excel_recalc_endpoint(req: ExcelRecalcRequest) -> ExcelRecalcResult:
+    """P2-C: 受管 .xlsx 公式缓存重算（soffice 就地刷新，重算前自动快照）。
+
+    失败契约同 export_pdf：永不 raise，预期内失败返回 ``ok=False``。
+    """
+    return refresh_formula_cache(req)
+
+
+@router.post("/import/convert-legacy", response_model=LegacyImportResult)
+def convert_legacy_import_endpoint(req: LegacyImportRequest) -> LegacyImportResult:
+    """P1-C: 旧格式 (.doc/.xls/.ppt) 暂存文件 → 现代格式就地转换。
+
+    源文件必须是 workspace 内的 staging 副本（导入网关先复制、后转换，
+    因此不产生工作区外任意读）。失败契约与 export_pdf 一致：永不 raise。
+    """
+    return convert_legacy_import(req)
+
+
+@router.post("/pdf/data", response_model=PdfDataResult)
+def pdf_data_endpoint(req: PdfDataRequest) -> PdfDataResult:
+    """受管 PDF 原文 base64 预览（/office 页面"原文预览"开关）。
+
+    返回 ``data:application/pdf`` URL，前端 iframe 交给 Chromium 内置
+    viewer 渲染——与聊天产物侧同一条高保真通路。预期内失败（越界 /
+    超限 / 不可读）返回 ``ok=False``，不抛 HTTP 异常，前端回落结构化
+    页卡片视图。路径校验复用 ``_validate_file_in_workspace``（renderer
+    IPC 与任意本地文件读之间的唯一屏障）。
+    """
+    try:
+        file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+        if file_path.stat().st_size > MAX_PDF_DATA_BYTES:
+            return PdfDataResult(
+                ok=False, error="PDF 超过 20MB 预览上限，请在文件管理器中查看"
+            )
+        data = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        return PdfDataResult(ok=True, data_url=f"data:application/pdf;base64,{data}")
+    except OfficeError as exc:
+        # 泛化错误信息防路径泄露（与 pdf.py 的错误口径一致）。
+        logger.warning("pdf/data preview rejected: %s", exc)
+        return PdfDataResult(ok=False, error="文件不可预览（路径无效或超出工作区）")
+    except OSError:
+        logger.warning("pdf/data preview failed to read: %s", req.file_path)
+        return PdfDataResult(ok=False, error="文件读取失败")
+
+
 @router.post("/pdf/generate", response_model=PdfGenerateResult)
 def generate_pdf_endpoint(req: PdfGenerateRequest) -> PdfGenerateResult:
     """Generate a PDF from structured data.
@@ -740,6 +900,42 @@ def export_pdf_endpoint(req: OfficeExportPdfRequest):
     with office_progress.track(req.task_id, "导出 PDF") as prog:
         prog.report("转换 PDF", 30)
         result = export_pdf.export_to_pdf(file_path, Path(req.workspace_path).resolve())
+        prog.report("完成", 95)
+    return result
+
+
+@router.get("/capabilities")
+def get_capabilities_endpoint(force: bool = False):
+    """Round A P6: 探测本机 Office 环境能力（转换器 / 可选依赖）。
+
+    前端 Office 页加载时调用一次，用于能力徽章与安装引导；
+    ``force=true`` 跳过 30s 缓存强制重探（用户点「重新检测」）。
+    Patch point（同 export-pdf 口径）：``backend.office.capabilities``
+    模块对象上的 ``probe_capabilities``。
+    """
+    from backend.office import capabilities
+
+    return capabilities.probe_capabilities(force=force)
+
+
+@router.post("/pdf-preview")
+def pdf_preview_endpoint(req: OfficeExportPdfRequest):
+    """Round A P1: 高保真预览 —— docx/xlsx/pptx → 缓存 PDF → data URL。
+
+    请求体复用 OfficeExportPdfRequest（workspace_path + file_path +
+    可选 task_id）——语义相同：定位工作区内一份托管文档。区别在产物
+    去向：导出写在源文件旁，预览写进 office/.preview-cache/ 并以
+    data URL 返回。失败契约同 export：HTTP 200 + ``ok=False``。
+    Patch point：``backend.office.pdf_preview.render_pdf_preview``。
+    """
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    from backend.office import pdf_preview
+
+    with office_progress.track(req.task_id, "高保真预览") as prog:
+        prog.report("转换 PDF", 30)
+        result = pdf_preview.render_pdf_preview(
+            file_path, Path(req.workspace_path).resolve()
+        )
         prog.report("完成", 95)
     return result
 

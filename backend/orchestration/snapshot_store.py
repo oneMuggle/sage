@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from backend.domain.orch_events import RunEvent, RunSnapshot, TaskSummary
 from backend.orchestration._lazy_lock import LazyLock
@@ -233,7 +233,7 @@ class SnapshotStore:
 
     def get_task_steering_state(
         self, run_id: str, task_id: str
-    ) -> Optional[tuple[str, int]]:
+    ) -> Optional[Tuple[str, int]]:
         """Return task status and revision for a lock-protected steering check."""
         run = self._runs.get(run_id)
         if run is None:

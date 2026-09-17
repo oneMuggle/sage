@@ -15,6 +15,7 @@ import { GatewayCard } from '../../widgets/settings/GatewayCard';
 import { HooksCard } from '../../widgets/settings/HooksCard';
 import { UsagePanel } from '../../widgets/settings/UsagePanel';
 
+import { FontSettingsSection } from './FontSettingsSection';
 import { ThemeSelector } from './ThemeSelector';
 import { SettingRow, Toggle } from './components';
 
@@ -397,6 +398,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">外观</h3>
+        <FontSettingsSection />
         <SettingRow label="流式输出" desc="逐字显示 AI 回复，而非等待全部生成完成">
           <Toggle value={settings.streaming} onChange={(v) => updateSettings({ streaming: v })} />
         </SettingRow>
@@ -415,6 +417,31 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
             placeholder="Asia/Shanghai"
             className="w-48 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary font-mono"
           />
+        </SettingRow>
+        {/* 日志时区 (2026-09-17): 与 IANA 时区分开, 默认 UTC 保持历史行为. */}
+        <SettingRow
+          label="日志时区"
+          desc="日志时间戳时区. UTC (历史默认) | 本地系统时区 | IANA 时区 (如 Asia/Shanghai). 切换立即生效."
+        >
+          <select
+            data-testid="settings-log-timezone-select"
+            value={settings.logTimezone}
+            onChange={async (e) => {
+              const value = e.target.value;
+              await updateSettings({ logTimezone: value });
+              // 通知 Electron main 进程立即更新 logger 时区 + 写盘持久化
+              await window.electronAPI?.setLogTimezone?.(value);
+            }}
+            className="w-48 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary font-mono"
+          >
+            <option value="UTC">UTC (历史默认)</option>
+            <option value="local">本地系统时区</option>
+            <option value="Asia/Shanghai">Asia/Shanghai (+08:00)</option>
+            <option value="Asia/Tokyo">Asia/Tokyo (+09:00)</option>
+            <option value="Europe/London">Europe/London</option>
+            <option value="America/New_York">America/New_York</option>
+            <option value="America/Los_Angeles">America/Los_Angeles</option>
+          </select>
         </SettingRow>
       </section>
       <section>
@@ -523,7 +550,9 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">诊断</h3>
         <DiagnosticsCard />
-        <GatewayCard />
+        <GatewayCard platform="telegram" />
+        <GatewayCard platform="discord" />
+        <GatewayCard platform="slack" />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">高级</h3>

@@ -24,6 +24,8 @@ _RAW_KEYS = {
     "worktreeIsolation": "worktree_isolation",
     "subagentApprovalMode": "subagent_approval_mode",
     "runTokenBudget": "run_token_budget",
+    "runWallClockLimitMinutes": "run_wall_clock_limit_min",
+    "maxRetryOfChains": "max_retry_of_chains",
 }
 
 
@@ -53,6 +55,12 @@ class OrchSettings:
     #: total_tokens 上限）。0 = 关闭（默认，保持现状）。触顶后剩余任务经
     #: run 级取消通道收口，conductor 下一批派发被拒（budget_exceeded）。
     run_token_budget: int = 0
+    #: BU11 (round21): run 级墙钟上限（分钟）。0 = 关闭（默认）。超限时剩余
+    #: 任务经 run 级取消通道收口，归因 wall_clock_exceeded。
+    run_wall_clock_limit_min: int = 0
+    #: RD14 (round22): 每 run 重派（retry_of）上限 —— 防止 conductor 误判
+    #: 时无限链式重派（t3←t2←t1…），token/时长成本失控。超限降级普通任务。
+    max_retry_of_chains: int = 10
 
 
 def load_orch_settings() -> OrchSettings:

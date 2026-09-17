@@ -17,8 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import AsyncIterator
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from sage_core import Message, Role, ToolCall
 
@@ -134,7 +133,7 @@ class HttpxLLMAdapter:
             模型回复的 ``domain.Message``（可能带 ``tool_calls``）。
         """
         raw_messages = [_from_domain_message(m) for m in messages]
-        # LLMClient.tool_choice 签名是 str | None；dict[str, Any] 形式由调用方自行
+        # LLMClient.tool_choice 签名是 str | None；Dict[str, Any] 形式由调用方自行
         # 解析为 provider-specific 形式，adapter 不做猜测。
         tc: Optional[str] = tool_choice if isinstance(tool_choice, str) else None
 

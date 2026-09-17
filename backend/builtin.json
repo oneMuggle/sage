@@ -1,0 +1,155 @@
+{
+  "version": "1.0.0",
+  "source": "builtin",
+  "generated_at": "2026-09-15T00:00:00.000000Z",
+  "description": "Verified model metadata seed. No network access required. Prices from official sources as of date.",
+  "models": [
+    {
+      "provider": "openai",
+      "model_id": "gpt-4o",
+      "native": 128000,
+      "price": {"input_per_million": "2.50", "output_per_million": "10.00"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "openai"
+    },
+    {
+      "provider": "openai",
+      "model_id": "gpt-4o-mini",
+      "native": 128000,
+      "price": {"input_per_million": "0.15", "output_per_million": "0.60"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "openai"
+    },
+    {
+      "provider": "openai",
+      "model_id": "gpt-4-turbo",
+      "native": 128000,
+      "price": {"input_per_million": "10.00", "output_per_million": "30.00"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "openai"
+    },
+    {
+      "provider": "openai",
+      "model_id": "o1-preview",
+      "native": 128000,
+      "price": {"input_per_million": "15.00", "output_per_million": "60.00"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "openai"
+    },
+    {
+      "provider": "openai",
+      "model_id": "o1-mini",
+      "native": 128000,
+      "price": {"input_per_million": "3.00", "output_per_million": "12.00"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "openai"
+    },
+    {
+      "provider": "anthropic",
+      "model_id": "claude-sonnet-4-20250514",
+      "native": 200000,
+      "price": {"input_per_million": "3.00", "output_per_million": "15.00"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "anthropic"
+    },
+    {
+      "provider": "anthropic",
+      "model_id": "claude-3-5-sonnet-20241022",
+      "native": 200000,
+      "price": {"input_per_million": "3.00", "output_per_million": "15.00"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "anthropic"
+    },
+    {
+      "provider": "anthropic",
+      "model_id": "claude-3-5-haiku-20241022",
+      "native": 200000,
+      "price": {"input_per_million": "0.80", "output_per_million": "4.00"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "anthropic"
+    },
+    {
+      "provider": "anthropic",
+      "model_id": "claude-3-opus-20240229",
+      "native": 200000,
+      "price": {"input_per_million": "15.00", "output_per_million": "75.00"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "anthropic"
+    },
+    {
+      "provider": "google",
+      "model_id": "gemini-2.0-flash",
+      "native": 1048576,
+      "price": {"input_per_million": "0.10", "output_per_million": "0.40"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "google"
+    },
+    {
+      "provider": "google",
+      "model_id": "gemini-1.5-pro",
+      "native": 2097152,
+      "price": {"input_per_million": "1.25", "output_per_million": "5.00"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "google"
+    },
+    {
+      "provider": "google",
+      "model_id": "gemini-1.5-flash",
+      "native": 1048576,
+      "price": {"input_per_million": "0.075", "output_per_million": "0.30"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "google"
+    },
+    {
+      "provider": "meta-llama",
+      "model_id": "llama-3.1-405b-instruct",
+      "native": 128000,
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "meta-llama",
+      "model_id": "llama-3.1-70b-instruct",
+      "native": 128000,
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "meta-llama",
+      "model_id": "llama-3.1-8b-instruct",
+      "native": 128000,
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "mistral",
+      "model_id": "mistral-large-2411",
+      "native": 128000,
+      "price": {"input_per_million": "2.00", "output_per_million": "6.00"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "mistral"
+    },
+    {
+      "provider": "mistral",
+      "model_id": "mistral-small-2409",
+      "native": 32000,
+      "price": {"input_per_million": "0.20", "output_per_million": "0.60"},
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "mistral"
+    },
+    {
+      "provider": "qwen",
+      "model_id": "qwen2.5-72b-instruct",
+      "native": 128000,
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "qwen",
+      "model_id": "qwen2.5-7b-instruct",
+      "native": 128000,
+      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    }
+  ]
+}

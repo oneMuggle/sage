@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,7 +33,7 @@ def sample_manifest():
     return UpdateManifest(
         version="1.2.3",
         channel="stable",
-        release_date=datetime(2026, 9, 5, 12, 0, 0, tzinfo=UTC),
+        release_date=datetime(2026, 9, 5, 12, 0, 0, tzinfo=timezone.utc),  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10
         release_notes="## What's New\n- Feature A",
         min_upgradable_version="1.0.0",
         files={

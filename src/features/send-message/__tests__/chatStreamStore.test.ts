@@ -112,12 +112,12 @@ describe('chatStreamStore', () => {
       useChatStreamStore.getState().startStream('sess-B', 'msg-B1', { initialContent: '' });
       useChatStreamStore.getState().appendContent('sess-A', 'msg-A1', 'A 的回答');
       useChatStreamStore.getState().appendContent('sess-B', 'msg-B1', 'B 的回答');
-      expect(
-        selectSessionSlots(useChatStreamStore.getState(), 'sess-A').streaming?.content,
-      ).toBe('A 的回答');
-      expect(
-        selectSessionSlots(useChatStreamStore.getState(), 'sess-B').streaming?.content,
-      ).toBe('B 的回答');
+      expect(selectSessionSlots(useChatStreamStore.getState(), 'sess-A').streaming?.content).toBe(
+        'A 的回答',
+      );
+      expect(selectSessionSlots(useChatStreamStore.getState(), 'sess-B').streaming?.content).toBe(
+        'B 的回答',
+      );
     });
 
     it('taskBoard / todos 按会话独立', () => {
@@ -126,9 +126,9 @@ describe('chatStreamStore', () => {
         plan: [],
         statuses: {},
       });
-      useChatStreamStore.getState().setTodos('sess-B', [
-        { content: 'B 的任务', status: 'pending' },
-      ]);
+      useChatStreamStore
+        .getState()
+        .setTodos('sess-B', [{ content: 'B 的任务', status: 'pending' }]);
       expect(selectSessionSlots(useChatStreamStore.getState(), 'sess-A').taskBoard?.runId).toBe(
         'orch-A',
       );
@@ -208,6 +208,154 @@ describe('chatStreamStore', () => {
       // final 是 done_reasoning 全量 (后端会算 = 段1 + 段2)
       useChatStreamStore.getState().replaceReasoning(SESS, 'msg-1', '段1-内容段2-内容');
       expect(slots().streaming?.reasoning).toBe('段1-内容段2-内容');
+    });
+  });
+
+  // 2026-09 step-by-step: 每个 ReAct 迭代快照为独立气泡
+  describe('step-by-step (completedSteps + addCompletedStep + finalizeStep)', () => {
+    it('startStream 重置 completedSteps = []', () => {
+      // 先制造一些历史
+      useChatStreamStore.getState().startStream(SESS, 'msg-1', { initialContent: '' });
+      useChatStreamStore.getState().addCompletedStep(
+        SESS,
+        'msg-1',
+        // @ts-expect-error -- 测试用 minimal Message 形状
+        { id: 'msg-1', role: 'assistant', content: 'snapshot' },
+      );
+      expect(slots().completedSteps).toHaveLength(1);
+
+      // 新一轮 run
+      useChatStreamStore.getState().startStream(SESS, 'msg-2', { initialContent: '' });
+      expect(slots().completedSteps).toEqual([]);
+      expect(slots().streaming?.messageId).toBe('msg-2');
+    });
+
+    it('addCompletedStep 推入 messageId 匹配的快照', () => {
+      useChatStreamStore.getState().startStream(SESS, 'msg-1', { initialContent: '' });
+      useChatStreamStore.getState().appendContent(SESS, 'msg-1', '本步回答');
+      const snapshot = {
+        id: 'msg-1',
+        session_id: SESS,
+        role: 'assistant' as const,
+        content: '本步回答',
+        created_at: Date.now(),
+        step_index: 0,
+      };
+      useChatStreamStore.getState().addCompletedStep(SESS, 'msg-1', snapshot);
+      expect(slots().completedSteps).toHaveLength(1);
+      expect(slots().completedSteps[0]).toEqual(snapshot);
+    });
+
+    it('addCompletedStep 在 messageId 不匹配时 noop（防止跨流污染）', () => {
+      useChatStreamStore.getState().startStream(SESS, 'msg-A', { initialContent: '' });
+      useChatStreamStore.getState().addCompletedStep(
+        SESS,
+        'msg-OTHER',
+        // @ts-expect-error -- 测试用 minimal Message 形状
+        { id: 'msg-OTHER', role: 'assistant', content: 'x' },
+      );
+      expect(slots().completedSteps).toEqual([]);
+    });
+
+    it('finalizeStep 切换 streaming.messageId + 重置 content/reasoning/toolCalls', () => {
+      useChatStreamStore.getState().startStream(SESS, 'msg-1', { initialContent: 'A' });
+      useChatStreamStore.getState().appendContent(SESS, 'msg-1', '回答内容');
+      useChatStreamStore.getState().appendReasoning(SESS, 'msg-1', '思考过程');
+      useChatStreamStore.getState().appendOrUpdateToolCall(SESS, {
+        id: 'tc-1',
+        name: 'bash',
+        args: {},
+      });
+      expect(slots().streaming?.content).toBe('A回答内容');
+
+      useChatStreamStore.getState().finalizeStep(SESS, 'msg-1', 'msg-2');
+      // streaming.messageId 已切换
+      expect(slots().streaming?.messageId).toBe('msg-2');
+      // content 重置为占位（让 UI 知道下一步开始）
+      expect(slots().streaming?.content).toBe('🤔 思考中…');
+      // reasoning 清空
+      expect(slots().streaming?.reasoning).toBe('');
+      // toolCalls 清空
+      expect(slots().streamingToolCalls).toEqual([]);
+    });
+
+    it('finalizeStep 在 oldMessageId 不匹配时 noop', () => {
+      useChatStreamStore.getState().startStream(SESS, 'msg-A', { initialContent: 'A 的内容' });
+      useChatStreamStore.getState().finalizeStep(SESS, 'msg-OTHER', 'msg-NEW');
+      // messageId 应保持原值,content 保持原值
+      expect(slots().streaming?.messageId).toBe('msg-A');
+      expect(slots().streaming?.content).toBe('A 的内容');
+    });
+
+    it('多步 run: snapshot1 → finalize → snapshot2 → finalize → 累积两条 completedSteps', () => {
+      useChatStreamStore.getState().startStream(SESS, 'msg-1', { initialContent: '' });
+
+      // Step 1: streaming 累积到 'step1 答案'
+      useChatStreamStore.getState().appendContent(SESS, 'msg-1', 'step1 答案');
+      useChatStreamStore.getState().addCompletedStep(SESS, 'msg-1', {
+        id: 'msg-1',
+        session_id: SESS,
+        role: 'assistant',
+        content: 'step1 答案',
+        created_at: Date.now(),
+        step_index: 0,
+      });
+      useChatStreamStore.getState().finalizeStep(SESS, 'msg-1', 'msg-2');
+
+      // Step 2: 新 streaming.messageId 是 msg-2
+      expect(slots().streaming?.messageId).toBe('msg-2');
+      expect(slots().streaming?.content).toBe('🤔 思考中…');
+      expect(slots().completedSteps).toHaveLength(1);
+
+      useChatStreamStore.getState().appendContent(SESS, 'msg-2', 'step2 答案');
+      useChatStreamStore.getState().addCompletedStep(SESS, 'msg-2', {
+        id: 'msg-2',
+        session_id: SESS,
+        role: 'assistant',
+        content: 'step2 答案',
+        created_at: Date.now(),
+        step_index: 1,
+      });
+      useChatStreamStore.getState().finalizeStep(SESS, 'msg-2', 'msg-3');
+
+      expect(slots().completedSteps).toHaveLength(2);
+      expect(slots().completedSteps[0].content).toBe('step1 答案');
+      expect(slots().completedSteps[1].content).toBe('step2 答案');
+      expect(slots().completedSteps[0].step_index).toBe(0);
+      expect(slots().completedSteps[1].step_index).toBe(1);
+      expect(slots().streaming?.messageId).toBe('msg-3');
+    });
+
+    it('resetAll 清掉 completedSteps', () => {
+      useChatStreamStore.getState().startStream(SESS, 'msg-1', { initialContent: '' });
+      useChatStreamStore.getState().addCompletedStep(SESS, 'msg-1', {
+        id: 'msg-1',
+        session_id: SESS,
+        role: 'assistant',
+        content: 'snapshot',
+        created_at: Date.now(),
+      });
+      expect(slots().completedSteps).toHaveLength(1);
+      useChatStreamStore.getState().resetAll();
+      expect(useChatStreamStore.getState().sessions[SESS]).toBeUndefined();
+    });
+
+    it('不同会话的 completedSteps 互不覆盖 (S2 键控)', () => {
+      useChatStreamStore.getState().startStream('sess-A', 'msg-A1', { initialContent: '' });
+      useChatStreamStore.getState().startStream('sess-B', 'msg-B1', { initialContent: '' });
+      useChatStreamStore.getState().addCompletedStep('sess-A', 'msg-A1', {
+        id: 'msg-A1',
+        session_id: 'sess-A',
+        role: 'assistant',
+        content: 'A snapshot',
+        created_at: Date.now(),
+      });
+      expect(
+        selectSessionSlots(useChatStreamStore.getState(), 'sess-A').completedSteps,
+      ).toHaveLength(1);
+      expect(selectSessionSlots(useChatStreamStore.getState(), 'sess-B').completedSteps).toEqual(
+        [],
+      );
     });
   });
 });

@@ -120,12 +120,21 @@ export interface AppSettings {
   endpoints: EndpointConfig[];
   modelSelections: ModelSelections;
   maxContext: number;
+  // Task 5 (2026-09-15): auto context window from catalog resolution.
+  // false = use maxContext as manual fixed value; true = resolve from catalog.
+  autoContext: boolean;
   temperature: number;
 
   // Task 1 (2026-08-23): IANA 时区 — 用户报告时区与本地不一致时排查用.
   // 默认 'Asia/Shanghai' (与后端 settings_canonicalizer.DEFAULT_TIMEZONE 对齐).
   // 后端 zoneinfo 校验, 非法值 → 422.
   timezone: string;
+
+  // 日志时区 (2026-09-17): 控制日志时间戳使用的时区.
+  // 'UTC' = 使用 UTC 时间 (默认, 历史行为)
+  // 'local' = 使用系统本地时区
+  // IANA 时区字符串 = 使用指定时区 (如 'Asia/Shanghai')
+  logTimezone: string;
 
   // Wiki
   wiki: WikiSettings;
@@ -195,12 +204,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
   endpoints: [],
   modelSelections: DEFAULT_MODEL_SELECTIONS,
   maxContext: 4096,
+  autoContext: false,
   temperature: 0.7,
 
   // Task 1 (2026-08-23): 时区默认 'Asia/Shanghai' — 与后端 canonicalizer
   // DEFAULT_TIMEZONE 对齐. 后端 zoneinfo 校验; 前端只 export 默认值, 由
   // mergeWithDefaults 兜底补值.
   timezone: 'Asia/Shanghai',
+
+  // 日志时区默认 'UTC' — 保持历史行为. 用户可在设置页切换为 'local' 或 IANA 时区.
+  logTimezone: 'UTC',
 
   // Wiki
   wiki: {
@@ -286,7 +299,7 @@ function fillSelection(
   const matchingEndpoint = endpoints.find(
     (endpoint) =>
       hasUsableEndpoint(endpoint) &&
-      endpoint.discoveredModels.some((model) => model.id === fallbackModelId),
+      (endpoint.discoveredModels ?? []).some((model) => model.id === fallbackModelId),
   );
   if (matchingEndpoint) {
     return {

@@ -119,16 +119,14 @@ class TestBuildClient:
 
     def test_build_client_end_to_end_request(self):
         """带代理配置的 client 仍能正常发请求（respx 拦截传输层，不真走代理）。"""
-        with (
-            patch("backend.tools.http_factory.load_proxy_config", return_value=dict(_PROXY)),
-            respx.mock(base_url="https://example.com") as mock,
-        ):
-            mock.get("/").mock(return_value=Response(200, text="ok"))
-            client = build_client(timeout=5.0)
-            try:
-                response = client.get("https://example.com/")
-            finally:
-                client.close()
+        with patch("backend.tools.http_factory.load_proxy_config", return_value=dict(_PROXY)):  # noqa: SIM117 — py38 不支持括号多上下文 with
+            with respx.mock(base_url="https://example.com") as mock:
+                mock.get("/").mock(return_value=Response(200, text="ok"))
+                client = build_client(timeout=5.0)
+                try:
+                    response = client.get("https://example.com/")
+                finally:
+                    client.close()
         assert response.status_code == 200
 
 

@@ -8,8 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from sage_core import Message, Role
 from sage_core.repositories import LLMPort
@@ -22,7 +21,7 @@ class MockLLMAdapter:
 
     - ``chat``           按顺序消费 ``responses``；耗尽后返回 ``default_content``。
     - ``chat_stream``    把 ``default_content`` 逐字符 yield。
-    - 每次调用都会被记录到 ``calls``（list[dict]），便于后续断言。
+    - 每次调用都会被记录到 ``calls``（List[dict]），便于后续断言。
     - ``reset``          清空调用记录并把 responses 索引归零。
     - ``assert_called_with`` 断言最后一次调用的入参符合预期。
 

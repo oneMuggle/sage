@@ -30,6 +30,7 @@ function usageFixture(overrides: Partial<SessionUsage>): SessionUsage {
     last_prompt_tokens: null,
     last_cached_tokens: null,
     last_at_ms: null,
+    effective_context_window: null,
     ...overrides,
   };
 }

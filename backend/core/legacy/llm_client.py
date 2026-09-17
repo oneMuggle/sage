@@ -11,9 +11,9 @@ import logging
 import os
 import re
 import time
-from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import timezone
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -56,6 +56,10 @@ _CONTEXT_OVERFLOW_MARKERS = (
     "exceeds the maximum",
     "reduce the length",
     "input length exceeds",
+    # LLM 代理(llm_proxy_routes)对上游 4xx 做脱敏后只保留结构化的
+    # detail.type;命中溢出特征串时代理把它标为 "context_overflow"。
+    # 这里认得该标记, 走代理的链路才能触发溢出急救压缩。
+    "context_overflow",
 )
 
 
@@ -204,6 +208,46 @@ class LLMConfig:
     # （如 gpt-4o → gpt-4o-mini）。None = 不降级。仅对可重试类错误
     # （限流/服务端错误/超时/网络）生效,每实例至多降级一次。
     fallback_model: Optional[str] = None
+    # Task 5 (2026-09-15): endpoint identity for usage attribution
+    endpoint_id: Optional[str] = None
+
+
+def _capture_price_snapshot(
+    endpoint_id: Optional[str], model_id: Optional[str]
+) -> Optional[Any]:
+    """Task 5: Capture immutable pricing snapshot from model catalog.
+
+    Returns PriceSnapshot if catalog has pricing for the endpoint+model,
+    else None (fail-open: usage tracking falls back to hardcoded pricing).
+    """
+    if not endpoint_id or not model_id:
+        return None
+    try:
+        from datetime import datetime
+
+        from backend.data.database import get_database
+        from backend.model_catalog.repository import CatalogRepository
+        from backend.model_catalog.schemas import EndpointKey
+        from backend.services.usage_tracker import PriceSnapshot
+
+        repo = CatalogRepository(get_database())
+        resolved = repo.resolve(EndpointKey(endpoint_id=endpoint_id, model_id=model_id))
+        price = resolved.price
+        # Only create snapshot if we have at least one price
+        if price.input_per_million is None and price.output_per_million is None:
+            return None
+        return PriceSnapshot(
+            input_per_million=str(price.input_per_million) if price.input_per_million is not None else None,
+            output_per_million=str(price.output_per_million) if price.output_per_million is not None else None,
+            scope=getattr(price, "currency", "USD") or "USD",
+            revision=0,  # TODO: wire revision from catalog layers
+            source="catalog",
+            currency=getattr(price, "currency", "USD") or "USD",
+            method="basic_io",
+            computed_at=datetime.now(timezone.utc).isoformat(),  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10
+        )
+    except Exception:
+        return None  # fail-open: catalog unavailable
 
 
 class StreamToolCallAggregator:
@@ -488,6 +532,11 @@ class LLMClient:
 
         start_time = time.time()
 
+        # Task 5 (2026-09-15): capture pricing snapshot before request
+        price_snapshot = _capture_price_snapshot(
+            self.config.endpoint_id, self.config.model
+        )
+
         # L3 重试退避: 限流/服务端错误/超时/网络失败按指数退避重试
         # （尊重 retry-after）。请求整体重放安全——非流式,无部分产出。
         max_attempts, base_delay = _retry_settings()
@@ -569,7 +618,9 @@ class LLMClient:
         if msg_data.get("tool_calls"):
             tool_calls = self._parse_tool_calls(msg_data["tool_calls"])
 
-        usage = data.get("usage", {})
+        # 部分网关/内容过滤响应会带 "usage": null — `data.get("usage", {})`
+        # 拿到 None, 下方 usage.get(...) 抛 AttributeError 绕过全部重试分类。
+        usage = data.get("usage") or {}
 
         # ===== M6 USAGE BEGIN: 规范化 usage + 记录到全局 tracker =====
         # tracker 故障永不影响 chat 返回 (fail-open)。
@@ -591,6 +642,8 @@ class LLMClient:
                     usage_dict["completion_tokens"],
                     session_id=self.session_id,
                     cached_tokens=usage_dict["cached_tokens"],
+                    endpoint_id=self.config.endpoint_id,
+                    price_snapshot=price_snapshot,
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking skipped: %s", usage_err)
@@ -643,6 +696,10 @@ class LLMClient:
         # ===== M6 USAGE BEGIN: 流式 usage 捕获 (final chunk 若携带 usage) =====
         stream_model: str = self.config.model
         stream_usage: Optional[Dict[str, Any]] = None
+        # Task 5 (2026-09-15): capture pricing snapshot before stream
+        price_snapshot = _capture_price_snapshot(
+            self.config.endpoint_id, self.config.model
+        )
         # ===== M6 USAGE END =====
 
         try:
@@ -685,6 +742,8 @@ class LLMClient:
                         int(stream_usage.get("completion_tokens") or 0),
                         session_id=self.session_id,
                         cached_tokens=extract_cached_tokens(stream_usage),
+                        endpoint_id=self.config.endpoint_id,
+                        price_snapshot=price_snapshot,
                     )
                 except Exception as usage_err:
                     logger.debug("usage tracking (stream) skipped: %s", usage_err)
@@ -746,6 +805,10 @@ class LLMClient:
         finish_reason: Optional[str] = None
         stream_model: str = self.config.model
         stream_usage: Optional[Dict[str, Any]] = None
+        # Task 5 (2026-09-15): capture pricing snapshot before stream
+        price_snapshot = _capture_price_snapshot(
+            self.config.endpoint_id, self.config.model
+        )
 
         # L3 重试退避（流式版）: 仅在"尚未产出任何增量"时重试——此时重放
         # 安全（调用方没收到过任何事件）;已有增量后失败无法安全重放,按原
@@ -811,17 +874,20 @@ class LLMClient:
                         and self.config.fallback_model
                         and self.config.fallback_model != body.get("model")
                     )
+                    # 已产出增量后失败无法安全重放：调用方（agent.run_loop 的
+                    # _saw_content_delta 契约）已把前一段增量实时下发给用户，
+                    # 换模型从零重放会造成内容重复/拼接错乱 — 无条件终止。
+                    if not nothing_yielded:
+                        raise
                     if (
                         attempt >= max_attempts
                         or llm_err.type not in _RETRYABLE_ERROR_TYPES
-                        or not nothing_yielded
                     ):
                         # D-1 (round5 批次 D): 主模型重试耗尽且未产出任何增量 →
                         # 降级 fallback_model 再来一轮（每实例至多一次）。
-                        if (
-                            not nothing_yielded
-                            or llm_err.type not in _RETRYABLE_ERROR_TYPES
-                        ) and can_fallback:
+                        # 与 chat() 同口径：仅对可重试类型的失败降级；
+                        # 鉴权/参数类错误换模型也无济于事，直接 raise。
+                        if can_fallback and llm_err.type in _RETRYABLE_ERROR_TYPES:
                             fallback_used = True
                             body["model"] = self.config.fallback_model
                             attempt = 0
@@ -882,6 +948,8 @@ class LLMClient:
                     usage_dict["completion_tokens"],
                     session_id=self.session_id,
                     cached_tokens=usage_dict["cached_tokens"],
+                    endpoint_id=self.config.endpoint_id,
+                    price_snapshot=price_snapshot,
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking (stream) skipped: %s", usage_err)

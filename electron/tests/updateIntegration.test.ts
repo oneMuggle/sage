@@ -76,6 +76,8 @@ let mockUserData: string | undefined;
 let mockInstallRoot: string | undefined;
 
 // ─── Mock factories ───────────────────────────────────────────────────────────
+let mockAppVersion = '1.0.0';
+
 vi.mock('electron', () => ({
   app: {
     getPath: (name: string) => {
@@ -85,7 +87,7 @@ vi.mock('electron', () => ({
       }
       throw new Error(`Unknown path: ${name}`);
     },
-    getVersion: () => '1.0.0',
+    getVersion: () => mockAppVersion,
     relaunch: vi.fn(),
     exit: vi.fn(),
   },
@@ -223,6 +225,7 @@ describe('Update System Integration', () => {
   let originalExecPath: string | undefined;
 
   beforeEach(async () => {
+    mockAppVersion = '1.0.0';
     vi.clearAllMocks();
     mockRunPostStartupChecks.mockResolvedValue({ passed: true, details: [] });
 
@@ -514,6 +517,8 @@ describe('Update System Integration', () => {
         details: [{ name: 'backend', passed: false, error: 'unhealthy' }],
       });
 
+      // Model the executable that actually launched, not just optimistic persisted state.
+      mockAppVersion = '2.0.0';
       // onAppStartup: health fails → crashCount 2→3 → threshold reached → rollback
       await updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow);
 

@@ -78,6 +78,16 @@ triggers: []
   references 后重新生成；
 - 迭代直到 `ok=true` 或用户接受。
 
+## 版式补充能力
+
+- 标题层级支持 h1-h5（四级/五级标题编号 1.1.1.1 自动续排）
+- 首页不同页眉页脚（封面页无页眉/不同页脚，first_page_different）
+- 奇偶页页眉页脚（odd_even_pages，书籍排版场景）
+- 横排分节（section_breaks：宽表格页单独横排，其余纵向）
+- 嵌入照片/扫描件 >8MB 时，本机装有 Pillow 会自动压缩到阈值内
+  （`pip install -r backend/requirements-optional.txt`）；未安装则
+  >10MB 的图会被拒绝，请先手工压缩
+
 ## 数据表附表（可选）
 
 论文需要数据附表（问卷统计/实验数据）时，用 `office_create`（doc_type=excel）

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   HashRouter,
   Routes,
@@ -10,6 +10,7 @@ import {
 } from 'react-router-dom';
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
+import { useTheme } from './app/providers/useTheme';
 import { UpdateDialog } from './components/UpdateDialog';
 import { loadCurrentSessionId } from './entities/session/storage';
 import { useSettingsStore } from './features/manage-settings/settingsStore';
@@ -40,6 +41,10 @@ const ScheduledTasks = lazy(() =>
 );
 const Skills = lazy(() => import('./pages/Skills').then((m) => ({ default: m.default })));
 const Help = lazy(() => import('./pages/Help').then((m) => ({ default: m.Help })));
+// Task 6 (2026-09-15): 模型目录管理页面
+const ModelCatalog = lazy(() =>
+  import('./pages/ModelCatalog').then((m) => ({ default: m.default })),
+);
 
 // ChatRoute 内直接调用 hook 形式的 useStore setter 会引入条件调用问题,
 // 用 getState() 命令式写入更直白(与 App useEffect 里的用法一致)。
@@ -133,21 +138,43 @@ function App() {
   // U18 (round4): 快捷键帮助覆盖层（非输入焦点下按 ? 打开）
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
 
-
   // R40: Ctrl+N 新建会话 —— 全局快捷键（仅无 modifier 冲突时触发）
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault();
-        useStore.getState().createSession().then((id) => {
-          useStore.getState().setCurrentSessionId(id);
-          window.location.hash = '#/chat';
-        }).catch(() => {});
+        useStore
+          .getState()
+          .createSession()
+          .then((id) => {
+            useStore.getState().setCurrentSessionId(id);
+            window.location.hash = '#/chat';
+          })
+          .catch(() => {});
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  // R47: Ctrl+Shift+D 切换暗色/亮色主题。
+  // 2026-09 修复: 旧实现手写 DOM/localStorage —— 只切 .dark 不设 data-theme
+  // (暗色变量组不生效)、存储 key 写成 sage:theme-mode 而读取方是 sage-theme
+  // (重启后主题回滚)、且绕过 ThemeProvider 使其内部 resolved 变陈旧
+  // (之后用设置页/命令面板切主题方向反转)。改走 useTheme().setMode 单一来源。
+  const { resolved, setMode } = useTheme();
+  const themeToggleRef = useRef({ resolved });
+  themeToggleRef.current = { resolved };
+  useEffect(() => {
+    const onThemeToggle = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        setMode(themeToggleRef.current.resolved === 'dark' ? 'light' : 'dark');
+      }
+    };
+    window.addEventListener('keydown', onThemeToggle);
+    return () => window.removeEventListener('keydown', onThemeToggle);
+  }, [setMode]);
 
   return (
     <HashRouter>
@@ -181,6 +208,8 @@ function App() {
             <Route path="scheduled" element={<ScheduledTasks />} />
             <Route path="orchestration" element={<Orchestration />} />
             <Route path="help" element={<Help />} />
+            {/* Task 6 (2026-09-15): 模型目录管理 */}
+            <Route path="model-catalog" element={<ModelCatalog />} />
           </Route>
         </Routes>
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />

@@ -103,7 +103,7 @@ def archive_prefix_in_transaction(
     for message_id in delete_message_ids:
         src = cursor.execute(
             "SELECT session_id, role, content, model, provider, tool_calls, "
-            "tool_call_id, reasoning_content, created_at "
+            "tool_call_id, reasoning_content, step_index, created_at "
             "FROM messages WHERE id = ?",
             (message_id,),
         ).fetchone()
@@ -112,8 +112,8 @@ def archive_prefix_in_transaction(
         cursor.execute(
             """
             INSERT INTO messages (id, session_id, role, content, model, provider,
-                                  tool_calls, tool_call_id, reasoning_content, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  tool_calls, tool_call_id, reasoning_content, step_index, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 f"msg-{uuid.uuid4().hex[:12]}",
@@ -125,7 +125,8 @@ def archive_prefix_in_transaction(
                 src[5],
                 src[6],
                 src[7],
-                src[8],  # created_at 原样保留 → 归档内 ORDER BY created_at 保序
+                src[8],  # step_index —— 2026-09 step-by-step：保留以便归档视图按步骤渲染
+                src[9],  # created_at 原样保留 → 归档内 ORDER BY created_at 保序
             ),
         )
 

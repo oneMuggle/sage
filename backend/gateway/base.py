@@ -243,10 +243,14 @@ class BaseGateway:
             session_id=session_id,
             role="user",
             content=text,
-            created_at=int(time.time() * 1000) // 1000,
+            created_at=int(time.time() * 1000)  # 2026-09 修复: 全库毫秒口径 (原 //1000 退化为秒, 排序错乱),
         )
         repo.save(user_msg)
-        history = repo.get_by_session(session_id, limit=_MAX_HISTORY)
+        # 2026-09 修复: get_by_session 是 ORDER BY created_at ASC LIMIT ?,
+        # 直接 limit=_MAX_HISTORY 取到的是"最旧 N 条" —— 会话超过 N 条后,
+        # LLM 每轮只能看到开头的历史。取全量再切尾部。
+        all_history = repo.get_by_session(session_id, limit=100000)
+        history = all_history[-_MAX_HISTORY:] if len(all_history) > _MAX_HISTORY else all_history
         kept, omitted = history_budget(history)
         history = kept
 
@@ -277,7 +281,7 @@ class BaseGateway:
             session_id=session_id,
             role="assistant",
             content=reply,
-            created_at=int(time.time() * 1000) // 1000,
+            created_at=int(time.time() * 1000)  # 2026-09 修复: 全库毫秒口径 (原 //1000 退化为秒, 排序错乱),
         )
         repo.save(assistant_msg)
         return reply

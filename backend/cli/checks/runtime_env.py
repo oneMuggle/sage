@@ -27,6 +27,7 @@ import logging
 import os
 import subprocess
 import sys
+from typing import Dict
 
 from backend.cli.doctor import CheckResult, Severity, register
 from backend.tools.runtime_probe import RuntimeProbeTool
@@ -100,7 +101,7 @@ class RuntimeEnvCheck:
 
         content = result.content if isinstance(result.content, dict) else {}
         runtimes = content.get("runtimes") or []
-        by_language: dict[str, int] = {}
+        by_language: Dict[str, int] = {}
         for r in runtimes:
             lang = r.get("language", "unknown")
             by_language[lang] = by_language.get(lang, 0) + 1

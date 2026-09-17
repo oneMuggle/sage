@@ -59,7 +59,9 @@ interface MessageProps {
 function CodeBlock({ language, children }: { language?: string; children: string }) {
   // Inline code fallback
   if (!language && !children.includes('\n')) {
-    return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{children}</code>;
+    return (
+      <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{children}</code>
+    );
   }
 
   return <ShikiCodeBlock language={language}>{children}</ShikiCodeBlock>;
@@ -95,10 +97,12 @@ function renderTextWithLinks(text: string): ReactNode[] {
 function PlainCodeBlock({ className, children }: { className?: string; children: unknown }) {
   const content = String(children).replace(/\n$/, '');
   if (!className && !content.includes('\n')) {
-    return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{content}</code>;
+    return (
+      <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{content}</code>
+    );
   }
   return (
-    <pre className="bg-[#282c34] text-gray-300 p-3 text-xs leading-relaxed overflow-x-auto rounded-md my-2">
+    <pre className="bg-[#282c34] text-gray-300 p-3 text-code font-mono leading-relaxed overflow-x-auto rounded-md my-2">
       <code>{content}</code>
     </pre>
   );
@@ -114,7 +118,7 @@ const markdownComponents = {
     const isInlineCode = !className && !content.includes('\n');
     if (isInlineCode || !lang) {
       return (
-        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{content}</code>
+        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{content}</code>
       );
     }
     // U7': Mermaid 图表渲染（动态加载，失败回退源码展示）
@@ -139,7 +143,9 @@ const markdownComponents = {
       // P2: 长表格纵向限高滚动 + 表头粘性（此前只能横向滚动，数十行的表
       // 把整条消息拉得极长）
       <div className="overflow-x-auto my-3 max-h-80 overflow-y-auto">
-        <table className="min-w-full text-xs border-collapse border border-border">{children}</table>
+        <table className="min-w-full text-xs border-collapse border border-border">
+          {children}
+        </table>
       </div>
     );
   },
@@ -181,7 +187,13 @@ const markdownComponents = {
   },
   a({ href, children }: { href?: string; children?: ReactNode }) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={href}
+        className="text-primary hover:underline"
+      >
         {children}
       </a>
     );
@@ -219,9 +231,7 @@ const MarkdownChunk = memo(
   function MarkdownChunk({ md, plainFences }: { md: string; plainFences?: boolean }) {
     // Components 断言: 映射对象是模块级单例，handler 参数用窄化类型
     // （react-markdown 的 ExtraProps 交叉类型过宽，直接标注反而失配）
-    const components = (
-      plainFences ? liveMarkdownComponents : markdownComponents
-    ) as Components;
+    const components = (plainFences ? liveMarkdownComponents : markdownComponents) as Components;
     return (
       <ReactMarkdown
         remarkPlugins={MD_REMARK_PLUGINS}
@@ -338,12 +348,15 @@ function ToolCallTitle({ name, args }: { name: string; args: Record<string, unkn
 /** 工具调用结果可折叠面板 — 大文件内容默认收起，避免刷屏
  *  阈值：超过 300 字符时自动折叠，用户可手动展开查看
  */
-function ToolCallResult({ result }: { result: string }) {
+function ToolCallResult({ result }: { result: unknown }) {
+  const safeResult = typeof result === 'string'
+    ? result
+    : JSON.stringify(result ?? '');
   const [isExpanded, setIsExpanded] = useState(false);
-  const isLarge = result.length > 300;
+  const isLarge = safeResult.length > 300;
 
   if (!isLarge) {
-    return <span className="text-text-primary break-all">{result}</span>;
+    return <span className="text-text-primary break-all">{safeResult}</span>;
   }
 
   return (
@@ -353,11 +366,11 @@ function ToolCallResult({ result }: { result: string }) {
         className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
       >
         {isExpanded ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-        <span>{isExpanded ? '收起' : `展开 (${result.length} 字符)`}</span>
+        <span>{isExpanded ? '收起' : `展开 (${safeResult.length} 字符)`}</span>
       </button>
       {isExpanded && (
         <pre className="mt-1 p-2 bg-bg-subtle border border-border rounded-radius-sm text-[11px] text-text-secondary overflow-x-auto max-h-80 overflow-y-auto whitespace-pre-wrap break-all font-mono">
-          {result}
+          {safeResult}
         </pre>
       )}
     </div>
@@ -389,6 +402,10 @@ function MessageComponent({
   // (思考/调用工具) 会覆盖占位值，覆盖后自动回退 markdown 渲染。
   const isThinkingPlaceholder =
     isAssistant && isStreaming === true && message.content === THINKING_PLACEHOLDER;
+  // 2026-09 step-by-step: 多步 run 中,中间步骤可能 content="" 但有
+  // tool_calls / reasoning_content。气泡只在有内容时渲染;其他部件
+  // (ThinkingPanel / tool_calls) 始终渲染,确保中间步骤不会"空泡"。
+  const showBubble = isUser || (isAssistant && Boolean((message.content ?? '').trim()));
   // P1 流式分块: 已确定前缀切稳定块（memo 化跳过重解析），只有 live 尾块
   // 随 delta 全量 re-parse；非流式整体单块渲染，DOM 与旧实现一致。
   const displayContent = useMemo(
@@ -407,7 +424,21 @@ function MessageComponent({
     () => isStreaming === true && hasUnclosedFence(displayContent),
     [displayContent, isStreaming],
   );
-  const toolCalls: ToolCall[] = message.tool_calls ?? [];
+  // 2026-09 修复: 历史消息的 tool_calls 从后端原样加载时是 JSON 字符串
+  // (session_repo 不做 parse), 直接 .map 会崩。双态归一化。
+  const toolCalls: ToolCall[] = useMemo(() => {
+    const raw = message.tool_calls;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string' && raw) {
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        return Array.isArray(parsed) ? (parsed as ToolCall[]) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }, [message.tool_calls]);
   // M4: 只有 user/assistant 消息可分叉（system/tool 行没有分叉语义）
   const canFork = Boolean(onFork) && (isUser || isAssistant);
   // U5': 编辑重发只对 user 消息有意义（重写用户输入，而非模型回答）
@@ -542,43 +573,45 @@ function MessageComponent({
           </div>
         )}
 
-        {/* 消息气泡 */}
-        <div
-          data-error={isError ? 'true' : undefined}
-          className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
-            isUser
-              ? 'bg-primary text-text-inverse'
-              : isError
-                ? 'bg-error/10 border border-error/40 text-error'
-                : 'bg-surface border border-border'
-          }`}
-        >
-          {/* Message content with Markdown */}
-          {isAssistant ? (
-            isThinkingPlaceholder ? (
-              <ThinkingShimmer />
-            ) : (
-              <div className="max-w-none max-w-3xl mx-auto w-full">
-                {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
+        {/* 消息气泡 — 2026-09 step-by-step: 空内容时不渲染,避免空白气泡 */}
+        {showBubble && (
+          <div
+            data-error={isError ? 'true' : undefined}
+            className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
+              isUser
+                ? 'bg-primary text-text-inverse'
+                : isError
+                  ? 'bg-error/10 border border-error/40 text-error'
+                  : 'bg-surface border border-border'
+            }`}
+          >
+            {/* Message content with Markdown */}
+            {isAssistant ? (
+              isThinkingPlaceholder ? (
+                <ThinkingShimmer />
+              ) : (
+                <div className="max-w-none max-w-3xl mx-auto w-full">
+                  {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
                     长文不再一行拉满；表格/代码块仍在容器内滚动 */}
-                {chunks.stable.map((md, i) => (
-                  <MarkdownChunk key={i} md={md} />
-                ))}
-                <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
-                {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
-                {isStreaming && (
-                  <span
-                    className="stream-cursor"
-                    aria-hidden="true"
-                    data-testid="stream-cursor"
-                  />
-                )}
-              </div>
-            )
-          ) : (
-            <p className="whitespace-pre-wrap">{renderTextWithLinks(message.content)}</p>
-          )}
-        </div>
+                  {chunks.stable.map((md, i) => (
+                    <MarkdownChunk key={i} md={md} />
+                  ))}
+                  <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
+                  {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
+                  {isStreaming && (
+                    <span
+                      className="stream-cursor"
+                      aria-hidden="true"
+                      data-testid="stream-cursor"
+                    />
+                  )}
+                </div>
+              )
+            ) : (
+              <p className="whitespace-pre-wrap">{renderTextWithLinks(message.content)}</p>
+            )}
+          </div>
+        )}
 
         {/* 底部信息 */}
         <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
@@ -623,7 +656,14 @@ function MessageComponent({
         )}
 
         {/* Action buttons */}
-        {(canCopy || onFeedback || canFork || canEditResend || canDelete || canRegenerate || canQuote || canSaveToMemory) && (
+        {(canCopy ||
+          onFeedback ||
+          canFork ||
+          canEditResend ||
+          canDelete ||
+          canRegenerate ||
+          canQuote ||
+          canSaveToMemory) && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
             {canCopy && (
               <button

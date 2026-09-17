@@ -4,7 +4,7 @@
 
 import { clsx } from 'clsx';
 import { Search } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { ENABLE_UPDATE_PROVIDERS_UI } from '../../shared/updateFeatureFlag';
@@ -34,7 +34,20 @@ type SettingsTab =
   | 'providers';
 
 export function Settings() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  // R45: 记住上次访问的 tab —— localStorage 持久化，重开设置页恢复
+  const [activeTab, setActiveTabState] = useState<SettingsTab>(() => {
+    try {
+      const saved = localStorage.getItem('sage:settings-tab');
+      if (saved) return saved as SettingsTab;
+    } catch { /* ignore */ }
+    return 'general';
+  });
+  const setActiveTab = useCallback((tab: SettingsTab) => {
+    setActiveTabState(tab);
+    try {
+      localStorage.setItem('sage:settings-tab', tab);
+    } catch { /* ignore */ }
+  }, []);
   // R41: 设置搜索 —— 按关键词过滤左侧 tab，纯前端
   const [searchQuery, setSearchQuery] = useState('');
   const { settings, updateSettings, resetSettings } = useSettings();

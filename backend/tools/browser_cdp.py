@@ -129,6 +129,8 @@ class BrowserSession:
     ws_path: str
     #: 持久 profile（登录态跨会话保留）；False = 临时目录，终止时删除
     persistent: bool = False
+    #: 持久 profile 目录名（persistent=True 时记录；AU3 自动刷新按名复用）
+    profile_name: str = ""
 
     def is_alive(self) -> bool:
         return self.process.poll() is None
@@ -199,6 +201,14 @@ def _terminate_session(session: BrowserSession) -> None:
     保留的前提；启动失败路径同样经由本函数，持久目录即使启动失败也不删
     （里面可能有用户既有登录态）。
     """
+    # SN3：先停事件通道（常驻 WS 线程），再杀进程
+    try:
+        from .browser_events import stop_download_tracking
+
+        if session.browser_id:
+            stop_download_tracking(session.browser_id)
+    except Exception:  # noqa: BLE001 — 事件通道清理失败不阻断终止
+        logger.debug("停止下载事件通道失败", exc_info=True)
     try:
         session.process.terminate()
         try:
@@ -358,6 +368,7 @@ def launch_browser(
                     port=port,
                     ws_path=ws_path,
                     persistent=persistent,
+                    profile_name=str(profile_name or "") if persistent else "",
                 )
                 get_browser_manager().register(session)
                 return session
@@ -457,8 +468,11 @@ def cdp_command(
     connection = _CDPConnection(session)
     try:
         # 浏览器级方法不带 sessionId（Target.* 自身即浏览器级；Browser.* 如
-        # setDownloadBehavior 走浏览器作用域，attach 页面反而可能报错）。
-        if method.startswith(("Target.", "Browser.")) and method not in ("Target.attachToTarget",):
+        # setDownloadBehavior、Storage.* 如 setCookies/getCookies（AU5 渲染
+        # 通道 cookie 注入 / 回写）都走浏览器作用域，attach 页面反而可能报错）。
+        if method.startswith(("Target.", "Browser.", "Storage.")) and method not in (
+            "Target.attachToTarget",
+        ):
             return connection.command(method, params)
         resolved_target = ensure_page_target(session, target_id)
         attached = connection.command(

@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/wiki", tags=["wiki"])
 
 
-def _cleanup_temp_paths(*paths: Optional[Path], project_root: Optional[Path] = None) -> None:
+def _cleanup_temp_paths(*paths: Path | None, project_root: Path | None = None) -> None:
     """Best-effort cleanup that preserves the operation's original failure."""
     for path in paths:
         if path is not None:
@@ -361,7 +361,7 @@ async def list_projects(base_path: str = "") -> List[ProjectInfo]:
         base_path: 父目录路径（可选）
 
     Returns:
-        list[ProjectInfo]: 项目列表
+        List[ProjectInfo]: 项目列表
     """
     import uuid
     from datetime import datetime
@@ -525,7 +525,7 @@ async def list_directory(path: str, project_path: str) -> List[dict]:
         project_path: 项目根目录
 
     Returns:
-        list[dict]: 文件节点列表
+        List[dict]: 文件节点列表
 
     Raises:
         HTTPException: 如果目标路径不存在
@@ -913,6 +913,7 @@ async def queue_status(project_path: str):
 
 
 @router.get("/ingest/queue/tasks")
+# noqa py38: FastAPI 在装饰期求值路由签名，``str | None`` 会让 win7/py3.8 导入即崩
 async def queue_tasks(project_path: str, status: Optional[str] = None):
     """获取队列中的任务列表。
 
@@ -1558,6 +1559,7 @@ from backend.storage.recent_projects import (  # noqa: E402
 
 
 class ProjectCheckResponse(BaseModel):
+    # noqa py38: pydantic 在类创建期求值字段注解，win7/py3.8 需 Optional
     exists: bool
     writable: bool
     is_project: bool

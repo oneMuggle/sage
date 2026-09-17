@@ -814,6 +814,17 @@ describe('MCP management IPC routes (M3)', () => {
       timeout_seconds: 45,
     });
     expect(r.body!({ name: 'srv', enabled: true })).toEqual({ enabled: true });
+    // r53-B: disabled_tools 走全量替换（数组原样透传，undefined 时省略）
+    expect(r.body!({ name: 'srv', disabled_tools: ['b', 'a'] })).toEqual({
+      disabled_tools: ['b', 'a'],
+    });
+    expect(r.body!({ name: 'srv', enabled: true })).not.toHaveProperty('disabled_tools');
+  });
+
+  it('mcp_server_tools reads the per-tool payload (r53-B)', () => {
+    const r = COMMAND_ROUTES.mcp_server_tools;
+    expect(r.method).toBe('GET');
+    expect(r.path({ name: 'a b' })).toBe('/api/v1/mcp/servers/a%20b/tools');
   });
 
   it('mcp_server_delete encodes the server name', () => {
@@ -823,6 +834,32 @@ describe('MCP management IPC routes (M3)', () => {
     expect(COMMAND_ROUTES.mcp_server_delete.path({ name: 'a b' })).toBe(
       '/api/v1/mcp/servers/a%20b',
     );
+  });
+});
+
+describe('Attachment RAG IPC routes (r59)', () => {
+  it('attachment_rag_index puts mediaId in path and embed in body', () => {
+    const r = COMMAND_ROUTES.attachment_rag_index;
+    expect(r.method).toBe('POST');
+    expect(r.path({ mediaId: 'm 1' })).toBe('/api/v1/chat/attachments/m%201/index');
+    const embed = { base_url: 'https://e/v1', api_key: 'k', model: 'emb-1', dim: 1536 };
+    expect(r.body!({ mediaId: 'm1', embed, target_chunk_size: 500 })).toEqual({
+      embed,
+      target_chunk_size: 500,
+    });
+    expect(r.body!({ mediaId: 'm1', embed })).toEqual({ embed });
+  });
+
+  it('attachment_rag_search posts to the search route', () => {
+    const r = COMMAND_ROUTES.attachment_rag_search;
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/chat/attachments/search');
+  });
+
+  it('attachment_rag_delete_index encodes the mediaId', () => {
+    const r = COMMAND_ROUTES.attachment_rag_delete_index;
+    expect(r.method).toBe('DELETE');
+    expect(r.path({ mediaId: 'a/b' })).toBe('/api/v1/chat/attachments/a%2Fb/index');
   });
 });
 

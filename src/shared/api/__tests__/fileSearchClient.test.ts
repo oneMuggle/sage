@@ -177,6 +177,49 @@ describe('fileSearchClient.search', () => {
     expect(out[0].docId).toBeNull();
     expect(out[0].sourcePath).toBe('/tmp/outside.pptx');
   });
+
+  // Phase 3.4 (2026-09-17): allowed_paths 搜索结果映射
+  it('maps allowed-file results from backend to FileSearchResult with allowed-file kind', async () => {
+    mockWorkspaceSearch.mockResolvedValue({
+      results: [
+        {
+          name: '[allowed]/report.pdf',
+          kind: 'allowed-file',
+          docType: null,
+          docId: null,
+          sizeBytes: 2048,
+          needsImport: false,
+          sourcePath: '/home/user/docs/report.pdf',
+        },
+      ],
+      total: 1,
+    });
+    const out = await fileSearchClient.search(SESSION_ID, 'report');
+    expect(out[0].kind).toBe('allowed-file');
+    expect(out[0].path).toBe('/home/user/docs/report.pdf');
+    expect(out[0].docId).toBeNull();
+  });
+
+  it('maps allowed-ppt results (office in allowed_paths, needs import)', async () => {
+    mockWorkspaceSearch.mockResolvedValue({
+      results: [
+        {
+          name: '[allowed]/slides.pptx',
+          kind: 'allowed-ppt',
+          docType: 'ppt',
+          docId: null,
+          sizeBytes: 4096,
+          needsImport: true,
+          sourcePath: '/home/user/docs/slides.pptx',
+        },
+      ],
+      total: 1,
+    });
+    const out = await fileSearchClient.search(SESSION_ID, 'slides');
+    expect(out[0].kind).toBe('allowed-ppt');
+    expect(out[0].docId).toBeNull();
+    expect(out[0].sourcePath).toBe('/home/user/docs/slides.pptx');
+  });
 });
 
 describe('fileSearchClient — AtFileSelection helpers', () => {
@@ -252,5 +295,48 @@ describe('fileSearchClient — AtFileSelection helpers', () => {
         sourcePath: '/w/m.pptx',
       }),
     ).toEqual({ docId: 'doc-m', docType: 'ppt', filename: 'm.pptx' });
+  });
+
+  // Phase 3.4 (2026-09-17): allowed_paths helper behaviour
+  it('classifyAtFileSelection returns "file" for allowed-file (plain file in allowed_paths)', async () => {
+    const { classifyAtFileSelection } = await import('../fileSearchClient');
+    expect(
+      classifyAtFileSelection({
+        path: '/home/user/docs/notes.txt',
+        name: '[allowed]/notes.txt',
+        kind: 'allowed-file',
+        docId: null,
+        docType: null,
+        sourcePath: '/home/user/docs/notes.txt',
+      }),
+    ).toBe('file');
+  });
+
+  it('classifyAtFileSelection returns "office-import" for allowed-ppt (unmanaged office in allowed_paths)', async () => {
+    const { classifyAtFileSelection } = await import('../fileSearchClient');
+    expect(
+      classifyAtFileSelection({
+        path: '/home/user/docs/slides.pptx',
+        name: '[allowed]/slides.pptx',
+        kind: 'allowed-ppt',
+        docId: null,
+        docType: 'ppt',
+        sourcePath: '/home/user/docs/slides.pptx',
+      }),
+    ).toBe('office-import');
+  });
+
+  it('fileSearchResultToChatOfficeRef returns null for allowed-file (NEVER fabricate a ref)', async () => {
+    const { fileSearchResultToChatOfficeRef } = await import('../fileSearchClient');
+    expect(
+      fileSearchResultToChatOfficeRef({
+        path: '/home/user/docs/notes.txt',
+        name: '[allowed]/notes.txt',
+        kind: 'allowed-file',
+        docId: null,
+        docType: null,
+        sourcePath: '/home/user/docs/notes.txt',
+      }),
+    ).toBeNull();
   });
 });
