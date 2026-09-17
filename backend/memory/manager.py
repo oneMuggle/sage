@@ -234,13 +234,21 @@ class MemoryManager:
 
         return results
 
-    def get_context(self, limit: int = 10, session_id: Optional[str] = None) -> str:
+    def get_context(
+        self,
+        limit: int = 10,
+        session_id: Optional[str] = None,
+        segment_id: Optional[int] = None,
+    ) -> str:
         """
         获取上下文用于 Agent
 
         Args:
             limit: 上下文消息数量限制
             session_id: 可选会话 ID，限定工作记忆上下文的范围
+            segment_id: 可选段 id（Task 14 context-isolation）。
+                透传给 :meth:`WorkingMemory.get_context`，仅返回该段消息。
+                ``None`` → 返回该会话全部段（向后兼容）。
 
         Returns:
             格式化的上下文字符串
@@ -260,8 +268,10 @@ class MemoryManager:
         except Exception as exc:
             logger.debug(f"用户画像快照注入失败: {exc}")
 
-        # 获取工作记忆上下文（按 session 隔离）
-        working_context = self.working.get_context(session_id, limit=limit)
+        # 获取工作记忆上下文（按 session 隔离 + Task 14 按 segment_id 隔离）
+        working_context = self.working.get_context(
+            session_id, limit=limit, segment_id=segment_id
+        )
         if working_context:
             parts.append("【当前对话】")
             for msg in working_context:

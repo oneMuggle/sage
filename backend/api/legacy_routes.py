@@ -2862,7 +2862,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
             # ===== R38 技能激活展示事件 END =====
 
-            # ===== R37 文本文档附件注入 BEGIN =====
+            # ===== R37 文本文档附件注入 BEGIN ===== =====
             # 已上传文本文档（attachment_media_ids）按 id 读全文，截断后并入
             # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
             try:
@@ -3064,6 +3064,54 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
                     except Exception:
                         logger.warning("failed to emit topic_shifted event")
+            # ===== L13 记忆上下文注入 BEGIN (Task 14 context-isolation) =====
+            # legacy /chat/stream 此前完全不注入记忆上下文(只能靠 LLM 主动
+            # 调 memory_search)——与 PHILOSOPHY"记忆优先"定位相悖。对齐
+            # agent.chat() 单发路径的注入口径(get_context limit=10),fail-safe。
+            # L4': 记忆随会话演进,同属易变上下文 → 并入尾部 dynamic 块。
+            # Task 14: 从 history_rows[-1].segment_id 推导当前活跃段 id,透传给
+            # MemoryManager.get_context → WorkingMemory.get_context,避免把
+            # 旧段的工作记忆残留混进当前段的 LLM 请求。
+            try:
+                l13_memory_manager = getattr(agent, "memory_manager", None)
+                if l13_memory_manager is not None and not memory_off:
+                    active_segment_id = (
+                        history_rows[-1].segment_id if history_rows else 0
+                    )
+                    l13_memory = l13_memory_manager.get_context(
+                        limit=10,
+                        session_id=data.session_id,
+                        segment_id=active_segment_id,
+                    )
+                    if l13_memory and str(l13_memory).strip():
+                        dynamic_context_parts.append(
+                            "以下是相关的记忆上下文：\n" + str(l13_memory)
+                        )
+            except Exception as l13_mem_err:
+                logger.debug(
+                    f"[REQ {request_id}] L13 memory context skipped: {l13_mem_err}"
+                )
+            # ===== L13 记忆上下文注入 END =====
+
+            # ===== R17-E 记忆召回展示事件 BEGIN =====
+            # L13 注入是静默的 —— 用户无法知道回答用了哪些记忆。注入成功
+            # 后用 recall() 取结构化命中（top3），推送 memory_used 流事件；
+            # 前端 Message 气泡显示"N 条记忆已应用"并可展开查看明细。
+            # fail-safe：任何异常只跳过事件，绝不影响注入与对话主流程。
+            if dynamic_context_parts and not memory_off:
+                l13_evt = _build_memory_used_event(
+                    getattr(agent, "memory_manager", None),
+                    query=data.message,
+                    session_id=data.session_id,
+                )
+                if l13_evt is not None:
+                    try:
+                        entry.queue.put_nowait(l13_evt)
+                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                        logger.debug(
+                            f"[REQ {request_id}] memory_used event push failed, ignored"
+                        )
+            # ===== R17-E 记忆召回展示事件 END =====
             # Task 5 (2026-09-15): catalog-based context budget.
             # Resolve effective window from model catalog, then compute budget
             # as window - reserve. Old >=20000 gate removed.
