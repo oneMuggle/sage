@@ -401,11 +401,6 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        # win7-only (保留)：main 已改走 summary/consolidation 表不再调用本
-        # 迁移；win7 的 memory/episodic.py 仍写这三列。幂等，可在每次
-        # init_db 调用。
-        _migrate_memory_traceability(conn)
-
         # Model catalog state is independent of legacy model settings.
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS model_catalog_entries (
@@ -597,6 +592,13 @@ class Database:
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
             )
         """)
+
+        # win7-only (保留)：main 已改走 summary/consolidation 表不再调用本
+        # 迁移；win7 的 memory/episodic.py 仍写这三列。幂等，可在每次
+        # init_db 调用。必须位于 memories_episodic 建表之后——新库首启时
+        # 该表尚不存在，PRAGMA table_info 返回空集会让 ALTER TABLE 报
+        # "no such table"。
+        _migrate_memory_traceability(conn)
 
         # 技能定义不再由 SQLite ``skills`` 表承载。
         # 当前实现从 SkillRegistry / SKILL.md 文件加载；故新数据库不得创建
