@@ -399,7 +399,7 @@ def test_get_bundled_python_path_returns_none_on_non_windows(monkeypatch):
 def test_find_windows_bash_prefers_sage_bundled_bash(monkeypatch):
     """Sage 自带 bash 路径作为第三优先级候选。"""
     roots = (r"C:\Program Files",)
-    sage_bash = r"C:\Program Files\Sage\tools\git-bash\bin\bash.exe"
+    sage_bash = r"C:\Program Files\Sage\resources\tools\git-bash\usr\bin\bash.exe"
     sage_root = r"C:\Program Files\Sage"
 
     # Mock: Git bash not found, Sage bundled bash found
@@ -416,7 +416,7 @@ def test_find_windows_bash_prefers_git_bash_over_sage_bundled(monkeypatch):
     """Git for Windows bash 优先级高于 Sage 自带 bash。"""
     roots = (r"C:\Program Files",)
     git_bash = r"C:\Program Files\Git\bin\bash.exe"
-    sage_bash = r"C:\Program Files\Sage\tools\git-bash\bin\bash.exe"
+    sage_bash = r"C:\Program Files\Sage\resources\tools\git-bash\usr\bin\bash.exe"
     sage_root = r"C:\Program Files\Sage"
 
     # Mock: both exist, Git bash should be preferred
