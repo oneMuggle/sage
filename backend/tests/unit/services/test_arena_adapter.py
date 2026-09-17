@@ -15,6 +15,14 @@ class FakeBrowserSession:
         return self.responses.get(method, {})
 
 
+class _FakeCdpStatusError(Exception):
+    """Exception with native status_code attribute, mimicking httpx.HTTPStatusError."""
+
+    def __init__(self, status_code: int, message: str = "") -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
 def test_thinking_filter_strip_removes_thinking_blocks():
     text = "Hello <thinking>internal reasoning here</thinking> world"
     assert ThinkingFilter.STRIP.value == "strip"
@@ -129,7 +137,7 @@ def test_check_login_state_raises_when_cdp_fails():
 
 def test_submit_message_retries_on_429():
     """The full submit_message retry path: 2 transient 429s then success."""
-    from backend.services.arena_adapter import ArenaAdapter, CDPCommandError
+    from backend.services.arena_adapter import ArenaAdapter
     from unittest.mock import patch
 
     bs = FakeBrowserSession()
@@ -139,9 +147,7 @@ def test_submit_message_retries_on_429():
         attempts["n"] += 1
         if method == "Runtime.evaluate" and "chat_input" in str(params):
             if attempts["n"] <= 2:
-                err = CDPCommandError("simulated 429")
-                err.status_code = 429
-                raise err
+                raise _FakeCdpStatusError(429, "simulated 429")
             return {"result": {"value": True}}
         return {"result": {"value": True}}
 
@@ -155,7 +161,7 @@ def test_submit_message_retries_on_429():
 
 def test_fill_login_retries_on_429():
     """fill_login retries on 429 and succeeds after transient failure."""
-    from backend.services.arena_adapter import ArenaAdapter, CDPCommandError
+    from backend.services.arena_adapter import ArenaAdapter
     from unittest.mock import patch
 
     bs = FakeBrowserSession()
@@ -165,9 +171,7 @@ def test_fill_login_retries_on_429():
         attempts["n"] += 1
         if method == "Runtime.evaluate" and "email_input" in str(params):
             if attempts["n"] == 1:
-                err = CDPCommandError("simulated 429")
-                err.status_code = 429
-                raise err
+                raise _FakeCdpStatusError(429, "simulated 429")
             return {"result": {"value": True}}
         return {"result": {"value": True}}
 

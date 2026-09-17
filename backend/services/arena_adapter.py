@@ -31,6 +31,10 @@ class SelectorNotFoundError(ArenaAdapterError):
 class CDPCommandError(ArenaAdapterError):
     """CDP command returned an error or no value."""
 
+    def __init__(self, message: str, status_code: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class ThinkingFilter(Enum):
     KEEP = "keep"
@@ -158,7 +162,8 @@ class ArenaAdapter:
             )
         except Exception as exc:
             raise CDPCommandError(
-                f"Runtime.evaluate failed: {exc}"
+                f"Runtime.evaluate failed: {exc}",
+                status_code=getattr(exc, "status_code", None),
             ) from exc
         if not isinstance(result, dict):
             raise CDPCommandError(
@@ -200,5 +205,6 @@ class ArenaAdapter:
                 )
             except Exception as exc:
                 raise CDPCommandError(
-                    f"Input.dispatchKeyEvent failed at char {i}/{len(text)}: {exc}"
+                    f"Input.dispatchKeyEvent failed at char {i}/{len(text)}: {exc}",
+                    status_code=getattr(exc, "status_code", None),
                 ) from exc
