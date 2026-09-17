@@ -19,6 +19,11 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ## [Unreleased]
 
 
+> 🌐 **网页访问能力优化 Round 14：浏览器健康自检 + 凭据 UI header 型新增**（方案 `docs/plans/2026-09-17_web-access-optimization-round14.md`）
+
+### Added(web-access)
+- **浏览器健康自检（H1）**：`GET /api/v1/diagnostic/browser` 上报浏览器发现 / 本地版本 / UA 声明版本；低于 Chrome 120 给出升级或 `SAGE_BROWSER_PATH` 指定新内核的警告——win7（Chrome 109 封顶）老化监控落地；设置页凭据区块顶部直接可见
+- **header 型凭据新增入口（C1/C2）**：`POST /api/v1/web-access/credentials/header`（校验沿用 vault，非法 422）+ 设置页表单（域名 / 头名 / 头值，值输入框掩码）——Bearer / API key 型凭据不再只能靠对话设置
 > 🌐 **网页访问能力优化 Round 13：AB6 连接复用 + X2 出网可观测**（方案 `docs/plans/2026-09-17_web-access-optimization-round13.md`）
 
 ### Changed(web-access)
