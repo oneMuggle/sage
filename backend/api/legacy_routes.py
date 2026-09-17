@@ -354,6 +354,11 @@ class ChatRequest(BaseModel):
     # 返回的 media_ref.id）。producer 按 id 读全文，注入上下文附件块。
     attachment_media_ids: List[str] = Field(default_factory=list)
 
+    # r66（RAG 切片 4a）：附件检索注入配置（opt-in）。超长文档（>100k
+    # 字符）改走「嵌入 query → 附件 chunk 检索 → top_k 注入」；缺省 =
+    # 现状全文截断注入。embed 配置与 wiki ingest / r58 同口径。
+    attachment_rag: Optional[Dict[str, Any]] = None
+
     # G6 (2026-09-06): 聊天图片输入 —— base64 data URL 列表（data:image/png;base64,...）。
     # 非空时 user 消息转 OpenAI 多模态 content（text + image_url 分段），
     # 依赖 llm_client._convert_messages 对 list 型 content 的原样透传。
@@ -2757,6 +2762,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 已上传文本文档（attachment_media_ids）按 id 读全文，截断后并入
             # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
             try:
+                from backend.api import chat_attachment_routes as _r66_car
+                from backend.services.attachment_context import (
+                    AttachmentRagOptions,
+                    build_attachment_context,
+                    embed_query_via_http,
+                )
+                from backend.services.attachment_rag import attachment_vector_store_path
                 from backend.services.multimodal.media_store import (
                     MEDIA_ROOT,
                     MediaKind,
@@ -2764,6 +2776,17 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
 
                 r37_store = MediaStore(root=MEDIA_ROOT)
+                # r66: opt-in 检索配置（缺省 = 现状全文截断注入）
+                r66_rag = None
+                if (
+                    isinstance(data.attachment_rag, dict)
+                    and isinstance(data.attachment_rag.get("embed"), dict)
+                ):
+                    r66_rag = AttachmentRagOptions(
+                        embed={str(k): str(v) for k, v in data.attachment_rag["embed"].items()},
+                        top_k=int(data.attachment_rag.get("top_k") or 6),
+                    )
+                r66_store_path = attachment_vector_store_path(MEDIA_ROOT.parent)
                 for r37_mid in data.attachment_media_ids[:10]:
                     try:
                         _r37_loaded = r37_store.load(r37_mid)
@@ -2774,15 +2797,36 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     _r37_ref, r37_bytes = _r37_loaded
                     if _r37_ref.kind != MediaKind.DOCUMENT:
                         continue
+                    # 全文提取（txt 直读；pdf/docx 复用 r39 提取器），不在此截断
                     try:
-                        r37_text = r37_bytes.decode("utf-8")[:100_000]
-                    except UnicodeDecodeError:
+                        _r37_ext = (
+                            (_r37_ref.file_path or "").rsplit(".", 1)[-1].lower()
+                            if "." in (_r37_ref.file_path or "")
+                            else "txt"
+                        )
+                        if _r37_ext in ("pdf", "docx"):
+                            r37_text = _r66_car._extract_document_text(r37_bytes, _r37_ext)
+                        else:
+                            r37_text = r37_bytes.decode("utf-8")
+                    except Exception:
                         continue
                     if not r37_text.strip():
                         continue
+                    # r66: 注入决策（全文 ≤100k 现状注入；超长且配置 rag →
+                    # 检索 top_k；否则截断前 100k）。fail-safe。
+                    r37_ctx = await build_attachment_context(
+                        r37_mid,
+                        full_text=r37_text,
+                        query=data.message,
+                        rag=r66_rag,
+                        store_path=r66_store_path,
+                        query_embedder=embed_query_via_http if r66_rag else None,
+                    )
+                    if r37_ctx is None:
+                        continue
                     dynamic_context_parts.append(
                         "<attached_document id=" + repr(r37_mid) + ">" + chr(10)
-                        + r37_text + chr(10) + "</attached_document>"
+                        + r37_ctx + chr(10) + "</attached_document>"
                     )
             except Exception as r37_att_err:
                 logger.debug(f"[REQ {request_id}] attachment media inject skipped: {r37_att_err}")
