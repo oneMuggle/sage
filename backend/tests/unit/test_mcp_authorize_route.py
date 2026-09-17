@@ -30,7 +30,7 @@ SERVER_URL = "https://mcp.example.com/mcp"
 
 
 @pytest.fixture()
-def isolated_pool(tmp_path, monkeypatch):
+def _isolated_pool(tmp_path, monkeypatch):
     monkeypatch.setenv("SAGE_USER_DATA_DIR", str(tmp_path))
     reset_pool(None)
     yield
@@ -98,7 +98,7 @@ def _auth_endpoints_mock(request: httpx.Request) -> Response:
     return Response(404, text="not found")
 
 
-def test_authorize_success_roundtrip(isolated_pool, tmp_path, monkeypatch):
+def test_authorize_success_roundtrip(_isolated_pool, tmp_path, monkeypatch):
     store = OAuthTokenStore(root=tmp_path)
     client, _ = _client(store)
     _seed_config_file(tmp_path, {"name": "oauth-srv", "url": SERVER_URL})
@@ -132,7 +132,7 @@ def test_authorize_success_roundtrip(isolated_pool, tmp_path, monkeypatch):
     assert store.load("oauth-srv").access_token == "at-r64"
 
 
-def test_authorize_stdio_server_400(isolated_pool, tmp_path):
+def test_authorize_stdio_server_400(_isolated_pool, tmp_path):
     store = OAuthTokenStore(root=tmp_path / "ud")
     client, _ = _client(store)
 
@@ -142,7 +142,7 @@ def test_authorize_stdio_server_400(isolated_pool, tmp_path):
     assert "stdio" in resp.json()["error"]
 
 
-def test_authorize_unknown_server_404(isolated_pool, tmp_path):
+def test_authorize_unknown_server_404(_isolated_pool, tmp_path):
     client, _ = _client(OAuthTokenStore(root=tmp_path / "ud"))
     resp = client.post("/api/v1/mcp/servers/ghost/authorize")
     assert resp.status_code == 404
