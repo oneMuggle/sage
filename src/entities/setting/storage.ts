@@ -38,6 +38,8 @@ const TOP_KEYS: ReadonlySet<keyof AppSettings> = new Set([
   'autoContext',
   'temperature',
   'timezone',
+  // 日志时区 (2026-09-17): 控制日志时间戳使用的时区, 与 IANA 时区分开.
+  'logTimezone',
   'wiki',
   'orch',
   'version',
@@ -266,6 +268,9 @@ export function mergeWithDefaults(partial: Partial<AppSettings>): AppSettings {
     modelSelections: mergedModelSelections,
     // Task 1 (2026-08-23): 缺省时区补 'Asia/Shanghai' — 与 DEFAULT_SETTINGS.timezone 对齐.
     timezone: partial.timezone ?? DEFAULT_SETTINGS.timezone,
+    // 日志时区 (2026-09-17): 缺省补 'UTC' — 与 DEFAULT_SETTINGS.logTimezone 对齐,
+    // 保持历史行为 (历史日志全部 UTC 时间戳). 用户可改 'local' 或 IANA 时区.
+    logTimezone: partial.logTimezone ?? DEFAULT_SETTINGS.logTimezone,
     // 嵌套 merge：部分 orch 更新不丢其余键（同 endpoints 的既有 bug 防护）。
     orch: { ...DEFAULT_ORCH_SETTINGS, ...(partial.orch ?? {}) },
     version: partial.version ?? SETTINGS_VERSION,

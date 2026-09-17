@@ -112,6 +112,9 @@ class SettingsPayload(BaseModel):
     temperature: Optional[float] = None
     # Task 1 (2026-08-23): IANA timezone 字符串 — 校验下沉到 canonicalizer.
     timezone: Optional[str] = None
+    # 日志时区 (2026-09-17): 控制日志时间戳使用的时区.
+    # 'UTC' | 'local' | IANA 时区字符串.
+    logTimezone: Optional[str] = None  # noqa: N815
     wiki: Optional[dict] = None
     version: Optional[str] = None
     orch: Optional[dict] = None
@@ -153,6 +156,9 @@ class LegacySettingsPayload(BaseModel):
     temperature: Optional[float] = None
     # Task 1 (2026-08-23): IANA timezone 字符串 — 校验下沉到 canonicalizer.
     timezone: Optional[str] = None
+    # 日志时区 (2026-09-17): 控制日志时间戳使用的时区.
+    # 'UTC' | 'local' | IANA 时区字符串.
+    logTimezone: Optional[str] = None  # noqa: N815
     wiki: Optional[dict] = None
     version: Optional[str] = None
     orch: Optional[dict] = None

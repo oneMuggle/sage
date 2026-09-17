@@ -460,6 +460,22 @@ const electronAPI = {
   },
 
   /**
+   * 日志时区 (2026-09-17): 用户在 Settings → 通用 下拉框选择.
+   * 写入 <userData>/sage-log-timezone.json, 同时更新 main 进程 logger 时区.
+   * 返回 { ok: boolean, error?: string } — 失败时由 renderer 决定是否 toast.
+   */
+  getLogTimezone(): Promise<{ logTimezone: string }> {
+    return ipcRenderer.invoke('sage:log-timezone:get') as Promise<{ logTimezone: string }>;
+  },
+
+  setLogTimezone(logTimezone: string): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke('sage:log-timezone:set', { logTimezone }) as Promise<{
+      ok: boolean;
+      error?: string;
+    }>;
+  },
+
+  /**
    * 演示模式同步标志 (2026-08-27): main 进程在演示模式激活时经
    * webPreferences.additionalArguments 注入 --sage-demo-mode=1。
    * renderer 的 isDemoMode() 优先读它 — settings store 在首屏请求时尚未

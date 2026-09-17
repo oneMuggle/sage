@@ -179,11 +179,13 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
           SAGE_DB_PATH: opts.sageDbPath,
           SAGE_USER_DATA_DIR: opts.sageUserDataDir,
           PYTHON_BACKEND_PORT: String(opts.port),
+          SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
         },
         extraEnv: {
           SAGE_DB_PATH: opts.sageDbPath,
           SAGE_USER_DATA_DIR: opts.sageUserDataDir,
           PYTHON_BACKEND_PORT: String(opts.port),
+          SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
         },
         reason: 'dev-conda-overridden',
       };
@@ -216,11 +218,13 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
             SAGE_DB_PATH: opts.sageDbPath,
             SAGE_USER_DATA_DIR: opts.sageUserDataDir,
             PYTHON_BACKEND_PORT: String(opts.port),
+            SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
           },
           extraEnv: {
             SAGE_DB_PATH: opts.sageDbPath,
             SAGE_USER_DATA_DIR: opts.sageUserDataDir,
             PYTHON_BACKEND_PORT: String(opts.port),
+            SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
           },
           reason: 'dev-conda',
         };
@@ -242,11 +246,13 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
         SAGE_DB_PATH: opts.sageDbPath,
         SAGE_USER_DATA_DIR: opts.sageUserDataDir,
         PYTHON_BACKEND_PORT: String(opts.port),
+        SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
       },
       extraEnv: {
         SAGE_DB_PATH: opts.sageDbPath,
         SAGE_USER_DATA_DIR: opts.sageUserDataDir,
         PYTHON_BACKEND_PORT: String(opts.port),
+        SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
       },
       reason: 'dev-conda',
     };
@@ -365,6 +371,7 @@ function packagedEnv(
     SAGE_DB_PATH: sageDbPath,
     SAGE_USER_DATA_DIR: sageUserDataDir,
     SAGE_LOG_LEVEL: process.env.SAGE_LOG_LEVEL ?? 'info',
+    SAGE_LOG_TIMEZONE: process.env.SAGE_LOG_TIMEZONE ?? 'UTC',
     PYTHONPATH: [join(resourcesPath, 'backend'), join(resourcesPath, 'sage-core')].join(sep),
   };
 }
