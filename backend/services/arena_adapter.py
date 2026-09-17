@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import logging
 import re
+import time as _time
+from backend.services.http_retry import retry_on_status
 from enum import Enum
 from typing import Any, Optional
 
@@ -75,25 +77,53 @@ class ArenaAdapter:
     # -- form filling -----------------------------------------------------
 
     def fill_login(self, email: str, password: str) -> None:
-        self._focus_selector(_SELECTORS["email_input"])
-        self._type_chars(email)
-        self._focus_selector(_SELECTORS["password_input"])
-        self._type_chars(password)
+        """Fill email + password fields. Retries on 429 per spec §6.2."""
+        def _do_fill() -> None:
+            self._focus_selector(_SELECTORS["email_input"])
+            self._type_chars(email)
+            self._focus_selector(_SELECTORS["password_input"])
+            self._type_chars(password)
+
+        retry_on_status(
+            _do_fill,
+            retry_statuses=(429,),
+            max_attempts=3,
+            base_delay=1.0,
+        )
 
     def fill_verification_code(self, code: str) -> None:
-        self._focus_selector(_SELECTORS["code_input"])
-        self._type_chars(code)
+        """Fill verification code field. Retries on 429 per spec §6.2."""
+        def _do_fill() -> None:
+            self._focus_selector(_SELECTORS["code_input"])
+            self._type_chars(code)
+
+        retry_on_status(
+            _do_fill,
+            retry_statuses=(429,),
+            max_attempts=3,
+            base_delay=1.0,
+        )
 
     # -- message dispatch -------------------------------------------------
 
     def submit_message(
         self, text: str, thinking_filter: ThinkingFilter = ThinkingFilter.KEEP
     ) -> str:
+        """Type text and click send. Retries on 429 per spec §6.2."""
         filtered = self.apply_thinking_filter(text, thinking_filter)
-        self._focus_selector(_SELECTORS["chat_input"])
-        self._type_chars(filtered)
-        self._click_selector(_SELECTORS["send_button"])
-        return filtered
+
+        def _do_submit() -> str:
+            self._focus_selector(_SELECTORS["chat_input"])
+            self._type_chars(filtered)
+            self._click_selector(_SELECTORS["send_button"])
+            return filtered
+
+        return retry_on_status(
+            _do_submit,
+            retry_statuses=(429,),
+            max_attempts=3,
+            base_delay=1.0,
+        )
 
     def wait_for_response(self, timeout_sec: int = 60) -> Optional[str]:
         """Stub: requires Phase-3 SSE completion observer."""

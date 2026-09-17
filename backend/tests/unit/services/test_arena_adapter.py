@@ -125,3 +125,54 @@ def test_check_login_state_raises_when_cdp_fails():
     adapter = ArenaAdapter(bs)
     with pytest.raises(CDPCommandError):
         adapter.check_login_state()
+
+
+def test_submit_message_retries_on_429():
+    """The full submit_message retry path: 2 transient 429s then success."""
+    from backend.services.arena_adapter import ArenaAdapter, CDPCommandError
+    from unittest.mock import patch
+
+    bs = FakeBrowserSession()
+    attempts = {"n": 0}
+
+    def fake_cdp(method, params=None, **_):
+        attempts["n"] += 1
+        if method == "Runtime.evaluate" and "chat_input" in str(params):
+            if attempts["n"] <= 2:
+                err = CDPCommandError("simulated 429")
+                err.status_code = 429
+                raise err
+            return {"result": {"value": True}}
+        return {"result": {"value": True}}
+
+    bs.cdp_command = fake_cdp
+    adapter = ArenaAdapter(bs)
+    with patch("backend.services.arena_adapter._time.sleep"):
+        result = adapter.submit_message("hello")
+    assert result == "hello"
+    assert attempts["n"] >= 3  # 2 failures + 1 success
+
+
+def test_fill_login_retries_on_429():
+    """fill_login retries on 429 and succeeds after transient failure."""
+    from backend.services.arena_adapter import ArenaAdapter, CDPCommandError
+    from unittest.mock import patch
+
+    bs = FakeBrowserSession()
+    attempts = {"n": 0}
+
+    def fake_cdp(method, params=None, **_):
+        attempts["n"] += 1
+        if method == "Runtime.evaluate" and "email_input" in str(params):
+            if attempts["n"] == 1:
+                err = CDPCommandError("simulated 429")
+                err.status_code = 429
+                raise err
+            return {"result": {"value": True}}
+        return {"result": {"value": True}}
+
+    bs.cdp_command = fake_cdp
+    adapter = ArenaAdapter(bs)
+    with patch("backend.services.arena_adapter._time.sleep"):
+        adapter.fill_login("user@example.com", "secret123")
+    assert attempts["n"] >= 2  # 1 failure + 1 success
