@@ -56,6 +56,7 @@
 | 78   | [office_update 修订后 TOC 刷新](./78-word-update-toc-refresh.md) | R41 修订侧收口：refresh_toc 标志 + upfront 非 word 守卫（修订未发生即拒）+ 受管摘要不回显路径 + 横排宽表场景文档（搭车） |
 | 79   | [图目录/表目录（TOF 域 + SEQ 题注）](./79-word-caption-index.md) | R42：题注 SEQ 域化（回读零变）+ figure_index/table_index（TOC \c 收录 + 缓存条目）+ COM Fields.Update 扩展 + lint 域内缓存跳过 |
 | 80   | [office_create schema 漂移卫生修复](./80-office-create-schema-drift.md) | R43：补 toc/section_breaks schema 声明（LLM 可发现化）+ types.ts 缺口 + 模型↔schema↔TS 三方防漂移对偶门禁 |
+| 81   | [lint 面补强：index 域在位校验](./81-lint-index-fields.md) | R44：figure_index/table_index 域在位规则（TOF 不冒充 TOC）+ lint schema 可检查子集白名单对偶门禁 |
 
 ---
 

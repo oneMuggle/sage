@@ -57,14 +57,32 @@ def _issue(rule_id: str, severity: str, message: str, fix_hint: str = "") -> Wor
     return WordLintIssue(rule_id=rule_id, severity=severity, message=message, fix_hint=fix_hint)
 
 
-def _document_has_toc_field(doc: Document) -> bool:
-    """检测文档是否存在 TOC 域（兼容 fldSimple 与 fldChar 复杂域两种载体）。"""
+def _document_has_field_with_instr(doc: Document, token: str) -> bool:
+    r"""检测文档是否存在 instr 含 token 的域（fldSimple/fldChar 双载体）。
+
+    注意 "TOC" 是 `\c` 图/表目录域（TOF）的前缀——区分 TOC 与 TOF 用
+    ``_document_has_toc_field`` 的排除逻辑，不要直接用裸 "TOC" token。
+    """
     for p in doc.paragraphs:
         for fld in p._p.findall(".//" + qn("w:fldSimple")):
-            if (fld.get(qn("w:instr")) or "").startswith("TOC"):
+            if token in (fld.get(qn("w:instr")) or ""):
                 return True
         for instr in p._p.findall(".//" + qn("w:instrText")):
-            if "TOC" in (instr.text or ""):
+            if token in (instr.text or ""):
+                return True
+    return False
+
+
+def _document_has_toc_field(doc: Document) -> bool:
+    """检测文档是否存在目录域（排除图/表目录域——后者 instr 也含 TOC）。"""
+    for p in doc.paragraphs:
+        for fld in p._p.findall(".//" + qn("w:fldSimple")):
+            instr = fld.get(qn("w:instr")) or ""
+            if "TOC" in instr and r"\c" not in instr:
+                return True
+        for instr in p._p.findall(".//" + qn("w:instrText")):
+            text = instr.text or ""
+            if "TOC" in text and r"\c" not in text:
                 return True
     return False
 
@@ -367,6 +385,24 @@ def lint_docx(path: Path, spec: WordFormatSpec) -> WordLintResult:
                 "toc/presence", "error",
                 "未检测到目录域（TOC instr）",
                 "在标题后插入 TOC 域（或用 format_spec.toc 重新生成）",
+            ))
+    # Round 44：图/表目录域在位校验（spec 声明了 index 就必须真的有
+    # 对应 TOC \c 域——字面"图N"文本不算，必须可被 Word 收录）。
+    if spec.figure_index is not None:
+        checked.append("figure_index")
+        if not _document_has_field_with_instr(doc, r'\c "图"'):
+            issues.append(_issue(
+                "figure_index/presence", "error",
+                r'未检测到插图目录域（TOC \c "图"）',
+                "用 format_spec.figure_index 重新生成（题注需 SEQ 域）",
+            ))
+    if spec.table_index is not None:
+        checked.append("table_index")
+        if not _document_has_field_with_instr(doc, r'\c "表"'):
+            issues.append(_issue(
+                "table_index/presence", "error",
+                r'未检测到表格目录域（TOC \c "表"）',
+                "用 format_spec.table_index 重新生成（题注需 SEQ 域）",
             ))
     if spec.numbering:
         checked.append("numbering")

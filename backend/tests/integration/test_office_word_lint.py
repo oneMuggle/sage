@@ -288,3 +288,71 @@ def test_lint_tool_registered_and_known() -> None:
 
     writer = next(p for p in create_default_agents() if p.id == "writer")
     assert "office_lint_word" in writer.tools
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Round 44：图/表目录域在位校验
+# ──────────────────────────────────────────────────────────────────────
+
+_TINY_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk"
+    "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
+
+
+def test_caption_index_conforming_zero_violations(tmp_path: Path) -> None:
+    """生成带 figure_index/table_index → 同 spec lint 零违规。"""
+    import base64
+
+    from backend.office.models import WordImageSpec, WordTableSpec
+
+    img = tmp_path / "a.png"
+    img.write_bytes(base64.b64decode(_TINY_PNG_B64))
+    gen_spec = {
+        "figure_index": {"heading_text": "插图目录"},
+        "table_index": {},
+    }
+    path = _generate(
+        tmp_path,
+        "idx.docx",
+        gen_spec,
+        images=[WordImageSpec(source=str(img), caption="架构图")],
+        tables=[WordTableSpec(headers=["A"], rows=[["1"]], caption="汇总表")],
+    )
+    result = lint_docx(path, WordFormatSpec(**gen_spec))
+    assert result.issues == []
+    assert "figure_index" in result.checked_rules
+    assert "table_index" in result.checked_rules
+
+
+def test_caption_index_missing_detected(tmp_path: Path) -> None:
+    """文档没有目录域但 spec 声明 → index/presence error。"""
+    from backend.office.models import WordIndexSpec
+
+    path = _generate(tmp_path, "plain.docx", {})
+    result = lint_docx(
+        path,
+        WordFormatSpec(figure_index=WordIndexSpec(), table_index=WordIndexSpec()),
+    )
+    rule_ids = {i.rule_id for i in result.issues}
+    assert "figure_index/presence" in rule_ids
+    assert "table_index/presence" in rule_ids
+
+
+def test_toc_presence_not_fooled_by_caption_index(tmp_path: Path) -> None:
+    r"""TOF 域（\c）不能冒充目录域：仅图目录 → toc/presence 仍报。"""
+    import base64
+
+    from backend.office.models import WordImageSpec, WordTocSpec
+
+    img = tmp_path / "a.png"
+    img.write_bytes(base64.b64decode(_TINY_PNG_B64))
+    path = _generate(
+        tmp_path,
+        "tof-only.docx",
+        {"figure_index": {}},
+        images=[WordImageSpec(source=str(img), caption="架构图")],
+    )
+    result = lint_docx(path, WordFormatSpec(toc=WordTocSpec()))
+    rule_ids = {i.rule_id for i in result.issues}
+    assert "toc/presence" in rule_ids

@@ -20,8 +20,24 @@ import pytest
 from backend.domain.tool_policy import ToolPolicy
 from backend.office.models import WordFormatSpec
 from backend.tools.office_create_tool import OfficeCreateTool
+from backend.tools.office_lint_tool import OfficeLintWordTool
 
 pytestmark = pytest.mark.unit
+
+#: lint 工具的 format_spec 声明 = 有对应校验规则的可检查子集
+#: （section_breaks/first_page_* 等暂无规则，有意不在列——加规则时同步）。
+LINT_CHECKABLE_SPEC = {
+    "page",
+    "body",
+    "headings",
+    "title",
+    "header",
+    "footer",
+    "numbering",
+    "toc",
+    "figure_index",
+    "table_index",
+}
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -48,3 +64,22 @@ def test_types_ts_word_format_spec_covers_model_fields():
     ts_keys = set(re.findall(r"^  (\w+)\??\s*:", block, re.M))
     missing = set(WordFormatSpec.model_fields) - ts_keys
     assert not missing, f"types.ts WordFormatSpec 缺字段: {sorted(missing)}"
+
+
+def test_lint_schema_matches_declared_checkable_whitelist():
+    """lint schema 的 format_spec 声明 = 有校验规则的可检查子集。
+
+    与 office_create 的"全等模型"不同——lint 只暴露有规则的项；
+    本测试锁住：声明既不缺规则（有 rule 无 schema），也不虚报
+    （有 schema 无 rule → LLM 传了却不校验）。
+    """
+    tool = OfficeLintWordTool(policy=ToolPolicy())
+    schema_props = tool.schema.parameters["properties"]["format_spec"][
+        "properties"
+    ]
+    assert set(schema_props) == LINT_CHECKABLE_SPEC
+
+
+def test_lint_checkable_whitelist_stays_within_model():
+    """lint 可检查子集必须是模型字段的真子集（防 schema 虚报字段）。"""
+    assert set(WordFormatSpec.model_fields) >= LINT_CHECKABLE_SPEC
