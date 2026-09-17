@@ -1,6 +1,6 @@
 # ruff: noqa: UP006, UP007, UP035 — pydantic v1 + Python 3.8 兼容：
 # pydantic v1 resolve_annotations 用 eval() 处理 forward refs，
-# eval 在 Python 3.8 上无法解析 PEP 585 (List[X]) 和 PEP 604 (X | Y)，
+# eval 在 Python 3.8 上无法解析 PEP 585 (list[X]) 和 PEP 604 (X | Y)，
 # 所以本文件保留 typing.List/Optional/Union 写法
 """
 API 路由定义
@@ -267,6 +267,21 @@ def with_db_lock(func):
     return make_with_db_lock(globals())(func)
 
 
+async def _run_db_sync(func, *args, **kwargs):
+    """在线程池中执行一个受 SQLite 锁保护的同步操作。
+
+    异步 handler 不能直接调用共享连接；锁必须在线程池 worker 内获取，
+    才能同时保护同步路由和 storage adapter 的访问。
+    """
+    loop = asyncio.get_running_loop()
+
+    def locked_call():
+        with _SQLITE_LOCK:
+            return func(*args, **kwargs)
+
+    return await loop.run_in_executor(None, locked_call)
+
+
 def _safe_log_field(value: object, max_length: int = 64) -> str:
     """Sanitize a user-controlled field for safe logging.
 
@@ -372,11 +387,6 @@ class ChatRequest(BaseModel):
     plan_override: Optional[List[Dict[str, Any]]] = None
     run_id: Optional[str] = None
 
-    # Task 4 (2026-09-17): 上下文重置标记。True 时 chat_stream_create 在持久化
-    # 当前消息前调用 MessageRepository.advance_segment(session_id)，开启新 segment；
-    # 历史加载改用 get_active_segment 只取当前段。
-    context_reset: bool = False
-
     # PM1 (round8): 单 agent 计划模式 —— 本次 run 只读（权限执行器 override
     # READ_ONLY）+ 计划指令 system 块；DONE 后前端出批准条，批准后普通执行。
     plan_mode: Optional[bool] = False
@@ -476,9 +486,10 @@ class AgentUpdate(BaseModel):
     走 Pydantic 校验, 非法值 422 (由 FastAPI 自动处理)。
     """
 
-    # 注: Pydantic v2 默认对 "model_" 前缀的字段名有保留命名空间保护.
-    # 我们在类内用 model_config 字段, 通过 ConfigDict 关掉该保护.
-    model_config = {"protected_namespaces": ()}
+    # 注: Pydantic 默认对 "model_" 前缀的字段名有保留命名空间保护.
+    # win7 (Pydantic 1/2 双兼容): 用 ``class Config`` 关掉该保护.
+    class Config:
+        protected_namespaces = ()
 
     name: Optional[str] = None
 
@@ -843,17 +854,24 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
 
     本函数**可以抛 CompactionError / 其他异常**——调用方（producer）
     统一 try/except：压缩失败只记日志，绝不阻塞聊天。
+
+    重入保护（PR A §1.2 cherry-pick from main #294）：
+    自动压缩路径也必须在 ``_compact_in_progress`` 中登记，与手动 compact
+    互斥。否则同会话并发自动压缩，或自动压缩与手动 compact 重叠，
+    会两次读取旧快照、两次写入续接摘要，破坏 message_count。
     """
+    # 进队列前先检查；如果已经被压缩中（手动或并发自动），直接跳过。
+    # 本进程内手动/自动 compact 共用同一 ``_compact_in_progress``。
+    if session_id in _compact_in_progress:
+        logger.debug(
+            "[M4] session=%s 已在压缩中, 跳过本次自动压缩",
+            _safe_log_field(session_id),
+        )
+        return
+
     message_repo = MessageRepository()
-    # Task 12 (context-isolation): 压缩只对当前 segment 起作用——
-    # 历史 segment 已被 advance_segment() 封存成 topic_separator + 摘要续接,
-    # 旧 segment 的对话本来就不会再注入本轮 LLM 请求, 没有压缩必要.
-    # 用 get_by_session 会把多个 segment 一起塞进 LLM 摘要 prompt, 浪费 token
-    # 且破坏"segment 间互相隔离"的口径.
-    # 2026-09 修复: producer 是 async task, 全量历史读是秒级同步 IO,
-    # 直接跑在事件循环上会冻结所有并发流的 NDJSON attach 与 HTTP 路由。
-    messages = await asyncio.to_thread(
-        lambda: message_repo.get_active_segment(session_id)
+    messages = await _run_db_sync(
+        message_repo.get_by_session, session_id, limit=100000
     )
     if not should_compact(messages):
         return
@@ -871,16 +889,39 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
         )
         return
 
-    new_messages, removed_count = await compact_messages(messages, llm_complete)
-    after = await asyncio.to_thread(
-        lambda: _persist_compaction(session_id, messages, new_messages, removed_count)
-    )
-    logger.info(
-        "[M4] session=%s 自动压缩完成: removed=%s after=%s",
-        _safe_log_field(session_id),
-        removed_count,
-        after,
-    )
+    # 二次检查 + 占位：should_compact 检查与 LLM 调用之间，并发请求
+    # 可能已进入压缩流程（``_compact_in_progress`` 已被占用）。
+    if _compact_in_progress_add(session_id) is False:
+        logger.debug(
+            "[M4] session=%s 并发抢先, 跳过本次自动压缩",
+            _safe_log_field(session_id),
+        )
+        return
+    try:
+        new_messages, removed_count = await compact_messages(messages, llm_complete)
+        after = await _run_db_sync(
+            _persist_compaction, session_id, messages, new_messages, removed_count
+        )
+        logger.info(
+            "[M4] session=%s 自动压缩完成: removed=%s after=%s",
+            _safe_log_field(session_id),
+            removed_count,
+            after,
+        )
+    finally:
+        _compact_in_progress.discard(session_id)
+
+
+def _compact_in_progress_add(session_id: str) -> bool:
+    """原子地把 session_id 加入 ``_compact_in_progress``，返回是否成功占位。
+
+    手动 compact 直接 ``_compact_in_progress.add()``，自动 compact 因为
+    需要"二次检查 + 占位"语义而走本 helper。
+    """
+    if session_id in _compact_in_progress:
+        return False
+    _compact_in_progress.add(session_id)
+    return True
 
 
 def _auto_checkpoint_if_enabled(session_id: str) -> Optional[str]:
@@ -2158,7 +2199,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 刻意 new 一个独立实例而非用下方 producer 内的 session_repo 变量 ——
             # 那个变量在数百行之后才绑定，早期失败路径 finally 会 UnboundLocalError。
             try:
-                await asyncio.to_thread(
+                await _run_db_sync(
                     SessionRepository().update_run_status, data.session_id, "running"
                 )
             except Exception as status_err:  # noqa: BLE001 — fail-open
@@ -2279,13 +2320,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 from backend.data.settings_repo import SettingsRepository
                 from backend.services.usage_tracker import usage_tracker as _usage_tracker
 
-                _raw_limit = SettingsRepository().get("spend_limit_usd")
+                # win7 惯例 (PR A §1.2): 同步 DB 读经 _run_db_sync; today_cost_usd
+                # 内部自带 _SQLITE_LOCK, 不能再包 _run_db_sync(非重入死锁),
+                # 改走裸 executor 线程。
+                _raw_limit = await _run_db_sync(
+                    SettingsRepository().get, "spend_limit_usd"
+                )
                 _spend_limit = float(_raw_limit) if _raw_limit and _raw_limit.strip() else 0.0
             except Exception as limit_read_err:
                 logger.debug(f"[REQ {request_id}] 花费限额读取失败(视为不限): {limit_read_err}")
                 _spend_limit = 0.0
             if _spend_limit > 0:
-                _today_cost = _usage_tracker.today_cost_usd()
+                _today_cost = await asyncio.get_running_loop().run_in_executor(
+                    None, _usage_tracker.today_cost_usd
+                )
                 if _today_cost >= _spend_limit:
                     logger.warning(
                         "[REQ %s] 花费限额拦截: today=%.4f USD >= limit=%.2f USD",
@@ -2622,7 +2670,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             await asyncio.wait_for(
                                 confirm_event.wait(), timeout=confirm_timeout
                             )
-                        except (TimeoutError, asyncio.TimeoutError):  # noqa: UP041
+                        except asyncio.TimeoutError:  # noqa: UP041 — py3.8: asyncio.TimeoutError ≠ builtin TimeoutError (3.11 才统一)
                             logger.warning(
                                 "编排确认超时 (%ss)，自动取消 run %s",
                                 confirm_timeout,
@@ -2721,6 +2769,51 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
             # ===== L5 环境上下文 + 技能清单 END =====
 
+            # ===== L13 记忆上下文注入 BEGIN (对标增强第二轮批次 C) =====
+            # legacy /chat/stream 此前完全不注入记忆上下文(只能靠 LLM 主动
+            # 调 memory_search)——与 PHILOSOPHY"记忆优先"定位相悖。对齐
+            # agent.chat() 单发路径的注入口径(get_context limit=10),fail-safe。
+            # L4': 记忆随会话演进,同属易变上下文 → 并入尾部 dynamic 块。
+            try:
+                l13_memory_manager = getattr(agent, "memory_manager", None)
+                if l13_memory_manager is not None and not memory_off:
+                    # win7 惯例 (PR A §1.2): get_context 背后的 episodic 查询
+                    # 直连共享连接, 统一经 _run_db_sync 拿锁, 防跨事务冲突。
+                    l13_memory = await _run_db_sync(
+                        l13_memory_manager.get_context,
+                        limit=10,
+                        session_id=data.session_id,
+                    )
+                    if l13_memory and str(l13_memory).strip():
+                        dynamic_context_parts.append(
+                            "以下是相关的记忆上下文：\n" + str(l13_memory)
+                        )
+            except Exception as l13_mem_err:
+                logger.debug(
+                    f"[REQ {request_id}] L13 memory context skipped: {l13_mem_err}"
+                )
+            # ===== L13 记忆上下文注入 END =====
+
+            # ===== R17-E 记忆召回展示事件 BEGIN =====
+            # L13 注入是静默的 —— 用户无法知道回答用了哪些记忆。注入成功
+            # 后用 recall() 取结构化命中（top3），推送 memory_used 流事件；
+            # 前端 Message 气泡显示"N 条记忆已应用"并可展开查看明细。
+            # fail-safe：任何异常只跳过事件，绝不影响注入与对话主流程。
+            if dynamic_context_parts and not memory_off:
+                l13_evt = _build_memory_used_event(
+                    getattr(agent, "memory_manager", None),
+                    query=data.message,
+                    session_id=data.session_id,
+                )
+                if l13_evt is not None:
+                    try:
+                        entry.queue.put_nowait(l13_evt)
+                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                        logger.debug(
+                            f"[REQ {request_id}] memory_used event push failed, ignored"
+                        )
+            # ===== R17-E 记忆召回展示事件 END =====
+
             # ===== R37 文本文档附件注入 BEGIN =====
             # 已上传文本文档（attachment_media_ids）按 id 读全文，截断后并入
             # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
@@ -2804,115 +2897,17 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 用户第二条消息起 agent"失忆",压缩也不省每轮 token。此处本轮 user
             # 消息尚未落盘(落盘在下方),历史天然不含本轮消息。历史加载失败时
             # 降级为无历史的旧行为,绝不阻断聊天。
-            repo = MessageRepository()
             try:
-                # Task 4 (2026-09-17): 显式上下文重置
-                if data.context_reset:
-                    await asyncio.to_thread(repo.advance_segment, data.session_id)
-                    # 重置 working memory 当前段
-                    try:
-                        from backend.memory.working import WorkingMemory
-                        WorkingMemory().clear(data.session_id)
-                    except Exception as mem_err:
-                        logger.warning("working memory clear failed: %s", mem_err)
-
-                history_rows = await asyncio.to_thread(
-                    repo.get_active_segment, data.session_id
+                # win7 惯例 (PR A §1.2): 同步 SQLite I/O 经 _run_db_sync 卸载到
+                # 线程池,避免阻塞事件循环 + 与 _SQLITE_LOCK 守护路径并发冲突。
+                history_rows = await _run_db_sync(
+                    MessageRepository().get_by_session, data.session_id, limit=100000
                 )
             except Exception as hist_err:
                 logger.warning(
                     f"[REQ {request_id}] 历史消息加载失败(降级为无历史): {hist_err}"
                 )
                 history_rows = []
-            # Task 10 (2026-09-17): 自动话题检测 — 用户未显式 context_reset
-            # 且 auto_topic_detection 启用时，扫描最近 N 条 assistant 文本；
-            # 正则层命中或向量层平均相似度 < 阈值即视作话题切换，自动
-            # advance_segment 并推 topic_shifted SSE。设置缺失或 "true" 视为启用。
-            try:
-                from backend.data.settings_repo import SettingsRepository
-                _auto_detect_raw = SettingsRepository().get("auto_topic_detection")
-            except Exception:
-                _auto_detect_raw = None
-            _auto_detect_on = _auto_detect_raw is None or _auto_detect_raw.strip().lower() == "true"
-            if not data.context_reset and _auto_detect_on:
-                recent_assistant = [
-                    r.content for r in (history_rows or [])[-6:]
-                    if getattr(r, "role", None) == "assistant"
-                ]
-                embed_fn = None
-                try:
-                    from backend.memory.embedder_factory import create_embedder
-                    _embedder = create_embedder()
-                    def embed_fn(t):
-                        return _embedder.encode(t)
-                except Exception:
-                    pass
-
-                from backend.chat.topic_detection import detect_topic_shift
-                is_new, _shift_reason = detect_topic_shift(
-                    data.message, recent_assistant, embed_fn=embed_fn
-                )
-                if is_new:
-                    new_seg = await asyncio.to_thread(repo.advance_segment, data.session_id)
-                    history_rows = await asyncio.to_thread(
-                        repo.get_active_segment, data.session_id
-                    )
-                    try:
-                        await entry.queue.put(
-                            {
-                                "state": "topic_shifted",
-                                "segment_id": new_seg,
-                                "reason": _shift_reason,
-                            }
-                        )
-                    except Exception:
-                        logger.warning("failed to emit topic_shifted event")
-            # ===== L13 记忆上下文注入 BEGIN (Task 14 context-isolation) =====
-            # legacy /chat/stream 此前完全不注入记忆上下文(只能靠 LLM 主动
-            # 调 memory_search)——与 PHILOSOPHY"记忆优先"定位相悖。对齐
-            # agent.chat() 单发路径的注入口径(get_context limit=10),fail-safe。
-            # L4': 记忆随会话演进,同属易变上下文 → 并入尾部 dynamic 块。
-            # Task 14: 从 history_rows[-1].segment_id 推导当前活跃段 id,透传给
-            # MemoryManager.get_context → WorkingMemory.get_context,避免把
-            # 旧段的工作记忆残留混进当前段的 LLM 请求。
-            try:
-                l13_memory_manager = getattr(agent, "memory_manager", None)
-                if l13_memory_manager is not None and not memory_off:
-                    active_segment_id = repo.get_active_segment_id(data.session_id)
-                    l13_memory = l13_memory_manager.get_context(
-                        limit=10,
-                        session_id=data.session_id,
-                        segment_id=active_segment_id,
-                    )
-                    if l13_memory and str(l13_memory).strip():
-                        dynamic_context_parts.append(
-                            "以下是相关的记忆上下文：\n" + str(l13_memory)
-                        )
-            except Exception as l13_mem_err:
-                logger.debug(
-                    f"[REQ {request_id}] L13 memory context skipped: {l13_mem_err}"
-                )
-            # ===== L13 记忆上下文注入 END =====
-
-            # ===== R17-E 记忆召回展示事件 BEGIN =====
-            # L13 注入是静默的 —— 用户无法知道回答用了哪些记忆。注入成功
-            # 后用 recall() 取结构化命中（top3），推送 memory_used 流事件；
-            # 前端 Message 气泡显示"N 条记忆已应用"并可展开查看明细。
-            # fail-safe：任何异常只跳过事件，绝不影响注入与对话主流程。
-            if dynamic_context_parts and not memory_off:
-                l13_evt = _build_memory_used_event(
-                    getattr(agent, "memory_manager", None),
-                    query=data.message,
-                    session_id=data.session_id,
-                )
-                if l13_evt is not None:
-                    try:
-                        entry.queue.put_nowait(l13_evt)
-                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
-                        logger.debug(
-                            f"[REQ {request_id}] memory_used event push failed, ignored"
-                        )
-            # ===== R17-E 记忆召回展示事件 END =====
             # Task 5 (2026-09-15): catalog-based context budget.
             # Resolve effective window from model catalog, then compute budget
             # as window - reserve. Old >=20000 gate removed.
@@ -2923,32 +2918,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 auto_context=data.auto_context,
             )
             l9_budget = history_token_budget(effective_window=effective_window)
-            # Task 7 (2026-09-17): context-isolation turn limit.
-            # Read ``context_turn_limit`` from settings (whitelisted in Task 6).
-            # Setting is stored as str; parse defensively — bad value falls back
-            # to None rather than 500-ing the chat request.
-            turn_limit: Optional[int] = None
-            try:
-                from backend.data.settings_repo import SettingsRepository
-
-                turn_limit_raw = SettingsRepository().get("context_turn_limit")
-                if turn_limit_raw:
-                    try:
-                        turn_limit = int(turn_limit_raw)
-                    except (ValueError, TypeError):
-                        logger.warning(
-                            "[REQ %s] context_turn_limit setting is invalid: %r, ignoring",
-                            request_id,
-                            turn_limit_raw,
-                        )
-                        turn_limit = None
-            except Exception as sl_err:  # noqa: BLE001 — 任何 settings 读取失败都不应阻断聊天
-                logger.warning(
-                    "[REQ %s] context_turn_limit 读取失败(降级为不限): %s",
-                    request_id,
-                    sl_err,
-                )
-                turn_limit = None
             messages, omitted_history = build_request_messages(
                 system_content=system_content,
                 user_text=data.message,
@@ -2961,15 +2930,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     if dynamic_context_parts
                     else None
                 ),
-                turn_limit=turn_limit,
             )
             if omitted_history > 0:
                 logger.info(
-                    "[REQ %s] 历史已省略最早 %s 条 (turn_limit %s, token 预算 %s)",
+                    "[REQ %s] 历史超过预算(%s tokens),已省略最早 %s 条",
                     request_id,
-                    omitted_history,
-                    turn_limit,
                     l9_budget,
+                    omitted_history,
                 )
 
             # G6 (2026-09-06): 图片附件 → 多模态 user 消息（OpenAI content 分段格式）。
@@ -2999,23 +2966,36 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 迭代器纯净),由 producer 整合层负责落 user+assistant 消息 + 更新
             # session metadata。每个落盘独立 try/except,失败只 logger.warning
             # 不破坏流。
+            #
+            # PR A §1.2 (win7): 这些调用必须经 ``_run_db_sync`` 包装,否则:
+            # 1) 同步 SQLite I/O 直接跑在事件循环线程,会阻塞其他 SSE/chat handler;
+            # 2) 与 ``_SQLITE_LOCK`` 守护的 compact / fork / watchdog / storage
+            #    adapter 路径并发时,会触发
+            #    "cannot start a transaction within a transaction"。
             message_repo = MessageRepository()
             session_repo = SessionRepository()
             user_now = int(time.time() * 1000)
             try:
-                message_repo.save(
+                await _run_db_sync(
+                    message_repo.save,
                     DbMessage(
                         id=str(uuid.uuid4()),
                         session_id=data.session_id,
                         role="user",
                         content=data.message,
                         created_at=user_now,
-                    )
+                    ),
                 )
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
             done_reasoning: Optional[str] = None
+
+            # alpha.36 (Bug #4): 累积本次 run 的工具调用,持久化到 assistant 消息的
+            # tool_calls 字段。用户切会话再切回时,前端 loadMessages 从 DB 读到
+            # tool_calls 就能恢复中间步骤(否则只有最终 content,中间信息全丢)。
+            # 形状对齐前端 ToolCall: {id, name, args, result?}
+            accumulated_tool_calls: List[Dict[str, Any]] = []
 
             # L2 真流式 (2026-09-06): run_loop 在 THINKING 段实时发 CONTENT_DELTA
             # 事件时置位 —— 此时 DONE.content 已实时下发过,不再做假切块,
@@ -3026,21 +3006,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 内容落盘（DONE 才落盘的旧语义会留下无回复的悬空 user 消息，
             # 已渲染内容重载即丢）。
             streamed_partial_parts: List[str] = []
-            # 2026-09 step-by-step: 当前迭代的 tool_calls 累积,STEP_DONE 时落盘并重置
-            accumulated_tool_calls: list = []
 
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
             done_event = None
-
-            # 2026-09 step-by-step: 本次 run 已落盘为 assistant 行的中间 step 数
-            # (STEP_DONE 触发,不含最终 DONE 行)。message_count 增量 =
-            # 1 (user) + steps_completed (中间 step) + 1 (最终 done)。
-            steps_completed: int = 0
-            # 2026-09 step-by-step: 追踪最近一次 agent 事件 — RT7 中断落盘 partial
-            # 行时,partial 内容是"当前 step 的累加器",step_index 需对齐这次事件的
-            # iteration 范围。
-            last_evt = None
 
             # P0-2 (2026-08-20): registration is created immediately after agent.
             # Keep the same entry and only refresh late-bound fields here.
@@ -3057,13 +3026,21 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 elif stream_entry.get("cancelled") and dispatcher is not None:
                     dispatcher.cancel()
 
+            # 从 settings 读 profile 迭代上限（用户可配），不回退到 profile 硬编码值
+            from backend.orchestration.orch_settings import load_orch_settings
+            _orch = load_orch_settings()
+            _profile_name = agent.profile.get("name", "primary") if agent.profile else "primary"
+            _profile_max_iter = {
+                "primary": _orch.max_primary_iterations,
+                "coder": _orch.max_coder_iterations,
+                "reviewer": _orch.max_reviewer_iterations,
+                "writer": _orch.max_writer_iterations,
+            }.get(_profile_name, _orch.max_primary_iterations)
+
             async for evt in agent.run_loop(
-                messages, llm_config=llm_config, session_id=data.session_id
+                messages, llm_config=llm_config, session_id=data.session_id,
+                max_iterations=_profile_max_iter,
             ):
-                # 2026-09 step-by-step: 追踪最近一次事件 → RT7 partial 落盘时取
-                # step_index 用。中断发生在 for 循环中,loop 变量 evt 仍存最后一次值,
-                # 但显式存到 last_evt 更稳。
-                last_evt = evt
                 # L2 真流式: run_loop 流式 THINKING 产出的内容增量直接转发
                 # (事件结构与旧 fake stream 的 content_delta 完全一致,前端无感)。
                 if evt.state.value == "content_delta":
@@ -3091,9 +3068,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 暂存 DONE 事件，不立即推入队列 —
                     # 待 post-loop 标题生成 + session_updated 事件后再推送，
                     # 保证前端 onDone → loadSessions() 时标题已落盘。
-                    # 2026-09 step-by-step: 显式把 evt.iteration 写回 step_index,
-                    # 前端消费 DONE 事件时也能拿到该步序号(便于流式气泡定位)。
-                    evt.step_index = evt.iteration
                     done_event = evt
                     run_outcome = "completed"
                 elif evt.state.value == "reasoning" and evt.reasoning:
@@ -3150,47 +3124,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             tc["result"] = tr.content
                             break
                     await entry.queue.put(evt.to_dict())
-                # 2026-09 step-by-step: 每完成一次 ReAct 迭代(OBSERVING 之后),
-                # agent.py 在该迭代边界 yield STEP_DONE。这里把"当前 step 的累加器"
-                # 快照成一行 assistant 消息,重置累加器准备下一步。最终步骤由 done
-                # 分支单独处理(无 tool_calls,只含 LLM 终稿 content)。
-                elif evt.state.value == "step_done":
-                    try:
-                        step_now = int(time.time() * 1000)
-                        step_content = "".join(streamed_partial_parts)
-                        step_tool_calls_json = (
-                            json.dumps(accumulated_tool_calls, ensure_ascii=False)
-                            if accumulated_tool_calls
-                            else None
-                        )
-                        message_repo.save(
-                            DbMessage(
-                                id=str(uuid.uuid4()),
-                                session_id=data.session_id,
-                                role="assistant",
-                                content=step_content,
-                                reasoning_content=done_reasoning,
-                                tool_calls=step_tool_calls_json,
-                                # step_index=evt.step_index (== evt.iteration,
-                                # agent.py 在并行/串行路径都同步设置)
-                                step_index=evt.step_index,
-                                created_at=step_now,
-                                model=(llm_config.get("model") if llm_config else "local"),
-                            ),
-                        )
-                        steps_completed += 1
-                    except Exception as step_db_err:
-                        logger.warning(
-                            f"[REQ {request_id}] step {evt.step_index} 持久化失败: {step_db_err}"
-                        )
-                    # 重置 per-step 累加器,让下一步的 delta/reasoning/tool_call
-                    # 累积到空 buffer(后续 STEP_DONE 看到的是干净的当前 step)。
-                    accumulated_tool_calls = []
-                    done_reasoning = None
-                    streamed_partial_parts = []
-                    # STEP_DONE 转发到前端,前端据此把当前 streaming 气泡快照成
-                    # completed step + 重置 streaming 准备下一步。
-                    await entry.queue.put(evt.to_dict())
                 else:
                     await entry.queue.put(evt.to_dict())
 
@@ -3198,9 +3131,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # LLMError 走 except 分支,此块不执行 (无 assistant 可保存)。
             if done_content:
                 assistant_now = int(time.time() * 1000)
-                assistant_persisted = False
+                assistant_message_id: Optional[str] = None
                 try:
-                    message_repo.save(
+                    saved = await _run_db_sync(
+                        message_repo.save,
                         DbMessage(
                             id=str(uuid.uuid4()),
                             session_id=data.session_id,
@@ -3209,39 +3143,35 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             reasoning_content=done_reasoning,
                             # alpha.36 (Bug #4): 持久化工具调用中间信息,
                             # 切会话再切回时前端 loadMessages 能恢复。
-                            # 2026-09 step-by-step: 最终步骤 LLM 通常不再发工具调用,
-                            # accumulated_tool_calls 已被前序 STEP_DONE 重置,这里
-                            # 落盘通常为 None。仅在 LLM 在终稿同时含 tool_call 的
-                            # 边界 case 下才会有值,语义上仍正确(那就是该步的 tool calls)。
                             tool_calls=(
                                 json.dumps(accumulated_tool_calls, ensure_ascii=False)
                                 if accumulated_tool_calls
                                 else None
                             ),
-                            # 2026-09 step-by-step: 最终步骤的 step_index 即
-                            # done_event.iteration (与 evt.iteration 同步)。
-                            step_index=(
-                                done_event.iteration if done_event is not None else 0
-                            ),
                             created_at=assistant_now,
                             model=(llm_config.get("model") if llm_config else "local"),
-                        )
+                        ),
                     )
-                    assistant_persisted = True
+                    assistant_message_id = getattr(saved, "id", None)
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
+                sess = None
                 # WS-C P0-2: 统一记忆写入路径 — assistant 落盘**成功后**才触发
                 # 提取（落盘失败则跳过, 避免产生无对应消息的脏记忆）。
                 # best-effort + autoMemory 开关, 失败只 warning, 不影响流。
-                if assistant_persisted:
+                if assistant_message_id is not None:
                     # ===== L11 stop 钩子 (批次 C-2, observe-only) =====
                     # run 正常结束通知; deny/modify 无语义, 一律忽略。
                     try:
-                        import backend.data.settings_repo as _settings_repo_mod
                         from backend.hooks.config import load_hooks as _load_hooks_fn
                         from backend.hooks.runner import run_event_hooks as _run_hooks_fn
 
-                        _stop_hooks = _load_hooks_fn(_settings_repo_mod.SettingsRepository())
+                        def _load_stop_hooks():
+                            from backend.data.settings_repo import SettingsRepository
+
+                            return _load_hooks_fn(SettingsRepository())
+
+                        _stop_hooks = await _run_db_sync(_load_stop_hooks)
                         if _stop_hooks:
                             _capped = done_content[:4096]
                             await _run_hooks_fn(
@@ -3258,29 +3188,44 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         logger.debug(
                             f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
                         )
-                    if not memory_off:
+                try:
+                    sess = await _run_db_sync(session_repo.get, data.session_id)
+                except Exception as db_err:
+                    logger.warning(f"[REQ {request_id}] 会话读取失败: {db_err}")
+                if sess is not None:
+                    try:
+                        await _run_db_sync(
+                            session_repo.update,
+                            data.session_id,
+                            last_message_at=assistant_now,
+                            message_count=sess.message_count + 2,
+                        )
+                    except Exception as db_err:
+                        logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
+                # Important-1 (win7 Task 6): when lifespan has installed a lifecycle
+                # manager, use it so memory_written hooks and traceability are
+                # emitted. Otherwise fall back to the async extraction queue.
+                if assistant_message_id is not None:
+                    lifecycle = getattr(request.app.state, "lifecycle", None)
+                    if lifecycle is not None and not memory_off:
+                        try:
+                            await lifecycle.on_turn_complete(
+                                data.session_id,
+                                [
+                                    {"role": "user", "content": data.message},
+                                    {"role": "assistant", "content": done_content},
+                                ],
+                                source_message_id=assistant_message_id,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                f"[REQ {request_id}] lifecycle on_turn_complete failed: {exc}"
+                            )
+                    elif not memory_off:
+                        # 对标 S2: 临时聊天（memory_mode='off'）不提取记忆
                         await _extract_legacy_chat_memory(
                             request_id, data.session_id, data.message, done_content
                         )
-                # win7 分支同款防御 (回流): sess 先初始化为 None。否则
-                # session_repo.get 抛错时 except 吞掉后, 下方标题生成判断行
-                # `if done_event and sess` 触发 UnboundLocalError, 一路冒穿
-                # producer —— 用户在内容已全部生成后收到 state=failed,
-                # DONE 事件/标题/session_updated 全部丢失。
-                sess = None
-                try:
-                    sess = session_repo.get(data.session_id)
-                    if sess is not None:
-                        session_repo.update(
-                            data.session_id,
-                            last_message_at=assistant_now,
-                            # 2026-09 step-by-step: 多步 run 产生 (steps_completed+1)
-                            # 条 assistant 行 (中间 step + 最终 done) 加 1 条 user 行,
-                            # 共 steps_completed+2 条新增消息。
-                            message_count=sess.message_count + steps_completed + 2,
-                        )
-                except Exception as db_err:
-                    logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
 
                 # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
                 # 在推送 DONE 事件前完成，确保前端 onDone → loadSessions() 读到新标题。
@@ -3297,7 +3242,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 data.message, done_content
                             )
                             if title:
-                                session_repo.update(data.session_id, title=title)
+                                # PR A §1.2: 标题更新同样需经 ``_run_db_sync``
+                                # 走 ``_SQLITE_LOCK``,与本会话其他写入串行化。
+                                await _run_db_sync(
+                                    session_repo.update, data.session_id, title=title
+                                )
                                 await entry.queue.put(
                                     {
                                         "type": "session_updated",
@@ -3335,7 +3284,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 partial_text = "".join(streamed_partial_parts).strip()
                 if partial_text:
                     try:
-                        message_repo.save(
+                        # 落盘走与 DONE 持久化同一把 _SQLITE_LOCK（_run_db_sync）。
+                        await _run_db_sync(
+                            message_repo.save,
                             DbMessage(
                                 id=str(uuid.uuid4()),
                                 session_id=data.session_id,
@@ -3344,22 +3295,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 reasoning_content=None,
                                 # alpha.36 (Bug #4): 中断时也持久化已累积的工具调用,
                                 # 切会话再切回能看到中断前已发生的工具步骤。
-                                # 2026-09 step-by-step: 累加器已在 STEP_DONE 时重置,
-                                # 这里只含"当前未完成 step"的 tool calls(等价于
-                                # 旧行为的"最后一次 STEP_DONE 后的剩余部分")。
                                 tool_calls=(
                                     json.dumps(accumulated_tool_calls, ensure_ascii=False)
                                     if accumulated_tool_calls
                                     else None
                                 ),
-                                # 2026-09 step-by-step: partial 行归属到当前
-                                # 中断时正在执行的 iteration(== last_evt.iteration)。
-                                step_index=(
-                                    last_evt.iteration if last_evt is not None else 0
-                                ),
                                 created_at=int(time.time() * 1000),
                                 model=(llm_config.get("model") if llm_config else "local"),
-                            )
+                            ),
                         )
                         await entry.queue.put(
                             {"state": "partial_persisted", "content": partial_text}
@@ -3392,7 +3335,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         str(_exc_info[1]) if _exc_info and _exc_info[0] else "运行失败"
                     )
             try:
-                await asyncio.to_thread(
+                await _run_db_sync(
                     SessionRepository().update_run_status,
                     data.session_id,
                     _terminal_status,
@@ -3544,7 +3487,7 @@ def steer_agent(data: SteerRequest):
     消息在目标 run 的**下一迭代边界**注入 LLM 上下文（agent.run_loop
     消费，与编排链 O1 边界投递同语义）。纯内存注册表 + deque 操作，
     不走 DB 锁；失败面：
-    - 404 stream_not_found：stream 不存在/已结束
+  - 404 stream_not_found：stream 不存在/已结束
     - 409 not_running：stream 存在但 agent 不在 run 活跃窗口
       （前端收到 409 回退排队语义——run 结束后作为新消息发送）
     - 400 msg_too_long：超过 8KB 额度
@@ -4122,7 +4065,17 @@ class MemorySaveRequest(BaseModel):
 
 
 class MemoryDeleteRequest(BaseModel):
-    id: str
+    id: Optional[str] = None
+    # Gap E (Task 5): the renderer bridge (T1) sends { memory_id } — the
+    # preload's `delete(args: { memory_id })` passes it straight through.
+    # Accept both spellings so the Memory page delete works end-to-end.
+    memory_id: Optional[str] = None
+
+    def resolve_id(self) -> Optional[str]:
+        """优先 memory_id（渲染器桥），兼容 legacy { id }。"""
+        if self.memory_id and self.id and self.memory_id != self.id:
+            raise HTTPException(status_code=422, detail="memory id mismatch")
+        return self.memory_id or self.id
 
 
 # ---- 对标 S2（2026-09-13）：记忆写入台账 / 撤销 / 用户画像 CRUD ---------
@@ -4317,9 +4270,12 @@ def delete_memory(data: MemoryDeleteRequest):
     """删除记忆"""
     try:
         mm = get_memory_manager()
+        target_id = data.resolve_id()
+        if not target_id:
+            raise HTTPException(status_code=422, detail="memory id required")
         # 尝试从所有类型中删除
         for mtype in ["episodic", "semantic"]:
-            if mm.delete_memory(data.id, mtype):
+            if mm.delete_memory(target_id, mtype):
                 return {"status": "ok"}
         raise HTTPException(status_code=404, detail="记忆不存在")
     except HTTPException:
@@ -4526,6 +4482,109 @@ def list_memories(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 记忆可追溯性 API (Gap E / Task 5) ====================
+
+
+def _get_memory_port(request: Request):
+    """返回 MemoryAdapter（MemoryPort 实现）。
+
+    生产路径：``main.py`` lifespan 把 adapter 挂在 ``app.state.memory_port``。
+    测试路径（不走 lifespan）：惰性构造一个绑定当前 MemoryManager 的
+    adapter —— conftest 已把 MemoryManager 重置到临时 DB，因此查询
+    打到测试库。
+    """
+    port = getattr(request.app.state, "memory_port", None)
+    if port is not None:
+        return port
+    from backend.adapters.out.memory.adapter import MemoryAdapter
+
+    return MemoryAdapter(get_memory_manager())
+
+
+@router.get("/memory/by-turn/{turn_id}")
+async def get_memories_by_turn(turn_id: str, request: Request):
+    """按来源 turn 查询记忆（可追溯性：从记忆点击跳回产生它的轮次）。"""
+    memory_port = _get_memory_port(request)
+    memories = await memory_port.find_by_turn(turn_id)
+    return {"memories": list(memories)}
+
+
+@router.get("/memory/summary/{session_id}")
+async def get_session_summary(session_id: str, request: Request):
+    """按会话聚合 task_summary 记忆（会话摘要 Tab）。"""
+    memory_port = _get_memory_port(request)
+    summaries = await memory_port.find_by_category_and_session("task_summary", session_id)
+    return {"summaries": list(summaries), "session_id": session_id}
+
+
+# ==================== 记忆 SSE 流 (Task 6) ====================
+
+
+@router.get("/memory/events")
+async def memory_events(request: Request):
+    """SSE 流：订阅 ``memory_written`` 生命周期事件 (Task 6)。
+
+    每个连接持有独立的 ``asyncio.Queue(maxsize=100)``；进程内
+    HookRegistry 触发 ``memory_written`` 时把事件序列化后推给连接。
+    15s 无事件时发心跳 ``: heartbeat`` 保持连接。客户端断开
+    (``request.is_disconnected()``) 或请求取消时在 ``finally`` 注销
+    监听器，避免 per-connection 闭包泄漏。
+
+    Electron 主进程 (``electron/main.ts``) 通过 EventSource 消费此流，
+    再通过 IPC ``sage:memory:event`` 转发给渲染进程。
+    """
+    from backend.memory.hooks import HookRegistry
+    from backend.memory.lifecycle import MemoryWriteEvent
+
+    hooks: HookRegistry = getattr(request.app.state, "hooks", None)
+    if hooks is None:
+        raise HTTPException(
+            status_code=503,
+            detail="memory hook registry not initialized",
+        )
+
+    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+
+    def on_memory_written(event: object) -> None:
+        """Hook 监听器（同步）：入队；队列满则丢弃并告警，绝不上抛。"""
+        try:
+            queue.put_nowait(event)
+        except asyncio.QueueFull:
+            logger.warning("memory events queue full, dropping event")
+
+    hooks.on("memory_written", on_memory_written)
+
+    async def event_stream():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:  # noqa: UP041 — Py3.10 asyncio.TimeoutError
+                    yield ": heartbeat\n\n"
+                    continue
+                if not isinstance(event, MemoryWriteEvent):
+                    continue
+                payload = json.dumps(
+                    {
+                        "memory_id": event.memory_id,
+                        "content": event.content,
+                        "memory_type": event.memory_type,
+                        "memory_category": event.memory_category,
+                        "session_id": event.session_id,
+                        "turn_id": event.turn_id,
+                        "timestamp": event.timestamp.isoformat(),
+                    },
+                    ensure_ascii=False,
+                )
+                yield f"data: {payload}\n\n"
+        finally:
+            hooks.off("memory_written", on_memory_written)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 def _enrich_memory_records(

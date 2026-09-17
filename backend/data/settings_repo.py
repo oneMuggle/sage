@@ -26,6 +26,18 @@ class SettingsRepository:
             "font_size_ui",
             "font_size_code",
             "current_session_id",
+            # Task 2 (Gap B) — MemoryLifecycleManager auto_memory preference gate.
+            # Surfaced via /api/v1/preferences/auto_memory (GET/PUT) backed by
+            # memory_get_auto / memory_set_auto IPC commands. Default True;
+            # when False, ChatService skips _extract_and_store_memory + compress.
+            "auto_memory",
+            # Important-2 (final review) — independent "记忆检索注入" gate.
+            # Surfaced via /api/v1/preferences/memory_retrieval (GET/PUT) backed
+            # by memory_get_retrieval / memory_set_retrieval IPC commands.
+            # Default True; when False, ChatService skips memory.retrieve
+            # (no memory injection into the LLM context). Independent of
+            # auto_memory — toggling one must never flip the other.
+            "memory_retrieval",
             # M1 工具安全加固: 权限模式 + 用户规则（见 backend/tools/permissions.py）
             "permission_mode",
             "permission_rules",

@@ -181,6 +181,36 @@ def _segment_for_index(text: Optional[str]) -> str:
     return " ".join(w.strip() for w in jieba.cut_for_search(text) if w.strip())
 
 
+def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
+    """Add source_turn_id / source_message_id / memory_category columns and
+    supporting indexes to ``memories_episodic``.
+
+    win7 承载：main 的 memory 子系统已改走 summary/consolidation 表，不再
+    调用本迁移；但 win7 的 memory/episodic.py 仍写这三列，且存量库早于
+    这些列存在。幂等，可在每次 init_db 调用。
+    """
+    cur = db.execute("PRAGMA table_info(memories_episodic)")
+    existing_cols = {row[1] for row in cur.fetchall()}
+    new_cols = {
+        "source_turn_id": "TEXT",
+        "source_message_id": "TEXT",
+        "memory_category": "TEXT",
+    }
+    for col, typedef in new_cols.items():
+        if col not in existing_cols:
+            db.execute(f"ALTER TABLE memories_episodic ADD COLUMN {col} {typedef}")
+            logger.info("migration: added memories_episodic.%s", col)
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mem_episodic_session_turn "
+        "ON memories_episodic(session_id, source_turn_id)"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mem_episodic_category "
+        "ON memories_episodic(memory_category)"
+    )
+    db.commit()
+
+
 def _warm_jieba() -> None:
     """§1.2 修复：模块导入时预热 jieba 词典，避免首次 FTS 写入冷启动 500ms+。
 
@@ -511,6 +541,9 @@ class Database:
             "ON messages(session_id, segment_id, created_at)"
         )
         conn.commit()
+
+        # win7-only（Task 4 / Gap A）：补 source_turn_id 等三列，见 _migrate_memory_traceability。
+        _migrate_memory_traceability(conn)
 
         # 会话摘要表（批次三 step 3，spec §4.3）
         # Dedicated table for compressed session summaries; deliberately
