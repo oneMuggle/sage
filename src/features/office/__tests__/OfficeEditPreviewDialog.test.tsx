@@ -651,6 +651,9 @@ describe('buildUpdateOps — op composition table', () => {
         imageHeight: '3',
       }),
     ).toEqual([{ op: 'add_image', path: 'images/logo.png', width_inches: 4, height_inches: 3 }]);
+    ).toEqual([
+      { op: 'add_image', path: 'images/logo.png', width_inches: 4, height_inches: 3 },
+    ]);
     expect(
       buildUpdateOps('word', {
         ...base,
