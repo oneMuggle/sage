@@ -303,6 +303,11 @@ export const en: Record<TranslationKey, string> = {
   'settings.mcp.tools.error': 'Failed to load tool list',
   'settings.mcp.tools.hint': 'Uncheck a tool to disable it; check to re-enable.',
   'settings.mcp.tools.disabled_tag': 'Disabled',
+  'settings.mcp.authorize.button': 'Authorize',
+  'settings.mcp.authorize.authorizing': 'Authorizing…',
+  'settings.mcp.authorize.success': 'OAuth authorization complete; tool calls now carry the new credentials.',
+  'settings.mcp.authorize.failed_prefix': 'Authorization failed: ',
+  'settings.mcp.authorize.hint': 'Open the browser to finish OAuth login (HTTP transport only)',
 
   // ─── Settings · Updates ────────────────
   'updates.strategy': 'Update strategy',

@@ -75,10 +75,20 @@ def _default_root() -> Path:
 
 
 class OAuthTokenStore:
-    """mcp_oauth_tokens.json 的进程内句柄（写后即落盘，跨进程读最新）。"""
+    """mcp_oauth_tokens.json 的进程内句柄（写后即落盘，跨进程读最新）。
+
+    root=None → 每次访问动态解析 SAGE_USER_DATA_DIR（r64：单例不能在
+    首次使用时冻结环境变量，测试与运行期变更都要生效）。
+    """
 
     def __init__(self, root: Optional[Path] = None):
-        self.root = Path(root) if root else _default_root()
+        self._root_override = Path(root) if root else None
+
+    @property
+    def root(self) -> Path:
+        if self._root_override is not None:
+            return self._root_override
+        return _default_root()
 
     @property
     def path(self) -> Path:

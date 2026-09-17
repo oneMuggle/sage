@@ -998,6 +998,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}/tools`,
   },
+  // r64: OAuth 授权（长请求——后端阻塞等待浏览器回调，上限 300s）
+  mcp_server_authorize: {
+    method: 'POST',
+    path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}/authorize`,
+  },
   mcp_server_delete: {
     method: 'DELETE',
     path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}`,
