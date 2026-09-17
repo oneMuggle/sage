@@ -15,7 +15,7 @@ def db_setup(tmp_path, monkeypatch):
     monkeypatch.setattr(db_mod, "_db", None)
     db = db_mod.get_database()
     db.init_db()
-    yield db
+    return db
 
 
 def test_context_turn_limit_whitelisted(db_setup):
@@ -38,5 +38,5 @@ def test_topic_detection_threshold_whitelisted(db_setup):
 
 def test_unknown_key_raises(db_setup):
     repo = SettingsRepository()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not in whitelist"):
         repo.set("bogus_key_xyz", "x")

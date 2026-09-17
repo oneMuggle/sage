@@ -2829,8 +2829,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 正则层命中或向量层平均相似度 < 阈值即视作话题切换，自动
             # advance_segment 并推 topic_shifted SSE。设置缺失或 "true" 视为启用。
             try:
-                from backend.data.settings_repo import SettingsRepository as _SR_T10
-                _auto_detect_raw = _SR_T10().get("auto_topic_detection")
+                from backend.data.settings_repo import SettingsRepository
+                _auto_detect_raw = SettingsRepository().get("auto_topic_detection")
             except Exception:
                 _auto_detect_raw = None
             _auto_detect_on = _auto_detect_raw is None or _auto_detect_raw.strip().lower() == "true"
@@ -2843,7 +2843,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 try:
                     from backend.memory.embedder_factory import create_embedder
                     _embedder = create_embedder()
-                    embed_fn = lambda t: _embedder.encode(t)
+                    def embed_fn(t):
+                        return _embedder.encode(t)
                 except Exception:
                     pass
 

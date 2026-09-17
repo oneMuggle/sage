@@ -15,7 +15,7 @@ def db_setup(tmp_path, monkeypatch):
     monkeypatch.setattr(db_mod, "_db", None)
     db = db_mod.get_database()
     db.init_db()
-    yield db
+    return db
 
 
 def _create_session(db, session_id: str):
