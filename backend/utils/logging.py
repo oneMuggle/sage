@@ -87,13 +87,13 @@ _CURRENT_LOG_TIMEZONE: str = DEFAULT_LOG_TIMEZONE
 def _resolve_log_timezone(tz: str):
     """把 logTimezone 字符串解析为 tzinfo 对象. 失败回落 UTC."""
     if not tz or tz == "UTC":
-        return timezone.utc
+        return timezone.utc  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10, win7 跑 3.8
     if tz == "local":
         return None  # None 表示用本地时间 (Formatter 特殊处理)
     try:
         return ZoneInfo(tz)
     except Exception:  # noqa: BLE001 — 非法 IANA → 回落 UTC
-        return timezone.utc
+        return timezone.utc  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10, win7 跑 3.8
 
 
 class TimezoneFormatter(logging.Formatter):
@@ -120,12 +120,12 @@ class TimezoneFormatter(logging.Formatter):
 
     def formatTime(self, record, datefmt=None):  # noqa: N802 — stdlib API
         # 检查时区是否变更; 是则重新解析.
-        if _CURRENT_LOG_TIMEZONE != self._cached_tz_key:
+        if self._cached_tz_key != _CURRENT_LOG_TIMEZONE:
             self._cached_tz_key = _CURRENT_LOG_TIMEZONE
             self._cached_tzinfo = _resolve_log_timezone(self._cached_tz_key)
 
         # record.created 是 POSIX 时间戳 (秒, UTC).
-        utc_dt = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        utc_dt = datetime.fromtimestamp(record.created, tz=timezone.utc)  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10, win7 跑 3.8
         if self._cached_tzinfo is None:
             # 'local': 转本地时区
             local_dt = utc_dt.astimezone()
@@ -238,11 +238,11 @@ class SageLogger:
         Returns:
             配置好的 FileHandler
         """
-        # 生成日志文件名（按日期）— 使用当前 logTimezone 切分.
+        # 生成日志文件名 — 按日期 — 使用当前 logTimezone 切分.
         tz = _CURRENT_LOG_TIMEZONE
         tzinfo = _resolve_log_timezone(tz)
         if tzinfo is None:
-            # local: 用本地日期
+            # tzinfo 为空表示用本地时间
             date_str = datetime.now().strftime("%Y%m%d")
         else:
             date_str = datetime.now(tz=tzinfo).strftime("%Y%m%d")

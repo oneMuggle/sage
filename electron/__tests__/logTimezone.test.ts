@@ -18,7 +18,11 @@ afterEach(() => {
 
 vi.mock('electron', () => ({
   app: {
-    isPackaged: false,
+    // Force packaged path so getLogTimezonePath() uses app.getPath('userData')
+    // (which the mock returns as tmpDir). Without this, the production code
+    // takes the dev branch (process.cwd()/data/) where the directory doesn't
+    // exist in CI → ENOENT failures.
+    isPackaged: true,
     getPath: () => tmpDir,
   },
 }));
@@ -35,9 +39,10 @@ describe('logTimezone', () => {
 
   it('readLogTimezone returns stored value', async () => {
     const { readLogTimezone } = await importLogTimezone();
-    // In dev mode (isPackaged=false), path is cwd()/data/sage-log-timezone.json
-    const dataDir = join(process.cwd(), 'data');
-    const filePath = join(dataDir, 'sage-log-timezone.json');
+    // With isPackaged=true (mock), getLogTimezonePath() uses
+    // app.getPath('userData') → tmpDir. So file lives at
+    // ${tmpDir}/sage-log-timezone.json.
+    const filePath = join(tmpDir, 'sage-log-timezone.json');
     try {
       writeFileSync(filePath, JSON.stringify({ logTimezone: 'Asia/Shanghai' }), 'utf-8');
       expect(readLogTimezone()).toBe('Asia/Shanghai');
@@ -48,8 +53,7 @@ describe('logTimezone', () => {
 
   it('readLogTimezone returns UTC for malformed JSON', async () => {
     const { readLogTimezone } = await importLogTimezone();
-    const dataDir = join(process.cwd(), 'data');
-    const filePath = join(dataDir, 'sage-log-timezone.json');
+    const filePath = join(tmpDir, 'sage-log-timezone.json');
     try {
       writeFileSync(filePath, 'not json', 'utf-8');
       expect(readLogTimezone()).toBe('UTC');
@@ -60,8 +64,7 @@ describe('logTimezone', () => {
 
   it('readLogTimezone returns UTC when field is empty string', async () => {
     const { readLogTimezone } = await importLogTimezone();
-    const dataDir = join(process.cwd(), 'data');
-    const filePath = join(dataDir, 'sage-log-timezone.json');
+    const filePath = join(tmpDir, 'sage-log-timezone.json');
     try {
       writeFileSync(filePath, JSON.stringify({ logTimezone: '' }), 'utf-8');
       expect(readLogTimezone()).toBe('UTC');
@@ -72,8 +75,7 @@ describe('logTimezone', () => {
 
   it('writeLogTimezone writes valid JSON and readLogTimezone reads it back', async () => {
     const { writeLogTimezone, readLogTimezone } = await importLogTimezone();
-    const dataDir = join(process.cwd(), 'data');
-    const filePath = join(dataDir, 'sage-log-timezone.json');
+    const filePath = join(tmpDir, 'sage-log-timezone.json');
     try {
       const result = writeLogTimezone('Europe/London');
       expect(result).toBe(true);
