@@ -499,6 +499,9 @@ def render_page(
     if rejection:
         raise RenderError(rejection)
 
+    # X2：渲染耗时（Round 15，与 web_fetch 的 net 块口径对齐）
+    _t0 = time.monotonic()
+
     credential_domain = (credential_domain or "").strip().lower()
     credential_cookies: List[Dict[str, Any]] = []
     if credential_domain:
@@ -603,6 +606,8 @@ def render_page(
     if html:
         # SN2：渲染后 DOM 交给调用方做候选文件链接嗅探（web_tool 不把它回传给模型）
         rendered["html"] = html
+    # X2：渲染耗时（Round 15）
+    rendered["net"] = {"elapsed_ms": int((time.monotonic() - _t0) * 1000)}
     return rendered
 
 
