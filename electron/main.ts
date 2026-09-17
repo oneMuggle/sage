@@ -656,10 +656,30 @@ export function scheduleBackendRestart(): void {
  */
 async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<boolean> {
   const expectedBackend = currentBackend;
-  if (!expectedBackend || backendLifecycle !== 'starting') return false;
+  if (!expectedBackend || backendLifecycle !== 'starting') {
+    logger.warn('main: waitForBackend early exit', {
+      hasExpectedBackend: !!expectedBackend,
+      lifecycle: backendLifecycle,
+    });
+    return false;
+  }
+  logger.info('main: waitForBackend starting health poll', {
+    expectedPid: expectedBackend.pid,
+    generation: expectedBackend.generation,
+    timeoutMs,
+    url: BACKEND_HEALTH,
+  });
   const deadline = Date.now() + timeoutMs;
+  let pollAttempts = 0;
   while (Date.now() < deadline) {
-    if (!isCurrentGeneration(expectedBackend, currentBackend) || appIsQuitting) return false;
+    pollAttempts++;
+    if (!isCurrentGeneration(expectedBackend, currentBackend) || appIsQuitting) {
+      logger.warn('main: waitForBackend generation mismatch or quitting', {
+        pollAttempts,
+        appIsQuitting,
+      });
+      return false;
+    }
     try {
       const health = await new Promise<unknown>((resolve) => {
         const req = http.get(
@@ -675,19 +695,37 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
             });
             res.on('end', () => {
               if (res.statusCode !== 200) {
+                logger.warn('main: health probe non-200', {
+                  statusCode: res.statusCode,
+                  pollAttempts,
+                });
                 resolve(null);
                 return;
               }
               try {
                 resolve(JSON.parse(body) as unknown);
               } catch {
+                logger.warn('main: health probe JSON parse failed', {
+                  bodyPreview: body.slice(0, 200),
+                  pollAttempts,
+                });
                 resolve(null);
               }
             });
             res.resume();
           },
         );
-        req.on('error', () => resolve(null));
+        req.on('error', (err) => {
+          // Log first few errors to help diagnose connection issues
+          if (pollAttempts <= 3) {
+            logger.warn('main: health probe error', {
+              error: err.message,
+              code: (err as NodeJS.ErrnoException).code,
+              pollAttempts,
+            });
+          }
+          resolve(null);
+        });
         req.setTimeout(HTTP_REQUEST_TIMEOUT_MS, () => {
           req.destroy();
           resolve(null);
@@ -702,13 +740,31 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
         //    returning 200 and this recheck; the ownershipToken check above
         //    rules that out, but we still want a structural assertion that
         //    the socket we hit belongs to the expected PID).
-        if (!isCurrentGeneration(expectedBackend, currentBackend)) return false;
+        if (!isCurrentGeneration(expectedBackend, currentBackend)) {
+          logger.warn('main: waitForBackend race-fix: generation changed after ownsBackend');
+          return false;
+        }
         if (!backendProc || backendProc.exitCode !== null || backendProc.signalCode !== null) {
+          logger.warn('main: waitForBackend race-fix: backend process exited', {
+            exitCode: backendProc?.exitCode,
+            signalCode: backendProc?.signalCode,
+          });
           return false;
         }
+        logger.info('main: waitForBackend checking port binding', {
+          port: BACKEND_PORT,
+          expectedPid: expectedBackend.pid,
+          pollAttempts,
+        });
         if (!(await isPortStillBoundByPid(BACKEND_PORT, expectedBackend.pid, 200))) {
+          logger.warn('main: waitForBackend port not bound by expected PID', {
+            port: BACKEND_PORT,
+            expectedPid: expectedBackend.pid,
+            pollAttempts,
+          });
           return false;
         }
+        logger.info('main: waitForBackend all checks passed', { pollAttempts });
         backendLifecycle = 'ready';
         // Task 0 review round 1, finding #6: tell the renderer the backend
         // is ready so BackendStatusBanner can clear the "starting…" state
@@ -716,11 +772,31 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
         mainWindow?.webContents.send('sage:event:backend:ready', { generation: expectedBackend.generation });
         return true;
       }
-    } catch {
-      /* transient connection or malformed health payload */
+      // Log ownership validation failure for diagnostics
+      if (pollAttempts <= 5 || pollAttempts % 20 === 0) {
+        logger.warn('main: ownsBackend validation failed', {
+          pollAttempts,
+          healthStatus: (health as Record<string, unknown>)?.status,
+          healthPid: (health as Record<string, unknown>)?.pid,
+          expectedPid: expectedBackend.pid,
+          healthGeneration: (health as Record<string, unknown>)?.generation,
+          expectedGeneration: expectedBackend.generation,
+          healthBuildId: (health as Record<string, unknown>)?.buildId,
+          expectedBuildId: buildManifest.buildId,
+        });
+      }
+    } catch (err) {
+      // Log unexpected exceptions
+      if (pollAttempts <= 3) {
+        logger.warn('main: waitForBackend unexpected exception', {
+          error: err instanceof Error ? err.message : String(err),
+          pollAttempts,
+        });
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
+  logger.warn('main: waitForBackend timed out', { pollAttempts, timeoutMs });
   return false;
 }
 
@@ -2262,6 +2338,12 @@ app.whenReady().then(async () => {
   }
   updateSplashStage('正在启动后端服务…');
   backendProc = spawnBackend();
+  logger.info('main: backend spawn returned', {
+    pid: backendProc?.pid,
+    hasBackendProc: !!backendProc,
+    lifecycle: backendLifecycle,
+    currentBackendPid: currentBackend?.pid,
+  });
   // If the resolver already fired the broken-installer dialog (because
   // bundled Python is missing or the platform is unsupported), suppress the
   // generic health-timeout dialog below so the user doesn't see two stacked
