@@ -16,10 +16,9 @@ pytestmark = pytest.mark.unit
 
 class TestLoopbackServer:
     def test_binds_random_port_and_exposes_redirect_uri(self):
-        with LoopbackCallbackServer() as s1, LoopbackCallbackServer() as s2:
-            assert s1.port > 0
-            assert s1.redirect_uri == f"http://127.0.0.1:{s1.port}/callback"
-            assert s1.port != s2.port or True  # 端口独立绑定即可
+        with LoopbackCallbackServer() as server:
+            assert server.port > 0
+            assert server.redirect_uri == f"http://127.0.0.1:{server.port}/callback"
 
     def test_captures_callback_url_via_real_http(self):
         with LoopbackCallbackServer() as server:
@@ -36,19 +35,13 @@ class TestLoopbackServer:
             assert server.captured == captured
 
     def test_non_callback_path_404(self):
-        with LoopbackCallbackServer() as server:
-            try:
-                urllib.request.urlopen(
-                    f"http://127.0.0.1:{server.port}/other", timeout=5
-                )
-                raise AssertionError("expected 404")
-            except urllib.error.HTTPError as exc:
-                assert exc.code == 404
+        with LoopbackCallbackServer() as server, pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(f"http://127.0.0.1:{server.port}/other", timeout=5)
+        assert exc_info.value.code == 404
 
     def test_wait_timeout(self):
-        with LoopbackCallbackServer() as server:
-            with pytest.raises(TimeoutError, match="超时"):
-                asyncio.run(server.wait(timeout=0.2))
+        with LoopbackCallbackServer() as server, pytest.raises(TimeoutError, match="超时"):
+            asyncio.run(server.wait(timeout=0.2))
 
 
 class TestWithLoopback:

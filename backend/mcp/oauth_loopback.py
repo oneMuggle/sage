@@ -32,7 +32,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
     server_version = "SageOAuthLoopback/1"
 
     def do_GET(self) -> None:  # noqa: N802 — http.server 命名约定
-        server: "LoopbackCallbackServer" = self.server.sage_oauth_owner  # type: ignore[attr-defined]
+        server: LoopbackCallbackServer = self.server.sage_oauth_owner  # type: ignore[attr-defined]
         if self.path.startswith("/callback"):
             server._captured = (
                 f"http://127.0.0.1:{server.port}{self.path}"
@@ -92,7 +92,7 @@ class LoopbackCallbackServer:
         self._server.shutdown()
         self._server.server_close()
 
-    def __enter__(self) -> "LoopbackCallbackServer":
+    def __enter__(self) -> LoopbackCallbackServer:
         return self
 
     def __exit__(self, *exc: object) -> None:
