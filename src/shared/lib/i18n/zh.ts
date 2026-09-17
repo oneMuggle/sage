@@ -380,6 +380,17 @@ export const zh = {
   'sider.project.add_failed': '添加项目失败：{message}',
   'sider.project.open_failed': '打开项目失败：{message}',
   'sider.project.remove_failed': '移除项目失败：{message}',
+  // allowed_paths 扩展 (P1, 2026-09-17)
+  'sider.project.allowed_paths_label': '额外允许访问',
+  'sider.project.allowed_paths_empty': '未配置额外可访问路径',
+  'sider.project.allowed_paths_hint': '类 .gitignore 语法：~/Documents/** 、/tmp/*',
+  'sider.project.allowed_paths_add_placeholder': '输入路径规则，如 ~/Documents/**',
+  'sider.project.allowed_paths_add': '添加',
+  'sider.project.allowed_paths_save': '保存',
+  'sider.project.allowed_paths_cancel': '取消',
+  'sider.project.allowed_paths_saved': '已保存 {count} 条规则',
+  'sider.project.allowed_paths_failed': '保存失败：{message}',
+  'sider.project.allowed_paths_remove': '移除规则',
 
   // ─── 标题栏 ──────────────────────────
   'titlebar.minimize': '最小化',

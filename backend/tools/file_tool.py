@@ -10,6 +10,13 @@ M1 工具安全加固（移植 claw-code file_ops.rs 的边界/限额设计）:
 - 二进制检测: 读取前嗅探首 8 KiB 的 NUL 字节，二进制文件报错而非返回乱码；
   但带 UTF-16 / UTF-8 BOM 的文件（如 Windows .reg 导出，Win7 用户常见）
   天然含 NUL 字节，先识别 BOM 按文本放行并按对应编码解码。
+
+2026-09-17 allowed_paths 扩展:
+
+- READ 操作在 ``enforce_workspace`` 模式下，除了检查 workspace 内，还检查
+  当前项目的 ``allowed_paths``（路径规则列表）。
+- 路径规则语法类 .gitignore（``~/Documents/**``、``/tmp/*`` 等）。
+- 匹配失败默认拒绝（fail-closed）。
 """
 
 import logging
@@ -20,6 +27,7 @@ from typing import Optional, Tuple
 from backend.data import artifact_repo
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
+from backend.office.allowed_paths import get_session_allowed_paths, is_allowed
 from backend.tools.context import current_tool_context
 
 from .base import BaseTool, ToolResult, ToolSchema
@@ -166,6 +174,58 @@ def _pre_read_checks(file_path: Path, original_bytes: int) -> Optional[ToolResul
     return None
 
 
+def _check_read_access(
+    path: str,
+    workspace_root: Optional[str],
+    enforce_workspace: bool,
+) -> Optional[ToolResult]:
+    """检查 READ 路径权限（workspace + allowed_paths）。
+
+    2026-09-17 allowed_paths 扩展: 路径不在 workspace 内时，检查当前 session
+    绑定项目的 allowed_paths 规则。匹配任一规则 → 放行；否则拒绝。
+
+    Args:
+        path: 待检查的文件路径
+        workspace_root: workspace 根目录（可为 None）
+        enforce_workspace: 是否强制 workspace/allowed_paths 边界
+
+    Returns:
+        ``ToolResult(success=False)`` 表示拒绝；``None`` 表示放行
+    """
+    if not enforce_workspace:
+        return None
+
+    # 延迟导入避免循环依赖
+    from .base import _is_safe_path
+
+    # 情况 1: 路径在 workspace 内 → 放行
+    if workspace_root and _is_safe_path(path, workspace_root):
+        return None
+
+    # 情况 2: 检查 allowed_paths
+    ctx = current_tool_context()
+    session_id = ctx.session_id if ctx else None
+    allowed_paths = get_session_allowed_paths(session_id)
+
+    if allowed_paths and is_allowed(path, allowed_paths):
+        logger.debug(
+            "read access granted via allowed_paths: %s (session=%s)",
+            path, session_id,
+        )
+        return None
+
+    # 拒绝
+    if workspace_root:
+        return ToolResult(
+            success=False,
+            error=(
+                f"path_outside_workspace: resolved path is not under {workspace_root} "
+                f"and not in project allowed_paths"
+            ),
+        )
+    return None
+
+
 class ReadFileTool(BaseTool):
     """读取文件工具"""
 
@@ -211,11 +271,16 @@ class ReadFileTool(BaseTool):
             文本文件例外，按 BOM 编码解码）。
         M2: ``policy.max_read_bytes`` 字节上限（≤ 5 MiB 的文件）——超限时
             **流式**读取（先于行切片）并标记 ``truncated=True``。
+        2026-09-17: ``enforce_workspace`` 模式下，路径不在 workspace 内时
+            检查当前项目的 ``allowed_paths`` 规则。
         """
-        if self._enforce_read_workspace:
-            blocked = self._enforce_workspace(path)
-            if blocked is not None:
-                return blocked
+        # allowed_paths 扩展：使用统一的读取权限检查
+        blocked = _check_read_access(
+            path, self._policy.workspace_root, self._enforce_read_workspace
+        )
+        if blocked is not None:
+            return blocked
+
         if self._policy.workspace_root:
             logger.debug(
                 "read_file: workspace_root 已设置; enforced=%s: %s",
@@ -427,11 +492,16 @@ class ListDirTool(BaseTool):
         M1: list_dir 属 READ 能力——不做 workspace 边界检查（读写非对称）。
         M2: ``policy.max_result_items`` 条数上限——超限时截断 ``items``；
             content 含 ``truncated``/``total_items``。
+        2026-09-17: ``enforce_workspace`` 模式下，路径不在 workspace 内时
+            检查当前项目的 ``allowed_paths`` 规则。
         """
-        if self._enforce_read_workspace:
-            blocked = self._enforce_workspace(path)
-            if blocked is not None:
-                return blocked
+        # allowed_paths 扩展：使用统一的读取权限检查
+        blocked = _check_read_access(
+            path, self._policy.workspace_root, self._enforce_read_workspace
+        )
+        if blocked is not None:
+            return blocked
+
         if self._policy.workspace_root:
             logger.debug(
                 "list_dir: workspace_root 已设置; enforced=%s: %s",
