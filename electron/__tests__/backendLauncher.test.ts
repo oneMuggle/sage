@@ -40,6 +40,13 @@ describe('resolveBackendLaunchCommand', () => {
         expect(plan.extraEnv).toEqual({
           SAGE_DB_PATH: '/mock/sage.db',
           SAGE_USER_DATA_DIR: '/mock/userData',
+          // 2026-08-26: dev-conda now threads PYTHON_BACKEND_PORT so the
+          // conda-launched backend reads the same port main.ts tells the
+          // renderer to hit (previously it fell back to the backend's
+          // built-in default 8765 regardless of override → ECONNREFUSED).
+          PYTHON_BACKEND_PORT: '8765',
+          // 2026-09-17: log timezone env injection (default UTC)
+          SAGE_LOG_TIMEZONE: 'UTC',
         });
         expect(plan.extraEnv).not.toHaveProperty('PYTHONPATH');
       }
@@ -74,6 +81,7 @@ describe('resolveBackendLaunchCommand', () => {
           SAGE_DB_PATH: '/mock/sage.db',
           SAGE_USER_DATA_DIR: '/mock/userData',
           PYTHON_BACKEND_PORT: '8765',
+          SAGE_LOG_TIMEZONE: 'UTC',
         });
         // CRITICAL: must NOT include `run`, `-n`, or `sage-backend` —
         // that's the legacy conda-wrapper shape and it would re-introduce
@@ -153,6 +161,7 @@ describe('resolveBackendLaunchCommand', () => {
           SAGE_DB_PATH: '/mock/sage.db',
           SAGE_USER_DATA_DIR: '/mock/userData',
           PYTHON_BACKEND_PORT: '8765',
+          SAGE_LOG_TIMEZONE: 'UTC',
         });
         expect(plan.extraEnv).not.toHaveProperty('PYTHONPATH');
       }
@@ -211,6 +220,8 @@ describe('resolveBackendLaunchCommand', () => {
           SAGE_USER_DATA_DIR: '/mock/userData',
           // test env has no SAGE_LOG_LEVEL set → `?? 'info'` fallback applies
           SAGE_LOG_LEVEL: 'info',
+          // 2026-09-17: log timezone (default UTC)
+          SAGE_LOG_TIMEZONE: 'UTC',
           // Win uses ';' as PYTHONPATH separator
           PYTHONPATH: [join('/mock', 'resources', 'backend'), join('/mock', 'resources', 'sage-core')].join(';'),
           PYTHON_BACKEND_PORT: '8765',
