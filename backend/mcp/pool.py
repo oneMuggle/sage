@@ -666,6 +666,7 @@ class McpServerPool:
             new_config = validate_server_config(
                 name=base.name,
                 command=base.command,
+                url=base.url,
                 args=base.args,
                 env=dict(base.env),
                 enabled=base.enabled if enabled is None else enabled,

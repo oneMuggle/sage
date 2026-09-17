@@ -158,7 +158,7 @@ describe('useOfficeDocuments — importAndRead token lifecycle', () => {
 });
 
 describe('useOfficeDocuments — workspace entry sweep', () => {
-  it('calls listDocuments then sweepOrphanStaging with the same workspace and known ids', async () => {
+  it('lists documents without invoking destructive cleanup', async () => {
     mockListDocuments.mockResolvedValue({
       documents: [
         {
@@ -195,10 +195,7 @@ describe('useOfficeDocuments — workspace entry sweep', () => {
     // Item 1.7: listDocuments now carries the include_archived flag
     // (false on the default live view).
     expect(mockListDocuments).toHaveBeenCalledWith('/tmp/ws', { includeArchived: false });
-    expect(mockSweepOrphanStaging).toHaveBeenCalledWith({
-      workspacePath: '/tmp/ws',
-      knownDocIds: ['doc-a', 'doc-b'],
-    });
+    expect(mockSweepOrphanStaging).not.toHaveBeenCalled();
   });
 
   it('archived view fetches with includeArchived and keeps only archived rows (item 1.7)', async () => {
@@ -242,6 +239,7 @@ describe('useOfficeDocuments — workspace entry sweep', () => {
     });
     await waitFor(() => {
       expect(result.current.documents.map((d) => d.id)).toEqual(['doc-arch']);
+      expect(mockSweepOrphanStaging).not.toHaveBeenCalled();
     });
   });
 
@@ -284,7 +282,7 @@ describe('useOfficeDocuments — workspace entry sweep', () => {
     expect(mockSweepOrphanStaging).not.toHaveBeenCalled();
   });
 
-  it('surfaces sweep failure without losing the documents list', async () => {
+  it('does not invoke legacy sweep even when it would fail', async () => {
     mockListDocuments.mockResolvedValue({
       documents: [
         {
@@ -307,9 +305,8 @@ describe('useOfficeDocuments — workspace entry sweep', () => {
     await waitFor(() => {
       expect(result.current.documents).toHaveLength(1);
     });
-    await waitFor(() => {
-      expect(result.current.error).toMatch(/rm failed/);
-    });
+    expect(result.current.error).toBeNull();
+    expect(mockSweepOrphanStaging).not.toHaveBeenCalled();
   });
 
   it('does not setDocuments on an unmounted hook when workspace changes mid-flight', async () => {

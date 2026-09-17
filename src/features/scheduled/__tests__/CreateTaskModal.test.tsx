@@ -140,3 +140,100 @@ describe('CreateTaskModal', () => {
     });
   });
 });
+
+const auditTask = {
+  id: 'audit-a',
+  name: 'Task A',
+  type: 'recurring' as const,
+  schedule: { kind: 'recurring' as const, cron: '0 8 * * *' },
+  session_id: 's-1',
+  content: 'Content A',
+  enabled: true,
+  created_at: 0,
+};
+const formTree = (props: Partial<React.ComponentProps<typeof CreateTaskModal>>) => (
+  <I18nProvider>
+    <CreateTaskModal open onClose={vi.fn()} sessionId="s-1" {...props} />
+  </I18nProvider>
+);
+const submitButton = () => document.querySelector('button[type="submit"]') as HTMLButtonElement;
+
+describe('scheduled audit form contracts', () => {
+  it('hydrates after closed mount and resets A to B to a new form', () => {
+    const view = render(formTree({ open: false }));
+    view.rerender(formTree({ task: auditTask }));
+    expect(screen.getByDisplayValue('Task A')).toBeTruthy();
+    view.rerender(
+      formTree({ task: { ...auditTask, id: 'audit-b', name: 'Task B', content: 'Content B' } }),
+    );
+    expect(screen.getByDisplayValue('Task B')).toBeTruthy();
+    expect(screen.queryByDisplayValue('Content A')).toBeNull();
+    view.rerender(formTree({ task: undefined }));
+    expect((document.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('submits edited content, schedule and actual target session', async () => {
+    render(
+      formTree({ task: auditTask, sessions: [{ id: 's-1' }, { id: 's-2', title: 'Second' }] }),
+    );
+    fireEvent.change(document.querySelector('textarea')!, {
+      target: { value: 'New instructions' },
+    });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 's-2' } });
+    fireEvent.click(screen.getByTestId('cron-preset-hourly'));
+    fireEvent.click(submitButton());
+    await waitFor(() =>
+      expect(useScheduledTaskStore.getState().update).toHaveBeenCalledWith(
+        'audit-a',
+        expect.objectContaining({
+          content: 'New instructions',
+          session_id: 's-2',
+          schedule: { kind: 'recurring', cron: '0 * * * *' },
+        }),
+      ),
+    );
+  });
+
+  it('sends enabled=false on creation', async () => {
+    const state = useScheduledTaskStore.getState();
+    state.create = vi.fn().mockResolvedValue({});
+    render(formTree({}));
+    fireEvent.change(screen.getByPlaceholderText(/scheduled\.field\.name|Task name|任务名称/i), {
+      target: { value: 'Paused' },
+    });
+    fireEvent.change(document.querySelector('textarea')!, { target: { value: 'hello' } });
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(submitButton());
+    await waitFor(() =>
+      expect(state.create).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: false, session_id: 's-1' }),
+      ),
+    );
+  });
+
+  it('blocks submission without an existing target session', () => {
+    render(formTree({ task: auditTask, sessions: [] }));
+    expect(submitButton().disabled).toBe(true);
+  });
+
+  it('allows renaming a paused expired once task and preserves its timestamp', async () => {
+    render(
+      formTree({
+        task: {
+          ...auditTask,
+          enabled: false,
+          type: 'once',
+          schedule: { kind: 'once', at: 1234567 },
+        },
+      }),
+    );
+    expect(submitButton().disabled).toBe(false);
+    fireEvent.click(submitButton());
+    await waitFor(() =>
+      expect(useScheduledTaskStore.getState().update).toHaveBeenCalledWith(
+        'audit-a',
+        expect.objectContaining({ schedule: { kind: 'once', at: 1234567 }, enabled: false }),
+      ),
+    );
+  });
+});

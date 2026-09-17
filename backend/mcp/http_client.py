@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 _MIN_TIMEOUT = 1.0
 
 
+class _SessionExpiredError(McpClientError):
+    """The server rejected an established session (HTTP 404)."""
+
+
 class HttpClientMcpClient:
     """Streamable-HTTP 传输的 MCP 客户端（同步接口）。"""
 
@@ -45,7 +49,7 @@ class HttpClientMcpClient:
             raise McpClientError(f"MCP server '{config.name}' has no url for HTTP transport")
         self._session_id: Optional[str] = None
         self._started = False
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._client = http_client
 
     # ---- 生命周期 ---------------------------------------------------------
@@ -60,9 +64,10 @@ class HttpClientMcpClient:
 
     def start(self) -> None:
         """initialize 握手 + initialized 通知。"""
-        if self._started:
-            return
         with self._lock:
+            if self._started:
+                return
+            self._session_id = None
             result = self._post("initialize", {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
@@ -83,18 +88,18 @@ class HttpClientMcpClient:
             self._started = True
 
     def stop(self) -> None:
-        self._started = False
+        with self._lock:
+            self._started = False
+            self._session_id = None
 
     # ---- 工具 (与 stdio 版同接口) ----------------------------------------
 
     def list_tools(self) -> List[Dict[str, Any]]:
-        self._ensure_started()
-        result = self._post("tools/list", {}, expect_response=True)
+        result = self._request("tools/list", {}, expect_response=True)
         return result.get("tools", []) if isinstance(result, dict) else []
 
     def call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        self._ensure_started()
-        result = self._post(
+        result = self._request(
             "tools/call", {"name": name, "arguments": arguments}, expect_response=True
         )
         if not isinstance(result, dict):
@@ -104,25 +109,21 @@ class HttpClientMcpClient:
     # ---- L10: resources / prompts ------------------------------------------
 
     def list_resources(self) -> List[Dict[str, Any]]:
-        self._ensure_started()
-        result = self._post("resources/list", {}, expect_response=True)
+        result = self._request("resources/list", {}, expect_response=True)
         return result.get("resources", []) if isinstance(result, dict) else []
 
     def read_resource(self, uri: str) -> Dict[str, Any]:
-        self._ensure_started()
-        result = self._post("resources/read", {"uri": uri}, expect_response=True)
+        result = self._request("resources/read", {"uri": uri}, expect_response=True)
         if not isinstance(result, dict):
             raise McpClientError(f"MCP server '{self._config.name}': malformed resources/read result")
         return result
 
     def list_prompts(self) -> List[Dict[str, Any]]:
-        self._ensure_started()
-        result = self._post("prompts/list", {}, expect_response=True)
+        result = self._request("prompts/list", {}, expect_response=True)
         return result.get("prompts", []) if isinstance(result, dict) else []
 
     def get_prompt(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        self._ensure_started()
-        result = self._post(
+        result = self._request(
             "prompts/get", {"name": name, "arguments": arguments}, expect_response=True
         )
         if not isinstance(result, dict):
@@ -134,6 +135,22 @@ class HttpClientMcpClient:
     def _ensure_started(self) -> None:
         if not self._started:
             raise McpClientError(f"MCP server '{self._config.name}' is not started")
+
+    def _request(self, method: str, params: Dict[str, Any], expect_response: bool) -> Any:
+        # Serialize the session lifecycle with requests. Reconnect is bounded;
+        # tools/call is NEVER replayed automatically (it may have side effects).
+        with self._lock:
+            self._ensure_started()
+            try:
+                return self._post(method, params, expect_response)
+            except _SessionExpiredError as exc:
+                self.start()
+                if method == "tools/call":
+                    raise McpClientError(
+                        "MCP session expired and was renewed; tool call was not replayed. "
+                        "Check its outcome before retrying."
+                    ) from exc
+                return self._post(method, params, expect_response)
 
     def _post(self, method: str, params: Dict[str, Any], expect_response: bool) -> Any:
         """POST 一条 JSON-RPC; 返回 result 字段或 None (通知/无响应)。"""
@@ -148,7 +165,8 @@ class HttpClientMcpClient:
         # 每次请求携带；自定义头先合并，真实会话头后置优先（Mcp-Session-Id
         # 决定续连，不能被配置覆盖）。
         for h_key, h_value in (getattr(self._config, "headers", None) or {}).items():
-            if isinstance(h_key, str) and isinstance(h_value, str):
+            if (isinstance(h_key, str) and isinstance(h_value, str)
+                    and h_key.lower() != "mcp-session-id"):
                 headers[h_key] = h_value
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
@@ -166,6 +184,13 @@ class HttpClientMcpClient:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
+            expired = (isinstance(exc, httpx.HTTPStatusError)
+                       and exc.response.status_code == 404 and bool(self._session_id)
+                       and method != "initialize")
+            self._started = False
+            self._session_id = None
+            if expired:
+                raise _SessionExpiredError("MCP HTTP session expired") from exc
             raise McpClientError(f"MCP HTTP error ({method}): {exc}") from exc
         finally:
             if owned:

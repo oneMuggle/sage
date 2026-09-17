@@ -111,6 +111,7 @@ const SEMVER_PATTERN =
   /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export class UpdateManager {
+  private startupFailurePromise: Promise<boolean> | null = null;
   private stateManager: StateManager;
   private configManager: ConfigManager;
   private updater: UpdaterBoundary;
@@ -840,6 +841,7 @@ export class UpdateManager {
   async onAppStartup(
     getWindow: () => BrowserWindow | null,
     backendUrl = 'http://127.0.0.1:8765',
+    getAuthToken: () => string | null = () => null,
   ): Promise<void> {
     const state = await this.stateManager.getState();
 
@@ -868,7 +870,7 @@ export class UpdateManager {
     }
 
     // Run post-startup health checks
-    const healthChecker = new LauncherHealthChecker({ getWindow, backendUrl });
+    const healthChecker = new LauncherHealthChecker({ getWindow, backendUrl, getAuthToken });
     const health = await healthChecker.runPostStartupChecks();
 
     if (!health.passed) {
@@ -877,17 +879,11 @@ export class UpdateManager {
       // pointing at a version that never completed installation).
       const marker = state.postInstallMarker;
       if (marker && marker.version === state.currentVersion) {
-        state.crashCount += 1;
-        await this.stateManager.setState(state);
-
+        if (await this.onAppStartupFailure('health-check-failed')) return;
+        const failedState = await this.stateManager.getState();
         const config = await this.configManager.getConfig();
-        if (state.crashCount >= config.autoRollbackThreshold) {
-          await this.rollback('auto-rollback:health-check-failed');
-          return; // rollback() calls app.exit(), but TypeScript needs this
-        }
-
         throw new Error(
-          `Health check failed (${state.crashCount}/${config.autoRollbackThreshold})`,
+          `Health check failed (${failedState.crashCount}/${config.autoRollbackThreshold})`,
         );
       }
 
@@ -904,6 +900,37 @@ export class UpdateManager {
       if (needsCrashReset) state.crashCount = 0;
       await this.stateManager.setState(state);
     }
+  }
+
+  /** Record a failed boot even when no renderer/backend ever became ready.
+   * One launch counts once, regardless of user retries or overlapping probes.
+   * Returns true only after rollback was actually invoked successfully.
+   */
+  onAppStartupFailure(reason: string): Promise<boolean> {
+    if (this.startupFailurePromise) return this.startupFailurePromise;
+    this.startupFailurePromise = (async () => {
+      const state = await this.stateManager.getState();
+      const marker = state.postInstallMarker;
+      if (
+        !marker ||
+        marker.version !== state.currentVersion ||
+        marker.version !== app.getVersion()
+      ) {
+        return false;
+      }
+      if (state.lastRecordedVersion !== state.currentVersion) {
+        state.crashCount = 0;
+        state.lastRecordedVersion = state.currentVersion;
+      }
+      state.crashCount += 1;
+      await this.stateManager.setState(state);
+      this.notifyStateChange(state);
+      const config = await this.configManager.getConfig();
+      if (state.crashCount < config.autoRollbackThreshold) return false;
+      await this.rollback(`auto-rollback:${reason}`);
+      return true;
+    })();
+    return this.startupFailurePromise;
   }
 
   async rollback(reason: string): Promise<void> {
@@ -1002,10 +1029,13 @@ export class UpdateManager {
   }
 
   private async reportRollbackEvent(reason: string, state: UpdateState): Promise<void> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
     try {
       const config = await this.configManager.getConfig();
       await fetchCompat(`${config.updateServerUrl}/api/v1/updates/rollbacks`, {
         method: 'POST',
+        signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           from_version: state.currentVersion,
@@ -1016,7 +1046,9 @@ export class UpdateManager {
         }),
       });
     } catch {
-      // Non-blocking: ignore reporting failures
+      // Telemetry never blocks local recovery.
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

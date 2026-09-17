@@ -1597,7 +1597,6 @@ it('rollback reaches local recovery while telemetry never settles (audit #17)', 
   });
 });
 
-
 interface UpdateStateLike {
   pendingUpdate?: { sha512?: string } | null;
   cachedRollbackPackage?: { path?: string; sha512?: string } | null;

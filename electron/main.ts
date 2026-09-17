@@ -291,6 +291,15 @@ let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let backendAuthToken: string | null = null;
 let updateManager: UpdateManager | null = null;
+async function reportUpdateStartupFailure(reason: string): Promise<boolean> {
+  try {
+    return (await updateManager?.onAppStartupFailure(reason)) ?? false;
+  } catch (err) {
+    logger.warn('main: startup recovery failed', { error: String(err) });
+    return false;
+  }
+}
+
 let cleanupUpdateIpc: (() => void) | null = null;
 let cleanupProviderIpc: (() => void) | null = null;
 
@@ -438,9 +447,8 @@ function spawnBackend(): ChildProcess {
     // this, the user sees two stacked modal dialogs about the same problem.
     reportedBrokenInstaller = true;
     updateSplashStage('安装包不完整，无法启动后端');
-    void showStartupFailureDialog({
-      reason: plan.title,
-      detail: plan.detail,
+    void reportUpdateStartupFailure('broken-installer').then(async (rolledBack) => {
+      if (!rolledBack) await showStartupFailureDialog({ reason: plan.title, detail: plan.detail });
     });
     // Return a no-op stub proc that exits immediately so the rest of the
     // startup flow (health probe → timeout) still works predictably.
@@ -634,7 +642,7 @@ export function scheduleBackendRestart(): void {
     attempt: restartCount,
     delayMs: delay,
   });
-    mainWindow?.webContents.send('sage:event:backend:disconnected', { attempt: restartCount });
+  mainWindow?.webContents.send('sage:event:backend:disconnected', { attempt: restartCount });
   restartTimer = setTimeout(() => {
     restartTimer = null;
     if (appIsQuitting || backendProc || currentBackend || backendLifecycle !== 'idle') return;
@@ -792,7 +800,9 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
         // Task 0 review round 1, finding #6: tell the renderer the backend
         // is ready so BackendStatusBanner can clear the "starting…" state
         // (or never show it, if the spawn-to-ready window was sub-frame).
-        mainWindow?.webContents.send('sage:event:backend:ready', { generation: expectedBackend.generation });
+        mainWindow?.webContents.send('sage:event:backend:ready', {
+          generation: expectedBackend.generation,
+        });
         return true;
       }
       // Log ownership validation failure for diagnostics
@@ -1782,7 +1792,10 @@ async function registerIpcHandlers(): Promise<void> {
 
     if (ENABLE_UPDATE_PROVIDERS_UI()) {
       cleanupProviderIpc = registerProviderIpc(ipcMain, {
-    isTrustedSender: (sender) => isTrustedRenderer(sender), providerStore, updateManager });
+        isTrustedSender: (sender) => isTrustedRenderer(sender),
+        providerStore,
+        updateManager,
+      });
     }
   }
   cleanupUpdateIpc?.();
@@ -2126,20 +2139,21 @@ app.whenReady().then(async () => {
   });
   // P22 (2026-09-17): 项目级 allowed_paths 注册 — 渲染端在
   // 协议层 resolveSageFileUrl 会同时检查 workspace 根与各项目 allowed_paths。
-  ipcMain.handle(
-    'sage-file:register-allowed-paths',
-    (_evt, projectId: string, paths: unknown) => {
-      const safePaths = Array.isArray(paths) ? paths.map((p) => String(p ?? '')) : [];
-      registerAllowedPaths(String(projectId ?? ''), safePaths);
-    },
-  );
+  ipcMain.handle('sage-file:register-allowed-paths', (_evt, projectId: string, paths: unknown) => {
+    const safePaths = Array.isArray(paths) ? paths.map((p) => String(p ?? '')) : [];
+    registerAllowedPaths(String(projectId ?? ''), safePaths);
+  });
   ipcMain.handle('sage-file:unregister-allowed-paths', (_evt, projectId: string) => {
     return unregisterAllowedPaths(String(projectId ?? ''));
   });
   // 2026-09-13: 启动屏 — 后端冷启动实测 50–65s（健康检查上限 90s），此前
   // 窗口创建排在 waitForBackend() 之后，用户双击图标后近一分钟无任何反馈。
   // CI 冒烟 (SAGE_SKIP_BACKEND) / 演示录屏 / SAGE_NO_SPLASH=1 时不显示。
-  if (!isDemoProcess() && process.env.SAGE_SKIP_BACKEND !== '1' && process.env.SAGE_NO_SPLASH !== '1') {
+  if (
+    !isDemoProcess() &&
+    process.env.SAGE_SKIP_BACKEND !== '1' &&
+    process.env.SAGE_NO_SPLASH !== '1'
+  ) {
     createSplashWindow();
   }
   // U12 (round4 批次 E): 系统托盘 + 全局快捷键唤起（Alt+Shift+S toggle）。
@@ -2400,7 +2414,14 @@ app.whenReady().then(async () => {
     return;
   }
   updateSplashStage('正在启动后端服务…');
-  backendProc = spawnBackend();
+  try {
+    backendProc = spawnBackend();
+  } catch (err) {
+    if (!(await reportUpdateStartupFailure('backend-spawn-failed'))) {
+      await showStartupFailureDialog({ reason: '后端进程启动失败', detail: String(err) });
+    }
+    return;
+  }
   logger.info('main: backend spawn returned', {
     pid: backendProc?.pid,
     hasBackendProc: !!backendProc,
@@ -2444,10 +2465,17 @@ app.whenReady().then(async () => {
       createMainWindow();
       buildApplicationMenu();
       void updateManager
-        ?.onAppStartup(() => mainWindow, BACKEND_URL)
+        ?.onAppStartup(
+          () => mainWindow,
+          BACKEND_URL,
+          () => backendAuthToken,
+        )
         .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
       return;
     }
+
+    // A post-install failure must be counted BEFORE a dialog can quit the app.
+    if (await reportUpdateStartupFailure('backend-startup-timeout')) return;
 
     // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
     // User can open logs, retry the health check, or quit.
@@ -2480,7 +2508,11 @@ app.whenReady().then(async () => {
       // and drive the crash counter / auto-rollback path; they must not
       // block the UI from appearing.
       void updateManager
-        ?.onAppStartup(() => mainWindow, BACKEND_URL)
+        ?.onAppStartup(
+          () => mainWindow,
+          BACKEND_URL,
+          () => backendAuthToken,
+        )
         .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
       return;
     }
@@ -2496,7 +2528,11 @@ app.whenReady().then(async () => {
   // increments the crash counter and may trigger auto-rollback; it must not
   // block the UI. Errors are logged for diagnostics.
   void updateManager
-    ?.onAppStartup(() => mainWindow, BACKEND_URL)
+    ?.onAppStartup(
+      () => mainWindow,
+      BACKEND_URL,
+      () => backendAuthToken,
+    )
     .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
 });
 

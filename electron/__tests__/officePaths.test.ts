@@ -16,12 +16,11 @@
  *     extension AND excludes legacy + "All Files" entries
  */
 
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
-import {
-  buildManagedPath,
-  isPathWithinWorkspace,
-  getOpenDialogFilters,
-} from '../officePaths';
+
+import { buildManagedPath, isPathWithinWorkspace, getOpenDialogFilters } from '../officePaths';
 
 const REF_PPT = {
   workspacePath: '/workspace',
@@ -45,10 +44,12 @@ const REF_EXCEL = {
 };
 
 describe('buildManagedPath', () => {
-  it('joins workspace + office + docType + id + filename on POSIX', () => {
+  it('joins workspace + office + docType + id + filename with a root-relative workspace', () => {
     const p = buildManagedPath(REF_PPT);
-    // Path joining on POSIX: workspace/office/ppt/doc-001/deck.pptx
-    expect(p.replace(/\\/g, '/')).toBe('/workspace/office/ppt/doc-001/deck.pptx');
+    // A root-relative path also acquires the current drive on Windows.
+    expect(p.replace(/\\/g, '/')).toBe(
+      path.resolve('/workspace/office/ppt/doc-001/deck.pptx').replace(/\\/g, '/'),
+    );
   });
 
   it('joins workspace + office + docType + id + filename with Windows-style workspace', () => {
@@ -78,21 +79,17 @@ describe('buildManagedPath', () => {
     // The runtime check that backs buildManagedPath internally — a
     // candidate path that starts with the workspace's *string* prefix
     // but lives outside it must NOT be accepted by isPathWithinWorkspace.
-    expect(
-      isPathWithinWorkspace('/tmp/workspace', '/tmp/workspace-evil/payload.pptx'),
-    ).toBe(false);
+    expect(isPathWithinWorkspace('/tmp/workspace', '/tmp/workspace-evil/payload.pptx')).toBe(false);
   });
 
   it('accepts valid paths inside the workspace', () => {
-    expect(
-      isPathWithinWorkspace('/tmp/workspace', '/tmp/workspace/office/ppt/d/file.pptx'),
-    ).toBe(true);
+    expect(isPathWithinWorkspace('/tmp/workspace', '/tmp/workspace/office/ppt/d/file.pptx')).toBe(
+      true,
+    );
   });
 
   it('rejects absolute paths that escape the workspace', () => {
-    expect(
-      isPathWithinWorkspace('/tmp/workspace', '/etc/passwd'),
-    ).toBe(false);
+    expect(isPathWithinWorkspace('/tmp/workspace', '/etc/passwd')).toBe(false);
   });
 
   it('rejects reversed-prefix escapes via .. segments', () => {
