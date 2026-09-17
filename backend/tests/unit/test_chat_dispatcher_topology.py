@@ -10,6 +10,7 @@ from backend.orchestration.chat_dispatcher import (
     _CASCADE_ERROR_PREFIX,
     ChatDispatcher,
 )
+from backend.orchestration.models import RecoveryPolicy
 from backend.tests.unit.test_chat_dispatcher import (
     _collect_events,
     _FakeSageAgent,
@@ -18,6 +19,18 @@ from backend.tests.unit.test_chat_dispatcher import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture(autouse=True)
+def _zero_retry_backoff():
+    """同 test_chat_dispatcher._zero_retry_backoff：级联/分波测试触发
+    重试路径时各真实等待 20s（backoff [5,15,30] 的前两档），断言不涉
+    及退避时长。fixture 不随 helper 的模块导入继承，需在本文件重复声明。"""
+    field = RecoveryPolicy.__dataclass_fields__["retry_backoff_secs"]
+    real_factory = field.default_factory
+    field.default_factory = lambda: [0, 0]
+    yield
+    field.default_factory = real_factory
 
 
 def _inject_plan(dispatcher, tasks_with_deps):

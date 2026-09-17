@@ -17,6 +17,17 @@ from backend.core.legacy.llm_client import LLMClient, LLMConfig
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def _fast_llm_retry_backoff(monkeypatch):
+    """429 重试路径的退避（封顶 15s + 指数基数）在单测里是纯等待；断言
+    的是 fallback 触发语义与错误类型，不涉退避时长。压到近零后重试
+    路径仍被真实执行。见 test_llm_client_errors._fast_llm_retry_backoff。"""
+    monkeypatch.setattr(
+        "backend.core.legacy.llm_client._LLM_RETRY_MAX_DELAY_S", 0.01
+    )
+    monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "0.01")
+
+
 def _rate_limited_response():
     resp = AsyncMock()
     resp.status_code = 429
