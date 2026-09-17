@@ -68,7 +68,10 @@ triggers: []
 - 数字格式（金额千分位/百分比）/ 条件格式（数据条/色阶/重复值高亮）
 - 下拉选项（data_validations，状态/分类列防手输错值）
 - 打印设置：横向/缩放单页宽/打印区域/每页重复标题行（title_rows）/
-  页边距/打印页眉页脚（&P 页码占位）
+  页边距（margins_cm，厘米）/ 打印页眉页脚（print_header/print_footer，
+  &P 为页码占位）
+- 组合示例："预算表横向打印、每页带标题行、金额千分位"——一次对话
+  即可同时满足格式+内容需求
 
 嵌入照片/扫描件 >8MB 时，本机装有 Pillow 会自动压缩到阈值内
 （`pip install -r backend/requirements-optional.txt`）；未安装则
