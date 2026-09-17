@@ -35,6 +35,7 @@
 // before `electron`, the `app.isPackaged` reference throws a TDZ error at
 // runtime even though tsc --noEmit is happy.
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
+import './crashGuard';
 import { logger } from './logger';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
@@ -108,6 +109,7 @@ import { killOrphanedBackendOnPort } from './orphanBackendKiller';
 import { createIncrementalUtf8Decoder } from './incrementalUtf8Decoder';
 import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
+import { runRuntimeChecks, showRuntimeMissingDialog } from './runtime-check';
 import { resolveSageDbPath, resolveSageUserDataDir } from './userDataPaths';
 import { mainWindow, setMainWindow } from './mainWindow';
 import {
@@ -265,8 +267,23 @@ if (NEEDS_NO_SANDBOX) {
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('in-process-gpu');
-app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
+// 2026-09-17: Win7 内网闪退缓解 — 缺 KB2670838 / KB3033929 时 Chromium 106
+// 找不到 DirectWrite/Vulkan 支持, 关 SkiaRenderer + ChromeOS 视频解码 + Vulkan
+// 后降级到软件渲染路径。注意 Chromium 的 appendSwitch('disable-features', ...)
+// 多次调用以最后一次为准, 所以 Win7 分支必须把全部禁用的 feature 写在同一
+// 个 appendSwitch 里, 否则会被后面的 switch 覆盖。
+app.commandLine.appendSwitch(
+  'disable-features',
+  'VizDisplayCompositor,Vulkan,UseSkiaRenderer,CalculateNativeWinOcclusion,UseChromeOSDirectVideoDecoder',
+);
 app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}`);
+// Win7 旧版 Windows 进一步降级: 关闭 GPU 合成 + GPU sandbox + /dev/shm
+// (Chromium 在 Win7 上 /dev/shm 不存在会 fallback 到 tmp, 提前关掉减少日志噪音)
+if (isLegacyWindows()) {
+  app.commandLine.appendSwitch('disable-gpu-compositing');
+  app.commandLine.appendSwitch('disable-gpu-sandbox');
+  app.commandLine.appendSwitch('disable-dev-shm-usage');
+}
 
 let backendProc: ChildProcess | null = null;
 let backendGeneration = 0;
@@ -2083,7 +2100,34 @@ app
     // is captured into the NDJSON startup log so the user can diagnose degraded
     // experiences via Show Logs. Default 20s cap lives in doctor.ts and can be
     // tuned per-build via SAGE_DOCTOR_TIMEOUT_MS (CI smoke paths tighten it).
-    updateSplashStage('正在自检运行环境…');
+    updateSplashStage('正在检查运行环境…');
+    // 2026-09-17: Win7 内网闪退根因防御层 — 在 doctor 之前先做 Win32 运行时
+    // 检测 (VC++ Redist / KB3033929 / KB4474419 / KB4490628), 缺哪个弹对话框
+    // 告诉用户去装哪个 + 提供微软官方下载链接. fail-open: 用户选「仍要启动」
+    // 则继续走原 doctor 流程.
+    if (process.env.SAGE_RUNTIME_CHECK_ON_START !== 'false') {
+      try {
+        const runtimeResults = await runRuntimeChecks();
+        const missing = runtimeResults.filter((r) => r.severity === 'critical');
+        if (missing.length > 0) {
+          logger.error('main: runtime check reported CRITICAL', {
+            missing: missing.map((m) => m.name),
+          });
+          const choice = await showRuntimeMissingDialog(missing);
+          if (choice === 'quit') {
+            logger.info('main: user quit after runtime missing dialog');
+            // showRuntimeMissingDialog 内部已 app.quit(), 这里只需跳出启动
+            app.exit(0);
+            return;
+          }
+          logger.info('main: user chose to continue despite runtime missing', {
+            choice,
+          });
+        }
+      } catch (err) {
+        logger.warn('main: runtime check threw', { error: String(err) });
+      }
+    }
     if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
       try {
         // 2026-08-26: use `resolveDoctorLaunchCommand` so the doctor
