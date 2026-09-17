@@ -38,6 +38,7 @@ import { useStore, type Session } from '../../../shared/lib/store';
 import { formatRelativeTime } from '../../../shared/lib/utils';
 import { SiderSection } from '../SiderSection';
 import { TwoStepDelete } from '../TwoStepDelete';
+import { AllowedPathsEditor } from './AllowedPathsEditor';
 
 interface ProjectSectionProps {
   collapsed: boolean;
@@ -476,6 +477,9 @@ export function ProjectSection({
                     </div>
                   </div>
                   {renderSubSessions(project)}
+                  {expanded && (
+                    <AllowedPathsEditor project={project} onUpdated={() => void refresh()} />
+                  )}
                 </div>
               );
             })
