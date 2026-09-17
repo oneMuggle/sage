@@ -119,10 +119,8 @@ def _refresh_toc_inner(  # noqa: PLR0911 — 逐条早退是这套失败契约�
     if not resolved_source.is_file():
         return TocRefreshResult(ok=False, error=f"源路径不是常规文件: {resolved_source.name}")
 
-    applicable, reason = word_com_applicable()
-    if not applicable:
-        return TocRefreshResult(ok=False, error=f"Word COM 不可用：{reason}")
-
+    # 平台/pywin32 缺失不做前置硬闸：TOC 刷新只有 Word COM 一条通道，
+    # 懒加载 ImportError 即权威降级信号（linux 下 pywin32 本就不可安装）。
     return _refresh_with_word_com(resolved_source)
 
 
