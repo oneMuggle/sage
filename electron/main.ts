@@ -2128,23 +2128,6 @@ app
         logger.warn('main: runtime check threw', { error: String(err) });
       }
     }
-    updateSplashStage('正在自检后端环境…');
-    }
-    // U12 (round4 批次 E): 系统托盘 + 全局快捷键唤起（Alt+Shift+S toggle）。
-    // 内部全量降级:托盘/快捷键不可用只记日志,绝不阻断启动。
-    setupTrayAndGlobalShortcut();
-    // T11: inject backend URL + auth token getter so both the IPC handler
-    // and the tray "导出诊断包…" menu can call the backend.
-    initDiagnosticExport({
-      backendUrl: BACKEND_URL,
-      getAuthToken: () => backendAuthToken,
-    });
-    // Phase 4: pre-launch self-check (skippable via SAGE_DOCTOR_ON_START=false for CI).
-    // fail-open by design: doctor never blocks the app from launching — its output
-    // is captured into the NDJSON startup log so the user can diagnose degraded
-    // experiences via Show Logs. Default 20s cap lives in doctor.ts and can be
-    // tuned per-build via SAGE_DOCTOR_TIMEOUT_MS (CI smoke paths tighten it).
-    updateSplashStage('正在自检运行环境…');
     if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
       try {
         // 2026-08-26: use `resolveDoctorLaunchCommand` so the doctor
