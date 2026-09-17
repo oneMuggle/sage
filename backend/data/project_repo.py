@@ -14,10 +14,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -53,6 +54,7 @@ class Project:
     name: str
     created_at: int
     last_opened_at: int
+    allowed_paths: List[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -61,16 +63,24 @@ class Project:
             "name": self.name,
             "created_at": self.created_at,
             "last_opened_at": self.last_opened_at,
+            "allowed_paths": self.allowed_paths,
         }
 
 
 def _row_to_project(row) -> Project:  # noqa: ANN001 — sqlite3.Row
+    # allowed_paths 存为 JSON 字符串，反序列化为 List[str]。旧行 NULL/缺失 → 空列表。
+    raw_paths = row["allowed_paths"] if "allowed_paths" in row.keys() else None
+    try:
+        allowed_paths = json.loads(raw_paths) if raw_paths else []
+    except (json.JSONDecodeError, TypeError):
+        allowed_paths = []
     return Project(
         id=row["id"],
         path=row["path"],
         name=row["name"],
         created_at=row["created_at"],
         last_opened_at=row["last_opened_at"],
+        allowed_paths=allowed_paths,
     )
 
 
@@ -84,8 +94,18 @@ class ProjectRepository:
     def __init__(self):
         self.db = get_database()
 
-    def register(self, path: str, now_ms: Optional[int] = None) -> Project:
+    def register(
+        self,
+        path: str,
+        now_ms: Optional[int] = None,
+        allowed_paths: Optional[List[str]] = None,
+    ) -> Project:
         """登记（或重新打开）一个项目目录，返回规范化后的项目行。
+
+        Args:
+            path: 项目目录路径
+            now_ms: 时间戳（毫秒），默认当前时间
+            allowed_paths: 额外允许访问的路径规则列表，默认空列表
 
         Raises:
             OfficePathError: 目录不存在 / 不是目录 / 含 ``..`` 段。
@@ -96,13 +116,16 @@ class ProjectRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
+        # allowed_paths 存为 JSON 字符串
+        allowed_paths_json = json.dumps(allowed_paths or [])
+
         cursor.execute(
             """
-            INSERT INTO projects (id, path, name, created_at, last_opened_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO projects (id, path, name, created_at, last_opened_at, allowed_paths)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(path) DO UPDATE SET last_opened_at = excluded.last_opened_at
             """,
-            (str(uuid.uuid4()), canonical_str, canonical.name, ts, ts),
+            (str(uuid.uuid4()), canonical_str, canonical.name, ts, ts, allowed_paths_json),
         )
         conn.commit()
 
@@ -145,6 +168,26 @@ class ProjectRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def update_allowed_paths(self, project_id: str, allowed_paths: List[str]) -> bool:
+        """更新项目的额外允许访问路径规则列表。
+
+        Args:
+            project_id: 项目 ID
+            allowed_paths: 新的路径规则列表（如 ["~/Documents/**", "/tmp/*"]）
+
+        Returns:
+            True 如果更新成功，False 如果项目不存在
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        allowed_paths_json = json.dumps(allowed_paths)
+        cursor.execute(
+            "UPDATE projects SET allowed_paths = ? WHERE id = ?",
+            (allowed_paths_json, project_id),
+        )
         conn.commit()
         return cursor.rowcount > 0
 
@@ -250,6 +293,39 @@ def open_project(
     return project, session, True
 
 
+def create_session_for_project(
+    project_id: str, now_ms: Optional[int] = None
+) -> Tuple[Project, Session]:
+    """在项目下显式新建一个绑定会话（项目行 hover + 「新建会话」按钮）。
+
+    与 ``open_project`` 的区别：不做「最近活跃会话复用」，永远新建。
+    其余语义（目录缺失 → ProjectPathMissingError → 路由层 410、绑定
+    工作区、刷新 last_opened_at）与 open_project 同口径。
+    """
+    repo = ProjectRepository()
+    project = repo.get(project_id)
+    if project is None:
+        raise ProjectNotFoundError(f"Project '{project_id}' is not registered")
+
+    try:
+        validate_workspace(Path(project.path))
+    except OfficePathError as exc:
+        raise ProjectPathMissingError(
+            f"Project directory is missing on disk: {project.path}"
+        ) from exc
+
+    repo.touch(project_id, now_ms)
+
+    session = SessionRepository().create(title=project.name)
+    bind_session_workspace(
+        get_database().get_connection(), session.id, project.path, now_ms=now_ms
+    )
+    logger.info(
+        "project create_session: 新建会话 %s 绑定项目 %s", session.id, project.path
+    )
+    return project, session
+
+
 def register_quietly(path: str, now_ms: Optional[int] = None) -> Optional[Project]:
     """容错登记：失败记日志返回 None，绝不抛（供跨域写侧联动使用）。
 
@@ -270,6 +346,7 @@ __all__ = [
     "ProjectNotFoundError",
     "ProjectPathMissingError",
     "ProjectRepository",
+    "create_session_for_project",
     "open_project",
     "register_quietly",
 ]

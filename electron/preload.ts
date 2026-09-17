@@ -154,6 +154,12 @@ const electronAPI = {
       ipcRenderer.invoke('sage-file:register-root', path) as Promise<boolean>,
     unregisterRoot: (path: string) =>
       ipcRenderer.invoke('sage-file:unregister-root', path) as Promise<boolean>,
+    // P22 (2026-09-17): 项目级 allowed_paths 注册 —— 与工作区根 OR-组合，
+    // 命中任一即放行。register 接收空数组等同清空（保留 key）。
+    registerAllowedPaths: (projectId: string, paths: string[]) =>
+      ipcRenderer.invoke('sage-file:register-allowed-paths', projectId, paths) as Promise<void>,
+    unregisterAllowedPaths: (projectId: string) =>
+      ipcRenderer.invoke('sage-file:unregister-allowed-paths', projectId) as Promise<boolean>,
   },
 
   /**
@@ -208,6 +214,10 @@ const electronAPI = {
    * reconstructs managed paths from `OfficeManagedRef` tuples.
    */
   office: {
+    previewStaging: (workspacePath: string) =>
+      ipcRenderer.invoke('office:staging-preview', { workspacePath }) as Promise<
+        import('../src/shared/types/electron-api').OfficeStagingReport
+      >,
     pickOfficeFile: (docType: OfficeDocType) =>
       ipcRenderer.invoke('office:pick-file', { docType }) as Promise<PickedOfficeFile | null>,
     pickSavePath: (defaultName: string) =>
@@ -264,6 +274,8 @@ const electronAPI = {
    */
   journal: {
     parseTemplate: (filePath: string) =>
+      // 2026-09 修复: 这些裸 ipcMain channel 从未注册(实现走 sage:invoke 的
+      // COMMAND_ROUTES → HTTP), 一调用必 rejects 'No handler registered'。
       ipcRenderer.invoke('sage:invoke', {
         cmd: 'office_journal_parse_template',
         args: { file_path: filePath },
@@ -279,7 +291,10 @@ const electronAPI = {
         args: { spec_id: specId },
       }) as Promise<JournalGetSpecResponse>,
     validate: (args: { spec_id?: string; file_path?: string }) =>
-      ipcRenderer.invoke('sage:invoke', { cmd: 'office_journal_validate', args }) as Promise<JournalValidateResponse>,
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'office_journal_validate',
+        args,
+      }) as Promise<JournalValidateResponse>,
     fillFromContent: (req: JournalFillFromContentRequest) =>
       ipcRenderer.invoke('sage:invoke', {
         cmd: 'office_journal_fill_from_content',

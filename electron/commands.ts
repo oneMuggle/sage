@@ -187,6 +187,10 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // 项目模块 P1 (2026-09-13): 最近项目注册表 + 项目内会话。
   // open = "复用最近活跃会话或新建并绑定项目目录"（后端原子完成，返回
   // { project, session, created }），前端拿到 session.id 后 setCurrent + 导航。
+  //
+  // 2026-09-17 allowed_paths 扩展:
+  // - register 时可携带 allowed_paths（不传 → 后端默认 []）
+  // - 新增 projects_update_allowed_paths 单独更新项目的允许访问路径规则
   projects_list: {
     method: 'GET',
     path: () => '/api/v1/projects',
@@ -194,7 +198,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   projects_register: {
     method: 'POST',
     path: () => '/api/v1/projects',
-    body: (a) => ({ path: a.path }),
+    body: (a) => {
+      const body: Record<string, unknown> = { path: a.path };
+      if (a.allowed_paths != null) body.allowed_paths = a.allowed_paths;
+      return body;
+    },
   },
   projects_remove: {
     method: 'DELETE',
@@ -213,6 +221,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   projects_list_sessions: {
     method: 'GET',
     path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/sessions`,
+  },
+  projects_update_allowed_paths: {
+    method: 'PUT',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/allowed-paths`,
+    body: (a) => ({ allowed_paths: a.allowed_paths }),
   },
 
   // R19: 数据安全 —— 备份清单/手动备份/记忆导出（system_routes，GET/POST

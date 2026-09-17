@@ -49,6 +49,33 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - `BROWSER_TOOLS` 新增 `browser_downloads`（READ）；coder 默认工具白名单经 `*BROWSER_TOOLS` 自动带上；`browser_launch` 结果新增 `download_tracking`
 
 
+## [v0.4.9-alpha.43-win7] - 2026-09-17
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 同步 main #1013（项目级 allowed_paths）：后端 allowed_paths 校验 + 新增 `allowed_paths` PUT 路由、Electron `sage-file` 协议层 registerAllowedPaths / unregisterAllowedPaths、前端 `AllowedPathsEditor` 编辑器、新增 67 单测 + 8 集成测试；Phase 5 文档延后合并（#1018 docs-only，等 main PR 整体定稿）。
+
+### Added
+- **Backend allowed_paths 模块**：新增 `backend/office/allowed_paths.py`，实现项目级附加允许访问路径规则（max 50 条 / path）；注册到 `PermissionEnforcer` 校验链：`file_tool` 拒绝 workspace 外、但命中项目 allowed_paths 列表的路径时直接放行，不走审批；路径必须规范化（含 cython / py3.8 不支持），用 `os.path.realpath` 兜底
+- **project_routes 新增 `PUT /api/v1/projects/{id}/allowed-paths`**：用 `_constrained_list(str, max_length=50)` 替换 v1 不支持的 `Field(max_length=)`；Pydantic v1/v2 双兼容走 `backend.compat.win7.pydantic_compat.ConfigDict`
+- **Electron sage-file 协议层 registerAllowedPaths**：解析器把项目级 allowed_paths 纳入 `resolveSageFileUrl` 的合法路径白名单（与 workspace 根并列）；渲染端在 `ProjectSection` 注册时调用 `ipcRenderer.invoke('sage-file:register-allowed-paths', projectId, paths)`，卸载时反向注销
+- **前端 `AllowedPathsEditor` 组件**：侧边栏项目详情面板新增「额外允许访问路径」区块——列表展示 / 单条添加 / 单条删除 / 失焦自动保存（PUT allowed-paths）；i18n 同步中英双语文案
+- **测试覆盖**：新增 `test_allowed_paths.py`（67 单测：路径规范化、realpath 兜底、长度上限、Unicode 路径、Windows 路径分隔符）+ `test_allowed_paths_integration.py`（8 集成测试：permission_gate 接入、file_tool 实际落盘、electron sage-file 协议层解析）
+
+### Changed
+- **Backend `file_tool`**：权限校验链路接入 `PermissionEnforcer.check_allowed_paths()`——workspace 外路径先查项目 allowed_paths 白名单，命中则跳过审批；未命中走原审批流（与 main 行为对齐）
+- **Backend `permission_gate.py`**：`extract_target_path` 改为项目级 allowed_paths 提示用，导出 `target_path` 字段供前端「项目级允许」按钮
+- **Backend `data/project_repo.py`**：`Project` 模型新增 `allowed_paths: List[str]` 字段（默认空），新增 `update_allowed_paths(id, paths)` 方法，DB schema 升级走 `data/database.py` 自适应迁移
+- **Electron `commands.ts` / `main.ts`**：commands 表新增 `projects_update_allowed_paths`（PUT allowed-paths），main.ts 注册 `sage-file:register-allowed-paths` / `unregister-allowed-paths` IPC handlers
+- **Frontend `projectApi.ts`**：`projects_update` 携带 `allowed_paths`，新增 `updateAllowedPaths(projectId, paths)` 方法
+- **Frontend `ProjectSection.tsx`**：render ProjectCard 时附加 `useEffect` 注册/注销 electron protocol allowed_paths；切换项目自动同步协议层白名单
+
+### Fixed
+- **Pydantic v1 List 字段约束绕过**：原 `List[int] = Field(min_length=1, max_length=200)` 在 v1 下 silently 忽略长度约束——本次 `_constrained_list` helper 在 Pydantic v1 / v2 双路径强制 min/max_length 校验，避免越界输入打穿下游 storage
+- **项目级路径未走协议层白名单**：之前 `resolveSageFileUrl` 只接受 workspace 根，渲染端拉取项目目录外的文件（Office 文档外部引用等）一律被拒；本次 allowed_paths 接入后协议层允许经白名单放行
+
+### Skipped（Phase 5 docs 延后）
+- **allowed_paths 文档手册**（main PR #1018，仅 `docs/plans/` + `docs/technical/` + `docs/user-manual/` 文档变更）：与功能 PR #1013 拆分——功能先合并便于安装包内嵌测试，文档等 main 整套 #1014 / #1018 / #1020 PR 全绿后整体 cherry-pick。详见 `docs/plans/2026-09-17_allowed-paths-phase-5-windows.md` 后续步骤
+
+
 ## [v0.4.9-alpha.34-win7] - 2026-09-15
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 收口 7 commits：py3.8 后端 round 3 / Ruff lint 收口 / main 最大化对齐 B1-B6 / UI/Code 字体定制 / Windows bash 工具 + 工具 schema 校验。

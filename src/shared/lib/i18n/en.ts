@@ -272,15 +272,29 @@ export const en: Record<TranslationKey, string> = {
   'settings.mcp.required': 'Required server',
   'settings.mcp.delete': 'Delete',
   'settings.mcp.builtin_hint': 'Built-in server, cannot be deleted',
+  'settings.mcp.add.transport': 'Transport',
+  'settings.mcp.add.url': 'HTTP endpoint URL',
+  'settings.mcp.add.headers': 'Headers (JSON object; optional)',
+  'settings.mcp.error.url_invalid': 'Enter a valid HTTP or HTTPS URL.',
+  'settings.mcp.error.args_invalid':
+    'Arguments must be a JSON array of strings. Each item is one argument, including spaces and empty strings.',
+  'settings.mcp.error.headers_invalid': 'Headers must be a JSON object with string values.',
   'settings.mcp.add.title': 'Add server',
   'settings.mcp.add.name': 'Name',
   'settings.mcp.add.command': 'Command',
-  'settings.mcp.add.args': 'Arguments (space separated)',
+  'settings.mcp.add.args': 'Arguments (JSON string array)',
   'settings.mcp.add.required': 'Required',
   'settings.mcp.add.submit': 'Add',
   'settings.mcp.error.name_invalid':
     'Name may only contain lowercase letters, digits, underscores, hyphens (≤64 chars)',
   'settings.mcp.error.command_required': 'Command is required',
+  'settings.mcp.tools.expand': 'Tools',
+  'settings.mcp.tools.collapse': 'Collapse',
+  'settings.mcp.tools.loading': 'Loading tools…',
+  'settings.mcp.tools.none': 'No tools discovered (server not ready, or it exposes none)',
+  'settings.mcp.tools.error': 'Failed to load tool list',
+  'settings.mcp.tools.hint': 'Uncheck a tool to disable it; check to re-enable.',
+  'settings.mcp.tools.disabled_tag': 'Disabled',
 
   // ─── Settings · Updates ────────────────
   'updates.strategy': 'Update strategy',
@@ -379,6 +393,17 @@ export const en: Record<TranslationKey, string> = {
   'sider.project.add_failed': 'Failed to add project: {message}',
   'sider.project.open_failed': 'Failed to open project: {message}',
   'sider.project.remove_failed': 'Failed to remove project: {message}',
+  // allowed_paths extension (P1, 2026-09-17)
+  'sider.project.allowed_paths_label': 'Extra allowed paths',
+  'sider.project.allowed_paths_empty': 'No extra paths configured',
+  'sider.project.allowed_paths_hint': 'Gitignore-like syntax: ~/Documents/** , /tmp/*',
+  'sider.project.allowed_paths_add_placeholder': 'Enter a path rule, e.g. ~/Documents/**',
+  'sider.project.allowed_paths_add': 'Add',
+  'sider.project.allowed_paths_save': 'Save',
+  'sider.project.allowed_paths_cancel': 'Cancel',
+  'sider.project.allowed_paths_saved': 'Saved {count} rule(s)',
+  'sider.project.allowed_paths_failed': 'Save failed: {message}',
+  'sider.project.allowed_paths_remove': 'Remove rule',
 
   // ─── Titlebar ─────────────────────
   'titlebar.minimize': 'Minimize',
@@ -463,6 +488,12 @@ export const en: Record<TranslationKey, string> = {
   'scheduled.toast.create_fail': 'Failed to create task',
   'scheduled.toast.update_fail': 'Failed to update task',
   'scheduled.toast.delete_fail': 'Failed to delete task',
+  'scheduled.session.required': 'Select a target session',
+  'scheduled.session.empty': 'Create a conversation first, then return to schedule a task.',
+  'scheduled.run_failed': 'Delivery failed — review the target session before retrying',
+  'scheduled.run_succeeded': 'Last delivery succeeded',
+  'scheduled.confirm.retry':
+    'Check the target conversation first: the previous delivery may have succeeded before the error. Retry now?',
   'scheduled.confirm.delete': 'Delete this scheduled task?',
 
   // ─── M1 tool approval ─────────────
@@ -478,6 +509,11 @@ export const en: Record<TranslationKey, string> = {
   'permission.toast.failed': 'Failed to submit approval answer',
   'permission.subagent_context': 'Orchestration subagent requests approval',
   'permission.diff': 'Proposed changes',
+  'permission.project_allow.button': 'Allow for project',
+  'permission.project_allow.tooltip': 'Add this path to the current project allowed paths',
+  'permission.project_allow.added': 'Rule {rule} added',
+  'permission.project_allow.no_project': 'No project found for current workspace',
+  'permission.project_allow.failed': 'Failed to add allowed path rule',
   'codeBlock.copy': 'Copy',
   'codeBlock.copied': 'Copied',
   'codeBlock.toggleWrap': 'Toggle word wrap',
@@ -579,6 +615,18 @@ export const en: Record<TranslationKey, string> = {
   'settings.usage.partialEstimateHint': 'Some requests have unknown cost; total is approximate',
 
   // ─── M6 生态扩展: Office 文档 i18n 覆盖 ─────
+  'office.staging.inspect': 'Inspect staging (read-only)',
+  'office.staging.notice':
+    'Nothing is moved or deleted. Review candidates are not proven orphans: verify database references before any cleanup. Unknown directories and live owners are retained.',
+  'office.staging.unavailable': 'This desktop build does not support staging inspection.',
+  'office.staging.empty': 'No inspectable staging entries found.',
+  'office.staging.truncated': 'Report limited to 1000 entries; this is not a complete inventory.',
+  'office.staging.completed': 'Completed import — retain',
+  'office.staging.active': 'Live import owner — retain',
+  'office.staging.recent': 'Less than seven days old — retain',
+  'office.staging.review': 'Old import with no live owner — manual review only',
+  'office.staging.untracked': 'No trustworthy staging evidence — retain',
+  'office.staging.unreadable': 'Evidence unavailable — retain',
   'office.title': 'Office Documents',
   'office.selectWorkspace': 'Select Workspace',
   'office.emptyState': 'Select a workspace directory to get started',

@@ -219,6 +219,12 @@ export interface PermissionRequest {
   };
   /** U15: 写类工具的将写入内容 unified diff（无法生成时缺省，回退 args_summary） */
   diff_preview?: string;
+  /**
+   * Phase 3.3 (2026-09-17): 工具参数中提取的目标路径（绝对路径），
+   * 用于前端"项目级允许"按钮 —— 用户可一键将该路径加入 allowed_paths。
+   * 无路径参数时缺省。
+   */
+  target_path?: string;
 }
 
 /** 问题选项 — QuestionDialog 渲染为可选卡片 */
@@ -864,6 +870,9 @@ export interface ScheduledTask {
   enabled: boolean;
   last_run?: number | null;
   next_run?: number | null;
+  last_attempt?: number | null;
+  last_status?: 'never' | 'succeeded' | 'failed';
+  last_error?: string | null;
   created_at: number;
 }
 
@@ -873,11 +882,16 @@ export interface CreateTaskInput {
   schedule: Schedule;
   session_id: string;
   content: string;
+  enabled?: boolean;
 }
 
 export interface UpdateTaskInput {
   name?: string;
   enabled?: boolean;
+  type?: ScheduleKind;
+  schedule?: Schedule;
+  session_id?: string;
+  content?: string;
 }
 
 // ============================================================================
@@ -1432,6 +1446,14 @@ export interface WordFormatSpec {
   bibliography?: BibliographySpec;
   // Round 13：目录域（None = 不插入目录）
   toc?: WordTocSpec;
+  // Round 33：首页不同页眉页脚（封面页场景）
+  first_page_different?: boolean;
+  first_page_header?: WordHeaderFooterSpec;
+  first_page_footer?: WordHeaderFooterSpec;
+  // Round 34：奇偶页不同页眉页脚（书籍排版场景）
+  odd_even_pages?: boolean;
+  even_page_header?: WordHeaderFooterSpec;
+  even_page_footer?: WordHeaderFooterSpec;
 }
 
 // Word 插图（Round 8）：支持行内放置与题注自动编号。
@@ -1612,6 +1634,9 @@ export interface ExcelPrintSetupSpec {
     left?: number;
     right?: number;
   };
+  // Round 32：打印页眉/页脚文本（&P 为页码占位）
+  print_header?: string;
+  print_footer?: string;
 }
 
 export interface ExcelDataValidationSpec {

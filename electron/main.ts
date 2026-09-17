@@ -38,7 +38,13 @@ import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electr
 import { logger } from './logger';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
-import { registerSageFileProtocol, registerWorkspaceRoot, unregisterWorkspaceRoot } from './sageFileProtocol';
+import {
+  registerSageFileProtocol,
+  registerWorkspaceRoot,
+  unregisterWorkspaceRoot,
+  registerAllowedPaths,
+  unregisterAllowedPaths,
+} from './sageFileProtocol';
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
 import { readLogTimezone, writeLogTimezone } from './logTimezone';
@@ -2100,6 +2106,18 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('sage-file:unregister-root', (_evt, root: string) => {
     return unregisterWorkspaceRoot(String(root ?? ''));
+  });
+  // P22 (2026-09-17): 项目级 allowed_paths 注册 — 渲染端在
+  // 协议层 resolveSageFileUrl 会同时检查 workspace 根与各项目 allowed_paths。
+  ipcMain.handle(
+    'sage-file:register-allowed-paths',
+    (_evt, projectId: string, paths: unknown) => {
+      const safePaths = Array.isArray(paths) ? paths.map((p) => String(p ?? '')) : [];
+      registerAllowedPaths(String(projectId ?? ''), safePaths);
+    },
+  );
+  ipcMain.handle('sage-file:unregister-allowed-paths', (_evt, projectId: string) => {
+    return unregisterAllowedPaths(String(projectId ?? ''));
   });
   // 2026-09-13: 启动屏 — 后端冷启动实测 50–65s（健康检查上限 90s），此前
   // 窗口创建排在 waitForBackend() 之后，用户双击图标后近一分钟无任何反馈。
