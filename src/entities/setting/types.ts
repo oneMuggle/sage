@@ -290,7 +290,7 @@ function fillSelection(
   const matchingEndpoint = endpoints.find(
     (endpoint) =>
       hasUsableEndpoint(endpoint) &&
-      endpoint.discoveredModels.some((model) => model.id === fallbackModelId),
+      (endpoint.discoveredModels ?? []).some((model) => model.id === fallbackModelId),
   );
   if (matchingEndpoint) {
     return {
