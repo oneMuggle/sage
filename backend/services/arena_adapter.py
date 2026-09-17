@@ -18,6 +18,18 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 
+class ArenaAdapterError(Exception):
+    """Base class for arena adapter failures."""
+
+
+class SelectorNotFoundError(ArenaAdapterError):
+    """Element selector matched no DOM node."""
+
+
+class CDPCommandError(ArenaAdapterError):
+    """CDP command returned an error or no value."""
+
+
 class ThinkingFilter(Enum):
     KEEP = "keep"
     STRIP = "strip"
@@ -84,13 +96,11 @@ class ArenaAdapter:
         return filtered
 
     def wait_for_response(self, timeout_sec: int = 60) -> Optional[str]:
-        """Stub: in production this would observe SSE completion via CDP.
-
-        Returns the final response text when the stream ends, or None on timeout.
-        Real implementation lands in Phase 3 task 11 with the Node worker.
-        """
-        logger.debug("wait_for_response called with timeout=%d", timeout_sec)
-        return None  # TODO(phase-3): real SSE completion observer
+        """Stub: requires Phase-3 SSE completion observer."""
+        raise NotImplementedError(
+            f"wait_for_response not implemented (timeout_sec={timeout_sec}); "
+            "see docs/superpowers/specs/2026-09-16-arena-automation-model-probe-design.md §3.4"
+        )
 
     # -- Thinking filter --------------------------------------------------
 
@@ -111,26 +121,54 @@ class ArenaAdapter:
     # -- internal helpers -------------------------------------------------
 
     def _eval_js(self, expression: str) -> Any:
-        return self._bs.cdp_command(
-            "Runtime.evaluate",
-            {"expression": expression, "returnByValue": True},
-        ).get("result", {}).get("value")
+        try:
+            result = self._bs.cdp_command(
+                "Runtime.evaluate",
+                {"expression": expression, "returnByValue": True},
+            )
+        except Exception as exc:
+            raise CDPCommandError(
+                f"Runtime.evaluate failed: {exc}"
+            ) from exc
+        if not isinstance(result, dict):
+            raise CDPCommandError(
+                f"Runtime.evaluate returned non-dict: {result!r}"
+            )
+        inner = result.get("result")
+        if inner is not None and "value" not in inner:
+            raise CDPCommandError(
+                f"Runtime.evaluate missing 'value' key: {result!r}"
+            )
+        if inner is None:
+            return None
+        return inner.get("value")
 
     def _focus_selector(self, selector: str) -> None:
-        self._bs.cdp_command(
-            "Runtime.evaluate",
-            {"expression": f"document.querySelector({selector!r})?.focus()", "returnByValue": True},
+        result = self._eval_js(
+            f"document.querySelector({selector!r})?.focus()"
         )
+        if result is None:
+            raise SelectorNotFoundError(
+                f"selector matched no element: {selector!r}"
+            )
 
     def _click_selector(self, selector: str) -> None:
-        self._bs.cdp_command(
-            "Runtime.evaluate",
-            {"expression": f"document.querySelector({selector!r})?.click()", "returnByValue": True},
+        result = self._eval_js(
+            f"document.querySelector({selector!r})?.click()"
         )
+        if result is None:
+            raise SelectorNotFoundError(
+                f"selector matched no element: {selector!r}"
+            )
 
     def _type_chars(self, text: str) -> None:
-        for ch in text:
-            self._bs.cdp_command(
-                "Input.dispatchKeyEvent",
-                {"type": "char", "text": ch},
-            )
+        for i, ch in enumerate(text):
+            try:
+                self._bs.cdp_command(
+                    "Input.dispatchKeyEvent",
+                    {"type": "char", "text": ch},
+                )
+            except Exception as exc:
+                raise CDPCommandError(
+                    f"Input.dispatchKeyEvent failed at char {i}/{len(text)}: {exc}"
+                ) from exc

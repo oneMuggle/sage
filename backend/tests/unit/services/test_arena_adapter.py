@@ -53,6 +53,7 @@ def test_adapter_detect_captcha_returns_true_when_iframe_present():
 
 def test_adapter_fill_login_sends_key_dispatch_events():
     bs = FakeBrowserSession()
+    bs.responses["Runtime.evaluate"] = {"result": {"value": True}}
     adapter = ArenaAdapter(bs)
     adapter.fill_login("user@example.com", "secret123")
     # Should have called Input.dispatchKeyEvent for each character
@@ -62,3 +63,65 @@ def test_adapter_fill_login_sends_key_dispatch_events():
     # Verify text was split into per-character dispatches
     typed_chars = [k["params"].get("text", "") for k in key_events if k["params"].get("type") == "char"]
     assert "u" in typed_chars and "s" in typed_chars
+
+
+def test_eval_js_raises_on_cdp_command_error():
+    from backend.services.arena_adapter import ArenaAdapter, CDPCommandError
+
+    class FailingSession(FakeBrowserSession):
+        def cdp_command(self, method, params=None, **_):
+            self.calls.append({"method": method, "params": params})
+            raise RuntimeError("CDP socket closed")
+
+    bs = FailingSession()
+    adapter = ArenaAdapter(bs)
+    with pytest.raises(CDPCommandError) as excinfo:
+        adapter._eval_js("document.title")
+    assert "CDP socket closed" in str(excinfo.value)
+
+
+def test_eval_js_raises_on_empty_result():
+    from backend.services.arena_adapter import ArenaAdapter, CDPCommandError
+
+    bs = FakeBrowserSession()
+    bs.responses["Runtime.evaluate"] = {"result": {}}  # missing 'value'
+    adapter = ArenaAdapter(bs)
+    with pytest.raises(CDPCommandError):
+        adapter._eval_js("document.title")
+
+
+def test_focus_selector_raises_when_element_missing():
+    from backend.services.arena_adapter import (
+        ArenaAdapter, SelectorNotFoundError,
+    )
+
+    bs = FakeBrowserSession()
+    bs.responses["Runtime.evaluate"] = {"result": {"value": None}}
+    adapter = ArenaAdapter(bs)
+    with pytest.raises(SelectorNotFoundError):
+        adapter._focus_selector("input#email")
+
+
+def test_click_selector_raises_when_element_missing():
+    from backend.services.arena_adapter import (
+        ArenaAdapter, SelectorNotFoundError,
+    )
+
+    bs = FakeBrowserSession()
+    bs.responses["Runtime.evaluate"] = {"result": {"value": None}}
+    adapter = ArenaAdapter(bs)
+    with pytest.raises(SelectorNotFoundError):
+        adapter._click_selector("button.submit")
+
+
+def test_check_login_state_raises_when_cdp_fails():
+    from backend.services.arena_adapter import ArenaAdapter, CDPCommandError
+
+    class FailingSession(FakeBrowserSession):
+        def cdp_command(self, method, params=None, **_):
+            raise RuntimeError("connection lost")
+
+    bs = FailingSession()
+    adapter = ArenaAdapter(bs)
+    with pytest.raises(CDPCommandError):
+        adapter.check_login_state()
