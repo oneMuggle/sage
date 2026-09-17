@@ -291,6 +291,9 @@ export interface ElectronAPI {
   sageFile?: {
     registerRoot: (path: string) => Promise<boolean>;
     unregisterRoot: (path: string) => Promise<boolean>;
+    // P22 (2026-09-17): 项目级 allowed_paths 注册 —— 与工作区根 OR-组合。
+    registerAllowedPaths: (projectId: string, paths: string[]) => Promise<void>;
+    unregisterAllowedPaths: (projectId: string) => Promise<boolean>;
   };
   /**
    * Streaming callers (wiki chat / wiki ingest) pass `options.streamId`
@@ -309,7 +312,6 @@ export interface ElectronAPI {
   journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;
   providers: ProvidersElectronApiBridge;
-  /**
   /**
    * Task 10 (2026-09-11): Diagnostic export bridge for LLM trace bundles.
    * Two methods — exportBundle (native save dialog → zip) and preview

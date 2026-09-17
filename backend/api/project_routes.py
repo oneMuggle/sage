@@ -40,6 +40,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 class ProjectRegisterRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     path: str = Field(min_length=1, max_length=1024)
+    allowed_paths: Optional[List[str]] = Field(default=None, max_length=50)
 
 
 class ProjectModel(BaseModel):
@@ -51,6 +52,7 @@ class ProjectModel(BaseModel):
     last_opened_at: int
     session_count: int = 0
     last_session_id: Optional[str] = None
+    allowed_paths: List[str] = Field(default_factory=list)
 
 
 class ProjectListResponse(BaseModel):
@@ -73,6 +75,17 @@ class ProjectOpenResponse(BaseModel):
 class ProjectSessionsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     sessions: List[Dict[str, Any]]
+
+
+class ProjectAllowedPathsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    allowed_paths: List[str] = Field(max_length=50)
+
+
+class ProjectAllowedPathsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    allowed_paths: List[str]
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
@@ -101,11 +114,42 @@ def list_projects() -> ProjectListResponse:
 @router.post("", response_model=ProjectModel)
 def register_project(request: ProjectRegisterRequest) -> ProjectModel:
     try:
-        project = ProjectRepository().register(request.path)
+        project = ProjectRepository().register(
+            request.path,
+            allowed_paths=request.allowed_paths,
+        )
     except OfficePathError as exc:
         raise _error(400, "invalid_workspace_path", "项目路径无效或目录不存在") from exc
     stats = ProjectRepository().session_stats()
     return _with_stats(project, stats)
+
+
+@router.put("/{project_id}/allowed-paths", response_model=ProjectAllowedPathsResponse)
+def update_project_allowed_paths(
+    project_id: str,
+    request: ProjectAllowedPathsRequest,
+) -> ProjectAllowedPathsResponse:
+    """更新项目的额外允许访问路径规则列表。
+
+    2026-09-17 allowed_paths 扩展: 用户可以在前端项目详情面板管理
+    项目的允许访问路径（除 workspace 内的文件之外）。
+
+    Raises:
+        404 ``project_not_found``: 项目 ID 不存在
+    """
+    repo = ProjectRepository()
+    project = repo.get(project_id)
+    if project is None:
+        raise _error(404, "project_not_found", "项目不存在")
+
+    updated = repo.update_allowed_paths(project_id, request.allowed_paths)
+    if not updated:
+        raise _error(404, "project_not_found", "项目不存在")
+
+    return ProjectAllowedPathsResponse(
+        id=project_id,
+        allowed_paths=request.allowed_paths,
+    )
 
 
 @router.delete("/{project_id}", response_model=ProjectMutationResponse)

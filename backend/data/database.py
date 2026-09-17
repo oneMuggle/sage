@@ -753,6 +753,12 @@ class Database:
         _projects_columns = {row["name"] for row in cursor.fetchall()}
         if "intent" not in _projects_columns:
             cursor.execute("ALTER TABLE projects ADD COLUMN intent TEXT")
+        # Allowed paths (2026-09-17): 项目级额外允许访问的路径规则。JSON 数组
+        # 存储通配符路径字符串（如 "~/Documents/**"）。默认空数组 '[]'。
+        if "allowed_paths" not in _projects_columns:
+            cursor.execute(
+                "ALTER TABLE projects ADD COLUMN allowed_paths TEXT DEFAULT '[]'"
+            )
         conn.commit()
 
         # Office self-check history (round-3 Office parity, N4). Every

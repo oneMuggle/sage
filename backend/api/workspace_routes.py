@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
-from typing import List, Optional
+from pathlib import Path
+from typing import List, Optional, Set
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -191,8 +193,113 @@ def search_workspace(
         # contract drift. Normalize to a 422 so callers see the same
         # surface Pydantic gives them.
         raise _error(422, "invalid_search", str(exc)) from exc
+
+    # 2026-09-17 allowed_paths 扩展: 补充扫描项目 allowed_paths 内匹配的文件。
+    # 仅在 workspace 内结果数不足 limit 时补充，避免无谓的 IO。
+    if len(results) < limit:
+        try:
+            extra = _search_allowed_paths(conn, session_id, q, limit - len(results))
+            results.extend(extra)
+        except Exception:  # noqa: BLE001 — allowed_paths 扫描失败不影响主路径
+            pass
+
     models = [_search_model(result) for result in results]
     return WorkspaceSearchResponse(results=models, total=len(models))
+
+
+def _search_allowed_paths(
+    conn: sqlite3.Connection,
+    session_id: str,
+    query: str,
+    remaining: int,
+) -> List[WorkspaceSearchResult]:
+    """在项目 allowed_paths 内搜索匹配 query 的文件。
+
+    2026-09-17: 补充 workspace 搜索结果的 allowed_paths 扩展。每个规则展开
+    后做目录存在性检查 + 子树扫描；同名 workspace 文件优先（由
+    ``search_workspace_files`` 先返回）。
+
+    Args:
+        conn: 数据库连接
+        session_id: 会话 ID
+        query: 搜索关键词
+        remaining: 还可补充的结果数
+
+    Returns:
+        额外的 WorkspaceSearchResult 列表（最多 remaining 条）
+    """
+    if not query or remaining <= 0:
+        return []
+
+    from backend.office.allowed_paths import _expand_rule, get_session_allowed_paths
+    from backend.office.workspace_search import _OFFICE_SUFFIXES, WorkspaceSearchResult
+
+    allowed_paths = get_session_allowed_paths(session_id)
+    if not allowed_paths:
+        return []
+
+    binding = get_workspace_binding(conn, session_id)
+    if binding is None:
+        return []
+
+    results: List[WorkspaceSearchResult] = []
+    seen_names: Set[str] = set()
+    lowered_query = query.casefold()
+
+    for rule in allowed_paths:
+        if len(results) >= remaining:
+            break
+        rule_path = _expand_rule(rule, project_root=binding.workspace_path)
+        if rule_path is None:
+            continue
+        try:
+            resolved = rule_path.resolve()
+        except OSError:
+            continue
+        if not resolved.is_dir():
+            continue
+
+        # 子树扫描（限制深度防止失控）
+        try:
+            for root, _dirnames, filenames in os.walk(
+                resolved, topdown=True, followlinks=False
+            ):
+                if len(results) >= remaining:
+                    break
+                for filename in sorted(filenames, key=str.casefold):
+                    if len(results) >= remaining:
+                        break
+                    if lowered_query not in filename.casefold():
+                        continue
+                    abs_path = Path(root) / filename
+                    try:
+                        size_bytes = abs_path.stat().st_size
+                    except OSError:
+                        continue
+                    # name 用规则路径前缀标识（区别于 workspace 文件）
+                    rel = abs_path.relative_to(resolved).as_posix()
+                    virtual_name = f"[allowed]/{rel}"
+                    if virtual_name in seen_names:
+                        continue
+                    seen_names.add(virtual_name)
+
+                    doc_type = _OFFICE_SUFFIXES.get(abs_path.suffix.casefold())
+                    needs_import = doc_type is not None
+                    results.append(
+                        WorkspaceSearchResult(
+                            name=virtual_name,
+                            kind="allowed-" + (doc_type.value if doc_type else "file"),
+                            doc_type=doc_type,
+                            doc_id=None,
+                            size_bytes=size_bytes,
+                            needs_import=needs_import,
+                            source_path=str(abs_path),
+                        )
+                    )
+        except OSError:
+            continue
+
+    return results[:remaining]
 
 
 def _bound_workspace_or_raise(conn: sqlite3.Connection, session_id: str) -> str:

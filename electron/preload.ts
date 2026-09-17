@@ -154,6 +154,12 @@ const electronAPI = {
       ipcRenderer.invoke('sage-file:register-root', path) as Promise<boolean>,
     unregisterRoot: (path: string) =>
       ipcRenderer.invoke('sage-file:unregister-root', path) as Promise<boolean>,
+    // P22 (2026-09-17): 项目级 allowed_paths 注册 —— 与工作区根 OR-组合，
+    // 命中任一即放行。register 接收空数组等同清空（保留 key）。
+    registerAllowedPaths: (projectId: string, paths: string[]) =>
+      ipcRenderer.invoke('sage-file:register-allowed-paths', projectId, paths) as Promise<void>,
+    unregisterAllowedPaths: (projectId: string) =>
+      ipcRenderer.invoke('sage-file:unregister-allowed-paths', projectId) as Promise<boolean>,
   },
 
   /**
@@ -285,7 +291,10 @@ const electronAPI = {
         args: { spec_id: specId },
       }) as Promise<JournalGetSpecResponse>,
     validate: (args: { spec_id?: string; file_path?: string }) =>
-      ipcRenderer.invoke('sage:invoke', { cmd: 'office_journal_validate', args }) as Promise<JournalValidateResponse>,
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'office_journal_validate',
+        args,
+      }) as Promise<JournalValidateResponse>,
     fillFromContent: (req: JournalFillFromContentRequest) =>
       ipcRenderer.invoke('sage:invoke', {
         cmd: 'office_journal_fill_from_content',
