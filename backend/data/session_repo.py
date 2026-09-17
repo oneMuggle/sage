@@ -273,6 +273,11 @@ class Message:
     # 2026-09 step-by-step: 同一 session 内 assistant 行的步序号（从 0 开始）。
     # user/tool/system 行 → None。多步 run 时每个 ReAct 迭代产生一行 step_index=N。
     step_index: Optional[int] = None
+    # 2026-09 context-isolation: 主题段隔离。segment_id 从 0 开始,每次"切话题"
+    # 增加。subtype='topic_separator' 标记这是一条段切换 marker(由 user 主动
+    # 调用 /topic-new 或类似动作产生),正常消息 subtype=None。
+    segment_id: int = 0
+    subtype: Optional[str] = None
 
     @classmethod
     def from_row(cls, row) -> Message:
@@ -288,6 +293,8 @@ class Message:
             tool_call_id=row["tool_call_id"],
             reasoning_content=row["reasoning_content"],
             step_index=row["step_index"] if "step_index" in row.keys() else None,
+            segment_id=row["segment_id"] if "segment_id" in row.keys() else 0,
+            subtype=row["subtype"] if "subtype" in row.keys() else None,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -303,6 +310,8 @@ class Message:
             "tool_call_id": self.tool_call_id,
             "reasoning_content": self.reasoning_content,
             "step_index": self.step_index,
+            "segment_id": self.segment_id,
+            "subtype": self.subtype,
         }
 
 
