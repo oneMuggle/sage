@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🌐 **网页访问能力优化 Round 13：AB6 连接复用 + X2 出网可观测**（方案 `docs/plans/2026-09-17_web-access-optimization-round13.md`）
+
+### Changed(web-access)
+- **连接复用（AB6）**：`_get_with_redirects` 整链（含全部重定向 hop）复用同一个 httpx client——TLS 握手 / 代理隧道只建一次，keep-alive 生效；仅当某 hop 的 TLS 校验口径变化时才重建；异常路径经 finally 保证关闭
+- **出网可观测（X2）**：`web_fetch` 成功结果新增 `net: {elapsed_ms, bytes}`（不进缓存），为后续 per-host 调优提供数据
 > 🌐 **网页访问能力优化 Round 12：凭据管理 UI + humanize 工具名**（方案 `docs/plans/2026-09-16_web-access-optimization-round12.md`）
 
 ### Added(web-access)

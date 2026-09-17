@@ -1619,6 +1619,55 @@ def test_render_dynamic_login_wall_raises(monkeypatch):
         )
 
 
+# ---------- Round 13 AB6/X2：连接复用 + 出网统计 ----------
+
+
+def test_web_fetch_reuses_single_client_across_hops(monkeypatch):
+    """AB6：重定向链的所有 hop 复用同一个 client（build_client 只建一次）。"""
+    import backend.tools.web_tool as wt
+
+    tool = _fetch_tool()
+    calls = {"build": 0}
+    real_build_client = wt.build_client
+
+    def counting_build_client(*args, **kwargs):
+        calls["build"] += 1
+        return real_build_client(*args, **kwargs)
+
+    monkeypatch.setattr(wt, "build_client", counting_build_client)
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/start").mock(return_value=Response(302, headers={"location": "/mid"}))
+        mock.get("/mid").mock(return_value=Response(302, headers={"location": "/end"}))
+        mock.get("/end").mock(
+            return_value=Response(200, text="done", headers={"content-type": "text/plain"})
+        )
+        result = tool.execute(url="https://example.com/start")
+
+    assert result.success is True
+    assert calls["build"] == 1
+
+
+def test_web_fetch_attaches_net_stats(monkeypatch):
+    """X2：成功结果带 net {elapsed_ms, bytes}，且 net 不写入缓存。"""
+    import backend.tools.web_cache as web_cache_mod
+
+    tool = _fetch_tool()
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/ok").mock(
+            return_value=Response(200, text="hello net", headers={"content-type": "text/plain"})
+        )
+        result = tool.execute(url="https://example.com/ok")
+
+    assert result.success is True
+    net = result.content["net"]
+    assert net["elapsed_ms"] >= 0
+    assert net["bytes"] == len("hello net")
+    # 缓存里不应有 net 块
+    cached = web_cache_mod.get("https://example.com/ok", "text")
+    assert cached is not None
+    assert "net" not in cached
+
+
 def test_render_dynamic_login_wall_retries_after_refresh(monkeypatch):
     from backend.domain.network_policy import NetworkMode, NetworkPolicy
 

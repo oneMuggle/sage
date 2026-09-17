@@ -5,8 +5,10 @@ Web 工具 - 网络搜索和网页获取
 # win7 py3.8: PEP 604 (X | Y) / PEP 585 (Set[...]) 注解惰性化，避免 def 定义时报错
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Address, IPv6Address
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
@@ -603,6 +605,8 @@ class WebFetchTool(BaseTool):
                 return ToolResult(success=False, error=validation_error)
 
         can_escalate = bool(escalate) and render != "never" and mode != "raw"
+        # X2：elapsed 计时起点
+        _t0 = time.monotonic()
         try:
             try:
                 response, final_url, credential_note, login_error = self._fetch_credentialled(
@@ -647,9 +651,16 @@ class WebFetchTool(BaseTool):
                 from .web_cache import put as _cache_put
 
                 storable = {
-                    key_: value for key_, value in content.items() if key_ not in ("note", "cached")
+                    key_: value
+                    for key_, value in content.items()
+                    if key_ not in ("note", "cached", "net")
                 }
                 _cache_put(url, mode, storable)
+            # X2：出网可观测——耗时与返回正文大小（net 块不进缓存）
+            content["net"] = {
+                "elapsed_ms": int((time.monotonic() - _t0) * 1000),
+                "bytes": len(str(content.get("content", ""))),
+            }
             content["content"] = str(content.get("content", ""))[:max_length]
             return ToolResult(success=True, content=content)
         except httpx.HTTPStatusError as e:
@@ -696,6 +707,10 @@ class WebFetchTool(BaseTool):
         current_url = url
         credential_stripped = False
         refreshed_names: list = []
+        # AB6：整链复用一个 httpx client（keep-alive / 代理握手只做一次）；
+        # 仅当某 hop 的 TLS 校验口径与当前 client 不同（罕见）才重建。
+        client: Optional[httpx.Client] = None
+        client_verify: Optional[bool] = None
         for redirect_count in range(self._MAX_REDIRECTS + 1):
             url_error = self._validate_target_url(current_url)
             if url_error:
@@ -722,13 +737,19 @@ class WebFetchTool(BaseTool):
                 elif redirect_count > 0:
                     credential_stripped = True
 
-            with build_client(
-                timeout=30.0,
-                follow_redirects=False,
-                verify=not network_policy.allows_insecure_tls(current_url),
-                trust_env=not self._policy.subagent_only,
-                headers=default_headers(),
-            ) as client:
+            verify = not network_policy.allows_insecure_tls(current_url)
+            if client is None or verify != client_verify:
+                if client is not None:
+                    client.close()
+                client = build_client(
+                    timeout=30.0,
+                    follow_redirects=False,
+                    verify=verify,
+                    trust_env=not self._policy.subagent_only,
+                    headers=default_headers(),
+                )
+                client_verify = verify
+            with contextlib.nullcontext(client) as client:  # noqa: PLW2901
                 # 强制 ``Accept-Encoding: identity`` 禁用 httpx 自动解压。
                 # 部分站点声明 ``Content-Encoding: gzip`` 但响应体实际不是合法
                 # gzip 流(常见于上游 CDN/反代),httpx 解压会抛
