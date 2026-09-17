@@ -18,6 +18,10 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+> 🌐 **网页访问能力优化 Round 16：设置页展示 per-host 出网指标**（方案 `docs/plans/2026-09-17_web-access-optimization-round16.md`）
+
+### Added(web-access)
+- **出网指标展示（X2 UI）**：设置→网络凭据区块新增"出网指标（本进程内）"——消费 `GET /api/v1/web-access/metrics`，按域名渲染 成功/失败/升级渲染/均耗时，无数据不渲染；文案明示"进程内存态，重启清零"
 > 🌐 **网页访问能力优化 Round 15：per-host 出网指标 + 渲染 net 块**（方案 `docs/plans/2026-09-17_web-access-optimization-round15.md`）
 
 ### Changed(web-access)
