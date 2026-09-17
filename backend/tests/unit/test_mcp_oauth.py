@@ -400,7 +400,7 @@ class TestAuthorizeOrchestration:
         async def evil_callback(authorization_url):
             return "http://127.0.0.1:8765/callback?code=xyz&state=evil"
 
-        with pytest.raises(Exception):
+        with pytest.raises(OAuthStateError):
             await authorize_mcp_server(
                 self.SERVER,
                 redirect_uri="http://127.0.0.1:8765/callback",
