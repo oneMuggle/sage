@@ -336,3 +336,36 @@ def test_observation_service_is_llm_relevant_empty_url():
     assert _is_llm_relevant("") is False
     assert _is_llm_relevant("https://example.com/static.js") is False
     assert _is_llm_relevant("https://api.openai.com/v1/chat") is True
+
+
+def test_run_trace_resolver_invoked_on_ws_frame():
+    """process_event must hand off WS frame payloads to the resolver."""
+    from backend.services.run_trace_resolver import (
+        RunTraceEvidence, RunTraceResolver,
+    )
+
+    emitted = []
+
+    def fetch(run_id, token):
+        return {
+            "spans": [
+                {"name": "ai.streamText.doStream", "attributes": {"model": "gpt-4o"}}
+            ]
+        }
+
+    def emit(ev):
+        emitted.append(ev)
+
+    resolver = RunTraceResolver(fetch_trace=fetch, emit_evidence=emit)
+    bs = FakeBrowserSession()
+    worker = FakeWorker()
+    obs = ModelObservationService(browser_session=bs, worker=worker, run_trace_resolver=resolver)
+    obs.process_event({
+        "method": "Network.webSocketFrameReceived",
+        "params": {
+            "response": {"url": "https://api.openai.com/v1/chat/completions"},
+            "payloadData": '{"runId":"r1"}',
+        },
+    })
+    assert any(e.model_id == "gpt-4o" for e in emitted)
+    assert any(e.run_id == "r1" for e in emitted)

@@ -9,6 +9,7 @@ from typing import Any, Callable, Deque, Dict, List, Optional
 from .model_probe_py.classify import (
     collectModelFields, scanTextForModel, vendorFromUrl, protocolFingerprint,
 )
+from .run_trace_resolver import RunTraceResolver
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +61,12 @@ class ModelObservationService:
         browser_session: Any,
         worker: Any,
         verdict_cap: int = DEFAULT_VERDICT_CAP,
+        run_trace_resolver: Optional[RunTraceResolver] = None,
     ):
         self._browser_session = browser_session
         self._worker = worker
         self._verdict_cap = verdict_cap
+        self._run_trace_resolver = run_trace_resolver
         self._verdicts: Deque[Dict] = deque(maxlen=verdict_cap)
         self._running = False
 
@@ -93,6 +96,13 @@ class ModelObservationService:
             evidence = self._evidence_from_response(params)
         elif method == "Network.webSocketFrameReceived":
             evidence = self._evidence_from_ws_frame(params)
+            if self._run_trace_resolver is not None:
+                payload_data = params.get("payloadData") or ""
+                if payload_data:
+                    try:
+                        self._run_trace_resolver.observe_sse_chunk(payload_data)
+                    except Exception as exc:
+                        logger.warning("run_trace_resolver hook failed: %s", exc)
         else:
             return None
 
