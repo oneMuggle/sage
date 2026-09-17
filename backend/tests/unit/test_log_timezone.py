@@ -97,21 +97,21 @@ class TestSetLogTimezone:
     """set_log_timezone() updates the global timezone."""
 
     def test_set_valid_timezone(self):
-        from backend.utils.logging import set_log_timezone
         import backend.utils.logging as mod
+        from backend.utils.logging import set_log_timezone
         set_log_timezone("America/New_York")
         assert mod._CURRENT_LOG_TIMEZONE == "America/New_York"
 
     def test_set_empty_string_ignored(self):
-        from backend.utils.logging import set_log_timezone
         import backend.utils.logging as mod
+        from backend.utils.logging import set_log_timezone
         set_log_timezone("UTC")
         set_log_timezone("")
         assert mod._CURRENT_LOG_TIMEZONE == "UTC"
 
     def test_set_none_ignored(self):
-        from backend.utils.logging import set_log_timezone
         import backend.utils.logging as mod
+        from backend.utils.logging import set_log_timezone
         set_log_timezone("UTC")
         set_log_timezone(None)  # type: ignore[arg-type]
         assert mod._CURRENT_LOG_TIMEZONE == "UTC"

@@ -927,7 +927,7 @@ if __name__ == "__main__":
 if __name__ == "__main__":
     import uvicorn
 
-    from backend.utils.logging import setup_logging, set_log_timezone
+    from backend.utils.logging import set_log_timezone, setup_logging
 
     _elapsed_entry = time.monotonic() - _startup_t0
     print(  # noqa: T201
