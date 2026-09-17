@@ -190,3 +190,38 @@ class TestHttpClientInjection:
         client._client = httpx.Client(transport=httpx.MockTransport(handler))
         client.start()  # 刷新失败不应抛出
         assert store.load("srv") is None  # 记录被清除
+
+
+class TestUnauthorizedSelfHeal:
+    """r70: 401 + OAuth 头 → 清 token 记录 + 错误面点名重授权。"""
+
+    def _client_with_401(self, tmp_path, store):
+        config = validate_server_config("srv", url="https://mcp.example.com/rpc", timeout_seconds=5)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(401, text="token revoked")
+
+        return HttpClientMcpClient(config, http_client=httpx.Client(
+            transport=httpx.MockTransport(handler)
+        ), oauth_store=store)
+
+    def test_401_clears_token_and_names_reauth(self, tmp_path):
+        store = OAuthTokenStore(root=tmp_path)
+        store.save(_record(expires_at=0.0))
+        client = self._client_with_401(tmp_path, store)
+
+        from backend.mcp.client import McpClientError
+
+        with pytest.raises(McpClientError, match="重新授权"):
+            client.start()
+
+        assert store.load("srv") is None
+
+    def test_401_without_token_keeps_plain_error(self, tmp_path):
+        client = self._client_with_401(tmp_path, OAuthTokenStore(root=tmp_path))
+
+        from backend.mcp.client import McpClientError
+
+        with pytest.raises(McpClientError) as exc_info:
+            client.start()
+        assert "重新授权" not in str(exc_info.value)
