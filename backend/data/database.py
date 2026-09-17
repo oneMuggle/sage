@@ -181,11 +181,14 @@ def _segment_for_index(text: Optional[str]) -> str:
     return " ".join(w.strip() for w in jieba.cut_for_search(text) if w.strip())
 
 
-# win7-only (保留)：main 已改走 summary/consolidation 表不再调用本迁移；
-# 但 win7 的 memory/episodic.py 仍写这三列且存量库早于这些列存在。
 def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
-    """Add source_turn_id / source_message_id / memory_category columns to
-    ``memories_episodic``. Idempotent."""
+    """Add source_turn_id / source_message_id / memory_category columns and
+    supporting indexes to ``memories_episodic``.
+
+    win7 承载：main 的 memory 子系统已改走 summary/consolidation 表，不再
+    调用本迁移；但 win7 的 memory/episodic.py 仍写这三列，且存量库早于
+    这些列存在。幂等，可在每次 init_db 调用。
+    """
     cur = db.execute("PRAGMA table_info(memories_episodic)")
     existing_cols = {row[1] for row in cur.fetchall()}
     new_cols = {
@@ -367,7 +370,14 @@ class Database:
         self._conn_proxy: Optional[_LockedConnection] = None
 
     def get_connection(self) -> sqlite3.Connection:
-        """获取数据库连接 (B2: 返回加锁代理, 全部 SQLite 访问共享 _SQLITE_LOCK)"""
+        """获取数据库连接 (B2: 返回加锁代理, 全部 SQLite 访问共享 _SQLITE_LOCK)
+
+        代理与 ``self._connection`` 按身份绑定: 测试会直接替换 ``_connection``
+        注入 mock 连接 (如 evolution hooks 的故障注入), 身份变化时重建代理,
+        避免拿到包着旧真实连接的过期代理。(win7 保留)
+        """
+        if self._conn_proxy is not None and self._conn_proxy._conn is not self._connection:
+            self._conn_proxy = None
         if self._connection is None:
             self._connection = sqlite3.connect(self.db_path, check_same_thread=False)
             self._connection.row_factory = sqlite3.Row
@@ -385,6 +395,7 @@ class Database:
             # 生产 DB（data/sage.db）始终保持 synchronous=FULL（默认值）。
             if os.environ.get("SAGE_TEST_FAST_SQLITE") == "1":
                 self._connection.execute("PRAGMA synchronous=OFF")
+        if self._conn_proxy is None:
             self._conn_proxy = _LockedConnection(self._connection)
         assert self._conn_proxy is not None
         return self._conn_proxy
@@ -593,11 +604,7 @@ class Database:
             )
         """)
 
-        # win7-only (保留)：main 已改走 summary/consolidation 表不再调用本
-        # 迁移；win7 的 memory/episodic.py 仍写这三列。幂等，可在每次
-        # init_db 调用。必须位于 memories_episodic 建表之后——新库首启时
-        # 该表尚不存在，PRAGMA table_info 返回空集会让 ALTER TABLE 报
-        # "no such table"。
+        # win7-only（Task 4 / Gap A）：补 source_turn_id 等三列，见 _migrate_memory_traceability。
         _migrate_memory_traceability(conn)
 
         # 技能定义不再由 SQLite ``skills`` 表承载。
