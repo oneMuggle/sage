@@ -35,3 +35,27 @@ tokenizers>=0.15.0
 #
 # 注意:不要在 Win7 LTS 的生产安装包中默认安装 MCP。MCP 仅用于显式启用的
 # 开发/实验场景,安装前应在 Python 3.8 环境中完成导入和功能验证。
+#   C. 兼容老 mcp 版本(若 A 失败):
+#      $ pip install 'mcp<1.0'
+#      自行测试 Sage 与 mcp 的 API 兼容
+#
+# 验证安装成功:
+#   $ python -c "import mcp; print('mcp', mcp.__version__)"
+#
+# 长期计划(2026-09-15 CVE review):
+#   见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2
+#   升级 starlette + httpx 后,本节可降级为单行 `mcp>=1.0`,与 requirements.txt 合并。
+#
+# 当前推荐: **暂时不要在 main 分支装 MCP**,
+#            直到 starlette 升级 PR 完成(预计 2026-09-30 前)。
+# =============================================================================
+# OCR 扫描件兜底 (office-p4a) — pytesseract + tesseract 二进制
+# =============================================================================
+# 为什么单独放: OCR 整页光栅化 + tesseract 推理代价高，且 tesseract 是
+# 系统级二进制（含中文需 chi_sim 语言包），不适合进默认依赖。
+# 启用: 1) pip install pytesseract  2) 安装 tesseract（PATH 可见）
+#       3) 中文识别需 chi_sim 语言包  4) 环境变量 SAGE_OCR=1 显式开启
+# 验证: SAGE_OCR=1 python -c "from backend.office.ocr import ocr_available; print(ocr_available())"
+#
+# pytesseract>=0.3.10
+
