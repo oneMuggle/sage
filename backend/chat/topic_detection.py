@@ -37,7 +37,7 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
 def detect_topic_shift(
     user_text: str,
     recent_assistant_texts: List[str],
-    embed_fn: Callable[[str], List[float]] | None = None,
+    embed_fn: Optional[Callable[[str], List[float]]] = None,
     threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
 ) -> Tuple[bool, str]:
     """Return (is_new_topic, reason).
