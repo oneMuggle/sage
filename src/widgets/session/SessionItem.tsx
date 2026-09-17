@@ -1,4 +1,18 @@
-import { AlertCircle, Check, Clock, FileText, GitBranch, Loader2, Paperclip, PauseCircle, Pencil, Pin, PinOff, Download, Search } from 'lucide-react';
+import {
+  AlertCircle,
+  Check,
+  Clock,
+  FileText,
+  GitBranch,
+  Loader2,
+  Paperclip,
+  PauseCircle,
+  Pencil,
+  Pin,
+  PinOff,
+  Download,
+  Search,
+} from 'lucide-react';
 import { useEffect, useReducer, useRef, useState } from 'react';
 
 import { usePermissionState } from '../../entities/permission/permissionState';
@@ -172,6 +186,7 @@ export function SessionItem({
       onKeyDown={handleKeyDown}
       className={`
         group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer
+        w-full min-w-0 overflow-hidden
         transition-colors focus:outline-none focus:ring-2 focus:ring-primary
         ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-bg-hover'}
       `}
@@ -214,7 +229,7 @@ export function SessionItem({
               className="flex-1 min-w-0 text-sm font-medium bg-bg-hover border border-primary rounded px-1 py-0 focus:outline-none"
             />
           ) : (
-            <span className="truncate">{session.title}</span>
+            <span className="truncate flex-1 min-w-0">{session.title}</span>
           )}
           {/* U4': 双击标题进入 inline 重命名 */}
           {onRename && !renaming && (
@@ -325,21 +340,21 @@ export function SessionItem({
             </span>
           )}
         </p>
-        <p className="text-xs text-muted truncate">
+        <p className="text-xs text-muted flex items-center gap-1 min-w-0">
           {/* P0-4 (UI 优化方案 2026-09-13): 元信息行 — 消息预览 + 相对时间 + 消息数 */}
           {session.last_message_preview ? (
-            <span className="truncate">{session.last_message_preview}</span>
-          ) : (
-            <span>{formatRelativeTime(session.last_message_at ?? session.updated_at)}</span>
-          )}
-          <span className="mx-1 text-muted/50">·</span>
-          <span className="flex-shrink-0">
+            <>
+              <span className="truncate flex-1 min-w-0">{session.last_message_preview}</span>
+              <span className="text-muted/40 flex-shrink-0">·</span>
+            </>
+          ) : null}
+          <span className="flex-shrink-0 text-muted/80">
             {formatRelativeTime(session.last_message_at ?? session.updated_at)}
           </span>
           {session.message_count > 0 && (
             <>
-              <span className="mx-1 text-muted/50">·</span>
-              <span className="flex-shrink-0">{session.message_count} 条</span>
+              <span className="text-muted/40 flex-shrink-0">·</span>
+              <span className="flex-shrink-0 text-muted/80">{session.message_count} 条</span>
             </>
           )}
         </p>
@@ -360,7 +375,7 @@ export function SessionItem({
       </div>
 
       {/* 操作按钮 */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
         {session.is_pinned && <Pin className="w-4 h-4 text-primary" />}
         {/* U18: 导出完整会话为自包含 HTML */}
         <button

@@ -190,7 +190,7 @@ class SqliteStorageAdapter:
         ]
 
     def _sync_last_message_previews(self, session_ids: List[str]) -> Dict[str, str]:
-        """批量获取每个会话的最后一条 user/assistant 消息预览(截断 80 字符)。"""
+        """批量获取每个会话的最后一条 user/assistant 消息预览(截断 40 字符)。"""
         if not session_ids:
             return {}
         conn = self._sessions.db.get_connection()
@@ -200,7 +200,7 @@ class SqliteStorageAdapter:
         cursor.execute(
             f"""
             SELECT m.session_id,
-                   SUBSTR(m.content, 1, 80) AS preview
+                   SUBSTR(m.content, 1, 40) AS preview
             FROM messages m
             INNER JOIN (
                 SELECT session_id, MAX(created_at) AS max_created

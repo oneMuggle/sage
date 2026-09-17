@@ -34,18 +34,23 @@ export function SortableSessionItem({ id, label, disabled, children }: SortableS
   };
 
   return (
-    <div ref={setNodeRef} style={style} aria-label={label} className="flex items-center">
+    <div
+      ref={setNodeRef}
+      style={style}
+      aria-label={label}
+      className="flex items-center w-full min-w-0"
+    >
       <button
         type="button"
         {...attributes}
         {...listeners}
         aria-label={t('sider.drag_handle')}
         title={t('sider.drag_handle')}
-        className="inline-flex items-center justify-center w-5 h-5 mr-1 cursor-grab active:cursor-grabbing text-muted hover:text-text"
+        className="inline-flex items-center justify-center w-5 h-5 mr-1 flex-shrink-0 cursor-grab active:cursor-grabbing text-muted hover:text-text"
       >
         <GripVertical className="w-3.5 h-3.5" />
       </button>
-      {children}
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }
