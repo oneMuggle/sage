@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🧹 **Word 写作能力 Round 43：office_create schema 漂移卫生修复**（方案 `docs/plans/2026-09-18_r43-schema-drift-plan.md`）
+
+### Fixed(office)
+- **schema 可发现化缺口**：format_spec 补 `toc`（R13 交付却从未进 LLM schema）与 `section_breaks`（R26 同病）声明——目录域与分节横排能力对模型可见；types.ts 补 `WordSectionBreakSpec` 接口与字段
+- **防漂移门禁**：新增对偶测试——工具 schema format_spec 属性集合与 WordFormatSpec 模型字段全等、types.ts 接口覆盖模型全部字段，今后单侧加字段即 CI 红
+
 > 📝 **Word 写作能力 Round 42：图目录/表目录（TOF 域 + SEQ 题注升级）**（方案 `docs/plans/2026-09-18_r42-caption-index-plan.md`）
 
 ### Added(office)

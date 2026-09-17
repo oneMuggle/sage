@@ -610,6 +610,60 @@ class OfficeCreateTool(BaseTool):
                                             "placeholder_text": {"type": "string"},
                                         },
                                     },
+                                    "toc": {
+                                        "type": "object",
+                                        "description": (
+                                            "word 可选：目录域（TOC，打开后"
+                                            "更新域/F9 或经 Word COM 刷新"
+                                            "得真页码）。heading_text 自定义"
+                                            "标题（默认'目录'），levels 收录"
+                                            "标题级别范围如 '1-3'。"
+                                        ),
+                                        "properties": {
+                                            "heading_text": {"type": "string"},
+                                            "levels": {"type": "string"},
+                                            "placeholder_text": {"type": "string"},
+                                        },
+                                    },
+                                    "section_breaks": {
+                                        "type": "array",
+                                        "description": (
+                                            "word 可选：分节横排（宽表/财务页"
+                                            "场景）。每项在 start_paragraph"
+                                            "（0-based 段落下标）前插入 NEW_PAGE"
+                                            " 分节并对新节应用 page_setup"
+                                            "（orientation: 'landscape' 等）。"
+                                            "按列表顺序依次生效。"
+                                        ),
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "start_paragraph": {
+                                                    "type": "integer",
+                                                },
+                                                "page_setup": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "size": {
+                                                            "type": "string",
+                                                            "enum": ["A4", "letter"],
+                                                        },
+                                                        "orientation": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "portrait",
+                                                                "landscape",
+                                                            ],
+                                                        },
+                                                        "margins_cm": {
+                                                            "type": "object",
+                                                        },
+                                                    },
+                                                },
+                                            },
+                                            "required": ["start_paragraph", "page_setup"],
+                                        },
+                                    },
                                     "bibliography": {
                                         "type": "object",
                                         "description": (
