@@ -2622,7 +2622,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             await asyncio.wait_for(
                                 confirm_event.wait(), timeout=confirm_timeout
                             )
-                        except TimeoutError:
+                        except (TimeoutError, asyncio.TimeoutError):  # noqa: UP041
                             logger.warning(
                                 "编排确认超时 (%ss)，自动取消 run %s",
                                 confirm_timeout,
