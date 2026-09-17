@@ -34,7 +34,20 @@ import { dialog, shell, app } from 'electron';
 import { logger } from './logger';
 import { getLogDir } from './logPaths';
 
-const execFileP = promisify(execFile);
+// 2026-09-17: 惰性求值 execFileP, 不在模块顶层 promisify(execFile)。
+// vitest mock `electron` / `node:child_process` 时不会注入 execFile, 模块
+// 顶层求值会抛 TypeError("original must be of type function"). 放到函数内
+// 第一次调用时再 promisify, 让 mock 测试可以顺利 import 本模块而不报错.
+// 生产环境下 execFile 永远存在, 单次 promisify 开销可忽略.
+let execFilePCached: ((file: string, args: string[], opts: unknown) => Promise<{ stdout: string }>) | null = null;
+function execFileP(
+  file: string,
+  args: string[],
+  opts: unknown,
+): Promise<{ stdout: string }> {
+  if (!execFilePCached) execFilePCached = promisify(execFile);
+  return execFilePCached(file, args, opts);
+}
 
 const DOWNLOAD_URLS = {
   vc_redist_x64: 'https://aka.ms/vc14/vc_redist.x64.exe',
