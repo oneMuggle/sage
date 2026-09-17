@@ -2931,10 +2931,21 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 内容落盘（DONE 才落盘的旧语义会留下无回复的悬空 user 消息，
             # 已渲染内容重载即丢）。
             streamed_partial_parts: List[str] = []
+            # 2026-09 step-by-step: 当前迭代的 tool_calls 累积,STEP_DONE 时落盘并重置
+            accumulated_tool_calls: list = []
 
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
             done_event = None
+
+            # 2026-09 step-by-step: 本次 run 已落盘为 assistant 行的中间 step 数
+            # (STEP_DONE 触发,不含最终 DONE 行)。message_count 增量 =
+            # 1 (user) + steps_completed (中间 step) + 1 (最终 done)。
+            steps_completed: int = 0
+            # 2026-09 step-by-step: 追踪最近一次 agent 事件 — RT7 中断落盘 partial
+            # 行时,partial 内容是"当前 step 的累加器",step_index 需对齐这次事件的
+            # iteration 范围。
+            last_evt = None
 
             # P0-2 (2026-08-20): registration is created immediately after agent.
             # Keep the same entry and only refresh late-bound fields here.
@@ -2954,6 +2965,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             async for evt in agent.run_loop(
                 messages, llm_config=llm_config, session_id=data.session_id
             ):
+                # 2026-09 step-by-step: 追踪最近一次事件 → RT7 partial 落盘时取
+                # step_index 用。中断发生在 for 循环中,loop 变量 evt 仍存最后一次值,
+                # 但显式存到 last_evt 更稳。
+                last_evt = evt
                 # L2 真流式: run_loop 流式 THINKING 产出的内容增量直接转发
                 # (事件结构与旧 fake stream 的 content_delta 完全一致,前端无感)。
                 if evt.state.value == "content_delta":
@@ -2981,6 +2996,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 暂存 DONE 事件，不立即推入队列 —
                     # 待 post-loop 标题生成 + session_updated 事件后再推送，
                     # 保证前端 onDone → loadSessions() 时标题已落盘。
+                    # 2026-09 step-by-step: 显式把 evt.iteration 写回 step_index,
+                    # 前端消费 DONE 事件时也能拿到该步序号(便于流式气泡定位)。
+                    evt.step_index = evt.iteration
                     done_event = evt
                     run_outcome = "completed"
                 elif evt.state.value == "reasoning" and evt.reasoning:
@@ -3017,6 +3035,67 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             "reasoning": done_reasoning,
                         }
                     )
+                # alpha.36 (Bug #4): 累积工具调用请求(ACTING)和结果(OBSERVING),
+                # 持久化时写入 assistant 消息的 tool_calls 字段。
+                elif evt.state.value == "acting" and evt.tool_call:
+                    tc = evt.tool_call
+                    accumulated_tool_calls.append(
+                        {
+                            "id": tc.id,
+                            "name": tc.name,
+                            "args": dict(tc.arguments) if isinstance(tc.arguments, dict) else {},
+                        }
+                    )
+                    await entry.queue.put(evt.to_dict())
+                elif evt.state.value == "observing" and evt.tool_result:
+                    # 把结果回填到最后一条匹配的 tool_call(按 id)
+                    tr = evt.tool_result
+                    for tc in reversed(accumulated_tool_calls):
+                        if tc.get("id") == tr.tool_call_id:
+                            tc["result"] = tr.content
+                            break
+                    await entry.queue.put(evt.to_dict())
+                # 2026-09 step-by-step: 每完成一次 ReAct 迭代(OBSERVING 之后),
+                # agent.py 在该迭代边界 yield STEP_DONE。这里把"当前 step 的累加器"
+                # 快照成一行 assistant 消息,重置累加器准备下一步。最终步骤由 done
+                # 分支单独处理(无 tool_calls,只含 LLM 终稿 content)。
+                elif evt.state.value == "step_done":
+                    try:
+                        step_now = int(time.time() * 1000)
+                        step_content = "".join(streamed_partial_parts)
+                        step_tool_calls_json = (
+                            json.dumps(accumulated_tool_calls, ensure_ascii=False)
+                            if accumulated_tool_calls
+                            else None
+                        )
+                        message_repo.save(
+                            DbMessage(
+                                id=str(uuid.uuid4()),
+                                session_id=data.session_id,
+                                role="assistant",
+                                content=step_content,
+                                reasoning_content=done_reasoning,
+                                tool_calls=step_tool_calls_json,
+                                # step_index=evt.step_index (== evt.iteration,
+                                # agent.py 在并行/串行路径都同步设置)
+                                step_index=evt.step_index,
+                                created_at=step_now,
+                                model=(llm_config.get("model") if llm_config else "local"),
+                            ),
+                        )
+                        steps_completed += 1
+                    except Exception as step_db_err:
+                        logger.warning(
+                            f"[REQ {request_id}] step {evt.step_index} 持久化失败: {step_db_err}"
+                        )
+                    # 重置 per-step 累加器,让下一步的 delta/reasoning/tool_call
+                    # 累积到空 buffer(后续 STEP_DONE 看到的是干净的当前 step)。
+                    accumulated_tool_calls = []
+                    done_reasoning = None
+                    streamed_partial_parts = []
+                    # STEP_DONE 转发到前端,前端据此把当前 streaming 气泡快照成
+                    # completed step + 重置 streaming 准备下一步。
+                    await entry.queue.put(evt.to_dict())
                 else:
                     await entry.queue.put(evt.to_dict())
 
@@ -3033,6 +3112,22 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             role="assistant",
                             content=done_content,
                             reasoning_content=done_reasoning,
+                            # alpha.36 (Bug #4): 持久化工具调用中间信息,
+                            # 切会话再切回时前端 loadMessages 能恢复。
+                            # 2026-09 step-by-step: 最终步骤 LLM 通常不再发工具调用,
+                            # accumulated_tool_calls 已被前序 STEP_DONE 重置,这里
+                            # 落盘通常为 None。仅在 LLM 在终稿同时含 tool_call 的
+                            # 边界 case 下才会有值,语义上仍正确(那就是该步的 tool calls)。
+                            tool_calls=(
+                                json.dumps(accumulated_tool_calls, ensure_ascii=False)
+                                if accumulated_tool_calls
+                                else None
+                            ),
+                            # 2026-09 step-by-step: 最终步骤的 step_index 即
+                            # done_event.iteration (与 evt.iteration 同步)。
+                            step_index=(
+                                done_event.iteration if done_event is not None else 0
+                            ),
                             created_at=assistant_now,
                             model=(llm_config.get("model") if llm_config else "local"),
                         )
@@ -3084,7 +3179,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         session_repo.update(
                             data.session_id,
                             last_message_at=assistant_now,
-                            message_count=sess.message_count + 2,
+                            # 2026-09 step-by-step: 多步 run 产生 (steps_completed+1)
+                            # 条 assistant 行 (中间 step + 最终 done) 加 1 条 user 行,
+                            # 共 steps_completed+2 条新增消息。
+                            message_count=sess.message_count + steps_completed + 2,
                         )
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
@@ -3149,6 +3247,21 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 role="assistant",
                                 content=partial_text + "\n\n[已中断]",
                                 reasoning_content=None,
+                                # alpha.36 (Bug #4): 中断时也持久化已累积的工具调用,
+                                # 切会话再切回能看到中断前已发生的工具步骤。
+                                # 2026-09 step-by-step: 累加器已在 STEP_DONE 时重置,
+                                # 这里只含"当前未完成 step"的 tool calls(等价于
+                                # 旧行为的"最后一次 STEP_DONE 后的剩余部分")。
+                                tool_calls=(
+                                    json.dumps(accumulated_tool_calls, ensure_ascii=False)
+                                    if accumulated_tool_calls
+                                    else None
+                                ),
+                                # 2026-09 step-by-step: partial 行归属到当前
+                                # 中断时正在执行的 iteration(== last_evt.iteration)。
+                                step_index=(
+                                    last_evt.iteration if last_evt is not None else 0
+                                ),
                                 created_at=int(time.time() * 1000),
                                 model=(llm_config.get("model") if llm_config else "local"),
                             )
