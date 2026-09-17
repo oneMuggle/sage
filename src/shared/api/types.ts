@@ -55,6 +55,12 @@ export interface SessionLineage {
   archives: LineageArchive[];
 }
 
+/** Task 11 (2026-09-17): POST /sessions/{id}/segments/retreat 响应 */
+export interface SessionRetreatResult {
+  /** true = 成功删除了一个 separator 并 merge segments；false = 无可删的 separator */
+  ok: boolean;
+}
+
 /** U18: POST /sessions/{id}/export 响应（JSON 信封，html 为自包含文档文本） */
 export interface SessionExportResult {
   /** 自包含导出 HTML 全文（内联 CSS/JS/marked/highlight.js，离线可开） */

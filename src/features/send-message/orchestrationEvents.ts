@@ -163,5 +163,14 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
     return true;
   }
 
+  // Task 11 (2026-09-17): topic_shifted 横幅态 — 写入 shiftInfo
+  // 由 Chat.tsx 渲染 TopicShiftBanner;banner 自身持有可见性计时。
+  if (evt.state === 'topic_shifted') {
+    const segId = typeof evt.segment_id === 'number' ? evt.segment_id : 0;
+    const reason = typeof evt.reason === 'string' ? evt.reason : '';
+    board.setShiftInfo(sid, { segmentId: segId, reason });
+    return true;
+  }
+
   return false;
 }

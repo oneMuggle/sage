@@ -28,6 +28,7 @@ import { PermissionModeSwitch } from '../widgets/chat/PermissionModeSwitch';
 import { ProjectBadge } from '../widgets/chat/ProjectBadge';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
+import { TopicShiftBanner } from '../widgets/chat/TopicShiftBanner';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
 import { SessionUsageBadge } from '../widgets/chat/SessionUsageBadge';
 import { ArchivesModal } from '../widgets/session';
@@ -135,6 +136,22 @@ export function Chat() {
     }
     void sendMessage(lastUser.content, currentSessionId);
   }, [currentSessionId, messages, sendMessage]);
+
+  // Task 11 (2026-09-17): topic shift 横幅 — 监听当前会话的 shiftInfo 槽位;
+  // 仅在当前会话命中时显示,避免后台会话触发的事件串台。`handleRetreat`
+  // 由 TopicShiftBanner 在用户点"恢复完整上下文"后调用,组件已先调
+  // sessionApi.retreatSegment 删 separator,这里再 loadMessages 重拉并清
+  // 掉 store 里的 shiftInfo(防止 banner 重渲染)。
+  const shiftInfo = useChatStreamStore((s) =>
+    currentSessionId != null ? s.sessions[currentSessionId]?.shiftInfo ?? null : null,
+  );
+  const handleRetreat = useCallback(async () => {
+    if (!currentSessionId) return;
+    useChatStreamStore.getState().setShiftInfo(currentSessionId, null);
+    await loadMessages(currentSessionId);
+  }, [currentSessionId, loadMessages]);
+  const showTopicShiftBanner =
+    currentSessionId != null && shiftInfo != null && !isLoading;
 
   const { t } = useI18n();
   const isTempChat = currentSessionId != null && tempChatSessions.has(currentSessionId);
@@ -345,7 +362,16 @@ export function Chat() {
       // router API 只清业务 state。
       navigate(location.pathname + location.search, { replace: true, state: null });
     }
-  }, [pendingMessage, currentSessionId, sendMessage, settingsLoading, storeLoading, location.pathname, location.search, navigate]);
+  }, [
+    pendingMessage,
+    currentSessionId,
+    sendMessage,
+    settingsLoading,
+    storeLoading,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   const handleNewSession = async () => {
     // 与 Sidebar 的 "+ 新对话" 行为对齐:跳到欢迎页由用户输入后再创建会话。
@@ -796,6 +822,14 @@ export function Chat() {
           right-panel R1 批次 D: relative 供面板最大化时 absolute 覆盖。 */}
       <div className="flex-1 flex min-h-0 overflow-hidden relative">
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
+          {showTopicShiftBanner && (
+            <TopicShiftBanner
+              sessionId={currentSessionId!}
+              reason={shiftInfo.reason}
+              onRetreat={() => void handleRetreat()}
+            />
+          )}
+
           {showInterruptBanner && (
             <InterruptedRunBanner
               onRetry={retryInterruptedRun}

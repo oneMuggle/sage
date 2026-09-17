@@ -133,6 +133,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/compact`,
   },
+  // Task 11 (2026-09-17): context-isolation — 撤回自动话题切换（删最后一个 separator）
+  session_retreat_segment: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/segments/retreat`,
+  },
   // R17-A2: 压缩谱系（归档会话列表，新→旧）。sessionApi.getLineage。
   session_lineage: {
     method: 'GET',

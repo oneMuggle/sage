@@ -123,6 +123,12 @@ export interface SessionStreamSlots {
    * - startStream / resetAll 时清空
    */
   completedSteps: Message[];
+  /**
+   * Task 11 (2026-09-17): topic_shifted 事件 — 收到自动话题切换通知时
+   * 写入,前端 TopicShiftBanner 展示"恢复完整上下文"入口;用户点恢复
+   * 或点关闭时调用 clearShiftInfo 清掉;切会话 / startStream 也会清。
+   */
+  shiftInfo: { segmentId: number; reason: string } | null;
 }
 
 const EMPTY_SLOTS: SessionStreamSlots = {
@@ -131,6 +137,7 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   taskBoard: null,
   todos: [],
   completedSteps: [],
+  shiftInfo: null,
 };
 
 /** 读取某会话的槽位；无该会话（或 sessionId 为 null）时返回共享空槽位。
@@ -202,6 +209,10 @@ interface ChatStreamStoreState {
    */
   finalizeStep: (sessionId: string, oldMessageId: string, newMessageId: string) => void;
 
+  // —— Task 11 (2026-09-17): topic_shifted 横幅态 ——
+  /** 收到 topic_shifted 事件时写入;前端 TopicShiftBanner 立刻可见。 */
+  setShiftInfo: (sessionId: string, info: { segmentId: number; reason: string } | null) => void;
+
   // —— 会话删除时清理槽位，防 Map 泄漏 / 迟到事件复活死会话 ——
   clearSession: (sessionId: string) => void;
 
@@ -238,6 +249,8 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
         taskBoard: null,
         todos: [],
         completedSteps: [],
+        // Task 11 (2026-09-17): 新一轮流式清掉 topic_shifted 横幅态
+        shiftInfo: null,
       }),
     })),
 
@@ -360,6 +373,10 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
         }),
       };
     }),
+
+  // Task 11 (2026-09-17): topic_shifted 横幅态 — 写入后由 TopicShiftBanner 展示
+  setShiftInfo: (sessionId, info) =>
+    set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { shiftInfo: info }) })),
 
   updateTaskBoard: (sessionId, _runId, updater) =>
     set((prev) => {
