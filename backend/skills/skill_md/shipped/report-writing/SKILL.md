@@ -2,9 +2,9 @@
 name: report-writing
 description: 撰写项目文档/工作报告/内部资料/技术报告的完整工作流——格式来源三选一、大纲与术语表、分章起草、图表题注、docx 生成与格式自检。当用户要写正式项目文档或报告时使用。
 license: Apache-2.0
-compatibility: 需要 Round 7-10 的 office 工具面（office_create 的 format_spec、office_lint_word、office_update 快照回滚）
+compatibility: 需要 Round 7-10 的 office 工具面（office_create 的 format_spec、office_lint_word、office_update 快照回滚）；目录真页码走 office_refresh_toc（Word COM 可选通道）
 when_to_use: 当用户要撰写项目文档、项目总结、内部资料、需求文档、验收文档,或用"写报告""项目报告""阶段报告""写项目文档""项目文档""技术报告""内部资料""项目总结""验收文档"等表达时使用
-allowed-tools: write_file office_list office_read office_create office_update office_lint_word office_repair_word ask_user_question
+allowed-tools: write_file office_list office_read office_create office_update office_lint_word office_repair_word office_refresh_toc ask_user_question
 triggers: []
 ---
 
@@ -43,7 +43,8 @@ triggers: []
 逐章 `write_file` 落盘 markdown（如 `<工作区>/report/03-进度.md`）。
 图表描述写成"【图：架构图】说明文字"占位，生成时转为 `images`（配
 `caption`，题注自动编号"图N"）与 `tables`（正式数据表用
-`style: "three_line"` + `caption`）。
+`style: "three_line"` + `caption`；表头行加 `header_style: true` 得
+加粗+浅灰底+居中的表头样式）。
 
 ### 4. 生成或修订 docx
 
@@ -58,7 +59,12 @@ triggers: []
 - 样式/编号/题注类违规 → `office_repair_word` 自动修复（默认写
   -repaired.docx 新文件；确认无误可 overwrite=true 原地替换），修复后
   自动复检；
-- 复检至 `ok=true` 或用户接受。正式交付提醒用户：文档在工作区
+- 复检至 `ok=true` 或用户接受。
+- 带目录的文档（`format_spec.toc`）→ 交付前调 `office_refresh_toc`
+  把目录域刷新为真页码（需本机 Word + pywin32，缺 pywin32 时按返回的
+  安装引导处理；无 Word 环境则提醒用户在 Word 里 Ctrl+A → F9 手动
+  更新域）。
+- 正式交付提醒用户：文档在工作区
 `office/word/` 受管目录下，可随时用 office_list / office_read 回看。
 
 ## Excel 附表与打印（可选）
