@@ -50,8 +50,9 @@ class TokenRecord:
             return None
         if not isinstance(token, str) or not token:
             return None
-        expires_at = data.get("expires_at", 0.0)
-        if not isinstance(expires_at, (int, float)):
+        try:
+            expires_at = float(data.get("expires_at", 0.0))
+        except (TypeError, ValueError):
             expires_at = 0.0
         return cls(
             server_name=name,
