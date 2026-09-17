@@ -128,6 +128,12 @@ _PRIMARY_SEED_TOOLS = (
     # D2 (2026-09-09): plan_write 退役移除 —— 无消费者半成品（存储无读取方、
     # 无 SSE、无 UI），与 todo_write + 编排计划三套重复；继续暴露只会误导
     # LLM 把计划写进无处可去的地方。
+    # alpha.36 (Bug #5): 沙箱代码执行（repl / execute_code）。此前只在
+    # domain/tool_names.SANDBOX_TOOLS 防漂移校验中出现，从未进 profile
+    # 白名单——LLM 根本看不见这两个工具，用户抱怨"代码执行工具没法执行代码"。
+    # calculator 已在 _PRIMARY_CORE_TOOLS，这里只补 repl / execute_code。
+    "repl",
+    "execute_code",
 )
 
 # coder：bash 三件齐备（同上）。2026-09-03 PR #381 把 TerminalTool 重写为
@@ -151,6 +157,11 @@ _CODER_SEED_TOOLS = (
     # G7: 浏览器自动化 —— coder 是 executor，浏览器操作属执行域
     # （primary 委派给 coder；launch=EXEC、navigate=EXTERNAL 均有审批门禁）
     *BROWSER_TOOLS,
+    # alpha.36 (Bug #5): 沙箱代码执行 —— coder 是 executor，repl / execute_code
+    # 天然属执行域。与 bash 互补：bash 走子进程 shell，repl 走持久 Python
+    # 会话（保留变量/imports），execute_code 走 zero-context RPC。
+    "repl",
+    "execute_code",
 )
 
 
