@@ -191,3 +191,58 @@ describe('ThinkingPanel', () => {
     expect(container.textContent).toContain('这是思考内容');
   });
 });
+
+describe('ToolCallResultDefensiveRender', () => {
+  // 回归测试 (2026-09-17 win7 安装包): 后端历史 bug 让 tc.result 在运行时
+  // 是 dict 而非字符串,前端直接渲染 dict 会触发 React error #31
+  // "Objects are not valid as a React child (found: object with keys {...})".
+  // ToolCallResult 组件现在用 typeof 守卫把 unknown → JSON 字符串。
+
+  it('renders dict-shaped tool result as JSON string without throwing', () => {
+    const msg = {
+      id: '1',
+      session_id: 's',
+      role: 'assistant',
+      content: '工具调用失败',
+      created_at: 0,
+      tool_calls: [
+        {
+          name: 'execute_code',
+          args: { code: 'x = 1' },
+          // 故意传 dict 而非 str: 模拟后端历史 bug（dict 穿透到 React 渲染）
+          result: { error: '子进程异常退出', exit_code: 137, stderr: 'FATAL' },
+        },
+      ],
+    } as unknown as MessageType;
+    expect(() => renderWithI18n(<Message message={msg} />)).not.toThrow();
+    const { container } = renderWithI18n(<Message message={msg} />);
+    // result 必须被 JSON 序列化展示,不能直接渲染对象
+    expect(container.textContent).toContain('子进程异常退出');
+    expect(container.textContent).toContain('137');
+  });
+
+  it('renders string tool result unchanged', () => {
+    const msg: MessageType = {
+      id: '1',
+      session_id: 's',
+      role: 'assistant',
+      content: '工具返回',
+      created_at: 0,
+      tool_calls: [{ name: 'calculator', args: {}, result: '42' }],
+    };
+    const { container } = renderWithI18n(<Message message={msg} />);
+    expect(container.textContent).toContain('42');
+  });
+
+  it('renders null tool result as empty (no crash)', () => {
+    const msg = {
+      id: '1',
+      session_id: 's',
+      role: 'assistant',
+      content: '工具返回',
+      created_at: 0,
+      tool_calls: [{ name: 'calculator', args: {}, result: null }],
+    } as unknown as MessageType;
+    expect(() => renderWithI18n(<Message message={msg} />)).not.toThrow();
+  });
+});
