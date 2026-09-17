@@ -27,6 +27,7 @@ __all__ = [
     "ocr_available",
     "ocr_page_if_needed",
     "is_ocr_enabled",
+    "ocr_languages",
 ]
 
 #: 页面文本层字符数低于该值视为扫描页（触发 OCR 候选）
@@ -37,6 +38,19 @@ _OCR_ENV_VAR = "SAGE_OCR"
 
 #: tesseract 识别语言（默认英文+简中；用户可覆盖）
 _OCR_LANG_ENV_VAR = "SAGE_OCR_LANG"
+
+#: 低置信度文本过滤阈值（0-100，image_to_data 的 conf 列）；0 = 不过滤
+_OCR_MIN_CONFIDENCE_DEFAULT = 40
+
+
+def _min_confidence() -> int:
+    raw = os.environ.get("SAGE_OCR_MIN_CONFIDENCE", "").strip()
+    if not raw:
+        return _OCR_MIN_CONFIDENCE_DEFAULT
+    try:
+        return max(0, min(100, int(raw)))
+    except ValueError:
+        return _OCR_MIN_CONFIDENCE_DEFAULT
 
 
 def is_ocr_enabled() -> bool:
@@ -57,6 +71,39 @@ def ocr_available() -> Tuple[bool, str]:
 
 def _ocr_lang() -> str:
     return os.environ.get(_OCR_LANG_ENV_VAR, "eng+chi_sim").strip() or "eng"
+
+
+def ocr_languages() -> Optional[list]:
+    """返回 tesseract 已安装的语言包列表；依赖缺失返回 None。
+
+    P4-B：供 capabilities 展示 + 请求语言回退判断（用户配置了未安装的
+    语言包时，回退到已安装语言里第一个可用的，避免 tesseract 直接报错）。
+    """
+    try:
+        import pytesseract
+
+        langs = pytesseract.get_languages(config="")
+        return sorted(langs) if langs else None
+    except Exception:  # noqa: BLE001 — best-effort
+        return None
+
+
+def _resolve_lang_with_fallback(pytesseract: Any) -> str:
+    """请求语言与已安装语言包求交集；全部缺失时回退 'eng'（如已装）。"""
+    requested = [seg for seg in _ocr_lang().split("+") if seg]
+    try:
+        installed = set(pytesseract.get_languages(config=""))
+    except Exception:  # noqa: BLE001 — 枚举失败则不回退，交由 tesseract 报错
+        return "+".join(requested)
+    usable = [seg for seg in requested if seg in installed]
+    if usable:
+        return "+".join(usable)
+    logger.warning(
+        "OCR 语言包 %s 均未安装（已装: %s），回退 eng",
+        requested,
+        sorted(installed),
+    )
+    return "eng" if "eng" in installed else _ocr_lang()
 
 
 def ocr_page_if_needed(page: Any, text: str) -> Optional[str]:
@@ -81,8 +128,41 @@ def ocr_page_if_needed(page: Any, text: str) -> Optional[str]:
 
         pix = page.get_pixmap(dpi=200)
         img = Image.open(io.BytesIO(pix.tobytes("png")))
-        recognized = pytesseract.image_to_string(img, lang=_ocr_lang())
+        # P4-B: image_to_data 取逐词置信度，过滤低置信度噪声后再拼文本
+        # （扫描件常见噪声：低置信度乱码行）。失败退回 image_to_string。
+        lang = _resolve_lang_with_fallback(pytesseract)
+        min_conf = _min_confidence()
+        recognized = _recognize(pytesseract, img, lang, min_conf)
         return recognized if recognized.strip() else None
     except Exception:  # noqa: BLE001 — best-effort 兜底
         logger.warning("OCR failed on page; keeping original text", exc_info=True)
         return None
+
+
+def _recognize(pytesseract: Any, img: Any, lang: str, min_conf: int) -> str:
+    """识别一页：优先 image_to_data（置信度过滤），异常退回 image_to_string。"""
+    if min_conf <= 0:
+        return pytesseract.image_to_string(img, lang=lang)
+    try:
+        data = pytesseract.image_to_data(img, lang=lang, output_type=pytesseract.Output.DICT)
+        lines: dict = {}
+        for raw_word, conf, block, par, line in zip(
+            data.get("text", []),
+            data.get("conf", []),
+            data.get("block_num", []),
+            data.get("par_num", []),
+            data.get("line_num", []), strict=False,
+        ):
+            word = str(raw_word).strip()
+            try:
+                conf_v = float(conf)
+            except (TypeError, ValueError):
+                conf_v = -1.0
+            if not word or conf_v < min_conf:
+                continue
+            key = (block, par, line)
+            lines.setdefault(key, []).append(word)
+        return "\n".join(" ".join(words) for _, words in sorted(lines.items()))
+    except Exception:  # noqa: BLE001 — data 通道失败退回 string 通道
+        logger.warning("image_to_data failed; falling back to image_to_string", exc_info=True)
+        return pytesseract.image_to_string(img, lang=lang)
