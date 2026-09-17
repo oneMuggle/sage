@@ -1,8 +1,9 @@
 """检查 8765 端口是否被占用(可能为孤儿 backend 进程)。"""
 from __future__ import annotations
 
-import socket
+import os
 
+from backend.cli.checks._ports import bind_probe
 from backend.cli.doctor import CheckResult, Severity, register
 
 PORT = 8765
@@ -14,19 +15,18 @@ class PortBackendCheck:
     description = "8765 端口占用检测（FastAPI backend）"
 
     def run(self) -> CheckResult:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(("127.0.0.1", PORT))
-        except OSError:
+        free, _exc = bind_probe(PORT)
+        if not free:
+            if os.name == "nt":
+                hint = "netstat -ano | findstr :8765 定位 PID，taskkill /PID <pid> /F 结束"
+            else:
+                hint = "lsof -i :8765 && kill <PID>"
             return CheckResult(
                 self.name,
                 Severity.WARN,
                 "8765 端口被占用（可能为孤儿 backend 进程）",
-                "lsof -i :8765 && kill <PID>",
+                hint,
             )
-        finally:
-            sock.close()
 
         return CheckResult(
             self.name,
