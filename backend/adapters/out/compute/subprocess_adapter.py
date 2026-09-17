@@ -238,7 +238,7 @@ def _params_to_args(params: Dict[str, Any], schema: Dict[str, Any]) -> List[str]
             if val:
                 out.append(flag)
             continue
-        if isinstance(val, list | tuple):
+        if isinstance(val, (list, tuple)):  # noqa: UP038 — py38 运行时 isinstance 不支持 X | Y
             if not val:
                 continue
             out.append(flag)

@@ -46,7 +46,7 @@ def _load_top_level_functions(src: str) -> list[ast.FunctionDef | ast.AsyncFunct
     return [
         node
         for node in tree.body
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))  # noqa: UP038 — py38 运行时 isinstance 不支持 X | Y
     ]
 
 
