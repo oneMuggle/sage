@@ -12,7 +12,6 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.compat.win7.pydantic_compat import ConfigDict
-
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
 from backend.office.models import OfficeDocType, _constrained_list

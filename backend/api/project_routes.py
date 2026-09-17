@@ -23,7 +23,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.compat.win7.pydantic_compat import ConfigDict
-
 from backend.data.project_repo import (
     Project,
     ProjectNotFoundError,
