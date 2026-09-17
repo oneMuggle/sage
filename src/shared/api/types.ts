@@ -1442,6 +1442,15 @@ export interface WordHeaderFooterSpec {
 
 // 目录域设置（Round 13）：TOC 域由渲染器按标题样式生成（打开后更新域）。
 // Backend counterpart: WordTocSpec in backend/office/models.py。
+/**
+ * Round 42：图目录/表目录设置（TOF 域 `TOC \c "图|表"`）。
+ * backend/office/models.py WordIndexSpec 对应。
+ */
+export interface WordIndexSpec {
+  heading_text?: string;
+  placeholder_text?: string;
+}
+
 export interface WordTocSpec {
   heading_text?: string;
   levels?: string;
@@ -1462,6 +1471,9 @@ export interface WordFormatSpec {
   bibliography?: BibliographySpec;
   // Round 13：目录域（None = 不插入目录）
   toc?: WordTocSpec;
+  // Round 42：图目录/表目录（TOF 域，收录 SEQ 题注）
+  figure_index?: WordIndexSpec;
+  table_index?: WordIndexSpec;
   // Round 33：首页不同页眉页脚（封面页场景）
   first_page_different?: boolean;
   first_page_header?: WordHeaderFooterSpec;

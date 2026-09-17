@@ -46,6 +46,7 @@ def _install_com_stubs(
     toc_count: int = 2,
     fail_on_update_index: Optional[int] = None,
     fail_on_open: bool = False,
+    field_count: int = 3,
 ) -> None:
     """Inject stub pythoncom + win32com that record the COM call sequence."""
 
@@ -66,6 +67,12 @@ def _install_com_stubs(
             recorder.setdefault("items", []).append(i)
             return _FakeToc(i)
 
+    class _FakeFields:
+        Count = field_count  # noqa: N802 — COM API name
+
+        def Update(self) -> None:  # noqa: N802 — COM API name
+            recorder["fields_updated"] = True
+
     class _FakeDocument:
         def Save(self) -> None:  # noqa: N802 — COM API name
             recorder["saved"] = True
@@ -74,6 +81,7 @@ def _install_com_stubs(
             recorder["closed"] = kwargs
 
         TablesOfContents = _FakeTocs()  # noqa: N815 — COM API name
+        Fields = _FakeFields()  # noqa: N815 — COM API name
 
     class _FakeDocuments:
         def Open(self, FileName, **kwargs):  # noqa: N802, N803 — COM API names
@@ -132,6 +140,7 @@ def test_refresh_updates_all_tocs_and_saves(
     assert result.error is None
     assert result.method == "word_com"
     assert recorder["updated"] == [1, 2]
+    assert recorder["fields_updated"] is True
     assert recorder["saved"] is True
     assert recorder["closed"] == {"SaveChanges": False}
     assert recorder["quit"] is True
@@ -147,10 +156,10 @@ def test_refresh_updates_all_tocs_and_saves(
 def test_refresh_no_toc_is_successful_noop(
     monkeypatch: pytest.MonkeyPatch, ws: Path
 ) -> None:
-    """文档没有目录 → ok=True / toc_count=0，不落盘（不 Save）。"""
+    """无目录且无其他域 → ok=True / toc_count=0，不落盘（不 Save）。"""
     source = _make_source(ws)
     recorder: Dict[str, Any] = {}
-    _install_com_stubs(monkeypatch, recorder, toc_count=0)
+    _install_com_stubs(monkeypatch, recorder, toc_count=0, field_count=0)
 
     result = refresh_toc_page_numbers(source, ws)
 

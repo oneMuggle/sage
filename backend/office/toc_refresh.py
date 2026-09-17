@@ -163,10 +163,16 @@ def _refresh_with_word_com(docx_path: Path) -> TocRefreshResult:
         toc_count = int(tocs.Count)
         for i in range(1, toc_count + 1):
             tocs.Item(i).Update()
-        if toc_count > 0:
+        # Round 42：其余域一并更新——SEQ 题注重编号 + 图/表目录（TOF，
+        # TOC \c）收录条目与页码。TOC 已由上方 Update 处理，此处重复
+        # 覆盖无副作用。
+        fields = doc.Fields
+        field_count = int(fields.Count)
+        fields.Update()
+        if toc_count > 0 or field_count > 0:
             doc.Save()
         else:
-            logger.info("TOC refresh no-op (no TablesOfContents): %s", docx_path)
+            logger.info("TOC refresh no-op (no fields): %s", docx_path)
         logger.info("Word COM TOC refresh succeeded: %s (%d TOC)", docx_path, toc_count)
         return TocRefreshResult(ok=True, toc_count=toc_count)
     except Exception as exc:

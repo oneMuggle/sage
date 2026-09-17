@@ -260,10 +260,33 @@ def _check_numbering(
             ))
 
 
+def _iter_paragraphs_outside_fields(doc: Document):
+    """跳过复杂域缓存内容中的段落（Round 42）。
+
+    目录/图目录域（fldChar begin...end）的缓存行形如"图N　标题"，
+    会被 caption/sequence 规则误判为正文题注重复——begin 与 end 之间
+    的纯缓存段落不参与规则；begin/end 所在段自身文本为空，无影响。
+    """
+    inside_field = False
+    for para in doc.paragraphs:
+        has_toggle = False
+        for run in para.runs:
+            for fld in run._r.findall(qn("w:fldChar")):
+                fld_type = fld.get(qn("w:fldCharType"))
+                if fld_type == "begin":
+                    inside_field = True
+                    has_toggle = True
+                elif fld_type == "end":
+                    inside_field = False
+                    has_toggle = True
+        if has_toggle or not inside_field:
+            yield para
+
+
 def _check_captions(doc: Document, issues: List[WordLintIssue]) -> None:
     for label, regex in (("图", _FIGURE_CAPTION_RE), ("表", _TABLE_CAPTION_RE)):
         expected = 1
-        for para in doc.paragraphs:
+        for para in _iter_paragraphs_outside_fields(doc):
             match = regex.match(para.text)
             if match is None:
                 continue

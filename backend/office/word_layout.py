@@ -330,8 +330,23 @@ def add_caption(doc: Document, text: str, *, kind: str, number: int) -> None:
     """
     paragraph = doc.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = paragraph.add_run(f"{'图' if kind == 'figure' else '表'}{number}　{text}")
-    run.font.size = Pt(9)
+    label = "图" if kind == "figure" else "表"
+    label_run = paragraph.add_run(label)
+    label_run.font.size = Pt(9)
+    # Round 42：编号以 SEQ 复杂域承载（Word 据此把段落识别为题注条目，
+    # TOC \c 可收录生成图/表目录）；缓存编号保证未更新域时的显示与
+    # python-docx 回读文本同既有字面形态完全一致（lint 零改动通过）。
+    _fld_char(paragraph, "begin")
+    instr_el = OxmlElement("w:instrText")
+    instr_el.set(qn("xml:space"), "preserve")
+    instr_el.text = rf" SEQ {label} \* ARABIC "
+    paragraph._p.append(instr_el)
+    _fld_char(paragraph, "separate")
+    number_run = paragraph.add_run(str(number))
+    number_run.font.size = Pt(9)
+    _fld_char(paragraph, "end")
+    text_run = paragraph.add_run("　" + text)
+    text_run.font.size = Pt(9)
 
 
 def heading_number_prefix(counters: Any, level: int) -> str:
@@ -389,6 +404,42 @@ def insert_toc_field(doc: Document, toc: Any, headings: Any = None) -> None:
                 entry_run.bold = True
     else:
         entry = doc.add_paragraph(str(toc.placeholder_text))
+
+    end_paragraph = doc.add_paragraph()
+    _fld_char(end_paragraph, "end")
+
+    doc.add_page_break()
+
+
+def insert_tof_field(doc: Document, spec: Any, label: str, entries: Any) -> None:
+    r"""在文档当前末尾插入图/表目录标题 + TOF 域（``TOC \c``）+ 分页。
+
+    - 标题用加粗居中普通段落（非 Heading 样式）——不被域自我收录、
+      不参与多级标题编号检查（与目录标题同理）；
+    - TOF 域为 fldChar 复杂域：begin + instrText（'TOC \h \z \c "图"'）
+      + separate → 缓存条目行 → end。缓存条目为"图N　标题"（无页码——
+      页码由渲染器/COM 更新域时计算）；entries 为空时退化为占位提示行；
+    - 之后 add_page_break 使正文另起一页（图目录/表目录各自独占页）。
+    """
+    paragraph = doc.add_paragraph()
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = paragraph.add_run(str(spec.heading_text))
+    run.bold = True
+    run.font.size = Pt(16)
+
+    begin_paragraph = doc.add_paragraph()
+    _fld_char(begin_paragraph, "begin")
+    instr_el = OxmlElement("w:instrText")
+    instr_el.set(qn("xml:space"), "preserve")
+    instr_el.text = rf' TOC \h \z \c "{label}" '
+    begin_paragraph._p.append(instr_el)
+    _fld_char(begin_paragraph, "separate")
+
+    if entries:
+        for number, text in entries:
+            doc.add_paragraph(f"{label}{number}　{text}")
+    else:
+        doc.add_paragraph(str(spec.placeholder_text))
 
     end_paragraph = doc.add_paragraph()
     _fld_char(end_paragraph, "end")
