@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.data.database import _SQLITE_LOCK, get_database, make_with_db_lock
+from backend.data.database import get_database, make_with_db_lock
 from backend.data.project_material_repo import (
     MAX_MATERIAL_CONTENT_CHARS,
     ProjectMaterial,

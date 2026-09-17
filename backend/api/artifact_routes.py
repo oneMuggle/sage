@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.data import artifact_reader, artifact_repo, artifact_version_repo
-from backend.data.database import _SQLITE_LOCK, make_with_db_lock
+from backend.data.database import make_with_db_lock
 
 router = APIRouter(prefix="/sessions/{session_id}/artifacts", tags=["artifacts"])
 

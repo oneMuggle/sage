@@ -65,14 +65,14 @@ def _make_artifact_with_versions(tmp_path: Path, session_id: str = "sess_v"):
     artifact_version_repo.create_version(
         artifact_id=aid,
         content="# v1 content\n",
-        content_hash=hashlib.sha256("# v1 content\n".encode()).hexdigest(),
+        content_hash=hashlib.sha256(b"# v1 content\n").hexdigest(),
         snapshot_dir=snapshot_dir,
         note="v1",
     )
     artifact_version_repo.create_version(
         artifact_id=aid,
         content="# v2 content\n",
-        content_hash=hashlib.sha256("# v2 content\n".encode()).hexdigest(),
+        content_hash=hashlib.sha256(b"# v2 content\n").hexdigest(),
         snapshot_dir=snapshot_dir,
         note="v2",
     )

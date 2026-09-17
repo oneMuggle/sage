@@ -54,10 +54,10 @@ def create_version(
             f"Artifact {artifact_id} 已达最大版本数 {MAX_VERSIONS_PER_ARTIFACT}"
         )
 
-    # 写入快照文件
+    # 写入快照文件 (write_bytes 避免 Windows 平台将换行符替换为 CRLF)
     snapshot_path = Path(snapshot_dir) / f"{artifact_id}_v{new_version}.txt"
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-    snapshot_path.write_text(content, encoding="utf-8")
+    snapshot_path.write_bytes(content.encode("utf-8"))
 
     # 插入版本记录
     created_at = int(time.time() * 1000)
@@ -232,10 +232,13 @@ async def apply_edit(
         current_bytes = path.read_bytes()
         current_hash = hashlib.sha256(current_bytes).hexdigest()
         if current_hash != base_hash:
-            raise ConflictError(
-                f"base_hash 冲突：期望 {base_hash[:16]}…，实际 {current_hash[:16]}…，"
-                " 文件已被外部修改"
-            )
+            # 兼容 Windows 平台 CRLF 换行符与客户端归一化 LF 换行符的哈希比对
+            normalized_hash = hashlib.sha256(current_bytes.replace(b"\r\n", b"\n")).hexdigest()
+            if normalized_hash != base_hash:
+                raise ConflictError(
+                    f"base_hash 冲突：期望 {base_hash[:16]}…，实际 {current_hash[:16]}…，"
+                    " 文件已被外部修改"
+                )
 
         # 写入文件（原子替换：先写临时文件再 rename）
         tmp_path = path.with_suffix(path.suffix + ".tmp")

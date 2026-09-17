@@ -151,7 +151,8 @@ async def test_pending_materials_are_excluded_from_injection(
     assert MATERIALS_HEADER not in system_text
     assert "PENDINGMAT" not in system_text
     assert "FAILEDMAT" not in system_text
-    assert pending.id and failed.id
+    assert pending.id
+    assert failed.id
 
 
 @pytest.mark.asyncio()

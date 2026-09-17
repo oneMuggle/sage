@@ -1,6 +1,6 @@
 // src/widgets/chat/artifacts/VersionHistory.tsx
-import { useCallback, useEffect, useState } from 'react';
 import { History, RotateCcw } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
 import {
   listArtifactVersions,

@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
 import { revealArtifact, updateArtifactContent } from '../../../features/artifacts/artifactApi';
 import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';
+
 import { VersionHistory } from './VersionHistory';
 
 interface ArtifactViewerProps {

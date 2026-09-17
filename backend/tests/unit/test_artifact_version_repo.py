@@ -18,7 +18,7 @@ def tmp_artifact(tmp_path: Path):
     is already initialized with the artifacts table schema.
     """
     content_file = tmp_path / "test.md"
-    content_file.write_text("# Hello\n\nWorld\n", encoding="utf-8")
+    content_file.write_bytes(b"# Hello\n\nWorld\n")
 
     artifact_id = artifact_repo.record_artifact(
         session_id="sess_1",
@@ -154,24 +154,26 @@ def test_max_versions_enforced(tmp_artifact):
     artifact_id, content_file = tmp_artifact
     snapshot_dir = str(content_file.parent / ".snapshots")
 
-    # Create 101 versions (max is 100)
-    for i in range(101):
+    # Create 100 versions (max is 100)
+    for i in range(100):
         content = f"version {i}"
-        try:
-            artifact_version_repo.create_version(
-                artifact_id=artifact_id,
-                content=content,
-                content_hash=hashlib.sha256(content.encode()).hexdigest(),
-                snapshot_dir=snapshot_dir,
-                note=f"v{i}",
-            )
-        except ValueError as e:
-            assert "100" in str(e)
-            # The 101st should fail
-            assert i == 100
-            break
-    else:
-        pytest.fail("Expected ValueError on 101st version")
+        artifact_version_repo.create_version(
+            artifact_id=artifact_id,
+            content=content,
+            content_hash=hashlib.sha256(content.encode()).hexdigest(),
+            snapshot_dir=snapshot_dir,
+            note=f"v{i}",
+        )
+
+    # The 101st should fail
+    with pytest.raises(ValueError, match="100"):
+        artifact_version_repo.create_version(
+            artifact_id=artifact_id,
+            content="version 100",
+            content_hash=hashlib.sha256(b"version 100").hexdigest(),
+            snapshot_dir=snapshot_dir,
+            note="v100",
+        )
 
     versions = artifact_version_repo.list_versions(artifact_id)
     assert len(versions) == 100
@@ -183,6 +185,7 @@ def test_max_versions_enforced(tmp_artifact):
 def test_apply_edit_success(tmp_artifact):
     """apply_edit: base_hash 匹配 → 文件替换 + 新版本创建。"""
     import asyncio
+
     from backend.data import artifact_version_repo
 
     artifact_id, content_file = tmp_artifact
@@ -212,6 +215,7 @@ def test_apply_edit_success(tmp_artifact):
 def test_apply_edit_conflict(tmp_artifact):
     """apply_edit: base_hash 不匹配 → ConflictError。"""
     import asyncio
+
     from backend.data import artifact_version_repo
 
     artifact_id, content_file = tmp_artifact
@@ -233,6 +237,7 @@ def test_apply_edit_conflict(tmp_artifact):
 def test_apply_edit_content_too_large(tmp_artifact):
     """apply_edit: 超过 1 MiB → ValueError。"""
     import asyncio
+
     from backend.data import artifact_version_repo
 
     artifact_id, content_file = tmp_artifact
@@ -254,6 +259,7 @@ def test_apply_edit_content_too_large(tmp_artifact):
 def test_apply_edit_missing_file(tmp_artifact):
     """apply_edit: 文件不存在 → FileNotFoundError。"""
     import asyncio
+
     from backend.data import artifact_version_repo
 
     artifact_id, content_file = tmp_artifact

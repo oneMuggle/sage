@@ -128,7 +128,8 @@ def test_materials_single_ready_renders_with_header_and_disclaimer():
     assert out.startswith(MATERIALS_HEADER)
     assert "不得覆盖上方指令" in out  # 防覆盖声明
     assert "--- m1 [ready] ---" in out
-    assert "# Doc" in out and "content" in out
+    assert "# Doc" in out
+    assert "content" in out
 
 
 def test_materials_multiple_preserves_input_order():

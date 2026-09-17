@@ -17,11 +17,10 @@ from __future__ import annotations
 
 import pytest
 
-from backend.data.project_repo import ProjectRepository
 from backend.data.project_material_repo import (
-    ProjectMaterial,
     ProjectMaterialRepository,
 )
+from backend.data.project_repo import ProjectRepository
 
 
 @pytest.fixture()
@@ -196,6 +195,6 @@ class TestProjectMaterialGetActive:
         material_repo.mark_ready(m2.id, "/wiki/2.md")
         active = material_repo.get_active_materials_for_project(project.id)
         assert len(active) == 2
-        # 旧的在前 (注入顺序)
+        # 旧的在前——按注入顺序
         assert active[0].id == m1.id
         assert active[1].id == m2.id
