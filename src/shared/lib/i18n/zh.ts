@@ -285,6 +285,11 @@ export const zh = {
   'settings.mcp.tools.error': '工具列表加载失败',
   'settings.mcp.tools.hint': '取消勾选即禁用该工具，勾选即重新启用。',
   'settings.mcp.tools.disabled_tag': '已禁用',
+  'settings.mcp.authorize.button': '授权',
+  'settings.mcp.authorize.authorizing': '授权中…',
+  'settings.mcp.authorize.success': 'OAuth 授权完成，工具调用将携带新凭据。',
+  'settings.mcp.authorize.failed_prefix': '授权失败：',
+  'settings.mcp.authorize.hint': '打开浏览器完成 OAuth 登录（仅 HTTP 传输）',
 
   // ─── 设置页 · 更新 ────────────────
   'updates.strategy': '更新策略',

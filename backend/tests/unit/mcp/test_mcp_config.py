@@ -236,3 +236,22 @@ class TestConcurrentFileAccess:
         names = [s["name"] for s in raw["servers"]]
         assert len(names) == len(set(names))  # no duplicates / corruption
         assert set(names) == {"new1", "new3", "new5", "new7", "new9"}
+
+
+# ============================================================================
+# r64: HTTP 传输用户服务器重启存活（url 必须透传 load）
+# ============================================================================
+
+
+def test_url_server_survives_file_roundtrip(tmp_path):
+    """回归：url 服务器 save→load 后 url 不丢（原实现退化 command='' 被跳过）。"""
+    path = tmp_path / "mcp_servers.json"
+    original = cfg.validate_server_config(
+        name="remote", url="https://mcp.example.com/rpc", headers={"Authorization": "Bearer t"}
+    )
+    cfg.save_user_server_configs([original], path=path)
+    loaded = cfg.load_user_server_configs(path=path)
+    assert len(loaded) == 1
+    assert loaded[0].url == "https://mcp.example.com/rpc"
+    assert loaded[0].command == ""
+    assert loaded[0].headers == {"Authorization": "Bearer t"}

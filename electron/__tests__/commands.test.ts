@@ -772,6 +772,12 @@ describe('MCP management IPC routes (M3)', () => {
     expect(r.path({ name: 'a b' })).toBe('/api/v1/mcp/servers/a%20b/tools');
   });
 
+  it('mcp_server_authorize posts to the per-server authorize route (r64)', () => {
+    const r = COMMAND_ROUTES.mcp_server_authorize;
+    expect(r.method).toBe('POST');
+    expect(r.path({ name: 'a b' })).toBe('/api/v1/mcp/servers/a%20b/authorize');
+  });
+
   it('mcp_server_delete encodes the server name', () => {
     expect(COMMAND_ROUTES.mcp_server_delete.path({ name: 'drawio' })).toBe(
       '/api/v1/mcp/servers/drawio',

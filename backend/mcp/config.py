@@ -261,9 +261,13 @@ def builtin_names() -> List[str]:
 
 def _config_from_dict(raw: Dict[str, object]) -> ServerConfig:
     """Parse one user JSON entry into a validated ServerConfig."""
+    # r64: url 必须透传——否则 HTTP 传输的用户服务器重启后退化为
+    # command="" 被当无效条目跳过（丢失）。
+    raw_url = raw.get("url")
     return validate_server_config(
         name=str(raw.get("name", "")),
         command=str(raw.get("command", "")),
+        url=raw_url if isinstance(raw_url, str) and raw_url.strip() else None,
         args=tuple(raw.get("args") or ()),  # type: ignore[arg-type]
         disabled_tools=tuple(raw.get("disabled_tools") or ()),  # type: ignore[arg-type]
         headers=dict(raw.get("headers") or {}),  # type: ignore[arg-type]
