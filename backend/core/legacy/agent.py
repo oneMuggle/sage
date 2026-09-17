@@ -1194,7 +1194,20 @@ class SageAgent:
                                         else result_p.content
                                     )
                                     return json.dumps(value, ensure_ascii=False), False
-                                return result_p.error or "工具执行失败", True
+                                # error 规范化: str 直通, None 退化为默认文案, 其他类型 JSON 序列化
+                                err_value = result_p.error
+                                normalized = (
+                                    err_value
+                                    if isinstance(err_value, str)
+                                    else (
+                                        "工具执行失败"
+                                        if err_value is None
+                                        else json.dumps(
+                                            err_value, ensure_ascii=False, default=str
+                                        )
+                                    )
+                                )
+                                return (normalized or "工具执行失败"), True
                             return json.dumps(result_p, ensure_ascii=False, default=str), False
                         except Exception as exc:  # noqa: BLE001
                             logger.error(f"并行工具执行失败: {tc.name}, error: {exc}")
@@ -1584,7 +1597,15 @@ class SageAgent:
                                                 output_value, ensure_ascii=False, default=str
                                             )
                                         else:
-                                            result_content = result.error or "工具执行失败"
+                                            err_value = result.error
+                                            if isinstance(err_value, str):
+                                                result_content = err_value or "工具执行失败"
+                                            elif err_value is None:
+                                                result_content = "工具执行失败"
+                                            else:
+                                                result_content = json.dumps(
+                                                    err_value, ensure_ascii=False, default=str
+                                                )
                                     else:
                                         is_error = False
                                         result_content = json.dumps(

@@ -622,9 +622,15 @@ export function useChat() {
                   } catch {
                     // Not JSON, ignore
                   }
+                  // 防御: 后端历史 bug (execute_code_tool 异常退出返回 dict error)
+                  // 可能让 tr.content 是对象而非字符串,这里强制序列化为字符串以避免
+                  // React 渲染对象时触发 "Objects are not valid as a React child"。
+                  const safeResult = typeof tr.content === 'string'
+                    ? tr.content
+                    : JSON.stringify(tr.content ?? '');
                   useChatStreamStore.getState().appendOrUpdateToolCall(sid, {
                     ...targetTc,
-                    result: tr.content,
+                    result: safeResult,
                     metadata,
                   });
                 }
