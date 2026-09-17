@@ -1166,7 +1166,15 @@ class SageAgent:
                                         else result_p.content
                                     )
                                     return json.dumps(value, ensure_ascii=False), False
-                                return result_p.error or "工具执行失败", True
+                                err_value = result_p.error
+                                if isinstance(err_value, str):
+                                    return err_value or "工具执行失败", True
+                                if err_value is None:
+                                    return "工具执行失败", True
+                                return (
+                                    json.dumps(err_value, ensure_ascii=False, default=str),
+                                    True,
+                                )
                             return json.dumps(result_p, ensure_ascii=False, default=str), False
                         except Exception as exc:  # noqa: BLE001
                             logger.error(f"并行工具执行失败: {tc.name}, error: {exc}")
@@ -1556,7 +1564,15 @@ class SageAgent:
                                                 output_value, ensure_ascii=False, default=str
                                             )
                                         else:
-                                            result_content = result.error or "工具执行失败"
+                                            err_value = result.error
+                                            if isinstance(err_value, str):
+                                                result_content = err_value or "工具执行失败"
+                                            elif err_value is None:
+                                                result_content = "工具执行失败"
+                                            else:
+                                                result_content = json.dumps(
+                                                    err_value, ensure_ascii=False, default=str
+                                                )
                                     else:
                                         is_error = False
                                         result_content = json.dumps(
