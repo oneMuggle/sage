@@ -254,6 +254,7 @@ from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与�
     _SQLITE_LOCK,
     make_with_db_lock,
 )
+from backend.utils.py_compat import to_thread
 
 
 def with_db_lock(func):
@@ -842,7 +843,7 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
     message_repo = MessageRepository()
     # 2026-09 修复: producer 是 async task, 全量历史读是秒级同步 IO,
     # 直接跑在事件循环上会冻结所有并发流的 NDJSON attach 与 HTTP 路由。
-    messages = await asyncio.to_thread(
+    messages = await to_thread(
         lambda: message_repo.get_by_session(session_id, limit=100000)
     )
     if not should_compact(messages):
@@ -862,7 +863,7 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
         return
 
     new_messages, removed_count = await compact_messages(messages, llm_complete)
-    after = await asyncio.to_thread(
+    after = await to_thread(
         lambda: _persist_compaction(session_id, messages, new_messages, removed_count)
     )
     logger.info(
@@ -2148,7 +2149,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 刻意 new 一个独立实例而非用下方 producer 内的 session_repo 变量 ——
             # 那个变量在数百行之后才绑定，早期失败路径 finally 会 UnboundLocalError。
             try:
-                await asyncio.to_thread(
+                await to_thread(
                     SessionRepository().update_run_status, data.session_id, "running"
                 )
             except Exception as status_err:  # noqa: BLE001 — fail-open
@@ -2836,7 +2837,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 消息尚未落盘(落盘在下方),历史天然不含本轮消息。历史加载失败时
             # 降级为无历史的旧行为,绝不阻断聊天。
             try:
-                history_rows = await asyncio.to_thread(
+                history_rows = await to_thread(
                     lambda: MessageRepository().get_by_session(
                         data.session_id, limit=100000
                     )
@@ -3297,7 +3298,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         str(_exc_info[1]) if _exc_info and _exc_info[0] else "运行失败"
                     )
             try:
-                await asyncio.to_thread(
+                await to_thread(
                     SessionRepository().update_run_status,
                     data.session_id,
                     _terminal_status,
