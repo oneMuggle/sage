@@ -1166,15 +1166,20 @@ class SageAgent:
                                         else result_p.content
                                     )
                                     return json.dumps(value, ensure_ascii=False), False
+                                # error 规范化: str 直通, None 退化为默认文案, 其他类型 JSON 序列化
                                 err_value = result_p.error
-                                if isinstance(err_value, str):
-                                    return err_value or "工具执行失败", True
-                                if err_value is None:
-                                    return "工具执行失败", True
-                                return (
-                                    json.dumps(err_value, ensure_ascii=False, default=str),
-                                    True,
+                                normalized = (
+                                    err_value
+                                    if isinstance(err_value, str)
+                                    else (
+                                        "工具执行失败"
+                                        if err_value is None
+                                        else json.dumps(
+                                            err_value, ensure_ascii=False, default=str
+                                        )
+                                    )
                                 )
+                                return (normalized or "工具执行失败"), True
                             return json.dumps(result_p, ensure_ascii=False, default=str), False
                         except Exception as exc:  # noqa: BLE001
                             logger.error(f"并行工具执行失败: {tc.name}, error: {exc}")

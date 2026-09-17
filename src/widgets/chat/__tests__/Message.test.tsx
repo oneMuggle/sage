@@ -209,7 +209,7 @@ describe('ToolCallResultDefensiveRender', () => {
         {
           name: 'execute_code',
           args: { code: 'x = 1' },
-          // @ts-expect-error — 故意构造非法类型模拟后端历史 bug
+          // 故意传 dict 而非 str: 模拟后端历史 bug（dict 穿透到 React 渲染）
           result: { error: '子进程异常退出', exit_code: 137, stderr: 'FATAL' },
         },
       ],
