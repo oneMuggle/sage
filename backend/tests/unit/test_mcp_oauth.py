@@ -12,15 +12,19 @@ from backend.mcp.oauth import (
     OAuthAuthorizeError,
     OAuthMetadataError,
     OAuthStateError,
+    authorize_mcp_server,
     build_authorization_server_discovery_urls,
     build_authorization_url,
+    build_dynamic_registration_request,
     build_protected_resource_discovery_urls,
     code_challenge_s256,
+    exchange_authorization_code,
     generate_code_verifier,
     generate_pkce_pair,
     generate_state,
     parse_authorization_server_metadata,
     parse_protected_resource_metadata,
+    parse_registration_response,
     parse_token_response,
     validate_authorization_callback,
 )
@@ -223,3 +227,185 @@ class TestTokenResponse:
     def test_non_dict_raises(self):
         with pytest.raises(OAuthMetadataError, match="JSON 对象"):
             parse_token_response(["not", "a", "dict"])
+
+
+# ============================================================================
+# r62: 动态注册 / code 交换 / 授权编排
+# ============================================================================
+
+
+class TestDynamicRegistration:
+    def test_request_shape(self):
+        headers, body = build_dynamic_registration_request(
+            "sage", "http://127.0.0.1:0/callback", scope="mcp:tools"
+        )
+        assert headers["Content-Type"] == "application/json"
+        assert body["client_name"] == "sage"
+        assert body["redirect_uris"] == ["http://127.0.0.1:0/callback"]
+        assert body["grant_types"] == ["authorization_code", "refresh_token"]
+        assert body["response_types"] == ["code"]
+        assert body["token_endpoint_auth_method"] == "none"
+        assert body["scope"] == "mcp:tools"
+
+    def test_parse_ok(self):
+        reg = parse_registration_response({"client_id": "cid-1", "client_secret": "s"})
+        assert reg["client_id"] == "cid-1"
+
+    def test_parse_missing_client_id_raises(self):
+        with pytest.raises(OAuthMetadataError, match="client_id"):
+            parse_registration_response({"client_secret": "s"})
+
+
+class TestExchangeAuthorizationCode:
+    def test_request_shape(self):
+        url, headers, body = exchange_authorization_code(
+            "https://auth.example.com/token",
+            client_id="cid",
+            code="abc",
+            redirect_uri="http://127.0.0.1:0/callback",
+            code_verifier="v" * 43,
+        )
+        assert url == "https://auth.example.com/token"
+        assert "grant_type=authorization_code" in body
+        assert "code=abc" in body
+        assert "code_verifier=" in body
+        assert "client_id=cid" in body
+        assert "client_secret" not in body
+
+    def test_optional_secret_and_resource(self):
+        _, _, body = exchange_authorization_code(
+            "https://a/t",
+            client_id="cid",
+            code="abc",
+            redirect_uri="http://x/cb",
+            code_verifier="v" * 43,
+            client_secret="sec",
+            resource="https://mcp.example.com",
+        )
+        assert "client_secret=sec" in body
+        assert "resource=" in body
+
+
+class TestAuthorizeOrchestration:
+    SERVER = "https://mcp.example.com/mcp"
+
+    def _fakes(self, *, include_resource_meta=True, include_registration=True):
+        calls = {"get": [], "post": [], "auth_url": None}
+
+        async def get_json(url):
+            calls["get"].append(url)
+            if "oauth-protected-resource" in url and include_resource_meta:
+                return {
+                    "resource": self.SERVER,
+                    "authorization_servers": ["https://auth.example.com"],
+                }
+            if "oauth-authorization-server" in url:
+                meta = {
+                    "issuer": "https://auth.example.com",
+                    "authorization_endpoint": "https://auth.example.com/authorize",
+                    "token_endpoint": "https://auth.example.com/token",
+                }
+                if include_registration:
+                    meta["registration_endpoint"] = "https://auth.example.com/register"
+                return meta
+            raise AssertionError(f"unexpected GET {url}")
+
+        async def post_json(url, headers, body):
+            calls["post"].append((url, headers, body))
+            if url.endswith("/register"):
+                return {"client_id": "cid-77"}
+            if url.endswith("/token"):
+                return {
+                    "access_token": "at-final",
+                    "refresh_token": "rt-final",
+                    "expires_in": 3600,
+                    "scope": "mcp:tools",
+                }
+            raise AssertionError(f"unexpected POST {url}")
+
+        async def wait_callback(authorization_url):
+            calls["auth_url"] = authorization_url
+            from urllib.parse import parse_qs, urlparse
+
+            state = parse_qs(urlparse(authorization_url).query)["state"][0]
+            return f"http://127.0.0.1:8765/callback?code=xyz&state={state}"
+
+        return get_json, post_json, wait_callback, calls
+
+    async def test_full_flow_produces_record(self):
+        get_json, post_json, wait_callback, calls = self._fakes()
+        record = await authorize_mcp_server(
+            self.SERVER,
+            redirect_uri="http://127.0.0.1:8765/callback",
+            scope="mcp:tools",
+            http_get_json=get_json,
+            http_post_json=post_json,
+            wait_for_callback=wait_callback,
+        )
+        assert record.access_token == "at-final"
+        assert record.refresh_token == "rt-final"
+        assert record.client_id == "cid-77"
+        assert record.token_endpoint == "https://auth.example.com/token"
+        assert record.expires_at > 0
+        assert record.scope == "mcp:tools"
+        assert "code_challenge_method=S256" in calls["auth_url"]
+        assert "client_id=cid-77" in calls["auth_url"]
+        token_posts = [p for p in calls["post"] if p[0].endswith("/token")]
+        assert "code_verifier=" in token_posts[0][2]
+
+    async def test_fallback_direct_discovery_without_resource_meta(self):
+        get_json, post_json, wait_callback, _ = self._fakes(include_resource_meta=False)
+        record = await authorize_mcp_server(
+            self.SERVER,
+            redirect_uri="http://127.0.0.1:8765/callback",
+            http_get_json=get_json,
+            http_post_json=post_json,
+            wait_for_callback=wait_callback,
+        )
+        assert record.access_token == "at-final"
+
+    async def test_no_metadata_raises(self):
+        async def get_json(url):
+            raise OSError("no metadata here")
+
+        async def post_json(url, headers, body):
+            raise AssertionError("should not post")
+
+        async def wait_callback(url):
+            raise AssertionError("should not authorize")
+
+        with pytest.raises(OAuthMetadataError, match="元数据"):
+            await authorize_mcp_server(
+                self.SERVER,
+                redirect_uri="http://x/cb",
+                http_get_json=get_json,
+                http_post_json=post_json,
+                wait_for_callback=wait_callback,
+            )
+
+    async def test_no_registration_endpoint_raises(self):
+        get_json, post_json, wait_callback, _ = self._fakes(include_registration=False)
+        with pytest.raises(OAuthMetadataError, match="registration_endpoint"):
+            await authorize_mcp_server(
+                self.SERVER,
+                redirect_uri="http://127.0.0.1:8765/callback",
+                http_get_json=get_json,
+                http_post_json=post_json,
+                wait_for_callback=wait_callback,
+            )
+
+    async def test_state_tamper_aborts(self):
+        get_json, post_json, _, calls = self._fakes()
+
+        async def evil_callback(authorization_url):
+            return "http://127.0.0.1:8765/callback?code=xyz&state=evil"
+
+        with pytest.raises(Exception):
+            await authorize_mcp_server(
+                self.SERVER,
+                redirect_uri="http://127.0.0.1:8765/callback",
+                http_get_json=get_json,
+                http_post_json=post_json,
+                wait_for_callback=evil_callback,
+            )
+        assert not [p for p in calls["post"] if p[0].endswith("/token")]
