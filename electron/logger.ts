@@ -68,6 +68,12 @@ function resolveLevel(): LogLevel {
 const LOG_DIR = resolveLogDir();
 let CURRENT_LEVEL = resolveLevel();
 
+// 日志时区 (2026-09-17): 用户可选择日志时间戳使用的时区.
+// 'UTC' = 使用 UTC 时间 (历史默认), 'local' = 使用系统本地时区, 其他 IANA 字符串.
+// 默认 'UTC' 保持向后兼容; 由 Electron main 进程在读取 settings 后调用
+// setLogTimezone() 更新此值.
+let CURRENT_LOG_TIMEZONE: string = process.env.SAGE_LOG_TIMEZONE || 'UTC';
+
 try {
   mkdirSync(LOG_DIR, { recursive: true });
   log.transports.file.resolvePath = () => join(LOG_DIR, 'electron-log-fallback.log');
@@ -75,6 +81,75 @@ try {
   log.transports.console.level = process.env.NODE_ENV === 'production' ? 'warn' : 'debug';
 } catch (err) {
   console.error('[logger] failed to configure transports:', err);
+}
+
+/**
+ * 将 Date 对象按当前 logTimezone 设置格式化为 ISO 字符串.
+ * - 'UTC' → toISOString() (末尾带 'Z')
+ * - 'local' → 本地时区的 ISO-like 字符串
+ * - 其他 (IANA 时区) → 通过 Intl.DateTimeFormat 转换到该时区
+ */
+function formatTimestamp(date: Date, tz: string): string {
+  if (tz === 'UTC') {
+    return date.toISOString();
+  }
+  if (tz === 'local') {
+    // 本地时区: 与 UTC 等价的可读格式, 含本机偏移.
+    const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+    const y = date.getFullYear();
+    const mo = pad(date.getMonth() + 1);
+    const d = pad(date.getDate());
+    const h = pad(date.getHours());
+    const mi = pad(date.getMinutes());
+    const s = pad(date.getSeconds());
+    const ms = pad(date.getMilliseconds(), 3);
+    const offset = -date.getTimezoneOffset(); // 分钟; 东八区为 +480
+    const sign = offset >= 0 ? '+' : '-';
+    const oh = pad(Math.floor(Math.abs(offset) / 60));
+    const om = pad(Math.abs(offset) % 60);
+    return `${y}-${mo}-${d}T${h}:${mi}:${s}.${ms}${sign}${oh}:${om}`;
+  }
+  // IANA 时区: 使用 Intl.DateTimeFormat 转换.
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      fractionalSecondDigits: 3,
+    }).formatToParts(date);
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '00';
+    const y = get('year');
+    const mo = get('month');
+    const d = get('day');
+    const h = get('hour') === '24' ? '00' : get('hour');
+    const mi = get('minute');
+    const s = get('second');
+    const ms = get('fractionalSecond');
+    // 计算该时区与 UTC 的偏移.
+    const tzDate = new Date(date.toLocaleString('en-US', { timeZone: tz }));
+    const offsetMin = (tzDate.getTime() - date.getTime()) / 60000 + date.getTimezoneOffset();
+    const sign = offsetMin >= 0 ? '+' : '-';
+    const oh = String(Math.floor(Math.abs(offsetMin) / 60)).padStart(2, '0');
+    const om = String(Math.abs(offsetMin) % 60).padStart(2, '0');
+    return `${y}-${mo}-${d}T${h}:${mi}:${s}.${ms}${sign}${oh}:${om}`;
+  } catch {
+    // 非法 IANA 时区 → 回落到 UTC.
+    return date.toISOString();
+  }
+}
+
+/** YYYY-MM-DD 提取 (按 logTimezone 切分文件). */
+function formatDateOnly(date: Date, tz: string): string {
+  if (tz === 'UTC') {
+    return date.toISOString().slice(0, 10);
+  }
+  // local 或 IANA: 提取 YYYY-MM-DD 部分.
+  return formatTimestamp(date, tz).slice(0, 10);
 }
 
 function shouldLog(level: LogLevel): boolean {
@@ -100,8 +175,9 @@ function safeStringify(value: unknown): unknown {
 }
 
 function writeLine(level: LogLevel, source: string, msg: string, meta?: unknown): void {
+  const now = new Date();
   const line: Record<string, unknown> = {
-    ts: new Date().toISOString(),
+    ts: formatTimestamp(now, CURRENT_LOG_TIMEZONE),
     level,
     source,
     msg,
@@ -109,7 +185,7 @@ function writeLine(level: LogLevel, source: string, msg: string, meta?: unknown)
   if (meta !== undefined) {
     line.meta = safeStringify(meta);
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatDateOnly(now, CURRENT_LOG_TIMEZONE);
   const file = join(LOG_DIR, `sage-${today}.ndjson`);
   try {
     if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
@@ -141,6 +217,14 @@ export function setLogLevel(level: LogLevel): void {
   } catch {
     /* electron-log transport 在测试/无 electron 环境可能未配置,忽略 */
   }
+}
+
+/** 运行时切换日志时区 (2026-09-17). 接受 'UTC' | 'local' | IANA 时区字符串. 无效值忽略. */
+export function setLogTimezone(tz: string): void {
+  if (!tz || typeof tz !== 'string') return;
+  // 'UTC' 和 'local' 是保留关键字; 其他视作 IANA 时区.
+  // IANA 时区校验交给 formatTimestamp 的 try/catch 兜底.
+  CURRENT_LOG_TIMEZONE = tz;
 }
 
 export const logger = {

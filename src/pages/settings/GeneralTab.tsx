@@ -418,6 +418,31 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
             className="w-48 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary font-mono"
           />
         </SettingRow>
+        {/* 日志时区 (2026-09-17): 与 IANA 时区分开, 默认 UTC 保持历史行为. */}
+        <SettingRow
+          label="日志时区"
+          desc="日志时间戳时区. UTC (历史默认) | 本地系统时区 | IANA 时区 (如 Asia/Shanghai). 切换立即生效."
+        >
+          <select
+            data-testid="settings-log-timezone-select"
+            value={settings.logTimezone}
+            onChange={async (e) => {
+              const value = e.target.value;
+              await updateSettings({ logTimezone: value });
+              // 通知 Electron main 进程立即更新 logger 时区 + 写盘持久化
+              await window.electronAPI?.setLogTimezone?.(value);
+            }}
+            className="w-48 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary font-mono"
+          >
+            <option value="UTC">UTC (历史默认)</option>
+            <option value="local">本地系统时区</option>
+            <option value="Asia/Shanghai">Asia/Shanghai (+08:00)</option>
+            <option value="Asia/Tokyo">Asia/Tokyo (+09:00)</option>
+            <option value="Europe/London">Europe/London</option>
+            <option value="America/New_York">America/New_York</option>
+            <option value="America/Los_Angeles">America/Los_Angeles</option>
+          </select>
+        </SettingRow>
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">对话</h3>

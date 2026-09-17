@@ -927,7 +927,7 @@ if __name__ == "__main__":
 if __name__ == "__main__":
     import uvicorn
 
-    from backend.utils.logging import setup_logging
+    from backend.utils.logging import setup_logging, set_log_timezone
 
     _elapsed_entry = time.monotonic() - _startup_t0
     print(  # noqa: T201
@@ -949,6 +949,11 @@ if __name__ == "__main__":
     _LEVEL_MAP = {"debug": "DEBUG", "info": "INFO", "warn": "WARNING", "error": "ERROR"}
     _level = _LEVEL_MAP.get(os.environ.get("SAGE_LOG_LEVEL", "info").lower(), "INFO")
     setup_logging(log_level=_level)
+
+    # 日志时区 (2026-09-17): 从 SAGE_LOG_TIMEZONE env 读取, 应用到 Python logger.
+    # 由 Electron main.ts 注入 (值来自用户设置 logTimezone). 默认 'UTC' 保持历史行为.
+    _log_tz = os.environ.get("SAGE_LOG_TIMEZONE", "UTC")
+    set_log_timezone(_log_tz)
 
     # uvicorn 自带 logger 默认 WARNING 且无 handler;显式放行到 INFO 并传播到
     # 根 logger,否则 log_config=None 后 access log 会被 uvicorn 自身级别过滤。

@@ -8,9 +8,14 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except ImportError:  # pragma: no cover — py38 compat
+    from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 
 from opentelemetry import trace
 
@@ -30,6 +35,9 @@ LOG_LEVELS = {
 # 默认日志级别
 DEFAULT_LOG_LEVEL = "INFO"
 
+# 默认日志时区 (2026-09-17): 'UTC' 保持历史行为.
+DEFAULT_LOG_TIMEZONE = "UTC"
+
 # 日志文件保留天数
 LOG_FILE_MAX_DAYS = 7
 
@@ -38,7 +46,7 @@ _NO_TRACE_ID = "-"
 
 
 class TraceIdFilter(logging.Filter):
-    """把当前 OTel span 的 ``trace_id`` / ``span_id`` 注入 log record。
+    """把当前 OTel span 的 ``trace_id`` / ``span_id`` 注入 log record.
 
     给所有 handler 装上后，``LOG_FORMAT`` 中的 ``%(trace_id)s`` / ``%(span_id)s``
     就会被替换为十六进制字符串。
@@ -69,6 +77,63 @@ class TraceIdFilter(logging.Filter):
         if not hasattr(record, "span_id"):
             record.span_id = _NO_TRACE_ID
         return True
+
+
+# 日志时区 (2026-09-17): 全局当前时区设置. 由 set_log_timezone() 修改.
+# 'UTC' | 'local' | IANA 时区字符串 (如 'Asia/Shanghai').
+_CURRENT_LOG_TIMEZONE: str = DEFAULT_LOG_TIMEZONE
+
+
+def _resolve_log_timezone(tz: str):
+    """把 logTimezone 字符串解析为 tzinfo 对象. 失败回落 UTC."""
+    if not tz or tz == "UTC":
+        return timezone.utc
+    if tz == "local":
+        return None  # None 表示用本地时间 (Formatter 特殊处理)
+    try:
+        return ZoneInfo(tz)
+    except Exception:  # noqa: BLE001 — 非法 IANA → 回落 UTC
+        return timezone.utc
+
+
+class TimezoneFormatter(logging.Formatter):
+    """时区感知的日志 Formatter (2026-09-17).
+
+    通过读取模块级 ``_CURRENT_LOG_TIMEZONE`` 决定时间戳格式化的时区:
+
+    - 'UTC': UTC 时间 (默认, 历史行为)
+    - 'local': 系统本地时间
+    - IANA 时区字符串: 该时区的时间
+
+    设计要点:
+
+    - 与 ``logging.Formatter`` 接口兼容, 无需修改调用方.
+    - 时区解析失败时回落 UTC, 不会因为坏设置导致日志系统崩溃.
+    - 通过 ``set_log_timezone()`` 切换后, 新生成的 record 立即使用新时区.
+    """
+
+    def __init__(self, fmt: str, datefmt: str) -> None:
+        super().__init__(fmt, datefmt)
+        # 初始 tzinfo 缓存. 每次 format 时若时区变更会重新解析.
+        self._cached_tz_key: str = _CURRENT_LOG_TIMEZONE
+        self._cached_tzinfo = _resolve_log_timezone(self._cached_tz_key)
+
+    def formatTime(self, record, datefmt=None):  # noqa: N802 — stdlib API
+        # 检查时区是否变更; 是则重新解析.
+        if _CURRENT_LOG_TIMEZONE != self._cached_tz_key:
+            self._cached_tz_key = _CURRENT_LOG_TIMEZONE
+            self._cached_tzinfo = _resolve_log_timezone(self._cached_tz_key)
+
+        # record.created 是 POSIX 时间戳 (秒, UTC).
+        utc_dt = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        if self._cached_tzinfo is None:
+            # 'local': 转本地时区
+            local_dt = utc_dt.astimezone()
+        else:
+            local_dt = utc_dt.astimezone(self._cached_tzinfo)
+        if datefmt:
+            return local_dt.strftime(datefmt)
+        return local_dt.isoformat()
 
 
 class SageLogger:
@@ -159,7 +224,7 @@ class SageLogger:
         handler = logging.StreamHandler(sys.stdout)
         handler.setLevel(LOG_LEVELS.get(self._log_level, logging.INFO))
 
-        formatter = logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT)
+        formatter = TimezoneFormatter(LOG_FORMAT, LOG_DATE_FORMAT)
         handler.setFormatter(formatter)
         # 注入 OTel trace_id / span_id（即使没有活跃 span 也不抛错）
         handler.addFilter(TraceIdFilter())
@@ -173,13 +238,20 @@ class SageLogger:
         Returns:
             配置好的 FileHandler
         """
-        # 生成日志文件名（按日期）
-        log_file = self._log_dir / f"sage_{datetime.now().strftime('%Y%m%d')}.log"
+        # 生成日志文件名（按日期）— 使用当前 logTimezone 切分.
+        tz = _CURRENT_LOG_TIMEZONE
+        tzinfo = _resolve_log_timezone(tz)
+        if tzinfo is None:
+            # local: 用本地日期
+            date_str = datetime.now().strftime("%Y%m%d")
+        else:
+            date_str = datetime.now(tz=tzinfo).strftime("%Y%m%d")
+        log_file = self._log_dir / f"sage_{date_str}.log"
 
         handler = logging.FileHandler(log_file, encoding="utf-8")
         handler.setLevel(logging.DEBUG)  # 文件记录所有级别
 
-        formatter = logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT)
+        formatter = TimezoneFormatter(LOG_FORMAT, LOG_DATE_FORMAT)
         handler.setFormatter(formatter)
         handler.addFilter(TraceIdFilter())
 
@@ -282,6 +354,24 @@ def set_log_level(level: str) -> None:
         level: 日志级别
     """
     _logger_manager.set_level(level)
+
+
+def set_log_timezone(tz: str) -> None:
+    """设置日志时区 (2026-09-17, 便捷函数).
+
+    Args:
+        tz: 'UTC' | 'local' | IANA 时区字符串.
+
+    Note:
+        - 设置后立即生效; 新写入的日志使用新时区.
+        - 不会重新创建 FileHandler; 文件名按下次创建 handler 时确定.
+        - 已有 handler 的 Formatter 内部缓存会自我刷新, 无需重建.
+        - 非法 IANA 时区字符串会被内部回落到 UTC, 不会抛错.
+    """
+    global _CURRENT_LOG_TIMEZONE
+    if not tz or not isinstance(tz, str):
+        return
+    _CURRENT_LOG_TIMEZONE = tz
 
 
 # 导出常用日志级别常量

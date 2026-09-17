@@ -43,6 +43,7 @@ EXPECTED_TOP_KEYS = frozenset(
         "maxContext",
         "temperature",
         "timezone",  # Task 1 (2026-08-23): IANA timezone, 默认 Asia/Shanghai
+        "logTimezone",  # 2026-09-17: 日志时间戳时区 ('UTC' | 'local' | IANA)
         "wiki",
         "version",
         "orch",
@@ -51,7 +52,7 @@ EXPECTED_TOP_KEYS = frozenset(
 
 
 def test_legal_top_keys_matches_appsettings_interface() -> None:
-    """LEGAL_TOP_KEYS 必须与 AppSettings 12 顶层字段 1:1 对齐."""
+    """LEGAL_TOP_KEYS 必须与 AppSettings 顶层字段 1:1 对齐."""
     assert LEGAL_TOP_KEYS == EXPECTED_TOP_KEYS
 
 
