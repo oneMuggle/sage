@@ -1,7 +1,18 @@
 // src/shared/api/fileSearchClient.ts
 import { workspaceApi } from './workspaceApi';
 
-export type FileSearchKind = 'file' | 'office-ppt' | 'office-word' | 'office-excel' | 'office-pdf';
+export type FileSearchKind =
+  | 'file'
+  | 'office-ppt'
+  | 'office-word'
+  | 'office-excel'
+  | 'office-pdf'
+  // Phase 3.4 (2026-09-17): allowed_paths 搜索结果前缀，只读。
+  | 'allowed-file'
+  | 'allowed-ppt'
+  | 'allowed-word'
+  | 'allowed-excel'
+  | 'allowed-pdf';
 
 /**
  * Workspace-aware search result.
@@ -80,7 +91,7 @@ export type AtFileSelection =
 export function fileSearchResultToChatOfficeRef(
   result: FileSearchResult,
 ): { docId: string; docType: 'ppt' | 'word' | 'excel' | 'pdf'; filename: string } | null {
-  if (result.kind === 'file') return null;
+  if (result.kind === 'file' || result.kind === 'allowed-file') return null;
   if (!result.docId || !result.docType) return null;
   return {
     docId: result.docId,
@@ -97,7 +108,7 @@ export function fileSearchResultToChatOfficeRef(
  * - office-* with `docId` → managed ref
  */
 export function classifyAtFileSelection(result: FileSearchResult): AtFileSelection['kind'] {
-  if (result.kind === 'file') return 'file';
+  if (result.kind === 'file' || result.kind === 'allowed-file') return 'file';
   const ref = fileSearchResultToChatOfficeRef(result);
   if (ref) return 'office';
   return 'office-import';

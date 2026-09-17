@@ -80,7 +80,14 @@ export type WorkspaceSearchKind =
   | 'office-ppt'
   | 'office-word'
   | 'office-excel'
-  | 'office-pdf';
+  | 'office-pdf'
+  // Phase 3.4 (2026-09-17): allowed_paths 搜索结果 —— 与上述 kind 同构但
+  // 带 `allowed-` 前缀，前端据此区分"workspace 内"与"allowed_paths 只读"。
+  | 'allowed-file'
+  | 'allowed-ppt'
+  | 'allowed-word'
+  | 'allowed-excel'
+  | 'allowed-pdf';
 
 export interface WorkspaceSearchResult {
   name: string;
