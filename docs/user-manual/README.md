@@ -22,6 +22,7 @@
 | 14   | [可插拔更新源](./14-update-providers.md) | 设置 → 更新源 tab：添加 GitHub/Gitee/GitLab/自建 HTTP 源 + 设为默认 + 测试连接 + 删除；token 用 safeStorage 加密存储，IPC 返回自动 mask |
 | 15   | [出错时如何导出诊断包](./15-diagnostic-export.md) | 一键导出最近 50 次 LLM 调用为 zip 发给支持人员（托盘菜单 / 设置页入口 + 脱敏说明 + Win7 注意） |
 | 16   | [额外访问路径（Allowed Paths）](./16-allowed-paths.md) | 配置额外只读路径让 agent 访问 workspace 之外的文件；首次未授权路径会弹出审批对话框（拒绝/允许/项目级允许） |
+| 17   | [网页访问与登录态](./17-web-access.md) | 三条出网通道 / 网站凭据管理（含 header 型新增）/ 登录态自动刷新 / 浏览器健康 / 出网指标 / 常见错误出路 |
 
 ---
 
