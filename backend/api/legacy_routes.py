@@ -254,7 +254,7 @@ from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与�
     _SQLITE_LOCK,
     make_with_db_lock,
 )
-from backend.utils.py_compat import to_thread
+from backend.utils.py_compat import TIMEOUT_ERRORS, to_thread
 
 
 def with_db_lock(func):
@@ -2618,7 +2618,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             await asyncio.wait_for(
                                 confirm_event.wait(), timeout=confirm_timeout
                             )
-                        except TimeoutError:
+                        except TIMEOUT_ERRORS:  # py38: wait_for 抛 asyncio.TimeoutError（与本型不同类）
                             logger.warning(
                                 "编排确认超时 (%ss)，自动取消 run %s",
                                 confirm_timeout,
