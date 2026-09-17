@@ -2797,7 +2797,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     _r37_ref, r37_bytes = _r37_loaded
                     if _r37_ref.kind != MediaKind.DOCUMENT:
                         continue
-                    # 全文提取（txt 直读；pdf/docx 复用 r39 提取器），不在此截断
+                    # 全文提取（txt 直读；pdf/docx 复用 r39 提取器），不在此截断。
+                    # pdf/docx 提取是秒级同步 CPU 活，放线程池避免卡事件循环（r68）。
                     try:
                         _r37_ext = (
                             (_r37_ref.file_path or "").rsplit(".", 1)[-1].lower()
@@ -2805,7 +2806,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             else "txt"
                         )
                         if _r37_ext in ("pdf", "docx"):
-                            r37_text = _r66_car._extract_document_text(r37_bytes, _r37_ext)
+                            r37_text = await asyncio.get_running_loop().run_in_executor(
+                                None,
+                                _r66_car._extract_document_text,
+                                r37_bytes,
+                                _r37_ext,
+                            )
                         else:
                             r37_text = r37_bytes.decode("utf-8")
                     except Exception:
