@@ -266,6 +266,17 @@ class OfficeCreateTool(BaseTool):
                             "不传则默认宋体。"
                         ),
                     },
+                    "refresh_toc": {
+                        "type": "boolean",
+                        "description": (
+                            "word 专用：生成成功后立即用 Word COM 把目录"
+                            "（TOC）域刷新为真页码并原地保存（一步到位，无需"
+                            "再调 office_refresh_toc）。需本机 Word + pywin32；"
+                            "不可用时生成照常成功，结果附加 toc_refresh.error"
+                            " 说明（此时可在 Word 中 Ctrl+A → F9 手动更新）。"
+                            "仅 doc_type=word 可传。"
+                        ),
+                    },
                     "content": {
                         "type": "object",
                         "description": (
@@ -1100,6 +1111,7 @@ class OfficeCreateTool(BaseTool):
         filename: Optional[str] = None,
         content: Optional[Dict[str, Any]] = None,
         font_family: Optional[str] = None,
+        refresh_toc: Optional[bool] = None,
         **kwargs: Any,
     ) -> ToolResult:
         # doc_type 大小写容错（T6 实测模型传 "Word"）：归一化后再校验。
@@ -1108,6 +1120,15 @@ class OfficeCreateTool(BaseTool):
         error = self._check_params(doc_type, output_dir, filename, content)
         if error is not None:
             return error
+
+        # Round 40: refresh_toc 一步到位刷新目录域（word 专用，strict——
+        # 非 word 显式报错而非静默忽略，防 LLM 误以为已刷新）。
+        do_refresh = bool(refresh_toc)
+        if do_refresh and OfficeDocType(doc_type) is not OfficeDocType.WORD:
+            return ToolResult(
+                success=False,
+                error="refresh_toc_only_supported_for_word: refresh_toc 仅支持 doc_type=word",
+            )
 
         # ---- T7.5: binding-aware delegation -----------------------------
         # When the agent loop is running under a session-workspace binding
@@ -1119,6 +1140,8 @@ class OfficeCreateTool(BaseTool):
             doc_type=doc_type, filename=filename, content=content
         )
         if delegated is not None:
+            if do_refresh and delegated.success:
+                delegated = self._attach_toc_refresh_managed(delegated)
             return delegated
 
         doc_type_enum = OfficeDocType(doc_type)
@@ -1129,10 +1152,76 @@ class OfficeCreateTool(BaseTool):
         content = self._normalize_content(doc_type_enum, filename, content)
         if content is None:
             return ToolResult(success=False, error="content_required")
-        return self._generate_document(
+        result = self._generate_document(
             doc_type_enum, filename, content, target_dir,
             font_family=font_family,
         )
+        if do_refresh and result.success:
+            result = self._attach_toc_refresh_local(
+                result, Path(result.content["path"])
+            )
+        return result
+
+    def _attach_toc_refresh_managed(self, result: ToolResult) -> ToolResult:
+        """受管路径刷新：doc_id 定位落盘文件，刷新后只附加摘要字段。
+
+        维持「不回显受管绝对路径」不变式——toc_refresh 只含 ok/toc_count/
+        error。定位失败同样不毁生成结果（附加降级说明）。
+        """
+        content = dict(result.content or {})
+        try:
+            ctx = current_tool_context()
+            conn = get_database().get_connection()
+            binding = get_active_workspace(
+                conn, ctx.session_id, expected_generation=ctx.binding_generation
+            )
+            doc = get_document_in_workspace(
+                conn, str(content.get("document_id")), binding.workspace_path
+            )
+            path = document_path(doc)
+            workspace = Path(binding.workspace_path)
+        except Exception:
+            content["toc_refresh"] = {
+                "ok": False,
+                "error": "定位受管文档失败，目录域未刷新",
+            }
+            return ToolResult(success=True, content=content)
+        return self._refresh_and_attach(result, path, workspace)
+
+    def _attach_toc_refresh_local(self, result: ToolResult, path: Path) -> ToolResult:
+        """legacy output_dir 路径刷新：无绑定时以输出父目录为围栏。"""
+        workspace = self._binding_workspace_or_none() or path.parent
+        return self._refresh_and_attach(result, path, workspace)
+
+    def _binding_workspace_or_none(self) -> Optional[Path]:
+        """有活动绑定 → 绑定工作区 Path；否则 ``None``（DB 不可用同样吞掉）。"""
+        ctx = current_tool_context()
+        if ctx is None or not ctx.session_id:
+            return None
+        try:
+            conn = get_database().get_connection()
+            binding = get_active_workspace(
+                conn, ctx.session_id, expected_generation=ctx.binding_generation
+            )
+        except Exception:
+            return None
+        if binding is None:
+            return None
+        return Path(binding.workspace_path)
+
+    def _refresh_and_attach(
+        self, result: ToolResult, path: Path, workspace: Path
+    ) -> ToolResult:
+        """执行刷新并把摘要附加到结果（刷新失败不改写成功态）。"""
+        from backend.office.toc_refresh import refresh_toc_page_numbers
+
+        refresh = refresh_toc_page_numbers(path, workspace)
+        summary: Dict[str, Any] = {"ok": refresh.ok, "toc_count": refresh.toc_count}
+        if refresh.error:
+            summary["error"] = refresh.error
+        content = dict(result.content or {})
+        content["toc_refresh"] = summary
+        return ToolResult(success=result.success, content=content)
 
     @staticmethod
     def _try_delegate_to_bound_service(

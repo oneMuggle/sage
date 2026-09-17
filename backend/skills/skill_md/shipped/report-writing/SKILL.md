@@ -60,10 +60,10 @@ triggers: []
   -repaired.docx 新文件；确认无误可 overwrite=true 原地替换），修复后
   自动复检；
 - 复检至 `ok=true` 或用户接受。
-- 带目录的文档（`format_spec.toc`）→ 交付前调 `office_refresh_toc`
-  把目录域刷新为真页码（需本机 Word + pywin32，缺 pywin32 时按返回的
-  安装引导处理；无 Word 环境则提醒用户在 Word 里 Ctrl+A → F9 手动
-  更新域）。
+- 带目录的文档（`format_spec.toc`）→ 真页码两步走：生成时可直接带
+  `refresh_toc: true`（一步到位）；未带时交付前调 `office_refresh_toc`
+  刷新目录域。需本机 Word + pywin32，缺 pywin32 时按返回的安装引导
+  处理；无 Word 环境则提醒用户在 Word 里 Ctrl+A → F9 手动更新域。
 - 正式交付提醒用户：文档在工作区
 `office/word/` 受管目录下，可随时用 office_list / office_read 回看。
 
