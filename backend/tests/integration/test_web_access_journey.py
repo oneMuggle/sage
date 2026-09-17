@@ -13,18 +13,15 @@ J3  渲染失败 → RenderError 语义 + 指标记 fail
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from typing import Any, Dict
+from typing import Dict
 
 import httpx
 import pytest
 import respx
 
-from backend.domain.tool_policy import ToolPolicy
-from backend.tools import web_metrics, web_render, web_tool
+from backend.tools import web_metrics, web_render
 from backend.tools.credential_vault import (
     load_credential,
-    resolve_credential,
     save_credential,
 )
 from backend.tools.web_tool import WebFetchTool
@@ -114,12 +111,11 @@ def test_j1_credential_expired_reports_without_hop(monkeypatch):
 
     _seed_credential("stale")
     # 直接把档案 cookie 置为已过期（走假共享 repo）
+    from backend.services.secret_box import encrypt_secret
     from backend.tools.credential_vault import (
         SETTINGS_KEY_CREDENTIAL_VAULT,
         load_credential,
     )
-
-    from backend.services.secret_box import encrypt_secret
 
     repo = _SharedRepo()
     cookies = load_credential(".example.com", repo=repo)
@@ -150,7 +146,6 @@ def test_j1_credential_expired_reports_without_hop(monkeypatch):
 
 def test_j2_render_login_wall_then_auto_refresh_success(monkeypatch):
     """JS 壳渲染带凭据 → 渲染遇登录墙（AU7）→ AU3 自愈重渲染 → 成功。"""
-    from backend.domain.network_policy import NetworkMode, NetworkPolicy
 
     _seed_credential("stale-but-refreshable")
     tool = WebFetchTool()
@@ -208,7 +203,6 @@ def test_j2_render_login_wall_then_auto_refresh_success(monkeypatch):
 
 def test_j3_render_failure_counts_fail_metric(monkeypatch):
     """渲染失败经 execute → RenderError 语义 + per-host 指标记 fail。"""
-    from backend.domain.network_policy import NetworkMode, NetworkPolicy
 
     tool = WebFetchTool()
 
