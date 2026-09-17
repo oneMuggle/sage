@@ -3026,6 +3026,32 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 auto_context=data.auto_context,
             )
             l9_budget = history_token_budget(effective_window=effective_window)
+            # Task 7 (2026-09-17): context-isolation turn limit.
+            # Read ``context_turn_limit`` from settings (whitelisted in Task 6).
+            # Setting is stored as str; parse defensively — bad value falls back
+            # to None rather than 500-ing the chat request.
+            turn_limit: Optional[int] = None
+            try:
+                from backend.data.settings_repo import SettingsRepository
+
+                turn_limit_raw = SettingsRepository().get("context_turn_limit")
+                if turn_limit_raw:
+                    try:
+                        turn_limit = int(turn_limit_raw)
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            "[REQ %s] context_turn_limit setting is invalid: %r, ignoring",
+                            request_id,
+                            turn_limit_raw,
+                        )
+                        turn_limit = None
+            except Exception as sl_err:  # noqa: BLE001 — 任何 settings 读取失败都不应阻断聊天
+                logger.warning(
+                    "[REQ %s] context_turn_limit 读取失败(降级为不限): %s",
+                    request_id,
+                    sl_err,
+                )
+                turn_limit = None
             messages, omitted_history = build_request_messages(
                 system_content=system_content,
                 user_text=data.message,
@@ -3038,6 +3064,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     if dynamic_context_parts
                     else None
                 ),
+                turn_limit=turn_limit,
             )
             if omitted_history > 0:
                 logger.info(

@@ -163,6 +163,7 @@ def build_request_messages(
     attachment_block: Optional[str] = None,
     budget_tokens: Optional[int] = None,
     trailing_system: Optional[str] = None,
+    turn_limit: Optional[int] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
     """组装 producer 的完整请求消息（L1 主入口，纯函数）。
 
@@ -175,11 +176,21 @@ def build_request_messages(
     命中，头部 system + 追加式历史保持跨请求稳定即可吃到缓存；易变块若
     混进头部 system，任何 git 状态/时间变化都会让整轮缓存失效。
 
+    Args:
+        turn_limit: 滑动窗口的 user 轮数上限（1 轮 = 1 user + 1 assistant）。
+            来自 settings ``context_turn_limit``。``None``/0/负数 → 不限。
+            在 ``truncate_history`` 之后再按轮数从最旧砍，``omitted`` 累加。
+
     Returns:
         ``(messages, omitted_count)``。任何失败都不抛错 —— 历史注入是
         best-effort 增强，绝不能阻断聊天。
     """
     kept, omitted = truncate_history(db_rows_to_history(history_rows), budget_tokens)
+    # 方案 B：滑动窗口（按 user 轮数）。
+    # 在 token 截断后再砍,缺的轮数加到 running omitted 上,统一反映在 system 提示里。
+    if turn_limit:
+        kept, turn_omitted = apply_turn_limit(kept, turn_limit)
+        omitted += turn_omitted
 
     messages: List[Dict[str, Any]] = []
     system_text = system_content
