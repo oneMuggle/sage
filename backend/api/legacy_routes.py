@@ -3068,10 +3068,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             )
             if omitted_history > 0:
                 logger.info(
-                    "[REQ %s] 历史超过预算(%s tokens),已省略最早 %s 条",
+                    "[REQ %s] 历史已省略最早 %s 条 (turn_limit %s, token 预算 %s)",
                     request_id,
-                    l9_budget,
                     omitted_history,
+                    turn_limit,
+                    l9_budget,
                 )
 
             # G6 (2026-09-06): 图片附件 → 多模态 user 消息（OpenAI content 分段格式）。

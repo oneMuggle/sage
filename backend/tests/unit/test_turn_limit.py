@@ -80,13 +80,95 @@ def test_build_request_messages_turn_limit_none_keeps_all():
 
 
 def test_build_request_messages_turn_limit_zero_keeps_all():
-    """turn_limit=0 或负数 → 视同不限，原样返回。"""
+    """turn_limit=0 → 视同不限，原样返回（仅测 0，负数见 _negative 用例）。"""
     rows = [_row("user", "q0"), _row("assistant", "a0")]
     messages, omitted = build_request_messages(
         system_content="system",
         user_text="current",
         history_rows=rows,
         turn_limit=0,
+    )
+    history_msgs = messages[1:-1]
+    assert len(history_msgs) == 2
+    assert omitted == 0
+
+
+def test_build_request_messages_turn_limit_negative():
+    """turn_limit=-1 → 负数视同不限（apply_turn_limit 的 <=0 守门），原样返回。"""
+    rows = []
+    for i in range(4):
+        rows.append(_row("user", f"q{i}"))
+        rows.append(_row("assistant", f"a{i}"))
+
+    messages, omitted = build_request_messages(
+        system_content="system",
+        user_text="current",
+        history_rows=rows,
+        turn_limit=-1,
+    )
+
+    history_msgs = messages[1:-1]
+    # 4 轮 = 8 条，全部保留
+    assert len(history_msgs) == 8
+    assert omitted == 0
+
+
+def test_settings_non_numeric_turn_limit():
+    """SettingsRepository 返回 'abc' → int() 失败降级为 None → 不截断。
+
+    复现 legacy_routes.py 的 settings 解析契约：非数字值走 ValueError 分支
+    回退到 turn_limit=None，下游 build_request_messages 视同不限。
+    """
+    # 模拟 legacy_routes.py 的解析逻辑
+    raw_value = "abc"
+    if raw_value:
+        try:
+            parsed_limit = int(raw_value)
+        except (ValueError, TypeError):
+            parsed_limit = None
+    else:
+        parsed_limit = None
+
+    assert parsed_limit is None, "非数字设置值应降级为 None"
+
+    # 验证下游行为：turn_limit=None 时不截断
+    rows = [_row("user", "q0"), _row("assistant", "a0")]
+    messages, omitted = build_request_messages(
+        system_content="system",
+        user_text="current",
+        history_rows=rows,
+        turn_limit=parsed_limit,
+    )
+    history_msgs = messages[1:-1]
+    assert len(history_msgs) == 2
+    assert omitted == 0
+
+
+def test_settings_missing_turn_limit_key():
+    """SettingsRepository 返回 None（键不存在）→ 跳过解析 → turn_limit=None → 不截断。
+
+    复现 legacy_routes.py 的 settings 解析契约：缺失键时 raw 为 None/falsy，
+    不进 int() 分支，turn_limit 维持初始值 None。
+    """
+    # 模拟 legacy_routes.py 的解析逻辑
+    raw_value = None
+    if raw_value:
+        try:
+            parsed_limit = int(raw_value)  # pragma: no cover
+        except (ValueError, TypeError):
+            parsed_limit = None  # pragma: no cover
+    else:
+        parsed_limit = None
+
+    assert parsed_limit is None, "缺失键应得到 None"
+
+    # 验证下游行为
+    rows = [_row("user", "q0"), _row("assistant", "a0")]
+    messages, omitted = build_request_messages(
+        system_content="system",
+        user_text="current",
+        history_rows=rows,
+        turn_limit=parsed_limit,
     )
     history_msgs = messages[1:-1]
     assert len(history_msgs) == 2

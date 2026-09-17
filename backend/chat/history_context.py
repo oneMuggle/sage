@@ -188,7 +188,7 @@ def build_request_messages(
     kept, omitted = truncate_history(db_rows_to_history(history_rows), budget_tokens)
     # 方案 B：滑动窗口（按 user 轮数）。
     # 在 token 截断后再砍,缺的轮数加到 running omitted 上,统一反映在 system 提示里。
-    if turn_limit:
+    if turn_limit and turn_limit > 0:
         kept, turn_omitted = apply_turn_limit(kept, turn_limit)
         omitted += turn_omitted
 
