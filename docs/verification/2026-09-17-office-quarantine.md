@@ -49,10 +49,14 @@ python -m backend.office.staging_quarantine restore \
 
 | 状态 | 含义 | 处理 |
 | --- | --- | --- |
-| `referenced` | 命中任一引用来源，或位于数据库仍登记的工作区内 | 保留 |
+| `referenced` | 命中任一引用来源、位于数据库仍登记的工作区内，或存在未完成的导入 sentinel（导入租约） | 保留 |
 | `fresh` | 静默期（默认 24h）内有写入 | 保留，稍后重跑 |
-| `unknown` | 缺表/缺列、扫描超预算或超时、路径歧义、空目录、符号链接、读取失败 | 保留并人工确认 |
+| `unknown` | 缺表/缺列、扫描超预算或超时、路径歧义、空目录、符号链接、读取失败、导入 sentinel 损坏/超限/token 不符 | 保留并人工确认 |
 | `no_reference_found` | 本次快照与列出的来源中未查到引用 | **仅此状态**可被隔离；仍非孤儿证明 |
+
+导入中的目录不会被隔离：Electron 暂存导入会写 `.sage-import-v1.json`，完成后写
+`.sage-import-completed`。只有前者存在时视为租约生效（owner 进程已死也只降级为待复核，不清算）；
+两者都存在或都不存在时，按上表其余规则判定。
 
 隔离位置：`<workspace>/office/.quarantine/<quarantine_id>/`，清单 `<workspace>/office/.quarantine/manifest.jsonl`
 （append-only，含逐文件 SHA-256、原路径、隔离时间、`eligible_for_purge_after`）。

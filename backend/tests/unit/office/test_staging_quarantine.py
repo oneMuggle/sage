@@ -560,6 +560,129 @@ def test_changed_source_is_flagged_and_retained(env, monkeypatch: pytest.MonkeyP
     assert sq.quarantine_report(ws)["entries"] == []
 
 
+def _write_marker(
+    directory: Path,
+    doc_id: str,
+    *,
+    owner_pid: int = 0,
+    version: int = 1,
+    token: Optional[str] = None,
+) -> None:
+    evidence = {
+        "version": version,
+        "token": doc_id if token is None else token,
+        "filename": doc_id + ".docx",
+        "createdAt": int(time.time() * 1000),
+        "ownerPid": owner_pid or os.getpid(),
+    }
+    (directory / sq.STAGING_MARKER).write_text(json.dumps(evidence), encoding="utf-8")
+
+
+def test_active_import_lease_is_never_quarantined(env) -> None:
+    """An in-flight import older than the quiet window must still be retained."""
+    ws, db = env
+    target = ws / "office" / "word" / "doc-orphan"
+    _write_marker(target, "doc-orphan")
+    stamp = time.time() - 72 * 3600
+    for path in target.rglob("*"):
+        os.utime(str(path), (stamp, stamp))
+    plan = sq.plan_quarantine(db, ws)
+    entry = {c["document_id"]: c for c in plan["candidates"]}["doc-orphan"]
+    assert entry["status"] == "referenced"
+    assert entry["reason"] == "import_in_progress_or_pending_review"
+    assert entry["import_lease"]["state"] == "active"
+    assert "import_lease_active:active" in entry["references"]
+    result = sq.quarantine_run(db, ws, dry_run=False)
+    assert result["planned"] == []
+    assert result["quarantined"] == []
+    assert (target / "doc.bin").is_file()
+
+
+def test_dead_owner_import_stays_a_review_candidate(env) -> None:
+    """A dead owner pid is not clearance (backend commit may have succeeded)."""
+    ws, db = env
+    target = ws / "office" / "word" / "doc-orphan"
+    _write_marker(target, "doc-orphan", owner_pid=2147483646)
+    stamp = time.time() - 30 * 24 * 3600
+    for path in target.rglob("*"):
+        os.utime(str(path), (stamp, stamp))
+    plan = sq.plan_quarantine(db, ws)
+    entry = {c["document_id"]: c for c in plan["candidates"]}["doc-orphan"]
+    assert entry["import_lease"]["state"] in ("review", "active")
+    assert entry["status"] == "referenced"
+    assert sq.quarantine_run(db, ws, dry_run=False)["planned"] == []
+
+
+def test_completed_import_sentinel_falls_back_to_reference_rules(env) -> None:
+    ws, db = env
+    target = ws / "office" / "word" / "doc-orphan"
+    _write_marker(target, "doc-orphan")
+    (target / sq.COMPLETED_MARKER).write_text("completed", encoding="utf-8")
+    stamp = time.time() - 72 * 3600
+    for path in target.rglob("*"):
+        os.utime(str(path), (stamp, stamp))
+    plan = sq.plan_quarantine(db, ws)
+    entry = {c["document_id"]: c for c in plan["candidates"]}["doc-orphan"]
+    assert entry["import_lease"]["state"] == "completed"
+    assert "import_completed_sentinel" in entry["references"]
+    assert entry["status"] == "referenced"
+    # a completed import with no other evidence is a normal cleanup candidate
+    (target / sq.STAGING_MARKER).unlink()
+    (target / sq.COMPLETED_MARKER).unlink()
+    plan2 = sq.plan_quarantine(db, ws)
+    entry2 = {c["document_id"]: c for c in plan2["candidates"]}["doc-orphan"]
+    assert entry2["import_lease"]["state"] == "none"
+    assert entry2["status"] == "no_reference_found"
+
+
+def test_invalid_or_foreign_sentinel_retains_candidate(env) -> None:
+    ws, db = env
+    by_id = {}
+
+    corrupt = ws / "office" / "word" / "doc-orphan"
+    (corrupt / sq.STAGING_MARKER).write_text("{not json", encoding="utf-8")
+    by_id["corrupt"] = corrupt
+
+    foreign = ws / "office" / "ppt" / "doc-foreign"
+    foreign.mkdir(parents=True)
+    (foreign / "slide.bin").write_bytes(b"payload")
+    _write_marker(foreign, "doc-foreign", token="some-other-token")
+    by_id["foreign"] = foreign
+
+    oversized = ws / "office" / "excel" / "doc-oversized"
+    oversized.mkdir(parents=True)
+    (oversized / "sheet.bin").write_bytes(b"payload")
+    (oversized / sq.STAGING_MARKER).write_text("x" * 5000, encoding="utf-8")
+    by_id["oversized"] = oversized
+
+    plan = sq.plan_quarantine(db, ws)
+    entries = {c["document_id"]: c for c in plan["candidates"]}
+    for doc_id in ("doc-orphan", "doc-foreign", "doc-oversized"):
+        assert entries[doc_id]["status"] == "unknown"
+        assert entries[doc_id]["reason"] == "import_sentinel_invalid"
+        assert entries[doc_id]["import_lease"]["state"] == "invalid"
+    result = sq.quarantine_run(db, ws, dry_run=False)
+    assert result["planned"] == []
+    for path in by_id.values():
+        assert path.is_dir()
+
+
+def test_sentinels_are_not_self_references(env) -> None:
+    """A directory must not become 'referenced' merely by owning its sentinel."""
+    ws, db = env
+    target = ws / "office" / "word" / "doc-orphan"
+    _write_marker(target, "doc-orphan")
+    (target / sq.COMPLETED_MARKER).write_text("completed", encoding="utf-8")
+    stamp = time.time() - 72 * 3600
+    for path in target.rglob("*"):
+        os.utime(str(path), (stamp, stamp))
+    plan = sq.plan_quarantine(db, ws, skip_filesystem_scan=True)
+    entry = {c["document_id"]: c for c in plan["candidates"]}["doc-orphan"]
+    assert not [r for r in entry["references"] if r.startswith("workspace_file:")]
+    assert entry["status"] == "referenced"
+    assert entry["references"] == ["import_completed_sentinel"]
+
+
 def test_cli_exit_codes(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     ws = tmp_path / "leftover"
     (ws / "office").mkdir(parents=True)
