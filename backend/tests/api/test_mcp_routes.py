@@ -356,3 +356,34 @@ def test_http_url_create_roundtrip_and_patch_preserves_transport(client, tmp_pat
 @pytest.mark.parametrize("payload", [{"name": "empty"}, {"name": "bad", "url": "ftp://host"}])
 def test_invalid_transport_is_rejected(client, payload):
     assert client.post("/api/v1/mcp/servers", json=payload).status_code == 400
+
+
+class TestOAuthStatus:
+    """r65: OAuth 授权状态可见化 + 删除服务器清理 token。"""
+
+    def test_status_and_servers_expose_has_oauth_token(self, client, tmp_path):
+        from backend.mcp.oauth_store import OAuthTokenStore, TokenRecord
+
+        client.post("/api/v1/mcp/servers", json={"name": "srv", "command": "node"})
+        (entry,) = client.get("/api/v1/mcp/status").json()["servers"]
+        assert entry["has_oauth_token"] is False
+        (config,) = client.get("/api/v1/mcp/servers").json()["servers"]
+        assert config["has_oauth_token"] is False
+
+        OAuthTokenStore(root=tmp_path).save(
+            TokenRecord(server_name="srv", access_token="at", token_type="Bearer")
+        )
+        (entry,) = client.get("/api/v1/mcp/status").json()["servers"]
+        assert entry["has_oauth_token"] is True
+        (config,) = client.get("/api/v1/mcp/servers").json()["servers"]
+        assert config["has_oauth_token"] is True
+
+    def test_delete_cleans_oauth_token(self, client, tmp_path):
+        from backend.mcp.oauth_store import OAuthTokenStore, TokenRecord
+
+        client.post("/api/v1/mcp/servers", json={"name": "srv", "command": "node"})
+        store = OAuthTokenStore(root=tmp_path)
+        store.save(TokenRecord(server_name="srv", access_token="at", token_type="Bearer"))
+
+        assert client.delete("/api/v1/mcp/servers/srv").json()["ok"] is True
+        assert store.load("srv") is None

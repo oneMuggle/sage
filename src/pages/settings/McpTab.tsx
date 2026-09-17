@@ -369,18 +369,31 @@ export function McpTab() {
                         {t('settings.mcp.delete')}
                       </button>
                       {srv.url && (
-                        <button
-                          type="button"
-                          data-testid={`mcp-authorize-${srv.name}`}
-                          className="ml-1.5 px-2 py-0.5 text-xs rounded-radius-sm border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-50"
-                          disabled={authorizing !== null}
-                          title={t('settings.mcp.authorize.hint')}
-                          onClick={() => void handleAuthorize(srv.name)}
-                        >
-                          {authorizing === srv.name
-                            ? t('settings.mcp.authorize.authorizing')
-                            : t('settings.mcp.authorize.button')}
-                        </button>
+                        <>
+                          {(stateByKey.get(srv.name)?.has_oauth_token ?? false) && (
+                            <span
+                              data-testid={`mcp-oauth-badge-${srv.name}`}
+                              title={t('settings.mcp.authorize.badge')}
+                              className="ml-1.5 text-amber-500"
+                            >
+                              🔑
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            data-testid={`mcp-authorize-${srv.name}`}
+                            className="ml-1.5 px-2 py-0.5 text-xs rounded-radius-sm border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-50"
+                            disabled={authorizing !== null}
+                            title={t('settings.mcp.authorize.hint')}
+                            onClick={() => void handleAuthorize(srv.name)}
+                          >
+                            {authorizing === srv.name
+                              ? t('settings.mcp.authorize.authorizing')
+                              : (stateByKey.get(srv.name)?.has_oauth_token ?? false)
+                                ? t('settings.mcp.authorize.reauthorize')
+                                : t('settings.mcp.authorize.button')}
+                          </button>
+                        </>
                       )}
                     </td>
                   </tr>

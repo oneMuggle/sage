@@ -308,6 +308,8 @@ export const en: Record<TranslationKey, string> = {
   'settings.mcp.authorize.success': 'OAuth authorization complete; tool calls now carry the new credentials.',
   'settings.mcp.authorize.failed_prefix': 'Authorization failed: ',
   'settings.mcp.authorize.hint': 'Open the browser to finish OAuth login (HTTP transport only)',
+  'settings.mcp.authorize.badge': 'OAuth authorized',
+  'settings.mcp.authorize.reauthorize': 'Re-authorize',
 
   // ─── Settings · Updates ────────────────
   'updates.strategy': 'Update strategy',

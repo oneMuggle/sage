@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from backend.mcp.client import McpClientError
 from backend.mcp.config import McpConfigError, ServerConfig, validate_server_config
+from backend.mcp.oauth_store import get_oauth_token_store
 from backend.mcp.pool import McpServerPool, get_pool
 
 logger = logging.getLogger(__name__)
@@ -121,7 +122,13 @@ def _pool() -> McpServerPool:
 def mcp_status() -> Dict[str, Any]:
     """Status report across all configured servers. Always 200 — state
     travels in the body (degraded mode is not an HTTP error)."""
-    return _pool().status_report().to_dict()
+    report = _pool().status_report().to_dict()
+    # r65: OAuth 授权状态可见化（不透出 token 本体）
+    store = get_oauth_token_store()
+    for entry in report.get("servers", []):
+        if isinstance(entry, dict):
+            entry["has_oauth_token"] = store.has(str(entry.get("name", "")))
+    return report
 
 
 @router.get("/mcp/servers")
@@ -131,9 +138,13 @@ def list_mcp_servers() -> Dict[str, Any]:
 
     pool = _pool()
     builtins = set(builtin_names())
-    servers = [
-        _config_to_dict(c, builtin=c.name in builtins) for c in pool.effective_configs()
-    ]
+    store = get_oauth_token_store()
+    servers = []
+    for c in pool.effective_configs():
+        data = _config_to_dict(c, builtin=c.name in builtins)
+        # r65: OAuth 授权状态可见化（不透出 token 本体）
+        data["has_oauth_token"] = store.has(c.name)
+        servers.append(data)
     return {"servers": servers}
 
 
@@ -303,4 +314,9 @@ def delete_mcp_server(name: str) -> Dict[str, Any]:
     except OSError as exc:
         logger.error("MCP config persistence failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"config save failed: {exc}")
+    # r65: 删除服务器顺带清理 OAuth token（不留孤儿凭据）
+    try:
+        get_oauth_token_store().delete(name)
+    except OSError as exc:
+        logger.warning("[MCP:%s] OAuth token 清理失败: %s", name, exc)
     return {"ok": True, "name": name}

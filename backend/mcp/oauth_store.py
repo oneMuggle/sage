@@ -126,6 +126,11 @@ class OAuthTokenStore:
         self._write_all(records)
         return True
 
+    def has(self, server_name: str) -> bool:
+        """该服务器是否存在 token 记录（r65 状态可见化；读失败按 false）。"""
+        record = self._read_all().get(server_name)
+        return TokenRecord.from_dict(record) is not None
+
     def list_names(self) -> list:
         return sorted(self._read_all().keys())
 
