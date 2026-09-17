@@ -664,6 +664,7 @@ export const zh = {
   'office.preview.paragraphsTruncated': '…还有 {n} 段未显示',
   'office.preview.cellsTruncated': '…还有 {n} 列未显示',
   'office.preview.sheetTab': '工作表',
+  'office.preview.nativeFailed': '原生预览加载失败，请使用结构视图',
 
   // ─── Office parity batch 2: 编辑预览对话框 (item 2.5) ─────
   'office.edit.title': '编辑预览',
@@ -704,6 +705,35 @@ export const zh = {
   'office.edit.selfCheckSheets': '工作表 {n}',
   'office.edit.selfCheckSlides': '幻灯片 {n}',
   'office.edit.selfCheckPages': '页 {n}',
+  // R53 扩展：编辑操作类型与参数
+  'office.edit.opKind': '编辑类型',
+  'office.edit.kindReplaceText': '查找替换',
+  'office.edit.kindAppendParagraphs': '追加段落',
+  'office.edit.kindSetTableCell': '修改表格单元格',
+  'office.edit.kindDeleteParagraph': '删除段落',
+  'office.edit.kindAddComment': '添加批注',
+  'office.edit.kindSetStyle': '修改段落样式',
+  'office.edit.kindDeleteComment': '删除批注',
+  'office.edit.paragraphs': '段落内容（每行一条）',
+  'office.edit.paraHeading': '段落级别',
+  'office.edit.headingNone': '正文',
+  'office.edit.tableIndex': '表格序号',
+  'office.edit.tableRow': '行号',
+  'office.edit.tableCol': '列号',
+  'office.edit.tableText': '单元格内容',
+  'office.edit.deleteFindPlaceholder': '段落包含的文本（大小写不敏感）…',
+  'office.edit.commentId': '批注 id（见预览批注列表）',
+  'office.edit.commentIdPlaceholder': '如 0、1…',
+  'office.edit.commentText': '批注内容',
+  'office.edit.commentAuthor': '批注作者（可选）',
+  'office.edit.styleMatch': '段落包含文本',
+  'office.edit.styleMatchPlaceholder': '大小写不敏感的包含匹配…',
+  'office.edit.styleIndex': '段落序号（0 起）',
+  'office.edit.styleFontSize': '字号（pt）',
+  'office.edit.styleColor': '颜色（hex）',
+  'office.edit.styleAlign': '对齐',
+  'office.edit.styleBold': '加粗',
+  'office.edit.styleItalic': '斜体',
 
   // ─── Office parity batch 2: 导出 PDF (item 2.7) ─────
   'office.export.pdf': '导出 PDF',
@@ -712,6 +742,22 @@ export const zh = {
   'office.export.failed': '导出失败',
   'office.export.noConverter': '未找到本机转换器（需要 LibreOffice 或 MS Word）',
   'office.export.openFolder': '打开所在文件夹',
+
+  // ─── Office capabilities (R53) ─────
+  'office.caps.pdf': 'PDF 导出',
+  'office.caps.image': '图片压缩',
+  'office.caps.formula': '公式求值',
+  'office.caps.refresh': '重新检测',
+  'office.caps.install.pdf.win':
+    '未检测到转换器：安装 LibreOffice（libreoffice.org/download）或 MS Word 后可导出/高保真预览 PDF',
+  'office.caps.install.pdf.mac':
+    '未检测到转换器：brew install --cask libreoffice 后可导出/高保真预览 PDF',
+  'office.caps.install.pdf.linux':
+    '未检测到转换器：sudo apt install libreoffice（或发行版等价命令）后可导出/高保真预览 PDF',
+  'office.caps.install.pillow':
+    '未安装 Pillow：pip install -r backend/requirements-optional.txt 后 >8MB 图片将自动压缩',
+  'office.caps.install.formulas':
+    '未安装 formulas：pip install -r backend/requirements-optional.txt 后 Excel 公式可本地求值',
 
   // ─── Office parity batch 3: Word 模板库 (item 3.2 从模板创建) ─────
   'office.template.modeFreeform': '自由创建',

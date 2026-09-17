@@ -679,6 +679,7 @@ export const en: Record<TranslationKey, string> = {
   'office.preview.paragraphsTruncated': '…{n} more paragraphs hidden',
   'office.preview.cellsTruncated': '…{n} more columns hidden',
   'office.preview.sheetTab': 'Sheets',
+  'office.preview.nativeFailed': 'Native preview failed to load — use the structured view',
 
   // ─── Office parity batch 2: edit preview dialog (item 2.5) ─────
   'office.edit.title': 'Edit Preview',
@@ -720,6 +721,35 @@ export const en: Record<TranslationKey, string> = {
   'office.edit.selfCheckSheets': '{n} sheets',
   'office.edit.selfCheckSlides': '{n} slides',
   'office.edit.selfCheckPages': '{n} pages',
+  // R53 extended: edit operation types and parameters
+  'office.edit.opKind': 'Edit type',
+  'office.edit.kindReplaceText': 'Find & replace',
+  'office.edit.kindAppendParagraphs': 'Append paragraphs',
+  'office.edit.kindSetTableCell': 'Set table cell',
+  'office.edit.kindDeleteParagraph': 'Delete paragraph',
+  'office.edit.kindAddComment': 'Add comment',
+  'office.edit.kindSetStyle': 'Set paragraph style',
+  'office.edit.kindDeleteComment': 'Delete comment',
+  'office.edit.paragraphs': 'Paragraphs (one per line)',
+  'office.edit.paraHeading': 'Paragraph level',
+  'office.edit.headingNone': 'Body text',
+  'office.edit.tableIndex': 'Table #',
+  'office.edit.tableRow': 'Row #',
+  'office.edit.tableCol': 'Column #',
+  'office.edit.tableText': 'Cell text',
+  'office.edit.deleteFindPlaceholder': 'Paragraph contains text (case-insensitive)…',
+  'office.edit.commentId': 'Comment ID (see preview comment list)',
+  'office.edit.commentIdPlaceholder': 'e.g. 0, 1…',
+  'office.edit.commentText': 'Comment text',
+  'office.edit.commentAuthor': 'Comment author (optional)',
+  'office.edit.styleMatch': 'Paragraph contains text',
+  'office.edit.styleMatchPlaceholder': 'Case-insensitive contains match…',
+  'office.edit.styleIndex': 'Paragraph index (0-based)',
+  'office.edit.styleFontSize': 'Font size (pt)',
+  'office.edit.styleColor': 'Color (hex)',
+  'office.edit.styleAlign': 'Alignment',
+  'office.edit.styleBold': 'Bold',
+  'office.edit.styleItalic': 'Italic',
 
   // ─── Office parity batch 2: export PDF (item 2.7) ─────
   'office.export.pdf': 'Export PDF',
@@ -728,6 +758,22 @@ export const en: Record<TranslationKey, string> = {
   'office.export.failed': 'Export failed',
   'office.export.noConverter': 'No local converter found (LibreOffice or MS Word required)',
   'office.export.openFolder': 'Show in Folder',
+
+  // ─── Office capabilities (R53) ─────
+  'office.caps.pdf': 'PDF export',
+  'office.caps.image': 'Image compression',
+  'office.caps.formula': 'Formula evaluation',
+  'office.caps.refresh': 'Re-detect',
+  'office.caps.install.pdf.win':
+    'No converter detected: install LibreOffice (libreoffice.org/download) or MS Word to export / high-fidelity PDF preview',
+  'office.caps.install.pdf.mac':
+    'No converter detected: brew install --cask libreoffice to export / high-fidelity PDF preview',
+  'office.caps.install.pdf.linux':
+    'No converter detected: sudo apt install libreoffice (or distro equivalent) to export / high-fidelity PDF preview',
+  'office.caps.install.pillow':
+    'Pillow not installed: pip install -r backend/requirements-optional.txt to auto-compress >8MB images',
+  'office.caps.install.formulas':
+    'formulas not installed: pip install -r backend/requirements-optional.txt to evaluate Excel formulas locally',
 
   // ─── Office parity batch 3: Word template library (item 3.2) ─────
   'office.template.modeFreeform': 'Free-form',
