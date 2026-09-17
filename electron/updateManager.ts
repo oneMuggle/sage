@@ -111,6 +111,7 @@ const SEMVER_PATTERN =
   /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export class UpdateManager {
+  private startupFailurePromise: Promise<boolean> | null = null;
   private stateManager: StateManager;
   private configManager: ConfigManager;
   private updater: UpdaterBoundary;
@@ -128,9 +129,13 @@ export class UpdateManager {
   private activeProvider: UpdateProvider | null = null;
   /** Cached normalised release from the last successful active-provider check. */
   private lastNormalisedRelease: NormalisedRelease | null = null;
+  /** 2026-09 修复: provider 下载的安装包落点 (userData 管理目录), installUpdate 用 */
+  private providerInstallerPath: string | null = null;
 
   constructor(
-    optionsOrUpdater: UpdateManagerOptions | UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary,
+    optionsOrUpdater:
+      | UpdateManagerOptions
+      | UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary,
   ) {
     // Backward-compat: old callers do `new UpdateManager(updaterBoundary)`,
     // new callers do `new UpdateManager({ providerStore, providerRegistry })`.
@@ -174,18 +179,14 @@ export class UpdateManager {
     const def = list.find((c) => c.isDefault && c.enabled);
     if (def) {
       this.activeProvider = this.deps.providerRegistry.build(def);
-      logger.info(
-        `active provider = user-configured ${def.displayName} (${def.type})`,
-      );
+      logger.info(`active provider = user-configured ${def.displayName} (${def.type})`);
     } else {
       this.activeProvider = createGenericHttpProvider({
         id: BUILTIN_GENERIC_CONFIG.id,
         displayName: BUILTIN_GENERIC_CONFIG.displayName,
         config: BUILTIN_GENERIC_CONFIG.config,
       });
-      logger.warn(
-        'No user default provider, falling back to built-in updates.sage.app',
-      );
+      logger.warn('No user default provider, falling back to built-in updates.sage.app');
     }
   }
 
@@ -218,9 +219,7 @@ export class UpdateManager {
    * Task 1.8 (preflight): ping a named provider without mutating activeProvider.
    * Builds a transient provider from store config and invokes `ping()`.
    */
-  async pingProvider(
-    id: string,
-  ): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+  async pingProvider(id: string): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
     if (!this.deps.providerStore || !this.deps.providerRegistry) {
       throw new Error('Provider system not initialised');
     }
@@ -346,28 +345,56 @@ export class UpdateManager {
       throw new Error('Release has no downloadable asset');
     }
     try {
-      const path = await this.activeProvider.downloadAsset(release, firstAsset.id);
+      const downloadedPath = await this.activeProvider.downloadAsset(release, firstAsset.id);
       // Signature verification: only invoke verifyArtifact when the active
-      // provider exposes it AND the provider config carries a publicKey AND
-      // the asset has a signature. Non-generic providers handle signatures
-      // internally per their type contract (see spec §4.1).
-      if (
-        this.activeProvider.verifyArtifact &&
-        firstAsset.signature &&
-        storeCfg?.type === 'generic-http' &&
-        // Narrow union: only GenericHttpConfig has publicKey.
-        (storeCfg.config as { publicKey?: string }).publicKey
-      ) {
-        const genericCfg = storeCfg.config as { publicKey: string };
-        const ok = await this.activeProvider.verifyArtifact(
-          path,
-          firstAsset.signature,
-          genericCfg.publicKey,
-        );
-        if (!ok) {
-          throw new Error('Signature verification failed; refusing this update');
+      // provider exposes it AND a generic-http config carries a publicKey.
+      // 2026-09 修复: 内置 provider (__builtin__) 不在 store 里, storeCfg 为
+      // null —— 此前校验被静默跳过, 更新安全模型整段旁路。publicKey 回退到
+      // BUILTIN_GENERIC_CONFIG; requireArtifactSignature 为 true 时缺签名
+      // 直接拒绝。
+      const genericCfg: { publicKey?: string; requireArtifactSignature?: boolean } | null =
+        storeCfg?.type === 'generic-http'
+          ? (storeCfg.config as { publicKey?: string; requireArtifactSignature?: boolean })
+          : activeId === BUILTIN_GENERIC_CONFIG.id
+            ? (BUILTIN_GENERIC_CONFIG.config as {
+                publicKey?: string;
+                requireArtifactSignature?: boolean;
+              })
+            : null;
+      if (this.activeProvider.verifyArtifact && genericCfg?.publicKey) {
+        if (!firstAsset.signature && genericCfg.requireArtifactSignature !== false) {
+          throw new Error('Update asset has no signature; refusing this update');
+        }
+        if (firstAsset.signature) {
+          const ok = await this.activeProvider.verifyArtifact(
+            downloadedPath,
+            firstAsset.signature,
+            genericCfg.publicKey,
+          );
+          if (!ok) {
+            throw new Error('Signature verification failed; refusing this update');
+          }
         }
       }
+      // 2026-09 修复: 此前 pendingUpdate/cachedRollbackPackage 的 sha512
+      // 恒为空串、path 是 CWD 相对路径 —— 回滚重装的两个完整性校验必然
+      // 拒绝。下载完成后计算真实 sha512 并把安装包收进 userData 管理目录。
+      // 任一步失败 (假路径/只读盘) 都降级为原相对路径, 不阻断下载。
+      let managedPath = downloadedPath;
+      let sha512 = '';
+      try {
+        const buf = await fs.readFile(downloadedPath);
+        sha512 = crypto.createHash('sha512').update(buf).digest('hex');
+        const managedDir = path.join(app.getPath('userData'), 'update-cache');
+        await fs.mkdir(managedDir, { recursive: true });
+        managedPath = path.join(managedDir, firstAsset.name);
+        await fs.copyFile(downloadedPath, managedPath);
+      } catch (hashErr) {
+        logger.warn?.('provider download: hash/managed-copy failed', hashErr);
+        managedPath = downloadedPath;
+      }
+      this.providerInstallerPath = managedPath;
+
       // Maintain the legacy state-update contract so downstream consumers
       // (renderer's state-change listener) see a consistent UpdateState.
       if (updateOverride) {
@@ -384,14 +411,14 @@ export class UpdateManager {
           releaseNotes: release.releaseNotes,
           fileUrl: firstAsset.downloadUrl,
           filename: firstAsset.name,
-          sha512: '',
+          sha512,
           size: firstAsset.size,
           signature: firstAsset.signature ?? '',
         },
         cachedRollbackPackage: {
-          path,
+          path: managedPath,
           version: release.version,
-          sha512: '',
+          sha512,
           size: firstAsset.size,
           signature: firstAsset.signature ?? '',
           fileUrl: firstAsset.downloadUrl,
@@ -682,16 +709,21 @@ export class UpdateManager {
     // remain retryable rather than being recorded as already installed.
     const prepared = await this.prepareForUpgrade();
     const preparedAt = new Date().toISOString();
-    await this.stateManager.setState({
-      ...state,
-      pendingInstallAttempt: {
-        version: state.pendingUpdate.version,
-        startedAt: preparedAt,
-        phase: 'prepared',
-        previousVersion: state.currentVersion,
-        pendingUpdate: state.pendingUpdate,
-      },
-    });
+    try {
+      await this.stateManager.setState({
+        ...state,
+        pendingInstallAttempt: {
+          version: state.pendingUpdate.version,
+          startedAt: preparedAt,
+          phase: 'prepared',
+          previousVersion: state.currentVersion,
+          pendingUpdate: state.pendingUpdate,
+        },
+      });
+    } catch (error) {
+      if (prepared?.wasRenamed) await this.restorePreparedUpgrade(prepared);
+      throw error;
+    }
 
     // CRITICAL: persist the post-install state BEFORE calling quitAndInstall().
     // quitAndInstall() hands off to the native installer and may exit the
@@ -731,6 +763,61 @@ export class UpdateManager {
       throw setStateError;
     }
     this.notifyStateChange(newState);
+
+    // 2026-09 修复: provider 路径此前直接调 electron-updater 的
+    // quitAndInstall() —— 它从未经手下载 (downloadedUpdateHelper 为空),
+    // 是静默 no-op; 而状态已乐观翻转成"已安装", 下次启动回滚后 UI 再次
+    // 提示安装, 无限循环。Windows 下直接静默运行已下载的安装包 (与
+    // reinstallFromPackage 同一套 NSIS /S /D= 契约), 非 Windows 给出
+    // 明确的手动安装指引。
+    if (this.providerInstallerPath) {
+      if (process.platform !== 'win32') {
+        const failedState: UpdateState = {
+          ...state,
+          pendingInstallAttempt: {
+            version: state.pendingUpdate.version,
+            startedAt: preparedAt,
+            phase: 'failed',
+            previousVersion: state.currentVersion,
+            pendingUpdate: state.pendingUpdate,
+          },
+        };
+        await this.stateManager.setState(failedState);
+        if (prepared?.wasRenamed) await this.restorePreparedUpgrade(prepared);
+        this.notifyStateChange(failedState);
+        throw new Error(
+          `Automatic install is Windows-only for provider updates; please run ${this.providerInstallerPath} manually`,
+        );
+      }
+      const installDir = path.dirname(process.execPath);
+      const { spawn } = await import('child_process');
+      try {
+        const installer = spawn(
+          this.providerInstallerPath,
+          ['/S', `/D=${installDir}`],
+          { detached: true, stdio: 'ignore' },
+        );
+        installer.unref();
+      } catch (spawnError) {
+        const failedState: UpdateState = {
+          ...state,
+          pendingInstallAttempt: {
+            version: state.pendingUpdate.version,
+            startedAt: preparedAt,
+            phase: 'failed',
+            previousVersion: state.currentVersion,
+            pendingUpdate: state.pendingUpdate,
+          },
+        };
+        await this.stateManager.setState(failedState);
+        if (prepared?.wasRenamed) await this.restorePreparedUpgrade(prepared);
+        this.notifyStateChange(failedState);
+        throw spawnError;
+      }
+      app.relaunch();
+      app.exit(0);
+      return;
+    }
 
     try {
       this.updater.quitAndInstall();
@@ -792,17 +879,11 @@ export class UpdateManager {
       // pointing at a version that never completed installation).
       const marker = state.postInstallMarker;
       if (marker && marker.version === state.currentVersion) {
-        state.crashCount += 1;
-        await this.stateManager.setState(state);
-
+        if (await this.onAppStartupFailure('health-check-failed')) return;
+        const failedState = await this.stateManager.getState();
         const config = await this.configManager.getConfig();
-        if (state.crashCount >= config.autoRollbackThreshold) {
-          await this.rollback('auto-rollback:health-check-failed');
-          return; // rollback() calls app.exit(), but TypeScript needs this
-        }
-
         throw new Error(
-          `Health check failed (${state.crashCount}/${config.autoRollbackThreshold})`,
+          `Health check failed (${failedState.crashCount}/${config.autoRollbackThreshold})`,
         );
       }
 
@@ -821,11 +902,42 @@ export class UpdateManager {
     }
   }
 
+  /** Record a failed boot even when no renderer/backend ever became ready.
+   * One launch counts once, regardless of user retries or overlapping probes.
+   * Returns true only after rollback was actually invoked successfully.
+   */
+  onAppStartupFailure(reason: string): Promise<boolean> {
+    if (this.startupFailurePromise) return this.startupFailurePromise;
+    this.startupFailurePromise = (async () => {
+      const state = await this.stateManager.getState();
+      const marker = state.postInstallMarker;
+      if (
+        !marker ||
+        marker.version !== state.currentVersion ||
+        marker.version !== app.getVersion()
+      ) {
+        return false;
+      }
+      if (state.lastRecordedVersion !== state.currentVersion) {
+        state.crashCount = 0;
+        state.lastRecordedVersion = state.currentVersion;
+      }
+      state.crashCount += 1;
+      await this.stateManager.setState(state);
+      this.notifyStateChange(state);
+      const config = await this.configManager.getConfig();
+      if (state.crashCount < config.autoRollbackThreshold) return false;
+      await this.rollback(`auto-rollback:${reason}`);
+      return true;
+    })();
+    return this.startupFailurePromise;
+  }
+
   async rollback(reason: string): Promise<void> {
     const state = await this.stateManager.getState();
 
     // 1. Report rollback event (non-blocking)
-    await this.reportRollbackEvent(reason, state);
+    void this.reportRollbackEvent(reason, state);
 
     // 2. Check if .prev exists
     const installDir = path.dirname(process.execPath);
@@ -917,10 +1029,13 @@ export class UpdateManager {
   }
 
   private async reportRollbackEvent(reason: string, state: UpdateState): Promise<void> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
     try {
       const config = await this.configManager.getConfig();
       await fetchCompat(`${config.updateServerUrl}/api/v1/updates/rollbacks`, {
         method: 'POST',
+        signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           from_version: state.currentVersion,
@@ -931,7 +1046,9 @@ export class UpdateManager {
         }),
       });
     } catch {
-      // Non-blocking: ignore reporting failures
+      // Telemetry never blocks local recovery.
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
