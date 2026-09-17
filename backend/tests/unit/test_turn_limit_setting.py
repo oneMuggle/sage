@@ -8,7 +8,7 @@ from backend.data.settings_repo import SettingsRepository
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture
+@pytest.fixture()
 def db_setup(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     monkeypatch.setenv("SAGE_DB_PATH", str(db_path))
