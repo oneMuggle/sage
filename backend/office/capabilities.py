@@ -55,6 +55,10 @@ class OfficeCapabilities(BaseModel):
         default=False,
         description="OCR 兜底是否可用（pytesseract 已装且 tesseract 在 PATH）",
     )
+    ocr_languages: Optional[list] = Field(
+        default=None,
+        description="tesseract 已安装的语言包清单（如 ['chi_sim', 'eng']）；不可用为 None",
+    )
 
 
 #: (探测时间戳, 结果)。探测无副作用，进程内共享一份即可。
@@ -75,6 +79,7 @@ def _probe() -> OfficeCapabilities:
         pillow_available=find_spec("PIL") is not None,
         formulas_available=find_spec("formulas") is not None,
         ocr_available=_ocr_available(),
+        ocr_languages=_ocr_languages(),
     )
 
 
@@ -87,6 +92,16 @@ def _ocr_available() -> bool:
         return ok
     except Exception:  # noqa: BLE001 — 探测失败即不可用
         return False
+
+
+def _ocr_languages() -> Optional[list]:
+    """P4-B: 已装语言包枚举（懒加载，异常归为 None）。"""
+    try:
+        from .ocr import ocr_languages
+
+        return ocr_languages()
+    except Exception:  # noqa: BLE001 — 枚举失败即 None
+        return None
 
 
 def probe_capabilities(force: bool = False) -> OfficeCapabilities:
