@@ -467,6 +467,27 @@ def apply_odd_even_different(doc: Document, even_header: Any, even_footer: Any) 
         target.text = even_footer.text or ""
 
 
+def apply_table_header_style(table: Any) -> None:
+    """表头行样式（Round 36）：首行加粗 + 浅灰底（D9D9D9）+ 居中。
+
+    与 ExcelSheetSpec.header_style 对称。Word 单元格底纹用 tcPr/w:shd
+    （openpyxl 的 fill 属性不适用于 python-docx 单元格）。数据行不触碰。
+    """
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    for cell in table.rows[0].cells:
+        for paragraph in cell.paragraphs:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for run in paragraph.runs:
+                run.font.bold = True
+        tc_pr = cell._tc.get_or_add_tcPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"), "D9D9D9")
+        tc_pr.append(shd)
+
+
 def apply_section_break(doc: Document, page: WordPageSetupSpec) -> None:
     """插入 NEW_PAGE 分节并对新节应用 page setup（Round 26 横排分节）。
 

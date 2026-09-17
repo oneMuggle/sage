@@ -810,6 +810,10 @@ def _style_table(doc: Document, table: Any, table_spec: Any) -> None:
     elif table_spec.style == "grid":
         with contextlib.suppress(KeyError):
             table.style = doc.styles["Table Grid"]
+    if getattr(table_spec, "header_style", False):
+        from .word_layout import apply_table_header_style
+
+        apply_table_header_style(table)
     if table_spec.header_repeat and table_spec.rows:
         enable_header_repeat(table)
     if table_spec.column_widths_cm:

@@ -967,6 +967,14 @@ class OfficeCreateTool(BaseTool):
                                                         "（长表打印每页带表头）"
                                                     ),
                                                 },
+                                                "header_style": {
+                                                    "type": "boolean",
+                                                    "description": (
+                                                        "表头行加粗+浅灰底+居中"
+                                                        "（Round 36，与 Excel"
+                                                        " header_style 对称）"
+                                                    ),
+                                                },
                                                 "margins_cm": {
                                                     "type": "object",
                                                     "description": (
