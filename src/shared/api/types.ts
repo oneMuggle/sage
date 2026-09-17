@@ -1534,6 +1534,8 @@ export interface WordTableSpec {
   header_repeat?: boolean;
   column_widths_cm?: number[];
   merges?: WordCellMergeSpec[];
+  // Round 36：表头行样式（加粗+浅灰底+居中）
+  header_style?: boolean;
 }
 
 // Word 格式 Linter（Round 10）：对照 FormatSpec 校验 docx。

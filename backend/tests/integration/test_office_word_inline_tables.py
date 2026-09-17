@@ -348,3 +348,41 @@ def test_legacy_payload_backward_compatible(tmp_path: Path) -> None:
 
 def test_format_spec_numbering_model_default() -> None:
     assert WordFormatSpec().numbering is False
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Header style (Round 36)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_table_header_style_applied(tmp_path: Path) -> None:
+    path = _generate(
+        tmp_path,
+        tables=[{
+            "headers": ["名称", "数量"],
+            "rows": [["a", "1"]],
+            "header_style": True,
+        }],
+    )
+    doc = Document(str(path))
+    table = doc.tables[0]
+    header_cell = table.rows[0].cells[0]
+    # 表头行加粗 + 居中 + 浅灰底（w:shd fill=D9D9D9）
+    assert header_cell.paragraphs[0].runs[0].font.bold is True
+    shd = header_cell._tc.get_or_add_tcPr().find(qn("w:shd"))
+    assert shd is not None
+    assert shd.get(qn("w:fill")) == "D9D9D9"
+    # 数据行不受影响（无底纹）
+    data_shd = table.rows[1].cells[0]._tc.get_or_add_tcPr().find(qn("w:shd"))
+    assert data_shd is None
+
+
+def test_table_header_style_off_zero_change(tmp_path: Path) -> None:
+    path = _generate(
+        tmp_path,
+        tables=[{"headers": ["名称"], "rows": [["a"]]}],
+    )
+    table = Document(str(path)).tables[0]
+    first_header_cell = table.rows[0].cells[0]
+    shd = first_header_cell._tc.get_or_add_tcPr().find(qn("w:shd"))
+    assert shd is None  # 未启用 header_style 不加底纹

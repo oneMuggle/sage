@@ -560,6 +560,10 @@ class WordTableSpec(BaseModel):
         default=None,
         description="各列列宽（厘米）；None 不设置，长度须等于列数",
     )
+    # Round 36：表头行样式（加粗 + 浅灰底 + 居中），与 Excel header_style 对称。
+    header_style: bool = Field(
+        default=False, description="表头行加粗 + 浅灰底(D9D9D9) + 居中"
+    )
     merges: _constrained_list(WordCellMergeSpec, max_length=200) = Field(default_factory=list)
 
 
