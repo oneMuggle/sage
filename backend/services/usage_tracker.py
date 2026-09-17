@@ -17,6 +17,7 @@ import logging
 import threading
 import time
 from collections import deque
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Deque, Dict, List, Optional, Tuple
@@ -24,6 +25,16 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 RECORD_CAP = 1000
+
+# RT23 (round23): 编排子任务级 token 归因 —— dispatcher 在子任务执行前
+# 设置 ContextVar，_persist 落库时自动携带 task_id。ContextVar 天然随
+# asyncio 任务树传播，无需改 LLMClient 接口。
+current_task_id: ContextVar = ContextVar("current_task_id", default=None)
+
+
+def set_current_task_id(task_id: str | None) -> None:
+    """设置 / 清除当前任务归因 ID（dispatcher 在子任务启停时调用）。"""
+    current_task_id.set(task_id)
 
 # 每百万 token 的美元定价: (input, output)。键按最长前缀优先匹配
 # (lowercased 模型名), 未知模型 → 成本 None。
@@ -86,7 +97,6 @@ class PriceSnapshot:
         }
 
 
-
 def pricing_for_model(model: str) -> Optional[Tuple[float, float]]:
     """返回模型的 (input, output) USD/1M 定价; 未知模型 → None。
 
@@ -112,7 +122,7 @@ def estimate_cost_usd(
     prompt_tokens: int,
     completion_tokens: int,
     cached_tokens: int = 0,
-) -> Optional[float]:
+) -> float | None:
     """估算单次请求的美元成本; 未知模型 → None。
 
     L4: ``cached_tokens`` 是 prompt 中命中缓存的部分（各家 usage 口径中
@@ -173,7 +183,7 @@ def _accumulate(
     bucket: Dict[str, Any],
     prompt_tokens: int,
     completion_tokens: int,
-    cost: Optional[float],
+    cost: float | None,
     cached_tokens: int = 0,
     cache_read_tokens: int = 0,
     cache_creation_tokens: int = 0,
@@ -224,7 +234,7 @@ class UsageTracker:
         model: str,
         prompt_tokens: int,
         completion_tokens: int,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         cached_tokens: int = 0,
         cache_read_tokens: int = 0,
         cache_creation_tokens: int = 0,
@@ -257,7 +267,7 @@ class UsageTracker:
         # L8 PR-C (2026-09-09): 流式首字节延迟与总延迟——负值/None 视为未采样,
         # 字符串数字尽力 int() 转换 (兼容 LLMClient 偶发 str 字段)。
         # 落库时存 None 而不是 -1, 便于 SQL `WHERE first_token_ms IS NOT NULL` 过滤。
-        def _norm_latency(value: Any) -> Optional[int]:
+        def _norm_latency(value: Any) -> int | None:
             if value is None:
                 return None
             if isinstance(value, bool):  # bool 是 int 子类, 排除 True/False
@@ -328,7 +338,7 @@ class UsageTracker:
         return entry
 
     @staticmethod
-    def _persist(entry: UsageRecord, session_id: Optional[str]) -> None:
+    def _persist(entry: UsageRecord, session_id: str | None) -> None:
         """单行落库 (L8)。任何失败静默——用量是增强信息, 不是关键路径。"""
         try:
             import uuid
@@ -355,14 +365,16 @@ class UsageTracker:
                 entry.latency_ms,
                 entry.endpoint_id,
                 snapshot_json,
+                # RT23 (round23): 编排子任务归因（ContextVar 自动携带）。
+                current_task_id.get(),
             )
             with _SQLITE_LOCK:
                 get_database().get_connection().execute(
                     "INSERT INTO usage_events (id, session_id, model, prompt_tokens,"
                     " completion_tokens, total_tokens, estimated_cost_usd, created_at,"
                     " cached_tokens, cache_read_tokens, cache_creation_tokens,"
-                    " first_token_ms, latency_ms, endpoint_id, price_snapshot)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " first_token_ms, latency_ms, endpoint_id, price_snapshot, task_id)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     row,
                 )
                 get_database().get_connection().commit()
@@ -504,7 +516,28 @@ class UsageTracker:
             logger.warning("session_usage_since 读取失败（预算守门降级）: %s", exc)
             return 0
 
-    def last_request(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def task_usage_since(self, session_id: str, task_id: str, since_ms: int) -> int:
+        """RT23 (round23): 指定任务的累计 total_tokens（task_id 归因查询）。
+
+        依赖 usage_events.task_id 列（round23 schema migration）与
+        _persist 中 ContextVar 携带的 task_id 归因。fail-open 返 0。
+        """
+        try:
+            from backend.data.database import _SQLITE_LOCK, get_database
+
+            with _SQLITE_LOCK:
+                row = get_database().get_connection().execute(
+                    "SELECT COALESCE(SUM(total_tokens), 0) AS total"
+                    " FROM usage_events WHERE session_id = ? AND task_id = ?"
+                    " AND created_at >= ?",
+                    (session_id, task_id, int(since_ms)),
+                ).fetchone()
+            return int(row["total"] or 0) if row else 0
+        except Exception as exc:  # noqa: BLE001 — fail-open
+            logger.warning("task_usage_since 读取失败: %s", exc)
+            return 0
+
+    def last_request(self, session_id: str) -> Dict[str, Any] | None:
         """U17: 该会话最近一次 LLM 请求的用量行。
 
         上一轮请求的 ``prompt_tokens`` 是"当前上下文占用"的最佳可得代理:
