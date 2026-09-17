@@ -378,6 +378,11 @@ class ChatRequest(BaseModel):
     plan_override: Optional[List[Dict[str, Any]]] = None
     run_id: Optional[str] = None
 
+    # Task 4 (2026-09-17): 上下文重置标记。True 时 chat_stream_create 在持久化
+    # 当前消息前调用 MessageRepository.advance_segment(session_id)，开启新 segment；
+    # 历史加载改用 get_active_segment 只取当前段。
+    context_reset: bool = False
+
     # PM1 (round8): 单 agent 计划模式 —— 本次 run 只读（权限执行器 override
     # READ_ONLY）+ 计划指令 system 块；DONE 后前端出批准条，批准后普通执行。
     plan_mode: Optional[bool] = False
@@ -2991,11 +2996,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 用户第二条消息起 agent"失忆",压缩也不省每轮 token。此处本轮 user
             # 消息尚未落盘(落盘在下方),历史天然不含本轮消息。历史加载失败时
             # 降级为无历史的旧行为,绝不阻断聊天。
+            repo = MessageRepository()
             try:
-                history_rows = await to_thread(
-                    lambda: MessageRepository().get_by_session(
-                        data.session_id, limit=100000
-                    )
+                # Task 4 (2026-09-17): 显式上下文重置
+                if data.context_reset:
+                    await asyncio.to_thread(repo.advance_segment, data.session_id)
+                    # 重置 working memory 当前段
+                    try:
+                        from backend.memory.working import WorkingMemory
+                        WorkingMemory().clear(data.session_id)
+                    except Exception as mem_err:
+                        logger.warning("working memory clear failed: %s", mem_err)
+
+                history_rows = await asyncio.to_thread(
+                    repo.get_active_segment, data.session_id
                 )
             except Exception as hist_err:
                 logger.warning(
