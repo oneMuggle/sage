@@ -8,6 +8,9 @@ import { useSettings } from '../features/manage-settings/useSettings';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
 import { useChat } from '../features/send-message/useChat';
 import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
+import {
+  loadAttachmentRagConfig,
+} from '../shared/api/attachmentRagConfig';
 import { orchRunClient } from '../shared/api/orchRunClient';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
@@ -411,6 +414,12 @@ export function Chat() {
         }
       }
 
+      // r67: 超长文档检索注入（opt-in，localStorage 配置）
+      const r67Rag = loadAttachmentRagConfig();
+      const attachmentRag = r67Rag.enabled
+        ? { embed: r67Rag.embed, top_k: r67Rag.top_k }
+        : null;
+
       if (!currentSessionId) {
         const sessionId = await createSession();
         await sendMessage(content, sessionId, officeRefs, orchestrationMode, {
@@ -418,6 +427,7 @@ export function Chat() {
           memoryDisabled: tempChatSessions.has(sessionId),
           images,
           attachmentMediaIds,
+          attachmentRag,
         });
       } else {
         await sendMessage(content, undefined, officeRefs, orchestrationMode, {
@@ -425,6 +435,7 @@ export function Chat() {
           memoryDisabled: tempChatSessions.has(currentSessionId),
           images,
           attachmentMediaIds,
+          attachmentRag,
         });
       }
     },
