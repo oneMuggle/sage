@@ -81,10 +81,12 @@ matplotlib==3.7.5      # 3.7 为 py38 末线
 Pillow==10.4.0         # 10.x 末线支持 3.8
 networkx==3.1          # 3.2+ 弃 3.8
 apscheduler==3.10.4    # 3.x 线（4.x 弃 3.8）
-docxtpl==0.16.7
+docxtpl==0.20.0
 # formulas 按 main 侧约定不上 Win7（main requirements.txt 注释：main 通道 only；懒加载，缺失走降级路径）
 hnswlib==0.8.0
-python-multipart==0.0.6
-reportlab==4.0.9
-PyMuPDF==1.24.9
+python-multipart==0.0.20
+reportlab==4.2.5
+PyMuPDF==1.24.11
 openpyxl==3.1.5
+
+# 钉版对齐 release/win7 已验证组合（win7 requirements-py38.txt 同名行）；升级需走 Win7 兼容性测试
