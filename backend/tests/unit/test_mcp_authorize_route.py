@@ -98,7 +98,8 @@ def _auth_endpoints_mock(request: httpx.Request) -> Response:
     return Response(404, text="not found")
 
 
-def test_authorize_success_roundtrip(_isolated_pool, tmp_path, monkeypatch):
+@pytest.mark.usefixtures("_isolated_pool")
+def test_authorize_success_roundtrip(tmp_path, monkeypatch):
     store = OAuthTokenStore(root=tmp_path)
     client, _ = _client(store)
     _seed_config_file(tmp_path, {"name": "oauth-srv", "url": SERVER_URL})
@@ -132,7 +133,8 @@ def test_authorize_success_roundtrip(_isolated_pool, tmp_path, monkeypatch):
     assert store.load("oauth-srv").access_token == "at-r64"
 
 
-def test_authorize_stdio_server_400(_isolated_pool, tmp_path):
+@pytest.mark.usefixtures("_isolated_pool")
+def test_authorize_stdio_server_400(tmp_path):
     store = OAuthTokenStore(root=tmp_path / "ud")
     client, _ = _client(store)
 
@@ -142,7 +144,8 @@ def test_authorize_stdio_server_400(_isolated_pool, tmp_path):
     assert "stdio" in resp.json()["error"]
 
 
-def test_authorize_unknown_server_404(_isolated_pool, tmp_path):
+@pytest.mark.usefixtures("_isolated_pool")
+def test_authorize_unknown_server_404(tmp_path):
     client, _ = _client(OAuthTokenStore(root=tmp_path / "ud"))
     resp = client.post("/api/v1/mcp/servers/ghost/authorize")
     assert resp.status_code == 404
