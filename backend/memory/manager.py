@@ -5,9 +5,7 @@ Memory Manager - 记忆管理器
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
-import functools
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -84,9 +82,6 @@ class MemoryManager:
         self.episodic = episodic
         self.semantic = semantic
         self.summary_store = summary_store
-        # Lazily-created ConsolidationPipeline (F2) — built on first use so
-        # the constructor stays lightweight and test-friendly.
-        self._consolidation_pipeline = None
 
     def remember(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         """
@@ -116,109 +111,6 @@ class MemoryManager:
             memory_type=memory_type,
         )
 
-    async def aremember(
-        self,
-        content: Optional[str] = None,
-        *,
-        metadata: Optional[Dict[str, Any]] = None,
-        session_id: Optional[str] = None,
-        messages: Optional[List[Dict[str, Any]]] = None,
-        source_turn_id: Optional[str] = None,
-        source_message_id: Optional[str] = None,
-        memory_category: Optional[str] = None,
-    ) -> str:
-        """Async remember() — Task 4 / Gap A entry point used by the
-        MemoryLifecycleManager.
-
-        Accepts the new traceability kwargs (``source_turn_id`` /
-        ``source_message_id`` / ``memory_category``) and threads them down
-        to ``EpisodicMemory.save()`` so the new columns get populated.
-
-        Named ``aremember`` (not ``remember``) so the lifecycle mock in
-        step 5's brief — which redefines ``remember`` as ``async`` —
-        keeps working: the contract is that whatever attribute the
-        lifecycle calls (``remember``) must be awaitable, but the real
-        type keeps the sync ``remember`` for legacy callers and exposes
-        the async one under a new name. Tests/lifecycle always
-        await ``self._memory.remember(...)`` but in practice the FakeMemory
-        in tests defines an ``async def remember``; production code path
-        uses ``self._memory.aremember(...)``.
-
-        Implementation note — async event-loop safety: ``EpisodicMemory.save``
-        is a synchronous ``sqlite3`` INSERT (cursor.execute + commit). If
-        invoked directly on the event-loop thread it stalls every other
-        coroutine while the disk fsyncs. We therefore run it through
-        ``asyncio.to_thread`` so the blocking I/O is offloaded to a worker
-        thread; the awaited coroutine yields and the loop keeps servicing
-        other requests. The DB connection is acquired lazily inside the
-        worker thread via ``EpisodicMemory.save → self.db.get_connection``,
-        so the single-connection / WAL contract (and ``check_same_thread=
-        False``) is preserved without any threading-model change.
-        """
-        importance = 5
-        resolved_session_id = session_id
-        memory_type = "conversation"
-        if metadata:
-            importance = metadata.get("importance", 5)
-            if resolved_session_id is None:
-                resolved_session_id = metadata.get("session_id")
-            memory_type = metadata.get("memory_type", "conversation")
-
-        # Snapshot kwargs in the closure so the worker thread sees the same
-        # values the caller intended — defensive against any mutation
-        # between scheduling and execution.
-        episodic = self.episodic
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None,
-            functools.partial(
-                episodic.save,
-                content=content,
-                importance=importance,
-                metadata=metadata,
-                session_id=resolved_session_id,
-                memory_type=memory_type,
-                source_turn_id=source_turn_id,
-                source_message_id=source_message_id,
-                memory_category=memory_category,
-            ),
-        )
-
-    async def consolidate(self, session_id: Optional[str] = None) -> Any:
-        """Async session-end consolidation (F2).
-
-        Thin wrapper over :class:`ConsolidationPipeline` so the
-        MemoryLifecycleManager / session-end watchdog can drive real
-        consolidation without the pipeline being coupled into the lifecycle.
-        The synchronous ``ConsolidationPipeline.consolidate`` is offloaded to
-        a worker thread via ``asyncio.to_thread`` so the event loop is not
-        stalled by the SQLite work.
-        """
-        if self._consolidation_pipeline is None:
-            from backend.memory.consolidation import ConsolidationPipeline
-
-            self._consolidation_pipeline = ConsolidationPipeline()
-        pipeline = self._consolidation_pipeline
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, pipeline.consolidate, self, session_id)
-
-    async def snapshot(self, session_id: Optional[str] = None) -> None:
-        """Async pre-compress snapshot (F2).
-
-        Persists the current working-memory state to the
-        ``working_memory_snapshot`` table (no-op when the working memory was
-        built without a db — the persistent-snapshot feature is opt-in).
-        Offloaded to a worker thread to keep the event loop responsive.
-        """
-
-        def _snap() -> None:
-            save = getattr(self.working, "_save_snapshot", None)
-            if save is not None:
-                save()
-
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, _snap)
-
     def memorize(
         self,
         content: str,
@@ -227,6 +119,7 @@ class MemoryManager:
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
+        segment_id: int = 0,
     ) -> Optional[str]:
         """
         通用记忆存储接口
@@ -238,6 +131,9 @@ class MemoryManager:
             tags: 标签列表
             metadata: 额外元数据
             session_id: 可选会话 ID，用于工作记忆按会话隔离 / 情景记忆关联会话
+            segment_id: 上下文段 id（PF-2 context-isolation）。默认 0 — 向后兼容
+                既有调用方；同会话多段时区分工作记忆的可见范围。仅当
+                ``resolved == "working"`` 时生效（episodic/semantic 无段概念）。
 
         Returns:
             记忆 ID：
@@ -248,7 +144,9 @@ class MemoryManager:
         resolved = classify_memory_type(memory_type, importance, content)
 
         if resolved == "working":
-            seq = self.working.add(session_id, {"role": "system", "content": content})
+            seq = self.working.add(
+                session_id, {"role": "system", "content": content}, segment_id=segment_id
+            )
             sid = self.working.resolve_session_id(session_id)
             return f"wm:{sid}:{seq}"
 
@@ -257,27 +155,16 @@ class MemoryManager:
             if tags:
                 meta["tags"] = tags
             sid = session_id or meta.get("session_id")
-            # F3 (win7) — forward traceability fields from metadata so the
-            # adapter.store → memorize → episodic.save chain actually
-            # populates the three new columns instead of silently dropping
-            # them (the fields default to None when absent → backward compat).
             return self.episodic.save(
-                content=content,
-                importance=importance,
-                metadata=meta,
-                session_id=sid,
-                source_turn_id=meta.get("source_turn_id"),
-                source_message_id=meta.get("source_message_id"),
-                memory_category=meta.get("memory_category"),
+                content=content, importance=importance, metadata=meta, session_id=sid
             )
 
         elif resolved == "semantic":
-            meta = metadata or {}
             return self.semantic.save(
                 content=content,
                 summary=None,
                 tags=tags,
-                session_id=session_id or meta.get("session_id"),
+                session_id=session_id,
             )
 
         else:
@@ -353,13 +240,21 @@ class MemoryManager:
 
         return results
 
-    def get_context(self, limit: int = 10, session_id: Optional[str] = None) -> str:
+    def get_context(
+        self,
+        limit: int = 10,
+        session_id: Optional[str] = None,
+        segment_id: Optional[int] = None,
+    ) -> str:
         """
         获取上下文用于 Agent
 
         Args:
             limit: 上下文消息数量限制
             session_id: 可选会话 ID，限定工作记忆上下文的范围
+            segment_id: 可选段 id（Task 14 context-isolation）。
+                透传给 :meth:`WorkingMemory.get_context`，仅返回该段消息。
+                ``None`` → 返回该会话全部段（向后兼容）。
 
         Returns:
             格式化的上下文字符串
@@ -379,8 +274,10 @@ class MemoryManager:
         except Exception as exc:
             logger.debug(f"用户画像快照注入失败: {exc}")
 
-        # 获取工作记忆上下文（按 session 隔离）
-        working_context = self.working.get_context(session_id, limit=limit)
+        # 获取工作记忆上下文（按 session 隔离 + Task 14 按 segment_id 隔离）
+        working_context = self.working.get_context(
+            session_id, limit=limit, segment_id=segment_id
+        )
         if working_context:
             parts.append("【当前对话】")
             for msg in working_context:
@@ -430,15 +327,24 @@ class MemoryManager:
 
         return "\n".join(parts) if parts else ""
 
-    def compress(self, session_id: Optional[str] = None) -> None:
+    def compress(
+        self,
+        session_id: Optional[str] = None,
+        segment_id: Optional[int] = None,
+    ) -> None:
         """
         压缩指定会话的工作记忆
         生成摘要并保存到情景记忆
 
         Args:
             session_id: 会话 ID（None → 默认会话），仅压缩并清空该会话
+            segment_id: 上下文段 id（PF-3 context-isolation）。若指定，则仅压缩
+                并清空该段的工作记忆（使用 ``clear_segment``）；若为 None，则
+                维持默认行为，清空整个会话的工作记忆（向后兼容）。
         """
-        messages = self.working.get_context(session_id)
+        messages = self.working.get_context(
+            session_id, segment_id=segment_id
+        )
 
         if not messages:
             return
@@ -455,17 +361,26 @@ class MemoryManager:
                 session_id=session_id,
             )
 
-            # 清空该会话的工作记忆
-            self.working.clear(session_id)
+            # 清空工作记忆：段级或会话级
+            if segment_id is not None:
+                self.working.clear_segment(session_id, segment_id)
+            else:
+                self.working.clear(session_id)
 
             logger.info(
                 f"工作记忆已压缩: session={normalize_session_id(session_id)}, "
-                f"保存了 {len(messages)} 条消息的摘要"
+                f"segment={segment_id}, 保存了 {len(messages)} 条消息的摘要"
             )
         except Exception as e:
             logger.error(f"压缩工作记忆失败: {e}")
 
-    def add_to_working(self, role: str, content: str, session_id: Optional[str] = None) -> None:
+    def add_to_working(
+        self,
+        role: str,
+        content: str,
+        session_id: Optional[str] = None,
+        segment_id: int = 0,
+    ) -> None:
         """
         添加消息到工作记忆
 
@@ -473,8 +388,12 @@ class MemoryManager:
             role: 角色 (user/assistant/system)
             content: 消息内容
             session_id: 可选会话 ID（None → 默认会话）
+            segment_id: 上下文段 id（PF-2 context-isolation）。默认 0 — 向后兼容
+                既有调用方；同会话多段时区分工作记忆的可见范围。
         """
-        self.working.add(session_id, {"role": role, "content": content})
+        self.working.add(
+            session_id, {"role": role, "content": content}, segment_id=segment_id
+        )
 
     def search_memories(
         self,

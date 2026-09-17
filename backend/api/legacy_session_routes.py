@@ -79,7 +79,7 @@ def list_sessions(
     sessions = repo.list(limit=limit, offset=offset)
     result = [s.to_dict() for s in sessions]
     # P0-4 (UI 优化方案 2026-09-13): 批量附加 last_message_preview(每个会话最后一条
-    # user/assistant 消息截断 40 字符),空会话 → None。
+    # user/assistant 消息截断 80 字符),空会话 → None。
     previews = _batch_last_message_previews([s.id for s in sessions])
     for item in result:
         item["last_message_preview"] = previews.get(item["id"])
@@ -87,7 +87,7 @@ def list_sessions(
 
 
 def _batch_last_message_previews(session_ids: List[str]) -> Dict[str, str]:
-    """批量取每个会话的最后一条 user/assistant 消息预览(截断 40 字符)。"""
+    """批量取每个会话的最后一条 user/assistant 消息预览(截断 80 字符)。"""
     if not session_ids:
         return {}
     conn = get_database().get_connection()
@@ -95,7 +95,7 @@ def _batch_last_message_previews(session_ids: List[str]) -> Dict[str, str]:
     placeholders = ",".join("?" for _ in session_ids)
     cursor.execute(
         f"""
-        SELECT m.session_id, SUBSTR(m.content, 1, 40) AS preview
+        SELECT m.session_id, SUBSTR(m.content, 1, 80) AS preview
         FROM messages m
         INNER JOIN (
             SELECT session_id, MAX(created_at) AS max_created
@@ -215,7 +215,7 @@ async def compact_session(session_id: str):
         raise HTTPException(status_code=404, detail="会话不存在")
 
     message_repo = MessageRepository()
-    messages = message_repo.get_by_session(session_id, limit=100000)
+    messages = message_repo.get_active_segment(session_id)
     before = len(messages)
 
     if not should_compact(messages):
@@ -434,3 +434,22 @@ def list_session_lineage(session_id: str):
 
     archives = list_archives(get_database(), session_id)
     return {"session_id": session_id, "archives": archives}
+
+
+# ---------------------------------------------------------------------------
+# Task 11 (2026-09-17): context-isolation 撤销入口 — 撤回自动话题切换
+# ---------------------------------------------------------------------------
+
+
+@router.post("/sessions/{session_id}/segments/retreat", response_model=dict)
+def retreat_session_segment(session_id: str):
+    """回退最近一次自动话题切换（删除最后一个 topic_separator）。
+
+    前端 ``TopicShiftBanner`` 在用户点击"恢复完整上下文"时调用；后端
+    复用 ``MessageRepository.retreat_segment``（Task 2）直接删行。
+
+    - 200 + ``{"ok": true}`` — 成功删除了一个 separator，merge segments
+    - 200 + ``{"ok": false}`` — 无 separator 可删（用户尚未触发过话题切换）
+    """
+    ok = MessageRepository().retreat_segment(session_id)
+    return {"ok": ok}

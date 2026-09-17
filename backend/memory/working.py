@@ -21,6 +21,8 @@ import time
 from collections import deque
 from typing import Any, Dict, List, Optional
 
+from backend.data.database import _SQLITE_LOCK
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_SESSION_ID = "default"
@@ -156,7 +158,12 @@ class WorkingMemory:
 
     # ==================== 核心 API ====================
 
-    def add(self, session_id: Optional[Any] = None, message: Optional[Dict[str, Any]] = None) -> int:
+    def add(
+        self,
+        session_id: Optional[Any] = None,
+        message: Optional[Dict[str, Any]] = None,
+        segment_id: int = 0,
+    ) -> int:
         """
         添加消息到工作记忆
 
@@ -167,6 +174,10 @@ class WorkingMemory:
         Args:
             session_id: 会话 ID（旧形态下该位置为消息 dict）
             message: 消息字典，包含 role, content 等字段
+            segment_id: 上下文段 id（Task 14 context-isolation）。
+                默认 0 — 向后兼容既有调用方；同会话多段时区分
+                ``get_context(..., segment_id=N)`` 的可见范围。
+                ``clear_segment(session_id, segment_id)`` 仅清目标段。
 
         Returns:
             该消息在所属会话内的自增序号（上层可据此合成 ``wm:<sid>:<seq>`` id）
@@ -187,6 +198,7 @@ class WorkingMemory:
         self._messages.append(
             {
                 "session_id": sid,
+                "segment_id": segment_id,
                 "role": message.get("role", "unknown"),
                 "content": content,
                 "tokens": tokens,
@@ -244,7 +256,10 @@ class WorkingMemory:
             self.total_tokens -= evicted_tokens
 
     def get_context(
-        self, session_id: Optional[Any] = None, limit: Optional[int] = None
+        self,
+        session_id: Optional[Any] = None,
+        limit: Optional[int] = None,
+        segment_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         获取指定会话的当前上下文
@@ -254,6 +269,9 @@ class WorkingMemory:
         Args:
             session_id: 会话 ID（None → 默认/绑定会话）
             limit: 可选，限制返回的消息数量
+            segment_id: 可选段 id（Task 14 context-isolation）。
+                ``None`` → 返回该会话全部段消息（向后兼容）；
+                传入 int → 仅返回 ``segment_id`` 匹配的消息。
 
         Returns:
             消息列表
@@ -262,6 +280,8 @@ class WorkingMemory:
             session_id, limit = None, session_id
         sid = self._resolve(session_id)
         msgs = self._session_messages(sid)
+        if segment_id is not None:
+            msgs = [m for m in msgs if m.get("segment_id", 0) == segment_id]
         if limit is None:
             return msgs
         return msgs[-limit:]
@@ -297,6 +317,41 @@ class WorkingMemory:
         self._summaries.pop(sid, None)
         self._entities.pop(sid, None)
         self._variables.pop(sid, None)
+        # 持久化清空状态
+        self._save_snapshot(sid)
+
+    def clear_segment(
+        self,
+        session_id: Optional[str] = None,
+        segment_id: int = 0,
+    ) -> None:
+        """
+        清空指定会话的指定段（Task 14 context-isolation）。
+
+        只移除匹配 ``(session_id, segment_id)`` 的消息，其他段不受影响。
+        :func:`clear` 清空整个会话；本函数是更细粒度的"段级清空"。
+
+        Args:
+            session_id: 会话 ID（None → 默认/绑定会话）
+            segment_id: 段 id（默认 0）
+        """
+        sid = self._resolve(session_id)
+        kept: deque = deque()
+        evicted_tokens = 0
+        for m in self._messages:
+            if (
+                m.get("session_id") == sid
+                and m.get("segment_id", 0) == segment_id
+            ):
+                evicted_tokens += m.get("tokens", 0)
+                continue
+            kept.append(m)
+        self._messages = kept
+        # 仅扣减本会话、本段被移除的 token 估算值。
+        self._session_tokens[sid] = max(
+            0, self._session_tokens.get(sid, 0) - evicted_tokens
+        )
+        self.total_tokens = max(0, self.total_tokens - evicted_tokens)
         # 持久化清空状态
         self._save_snapshot(sid)
 
@@ -392,29 +447,39 @@ class WorkingMemory:
 
         sid = self._resolve(session_id)
         try:
-            conn = self._db.get_connection()
-            # 先清空该会话的旧快照
-            conn.execute(
-                "DELETE FROM working_memory_snapshot WHERE session_id = ?",
-                (sid,),
-            )
-            # 插入该会话当前所有消息
-            now_ms = int(time.time() * 1000)
-            for msg in self._session_messages(sid):
-                conn.execute(
-                    """INSERT INTO working_memory_snapshot
-                       (session_id, role, content, tokens, timestamp, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (
-                        sid,
-                        msg.get("role", "unknown"),
-                        msg.get("content", ""),
-                        msg.get("tokens", 0),
-                        msg.get("timestamp", 0.0),
-                        now_ms,
-                    ),
-                )
-            conn.commit()
+            # One savepoint and one lock span the entire replacement. RELEASE
+            # commits only when outermost; a failure never commits/rolls back
+            # unrelated writes already pending on the shared connection.
+            with _SQLITE_LOCK:
+                conn = self._db.get_connection()
+                conn.execute("SAVEPOINT working_memory_replace")
+                try:
+                    # 先清空该会话的旧快照
+                    conn.execute(
+                        "DELETE FROM working_memory_snapshot WHERE session_id = ?",
+                        (sid,),
+                    )
+                    # 插入该会话当前所有消息
+                    now_ms = int(time.time() * 1000)
+                    for msg in self._session_messages(sid):
+                        conn.execute(
+                            """INSERT INTO working_memory_snapshot
+                               (session_id, role, content, tokens, timestamp, created_at)
+                               VALUES (?, ?, ?, ?, ?, ?)""",
+                            (
+                                sid,
+                                msg.get("role", "unknown"),
+                                msg.get("content", ""),
+                                msg.get("tokens", 0),
+                                msg.get("timestamp", 0.0),
+                                now_ms,
+                            ),
+                        )
+                    conn.execute("RELEASE SAVEPOINT working_memory_replace")
+                except BaseException:
+                    conn.execute("ROLLBACK TO SAVEPOINT working_memory_replace")
+                    conn.execute("RELEASE SAVEPOINT working_memory_replace")
+                    raise
             logger.debug(
                 f"工作记忆快照已保存: session={sid}, 消息数={len(self._session_messages(sid))}"
             )
