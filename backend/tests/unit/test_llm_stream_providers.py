@@ -50,8 +50,8 @@ def _read_request_body(route_call) -> dict:
 @pytest.mark.asyncio()
 async def test_claude_chat_stream_roundtrip_sends_max_tokens():
     with respx.mock(base_url="https://api.anthropic.com", assert_all_called=False) as mock:
-        # base_url 带 /v1 时，httpx 把硬编码的 /v1/chat/completions 合并为 /v1/v1/…
-        route = mock.post("/v1/v1/chat/completions").mock(return_value=_sse("你好|世界"))
+        # r69 起 base_url 尾部 /v1 被剥掉，请求落在 /v1/chat/completions
+        route = mock.post("/v1/chat/completions").mock(return_value=_sse("你好|世界"))
         client = LLMClient(
             LLMConfig(
                 provider="claude",
@@ -76,8 +76,8 @@ async def test_claude_chat_stream_roundtrip_sends_max_tokens():
 @pytest.mark.asyncio()
 async def test_claude_chat_stream_events_roundtrip():
     with respx.mock(base_url="https://api.anthropic.com", assert_all_called=False) as mock:
-        # base_url 带 /v1 时，httpx 把硬编码的 /v1/chat/completions 合并为 /v1/v1/…
-        route = mock.post("/v1/v1/chat/completions").mock(return_value=_sse("a|b|c"))
+        # r69 起 base_url 尾部 /v1 被剥掉，请求落在 /v1/chat/completions
+        route = mock.post("/v1/chat/completions").mock(return_value=_sse("a|b|c"))
         client = LLMClient(
             LLMConfig(
                 provider="claude",
@@ -145,8 +145,8 @@ async def test_gemini_chat_stream_forwards_thinking_budget():
 @pytest.mark.asyncio()
 async def test_ollama_chat_stream_roundtrip_without_auth_header():
     with respx.mock(base_url="http://127.0.0.1:11434", assert_all_called=False) as mock:
-        # 同上：/v1 后缀 + 客户端硬编码路径 → /v1/v1/…
-        route = mock.post("/v1/v1/chat/completions").mock(return_value=_sse("hello|world"))
+        # r69 起 base_url 尾部 /v1 被剥掉，请求落在 /v1/chat/completions
+        route = mock.post("/v1/chat/completions").mock(return_value=_sse("hello|world"))
         client = LLMClient(
             LLMConfig(
                 provider="ollama",
@@ -179,7 +179,7 @@ async def test_ollama_stream_events_reasoning_delta():
         "data: [DONE]\n\n"
     )
     with respx.mock(base_url="http://127.0.0.1:11434", assert_all_called=False) as mock:
-        mock.post("/v1/v1/chat/completions").mock(
+        mock.post("/v1/chat/completions").mock(
             return_value=Response(
                 200,
                 content=lines.encode(),
@@ -212,3 +212,24 @@ async def test_ollama_stream_events_reasoning_delta():
         assert events[-1][1].content == "答"
         # 推理文本进 reasoning 字段，不混入 content
         assert events[-1][1].reasoning_content == "想一下"
+
+
+@pytest.mark.asyncio()
+async def test_base_url_v1_suffix_deduplicated():
+    """r69 回归：base_url 带 /v1 时剥掉，不再请求 /v1/v1/… 404 路径。"""
+    with respx.mock(base_url="https://api.anthropic.com", assert_all_called=False) as mock:
+        route = mock.post("/v1/chat/completions").mock(return_value=_sse("ok"))
+        client = LLMClient(
+            LLMConfig(
+                provider="claude",
+                api_key="sk-ant-test",
+                base_url="https://api.anthropic.com/v1/",
+                model="claude-sonnet-4",
+                use_proxy=False,
+            )
+        )
+        chunks = [c async for c in client.chat_stream([{"role": "user", "content": "hi"}])]
+        assert chunks == ["ok"]
+        assert route.call_count == 1
+        sent_url = str(route.calls.last.request.url)
+        assert sent_url.count("/v1/") == 1
