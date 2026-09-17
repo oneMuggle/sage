@@ -41,6 +41,8 @@ import { closeSplashWindow, createSplashWindow, updateSplashStage } from './spla
 import { registerSageFileProtocol, registerWorkspaceRoot, unregisterWorkspaceRoot } from './sageFileProtocol';
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
+import { readLogTimezone, writeLogTimezone } from './logTimezone';
+import { setLogTimezone } from './logger';
 logger.info('main: process started', {
   pid: process.pid,
   electronVer: process.versions.electron,
@@ -333,6 +335,17 @@ try {
   }
 } catch (err) {
   logger.warn('main: failed to read demo mode settings', { error: String(err) });
+}
+
+// 日志时区 (2026-09-17): 从 userData JSON 读取, 应用到 Electron logger + 传给 Python 后端.
+let logTimezoneFromSettings = 'UTC';
+try {
+  logTimezoneFromSettings = readLogTimezone();
+  setLogTimezone(logTimezoneFromSettings);
+  // 同时设置 env 变量, spawnBackend 会传给 Python 后端.
+  process.env.SAGE_LOG_TIMEZONE = logTimezoneFromSettings;
+} catch (err) {
+  logger.warn('main: failed to read log timezone settings', { error: String(err) });
 }
 
 // Set by spawnBackend() when the resolver reports a broken installer, so the
@@ -1342,6 +1355,33 @@ async function registerIpcHandlers(): Promise<void> {
       }
       logger.error('main: failed to persist demo mode', { error: String(err) });
       return { ok: false, error: '无法保存演示模式设置' };
+    }
+  });
+
+  // 日志时区 (2026-09-17): renderer 在 Settings → 通用 改 logTimezone 后调用此 IPC.
+  // 立即应用到 Electron logger, 同时写盘供下次启动读取. Python 后端通过 env 变量接收.
+  ipcMain.handle('sage:log-timezone:get', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      return { logTimezone: 'UTC' };
+    }
+    return { logTimezone: logTimezoneFromSettings };
+  });
+
+  ipcMain.handle('sage:log-timezone:set', (evt, payload: { logTimezone: string }) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      return { ok: false, error: '未授权的窗口请求' };
+    }
+    const tz = typeof payload?.logTimezone === 'string' ? payload.logTimezone : 'UTC';
+    try {
+      setLogTimezone(tz);
+      process.env.SAGE_LOG_TIMEZONE = tz;
+      writeLogTimezone(tz);
+      logTimezoneFromSettings = tz;
+      logger.info('main: log timezone updated', { logTimezone: tz });
+      return { ok: true };
+    } catch (err) {
+      logger.error('main: failed to persist log timezone', { error: String(err) });
+      return { ok: false, error: '无法保存日志时区设置' };
     }
   });
 
