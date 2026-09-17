@@ -23,7 +23,6 @@ from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.permissions import PermissionEnforcer, PermissionMode
 
-
 # ── Test fixtures ──────────────────────────────────────────────────────────
 
 

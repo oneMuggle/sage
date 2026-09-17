@@ -1385,10 +1385,10 @@ class SageAgent:
 
                     # L8: required 参数存在性校验——工具执行前拦截缺失参数,
                     # 避免 Python TypeError 被 except Exception 捕获后变成不友好的
-                    # "[工具错误] execute() missing 1 required positional argument"
-                    # 消息。与 hooks/runner.py:validate_modified_args 同构的轻量检查。
+                    # [工具错误] execute() missing ... 消息。
+                    # 与 hooks/runner.py:validate_modified_args 同构的轻量检查。
                     _schema_tool = self.tool_registry.get(tc.name)
-                    if _schema_tool is not None:
+                    if _schema_tool is not None and hasattr(_schema_tool, "schema"):
                         _schema_required = _schema_tool.schema.parameters.get("required", [])
                         if isinstance(_schema_required, list):
                             _missing = [k for k in _schema_required if k not in args]
