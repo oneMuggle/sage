@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 40：office_create 一键 TOC 刷新**（方案 `docs/plans/2026-09-18_r40-create-toc-refresh-plan.md`）
+
+### Added(office)
+- **`office_create` 新增 `refresh_toc` 标志**（word 专用）：生成成功后立即用 Word COM 把目录域刷新为真页码并原地保存——带目录报告一步到位，省一次 LLM 往返；受管/legacy 双路径接线，受管路径维持「不回显绝对路径」不变式；非 word 传参显式报错（strict）
+- **降级契约**：Word COM/pywin32 不可用时生成照常成功，结果附加 `toc_refresh: {ok: false, error}` 安装引导说明，绝不因刷新失败回滚已落盘文档
+
+### Fixed(test)
+- **rollback 遥测测试竞态修复（搭车，test-only）**：`updateManager.test.ts` 的 fetch 断言包进 `vi.waitFor`——`rollback()` 刻意 fire-and-forget 发遥测，立即断言与微任务调度存在竞态（R38 轮 CI 实际 flake 一次）
+
 > 📝 **Word 写作能力 Round 39：目录真页码（Word COM 刷新域可选通道）**（方案 `docs/plans/2026-09-18_r39-toc-page-refresh-plan.md`）
 
 ### Added(office)
