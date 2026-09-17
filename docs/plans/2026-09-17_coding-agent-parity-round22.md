@@ -35,4 +35,8 @@
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A（重派链防失控上限与墙钟上限设置入口） | PR #985（squash 44fc1c30） | PR #991（cherry-win7-r22，squash ebe9552a） |
+
+win7 对齐说明：零冲突落位；CI 含 py3.8 job 终验；`Backend unit (Windows, non-blocking)` job 首跑 7 例 Windows 平台测试失败（persona/path_safety/download 等），与本批改动无关（docs + orchestration 双域，本地全绿），确认为该 job 新增后首跑暴露的既有 Windows 基线问题。
