@@ -13,7 +13,6 @@ Uses the project's autouse `setup_test_db` fixture (provides fresh in-memory DB
 before inserting child rows into messages).
 """
 
-import time
 
 import pytest
 

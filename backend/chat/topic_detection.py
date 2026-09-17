@@ -8,8 +8,9 @@ Two-layer strategy:
 Embedding is optional; if embed_fn is None and quick signals miss, returns False.
 """
 from __future__ import annotations
+
 import re
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Callable, List, Sequence, Tuple
 
 QUICK_NEW_TOPIC_SIGNALS = [
     r"换个话题", r"另一个问题", r"新话题", r"不相关的",
@@ -36,7 +37,7 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
 def detect_topic_shift(
     user_text: str,
     recent_assistant_texts: List[str],
-    embed_fn: Optional[Callable[[str], List[float]]] = None,
+    embed_fn: Callable[[str], List[float]] | None = None,
     threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
 ) -> Tuple[bool, str]:
     """Return (is_new_topic, reason).
