@@ -522,12 +522,13 @@ class Database:
         # 2026-09-17 context-isolation: 老库加 segment_id/subtype 列；已有消息
         # segment_id=0（属于第 0 段）,subtype=NULL（正常消息,不是切换标记）。
         # 段索引 (session_id, segment_id, created_at) 用于按当前段过滤历史。
-        msg_cols = {row[1] for row in conn.execute("PRAGMA table_info(messages)").fetchall()}
-        if "segment_id" not in msg_cols:
-            conn.execute("ALTER TABLE messages ADD COLUMN segment_id INTEGER NOT NULL DEFAULT 0")
-        if "subtype" not in msg_cols:
-            conn.execute("ALTER TABLE messages ADD COLUMN subtype TEXT")
-        conn.execute(
+        if "segment_id" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN segment_id INTEGER DEFAULT 0")
+            conn.commit()
+        if "subtype" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN subtype TEXT")
+            conn.commit()
+        cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_messages_segment "
             "ON messages(session_id, segment_id, created_at)"
         )
