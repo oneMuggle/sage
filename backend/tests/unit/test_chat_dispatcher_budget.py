@@ -228,3 +228,143 @@ def test_background_guide_documents_snapshot_strategy():
     assert "wait=false" in src
     assert "提前汇总" in src
     # 预算触顶的聚合标注在 chat_dispatcher（round11 已覆盖），此处不重复
+
+
+# ---- BU13 (round24) / RT23 补测：任务级归因与事件可见性 ----------------------
+
+
+def _seed_task_usage(
+    session_id: str, task_id: str, total_tokens: int, created_at_ms: int
+) -> None:
+    """插带 task_id 归因的 usage_events 行（模拟子任务执行期间的 LLM 用量）。"""
+    import uuid
+
+    from backend.data.database import get_database
+
+    conn = get_database().get_connection()
+    conn.execute(
+        "INSERT INTO usage_events (id, session_id, model, prompt_tokens,"
+        " completion_tokens, total_tokens, estimated_cost_usd, created_at,"
+        " cached_tokens, task_id)"
+        " VALUES (?, ?, 'test-model', 0, 0, ?, 0.0, ?, 0, ?)",
+        (str(uuid.uuid4()), session_id, total_tokens, created_at_ms, task_id),
+    )
+    conn.commit()
+
+
+def test_task_usage_since_filters_by_task_and_window(tmp_path, monkeypatch):
+    """RT23 (round23 补测): task_usage_since 只聚合指定 task_id 且落在窗口内。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    now = int(time.time() * 1000)
+    _seed_task_usage("sess-tu", "t1", 100, now)
+    _seed_task_usage("sess-tu", "t1", 50, now - 10 * 60_000)  # 窗口外
+    _seed_task_usage("sess-tu", "t2", 200, now)  # 别的任务
+    used = (
+        __import__("backend.services.usage_tracker", fromlist=["UsageTracker"])
+        .UsageTracker()
+        .task_usage_since("sess-tu", "t1", now - 60_000)
+    )
+    assert used == 100
+
+
+def test_task_usage_since_fail_open(tmp_path, monkeypatch):
+    """RT23 (round23 补测): DB 故障返 0，不向事件路径抛异常。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    import backend.data.database as db_mod
+    from backend.services.usage_tracker import UsageTracker
+
+    def _boom():
+        raise RuntimeError("simulated db failure")
+
+    monkeypatch.setattr(db_mod, "get_database", _boom)
+    assert UsageTracker().task_usage_since("sess-x", "t1", 0) == 0
+
+
+@pytest.mark.asyncio()
+async def test_record_persists_contextvar_task_id(tmp_path, monkeypatch):
+    """RT23 (round23 补测): ContextVar 归因 —— record() 落库自动携带 task_id。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    from backend.services.usage_tracker import (
+        UsageTracker,
+        set_current_task_id,
+    )
+
+    set_current_task_id("tA")
+    try:
+        UsageTracker().record("test-model", 1, 1, session_id="sess-ctx")
+        used = UsageTracker().task_usage_since("sess-ctx", "tA", 0)
+    finally:
+        set_current_task_id(None)
+    assert used == 2
+
+
+def _drain_task_events(queue):
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    return [e for e in events if e.get("state") == "task_status"]
+
+
+@pytest.mark.asyncio()
+async def test_done_event_reports_per_task_tokens(tmp_path, monkeypatch):
+    """BU13 (round24): 终态事件携带本任务 token（而非 run 累计），预算关闭也带键。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-bu13-1",
+        session_id="sess-bu13",
+    )
+    d.settings.run_token_budget = 0  # 门槛解除：预算关闭仍可见
+
+    async def fake_run(state):
+        _seed_task_usage(
+            "sess-bu13",
+            state.task_id,
+            300 if state.task_id == "t1" else 40,
+            int(time.time() * 1000),
+        )
+        state.status = "done"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch(
+        [
+            {"task_id": "t1", "agent_id": "primary", "goal": "g1"},
+            {"task_id": "t2", "agent_id": "primary", "goal": "g2"},
+        ]
+    )
+    events = {e["task_id"]: e for e in _drain_task_events(queue) if e["task_id"]}
+    assert events["t1"]["status"] == "done"
+    assert events["t1"]["used_tokens"] == 300  # 非累计 340
+    assert events["t2"]["used_tokens"] == 40
+
+
+@pytest.mark.asyncio()
+async def test_running_event_lacks_tokens_and_duration(tmp_path, monkeypatch):
+    """BU13 (round24): queued/running 事件不带 used_tokens/duration_ms（进行中无意义）。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-bu13-2",
+        session_id="sess-bu13b",
+    )
+
+    async def fake_run(state):
+        state.status = "done"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+    events = _drain_task_events(queue)
+    running = [e for e in events if e["status"] == "running"]
+    assert running, "应存在 running 事件"
+    assert "used_tokens" not in running[0]
+    assert "duration_ms" not in running[0]
+    done = [e for e in events if e["status"] == "done"]
+    assert done
+    assert "duration_ms" in done[0]
+    assert done[0]["duration_ms"] >= 0

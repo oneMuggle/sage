@@ -321,9 +321,13 @@ export interface TaskStatusEvent {
   // RD13+ (round15): 重派来源任务 ID —— conductor 用 retry_of 重派时携带,
   // 任务树据此渲染"重派"徽章（可追溯哪些任务是重做的）。普通任务无此键。
   retry_of?: string;
-  // BU9 (round20): 终态任务附带的 run 窗口累计用量（tokens）—— 预算开启时
-  // 携带；queued/running 不带。任务树进度行渲染消耗可见性。
+  // BU9 (round20) + BU13 (round24): 终态任务附带的本任务 token 消耗 ——
+  // round24 起语义收敛为 per-task 归因（usage_events.task_id 过滤），
+  // 且预算关闭也携带；queued/running 不带。任务树渲染消耗可见性。
   used_tokens?: number;
+  // BU13 (round24): 终态任务执行时长（毫秒）—— started_at→finished_at；
+  // 二者齐备才携带。任务树行内渲染耗时徽章。
+  duration_ms?: number;
   // live-events P0 (2026-09-06): 派发本批次的 conductor 工具调用 ID —— 聊天流内
   // 把子代理实时步骤关联到 "Delegate <goal>" 卡片的关联键。
   parent_tool_call_id?: string | null;
