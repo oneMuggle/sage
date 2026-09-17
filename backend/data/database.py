@@ -947,6 +947,12 @@ class Database:
                 "ALTER TABLE usage_events ADD COLUMN price_snapshot TEXT"
             )
             conn.commit()
+        # RT23 (round23): task_id 归因列 —— 编排子任务级 token 消耗追踪。
+        if "task_id" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN task_id TEXT"
+            )
+            conn.commit()
         # L8 PR-B (2026-09-09): 用量日聚合表 — 7d/30d 时间范围查询的预聚合层,
         # 避免每次都扫 usage_events 全量。days_bucket 0=今天, 1=昨天 ... 6=6 天前
         # (7d 范围), >=7 即 30d 范围折叠到月聚合。模型维度另算。
