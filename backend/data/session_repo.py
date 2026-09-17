@@ -707,3 +707,54 @@ class MessageRepository:
         except Exception as exc:  # noqa: BLE001 — 索引故障不影响写入
             logger.warning("定时消息索引挂钩失败: %s", exc)
         return {"id": message_id}
+
+    def get_active_segment(self, session_id: str) -> List[Message]:
+        """Return messages after the last topic_separator (context-isolation)."""
+        all_msgs = self.get_by_session(session_id, limit=100000)
+        last_sep_idx = -1
+        for i in range(len(all_msgs) - 1, -1, -1):
+            if all_msgs[i].subtype == "topic_separator":
+                last_sep_idx = i
+                break
+        return all_msgs[last_sep_idx + 1:]
+
+    def advance_segment(self, session_id: str) -> int:
+        """Insert a topic_separator message and return the new segment_id.
+
+        Flow: query current max segment_id, insert a 'system' message with
+        sentinel content, then UPDATE it to mark subtype=topic_separator and
+        bump segment_id. Returns the new segment_id (0-based, incremented).
+        """
+        all_msgs = self.get_by_session(session_id, limit=100000)
+        max_seg = max((m.segment_id for m in all_msgs), default=-1)
+        new_seg = max_seg + 1
+        insert_result = self.insert(
+            session_id=session_id,
+            role="system",
+            content="[上下文已在此处重置]",
+            created_at=int(time.time() * 1000),
+        )
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE messages SET segment_id = ?, subtype = ? WHERE id = ?",
+            (new_seg, "topic_separator", insert_result["id"]),
+        )
+        conn.commit()
+        return new_seg
+
+    def retreat_segment(self, session_id: str) -> bool:
+        """Remove the last topic_separator (if any) and merge segments.
+
+        Returns True if a separator was deleted, False if none existed.
+        Used for 'undo' on false-positive auto-detection of topic shifts.
+        """
+        all_msgs = self.get_by_session(session_id, limit=100000)
+        for i in range(len(all_msgs) - 1, -1, -1):
+            if all_msgs[i].subtype == "topic_separator":
+                conn = self.db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM messages WHERE id = ?", (all_msgs[i].id,))
+                conn.commit()
+                return True
+        return False
