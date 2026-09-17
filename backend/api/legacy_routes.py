@@ -855,10 +855,16 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
         未达到阈值或无 LLM 配置时返回 ``None``。
     """
     message_repo = MessageRepository()
+    # Task 12 (context-isolation): 压缩只对当前 segment 起作用——
+    # 历史 segment 已被 advance_segment() 封存成 topic_separator + 摘要续接,
+    # 旧 segment 的对话本来就不会再注入本轮 LLM 请求, 没有压缩必要.
+    # 用 get_by_session 会把多个 segment 一起塞进 LLM 摘要 prompt, 浪费 token
+    # 且破坏"segment 间互相隔离"的口径.
     # 2026-09 修复: producer 是 async task, 全量历史读是秒级同步 IO,
     # 直接跑在事件循环上会冻结所有并发流的 NDJSON attach 与 HTTP 路由。
-    messages = await to_thread(
-        lambda: message_repo.get_by_session(session_id, limit=100000)
+    messages = await asyncio.to_thread(
+        lambda: message_repo.get_active_segment(session_id)
+    )
     )
     if not should_compact(messages):
         return None
