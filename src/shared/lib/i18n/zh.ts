@@ -861,6 +861,13 @@ export const zh = {
     '未安装 Pillow：pip install -r backend/requirements-optional.txt 后 >8MB 图片将自动压缩',
   'office.caps.install.formulas':
     '未安装 formulas：pip install -r backend/requirements-optional.txt 后 Excel 公式可本地求值',
+  'office.caps.ocr': 'OCR',
+  'office.caps.install.ocr': '安装 pytesseract + tesseract（含 chi_sim）后可用于扫描件',
+  'office.edit.kindAddImage': '插入图片',
+  'office.edit.imagePath': '图片路径（相对工作区）',
+  'office.edit.imagePathPlaceholder': '如 images/logo.png',
+  'office.edit.imageWidth': '宽（英寸，可选）',
+  'office.edit.imageHeight': '高（英寸，可选）',
 
   // ─── Office display round B: P2 快照可视 diff ─────
   'office.snapshot.diff': '与当前版本对比',

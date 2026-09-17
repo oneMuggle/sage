@@ -74,7 +74,8 @@ export type WordEditKind =
   | 'delete_paragraph'
   | 'add_comment'
   | 'set_paragraph_style'
-  | 'delete_comment';
+  | 'delete_comment'
+  | 'add_image';
 export type ExcelEditKind =
   | 'set_cells'
   | 'append_rows'
@@ -121,6 +122,10 @@ interface ComposeState {
   styleAlign: string;
   // word delete_comment
   commentId: string;
+  // word add_image
+  imagePath: string;
+  imageWidth: string;
+  imageHeight: string;
   // excel set_cells
   sheet: string;
   cell: string;
@@ -181,6 +186,9 @@ const INITIAL_COMPOSE: ComposeState = {
   styleColor: '',
   styleAlign: '',
   commentId: '',
+  imagePath: '',
+  imageWidth: '',
+  imageHeight: '',
   sheet: '',
   cell: '',
   value: '',
@@ -251,6 +259,16 @@ export function buildUpdateOps(
       if (!find || !comment) return null;
       const op: OfficeUpdateOp = { op: 'add_comment', find, comment };
       if (state.commentAuthor.trim()) op.author = state.commentAuthor.trim();
+      return [op];
+    }
+    if (state.wordKind === 'add_image') {
+      const image = state.imagePath.trim();
+      if (!image) return null;
+      const op: OfficeUpdateOp = { op: 'add_image', path: image };
+      const w = Number(state.imageWidth.trim());
+      const h = Number(state.imageHeight.trim());
+      if (state.imageWidth.trim() && Number.isFinite(w) && w > 0) op.width_inches = w;
+      if (state.imageHeight.trim() && Number.isFinite(h) && h > 0) op.height_inches = h;
       return [op];
     }
     if (state.wordKind === 'set_paragraph_style') {
@@ -513,6 +531,7 @@ export function OfficeEditPreviewDialog({
                     <option value="add_comment">{t('office.edit.kindAddComment')}</option>
                     <option value="set_paragraph_style">{t('office.edit.kindSetStyle')}</option>
                     <option value="delete_comment">{t('office.edit.kindDeleteComment')}</option>
+                    <option value="add_image">{t('office.edit.kindAddImage')}</option>
                   </select>
                 </div>
                 {compose.wordKind === 'replace_text' && (
@@ -736,6 +755,53 @@ export function OfficeEditPreviewDialog({
                         />
                         {t('office.edit.styleItalic')}
                       </label>
+                    </div>
+                  </>
+                )}
+                {compose.wordKind === 'add_image' && (
+                  <>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.imagePath')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.imagePath}
+                        onChange={(e) => setField('imagePath')(e.target.value)}
+                        placeholder={t('office.edit.imagePathPlaceholder')}
+                        className={inputClass}
+                        data-testid="office-edit-image-path"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.imageWidth')}
+                        </label>
+                        <input
+                          type="number"
+                          min={0.1}
+                          step={0.1}
+                          value={compose.imageWidth}
+                          onChange={(e) => setField('imageWidth')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-image-width"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.imageHeight')}
+                        </label>
+                        <input
+                          type="number"
+                          min={0.1}
+                          step={0.1}
+                          value={compose.imageHeight}
+                          onChange={(e) => setField('imageHeight')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-image-height"
+                        />
+                      </div>
                     </div>
                   </>
                 )}

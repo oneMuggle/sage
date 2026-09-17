@@ -880,6 +880,13 @@ export const en: Record<TranslationKey, string> = {
     'Pillow not installed: pip install -r backend/requirements-optional.txt to auto-compress images >8MB',
   'office.caps.install.formulas':
     'formulas not installed: pip install -r backend/requirements-optional.txt to evaluate Excel formulas locally',
+  'office.caps.ocr': 'OCR',
+  'office.caps.install.ocr': 'Install pytesseract + tesseract (with chi_sim) for scanned PDFs',
+  'office.edit.kindAddImage': 'Insert image',
+  'office.edit.imagePath': 'Image path (relative to workspace)',
+  'office.edit.imagePathPlaceholder': 'e.g. images/logo.png',
+  'office.edit.imageWidth': 'Width (inches, optional)',
+  'office.edit.imageHeight': 'Height (inches, optional)',
 
   // ─── Office display round B: P2 snapshot visual diff ─────
   'office.snapshot.diff': 'Compare with current',
