@@ -3075,9 +3075,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             try:
                 l13_memory_manager = getattr(agent, "memory_manager", None)
                 if l13_memory_manager is not None and not memory_off:
-                    active_segment_id = (
-                        history_rows[-1].segment_id if history_rows else 0
-                    )
+                    active_segment_id = repo.get_active_segment_id(data.session_id)
                     l13_memory = l13_memory_manager.get_context(
                         limit=10,
                         session_id=data.session_id,

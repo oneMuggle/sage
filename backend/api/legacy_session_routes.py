@@ -215,7 +215,7 @@ async def compact_session(session_id: str):
         raise HTTPException(status_code=404, detail="会话不存在")
 
     message_repo = MessageRepository()
-    messages = message_repo.get_by_session(session_id, limit=100000)
+    messages = message_repo.get_active_segment(session_id)
     before = len(messages)
 
     if not should_compact(messages):

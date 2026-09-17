@@ -718,6 +718,28 @@ class MessageRepository:
                 break
         return all_msgs[last_sep_idx + 1:]
 
+    def get_active_segment_id(self, session_id: str) -> int:
+        """获取当前会话最新的 segment_id（如果不存在消息则返回 0）。
+
+        用于 L13 记忆上下文注入等场景，避免依赖 ``history_rows[-1].segment_id``
+        的脆弱推导（需要确保 history_rows 非空且最后一条携带正确 segment_id）。
+        直接查询 MAX(segment_id) 更健壮、语义更明确。
+
+        Args:
+            session_id: 会话 ID
+
+        Returns:
+            当前活跃段 id（0 表示初始段或无消息）
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COALESCE(MAX(segment_id), 0) FROM messages WHERE session_id = ?",
+            (session_id,),
+        )
+        row = cursor.fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
     def advance_segment(self, session_id: str) -> int:
         """Insert a topic_separator message and return the new segment_id.
 
