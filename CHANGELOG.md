@@ -18,6 +18,11 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+> 🌐 **网页访问能力优化 Round 15：per-host 出网指标 + 渲染 net 块**（方案 `docs/plans/2026-09-17_web-access-optimization-round15.md`）
+
+### Changed(web-access)
+- **per-host 出网指标（M1/M3）**：新增 `backend/tools/web_metrics.py`——线程安全滚动指标（每域名 deque 100 条、全局 LRU 200 域名、进程内递增序号定 LRU 序），异常全静默；web_fetch 成功/失败路径与 download attempt 出口/成功埋点；`GET /api/v1/web-access/metrics` + `PUT /web-access/metrics/reset`（Origin 守卫同口径）
+- **渲染耗时（X2 对齐）**：render_page 结果补 `net: {elapsed_ms}`（与 web_fetch net 口径对齐，不进缓存）
 
 > 🌐 **网页访问能力优化 Round 14：浏览器健康自检 + 凭据 UI header 型新增**（方案 `docs/plans/2026-09-17_web-access-optimization-round14.md`）
 

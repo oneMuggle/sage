@@ -78,6 +78,12 @@ def _origin_guard(request: Request) -> Optional[JSONResponse]:
     return forbidden_origin_response(request)
 
 
+def _metrics_snapshot() -> Dict[str, Any]:
+    from backend.tools import web_metrics
+
+    return web_metrics.snapshot()
+
+
 def _load_config_dict() -> Dict[str, Any]:
     try:
         raw = SettingsRepository().get(SETTINGS_KEY_WEB_ACCESS_CONFIG)
@@ -155,4 +161,24 @@ async def create_header_credential(request: Request, body: HeaderCredentialBody)
         )
     except ValueError as exc:
         return JSONResponse(status_code=422, content={"ok": False, "error": str(exc)[:200]})
+    return {"ok": True}
+
+
+@router.get("/web-access/metrics")
+async def get_web_metrics(request: Request) -> Dict[str, Any]:
+    """Per-host 出网指标（Round 15 X2 延伸；进程内存态，重启清零）。"""
+    guard = _origin_guard(request)
+    if guard:
+        return guard
+    return {"metrics": _metrics_snapshot()}
+
+
+@router.put("/web-access/metrics/reset")
+async def reset_web_metrics(request: Request) -> Dict[str, Any]:
+    guard = _origin_guard(request)
+    if guard:
+        return guard
+    from backend.tools import web_metrics
+
+    web_metrics.reset()
     return {"ok": True}
