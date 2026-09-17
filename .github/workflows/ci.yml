@@ -122,7 +122,8 @@ jobs:
         shell: bash -el {0}
         timeout-minutes: 40
         run: |
-          conda run -n sage-backend-py38 bash -c "cd backend && pytest -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
+          # --durations=20：报告用埋点，与 main backend hex 步骤对齐
+          conda run -n sage-backend-py38 bash -c "cd backend && pytest -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80 --durations=20"
 
       - name: Pytest serial (latency-sensitive file)
         shell: bash -el {0}
@@ -217,7 +218,9 @@ jobs:
         shell: bash -el {0}
         timeout-minutes: 40
         run: |
-          conda run -n sage-backend bash -c "cd backend && pytest -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
+          # --durations=20：只报告不改变行为。输出最慢 20 个测试到 job log，
+          # 为后续按目录分片（shard）提供依据 —— loadfile 下总时长由最慢文件决定
+          conda run -n sage-backend bash -c "cd backend && pytest -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80 --durations=20"
 
       - name: Pytest hex serial (latency-sensitive file)
         shell: bash -el {0}
@@ -282,7 +285,9 @@ jobs:
         # 显形为红 job，需给足真实运行时长（≥10.2 min，上限留一倍余量）。
         timeout-minutes: 20
         run: |
-          conda run -n sage-backend bash -c "cd backend && API_MODE=legacy pytest --no-cov -q -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py"
+          # --durations=20：报告用埋点，与 hex 步骤对齐（legacy 实测 ~14 min，
+          # 已接近关键路径，同样需要分片依据）
+          conda run -n sage-backend bash -c "cd backend && API_MODE=legacy pytest --no-cov -q -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --durations=20"
 
   # ========== Dependency audit: read-only npm + Python reports ==========
   # This job intentionally does not mutate package manifests or fix findings.
