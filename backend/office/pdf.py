@@ -228,12 +228,22 @@ def read_pdf(
         for page_num in range(len(doc)):
             page = doc[page_num]
             text = page.get_text()
+            # P4-A (office-p4a): 扫描/纯图页 OCR 兜底 —— 仅 SAGE_OCR=1 且
+            # pytesseract+tesseract 可用时触发；否则保持原（空）文本。
+            ocr_used = False
+            from .ocr import ocr_page_if_needed
+
+            ocr_text = ocr_page_if_needed(page, text)
+            if ocr_text is not None:
+                text = ocr_text
+                ocr_used = True
             pages.append(
                 PdfPageContent(
                     page_number=page_num + 1,
                     text=text,
                     tables=_extract_page_tables(page, page_number=page_num + 1),
                     images=[],
+                    ocr=ocr_used,
                 )
             )
         metadata: Dict = dict(doc.metadata) if doc.metadata else {}

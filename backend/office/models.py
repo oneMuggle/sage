@@ -1222,6 +1222,9 @@ class PdfPageContent(BaseModel):
     text: str
     tables: List[List[List[str]]] = Field(default_factory=list)
     images: List[Dict[str, Any]] = Field(default_factory=list)
+    # P4-A (office-p4a): 该页文本是否来自 OCR 兜底（SAGE_OCR=1 且 pytesseract
+    # 可用时，扫描/纯图页触发）。additive 字段，前端/摘要可安全忽略。
+    ocr: bool = Field(default=False, description="文本来自 OCR 兜底（扫描页）")
 
 
 class PdfReadResult(BaseModel):
