@@ -43,6 +43,7 @@ from backend.orchestration.topology import (
     downstream_closure,
     find_cycle,
 )
+from backend.services.usage_tracker import set_current_task_id
 
 logger = logging.getLogger(__name__)
 
@@ -759,6 +760,9 @@ class ChatDispatcher:
                 state.status = "running"
                 state.started_at = time.time()
                 self._emit_task_status(state)
+                # RT23 (round23): 设置任务归因 ContextVar —— 子代理执行期间
+                # LLM 用量自动携带 task_id（ContextVar 随 asyncio 任务传播）。
+                set_current_task_id(state.task_id)
                 # 让其他子任务也有机会 emit running,保证 queued/running/done 三阶段序
                 await asyncio.sleep(0)
                 # RV1 (round8): 已完成任务回放 —— 计划条目带 preset_output
@@ -817,6 +821,8 @@ class ChatDispatcher:
                     self._check_run_budget()
                     # BU11 (round21): 墙钟守门 —— run 整体时长超限同款收口。
                     self._check_run_wall_clock()
+                    # RT23 (round23): 清除任务归因 ContextVar。
+                    set_current_task_id(None)
 
         # P1 拓扑调度 (spec 2026-08-21): 依 depends_on 分波执行。
         # - 波内 asyncio.gather 全并行（信号量限流不变）
@@ -1244,30 +1250,6 @@ class ChatDispatcher:
                     used,
                     budget,
                 )
-
-    def _check_run_wall_clock(self) -> None:
-        """BU11 (round21): run 级墙钟守门 —— 超限时触发与预算同款收口。
-
-        预算键 ``OrchSettings.run_wall_clock_limit_min``（分钟，0 = 关闭）。
-        窗口 = 首次派发起的墙钟时长（每个任务都正常也可能整体跑飞，token
-        预算管不住这种失控形态）。触发后经 ``_cancelled`` 传播收口；任务级
-        归因 ``wall_clock_exceeded: …``（先于用户取消判断，避免误归因）。
-        """
-        limit_min = getattr(self.settings, "run_wall_clock_limit_min", 0)
-        if limit_min <= 0 or self._wall_clock_exceeded:
-            return
-        if not self._first_dispatch_at:
-            return
-        elapsed_ms = int(time.time() * 1000) - int(self._first_dispatch_at * 1000)
-        if elapsed_ms >= limit_min * 60_000:
-            self._wall_clock_exceeded = True
-            self._wall_clock_limit_min = limit_min
-            logger.warning(
-                "run %s 触发墙钟上限：%d 分钟，剩余任务停止派发",
-                self.run_id,
-                limit_min,
-            )
-            self._cancelled.set()
 
     def _check_run_wall_clock(self) -> None:
         """BU11 (round21): run 级墙钟守门 —— 超限时触发与预算同款收口。
