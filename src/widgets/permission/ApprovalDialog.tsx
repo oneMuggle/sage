@@ -21,7 +21,9 @@ import { toast } from 'sonner';
 import { usePermissionState } from '../../entities/permission/permissionState';
 import type { PermissionRequest } from '../../shared/api';
 import { invoke } from '../../shared/api/desktopInvoke';
+import { projectApi } from '../../shared/api/projectApi';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 import { ShikiCodeBlock } from '../chat/ShikiCodeBlock';
 
 /** permissions_answer 应答体（HTTP 恒 200，ok 字段区分成败） */
@@ -47,6 +49,7 @@ export function ApprovalDialog() {
   const { t } = useI18n();
   const currentRequest = usePermissionState((s) => s.currentRequest);
   const resolve = usePermissionState((s) => s.resolve);
+  const workspacePath = useCurrentWorkspace();
   const [remember, setRemember] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -97,6 +100,47 @@ export function ApprovalDialog() {
       );
     } finally {
       // 无论 ok/error 都关闭 — 理由见文件头注
+      resolve();
+    }
+  };
+
+  /**
+   * Phase 3.3: "项目级允许"按钮 —— 将目标路径加入当前项目的 allowed_paths，
+   * 然后批准请求。规则生成：目录路径追加 `/**`，文件路径原样添加。
+   */
+  const handleProjectAllow = async (): Promise<void> => {
+    if (submitting || !currentRequest?.target_path || !workspacePath) return;
+    setSubmitting(true);
+    try {
+      // 查找当前工作区对应的项目
+      const projects = await projectApi.list();
+      const project = projects.find((p) => p.path === workspacePath);
+      if (!project) {
+        toast.error(t('permission.project_allow.no_project'));
+        return;
+      }
+      // 生成规则：目录加 /**，文件原样
+      const targetPath = currentRequest.target_path;
+      const rule = targetPath.endsWith('/') || !targetPath.includes('.')
+        ? `${targetPath.replace(/\/$/, '')}/**`
+        : targetPath;
+      // 追加到现有规则（去重）
+      const existingRules = project.allowedPaths ?? [];
+      if (existingRules.includes(rule)) {
+        // 已存在，直接批准
+        await answer(true);
+        return;
+      }
+      const newRules = [...existingRules, rule];
+      await projectApi.updateAllowedPaths(project.id, newRules);
+      toast.success(t('permission.project_allow.added').replace('{rule}', rule));
+      // 批准请求
+      await answer(true);
+    } catch (err) {
+      toast.error(
+        `${t('permission.project_allow.failed')}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
       resolve();
     }
   };
@@ -200,25 +244,42 @@ export function ApprovalDialog() {
             {t('permission.remember')}
           </label>
 
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              data-testid="permission-deny"
-              disabled={submitting}
-              onClick={() => void answer(false)}
-              className="px-3 py-1.5 text-xs border border-border rounded text-text-secondary hover:text-text hover:bg-bg-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {t('permission.deny')}
-            </button>
-            <button
-              type="button"
-              data-testid="permission-approve"
-              disabled={submitting}
-              onClick={() => void answer(true)}
-              className="px-3 py-1.5 text-xs bg-primary text-text-inverse rounded hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {t('permission.approve')}
-            </button>
+          <div className="flex justify-between gap-2 pt-1">
+            {/* Phase 3.3: "项目级允许"按钮 —— 仅当有 target_path 且有活跃工作区时显示 */}
+            {currentRequest.target_path && workspacePath ? (
+              <button
+                type="button"
+                data-testid="permission-project-allow"
+                disabled={submitting}
+                onClick={() => void handleProjectAllow()}
+                className="px-3 py-1.5 text-xs border border-primary/40 text-primary rounded hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={t('permission.project_allow.tooltip')}
+              >
+                {t('permission.project_allow.button')}
+              </button>
+            ) : (
+              <span /> // 占位，保持右侧按钮对齐
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                data-testid="permission-deny"
+                disabled={submitting}
+                onClick={() => void answer(false)}
+                className="px-3 py-1.5 text-xs border border-border rounded text-text-secondary hover:text-text hover:bg-bg-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {t('permission.deny')}
+              </button>
+              <button
+                type="button"
+                data-testid="permission-approve"
+                disabled={submitting}
+                onClick={() => void answer(true)}
+                className="px-3 py-1.5 text-xs bg-primary text-text-inverse rounded hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {t('permission.approve')}
+              </button>
+            </div>
           </div>
         </div>
       </div>

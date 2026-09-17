@@ -97,7 +97,27 @@ export interface SavedOfficeFile {
   savedPath: string;
 }
 
+export type OfficeStagingStatus =
+  | 'completed'
+  | 'active'
+  | 'recent'
+  | 'review'
+  | 'untracked'
+  | 'unreadable';
+export interface OfficeStagingReport {
+  readOnly: true;
+  truncated: boolean;
+  items: Array<{
+    documentId: string;
+    docType: OfficeDocType;
+    status: OfficeStagingStatus;
+    createdAt?: number;
+  }>;
+}
+
 export interface OfficeElectronApiBridge {
+  /** Read-only evidence, not deletion authorization; optional for old desktop builds. */
+  previewStaging?: (workspacePath: string) => Promise<OfficeStagingReport>;
   /** Legacy Phase 1.3 channels — kept for compat with the /office page UI. */
   pickOfficeFile: (docType: OfficeDocType) => Promise<PickedOfficeFile | null>;
   pickSavePath: (defaultName: string) => Promise<string | null>;
@@ -121,8 +141,8 @@ export interface OfficeElectronApiBridge {
   /** Discard an import; the staged file is deleted. Idempotent on unknown tokens. */
   discardOfficeImport: (importToken: string) => Promise<void>;
   /**
-   * Sweep orphan staging directories not present in `knownDocIds`.
-   * Returns the count of directories removed.
+   * Deprecated no-op. Renderer document lists cannot establish orphanhood.
+   * Always returns swept=0; use previewStaging for read-only evidence.
    */
   sweepOrphanStaging: (opts: {
     workspacePath: string;
@@ -250,37 +270,6 @@ export interface UpdateElectronApiBridge {
   checkWith: (providerId: string, channel?: string) => Promise<CheckResult | null>;
 }
 
-/**
- * Memory bridge exposed at `window.electronAPI.memory`. Task 1 wired the
- * IPC commands; Task 2 (Gap B) types the shape and lands the Settings UI
- * toggle that calls `getAutoMemory` / `setAutoMemory`. The remaining 3
- * methods (`findByTurn`, `getProfile`, `getSummary`) type-stub for T5/T6.
- */
-export interface MemoryElectronApiBridge {
-  search: (args: { query: string; type?: string }) => Promise<unknown>;
-  save: (args: { content: string; importance?: number; category?: string }) => Promise<unknown>;
-  list: (args: { page?: number; page_size?: number; type?: string }) => Promise<unknown>;
-  delete: (args: { memory_id: string }) => Promise<unknown>;
-  /** GET /api/v1/preferences/auto_memory → "true" | "false" | null (default True). */
-  getAutoMemory: () => Promise<unknown>;
-  /** PUT /api/v1/preferences/auto_memory with body { value: boolean }. */
-  setAutoMemory: (args: { value: boolean }) => Promise<unknown>;
-  /** Important-2 — GET /api/v1/preferences/memory_retrieval → "true" | "false" | null (default True). */
-  getMemoryRetrieval: () => Promise<unknown>;
-  /** Important-2 — PUT /api/v1/preferences/memory_retrieval with body { value: boolean }. */
-  setMemoryRetrieval: (args: { value: boolean }) => Promise<unknown>;
-  findByTurn: (args: { turn_id: string }) => Promise<unknown>;
-  getProfile: () => Promise<unknown>;
-  getSummary: (args: { session_id: string }) => Promise<unknown>;
-  /**
-   * Task 6 — subscribe to backend memory_written SSE events (via main relay).
-   * The callback receives the raw JSON string payload of each SSE event.
-   * Resolves to an unsubscribe function, or `null` when the relay could not
-   * be established (caller should fall back to polling).
-   */
-  subscribe: (callback: (event: unknown) => void) => Promise<(() => void) | null>;
-}
-
 export interface ElectronAPI {
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
@@ -302,6 +291,9 @@ export interface ElectronAPI {
   sageFile?: {
     registerRoot: (path: string) => Promise<boolean>;
     unregisterRoot: (path: string) => Promise<boolean>;
+    // P22 (2026-09-17): 项目级 allowed_paths 注册 —— 与工作区根 OR-组合。
+    registerAllowedPaths: (projectId: string, paths: string[]) => Promise<void>;
+    unregisterAllowedPaths: (projectId: string) => Promise<boolean>;
   };
   /**
    * Streaming callers (wiki chat / wiki ingest) pass `options.streamId`
@@ -320,7 +312,6 @@ export interface ElectronAPI {
   journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;
   providers: ProvidersElectronApiBridge;
-  /**
   /**
    * Task 10 (2026-09-11): Diagnostic export bridge for LLM trace bundles.
    * Two methods — exportBundle (native save dialog → zip) and preview

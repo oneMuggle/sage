@@ -7,6 +7,7 @@ Claude Code 项目 → 会话归属）。路由面刻意保持最小：
 - ``POST /projects``                     登记目录（validate_workspace 校验，幂等）
 - ``DELETE /projects/{project_id}``      从清单移除（不动磁盘与会话）
 - ``POST /projects/{project_id}/open``   打开项目：复用最近会话或新建并绑定
+- ``POST /projects/{project_id}/sessions`` 项目下显式新建绑定会话
 - ``GET  /projects/{project_id}/sessions`` 项目下未归档会话（新→旧）
 
 会话与目录的归属复用 ``session_workspace_bindings`` 活跃绑定（见
@@ -22,14 +23,17 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.compat.win7.pydantic_compat import ConfigDict
+
 from backend.data.project_repo import (
     Project,
     ProjectNotFoundError,
     ProjectPathMissingError,
     ProjectRepository,
+    create_session_for_project,
     open_project,
 )
 from backend.office.errors import OfficePathError
+from backend.office.models import _constrained_list
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +43,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 class ProjectRegisterRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     path: str = Field(min_length=1, max_length=1024)
+    allowed_paths: Optional[_constrained_list(str, max_length=50)] = Field(default=None)
 
 
 class ProjectModel(BaseModel):
@@ -50,6 +55,7 @@ class ProjectModel(BaseModel):
     last_opened_at: int
     session_count: int = 0
     last_session_id: Optional[str] = None
+    allowed_paths: List[str] = Field(default_factory=list)
 
 
 class ProjectListResponse(BaseModel):
@@ -72,6 +78,17 @@ class ProjectOpenResponse(BaseModel):
 class ProjectSessionsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     sessions: List[Dict[str, Any]]
+
+
+class ProjectAllowedPathsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    allowed_paths: _constrained_list(str, max_length=50) = Field(...)
+
+
+class ProjectAllowedPathsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    allowed_paths: List[str]
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
@@ -100,11 +117,42 @@ def list_projects() -> ProjectListResponse:
 @router.post("", response_model=ProjectModel)
 def register_project(request: ProjectRegisterRequest) -> ProjectModel:
     try:
-        project = ProjectRepository().register(request.path)
+        project = ProjectRepository().register(
+            request.path,
+            allowed_paths=request.allowed_paths,
+        )
     except OfficePathError as exc:
         raise _error(400, "invalid_workspace_path", "项目路径无效或目录不存在") from exc
     stats = ProjectRepository().session_stats()
     return _with_stats(project, stats)
+
+
+@router.put("/{project_id}/allowed-paths", response_model=ProjectAllowedPathsResponse)
+def update_project_allowed_paths(
+    project_id: str,
+    request: ProjectAllowedPathsRequest,
+) -> ProjectAllowedPathsResponse:
+    """更新项目的额外允许访问路径规则列表。
+
+    2026-09-17 allowed_paths 扩展: 用户可以在前端项目详情面板管理
+    项目的允许访问路径（除 workspace 内的文件之外）。
+
+    Raises:
+        404 ``project_not_found``: 项目 ID 不存在
+    """
+    repo = ProjectRepository()
+    project = repo.get(project_id)
+    if project is None:
+        raise _error(404, "project_not_found", "项目不存在")
+
+    updated = repo.update_allowed_paths(project_id, request.allowed_paths)
+    if not updated:
+        raise _error(404, "project_not_found", "项目不存在")
+
+    return ProjectAllowedPathsResponse(
+        id=project_id,
+        allowed_paths=request.allowed_paths,
+    )
 
 
 @router.delete("/{project_id}", response_model=ProjectMutationResponse)
@@ -133,6 +181,28 @@ def open_project_route(project_id: str) -> ProjectOpenResponse:
         project=_with_stats(project, stats),
         session=session.to_dict(),
         created=created,
+    )
+
+
+@router.post("/{project_id}/sessions", response_model=ProjectOpenResponse)
+def create_project_session_route(project_id: str) -> ProjectOpenResponse:
+    """项目下显式新建绑定会话（前端项目行 hover「新建会话」按钮）。
+
+    2026-09 修复: 前端 ``projects_create_session`` 一直 POST 本路由,
+    后端从未注册 → 405 Method Not Allowed, 按钮每次点击都报错。
+    响应复用 ProjectOpenResponse (project/session/created), created 恒 true。
+    """
+    try:
+        project, session = create_session_for_project(project_id)
+    except ProjectNotFoundError as exc:
+        raise _error(404, "project_not_found", "项目不存在") from exc
+    except ProjectPathMissingError as exc:
+        raise _error(410, "project_path_missing", "项目目录不存在或已被移动") from exc
+    stats = ProjectRepository().session_stats()
+    return ProjectOpenResponse(
+        project=_with_stats(project, stats),
+        session=session.to_dict(),
+        created=True,
     )
 
 

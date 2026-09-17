@@ -181,36 +181,6 @@ def _segment_for_index(text: Optional[str]) -> str:
     return " ".join(w.strip() for w in jieba.cut_for_search(text) if w.strip())
 
 
-def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
-    """Add source_turn_id / source_message_id / memory_category columns and
-    supporting indexes to ``memories_episodic``.
-
-    win7 承载：main 的 memory 子系统已改走 summary/consolidation 表，不再
-    调用本迁移；但 win7 的 memory/episodic.py 仍写这三列，且存量库早于
-    这些列存在。幂等，可在每次 init_db 调用。
-    """
-    cur = db.execute("PRAGMA table_info(memories_episodic)")
-    existing_cols = {row[1] for row in cur.fetchall()}
-    new_cols = {
-        "source_turn_id": "TEXT",
-        "source_message_id": "TEXT",
-        "memory_category": "TEXT",
-    }
-    for col, typedef in new_cols.items():
-        if col not in existing_cols:
-            db.execute(f"ALTER TABLE memories_episodic ADD COLUMN {col} {typedef}")
-            logger.info("migration: added memories_episodic.%s", col)
-    db.execute(
-        "CREATE INDEX IF NOT EXISTS idx_mem_episodic_session_turn "
-        "ON memories_episodic(session_id, source_turn_id)"
-    )
-    db.execute(
-        "CREATE INDEX IF NOT EXISTS idx_mem_episodic_category "
-        "ON memories_episodic(memory_category)"
-    )
-    db.commit()
-
-
 def _warm_jieba() -> None:
     """§1.2 修复：模块导入时预热 jieba 词典，避免首次 FTS 写入冷启动 500ms+。
 
@@ -370,14 +340,7 @@ class Database:
         self._conn_proxy: Optional[_LockedConnection] = None
 
     def get_connection(self) -> sqlite3.Connection:
-        """获取数据库连接 (B2: 返回加锁代理, 全部 SQLite 访问共享 _SQLITE_LOCK)
-
-        代理与 ``self._connection`` 按身份绑定: 测试会直接替换 ``_connection``
-        注入 mock 连接 (如 evolution hooks 的故障注入), 身份变化时重建代理,
-        避免拿到包着旧真实连接的过期代理。(win7 保留)
-        """
-        if self._conn_proxy is not None and self._conn_proxy._conn is not self._connection:
-            self._conn_proxy = None
+        """获取数据库连接 (B2: 返回加锁代理, 全部 SQLite 访问共享 _SQLITE_LOCK)"""
         if self._connection is None:
             self._connection = sqlite3.connect(self.db_path, check_same_thread=False)
             self._connection.row_factory = sqlite3.Row
@@ -395,7 +358,6 @@ class Database:
             # 生产 DB（data/sage.db）始终保持 synchronous=FULL（默认值）。
             if os.environ.get("SAGE_TEST_FAST_SQLITE") == "1":
                 self._connection.execute("PRAGMA synchronous=OFF")
-        if self._conn_proxy is None:
             self._conn_proxy = _LockedConnection(self._connection)
         assert self._conn_proxy is not None
         return self._conn_proxy
@@ -515,6 +477,10 @@ class Database:
                 tool_calls TEXT,
                 tool_call_id TEXT,
                 reasoning_content TEXT,
+                -- 2026-09 step-by-step: 同一 session 内 assistant 行的步序号（从 0 开始）。
+                -- 单步 run → step_index=0；多步 run → 每个 ReAct 迭代产生一行 step_index=N。
+                -- user/tool 行 step_index=NULL。
+                step_index INTEGER,
                 created_at INTEGER NOT NULL,
                 latency_ms INTEGER,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
@@ -526,6 +492,10 @@ class Database:
         columns = [row["name"] for row in cursor.fetchall()]
         if "reasoning_content" not in columns:
             cursor.execute("ALTER TABLE messages ADD COLUMN reasoning_content TEXT")
+            conn.commit()
+        # 2026-09 step-by-step: 老库加 step_index 列；已有 assistant 行 NULL → 历史视图按 0 处理。
+        if "step_index" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN step_index INTEGER")
             conn.commit()
 
         # 会话摘要表（批次三 step 3，spec §4.3）
@@ -595,9 +565,6 @@ class Database:
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
             )
         """)
-
-        # win7-only（Task 4 / Gap A）：补 source_turn_id 等三列，见 _migrate_memory_traceability。
-        _migrate_memory_traceability(conn)
 
         # 技能定义不再由 SQLite ``skills`` 表承载。
         # 当前实现从 SkillRegistry / SKILL.md 文件加载；故新数据库不得创建
@@ -786,6 +753,12 @@ class Database:
         _projects_columns = {row["name"] for row in cursor.fetchall()}
         if "intent" not in _projects_columns:
             cursor.execute("ALTER TABLE projects ADD COLUMN intent TEXT")
+        # Allowed paths (2026-09-17): 项目级额外允许访问的路径规则。JSON 数组
+        # 存储通配符路径字符串（如 "~/Documents/**"）。默认空数组 '[]'。
+        if "allowed_paths" not in _projects_columns:
+            cursor.execute(
+                "ALTER TABLE projects ADD COLUMN allowed_paths TEXT DEFAULT '[]'"
+            )
         conn.commit()
 
         # Office self-check history (round-3 Office parity, N4). Every
