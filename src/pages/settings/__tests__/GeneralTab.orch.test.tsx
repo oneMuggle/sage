@@ -74,7 +74,7 @@ beforeEach(() => {
 });
 
 describe('GeneralTab 编排 section', () => {
-  it('渲染 6 个编排数值输入（含子代理迭代上限）', () => {
+  it('渲染 9 个编排数值输入（含迭代/预算/墙钟/超时/重派链）', () => {
     renderTab();
     expect(screen.getByTestId('orch-max-concurrent')).toBeInTheDocument();
     expect(screen.getByTestId('orch-max-aggregate')).toBeInTheDocument();
@@ -167,6 +167,73 @@ describe('GeneralTab — Run token 预算 (BU4)', () => {
         runTokenBudget: 200000,
         maxConcurrentSubagents: 4, // 保留其余键（部分更新契约）
       }),
+    });
+  });
+});
+
+// ============================================================================
+// RD15 (round25): 墙钟上限 / 单任务超时 / 重派链上限 —— 后端守门键透出设置页
+// ============================================================================
+
+describe('GeneralTab — 编排守门键透出 (RD15)', () => {
+  it('三个新输入默认值与后端 OrchSettings 对齐', () => {
+    renderTab();
+    expect(
+      (screen.getByTestId('orch-run-wall-clock-limit') as HTMLInputElement).value,
+    ).toBe('0');
+    expect(
+      (screen.getByTestId('orch-subagent-task-timeout') as HTMLInputElement).value,
+    ).toBe('900');
+    expect(
+      (screen.getByTestId('orch-max-retry-of-chains') as HTMLInputElement).value,
+    ).toBe('10');
+  });
+
+  it('墙钟上限修改走部分更新契约', () => {
+    const updateSettings = vi.fn();
+    vi.mocked(useSettings).mockReturnValue({
+      settings: { ...DEFAULT_SETTINGS, orch: { ...DEFAULT_SETTINGS.orch } },
+      isLoading: false,
+      loadSettings: vi.fn().mockResolvedValue(undefined),
+      updateSettings,
+      resetSettings: vi.fn(),
+    });
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-run-wall-clock-limit'), {
+      target: { value: '45' },
+    });
+    expect(updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({
+        runWallClockLimitMinutes: 45,
+        maxRetryOfChains: 10, // 保留其余键（部分更新契约）
+      }),
+    });
+  });
+
+  it('单任务超时与重派链上限修改走部分更新契约', () => {
+    const updateSettings = vi.fn();
+    vi.mocked(useSettings).mockReturnValue({
+      settings: { ...DEFAULT_SETTINGS, orch: { ...DEFAULT_SETTINGS.orch } },
+      isLoading: false,
+      loadSettings: vi.fn().mockResolvedValue(undefined),
+      updateSettings,
+      resetSettings: vi.fn(),
+    });
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-subagent-task-timeout'), {
+      target: { value: '300' },
+    });
+    expect(updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({ subagentTaskTimeoutS: 300 }),
+    });
+
+    fireEvent.change(screen.getByTestId('orch-max-retry-of-chains'), {
+      target: { value: '5' },
+    });
+    expect(updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({ maxRetryOfChains: 5 }),
     });
   });
 });
