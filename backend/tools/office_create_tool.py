@@ -583,6 +583,33 @@ class OfficeCreateTool(BaseTool):
                                         "description": "偶数页页脚文本",
                                         "properties": {"text": {"type": "string"}},
                                     },
+                                    "figure_index": {
+                                        "type": "object",
+                                        "description": (
+                                            "word 可选：插图目录（TOF 域 "
+                                            r'TOC \c "图"，收录 SEQ 题注段）。'
+                                            "生成后经 Word COM 刷新域得真页码"
+                                            "（office_create 带 refresh_toc 或 "
+                                            "office_refresh_toc）。heading_text "
+                                            "自定义标题，默认'图目录'。"
+                                        ),
+                                        "properties": {
+                                            "heading_text": {"type": "string"},
+                                            "placeholder_text": {"type": "string"},
+                                        },
+                                    },
+                                    "table_index": {
+                                        "type": "object",
+                                        "description": (
+                                            r"word 可选：表格目录（TOC \c "
+                                            '"表"，收录 SEQ 题注段），其余同 '
+                                            "figure_index；默认标题'表目录'。"
+                                        ),
+                                        "properties": {
+                                            "heading_text": {"type": "string"},
+                                            "placeholder_text": {"type": "string"},
+                                        },
+                                    },
                                     "bibliography": {
                                         "type": "object",
                                         "description": (

@@ -51,6 +51,10 @@ triggers: []
 （N 为 0-based 段落下标，该段起进入 NEW_PAGE 新节并应用新页面设置，
 可再切回竖版）。组合示例："第 3 章整章横排放资金明细宽表，其余章节竖版"。
 
+期刊/正式报告要插图清单/表格清单时，`format_spec` 加 `figure_index` /
+`table_index`（各占一页，收录全部 SEQ 题注；生成时带 `refresh_toc: true`
+即可一并刷出真页码）。
+
 ### 4. 生成或修订 docx
 
 - 新文档 → `office_create`（doc_type=word），带 format_spec / 题注 /

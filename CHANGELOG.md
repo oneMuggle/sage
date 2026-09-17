@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 42：图目录/表目录（TOF 域 + SEQ 题注升级）**（方案 `docs/plans/2026-09-18_r42-caption-index-plan.md`）
+
+### Added(office)
+- **题注编号 SEQ 域化**：add_caption 的"图N/表N"编号改为 SEQ 复杂域（缓存编号显示不变）——Word 语义上成为可收录的题注条目，python-docx 回读文本与 lint 规则零改动
+- **`figure_index` / `table_index`**（format_spec 新增，WordIndexSpec）：插入图/表目录 TOF 域（`TOC \c`），缓存条目按正文编号顺序预收集（无题注不占号口径一致），各占一页；生成时带 `refresh_toc: true` 或事后 office_refresh_toc/office_update 刷新即得真页码
+- **COM 刷新扩展**：TOC 之外追加 Fields.Update（SEQ 重编号 + TOF 收录一次完成），纯 TOF 文档也落盘
+- **lint 兼容**：目录/图目录缓存行不再误判为题注重复（fldChar begin/end 之间的缓存段跳过 caption/sequence 规则）
+
 > 📝 **Word 写作能力 Round 41：office_update 修订后 TOC 刷新**（方案 `docs/plans/2026-09-18_r41-update-toc-refresh-plan.md`）
 
 ### Added(office)

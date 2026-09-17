@@ -933,6 +933,15 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
 
             apply_format_spec(doc, req.format_spec)
 
+        # Round 42：分桶前置——图目录条目预收集（目录段）与正文插图
+        # 共用同一 images_by_position/trailing_images，保证编号一致。
+        inline_images, trailing_images = _partition_images(
+            req.images, len(req.paragraphs)
+        )
+        images_by_position: Dict[int, List[Any]] = {}
+        for image in inline_images:
+            images_by_position.setdefault(image.after_paragraph or 0, []).append(image)
+
         # Title
         doc.add_heading(req.title, level=0)
 
@@ -962,6 +971,41 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                         toc_headings.append((level, text))
 
             insert_toc_field(doc, req.format_spec.toc, toc_headings)
+
+        # ── Round 42：图目录/表目录（TOC \c 收录 SEQ 题注） ──────────────
+        # 条目按正文编号顺序预收集（无题注不占号——与正文 figure_no/
+        # table_no 同一守卫），缓存行"图N　标题"无页码（COM/渲染器更新
+        # 域后得真页码）；各自独占页（域后分页，同目录域惯例）。
+        if req.format_spec is not None and (
+            req.format_spec.figure_index is not None
+            or req.format_spec.table_index is not None
+        ):
+            from .word_layout import insert_tof_field
+
+            if req.format_spec.figure_index is not None:
+                figure_entries: List[Tuple[int, str]] = []
+                _fig_no = 0
+                for pi in range(len(req.paragraphs)):
+                    for image in images_by_position.get(pi, []):
+                        if getattr(image, "caption", None):
+                            _fig_no += 1
+                            figure_entries.append((_fig_no, image.caption))
+                for image in trailing_images:
+                    if getattr(image, "caption", None):
+                        _fig_no += 1
+                        figure_entries.append((_fig_no, image.caption))
+                insert_tof_field(
+                    doc, req.format_spec.figure_index, "图", figure_entries
+                )
+            if req.format_spec.table_index is not None:
+                table_entries = [
+                    (_i + 1, table_spec.caption)
+                    for _i, table_spec in enumerate(req.tables)
+                    if table_spec.caption
+                ]
+                insert_tof_field(
+                    doc, req.format_spec.table_index, "表", table_entries
+                )
 
         # ── Round 33：首页不同页眉页脚 ────────────────────────────────────
         # 启用后首页使用独立的页眉/页脚（封面页场景）；正文从第 2 页起
@@ -1014,13 +1058,6 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # Round 20：counters 扩到 5 级（h4/h5 编号）。
         heading_counters = [0, 0, 0, 0, 0]
         numbering = bool(req.format_spec.numbering) if req.format_spec else False
-        inline_images, trailing_images = _partition_images(
-            req.images, len(req.paragraphs)
-        )
-        images_by_position: Dict[int, List[Any]] = {}
-        for image in inline_images:
-            images_by_position.setdefault(image.after_paragraph or 0, []).append(image)
-
         # ── Round 26：横排分节（section_breaks 按 start_paragraph 排序） ───
         pending_breaks: List[Any] = sorted(
             (req.format_spec.section_breaks if req.format_spec else []) or [],
