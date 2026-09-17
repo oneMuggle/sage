@@ -206,6 +206,8 @@ export const en: Record<TranslationKey, string> = {
   'settings.network.creds.metrics.escalated': 'escalated',
   'settings.network.creds.metrics.avg': 'avg',
   'settings.network.creds.metrics.hint': 'In-memory, reset on restart',
+  'settings.network.creds.metrics.refresh': 'Refresh',
+  'settings.network.creds.metrics.reset': 'Reset',
   'settings.network.creds.confirm': 'Delete credentials for this site? This cannot be undone.',
   'settings.network.creds.plaintext': 'plaintext',
   'settings.network.creds.profile': 'source',

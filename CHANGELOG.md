@@ -18,6 +18,12 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+> 🌐 **网页访问能力优化 Round 18：web_search 纳入 per-host 指标 + 指标 UI 刷新/重置**（方案 `docs/plans/2026-09-18_web-access-optimization-round18.md`）
+
+### Changed(web-access)
+- **搜索指标（S1）**：WebSearchTool 串行路径逐引擎埋点——伪域 `search:<engine>`，请求成功即 ok（0 条结果按 Round 9 口径仍 ok）、异常记 fail；并行聚合模式暂不埋点（串行为默认路径）
+- **指标 UI（U1）**：设置页指标区块加"刷新"与"重置"（PUT /web-access/metrics/reset）按钮
+
 > 🌐 **网页访问能力优化 Round 16：设置页展示 per-host 出网指标**（方案 `docs/plans/2026-09-17_web-access-optimization-round16.md`）
 
 ### Added(web-access)
