@@ -88,7 +88,8 @@ export type PptEditKind =
   | 'set_slide_title'
   | 'set_slide_bullets'
   | 'set_slide_notes'
-  | 'append_slide';
+  | 'append_slide'
+  | 'add_picture';
 
 interface ComposeState {
   // op-kind selectors (default per type keeps the batch-2 single-op UX)
@@ -160,6 +161,11 @@ interface ComposeState {
   // ppt append_slide
   appendTitle: string;
   appendNotes: string;
+  // ppt add_picture
+  pictureIndex: string;
+  picturePath: string;
+  pictureWidth: string;
+  pictureHeight: string;
 }
 
 const INITIAL_COMPOSE: ComposeState = {
@@ -213,6 +219,10 @@ const INITIAL_COMPOSE: ComposeState = {
   notesText: '',
   appendTitle: '',
   appendNotes: '',
+  pictureIndex: '1',
+  picturePath: '',
+  pictureWidth: '',
+  pictureHeight: '',
 };
 
 /** 非空行列表 — textarea 多行输入 → string[]（去首尾空白、丢空行）。 */
@@ -376,6 +386,18 @@ export function buildUpdateOps(
       if (!title && !bullets.length && !notes) return null;
       const op: OfficeUpdateOp = { op: 'append_slide', title, bullets };
       if (notes) op.notes = notes;
+      return [op];
+    }
+    if (state.pptKind === 'add_picture') {
+      const image = state.picturePath.trim();
+      if (!image) return null;
+      const slideIndex = Number(state.pictureIndex || '1');
+      if (!Number.isInteger(slideIndex) || slideIndex < 1) return null;
+      const op: OfficeUpdateOp = { op: 'add_picture', index: slideIndex - 1, path: image };
+      const w = Number(state.pictureWidth.trim());
+      const h = Number(state.pictureHeight.trim());
+      if (state.pictureWidth.trim() && Number.isFinite(w) && w > 0) op.width_inches = w;
+      if (state.pictureHeight.trim() && Number.isFinite(h) && h > 0) op.height_inches = h;
       return [op];
     }
     const n = Number(state.slideNumber);
@@ -1206,6 +1228,7 @@ export function OfficeEditPreviewDialog({
                     <option value="set_slide_bullets">{t('office.edit.kindSetBullets')}</option>
                     <option value="set_slide_notes">{t('office.edit.kindSetNotes')}</option>
                     <option value="append_slide">{t('office.edit.kindAppendSlide')}</option>
+                    <option value="add_picture">{t('office.edit.kindAddPicture')}</option>
                   </select>
                 </div>
                 {compose.pptKind === 'append_slide' ? (
@@ -1245,6 +1268,65 @@ export function OfficeEditPreviewDialog({
                         className={inputClass}
                         data-testid="office-edit-append-notes"
                       />
+                    </div>
+                  </>
+                ) : compose.pptKind === 'add_picture' ? (
+                  <>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.pptSlideNumber')}
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={compose.pictureIndex}
+                        onChange={(e) => setField('pictureIndex')(e.target.value)}
+                        className={inputClass}
+                        data-testid="office-edit-picture-index"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">
+                        {t('office.edit.imagePath')}
+                      </label>
+                      <input
+                        type="text"
+                        value={compose.picturePath}
+                        onChange={(e) => setField('picturePath')(e.target.value)}
+                        placeholder={t('office.edit.imagePathPlaceholder')}
+                        className={inputClass}
+                        data-testid="office-edit-picture-path"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.imageWidth')}
+                        </label>
+                        <input
+                          type="number"
+                          min={0.1}
+                          step={0.1}
+                          value={compose.pictureWidth}
+                          onChange={(e) => setField('pictureWidth')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-picture-width"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted mb-1">
+                          {t('office.edit.imageHeight')}
+                        </label>
+                        <input
+                          type="number"
+                          min={0.1}
+                          step={0.1}
+                          value={compose.pictureHeight}
+                          onChange={(e) => setField('pictureHeight')(e.target.value)}
+                          className={inputClass}
+                          data-testid="office-edit-picture-height"
+                        />
+                      </div>
                     </div>
                   </>
                 ) : (
