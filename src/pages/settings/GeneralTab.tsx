@@ -515,6 +515,30 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
           value={settings.orch.runTokenBudget}
           onChange={(v) => updateSettings({ orch: { ...settings.orch, runTokenBudget: v } })}
         />
+        {/* RD15 (round25): round21 BU11 / round8 O2 / round22 RD14 后端守门键
+            透出设置页——后端有闸门、用户找得到旋钮。 */}
+        <NumberField
+          label="Run 墙钟上限（分钟，0=不限）"
+          dataTestId="orch-run-wall-clock-limit"
+          value={settings.orch.runWallClockLimitMinutes}
+          onChange={(v) =>
+            updateSettings({ orch: { ...settings.orch, runWallClockLimitMinutes: v } })
+          }
+        />
+        <NumberField
+          label="单子任务超时（秒，0=不限）"
+          dataTestId="orch-subagent-task-timeout"
+          value={settings.orch.subagentTaskTimeoutS}
+          onChange={(v) =>
+            updateSettings({ orch: { ...settings.orch, subagentTaskTimeoutS: v } })
+          }
+        />
+        <NumberField
+          label="重派链上限（次）"
+          dataTestId="orch-max-retry-of-chains"
+          value={settings.orch.maxRetryOfChains}
+          onChange={(v) => updateSettings({ orch: { ...settings.orch, maxRetryOfChains: v } })}
+        />
         <SettingRow
           label="子代理自动批准非危险工具"
           desc="编排子代理遇到需审批的工具时,自动放行非危险调用;破坏性/可疑命令与工作区越界仍弹窗确认"
