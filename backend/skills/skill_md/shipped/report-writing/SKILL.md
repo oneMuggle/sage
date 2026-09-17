@@ -46,6 +46,11 @@ triggers: []
 `style: "three_line"` + `caption`；表头行加 `header_style: true` 得
 加粗+浅灰底+居中的表头样式）。
 
+宽表/财务附表排不下 A4 竖版时，用分节横排：`format_spec.section_breaks`
+声明 `{"start_paragraph": N, "page_setup": {"orientation": "landscape"}}`
+（N 为 0-based 段落下标，该段起进入 NEW_PAGE 新节并应用新页面设置，
+可再切回竖版）。组合示例："第 3 章整章横排放资金明细宽表，其余章节竖版"。
+
 ### 4. 生成或修订 docx
 
 - 新文档 → `office_create`（doc_type=word），带 format_spec / 题注 /

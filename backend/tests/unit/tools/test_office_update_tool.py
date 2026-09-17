@@ -90,7 +90,7 @@ def test_schema_has_no_workspace_path_parameter():
     props = _tool().schema.parameters["properties"]
     assert "workspace_path" not in props
     # dry_run: round-2 R4 只读预览开关（默认 false，不传即走正式编辑路径）
-    assert set(props) == {"doc_id", "file_path", "ops", "dry_run"}
+    assert set(props) == {"doc_id", "file_path", "ops", "dry_run", "refresh_toc"}
 
 
 # ── 参数校验 ──────────────────────────────────────────────────────────
@@ -277,3 +277,144 @@ def test_update_by_path_outside_workspace_root_rejected(tmp_path: Path):
     )
     assert result.success is False
     assert result.error.startswith("path_outside_workspace")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Round 41: refresh_toc 修订后刷新目录域
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _fake_refresh(recorder, *, ok=True, toc_count=2, error=None):
+    from backend.office.toc_refresh import TocRefreshResult
+
+    def _refresh(path, workspace):
+        recorder.append((path, workspace))
+        return TocRefreshResult(ok=ok, toc_count=toc_count, error=error)
+
+    return _refresh
+
+
+def test_update_doc_id_refresh_toc_attaches_summary(tmp_path: Path):
+    """受管 doc_id 修订 + refresh_toc：摘要附加且不泄漏受管绝对路径。"""
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-1")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-1", str(work), now_ms=1)
+    from docx import Document
+
+    doc_file = work / "office" / "word" / "doc-a"
+    doc_file.mkdir(parents=True)
+    d = Document()
+    d.add_paragraph("旧文本")
+    d.save(str(doc_file / "doc-a.docx"))
+    save_document(conn, _make_doc(doc_id="doc-a", workspace_path=binding.workspace_path))
+
+    calls = []
+    with patch("backend.tools.office_update_tool.get_database", return_value=db), patch(
+        "backend.office.toc_refresh.refresh_toc_page_numbers",
+        _fake_refresh(calls, toc_count=2),
+    ):
+        token = set_tool_context(_ctx("sess-1", binding.generation))
+        try:
+            result = _tool().execute(
+                doc_id="doc-a",
+                ops=[{"op": "replace_text", "find": "旧文本", "replace": "新文本"}],
+                refresh_toc=True,
+            )
+        finally:
+            reset_tool_context(token)
+
+    assert result.success is True
+    assert result.content["toc_refresh"] == {"ok": True, "toc_count": 2}
+    assert len(calls) == 1
+    assert calls[0][0] == doc_file / "doc-a.docx"
+    assert "workspace" not in str(result.content) or str(work) not in str(result.content)
+
+
+def test_update_doc_id_refresh_toc_degrades_gracefully(tmp_path: Path):
+    """COM 不可用 → 修订保持 success=True，附加降级 error。"""
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-1")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-1", str(work), now_ms=1)
+    from docx import Document
+
+    doc_file = work / "office" / "word" / "doc-b"
+    doc_file.mkdir(parents=True)
+    d = Document()
+    d.add_paragraph("正文")
+    d.save(str(doc_file / "doc-b.docx"))
+    save_document(conn, _make_doc(doc_id="doc-b", workspace_path=binding.workspace_path))
+
+    with patch("backend.tools.office_update_tool.get_database", return_value=db), patch(
+        "backend.office.toc_refresh.refresh_toc_page_numbers",
+        _fake_refresh([], ok=False, toc_count=0, error="Word COM 不可用（未安装 pywin32）"),
+    ):
+        token = set_tool_context(_ctx("sess-1", binding.generation))
+        try:
+            result = _tool().execute(
+                doc_id="doc-b",
+                ops=[{"op": "replace_text", "find": "正文", "replace": "新正文"}],
+                refresh_toc=True,
+            )
+        finally:
+            reset_tool_context(token)
+
+    assert result.success is True
+    assert result.content["toc_refresh"]["ok"] is False
+    assert "pywin32" in result.content["toc_refresh"]["error"]
+
+
+def test_update_by_path_refresh_toc_word_success(tmp_path: Path):
+    from docx import Document
+
+    target = tmp_path / "报告.docx"
+    d = Document()
+    d.add_paragraph("一段")
+    d.save(str(target))
+
+    calls = []
+    with patch(
+        "backend.office.toc_refresh.refresh_toc_page_numbers",
+        _fake_refresh(calls, toc_count=1),
+    ):
+        result = _tool().execute(
+            file_path=str(target),
+            ops=[{"op": "replace_text", "find": "一段", "replace": "二段"}],
+            refresh_toc=True,
+        )
+
+    assert result.success is True
+    assert result.content["toc_refresh"] == {"ok": True, "toc_count": 1}
+    assert calls[0][0] == target
+    # 无绑定 → 回退文件父目录
+    assert calls[0][1] == tmp_path
+
+
+def test_update_by_path_refresh_toc_rejects_non_word_upfront(tmp_path: Path):
+    """非 word + refresh_toc：upfront 拒绝——修订不应发生。"""
+    from openpyxl import Workbook
+
+    target = tmp_path / "报表.xlsx"
+    wb = Workbook()
+    wb.active.title = "数据"
+    wb.save(str(target))
+
+    result = _tool().execute(
+        file_path=str(target),
+        ops=[{"op": "append_rows", "sheet": "数据", "rows": [["a", "1"]]}],
+        refresh_toc=True,
+    )
+
+    assert result.success is False
+    assert "refresh_toc_only_supported_for_word" in (result.error or "")
+    # upfront 守卫：ops 未执行
+    from backend.office.excel import read_xlsx
+
+    assert read_xlsx(target, workspace_path="").sheets[0].rows == []
