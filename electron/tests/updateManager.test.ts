@@ -1596,3 +1596,167 @@ it('rollback reaches local recovery while telemetry never settles (audit #17)', 
     });
   });
 });
+
+
+interface UpdateStateLike {
+  pendingUpdate?: { sha512?: string } | null;
+  cachedRollbackPackage?: { path?: string; sha512?: string } | null;
+}
+
+describe('UpdateManager — 内置 provider 签名校验 + 下载完整性 (2026-09 修复)', () => {
+  beforeEach(async () => {
+    await fs.mkdir(mockUserData, { recursive: true });
+    await fs.rm(`${mockUserData}/update-state.json`, { force: true });
+    await fs.rm(`${mockUserData}/update-config.json`, { force: true });
+    await fs.writeFile(
+      `${mockUserData}/update-config.json`,
+      JSON.stringify({
+        updateStrategy: 'manual',
+        channel: 'stable',
+        rollbackWindowDays: 7,
+        autoRollbackThreshold: 3,
+        checkIntervalHours: 24,
+        updateServerUrl: 'https://updates.sage.app',
+        enableTelemetry: false,
+        cacheRetentionDays: 30,
+      }),
+    );
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await fs.rm(mockUserData, { recursive: true, force: true });
+  });
+
+  /** 构造带注入 provider 的 UpdateManager: registry.build 返回受控 fake
+   * (id 固定 __builtin__ —— 命中 storeCfg=null 的内置回退校验分支) */
+  async function createProviderManager(buildImpl: () => unknown) {
+    const { UpdateManager: Fresh } = await import('../updateManager');
+    const fakeStore = {
+      list: async () => [
+        {
+          id: 'user-fake',
+          type: 'generic-http',
+          displayName: 'User fake',
+          enabled: true,
+          isDefault: true,
+          createdAt: '',
+          updatedAt: '',
+          config: {},
+        },
+      ],
+      get: async () => null,
+    };
+    const fakeRegistry = { build: vi.fn(buildImpl) };
+    const manager = new Fresh({
+      providerStore: fakeStore as never,
+      providerRegistry: fakeRegistry as never,
+    });
+    await manager.init();
+    return { manager, fakeRegistry };
+  }
+
+  async function updateManagerState(manager: unknown): Promise<UpdateStateLike> {
+    const { StateManager } = await import('../updateState');
+    void manager;
+    return new StateManager().getState() as Promise<UpdateStateLike>;
+  }
+
+  function makeRelease(signature?: string) {
+    return {
+      version: '9.9.9',
+      channel: 'stable',
+      publishedAt: new Date().toISOString(),
+      assets: [
+        {
+          id: 'asset-1',
+          name: 'Sage-Setup-9.9.9.exe',
+          size: 11,
+          downloadUrl: 'https://updates.sage.app/dl/Sage-Setup-9.9.9.exe',
+          signature,
+        },
+      ],
+    };
+  }
+
+  async function makeInstallerFile(): Promise<{ filePath: string; bytes: Buffer }> {
+    const bytes = Buffer.from('SAGE-FAKE-INSTALLER-BYTES');
+    const filePath = path.join(mockUserData, 'dl-cache', 'Sage-Setup-9.9.9.exe');
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, bytes);
+    return { filePath, bytes };
+  }
+
+  it('内置 provider: verifyArtifact 以 BUILTIN publicKey 调用, 下载物入 userData 管理目录且 sha512 落账', async () => {
+    const { filePath, bytes } = await makeInstallerFile();
+    const verifyArtifact = vi.fn().mockResolvedValue(true);
+    const fakeProvider = {
+      type: 'generic-http',
+      id: '__builtin__',
+      displayName: 'Fake builtin',
+      channels: [],
+      checkForUpdates: vi.fn().mockResolvedValue(makeRelease('sig-data')),
+      downloadAsset: vi.fn().mockResolvedValue(filePath),
+      verifyArtifact,
+      ping: vi.fn(),
+    };
+    const { manager } = await createProviderManager(() => fakeProvider);
+    await manager.checkForUpdates();
+
+    await manager.downloadUpdate();
+
+    expect(verifyArtifact).toHaveBeenCalledTimes(1);
+    const [, , usedKey] = verifyArtifact.mock.calls[0];
+    expect(usedKey).toContain('BEGIN PUBLIC KEY');
+
+    const state = await updateManagerState(manager);
+    expect(state.pendingUpdate?.sha512).toBe(
+      crypto.createHash('sha512').update(bytes).digest('hex'),
+    );
+    expect(state.cachedRollbackPackage?.path).toContain('update-cache');
+    expect(state.cachedRollbackPackage?.path).toContain('Sage-Setup-9.9.9.exe');
+    // 必须落在 userData 下 (reinstallFromPackage 的 containment 校验前提)
+    expect(path.resolve(state.cachedRollbackPackage?.path ?? '')).toContain(
+      path.resolve(mockUserData),
+    );
+  });
+
+  it('内置 provider: 签名校验失败 → 下载被拒绝', async () => {
+    const { filePath } = await makeInstallerFile();
+    const fakeProvider = {
+      type: 'generic-http',
+      id: '__builtin__',
+      displayName: 'Fake builtin',
+      channels: [],
+      checkForUpdates: vi.fn().mockResolvedValue(makeRelease('sig-data')),
+      downloadAsset: vi.fn().mockResolvedValue(filePath),
+      verifyArtifact: vi.fn().mockResolvedValue(false),
+      ping: vi.fn(),
+    };
+    const { manager } = await createProviderManager(() => fakeProvider);
+    await manager.checkForUpdates();
+
+    await expect(manager.downloadUpdate()).rejects.toThrow(/Signature verification failed/);
+  });
+
+  it('内置 provider: 缺签名且 requireArtifactSignature=true → 直接拒绝', async () => {
+    const { filePath } = await makeInstallerFile();
+    const release = makeRelease(undefined);
+    const fakeProvider = {
+      type: 'generic-http',
+      id: '__builtin__',
+      displayName: 'Fake builtin',
+      channels: [],
+      checkForUpdates: vi.fn().mockResolvedValue(release),
+      downloadAsset: vi.fn().mockResolvedValue(filePath),
+      verifyArtifact: vi.fn(),
+      ping: vi.fn(),
+    };
+    const { manager } = await createProviderManager(() => fakeProvider);
+    await manager.checkForUpdates();
+
+    await expect(manager.downloadUpdate()).rejects.toThrow(/no signature/);
+    expect(fakeProvider.verifyArtifact).not.toHaveBeenCalled();
+  });
+});
