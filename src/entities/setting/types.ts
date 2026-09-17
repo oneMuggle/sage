@@ -99,7 +99,16 @@ export interface OrchSettings {
   subagentApprovalMode: 'ask' | 'auto';
   // BU4 (round11/14): run 级 token 预算（该 run 首次派发起，本 session 累计
   // total_tokens 上限）。0 = 关闭。超限后剩余任务收口、后续派发被拒。
-  runTokenBudget: number; // 0 // 'ask'
+  runTokenBudget: number; // 0
+  // BU11 (round21): run 级墙钟上限（分钟）。0 = 关闭。与 token 预算互补——
+  // 管住"每个任务都正常但整体跑飞"的失控形态。
+  runWallClockLimitMinutes: number; // 0
+  // O2 (round8): 单个子任务 wall-clock 超时（秒）。0 = 关闭。超时任务强制
+  // 终止置 failed（error 前缀 task_timeout:），下游依赖级联收口。
+  subagentTaskTimeoutS: number; // 900
+  // RD14 (round22): retry_of 重派链上限——同一任务被连续重派超过 N 次后
+  // 拒绝再次重派，防失败计划 rerun 无限循环。
+  maxRetryOfChains: number; // 10
 }
 
 /** All application settings */
@@ -188,6 +197,9 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   worktreeIsolation: false,
   subagentApprovalMode: 'ask',
   runTokenBudget: 0,
+  runWallClockLimitMinutes: 0,
+  subagentTaskTimeoutS: 900,
+  maxRetryOfChains: 10,
 };
 
 /** Sensible defaults for all settings */
