@@ -212,7 +212,12 @@ export const useStore = create<StoreState>((set, _get) => ({
 
     try {
       set({ isLoading: true });
-      const loadedMessages = await invoke<Message[]>('get_messages', { sessionId });
+      // 2026-09 修复: 缺省 limit=100 会把长会话截断在前 100 条且无翻页
+      // 补偿 —— 与 fork/export/compact 的全量读取同口径 (仓库内既有实践)。
+      const loadedMessages = await invoke<Message[]>('get_messages', {
+        sessionId,
+        limit: 100000,
+      });
       set((state) => {
         const isLatestRequest = messageLoadGenerations.get(sessionId) === generation;
         if (!isLatestRequest || state.currentSessionId !== sessionId) {
