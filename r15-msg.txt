@@ -1,0 +1,7 @@
+feat(web-access): Round 15——per-host 出网指标 + 渲染 net 块
+
+- M1：backend/tools/web_metrics.py——线程安全 per-host 滚动指标（每域名 deque 100 条、全局 LRU 200 域名、进程内递增序号定 LRU 序），异常全静默
+- M2：web_fetch execute 成功/各失败路径 + download_tool attempt 出口/成功埋点；render_page 结果补 net.elapsed_ms（与 web_fetch net 口径对齐，不进缓存）
+- M3：GET /api/v1/web-access/metrics + PUT /web-access/metrics/reset（Origin 守卫同口径；经 _metrics_snapshot 可 monkeypatch）
+- 方案：docs/plans/2026-09-17_web-access-optimization-round15.md
+- 测试：web_metrics 5 例 + metrics 端点 4 例；本地回归 209 passed；ruff/py38 过
