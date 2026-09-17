@@ -99,7 +99,6 @@ async function syncAllowedPathsToMain(
   try {
     await api.registerAllowedPaths(projectId, [...paths]);
   } catch (err) {
-    // eslint-disable-next-line no-console -- best-effort 同步, 不阻断主流程
     console.warn('[projectApi] sync allowed_paths to main failed', { projectId, err });
   }
 }
@@ -111,7 +110,6 @@ async function unregisterAllowedPathsFromMain(projectId: string): Promise<void> 
   try {
     await api.unregisterAllowedPaths(projectId);
   } catch (err) {
-    // eslint-disable-next-line no-console -- best-effort, 同上
     console.warn('[projectApi] unregister allowed_paths from main failed', { projectId, err });
   }
 }

@@ -16,14 +16,14 @@ from pathlib import Path
 import pytest
 
 from backend.data.project_repo import ProjectRepository
-from backend.tools.context import ToolExecutionContext, set_tool_context, reset_tool_context
+from backend.tools.context import ToolExecutionContext, reset_tool_context, set_tool_context
 
 
-@pytest.fixture
+@pytest.fixture()
 def repo(tmp_path: Path):
     """每个测试用临时数据库 + repo 实例。"""
-    from backend.data.database import Database
     import backend.data.database as db_module
+    from backend.data.database import Database
 
     test_db = Database(str(tmp_path / "test.db"))
     test_db.init_db()
@@ -113,8 +113,8 @@ class TestFileToolAllowedPathsIntegration:
         self._tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         self._tmp_db.close()
 
-        from backend.data.database import Database
         import backend.data.database as db_module
+        from backend.data.database import Database
 
         test_db = Database(self._tmp_db.name)
         test_db.init_db()
@@ -130,10 +130,10 @@ class TestFileToolAllowedPathsIntegration:
 
     def test_read_file_allowed_via_allowed_paths(self, tmp_path: Path):
         """路径不在 workspace 内但在 allowed_paths → 放行。"""
+        from backend.data.database import get_database
+        from backend.data.session_repo import SessionRepository
         from backend.domain.tool_policy import ToolPolicy
         from backend.office.session_workspace import bind_session_workspace
-        from backend.data.session_repo import SessionRepository
-        from backend.data.database import get_database
         from backend.tools.file_tool import ReadFileTool
 
         workspace = tmp_path / "workspace"
@@ -172,10 +172,10 @@ class TestFileToolAllowedPathsIntegration:
 
     def test_read_file_rejected_when_no_match(self, tmp_path: Path):
         """路径不在 workspace 也不在 allowed_paths → 拒绝。"""
+        from backend.data.database import get_database
+        from backend.data.session_repo import SessionRepository
         from backend.domain.tool_policy import ToolPolicy
         from backend.office.session_workspace import bind_session_workspace
-        from backend.data.session_repo import SessionRepository
-        from backend.data.database import get_database
         from backend.tools.file_tool import ReadFileTool
 
         workspace = tmp_path / "workspace"

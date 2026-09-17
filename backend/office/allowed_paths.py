@@ -49,7 +49,6 @@ def get_session_allowed_paths(session_id: Optional[str]) -> List[str]:
 
     try:
         from backend.data.database import get_database
-        from backend.data.project_repo import ProjectRepository
         from backend.office.session_workspace import get_workspace_binding
 
         conn = get_database().get_connection()
@@ -58,7 +57,6 @@ def get_session_allowed_paths(session_id: Optional[str]) -> List[str]:
             return []
 
         # 通过 workspace_path 查找 project
-        repo = ProjectRepository()
         conn_cursor = conn.execute(
             "SELECT * FROM projects WHERE path = ?", (binding.workspace_path,)
         )
@@ -113,11 +111,7 @@ def is_allowed(
         logger.warning("allowed_paths: 无法解析候选路径 %r: %s", candidate, exc)
         return False
 
-    for rule in allowed_paths:
-        if _matches_rule(candidate_path, rule, project_root):
-            return True
-
-    return False
+    return any(_matches_rule(candidate_path, rule, project_root) for rule in allowed_paths)
 
 
 def _matches_rule(

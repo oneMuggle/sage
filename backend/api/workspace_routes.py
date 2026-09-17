@@ -231,8 +231,8 @@ def _search_allowed_paths(
     if not query or remaining <= 0:
         return []
 
-    from backend.office.allowed_paths import get_session_allowed_paths, _expand_rule
-    from backend.office.workspace_search import WorkspaceSearchResult, _OFFICE_SUFFIXES
+    from backend.office.allowed_paths import _expand_rule, get_session_allowed_paths
+    from backend.office.workspace_search import _OFFICE_SUFFIXES, WorkspaceSearchResult
 
     allowed_paths = get_session_allowed_paths(session_id)
     if not allowed_paths:

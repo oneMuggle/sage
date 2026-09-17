@@ -38,6 +38,7 @@ import { useStore, type Session } from '../../../shared/lib/store';
 import { formatRelativeTime } from '../../../shared/lib/utils';
 import { SiderSection } from '../SiderSection';
 import { TwoStepDelete } from '../TwoStepDelete';
+
 import { AllowedPathsEditor } from './AllowedPathsEditor';
 
 interface ProjectSectionProps {
