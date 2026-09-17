@@ -17,6 +17,7 @@ from unittest.mock import patch
 import pytest
 
 from backend.orchestration.chat_dispatcher import ChatDispatcher
+from backend.orchestration.models import RecoveryPolicy
 from backend.orchestration.orch_settings import OrchSettings
 
 _DUMMY_PROFILE = {"system_prompt": "你是测试子 agent", "tools": []}
@@ -79,6 +80,23 @@ class _BrokenReview(_FakeSageAgent):
 
 def _make_queue():
     return asyncio.Queue()
+
+
+@pytest.fixture(autouse=True)
+def _zero_retry_backoff():
+    """重试退避 RecoveryPolicy.retry_backoff_secs=[5,15,30]s 在单测里是纯等待。
+
+    本文件的失败重试测试各真实等待 20s（5+15），断言只关心重试次数与
+    终态（done/failed/错误聚合），从不关心退避时长。packets 在
+    dispatch() 内构造、读取 dataclass 字段的 default_factory，因此在
+    fixture 里替换该工厂即可全文件生效；测试结束恢复。
+    数据依据：#1037 全量 durations —— 本文件 25.1s + topology 40.1s。
+    """
+    field = RecoveryPolicy.__dataclass_fields__["retry_backoff_secs"]
+    real_factory = field.default_factory
+    field.default_factory = lambda: [0, 0]
+    yield
+    field.default_factory = real_factory
 
 
 def _collect_events(queue: asyncio.Queue, n: int) -> List[dict]:
