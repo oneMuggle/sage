@@ -11,6 +11,7 @@ import {
   type ChatOfficeRef,
   type TaskPlanItem,
 } from '../../shared/api';
+import type { AttachmentEmbedConfig } from '../../shared/api/attachmentRagConfig';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import {
   mapAgentErrorToText,
@@ -268,6 +269,8 @@ export function useChat() {
         /** R23-D2: 聊天图片输入（base64 data URL，≤4 张/单张 5MiB） */
         images?: string[];
         attachmentMediaIds?: string[];
+        /** r67: 附件检索注入配置（opt-in） */
+        attachmentRag?: { embed: AttachmentEmbedConfig; top_k: number } | null;
       },
     ) => {
       const sid = sessionId ?? currentSessionId;
@@ -770,6 +773,7 @@ export function useChat() {
           officeRefs,
           opts?.images,
           opts?.attachmentMediaIds,
+          opts?.attachmentRag,
         );
         // Never let a late subscription overwrite a newer run's handle.
         if (finished || activeStreamRegistry.get(sid) !== streamHandle) {

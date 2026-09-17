@@ -5,6 +5,7 @@
 
 import { clientLogger } from '../log/client';
 
+import type { AttachmentEmbedConfig } from './attachmentRagConfig';
 import { isDemoMode } from './demoFlag';
 import { listen, type UnlistenFn } from './desktopEvent';
 import { invoke } from './desktopInvoke';
@@ -131,6 +132,8 @@ export const chatApi = {
     /** R23-D2: 聊天图片输入（base64 data URL），后端限 4 张/单张 5MiB */
     images?: string[],
     attachmentMediaIds?: string[],
+    /** r67: 附件检索注入配置（opt-in；undefined = 现状全文注入） */
+    attachmentRag?: { embed: AttachmentEmbedConfig; top_k: number } | null,
   ): Promise<{ streamId: string; cancel: () => void }> {
     // 消息原文直传,理由同 chat()。
     if (!handlers || typeof handlers.onEvent !== 'function') {
@@ -183,6 +186,8 @@ export const chatApi = {
       // R23-D2: 聊天图片输入 —— 后端 ChatRequest.images（data URL 列表）
       images: images ?? [],
       attachment_media_ids: attachmentMediaIds ?? [],
+      // r67: 附件检索注入（键已 snake，桥接原样透传）
+      attachment_rag: attachmentRag ?? null,
     });
     const eventName = `chat-stream-${streamId}`;
 
