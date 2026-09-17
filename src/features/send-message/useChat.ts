@@ -271,6 +271,11 @@ export function useChat() {
         attachmentMediaIds?: string[];
         /** r67: 附件检索注入配置（opt-in） */
         attachmentRag?: { embed: AttachmentEmbedConfig; top_k: number } | null;
+        /**
+         * Task 5 (2026-09-17): 上下文重置 —— 后端在本轮消息前插入
+         * topic_separator 并清空 LLM 历史窗口。
+         */
+        contextReset?: boolean;
       },
     ) => {
       const sid = sessionId ?? currentSessionId;
@@ -401,6 +406,8 @@ export function useChat() {
         // PM1 (round8): 计划模式透传（本次 run 只读 + 计划指令）
         planMode: opts?.planMode,
         memoryDisabled: opts?.memoryDisabled,
+        // Task 5 (2026-09-17): 上下文重置 —— "新话题" 按钮触发
+        contextReset: opts?.contextReset,
       };
 
       const appendContent = (next: string): void => {

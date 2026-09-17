@@ -7,6 +7,7 @@ import { BtwOverlay } from '../../features/chat';
 import type { Message as MessageType } from '../../shared/lib/store';
 
 import { Message } from './Message';
+import { TopicSeparator } from './TopicSeparator';
 
 /** U11 (批次 C-3): 尾窗渲染步长 —— "加载更早"每次多显示的条数 */
 const WINDOW_STEP = 60;
@@ -114,22 +115,26 @@ export function MessageList({
             加载更早消息（还有 {hiddenCount} 条）
           </button>
         )}
-        {visible.map((message) => (
-          <Message
-            key={message.id}
-            message={message}
-            knowledgeRefs={knowledgeRefs?.[message.id]}
-            attachments={attachments?.[message.id]}
-            isStreaming={message.id === streamingMessageId}
-            onFork={onFork}
-            onEditResend={onEditResend}
-            onRegenerate={onRegenerate}
-            onDelete={onDelete}
-            onQuote={onQuote}
-            onSaveToMemory={onSaveToMemory}
-            artifactsByToolCall={artifactsByToolCall}
-          />
-        ))}
+        {visible.map((message) =>
+          message.subtype === 'topic_separator' ? (
+            <TopicSeparator key={message.id} content={message.content} />
+          ) : (
+            <Message
+              key={message.id}
+              message={message}
+              knowledgeRefs={knowledgeRefs?.[message.id]}
+              attachments={attachments?.[message.id]}
+              isStreaming={message.id === streamingMessageId}
+              onFork={onFork}
+              onEditResend={onEditResend}
+              onRegenerate={onRegenerate}
+              onDelete={onDelete}
+              onQuote={onQuote}
+              onSaveToMemory={onSaveToMemory}
+              artifactsByToolCall={artifactsByToolCall}
+            />
+          ),
+        )}
       </div>
       <BtwOverlay />
     </>

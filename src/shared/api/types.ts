@@ -140,6 +140,8 @@ export interface Message {
   step_index?: number | null;
   /** alpha.36 (Bug #4): 同一 message 行内携带的 LLM 推理过程（持久化在 DB）。 */
   reasoning_content?: string | null;
+  /** Task 5 (2026-09-17): 消息子类型 —— 'topic_separator' 渲染为分隔线。 */
+  subtype?: string | null;
 }
 
 export interface ToolCall {
@@ -543,6 +545,11 @@ export interface ChatConfig {
   planMode?: boolean;
   // 对标 S2 (2026-09-13): 临时聊天 —— 本轮不注入记忆也不做记忆提取。
   memoryDisabled?: boolean;
+  /**
+   * Task 5 (2026-09-17): 上下文重置标记 —— true 时后端在本轮消息前插入
+   * topic_separator 并清空 LLM 历史窗口，实现"新话题"显式分界。
+   */
+  contextReset?: boolean;
 }
 
 // ==================== Memory 类型定义 ====================

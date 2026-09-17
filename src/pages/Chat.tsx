@@ -370,6 +370,11 @@ export function Chat() {
         orchestrationMode?: string;
         // PM1 (round8): /plan 计划模式 —— 本次 run 只读 + 计划产出。
         planMode?: boolean;
+        /**
+         * Task 5 (2026-09-17): 上下文重置标记 —— "新话题" 按钮触发，
+         * 后端在本轮消息前插入 topic_separator 并清空 LLM 历史窗口。
+         */
+        contextReset?: boolean;
       },
     ) => {
       clearError();
@@ -426,6 +431,8 @@ export function Chat() {
           images,
           attachmentMediaIds,
           attachmentRag,
+          // Task 5 (2026-09-17): 上下文重置 —— "新话题" 按钮触发
+          contextReset: options?.contextReset,
         });
       } else {
         await sendMessage(content, undefined, officeRefs, orchestrationMode, {
@@ -434,6 +441,8 @@ export function Chat() {
           images,
           attachmentMediaIds,
           attachmentRag,
+          // Task 5 (2026-09-17): 上下文重置 —— "新话题" 按钮触发
+          contextReset: options?.contextReset,
         });
       }
     },
