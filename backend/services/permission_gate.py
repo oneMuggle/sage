@@ -60,6 +60,28 @@ _DIFF_PREVIEW_TOOLS = frozenset({"write_file", "edit_file", "apply_patch"})
 MAX_SCRUB_DEPTH = 5
 
 
+#: 从工具参数中提取目标路径的候选键名（按优先级排序）
+_TARGET_PATH_KEYS: Tuple[str, ...] = ("path", "file_path", "target_path", "directory", "file")
+
+
+def extract_target_path(args: Dict[str, Any] | None) -> Optional[str]:
+    """从工具参数中提取目标路径（用于前端"项目级允许"按钮）。
+
+    依次检查常见路径键名，返回第一个非空字符串值。
+    路径必须为绝对路径或含 ``/`` 的相对路径，否则返回 None。
+    """
+    if not isinstance(args, dict):
+        return None
+    for key in _TARGET_PATH_KEYS:
+        value = args.get(key)
+        if isinstance(value, str) and value.strip():
+            candidate = value.strip()
+            # 只接受绝对路径或含目录分隔符的相对路径（避免纯文件名误命中）
+            if candidate.startswith("/") or "/" in candidate or "\\" in candidate:
+                return candidate
+    return None
+
+
 def _scrub_value(value: Any, depth: int) -> Any:
     """递归脱敏：任意深度的 dict/list 里键名命中秘密模式的值 → ``"***"``。
 
@@ -270,6 +292,7 @@ class ApprovalRequest:
     message: str
     created_at: float
     diff_preview: Optional[str] = None
+    target_path: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """流事件 / REST 响应共用的 JSON 形态。"""
@@ -283,6 +306,8 @@ class ApprovalRequest:
         }
         if self.diff_preview:
             payload["diff_preview"] = self.diff_preview
+        if self.target_path:
+            payload["target_path"] = self.target_path
         return payload
 
     @classmethod
@@ -303,6 +328,7 @@ class ApprovalRequest:
             message=message,
             created_at=time.time(),
             diff_preview=build_diff_preview(tool_name, args, workspace_root),
+            target_path=extract_target_path(args),
         )
 
 

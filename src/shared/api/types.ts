@@ -219,6 +219,12 @@ export interface PermissionRequest {
   };
   /** U15: 写类工具的将写入内容 unified diff（无法生成时缺省，回退 args_summary） */
   diff_preview?: string;
+  /**
+   * Phase 3.3 (2026-09-17): 工具参数中提取的目标路径（绝对路径），
+   * 用于前端"项目级允许"按钮 —— 用户可一键将该路径加入 allowed_paths。
+   * 无路径参数时缺省。
+   */
+  target_path?: string;
 }
 
 /** 问题选项 — QuestionDialog 渲染为可选卡片 */
