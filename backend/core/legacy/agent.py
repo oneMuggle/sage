@@ -1374,6 +1374,70 @@ class SageAgent:
                         )
                         continue
 
+                    # L7+: args 非 dict 防御——json.loads 成功但结果是 list/scalar
+                    # 时，后续 tool.execute(**args) 会 TypeError。与 JSON 解析失败
+                    # 同构处理：回传 is_error 工具结果，LLM 可修正重试。
+                    if not isinstance(args, dict):
+                        _type_content = (
+                            f"[参数错误] 工具 {tc.name} 的 arguments 必须是对象(object)，"
+                            f"实际为 {type(args).__name__}。请修正参数后重新调用。"
+                        )
+                        yield AgentEvent(
+                            state=AgentState.OBSERVING,
+                            iteration=i,
+                            tool_call=ToolCallRequest(id=tc.id, name=tc.name, arguments={}),
+                            tool_result=ToolCallResult(
+                                tool_call_id=tc.id,
+                                content=_type_content,
+                                is_error=True,
+                            ),
+                            agent_id=self.agent_id,
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc.id,
+                                "content": _type_content,
+                            }
+                        )
+                        continue
+
+                    # L8: required 参数存在性校验——工具执行前拦截缺失参数,
+                    # 避免 Python TypeError 被 except Exception 捕获后变成不友好的
+                    # [工具错误] execute() missing ... 消息。
+                    # 与 hooks/runner.py:validate_modified_args 同构的轻量检查。
+                    _schema_tool = self.tool_registry.get(tc.name)
+                    if _schema_tool is not None and hasattr(_schema_tool, "schema"):
+                        _schema_required = _schema_tool.schema.parameters.get("required", [])
+                        if isinstance(_schema_required, list):
+                            _missing = [k for k in _schema_required if k not in args]
+                            if _missing:
+                                _missing_content = (
+                                    f"[参数错误] 工具 {tc.name} 缺少必需参数: {_missing}。"
+                                    "请提供这些参数后重新调用。"
+                                )
+                                yield AgentEvent(
+                                    state=AgentState.OBSERVING,
+                                    iteration=i,
+                                    tool_call=ToolCallRequest(
+                                        id=tc.id, name=tc.name, arguments=args
+                                    ),
+                                    tool_result=ToolCallResult(
+                                        tool_call_id=tc.id,
+                                        content=_missing_content,
+                                        is_error=True,
+                                    ),
+                                    agent_id=self.agent_id,
+                                )
+                                messages.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tc.id,
+                                        "content": _missing_content,
+                                    }
+                                )
+                                continue
+
                     # ===== M6 HOOKS BEGIN: pre_tool_use (deny/modify) =====
                     # 用户自定义钩子 (backend/hooks/)。Fail-open: 钩子故障
                     # 永不阻断循环, 仅显式 "deny" 拦截执行; "modify" 经 schema
