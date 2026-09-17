@@ -24,7 +24,7 @@ PROJECT_ROOT = os.path.dirname(
 SAGE_BACKEND_PY = sys.executable
 
 
-@functools.lru_cache(maxsize=None)
+@functools.lru_cache
 def _run_doctor(*args, timeout=30):
     """Invoke ``python -m backend.cli.doctor`` and capture output.
 
@@ -35,6 +35,9 @@ def _run_doctor(*args, timeout=30):
     semantics-preserving and cuts ~15 redundant spawns (~110s) from the CI
     hex step. Pass distinct args (or call .cache_clear()) if a future test
     needs a fresh run.
+
+    Bare ``lru_cache`` (not ``functools.cache``): the latter is 3.9+ and this
+    file must stay importable on the win7 Python 3.8 line.
     """
     cmd = [SAGE_BACKEND_PY, "-m", "backend.cli.doctor"] + list(args)
     return subprocess.run(
