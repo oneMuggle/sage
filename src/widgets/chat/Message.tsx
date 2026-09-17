@@ -348,12 +348,15 @@ function ToolCallTitle({ name, args }: { name: string; args: Record<string, unkn
 /** 工具调用结果可折叠面板 — 大文件内容默认收起，避免刷屏
  *  阈值：超过 300 字符时自动折叠，用户可手动展开查看
  */
-function ToolCallResult({ result }: { result: string }) {
+function ToolCallResult({ result }: { result: unknown }) {
+  const safeResult = typeof result === 'string'
+    ? result
+    : JSON.stringify(result ?? '');
   const [isExpanded, setIsExpanded] = useState(false);
-  const isLarge = result.length > 300;
+  const isLarge = safeResult.length > 300;
 
   if (!isLarge) {
-    return <span className="text-text-primary break-all">{result}</span>;
+    return <span className="text-text-primary break-all">{safeResult}</span>;
   }
 
   return (
@@ -363,11 +366,11 @@ function ToolCallResult({ result }: { result: string }) {
         className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
       >
         {isExpanded ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-        <span>{isExpanded ? '收起' : `展开 (${result.length} 字符)`}</span>
+        <span>{isExpanded ? '收起' : `展开 (${safeResult.length} 字符)`}</span>
       </button>
       {isExpanded && (
         <pre className="mt-1 p-2 bg-bg-subtle border border-border rounded-radius-sm text-[11px] text-text-secondary overflow-x-auto max-h-80 overflow-y-auto whitespace-pre-wrap break-all font-mono">
-          {result}
+          {safeResult}
         </pre>
       )}
     </div>
