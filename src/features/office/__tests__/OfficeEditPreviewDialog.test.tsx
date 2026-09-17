@@ -651,9 +651,12 @@ describe('buildUpdateOps — op composition table', () => {
         imageHeight: '3',
       }),
     ).toEqual([{ op: 'add_image', path: 'images/logo.png', width_inches: 4, height_inches: 3 }]);
+<<<<<<< HEAD
     ).toEqual([
       { op: 'add_image', path: 'images/logo.png', width_inches: 4, height_inches: 3 },
     ]);
+=======
+>>>>>>> b6879791 (feat(office): office-p4c 批次——ppt 插入图片 UI 入口 (#1052))
     expect(
       buildUpdateOps('word', {
         ...base,
