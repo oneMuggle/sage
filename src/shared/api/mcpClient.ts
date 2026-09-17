@@ -28,6 +28,8 @@ export interface McpServerStatusEntry {
   required: boolean;
   /** R53: 已禁用的工具 id 列表 */
   disabled_tools?: string[];
+  /** r65: 是否已 OAuth 授权（不透出 token 本体） */
+  has_oauth_token?: boolean;
 }
 
 export interface McpStatusReport {

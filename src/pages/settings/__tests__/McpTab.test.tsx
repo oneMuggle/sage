@@ -328,6 +328,46 @@ describe('McpTab', () => {
     await waitFor(() => expect(screen.getByTestId('state-badge-alpha')).toBeTruthy());
     expect(screen.queryByTestId('mcp-authorize-alpha')).toBeNull();
   });
+
+  it('r65: has_oauth_token 服务器渲染钥匙角标 + 重新授权文案', async () => {
+    mocks.listServers.mockResolvedValue([
+      {
+        name: 'remote',
+        command: '',
+        url: 'https://mcp.example.com/rpc',
+        args: [],
+        env: {},
+        enabled: true,
+        required: false,
+        timeout_seconds: 30,
+        builtin: false,
+      },
+    ]);
+    mocks.status.mockResolvedValue({
+      ...STATUS,
+      servers: [
+        {
+          name: 'remote',
+          state: 'ready',
+          tool_count: 1,
+          last_error: null,
+          since: 1,
+          required: false,
+          has_oauth_token: true,
+        },
+      ],
+    });
+    render(<McpTab />);
+    await waitFor(() => expect(screen.getByTestId('mcp-oauth-badge-remote')).toBeTruthy());
+    const btn = screen.getByTestId('mcp-authorize-remote');
+    await waitFor(() => expect(btn.textContent).toBe('settings.mcp.authorize.reauthorize'));
+  });
+
+  it('r65: 无 has_oauth_token 时不渲染角标，文案保持授权', async () => {
+    render(<McpTab />);
+    await waitFor(() => expect(screen.getByTestId('state-badge-alpha')).toBeTruthy());
+    expect(screen.queryByTestId('mcp-oauth-badge-alpha')).toBeNull();
+  });
   it('submits an HTTP URL and headers without requiring a command', async () => {
     render(<McpTab />);
     await waitFor(() => expect(mocks.status).toHaveBeenCalled());

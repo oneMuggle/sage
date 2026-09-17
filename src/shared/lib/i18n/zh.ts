@@ -298,6 +298,8 @@ export const zh = {
   'settings.mcp.authorize.success': 'OAuth 授权完成，工具调用将携带新凭据。',
   'settings.mcp.authorize.failed_prefix': '授权失败：',
   'settings.mcp.authorize.hint': '打开浏览器完成 OAuth 登录（仅 HTTP 传输）',
+  'settings.mcp.authorize.badge': '已 OAuth 授权',
+  'settings.mcp.authorize.reauthorize': '重新授权',
 
   // ─── 设置页 · 更新 ────────────────
   'updates.strategy': '更新策略',
