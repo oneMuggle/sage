@@ -189,6 +189,13 @@ def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
     调用本迁移；但 win7 的 memory/episodic.py 仍写这三列，且存量库早于
     这些列存在。幂等，可在每次 init_db 调用。
     """
+    # Check if table exists before attempting migration
+    table_check = db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='memories_episodic'"
+    ).fetchone()
+    if not table_check:
+        return  # Table doesn't exist yet, skip migration
+
     cur = db.execute("PRAGMA table_info(memories_episodic)")
     existing_cols = {row[1] for row in cur.fetchall()}
     new_cols = {
