@@ -737,15 +737,15 @@ _TODO_GUIDANCE_PROMPT = (
 #: LLM 可用的代码执行工具，避免其自我设限。未拿到这些工具的子代理看到文本
 #: 也无工具可调，无副作用。
 _CODE_EXECUTION_CAPABILITY_PROMPT = (
-    '\n\n代码执行：你可以直接执行代码，不要拒绝用户说「我不能执行代码」：\n'
-    '- 执行 Python 代码片段：调用 repl 工具（参数 code），在隔离子进程中运行，'
-    '返回 stdout/stderr/exit_code。适合快速验证、数据处理、算法试验。\n'
-    '- 批量工具调用：调用 execute_code 工具（参数 code），代码内用 '
-    'sage.call(tool_name, **args) 调用其他工具 —— N 次调用只占一次往返，'
-    '适合批量文件处理、多步机械操作。\n'
-    '- 执行 Shell 命令：调用 bash 工具（参数 command），可运行任意命令'
-    '（包括 python <脚本路径> 执行用户指定的代码文件）。\n'
-    '用户贴入代码或指定代码文件时，主动用 repl/bash 执行，不要只解释代码。'
+    "\n\n代码执行：你可以直接执行代码，不要拒绝用户说「我不能执行代码」：\n"
+    "- 执行 Python 代码片段：调用 repl 工具（参数 code），在隔离子进程中运行，"
+    "返回 stdout/stderr/exit_code。适合快速验证、数据处理、算法试验。\n"
+    "- 批量工具调用：调用 execute_code 工具（参数 code），代码内用 "
+    "sage.call(tool_name, **args) 调用其他工具 —— N 次调用只占一次往返，"
+    "适合批量文件处理、多步机械操作。\n"
+    "- 执行 Shell 命令：调用 bash 工具（参数 command），可运行任意命令"
+    "（包括 python <脚本路径> 执行用户指定的代码文件）。\n"
+    "用户贴入代码或指定代码文件时，主动用 repl/bash 执行，不要只解释代码。"
 )
 
 
