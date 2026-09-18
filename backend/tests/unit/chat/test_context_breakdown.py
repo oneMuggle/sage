@@ -1,5 +1,4 @@
-# backend/tests/unit/chat/test_context_breakdown.py
-"""上下文分类明细估算 + provider 实报校准单元测试。"""
+"""上下文分类明细估算 + provider 实报校准单元测试 (backend/chat/context_breakdown.py)。"""
 
 from __future__ import annotations
 
@@ -165,8 +164,7 @@ class TestTrackerPersistence:
     def test_breakdown_roundtrip_and_task_filter(self, monkeypatch):
         import time
 
-        from backend.services.usage_tracker import UsageTracker
-        from backend.services.usage_tracker import current_task_id
+        from backend.services.usage_tracker import UsageTracker, current_task_id
 
         self._patch_db(monkeypatch)
         tracker = UsageTracker()

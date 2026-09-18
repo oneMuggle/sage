@@ -1,5 +1,4 @@
-# backend/chat/context_breakdown.py
-"""上下文分类明细估算 + provider 实报校准。
+"""上下文分类明细估算 + provider 实报校准 (backend/chat/context_breakdown.py)。
 
 ContextMeter 此前只显示 `上一轮 prompt_tokens / 窗口` 一个总数——provider
 不返回 prompt 构成拆分,明细只能在**请求装配完成后、发送前**对最终

@@ -573,12 +573,11 @@ class UsageTracker:
         if row is None:
             return None
         breakdown = None
-        raw_breakdown = row["context_breakdown"] if "context_breakdown" in row.keys() else None
-        if raw_breakdown:
+        if row["context_breakdown"]:
             try:
                 import json as _json
 
-                breakdown = _json.loads(raw_breakdown)
+                breakdown = _json.loads(row["context_breakdown"])
             except (ValueError, TypeError):
                 breakdown = None
         return {
