@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 51：读侧 core properties 回读**（方案 `docs/plans/2026-09-18_r51-read-metadata-plan.md`）
+
+### Added(office)
+- **`read_docx` / `read_xlsx` 回读 `metadata`**（WordMetadataSpec，全空为 None）——R49/R50 写入的文档属性在读取侧可见，Sage 可回答"这篇文档的作者/关键词是什么"；读侧映射与写侧对偶（xlsx creator/description ↔ author/comments）
+
 > 📝 **Word 写作能力 Round 50：Excel core properties 对称支持**（方案 `docs/plans/2026-09-18_r50-excel-metadata-plan.md`）
 
 ### Added(office)
