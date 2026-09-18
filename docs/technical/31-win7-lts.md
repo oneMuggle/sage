@@ -16,20 +16,25 @@
 | WebView  | 无（Electron 自带 Chromium 106）                  |
 | 入口文档 | [`../technical/20-electron.md`](./20-electron.md) |
 
-## 2. 与 main 的关系
+## 2. 与 main 的关系（2026-09 政策更新：对齐优先）
+
+> 旧政策为「win7 仅接受 hotfix、不接受新功能」。实际执行中 win7 自 2026-08 起持续接收功能（office quarantine #1116、workspace 优化 #1114、多浏览器支持 #1123 等），分叉累积已造成同步成本，政策正式改为**对齐优先**。
 
 - **main** 持续迭代，Electron 21.4.4 锁定 + Python 3.10+ 演进
-- **release/win7** 只接受：
-  - 安全修复（Electron 21 已知 CVE 修复不来自官方，由项目评估决定）
-  - Win7 特定 bug 修复
-  - Python 3.8 兼容性微调
-- **不接受**：
-  - 新功能
+- **release/win7** 是 main 的兼容运行通道，**新功能默认需要同步落地 win7**：
+  - 功能在 main 合入前先过「对齐门禁」（见下），使 win7 同步接近零成本
+  - 安全修复、Win7 特定 bug 修复、Python 3.8 兼容性微调照常接收
+- **仍不接受**：
   - 依赖大版本升级（Electron 22+, Python 3.9+）
-  - 性能重构
-  - a11y 改进
+  - 未在设计文档显式标注「**永不进 win7**」就试图绕过同步的功能（先例：[`../plans/2026-09-09_office-code-sandbox-design.md`](../plans/2026-09-09_office-code-sandbox-design.md)）
 
-**同步方式**：单 commit cherry-pick，commit message 加 `(cherry picked from main commit XXX)`。
+### 对齐门禁（main 新功能合入前必须满足）
+
+1. **后端 py3.8 纪律**：禁 PEP 604（`X | None`）/ PEP 585（内建泛型标注）/ `zip(strict=)`，一律 `Optional[X]` / `List[...]` 风格
+2. **前端 / Electron 基线**：Chromium 106 + Node 16 + ES2020（全仓 build target 已是 `es2020`）；超出 Chromium 106 的浏览器能力禁止使用，Win7 有渲染差异的能力（如 `transparent` 窗口依赖 DWM 合成）必须带降级路径
+3. **依赖检查**：新增前端依赖不得要求更高 Chromium；新增后端依赖须有 Python 3.8 可用版本并同步 `backend/requirements-py38.txt`
+
+**同步方式**：main 合入且 CI 绿 → 单 commit cherry-pick 到 `release/win7`，commit message 加 `(cherry picked from main commit XXX)`；无法干净 cherry-pick 时等价重写、验收口径一致。Win7 先行开发的修复/功能同样反向 cherry-pick 到 main 并保留 provenance（先例：2026-09-11 LLM trace 诊断导出）。两分支仍**禁止 merge**（见 `.claude/CLAUDE.md` 操作约束）。
 
 ## 3. Win7 启动验证（人工步骤）
 

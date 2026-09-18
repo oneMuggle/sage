@@ -89,7 +89,7 @@ worktree 内用 `python -m venv .venv` 隔离。
 
 ## 双分支长期共存策略（强制）
 
-项目采用 **main + release/win7 双分支长期共存**架构,两个分支各自独立演进,**严禁删除或合并 release/win7 分支**。
+项目采用 **main + release/win7 双分支长期共存**架构,两分支保持独立(禁止 merge),但代码**对齐优先**——新功能默认同步落地两个分支,以控制分叉成本（政策与对齐门禁详见 [`docs/technical/31-win7-lts.md`](../docs/technical/31-win7-lts.md) §2）。**严禁删除或合并 release/win7 分支**。
 
 ### 分支定位
 
@@ -103,8 +103,8 @@ worktree 内用 `python -m venv .venv` 隔离。
 ### 核心规则
 
 1. **release/win7 分支不可删除**:此分支服务 Windows 7 SP1 用户,直到 2027-12-13 EOL 后方可归档
-2. **不主动合并**:两个分支独立演进,main 的新功能不强制同步到 release/win7;release/win7 的 Win7 特定修复不合并回 main
-3. **按需 cherry-pick**:安全补丁或关键 bug 修复可以 cherry-pick 到另一分支,但需手动解决冲突并测试
+2. **对齐优先**:main 的新功能默认需同步到 release/win7（合入 main 前先过 31-win7-lts.md §2 的对齐门禁）;确实无法同步的功能,须在设计文档显式标注「永不进 win7」。release/win7 的 Win7 特定修复同样反向同步回 main
+3. **同步靠 cherry-pick（双向）**:安全补丁、bug 修复与功能一律 cherry-pick 并保留 `(cherry picked from ...)` provenance,无法干净 cherry-pick 时等价重写、验收口径一致;需手动解决冲突并测试
 4. **依赖版本独立**:
    - main 使用 `backend/requirements.txt`(Python 3.10,pydantic 2.x)
    - release/win7 使用 `backend/requirements-py38.txt`(Python 3.8,pydantic 1.x)
