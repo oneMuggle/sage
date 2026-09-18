@@ -19,6 +19,11 @@ sqlite-vec>=0.1.9
 httpx==0.26.0
 python-multipart==0.0.32  # required for FastAPI File() / Form() in legacy_routes.py; >=0.0.18 fixes PYSEC-2026-1851/1852/3036-3040
 
+# Crypto (Arena account pool — Fernet symmetric encryption for passwords)
+# cryptography 41.0.7 ships cp310 + cp311 wheels on PyPI; 42+/43+ also
+# support 3.10+ but 41.x is the version validated against the full stack.
+cryptography==41.0.7
+
 # Observability
 prometheus-client==0.25.0
 

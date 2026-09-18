@@ -49,6 +49,10 @@ sqlite-vec>=0.1.9
 httpx==0.26.0
 python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
 
+# Crypto (Arena account pool — Fernet symmetric encryption for passwords)
+# cryptography 41.0.7 ships cp311 win_amd64 wheels on PyPI.
+cryptography==41.0.7
+
 # Observability
 prometheus-client==0.25.0
 
