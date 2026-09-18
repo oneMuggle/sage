@@ -552,6 +552,7 @@ function InputCardInner({
         <input
           type="file"
           id="chat-input-file"
+          accept=".txt,.md,.pdf,.docx"
           multiple
           className="hidden"
           onChange={onFileSelect}
