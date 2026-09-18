@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import io
 import json
 import subprocess
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from backend.tools.browser_launcher import (
-    BrowserCapability,
-    BrowserLauncher,
     BrowserType,
     ChromeLauncher,
     FirefoxLauncher,
@@ -45,7 +41,7 @@ def test_chrome_launcher_build_command():
     assert "--proxy-server=http://127.0.0.1:7890" in cmd
     assert cmd[-1] == "about:blank"
 
-    # Headless = False
+    # Verify headful mode does not include headless flag
     cmd_headful = launcher.build_command(
         executable="/usr/bin/chrome",
         headless=False,

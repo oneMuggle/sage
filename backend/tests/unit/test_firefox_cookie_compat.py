@@ -116,12 +116,13 @@ def test_merge_cdp_cookies_handles_firefox_negative_expires():
 
     mock_repo = MagicMock()
     # 模拟已有的 vault entry
+    import json
+
     from backend.tools.credential_vault import (
-        KIND_COOKIE,
         _VAULT_ACCOUNT_PREFIX,
+        KIND_COOKIE,
         encrypt_secret,
     )
-    import json
 
     existing_cookies = [
         {

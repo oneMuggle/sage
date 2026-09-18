@@ -19,7 +19,7 @@ import urllib.request
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -203,9 +203,9 @@ class FirefoxLauncher(BrowserLauncher):
 
 
 def _windows_candidates() -> List[Tuple[BrowserType, Path]]:
-    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
-    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
-    local_appdata = os.environ.get("LocalAppData", "")
+    program_files = os.environ.get("PROGRAMFILES", r"C:\Program Files")
+    program_files_x86 = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
+    local_appdata = os.environ.get("LOCALAPPDATA", "")
     bases = [program_files, program_files_x86, local_appdata]
 
     targets = [
@@ -278,64 +278,63 @@ def _create_capability(b_type: BrowserType, executable: str) -> BrowserCapabilit
     )
 
 
-def discover_and_select() -> Optional[BrowserCapability]:
-    """按优先级顺序发现并选择首选浏览器。
-
-    优先级链：
-    1. 环境变量 SAGE_BROWSER_PATH（最高优先级，向后兼容）
-    2. 环境变量 SAGE_FIREFOX_PATH（Firefox 显式指定）
-    3. Windows / macOS 平台路径或 Linux PATH 中的 Chrome/Edge/Chromium
-    4. 平台路径或 PATH 中的 Firefox
-    """
-    # 1. 显式环境变量 SAGE_BROWSER_PATH
+def _discover_from_env() -> Optional[BrowserCapability]:
     env_browser = os.environ.get("SAGE_BROWSER_PATH")
     if env_browser and Path(env_browser).is_file():
-        b_type = _infer_browser_type(env_browser)
-        return _create_capability(b_type, env_browser)
+        return _create_capability(_infer_browser_type(env_browser), env_browser)
 
-    # 2. 显式环境变量 SAGE_FIREFOX_PATH
     env_firefox = os.environ.get("SAGE_FIREFOX_PATH")
     if env_firefox and Path(env_firefox).is_file():
         return _create_capability(BrowserType.FIREFOX, env_firefox)
+    return None
 
-    # 3. Windows 平台候选
-    if os.name == "nt":
-        candidates = _windows_candidates()
-        # 先找 Chrome / Edge
-        for b_type, path in candidates:
-            if b_type in (BrowserType.CHROME, BrowserType.EDGE) and path.is_file():
-                return _create_capability(b_type, str(path))
-        # 再找 Firefox
-        for b_type, path in candidates:
-            if b_type == BrowserType.FIREFOX and path.is_file():
-                return _create_capability(b_type, str(path))
-        # 兜底查 PATH 中的 firefox / chrome
-        for name in ("chrome", "msedge", "firefox"):
-            found = shutil.which(name)
-            if found:
-                return _create_capability(_infer_browser_type(name), found)
+
+def _discover_windows() -> Optional[BrowserCapability]:
+    if os.name != "nt":
         return None
+    candidates = _windows_candidates()
+    for b_type, path in candidates:
+        if b_type in (BrowserType.CHROME, BrowserType.EDGE) and path.is_file():
+            return _create_capability(b_type, str(path))
+    for b_type, path in candidates:
+        if b_type == BrowserType.FIREFOX and path.is_file():
+            return _create_capability(b_type, str(path))
+    for name in ("chrome", "msedge", "firefox"):
+        found = shutil.which(name)
+        if found:
+            return _create_capability(_infer_browser_type(name), found)
+    return None
 
-    # 4. macOS 平台候选
-    if platform.system() == "Darwin":
-        darwin_candidates = _darwin_candidates()
-        # 先找 Chromium 系
-        for b_type, path in darwin_candidates:
-            if b_type != BrowserType.FIREFOX and path.is_file():
-                return _create_capability(b_type, str(path))
-        # 再找 Firefox
-        for b_type, path in darwin_candidates:
-            if b_type == BrowserType.FIREFOX and path.is_file():
-                return _create_capability(b_type, str(path))
 
-    # 5. Linux / POSIX：先 Chromium 系 PATH，后 Firefox PATH
+def _discover_darwin() -> Optional[BrowserCapability]:
+    if platform.system() != "Darwin":
+        return None
+    candidates = _darwin_candidates()
+    for b_type, path in candidates:
+        if b_type != BrowserType.FIREFOX and path.is_file():
+            return _create_capability(b_type, str(path))
+    for b_type, path in candidates:
+        if b_type == BrowserType.FIREFOX and path.is_file():
+            return _create_capability(b_type, str(path))
+    return None
+
+
+def _discover_path_browsers() -> Optional[BrowserCapability]:
     for b_type, name in _LINUX_CHROME_NAMES:
         found = shutil.which(name)
         if found:
             return _create_capability(b_type, found)
-
     firefox_found = shutil.which("firefox")
     if firefox_found:
         return _create_capability(BrowserType.FIREFOX, firefox_found)
-
     return None
+
+
+def discover_and_select() -> Optional[BrowserCapability]:
+    """按优先级顺序发现并选择首选浏览器。"""
+    return (
+        _discover_from_env()
+        or _discover_windows()
+        or _discover_darwin()
+        or _discover_path_browsers()
+    )
