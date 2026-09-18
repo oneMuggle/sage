@@ -8,6 +8,7 @@ Two-layer strategy:
 Embedding is optional; if embed_fn is None and quick signals miss, returns False.
 """
 from __future__ import annotations
+
 import re
 from typing import Callable, List, Optional, Sequence, Tuple
 
@@ -25,7 +26,7 @@ DEFAULT_SIMILARITY_THRESHOLD = 0.35
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     if not a or not b or len(a) != len(b):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     na = sum(x * x for x in a) ** 0.5
     nb = sum(x * x for x in b) ** 0.5
     if na == 0 or nb == 0:
