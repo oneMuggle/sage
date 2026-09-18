@@ -8,6 +8,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { AgentEvent } from '../../../shared/api/types';
+import { useStore } from '../../../shared/lib/store';
+import { useRightPanelStore } from '../../right-panel/rightPanelStore';
 import {
   selectSessionSlots,
   useChatStreamStore,
@@ -155,5 +157,34 @@ describe('applyOrchestrationEventToBoard — R35', () => {
       false,
     );
     expect(applyOrchestrationEventToBoard(evt({ state: 'done', content: 'x' }), SID)).toBe(false);
+  });
+
+  // right-panel R1 批次 B: artifact_created → 自动唤起守卫接线。
+  it('artifact_created 当前会话且面板关 → 自动展开到产物 Tab', () => {
+    useStore.setState({ currentSessionId: SID });
+    useRightPanelStore.setState({ open: false, tab: 'progress' });
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'artifact_created',
+        artifact: { id: 'a', path: '/p', name: 'n', kind: 'file', size: 1, created_at: 1 },
+      }),
+      SID,
+    );
+    const s = useRightPanelStore.getState();
+    expect(s.open).toBe(true);
+    expect(s.tab).toBe('artifacts');
+  });
+
+  it('artifact_created 后台会话 → 不自动展开', () => {
+    useStore.setState({ currentSessionId: 'sess-viewing-other' });
+    useRightPanelStore.setState({ open: false, tab: 'progress' });
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'artifact_created',
+        artifact: { id: 'a', path: '/p', name: 'n', kind: 'file', size: 1, created_at: 1 },
+      }),
+      SID,
+    );
+    expect(useRightPanelStore.getState().open).toBe(false);
   });
 });

@@ -84,5 +84,22 @@ export function useResizablePanel({
   // P1: 暴露拖拽态 — 面板宽度动画（push 模式 transition-[width]）在拖拽
   // 期间需禁用，否则动画滞后拖垮跟手性（与 useResizableSidebar 同思路）。
   // ref 在 mousedown 置位、mousemove 触发 setWidth 重渲染后读取即为 true。
-  return { width, isDragging: isDraggingRef.current, onMouseDown };
+  //
+  // right-panel R1 批次 D: applyWidth —— 编程式设宽（档位按钮/双击复位/
+  // 键盘微调），clamp 后立即持久化（拖拽路径的"松手才持久化"不适用：
+  // 点击即终值）。
+  const applyWidth = useCallback(
+    (next: number) => {
+      const clamped = Math.min(maxWidth, Math.max(minWidth, next));
+      setWidth(clamped);
+      try {
+        localStorage.setItem(storageKey, String(clamped));
+      } catch {
+        // localStorage 不可用
+      }
+    },
+    [maxWidth, minWidth, storageKey],
+  );
+
+  return { width, isDragging: isDraggingRef.current, onMouseDown, applyWidth };
 }
