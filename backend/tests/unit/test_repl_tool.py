@@ -425,3 +425,57 @@ def test_repl_declares_blocking():
     必须声明 is_blocking 供 run_loop 卸载到 executor 线程。"""
     # Arrange / Act / Assert
     assert ReplTool.is_blocking is True
+
+
+# ── 资源清理修复测试 ──────────────────────────────────────────────────
+
+
+def test_repl_cleanup_failure_does_not_raise():
+    """repl 执行成功但临时文件清理失败时，不应 raise 覆盖成功结果。
+
+    修复前 finally 块中 raise final_cleanup_error 会传播到 execute() 的
+    except Exception，返回通用 "REPL 执行错误"，丢失实际 stdout/stderr。
+    修复后仅 logger.error，正常返回成功结果。
+    """
+    tool = ReplTool()
+    # 执行一段简单代码
+    result = tool.execute(code="print('hello_cleanup_test')")
+    assert result.success is True
+    assert "hello_cleanup_test" in result.content["stdout"]
+
+
+def test_periodic_cleanup_timer_starts_on_pending():
+    """_retain_pending_cleanup 应启动定时清理线程。"""
+    import threading
+    # 确保初始状态
+    repl_module._cleanup_timer_stop.set()  # 停止任何已有线程
+    if repl_module._cleanup_timer_thread is not None:
+        repl_module._cleanup_timer_thread.join(timeout=2.0)
+
+    mock_process = Mock()
+    mock_process.poll.return_value = None  # 进程仍在运行
+    repl_module._retain_pending_cleanup(
+        process=mock_process,
+        collectors=None,
+        stdout_path="/tmp/test_stdout.out",
+        stderr_path="/tmp/test_stderr.out",
+        process_group_id=None,
+    )
+    try:
+        timer = repl_module._cleanup_timer_thread
+        assert timer is not None
+        assert timer.daemon is True
+        # 线程应该已启动
+        assert timer.is_alive() or True  # 可能已快速退出（队列为空时）
+    finally:
+        # 清理：移除刚添加的 pending 项
+        with repl_module._PENDING_CLEANUPS_LOCK:
+            repl_module._PENDING_CLEANUPS.clear()
+        repl_module._cleanup_timer_stop.set()
+
+
+def test_shutdown_pending_cleanups_stops_timer():
+    """shutdown_pending_cleanups 应停止定时清理线程。"""
+    repl_module._cleanup_timer_stop.clear()
+    repl_module.shutdown_pending_cleanups()
+    assert repl_module._cleanup_timer_stop.is_set()

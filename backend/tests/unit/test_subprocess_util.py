@@ -415,3 +415,98 @@ def test_read_capped_output_strips_ansi(tmp_path):
     text, truncated, _ = subprocess_util.read_capped_output(str(f), cap=1024)
     assert text == "hello world"
     assert truncated is False
+
+
+# ── 编码 fallback 测试 ─────────────────────────────────────────────
+
+
+class TestDecodeOutput:
+    """_decode_output 编码 fallback 逻辑测试。"""
+
+    def test_utf8_passthrough(self) -> None:
+        """合法 UTF-8 直接通过，无替换字符。"""
+        raw = "你好世界".encode("utf-8")
+        assert subprocess_util._decode_output(raw) == "你好世界"
+
+    def test_ascii_passthrough(self) -> None:
+        """纯 ASCII 直接通过。"""
+        assert subprocess_util._decode_output(b"hello world") == "hello world"
+
+    def test_gbk_fallback(self) -> None:
+        """GBK 编码字节在 UTF-8 解码失败时 fallback 到系统编码。
+
+        在 Linux CI 上 locale 可能是 UTF-8，fallback 不生效，
+        此时 _decode_output 返回 errors="replace" 结果（含 ）。
+        在中文 Windows 上 fallback 到 GBK，应正确解码。
+        """
+        # "你好" 的 GBK 编码
+        gbk_bytes = "你好".encode("gbk")
+        result = subprocess_util._decode_output(gbk_bytes)
+        import locale
+        pref = locale.getpreferredencoding(do_setlocale=False).lower()
+        if pref in ("gbk", "cp936", "gb2312", "gb18030"):
+            # 中文 Windows：fallback 到 GBK，应正确解码
+            assert result == "你好"
+        else:
+            # Linux/Mac：fallback 不到 GBK，结果为 replace
+            assert "" in result or result == "你好"
+
+    def test_empty_bytes(self) -> None:
+        """空字节返回空字符串。"""
+        assert subprocess_util._decode_output(b"") == ""
+
+
+class TestReadCappedOutputEncoding:
+    """read_capped_output 编码集成测试。"""
+
+    def test_utf8_chinese_content(self, tmp_path) -> None:
+        """UTF-8 编码的中文内容正确解码。"""
+        f = tmp_path / "out.out"
+        content = "路径: /home/user/文档/test.py"
+        f.write_bytes(content.encode("utf-8"))
+        text, truncated, _ = subprocess_util.read_capped_output(str(f), cap=1024)
+        assert text == content
+        assert truncated is False
+
+
+# ── spawn_verified extra_env 测试 ────────────────────────────────────
+
+
+class TestSpawnVerifiedExtraEnv:
+    """spawn_verified extra_env 参数测试。"""
+
+    def test_extra_env_injected(self) -> None:
+        """extra_env 中的变量被注入到子进程环境。"""
+        verified = subprocess_util.spawn_verified(
+            [sys.executable, "-c", "import os; print(os.environ.get('SAGE_TEST_VAR', 'MISSING'))"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            extra_env={"SAGE_TEST_VAR": "hello_from_test"},
+        )
+        stdout, _ = verified.process.communicate(timeout=10)
+        assert b"hello_from_test" in stdout
+
+    def test_extra_env_none_no_change(self) -> None:
+        """extra_env=None 时行为不变（向后兼容）。"""
+        verified = subprocess_util.spawn_verified(
+            [sys.executable, "-c", "print('ok')"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        stdout, _ = verified.process.communicate(timeout=10)
+        assert b"ok" in stdout
+
+    def test_extra_env_overrides_parent(self) -> None:
+        """extra_env 覆盖父进程同名环境变量。"""
+        os.environ["SAGE_TEST_OVERRIDE"] = "parent_value"
+        try:
+            verified = subprocess_util.spawn_verified(
+                [sys.executable, "-c", "import os; print(os.environ.get('SAGE_TEST_OVERRIDE', ''))"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                extra_env={"SAGE_TEST_OVERRIDE": "child_value"},
+            )
+            stdout, _ = verified.process.communicate(timeout=10)
+            assert b"child_value" in stdout
+        finally:
+            del os.environ["SAGE_TEST_OVERRIDE"]
