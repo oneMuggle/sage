@@ -1,4 +1,5 @@
 // src/widgets/chat/artifacts/ArtifactViewer.tsx
+import CodeMirror from '@uiw/react-codemirror';
 import {
   ArrowLeft,
   ClipboardCopy,
@@ -208,6 +209,11 @@ function CsvPreview({ text }: { text: string }) {
 
 export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerProps) {
   const { content, loading, refresh } = useArtifactContent(sessionId, artifact.id);
+  // R3 批次 B: 跟随应用主题（ThemeProvider 同步维护 .dark class，直读
+  // 避免 hook 依赖；主题切换在编辑态挂载后的场景极罕见，不订阅）
+  const themeResolved: 'light' | 'dark' = document.documentElement.classList.contains('dark')
+    ? 'dark'
+    : 'light';
   const [editMode, setEditMode] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [editBaseHash, setEditBaseHash] = useState('');
@@ -339,13 +345,18 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
 
       <div className="flex-1 overflow-auto p-3">
         {editMode ? (
-          <div className="flex flex-col h-full">
-            <textarea
-              className="flex-1 w-full p-2 text-sm font-mono bg-bg-input border border-border rounded resize-none focus:outline-none focus:ring-1 focus:ring-accent"
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              spellCheck={false}
-            />
+          <div className="flex flex-col h-full" data-testid="artifact-edit-codemirror">
+            {/* R3 批次 B: textarea → CodeMirror（行号 + 语法高亮编辑），
+                value/onChange 与乐观并发 hash 保存逻辑完全兼容 */}
+            <div className="flex-1 min-h-0 border border-border rounded overflow-auto bg-bg-input">
+              <CodeMirror
+                value={editContent}
+                height="100%"
+                theme={themeResolved}
+                basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
+                onChange={(value) => setEditContent(value)}
+              />
+            </div>
             {saveError && <div className="mt-2 text-xs text-error">{saveError}</div>}
           </div>
         ) : loading ? (
