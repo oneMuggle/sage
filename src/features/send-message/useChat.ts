@@ -984,7 +984,11 @@ export function useChat() {
             if (applyOrchestrationEventToBoard(evt, sid)) {
               return;
             }
-            // r71: 重接路径同主路径 —— 检索引用明细随消息落库
+            // r77: 重接路径补 memory_used —— 重放时 memory_refs 不丢失（与主路径同口径）
+            if (evt.state === 'memory_used' && evt.memories?.length) {
+              updateMessage(messageId, { memory_refs: evt.memories, memory_applied: evt.memories.length });
+            }
+                        // r71: 重接路径同主路径 —— 检索引用明细随消息落库
             if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
               updateMessage(messageId, { rag_citations: evt.citations });
             }

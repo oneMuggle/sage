@@ -1531,6 +1531,42 @@ describe('useChat taskBoard', () => {
     const user = useStore.getState().messages.find((m) => m.role === 'user');
     expect(user?.activated_skills).toBeUndefined();
   });
+  // r77 回归: 重接(reattach)重放时 memory_used 也要写入 memory_refs,
+  // 与主路径同口径 —— 否则页面刷新后完成的消息丢失记忆明细。
+  it('routes memory_used payload to memory_refs on replay', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-mem' });
+    const memPayload = [{ id: 'mem-1', memory_type: 'long', preview: '命中记忆' }];
+    listenMock.mockImplementationOnce(
+      async (_name: string, cb: (e: { payload: Record<string, unknown> }) => void) => {
+        Promise.resolve().then(() => {
+          cb({
+            payload: {
+              state: 'memory_used',
+              iteration: 0,
+              memories: memPayload,
+            },
+          });
+          cb({ payload: { state: 'done', iteration: 0, content: 'done' } });
+        });
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+    await act(async () => {
+      await result.current.sendMessage('带记忆的提问');
+    });
+
+    await waitFor(() => {
+      const assistant = useStore
+        .getState()
+        .messages.find((m) => m.role === 'assistant');
+      expect(assistant?.memory_refs).toEqual(memPayload);
+      expect(assistant?.memory_applied).toBe(1);
+    });
+  });
 
   it('falls back to statuses-driven progress when no task_progress arrives', async () => {
     seedActiveEndpoint();
