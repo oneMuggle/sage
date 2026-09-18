@@ -2010,6 +2010,21 @@ def _build_memory_used_event(
         return None
 
 
+def _clear_working_segment(agent: Any, session_id: str, segment_id: int) -> None:
+    """清空共享工作记忆中指定段的消息（context-isolation Task 14）。
+
+    **必须经 ``agent.memory_manager`` 取共享实例**：``WorkingMemory`` 是普通类
+    （无单例/``__new__`` 覆盖），``WorkingMemory()`` 构造的是全新的空实例，
+    对它调 ``clear_segment`` 遍历空队列、什么都清不掉（2026-09-18 修复）。
+
+    bare agent（``memory_manager is None``）时静默跳过，不影响主流程。
+    """
+    memory_manager = getattr(agent, "memory_manager", None)
+    if memory_manager is None:
+        return
+    memory_manager.working.clear_segment(session_id, segment_id)
+
+
 @router.post("/chat/stream")
 async def chat_stream_create(data: ChatRequest, request: Request):
     """创建 chat 流 (I2)。
@@ -2979,8 +2994,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     await _run_db_sync(repo.advance_segment, data.session_id)
                     try:
-                        from backend.memory.working import WorkingMemory
-                        WorkingMemory().clear_segment(data.session_id, _old_seg)
+                        _clear_working_segment(agent, data.session_id, _old_seg)
                     except Exception as mem_err:
                         logger.warning("working memory clear_segment failed: %s", mem_err)
 
@@ -3033,8 +3047,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     new_seg = await _run_db_sync(repo.advance_segment, data.session_id)
                     try:
-                        from backend.memory.working import WorkingMemory
-                        WorkingMemory().clear_segment(data.session_id, _old_seg_auto)
+                        _clear_working_segment(agent, data.session_id, _old_seg_auto)
                     except Exception as wm_err:
                         logger.warning("working memory clear_segment (auto) failed: %s", wm_err)
                     history_rows = await _run_db_sync(
