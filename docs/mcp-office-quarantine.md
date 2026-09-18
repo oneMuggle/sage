@@ -15,6 +15,17 @@
 - `backend/tests/unit/office/test_staging_quarantine.py`：20 项安全契约测试。
 - `docs/verification/2026-09-17-office-quarantine.md`：操作手册与判定口径。
 
+## 后续增量（同分支续作）
+
+- **导入租约**（#1101 / #1103，已合并 main 与 release/win7）：识别 Electron 导入 sentinel，
+  见「设计要点」第 2 条；`test_staging_quarantine.py` 增至 25 项。
+- **HTTP API 接入**：`backend/api/office_quarantine_routes.py` 暴露
+  `GET /api/v1/office/quarantine/plan`、`POST .../run`、`GET .../report`、
+  `POST .../{quarantine_id}/restore`，注册于 `backend/main.py`；
+  `backend/tests/integration/test_office_quarantine_routes.py` 26 项路由级测试。
+  **有意不暴露 purge**：永久删除仍只保留 CLI 三重门禁，且有测试断言路由面不含
+  purge/delete/remove 与 DELETE 方法。
+
 ## 设计要点
 
 1. **只读计划**：`plan` 不改任何字节。证据来源在既有只读工具之上扩展为
@@ -43,6 +54,9 @@
    承诺，只是把竞态窗口压到「失败即保留」。
 8. **永久删除三重门禁**：`purge` 需 `--allow-permanent-deletion` + 逐字重打 quarantine id + 已过保留期
    （默认 7 天），且目标必须位于隔离根内。默认全流程零删除，保留期到期也只标记为可人工处理。
+9. **API 层只做输入校验与响应整形**：`office_quarantine_routes.py` 不自行决定谁该被隔离，
+   裁决全部沿用模块（含导入租约与已注册工作区规则）。响应模型 `extra="allow"`，模块新增证据
+   字段不会被 schema 校验吃掉；请求模型 `extra="forbid"`，想象中的安全开关宁可 422 也不静默忽略。
 
 ## 明确边界（未宣称）
 
@@ -51,5 +65,6 @@
   不构成共同原子快照。
 - 不覆盖任意嵌入元数据的全部形态（例如二进制内非 ASCII 编码的 id）、外部备份、快照卷。
 - `no_reference_found` 不是孤儿证明，也不是删除许可；`plan` 输出的 `safe_to_delete` 恒为 false。
-- 未接入 UI 自动调用，未接入定时任务；仅 CLI 与显式人工触发。
+- 已有 CLI 与 HTTP API 两条入口，但**未接入前端 UI、未接入定时任务**：每次执行都需人工显式
+  发起，`run` 的 `dry_run` 默认为 `true`。
 - 真实 Windows 7 系统与安装包回滚验收仍未完成，属发布门禁。
