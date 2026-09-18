@@ -1,5 +1,5 @@
 // src/features/artifacts/useArtifactContent.ts
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 import { readArtifactContent, type ArtifactContent } from './artifactApi';
 
@@ -35,5 +35,15 @@ export function useArtifactContent(sessionId: string, artifactId: string | null)
     };
   }, [sessionId, artifactId]);
 
-  return { content, loading };
+  const refresh = useCallback(async () => {
+    if (!artifactId) return;
+    try {
+      const c = await readArtifactContent(sessionId, artifactId);
+      setContent(c);
+    } catch (e: unknown) {
+      setContent({ ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  }, [sessionId, artifactId]);
+
+  return { content, loading, refresh };
 }

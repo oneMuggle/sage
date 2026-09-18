@@ -205,6 +205,61 @@ describe('relayChatStream (I2: attach to existing stream via GET)', () => {
 });
 
 describe('relayNdjsonToEvent (PR-2 Task 3: wiki_chat_stream relay)', () => {
+  it('preserves structured citations and distinguishes cited evidence from retrieved sources', async () => {
+    const wc = new MockWebContents();
+    const cited = {
+      id: 'S1',
+      path: 'wiki/研究.md',
+      title: '研究',
+      excerpt: '第一行\n第二行',
+      content_hash: 'a'.repeat(64),
+      line_start: 1,
+      line_end: 2,
+    };
+    const uncited = { ...cited, id: 'S2', path: 'wiki/other.md', title: 'Other' };
+    const data = { citations: [cited], sources: [cited, uncited] };
+
+    await relayNdjsonToEvent(
+      makeNdjsonReadable([JSON.stringify({ event: 'done', data })]),
+      'wiki-chat-stream-evidence',
+      wc as unknown as Electron.WebContents,
+      new AbortController().signal,
+    );
+
+    expect(wc.sent).toEqual([
+      { channel: 'sage:event:wiki-chat-stream-evidence-done', payload: data },
+    ]);
+  });
+
+  it('preserves retrieved sources when an answer cites none of them', async () => {
+    const wc = new MockWebContents();
+    const data = {
+      citations: [],
+      sources: [
+        {
+          id: 'S1',
+          path: 'wiki/a.md',
+          title: 'A',
+          excerpt: 'Evidence',
+          content_hash: 'b'.repeat(64),
+          line_start: 3,
+          line_end: 3,
+        },
+      ],
+    };
+
+    await relayNdjsonToEvent(
+      makeNdjsonReadable([JSON.stringify({ event: 'done', data })]),
+      'wiki-chat-stream-uncited',
+      wc as unknown as Electron.WebContents,
+      new AbortController().signal,
+    );
+
+    expect(wc.sent).toEqual([
+      { channel: 'sage:event:wiki-chat-stream-uncited-done', payload: data },
+    ]);
+  });
+
   it('dispatches each NDJSON event to {prefix}-{event} channel with rawEvent.data payload', async () => {
     const wc = new MockWebContents();
     const body = makeNdjsonReadable([

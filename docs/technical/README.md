@@ -50,6 +50,7 @@
 | 55   | [期刊模板子系统](./55-journal-template-subsystem.md) | N1–N8 完整闭环：模板表 + 字段语义 + 多步向导 + 状态机 + 预览/导出 + SKILL 引导 + 持久化 |
 | 56   | [可插拔更新源系统](./56-update-providers.md) | Phase 1–4 完整交付：4 平台 provider（generic-http/github/gitee/gitlab）+ ProviderRegistry/Store/IPC + safeStorage token 加密 + feature flag 全开 + E2E 闭环 |
 | 57   | [LLM 调用诊断包导出](./57-llm-trace-diagnostic-export.md) | 一键导出最近 50 次 LLM 调用为 zip（含 upstream_url / 状态码 / 脱敏 headers）供离线分析 + 10 类 pattern 双层防御 + 512KB body 截断 + Win7 零依赖兼容 |
+| 58   | [项目上下文沉淀 (M3)](./58-project-context-aggregation.md) | description/instructions 元数据 + project_materials 资料表 + context 注入 + save-answer 角色过滤（security MEDIUM fix）+ review HIGH #1/#2/#3 fix（artifact_routes + project_routes 17 个端点 `@with_db_lock` 串行化 + async/sync 双形态 + IntegrityError 防御）|
 | 75   | [项目级文件访问控制（Allowed Paths）](./75-allowed-paths.md) | 额外只读路径规则：`~/**` glob 语法 + 读写分离（读放行、写审批）+ 前端搜索集成（allowed-* 类型）+ 项目级持久化 |
 | 76   | [Word 目录真页码（Word COM 刷新域）](./76-word-toc-page-refresh.md) | R29 静态缓存目录收口：office_refresh_toc 可选通道（Word COM Update TOC + AutomationSecurity 禁宏 + finally 防进程泄漏）+ pywin32 进可选依赖 + writer 白名单/技能可发现化 |
 | 77   | [office_create 一键 TOC 刷新](./77-word-create-toc-refresh.md) | R40 编排收口：refresh_toc 标志双路径接线（受管 doc_id 定位不回显路径 / legacy 围栏回退）+ 降级不毁生成 + rollback 遥测竞态测试修复（搭车） |
