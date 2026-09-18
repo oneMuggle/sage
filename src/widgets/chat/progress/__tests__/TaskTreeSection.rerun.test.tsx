@@ -472,3 +472,128 @@ describe('TaskTreeSection — 单任务重试 (RV4)', () => {
     expect(screen.queryByTestId('task-tree-retry-t2')).toBeNull();
   });
 });
+
+// ============================================================================
+// BU15 (round29): running 行实时计时徽章
+// ============================================================================
+
+describe('TaskTreeSection — running 实时耗时 (BU15)', () => {
+  it('running 行渲染 elapsed 徽章，done 后消失', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-18T12:00:30Z'));
+      const runningSince = Date.now() - 83_000; // 1m23s
+      render(
+        <TaskTreeSection
+          board={makeBoard({
+            statuses: {
+              t1: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't1',
+                status: 'running',
+                agent_id: 'primary',
+                goal: 'g1',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+                runningSince,
+              },
+              t2: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't2',
+                status: 'done',
+                agent_id: 'primary',
+                goal: 'g2',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+              },
+            } as TaskBoardState['statuses'],
+          })}
+        />,
+      );
+      expect(screen.getByTestId('task-tree-elapsed-t1').textContent).toBe('1m23s');
+
+      // 终态替换：徽章消失
+      cleanup();
+      render(
+        <TaskTreeSection
+          board={makeBoard({
+            statuses: {
+              t1: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't1',
+                status: 'done',
+                agent_id: 'primary',
+                goal: 'g1',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+                duration_ms: 90_000,
+              },
+              t2: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't2',
+                status: 'done',
+                agent_id: 'primary',
+                goal: 'g2',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+              },
+            } as TaskBoardState['statuses'],
+          })}
+        />,
+      );
+      expect(screen.queryByTestId('task-tree-elapsed-t1')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('亚分钟显示秒；无 runningSince 的 running 行不显示徽章', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-18T12:00:10Z'));
+      render(
+        <TaskTreeSection
+          board={makeBoard({
+            statuses: {
+              t1: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't1',
+                status: 'running',
+                agent_id: 'primary',
+                goal: 'g1',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+                runningSince: Date.now() - 42_000,
+              },
+              t2: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't2',
+                status: 'running',
+                agent_id: 'primary',
+                goal: 'g2',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+              },
+            } as TaskBoardState['statuses'],
+          })}
+        />,
+      );
+      expect(screen.getByTestId('task-tree-elapsed-t1').textContent).toBe('42s');
+      expect(screen.queryByTestId('task-tree-elapsed-t2')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
