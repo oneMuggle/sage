@@ -33,6 +33,20 @@ export interface DiagnosticPreviewResult {
   version: string;
 }
 
+export interface BrowserCheckItem {
+  id: string;
+  status: 'pass' | 'warn' | 'fail' | 'na';
+  detail: string;
+  fix_hint: string | null;
+}
+
+export interface BrowserCheckResult {
+  platform: string;
+  checks: BrowserCheckItem[];
+  recommended_browser: string;
+  errors: string[];
+}
+
 interface DiagnosticDeps {
   backendUrl: string;
   getAuthToken: () => string | null;
@@ -76,6 +90,26 @@ export async function runDiagnosticPreview(): Promise<DiagnosticPreviewResult> {
   }
 }
 
+export async function runBrowserCheck(): Promise<BrowserCheckResult> {
+  const d = requireDeps();
+  const empty: BrowserCheckResult = {
+    platform: 'unknown',
+    checks: [],
+    recommended_browser: 'none',
+    errors: ['backend unreachable'],
+  };
+  try {
+    const resp = await fetch(`${d.backendUrl}/api/v1/diagnostic/browser-check`, {
+      headers: { Authorization: `Bearer ${d.getAuthToken() ?? ''}` },
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return (await resp.json()) as BrowserCheckResult;
+  } catch (err) {
+    logger.warn('diagnostic.browser-check failed', { err: String(err) });
+    return empty;
+  }
+}
+
 export async function runDiagnosticExport(
   opts: DiagnosticExportOpts,
 ): Promise<DiagnosticExportResult> {
@@ -99,11 +133,7 @@ export async function runDiagnosticExport(
     }
     const buf = Buffer.from(await resp.arrayBuffer());
 
-    const stamp = new Date()
-      .toISOString()
-      .replace(/[:.]/g, '-')
-      .replace(/T/, '_')
-      .slice(0, 19);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/T/, '_').slice(0, 19);
     const defaultName = `sage-diagnostic-${app.getVersion()}-${stamp}.zip`;
     const dl = await dialog.showSaveDialog({
       title: '导出诊断包',

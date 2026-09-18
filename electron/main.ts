@@ -114,6 +114,7 @@ import {
   initDiagnosticExport,
   runDiagnosticExport,
   runDiagnosticPreview,
+  runBrowserCheck,
 } from './diagnosticExport';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
@@ -1734,6 +1735,14 @@ async function registerIpcHandlers(): Promise<void> {
       return runDiagnosticExport(opts);
     },
   );
+
+  // diagnostic:browser-check → GET /api/v1/diagnostic/browser-check
+  // Returns browser environment health checks (executable discovery,
+  // Win7 SP1/KB4474419, VC++ 2019, data dir writable, CDP handshake).
+  ipcMain.handle('diagnostic:browser-check', async (evt) => {
+    if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+    return runBrowserCheck();
+  });
 }
 
 /**
