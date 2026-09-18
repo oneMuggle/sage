@@ -10,6 +10,7 @@ import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
 import { useChat } from '../features/send-message/useChat';
 import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
+import { maybeIndexAttachment } from '../shared/api/attachmentAutoIndex';
 import {
   loadAttachmentRagConfig,
 } from '../shared/api/attachmentRagConfig';
@@ -451,8 +452,11 @@ export function Chat() {
             att.name,
             att.type || 'text/plain',
           )) as { media_ref?: { id?: string } } | undefined;
-          if (res?.media_ref?.id) attachmentMediaIds.push(res.media_ref.id);
-          else toast.warning(`附件上传失败: ${att.name}`);
+          if (res?.media_ref?.id) {
+            attachmentMediaIds.push(res.media_ref.id);
+            // r74: 检索配置启用时自动建索引（fire-and-forget，不阻断发送）
+            maybeIndexAttachment(res.media_ref.id);
+          } else toast.warning(`附件上传失败: ${att.name}`);
         } catch {
           toast.warning(`附件上传失败: ${att.name}`);
         }
