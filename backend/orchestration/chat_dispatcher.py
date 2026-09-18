@@ -501,6 +501,9 @@ class ChatDispatcher:
         if self._bg_task is not None:
             snapshot["aggregate"] = self._aggregate(list(self._states.values()))
         snapshot["budget_exceeded"] = self._budget_exceeded
+        # BU14 (round28): 墙钟触顶标志与预算对称透出 —— conductor 在
+        # wait=false 快照上可区分"还在跑"与"守门已停派"。
+        snapshot["wall_clock_exceeded"] = self._wall_clock_exceeded
         return snapshot
 
     async def wait_background(self, timeout: Optional[float] = None) -> str:
@@ -527,11 +530,20 @@ class ChatDispatcher:
         total = len(states)
         done = sum(1 for s in states if s.status == "done")
         aggregate = self._aggregate(states)
+        # BD8 (round28): 守门归因 —— 触顶时载荷带标志且在聚合文本尾部注入
+        # 说明行，conductor 的 LLM 语境直接可读（"没跑完"≠"还在跑"）。
+        notes = ""
+        if self._budget_exceeded:
+            notes = "\n\n[预算已触顶，剩余任务已停止派发]"
+        elif self._wall_clock_exceeded:
+            notes = "\n\n[墙钟上限已到，剩余任务已停止派发]"
         return {
             "status": "partial",
             "done": done,
             "total": total,
-            "aggregate": aggregate,
+            "aggregate": aggregate + notes,
+            "budget_exceeded": self._budget_exceeded,
+            "wall_clock_exceeded": self._wall_clock_exceeded,
         }
 
     async def dispatch(self, tasks: List[Dict[str, str]]) -> str:
