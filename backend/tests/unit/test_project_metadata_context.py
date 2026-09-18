@@ -16,6 +16,8 @@ TDD RED: 本文件先写失败测试, 再在 backend/chat/project_context.py 实
 
 from __future__ import annotations
 
+from typing import Optional
+
 import pytest
 
 from backend.chat.project_context import (
