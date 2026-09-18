@@ -480,8 +480,12 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
         ) : loading && !changes ? (
           <div className="p-3 text-sm text-muted">加载变更…</div>
         ) : !changes || changes.changes.length === 0 ? (
-          <div className="p-3 text-sm text-muted">
+          // R2 批次 C: 空态引导 —— 说明变更面板的数据来源
+          <div className="p-3 text-sm text-muted" data-testid="changes-empty">
             {changes?.clean ? '工作区干净,没有未提交变更' : '暂无变更信息'}
+            <div className="mt-1 text-xs text-muted/80">
+              agent 改动工作区文件后，这里会列出可审查/可回滚的变更
+            </div>
           </div>
         ) : (
           <div className="divide-y divide-border">
