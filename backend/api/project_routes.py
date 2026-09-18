@@ -65,6 +65,7 @@ class ProjectModel(BaseModel):
     name: str
     created_at: int
     last_opened_at: int
+    allowed_paths: List[str] = Field(default_factory=list)
     description: Optional[str] = None
     instructions: Optional[str] = None
     session_count: int = 0
@@ -183,7 +184,9 @@ def list_projects() -> ProjectListResponse:
 @with_db_lock
 def register_project(request: ProjectRegisterRequest) -> ProjectModel:
     try:
-        project = ProjectRepository().register(request.path)
+        project = ProjectRepository().register(
+            request.path, allowed_paths=request.allowed_paths
+        )
     except OfficePathError as exc:
         raise _error(400, "invalid_workspace_path", "项目路径无效或目录不存在") from exc
     stats = ProjectRepository().session_stats()
@@ -210,6 +213,26 @@ def update_project(
     updated = repo.get(project_id)
     assert updated is not None
     return _with_stats(updated, repo.session_stats())
+
+
+@router.put("/{project_id}/allowed-paths", response_model=ProjectAllowedPathsResponse)
+@with_db_lock
+def update_project_allowed_paths(
+    project_id: str, request: ProjectAllowedPathsRequest
+) -> ProjectAllowedPathsResponse:
+    """更新项目 allowed_paths（2026-09-17 扩展）。
+
+    用户可在前端项目详情面板管理额外允许访问的路径规则。
+    """
+    repo = ProjectRepository()
+    _get_project_or_404(project_id)
+    updated = repo.update_allowed_paths(project_id, request.allowed_paths)
+    if not updated:
+        raise _error(404, "project_not_found", "项目不存在")
+    return ProjectAllowedPathsResponse(
+        id=project_id,
+        allowed_paths=request.allowed_paths,
+    )
 
 
 @router.get("/{project_id}/materials", response_model=ProjectMaterialsResponse)
