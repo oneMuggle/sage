@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 46：交叉引用升级——REF 域 + 题注书签**（方案 `docs/plans/2026-09-18_r46-ref-fields-plan.md`）
+
+### Added(office)
+- **占位符产物原生化**：`{{fig:}}/{{tbl:}}` 不再写成纯文本"图N"，改为 `REF _RefFig{n} \h` 复杂域（缓存"图N"）+ 题注编号套书签——F9/COM 更新域后正文引用自动跟随题注重排；R39 COM 刷新通道（Fields.Update）零新增编排即覆盖
+- **零回归双路径**：有占位符的段落走分段写 run 路径（标题 numbering 前缀为首段），无占位符段落保持既有单次写入（产物逐字节不变）
+
 > 📝 **Word 写作能力 Round 45：交叉引用占位符**（方案 `docs/plans/2026-09-18_r45-cross-ref-plan.md`）
 
 ### Added(office)
