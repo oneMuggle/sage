@@ -437,8 +437,16 @@ class WebSearchTool(BaseTool):
                     results = future.result()
                 except Exception as exc:  # noqa: BLE001 — 单引擎失败不影响其他引擎
                     errors.append(f"{engine.name}: {exc}")
+                    # R20：per-host 指标（伪域 search:<engine>，异常记 fail）
+                    from . import web_metrics
+
+                    web_metrics.record(f"search:{engine.name}", False, 0)
                     continue
                 saw_completed = True
+                # R20：请求完成即 ok（0 条结果按 Round 9 口径仍 ok，如实报可能被限流）
+                from . import web_metrics
+
+                web_metrics.record(f"search:{engine.name}", True, 0)
                 if results:
                     collected.append((engines.index(engine), engine.name, results))
                 else:
