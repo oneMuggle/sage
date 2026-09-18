@@ -319,6 +319,30 @@ def _check_captions(doc: Document, issues: List[WordLintIssue]) -> None:
             expected += 1
 
 
+_CROSS_REF_RESIDUE_RE = re.compile(r"\{\{(fig|tbl):[^}]+\}\}")
+
+
+def _check_cross_ref_residue(doc: Document, issues: List[WordLintIssue]) -> None:
+    """正文残留未解析的交叉引用占位符 → error（Round 45）。
+
+    生成通路会 fail-fast（未命中题注即生成失败），残渍只来自手工编辑
+    或外部导入的文档——此时占位符是死文本，提示直接写 图N/表N 或重新
+    生成。
+    """
+    residue = [
+        para.text
+        for para in _iter_paragraphs_outside_fields(doc)
+        if _CROSS_REF_RESIDUE_RE.search(para.text)
+    ]
+    if residue:
+        issues.append(_issue(
+            "cross_ref/residue", "error",
+            f"存在未解析的交叉引用占位符（{len(residue)} 处，如 {residue[0][:40]}）",
+            "占位符仅在 office_create 生成时解析；手工编辑请直接写 图N/表N，"
+            "或用原 format_spec 重新生成",
+        ))
+
+
 def _check_citations(doc: Document, issues: List[WordLintIssue]) -> None:
     numbers: set = set()
     for para in doc.paragraphs:
@@ -416,6 +440,10 @@ def lint_docx(path: Path, spec: WordFormatSpec) -> WordLintResult:
         _check_captions(doc, issues)
     checked.append("citations")
     _check_citations(doc, issues)
+    # Round 45：交叉引用占位符残渍检查（无条件启用——残渍在任何语境
+    # 下都是死文本）。
+    checked.append("cross_ref")
+    _check_cross_ref_residue(doc, issues)
 
     errors = [i for i in issues if i.severity == "error"]
     warnings = [i for i in issues if i.severity == "warning"]
