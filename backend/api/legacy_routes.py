@@ -2814,14 +2814,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # legacy /chat/stream 此前缺少 A16 自动激活(仅 hex 路径有),
             # 补齐后用户消息匹配 SKILL.md when_to_use 时自动注入技能指令。
             # fail-safe: 任何故障静默降级,不影响对话主流程。
-            r38_activated_skill_names: list[str] = []
+            # MEDIUM-1 修复: 改用 _get_skill_adapter() (委托 InprocSkillAdapter),
+            # 而非 getattr(agent, "skills", None) (SageAgent 无 skills 属性, 恒 None)。
+            # 首次调用 _get_skill_adapter() 会同步扫描文件系统, 用 asyncio.to_thread
+            # 包裹避免阻塞事件循环。
+            r38_activated_skill_list: list[dict] = []
             try:
                 from backend.application.services.chat_service import (
                     _skill_activation_block,
                 )
 
-                r38_skills_port = getattr(agent, "skills", None)
-                r38_block, r38_activated_skill_names = _skill_activation_block(
+                r38_skills_port = await asyncio.to_thread(_get_skill_adapter)
+                r38_block, r38_activated_skill_list = _skill_activation_block(
                     data.message or "", r38_skills_port
                 )
                 if r38_block:
@@ -2835,12 +2839,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # ===== R38 技能激活展示事件 BEGIN =====
             # A16 自动激活后推送 skill_activated 事件,前端渲染可展开 chip。
             # fail-safe: 任何异常只跳过事件,绝不影响对话主流程。
-            if r38_activated_skill_names:
+            # MEDIUM-3 修复: r38_activated_skill_list 已是事件载荷形状
+            # [{"name": str, "triggers_matched": List[str]}], 直接透传。
+            if r38_activated_skill_list:
                 try:
                     entry.queue.put_nowait({
                         "state": "skill_activated",
                         "session_id": data.session_id,
-                        "skills": [{"name": n, "triggers_matched": []} for n in r38_activated_skill_names],
+                        "skills": r38_activated_skill_list,
                     })
                 except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
                     logger.debug(

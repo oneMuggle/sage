@@ -108,7 +108,8 @@ describe('Message — R17 信任感交互', () => {
   it('R38: role=system 且含 compact_info 时渲染居中的压缩系统提示', () => {
     const msg = makeMsg({
       role: 'system',
-      content: '📦 上下文已压缩：20 → 8 条（移除 12 条）',
+      // LOW-1: 统一口径
+      content: '📦 上下文已压缩：20 → 8 条（12 条历史已合并为摘要）',
       compact_info: { before: 20, after: 8, removed: 12 },
     });
     renderWithI18n(<Message message={msg} />);

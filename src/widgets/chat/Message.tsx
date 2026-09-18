@@ -742,11 +742,26 @@ function MessageComponent({
             data-testid="skill-activated-list"
           >
             {activatedSkills.map((skill) => (
-              <div key={skill.name} className="flex items-start gap-1.5">
-                <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
-                  技能
-                </span>
-                <span className="text-text-secondary break-all">{skill.name}</span>
+              <div key={skill.name} className="flex flex-col gap-0.5">
+                <div className="flex items-start gap-1.5">
+                  <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
+                    技能
+                  </span>
+                  <span className="text-text-secondary break-all">{skill.name}</span>
+                </div>
+                {/* MEDIUM-3: 展示命中的触发词（extract_triggers 已小写化） */}
+                {skill.triggers_matched && skill.triggers_matched.length > 0 && (
+                  <div className="ml-5 flex flex-wrap gap-1">
+                    {skill.triggers_matched.map((trigger, idx) => (
+                      <span
+                        key={idx}
+                        className="px-1 py-0.5 rounded bg-bg-hover text-text-tertiary text-[10px]"
+                      >
+                        {trigger}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
