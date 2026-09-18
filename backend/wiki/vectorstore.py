@@ -7,7 +7,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from .files import secure_atomic_write_file, secure_read_text
 
@@ -136,7 +136,9 @@ class VectorStore:
         self._flush()
         return len(indices_to_remove)
 
-    def search(self, query_vec: List[float], limit: int) -> List[SearchHit]:
+    def search(
+        self, query_vec: List[float], limit: int, allowed_paths: Optional[Set[str]] = None
+    ) -> List[SearchHit]:
         """搜索最相似的向量。
 
         Args:
@@ -151,6 +153,8 @@ class VectorStore:
 
         hits = []
         for rec in self.records:
+            if allowed_paths is not None and rec.page_path not in allowed_paths:
+                continue
             score = _cosine_similarity(query_vec, rec.vector)
             hits.append(
                 SearchHit(
