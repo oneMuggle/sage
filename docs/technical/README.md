@@ -60,6 +60,7 @@
 | 81   | [lint 面补强：index 域在位校验](./81-lint-index-fields.md) | R44：figure_index/table_index 域在位规则（TOF 不冒充 TOC）+ lint schema 可检查子集白名单对偶门禁 |
 | 82   | [交叉引用占位符](./82-word-cross-refs.md) | R45：{{fig:}}/{{tbl:}} → 图N/表N（题注文本匹配 + fail-fast）+ 编号映射三处一致 + residue lint 规则 |
 | 83   | [交叉引用升级：REF 域 + 题注书签](./83-word-ref-fields.md) | R46：题注编号套书签 + 占位符写成 REF 复杂域（更新域自动同步重排）+ 无占位符段落零变化双路径 |
+| 84   | [repair 补 index 域插入 + SEQ 兼容](./84-repair-index-fields.md) | R48：lint→repair 闭环（缺 figure_index/table_index 自动插入 TOF）+ SEQ 题注重排不再摧毁域/书签（缺陷修复）+ caption/duplicate warning |
 | 83   | [Python 后端代码保护方案](./83-python-code-protection.md) | Cython 二进制编译核心包 (sage_core) + Python 字节码混淆与源码剥离 (backend) + 开发与发布模式分离 (SAGE_PROTECT_CODE) |
 
 ---
