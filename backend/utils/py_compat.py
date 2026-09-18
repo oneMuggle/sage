@@ -21,3 +21,9 @@ async def to_thread(func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> A
     call = functools.partial(func, **kwargs)
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, call, *args)
+
+
+# wait_for / wait 超时异常族：py38 中 asyncio.TimeoutError 与 builtin
+# TimeoutError 是两个类（3.11 起合流），except 必须同时覆盖。
+# 以常量形式提供，避免各 except 行被 UP041 autofix 改回单型。
+TIMEOUT_ERRORS = (TimeoutError, getattr(asyncio, "TimeoutError", TimeoutError))

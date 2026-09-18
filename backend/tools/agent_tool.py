@@ -89,6 +89,7 @@ from backend.tools.memory_tool import MemorySearchTool
 from backend.tools.network_config import load_network_policy
 from backend.tools.registry import ToolRegistry
 from backend.tools.web_tool import WebFetchTool, WebSearchTool
+from backend.utils.py_compat import TIMEOUT_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -552,7 +553,7 @@ class AgentTool(BaseTool):
                 ),
                 timeout=SUBAGENT_TIMEOUT_S,
             )
-        except TimeoutError:
+        except TIMEOUT_ERRORS:  # py38: wait_for 抛 asyncio.TimeoutError（与本型不同类）
             # wait_for 已取消内层协程 —— 子 run_loop 在取消点收口,
             # 不存在遗弃线程（异步通路的 L12 根修）。
             logger.warning(

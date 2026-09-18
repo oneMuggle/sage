@@ -13,7 +13,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+
+import pytest
 
 from backend.office.allowed_paths import is_allowed
 
@@ -62,14 +63,18 @@ class TestIsAllowed:
 
         assert is_allowed(str(candidate), [rule]) is True
 
-    def test_tilde_expansion(self):
+    def test_tilde_expansion(self, tmp_path, monkeypatch):
         """~ 展开为 home 目录。"""
-        with patch("pathlib.Path.home") as mock_home:
-            mock_home.return_value = Path("/fake/home/user")
+        fake_home = tmp_path / "fake-home" / "user"
+        fake_home.mkdir(parents=True)
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
-            # 规则 ~/docs/** 应该匹配 /fake/home/user/docs/file.txt
-            candidate = "/fake/home/user/docs/file.txt"
-            assert is_allowed(candidate, ["~/docs/**"]) is True
+        (fake_home / "docs").mkdir()
+        candidate = fake_home / "docs" / "file.txt"
+        candidate.write_text("test")
+
+        # 规则 ~/docs/** 应该匹配 <home>/docs/file.txt
+        assert is_allowed(str(candidate), ["~/docs/**"]) is True
 
     def test_path_traversal_blocked(self, tmp_path: Path):
         """路径遍历（..）被 resolve() 阻断。"""
@@ -143,7 +148,10 @@ class TestPathSafety:
 
         # 在 allowed_dir 中创建指向 target_file 的符号链接
         symlink = allowed_dir / "escape_link"
-        symlink.symlink_to(target_file)
+        try:
+            symlink.symlink_to(target_file)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlinks are not supported")
 
         # 规则只允许 allowed_dir 下的内容
         rule = str(allowed_dir / "**")

@@ -43,6 +43,7 @@ from backend.adapters.out.compute._resolver import (
     ExecutableResolver,
     ResolvedExecutable,
 )
+from backend.utils.py_compat import TIMEOUT_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +192,7 @@ class SubprocessComputeAdapter:
                 proc.communicate(),
                 timeout=timeout_s,
             )
-        except TimeoutError:
+        except TIMEOUT_ERRORS:  # py38: wait_for 抛 asyncio.TimeoutError（与本型不同类）
             proc.kill()
             await proc.wait()
             return ComputeResult(
