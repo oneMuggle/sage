@@ -24,7 +24,7 @@ describe('runOnce (Windows RunOnce 注册表助手)', () => {
   });
 
   it('registerRunOnceCommand 以 reg add HKCU RunOnce 写入指定命令', async () => {
-    await registerRunOnceCommand('cmd /c "C:\bat\.prepare-rollback.bat"');
+    await registerRunOnceCommand('cmd /c "C:/bat-dir/.prepare-rollback.bat"');
     expect(mockCalls).toHaveLength(1);
     expect(mockCalls[0].cmd).toBe('reg');
     expect(mockCalls[0].args[0]).toBe('add');
