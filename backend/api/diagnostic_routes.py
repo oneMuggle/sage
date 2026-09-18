@@ -218,3 +218,29 @@ def _probe_chrome_major_safe() -> Optional[int]:
         return _probe_chrome_major()
     except Exception:  # noqa: BLE001
         return None
+
+
+# ==================== 浏览器环境诊断（Phase D） ====================
+
+
+@router.get("/browser-check")
+def browser_check() -> dict:
+    """检查浏览器环境并返回诊断结果（Phase D）。
+
+    返回格式::
+
+        {
+            "platform": "win32",
+            "checks": [
+                {"id": "executable_chrome", "status": "pass", ...},
+                ...
+            ],
+            "recommended_browser": "chrome",
+            "errors": []
+        }
+
+    API 契约见 docs/plans/2026-09-17_multi-browser-support.md §4。
+    """
+    from backend.tools.browser_diagnostics import run_all_checks
+
+    return run_all_checks()
