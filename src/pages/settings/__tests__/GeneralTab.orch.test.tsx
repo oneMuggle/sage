@@ -74,7 +74,7 @@ beforeEach(() => {
 });
 
 describe('GeneralTab 编排 section', () => {
-  it('渲染 9 个编排数值输入（含迭代/预算/墙钟/超时/重派链）', () => {
+  it('渲染全部编排设置输入（数值/开关/文本）', () => {
     renderTab();
     expect(screen.getByTestId('orch-max-concurrent')).toBeInTheDocument();
     expect(screen.getByTestId('orch-max-aggregate')).toBeInTheDocument();
@@ -82,6 +82,9 @@ describe('GeneralTab 编排 section', () => {
     expect(screen.getByTestId('orch-max-retries')).toBeInTheDocument();
     expect(screen.getByTestId('orch-max-lane-iterations')).toBeInTheDocument();
     expect(screen.getByTestId('orch-max-subagent-iterations')).toBeInTheDocument();
+    // RD16 (round26): 后端键集全量对齐的最后两个旋钮
+    expect(screen.getByTestId('orch-worktree-isolation')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-scratch-root')).toBeInTheDocument();
   });
 
   it('子代理迭代上限默认 10，修改后 updateSettings 保留其它键', () => {
@@ -235,5 +238,55 @@ describe('GeneralTab — 编排守门键透出 (RD15)', () => {
     expect(updateSettings).toHaveBeenCalledWith({
       orch: expect.objectContaining({ maxRetryOfChains: 5 }),
     });
+  });
+});
+
+// ============================================================================
+// RD16 (round26): worktree 隔离开关 + scratch 根目录名 —— 编排设置全量收口
+// ============================================================================
+
+describe('GeneralTab — 隔离与 scratch 旋钮 (RD16)', () => {
+  it('worktree 隔离开关默认关，切换走部分更新契约', () => {
+    const updateSettings = vi.fn();
+    vi.mocked(useSettings).mockReturnValue({
+      settings: { ...DEFAULT_SETTINGS, orch: { ...DEFAULT_SETTINGS.orch } },
+      isLoading: false,
+      loadSettings: vi.fn().mockResolvedValue(undefined),
+      updateSettings,
+      resetSettings: vi.fn(),
+    });
+    renderTab();
+
+    const toggle = screen.getByTestId('orch-worktree-isolation');
+    fireEvent.click(toggle);
+    expect(updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({
+        worktreeIsolation: true,
+        maxRetryOfChains: 10, // 保留其余键（部分更新契约）
+      }),
+    });
+  });
+
+  it('scratch 根目录名默认 orch_scratch，修改走部分更新契约，空输入不提交', () => {
+    const updateSettings = vi.fn();
+    vi.mocked(useSettings).mockReturnValue({
+      settings: { ...DEFAULT_SETTINGS, orch: { ...DEFAULT_SETTINGS.orch } },
+      isLoading: false,
+      loadSettings: vi.fn().mockResolvedValue(undefined),
+      updateSettings,
+      resetSettings: vi.fn(),
+    });
+    renderTab();
+
+    const input = screen.getByTestId('orch-scratch-root') as HTMLInputElement;
+    expect(input.value).toBe('orch_scratch');
+
+    fireEvent.change(input, { target: { value: 'my_scratch' } });
+    expect(updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({ scratchRoot: 'my_scratch' }),
+    });
+
+    fireEvent.change(input, { target: { value: '   ' } });
+    expect(updateSettings).toHaveBeenCalledTimes(1); // 空白输入未追加提交
   });
 });
