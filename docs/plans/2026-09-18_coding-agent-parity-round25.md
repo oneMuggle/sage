@@ -50,4 +50,7 @@ GeneralTab 编排 section 无对应输入。**后端有闸门、用户找不到�
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1099（squash `648a4aa7`，2026-09-18 merge，CI 12 项全绿）。
+- **win7 对齐**：PR #1104（squash `9ed8c28c`，2026-09-18 merge，必过项全绿）。
+  cherry-pick 干净落位，win7 基底 vitest 9 例本地全绿。
+- **回填分支**：`docs/r25-backfill`（本提交）。
