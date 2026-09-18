@@ -71,7 +71,13 @@ export interface Message {
   memory_applied?: number;
   /** R17-E: 记忆召回明细（memory_used 流事件携带，可展开查看） */
   memory_refs?: { id: string; memory_type: string; preview: string }[];
-  reasoning_content?: string; // LLM 思考/推理过程
+  /** R38: 本轮自动激活的技能列表（skill_activated 流事件携带） */
+  activated_skills?: { name: string; triggers_matched: string[] }[];
+  /** R38: 自动压缩信息（compact_triggered 流事件携带） */
+  compact_info?: { before: number; after: number; removed: number };
+  reasoning_content?: string | null; // LLM 思考/推理过程（2026-09 step-by-step: 允许 null 表示该步无 reasoning 累积）
+  /** 2026-09 step-by-step: 多步 ReAct 中每条 assistant 消息的步序号。null=旧消息/单步。 */
+  step_index?: number | null;
 }
 
 // 状态接口

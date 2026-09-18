@@ -451,6 +451,8 @@ function ChatInputInner({
           .then((result) => {
             const body =
               typeof result.content === 'string' ? result.content : `/${skillName} ${args}`.trim();
+            // R38: 显式调用技能成功后提示用户
+            toast.info(t('chat.skill_loaded').replace('{name}', skillName));
             onSend(body);
             setValue('');
           })
