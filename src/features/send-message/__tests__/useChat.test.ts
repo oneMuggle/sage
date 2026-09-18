@@ -1773,4 +1773,118 @@ describe('useChat subagent_event synthesized board (agent tool)', () => {
     expect(board?.plan[0]?.goal).toBe('编排目标');
     expect(board?.live?.['a1']).toBeUndefined();
   });
+
+  // ── R38 MEDIUM-2: SSE 载荷运行时校验 ──────────────────────────────
+  // 畸形载荷必须被丢弃（不更新 UI），合法载荷正常消费。
+  describe('R38 透明度事件载荷校验', () => {
+    async function setupCapture() {
+      seedActiveEndpoint();
+      invokeMock.mockResolvedValueOnce({ streamId: 'stream-r38' });
+      let capturedCb: ((e: unknown) => void) | null = null;
+      listenMock.mockImplementationOnce(async (_name: string, cb: (e: unknown) => void) => {
+        capturedCb = cb;
+        return vi.fn();
+      });
+      const { result } = renderHook(() => useChat());
+      await waitForSettingsLoaded();
+      await act(async () => {
+        // 不驱动 done：本组用例只验证事件载荷校验，流保持挂起即可
+        (result.current.sendMessage('ping') as unknown as Promise<void>).catch(() => {});
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(capturedCb).not.toBeNull();
+      return { result, capturedCb: capturedCb! };
+    }
+
+    it('compact_triggered 字段类型不符（string 而非 number）→ 丢弃, 不插入系统消息', async () => {
+      const { result, capturedCb } = await setupCapture();
+      const before = result.current.messages.length;
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'compact_triggered',
+            iteration: 0,
+            compact: { before: '20', after: 8, removed: 12 },
+          },
+        });
+      });
+
+      expect(result.current.messages.length).toBe(before);
+      expect(result.current.messages.some((m) => m.compact_info)).toBe(false);
+    });
+
+    it('compact_triggered 合法 → 插入带 compact_info 的系统消息', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'compact_triggered',
+            iteration: 0,
+            compact: { before: 20, after: 8, removed: 12 },
+          },
+        });
+      });
+
+      const compactMsg = result.current.messages.find((m) => m.compact_info);
+      expect(compactMsg).toBeDefined();
+      expect(compactMsg?.compact_info).toEqual({ before: 20, after: 8, removed: 12 });
+    });
+
+    it('skill_activated 条目 name 非字符串 → 丢弃, 不写 activated_skills', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'skill_activated',
+            iteration: 0,
+            skills: [{ name: 123, triggers_matched: [] }],
+          },
+        });
+      });
+
+      const userMsg = result.current.messages.find((m) => m.role === 'user');
+      expect(userMsg?.activated_skills).toBeUndefined();
+    });
+
+    it('skill_activated 合法 → 命中触发词写入用户消息', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'skill_activated',
+            iteration: 0,
+            skills: [{ name: 'deploy', triggers_matched: ['部署'] }],
+          },
+        });
+      });
+
+      const userMsg = result.current.messages.find((m) => m.role === 'user');
+      expect(userMsg?.activated_skills).toEqual([
+        { name: 'deploy', triggers_matched: ['部署'] },
+      ]);
+    });
+
+    it('memory_used 条目缺 id → 丢弃, 不写 memory_refs', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'memory_used',
+            iteration: 0,
+            memories: [{ preview: '没有 id 的脏数据' }],
+          },
+        });
+      });
+
+      const asstMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(asstMsg?.memory_refs).toBeUndefined();
+      expect(asstMsg?.memory_applied).toBeUndefined();
+    });
+  });
 });
