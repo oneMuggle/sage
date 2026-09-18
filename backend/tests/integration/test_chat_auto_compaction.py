@@ -17,6 +17,7 @@ import pytest
 
 from backend.core.legacy.agent_state import AgentEvent, AgentState
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
+from backend.data.settings_repo import SettingsRepository
 from backend.main import app
 
 pytestmark = pytest.mark.integration
@@ -76,6 +77,7 @@ async def test_auto_compaction_before_chat_run_loop(client, monkeypatch):
 
     create = await client.post(SESSIONS_PATH, json={"title": "自动压缩"})
     session_id = create.json()["id"]
+    SettingsRepository().set("auto_topic_detection", "false")
     _seed_over_threshold(session_id, n=14)
 
     async def fake_summary_llm(prompt: str) -> str:
@@ -113,6 +115,7 @@ async def test_auto_compaction_failure_never_blocks_chat(client, monkeypatch):
 
     create = await client.post(SESSIONS_PATH, json={"title": "压缩失败不阻塞"})
     session_id = create.json()["id"]
+    SettingsRepository().set("auto_topic_detection", "false")
     _seed_over_threshold(session_id, n=14)
 
     async def exploding_llm(prompt: str) -> str:
@@ -148,6 +151,7 @@ async def test_auto_compaction_prefers_request_llm_config(client, monkeypatch):
 
     create = await client.post(SESSIONS_PATH, json={"title": "请求配置优先"})
     session_id = create.json()["id"]
+    SettingsRepository().set("auto_topic_detection", "false")
     _seed_over_threshold(session_id, n=14)
 
     captured = {}

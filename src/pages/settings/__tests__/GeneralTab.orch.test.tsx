@@ -27,6 +27,8 @@ vi.mock('../../../shared/api/settingsClient', () => ({
     setSettings: vi.fn().mockResolvedValue(undefined),
     getPreference: (...args: unknown[]) => mocks.getPreference(...args),
     setPreference: (...args: unknown[]) => mocks.setPreference(...args),
+    getContextTurnLimit: vi.fn().mockResolvedValue(null),
+    setContextTurnLimit: vi.fn().mockResolvedValue(undefined),
   },
 }));
 

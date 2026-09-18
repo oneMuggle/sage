@@ -25,6 +25,7 @@ import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
 import { SessionUsageBadge } from '../widgets/chat/SessionUsageBadge';
+import { TopicShiftBanner } from '../widgets/chat/TopicShiftBanner';
 import { ArchivesModal } from '../widgets/session';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
@@ -134,6 +135,37 @@ export function Chat() {
     }
     void sendMessage(lastUser.content, currentSessionId);
   }, [currentSessionId, messages, sendMessage]);
+
+  // Task 11 (2026-09-17): topic shift 横幅 — 监听当前会话的 shiftInfo 槽位;
+  // 仅在当前会话命中时显示,避免后台会话触发的事件串台。`handleRetreat`
+  // 由 TopicShiftBanner 在用户点"恢复完整上下文"后调用,组件已先调
+  // sessionApi.retreatSegment 删 separator,这里再 loadMessages 重拉并清
+  // 掉 store 里的 shiftInfo(防止 banner 重渲染)。
+  //
+  // Fix round 1 (2026-09-17): 后台会话触发的 topic_shifted 不会被 banner
+  // 消费,如果一直留在 store 里,用户后续切回该会话就会看到陈旧横幅。
+  // 这里读出时检查 createdAt:超过 30s(> 10s 自动消失时长,留足边界)
+  // 视为过期,清掉 store 并返回 null。
+  const SHIFT_INFO_TTL_MS = 30_000;
+  const rawShiftInfo = useChatStreamStore((s) =>
+    currentSessionId != null ? (s.sessions[currentSessionId]?.shiftInfo ?? null) : null,
+  );
+  const shiftInfo = useMemo(() => {
+    if (!rawShiftInfo) return null;
+    if (!currentSessionId) return null;
+    if (Date.now() - rawShiftInfo.createdAt > SHIFT_INFO_TTL_MS) {
+      // 过期:清掉 store,避免下次重渲染再次进入此分支
+      useChatStreamStore.getState().setShiftInfo(currentSessionId, null);
+      return null;
+    }
+    return rawShiftInfo;
+  }, [rawShiftInfo, currentSessionId]);
+  const handleRetreat = useCallback(async () => {
+    if (!currentSessionId) return;
+    useChatStreamStore.getState().setShiftInfo(currentSessionId, null);
+    await loadMessages(currentSessionId);
+  }, [currentSessionId, loadMessages]);
+  const showTopicShiftBanner = currentSessionId != null && shiftInfo != null && !isLoading;
 
   const { t } = useI18n();
   const isTempChat = currentSessionId != null && tempChatSessions.has(currentSessionId);
@@ -344,7 +376,16 @@ export function Chat() {
       // router API 只清业务 state。
       navigate(location.pathname + location.search, { replace: true, state: null });
     }
-  }, [pendingMessage, currentSessionId, sendMessage, settingsLoading, storeLoading, location.pathname, location.search, navigate]);
+  }, [
+    pendingMessage,
+    currentSessionId,
+    sendMessage,
+    settingsLoading,
+    storeLoading,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   const handleNewSession = async () => {
     // 与 Sidebar 的 "+ 新对话" 行为对齐:跳到欢迎页由用户输入后再创建会话。
@@ -369,6 +410,11 @@ export function Chat() {
         orchestrationMode?: string;
         // PM1 (round8): /plan 计划模式 —— 本次 run 只读 + 计划产出。
         planMode?: boolean;
+        /**
+         * Task 5 (2026-09-17): 上下文重置标记 —— "新话题" 按钮触发，
+         * 后端在本轮消息前插入 topic_separator 并清空 LLM 历史窗口。
+         */
+        contextReset?: boolean;
       },
     ) => {
       clearError();
@@ -418,6 +464,8 @@ export function Chat() {
           memoryDisabled: tempChatSessions.has(sessionId),
           images,
           attachmentMediaIds,
+          // Task 5 (2026-09-17): 上下文重置 —— "新话题" 按钮触发
+          contextReset: options?.contextReset,
         });
       } else {
         await sendMessage(content, undefined, officeRefs, orchestrationMode, {
@@ -425,6 +473,8 @@ export function Chat() {
           memoryDisabled: tempChatSessions.has(currentSessionId),
           images,
           attachmentMediaIds,
+          // Task 5 (2026-09-17): 上下文重置 —— "新话题" 按钮触发
+          contextReset: options?.contextReset,
         });
       }
     },
@@ -764,6 +814,14 @@ export function Chat() {
           布局（挤压主区成三栏，对齐 Claude artifacts）；窄屏回退 overlay。 */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
+          {showTopicShiftBanner && (
+            <TopicShiftBanner
+              sessionId={currentSessionId!}
+              reason={shiftInfo.reason}
+              onRetreat={() => void handleRetreat()}
+            />
+          )}
+
           {showInterruptBanner && (
             <InterruptedRunBanner
               onRetry={retryInterruptedRun}

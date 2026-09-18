@@ -114,6 +114,15 @@ export interface SessionStreamSlots {
   taskBoard: TaskBoardState | null;
   // P1 todo 接线 (2026-08-21): todo_snapshot 全量快照（agent 自维护清单）。
   todos: TodoItem[];
+  /**
+   * Task 11 (2026-09-17): topic_shifted 事件 — 收到自动话题切换通知时
+   * 写入,前端 TopicShiftBanner 展示"恢复完整上下文"入口;用户点恢复
+   * 或点关闭时调用 clearShiftInfo 清掉;切会话 / startStream 也会清。
+   *
+   * created_at 用于自动过期:后台会话的 shiftInfo 不会被 banner 消费,
+   * 30 秒后读取时自动视为 null,避免用户切回时会话看到陈旧横幅。
+   */
+  shiftInfo: { segmentId: number; reason: string; createdAt: number } | null;
 }
 
 const EMPTY_SLOTS: SessionStreamSlots = {
@@ -121,6 +130,7 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   streamingToolCalls: [],
   taskBoard: null,
   todos: [],
+  shiftInfo: null,
 };
 
 /** 读取某会话的槽位；无该会话（或 sessionId 为 null）时返回共享空槽位。
@@ -178,6 +188,13 @@ interface ChatStreamStoreState {
   // —— todo 清单（P1 接线） ——
   setTodos: (sessionId: string, todos: TodoItem[]) => void;
 
+  // —— Task 11 (2026-09-17): topic_shifted 横幅态 ——
+  /** 收到 topic_shifted 事件时写入;前端 TopicShiftBanner 立刻可见。 */
+  setShiftInfo: (
+    sessionId: string,
+    info: { segmentId: number; reason: string; createdAt: number } | null,
+  ) => void;
+
   // —— 会话删除时清理槽位，防 Map 泄漏 / 迟到事件复活死会话 ——
   clearSession: (sessionId: string) => void;
 
@@ -213,6 +230,8 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
         streamingToolCalls: [],
         taskBoard: null,
         todos: [],
+        // Task 11 (2026-09-17): 新一轮流式清掉 topic_shifted 横幅态
+        shiftInfo: null,
       }),
     })),
 
@@ -303,6 +322,10 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
 
   setTodos: (sessionId, todos) =>
     set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { todos }) })),
+
+  // Task 11 (2026-09-17): topic_shifted 横幅态 — 写入后由 TopicShiftBanner 展示
+  setShiftInfo: (sessionId, info) =>
+    set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { shiftInfo: info }) })),
 
   updateTaskBoard: (sessionId, _runId, updater) =>
     set((prev) => {

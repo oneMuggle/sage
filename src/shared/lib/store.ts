@@ -78,6 +78,8 @@ export interface Message {
   reasoning_content?: string | null; // LLM 思考/推理过程（2026-09 step-by-step: 允许 null 表示该步无 reasoning 累积）
   /** 2026-09 step-by-step: 多步 ReAct 中每条 assistant 消息的步序号。null=旧消息/单步。 */
   step_index?: number | null;
+  /** Task 5 (2026-09-17): 消息子类型 —— 'topic_separator' 渲染为分隔线。 */
+  subtype?: string | null;
 }
 
 // 状态接口

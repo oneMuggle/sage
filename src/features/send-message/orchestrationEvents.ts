@@ -19,10 +19,7 @@ import type {
 } from '../../shared/api/types';
 import { bumpArtifactEvent } from '../artifacts/artifactEventsStore';
 
-import {
-  mergeLiveEvent,
-  useChatStreamStore,
-} from './chatStreamStore';
+import { mergeLiveEvent, useChatStreamStore } from './chatStreamStore';
 
 export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): boolean {
   const board = useChatStreamStore.getState();
@@ -156,6 +153,15 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
   // todo 快照。
   if (evt.state === 'todo_snapshot' && Array.isArray(evt.todos)) {
     board.setTodos(sid, evt.todos);
+    return true;
+  }
+
+  // Task 11 (2026-09-17): topic_shifted 横幅态 — 写入 shiftInfo
+  // 由 Chat.tsx 渲染 TopicShiftBanner;banner 自身持有可见性计时。
+  if (evt.state === 'topic_shifted') {
+    const segId = typeof evt.segment_id === 'number' ? evt.segment_id : 0;
+    const reason = typeof evt.reason === 'string' ? evt.reason : '';
+    board.setShiftInfo(sid, { segmentId: segId, reason, createdAt: Date.now() });
     return true;
   }
 

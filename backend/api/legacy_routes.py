@@ -387,6 +387,11 @@ class ChatRequest(BaseModel):
     plan_override: Optional[List[Dict[str, Any]]] = None
     run_id: Optional[str] = None
 
+    # Task 4 (2026-09-17): 上下文重置标记。True 时 chat_stream_create 在持久化
+    # 当前消息前调用 MessageRepository.advance_segment(session_id)，开启新 segment；
+    # 历史加载改用 get_active_segment 只取当前段。
+    context_reset: bool = False
+
     # PM1 (round8): 单 agent 计划模式 —— 本次 run 只读（权限执行器 override
     # READ_ONLY）+ 计划指令 system 块；DONE 后前端出批准条，批准后普通执行。
     plan_mode: Optional[bool] = False
@@ -810,12 +815,16 @@ def _persist_compaction(
     summary = new_messages[0]
     first_kept = messages[removed_count] if len(messages) > removed_count else None
     created_at = (first_kept.created_at - 1) if first_kept is not None else int(time.time() * 1000)
+    # Task 14 (context-isolation): 续接摘要继承被压缩段的 segment_id,
+    # 避免落库为 segment_id=0 导致活跃段识别错乱或段感知切片丢弃压缩历史。
+    last_removed = messages[removed_count - 1] if removed_count > 0 else None
     continuation = DbMessage(
         id=str(uuid.uuid4()),
         session_id=session_id,
         role=summary["role"],
         content=summary["content"],
         created_at=created_at,
+        segment_id=last_removed.segment_id if last_removed is not None else 0,
     )
 
     after = len(new_messages)
@@ -873,9 +882,12 @@ async def _maybe_auto_compact_session(
         return None
 
     message_repo = MessageRepository()
-    messages = await _run_db_sync(
-        message_repo.get_by_session, session_id, limit=100000
-    )
+    # Task 12 (context-isolation): 压缩只对当前 segment 起作用——
+    # 历史 segment 已被 advance_segment() 封存成 topic_separator + 摘要续接,
+    # 旧 segment 的对话本来就不会再注入本轮 LLM 请求, 没有压缩必要.
+    # 用 get_by_session 会把多个 segment 一起塞进 LLM 摘要 prompt, 浪费 token
+    # 且破坏"segment 间互相隔离"的口径.
+    messages = await _run_db_sync(message_repo.get_active_segment, session_id)
     if not should_compact(messages):
         return None
 
@@ -1999,6 +2011,21 @@ def _build_memory_used_event(
         return None
 
 
+def _clear_working_segment(agent: Any, session_id: str, segment_id: int) -> None:
+    """清空共享工作记忆中指定段的消息（context-isolation Task 14）。
+
+    **必须经 ``agent.memory_manager`` 取共享实例**：``WorkingMemory`` 是普通类
+    （无单例/``__new__`` 覆盖），``WorkingMemory()`` 构造的是全新的空实例，
+    对它调 ``clear_segment`` 遍历空队列、什么都清不掉（2026-09-18 修复）。
+
+    bare agent（``memory_manager is None``）时静默跳过，不影响主流程。
+    """
+    memory_manager = getattr(agent, "memory_manager", None)
+    if memory_manager is None:
+        return
+    memory_manager.working.clear_segment(session_id, segment_id)
+
+
 @router.post("/chat/stream")
 async def chat_stream_create(data: ChatRequest, request: Request):
     """创建 chat 流 (I2)。
@@ -2844,51 +2871,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
             # ===== R38 A16 技能自动激活 END =====
 
-            # ===== L13 记忆上下文注入 BEGIN (对标增强第二轮批次 C) =====
-            # legacy /chat/stream 此前完全不注入记忆上下文(只能靠 LLM 主动
-            # 调 memory_search)——与 PHILOSOPHY"记忆优先"定位相悖。对齐
-            # agent.chat() 单发路径的注入口径(get_context limit=10),fail-safe。
-            # L4': 记忆随会话演进,同属易变上下文 → 并入尾部 dynamic 块。
-            try:
-                l13_memory_manager = getattr(agent, "memory_manager", None)
-                if l13_memory_manager is not None and not memory_off:
-                    # win7 惯例 (PR A §1.2): get_context 背后的 episodic 查询
-                    # 直连共享连接, 统一经 _run_db_sync 拿锁, 防跨事务冲突。
-                    l13_memory = await _run_db_sync(
-                        l13_memory_manager.get_context,
-                        limit=10,
-                        session_id=data.session_id,
-                    )
-                    if l13_memory and str(l13_memory).strip():
-                        dynamic_context_parts.append(
-                            "以下是相关的记忆上下文：\n" + str(l13_memory)
-                        )
-            except Exception as l13_mem_err:
-                logger.debug(
-                    f"[REQ {request_id}] L13 memory context skipped: {l13_mem_err}"
-                )
-            # ===== L13 记忆上下文注入 END =====
-
-            # ===== R17-E 记忆召回展示事件 BEGIN =====
-            # L13 注入是静默的 —— 用户无法知道回答用了哪些记忆。注入成功
-            # 后用 recall() 取结构化命中（top3），推送 memory_used 流事件；
-            # 前端 Message 气泡显示"N 条记忆已应用"并可展开查看明细。
-            # fail-safe：任何异常只跳过事件，绝不影响注入与对话主流程。
-            if dynamic_context_parts and not memory_off:
-                l13_evt = _build_memory_used_event(
-                    getattr(agent, "memory_manager", None),
-                    query=data.message,
-                    session_id=data.session_id,
-                )
-                if l13_evt is not None:
-                    try:
-                        entry.queue.put_nowait(l13_evt)
-                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
-                        logger.debug(
-                            f"[REQ {request_id}] memory_used event push failed, ignored"
-                        )
-            # ===== R17-E 记忆召回展示事件 END =====
-
             # ===== R38 技能激活展示事件 BEGIN =====
             # A16 自动激活后推送 skill_activated 事件,前端渲染可展开 chip。
             # fail-safe: 任何异常只跳过事件,绝不影响对话主流程。
@@ -3000,17 +2982,139 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 用户第二条消息起 agent"失忆",压缩也不省每轮 token。此处本轮 user
             # 消息尚未落盘(落盘在下方),历史天然不含本轮消息。历史加载失败时
             # 降级为无历史的旧行为,绝不阻断聊天。
+            repo = MessageRepository()
             try:
                 # win7 惯例 (PR A §1.2): 同步 SQLite I/O 经 _run_db_sync 卸载到
                 # 线程池,避免阻塞事件循环 + 与 _SQLITE_LOCK 守护路径并发冲突。
+                # Task 4 (2026-09-17): 显式上下文重置
+                if data.context_reset:
+                    # Task 14 (context-isolation): 记录旧段 id,advance 后只清旧段
+                    # 工作记忆,避免 clear() 把其他段一并擦掉破坏段隔离语义。
+                    _old_seg = await _run_db_sync(
+                        repo.get_active_segment_id, data.session_id
+                    )
+                    await _run_db_sync(repo.advance_segment, data.session_id)
+                    try:
+                        _clear_working_segment(agent, data.session_id, _old_seg)
+                    except Exception as mem_err:
+                        logger.warning("working memory clear_segment failed: %s", mem_err)
+
                 history_rows = await _run_db_sync(
-                    MessageRepository().get_by_session, data.session_id, limit=100000
+                    repo.get_active_segment, data.session_id
                 )
             except Exception as hist_err:
                 logger.warning(
                     f"[REQ {request_id}] 历史消息加载失败(降级为无历史): {hist_err}"
                 )
                 history_rows = []
+            # Task 10 (2026-09-17): 自动话题检测 — 用户未显式 context_reset
+            # 且 auto_topic_detection 启用时，扫描最近 N 条 assistant 文本；
+            # 正则层命中或向量层平均相似度 < 阈值即视作话题切换，自动
+            # advance_segment 并推 topic_shifted SSE。设置严格 opt-in:
+            # 仅 "true" (大小写不敏感) 启用;缺失或其他值视为关闭,避免
+            # 未显式配置的会话发生隐式上下文切换 (2026-09-18)。
+            try:
+                from backend.data.settings_repo import SettingsRepository as _SettingsRepo
+                _auto_detect_raw = _SettingsRepo().get("auto_topic_detection")
+            except Exception:
+                _auto_detect_raw = None
+            _auto_detect_on = (
+                _auto_detect_raw is not None
+                and _auto_detect_raw.strip().lower() == "true"
+            )
+            if not data.context_reset and _auto_detect_on:
+                recent_assistant = [
+                    r.content for r in (history_rows or [])[-6:]
+                    if getattr(r, "role", None) == "assistant"
+                ]
+                embed_fn = None
+                try:
+                    from backend.memory.embedder_factory import create_embedder
+                    _embedder = create_embedder()
+                    def embed_fn(t):
+                        return _embedder.encode(t)
+                except Exception:
+                    pass
+
+                from backend.chat.topic_detection import detect_topic_shift
+                is_new, _shift_reason = detect_topic_shift(
+                    data.message, recent_assistant, embed_fn=embed_fn
+                )
+                if is_new:
+                    # Task 14 (context-isolation): 记录旧段 id,advance 后清旧段
+                    # 工作记忆,与显式 context_reset 路径保持一致清理口径。
+                    _old_seg_auto = await _run_db_sync(
+                        repo.get_active_segment_id, data.session_id
+                    )
+                    new_seg = await _run_db_sync(repo.advance_segment, data.session_id)
+                    try:
+                        _clear_working_segment(agent, data.session_id, _old_seg_auto)
+                    except Exception as wm_err:
+                        logger.warning("working memory clear_segment (auto) failed: %s", wm_err)
+                    history_rows = await _run_db_sync(
+                        repo.get_active_segment, data.session_id
+                    )
+                    try:
+                        await entry.queue.put(
+                            {
+                                "state": "topic_shifted",
+                                "segment_id": new_seg,
+                                "reason": _shift_reason,
+                            }
+                        )
+                    except Exception:
+                        logger.warning("failed to emit topic_shifted event")
+            # ===== L13 记忆上下文注入 BEGIN (Task 14 context-isolation) =====
+            # legacy /chat/stream 此前完全不注入记忆上下文(只能靠 LLM 主动
+            # 调 memory_search)——与 PHILOSOPHY"记忆优先"定位相悖。对齐
+            # agent.chat() 单发路径的注入口径(get_context limit=10),fail-safe。
+            # L4': 记忆随会话演进,同属易变上下文 → 并入尾部 dynamic 块。
+            # Task 14: 从 history_rows[-1].segment_id 推导当前活跃段 id,透传给
+            # MemoryManager.get_context → WorkingMemory.get_context,避免把
+            # 旧段的工作记忆残留混进当前段的 LLM 请求。
+            try:
+                l13_memory_manager = getattr(agent, "memory_manager", None)
+                if l13_memory_manager is not None and not memory_off:
+                    # win7 惯例 (PR A §1.2): get_context 背后的 episodic 查询
+                    # 直连共享连接, 统一经 _run_db_sync 拿锁, 防跨事务冲突。
+                    active_segment_id = await _run_db_sync(
+                        repo.get_active_segment_id, data.session_id
+                    )
+                    l13_memory = await _run_db_sync(
+                        l13_memory_manager.get_context,
+                        limit=10,
+                        session_id=data.session_id,
+                        segment_id=active_segment_id,
+                    )
+                    if l13_memory and str(l13_memory).strip():
+                        dynamic_context_parts.append(
+                            "以下是相关的记忆上下文：\n" + str(l13_memory)
+                        )
+            except Exception as l13_mem_err:
+                logger.debug(
+                    f"[REQ {request_id}] L13 memory context skipped: {l13_mem_err}"
+                )
+            # ===== L13 记忆上下文注入 END =====
+
+            # ===== R17-E 记忆召回展示事件 BEGIN =====
+            # L13 注入是静默的 —— 用户无法知道回答用了哪些记忆。注入成功
+            # 后用 recall() 取结构化命中（top3），推送 memory_used 流事件；
+            # 前端 Message 气泡显示"N 条记忆已应用"并可展开查看明细。
+            # fail-safe：任何异常只跳过事件，绝不影响注入与对话主流程。
+            if dynamic_context_parts and not memory_off:
+                l13_evt = _build_memory_used_event(
+                    getattr(agent, "memory_manager", None),
+                    query=data.message,
+                    session_id=data.session_id,
+                )
+                if l13_evt is not None:
+                    try:
+                        entry.queue.put_nowait(l13_evt)
+                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                        logger.debug(
+                            f"[REQ {request_id}] memory_used event push failed, ignored"
+                        )
+            # ===== R17-E 记忆召回展示事件 END =====
             # Task 5 (2026-09-15): catalog-based context budget.
             # Resolve effective window from model catalog, then compute budget
             # as window - reserve. Old >=20000 gate removed.
@@ -3021,6 +3125,32 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 auto_context=data.auto_context,
             )
             l9_budget = history_token_budget(effective_window=effective_window)
+            # Task 7 (2026-09-17): context-isolation turn limit.
+            # Read ``context_turn_limit`` from settings (whitelisted in Task 6).
+            # Setting is stored as str; parse defensively — bad value falls back
+            # to None rather than 500-ing the chat request.
+            turn_limit: Optional[int] = None
+            try:
+                from backend.data.settings_repo import SettingsRepository
+
+                turn_limit_raw = SettingsRepository().get("context_turn_limit")
+                if turn_limit_raw:
+                    try:
+                        turn_limit = int(turn_limit_raw)
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            "[REQ %s] context_turn_limit setting is invalid: %r, ignoring",
+                            request_id,
+                            turn_limit_raw,
+                        )
+                        turn_limit = None
+            except Exception as sl_err:  # noqa: BLE001 — 任何 settings 读取失败都不应阻断聊天
+                logger.warning(
+                    "[REQ %s] context_turn_limit 读取失败(降级为不限): %s",
+                    request_id,
+                    sl_err,
+                )
+                turn_limit = None
             messages, omitted_history = build_request_messages(
                 system_content=system_content,
                 user_text=data.message,
@@ -3033,13 +3163,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     if dynamic_context_parts
                     else None
                 ),
+                turn_limit=turn_limit,
             )
             if omitted_history > 0:
                 logger.info(
-                    "[REQ %s] 历史超过预算(%s tokens),已省略最早 %s 条",
+                    "[REQ %s] 历史已省略最早 %s 条 (turn_limit %s, token 预算 %s)",
                     request_id,
-                    l9_budget,
                     omitted_history,
+                    turn_limit,
+                    l9_budget,
                 )
 
             # G6 (2026-09-06): 图片附件 → 多模态 user 消息（OpenAI content 分段格式）。

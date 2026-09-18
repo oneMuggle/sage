@@ -4,7 +4,6 @@
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import json
 import logging
@@ -282,6 +281,7 @@ class Message:
 
     @classmethod
     def from_row(cls, row) -> Message:
+        row_keys = set(row.keys())  # set() 避免 sqlite3.Row.keys() 触发 SIM118
         return cls(
             id=row["id"],
             session_id=row["session_id"],
@@ -293,9 +293,9 @@ class Message:
             tool_calls=row["tool_calls"],
             tool_call_id=row["tool_call_id"],
             reasoning_content=row["reasoning_content"],
-            step_index=row["step_index"] if "step_index" in row.keys() else None,
-            segment_id=row["segment_id"] if "segment_id" in row.keys() else 0,
-            subtype=row["subtype"] if "subtype" in row.keys() else None,
+            step_index=row["step_index"] if "step_index" in row_keys else None,
+            segment_id=row["segment_id"] if "segment_id" in row_keys else 0,
+            subtype=row["subtype"] if "subtype" in row_keys else None,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -501,10 +501,14 @@ class MessageRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
+        # Task 1 (2026-09-17): 写入时绑定当前活跃 segment_id,
+        # 保证 advance_segment() 后的消息落在新段上
+        active_segment_id = self.get_active_segment_id(message.session_id)
+
         cursor.execute(
             """
-            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at, segment_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 message.id,
@@ -518,6 +522,7 @@ class MessageRepository:
                 message.reasoning_content,
                 message.step_index,
                 message.created_at,
+                active_segment_id,
             ),
         )
 
@@ -586,8 +591,8 @@ class MessageRepository:
                 cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
             cursor.execute(
                 """
-                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at, segment_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     continuation_message.id,
@@ -601,6 +606,7 @@ class MessageRepository:
                     continuation_message.reasoning_content,
                     continuation_message.step_index,
                     continuation_message.created_at,
+                    getattr(continuation_message, "segment_id", 0) or 0,
                 ),
             )
             cursor.execute(
@@ -692,10 +698,13 @@ class MessageRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
+        # Task 1 (2026-09-17): 写入时绑定当前活跃 segment_id
+        active_segment_id = self.get_active_segment_id(session_id)
+
         cursor.execute(
-            "INSERT INTO messages (id, session_id, role, content, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (message_id, session_id, role, content, created_at),
+            "INSERT INTO messages (id, session_id, role, content, created_at, segment_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (message_id, session_id, role, content, created_at, active_segment_id),
         )
         conn.commit()
         # Round 2: 定时消息同步全文索引（best-effort）
