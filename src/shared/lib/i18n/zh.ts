@@ -55,6 +55,7 @@ export const zh = {
     'Sage 会记住你的项目信息，无需重复说明上下文 · 支持 Markdown 语法 · 输入 / 呼出命令，@ 引用工作区文件',
   'chat.rag_citations_toggle': '附件检索溯源',
   'chat.rag_citations_count': '{n} 个片段命中注入',
+  'chat.rag_citation_source': '来源',
   'chat.rag_citation_chunk': '片段',
   'chat.memory_applied': '条记忆已应用',
   // R38: 技能激活展示

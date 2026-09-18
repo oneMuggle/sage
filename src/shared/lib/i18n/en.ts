@@ -55,6 +55,7 @@ export const en: Record<TranslationKey, string> = {
     'Sage remembers your project context · Supports Markdown · Type / for commands, @ to reference workspace files',
   'chat.rag_citations_toggle': 'Attachment retrieval citations',
   'chat.rag_citations_count': '{n} chunks injected',
+  'chat.rag_citation_source': 'source',
   'chat.rag_citation_chunk': 'chunk',
   'chat.memory_applied': 'memories applied',
   // R38: Skill activation display
