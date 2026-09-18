@@ -663,6 +663,20 @@ class SageAgent:
             return False
         from backend.domain.risk import RiskClass
 
+        # Phase 1: profile whitelist pre-pass (batch-level, no side effects).
+        # Reject the whole batch BEFORE any enforcer.check call so a tool
+        # outside the profile's whitelist cannot slip through on the strength
+        # of an earlier in-whitelist tool passing the enforcer.
+        allowed_profile_tools = (
+            set(self.profile.get("tools") or [])
+            if self.profile and self.profile.get("tools") is not None
+            else None
+        )
+        if allowed_profile_tools is not None and any(
+            tc.name not in allowed_profile_tools for tc in batch
+        ):
+            return False
+        # Phase 2: per-tool invariants + enforcer pre-check.
         for tc in batch:
             if tc.name in (
                 ASK_USER_QUESTION_TOOL_NAME,
@@ -1556,10 +1570,36 @@ class SageAgent:
                                     result_content = q_result.error or "工具执行失败"
 
                     if not ask_handled:
-                        # M1: enforcement-before-dispatch —— 每次工具调用先过权限
+                        # Profile 工具白名单不仅控制 schema 暴露，也必须在执行边界
+                        # 再校验，防止伪造/异常 tool call 直接从全局 registry 取到
+                        # profile 未授权的工具。
+                        allowed_profile_tools = (
+                            set(self.profile.get("tools") or [])
+                            if self.profile and self.profile.get("tools") is not None
+                            else None
+                        )
+                        if allowed_profile_tools is not None and tc.name not in allowed_profile_tools:
+                            logger.warning(
+                                "工具调用被 profile 白名单拒绝: agent=%s tool=%s",
+                                self.agent_id,
+                                tc.name,
+                            )
+                            result_content = f"工具未对当前 Agent 开放: {tc.name}"
+                            is_error = True
+                            profile_denied = True
+                        else:
+                            profile_denied = False
+
+                        # M1: enforcement-before-dispatch — 每次工具调用先过权限
                         # 执行器（deny/allow 规则 → 模式矩阵 → bash 风险升级）。
                         # 被拒 → 注入错误 ToolResult，循环正常继续（不抛异常）。
                         decision = enforcer.check(tc.name, args)
+                        if profile_denied:
+                            decision = PermissionDecision(
+                                allowed=False,
+                                needs_approval=False,
+                                reason="当前 Agent profile 未授权此工具",
+                            )
                         # S3 (2026-09-13): 未经用户确认即放行 → 记入会话自动放行
                         # 台账（顶栏"已自动批准 N 次" + 审计列表）。fail-safe。
                         if decision.allowed and not decision.needs_approval:

@@ -27,6 +27,7 @@ from .calculator import CalculatorTool
 from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, CheckpointRestoreTool
 from .codebase_search_tool import CodebaseSearchTool
 from .commit_message_tool import GitCommitMessageTool
+from .config_tool import ReadSageConfigTool, UpdateSageConfigTool
 from .download_tool import HttpDownloadTool
 from .edit_tool import EditTool
 from .execute_code_tool import ExecuteCodeTool
@@ -286,6 +287,10 @@ def register_all_tools(
     registry.register(SpeechToTextTool(policy=policy))
     registry.register(ImageGenerationTool(policy=policy))
 
+    # Sage 自省与配置工具：read_sage_config 为 READ，update_sage_config 为 WRITE_LOCAL。
+    registry.register(ReadSageConfigTool(policy=policy))
+    registry.register(UpdateSageConfigTool(policy=policy))
+
     # Register MCP tools (from external MCP servers like draw.io)
     try:
         from backend.mcp import register_mcp_tools
@@ -377,5 +382,7 @@ __all__ = [
     "TextToSpeechTool",
     "SpeechToTextTool",
     "ImageGenerationTool",
+    "ReadSageConfigTool",
+    "UpdateSageConfigTool",
     "register_all_tools",
 ]
