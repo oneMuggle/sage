@@ -260,6 +260,9 @@ class ChatDispatcher:
         # BU2 (round11): run 级 token 预算守门状态 —— 触发一次即置位
         # （_cancelled 随之置位收口剩余任务），dispatch 入口据此拒绝后续批次。
         self._budget_exceeded = False
+        # BU17 (round31): 任务级消耗 memo —— _aggregate 块标题标注用；
+        # 终态即定格，preset 回放（0 消耗）与查询失败（None）不缓存值。
+        self._task_tokens: Dict[str, int] = {}
         self._budget_limit = 0
         # BU7 (round18): 80% 预警一次性标志。
         self._budget_warned = False
@@ -472,6 +475,27 @@ class ChatDispatcher:
             self.dispatch(tasks), name=f"bg-dispatch-{self.run_id}"
         )
         return self._bg_task
+
+    def _task_tokens_used(self, task_id: str) -> Optional[int]:
+        """BU17 (round31): 任务级累计 tokens（RT23 归因，run 内 memoize）。
+
+        查询失败返 None（不缓存，下次聚合重试）；成功后缓存 —— 调用方
+        保证仅终态块查询（终态消耗定格，memo 安全）。
+        """
+        if task_id in self._task_tokens:
+            return self._task_tokens[task_id]
+        if not self.session_id or not self._first_dispatch_at:
+            return None
+        try:
+            from backend.services.usage_tracker import UsageTracker
+
+            used = UsageTracker().task_usage_since(
+                self.session_id, task_id, int(self._first_dispatch_at * 1000)
+            )
+        except Exception:  # noqa: BLE001 — 增强信息，失败跳过
+            return None
+        self._task_tokens[task_id] = used
+        return used
 
     def background_snapshot(self) -> Dict[str, Any]:
         """BD3 (round13): 非阻塞快照 —— 各子任务当前状态与结果预览。
@@ -1593,6 +1617,16 @@ class ChatDispatcher:
         blocks: List[str] = []
         for state in states:
             header_item = f"## 子任务 {state.task_id}（{state.agent_id}）"
+            # BU17 (round31): 任务级消耗标注 —— RT23 归因查询 + run 内
+            # memoize；仅终态块标注（running 查询会缓存滞后值）；
+            # N>0 才显（preset 回放 0 / 查询失败不显）。
+            _used = (
+                self._task_tokens_used(state.task_id)
+                if state.status in ("done", "failed", "cancelled")
+                else None
+            )
+            if _used:
+                header_item += f"（消耗 {_used} tokens）"
             if state.status == "done" and state.output:
                 body = state.output[: self.settings.max_subagent_result_chars]
                 block = f"{header_item}\n\n{body}"
