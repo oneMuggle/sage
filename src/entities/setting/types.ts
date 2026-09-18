@@ -80,8 +80,8 @@ export interface WikiSettings {
   useFolderPicker: boolean;
 }
 
-// Wave 3 P2-9 (2026-08-14): 编排执行参数（前端 UI 渲染 5 个数值；scratchRoot
-// 仅后端配置，不在此 interface —— 见 storage 层注释）。
+// Wave 3 P2-9 (2026-08-14): 编排执行参数。RD16 (round26) 起前端键集与
+// 后端 OrchSettings 完全对齐（scratchRoot 此前仅后端配置，现透出设置页）。
 export interface OrchSettings {
   maxConcurrentSubagents: number; // 4
   maxAggregateChars: number; // 120 * 1024
@@ -92,6 +92,9 @@ export interface OrchSettings {
   // ``OrchSettings.max_subagent_iterations`` 默认对齐；用户可在此调整。
   maxSubagentIterations: number; // 6
   worktreeIsolation: boolean; // false
+  // RD16 (round26): scratch 根目录名（相对 data 目录），dispatcher 与
+  // orchestration_router 的子任务 scratch 目录均落在其下。
+  scratchRoot: string; // 'orch_scratch'
   // live-events P1 (2026-09-06): 新 run 子代理审批模式默认值。
   // "ask" = 风险工具逐次审批（子代理审批请求转发前端弹窗）;
   // "auto" = 非危险工具自动批准（破坏性/可疑命令/工作区越界仍转人工）。
@@ -195,6 +198,7 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   maxLaneIterations: 8,
   maxSubagentIterations: 6,
   worktreeIsolation: false,
+  scratchRoot: 'orch_scratch',
   subagentApprovalMode: 'ask',
   runTokenBudget: 0,
   runWallClockLimitMinutes: 0,
