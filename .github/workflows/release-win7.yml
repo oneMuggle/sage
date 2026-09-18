@@ -71,6 +71,8 @@ jobs:
 
       - name: Bundle Python backend (Win7 LTS)
         shell: pwsh
+        env:
+          SAGE_PROTECT_CODE: "true"
         run: pwsh scripts/bundle-python.ps1
 
       - name: Bundle MSYS2 bash (Win7 LTS)

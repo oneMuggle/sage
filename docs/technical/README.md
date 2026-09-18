@@ -59,6 +59,7 @@
 | 80   | [office_create schema 漂移卫生修复](./80-office-create-schema-drift.md) | R43：补 toc/section_breaks schema 声明（LLM 可发现化）+ types.ts 缺口 + 模型↔schema↔TS 三方防漂移对偶门禁 |
 | 81   | [lint 面补强：index 域在位校验](./81-lint-index-fields.md) | R44：figure_index/table_index 域在位规则（TOF 不冒充 TOC）+ lint schema 可检查子集白名单对偶门禁 |
 | 82   | [多浏览器支持：架构与诊断](./82-multi-browser-support.md) | BrowserLauncher 抽象 + Firefox CDP 差异 + discover_and_select() 优先级链 + 诊断 API 契约 + credential_vault Firefox 兼容 |
+| 83   | [Python 后端代码保护方案](./83-python-code-protection.md) | Cython 二进制编译核心包 (sage_core) + Python 字节码混淆与源码剥离 (backend) + 开发与发布模式分离 (SAGE_PROTECT_CODE) |
 
 ---
 

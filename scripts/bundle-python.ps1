@@ -31,8 +31,16 @@
 # bundle time instead of at end-user startup (4-5s after spawn → 30s
 # timeout dialog).
 #
-# Usage: .\scripts\bundle-python.ps1
+# Usage: .\scripts\bundle-python.ps1 [-ProtectCode]
 # Output: resources/python/ (embeddable runtime + site-packages) and resources/backend/
+
+# Code protection mode: set SAGE_PROTECT_CODE=true (or pass -ProtectCode) during
+# release builds to compile sage_core to native C-extensions (.pyd) and
+# byte-compile/strip backend .py files. Dev/CI mode (default) copies source .py
+# directly for rapid build times.
+param(
+    [switch]$ProtectCode = ($env:SAGE_PROTECT_CODE -eq "true")
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -170,14 +178,33 @@ Write-Host "Installing Python dependencies from requirements-py38.txt..." -Foreg
 & $PythonExe -m pip install --no-warn-script-location --no-build-isolation -r $RequirementsFile
 if ($LASTEXITCODE -ne 0) { throw "pip install -r requirements-py38.txt failed with exit code $LASTEXITCODE" }
 
-# Install sage-core in development mode (also using full Python)
+if ($ProtectCode) {
+    Write-Host "🛡️ Code protection ENABLED: Installing Cython..." -ForegroundColor Yellow
+    # Cython < 3.1 is the last line with Python 3.8 support (Win7 LTS runtime ABI).
+    & $PythonExe -m pip install --no-warn-script-location "cython>=3.0.0,<3.1.0" "setuptools"
+    if ($LASTEXITCODE -ne 0) { throw "pip install cython failed with exit code $LASTEXITCODE" }
+}
+
+# Install sage-core: dev mode mirrors the source tree + editable install;
+# protected mode compiles sage_core to native C-extensions (.pyd) in place.
 $SageCoreSource = Join-Path $PSScriptRoot "..\packages\sage-core"
 if (Test-Path $SageCoreSource) {
-    Write-Host "Installing sage-core package..." -ForegroundColor Green
     $SageCoreDest = Join-Path $ResourcesDir "sage-core"
-    Copy-Item -Path $SageCoreSource -Destination $SageCoreDest -Recurse -Force
-    & $PythonExe -m pip install --no-warn-script-location --no-build-isolation -e $SageCoreDest
-    if ($LASTEXITCODE -ne 0) { throw "pip install -e sage-core failed with exit code $LASTEXITCODE" }
+    if ($ProtectCode) {
+        Write-Host "🛡️ Code protection: Compiling sage_core with Cython..." -ForegroundColor Yellow
+        $CompileScript = Join-Path $PSScriptRoot "compile-sage-core.py"
+        & $PythonExe $CompileScript build_ext --inplace
+        if ($LASTEXITCODE -ne 0) { throw "Cython compilation for sage_core failed with exit code $LASTEXITCODE" }
+        # electron-builder's extraResources still lists resources/sage-core, so the
+        # directory must exist — keep it empty rather than mirroring .py source.
+        New-Item -ItemType Directory -Force -Path $SageCoreDest | Out-Null
+        Write-Host "🛡️ resources/sage-core kept empty (source not mirrored in protected mode)." -ForegroundColor Green
+    } else {
+        Write-Host "Installing sage-core package..." -ForegroundColor Green
+        Copy-Item -Path $SageCoreSource -Destination $SageCoreDest -Recurse -Force
+        & $PythonExe -m pip install --no-warn-script-location --no-build-isolation -e $SageCoreDest
+        if ($LASTEXITCODE -ne 0) { throw "pip install -e sage-core failed with exit code $LASTEXITCODE" }
+    }
 
     # CRITICAL (v0.4.5-alpha.1 bundling regression, main PR #132 fix ported to win7):
     # The source dir is hyphen-named `sage-core/` but the Python module is
@@ -198,7 +225,13 @@ if (Test-Path $SageCoreSource) {
     # only adds the runtime-loadable package to the embeddable.
     $EmbedSitePackagesForSageCore = Join-Path $PythonDir "Lib\site-packages"
     New-Item -ItemType Directory -Force -Path $EmbedSitePackagesForSageCore | Out-Null
-    $SageCorePkgSrc = Join-Path $SageCoreDest "sage_core"
+    # Protected mode compiles in place, so the .pyd live under the source tree;
+    # dev mode reads the mirrored copy under resources/.
+    if ($ProtectCode) {
+        $SageCorePkgSrc = Join-Path $SageCoreSource "sage_core"
+    } else {
+        $SageCorePkgSrc = Join-Path $SageCoreDest "sage_core"
+    }
     $SageCorePkgDest = Join-Path $EmbedSitePackagesForSageCore "sage_core"
     if (Test-Path $SageCorePkgSrc) {
         Write-Host "Copying inner sage_core/ to embeddable site-packages (port of main PR #132)..." -ForegroundColor Green
@@ -208,6 +241,11 @@ if (Test-Path $SageCoreSource) {
         Copy-Item -Path $SageCorePkgSrc -Destination $SageCorePkgDest -Recurse -Force
         # Drop __pycache__ from the runtime copy
         Get-ChildItem -Path $SageCorePkgDest -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force
+        if ($ProtectCode) {
+            # Keep only compiled extensions + package markers; strip .py source.
+            Get-ChildItem -Path $SageCorePkgDest -Recurse -Filter "*.py" | Where-Object { $_.Name -ne "__init__.py" } | Remove-Item -Force
+            Write-Host "🛡️ Stripped sage_core .py source from embeddable site-packages (kept .pyd + __init__.py)." -ForegroundColor Green
+        }
     }
 } else {
     # Outer WARNING mirrors the inner one below — surfaces the failure mode
@@ -236,6 +274,16 @@ foreach ($item in $BackendItems) {
     } else {
         Copy-Item -Path $item.FullName -Destination $dest -Force
     }
+}
+
+# In protected mode, compile backend to .pyc and strip source .py files (except main.py)
+if ($ProtectCode) {
+    Write-Host "🛡️ Compiling backend to bytecode (.pyc) and stripping source .py..." -ForegroundColor Yellow
+    & $PythonExe -m compileall -b $BackendDir
+    if ($LASTEXITCODE -ne 0) { throw "compileall for backend failed with exit code $LASTEXITCODE" }
+    # main.py stays as source — the launcher entry point must remain readable.
+    Get-ChildItem -Path $BackendDir -Recurse -Filter "*.py" | Where-Object { $_.Name -ne "main.py" } | Remove-Item -Force
+    Write-Host "🛡️ Backend source stripping complete." -ForegroundColor Green
 }
 
 # Create backend startup script (from main 6034f7ed — win7 lacks it)
