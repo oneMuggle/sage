@@ -2297,10 +2297,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             request_id,
                             l11_outcome.reason,
                         )
+                        # 2026-09 (同步 #1100): 失败信封统一 dict {type, message}
                         await entry.queue.put(
                             {
                                 "state": "failed",
-                                "error": "prompt_blocked_by_hook",
+                                "error": {
+                                    "type": "prompt_blocked_by_hook",
+                                    "message": l11_outcome.reason
+                                    or "该消息已被本地钩子拦截",
+                                },
                             }
                         )
                         return
@@ -3227,41 +3232,47 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             request_id, data.session_id, data.message, done_content
                         )
 
-                # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
-                # 在推送 DONE 事件前完成，确保前端 onDone → loadSessions() 读到新标题。
-                if done_event and sess and sess.message_count <= 2:
-                    try:
-                        from backend.chat.title_generator import TitleGenerator
-                        from backend.orchestration.llm_factory import (
-                            build_llm_client_from_settings,
-                        )
-
-                        title_client = build_llm_client_from_settings()
-                        if title_client:
-                            title = await TitleGenerator(title_client).generate(
-                                data.message, done_content
-                            )
-                            if title:
-                                # PR A §1.2: 标题更新同样需经 ``_run_db_sync``
-                                # 走 ``_SQLITE_LOCK``,与本会话其他写入串行化。
-                                await _run_db_sync(
-                                    session_repo.update, data.session_id, title=title
-                                )
-                                await entry.queue.put(
-                                    {
-                                        "type": "session_updated",
-                                        "subtype": "title_updated",
-                                        "title": title,
-                                    }
-                                )
-                    except Exception as e:
-                        logger.warning(
-                            f"[REQ {request_id}] 标题生成失败: {e}"
-                        )
-
-                # 推送暂存的 DONE 事件（在 session_updated 之后）
+                # 推送暂存的 DONE 事件先行 —— 2026-09 修复 (同步 #1100):
+                # 标题生成内部自带 3 次退避重试, 最长可拖 15s+, 此前阻塞在
+                # DONE 之前, 内容已生成完用户仍在转圈。现 DONE 立即推送,
+                # 标题转后台任务生成, 完成后落库并补发 title_updated。
                 if done_event:
                     await entry.queue.put(done_event.to_dict())
+
+                # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
+                if done_event and sess and sess.message_count <= 2:
+
+                    async def _generate_title() -> None:
+                        try:
+                            from backend.chat.title_generator import TitleGenerator
+                            from backend.orchestration.llm_factory import (
+                                build_llm_client_from_settings,
+                            )
+
+                            title_client = build_llm_client_from_settings()
+                            if title_client:
+                                title = await TitleGenerator(title_client).generate(
+                                    data.message, done_content
+                                )
+                                if title:
+                                    # PR A §1.2: 标题更新同样需经 ``_run_db_sync``
+                                    # 走 ``_SQLITE_LOCK``,与本会话其他写入串行化。
+                                    await _run_db_sync(
+                                        session_repo.update, data.session_id, title=title
+                                    )
+                                    await entry.queue.put(
+                                        {
+                                            "type": "session_updated",
+                                            "subtype": "title_updated",
+                                            "title": title,
+                                        }
+                                    )
+                        except Exception as e:
+                            logger.warning(
+                                f"[REQ {request_id}] 标题生成失败: {e}"
+                            )
+
+                    asyncio.create_task(_generate_title())
         except LLMError as e:
             logger.warning(
                 f"[REQ {request_id}] /chat/stream LLM error: "
