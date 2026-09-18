@@ -79,6 +79,12 @@ class _PendingReplCleanup:
 _PENDING_CLEANUPS: List[_PendingReplCleanup] = []
 _PENDING_CLEANUPS_LOCK = threading.RLock()
 
+#: 定时清理线程的轮询间隔（秒）
+_CLEANUP_TIMER_INTERVAL = 60.0
+#: 定时清理线程引用；惰性启动，队列空时自动退出
+_cleanup_timer_thread: Optional[threading.Thread] = None
+_cleanup_timer_stop = threading.Event()
+
 
 def _close_process_streams(process: Any) -> None:
     for stream in (process.stdout, process.stderr):
@@ -181,7 +187,31 @@ def _retry_pending_cleanups() -> None:
 
 def shutdown_pending_cleanups() -> None:
     """在后端关闭时尝试一次待处理的 REPL 资源清理。"""
+    _cleanup_timer_stop.set()
     _retry_pending_cleanups()
+
+
+def _cleanup_timer_loop() -> None:
+    """定时清理线程主循环：每 _CLEANUP_TIMER_INTERVAL 秒重试一次，队列空时退出。"""
+    while not _cleanup_timer_stop.wait(timeout=_CLEANUP_TIMER_INTERVAL):
+        _retry_pending_cleanups()
+        with _PENDING_CLEANUPS_LOCK:
+            if not _PENDING_CLEANUPS:
+                return
+
+
+def _ensure_cleanup_timer() -> None:
+    """确保定时清理线程已启动。仅在有待处理项且线程未运行时启动。"""
+    global _cleanup_timer_thread
+    if _cleanup_timer_thread is not None and _cleanup_timer_thread.is_alive():
+        return
+    _cleanup_timer_stop.clear()
+    _cleanup_timer_thread = threading.Thread(
+        target=_cleanup_timer_loop,
+        name="sage-repl-cleanup-timer",
+        daemon=True,
+    )
+    _cleanup_timer_thread.start()
 
 
 def _retain_pending_cleanup(
@@ -210,6 +240,7 @@ def _retain_pending_cleanup(
                 process_group_killed=process_group_killed,
             )
         )
+    _ensure_cleanup_timer()
 
 
 def clamp_timeout(value: float) -> float:
@@ -358,6 +389,7 @@ class ReplTool(BaseTool):
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
+                    extra_env={"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
                 )
             except ProcessGroupVerificationError as exc:
                 # Popen succeeded; retain the exposed process for fail-closed
@@ -536,7 +568,6 @@ class ReplTool(BaseTool):
                             process_group_killed=process_group_killed,
                         )
                     logger.error(
-                        "repl 资源清理失败（异常类型=%s）",
+                        "repl 资源清理失败（异常类型=%s），临时文件已入队延迟重试",
                         type(final_cleanup_error).__name__,
                     )
-                    raise final_cleanup_error
