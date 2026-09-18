@@ -69,6 +69,10 @@ OFFICE_TOOLS = (
     "office_fill_pdf_form",
     "office_analyze_word_template",
     "office_fill_word_template",
+    # 2026-09-18 PPT 模板两件套（office-p5a HTTP 能力的 LLM 工具面镜像）：
+    # analyze 枚举版式/占位符（READ）；fill 以模板副本另存新 .pptx（WRITE_LOCAL）。
+    "office_analyze_ppt_template",
+    "office_fill_ppt_template",
     "office_analyze",
     # 2026-09-11 Round 9 引用体系：BibTeX 解析（READ，纯文本、无工作区依赖）
     "office_parse_bibtex",

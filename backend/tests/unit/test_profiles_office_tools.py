@@ -68,13 +68,17 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
     # 20 → 21 件（按字母序插在 office_read_pdf_form 与 office_restore 之间）。
     # 2026-09-18 Round 39: primary 经 *OFFICE_TOOLS 继承 office_refresh_toc,
     # 21 → 22 件（office_read_pdf_form 之后、office_repair_word 之前）。
+    # 2026-09-18 PPT 模板两件: primary 经 *OFFICE_TOOLS 继承
+    # office_analyze_ppt_template / office_fill_ppt_template, 22 → 24 件。
     assert visible == [
         "office_analyze",
+        "office_analyze_ppt_template",
         "office_analyze_word_template",
         "office_archive",
         "office_create",
         "office_delete",
         "office_fill_pdf_form",
+        "office_fill_ppt_template",
         "office_fill_word_template",
         "office_generate_pdf",
         "office_journal_fill_from_content",
@@ -112,12 +116,16 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
     # （仍不给 office_delete）。
     # 2026-09-18 Round 39: writer 白名单补 office_refresh_toc, 20 → 21 件
     # （仍不给 office_delete）。
+    # 2026-09-18 PPT 模板两件: writer 补 office_analyze_ppt_template /
+    # office_fill_ppt_template, 21 → 23 件（仍不给 office_delete）。
     assert visible == [
         "office_analyze",
+        "office_analyze_ppt_template",
         "office_analyze_word_template",
         "office_archive",
         "office_create",
         "office_fill_pdf_form",
+        "office_fill_ppt_template",
         "office_fill_word_template",
         "office_generate_pdf",
         "office_journal_fill_from_content",
@@ -161,6 +169,7 @@ def test_list_and_read_hidden_without_workspace_binding(registry):
         "office_create",
         "office_delete",
         "office_fill_pdf_form",
+        "office_fill_ppt_template",
         "office_fill_word_template",
         "office_generate_pdf",
         "office_parse_bibtex",

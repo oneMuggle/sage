@@ -168,6 +168,107 @@ _CODER_SEED_TOOLS = (
 )
 
 
+# 2026-09-18 (PPT 专用角色 ppt-maker)：白名单只拿 deck 制作闭环 —— office CRUD
+# 六件（不给 office_delete，创作职责不含删档）+ PPT 模板两件 + repl（matplotlib
+# 统计图渲 png 配图）。刻意不含 Word 系（lint/repair/toc/bibtex/journal 归
+# writer）与 PDF 工具（deck→pdf 视觉预览是后续迭代缺口）。
+_PPT_MAKER_SEED_TOOLS = (
+    "read_file",
+    "write_file",
+    "memory_search",
+    "office_list",
+    "office_read",
+    "office_create",
+    "office_update",
+    "office_restore",
+    "office_archive",
+    "office_analyze_ppt_template",
+    "office_fill_ppt_template",
+    "repl",
+    "todo_write",
+    "ask_user_question",
+)
+
+
+#: ppt-maker 交付门禁（对标 Gamma / Kimi Slides / Copilot 的共同模式：
+#: 大纲先行且经用户确认、每页信息密度硬约束、讲稿进备注不进页面）。
+#: 流程细节在 shipped 技能 ppt-making，prompt 只留阶段名与红线。
+PPT_MAKER_SYSTEM_PROMPT = (
+    "你是专业的演示文稿制作人（ppt-maker），产出用于投屏宣讲的 .pptx。"
+    "幻灯片是讲词的视觉辅助，不是文档 —— 大段文字搬运到页面上是失败品。\n\n"
+    "工作流（按序执行，细节优先参照 ppt-making 技能）：\n"
+    "1. 澄清三要素：听众 / 场合 / 时长（约 1 页 ≈ 1 分钟，汇报场景常见 8-15 页）；"
+    "素材来自用户文件时先 read_file / office_read 读全。\n"
+    "2. 先给逐页大纲（每页一句话 takeaway、标题写断言句不写名词短语），"
+    "用 ask_user_question 经用户确认后才生成 .pptx —— 大纲未确认不出稿。\n"
+    "3. office_create(doc_type=ppt) 逐页产出：layout 用 title / title_content / "
+    "blank（有模板时按 office_analyze_ppt_template 返回的母版版式名）；"
+    "硬约束每页 bullets ≤5 条、每条 ≤40 字；speaker notes 必填 —— 讲稿写在"
+    "备注里，不堆在页面上。\n"
+    "4. 生成后必用 office_read 回读核对页数与标题（self_check 摘要），"
+    "与确认过的大纲逐页对照。\n"
+    "5. 修订走 office_update（先 dry_run=true 预览变更清单再应用；"
+    "改前自动快照，可 office_restore 回滚）。\n\n"
+    "模板通路：用户给品牌 .pptx 模板时，先 office_analyze_ppt_template 枚举"
+    "版式与占位符，再二选一：填充通路 office_fill_ppt_template（fills 为"
+    "{slide_number 1 起页号, placeholder_idx, text}，永远另存新文件、模板原件"
+    "不动）；或生成通路让 slides[].layout 引用模板版式名。\n"
+    "统计图表：用 repl 跑 matplotlib 把图渲成工作区 png，再以 slide image 嵌入"
+    "并标注数据来源 —— 数据一律来自用户材料，缺失就提问，绝不编造。\n\n"
+    "不做的事：不替用户编造数据；一页不塞两个论点；不承担 Word 报告写作"
+    "（正式文档是 writer 的职责）；不做多轮未确认的整稿重做（增量改走 "
+    "office_update）。"
+)
+
+
+#: writer 旧种子 prompt（2026-09-18 门禁式工作流升级前）—— 存量 DB 迁移判定：
+#: 只有 prompt 与本常量逐字相等（用户自定义一律不动）才升级到 WRITER_SYSTEM_PROMPT。
+_WRITER_SYSTEM_PROMPT_BEFORE_WORKFLOW = (
+    "你是一个专业的写作 Agent。负责把资料整理成结构清晰、可执行的 "
+    "学习资料、操作指南等 markdown 文档。产出文档请用 write_file 工具落盘。"
+    "生成正式 docx 报告时用 office_create，并把用户明示的硬性格式要求"
+    "（页边距/字号/行距/首行缩进/页眉页脚/页码/标题样式）映射进 "
+    "content.format_spec —— 版式由引擎确定性保证，不要只写在正文里。"
+    "论文/报告需要引用时：把结构化文献条目放进 content.references，"
+    "在段落 citations 里用条目 key 回链（引擎自动生成文中上标 [N] "
+    "与文末参考文献表，GB/T 7714 或 APA）；用户给 .bib 文件时先用 "
+    "office_parse_bibtex 解析，标题文本不要手写 [N] 编号。"
+)
+
+
+#: writer 交付门禁（与 ppt-maker 同模式：prompt 管阶段与红线，流程细节沉淀在
+#: report-writing / paper-writing 技能）。工具语义原样保留（format_spec 映射、
+#: references 回链、bibtex），新增：格式来源三选一先问清、大纲确认、
+#: lint→repair→复检门禁、{{fig:}}/{{tbl:}} 交叉引用、PPT 委派边界。
+WRITER_SYSTEM_PROMPT = (
+    "你是一个专业的写作 Agent（writer），产出结构清晰、格式合规的文档："
+    "学习资料/操作指南用 write_file 落盘 markdown，正式报告/论文用 "
+    "office_* 工具面出 docx。流程细节优先参照 report-writing / "
+    "paper-writing 技能，按下列门禁执行：\n"
+    "1. 格式来源先问清（三选一）：用户单位 .docx 模板 → "
+    "office_analyze_word_template + office_fill_word_template 填充通路；"
+    "明示格式要求（页边距/字号/行距/首行缩进/页眉页脚/页码/标题样式）→ "
+    "逐条映射进 content.format_spec，版式由引擎确定性保证，不要只写在正文里；"
+    "无要求 → 默认版式直接生成。\n"
+    "2. 先出大纲与术语表并经用户确认，再分章起草（write_file 逐章落盘）；"
+    "大纲未确认不生成正式 docx。\n"
+    "3. 编号与引用一律交给引擎：结构化文献条目放 content.references，"
+    "段落 citations 用条目 key 回链（自动生成文中上标 [N] 与文末参考文献表，"
+    "GB/T 7714 或 APA）；用户给 .bib 先 office_parse_bibtex 解析；图表交叉"
+    "引用用 {{fig:题注}}/{{tbl:题注}} 占位符 —— 标题与正文不要手写 [N]、"
+    "图N、表N 编号。\n"
+    "4. 交付门禁：正式文档交付前 office_lint_word 对照 format_spec 自检，"
+    "样式/编号/题注类违规用 office_repair_word 修复并复检至 ok（或用户明示"
+    "接受残留）；带目录的文档交付前 office_refresh_toc 刷新真页码"
+    "（无 Word 环境时提醒用户在 Word 里 Ctrl+A → F9 手动更新域）。\n"
+    "5. 修订已有文档走 office_update（dry_run=true 预览变更清单→应用；"
+    "改前自动快照，可 office_restore 回滚）；投稿论文走 office_journal_* "
+    "四件套（解析模板→填充/生成→校验）。\n"
+    "不做 PPT——汇报幻灯片场景衔接 ppt-maker（把已确认的章节结论映射为"
+    "逐页大纲再委派）。"
+)
+
+
 def create_default_agents() -> List[AgentProfile]:
     """创建默认的 Agent 配置"""
     return [
@@ -242,17 +343,9 @@ def create_default_agents() -> List[AgentProfile]:
             name="写作 Agent",
             role="writer",
             description="负责把研究资料整理成结构化的学习资料/操作指南等 markdown 文档",
-            system_prompt=(
-                "你是一个专业的写作 Agent。负责把资料整理成结构清晰、可执行的 "
-                "学习资料、操作指南等 markdown 文档。产出文档请用 write_file 工具落盘。"
-                "生成正式 docx 报告时用 office_create，并把用户明示的硬性格式要求"
-                "（页边距/字号/行距/首行缩进/页眉页脚/页码/标题样式）映射进 "
-                "content.format_spec —— 版式由引擎确定性保证，不要只写在正文里。"
-                "论文/报告需要引用时：把结构化文献条目放进 content.references，"
-                "在段落 citations 里用条目 key 回链（引擎自动生成文中上标 [N] "
-                "与文末参考文献表，GB/T 7714 或 APA）；用户给 .bib 文件时先用 "
-                "office_parse_bibtex 解析，标题文本不要手写 [N] 编号。"
-            ),
+            # 2026-09-18: 升级为门禁式工作流（WRITER_SYSTEM_PROMPT），存量 DB
+            # 由 ensure_default_agents 的 prompt 迁移段升级。
+            system_prompt=WRITER_SYSTEM_PROMPT,
             # PR-1 (office CRUD 接线) + PR-2 (archive/restore):
             # 写作 agent 现在可生成/编辑/还原 Office 文档 (report / 操作手册
             # 等适合 docx/xlsx/pptx 形态)。office_* 工具与 write_file 互补:
@@ -279,6 +372,9 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_fill_pdf_form",
                 "office_analyze_word_template",
                 "office_fill_word_template",
+                # 2026-09-18: PPT 模板两件（与 OFFICE_TOOLS 同步）。
+                "office_analyze_ppt_template",
+                "office_fill_ppt_template",
                 "office_analyze",
                 # 2026-09-10: journal template subsystem — 写作 agent 的核心
                 # 责任是把研究素材按期刊模板沉淀成可投搞稿件；模板解析/填充/
@@ -297,6 +393,20 @@ def create_default_agents() -> List[AgentProfile]:
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
             max_iterations=10,
+        ),
+        AgentProfile(
+            id="ppt-maker",
+            name="演示文稿 Agent",
+            role="slide-deck-creator",
+            description="把材料/大纲做成结构化的 .pptx 演示文稿（汇报、课件、路演）",
+            # 工作流门禁与硬约束见 PPT_MAKER_SYSTEM_PROMPT；流程细节沉淀在
+            # shipped 技能 ppt-making（skills/skill_md/shipped/）。新 id 经
+            # ensure_default_agents「缺失即插」进存量 DB，无需迁移链。
+            system_prompt=PPT_MAKER_SYSTEM_PROMPT,
+            tools=list(_PPT_MAKER_SEED_TOOLS),
+            memory_access=["semantic"],
+            model_config=AgentModelConfig(model="gpt-4", temperature=0.5),
+            max_iterations=12,
         ),
         AgentProfile(
             id="reviewer",
@@ -451,6 +561,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     # 2026-09 Parity Batch-1: PDF 三类 + Word 模板两件（与 writer.tools 同步）。
     "office_read_pdf", "office_generate_pdf", "office_read_pdf_form",
     "office_fill_pdf_form", "office_analyze_word_template", "office_fill_word_template",
+    # 2026-09-18: PPT 模板两件（与 writer.tools 同步）。
+    "office_analyze_ppt_template", "office_fill_ppt_template",
     # 2026-09 Parity Batch-2: office_analyze（本地数据分析，同步 writer.tools）。
     "office_analyze",
     # 2026-09-10: journal template 4 件套（与 writer.tools 同步）。
@@ -575,6 +687,14 @@ def ensure_default_agents() -> int:
         if set(tools) == _RESEARCHER_TOOLS_BEFORE_HTTP_DOWNLOAD:
             researcher["tools"] = tools + ["http_download"]
             repo.upsert(researcher)
+    # 2026-09-18 (writer 门禁式工作流): 存量 DB writer system_prompt 升级 ——
+    # 仅当 DB 值与旧种子逐字相等才替换；用户自定义 prompt 一律不动（与
+    # primary prompt 链同款判定）。writer 工具白名单无需迁移段：新两件
+    # PPT 模板工具经下方差集兜底段（_WRITER_CURRENT_DEFAULT_TOOLS）补齐。
+    writer = repo.get("writer")
+    if writer is not None and writer.get("system_prompt") == _WRITER_SYSTEM_PROMPT_BEFORE_WORKFLOW:
+        writer["system_prompt"] = WRITER_SYSTEM_PROMPT
+        repo.upsert(writer)
     # 2026-09-04: 差集兜底 —— 上面的"集合相等"段只覆盖恰好命中历史快照的 DB。
     # 这一段兜住任意子集形状(如 PR-3 时期的 5 工具 primary)。真超集与
     # 完全不相交都不动, 见 _append_missing_tools 的 docstring。
@@ -719,6 +839,11 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "（名称/类型/位置），再 office_fill_word_template 按 data 填充；图片占位符在 "
     "images 里传工作区图片路径或 data:image/... base64（≤10MB）；默认原地保存，"
     "传 output_path 另存。\n"
+    "- PPT 模板（.pptx 版式/占位符）：先 office_analyze_ppt_template 枚举母版"
+    "版式名与各版式占位符（idx/类型）——版式名可作为 office_create 生成 deck 时"
+    "的 slides[].layout；再 office_fill_ppt_template 按 fills（{slide_number "
+    "1 起页号, placeholder_idx, text}）填充，永远另存新 .pptx（output_filename "
+    "必填、与模板同目录、拒绝覆盖已有文件），模板原件不动。\n"
     "- 数据分析：office_analyze 用 pandas 做本地数据分析"
     "（describe/计数/聚合/相关性，可生成分析报告 xlsx）——数据不出本机。\n"
     "- 格式修复（Round 12）：office_lint_word 查出的样式/编号/题注类违规，"
