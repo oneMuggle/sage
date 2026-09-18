@@ -58,7 +58,10 @@ def test_check_executable_chrome_found():
 
 def test_check_executable_chrome_not_found():
     """未发现 Chrome 时返回 warn。"""
-    result = _check_executable_chrome(None)
+    with patch(
+        "backend.tools.browser_diagnostics.discover_and_select", return_value=None
+    ):
+        result = _check_executable_chrome(None)
     assert result.status == "warn"
     assert result.fix_hint is not None
 
