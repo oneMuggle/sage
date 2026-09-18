@@ -127,7 +127,9 @@ describe('RightPanel', () => {
       vi.mocked(useArtifactContent).mockReturnValue({
         content: { ok: true, kind: 'markdown', content: '# Hello' },
         loading: false,
-      });
+        // win7 分支签名差异：useArtifactContent 额外返回 refresh
+        refresh: vi.fn(),
+      } as never);
       const { useArtifacts } = await import('../../../features/artifacts/useArtifacts');
       vi.mocked(useArtifacts).mockReturnValue({
         artifacts: arts,
