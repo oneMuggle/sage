@@ -2897,9 +2897,23 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     if r37_ctx is None:
                         continue
+                    # r71: RAG 检索注入发生 → 推引用溯源事件（气泡内展示）
+                    if r37_ctx.mode == "rag":
+                        try:
+                            entry.queue.put_nowait(
+                                {
+                                    "state": "attachment_rag_used",
+                                    "session_id": data.session_id,
+                                    "citations": [
+                                        {"media_id": r37_mid, "mode": "rag"}
+                                    ],
+                                }
+                            )
+                        except Exception:
+                            logger.debug(f"[REQ {request_id}] rag_used event push failed, ignored")
                     dynamic_context_parts.append(
                         "<attached_document id=" + repr(r37_mid) + ">" + chr(10)
-                        + r37_ctx + chr(10) + "</attached_document>"
+                        + r37_ctx.text + chr(10) + "</attached_document>"
                     )
             except Exception as r37_att_err:
                 logger.debug(f"[REQ {request_id}] attachment media inject skipped: {r37_att_err}")

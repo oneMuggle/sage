@@ -76,6 +76,8 @@ export interface Message {
   activated_skills?: { name: string; triggers_matched: string[] }[];
   /** R38: 自动压缩信息（compact_triggered 流事件携带） */
   compact_info?: { before: number; after: number; removed: number };
+  /** r71: 附件检索注入溯源（attachment_rag_used 流事件携带） */
+  rag_citations?: { media_id: string; mode: string }[];
   reasoning_content?: string | null; // LLM 思考/推理过程（2026-09 step-by-step: 允许 null 表示该步无 reasoning 累积）
   /** 2026-09 step-by-step: 多步 ReAct 中每条 assistant 消息的步序号。null=旧消息/单步。 */
   step_index?: number | null;

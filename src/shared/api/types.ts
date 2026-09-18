@@ -215,7 +215,10 @@ export type AgentState =
   // 压缩统计,载荷见 AgentEvent.compact。
   | 'compact_triggered'
   // Task 10 (2026-09-17): 自动话题检测 — 切换 segment 时由 producer 推送。
-  | 'topic_shifted';
+  | 'topic_shifted'
+  // r71: 附件检索注入溯源（引用块在气泡内可展开）,
+  // 载荷见 AgentEvent.citations。
+  | 'attachment_rag_used';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -515,6 +518,8 @@ export interface AgentEvent {
   skills?: { name: string; triggers_matched: string[] }[];
   // R38: compact_triggered 事件载荷（M4 自动压缩统计）。
   compact?: { before: number; after: number; removed: number };
+  // r71: attachment_rag_used 事件载荷（超长文档检索注入溯源）。
+  citations?: { media_id: string; mode: string }[];
 }
 
 // ==================== 错误类型定义 ====================
