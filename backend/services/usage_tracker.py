@@ -160,6 +160,8 @@ class UsageRecord:
     # Task 5 (2026-09-15): endpoint identity and immutable pricing snapshot.
     endpoint_id: Optional[str] = None
     price_snapshot: Optional[PriceSnapshot] = None
+    # 上下文分类明细快照 (backend.chat.context_breakdown 结构); None = 未采集
+    context_breakdown: Optional[Dict[str, Any]] = None
 
 
 def _empty_bucket() -> Dict[str, Any]:
@@ -242,6 +244,7 @@ class UsageTracker:
         latency_ms: Optional[int] = None,
         endpoint_id: Optional[str] = None,
         price_snapshot: Optional[PriceSnapshot] = None,
+        context_breakdown: Optional[Dict[str, Any]] = None,
     ) -> UsageRecord:
         """记录一次 LLM 调用; 返回生成的 UsageRecord。
 
@@ -298,6 +301,7 @@ class UsageTracker:
             latency_ms=lt,
             endpoint_id=endpoint_id,
             price_snapshot=price_snapshot,
+            context_breakdown=context_breakdown,
         )
         day = datetime.now().strftime("%Y-%m-%d")
         with self._lock:
@@ -349,6 +353,10 @@ class UsageTracker:
             if entry.price_snapshot is not None:
                 import json as _json
                 snapshot_json = _json.dumps(entry.price_snapshot.to_dict(), ensure_ascii=False)
+            breakdown_json = None
+            if entry.context_breakdown is not None:
+                import json as _json
+                breakdown_json = _json.dumps(entry.context_breakdown, ensure_ascii=False)
             row = (
                 str(uuid.uuid4()),
                 session_id,
@@ -367,14 +375,16 @@ class UsageTracker:
                 snapshot_json,
                 # RT23 (round23): 编排子任务归因（ContextVar 自动携带）。
                 current_task_id.get(),
+                breakdown_json,
             )
             with _SQLITE_LOCK:
                 get_database().get_connection().execute(
                     "INSERT INTO usage_events (id, session_id, model, prompt_tokens,"
                     " completion_tokens, total_tokens, estimated_cost_usd, created_at,"
                     " cached_tokens, cache_read_tokens, cache_creation_tokens,"
-                    " first_token_ms, latency_ms, endpoint_id, price_snapshot, task_id)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " first_token_ms, latency_ms, endpoint_id, price_snapshot, task_id,"
+                    " context_breakdown)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     row,
                 )
                 get_database().get_connection().commit()
@@ -538,10 +548,12 @@ class UsageTracker:
             return 0
 
     def last_request(self, session_id: str) -> Dict[str, Any] | None:
-        """U17: 该会话最近一次 LLM 请求的用量行。
+        """U17: 该会话最近一次**主链路** LLM 请求的用量行。
 
         上一轮请求的 ``prompt_tokens`` 是"当前上下文占用"的最佳可得代理:
         本轮请求 = 历史 + system + 新消息, 恰为下一轮开始前的上下文基线。
+        ``task_id IS NULL`` 过滤编排子任务行——子代理的上下文构成与主
+        会话不同,混入会让 ContextMeter 显示成子代理的占用。
         DB 不可用 / 无记录 → None (前端隐藏指示器)。
         """
         try:
@@ -549,8 +561,9 @@ class UsageTracker:
 
             with _SQLITE_LOCK:
                 row = get_database().get_connection().execute(
-                    "SELECT model, prompt_tokens, cached_tokens, created_at"
-                    " FROM usage_events WHERE session_id = ?"
+                    "SELECT model, prompt_tokens, cached_tokens, created_at,"
+                    " context_breakdown"
+                    " FROM usage_events WHERE session_id = ? AND task_id IS NULL"
                     " ORDER BY created_at DESC LIMIT 1",
                     (session_id,),
                 ).fetchone()
@@ -559,11 +572,20 @@ class UsageTracker:
             return None
         if row is None:
             return None
+        breakdown = None
+        if row["context_breakdown"]:
+            try:
+                import json as _json
+
+                breakdown = _json.loads(row["context_breakdown"])
+            except (ValueError, TypeError):
+                breakdown = None
         return {
             "model": str(row["model"] or ""),
             "prompt_tokens": int(row["prompt_tokens"] or 0),
             "cached_tokens": int(row["cached_tokens"] or 0),
             "at_ms": int(row["created_at"] or 0),
+            "context_breakdown": breakdown,
         }
 
     def session_summary(self, session_id: str) -> Dict[str, Any]:
@@ -633,33 +655,26 @@ class UsageTracker:
                 "estimated_cost_usd": float(row["estimated_cost_usd"]) if row else 0.0,
             }
             last = self.last_request(session_id)
-        # Task 5: resolve effective context window for the last used model
+        # Task 5: resolve effective context window for the last used model.
+        # 复用 legacy_routes 的完整解析级联——尊重用户的 autoContext 开关与
+        # 手动 maxContext 钉值;此前此处硬写 automatic=True,手动模式用户的
+        # 百分比按 catalog 窗口算,与请求实际使用的预算不一致。
         eff_window = None
         if last and last.get("model"):
             try:
-                from backend.data.database import get_database
+                from backend.api.legacy_routes import _resolve_effective_window
                 from backend.data.settings_canonicalizer import to_camel
                 from backend.data.settings_repo import SettingsRepository
-                from backend.model_catalog.context import effective_window
-                from backend.model_catalog.repository import CatalogRepository
-                from backend.model_catalog.schemas import EndpointKey
 
                 raw = SettingsRepository().get_json("app_settings")
-                if isinstance(raw, dict):
-                    settings = to_camel(raw)
-                    selections = settings.get("modelSelections") or {}
-                    chat_sel = selections.get("chatModel") if isinstance(selections, dict) else None
-                    ep_id = None
-                    if isinstance(chat_sel, dict) and chat_sel.get("endpointId"):
-                        ep_id = chat_sel["endpointId"]
-                    if ep_id:
-                        repo = CatalogRepository(get_database())
-                        resolved = repo.resolve(
-                            EndpointKey(endpoint_id=ep_id, model_id=last["model"])
-                        )
-                        eff_window = effective_window(resolved.limits, True, 4096)
+                settings = to_camel(raw) if isinstance(raw, dict) else {}
+                eff_window = _resolve_effective_window(
+                    model_id=last["model"],
+                    max_context=settings.get("maxContext"),
+                    auto_context=settings.get("autoContext"),
+                )
             except Exception:
-                pass  # fail-open: catalog unavailable
+                pass  # fail-open: catalog/settings unavailable
 
         summary.update(
             {
@@ -667,6 +682,7 @@ class UsageTracker:
                 "last_prompt_tokens": last["prompt_tokens"] if last else None,
                 "last_cached_tokens": last["cached_tokens"] if last else None,
                 "last_at_ms": last["at_ms"] if last else None,
+                "last_context_breakdown": (last or {}).get("context_breakdown"),
                 "effective_context_window": eff_window,
             }
         )

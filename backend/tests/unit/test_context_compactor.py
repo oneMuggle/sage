@@ -62,6 +62,12 @@ class TestTokenEstimation:
         messages = [_msg("assistant", None)]
         assert compactor.estimate_tokens(messages) == 0
 
+    def test_estimate_tokens_chinese_uses_shared_caliber(self):
+        """口径统一：中文按字符计（旧 len/4 会把 200 汉字估成 50 → 严重低估）"""
+        compactor = ContextCompactor()
+        messages = [_msg("user", "汉" * 200)]
+        assert compactor.estimate_tokens(messages) == 200
+
     def test_should_compact_below_threshold(self):
         """未超阈值 → False（400 chars = 100 tokens，阈值恰好 100）"""
         compactor = ContextCompactor(context_window=200, compact_threshold_ratio=0.5)

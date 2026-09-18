@@ -119,6 +119,21 @@ export interface SessionUsage {
   last_at_ms: number | null;
   // Task 5: catalog-resolved effective context window for ContextMeter
   effective_context_window: number | null;
+  /** 上下文分类明细 (backend/chat/context_breakdown.py): 最近一次请求的
+   *  prompt 构成估算 + provider 实报校准;旧记录/未采集时为 null。 */
+  last_context_breakdown?: ContextBreakdown | null;
+}
+
+/** 一次请求的上下文分类明细快照 */
+export interface ContextBreakdown {
+  /** 类别 → token 数 (calibrated=true 时各类之和恰等于 prompt_tokens) */
+  categories: Record<string, number>;
+  /** 校准前的本地估算总和 */
+  estimated_total: number;
+  /** provider 实报 prompt_tokens;未回报时 null */
+  prompt_tokens: number | null;
+  /** 是否已按实报值等比校准 */
+  calibrated: boolean;
 }
 
 export async function fetchSessionUsage(sessionId: string): Promise<SessionUsage> {
