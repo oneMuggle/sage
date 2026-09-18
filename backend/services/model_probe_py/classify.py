@@ -47,7 +47,7 @@ def collectModelFields(  # noqa: N802
         out = []
     if depth > maxDepth or node is None:
         return out
-    if not isinstance(node, dict | list):
+    if not isinstance(node, (dict, list)):  # noqa: UP038
         return out
 
     if isinstance(node, list):
@@ -63,7 +63,7 @@ def collectModelFields(  # noqa: N802
             for i, m in enumerate(value):
                 if isinstance(m, str):
                     out.append({"path": f"{p}[{i}]", "key": "model", "value": m})
-        elif isinstance(value, dict | list):
+        elif isinstance(value, (dict, list)):  # noqa: UP038
             collectModelFields(value, p, out, depth + 1, maxDepth)
     return out
 

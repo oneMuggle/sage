@@ -78,7 +78,7 @@ def extract_public_access_token(frame: Dict[str, Any]) -> Optional[str]:
         headers = record.get("headers")
         if isinstance(headers, list):
             for pair in headers:
-                if isinstance(pair, list | tuple) and len(pair) >= 2 and str(pair[0]).lower() == "public-access-token" and isinstance(pair[1], str):
+                if isinstance(pair, (list, tuple)) and len(pair) >= 2 and str(pair[0]).lower() == "public-access-token" and isinstance(pair[1], str):  # noqa: UP038
                     return pair[1]
         elif isinstance(headers, dict):
             for key, value in headers.items():
@@ -161,7 +161,7 @@ def validate_jwt_claims(claims: Dict[str, Any]) -> bool:
 
     # Expiration check (required)
     exp = claims.get("exp")
-    if not isinstance(exp, int | float) or exp <= _time.time():
+    if not isinstance(exp, (int, float)) or exp <= _time.time():  # noqa: UP038
         logger.debug("JWT missing, invalid, or expired exp claim")
         return False
 
