@@ -199,7 +199,13 @@ export type AgentState =
   | 'artifact_created'
   // R17-E: 记忆召回展示 —— L13 注入记忆上下文后推送本次命中条目,
   // 载荷见 AgentEvent.memories。
-  | 'memory_used';
+  | 'memory_used'
+  // R38 (2026-09-18): 技能激活展示 —— A16 自动激活或显式 /skill 调用后
+  // 推送本次激活的技能列表,载荷见 AgentEvent.skills。
+  | 'skill_activated'
+  // R38 (2026-09-18): 自动上下文压缩展示 —— M4 达到阈值触发压缩后推送
+  // 压缩统计,载荷见 AgentEvent.compact。
+  | 'compact_triggered';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -492,6 +498,10 @@ export interface AgentEvent {
   };
   // R17-E: memory_used 事件载荷（L13 记忆注入命中条目,气泡内可展开）。
   memories?: { id: string; memory_type: string; preview: string }[];
+  // R38: skill_activated 事件载荷（A16 自动激活或显式 /skill 调用的技能列表）。
+  skills?: { name: string; triggers_matched: string[] }[];
+  // R38: compact_triggered 事件载荷（M4 自动压缩统计）。
+  compact?: { before: number; after: number; removed: number };
 }
 
 // ==================== 错误类型定义 ====================

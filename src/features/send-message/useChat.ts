@@ -338,6 +338,7 @@ export function useChat() {
         content,
         created_at: Date.now(),
       };
+      const userId = userMessage.id;
       addMessage(userMessage);
 
       if (!chatEndpoint?.baseUrl) {
@@ -629,6 +630,31 @@ export function useChat() {
               // 主路径与重接路径共用（重接重放时任务板完整重建）。
               if (applyOrchestrationEventToBoard(evt, sid)) {
                 return;
+              }
+
+              // R38: 透明度增强事件 — 技能激活 / 记忆召回 / 上下文压缩
+              // 这些事件不影响对话主流程，仅用于 UI 展示。fail-safe: 任何
+              // 异常只跳过更新，绝不阻断聊天。
+              if (evt.state === 'memory_used' && evt.memories) {
+                updateMessage(assistantId, {
+                  memory_refs: evt.memories,
+                  memory_applied: evt.memories.length,
+                });
+              }
+              if (evt.state === 'skill_activated' && evt.skills) {
+                updateMessage(userId, { activated_skills: evt.skills });
+              }
+              if (evt.state === 'compact_triggered' && evt.compact) {
+                // 插入特殊系统消息气泡（非普通 assistant 气泡）
+                const compactMsg: Message = {
+                  id: crypto.randomUUID(),
+                  session_id: sid,
+                  role: 'system',
+                  content: `📦 上下文已压缩：${evt.compact.before} → ${evt.compact.after} 条（移除 ${evt.compact.removed} 条）`,
+                  created_at: Date.now(),
+                  compact_info: evt.compact,
+                };
+                addMessage(compactMsg);
               }
 
               // 处理 reasoning 事件：三种 state 不同处理 (2026-09-02 bug fix)
