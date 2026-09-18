@@ -27,6 +27,11 @@ sqlite-vec>=0.1.9
 # HTTP
 httpx==0.26.0
 
+# Crypto (Arena account pool — Fernet symmetric encryption for passwords)
+# cryptography 41.0.7 ships cp38 wheels on PyPI; 42+ also supports 3.8 but
+# 41.x is the last branch tested against the full py38 + pydantic 1.x stack.
+cryptography==41.0.7
+
 # Observability
 prometheus-client==0.21.1  # py38 上限：0.22+ 要求 Python>=3.9
 
