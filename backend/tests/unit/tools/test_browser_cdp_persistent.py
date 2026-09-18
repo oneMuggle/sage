@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 import json
-import pytest
 
 from backend.tools.browser_cdp import PersistentCDPSession
 

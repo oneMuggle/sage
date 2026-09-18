@@ -9,6 +9,7 @@ Two backends:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import shutil
@@ -16,7 +17,9 @@ import subprocess
 from typing import Dict, List, Optional, Union
 
 from .model_probe_py.classify import (
-    SOURCE_WEIGHTS, resolveEvidence, vendorFromUrl,
+    SOURCE_WEIGHTS,
+    resolveEvidence,
+    vendorFromUrl,
 )
 from .model_probe_py.idmap import resolveModelId
 
@@ -64,10 +67,8 @@ class ModelProbeWorker:
             self._proc = None
 
     def __del__(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self.close()
-        except Exception:  # noqa: BLE001
-            pass
 
     # -- internal ----------------------------------------------------------
 

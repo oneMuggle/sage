@@ -11,9 +11,10 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from .registry import (
-    FAMILY_PROTOCOLS, HOST_VENDOR, MODEL_HEADER_RE, MODEL_KEY_RE,
+    FAMILY_PROTOCOLS,
+    HOST_VENDOR,
+    MODEL_KEY_RE,
 )
-
 
 #: Evidence source authority weights (the closer to ground truth, the higher)
 SOURCE_WEIGHTS: Dict[str, float] = {
@@ -34,19 +35,19 @@ SOURCE_WEIGHTS: Dict[str, float] = {
 }
 
 
-def collectModelFields(
+def collectModelFields(  # noqa: N802
     node: Any,
     path: str = "$",
     out: Optional[List[Dict]] = None,
     depth: int = 0,
-    maxDepth: int = 12,
+    maxDepth: int = 12,  # noqa: N803
 ) -> List[Dict]:
     """Recursively traverse JSON, collect all string values for model-key fields."""
     if out is None:
         out = []
     if depth > maxDepth or node is None:
         return out
-    if not isinstance(node, (dict, list)):
+    if not isinstance(node, dict | list):
         return out
 
     if isinstance(node, list):
@@ -62,12 +63,12 @@ def collectModelFields(
             for i, m in enumerate(value):
                 if isinstance(m, str):
                     out.append({"path": f"{p}[{i}]", "key": "model", "value": m})
-        elif isinstance(value, (dict, list)):
+        elif isinstance(value, dict | list):
             collectModelFields(value, p, out, depth + 1, maxDepth)
     return out
 
 
-def scanTextForModel(text: str) -> List[str]:
+def scanTextForModel(text: str) -> List[str]:  # noqa: N802
     """Regex fallback: find model strings in arbitrary text (e.g. truncated SSE)."""
     found: List[str] = []
     if not isinstance(text, str) or not text:
@@ -82,7 +83,7 @@ def scanTextForModel(text: str) -> List[str]:
     return found
 
 
-def vendorFromUrl(url: str) -> Optional[str]:
+def vendorFromUrl(url: str) -> Optional[str]:  # noqa: N802
     """Map URL hostname to known vendor family."""
     if not isinstance(url, str) or not url:
         return None
@@ -102,7 +103,7 @@ def vendorFromUrl(url: str) -> Optional[str]:
     return None
 
 
-def protocolFingerprint(text: str) -> Optional[str]:
+def protocolFingerprint(text: str) -> Optional[str]:  # noqa: N802
     """Detect family from protocol framing tokens when no model string is present."""
     if not isinstance(text, str) or not text:
         return None
@@ -113,7 +114,7 @@ def protocolFingerprint(text: str) -> Optional[str]:
     return None
 
 
-def resolveEvidence(evidence: List[Dict]) -> Dict:
+def resolveEvidence(evidence: List[Dict]) -> Dict:  # noqa: N802
     """Aggregate evidence items into a single verdict.
 
     Each evidence item is a dict with at least: source, modelId (or family),

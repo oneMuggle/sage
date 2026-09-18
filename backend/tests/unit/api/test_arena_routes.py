@@ -6,11 +6,11 @@ from cryptography.fernet import Fernet
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.api.arena_routes import router, init_arena_service
+from backend.api.arena_routes import init_arena_service, router
 from backend.config.arena_automation import ArenaAutomationConfig
 
 
-@pytest.fixture
+@pytest.fixture()
 def client():
     fd, path = tempfile.mkstemp(suffix=".sqlite")
     os.close(fd)
@@ -23,7 +23,7 @@ def client():
     os.unlink(path)
 
 
-@pytest.fixture
+@pytest.fixture()
 def disabled_client():
     fd, path = tempfile.mkstemp(suffix=".sqlite")
     os.close(fd)

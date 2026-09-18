@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from typing import Dict, List, Pattern, Set
 
-
 #: Model name family patterns: family name → regex of canonical model name patterns
 MODEL_PATTERNS: Dict[str, Pattern] = {
     "gpt": re.compile(r"\bgpt[-\s]?\d|chatgpt|gpt-4o|gpt-5|gpt-6", re.IGNORECASE),
@@ -81,7 +80,7 @@ FAMILY_PROTOCOLS: Dict[str, List[str]] = {
 _FRONTIER_FAMILIES = {"gpt", "claude", "gemini"}
 
 
-def isFrontier(name: str) -> bool:
+def isFrontier(name: str) -> bool:  # noqa: N802
     """Return True if model name matches a known frontier family pattern."""
     if not isinstance(name, str) or not name:
         return False

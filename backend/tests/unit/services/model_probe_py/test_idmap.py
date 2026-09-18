@@ -1,7 +1,11 @@
 import asyncio
 
 from backend.services.model_probe_py.idmap import (
-    isUuid, resolveModelId, refreshModelMap, mapStats, _model_map,
+    _model_map,
+    isUuid,
+    mapStats,
+    refreshModelMap,
+    resolveModelId,
 )
 
 

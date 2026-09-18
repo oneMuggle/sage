@@ -5,8 +5,12 @@ from __future__ import annotations
 import pytest
 
 from backend.services.model_probe_py.classify import (
-    SOURCE_WEIGHTS, collectModelFields, protocolFingerprint,
-    resolveEvidence, scanTextForModel, vendorFromUrl,
+    SOURCE_WEIGHTS,
+    collectModelFields,
+    protocolFingerprint,
+    resolveEvidence,
+    scanTextForModel,
+    vendorFromUrl,
 )
 
 

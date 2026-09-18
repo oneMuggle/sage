@@ -78,9 +78,8 @@ def extract_public_access_token(frame: Dict[str, Any]) -> Optional[str]:
         headers = record.get("headers")
         if isinstance(headers, list):
             for pair in headers:
-                if isinstance(pair, (list, tuple)) and len(pair) >= 2:
-                    if str(pair[0]).lower() == "public-access-token" and isinstance(pair[1], str):
-                        return pair[1]
+                if isinstance(pair, list | tuple) and len(pair) >= 2 and str(pair[0]).lower() == "public-access-token" and isinstance(pair[1], str):
+                    return pair[1]
         elif isinstance(headers, dict):
             for key, value in headers.items():
                 if str(key).lower() == "public-access-token" and isinstance(value, str):
@@ -162,20 +161,13 @@ def validate_jwt_claims(claims: Dict[str, Any]) -> bool:
 
     # Expiration check (required)
     exp = claims.get("exp")
-    if not isinstance(exp, (int, float)):
-        logger.debug("JWT missing or invalid exp claim")
-        return False
-    if exp <= _time.time():
-        logger.debug("JWT expired: exp=%s", exp)
+    if not isinstance(exp, int | float) or exp <= _time.time():
+        logger.debug("JWT missing, invalid, or expired exp claim")
         return False
 
     # Public access token marker (required)
     pub = claims.get("pub")
-    if pub is not True:
-        logger.debug("JWT pub claim is not True: %r", pub)
-        return False
-
-    return True
+    return pub is True
 
 
 #: Pattern for token counts like "6.6k", "1.2M", "1500", "1,500"

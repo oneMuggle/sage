@@ -29,7 +29,8 @@ def test_thinking_filter_strip_removes_thinking_blocks():
     result = ArenaAdapter.apply_thinking_filter(text, ThinkingFilter.STRIP)
     assert "<thinking>" not in result
     assert "internal reasoning here" not in result
-    assert "Hello" in result and "world" in result
+    assert "Hello" in result
+    assert "world" in result
 
 
 def test_thinking_filter_keep_passes_verbatim():
@@ -42,7 +43,8 @@ def test_thinking_filter_summarize_replaces_with_token_estimate():
     result = ArenaAdapter.apply_thinking_filter(text, ThinkingFilter.SUMMARIZE)
     assert "<thinking>" not in result
     assert "[thinking:" in result
-    assert "Hello" in result and "world" in result
+    assert "Hello" in result
+    assert "world" in result
 
 
 def test_adapter_check_login_state_returns_true_when_avatar_present():
@@ -70,7 +72,8 @@ def test_adapter_fill_login_sends_key_dispatch_events():
     assert len(key_events) >= 16
     # Verify text was split into per-character dispatches
     typed_chars = [k["params"].get("text", "") for k in key_events if k["params"].get("type") == "char"]
-    assert "u" in typed_chars and "s" in typed_chars
+    assert "u" in typed_chars
+    assert "s" in typed_chars
 
 
 def test_eval_js_raises_on_cdp_command_error():
@@ -100,7 +103,8 @@ def test_eval_js_raises_on_empty_result():
 
 def test_focus_selector_raises_when_element_missing():
     from backend.services.arena_adapter import (
-        ArenaAdapter, SelectorNotFoundError,
+        ArenaAdapter,
+        SelectorNotFoundError,
     )
 
     bs = FakeBrowserSession()
@@ -112,7 +116,8 @@ def test_focus_selector_raises_when_element_missing():
 
 def test_click_selector_raises_when_element_missing():
     from backend.services.arena_adapter import (
-        ArenaAdapter, SelectorNotFoundError,
+        ArenaAdapter,
+        SelectorNotFoundError,
     )
 
     bs = FakeBrowserSession()
@@ -137,8 +142,9 @@ def test_check_login_state_raises_when_cdp_fails():
 
 def test_submit_message_retries_on_429():
     """The full submit_message retry path: 2 transient 429s then success."""
-    from backend.services.arena_adapter import ArenaAdapter
     from unittest.mock import patch
+
+    from backend.services.arena_adapter import ArenaAdapter
 
     bs = FakeBrowserSession()
     attempts = {"n": 0}
@@ -153,7 +159,7 @@ def test_submit_message_retries_on_429():
 
     bs.cdp_command = fake_cdp
     adapter = ArenaAdapter(bs)
-    with patch("backend.services.arena_adapter._time.sleep"):
+    with patch("backend.services.http_retry._time.sleep"):
         result = adapter.submit_message("hello")
     assert result == "hello"
     assert attempts["n"] >= 3  # 2 failures + 1 success
@@ -161,8 +167,9 @@ def test_submit_message_retries_on_429():
 
 def test_fill_login_retries_on_429():
     """fill_login retries on 429 and succeeds after transient failure."""
-    from backend.services.arena_adapter import ArenaAdapter
     from unittest.mock import patch
+
+    from backend.services.arena_adapter import ArenaAdapter
 
     bs = FakeBrowserSession()
     attempts = {"n": 0}
@@ -177,6 +184,6 @@ def test_fill_login_retries_on_429():
 
     bs.cdp_command = fake_cdp
     adapter = ArenaAdapter(bs)
-    with patch("backend.services.arena_adapter._time.sleep"):
+    with patch("backend.services.http_retry._time.sleep"):
         adapter.fill_login("user@example.com", "secret123")
     assert attempts["n"] >= 2  # 1 failure + 1 success

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Verify that the Python port of arena-model-probe produces equivalent
 verdicts to what the Node.js worker would return. We can't run Node in the
 test env, so we hand-code the expected verdicts for fixed inputs and assert
@@ -7,12 +8,13 @@ the Python port matches."""
 import pytest
 
 from backend.services.model_probe_py.classify import (
-    collectModelFields, scanTextForModel, protocolFingerprint,
+    collectModelFields,
+    protocolFingerprint,
     resolveEvidence,
 )
 
 
-@pytest.mark.integration
+@pytest.mark.integration()
 def test_python_port_handles_anthropic_request_shape():
     """Anthropic-style request body with model field at top level."""
     payload = {
@@ -24,7 +26,7 @@ def test_python_port_handles_anthropic_request_shape():
     assert any(f["value"] == "claude-opus-4-6" for f in fields)
 
 
-@pytest.mark.integration
+@pytest.mark.integration()
 def test_python_port_handles_openai_chunks():
     """OpenAI streaming chunk with model in the chunk envelope."""
     payload = {
@@ -37,7 +39,7 @@ def test_python_port_handles_openai_chunks():
     assert any("gpt-4o" in f["value"] for f in fields)
 
 
-@pytest.mark.integration
+@pytest.mark.integration()
 def test_python_port_resolves_uuid_with_injected_map():
     from backend.services.model_probe_py import idmap
     test_map = {
@@ -56,7 +58,7 @@ def test_python_port_resolves_uuid_with_injected_map():
         idmap._model_map.clear()
 
 
-@pytest.mark.integration
+@pytest.mark.integration()
 def test_python_port_protocol_fingerprint_matches_expected_families():
     assert protocolFingerprint('"type":"message_start"') == "anthropic"
     assert protocolFingerprint('"object":"chat.completion.chunk"') == "openai"
@@ -65,7 +67,7 @@ def test_python_port_protocol_fingerprint_matches_expected_families():
     assert protocolFingerprint("just plain text") is None
 
 
-@pytest.mark.integration
+@pytest.mark.integration()
 def test_python_port_verdict_aggregates_evidence_by_source_weight():
     evidence = [
         {"source": "request.body.model", "modelId": "gpt-4o", "weight": 1.0},

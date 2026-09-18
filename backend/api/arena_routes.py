@@ -15,7 +15,8 @@ from pydantic import BaseModel
 
 from backend.config.arena_automation import ArenaAutomationConfig
 from backend.services.arena_accounts import (
-    AccountState, ArenaAccountService,
+    AccountState,
+    ArenaAccountService,
 )
 
 logger = logging.getLogger(__name__)

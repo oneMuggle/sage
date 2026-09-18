@@ -15,7 +15,7 @@ import logging
 import sqlite3
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional
 
@@ -41,6 +41,11 @@ def derive_arena_key(token: str, machine_id: str) -> bytes:
     )
     raw = kdf.derive(token.encode("utf-8"))
     return base64.urlsafe_b64encode(raw)
+
+
+def _utcnow_iso() -> str:
+    """Return naive UTC timestamp string. Py3.10 compatible (no datetime.UTC)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")  # noqa: UP017
 
 
 class AccountState(Enum):
@@ -97,7 +102,7 @@ class ArenaAccountService:
         self, email: str, password: str, notes: Optional[str] = None
     ) -> Dict:
         with self._lock:
-            now = datetime.utcnow().isoformat(timespec="seconds")
+            now = _utcnow_iso()
             account_id = str(uuid.uuid4())
             password_enc = self._fernet.encrypt(password.encode("utf-8"))
             try:
@@ -174,7 +179,7 @@ class ArenaAccountService:
             ).fetchone()
             if row is None:
                 return None
-            now = datetime.utcnow().isoformat(timespec="seconds")
+            now = _utcnow_iso()
             self._conn.execute(
                 "UPDATE arena_accounts SET state = 'reserved', "
                 "last_used_at = ?, updated_at = ? WHERE id = ?",
@@ -185,7 +190,7 @@ class ArenaAccountService:
 
     def release_account(self, account_id: str) -> None:
         with self._lock:
-            now = datetime.utcnow().isoformat(timespec="seconds")
+            now = _utcnow_iso()
             self._conn.execute(
                 "UPDATE arena_accounts SET state = 'available', "
                 "failure_count = 0, updated_at = ? WHERE id = ?",
@@ -206,8 +211,8 @@ class ArenaAccountService:
             isolated_at = None
             if new_count >= self._failure_threshold:
                 new_state = "disabled"
-                isolated_at = datetime.utcnow().isoformat(timespec="seconds")
-            now = datetime.utcnow().isoformat(timespec="seconds")
+                isolated_at = _utcnow_iso()
+            now = _utcnow_iso()
             self._conn.execute(
                 "UPDATE arena_accounts SET state = ?, failure_count = ?, "
                 "isolated_at = ?, updated_at = ? WHERE id = ?",
@@ -221,7 +226,7 @@ class ArenaAccountService:
 
     def enable_account(self, account_id: str) -> None:
         with self._lock:
-            now = datetime.utcnow().isoformat(timespec="seconds")
+            now = _utcnow_iso()
             self._conn.execute(
                 "UPDATE arena_accounts SET state = 'available', "
                 "failure_count = 0, isolated_at = NULL, updated_at = ? "
@@ -232,7 +237,7 @@ class ArenaAccountService:
 
     def soft_delete_account(self, account_id: str) -> None:
         with self._lock:
-            now = datetime.utcnow().isoformat(timespec="seconds")
+            now = _utcnow_iso()
             self._conn.execute(
                 "UPDATE arena_accounts SET state = 'destroyed', updated_at = ? "
                 "WHERE id = ?",

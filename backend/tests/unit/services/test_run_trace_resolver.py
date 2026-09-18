@@ -18,7 +18,6 @@ from backend.services.run_trace_resolver import (
     validate_jwt_claims,
 )
 
-
 #: Valid defaults for JWT claims that pass validate_jwt_claims.
 #: Tests that need invalid claims (for testing rejection) override these fields.
 _VALID_CLAIM_DEFAULTS = {
@@ -239,7 +238,6 @@ def test_extract_run_id_from_claims_multiple_run_scopes():
 
 def test_validate_jwt_claims_accepts_valid_claims():
     import time
-    from backend.services.run_trace_resolver import validate_jwt_claims
     claims = {
         "iss": "https://id.trigger.dev",
         "aud": "https://api.trigger.dev",
@@ -253,7 +251,6 @@ def test_validate_jwt_claims_accepts_valid_claims():
 
 def test_validate_jwt_claims_rejects_wrong_issuer():
     import time
-    from backend.services.run_trace_resolver import validate_jwt_claims
     claims = {
         "iss": "https://evil.example.com",
         "aud": "https://api.trigger.dev",
@@ -265,7 +262,6 @@ def test_validate_jwt_claims_rejects_wrong_issuer():
 
 def test_validate_jwt_claims_rejects_wrong_audience():
     import time
-    from backend.services.run_trace_resolver import validate_jwt_claims
     claims = {
         "iss": "https://id.trigger.dev",
         "aud": "https://evil.example.com",
@@ -277,7 +273,6 @@ def test_validate_jwt_claims_rejects_wrong_audience():
 
 def test_validate_jwt_claims_rejects_expired():
     import time
-    from backend.services.run_trace_resolver import validate_jwt_claims
     claims = {
         "iss": "https://id.trigger.dev",
         "aud": "https://api.trigger.dev",
@@ -289,7 +284,6 @@ def test_validate_jwt_claims_rejects_expired():
 
 def test_validate_jwt_claims_rejects_missing_pub():
     import time
-    from backend.services.run_trace_resolver import validate_jwt_claims
     claims = {
         "iss": "https://id.trigger.dev",
         "aud": "https://api.trigger.dev",
@@ -300,7 +294,6 @@ def test_validate_jwt_claims_rejects_missing_pub():
 
 def test_validate_jwt_claims_rejects_pub_false():
     import time
-    from backend.services.run_trace_resolver import validate_jwt_claims
     claims = {
         "iss": "https://id.trigger.dev",
         "aud": "https://api.trigger.dev",
@@ -311,7 +304,6 @@ def test_validate_jwt_claims_rejects_pub_false():
 
 
 def test_validate_jwt_claims_rejects_missing_exp():
-    from backend.services.run_trace_resolver import validate_jwt_claims
     claims = {
         "iss": "https://id.trigger.dev",
         "aud": "https://api.trigger.dev",

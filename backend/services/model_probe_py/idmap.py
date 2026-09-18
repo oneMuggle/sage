@@ -24,14 +24,14 @@ _UUID_RE = re.compile(
 )
 
 
-def isUuid(s: str) -> bool:
+def isUuid(s: str) -> bool:  # noqa: N802
     """True if s is a UUID-shaped string."""
     if not isinstance(s, str) or not s:
         return False
     return bool(_UUID_RE.match(s))
 
 
-def resolveModelId(identifier: str, known_map: Optional[Dict] = None) -> Optional[str]:
+def resolveModelId(identifier: str, known_map: Optional[Dict] = None) -> Optional[str]:  # noqa: N802
     """If identifier is a UUID in the map, return the canonical model name.
 
     Otherwise return identifier unchanged (passthrough for plain model names).
@@ -44,7 +44,7 @@ def resolveModelId(identifier: str, known_map: Optional[Dict] = None) -> Optiona
     return identifier
 
 
-async def refreshModelMap(
+async def refreshModelMap(  # noqa: N802
     fetcher: Optional[Callable[[], Awaitable[Dict]]] = None,
 ) -> Dict:
     """Refresh the UUID → model name map.
@@ -67,6 +67,6 @@ async def refreshModelMap(
     return {"loaded": len(_model_map), "updated": False}
 
 
-def mapStats() -> Dict:
+def mapStats() -> Dict:  # noqa: N802
     """Return current map statistics."""
     return {"loaded": len(_model_map)}

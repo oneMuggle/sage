@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import logging
 import re
-import time as _time
-from backend.services.http_retry import retry_on_status
 from enum import Enum
 from typing import Any, Optional
+
+from backend.services.http_retry import retry_on_status
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ class ArenaAdapter:
         if mode == ThinkingFilter.STRIP:
             return _THOUGHT_BLOCK_RE.sub("", text).strip()
         if mode == ThinkingFilter.SUMMARIZE:
-            def _replace(match: "re.Match[str]") -> str:
+            def _replace(match: re.Match[str]) -> str:
                 inner = match.group(0)[len("<thinking>"):-len("</thinking>")]
                 est_tokens = max(1, int(len(inner) * _NAIVE_TOKEN_ESTIMATE / 4))
                 return f"[thinking: ~{est_tokens} tokens]"

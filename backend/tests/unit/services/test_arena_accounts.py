@@ -1,14 +1,16 @@
 import os
 import tempfile
+
 import pytest
 from cryptography.fernet import Fernet
 
 from backend.services.arena_accounts import (
-    ArenaAccountService, AccountState,
+    AccountState,
+    ArenaAccountService,
 )
 
 
-@pytest.fixture
+@pytest.fixture()
 def svc():
     fd, path = tempfile.mkstemp(suffix=".sqlite")
     os.close(fd)
@@ -34,7 +36,7 @@ def test_create_account_rejects_duplicate_email(svc):
 
 def test_reserve_picks_least_recently_used(svc):
     a1 = svc.create_account(email="a@example.com", password="x")
-    a2 = svc.create_account(email="b@example.com", password="y")
+    svc.create_account(email="b@example.com", password="y")  # second account, not used directly
     # Manually advance a1's last_used_at
     svc._conn.execute(
         "UPDATE arena_accounts SET last_used_at = ? WHERE id = ?",
@@ -47,7 +49,7 @@ def test_reserve_picks_least_recently_used(svc):
 
 def test_record_failure_isolates_after_threshold(svc):
     acc = svc.create_account(email="fail@example.com", password="x")
-    for i in range(3):
+    for _ in range(3):
         svc.record_failure(acc["id"], reason="timeout")
     final = svc.get_account(acc["id"])
     assert final["state"] == AccountState.DISABLED.value
@@ -82,8 +84,9 @@ def test_soft_delete_sets_destroyed(svc):
 
 def test_derive_arena_key_is_stable_and_fernet_compatible():
     """SPEC-GAP-01 regression: PBKDF2 derivation produces stable Fernet keys."""
-    from backend.services.arena_accounts import derive_arena_key
     from cryptography.fernet import Fernet
+
+    from backend.services.arena_accounts import derive_arena_key
 
     k1 = derive_arena_key(token="shared-token", machine_id="machine-abc")
     k2 = derive_arena_key(token="shared-token", machine_id="machine-abc")

@@ -1,5 +1,6 @@
 """Tests for the http_retry helper."""
 from unittest.mock import patch
+
 import pytest
 
 from backend.services.http_retry import (
@@ -57,9 +58,8 @@ def test_retry_on_status_exhausts_attempts():
         calls.append(1)
         raise FakeStatusError(429, "still rate limited")
 
-    with patch("backend.services.http_retry._time.sleep"):
-        with pytest.raises(FakeStatusError):
-            retry_on_status(fn, retry_statuses=(429,), max_attempts=3, base_delay=0.1)
+    with patch("backend.services.http_retry._time.sleep"), pytest.raises(FakeStatusError):
+        retry_on_status(fn, retry_statuses=(429,), max_attempts=3, base_delay=0.1)
     assert len(calls) == 3
 
 

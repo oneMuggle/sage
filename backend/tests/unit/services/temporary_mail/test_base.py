@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+
 import pytest
 
 from backend.services.temporary_mail.base import (
-    Mailbox, TemporaryMailProvider,
+    Mailbox,
+    TemporaryMailProvider,
 )
 
 
@@ -17,7 +19,7 @@ def test_mailbox_dataclass_round_trip():
         password="tok_abc",
         provider_token="provider_tok_xyz",
         provider="mailtm",
-        created_at=datetime(2026, 9, 16, 12, 0, 0),
+        created_at=datetime(2026, 9, 16, 12, 0, 0, tzinfo=timezone.utc),  # noqa: UP017
     )
     assert m.email == "user@temp.example"
     assert m.provider == "mailtm"

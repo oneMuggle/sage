@@ -4,10 +4,12 @@ import json
 import logging
 import re
 from collections import deque
-from typing import Any, Callable, Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional
 
 from .model_probe_py.classify import (
-    collectModelFields, scanTextForModel, vendorFromUrl, protocolFingerprint,
+    collectModelFields,
+    protocolFingerprint,
+    scanTextForModel,
 )
 from .run_trace_resolver import RunTraceResolver
 

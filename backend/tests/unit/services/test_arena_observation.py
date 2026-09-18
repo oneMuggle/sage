@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from backend.services.arena_observation import ModelObservationService
 
 

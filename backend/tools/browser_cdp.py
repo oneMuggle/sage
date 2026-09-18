@@ -571,7 +571,7 @@ class PersistentCDPSession:
         self._sync_queue: deque = deque()  # for sync test mode
         self.events: Any = None  # asyncio.Queue when async, deque when sync
 
-    def __enter__(self) -> "PersistentCDPSession":
+    def __enter__(self) -> PersistentCDPSession:
         if self._ws_factory is not None:
             # Sync test path: caller provides a fake WS; we just queue frames manually
             self._ws = self._ws_factory()

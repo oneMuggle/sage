@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 import os
 import tempfile
@@ -56,14 +57,14 @@ class FakeBrowserSession:
         return {"result": {"value": False}}
 
 
-@pytest.mark.integration
+@pytest.mark.integration()
 def test_registration_flow_uses_account_after_captcha_solved():
     fd, db_path = tempfile.mkstemp(suffix=".sqlite")
     os.close(fd)
     key = Fernet.generate_key()
 
     bs = FakeBrowserSession()
-    adapter = ArenaAdapter(bs)
+    ArenaAdapter(bs)  # noqa: F841 - adapter creation tested for side effects
     mail = FakeMailProvider(code="654321")
 
     async def run():
@@ -87,7 +88,7 @@ def test_registration_flow_uses_account_after_captcha_solved():
     os.unlink(db_path)
 
 
-@pytest.mark.integration
+@pytest.mark.integration()
 def test_thinking_filter_preserves_message_through_adapter_pipeline():
     bs = FakeBrowserSession()
     adapter = ArenaAdapter(bs)
