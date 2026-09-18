@@ -721,6 +721,23 @@ class WordSectionBreakSpec(BaseModel):
     page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
 
 
+class WordMetadataSpec(BaseModel):
+    """文档核心属性（Round 49）——Word「文件 → 信息」面板可见。
+
+    title 恒取请求 title，不在此重复；其余显式传入才写（不臆造作者）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    author: Optional[str] = Field(default=None, max_length=100)
+    subject: Optional[str] = Field(default=None, max_length=200)
+    keywords: Optional[str] = Field(
+        default=None, max_length=200, description="关键词（分号分隔）"
+    )
+    comments: Optional[str] = Field(default=None, max_length=500)
+    category: Optional[str] = Field(default=None, max_length=100)
+
+
 class OfficeWordGenerateRequest(BaseModel):
     """POST /api/v1/office/word/generate."""
 
@@ -745,6 +762,11 @@ class OfficeWordGenerateRequest(BaseModel):
     format_spec: Optional[WordFormatSpec] = Field(
         default=None,
         description="版式规范；None 保持默认版式（行为与历史版本一致）",
+    )
+    # Round 49：文档核心属性（core properties，期刊/公文归档要求）。
+    metadata: Optional[WordMetadataSpec] = Field(
+        default=None,
+        description="文档核心属性；None 只写 title（取请求 title）",
     )
     # Round 9：结构化参考文献 + 文中引用标记。带 references 时文末自动
     # 生成参考文献节；paragraphs[].citations 按 key 回链，编号=首现顺序。
