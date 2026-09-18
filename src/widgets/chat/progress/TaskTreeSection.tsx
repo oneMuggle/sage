@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
+import { useSettings } from '../../../features/manage-settings/useSettings';
 // TaskStatusValue 定义在 shared/api（Task 7 已 re-export），不从 useChat import
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue } from '../../../shared/api';
@@ -66,6 +67,10 @@ export function TaskTreeSection({
   onRerunFailed,
   onRetryTask,
 }: TaskTreeSectionProps) {
+  // BU16 (round30): run 起始时刻与墙钟上限（round25 设置键；未设置 = 0 不提示）。
+  const runWallClockLimitMinutes =
+    useSettings().settings.orch?.runWallClockLimitMinutes ?? 0;
+  const runStartedAt = board.dispatchedAt ?? null;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectTask = useRunControlStore((s) => s.selectTask);
   // B3 (2026-09-09): 单任务跳过 in-flight 集合 —— 防重复点击；终态由
@@ -149,12 +154,21 @@ export function TaskTreeSection({
     () => Object.values(board.statuses).some((st) => st.status === 'running'),
     [board.statuses],
   );
+  // BU16 (round30): run 级计时 —— in-flight（running/queued）即 tick；
+  // allDone 后停止 tick，now 冻结在最后一次渲染时刻 = run 总时长。
+  const inFlightTasks = useMemo(
+    () =>
+      Object.values(board.statuses).filter(
+        (st) => st.status === 'running' || st.status === 'queued',
+      ).length,
+    [board.statuses],
+  );
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    if (!hasRunning) return undefined;
+    if (!hasRunning && inFlightTasks === 0) return undefined;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [hasRunning]);
+  }, [hasRunning, inFlightTasks]);
 
   return (
     <div className="space-y-1" data-testid="task-tree">
@@ -167,6 +181,14 @@ export function TaskTreeSection({
           {inFlight > 0 && ` · ${inFlight} 个进行中`}
           {failed > 0 && <span className="text-error ml-1">({failed} 失败)</span>}
           {cancelled > 0 && <span className="text-text-secondary ml-1">({cancelled} 已取消)</span>}
+          {/* BU16 (round30): run 级耗时 + 可选上限提示 —— in-flight 实时
+              tick，终态冻结为总时长；上限为 round25 透出的设置键。 */}
+          {runStartedAt && (
+            <span className="ml-1" data-testid="task-tree-run-elapsed">
+              已运行 {formatElapsed(now - runStartedAt)}
+              {runWallClockLimitMinutes > 0 ? ` · 上限 ${runWallClockLimitMinutes} 分钟` : ''}
+            </span>
+          )}
           {/* BU13 (round24): per-task 消耗求和展示 —— 预算关闭也可见 */}
           {usedTokens > 0 && (
             <span className="ml-1">（已消耗 {usedTokens.toLocaleString()} tokens）</span>
