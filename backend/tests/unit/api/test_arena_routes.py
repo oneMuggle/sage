@@ -1,3 +1,4 @@
+import contextlib
 import os
 import tempfile
 
@@ -16,11 +17,13 @@ def client():
     os.close(fd)
     key = Fernet.generate_key()
     cfg = ArenaAutomationConfig(enabled=True)
-    init_arena_service(db_path=path, encryption_key=key, config=cfg)
+    service = init_arena_service(db_path=path, encryption_key=key, config=cfg)
     app = FastAPI()
     app.include_router(router)
     yield TestClient(app)
-    os.unlink(path)
+    service.close()  # Windows：连接未关闭时 unlink 报 WinError 32
+    with contextlib.suppress(PermissionError):
+        os.unlink(path)
 
 
 @pytest.fixture()
@@ -29,11 +32,13 @@ def disabled_client():
     os.close(fd)
     key = Fernet.generate_key()
     cfg = ArenaAutomationConfig(enabled=False)
-    init_arena_service(db_path=path, encryption_key=key, config=cfg)
+    service = init_arena_service(db_path=path, encryption_key=key, config=cfg)
     app = FastAPI()
     app.include_router(router)
     yield TestClient(app)
-    os.unlink(path)
+    service.close()  # Windows：连接未关闭时 unlink 报 WinError 32
+    with contextlib.suppress(PermissionError):
+        os.unlink(path)
 
 
 def test_create_and_list_accounts(client):
@@ -121,7 +126,7 @@ def test_max_accounts_returns_409():
     os.close(fd)
     key = Fernet.generate_key()
     cfg = ArenaAutomationConfig(enabled=True, max_accounts=1)
-    init_arena_service(db_path=path, encryption_key=key, config=cfg)
+    service = init_arena_service(db_path=path, encryption_key=key, config=cfg)
     app = FastAPI()
     app.include_router(router)
     tc = TestClient(app)
@@ -137,7 +142,9 @@ def test_max_accounts_returns_409():
         )
         assert r2.status_code == 409
     finally:
-        os.unlink(path)
+        service.close()  # Windows：连接未关闭时 unlink 报 WinError 32
+        with contextlib.suppress(PermissionError):
+            os.unlink(path)
 
 
 def test_duplicate_email_returns_409(client):

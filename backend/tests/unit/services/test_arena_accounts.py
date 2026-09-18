@@ -1,3 +1,4 @@
+import contextlib
 import os
 import tempfile
 
@@ -17,7 +18,9 @@ def svc():
     key = Fernet.generate_key()
     s = ArenaAccountService(db_path=path, encryption_key=key)
     yield s
-    os.unlink(path)
+    s.close()  # Windows：连接未关闭时 unlink 报 WinError 32
+    with contextlib.suppress(PermissionError):
+        os.unlink(path)
 
 
 def test_create_account_round_trip(svc):
