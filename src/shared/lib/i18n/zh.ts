@@ -54,6 +54,10 @@ export const zh = {
   'chat.hint':
     'Sage 会记住你的项目信息，无需重复说明上下文 · 支持 Markdown 语法 · 输入 / 呼出命令，@ 引用工作区文件',
   'chat.memory_applied': '条记忆已应用',
+  // R38: 技能激活展示
+  'chat.skills_activated': '个技能已激活',
+  'chat.skills_toggle': '查看激活的技能',
+  'chat.skill_loaded': '技能 {name} 已加载',
   // 对标 S2: 内联记忆写入提示 / 临时聊天
   'chat.memory_saved': '🧠 记住了',
   'chat.memory_saved_profile': '🧠 更新了关于你的画像',

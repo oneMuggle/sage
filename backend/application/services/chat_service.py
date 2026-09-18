@@ -29,7 +29,7 @@ import time
 import uuid
 import weakref
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from sage_core import LLMError, Message, Role, ToolCall
 from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
@@ -331,7 +331,7 @@ class ChatService:
         #      ``when_to_use`` 触发短语, 命中技能的 body 注入本轮 system
         #      prompt 动态段 (不进 frozen snapshot 缓存, 不写 storage,
         #      下一轮按新消息重新匹配)。best-effort: 任何故障静默降级。
-        activation_block = _skill_activation_block(
+        activation_block, activated_skill_names = _skill_activation_block(
             user_message.content or "", self.skills
         )
         if activation_block:
@@ -959,29 +959,34 @@ class ChatService:
 # --------------------------------------------------------------------------- #
 
 
-def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> str:
-    """计算本轮用户消息自动激活的技能上下文块（含前导换行，可直接追加）。
+def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> Tuple[str, List[str]]:
+    """计算本轮用户消息自动激活的技能上下文块及激活技能名列表。
 
     结构性探测：仅当 skills adapter 实现 ``auto_activate(message)`` 扩展
     方法（``InprocSkillAdapter``）时生效；纯 ``SkillPort`` mock / 其他
-    实现无此属性 → 返回空串。adapter 返回对象的 ``context_block`` 属性
+    实现无此属性 → 返回空串和空列表。adapter 返回对象的 ``context_block`` 属性
     非字符串（含 mock 返回值）同样视为无激活。
 
-    任何失败（adapter 抛错 / 返回类型异常）都降级为空串 —— 注入失败
+    任何失败（adapter 抛错 / 返回类型异常）都降级为空串和空列表 —— 注入失败
     绝不能破坏对话轮次（与记忆上下文注入同语义）。
+
+    Returns:
+        ``(block, names)`` —— block 为可追加到 system prompt 的文本（含前导换行），
+        names 为激活的技能名列表（用于推送 skill_activated 事件）。
     """
     if not message or skills is None:
-        return ""
+        return "", []
     auto_activate = getattr(skills, "auto_activate", None)
     if not callable(auto_activate):
-        return ""
+        return "", []
     try:
         result = auto_activate(message)
         block = getattr(result, "context_block", "")
+        names = list(getattr(result, "names", ()))
     except Exception as exc:
         logger.debug(f"A16 skill auto-activation skipped: {exc}")
-        return ""
-    return f"\n\n{block}" if isinstance(block, str) and block else ""
+        return "", []
+    return (f"\n\n{block}" if isinstance(block, str) and block else "", names if isinstance(names, list) else [])
 
 
 # --------------------------------------------------------------------------- #

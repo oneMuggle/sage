@@ -577,17 +577,22 @@ class TestChatServiceInjection:
 
 class TestSkillActivationBlockHelper:
     def test_empty_message_returns_empty(self):
-        """空消息 → 空串。"""
-        assert _skill_activation_block("", _FakeSkillPort(block="x")) == ""
+        """空消息 → 空串和空列表。"""
+        block, names = _skill_activation_block("", _FakeSkillPort(block="x"))
+        assert block == ""
+        assert names == []
 
     def test_none_skills_returns_empty(self):
-        """skills=None → 空串。"""
-        assert _skill_activation_block("hello", None) == ""
+        """skills=None → 空串和空列表。"""
+        block, names = _skill_activation_block("hello", None)
+        assert block == ""
+        assert names == []
 
     def test_block_prefixed_with_newlines(self):
-        """非空块前置双换行 (便于直接 += 拼接)。"""
-        result = _skill_activation_block("hello", _FakeSkillPort(block="BLOCK"))
-        assert result == "\n\nBLOCK"
+        """非空块前置双换行 (便于直接 += 拼接)，names 返回激活技能列表。"""
+        block, names = _skill_activation_block("hello", _FakeSkillPort(block="BLOCK"))
+        assert block == "\n\nBLOCK"
+        assert names == ["fake-skill"]
 
 
 # =====================================================================

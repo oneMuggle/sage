@@ -54,6 +54,10 @@ export const en: Record<TranslationKey, string> = {
   'chat.hint':
     'Sage remembers your project context · Supports Markdown · Type / for commands, @ to reference workspace files',
   'chat.memory_applied': 'memories applied',
+  // R38: Skill activation display
+  'chat.skills_activated': 'skills activated',
+  'chat.skills_toggle': 'View activated skills',
+  'chat.skill_loaded': 'Skill {name} loaded',
   // S2 parity: inline memory-write hints / temporary chat
   'chat.memory_saved': '🧠 Memory updated',
   'chat.memory_saved_profile': '🧠 Profile updated',
