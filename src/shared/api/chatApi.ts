@@ -131,6 +131,8 @@ export const chatApi = {
     /** R23-D2: 聊天图片输入（base64 data URL），后端限 4 张/单张 5MiB */
     images?: string[],
     attachmentMediaIds?: string[],
+    /** client_message_id (2026-09, 同步 #1155): 乐观 id 与服务端落库 id 对齐 */
+    clientMessageId?: string,
   ): Promise<{ streamId: string; cancel: () => void }> {
     // 消息原文直传,理由同 chat()。
     if (!handlers || typeof handlers.onEvent !== 'function') {
@@ -159,6 +161,7 @@ export const chatApi = {
     const { streamId } = await invoke<{ streamId: string }>('agent_chat_stream', {
       sessionId,
       message,
+      clientMessageId: clientMessageId ?? null,
       apiKey: config?.apiKey ?? null,
       apiUrl: config?.apiUrl ?? null,
       model: config?.model ?? null,

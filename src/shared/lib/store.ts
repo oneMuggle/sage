@@ -104,6 +104,8 @@ interface StoreState {
   addMessage: (message: Message) => void;
   /** PR-6: 用同一 id 的新对象替换某条消息 (流式 chat 结束时写回最终 content) */
   updateMessage: (id: string, patch: Partial<Message>) => void;
+  /** client_message_id 协议 (同步 #1155): DONE 携带服务端 id 后原地替换占位 id */
+  replaceMessageId: (oldId: string, newId: string) => void;
   /** R17-B: 本地移除一条消息（配合 messageApi.delete 的删除入口） */
   removeMessage: (id: string) => void;
   clearMessages: () => void;
@@ -256,6 +258,14 @@ export const useStore = create<StoreState>((set, _get) => ({
   updateMessage: (id, patch) => {
     set((state) => ({
       messages: state.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    }));
+  },
+
+  // client_message_id 协议 (同步 #1155): DONE 携带服务端 id 后原地替换
+  // 乐观占位 id —— 此后 loadMessages 对账按 id 精确命中。
+  replaceMessageId: (oldId, newId) => {
+    set((state) => ({
+      messages: state.messages.map((m) => (m.id === oldId ? { ...m, id: newId } : m)),
     }));
   },
 
