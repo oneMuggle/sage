@@ -97,3 +97,55 @@ def test_lint_detects_cross_ref_residue(tmp_path) -> None:
     rule_ids = {i.rule_id for i in result.issues}
     assert "cross_ref/residue" in rule_ids
     assert result.ok is False
+
+
+def test_cross_ref_placeholder_produces_ref_field(tmp_path) -> None:
+    """Round 46：占位符产物为 REF 复杂域（缓存图N）+ 题注段含书签。"""
+    from docx.oxml.ns import qn
+
+    output = _gen(
+        tmp_path,
+        "ref.docx",
+        paragraphs=[
+            WordParagraphSpec(text="系统架构如{{fig:架构图}}所示。"),
+        ],
+    )
+    doc = Document(str(output))
+
+    # 正文段：文本段 + REF 域（缓存"图1"）
+    ref_paras = [
+        p
+        for p in doc.paragraphs
+        if any(
+            "REF _RefFig" in (el.text or "")
+            for el in p._p.findall(".//" + qn("w:instrText"))
+        )
+    ]
+    assert len(ref_paras) == 1
+    assert ref_paras[0].text == "系统架构如图1所示。"
+    instrs = [
+        el.text
+        for el in ref_paras[0]._p.findall(".//" + qn("w:instrText"))
+        if el.text and "REF" in el.text
+    ]
+    assert instrs == [r" REF _RefFig1 \h "]
+
+    # 题注段：书签 _RefFig1 存在
+    bookmarks = [
+        bm.get(qn("w:name"))
+        for bm in doc.element.body.findall(".//" + qn("w:bookmarkStart"))
+    ]
+    assert "_RefFig1" in bookmarks
+
+
+def test_no_placeholder_paragraph_unchanged(tmp_path) -> None:
+    """无占位符段落走既有路径（单 run，产物零变化）。"""
+    output = _gen(
+        tmp_path,
+        "plain.docx",
+        paragraphs=[WordParagraphSpec(text="普通段落，无占位符。")],
+    )
+    doc = Document(str(output))
+    target = [p for p in doc.paragraphs if "普通段落" in p.text]
+    assert len(target) == 1
+    assert len(target[0].runs) == 1

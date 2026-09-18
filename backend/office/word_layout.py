@@ -331,6 +331,13 @@ def add_caption(doc: Document, text: str, *, kind: str, number: int) -> None:
     paragraph = doc.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     label = "图" if kind == "figure" else "表"
+    # Round 46：题注编号套书签（REF 交叉引用目标）。w:id 分段（图
+    # 100000+、表 200000+）避免与用户书签冲突；编号确定命名可复现。
+    bm_id = (100000 if kind == "figure" else 200000) + number
+    bm_start = OxmlElement("w:bookmarkStart")
+    bm_start.set(qn("w:id"), str(bm_id))
+    bm_start.set(qn("w:name"), f"{'_RefFig' if kind == 'figure' else '_RefTbl'}{number}")
+    paragraph._p.append(bm_start)
     label_run = paragraph.add_run(label)
     label_run.font.size = Pt(9)
     # Round 42：编号以 SEQ 复杂域承载（Word 据此把段落识别为题注条目，
@@ -345,6 +352,9 @@ def add_caption(doc: Document, text: str, *, kind: str, number: int) -> None:
     number_run = paragraph.add_run(str(number))
     number_run.font.size = Pt(9)
     _fld_char(paragraph, "end")
+    bm_end = OxmlElement("w:bookmarkEnd")
+    bm_end.set(qn("w:id"), str(bm_id))
+    paragraph._p.append(bm_end)
     text_run = paragraph.add_run("　" + text)
     text_run.font.size = Pt(9)
 
@@ -445,6 +455,21 @@ def insert_tof_field(doc: Document, spec: Any, label: str, entries: Any) -> None
     _fld_char(end_paragraph, "end")
 
     doc.add_page_break()
+
+
+def append_ref_field(paragraph, bookmark: str, cached: str) -> None:
+    """向段落追加 REF 交叉引用复杂域（begin+instr+separate+缓存+end）。
+
+    缓存文本保证未更新域时的显示；F9/COM 更新域后随书签处题注重排。
+    """
+    _fld_char(paragraph, "begin")
+    instr_el = OxmlElement("w:instrText")
+    instr_el.set(qn("xml:space"), "preserve")
+    instr_el.text = rf" REF {bookmark} \h "
+    paragraph._p.append(instr_el)
+    _fld_char(paragraph, "separate")
+    paragraph.add_run(cached)
+    _fld_char(paragraph, "end")
 
 
 def _fld_char(paragraph, char_type: str) -> None:

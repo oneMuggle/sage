@@ -61,18 +61,24 @@ _STYLES_TO_PATCH = (
 _CROSS_REF_RE = re.compile(r"\{\{(fig|tbl):([^}]+)\}\}")
 
 
-def _resolve_cross_refs(
+def _split_cross_ref_segments(
     text: str,
     figure_caption_numbers: Dict[str, int],
     table_caption_numbers: Dict[str, int],
-) -> str:
-    """解析段落文本中的交叉引用占位符为"图N"/"表N"。
+) -> List[Tuple[str, str, str]]:
+    """拆分段落文本为交叉引用段（Round 46）。
 
+    返回 ``[("text", 文本, "") | ("ref", 书签名, 缓存文本)]``——ref 段
+    由调用方写成 REF 复杂域（缓存"图N"），F9/COM 更新域后随题注重排。
     未命中任何题注即抛 ValueError（fail-fast，与 citations 未定义 key
     同哲学）——静默保留占位符会让残渍流入交付文档。
     """
 
-    def _sub(match: re.Match[str]) -> str:
+    segments: List[Tuple[str, str, str]] = []
+    pos = 0
+    for match in _CROSS_REF_RE.finditer(text):
+        if match.start() > pos:
+            segments.append(("text", text[pos : match.start()], ""))
         kind, caption = match.group(1), match.group(2).strip()
         if kind == "fig":
             number = figure_caption_numbers.get(caption)
@@ -80,15 +86,28 @@ def _resolve_cross_refs(
                 raise ValueError(
                     f"cross_ref_not_found: {{{{fig:{caption}}}}} 未匹配任何图片题注"
                 )
-            return f"图{number}"
-        number = table_caption_numbers.get(caption)
-        if number is None:
-            raise ValueError(
-                f"cross_ref_not_found: {{{{tbl:{caption}}}}} 未匹配任何表格题注"
-            )
-        return f"表{number}"
+            segments.append(("ref", f"_RefFig{number}", f"图{number}"))
+        else:
+            number = table_caption_numbers.get(caption)
+            if number is None:
+                raise ValueError(
+                    f"cross_ref_not_found: {{{{tbl:{caption}}}}} 未匹配任何表格题注"
+                )
+            segments.append(("ref", f"_RefTbl{number}", f"表{number}"))
+        pos = match.end()
+    if pos < len(text):
+        segments.append(("text", text[pos:], ""))
+    return segments
 
-    return _CROSS_REF_RE.sub(_sub, text)
+
+def _write_cross_ref_segment(paragraph, segment: Tuple[str, str, str]) -> None:
+    """把单个交叉引用段写入段落（text → run；ref → REF 复杂域）。"""
+    if segment[0] == "text":
+        paragraph.add_run(segment[1])
+    else:
+        from .word_layout import append_ref_field
+
+        append_ref_field(paragraph, segment[1], segment[2])
 
 
 def _patch_style_rfonts(style, ascii_name: str, ea_name: str) -> None:
@@ -1127,13 +1146,38 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
 
                 apply_section_break(doc, pending_breaks[break_idx].page_setup)
                 break_idx += 1
-            # Round 45：交叉引用占位符解析（{{fig:}}/{{tbl:}} → 图N/表N）
-            body_text = _resolve_cross_refs(
-                para.text, figure_caption_numbers, table_caption_numbers
+            # Round 45/46：交叉引用占位符——有占位符走分段写 run 路径
+            # （ref 段为 REF 复杂域，更新域自动同步题注重排）；无占位符
+            # 段落保持既有单次写入（产物零变化）。
+            ref_segments = (
+                _split_cross_ref_segments(
+                    para.text, figure_caption_numbers, table_caption_numbers
+                )
+                if _CROSS_REF_RE.search(para.text)
+                else None
             )
-            if para.heading in ("h1", "h2", "h3", "h4", "h5"):
+            if ref_segments is not None and para.heading in (
+                "h1", "h2", "h3", "h4", "h5"
+            ):
                 level = int(para.heading[1])
-                text = body_text
+                created = doc.add_heading("", level=level)
+                if numbering:
+                    created.add_run(
+                        heading_number_prefix(heading_counters, level) + " "
+                    )
+                for seg in ref_segments:
+                    _write_cross_ref_segment(created, seg)
+            elif ref_segments is not None:
+                created = doc.add_paragraph(
+                    style="List Bullet" if para.style == "bullet"
+                    else "List Number" if para.style == "numbered"
+                    else None
+                )
+                for seg in ref_segments:
+                    _write_cross_ref_segment(created, seg)
+            elif para.heading in ("h1", "h2", "h3", "h4", "h5"):
+                level = int(para.heading[1])
+                text = para.text
                 if numbering:
                     text = (
                         heading_number_prefix(heading_counters, level)
@@ -1143,12 +1187,12 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                 created = doc.add_heading(text, level=level)
             elif para.style == "bullet":
                 # ★ 新增：bullet 列表
-                created = doc.add_paragraph(body_text, style="List Bullet")
+                created = doc.add_paragraph(para.text, style="List Bullet")
             elif para.style == "numbered":
                 # ★ 新增：numbered 列表
-                created = doc.add_paragraph(body_text, style="List Number")
+                created = doc.add_paragraph(para.text, style="List Number")
             else:
-                created = doc.add_paragraph(body_text)
+                created = doc.add_paragraph(para.text)
             # 批次 2.3：可选段落级样式（无样式字段时零改动）
             _apply_paragraph_run_style(created, para)
             # Round 9：文中引用上标标记（仅非标题段落，标题已在预检拒绝）
