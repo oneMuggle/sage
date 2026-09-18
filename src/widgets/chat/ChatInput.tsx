@@ -65,6 +65,11 @@ interface ChatInputProps {
        * 普通消息不传（undefined → 后端 auto）。
        */
       orchestrationMode?: string;
+      /**
+       * Task 5 (2026-09-17): 上下文重置标记 —— "新话题" 按钮触发，
+       * 后端在本轮消息前插入 topic_separator 并清空 LLM 历史窗口。
+       */
+      contextReset?: boolean;
     },
   ) => void;
   onInterrupt?: () => void;
@@ -360,6 +365,16 @@ function ChatInputInner({
     clearAll();
   };
 
+  /**
+   * Task 5 (2026-09-17): "新话题" 按钮 —— 空内容 + contextReset 走 onSend，
+   * 后端在消息前插入 topic_separator 并清空 LLM 上下文。
+   */
+  const handleNewTopic = useCallback(() => {
+    if (isLoading || disabled) return;
+    onSend('', { contextReset: true });
+    setValue('');
+  }, [onSend, isLoading, disabled, setValue]);
+
   const handleSlashSelect = useCallback(
     (cmd: SlashCommand) => {
       setSlashMenuOpen(false);
@@ -451,6 +466,8 @@ function ChatInputInner({
           .then((result) => {
             const body =
               typeof result.content === 'string' ? result.content : `/${skillName} ${args}`.trim();
+            // R38: 显式调用技能成功后提示用户
+            toast.info(t('chat.skill_loaded').replace('{name}', skillName));
             onSend(body);
             setValue('');
           })
@@ -610,6 +627,7 @@ function ChatInputInner({
         value={value}
         onChange={handleChange}
         onSubmit={handleSend}
+        onNewTopic={handleNewTopic}
         placeholder={placeholder ?? t('chat.placeholder')}
         disabled={disabled}
         isLoading={isLoading}

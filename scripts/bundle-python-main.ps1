@@ -66,6 +66,13 @@
 # Output: resources/python/, resources/backend/, resources/sage-core/,
 #         resources/python/Lib/site-packages/sage_core/
 
+# Code protection mode: set SAGE_PROTECT_CODE=true (or pass -ProtectCode) during release builds
+# to compile sage_core to native C-extensions (.pyd) and byte-compile/strip backend .py files.
+# In dev/CI mode (default), source .py files are copied directly for rapid build times.
+param(
+    [switch]$ProtectCode = ($env:SAGE_PROTECT_CODE -eq "true")
+)
+
 $ErrorActionPreference = "Stop"
 
 # Configuration — 3.11 is main's stable Python line (matches backend Dockerfile
@@ -176,6 +183,12 @@ $PipExe = Join-Path $PythonDir "Scripts\pip.exe"
 & $PipExe install --no-warn-script-location -r $RequirementsFile
 if ($LASTEXITCODE -ne 0) { throw "pip install -r $RequirementsFile failed with exit code $LASTEXITCODE" }
 
+if ($ProtectCode) {
+  Write-Host "🛡️ Code protection ENABLED: Installing Cython..." -ForegroundColor Yellow
+  & $PipExe install --no-warn-script-location "cython>=3.0.0" "setuptools"
+  if ($LASTEXITCODE -ne 0) { throw "pip install cython failed with exit code $LASTEXITCODE" }
+}
+
 # Copy backend code
 Write-Host "Copying backend code..." -ForegroundColor Green
 $BackendItems = Get-ChildItem -Path $BackendSourceDir -Exclude "__pycache__", "*.pyc", ".pytest_cache", "*.egg-info"
@@ -188,6 +201,17 @@ foreach ($item in $BackendItems) {
   } else {
     Copy-Item -Path $item.FullName -Destination $dest -Force
   }
+}
+
+# In protected mode, compile backend to .pyc and strip source .py files (except main.py)
+if ($ProtectCode) {
+  Write-Host "🛡️ Compiling backend to bytecode (.pyc) and stripping source .py..." -ForegroundColor Yellow
+  & $PythonExe -m compileall -b $BackendDir
+  if ($LASTEXITCODE -ne 0) { throw "compileall for backend failed with exit code $LASTEXITCODE" }
+
+  # Strip .py files except main.py (keeps minimal entry point transparent to launcher)
+  Get-ChildItem -Path $BackendDir -Recurse -Filter "*.py" | Where-Object { $_.Name -ne "main.py" } | Remove-Item -Force
+  Write-Host "🛡️ Backend source stripping complete." -ForegroundColor Green
 }
 
 # Copy packages/sage-core if it exists.
@@ -230,32 +254,37 @@ foreach ($item in $BackendItems) {
 Write-Host "Copying sage-core package..." -ForegroundColor Green
 $SageCoreSource = Join-Path $PSScriptRoot "..\packages\sage-core"
 if (Test-Path $SageCoreSource) {
-  # 1) Mirror source layout to resources/sage-core/ (debug + dev parity)
-  Copy-Item -Path $SageCoreSource -Destination $SageCoreDir -Recurse -Force
-  if ($LASTEXITCODE -ne 0) { throw "Copy-Item sage-core (mirror) failed with exit code $LASTEXITCODE" }
-  # Strip __pycache__ that may have leaked from a prior local dev run; the
-  # mirror is debug-only but we keep it clean for consistency with the inner
-  # copy + to avoid shipping stale .pyc bytecode to a Windows machine that
-  # may be running a different Python minor (which would ignore them).
-  Get-ChildItem -Path $SageCoreDir -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  if ($ProtectCode) {
+    Write-Host "🛡️ Code protection: Compiling sage_core with Cython..." -ForegroundColor Yellow
+    $CompileScript = Join-Path $PSScriptRoot "compile-sage-core.py"
+    & $PythonExe $CompileScript build_ext --inplace
+    if ($LASTEXITCODE -ne 0) { throw "Cython compilation for sage_core failed with exit code $LASTEXITCODE" }
 
-  # 2) Copy inner sage_core/ package directly into bundled site-packages so
-  #    `import sage_core` works at runtime. Done as a separate step (instead
-  #    of relying on resources/sage-core/sage_core/) because the parent dir
-  #    uses a hyphen (sage-core) but the importable module uses an underscore
-  #    (sage_core) — Python's import machinery walks sys.path literally and
-  #    would not find the package under a hyphen-named directory.
+    # In protected mode, do not leak source in resources/sage-core, just keep an empty dir for electron-builder
+    Write-Host "🛡️ Omitting source tree mirror in resources/sage-core for protection." -ForegroundColor Yellow
+  } else {
+    # 1) Mirror source layout to resources/sage-core/ (debug + dev parity)
+    Copy-Item -Path $SageCoreSource -Destination $SageCoreDir -Recurse -Force
+    if ($LASTEXITCODE -ne 0) { throw "Copy-Item sage-core (mirror) failed with exit code $LASTEXITCODE" }
+    Get-ChildItem -Path $SageCoreDir -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  }
+
+  # 2) Copy inner sage_core/ package into bundled site-packages
   $SageCorePkgSource = Join-Path $SageCoreSource "sage_core"
   $SageCorePkgDest = Join-Path $PythonDir "Lib\site-packages\sage_core"
   if (Test-Path $SageCorePkgSource) {
     if (Test-Path $SageCorePkgDest) {
-      # Idempotent on re-run: clean any previous copy.
       Remove-Item -Recurse -Force $SageCorePkgDest
     }
     Copy-Item -Path $SageCorePkgSource -Destination $SageCorePkgDest -Recurse -Force
     if ($LASTEXITCODE -ne 0) { throw "Copy-Item sage_core package to site-packages failed with exit code $LASTEXITCODE" }
-    # Strip __pycache__ that might sneak in from a prior dev run
     Get-ChildItem -Path $SageCorePkgDest -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+    if ($ProtectCode) {
+      # In protected mode, strip .py files (keeping only compiled extensions and __init__.py)
+      Get-ChildItem -Path $SageCorePkgDest -Recurse -Filter "*.py" | Where-Object { $_.Name -ne "__init__.py" } | Remove-Item -Force
+      Write-Host "🛡️ Stripped sage_core .py source from site-packages (kept compiled binaries and __init__.py)." -ForegroundColor Green
+    }
   } else {
     Write-Host "WARNING: $SageCorePkgSource not found; sage_core will not be importable." -ForegroundColor Yellow
   }

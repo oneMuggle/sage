@@ -38,7 +38,9 @@ export type PreferenceKey =
   | 'search_config'
   | 'web_proxy'
   | 'web_access_config'
-  | 'browser_credential_vault';
+  | 'browser_credential_vault'
+  // Context Isolation (Task 8): 上下文轮数限制 — null/空 = 不限
+  | 'context_turn_limit';
 
 async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {
@@ -92,5 +94,29 @@ export const settingsClient = {
 
   async setPreference(key: PreferenceKey, value: string, category = 'ui'): Promise<void> {
     await ipcCall('set_preference', { key, value, value_type: 'string', category });
+  },
+
+  // ── Context Isolation (Task 8): context_turn_limit ──────────────────────
+
+  /**
+   * 读取上下文轮数限制。
+   *
+   * 后端 preferences KV 存 string; null/空 → 不限 (返回 null)。
+   */
+  async getContextTurnLimit(): Promise<number | null> {
+    const v = await settingsClient.getPreference<string>('context_turn_limit');
+    if (!v) return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  },
+
+  /**
+   * 写入上下文轮数限制。
+   *
+   * null → 不限 (后端存空串); 正整数 → 存 String(n)。
+   */
+  async setContextTurnLimit(value: number | null): Promise<void> {
+    const stored = value == null ? '' : String(value);
+    await settingsClient.setPreference('context_turn_limit', stored);
   },
 };

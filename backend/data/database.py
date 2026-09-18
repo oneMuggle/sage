@@ -519,6 +519,20 @@ class Database:
         if "step_index" not in columns:
             cursor.execute("ALTER TABLE messages ADD COLUMN step_index INTEGER")
             conn.commit()
+        # 2026-09-17 context-isolation: 老库加 segment_id/subtype 列；已有消息
+        # segment_id=0（属于第 0 段）,subtype=NULL（正常消息,不是切换标记）。
+        # 段索引 (session_id, segment_id, created_at) 用于按当前段过滤历史。
+        if "segment_id" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN segment_id INTEGER DEFAULT 0")
+            conn.commit()
+        if "subtype" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN subtype TEXT")
+            conn.commit()
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_messages_segment "
+            "ON messages(session_id, segment_id, created_at)"
+        )
+        conn.commit()
 
         # 会话摘要表（批次三 step 3，spec §4.3）
         # Dedicated table for compressed session summaries; deliberately
