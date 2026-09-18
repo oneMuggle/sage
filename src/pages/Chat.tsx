@@ -750,10 +750,11 @@ export function Chat() {
 
   // RV3 (round8): 只重跑失败任务 —— 调 rerun-failed 拿 planOverride
   // （done 子任务带 preset_output 回放），经 chatStream 重发全新 run。
-  const handleRerunFailed = async (runId: string) => {
+  // RV4 (round27): taskIds 提供时为单任务重试（只重建所选任务及其下游）。
+  const handleRerunFailed = async (runId: string, taskIds?: string[]) => {
     if (!currentSessionId) return;
     try {
-      const res = await orchRunClient.rerunFailed(runId);
+      const res = await orchRunClient.rerunFailed(runId, taskIds);
       const sid = res.session_id ?? currentSessionId;
       await sendMessage(res.goal, sid, undefined, 'force_multi', {
         planOverride: res.plan_override,
@@ -1013,6 +1014,7 @@ export function Chat() {
           // 自动派发）+ 清空 taskBoard。
           onCancelExecution={(runId) => void handleCancelRun(runId)}
           onRerunFailed={(runId) => void handleRerunFailed(runId)}
+          onRetryTask={(runId, taskId) => void handleRerunFailed(runId, [taskId])}
         />
       </div>
       {/* /内容行 */}

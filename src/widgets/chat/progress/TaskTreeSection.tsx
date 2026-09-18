@@ -45,12 +45,15 @@ interface TaskTreeSectionProps {
   // RV3 (round8): run 终态且有失败任务时的"重跑失败任务"入口。由上层
   // 调 rerun-failed 端点拿 planOverride 后经 chatStream 重发。
   onRerunFailed?: () => void;
+  // RV4 (round27): 单任务重试入口 —— failed 行内「重试」按钮。
+  onRetryTask?: (runId: string, taskId: string) => void;
 }
 
 export function TaskTreeSection({
   board,
   onCancel,
   onRerunFailed,
+  onRetryTask,
 }: TaskTreeSectionProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectTask = useRunControlStore((s) => s.selectTask);
@@ -260,6 +263,23 @@ export function TaskTreeSection({
                   }}
                 >
                   {skipping.has(item.task_id) ? '跳过中…' : '跳过'}
+                </button>
+              )}
+              {/* RV4 (round27): 单任务重试 —— failed 行内按钮；run 终态才可重试
+                 （rerun-failed 端点对 running run 返 409）。stopPropagation
+                  防触发整行 Drawer 点击。 */}
+              {onRetryTask && board.runId && allDone && status === 'failed' && (
+                <button
+                  type="button"
+                  data-testid={`task-tree-retry-${item.task_id}`}
+                  title="只重试该任务（其下游未完成任务将一并重建，已完成任务结果保留）"
+                  className="px-1.5 py-0.5 text-[10px] border border-border rounded text-text-secondary hover:text-primary hover:border-primary/40 shrink-0"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRetryTask(board.runId!, item.task_id);
+                  }}
+                >
+                  重试
                 </button>
               )}
               {/* P0-7 (2026-08-20): 重试徽章 —— retry_count>0 才显示 */}
