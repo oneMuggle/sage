@@ -1,5 +1,9 @@
 import { useState, useCallback } from 'react';
 
+/** r75/r76: 聊天文档附件支持的扩展名（Chat.tsx 上传白名单与 ChatInput
+ * 提示条件共用，避免两处口径漂移）。 */
+export const CHAT_DOCUMENT_EXTENSIONS = new Set(['txt', 'md', 'pdf', 'docx']);
+
 export interface AttachedFile {
   name: string;
   size: number;
