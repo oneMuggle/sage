@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🌐 **网页访问能力优化 Round 20：并行聚合搜索指标 + 诊断导出集成**（方案 `docs/plans/2026-09-18_web-access-optimization-round20.md`）
+
+### Changed(web-access)
+- **搜索指标收尾（S1）**：`_search_parallel` 并行聚合模式逐引擎埋点（伪域 `search:<engine>`；成功含 0 条结果记 ok、异常记 fail）——R18 遗留尾巴闭环
+- **诊断导出集成（X2 完整闭环）**：诊断包 zip 新增 `web-metrics.json`（per-host 出网指标快照，非空时写入；快照失败静默不影响诊断包）
 > 🧹 **Word 写作能力 Round 48：repair 补 index 域插入 + SEQ 题注重排兼容**（方案 `docs/plans/2026-09-18_r48-repair-index-plan.md`）
 
 ### Added(office)

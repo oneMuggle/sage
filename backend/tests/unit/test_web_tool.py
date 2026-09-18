@@ -1734,3 +1734,45 @@ def test_render_dynamic_login_wall_retries_after_refresh(monkeypatch):
     assert state["n"] == 2
     assert content["content"] == "real body"
     assert "refreshed note" in (content.get("note") or "")
+
+
+# ---------- Round 20：并行聚合搜索指标 ----------
+
+
+def test_web_search_parallel_records_engine_metrics(monkeypatch):
+    """并行聚合模式同样逐引擎记入 search:<engine> 指标（ok / fail）。"""
+    from types import SimpleNamespace
+
+    from backend.tools import web_metrics
+
+    web_metrics.reset()
+
+    class _FakeEngine:
+        def __init__(self, name, fail):
+            self.name = name
+            self._fail = fail
+
+        def search(self, query, limit, client=None):
+            if self._fail:
+                raise RuntimeError("down")
+            return [
+                {"title": "t", "url": f"https://{self.name}.example/r", "snippet": "s"}
+            ]
+
+    chain = [_FakeEngine("good", False), _FakeEngine("bad", True)]
+    monkeypatch.setattr(
+        "backend.tools.web_tool.resolve_engine_chain", lambda config: chain
+    )
+    monkeypatch.setattr(
+        "backend.tools.web_tool.load_search_config",
+        lambda: SimpleNamespace(parallel=True, parallel_first_n=2),
+    )
+
+    tool = WebSearchTool()
+    result = tool.execute(query="sage", limit=5)
+
+    assert result.success is True
+    snap = web_metrics.snapshot()
+    assert snap["search:good"]["ok"] == 1
+    assert snap["search:bad"]["fail"] == 1
+    web_metrics.reset()

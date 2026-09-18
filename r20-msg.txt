@@ -1,0 +1,6 @@
+feat(web-access): Round 20——并行聚合搜索指标 + 诊断导出集成 per-host 指标
+
+- S1 收尾：_search_parallel 并行聚合模式逐引擎埋点（伪域 search:<engine>；成功记 ok、异常记 fail、成功但 0 结果按 Round 9 口径记 ok 并如实报可能被限流）——R18 遗留尾巴闭环
+- X2 完整闭环：诊断导出 zip 新增 web-metrics.json（web_metrics.snapshot() 非空时写入；快照失败不影响诊断包）
+- 方案：docs/plans/2026-09-18_web-access-optimization-round20.md
+- 测试：并行聚合指标 1 例 + 导出含/不含 web-metrics 2 例；相关套件 119 passed

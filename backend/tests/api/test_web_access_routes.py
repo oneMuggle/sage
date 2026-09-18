@@ -215,3 +215,51 @@ async def test_metrics_origin_guard(client):
         "/api/v1/web-access/metrics", headers={"Origin": "https://evil.example"}
     )
     assert resp.status_code == 403
+
+
+# ---------- Round 20：诊断导出集成 web-metrics ----------
+
+
+def test_exporter_includes_web_metrics(monkeypatch):
+    """X2 闭环：诊断包 zip 含 web-metrics.json（快照非空时）。"""
+    import io
+    import json
+    import zipfile
+
+    from backend.services.llm_trace import exporter
+
+    monkeypatch.setattr(
+        "backend.tools.web_metrics.snapshot",
+        lambda: {"example.com": {"ok": 2, "fail": 0, "escalated": 1, "avg_elapsed_ms": 50}},
+    )
+    data = exporter.export_to_zip_bytes(
+        records=[],
+        include_prompts=False,
+        include_hostname=False,
+        app_version="test",
+        config_snapshot="",
+    )
+    zf = zipfile.ZipFile(io.BytesIO(data))
+    assert "web-metrics.json" in zf.namelist()
+    metrics = json.loads(zf.read("web-metrics.json"))
+    assert metrics["example.com"]["ok"] == 2
+
+
+def test_exporter_skips_web_metrics_when_empty(monkeypatch):
+    import io
+    import zipfile
+
+    from backend.services.llm_trace import exporter
+
+    monkeypatch.setattr(
+        "backend.tools.web_metrics.snapshot", lambda: {}
+    )
+    data = exporter.export_to_zip_bytes(
+        records=[],
+        include_prompts=False,
+        include_hostname=False,
+        app_version="test",
+        config_snapshot="",
+    )
+    zf = zipfile.ZipFile(io.BytesIO(data))
+    assert "web-metrics.json" not in zf.namelist()
