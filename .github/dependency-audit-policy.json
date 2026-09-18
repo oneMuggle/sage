@@ -783,6 +783,32 @@
       "actual_reachability": "ASGI framework used by FastAPI; reachable via HTTP requests on the local backend port",
       "controls": "same as PYSEC-2026-161 (starlette 0.35.1 forced by fastapi 0.109.1, fix requires Py3.9+); local-only binding 127.0.0.1, LocalAuthMiddleware bearer token, request limits, response sanitization, quarterly review through Win7 LTS EOL 2027-12-13",
       "exception": "temporary exception pending fastapi upgrade that supports starlette 1.x on Py3.8, or Win7 LTS EOL"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-12-19",
+      "source": "pip",
+      "package": "anyio",
+      "package_version": "3.7.1",
+      "advisory": "GHSA-5p39-cfhj-2xmp",
+      "advisory_url": "https://github.com/advisories/GHSA-5p39-cfhj-2xmp",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "not reachable in the production path; the advisory is a deadlock (not memory corruption) in anyio's process-pool workers whose stderr pipe is never drained, and the Win7 backend uses no anyio process pool (async offloading goes exclusively through anyio.to_thread; grep for to_process/run_process/ProcessPool over backend/ returns no hits)",
+      "controls": "anyio 3.7.1 is the 3.x terminal release pinned by the Win7 py38 runtime (fastapi 0.109/starlette 0.35.1 require anyio>=3.7.1,<5); the fix (4.14.2) is not installable on Python 3.8; no anyio.to_process usage in the codebase means the vulnerable worker-spawn path is never executed; quarterly review through Win7 LTS EOL 2027-12-13",
+      "exception": "temporary exception pending Win7 LTS EOL or a Py3.8-compatible backport of the stderr-drain fix"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-12-19",
+      "source": "pip",
+      "package": "anyio",
+      "package_version": "3.7.1",
+      "advisory": "GHSA-82r6-8w77-94w6",
+      "advisory_url": "https://github.com/advisories/GHSA-82r6-8w77-94w6",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "conditional and low exposure; the IDNA 2003 TLS spoofing requires (1) an anyio connect_tcp/TLSStream connection to an internationalized (non-ASCII) hostname and (2) an active MITM that already controls the connection; all configured LLM/gateway endpoints in the Win7 desktop profile are ASCII hostnames, and no user-facing surface accepts IDN hostnames for outbound TLS",
+      "controls": "anyio 3.7.1 is the 3.x terminal release pinned by the Win7 py38 runtime; the fix (4.14.2) is not installable on Python 3.8; outbound endpoints are operator-configured (default ASCII API hosts), TLS verification remains enabled, and quarterly review tracks any IDN endpoint support requests through Win7 LTS EOL 2027-12-13",
+      "exception": "temporary exception pending Win7 LTS EOL or a Py3.8-compatible backport of the IDNA 2003 handling fix"
     }
   ]
 }
