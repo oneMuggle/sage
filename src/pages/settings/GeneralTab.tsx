@@ -6,7 +6,8 @@ import { useEffect, useState } from 'react';
 
 import { DiagnosticCard } from '../../features/diagnostic';
 import { useSettings } from '../../features/manage-settings/useSettings';
-import { BUILTIN_PETS, getPetPack } from '../../features/pet/builtinPacks';
+import { getPetPack, listAllPacks } from '../../features/pet/builtinPacks';
+import { isPetImportAvailable, useImportedPacksStore } from '../../features/pet/importedPacks';
 import { usePetStore } from '../../features/pet/petStore';
 import {
   loadAttachmentRagConfig,
@@ -419,9 +420,11 @@ function CloseToTrayCard(): JSX.Element {
 }
 
 /**
- * 桌面宠物 P1（docs/plans/2026-09-18_desktop-pet-design.md §2.4）。
+ * 桌面宠物（docs/plans/2026-09-18_desktop-pet-design.md §2.4 / §3）。
  * 持久化走 petStore 的 localStorage（rightPanelStore 先例），不进后端
  * settings blob——桌宠是纯前端/桌面壳能力，双分支同构零 Python 触点。
+ * P2 导入：zip 校验在主进程（petImport.ts），这里只管 plan 确认 /
+ * 覆盖授权 / 移除，Web 通道（无 electronAPI.pet）隐藏导入入口。
  */
 function PetSection() {
   const enabled = usePetStore((s) => s.enabled);
@@ -429,6 +432,22 @@ function PetSection() {
   const setEnabled = usePetStore((s) => s.setEnabled);
   const setPetId = usePetStore((s) => s.setPetId);
   const currentId = getPetPack(petId).id;
+
+  const packs = useImportedPacksStore((s) => s.packs);
+  const pendingPlan = useImportedPacksStore((s) => s.pendingPlan);
+  const errors = useImportedPacksStore((s) => s.errors);
+  const planImport = useImportedPacksStore((s) => s.planImport);
+  const commitPending = useImportedPacksStore((s) => s.commitPending);
+  const discardPending = useImportedPacksStore((s) => s.discardPending);
+  const removePack = useImportedPacksStore((s) => s.removePack);
+  const canImport = isPetImportAvailable();
+
+  // PetDock 未挂载（宠物关闭）时设置页自己也要能列包
+  useEffect(() => {
+    if (canImport) void useImportedPacksStore.getState().refresh();
+  }, [canImport]);
+
+  const importedIds = new Set(packs.map((p) => p.id));
 
   return (
     <section data-testid="pet-section">
@@ -439,26 +458,87 @@ function PetSection() {
       >
         <Toggle testId="pet-enabled" value={enabled} onChange={setEnabled} />
       </SettingRow>
-      <SettingRow label="宠物" desc="内置宠物包（P2 将开放导入自定义宠物包）">
-        <div className="flex gap-3" data-testid="pet-picker">
-          {BUILTIN_PETS.map((pack) => (
-            <button
-              key={pack.id}
-              type="button"
-              data-testid={`pet-pick-${pack.id}`}
-              onClick={() => setPetId(pack.id)}
-              className={`flex flex-col items-center gap-1 p-2 rounded-radius-sm border transition-colors ${
-                pack.id === currentId
-                  ? 'border-primary bg-bg-muted'
-                  : 'border-border hover:bg-bg-muted'
-              }`}
-            >
-              <PetVisual pack={pack} state="idle" size={36} />
-              <span className="text-xs text-muted">{pack.name}</span>
-            </button>
+      <SettingRow label="宠物" desc="内置与已导入宠物包，点击切换">
+        <div className="flex flex-wrap gap-3" data-testid="pet-picker">
+          {listAllPacks().map((pack) => (
+            <div key={pack.id} className="relative">
+              <button
+                type="button"
+                data-testid={`pet-pick-${pack.id}`}
+                onClick={() => setPetId(pack.id)}
+                className={`flex flex-col items-center gap-1 p-2 rounded-radius-sm border transition-colors ${
+                  pack.id === currentId
+                    ? 'border-primary bg-bg-muted'
+                    : 'border-border hover:bg-bg-muted'
+                }`}
+              >
+                <PetVisual pack={pack} state="idle" size={36} />
+                <span className="text-xs text-muted">{pack.name}</span>
+              </button>
+              {importedIds.has(pack.id) && (
+                <button
+                  type="button"
+                  aria-label={`移除 ${pack.name}`}
+                  data-testid={`pet-remove-${pack.id}`}
+                  onClick={() => void removePack(pack.id)}
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-bg-muted border border-border text-[10px] leading-none text-muted hover:text-danger"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           ))}
         </div>
       </SettingRow>
+      {canImport && (
+        <SettingRow label="导入宠物包" desc="选择 zip（pet.json + css/png/webp，≤8MB）；校验通过后确认入库">
+          <div className="flex flex-col gap-2 items-start">
+            <button
+              type="button"
+              data-testid="pet-import"
+              onClick={() => void planImport()}
+              className="px-3 py-1 text-xs rounded-radius-sm border border-border hover:bg-bg-muted"
+            >
+              选择 zip…
+            </button>
+            {pendingPlan && (
+              <div data-testid="pet-import-confirm" className="text-xs text-muted flex flex-col gap-1">
+                <span>
+                  {pendingPlan.manifest.name}（{pendingPlan.manifest.id}）·{' '}
+                  {pendingPlan.files.length} 个文件 ·{' '}
+                  {Math.round(pendingPlan.totalBytes / 1024)} KB
+                  {pendingPlan.conflict && ' · 同名宠物包已存在，导入将覆盖'}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    data-testid="pet-import-commit"
+                    onClick={() => void commitPending(pendingPlan.conflict)}
+                    className="px-3 py-1 text-xs rounded-radius-sm bg-primary text-white"
+                  >
+                    {pendingPlan.conflict ? '覆盖导入' : '确认导入'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="pet-import-cancel"
+                    onClick={() => void discardPending()}
+                    className="px-3 py-1 text-xs rounded-radius-sm border border-border hover:bg-bg-muted"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
+            {errors.length > 0 && (
+              <ul data-testid="pet-import-errors" className="text-xs text-danger list-disc pl-4">
+                {errors.map((e) => (
+                  <li key={e}>{e}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </SettingRow>
+      )}
     </section>
   );
 }

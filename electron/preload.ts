@@ -26,6 +26,10 @@ import type {
   OfficeElectronApiBridge,
   OfficeManagedRef,
   PickedOfficeFile,
+  PetElectronApiBridge,
+  PetImportPlan,
+  ImportedPetPack,
+  PetMutationResult,
   ProvidersElectronApiBridge,
   RescanResult,
   SavedOfficeFile,
@@ -246,6 +250,21 @@ const electronAPI = {
     showOfficeDocumentInFolder: (ref: OfficeManagedRef) =>
       ipcRenderer.invoke('office:show-in-folder', ref) as Promise<void>,
   } satisfies OfficeElectronApiBridge,
+
+  /**
+   * Pet pack bridge (P2, 2026-09-18): 宠物包导入 — 纯本地文件通路，
+   * 不经后端（校验逻辑在 electron/petImport.ts）。
+   */
+  pet: {
+    listImports: () => ipcRenderer.invoke('pet:list-imports') as Promise<ImportedPetPack[]>,
+    planImport: () => ipcRenderer.invoke('pet:import-plan') as Promise<PetImportPlan | null>,
+    commitImport: (token: string, overwrite: boolean) =>
+      ipcRenderer.invoke('pet:import-commit', { token, overwrite }) as Promise<PetMutationResult>,
+    discardImport: (token: string) =>
+      ipcRenderer.invoke('pet:import-discard', { token }) as Promise<PetMutationResult>,
+    removePack: (id: string) =>
+      ipcRenderer.invoke('pet:remove-pack', { id }) as Promise<PetMutationResult>,
+  } satisfies PetElectronApiBridge,
 
   /**
    * Media bridge (Phase 2, 2026-09-12): multipart upload for chat attachments
