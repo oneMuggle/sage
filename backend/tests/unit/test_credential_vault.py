@@ -49,8 +49,8 @@ def _no_http_sleep(monkeypatch):
 
 
 _COOKIES = [
-    {"name": "SID", "value": "s3cret", "domain": ".example.com", "path": "/"},
-    {"name": "AUTH", "value": "token1", "domain": ".example.com", "path": "/"},
+    {"name": "SID", "value": "s3cret", "domain": ".example.com", "path": "/", "sameSite": "Lax"},
+    {"name": "AUTH", "value": "token1", "domain": ".example.com", "path": "/", "sameSite": "Lax"},
 ]
 
 
