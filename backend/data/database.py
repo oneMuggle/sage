@@ -1030,6 +1030,13 @@ class Database:
                 "ALTER TABLE usage_events ADD COLUMN task_id TEXT"
             )
             conn.commit()
+        # 上下文分类明细快照 (backend/chat/context_breakdown.py) ——
+        # JSON: {categories, estimated_total, prompt_tokens, calibrated}。
+        if "context_breakdown" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN context_breakdown TEXT"
+            )
+            conn.commit()
         # L8 PR-B (2026-09-09): 用量日聚合表 — 7d/30d 时间范围查询的预聚合层,
         # 避免每次都扫 usage_events 全量。days_bucket 0=今天, 1=昨天 ... 6=6 天前
         # (7d 范围), >=7 即 30d 范围折叠到月聚合。模型维度另算。
