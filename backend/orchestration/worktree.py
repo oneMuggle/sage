@@ -36,6 +36,24 @@ def _run_git(args: List[str], cwd: Optional[Path] = None) -> bool:
         return False
 
 
+def _run_git_out(args: List[str], cwd: Optional[Path] = None) -> Optional[str]:
+    """执行 git 子命令并返回 stdout；失败（非 0 退出 / 异常）返回 None。"""
+    try:
+        proc = subprocess.run(
+            ["git"] + args,
+            cwd=str(cwd) if cwd else None,
+            capture_output=True,
+            timeout=_GIT_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.debug("git %s 失败: %s", args[:2], exc)
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.decode("utf-8", errors="replace")
+
+
 def is_git_repo(path: Path) -> bool:
     """Return whether ``path`` is an existing directory inside a git work tree."""
     return path.is_dir() and _run_git(
@@ -43,22 +61,85 @@ def is_git_repo(path: Path) -> bool:
     )
 
 
-def create_worktree(repo: Path, dest: Path) -> bool:
-    """从 ``repo`` 的 HEAD 建 detached worktree 到 ``dest``。失败返回 False。"""
+def create_worktree(
+    repo: Path,
+    dest: Path,
+    branch: Optional[str] = None,
+    base_ref: str = "HEAD",
+    create_branch: bool = True,
+) -> bool:
+    """从 ``repo`` 建 worktree 到 ``dest``。失败返回 False。
+
+    ``branch`` 为空时保持旧行为：HEAD 的 detached 副本（编排 lane 隔离用）。
+    ``create_branch=True`` 时 ``git worktree add -b <branch> <dest> <base_ref>``；
+    ``create_branch=False`` 时检出已有分支 ``git worktree add <dest> <branch>``。
+    分支名过 :func:`backend.tools.git_tool._valid_ref` 白名单防注入。
+    """
     if not is_git_repo(repo) or dest.exists():
         return False
+    if branch is not None:
+        from backend.tools.git_tool import _valid_ref
+
+        if not _valid_ref(branch) or (create_branch and not _valid_ref(base_ref)):
+            logger.warning("worktree 分支名非法: branch=%r base=%r", branch, base_ref)
+            return False
+        if create_branch:
+            add_args = ["worktree", "add", "-b", branch, str(dest), base_ref]
+        else:
+            add_args = ["worktree", "add", str(dest), branch]
+    else:
+        add_args = ["worktree", "add", "--detach", str(dest), "HEAD"]
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
-        ok = _run_git(
-            ["worktree", "add", "--detach", str(dest), "HEAD"],
-            cwd=repo,
-        )
+        ok = _run_git(add_args, cwd=repo)
     except (OSError, RuntimeError, ValueError) as exc:
         logger.warning("worktree 创建异常 repo=%s dest=%s: %s", repo, dest, exc)
         return False
     if not ok:
-        logger.warning("worktree 创建失败 repo=%s dest=%s", repo, dest)
+        logger.warning("worktree 创建失败 repo=%s dest=%s branch=%s", repo, dest, branch)
     return ok
+
+
+def list_worktrees(repo: Path) -> List[dict]:
+    """``git worktree list --porcelain`` 解析结果。
+
+    每项: ``{path, head, branch, detached, main}``；``branch`` 为裸分支名
+    （detached 时为 None），``main`` 标记主仓（porcelain 输出首条）。
+    失败返回空列表。
+    """
+    out = _run_git_out(["worktree", "list", "--porcelain"], cwd=repo)
+    if out is None:
+        return []
+    entries: List[dict] = []
+    current: Optional[dict] = None
+    for line in out.splitlines():
+        line = line.rstrip()
+        if line.startswith("worktree "):
+            if current is not None:
+                entries.append(current)
+            raw_path = line[len("worktree "):]
+            current = {
+                "path": raw_path,
+                "head": "",
+                "branch": None,
+                "detached": False,
+                "main": not entries,
+            }
+        elif current is None:
+            continue
+        elif line.startswith("HEAD "):
+            current["head"] = line[len("HEAD "):]
+        elif line == "detached":
+            current["detached"] = True
+        elif line.startswith("branch "):
+            ref = line[len("branch "):]
+            prefix = "refs/heads/"
+            if ref.startswith(prefix):
+                ref = ref[len(prefix):]
+            current["branch"] = ref
+    if current is not None:
+        entries.append(current)
+    return entries
 
 
 def remove_worktree(dest: Path) -> None:
@@ -96,10 +177,23 @@ def prune_worktrees(cwd: Optional[Path] = None) -> bool:
     return _run_git(["worktree", "prune"], cwd=cwd)
 
 
-async def create_worktree_async(repo: Path, dest: Path) -> bool:
+async def create_worktree_async(
+    repo: Path,
+    dest: Path,
+    branch: Optional[str] = None,
+    base_ref: str = "HEAD",
+) -> bool:
     """在线程中创建 worktree，避免阻塞 asyncio event loop。"""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, create_worktree, repo, dest)
+    return await loop.run_in_executor(
+        None, create_worktree, repo, dest, branch, base_ref
+    )
+
+
+async def list_worktrees_async(repo: Path) -> List[dict]:
+    """在线程中列出 worktree，避免阻塞 asyncio event loop。"""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, list_worktrees, repo)
 
 
 async def remove_worktree_async(dest: Path) -> None:

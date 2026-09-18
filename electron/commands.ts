@@ -366,6 +366,40 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/changes/revert-hunks`,
     body: (a) => ({ path: a.path, hunk_indices: a.hunkIndices }),
   },
+  // 会话级 worktree 模式 (2026-09-18): 分支 picker / worktree 生命周期
+  worktree_branches: {
+    method: 'GET',
+    path: (a) => {
+      const sessionId = encodeURIComponent(String(a.sessionId));
+      const remote = a.includeRemote === false ? 'false' : 'true';
+      return `/api/v1/sessions/${sessionId}/worktree/branches?include_remote=${remote}`;
+    },
+  },
+  worktree_list: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/worktree`,
+  },
+  worktree_create: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/worktree`,
+    body: (a) => ({
+      mode: a.mode,
+      branch: a.branch,
+      base_ref: a.baseRef ?? 'HEAD',
+    }),
+  },
+  worktree_merge: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/worktree/merge`,
+    body: (a) => ({ worktree_id: a.worktreeId }),
+  },
+  worktree_delete: {
+    method: 'DELETE',
+    path: (a) =>
+      `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/worktree/${encodeURIComponent(
+        String(a.worktreeId),
+      )}?delete_branch=${a.deleteBranch === true ? 'true' : 'false'}`,
+  },
   // U2' 检查点面板 (对标增强第五轮批次 A): 快照列表 / 手动快照 / 覆盖恢复。
   // restore 语义"只覆盖不删除"由前端 confirm 文案明示;POST body 必须
   // 剥掉路径参数 (后端 extra="forbid",与 workspace_revert_changes 同理)。
