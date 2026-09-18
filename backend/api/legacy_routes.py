@@ -308,6 +308,14 @@ _PLAN_MODE_DIRECTIVE = (
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    # client_message_id (2026-09, docs/plans/2026-09-18_client-message-id-r1-plan):
+    # 前端乐观 user 消息 id 与服务端落库 id 对齐的根方案。传入时 user 消息
+    # 落库 id = f"u-{client_message_id}" (确定性); 未传 = 服务端 UUID (兼容)。
+    client_message_id: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9a-f-]{8,64}$",
+        description="前端生成的消息身份 id (UUID), 用于乐观 id 对齐与幂等",
+    )
     workspace_path: Optional[str] = None
     # 2026-07-30: 选 agent 的入口。None / 空字符串 → 端点 fallback 到 "primary"。
     # 真正的路由由 SageAgent(agent_id=...) 内部完成:从 SQLite 读 profile,
@@ -3251,9 +3259,17 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             session_repo = SessionRepository()
             user_now = int(time.time() * 1000)
             try:
+                # client_message_id (2026-09): 确定性 user id —— 前端乐观消息
+                # 用同一 id, 对账按 id 精确命中 (同 id 重复落库为同内容覆写,
+                # 天然幂等); 未传时维持 UUID。
+                user_message_id = (
+                    f"u-{data.client_message_id}"
+                    if data.client_message_id
+                    else str(uuid.uuid4())
+                )
                 message_repo.save(
                     DbMessage(
-                        id=str(uuid.uuid4()),
+                        id=user_message_id,
                         session_id=data.session_id,
                         role="user",
                         content=data.message,
@@ -3447,10 +3463,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             if done_content:
                 assistant_now = int(time.time() * 1000)
                 assistant_persisted = False
+                assistant_db_id = str(uuid.uuid4())
                 try:
                     message_repo.save(
                         DbMessage(
-                            id=str(uuid.uuid4()),
+                            id=assistant_db_id,
                             session_id=data.session_id,
                             role="assistant",
                             content=done_content,
@@ -3535,7 +3552,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # 用户盯着已生成完的内容转圈。现 DONE 立即推送, 标题转后台
                 # 任务生成; 完成后落库 (侧栏在下次自然刷新时呈现)。
                 if done_event:
-                    await entry.queue.put(done_event.to_dict())
+                    done_payload = done_event.to_dict()
+                    # client_message_id (2026-09): DONE 附带 assistant 消息的
+                    # 服务端 id, 前端据此把乐观占位 id 替换为真实 id —— 对账
+                    # 按 id 精确命中, 根治重复显示。
+                    if assistant_persisted:
+                        done_payload["message_id"] = assistant_db_id
+                    await entry.queue.put(done_payload)
 
                 # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
                 # 后台任务生成 —— 不阻塞 producer 收尾 (SENTINEL/运行态落库),

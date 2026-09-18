@@ -144,7 +144,8 @@ export function useChat() {
   const [errorSessionId, setErrorSessionId] = useState<string | null>(null);
   // PM2 (round8): 计划模式完成的会话 ID —— 非空时 Chat 渲染"按计划执行"批准条。
   const [planApprovalFor, setPlanApprovalFor] = useState<string | null>(null);
-  const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
+  const { messages, addMessage, updateMessage, replaceMessageId, currentSessionId, loadMessages } =
+    useStore();
   const { settings } = useSettings();
 
   // U5 (对标增强第二轮批次 B): 流式中用户继续发送 → 入队,当前回复自然
@@ -336,8 +337,11 @@ export function useChat() {
       setError(null);
       setErrorSessionId(null);
 
+      // client_message_id 协议 (2026-09): 乐观 user 消息直接使用与服务端
+      // 相同的确定性 id (u-<cmid>) —— 流结束对账按 id 精确命中, 根治重复。
+      const clientMessageId = crypto.randomUUID();
       const userMessage: Message = {
-        id: crypto.randomUUID(),
+        id: `u-${clientMessageId}`,
         session_id: sid,
         role: 'user',
         content,
@@ -470,6 +474,8 @@ export function useChat() {
       // 因为 ref 里混了 '🤔 思考中…' 占位符)。finishStream 用这个写 store。
       let finished = false;
       let lastDoneContent: string | null = null;
+      // client_message_id 协议: DONE 携带 assistant 消息的服务端 id
+      let lastDoneMessageId: string | null = null;
       // flushQueue=true 仅限流自然结束(onDone) —— 错误/中断不自动发队列消息
       const finishStream = (flushQueue = false): void => {
         if (finished) return;
@@ -502,6 +508,11 @@ export function useChat() {
             reasoning_content: finalReasoning || undefined,
             tool_calls: finalToolCalls.length > 0 ? finalToolCalls : undefined,
           });
+        }
+        // client_message_id 协议: DONE 带回服务端 id 时, 把乐观占位 id
+        // 原地替换 —— 此后 loadMessages 对账按 id 精确命中。
+        if (lastDoneMessageId && lastDoneMessageId !== assistantId) {
+          replaceMessageId(assistantId, lastDoneMessageId);
         }
         // 2026-08-19: 精准重置流式 state + toolCalls,**不清 taskBoard**
         // (与原 commit 一致:finishStream 旧实现只 setStreaming(null) + 清 ref,
@@ -774,6 +785,7 @@ export function useChat() {
                 appendContent(evt.content);
                 if (evt.state === 'done') {
                   lastDoneContent = evt.content;
+                  if (evt.message_id) lastDoneMessageId = evt.message_id;
                 }
                 useChatStreamStore
                   .getState()
@@ -809,6 +821,7 @@ export function useChat() {
           opts?.images,
           opts?.attachmentMediaIds,
           opts?.attachmentRag,
+          clientMessageId,
         );
         // Never let a late subscription overwrite a newer run's handle.
         if (finished || activeStreamRegistry.get(sid) !== streamHandle) {
@@ -833,6 +846,7 @@ export function useChat() {
       settings,
       addMessage,
       updateMessage,
+      replaceMessageId,
       markStreamActive,
       markStreamIdle,
     ],

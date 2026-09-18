@@ -454,6 +454,8 @@ export interface AgentEvent {
   tool_result?: AgentToolResult;
   /** producer 失败信封: LLMError.to_dict() 为 dict; 旧路径/限额拦截为 str */
   error?: string | { type?: string; message?: string; status_code?: number };
+  /** client_message_id 协议: DONE 附带 assistant 消息的服务端 id, 供前端替换占位 id */
+  message_id?: string;
   /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
   agent_id?: string;
   /** M1: state === 'permission_request' 时携带的审批请求详情 */

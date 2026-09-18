@@ -88,6 +88,8 @@ describe('chatApi.chatStream (PR-6)', () => {
       attachment_media_ids: [],
       // r67: 附件检索注入, 缺省 null（opt-in）
       attachment_rag: null,
+      // client_message_id 协议: 未传 → null (兼容旧客户端)
+      clientMessageId: null,
       // Task 5 (2026-09-15): context window resolver toggle, 缺省 null
       autoContext: null,
       // Task 5 (2026-09-17): 显式上下文重置, 缺省 false
