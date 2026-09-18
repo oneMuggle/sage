@@ -22,25 +22,33 @@
    `office_journal_generations.output_path / workspace_path`、`office_journal_specs.spec_json /
    template_filename / workspace_path`、四张 office 表的全字段 token 扫描，以及工作区文件扫描
    （含 .docx/.pptx/.xlsx 等 zip 容器内部关系部件）。
-2. **已注册工作区一律保留**：候选目录若位于数据库仍登记的 `workspace_path` 之下，直接判为
+2. **导入租约（跨进程 lease）**：识别 Electron `electron/officeStaging.ts` 写入的
+   `.sage-import-v1.json` / `.sage-import-completed` sentinel。有 staging marker 且无 completed
+   marker ⇒ 导入进行中或待人工复核，**无论数据库证据如何一律保留**（`import_lease_active`）；
+   owner pid 已死只降级为 `review`，绝不清算——后端提交可能已成功而渲染端未发 complete-import，
+   且 pid 会复用。sentinel 损坏/超限/token 与目录名不符 ⇒ `unknown`（`import_sentinel_invalid`）保留。
+   两类 sentinel 与隔离清单文件名被排除在工作区扫描之外，避免目录「自我引用」掩盖租约语义。
+3. **已注册工作区一律保留**：候选目录若位于数据库仍登记的 `workspace_path` 之下，直接判为
    `referenced`。清理目标只剩「数据库已不认识的工作区遗留暂存」，这是本工具最主要的真实场景。
-3. **保守分类**：`referenced` / `unknown`（缺表缺列、扫描超预算、超时、路径歧义、空目录、符号链接、
+4. **保守分类**：`referenced` / `unknown`（缺表缺列、扫描超预算、超时、路径歧义、空目录、符号链接、
    读取失败）/ `fresh`（静默期 24h 内被修改）/ `no_reference_found`。只有最后一类可进入隔离。
-4. **可恢复搬运**：先写 `intent` 记录并 fsync → 复制到
+5. **可恢复搬运**：先写 `intent` 记录并 fsync → 复制到
    `<workspace>/office/.quarantine/<id>.tmp-quarantine`（逐文件 SHA-256 校验、独占创建）→
    复制后再次摘要比对源目录 → `os.replace` 定版为 `<id>` 并写 `done` → 仅在内容仍与副本逐文件一致时
    删除源目录并写 `source_removed`。任何漂移写 `needs_review` 且保留源文件。
-5. **崩溃续跑**：下次运行先 `_resume_incomplete`：副本完整则补完搬运；副本残缺则丢弃副本、保留源；
+6. **崩溃续跑**：下次运行先 `_resume_incomplete`：副本完整则补完搬运；副本残缺则丢弃副本、保留源；
    源与副本都不在则写 `needs_review` 交人工。清单为 append-only JSONL，逐条 fsync。
-6. **并发协调**：`quarantine.lock` 单写者锁（忙则全部保留并返回 `quarantine_busy`）；Windows 下对候选
+7. **并发协调**：`quarantine.lock` 单写者锁（忙则全部保留并返回 `quarantine_busy`）；Windows 下对候选
    目录取 FILE_SHARE_NONE 句柄，令进行中的导入/编辑器写入与本操作互斥。这不是跨进程 exactly-once
    承诺，只是把竞态窗口压到「失败即保留」。
-7. **永久删除三重门禁**：`purge` 需 `--allow-permanent-deletion` + 逐字重打 quarantine id + 已过保留期
+8. **永久删除三重门禁**：`purge` 需 `--allow-permanent-deletion` + 逐字重打 quarantine id + 已过保留期
    （默认 7 天），且目标必须位于隔离根内。默认全流程零删除，保留期到期也只标记为可人工处理。
 
 ## 明确边界（未宣称）
 
-- 数据库读事务与文件系统不构成共同原子快照；本工具用「复制后校验 + 漂移即保留」代替原子性宣称。
+- 导入协调依赖既有 sentinel 协议，不是应用内全局锁：Electron 写 marker 与 Python 读 marker 之间
+  仍存在极小窗口，由「复制后逐文件校验 + 漂移即保留 + 静默期」共同兜底；数据库读事务与文件系统
+  不构成共同原子快照。
 - 不覆盖任意嵌入元数据的全部形态（例如二进制内非 ASCII 编码的 id）、外部备份、快照卷。
 - `no_reference_found` 不是孤儿证明，也不是删除许可；`plan` 输出的 `safe_to_delete` 恒为 false。
 - 未接入 UI 自动调用，未接入定时任务；仅 CLI 与显式人工触发。

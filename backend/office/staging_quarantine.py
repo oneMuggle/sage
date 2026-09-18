@@ -11,6 +11,10 @@ Contract
    containers (.docx/.pptx/.xlsx), whose relationship parts can embed another
    document's id or path. Candidates are classified ``referenced`` /
    ``no_reference_found`` / ``unknown`` / ``fresh``.
+   A staged import that Electron has not marked completed is treated as an
+   active lease and retained regardless of database evidence, matching
+   ``previewOfficeStaging``: a dead owner pid is a review candidate, never
+   clearance.
 2. ``quarantine_run`` acts only on ``no_reference_found`` candidates and only
    when ``dry_run=False``. Bytes are copied into
    ``<workspace>/office/.quarantine`` with per-file SHA-256 verification and an
@@ -43,6 +47,7 @@ import os
 import re
 import shutil
 import sqlite3
+import stat
 import sys
 import time
 import uuid
@@ -92,6 +97,19 @@ _TEXT_TABLES: Tuple[str, ...] = (
     "office_journal_generations",
 )
 _REQUIRED_TABLES: Tuple[str, ...] = ("office_documents",)
+
+#: Import sentinels written by ``electron/officeStaging.ts``. They are the
+#: cross-process lease: a staged import that has not been marked completed is
+#: in flight (or awaiting human review) and must never be moved.
+STAGING_MARKER = ".sage-import-v1.json"
+COMPLETED_MARKER = ".sage-import-completed"
+#: Mirrors ``STAGING_REVIEW_AGE_MS``; reported for parity, never used to clear.
+STAGING_REVIEW_AGE_MS = 7 * 24 * 60 * 60 * 1000
+_MARKER_MAX_BYTES = 4096
+#: A candidate's own sentinels are not third-party references; excluding them
+#: from the scans keeps the lease semantics observable instead of letting a
+#: directory "reference itself".
+_SELF_EVIDENCE_NAMES = frozenset({STAGING_MARKER, COMPLETED_MARKER, MANIFEST_NAME})
 #: A staging dir inside a workspace the app still registers is always retained.
 _WORKSPACE_TABLES: Tuple[str, ...] = (
     "office_documents",
@@ -361,6 +379,92 @@ def _existing_tables(connection: sqlite3.Connection) -> Set[str]:
     return {str(row[0]) for row in rows}
 
 
+def _owner_may_be_alive(pid: int) -> Optional[bool]:
+    """Advisory liveness probe. ``None`` means "cannot tell", never "dead"."""
+    if pid <= 0:
+        return None
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except (OSError, ValueError, AttributeError):
+        return None
+    return True
+
+
+def _import_lease(  # noqa: PLR0911 — every early return is a distinct retain verdict
+    directory: Path, doc_id: str
+) -> Dict[str, Any]:
+    """Read the Electron import sentinels for one staging directory.
+
+    Semantics mirror ``previewOfficeStaging`` and stay deliberately more
+    conservative: an owner pid that looks dead is *not* clearance, because the
+    backend commit may have succeeded without the renderer sending
+    ``complete-import``, and pids get reused. Only an explicit completion
+    sentinel ends the lease; anything unreadable keeps it.
+    """
+    lease: Dict[str, Any] = {
+        "marker_present": False,
+        "completed": False,
+        "active": False,
+        "state": "none",
+        "token_matches": None,
+        "created_at": None,
+        "owner_pid": None,
+        "owner_alive": None,
+    }
+    marker = directory / STAGING_MARKER
+    try:
+        lease["completed"] = (directory / COMPLETED_MARKER).exists()
+    except OSError:
+        lease["completed"] = False
+    try:
+        info = marker.lstat()
+    except FileNotFoundError:
+        lease["state"] = "completed" if lease["completed"] else "none"
+        return lease
+    except OSError:
+        lease.update(state="invalid", marker_present=True)
+        return lease
+    lease["marker_present"] = True
+    if not stat.S_ISREG(info.st_mode):
+        lease["state"] = "invalid"
+        return lease
+    if info.st_size > _MARKER_MAX_BYTES:
+        lease["state"] = "invalid"
+        return lease
+    try:
+        evidence = json.loads(marker.read_bytes().decode("utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        lease["state"] = "invalid"
+        return lease
+    if not isinstance(evidence, dict):
+        lease["state"] = "invalid"
+        return lease
+    token = evidence.get("token")
+    created = evidence.get("createdAt")
+    owner = evidence.get("ownerPid")
+    lease["token_matches"] = token == doc_id if isinstance(token, str) else None
+    lease["created_at"] = created if isinstance(created, int) and created >= 0 else None
+    lease["owner_pid"] = owner if isinstance(owner, int) and owner > 0 else None
+    if lease["owner_pid"] is not None:
+        lease["owner_alive"] = _owner_may_be_alive(lease["owner_pid"])
+    if evidence.get("version") != 1 or lease["token_matches"] is not True:
+        lease["state"] = "invalid"
+        return lease
+    if lease["created_at"] is None:
+        lease["state"] = "invalid"
+        return lease
+    if lease["completed"]:
+        lease["state"] = "completed"
+        return lease
+    lease["active"] = True
+    lease["state"] = "active" if lease["owner_alive"] is not False else "review"
+    return lease
+
+
 def _registered_workspaces(  # noqa: PLR0911 — each early exit is a distinct retain path
     connection: sqlite3.Connection, notes: List[str]
 ) -> List[Path]:
@@ -492,6 +596,8 @@ def _scan_workspace_files(  # noqa: PLR0911 — every early exit keeps evidence 
                 continue
             dirs[:] = [d for d in dirs if d not in ("node_modules", ".git", ".venv")]
             for name in sorted(files):
+                if name in _SELF_EVIDENCE_NAMES:
+                    continue
                 if scanned >= MAX_SCAN_FILES or time.monotonic() > deadline:
                     return hits, "incomplete"
                 path = root_path / name
@@ -592,6 +698,8 @@ def plan_quarantine(
             "office_journal_specs.workspace_path",
             "office_table_token_scan",
             "workspace_file_scan_including_zip_containers",
+            "import_sentinel:" + STAGING_MARKER,
+            "import_sentinel:" + COMPLETED_MARKER,
         ],
         "notes": notes,
         "quiet_hours": quiet_hours,
@@ -717,6 +825,25 @@ def plan_quarantine(
             "path": directory.as_posix(),
             "references": references,
         }
+        lease = _import_lease(directory, doc_id)
+        entry["import_lease"] = lease
+        if lease["state"] == "invalid":
+            # Unreadable/oversized/foreign sentinel: retain, never infer.
+            entry["status"] = "unknown"
+            entry["reason"] = "import_sentinel_invalid"
+            plan["candidates"].append(entry)
+            continue
+        if lease["active"]:
+            # In-flight import, or a dead-owner import awaiting human review.
+            label = "import_lease_active:" + str(lease["state"])
+            if label not in references:
+                references.append(label)
+            entry["status"] = "referenced"
+            entry["reason"] = "import_in_progress_or_pending_review"
+            plan["candidates"].append(entry)
+            continue
+        if lease["completed"] and "import_completed_sentinel" not in references:
+            references.append("import_completed_sentinel")
         try:
             resolved = directory.resolve()
             expected = root / "office" / directory.parent.name / doc_id
