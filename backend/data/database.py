@@ -189,13 +189,6 @@ def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
     调用本迁移；但 win7 的 memory/episodic.py 仍写这三列，且存量库早于
     这些列存在。幂等，可在每次 init_db 调用。
     """
-    # Check if table exists before attempting migration
-    table_check = db.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='memories_episodic'"
-    ).fetchone()
-    if not table_check:
-        return  # Table doesn't exist yet, skip migration
-
     cur = db.execute("PRAGMA table_info(memories_episodic)")
     existing_cols = {row[1] for row in cur.fetchall()}
     new_cols = {
@@ -549,9 +542,6 @@ class Database:
         )
         conn.commit()
 
-        # win7-only（Task 4 / Gap A）：补 source_turn_id 等三列，见 _migrate_memory_traceability。
-        _migrate_memory_traceability(conn)
-
         # 会话摘要表（批次三 step 3，spec §4.3）
         # Dedicated table for compressed session summaries; deliberately
         # separate from memories_episodic so a derived summary never gets
@@ -619,6 +609,9 @@ class Database:
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
             )
         """)
+
+        # win7-only（Task 4 / Gap A）：补 source_turn_id 等三列，见 _migrate_memory_traceability。
+        _migrate_memory_traceability(conn)
 
         # 技能定义不再由 SQLite ``skills`` 表承载。
         # 当前实现从 SkillRegistry / SKILL.md 文件加载；故新数据库不得创建
