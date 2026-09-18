@@ -6,15 +6,19 @@ import { describe, expect, it, vi } from 'vitest';
 import type { TaskBoardState } from '../../../../features/send-message/chatStreamStore';
 import { TaskTreeSection } from '../TaskTreeSection';
 
+const useSettingsMock = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../../features/manage-settings/useSettings', () => ({
-  useSettings: () => ({
-    settings: { orch: { runTokenBudget: 10000 } },
-    isLoading: false,
-    loadSettings: vi.fn(),
-    updateSettings: vi.fn(),
-    resetSettings: vi.fn(),
-  }),
+  useSettings: useSettingsMock,
 }));
+
+useSettingsMock.mockReturnValue({
+  settings: { orch: { runTokenBudget: 10000 } },
+  isLoading: false,
+  loadSettings: vi.fn(),
+  updateSettings: vi.fn(),
+  resetSettings: vi.fn(),
+});
 
 function makeBoard(overrides: Partial<TaskBoardState> = {}): TaskBoardState {
   return {
@@ -470,5 +474,244 @@ describe('TaskTreeSection — 单任务重试 (RV4)', () => {
       />,
     );
     expect(screen.queryByTestId('task-tree-retry-t2')).toBeNull();
+  });
+});
+
+// ============================================================================
+// BU15 (round29): running 行实时计时徽章
+// ============================================================================
+
+describe('TaskTreeSection — running 实时耗时 (BU15)', () => {
+  it('running 行渲染 elapsed 徽章，done 后消失', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-18T12:00:30Z'));
+      const runningSince = Date.now() - 83_000; // 1m23s
+      render(
+        <TaskTreeSection
+          board={makeBoard({
+            statuses: {
+              t1: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't1',
+                status: 'running',
+                agent_id: 'primary',
+                goal: 'g1',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+                runningSince,
+              },
+              t2: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't2',
+                status: 'done',
+                agent_id: 'primary',
+                goal: 'g2',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+              },
+            } as TaskBoardState['statuses'],
+          })}
+        />,
+      );
+      expect(screen.getByTestId('task-tree-elapsed-t1').textContent).toBe('1m23s');
+
+      // 终态替换：徽章消失
+      cleanup();
+      render(
+        <TaskTreeSection
+          board={makeBoard({
+            statuses: {
+              t1: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't1',
+                status: 'done',
+                agent_id: 'primary',
+                goal: 'g1',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+                duration_ms: 90_000,
+              },
+              t2: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't2',
+                status: 'done',
+                agent_id: 'primary',
+                goal: 'g2',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+              },
+            } as TaskBoardState['statuses'],
+          })}
+        />,
+      );
+      expect(screen.queryByTestId('task-tree-elapsed-t1')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('亚分钟显示秒；无 runningSince 的 running 行不显示徽章', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-18T12:00:10Z'));
+      render(
+        <TaskTreeSection
+          board={makeBoard({
+            statuses: {
+              t1: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't1',
+                status: 'running',
+                agent_id: 'primary',
+                goal: 'g1',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+                runningSince: Date.now() - 42_000,
+              },
+              t2: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't2',
+                status: 'running',
+                agent_id: 'primary',
+                goal: 'g2',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+              },
+            } as TaskBoardState['statuses'],
+          })}
+        />,
+      );
+      expect(screen.getByTestId('task-tree-elapsed-t1').textContent).toBe('42s');
+      expect(screen.queryByTestId('task-tree-elapsed-t2')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+// ============================================================================
+// BU16 (round30): run 级耗时与上限提示
+// ============================================================================
+
+describe('TaskTreeSection — run 级耗时 (BU16)', () => {
+  it('in-flight 显示已运行与上限提示', () => {
+    vi.useFakeTimers();
+    try {
+      useSettingsMock.mockReturnValue({
+        settings: { orch: { runWallClockLimitMinutes: 30 } },
+        isLoading: false,
+        loadSettings: vi.fn(),
+        updateSettings: vi.fn(),
+        resetSettings: vi.fn(),
+      });
+      vi.setSystemTime(new Date('2026-09-18T12:05:00Z'));
+      render(
+        <TaskTreeSection
+          board={makeBoard({
+            dispatchedAt: Date.now() - 150_000, // 2m30s
+            statuses: {
+              t1: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't1',
+                status: 'running',
+                agent_id: 'primary',
+                goal: 'g1',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+                runningSince: Date.now() - 30_000,
+              },
+              t2: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't2',
+                status: 'queued',
+                agent_id: 'primary',
+                goal: 'g2',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+              },
+            } as TaskBoardState['statuses'],
+            progress: { total: 2, done: 0, running: 1, queued: 1, failed: 0, cancelled: 0 },
+          })}
+        />,
+      );
+      const el = screen.getByTestId('task-tree-run-elapsed');
+      expect(el.textContent).toContain('已运行 2m30s');
+      expect(el.textContent).toContain('上限 30 分钟');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('终态后冻结且无上限设置时不提示', () => {
+    vi.useFakeTimers();
+    try {
+      useSettingsMock.mockReturnValue({
+        settings: { orch: { runWallClockLimitMinutes: 0 } },
+        isLoading: false,
+        loadSettings: vi.fn(),
+        updateSettings: vi.fn(),
+        resetSettings: vi.fn(),
+      });
+      vi.setSystemTime(new Date('2026-09-18T12:05:00Z'));
+      render(
+        <TaskTreeSection
+          board={makeBoard({
+            dispatchedAt: Date.now() - 90_000,
+            statuses: {
+              t1: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't1',
+                status: 'done',
+                agent_id: 'primary',
+                goal: 'g1',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+              },
+              t2: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't2',
+                status: 'failed',
+                agent_id: 'primary',
+                goal: 'g2',
+                error: 'boom',
+                output_preview: null,
+                retry_count: 0,
+              },
+            } as TaskBoardState['statuses'],
+            progress: { total: 2, done: 1, running: 0, queued: 0, failed: 1, cancelled: 0 },
+          })}
+        />,
+      );
+      const el = screen.getByTestId('task-tree-run-elapsed');
+      expect(el.textContent).toContain('已运行 1m30s');
+      expect(el.textContent).not.toContain('上限');
+      // 冻结：时间前进后不重渲染（无 tick）
+      vi.advanceTimersByTime(5_000);
+      expect(screen.getByTestId('task-tree-run-elapsed').textContent).toContain(
+        '已运行 1m30s',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

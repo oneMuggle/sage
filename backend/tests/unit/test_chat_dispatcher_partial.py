@@ -99,3 +99,92 @@ async def test_partial_aggregate_counts_failed(tmp_path, monkeypatch):
     assert snap["status"] == "partial"
     assert snap["done"] == 0
     assert "失败" in snap["aggregate"]
+
+
+# ---- BD8 / BU14 (round28): 守门归因透出到 partial / snapshot ------------------
+
+
+@pytest.mark.asyncio()
+async def test_partial_aggregate_budget_flags_and_note(tmp_path, monkeypatch):
+    """预算触顶：partial 载荷带双标志 + 聚合文本尾注入触顶说明行。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-bd8-1")
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        if state.task_id == "t2":
+            await asyncio.sleep(0.5)
+        state.status = "done"
+        return f"结果 {state.task_id}"
+
+    d._run_subagent = fake_run
+    d.start_background_dispatch(
+        [
+            {"task_id": "t1", "agent_id": "primary", "goal": "g1"},
+            {"task_id": "t2", "agent_id": "primary", "goal": "g2"},
+        ]
+    )
+    await asyncio.sleep(0.1)
+    d._budget_exceeded = True  # 模拟预算守门触发
+
+    snap = d.partial_aggregate()
+    assert snap["budget_exceeded"] is True
+    assert snap["wall_clock_exceeded"] is False
+    assert "预算已触顶" in snap["aggregate"]
+    assert "墙钟上限" not in snap["aggregate"]
+
+    # 快照对称透出（BU14）
+    bg = d.background_snapshot()
+    assert bg["budget_exceeded"] is True
+    assert bg["wall_clock_exceeded"] is False
+    await d.wait_background(timeout=5)
+
+
+@pytest.mark.asyncio()
+async def test_partial_aggregate_wall_clock_note(tmp_path, monkeypatch):
+    """墙钟触顶：注入墙钟说明行（与预算互斥，先判预算）。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-bd8-2")
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        state.status = "done"
+        return f"结果 {state.task_id}"
+
+    d._run_subagent = fake_run
+    d.start_background_dispatch(
+        [{"task_id": "t1", "agent_id": "primary", "goal": "g1"}]
+    )
+    await d.wait_background(timeout=5)
+    d._wall_clock_exceeded = True
+
+    snap = d.partial_aggregate()
+    assert snap["wall_clock_exceeded"] is True
+    assert "墙钟上限已到" in snap["aggregate"]
+    assert "预算已触顶" not in snap["aggregate"]
+
+
+@pytest.mark.asyncio()
+async def test_partial_aggregate_no_note_when_not_tripped(tmp_path, monkeypatch):
+    """未触顶：不注入说明行，标志为 False（对既有载荷形状零打扰）。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-bd8-3")
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        state.status = "done"
+        return f"结果 {state.task_id}"
+
+    d._run_subagent = fake_run
+    d.start_background_dispatch(
+        [{"task_id": "t1", "agent_id": "primary", "goal": "g1"}]
+    )
+    await d.wait_background(timeout=5)
+
+    snap = d.partial_aggregate()
+    assert snap["budget_exceeded"] is False
+    assert snap["wall_clock_exceeded"] is False
+    assert "已停止派发" not in snap["aggregate"]
