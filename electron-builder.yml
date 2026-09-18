@@ -59,13 +59,18 @@ extraResources:
     filter:
       - "**/*"
       - "!**/__pycache__"
-      - "!**/*.pyc"
+  # NOTE: .pyc is deliberately NOT excluded from the two Python entries.
+  # In protected builds (SAGE_PROTECT_CODE=true) the bundler strips backend/*.py
+  # and leaves sourceless .pyc as the ONLY copy of the code — excluding the
+  # extension would ship a backend/ holding just main.py, and every
+  # `import backend.*` would raise ModuleNotFoundError at runtime. Dev-mode
+  # bytecode all lives under __pycache__/ (excluded above), so allowing .pyc
+  # costs nothing on the development path.
   - from: "resources/backend"
     to: "backend"
     filter:
       - "**/*"
       - "!**/__pycache__"
-      - "!**/*.pyc"
   - from: "resources/sage-core"
     to: "sage-core"
     filter:

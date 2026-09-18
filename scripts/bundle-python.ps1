@@ -242,9 +242,13 @@ if (Test-Path $SageCoreSource) {
         # Drop __pycache__ from the runtime copy
         Get-ChildItem -Path $SageCorePkgDest -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force
         if ($ProtectCode) {
-            # Keep only compiled extensions + package markers; strip .py source.
+            # Keep only compiled extensions + package markers.
+            # .py — every module except the package marker.
             Get-ChildItem -Path $SageCorePkgDest -Recurse -Filter "*.py" | Where-Object { $_.Name -ne "__init__.py" } | Remove-Item -Force
-            Write-Host "🛡️ Stripped sage_core .py source from embeddable site-packages (kept .pyd + __init__.py)." -ForegroundColor Green
+            # Cython intermediates — the generated .c carries the translated
+            # function bodies and .pyx is the original typed source.
+            Get-ChildItem -Path $SageCorePkgDest -Recurse -Include "*.c", "*.pyx" | Remove-Item -Force
+            Write-Host "🛡️ Stripped sage_core source (.py/.c/.pyx) from embeddable site-packages (kept .pyd + __init__.py)." -ForegroundColor Green
         }
     }
 } else {
@@ -281,8 +285,10 @@ if ($ProtectCode) {
     Write-Host "🛡️ Compiling backend to bytecode (.pyc) and stripping source .py..." -ForegroundColor Yellow
     & $PythonExe -m compileall -b $BackendDir
     if ($LASTEXITCODE -ne 0) { throw "compileall for backend failed with exit code $LASTEXITCODE" }
-    # main.py stays as source — the launcher entry point must remain readable.
-    Get-ChildItem -Path $BackendDir -Recurse -Filter "*.py" | Where-Object { $_.Name -ne "main.py" } | Remove-Item -Force
+    # Only the top-level entry point stays readable. Matching on Name alone would
+    # spare any nested main.py anywhere in the tree.
+    $EntryPoint = Join-Path $BackendDir "main.py"
+    Get-ChildItem -Path $BackendDir -Recurse -Filter "*.py" | Where-Object { $_.FullName -ne $EntryPoint } | Remove-Item -Force
     Write-Host "🛡️ Backend source stripping complete." -ForegroundColor Green
 }
 
@@ -333,6 +339,13 @@ Write-Host ""
 Write-Host "Testing Python imports (backend.main + sage_core canaries)..." -ForegroundColor Green
 $EmbedPython = Join-Path $PythonDir "python.exe"
 $verifyCode = "import sys, os, certifi; ca=certifi.where(); assert os.path.isfile(ca) and os.path.getsize(ca) > 0, ca; print(f'Python {sys.version}'); print(f'certifi {certifi.__version__} @ {ca} ({os.path.getsize(ca)} bytes)'); import fastapi; import pydantic; import jieba; import hnswlib; import sage_core; import backend.main; print('All critical imports successful (certifi + hnswlib + sage_core + backend.main OK)')"
+if ($ProtectCode) {
+    # Assert the compiled extension is what actually loaded. A stale editable
+    # .pth copied over from full Python's site-packages could otherwise satisfy
+    # `import sage_core` from source and hide a failed Cython build.
+    # NOTE: single-quoted so PowerShell leaves the Python `$_probe` alone.
+    $verifyCode += '; import sage_core.entities.agent as _probe; assert _probe.__file__.endswith(".pyd"), "sage_core.entities.agent loaded from " + _probe.__file__; print("Protected canary OK: " + _probe.__file__)'
+}
 $verifyOutput = & $EmbedPython -c $verifyCode 2>&1
 $verifyExit = $LASTEXITCODE
 Write-Host $verifyOutput
