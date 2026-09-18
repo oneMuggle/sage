@@ -831,7 +831,7 @@ def _persist_compaction(
     return after
 
 
-async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) -> None:
+async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) -> Dict[str, int] | None:
     """聊天请求层的自动压缩钩子（M4）。
 
     在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
@@ -844,6 +844,10 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
 
     本函数**可以抛 CompactionError / 其他异常**——调用方（producer）
     统一 try/except：压缩失败只记日志，绝不阻塞聊天。
+
+    Returns:
+        压缩成功时返回 ``{"before": int, "after": int, "removed": int}``；
+        未达到阈值或无 LLM 配置时返回 ``None``。
     """
     message_repo = MessageRepository()
     # 2026-09 修复: producer 是 async task, 全量历史读是秒级同步 IO,
@@ -852,7 +856,7 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
         lambda: message_repo.get_by_session(session_id, limit=100000)
     )
     if not should_compact(messages):
-        return
+        return None
 
     if llm_config:
         from backend.core.legacy.llm_client import LLMClient, LLMConfig
@@ -865,8 +869,9 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
             "[M4] session=%s 达到压缩阈值但无 LLM 配置, 跳过自动压缩",
             _safe_log_field(session_id),
         )
-        return
+        return None
 
+    before_count = len(messages)
     new_messages, removed_count = await compact_messages(messages, llm_complete)
     after = await to_thread(
         lambda: _persist_compaction(session_id, messages, new_messages, removed_count)
@@ -877,6 +882,7 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
         removed_count,
         after,
     )
+    return {"before": before_count, "after": after, "removed": removed_count}
 
 
 def _auto_checkpoint_if_enabled(session_id: str) -> str | None:
@@ -2766,6 +2772,28 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
             # ===== L5 环境上下文 + 技能清单 END =====
 
+            # ===== R38 A16 技能自动激活 BEGIN (对标 chat_service.py 2.6) =====
+            # legacy /chat/stream 此前缺少 A16 自动激活(仅 hex 路径有),
+            # 补齐后用户消息匹配 SKILL.md when_to_use 时自动注入技能指令。
+            # fail-safe: 任何故障静默降级,不影响对话主流程。
+            r38_activated_skill_names: list[str] = []
+            try:
+                from backend.application.services.chat_service import (
+                    _skill_activation_block,
+                )
+
+                r38_skills_port = getattr(agent, "skills", None)
+                r38_block, r38_activated_skill_names = _skill_activation_block(
+                    data.message or "", r38_skills_port
+                )
+                if r38_block:
+                    dynamic_context_parts.append(r38_block)
+            except Exception as r38_skill_err:
+                logger.debug(
+                    f"[REQ {request_id}] R38 A16 skill auto-activation skipped: {r38_skill_err}"
+                )
+            # ===== R38 A16 技能自动激活 END =====
+
             # ===== L13 记忆上下文注入 BEGIN (对标增强第二轮批次 C) =====
             # legacy /chat/stream 此前完全不注入记忆上下文(只能靠 LLM 主动
             # 调 memory_search)——与 PHILOSOPHY"记忆优先"定位相悖。对齐
@@ -2806,6 +2834,22 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             f"[REQ {request_id}] memory_used event push failed, ignored"
                         )
             # ===== R17-E 记忆召回展示事件 END =====
+
+            # ===== R38 技能激活展示事件 BEGIN =====
+            # A16 自动激活后推送 skill_activated 事件,前端渲染可展开 chip。
+            # fail-safe: 任何异常只跳过事件,绝不影响对话主流程。
+            if r38_activated_skill_names:
+                try:
+                    entry.queue.put_nowait({
+                        "state": "skill_activated",
+                        "session_id": data.session_id,
+                        "skills": [{"name": n, "triggers_matched": []} for n in r38_activated_skill_names],
+                    })
+                except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                    logger.debug(
+                        f"[REQ {request_id}] skill_activated event push failed, ignored"
+                    )
+            # ===== R38 技能激活展示事件 END =====
 
             # ===== R37 文本文档附件注入 BEGIN =====
             # 已上传文本文档（attachment_media_ids）按 id 读全文，截断后并入
@@ -2919,16 +2963,28 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             # M4 自动压缩: run_loop 之前检查历史是否达到压缩阈值,达到则
             # 先压缩再继续。整块 try/except 隔离——压缩失败只记日志,
-            # 绝不阻塞本次聊天(流式事件照常产出)。注: AgentEvent 没有
-            # notice 类事件, 本里程碑不向前端推送压缩状态。
+            # 绝不阻塞本次聊天(流式事件照常产出)。
+            # R38 (2026-09-18): 压缩成功后推送 compact_triggered 事件,
+            # 前端渲染特殊系统消息气泡。
             # L1 (2026-09-06): 压缩必须在加载历史之前 —— 它缩的是持久化
             # 历史,而历史马上会注入本轮 LLM 请求(见下)。
+            compact_result = None
             try:
-                await _maybe_auto_compact_session(data.session_id, llm_config)
+                compact_result = await _maybe_auto_compact_session(data.session_id, llm_config)
             except Exception as compact_err:
                 logger.warning(
                     f"[REQ {request_id}] 自动压缩失败(忽略, 继续未压缩聊天): {compact_err}"
                 )
+            # R38: 推送 compact_triggered 事件（fail-safe）
+            if compact_result is not None:
+                try:
+                    entry.queue.put_nowait({
+                        "state": "compact_triggered",
+                        "session_id": data.session_id,
+                        "compact": compact_result,
+                    })
+                except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                    logger.debug(f"[REQ {request_id}] compact_triggered event push failed, ignored")
 
             # L1 会话历史接线 (对标增强第二轮, docs/plans/2026-09-06-parity-round2):
             # 把持久化历史注入本轮 LLM 请求 —— 此前只发 [system, attachments?, user],
