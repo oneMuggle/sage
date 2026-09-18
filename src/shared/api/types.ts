@@ -1528,8 +1528,7 @@ export interface WordFormatSpec {
   toc?: WordTocSpec;
   // Round 42：图目录/表目录（TOF 域，收录 SEQ 题注）
   figure_index?: WordIndexSpec;
-  table_index?: WordIndexSpec;
-  // Round 33：首页不同页眉页脚（封面页场景）
+  table_index?: WordIndexSpec;  // Round 33：首页不同页眉页脚（封面页场景）
   first_page_different?: boolean;
   first_page_header?: WordHeaderFooterSpec;
   first_page_footer?: WordHeaderFooterSpec;
@@ -1673,6 +1672,19 @@ export interface OfficeWordLintRequest {
   max_size_bytes?: number;
 }
 
+/**
+ * Round 49：文档核心属性（core properties，期刊/公文归档要求）。
+ * backend/office/models.py WordMetadataSpec 对应。
+ */
+export interface WordMetadataSpec {
+  author?: string;
+  subject?: string;
+  /** 关键词（分号分隔） */
+  keywords?: string;
+  comments?: string;
+  category?: string;
+}
+
 export interface OfficeWordGenerateRequest {
   /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
   task_id?: string;
@@ -1688,6 +1700,8 @@ export interface OfficeWordGenerateRequest {
   // Round 9 引用体系：结构化文献 + 引用样式
   references?: ReferenceSpec[];
   citation_style?: 'gbt7714' | 'apa';
+  // Round 49：文档核心属性（core properties）
+  metadata?: WordMetadataSpec;
 }
 
 export interface ExcelSheetSpec {

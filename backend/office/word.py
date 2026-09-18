@@ -1019,6 +1019,16 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # Title
         doc.add_heading(req.title, level=0)
 
+        # Round 49：文档核心属性（core properties）。title 恒为请求
+        # 标题；其余显式传入才写（不臆造作者）。
+        core = doc.core_properties
+        core.title = req.title
+        if req.metadata is not None:
+            for field in ("author", "subject", "keywords", "comments", "category"):
+                value = getattr(req.metadata, field)
+                if value is not None:
+                    setattr(core, field, value)
+
         # Round 13/29：目录域（标题之后、正文之前；分页使正文另起一页）。
         # 目录标题为普通段落，不参与多级标题编号检查（Linter 对偶跳过）。
         # Round 29：预收集标题清单回填为 TOC 域的静态缓存——打开文档即见
