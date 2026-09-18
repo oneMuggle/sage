@@ -490,28 +490,34 @@ class SageAgent:
                 "model": self.llm_config.model if self.llm_config else "local",
             }
 
-            # 持久化助手消息
-            try:
-                self.message_repo.save(
-                    DbMessage(
-                        id=assistant_message["id"],
-                        session_id=session_id,
-                        role="assistant",
-                        content=assistant_content,
-                        created_at=assistant_message["created_at"],
-                        model=assistant_message["model"],
+            # 2026-09 修复 (同步 #1100): LLM 未配置时的模拟响应只用于本轮
+            # UI 反馈, 不落库、不进工作记忆/长期记忆提取 —— 避免 mock 文案
+            # 进入真实会话历史, 污染续聊上下文、全文检索与记忆提取。
+            if self.llm_client:
+                # 持久化助手消息
+                try:
+                    self.message_repo.save(
+                        DbMessage(
+                            id=assistant_message["id"],
+                            session_id=session_id,
+                            role="assistant",
+                            content=assistant_content,
+                            created_at=assistant_message["created_at"],
+                            model=assistant_message["model"],
+                        )
                     )
+                except Exception as db_err:
+                    logger.warning(f"助手消息持久化失败: {db_err}")
+
+                # 将助手消息添加到工作记忆
+                self.memory_manager.add_to_working(
+                    "assistant", assistant_message["content"], session_id=session_id
                 )
-            except Exception as db_err:
-                logger.warning(f"助手消息持久化失败: {db_err}")
 
-            # 将助手消息添加到工作记忆
-            self.memory_manager.add_to_working(
-                "assistant", assistant_message["content"], session_id=session_id
-            )
-
-            # 对话后：提取关键信息存入情景记忆
-            self._extract_and_save_memories(session_id, user_message, assistant_message)
+                # 对话后：提取关键信息存入情景记忆
+                self._extract_and_save_memories(session_id, user_message, assistant_message)
+            else:
+                logger.info("LLM 未配置, 模拟响应不落库 (session=%s)", session_id)
 
             # 对话后：检查是否需要压缩工作记忆
             if self.memory_manager.working.total_tokens_for(session_id) > 3000:
