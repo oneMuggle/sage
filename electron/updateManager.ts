@@ -17,6 +17,7 @@ import type { ProviderStore } from './update/providerStore';
 import { BUILTIN_GENERIC_CONFIG } from './update/featureFlag';
 import { createGenericHttpProvider } from './update/providers/genericHttp';
 import { logger } from './logger';
+import { clearRunOnce, registerRunOnceCommand } from './update/runOnce';
 
 export interface CheckResult {
   updateAvailable: boolean;
@@ -395,6 +396,28 @@ export class UpdateManager {
       }
       this.providerInstallerPath = managedPath;
 
+      // 2026-09 Phase A (回滚语义重做): 落一份回滚元数据 —— 安装升级前,
+      // prepareForUpgrade 会把"当前版本对应的安装包"登记为
+      // cachedRollbackPackage (last-known-good), 元数据提供 hash/签名依据。
+      try {
+        const meta = {
+          version: release.version,
+          filename: firstAsset.name,
+          sha512,
+          size: firstAsset.size,
+          signature: firstAsset.signature ?? '',
+          fileUrl: firstAsset.downloadUrl,
+        };
+        const metaDir = path.dirname(managedPath);
+        await fs.writeFile(
+          path.join(metaDir, 'rollback-meta.json'),
+          JSON.stringify(meta),
+          'utf-8',
+        );
+      } catch (metaErr) {
+        logger.warn?.('provider download: rollback meta write failed', metaErr);
+      }
+
       // Maintain the legacy state-update contract so downstream consumers
       // (renderer's state-change listener) see a consistent UpdateState.
       if (updateOverride) {
@@ -415,14 +438,9 @@ export class UpdateManager {
           size: firstAsset.size,
           signature: firstAsset.signature ?? '',
         },
-        cachedRollbackPackage: {
-          path: managedPath,
-          version: release.version,
-          sha512,
-          size: firstAsset.size,
-          signature: firstAsset.signature ?? '',
-          fileUrl: firstAsset.downloadUrl,
-        },
+        // 2026-09 Phase A (回滚语义重做): cachedRollbackPackage 语义为
+        // "last-known-good 安装包", 不在下载新版本时覆盖 (保留既有条目)。
+        // 新版本包仅记录在 pendingUpdate + providerInstallerPath。
       };
       await this.stateManager.setState(newState);
       this.notifyStateChange(newState);
@@ -730,6 +748,10 @@ export class UpdateManager {
     // process synchronously (NSIS on Windows) or within milliseconds (Linux
     // AppImage). Writing first guarantees the next launch sees the intended
     // version and rollback baseline even if the process is killed mid-handoff.
+    // 2026-09 Phase A (回滚语义重做): 把"当前版本"的安装包登记为
+    // last-known-good 回滚数据 —— 此前 cachedRollbackPackage 存的是新版本
+    // 包, 与 lastKnownGoodVersion 校验永假, 回滚必然拒绝。
+    const lkgPackage = await this.findLastKnownGoodPackage(state.currentVersion);
     const newState: UpdateState = {
       ...state,
       currentVersion: state.pendingUpdate.version,
@@ -739,6 +761,7 @@ export class UpdateManager {
       pendingUpdate: null,
       updateAvailable: false,
       availableUpdate: null,
+      cachedRollbackPackage: lkgPackage ?? state.cachedRollbackPackage,
       postInstallMarker: {
         version: state.pendingUpdate.version,
         installedAt: new Date().toISOString(),
@@ -868,6 +891,22 @@ export class UpdateManager {
       state.crashCount = 0;
       state.lastRecordedVersion = state.currentVersion;
       await this.stateManager.setState(state);
+    }
+
+    // 2026-09 Phase B (回滚语义重做): 上一次升级若注册了 RunOnce 回滚交换,
+    // 此次启动说明交换已完成 (或未发生) —— 清理注册表项与残留 bat, 防止
+    // 下次登录重复执行旧交换脚本。
+    if (process.platform === 'win32' && !process.env.VITEST) {
+      await clearRunOnce();
+      try {
+        const staleScript = path.join(
+          path.dirname(path.dirname(process.execPath)),
+          '.prepare-rollback.bat',
+        );
+        await fs.rm(staleScript, { force: true });
+      } catch {
+        // best-effort
+      }
     }
 
     // Run post-startup health checks
@@ -1146,6 +1185,49 @@ export class UpdateManager {
     return crypto.createHash('sha512').update(buffer).digest('hex');
   }
 
+  /**
+   * 2026-09 Phase A (回滚语义重做): 在 userData/update-cache 里找
+   * "当前版本"的安装包 + 元数据, 作为 last-known-good 回滚数据。
+   * 版本不匹配 / 元数据缺失 / hash 非法 → null (如实记录, 不放宽校验)。
+   */
+  private async findLastKnownGoodPackage(
+    version: string,
+  ): Promise<{
+    path: string;
+    version: string;
+    sha512: string;
+    size: number;
+    signature: string;
+    fileUrl: string;
+  } | null> {
+    try {
+      const managedDir = path.join(app.getPath('userData'), 'update-cache');
+      const metaRaw = await fs.readFile(path.join(managedDir, 'rollback-meta.json'), 'utf-8');
+      const meta = JSON.parse(metaRaw) as {
+        version?: string;
+        filename?: string;
+        sha512?: string;
+        size?: number;
+        signature?: string;
+        fileUrl?: string;
+      };
+      if (meta.version !== version || !meta.filename || !meta.sha512) return null;
+      if (!/^[a-f0-9]{128}$/i.test(meta.sha512)) return null;
+      const packagePath = path.join(managedDir, meta.filename);
+      const stats = await fs.stat(packagePath);
+      return {
+        path: packagePath,
+        version: meta.version,
+        sha512: meta.sha512,
+        size: stats.size,
+        signature: meta.signature ?? '',
+        fileUrl: meta.fileUrl ?? '',
+      };
+    } catch {
+      return null;
+    }
+  }
+
   private async prepareForUpgrade(): Promise<PreparedUpgradeInfo | null> {
     const installDir = path.dirname(process.execPath);
     const prevDir = path.join(path.dirname(installDir), '.prev');
@@ -1169,6 +1251,12 @@ export class UpdateManager {
         '',
       ].join('\r\n');
       await fs.writeFile(scriptPath, script, { mode: 0o755 });
+      // 2026-09 Phase B (回滚语义重做): 此前 bat 写盘后没有任何机制执行它。
+      // RunOnce 在下一次用户登录时执行一次并自清除 —— 无需服务/管理员。
+      // vitest 下跳过 (避免测试写真实 HKCU)。
+      if (!process.env.VITEST) {
+        await registerRunOnceCommand(`cmd /c "${scriptPath}"`);
+      }
       // On Windows the rename is deferred; no filesystem change to track
       return null;
     }
