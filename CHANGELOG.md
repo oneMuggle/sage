@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 56：脚注/尾注设计评审稿**（设计文档，非实现）
+
+### Added(docs)
+- **`docs/technical/90-word-footnotes-design.md`**：脚注支持的设计评审稿——python-docx 无原生 API 的 OOXML 四件套结构分析（footnotes.xml part/relationship/content-type/系统脚注）、`{{fn:}}` 内联锚点选型、三期分期（Phase A 写侧最小闭环 ~1 轮）与风险清单（part 手术的半公开 API、WPS 兼容验证）
+
 > 📝 **Word 写作能力 Round 53：分节页码格式与起始号（w:pgNumType）**（方案 `docs/plans/2026-09-18_r53-pgnum-format-plan.md`）
 
 ### Added(office)
