@@ -528,6 +528,7 @@ export interface AgentEvent {
     media_id: string;
     mode: string;
     chunks?: { index: number; score: number }[];
+    filename?: string;
   }[];
 }
 

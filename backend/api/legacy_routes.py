@@ -2930,6 +2930,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     "citations": [
                                         {
                                             "media_id": r37_mid,
+                                            "filename": (
+                                                (_r37_ref.metadata or {}).get("original_filename")
+                                                or r37_mid
+                                            ),
                                             "mode": "rag",
                                             "chunks": [
                                                 {"index": c.index, "score": round(c.score, 2)}

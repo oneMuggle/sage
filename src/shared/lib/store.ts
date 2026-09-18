@@ -81,6 +81,7 @@ export interface Message {
     media_id: string;
     mode: string;
     chunks?: { index: number; score: number }[];
+    filename?: string;
   }[];
   reasoning_content?: string | null; // LLM 思考/推理过程（2026-09 step-by-step: 允许 null 表示该步无 reasoning 累积）
   /** 2026-09 step-by-step: 多步 ReAct 中每条 assistant 消息的步序号。null=旧消息/单步。 */
