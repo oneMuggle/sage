@@ -15,6 +15,7 @@ from backend.domain.tool_names import (
     BROWSER_TOOLS,
     CHECKPOINT_TOOLS,
     CODE_SEARCH_TOOLS,
+    CONFIG_TOOLS,
     EXEC_TOOLS,
     GIT_TOOLS,
     JOURNAL_TOOLS,
@@ -134,6 +135,8 @@ _PRIMARY_SEED_TOOLS = (
     # calculator 已在 _PRIMARY_CORE_TOOLS，这里只补 repl / execute_code。
     "repl",
     "execute_code",
+    # 2026-09-18 feat/agents-entry-config-query: 系统自省与配置工具 read_sage_config 与 update_sage_config
+    *CONFIG_TOOLS,
 )
 
 # coder：bash 三件齐备（同上）。2026-09-03 PR #381 把 TerminalTool 重写为
@@ -760,6 +763,19 @@ _CODE_EXECUTION_CAPABILITY_PROMPT = (
 )
 
 
+#: 2026-09-18 feat/agents-entry-config-query: 系统参数自省与修改声明。
+#: 解决用户在对话中询问参数时 LLM 只能凭先验回答默认值、或无法依指令调整参数的问题。
+_CONFIG_CAPABILITY_PROMPT = (
+    "\n\n系统配置自省与调整：你可以直接查询和修改 Sage 自身的运行参数：\n"
+    "- 查询系统当前真实参数：调用 read_sage_config 工具（参数 section 可选 "
+    "'orch' 编排上限/'agents' 智能体档案/'general' 通用设置/'all' 全部）。"
+    "当用户询问系统的迭代上限、当前模型、并发数等参数时，务必先调用该工具获取真实值。\n"
+    "- 调整系统参数：调用 update_sage_config 工具（参数 target 为 'orch'/'agent'/'general'，"
+    "agent_id 指定目标智能体，updates 为要更新的字段字典）。"
+    "可用于调整主助手或子代理的最大迭代步数、并发上限等。\n"
+)
+
+
 def build_system_base() -> str:
     """构建 system prompt 基础部分（身份 + 工具能力声明 + agent 列表）。"""
     base = "你是 Sage，一个智能 AI 助手。"
@@ -768,5 +784,6 @@ def build_system_base() -> str:
         + _OFFICE_CREATE_CAPABILITY_PROMPT
         + _TODO_GUIDANCE_PROMPT
         + _CODE_EXECUTION_CAPABILITY_PROMPT
+        + _CONFIG_CAPABILITY_PROMPT
         + format_agents_for_prompt()
     )
