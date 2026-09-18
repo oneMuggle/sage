@@ -1,5 +1,6 @@
 import { clsx } from 'clsx';
 import {
+  Bot,
   ChevronDown,
   ChevronRight,
   MessageSquare,
@@ -10,6 +11,7 @@ import {
   Sparkles,
   FileSpreadsheet,
   HelpCircle,
+  type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -42,15 +44,23 @@ const SESSION_ORDER_KEY = 'sage:sider:order:v1';
 // 对标 S3 (2026-09-13, 竞品对标 §2.2 导航收敛): 一级只保留高频 4 项，
 // 其余归入可折叠「更多」分组（默认展开，折叠状态本地持久化；当前路由命中
 // 「更多」内条目时强制展开）。路由与渐进披露（U10）规则不变。
-const primaryNavItems = [
+interface NavItem {
+  path: string;
+  label: string;
+  labelKey?: 'sidebar.nav.agents';
+  icon: LucideIcon;
+}
+
+const primaryNavItems: NavItem[] = [
   { path: '/chat', label: '对话', icon: MessageSquare },
   { path: '/memory', label: '记忆', icon: Brain },
   { path: '/knowledge', label: '知识库', icon: BookOpen },
   { path: '/settings', label: '设置', icon: Settings },
 ];
-const moreNavItems = [
+const moreNavItems: NavItem[] = [
   { path: '/office', label: 'Office', icon: FileSpreadsheet },
   { path: '/skills', label: '技能', icon: Sparkles },
+  { path: '/agents', label: '智能体', labelKey: 'sidebar.nav.agents', icon: Bot },
   { path: '/orchestration', label: '编排', icon: Network },
   { path: '/help', label: '帮助', icon: HelpCircle },
 ];
@@ -355,7 +365,7 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
               )}
             >
               <Icon className="w-4 h-4" />
-              <span>{item.label}</span>
+              <span>{item.labelKey === 'sidebar.nav.agents' ? t('sidebar.nav.agents') : item.label}</span>
               {/* U9: 对话入口的待处理数量（AttnBadge，带数字） */}
               {item.path === '/chat' && <AttnBadge count={attentionCount} />}
             </Link>
@@ -400,7 +410,7 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
                     )}
                   >
                     <Icon className="w-4 h-4" />
-                    <span>{item.label}</span>
+                    <span>{item.labelKey === 'sidebar.nav.agents' ? t('sidebar.nav.agents') : item.label}</span>
                   </Link>
                 );
               })}

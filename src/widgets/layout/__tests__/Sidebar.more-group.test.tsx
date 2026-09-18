@@ -53,6 +53,8 @@ describe('Sidebar — "更多" group (S3 nav convergence)', () => {
     }
     expect(screen.getByTestId('sidebar-more-toggle')).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('技能')).toBeInTheDocument();
+    expect(screen.getByText('智能体')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '智能体' })).toHaveAttribute('href', '/agents');
   });
 
   it('collapses/expands the group and persists the choice', () => {
@@ -68,6 +70,13 @@ describe('Sidebar — "更多" group (S3 nav convergence)', () => {
     localStorage.setItem('sage:sider:more-open:v1', '0');
     renderSidebarAt('/skills');
     expect(screen.getByText('技能')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-more-toggle')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('forces the group open for the agents route', () => {
+    localStorage.setItem('sage:sider:more-open:v1', '0');
+    renderSidebarAt('/agents');
+    expect(screen.getByRole('link', { name: '智能体' })).toHaveAttribute('href', '/agents');
     expect(screen.getByTestId('sidebar-more-toggle')).toHaveAttribute('aria-expanded', 'true');
   });
 
