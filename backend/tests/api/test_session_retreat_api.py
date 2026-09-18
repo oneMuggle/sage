@@ -18,14 +18,14 @@ pytestmark = pytest.mark.integration
 PREFIX = "/api/v1"
 
 
-@pytest.fixture
+@pytest.fixture()
 def db_setup(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     monkeypatch.setenv("SAGE_DB_PATH", str(db_path))
     monkeypatch.setattr(db_mod, "_db", None)
     db = db_mod.get_database()
     db.init_db()
-    yield db
+    return db
 
 
 def _create_session(db, session_id: str, title: str = "t") -> None:

@@ -47,7 +47,7 @@ def test_build_request_messages_applies_turn_limit():
     assert messages[-1]["role"] == "user"
     assert messages[-1]["content"] == "current q"
 
-    # 提取历史区(跳过首尾)
+    # 提取历史区——跳过首尾
     history_msgs = messages[1:-1]
     user_msgs = [m for m in history_msgs if m["role"] == "user"]
     assistant_msgs = [m for m in history_msgs if m["role"] == "assistant"]

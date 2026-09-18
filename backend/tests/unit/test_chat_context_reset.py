@@ -1,6 +1,6 @@
 """Task 4: Test ChatRequest.context_reset field and advance_segment wiring."""
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
 from backend.data.session_repo import MessageRepository
 
 
@@ -31,7 +31,7 @@ def test_advance_segment_called_when_context_reset():
     mock_repo.get_active_segment.return_value = []
     # The real validation is end-to-end via UI.
     # This ensures the method contract is stable.
-    assert hasattr(mock_repo, 'advance_segment')
+    assert hasattr(mock_repo, "advance_segment")
     result = mock_repo.advance_segment("s1")
     mock_repo.advance_segment.assert_called_once_with("s1")
     assert result == 1

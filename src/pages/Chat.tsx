@@ -28,9 +28,9 @@ import { PermissionModeSwitch } from '../widgets/chat/PermissionModeSwitch';
 import { ProjectBadge } from '../widgets/chat/ProjectBadge';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
-import { TopicShiftBanner } from '../widgets/chat/TopicShiftBanner';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
 import { SessionUsageBadge } from '../widgets/chat/SessionUsageBadge';
+import { TopicShiftBanner } from '../widgets/chat/TopicShiftBanner';
 import { ArchivesModal } from '../widgets/session';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
