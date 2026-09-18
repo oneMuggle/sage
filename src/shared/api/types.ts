@@ -199,7 +199,13 @@ export type AgentState =
   | 'artifact_created'
   // R17-E: 记忆召回展示 —— L13 注入记忆上下文后推送本次命中条目,
   // 载荷见 AgentEvent.memories。
-  | 'memory_used';
+  | 'memory_used'
+  // R38 (2026-09-18): 技能激活展示 —— A16 自动激活或显式 /skill 调用后
+  // 推送本次激活的技能列表,载荷见 AgentEvent.skills。
+  | 'skill_activated'
+  // R38 (2026-09-18): 自动上下文压缩展示 —— M4 达到阈值触发压缩后推送
+  // 压缩统计,载荷见 AgentEvent.compact。
+  | 'compact_triggered';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -321,9 +327,13 @@ export interface TaskStatusEvent {
   // RD13+ (round15): 重派来源任务 ID —— conductor 用 retry_of 重派时携带,
   // 任务树据此渲染"重派"徽章（可追溯哪些任务是重做的）。普通任务无此键。
   retry_of?: string;
-  // BU9 (round20): 终态任务附带的 run 窗口累计用量（tokens）—— 预算开启时
-  // 携带；queued/running 不带。任务树进度行渲染消耗可见性。
+  // BU9 (round20) + BU13 (round24): 终态任务附带的本任务 token 消耗 ——
+  // round24 起语义收敛为 per-task 归因（usage_events.task_id 过滤），
+  // 且预算关闭也携带；queued/running 不带。任务树渲染消耗可见性。
   used_tokens?: number;
+  // BU13 (round24): 终态任务执行时长（毫秒）—— started_at→finished_at；
+  // 二者齐备才携带。任务树行内渲染耗时徽章。
+  duration_ms?: number;
   // live-events P0 (2026-09-06): 派发本批次的 conductor 工具调用 ID —— 聊天流内
   // 把子代理实时步骤关联到 "Delegate <goal>" 卡片的关联键。
   parent_tool_call_id?: string | null;
@@ -488,6 +498,10 @@ export interface AgentEvent {
   };
   // R17-E: memory_used 事件载荷（L13 记忆注入命中条目,气泡内可展开）。
   memories?: { id: string; memory_type: string; preview: string }[];
+  // R38: skill_activated 事件载荷（A16 自动激活或显式 /skill 调用的技能列表）。
+  skills?: { name: string; triggers_matched: string[] }[];
+  // R38: compact_triggered 事件载荷（M4 自动压缩统计）。
+  compact?: { before: number; after: number; removed: number };
 }
 
 // ==================== 错误类型定义 ====================
@@ -1417,6 +1431,16 @@ export interface WordPageSetupSpec {
   margins_cm?: WordPageMarginsSpec;
 }
 
+/**
+ * Round 26/37：分节横排（宽表/财务页场景）。
+ * backend/office/models.py WordSectionBreakSpec 对应。
+ */
+export interface WordSectionBreakSpec {
+  /** 该 0-based 段落下标起进入新节 */
+  start_paragraph: number;
+  page_setup: WordPageSetupSpec;
+}
+
 export interface WordBodyStyleSpec {
   font_size_pt?: number;
   line_spacing?: number;
@@ -1442,6 +1466,15 @@ export interface WordHeaderFooterSpec {
 
 // 目录域设置（Round 13）：TOC 域由渲染器按标题样式生成（打开后更新域）。
 // Backend counterpart: WordTocSpec in backend/office/models.py。
+/**
+ * Round 42：图目录/表目录设置（TOF 域 `TOC \c "图|表"`）。
+ * backend/office/models.py WordIndexSpec 对应。
+ */
+export interface WordIndexSpec {
+  heading_text?: string;
+  placeholder_text?: string;
+}
+
 export interface WordTocSpec {
   heading_text?: string;
   levels?: string;
@@ -1462,12 +1495,17 @@ export interface WordFormatSpec {
   bibliography?: BibliographySpec;
   // Round 13：目录域（None = 不插入目录）
   toc?: WordTocSpec;
+  // Round 42：图目录/表目录（TOF 域，收录 SEQ 题注）
+  figure_index?: WordIndexSpec;
+  table_index?: WordIndexSpec;
   // Round 33：首页不同页眉页脚（封面页场景）
   first_page_different?: boolean;
   first_page_header?: WordHeaderFooterSpec;
   first_page_footer?: WordHeaderFooterSpec;
   // Round 34：奇偶页不同页眉页脚（书籍排版场景）
   odd_even_pages?: boolean;
+  // Round 26/37：分节横排（宽表/财务页场景）
+  section_breaks?: WordSectionBreakSpec[];
   even_page_header?: WordHeaderFooterSpec;
   even_page_footer?: WordHeaderFooterSpec;
 }
@@ -1534,6 +1572,8 @@ export interface WordTableSpec {
   header_repeat?: boolean;
   column_widths_cm?: number[];
   merges?: WordCellMergeSpec[];
+  // Round 36：表头行样式（加粗+浅灰底+居中）
+  header_style?: boolean;
 }
 
 // Word 格式 Linter（Round 10）：对照 FormatSpec 校验 docx。
@@ -1872,6 +1912,8 @@ export interface OfficeCapabilities {
   pdf_export_available: boolean;
   pillow_available: boolean;
   formulas_available: boolean;
+  /** P4-A (office-p4a): OCR 兜底可用（pytesseract 已装且 tesseract 在 PATH）。 */
+  ocr_available: boolean;
 }
 
 /**

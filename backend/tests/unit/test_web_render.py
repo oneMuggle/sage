@@ -618,7 +618,9 @@ def _install_refresh(monkeypatch, page: Dict[str, Any], storage_cookies):
     return calls
 
 
-def test_refresh_credentials_success(monkeypatch):
+# 注意：凡走 refresh_credentials / wait_page_ready 的测试必须注入 fake_time ——
+# 否则 mock 页面触发不了 ready 条件，会以真实时钟烧满 READY_TIMEOUT(10s)+settle(3s)。
+def test_refresh_credentials_success(fake_time, monkeypatch):
     page = {"url": "https://spa.example/dash", "html": "<html><body>hello</body></html>", "text": "hello"}
     calls = _install_refresh(
         monkeypatch,
@@ -644,7 +646,7 @@ def load_credential_value(repo, domain):
     return load_credential(domain, repo=repo)[0]["value"]
 
 
-def test_refresh_credentials_login_wall_page_fails(monkeypatch):
+def test_refresh_credentials_login_wall_page_fails(fake_time, monkeypatch):
     page = {
         "url": "https://spa.example/login",
         "html": "<html><body><input type=password></body></html>",
@@ -665,7 +667,7 @@ def test_refresh_credentials_login_wall_page_fails(monkeypatch):
     assert refreshed == []
 
 
-def test_refresh_credentials_skip_injection_when_no_cookies(monkeypatch):
+def test_refresh_credentials_skip_injection_when_no_cookies(fake_time, monkeypatch):
     page = {"url": "https://spa.example/dash", "html": "<html><body>hi</body></html>", "text": "hi"}
     calls = _install_refresh(monkeypatch, page, [])
     repo = _MemRepo()

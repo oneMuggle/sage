@@ -434,6 +434,8 @@ class HttpDownloadTool(BaseTool):
             expected_sha256: 完成后校验的 SHA-256
             referer:   覆盖 Referer 头
         """
+        # R15 X2：per-host 出网指标计时起点
+        _t0 = time.monotonic()
         url_error = self._validate_target_url(url)
         if url_error:
             return ToolResult(success=False, error=url_error)
@@ -540,8 +542,14 @@ class HttpDownloadTool(BaseTool):
                 last_error = str(exc)
                 retry_after = exc.retry_after
             except httpx.HTTPError as e:
+                from backend.tools import web_metrics
+
+                web_metrics.record(web_metrics.host_from_url(ctx.url), False, int((time.monotonic() - _t0) * 1000))
                 return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
             except Exception as e:  # noqa: BLE001 — 兜底：不可重试的失败统一包装
+                from backend.tools import web_metrics
+
+                web_metrics.record(web_metrics.host_from_url(ctx.url), False, int((time.monotonic() - _t0) * 1000))
                 return ToolResult(success=False, error=f"下载失败: {str(e)}")
             else:
                 if result.success and isinstance(result.content, dict):
@@ -978,6 +986,11 @@ class HttpDownloadTool(BaseTool):
             content["total_bytes"] = meta["total"]
         if digest is not None:
             content["sha256"] = digest
+        # R15 X2：per-host 出网指标（成功）
+        from backend.tools import web_metrics
+
+        # 该方法在 execute 的 try 之外；耗时口径以 execute 层埋点为准，此处仅计数
+        web_metrics.record(web_metrics.host_from_url(ctx.url), True, 0)
         return ToolResult(success=True, content=content, output=str(target))
 
     # ------------------------------------------------------------------ misc

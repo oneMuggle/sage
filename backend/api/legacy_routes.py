@@ -254,6 +254,7 @@ from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与�
     _SQLITE_LOCK,
     make_with_db_lock,
 )
+from backend.utils.py_compat import TIMEOUT_ERRORS, to_thread
 
 
 def with_db_lock(func):
@@ -352,6 +353,11 @@ class ChatRequest(BaseModel):
     # R37: 聊天文本文档附件 —— 已上传媒体 id 列表（POST /chat/attachments
     # 返回的 media_ref.id）。producer 按 id 读全文，注入上下文附件块。
     attachment_media_ids: List[str] = Field(default_factory=list)
+
+    # r66（RAG 切片 4a）：附件检索注入配置（opt-in）。超长文档（>100k
+    # 字符）改走「嵌入 query → 附件 chunk 检索 → top_k 注入」；缺省 =
+    # 现状全文截断注入。embed 配置与 wiki ingest / r58 同口径。
+    attachment_rag: Optional[Dict[str, Any]] = None
 
     # G6 (2026-09-06): 聊天图片输入 —— base64 data URL 列表（data:image/png;base64,...）。
     # 非空时 user 消息转 OpenAI 多模态 content（text + image_url 分段），
@@ -825,7 +831,7 @@ def _persist_compaction(
     return after
 
 
-async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) -> None:
+async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) -> Dict[str, int] | None:
     """聊天请求层的自动压缩钩子（M4）。
 
     在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
@@ -838,15 +844,19 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
 
     本函数**可以抛 CompactionError / 其他异常**——调用方（producer）
     统一 try/except：压缩失败只记日志，绝不阻塞聊天。
+
+    Returns:
+        压缩成功时返回 ``{"before": int, "after": int, "removed": int}``；
+        未达到阈值或无 LLM 配置时返回 ``None``。
     """
     message_repo = MessageRepository()
     # 2026-09 修复: producer 是 async task, 全量历史读是秒级同步 IO,
     # 直接跑在事件循环上会冻结所有并发流的 NDJSON attach 与 HTTP 路由。
-    messages = await asyncio.to_thread(
+    messages = await to_thread(
         lambda: message_repo.get_by_session(session_id, limit=100000)
     )
     if not should_compact(messages):
-        return
+        return None
 
     if llm_config:
         from backend.core.legacy.llm_client import LLMClient, LLMConfig
@@ -859,10 +869,11 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
             "[M4] session=%s 达到压缩阈值但无 LLM 配置, 跳过自动压缩",
             _safe_log_field(session_id),
         )
-        return
+        return None
 
+    before_count = len(messages)
     new_messages, removed_count = await compact_messages(messages, llm_complete)
-    after = await asyncio.to_thread(
+    after = await to_thread(
         lambda: _persist_compaction(session_id, messages, new_messages, removed_count)
     )
     logger.info(
@@ -871,6 +882,7 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
         removed_count,
         after,
     )
+    return {"before": before_count, "after": after, "removed": removed_count}
 
 
 def _auto_checkpoint_if_enabled(session_id: str) -> str | None:
@@ -2148,7 +2160,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 刻意 new 一个独立实例而非用下方 producer 内的 session_repo 变量 ——
             # 那个变量在数百行之后才绑定，早期失败路径 finally 会 UnboundLocalError。
             try:
-                await asyncio.to_thread(
+                await to_thread(
                     SessionRepository().update_run_status, data.session_id, "running"
                 )
             except Exception as status_err:  # noqa: BLE001 — fail-open
@@ -2246,10 +2258,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             request_id,
                             l11_outcome.reason,
                         )
+                        # 2026-09: 失败信封统一 dict {type, message};
+                        # reason 来自本地钩子, 非用户敏感内容, 可回显。
                         await entry.queue.put(
                             {
                                 "state": "failed",
-                                "error": "prompt_blocked_by_hook",
+                                "error": {
+                                    "type": "prompt_blocked_by_hook",
+                                    "message": l11_outcome.reason
+                                    or "该消息已被本地钩子拦截",
+                                },
                             }
                         )
                         return
@@ -2612,7 +2630,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             await asyncio.wait_for(
                                 confirm_event.wait(), timeout=confirm_timeout
                             )
-                        except TimeoutError:
+                        except TIMEOUT_ERRORS:  # py38: wait_for 抛 asyncio.TimeoutError（与本型不同类）
                             logger.warning(
                                 "编排确认超时 (%ss)，自动取消 run %s",
                                 confirm_timeout,
@@ -2673,6 +2691,49 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug(f"[REQ {request_id}] M6 project context skipped: {m6_ctx_err}")
             # ===== M6 PROJECT CONTEXT END =====
 
+            # ===== M3 PROJECT OVERVIEW + MATERIALS BEGIN (2026-09-15) =====
+            # 项目元数据 (description + instructions) 与用户显式添加的资料。
+            # 优先级: 应用安全规则 > 项目指令 (此处注入) > 全局风格偏好。
+            # 资料标注"不得覆盖上方指令", 沿用 PER_FILE_CHAR_CAP / TOTAL_CHAR_CAP
+            # 预算裁剪, 详见 backend/chat/project_context.py。独立标记块, rebase 友好。
+            try:
+                from backend.chat.project_context import (
+                    build_project_materials_block,
+                    build_project_metadata_block,
+                )
+                from backend.data.project_material_repo import (
+                    ProjectMaterialRepository,
+                )
+                from backend.data.project_repo import ProjectRepository
+                from backend.office.session_workspace import get_workspace_binding
+
+                m3_binding = get_workspace_binding(
+                    get_database().get_connection(), data.session_id
+                )
+                if m3_binding is not None and m3_binding.workspace_path:
+                    m3_project = (
+                        ProjectRepository()
+                        .get_project_for_workspace(m3_binding.workspace_path)
+                    )
+                    metadata_block = build_project_metadata_block(m3_project)
+                    if metadata_block:
+                        system_content += "\n\n" + metadata_block
+                    if m3_project is not None:
+                        active_materials = (
+                            ProjectMaterialRepository()
+                            .get_active_materials_for_project(m3_project.id)
+                        )
+                        materials_block = build_project_materials_block(
+                            active_materials
+                        )
+                        if materials_block:
+                            system_content += "\n\n" + materials_block
+            except Exception as m3_ctx_err:
+                logger.debug(
+                    f"[REQ {request_id}] M3 project overview skipped: {m3_ctx_err}"
+                )
+            # ===== M3 PROJECT OVERVIEW + MATERIALS END =====
+
             # ===== L5 环境上下文 + 技能清单 BEGIN (对标增强第二轮批次 B) =====
             # 告知模型平台/日期/工作区/git 状态与可用技能（此前模型对工作区
             # 状态零感知、技能只能盲调 skill 工具发现）。内部全 fail-safe:
@@ -2710,6 +2771,28 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"[REQ {request_id}] L5 environment context skipped: {l5_env_err}"
                 )
             # ===== L5 环境上下文 + 技能清单 END =====
+
+            # ===== R38 A16 技能自动激活 BEGIN (对标 chat_service.py 2.6) =====
+            # legacy /chat/stream 此前缺少 A16 自动激活(仅 hex 路径有),
+            # 补齐后用户消息匹配 SKILL.md when_to_use 时自动注入技能指令。
+            # fail-safe: 任何故障静默降级,不影响对话主流程。
+            r38_activated_skill_names: list[str] = []
+            try:
+                from backend.application.services.chat_service import (
+                    _skill_activation_block,
+                )
+
+                r38_skills_port = getattr(agent, "skills", None)
+                r38_block, r38_activated_skill_names = _skill_activation_block(
+                    data.message or "", r38_skills_port
+                )
+                if r38_block:
+                    dynamic_context_parts.append(r38_block)
+            except Exception as r38_skill_err:
+                logger.debug(
+                    f"[REQ {request_id}] R38 A16 skill auto-activation skipped: {r38_skill_err}"
+                )
+            # ===== R38 A16 技能自动激活 END =====
 
             # ===== L13 记忆上下文注入 BEGIN (对标增强第二轮批次 C) =====
             # legacy /chat/stream 此前完全不注入记忆上下文(只能靠 LLM 主动
@@ -2752,10 +2835,33 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
             # ===== R17-E 记忆召回展示事件 END =====
 
+            # ===== R38 技能激活展示事件 BEGIN =====
+            # A16 自动激活后推送 skill_activated 事件,前端渲染可展开 chip。
+            # fail-safe: 任何异常只跳过事件,绝不影响对话主流程。
+            if r38_activated_skill_names:
+                try:
+                    entry.queue.put_nowait({
+                        "state": "skill_activated",
+                        "session_id": data.session_id,
+                        "skills": [{"name": n, "triggers_matched": []} for n in r38_activated_skill_names],
+                    })
+                except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                    logger.debug(
+                        f"[REQ {request_id}] skill_activated event push failed, ignored"
+                    )
+            # ===== R38 技能激活展示事件 END =====
+
             # ===== R37 文本文档附件注入 BEGIN =====
             # 已上传文本文档（attachment_media_ids）按 id 读全文，截断后并入
             # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
             try:
+                from backend.api import chat_attachment_routes as _r66_car
+                from backend.services.attachment_context import (
+                    AttachmentRagOptions,
+                    build_attachment_context,
+                    embed_query_via_http,
+                )
+                from backend.services.attachment_rag import attachment_vector_store_path
                 from backend.services.multimodal.media_store import (
                     MEDIA_ROOT,
                     MediaKind,
@@ -2763,6 +2869,17 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
 
                 r37_store = MediaStore(root=MEDIA_ROOT)
+                # r66: opt-in 检索配置（缺省 = 现状全文截断注入）
+                r66_rag = None
+                if (
+                    isinstance(data.attachment_rag, dict)
+                    and isinstance(data.attachment_rag.get("embed"), dict)
+                ):
+                    r66_rag = AttachmentRagOptions(
+                        embed={str(k): str(v) for k, v in data.attachment_rag["embed"].items()},
+                        top_k=int(data.attachment_rag.get("top_k") or 6),
+                    )
+                r66_store_path = attachment_vector_store_path(MEDIA_ROOT.parent)
                 for r37_mid in data.attachment_media_ids[:10]:
                     try:
                         _r37_loaded = r37_store.load(r37_mid)
@@ -2773,15 +2890,42 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     _r37_ref, r37_bytes = _r37_loaded
                     if _r37_ref.kind != MediaKind.DOCUMENT:
                         continue
+                    # 全文提取（txt 直读；pdf/docx 复用 r39 提取器），不在此截断。
+                    # pdf/docx 提取是秒级同步 CPU 活，放线程池避免卡事件循环（r68）。
                     try:
-                        r37_text = r37_bytes.decode("utf-8")[:100_000]
-                    except UnicodeDecodeError:
+                        _r37_ext = (
+                            (_r37_ref.file_path or "").rsplit(".", 1)[-1].lower()
+                            if "." in (_r37_ref.file_path or "")
+                            else "txt"
+                        )
+                        if _r37_ext in ("pdf", "docx"):
+                            r37_text = await asyncio.get_running_loop().run_in_executor(
+                                None,
+                                _r66_car._extract_document_text,
+                                r37_bytes,
+                                _r37_ext,
+                            )
+                        else:
+                            r37_text = r37_bytes.decode("utf-8")
+                    except Exception:
                         continue
                     if not r37_text.strip():
                         continue
+                    # r66: 注入决策（全文 ≤100k 现状注入；超长且配置 rag →
+                    # 检索 top_k；否则截断前 100k）。fail-safe。
+                    r37_ctx = await build_attachment_context(
+                        r37_mid,
+                        full_text=r37_text,
+                        query=data.message,
+                        rag=r66_rag,
+                        store_path=r66_store_path,
+                        query_embedder=embed_query_via_http if r66_rag else None,
+                    )
+                    if r37_ctx is None:
+                        continue
                     dynamic_context_parts.append(
                         "<attached_document id=" + repr(r37_mid) + ">" + chr(10)
-                        + r37_text + chr(10) + "</attached_document>"
+                        + r37_ctx + chr(10) + "</attached_document>"
                     )
             except Exception as r37_att_err:
                 logger.debug(f"[REQ {request_id}] attachment media inject skipped: {r37_att_err}")
@@ -2819,16 +2963,28 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             # M4 自动压缩: run_loop 之前检查历史是否达到压缩阈值,达到则
             # 先压缩再继续。整块 try/except 隔离——压缩失败只记日志,
-            # 绝不阻塞本次聊天(流式事件照常产出)。注: AgentEvent 没有
-            # notice 类事件, 本里程碑不向前端推送压缩状态。
+            # 绝不阻塞本次聊天(流式事件照常产出)。
+            # R38 (2026-09-18): 压缩成功后推送 compact_triggered 事件,
+            # 前端渲染特殊系统消息气泡。
             # L1 (2026-09-06): 压缩必须在加载历史之前 —— 它缩的是持久化
             # 历史,而历史马上会注入本轮 LLM 请求(见下)。
+            compact_result = None
             try:
-                await _maybe_auto_compact_session(data.session_id, llm_config)
+                compact_result = await _maybe_auto_compact_session(data.session_id, llm_config)
             except Exception as compact_err:
                 logger.warning(
                     f"[REQ {request_id}] 自动压缩失败(忽略, 继续未压缩聊天): {compact_err}"
                 )
+            # R38: 推送 compact_triggered 事件（fail-safe）
+            if compact_result is not None:
+                try:
+                    entry.queue.put_nowait({
+                        "state": "compact_triggered",
+                        "session_id": data.session_id,
+                        "compact": compact_result,
+                    })
+                except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                    logger.debug(f"[REQ {request_id}] compact_triggered event push failed, ignored")
 
             # L1 会话历史接线 (对标增强第二轮, docs/plans/2026-09-06-parity-round2):
             # 把持久化历史注入本轮 LLM 请求 —— 此前只发 [system, attachments?, user],
@@ -2836,7 +2992,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 消息尚未落盘(落盘在下方),历史天然不含本轮消息。历史加载失败时
             # 降级为无历史的旧行为,绝不阻断聊天。
             try:
-                history_rows = await asyncio.to_thread(
+                history_rows = await to_thread(
                     lambda: MessageRepository().get_by_session(
                         data.session_id, limit=100000
                     )
@@ -3187,37 +3343,45 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
 
-                # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
-                # 在推送 DONE 事件前完成，确保前端 onDone → loadSessions() 读到新标题。
-                if done_event and sess and sess.message_count <= 2:
-                    try:
-                        from backend.chat.title_generator import TitleGenerator
-                        from backend.orchestration.llm_factory import (
-                            build_llm_client_from_settings,
-                        )
-
-                        title_client = build_llm_client_from_settings()
-                        if title_client:
-                            title = await TitleGenerator(title_client).generate(
-                                data.message, done_content
-                            )
-                            if title:
-                                session_repo.update(data.session_id, title=title)
-                                await entry.queue.put(
-                                    {
-                                        "type": "session_updated",
-                                        "subtype": "title_updated",
-                                        "title": title,
-                                    }
-                                )
-                    except Exception as e:
-                        logger.warning(
-                            f"[REQ {request_id}] 标题生成失败: {e}"
-                        )
-
-                # 推送暂存的 DONE 事件（在 session_updated 之后）
+                # 推送暂存的 DONE 事件先行 —— 2026-09 修复: 标题生成内部
+                # 自带 3 次退避重试, 最长可拖 15s+, 此前阻塞在 DONE 之前,
+                # 用户盯着已生成完的内容转圈。现 DONE 立即推送, 标题转后台
+                # 任务生成; 完成后落库 (侧栏在下次自然刷新时呈现)。
                 if done_event:
                     await entry.queue.put(done_event.to_dict())
+
+                # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
+                # 后台任务生成 —— 不阻塞 producer 收尾 (SENTINEL/运行态落库),
+                # 标题完成后落库并补发 title_updated 事件。
+                if done_event and sess and sess.message_count <= 2:
+
+                    async def _generate_title() -> None:
+                        try:
+                            from backend.chat.title_generator import TitleGenerator
+                            from backend.orchestration.llm_factory import (
+                                build_llm_client_from_settings,
+                            )
+
+                            title_client = build_llm_client_from_settings()
+                            if title_client:
+                                title = await TitleGenerator(title_client).generate(
+                                    data.message, done_content
+                                )
+                                if title:
+                                    session_repo.update(data.session_id, title=title)
+                                    await entry.queue.put(
+                                        {
+                                            "type": "session_updated",
+                                            "subtype": "title_updated",
+                                            "title": title,
+                                        }
+                                    )
+                        except Exception as e:
+                            logger.warning(
+                                f"[REQ {request_id}] 标题生成失败: {e}"
+                            )
+
+                    asyncio.create_task(_generate_title())
         except LLMError as e:
             logger.warning(
                 f"[REQ {request_id}] /chat/stream LLM error: "
@@ -3297,7 +3461,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         str(_exc_info[1]) if _exc_info and _exc_info[0] else "运行失败"
                     )
             try:
-                await asyncio.to_thread(
+                await to_thread(
                     SessionRepository().update_run_status,
                     data.session_id,
                     _terminal_status,

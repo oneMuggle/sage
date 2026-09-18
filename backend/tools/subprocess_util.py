@@ -16,6 +16,7 @@ from __future__ import annotations
 # Python 3.8 compatibility requires Optional annotations in this module.
 # ruff: noqa: UP045
 import contextlib
+import locale
 import logging
 import os
 import re
@@ -28,7 +29,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,22 @@ class ProcessGroupVerificationError(RuntimeError):  # noqa: N818
         self.running = process.poll() is None
 
 
+def _build_process_env(
+    extra_env: Optional[Dict[str, str]] = None,
+) -> Optional[Dict[str, str]]:
+    """构建子进程环境变量表。
+
+    ``extra_env=None`` → 返回 ``None``（Popen 继承父进程环境，零开销）。
+    ``extra_env`` 非空 → 拷贝父进程 ``os.environ`` 并合并覆盖项。
+    不修改 ``os.environ`` 本身。
+    """
+    if not extra_env:
+        return None
+    env = dict(os.environ)
+    env.update(extra_env)
+    return env
+
+
 def spawn_verified(
     argv: Sequence[str],
     *,
@@ -71,8 +88,13 @@ def spawn_verified(
     stdin: Any = subprocess.DEVNULL,
     stdout: Any = None,
     stderr: Any = None,
+    extra_env: Optional[Dict[str, str]] = None,
 ) -> VerifiedProcess:
-    """Start a process with a verifiable, dedicated POSIX process group."""
+    """Start a process with a verifiable, dedicated POSIX process group.
+
+    ``extra_env`` 非空时合并到子进程环境变量（覆盖同名父进程变量），
+    用于注入编码设置（``PYTHONUTF8=1``、``LANG=C.UTF-8``）等。
+    """
     if os.name == "nt" or not hasattr(os, "waitid"):
         raise RuntimeError("平台不支持安全进程组回收")
     process = subprocess.Popen(
@@ -82,6 +104,7 @@ def spawn_verified(
         stdout=stdout,
         stderr=stderr,
         start_new_session=True,
+        env=_build_process_env(extra_env),
     )
     try:
         process_group_id = os.getpgid(process.pid)
@@ -356,6 +379,27 @@ def strip_ansi(text: str) -> str:
     return _ANSI_ESCAPE_RE.sub("", text)
 
 
+def _decode_output(raw: bytes) -> str:
+    """解码子进程输出为文本。
+
+    优先 UTF-8；若解码结果含 ``U+FFFD`` 替换字符（表明原始字节不是合法 UTF-8，
+    常见于 Windows 中文系统 GBK/CP936 输出），则 fallback 到系统首选编码重试。
+    两次都失败则最终用 ``errors="replace"`` 容错。
+    """
+    text = raw.decode("utf-8", errors="replace")
+    if "�" not in text:
+        return text
+    fallback = locale.getpreferredencoding(do_setlocale=False)
+    if fallback and fallback.lower() not in ("utf-8", "utf8"):
+        try:
+            fallback_text = raw.decode(fallback, errors="replace")
+            if "�" not in fallback_text:
+                return fallback_text
+        except (UnicodeDecodeError, LookupError):
+            pass
+    return text
+
+
 def read_capped_output(file_path: str, cap: int, offset: int = 0) -> Tuple[str, bool, int]:
     """从 ``offset`` 起读至多 ``cap`` 字节；返回 ``(文本, 是否截断, 新偏移)``。
 
@@ -417,8 +461,8 @@ def read_capped_output(file_path: str, cap: int, offset: int = 0) -> Tuple[str, 
             with contextlib.suppress(OSError):
                 os.close(fd)
     if len(raw) <= cap:
-        return strip_ansi(raw.decode("utf-8", errors="replace")), False, offset + len(raw)
-    capped = strip_ansi(raw[:cap].decode("utf-8", errors="replace"))
+        return strip_ansi(_decode_output(raw)), False, offset + len(raw)
+    capped = strip_ansi(_decode_output(raw[:cap]))
     cap_kib = cap // 1024
     return (
         f"{capped}\n...[输出超过 {cap_kib} KiB 上限，已截断]",

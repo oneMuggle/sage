@@ -994,12 +994,16 @@ describe('UpdateManager', () => {
 
       await updateManager.rollback('test-reason');
 
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://updates.sage.app/api/v1/updates/rollbacks',
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        }),
+      // rollback() 以 fire-and-forget 发遥测（刻意不阻塞本地恢复），
+      // 断言需等待异步 fetch 发生，否则与微任务调度存在竞态（CI flake）。
+      await vi.waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          'https://updates.sage.app/api/v1/updates/rollbacks',
+          expect.objectContaining({
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        ),
       );
 
       const callBody = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);

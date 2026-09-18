@@ -150,3 +150,71 @@ def get_search_engines_health() -> SearchEnginesHealthResponse:
         )
 
     return SearchEnginesHealthResponse(engines=engines_report)
+
+
+# ---------------------------------------------------------------------------
+# Round 14：浏览器健康自检（win7 Chrome 109 老化监控落地）
+# ---------------------------------------------------------------------------
+
+#: 低于该大版本视为"过旧浏览器"——部分站点直接拒绝（UA/Client Hints 判定）
+OLD_BROWSER_MAJOR = 120
+
+
+class BrowserHealthResponse(BaseModel):
+    browserFound: bool  # noqa: N815 — camelCase 对齐前端
+    executable: str = ""
+    chromeMajor: Optional[int] = None  # noqa: N815
+    uaDeclaredMajor: Optional[int] = None  # noqa: N815
+    warning: str = ""
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+@router.get("/browser", response_model=BrowserHealthResponse)
+def get_browser_health() -> BrowserHealthResponse:
+    """报告出网通道实际使用的浏览器与版本（设置页健康卡片用）。
+
+    - ``chrome_major``：本地真实浏览器大版本（渲染通道用它）；
+    - ``ua_declared_major``：静态抓取 UA 声明的大版本（探测值过旧时声明
+      兜底版本，见 http_factory.chrome_major_version）；
+    - ``warning``：本地版本低于 OLD_BROWSER_MAJOR 时给出升级 / 指定内核指引
+      （win7 Chrome 109 封顶场景的老化监控）。
+    """
+    from backend.tools.browser_cdp import discover_browser_executable
+    from backend.tools.http_factory import chrome_major_version
+
+    try:
+        executable = discover_browser_executable() or ""
+    except Exception:  # noqa: BLE001 — 发现失败按未找到处理
+        executable = ""
+    chrome_major = _probe_chrome_major_safe()
+    ua_declared = chrome_major_version()
+    warning = ""
+    if not executable:
+        warning = (
+            "未发现可用浏览器：JS 渲染与浏览器通道不可用。"
+            "可安装 Chrome/Edge，或用 SAGE_BROWSER_PATH 指定浏览器路径"
+        )
+    elif chrome_major is not None and chrome_major < OLD_BROWSER_MAJOR:
+        warning = (
+            f"本机浏览器版本较旧（Chrome {chrome_major}），部分站点可能拒绝访问。"
+            "建议升级浏览器，或用 SAGE_BROWSER_PATH 指定新内核路径"
+        )
+    return BrowserHealthResponse(
+        browserFound=bool(executable),
+        executable=executable,
+        chromeMajor=chrome_major,
+        uaDeclaredMajor=ua_declared,
+        warning=warning,
+    )
+
+
+def _probe_chrome_major_safe() -> Optional[int]:
+    """读取本地浏览器大版本；任何失败返回 None（http_factory 内部函数的稳定包装）。"""
+    try:
+        from backend.tools.http_factory import _probe_chrome_major
+
+        return _probe_chrome_major()
+    except Exception:  # noqa: BLE001
+        return None

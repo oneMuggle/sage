@@ -290,6 +290,9 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_lint_word",
                 # Round 12 自动修复: lint→修复→复检（WRITE_LOCAL）
                 "office_repair_word",
+                # Round 39 目录真页码: Word COM 刷新 TOC 域（WRITE_LOCAL，
+                # 可选通道——缺失 Word/pywin32 时降级为可读理由）
+                "office_refresh_toc",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -459,6 +462,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "office_lint_word",
     # 2026-09-12 Round 12: 自动修复（与 writer.tools 同步）。
     "office_repair_word",
+    # 2026-09-18 Round 39: 目录真页码刷新（与 writer.tools 同步）。
+    "office_refresh_toc",
 ]
 
 

@@ -148,11 +148,12 @@ describe('TaskTreeSection — 重派徽章 (RD13+)', () => {
 });
 
 // ============================================================================
-// BU9 (round20): 预算开启时进度行展示消耗
+// BU9 (round20) → BU13 (round24): 进度行展示消耗
+// round24 起 used_tokens 为 per-task 归因值，进度行改为求和且不再依赖预算开关。
 // ============================================================================
 
-describe('TaskTreeSection — 消耗可见性 (BU9)', () => {
-  it('终态任务带 used_tokens 且预算开启 → 进度行显示消耗', () => {
+describe('TaskTreeSection — 消耗可见性 (BU13)', () => {
+  it('终态任务 used_tokens 求和展示（per-task 语义）', () => {
     render(
       <TaskTreeSection
         board={makeBoard({
@@ -187,7 +188,44 @@ describe('TaskTreeSection — 消耗可见性 (BU9)', () => {
       />,
     );
     expect(screen.getByText(/已消耗/)).toBeInTheDocument();
-    expect(screen.getByText(/已消耗/).textContent).toContain('4,200');
+    // 求和 4200+3800=8000；剥掉 locale 分隔符后断言数字本身（ICU 无关）。
+    const text = screen.getByText(/已消耗/).textContent ?? '';
+    expect(text.replace(/[^0-9]/g, '')).toContain('8000');
+  });
+
+  it('预算关闭（orch 缺失）→ 有消耗仍展示（BU13 门槛解除）', () => {
+    render(
+      <TaskTreeSection
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'done',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: null,
+              output_preview: null,
+              retry_count: 0,
+              used_tokens: 500,
+            },
+            t2: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't2',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g2',
+              error: 'boom',
+              output_preview: null,
+              retry_count: 0,
+            },
+          } as TaskBoardState['statuses'],
+        })}
+      />,
+    );
+    expect(screen.getByText(/已消耗/)).toBeInTheDocument();
   });
 
   it('无 used_tokens 数据 → 不显示消耗', () => {
@@ -222,5 +260,88 @@ describe('TaskTreeSection — 消耗可见性 (BU9)', () => {
       />,
     );
     expect(screen.queryByText(/已消耗/)).toBeNull();
+  });
+});
+
+// ============================================================================
+// BU13 (round24): 终态任务行内 消耗/耗时 徽章
+// ============================================================================
+
+describe('TaskTreeSection — 任务行 usage 徽章 (BU13)', () => {
+  it('done 任务带 used_tokens + duration_ms → 行内徽章展示', () => {
+    render(
+      <TaskTreeSection
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'done',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: null,
+              output_preview: null,
+              retry_count: 0,
+              used_tokens: 1500,
+              duration_ms: 2500,
+            },
+            t2: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't2',
+              status: 'done',
+              agent_id: 'primary',
+              goal: 'g2',
+              error: null,
+              output_preview: null,
+              retry_count: 0,
+            },
+          } as TaskBoardState['statuses'],
+        })}
+      />,
+    );
+    const badge = screen.getByTestId('task-tree-usage-t1');
+    expect(badge.textContent).toContain('1.5k tokens');
+    expect(badge.textContent).toContain('2.5s');
+    expect(screen.queryByTestId('task-tree-usage-t2')).toBeNull();
+  });
+
+  it('亚秒时长与整千 token 的格式化边界', () => {
+    render(
+      <TaskTreeSection
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: 'boom',
+              output_preview: null,
+              retry_count: 0,
+              used_tokens: 1000,
+              duration_ms: 450,
+            },
+            t2: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't2',
+              status: 'done',
+              agent_id: 'primary',
+              goal: 'g2',
+              error: null,
+              output_preview: null,
+              retry_count: 0,
+              duration_ms: 1000,
+            },
+          } as TaskBoardState['statuses'],
+        })}
+      />,
+    );
+    expect(screen.getByTestId('task-tree-usage-t1').textContent).toContain('450ms');
+    expect(screen.getByTestId('task-tree-usage-t2').textContent).toContain('1s');
   });
 });

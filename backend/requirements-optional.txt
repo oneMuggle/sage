@@ -49,3 +49,21 @@
 # 验证: SAGE_OCR=1 python -c "from backend.office.ocr import ocr_available; print(ocr_available())"
 #
 # pytesseract>=0.3.10
+
+# =============================================================================
+# Word COM 自动化 (Round 39 目录真页码) — pywin32
+# =============================================================================
+# 为什么单独放:
+#   pywin32 仅 Windows 可用、非 pure-python（含二进制扩展），且只在
+#   "本机装有 Microsoft Word" 时才有意义——不适合进默认依赖。
+#   现有两个消费方共用本通道:
+#     - office/export_pdf.py  Word COM 导出 PDF（SaveAs2, wdFormatPDF）
+#     - office/toc_refresh.py 刷新 TOC 域为真页码（TablesOfContents.Update）
+#   两者均为懒加载：未安装时优雅降级（capabilities.word_com_available=False，
+#   工具返回带安装引导的失败），不影响默认安装面。
+# 启用: pip install pywin32
+# 验证: python -c "import win32com.client; print('pywin32 OK')"
+# win7（Python 3.8 手动启用）: 钉 pywin32==306（最后支持 3.8 的版本）；
+#   新功能不回流 release/win7，本条仅供老分支自装参考。
+#
+# pywin32>=306

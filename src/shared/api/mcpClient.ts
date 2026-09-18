@@ -28,6 +28,8 @@ export interface McpServerStatusEntry {
   required: boolean;
   /** R53: 已禁用的工具 id 列表 */
   disabled_tools?: string[];
+  /** r65: 是否已 OAuth 授权（不透出 token 本体） */
+  has_oauth_token?: boolean;
 }
 
 export interface McpStatusReport {
@@ -125,6 +127,16 @@ export const mcpClient = {
 
   async serverTools(name: string): Promise<McpServerToolsReport> {
     return invoke<McpServerToolsReport>('mcp_server_tools', { name });
+  },
+
+  /**
+   * r64: OAuth 授权（长请求——后端阻塞等待浏览器回调，上限 300s）。
+   * 仅 HTTP 传输服务器可用；成功后 token 入库，Authorization 注入自动生效。
+   */
+  async authorizeServer(
+    name: string,
+  ): Promise<{ ok: boolean; server: string; token_type: string; expires_at: number }> {
+    return invoke('mcp_server_authorize', { name });
   },
 
   async deleteServer(name: string): Promise<{ ok: boolean; name: string }> {

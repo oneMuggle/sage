@@ -11,6 +11,7 @@ import {
   type ChatOfficeRef,
   type TaskPlanItem,
 } from '../../shared/api';
+import type { AttachmentEmbedConfig } from '../../shared/api/attachmentRagConfig';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import {
   mapAgentErrorToText,
@@ -268,6 +269,8 @@ export function useChat() {
         /** R23-D2: 聊天图片输入（base64 data URL，≤4 张/单张 5MiB） */
         images?: string[];
         attachmentMediaIds?: string[];
+        /** r67: 附件检索注入配置（opt-in） */
+        attachmentRag?: { embed: AttachmentEmbedConfig; top_k: number } | null;
       },
     ) => {
       const sid = sessionId ?? currentSessionId;
@@ -335,6 +338,7 @@ export function useChat() {
         content,
         created_at: Date.now(),
       };
+      const userId = userMessage.id;
       addMessage(userMessage);
 
       if (!chatEndpoint?.baseUrl) {
@@ -628,6 +632,31 @@ export function useChat() {
                 return;
               }
 
+              // R38: 透明度增强事件 — 技能激活 / 记忆召回 / 上下文压缩
+              // 这些事件不影响对话主流程，仅用于 UI 展示。fail-safe: 任何
+              // 异常只跳过更新，绝不阻断聊天。
+              if (evt.state === 'memory_used' && evt.memories) {
+                updateMessage(assistantId, {
+                  memory_refs: evt.memories,
+                  memory_applied: evt.memories.length,
+                });
+              }
+              if (evt.state === 'skill_activated' && evt.skills) {
+                updateMessage(userId, { activated_skills: evt.skills });
+              }
+              if (evt.state === 'compact_triggered' && evt.compact) {
+                // 插入特殊系统消息气泡（非普通 assistant 气泡）
+                const compactMsg: Message = {
+                  id: crypto.randomUUID(),
+                  session_id: sid,
+                  role: 'system',
+                  content: `📦 上下文已压缩：${evt.compact.before} → ${evt.compact.after} 条（移除 ${evt.compact.removed} 条）`,
+                  created_at: Date.now(),
+                  compact_info: evt.compact,
+                };
+                addMessage(compactMsg);
+              }
+
               // 处理 reasoning 事件：三种 state 不同处理 (2026-09-02 bug fix)
               //   - reasoning_delta: 增量, appendReasoning 累积
               //   - reasoning:       旧路径兼容 (非流式 LLM, 直接 yield 全量), append 累加
@@ -703,9 +732,8 @@ export function useChat() {
                   // 防御: 后端历史 bug (execute_code_tool 异常退出返回 dict error)
                   // 可能让 tr.content 是对象而非字符串,这里强制序列化为字符串以避免
                   // React 渲染对象时触发 "Objects are not valid as a React child"。
-                  const safeResult = typeof tr.content === 'string'
-                    ? tr.content
-                    : JSON.stringify(tr.content ?? '');
+                  const safeResult =
+                    typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content ?? '');
                   useChatStreamStore.getState().appendOrUpdateToolCall(sid, {
                     ...targetTc,
                     result: safeResult,
@@ -770,6 +798,7 @@ export function useChat() {
           officeRefs,
           opts?.images,
           opts?.attachmentMediaIds,
+          opts?.attachmentRag,
         );
         // Never let a late subscription overwrite a newer run's handle.
         if (finished || activeStreamRegistry.get(sid) !== streamHandle) {
@@ -922,10 +951,7 @@ export function useChat() {
             if (evt.state === 'failed') {
               // 2026-09 修复: error 信封统一为 dict | string 双态, 提取 message
               const raw = evt.error;
-              const errText =
-                typeof raw === 'string'
-                  ? raw
-                  : (raw?.message ?? '流式失败');
+              const errText = typeof raw === 'string' ? raw : (raw?.message ?? '流式失败');
               finishReattach(null, errText);
               return;
             }

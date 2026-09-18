@@ -7,6 +7,13 @@
 # Usage: .\scripts\bundle-python.ps1
 # Output: resources/python/ and resources/backend/
 
+# Code protection mode: set SAGE_PROTECT_CODE=true (or pass -ProtectCode) during release builds
+# to compile sage_core to native C-extensions (.pyd) and byte-compile/strip backend .py files.
+# In dev/CI mode (default), source .py files are copied directly for rapid build times.
+param(
+    [switch]$ProtectCode = ($env:SAGE_PROTECT_CODE -eq "true")
+)
+
 $ErrorActionPreference = "Stop"
 
 # Configuration
@@ -72,6 +79,12 @@ Write-Host "Installing Python dependencies from requirements-py38.txt..." -Foreg
 $PipExe = Join-Path $PythonDir "Scripts\pip.exe"
 & $PipExe install --no-warn-script-location -r $RequirementsFile
 
+if ($ProtectCode) {
+    Write-Host "🛡️ Code protection ENABLED: Installing Cython..." -ForegroundColor Yellow
+    # Cython < 3.1 is required for Python 3.8 support
+    & $PipExe install --no-warn-script-location "cython>=3.0.0,<3.1.0" "setuptools"
+}
+
 # Copy backend code
 Write-Host "Copying backend code..." -ForegroundColor Green
 $BackendItems = Get-ChildItem -Path $BackendSourceDir -Exclude "__pycache__", "*.pyc", ".pytest_cache", "*.egg-info"
@@ -86,14 +99,29 @@ foreach ($item in $BackendItems) {
     }
 }
 
+# In protected mode, compile backend to .pyc and strip source .py files (except main.py)
+if ($ProtectCode) {
+    Write-Host "🛡️ Compiling backend to bytecode (.pyc) and stripping source .py..." -ForegroundColor Yellow
+    & $PythonExe -m compileall -b $BackendDir
+    Get-ChildItem -Path $BackendDir -Recurse -Filter "*.py" | Where-Object { $_.Name -ne "main.py" } | Remove-Item -Force
+    Write-Host "🛡️ Backend source stripping complete." -ForegroundColor Green
+}
+
 # Copy packages/sage-core if it exists
 $SageCoreSource = Join-Path $PSScriptRoot "..\packages\sage-core"
 if (Test-Path $SageCoreSource) {
-    Write-Host "Copying sage-core package..." -ForegroundColor Green
-    $SageCoreDest = Join-Path $ResourcesDir "sage-core"
-    Copy-Item -Path $SageCoreSource -Destination $SageCoreDest -Recurse -Force
-    # Install sage-core in development mode
-    & $PipExe install --no-warn-script-location -e $SageCoreDest
+    if ($ProtectCode) {
+        Write-Host "🛡️ Code protection: Compiling sage_core with Cython..." -ForegroundColor Yellow
+        $CompileScript = Join-Path $PSScriptRoot "compile-sage-core.py"
+        & $PythonExe $CompileScript build_ext --inplace
+        # Do not mirror plain source to resources/sage-core in protected mode
+    } else {
+        Write-Host "Copying sage-core package..." -ForegroundColor Green
+        $SageCoreDest = Join-Path $ResourcesDir "sage-core"
+        Copy-Item -Path $SageCoreSource -Destination $SageCoreDest -Recurse -Force
+        # Install sage-core in development mode
+        & $PipExe install --no-warn-script-location -e $SageCoreDest
+    }
 }
 
 # Create backend startup script

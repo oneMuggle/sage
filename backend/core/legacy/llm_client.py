@@ -343,7 +343,12 @@ class LLMClient:
                 client_base_url = f"{backend}/api/v1/llm"
                 headers["X-LLM-Provider-Url"] = self.config.base_url
             else:
-                client_base_url = self.config.base_url
+                # r69: 直连去重 —— 请求路径固定 /v1/chat/completions，base_url
+                # 带 /v1 后缀时剥掉，否则 httpx 合并出 /v1/v1/… 404（与代理
+                # _join_provider_url 同口径）。
+                client_base_url = self.config.base_url.rstrip("/")
+                if client_base_url.endswith("/v1"):
+                    client_base_url = client_base_url[: -len("/v1")]
 
             if self.config.api_key:
                 headers["Authorization"] = f"Bearer {self.config.api_key}"

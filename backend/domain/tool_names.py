@@ -76,6 +76,9 @@ OFFICE_TOOLS = (
     "office_lint_word",
     # 2026-09-12 Round 12 自动修复：lint→修复→复检（WRITE_LOCAL）
     "office_repair_word",
+    # 2026-09-18 Round 39 目录真页码：Word COM 刷新 TOC 域（WRITE_LOCAL，
+    # 可选通道——需本机 Word + pywin32，缺失时降级为可读理由）
+    "office_refresh_toc",
 )
 
 # 本地开发环境助手（2026-09-04）：只读探测/诊断两件 + 审批后执行一件。

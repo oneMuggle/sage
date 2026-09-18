@@ -124,3 +124,94 @@ async def test_origin_guard_blocks_foreign_origin(client):
         headers={"Origin": "https://evil.example"},
     )
     assert resp.status_code == 403
+
+
+# ---------- Round 14：header 型凭据新增入口 ----------
+
+
+async def test_create_header_credential_ok(client, monkeypatch):
+    import backend.api.web_access_routes as routes
+
+    captured = {}
+    monkeypatch.setattr(
+        routes,
+        "save_header_credential",
+        lambda domain, headers: captured.update(domain=domain, headers=headers),
+    )
+    resp = await client.post(
+        "/api/v1/web-access/credentials/header",
+        json={"domain": ".example.com", "header_name": "Authorization", "value": "Bearer t"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+    assert captured == {
+        "domain": ".example.com",
+        "headers": {"Authorization": "Bearer t"},
+    }
+
+
+async def test_create_header_credential_invalid_returns_422(client, monkeypatch):
+    import backend.api.web_access_routes as routes
+
+    def _reject(domain, headers):
+        raise ValueError("save_header_credential: 非法或不允许的头名 cookie")
+
+    monkeypatch.setattr(routes, "save_header_credential", _reject)
+    resp = await client.post(
+        "/api/v1/web-access/credentials/header",
+        json={"domain": ".example.com", "header_name": "cookie", "value": "x"},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["ok"] is False
+
+
+async def test_create_header_credential_origin_guard(client):
+    resp = await client.post(
+        "/api/v1/web-access/credentials/header",
+        json={"domain": ".example.com", "header_name": "Authorization", "value": "t"},
+        headers={"Origin": "https://evil.example"},
+    )
+    assert resp.status_code == 403
+
+
+# ---------- Round 15：per-host 出网指标端点 ----------
+
+
+async def test_get_metrics_empty(client, monkeypatch):
+    import backend.api.web_access_routes as routes
+
+    monkeypatch.setattr(routes, "_metrics_snapshot", lambda: {})
+    resp = await client.get("/api/v1/web-access/metrics")
+    assert resp.status_code == 200
+    assert resp.json() == {"metrics": {}}
+
+
+async def test_get_metrics_reports_hosts(client, monkeypatch):
+    import backend.api.web_access_routes as routes
+
+    monkeypatch.setattr(
+        routes,
+        "_metrics_snapshot",
+        lambda: {"example.com": {"ok": 3, "fail": 1, "escalated": 1, "avg_elapsed_ms": 120}},
+    )
+    resp = await client.get("/api/v1/web-access/metrics")
+    assert resp.status_code == 200
+    assert resp.json()["metrics"]["example.com"]["ok"] == 3
+
+
+async def test_reset_metrics(client, monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        "backend.tools.web_metrics.reset", lambda: called.append(1)
+    )
+    resp = await client.put("/api/v1/web-access/metrics/reset")
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+    assert called == [1]
+
+
+async def test_metrics_origin_guard(client):
+    resp = await client.get(
+        "/api/v1/web-access/metrics", headers={"Origin": "https://evil.example"}
+    )
+    assert resp.status_code == 403

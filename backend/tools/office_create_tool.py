@@ -266,6 +266,17 @@ class OfficeCreateTool(BaseTool):
                             "不传则默认宋体。"
                         ),
                     },
+                    "refresh_toc": {
+                        "type": "boolean",
+                        "description": (
+                            "word 专用：生成成功后立即用 Word COM 把目录"
+                            "（TOC）域刷新为真页码并原地保存（一步到位，无需"
+                            "再调 office_refresh_toc）。需本机 Word + pywin32；"
+                            "不可用时生成照常成功，结果附加 toc_refresh.error"
+                            " 说明（此时可在 Word 中 Ctrl+A → F9 手动更新）。"
+                            "仅 doc_type=word 可传。"
+                        ),
+                    },
                     "content": {
                         "type": "object",
                         "description": (
@@ -280,7 +291,9 @@ class OfficeCreateTool(BaseTool):
                             "citation_style?:'gbt7714'|'apa', "
                             "paragraphs:[{text, citations?:[key], "
                             "heading?, font_size?, bold?, italic?, color?, "
-                            "align?}], tables:[{headers, rows[], caption?, "
+                            "align?}]（text 支持交叉引用占位符 "
+                            "{{fig:图题注}}/{{tbl:表题注}}，生成时替换为"
+                            "图N/表N；未匹配题注即生成失败）, tables:[{headers, rows[], caption?, "
                             "style?, header_repeat?, column_widths_cm?, "
                             "merges?}], images?:"
                             "[{source, width_inches?, height_inches?, "
@@ -571,6 +584,87 @@ class OfficeCreateTool(BaseTool):
                                         "type": "object",
                                         "description": "偶数页页脚文本",
                                         "properties": {"text": {"type": "string"}},
+                                    },
+                                    "figure_index": {
+                                        "type": "object",
+                                        "description": (
+                                            "word 可选：插图目录（TOF 域 "
+                                            r'TOC \c "图"，收录 SEQ 题注段）。'
+                                            "生成后经 Word COM 刷新域得真页码"
+                                            "（office_create 带 refresh_toc 或 "
+                                            "office_refresh_toc）。heading_text "
+                                            "自定义标题，默认'图目录'。"
+                                        ),
+                                        "properties": {
+                                            "heading_text": {"type": "string"},
+                                            "placeholder_text": {"type": "string"},
+                                        },
+                                    },
+                                    "table_index": {
+                                        "type": "object",
+                                        "description": (
+                                            r"word 可选：表格目录（TOC \c "
+                                            '"表"，收录 SEQ 题注段），其余同 '
+                                            "figure_index；默认标题'表目录'。"
+                                        ),
+                                        "properties": {
+                                            "heading_text": {"type": "string"},
+                                            "placeholder_text": {"type": "string"},
+                                        },
+                                    },
+                                    "toc": {
+                                        "type": "object",
+                                        "description": (
+                                            "word 可选：目录域（TOC，打开后"
+                                            "更新域/F9 或经 Word COM 刷新"
+                                            "得真页码）。heading_text 自定义"
+                                            "标题（默认'目录'），levels 收录"
+                                            "标题级别范围如 '1-3'。"
+                                        ),
+                                        "properties": {
+                                            "heading_text": {"type": "string"},
+                                            "levels": {"type": "string"},
+                                            "placeholder_text": {"type": "string"},
+                                        },
+                                    },
+                                    "section_breaks": {
+                                        "type": "array",
+                                        "description": (
+                                            "word 可选：分节横排（宽表/财务页"
+                                            "场景）。每项在 start_paragraph"
+                                            "（0-based 段落下标）前插入 NEW_PAGE"
+                                            " 分节并对新节应用 page_setup"
+                                            "（orientation: 'landscape' 等）。"
+                                            "按列表顺序依次生效。"
+                                        ),
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "start_paragraph": {
+                                                    "type": "integer",
+                                                },
+                                                "page_setup": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "size": {
+                                                            "type": "string",
+                                                            "enum": ["A4", "letter"],
+                                                        },
+                                                        "orientation": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "portrait",
+                                                                "landscape",
+                                                            ],
+                                                        },
+                                                        "margins_cm": {
+                                                            "type": "object",
+                                                        },
+                                                    },
+                                                },
+                                            },
+                                            "required": ["start_paragraph", "page_setup"],
+                                        },
                                     },
                                     "bibliography": {
                                         "type": "object",
@@ -967,6 +1061,14 @@ class OfficeCreateTool(BaseTool):
                                                         "（长表打印每页带表头）"
                                                     ),
                                                 },
+                                                "header_style": {
+                                                    "type": "boolean",
+                                                    "description": (
+                                                        "表头行加粗+浅灰底+居中"
+                                                        "（Round 36，与 Excel"
+                                                        " header_style 对称）"
+                                                    ),
+                                                },
                                                 "margins_cm": {
                                                     "type": "object",
                                                     "description": (
@@ -1092,6 +1194,7 @@ class OfficeCreateTool(BaseTool):
         filename: Optional[str] = None,
         content: Optional[Dict[str, Any]] = None,
         font_family: Optional[str] = None,
+        refresh_toc: Optional[bool] = None,
         **kwargs: Any,
     ) -> ToolResult:
         # doc_type 大小写容错（T6 实测模型传 "Word"）：归一化后再校验。
@@ -1100,6 +1203,15 @@ class OfficeCreateTool(BaseTool):
         error = self._check_params(doc_type, output_dir, filename, content)
         if error is not None:
             return error
+
+        # Round 40: refresh_toc 一步到位刷新目录域（word 专用，strict——
+        # 非 word 显式报错而非静默忽略，防 LLM 误以为已刷新）。
+        do_refresh = bool(refresh_toc)
+        if do_refresh and OfficeDocType(doc_type) is not OfficeDocType.WORD:
+            return ToolResult(
+                success=False,
+                error="refresh_toc_only_supported_for_word: refresh_toc 仅支持 doc_type=word",
+            )
 
         # ---- T7.5: binding-aware delegation -----------------------------
         # When the agent loop is running under a session-workspace binding
@@ -1111,6 +1223,8 @@ class OfficeCreateTool(BaseTool):
             doc_type=doc_type, filename=filename, content=content
         )
         if delegated is not None:
+            if do_refresh and delegated.success:
+                delegated = self._attach_toc_refresh_managed(delegated)
             return delegated
 
         doc_type_enum = OfficeDocType(doc_type)
@@ -1121,10 +1235,76 @@ class OfficeCreateTool(BaseTool):
         content = self._normalize_content(doc_type_enum, filename, content)
         if content is None:
             return ToolResult(success=False, error="content_required")
-        return self._generate_document(
+        result = self._generate_document(
             doc_type_enum, filename, content, target_dir,
             font_family=font_family,
         )
+        if do_refresh and result.success:
+            result = self._attach_toc_refresh_local(
+                result, Path(result.content["path"])
+            )
+        return result
+
+    def _attach_toc_refresh_managed(self, result: ToolResult) -> ToolResult:
+        """受管路径刷新：doc_id 定位落盘文件，刷新后只附加摘要字段。
+
+        维持「不回显受管绝对路径」不变式——toc_refresh 只含 ok/toc_count/
+        error。定位失败同样不毁生成结果（附加降级说明）。
+        """
+        content = dict(result.content or {})
+        try:
+            ctx = current_tool_context()
+            conn = get_database().get_connection()
+            binding = get_active_workspace(
+                conn, ctx.session_id, expected_generation=ctx.binding_generation
+            )
+            doc = get_document_in_workspace(
+                conn, str(content.get("document_id")), binding.workspace_path
+            )
+            path = document_path(doc)
+            workspace = Path(binding.workspace_path)
+        except Exception:
+            content["toc_refresh"] = {
+                "ok": False,
+                "error": "定位受管文档失败，目录域未刷新",
+            }
+            return ToolResult(success=True, content=content)
+        return self._refresh_and_attach(result, path, workspace)
+
+    def _attach_toc_refresh_local(self, result: ToolResult, path: Path) -> ToolResult:
+        """legacy output_dir 路径刷新：无绑定时以输出父目录为围栏。"""
+        workspace = self._binding_workspace_or_none() or path.parent
+        return self._refresh_and_attach(result, path, workspace)
+
+    def _binding_workspace_or_none(self) -> Optional[Path]:
+        """有活动绑定 → 绑定工作区 Path；否则 ``None``（DB 不可用同样吞掉）。"""
+        ctx = current_tool_context()
+        if ctx is None or not ctx.session_id:
+            return None
+        try:
+            conn = get_database().get_connection()
+            binding = get_active_workspace(
+                conn, ctx.session_id, expected_generation=ctx.binding_generation
+            )
+        except Exception:
+            return None
+        if binding is None:
+            return None
+        return Path(binding.workspace_path)
+
+    def _refresh_and_attach(
+        self, result: ToolResult, path: Path, workspace: Path
+    ) -> ToolResult:
+        """执行刷新并把摘要附加到结果（刷新失败不改写成功态）。"""
+        from backend.office.toc_refresh import refresh_toc_page_numbers
+
+        refresh = refresh_toc_page_numbers(path, workspace)
+        summary: Dict[str, Any] = {"ok": refresh.ok, "toc_count": refresh.toc_count}
+        if refresh.error:
+            summary["error"] = refresh.error
+        content = dict(result.content or {})
+        content["toc_refresh"] = summary
+        return ToolResult(success=result.success, content=content)
 
     @staticmethod
     def _try_delegate_to_bound_service(

@@ -4,10 +4,15 @@ import { toast } from 'sonner';
 
 import { PlanCard } from '../components/PlanCard';
 import { resolveEndpoint } from '../entities/setting/types';
+import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
 import { useSettings } from '../features/manage-settings/useSettings';
+import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
 import { useChat } from '../features/send-message/useChat';
 import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
+import {
+  loadAttachmentRagConfig,
+} from '../shared/api/attachmentRagConfig';
 import { orchRunClient } from '../shared/api/orchRunClient';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
@@ -69,14 +74,10 @@ export function Chat() {
     clearPlanApproval, // PM2: 清除批准状态
   } = useChat();
   // P1 (UI 优化方案 2026-09-13): 开关状态持久化 —— 重启恢复上次的面板开合
+  // right-panel R1 批次 A: 开合上抬 rightPanelStore（自动唤起/内联卡片需要
+  // 跨组件写面板状态）；localStorage 迁移进 store，此处只读订阅。
   const isMobile = useIsMobile();
-  const [rightPanelOpen, setRightPanelOpen] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('right-panel-open') === '1';
-    } catch {
-      return false;
-    }
-  });
+  const rightPanelOpen = useRightPanelStore((s) => s.open);
   // 对标 S2 (2026-09-13): 临时聊天 —— 按会话记住开关；开启后本会话每轮
   // 都以 memory_mode='off' 发送（不注入记忆、不提取记忆、不弹"记住了"）。
   // 2026-09 修复: 临时聊天开关此前是组件 state, 切到设置页再回来即复位为关,
@@ -411,6 +412,12 @@ export function Chat() {
         }
       }
 
+      // r67: 超长文档检索注入（opt-in，localStorage 配置）
+      const r67Rag = loadAttachmentRagConfig();
+      const attachmentRag = r67Rag.enabled
+        ? { embed: r67Rag.embed, top_k: r67Rag.top_k }
+        : null;
+
       if (!currentSessionId) {
         const sessionId = await createSession();
         await sendMessage(content, sessionId, officeRefs, orchestrationMode, {
@@ -418,6 +425,7 @@ export function Chat() {
           memoryDisabled: tempChatSessions.has(sessionId),
           images,
           attachmentMediaIds,
+          attachmentRag,
         });
       } else {
         await sendMessage(content, undefined, officeRefs, orchestrationMode, {
@@ -425,6 +433,7 @@ export function Chat() {
           memoryDisabled: tempChatSessions.has(currentSessionId),
           images,
           attachmentMediaIds,
+          attachmentRag,
         });
       }
     },
@@ -524,17 +533,26 @@ export function Chat() {
     () => (editResendTarget ? { onCancel: cancelEditResend } : null),
     [cancelEditResend, editResendTarget],
   );
-  // P1: 开关落 localStorage（下次启动恢复）；所有切换入口统一走此回调
+  // right-panel R1 批次 A: 开合逻辑迁入 store（含 localStorage 持久化），
+  // 此处只保留稳定引用的切换回调（按钮 + 快捷键共用）
   const handleToggleRightPanel = useCallback(() => {
-    setRightPanelOpen((v) => {
-      try {
-        localStorage.setItem('right-panel-open', v ? '0' : '1');
-      } catch {
-        // localStorage 不可用
-      }
-      return !v;
-    });
+    useRightPanelStore.getState().toggle();
   }, []);
+
+  // right-panel R1 批次 B: 未读产物徽标 —— 本次运行内产物事件计数与
+  // "面板打开时已见基线"之差；面板开着即视为已见（对齐 Claude 的红点语义）。
+  const artifactEventCount = useArtifactEventsStore((s) =>
+    currentSessionId ? (s.counts[currentSessionId] ?? 0) : 0,
+  );
+  const seenArtifactCount = useRightPanelStore((s) =>
+    currentSessionId ? (s.seenArtifactCount[currentSessionId] ?? 0) : 0,
+  );
+  const unseenArtifactCount = Math.max(0, artifactEventCount - seenArtifactCount);
+  useEffect(() => {
+    if (rightPanelOpen && currentSessionId) {
+      useRightPanelStore.getState().markArtifactsSeen(currentSessionId);
+    }
+  }, [rightPanelOpen, currentSessionId, artifactEventCount]);
 
   // P1: Ctrl/Cmd+Shift+P 切换右面板（与 Tooltip 提示对应）
   useEffect(() => {
@@ -756,13 +774,18 @@ export function Chat() {
           >
             + 新对话
           </button>
-          <RightPanelToggle open={rightPanelOpen} onClick={handleToggleRightPanel} />
+          <RightPanelToggle
+            open={rightPanelOpen}
+            onClick={handleToggleRightPanel}
+            unseenCount={unseenArtifactCount}
+          />
         </div>
       </div>
 
       {/* P1 (UI 优化方案 2026-09-13): 内容行 —— 右面板 push 模式参与 flex
-          布局（挤压主区成三栏，对齐 Claude artifacts）；窄屏回退 overlay。 */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
+          布局（挤压主区成三栏，对齐 Claude artifacts）；窄屏回退 overlay。
+          right-panel R1 批次 D: relative 供面板最大化时 absolute 覆盖。 */}
+      <div className="flex-1 flex min-h-0 overflow-hidden relative">
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
           {showInterruptBanner && (
             <InterruptedRunBanner
@@ -817,6 +840,7 @@ export function Chat() {
             ) : (
               <MessageList
                 messages={messages}
+                sessionId={currentSessionId}
                 streamingMessageId={streamingMessageId}
                 onFork={handleFork}
                 onEditResend={handleStartEditResend}
@@ -940,10 +964,9 @@ export function Chat() {
         </div>
         {/* /左列 */}
 
-        {/* Artifacts Panel: 桌面端 push（挤压主区），窄屏 overlay 回退 */}
+        {/* Artifacts Panel: 桌面端 push（挤压主区），窄屏 overlay 回退。
+            right-panel R1: 开合/Tab/最大化/选中产物由 rightPanelStore 自持 */}
         <RightPanel
-          open={rightPanelOpen}
-          onToggle={handleToggleRightPanel}
           variant={isMobile ? 'overlay' : 'push'}
           iteration={iteration}
           streamingState={streamingState}

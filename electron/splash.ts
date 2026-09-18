@@ -81,7 +81,24 @@ export function createSplashWindow(): void {
         sandbox: true,
       },
     });
-    win.once('ready-to-show', () => win.show());
+    // 2026-09-17: Win7 闪退防御 — ready-to-show 在某些 Chromium GPU 进程异常
+    // 场景下不会触发 (bug in Electron 21 + Win7 + GPU off), 用户看到永久黑屏.
+    // 加 3s 兜底: ready-to-show 没触发就强制 show, 至少让用户看到「Sage」logo
+    // 而不是完全没反馈. ready-to-show 触发时主动 clearTimeout 取消兜底.
+    let splashFallbackTimer: NodeJS.Timeout | null = null;
+    win.once('ready-to-show', () => {
+      if (splashFallbackTimer) {
+        clearTimeout(splashFallbackTimer);
+        splashFallbackTimer = null;
+      }
+      win.show();
+    });
+    splashFallbackTimer = setTimeout(() => {
+      if (!win.isDestroyed() && !win.isVisible()) {
+        logger.warn('splash: ready-to-show timeout (3s), forcing show');
+        win.show();
+      }
+    }, 3000);
     void win.loadURL(SPLASH_URL).catch((e: Error) => {
       logger.warn('splash: loadURL failed', { error: e.message });
     });

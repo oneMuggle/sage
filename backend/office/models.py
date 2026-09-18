@@ -560,6 +560,10 @@ class WordTableSpec(BaseModel):
         default=None,
         description="各列列宽（厘米）；None 不设置，长度须等于列数",
     )
+    # Round 36：表头行样式（加粗 + 浅灰底 + 居中），与 Excel header_style 对称。
+    header_style: bool = Field(
+        default=False, description="表头行加粗 + 浅灰底(D9D9D9) + 居中"
+    )
     merges: _constrained_list(WordCellMergeSpec, max_length=200) = Field(default_factory=list)
 
 
@@ -682,6 +686,27 @@ class WordFormatSpec(BaseModel):
     # 插入 NEW_PAGE 分节并对新节应用 page_setup；按列表顺序依次生效。
     section_breaks: _constrained_list("WordSectionBreakSpec", max_length=20) = Field(
         default_factory=list
+    )
+    # Round 42：图目录/表目录（TOC \c 收录 SEQ 题注；None = 不插入）。
+    figure_index: Optional[WordIndexSpec] = None
+    table_index: Optional[WordIndexSpec] = None
+
+
+class WordIndexSpec(BaseModel):
+    r"""图目录/表目录设置（Round 42）。
+
+    TOF 域（``TOC \h \z \c "<图|表>"``）由 Word 收录 SEQ 题注段；
+    生成器插入域与静态缓存条目（无页码——由渲染器/COM 刷新域计算），
+    与 R13 目录域同一思路。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    heading_text: str = Field(default="图目录", max_length=50)
+    placeholder_text: str = Field(
+        default='（图目录：在 Word 中按 F9 或右键"更新域"生成）',
+        max_length=200,
+        description="域未更新时的占位提示",
     )
 
 

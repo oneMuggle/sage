@@ -20,8 +20,10 @@ import base64
 import hashlib
 import secrets
 import time
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlencode, urlparse
+
+from backend.mcp.oauth_store import TokenRecord
 
 __all__ = [
     "OAuthError",
@@ -287,3 +289,190 @@ def build_refresh_request(
         body.append(("scope", scope))
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     return token_endpoint, headers, urlencode(body)
+
+
+# ---------- r62: 动态注册 + 授权码交换 + 授权编排（切片 3a） ----------
+
+
+def build_dynamic_registration_request(
+    client_name: str,
+    redirect_uri: str,
+    scope: Optional[str] = None,
+) -> tuple:
+    """RFC 7591 动态注册请求：(headers, JSON body dict)。
+
+    Sage 是公共客户端（无后端密钥）：token_endpoint_auth_method=none，
+    授权码 + PKCE + refresh 三 grant。
+    """
+    body: Dict[str, object] = {
+        "client_name": client_name,
+        "redirect_uris": [redirect_uri],
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": "none",
+    }
+    if scope:
+        body["scope"] = scope
+    headers = {"Content-Type": "application/json"}
+    return headers, body
+
+
+def parse_registration_response(data: object) -> Dict[str, object]:
+    """校验 RFC 7591 注册响应：client_id 必填；secret 等可选透传。"""
+    if not isinstance(data, dict):
+        raise OAuthMetadataError("注册响应必须是 JSON 对象")
+    reg: Dict[str, object] = dict(data)
+    _require_str(reg, "client_id", "注册响应")
+    return reg
+
+
+def exchange_authorization_code(
+    token_endpoint: str,
+    *,
+    client_id: str,
+    code: str,
+    redirect_uri: str,
+    code_verifier: str,
+    client_secret: Optional[str] = None,
+    resource: Optional[str] = None,
+) -> tuple:
+    """授权码换 token（RFC 6749 §4.1.3 + PKCE verifier）：(url, headers, form body)。"""
+    if not code:
+        raise OAuthMetadataError("code 不能为空")
+    if not redirect_uri:
+        raise OAuthMetadataError("redirect_uri 不能为空")
+    if not code_verifier:
+        raise OAuthMetadataError("code_verifier 不能为空")
+    body: List[tuple] = [
+        ("grant_type", "authorization_code"),
+        ("code", code),
+        ("redirect_uri", redirect_uri),
+        ("client_id", client_id),
+        ("code_verifier", code_verifier),
+    ]
+    if client_secret:
+        body.append(("client_secret", client_secret))
+    if resource:
+        body.append(("resource", resource))
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    return token_endpoint, headers, urlencode(body)
+
+
+async def authorize_mcp_server(
+    server_url: str,
+    *,
+    redirect_uri: str,
+    scope: Optional[str] = None,
+    resource: Optional[str] = None,
+    client_name: str = "sage",
+    http_get_json: Any,
+    http_post_json: Any,
+    wait_for_callback: Any,
+) -> TokenRecord:
+    """完整授权编排：发现 → 动态注册 → 授权 → 回调校验 → code 交换。
+
+    HTTP 与回调等待全部注入：
+    - ``http_get_json(url) -> dict``：元数据发现（逐候选 URL 调用）；
+    - ``http_post_json(url, headers, body) -> dict``：注册 + token 交换；
+    - ``wait_for_callback(authorization_url) -> callback_url``：切片 3b
+      提供本机回听；测试直传回调 URL。
+
+    受保护资源元数据（RFC 9728）优先——携带 authorization_servers 时取
+    第一个授权服务器；否则直接对 server_url 做授权服务器元数据发现。
+
+    Returns:
+        TokenRecord（client_id/token_endpoint 已回填，刷新链路即取即用）。
+    """
+    # 1) 发现：受保护资源 → 授权服务器（缺失/失败回退直查）
+    auth_metadata: Optional[Dict[str, object]] = None
+    issuer_fallback = None
+    for url in build_protected_resource_discovery_urls(server_url):
+        try:
+            resource_meta = parse_protected_resource_metadata(await http_get_json(url))
+        except Exception:
+            continue
+        servers = resource_meta.get("authorization_servers") or []
+        if servers:
+            issuer_fallback = str(servers[0])
+            for candidate in build_authorization_server_discovery_urls(issuer_fallback):
+                try:
+                    auth_metadata = parse_authorization_server_metadata(
+                        await http_get_json(candidate)
+                    )
+                    break
+                except Exception:
+                    continue
+            if auth_metadata:
+                break
+    if auth_metadata is None:
+        if issuer_fallback:
+            candidates = build_authorization_server_discovery_urls(issuer_fallback)
+        else:
+            candidates = build_authorization_server_discovery_urls(server_url)
+        for candidate in candidates:
+            try:
+                auth_metadata = parse_authorization_server_metadata(
+                    await http_get_json(candidate)
+                )
+                break
+            except Exception:
+                continue
+    if auth_metadata is None:
+        raise OAuthMetadataError(f"无法发现 {server_url} 的 OAuth 元数据")
+
+    issuer = str(auth_metadata.get("issuer", "")).rstrip("/")
+    authorization_endpoint = str(auth_metadata["authorization_endpoint"])
+    token_endpoint = str(auth_metadata["token_endpoint"])
+
+    # 2) 动态注册（公共客户端）
+    registration_endpoint = auth_metadata.get("registration_endpoint")
+    if not isinstance(registration_endpoint, str) or not registration_endpoint:
+        raise OAuthMetadataError(
+            "授权服务器未提供 registration_endpoint（动态注册不可用）"
+        )
+    reg_headers, reg_body = build_dynamic_registration_request(
+        client_name, redirect_uri, scope
+    )
+    registration = parse_registration_response(
+        await http_post_json(registration_endpoint, reg_headers, reg_body)
+    )
+    client_id = str(registration["client_id"])
+
+    # 3) 授权 URL → 回调 → 校验
+    verifier, challenge = generate_pkce_pair()
+    state = generate_state()
+    authorization_url = build_authorization_url(
+        authorization_endpoint,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        state=state,
+        code_challenge=challenge,
+        scope=scope,
+        resource=resource or (issuer or None),
+    )
+    callback_url = await wait_for_callback(authorization_url)
+    code = validate_authorization_callback(callback_url, state)
+
+    # 4) code 交换 → TokenRecord（client_id/token_endpoint 回填供刷新）
+    url, headers, body = exchange_authorization_code(
+        token_endpoint,
+        client_id=client_id,
+        code=code,
+        redirect_uri=redirect_uri,
+        code_verifier=verifier,
+        resource=resource,
+    )
+    token = parse_token_response(await http_post_json(url, headers, body))
+    expires_in = token.get("expires_in") or 0
+    import time as _time
+
+    return TokenRecord(
+        server_name=server_url,
+        access_token=str(token["access_token"]),
+        token_type=str(token.get("token_type", "Bearer")),
+        expires_at=float(_time.time()) + float(expires_in) if expires_in else 0.0,
+        refresh_token=str(token.get("refresh_token") or ""),
+        scope=str(token.get("scope") or (scope or "")),
+        client_id=client_id,
+        token_endpoint=token_endpoint,
+    )

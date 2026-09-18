@@ -1619,6 +1619,46 @@ def test_render_dynamic_login_wall_raises(monkeypatch):
         )
 
 
+# ---------- Round 18：web_search per-host 指标 ----------
+
+
+def test_web_search_records_engine_metrics(monkeypatch):
+    """串行路径逐引擎记入 search:<engine> 伪域指标（成功 ok / 异常 fail）。"""
+    from types import SimpleNamespace
+
+    from backend.tools import web_metrics
+
+    web_metrics.reset()
+
+    class _FakeEngine:
+        def __init__(self, name, fail):
+            self.name = name
+            self._fail = fail
+
+        def search(self, query, limit, client=None):
+            if self._fail:
+                raise RuntimeError("engine down")
+            return [{"title": "t", "url": "https://x.example/r", "snippet": "s"}]
+
+    fake_chain = [_FakeEngine("bad", True), _FakeEngine("good", False)]
+    monkeypatch.setattr(
+        "backend.tools.web_tool.resolve_engine_chain", lambda config: fake_chain
+    )
+    monkeypatch.setattr(
+        "backend.tools.web_tool.load_search_config",
+        lambda: SimpleNamespace(parallel=False, parallel_first_n=1),
+    )
+
+    tool = WebSearchTool()
+    result = tool.execute(query="sage", limit=5)
+
+    assert result.success is True
+    snap = web_metrics.snapshot()
+    assert snap["search:good"]["ok"] == 1
+    assert snap["search:bad"]["fail"] == 1
+    web_metrics.reset()
+
+
 # ---------- Round 13 AB6/X2：连接复用 + 出网统计 ----------
 
 

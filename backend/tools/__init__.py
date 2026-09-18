@@ -69,6 +69,7 @@ from .office_template_tool import (
     OfficeAnalyzeWordTemplateTool,
     OfficeFillWordTemplateTool,
 )
+from .office_toc_refresh_tool import OfficeRefreshTocTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
 from .patch_tool import ApplyPatchTool
@@ -209,6 +210,8 @@ def register_all_tools(
     registry.register(OfficeLintWordTool(policy=policy))
     # Round 12 自动修复: office_repair_word（WRITE_LOCAL，lint→修复→复检）
     registry.register(OfficeRepairWordTool(policy=policy))
+    # Round 39 目录真页码: office_refresh_toc（WRITE_LOCAL，Word COM 刷新 TOC 域）
+    registry.register(OfficeRefreshTocTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -336,6 +339,7 @@ __all__ = [
     "OfficeBibTexTool",
     "OfficeLintWordTool",
     "OfficeRepairWordTool",
+    "OfficeRefreshTocTool",
     "OfficeJournalParseTemplateTool",
     "OfficeJournalFillFromContentTool",
     "OfficeJournalGenerateArticleTool",

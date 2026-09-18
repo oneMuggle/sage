@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 45：交叉引用占位符**（方案 `docs/plans/2026-09-18_r45-cross-ref-plan.md`）
+
+### Added(office)
+- **`{{fig:图题注}}` / `{{tbl:表题注}}` 交叉引用占位符**：段落文本按题注文本引用插图/表格，生成时替换为"图N"/"表N"——LLM 不必猜编号，插图增删自动重排；未匹配题注即生成失败（fail-fast，与 citations 同哲学）
+- **题注编号映射前置**：编号映射与 R42 图/表目录条目共用同一来源，正文题注/目录条目/交叉引用三处编号严格一致
+- **`cross_ref/residue` lint 规则**：正文残留未解析占位符（手工编辑/外部导入）→ error 提示
+
+> 🧹 **Word 写作能力 Round 44：lint 面补强——index 域在位校验**（方案 `docs/plans/2026-09-18_r44-lint-index-plan.md`）
+
+### Added(office)
+- **`figure_index/presence` / `table_index/presence` lint 规则**：format_spec 声明了图/表目录即校验文档存在对应 `TOC \c` 域（字面"图N"文本不算——必须是 Word 可收录的域形态）
+- **toc/presence 精度修复**：TOF 的 instr 同含 "TOC" 前缀，目录域检测排除 `\c` 载体，R42 引入 TOF 后不再误满足
+- **lint schema 可检查子集白名单**：toc/figure_index/table_index 进 lint 工具 schema；对偶测试锁"声明=有规则的子集且 ⊆ 模型字段"
+
+> 🧹 **Word 写作能力 Round 43：office_create schema 漂移卫生修复**（方案 `docs/plans/2026-09-18_r43-schema-drift-plan.md`）
+
+### Fixed(office)
+- **schema 可发现化缺口**：format_spec 补 `toc`（R13 交付却从未进 LLM schema）与 `section_breaks`（R26 同病）声明——目录域与分节横排能力对模型可见；types.ts 补 `WordSectionBreakSpec` 接口与字段
+- **防漂移门禁**：新增对偶测试——工具 schema format_spec 属性集合与 WordFormatSpec 模型字段全等、types.ts 接口覆盖模型全部字段，今后单侧加字段即 CI 红
+
+> 📝 **Word 写作能力 Round 42：图目录/表目录（TOF 域 + SEQ 题注升级）**（方案 `docs/plans/2026-09-18_r42-caption-index-plan.md`）
+
+### Added(office)
+- **题注编号 SEQ 域化**：add_caption 的"图N/表N"编号改为 SEQ 复杂域（缓存编号显示不变）——Word 语义上成为可收录的题注条目，python-docx 回读文本与 lint 规则零改动
+- **`figure_index` / `table_index`**（format_spec 新增，WordIndexSpec）：插入图/表目录 TOF 域（`TOC \c`），缓存条目按正文编号顺序预收集（无题注不占号口径一致），各占一页；生成时带 `refresh_toc: true` 或事后 office_refresh_toc/office_update 刷新即得真页码
+- **COM 刷新扩展**：TOC 之外追加 Fields.Update（SEQ 重编号 + TOF 收录一次完成），纯 TOF 文档也落盘
+- **lint 兼容**：目录/图目录缓存行不再误判为题注重复（fldChar begin/end 之间的缓存段跳过 caption/sequence 规则）
+
+> 📝 **Word 写作能力 Round 41：office_update 修订后 TOC 刷新**（方案 `docs/plans/2026-09-18_r41-update-toc-refresh-plan.md`）
+
+### Added(office)
+- **`office_update` 新增 `refresh_toc` 标志**（word 专用）：修订成功后立即用 Word COM 刷新目录域为真页码——增删段落后的页码漂移一次性修复；doc_id 受管路径 upfront 非 word 守卫（修订尚未发生即拒绝，语义准确），file_path 路径同口径
+- **降级契约**：刷新失败/不可用时修订保持 success=True，仅附加 `toc_refresh: {ok: false, error}` 说明（与 R40 生成侧同口径）
+- **横排宽表场景文档（搭车）**：report-writing 技能补 R37 `section_breaks` 分节横排说明与组合示例（技能正文可发现化缺口）
+
+> 📝 **Word 写作能力 Round 40：office_create 一键 TOC 刷新**（方案 `docs/plans/2026-09-18_r40-create-toc-refresh-plan.md`）
+
+### Added(office)
+- **`office_create` 新增 `refresh_toc` 标志**（word 专用）：生成成功后立即用 Word COM 把目录域刷新为真页码并原地保存——带目录报告一步到位，省一次 LLM 往返；受管/legacy 双路径接线，受管路径维持「不回显绝对路径」不变式；非 word 传参显式报错（strict）
+- **降级契约**：Word COM/pywin32 不可用时生成照常成功，结果附加 `toc_refresh: {ok: false, error}` 安装引导说明，绝不因刷新失败回滚已落盘文档
+
+### Fixed(test)
+- **rollback 遥测测试竞态修复（搭车，test-only）**：`updateManager.test.ts` 的 fetch 断言包进 `vi.waitFor`——`rollback()` 刻意 fire-and-forget 发遥测，立即断言与微任务调度存在竞态（R38 轮 CI 实际 flake 一次）
+
+> 📝 **Word 写作能力 Round 39：目录真页码（Word COM 刷新域可选通道）**（方案 `docs/plans/2026-09-18_r39-toc-page-refresh-plan.md`）
+
+### Added(office)
+- **`office_refresh_toc` 工具**：把托管 .docx 的 TOC 域经 Word COM 刷新为真页码并落盘（TablesOfContents 逐个 Update + Save）——R29 静态缓存目录打开即真页码，无需用户手动 F9；WRITE_LOCAL 审批 + 工作区围栏，writer/primary 白名单可见
+- **降级契约**：无 Word/pywin32 时返回带安装引导的失败（`pip install pywin32` 或 Word 内 Ctrl+A → F9），绝不抛异常、绝不泄漏 WINWORD.EXE（finally Close/Quit + AutomationSecurity=3 禁宏）
+- **pywin32 进 requirements-optional.txt**（懒加载，与 Word COM 导出 PDF 共用通道；win7 手动启用钉 306）
+- report-writing 技能交付步骤接入刷新通道，并补上 R36 Word 表头行样式 header_style 的文档（搭车）
+
+> 🌐 **网页访问能力优化 Round 16：设置页展示 per-host 出网指标**（方案 `docs/plans/2026-09-17_web-access-optimization-round16.md`）
+
+### Added(web-access)
+- **出网指标展示（X2 UI）**：设置→网络凭据区块新增"出网指标（本进程内）"——消费 `GET /api/v1/web-access/metrics`，按域名渲染 成功/失败/升级渲染/均耗时，无数据不渲染；文案明示"进程内存态，重启清零"
+> 🌐 **网页访问能力优化 Round 15：per-host 出网指标 + 渲染 net 块**（方案 `docs/plans/2026-09-17_web-access-optimization-round15.md`）
+
+### Changed(web-access)
+- **per-host 出网指标（M1/M3）**：新增 `backend/tools/web_metrics.py`——线程安全滚动指标（每域名 deque 100 条、全局 LRU 200 域名、进程内递增序号定 LRU 序），异常全静默；web_fetch 成功/失败路径与 download attempt 出口/成功埋点；`GET /api/v1/web-access/metrics` + `PUT /web-access/metrics/reset`（Origin 守卫同口径）
+- **渲染耗时（X2 对齐）**：render_page 结果补 `net: {elapsed_ms}`（与 web_fetch net 口径对齐，不进缓存）
+
+
+> 🌐 **网页访问能力优化 Round 14：浏览器健康自检 + 凭据 UI header 型新增**（方案 `docs/plans/2026-09-17_web-access-optimization-round14.md`）
+
+### Added(web-access)
+- **浏览器健康自检（H1）**：`GET /api/v1/diagnostic/browser` 上报浏览器发现 / 本地版本 / UA 声明版本；低于 Chrome 120 给出升级或 `SAGE_BROWSER_PATH` 指定新内核的警告——win7（Chrome 109 封顶）老化监控落地；设置页凭据区块顶部直接可见
+- **header 型凭据新增入口（C1/C2）**：`POST /api/v1/web-access/credentials/header`（校验沿用 vault，非法 422）+ 设置页表单（域名 / 头名 / 头值，值输入框掩码）——Bearer / API key 型凭据不再只能靠对话设置
 > 🌐 **网页访问能力优化 Round 13：AB6 连接复用 + X2 出网可观测**（方案 `docs/plans/2026-09-17_web-access-optimization-round13.md`）
 
 ### Changed(web-access)

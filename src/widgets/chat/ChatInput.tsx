@@ -168,7 +168,6 @@ function ChatInputInner({
   // On fetch failure we silently fall back to an empty list (no slash skills).
   const [dynamicSlashCommands, setDynamicSlashCommands] = useState<DynamicSlashSkill[]>([]);
 
-
   // R27-A: 用户 Prompt 模板（映射为 tpl-* 命令，选中即填充输入框）
   const [promptTemplates, setPromptTemplates] = useState<
     { name: string; content: string; description?: string }[]
@@ -197,9 +196,11 @@ function ChatInputInner({
   // menu can display meaningful descriptions (not just "Skill: <name>").
   // List is loaded once; re-mount or restart app to pick up new SKILL.md.
   useEffect(() => {
+    let disposed = false;
     skillsApi
       .list()
       .then((skills) => {
+        if (disposed) return;
         const dynamic = skills
           .filter((s) => s.dispatch?.user_invocable === true)
           .map((s) => ({
@@ -208,7 +209,12 @@ function ChatInputInner({
           }));
         setDynamicSlashCommands(dynamic);
       })
-      .catch(() => setDynamicSlashCommands([]));
+      .catch(() => {
+        if (!disposed) setDynamicSlashCommands([]);
+      });
+    return () => {
+      disposed = true;
+    };
   }, []);
 
   // R27-A: 载入用户 Prompt 模板（失败静默降级为无模板）。返回 reload 供
@@ -445,6 +451,8 @@ function ChatInputInner({
           .then((result) => {
             const body =
               typeof result.content === 'string' ? result.content : `/${skillName} ${args}`.trim();
+            // R38: 显式调用技能成功后提示用户
+            toast.info(t('chat.skill_loaded').replace('{name}', skillName));
             onSend(body);
             setValue('');
           })

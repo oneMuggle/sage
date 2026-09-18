@@ -72,6 +72,9 @@ export function McpTab() {
   const [toolsLoading, setToolsLoading] = useState(false);
   const [toolsError, setToolsError] = useState<string | null>(null);
   const [toolBusy, setToolBusy] = useState<string | null>(null);
+  // r64: OAuth 授权（长请求；同一时刻只允许一个进行中）
+  const [authorizing, setAuthorizing] = useState<string | null>(null);
+  const [authorizeMessage, setAuthorizeMessage] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -99,6 +102,24 @@ export function McpTab() {
     } catch (e) {
       setActionError(e instanceof Error ? e.message : String(e));
       await refresh();
+    }
+  };
+
+  // r64: OAuth 授权 —— 打开浏览器等用户完成登录（后端阻塞至多 300s）
+  const handleAuthorize = async (name: string): Promise<void> => {
+    setActionError(null);
+    setAuthorizeMessage(null);
+    setAuthorizing(name);
+    try {
+      await mcpClient.authorizeServer(name);
+      setAuthorizeMessage(t('settings.mcp.authorize.success'));
+      await refresh();
+    } catch (e) {
+      setActionError(
+        `${t('settings.mcp.authorize.failed_prefix')}${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setAuthorizing(null);
     }
   };
 
@@ -255,6 +276,14 @@ export function McpTab() {
             {actionError}
           </div>
         )}
+        {authorizeMessage && (
+          <div
+            data-testid="mcp-authorize-message"
+            className="text-xs text-green-500 mb-3"
+          >
+            {authorizeMessage}
+          </div>
+        )}
 
         {servers.length === 0 && !loading ? (
           <div className="text-xs text-muted py-4 text-center">{t('settings.mcp.empty')}</div>
@@ -339,6 +368,33 @@ export function McpTab() {
                       >
                         {t('settings.mcp.delete')}
                       </button>
+                      {srv.url && (
+                        <>
+                          {(stateByKey.get(srv.name)?.has_oauth_token ?? false) && (
+                            <span
+                              data-testid={`mcp-oauth-badge-${srv.name}`}
+                              title={t('settings.mcp.authorize.badge')}
+                              className="ml-1.5 text-amber-500"
+                            >
+                              🔑
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            data-testid={`mcp-authorize-${srv.name}`}
+                            className="ml-1.5 px-2 py-0.5 text-xs rounded-radius-sm border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-50"
+                            disabled={authorizing !== null}
+                            title={t('settings.mcp.authorize.hint')}
+                            onClick={() => void handleAuthorize(srv.name)}
+                          >
+                            {authorizing === srv.name
+                              ? t('settings.mcp.authorize.authorizing')
+                              : (stateByKey.get(srv.name)?.has_oauth_token ?? false)
+                                ? t('settings.mcp.authorize.reauthorize')
+                                : t('settings.mcp.authorize.button')}
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                   {isExpanded && (

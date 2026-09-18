@@ -44,10 +44,6 @@ class TestPortBackendCheck:
         assert "空闲" in result.message
         assert check.name == "port_backend"
 
-    @pytest.mark.skipif(
-        os.name == "nt",
-        reason="端口占用探测在 Windows 语义不同（产品缺口，另行批次）",
-    )
     def test_warn_when_port_occupied(self, check):
         """When 8765 is occupied, expect WARN (orphan backend)."""
         s = _bind_8765()
@@ -64,3 +60,18 @@ class TestPortBackendCheck:
         assert check.name == "port_backend"
         assert isinstance(check.description, str)
         assert check.description
+
+
+    def test_occupied_hint_matches_platform(self, check):
+        """占用修复提示按平台分派：Windows 给 netstat/taskkill，POSIX 给 lsof。"""
+        s = _bind_8765()
+        try:
+            result = check.run()
+        finally:
+            s.close()
+        assert result.fix_hint is not None
+        if os.name == "nt":
+            assert "netstat" in result.fix_hint
+            assert "taskkill" in result.fix_hint
+        else:
+            assert "lsof" in result.fix_hint

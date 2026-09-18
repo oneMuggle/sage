@@ -36,7 +36,11 @@ from pydantic import BaseModel, Extra
 from backend.api.permission_routes import forbidden_origin_response
 from backend.api.settings_models import model_dump_compat
 from backend.data.settings_repo import SettingsRepository
-from backend.tools.credential_vault import delete_credential, list_credentials
+from backend.tools.credential_vault import (
+    delete_credential,
+    list_credentials,
+    save_header_credential,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +63,25 @@ class WebAccessConfigBody(BaseModel):
         extra = Extra.forbid
 
 
+class HeaderCredentialBody(BaseModel):
+    """POST header 凭据请求体（Round 14：凭据 UI header 型新增）。"""
+
+    domain: str
+    header_name: str
+    value: str
+
+    class Config:
+        extra = Extra.forbid
+
+
 def _origin_guard(request: Request) -> Optional[JSONResponse]:
     return forbidden_origin_response(request)
+
+
+def _metrics_snapshot() -> Dict[str, Any]:
+    from backend.tools import web_metrics
+
+    return web_metrics.snapshot()
 
 
 def _load_config_dict() -> Dict[str, Any]:
@@ -122,3 +143,42 @@ async def put_web_access_config(request: Request, body: WebAccessConfigBody) -> 
         "render_persistent": bool(data.get("render_persistent")),
         "auto_refresh_credentials": bool(data.get("auto_refresh_credentials")),
     }
+
+
+@router.post("/web-access/credentials/header")
+async def create_header_credential(request: Request, body: HeaderCredentialBody) -> Dict[str, Any]:
+    """新增 header 型凭据（Round 14：凭据 UI header 型新增入口）。
+
+    名/值校验沿用 save_header_credential（token 文法 / 禁传输头 / 拒换行）；
+    非法 → 422。Origin 守卫同全路由口径。
+    """
+    guard = _origin_guard(request)
+    if guard:
+        return guard
+    try:
+        save_header_credential(
+            body.domain.strip().lower(), {body.header_name: body.value}
+        )
+    except ValueError as exc:
+        return JSONResponse(status_code=422, content={"ok": False, "error": str(exc)[:200]})
+    return {"ok": True}
+
+
+@router.get("/web-access/metrics")
+async def get_web_metrics(request: Request) -> Dict[str, Any]:
+    """Per-host 出网指标（Round 15 X2 延伸；进程内存态，重启清零）。"""
+    guard = _origin_guard(request)
+    if guard:
+        return guard
+    return {"metrics": _metrics_snapshot()}
+
+
+@router.put("/web-access/metrics/reset")
+async def reset_web_metrics(request: Request) -> Dict[str, Any]:
+    guard = _origin_guard(request)
+    if guard:
+        return guard
+    from backend.tools import web_metrics
+
+    web_metrics.reset()
+    return {"ok": True}

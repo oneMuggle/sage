@@ -248,7 +248,14 @@ class WebSearchTool(BaseTool):
                         results = engine.search(query, limit, client=client)
                     except Exception as engine_exc:  # noqa: BLE001 — 单引擎失败降级下一引擎
                         engine_errors.append(f"{engine.name}: {engine_exc}")
+                        # R18：per-host 指标（伪域 search:<engine>）
+                        from . import web_metrics
+
+                        web_metrics.record(f"search:{engine.name}", False, 0)
                         continue
+                    from . import web_metrics
+
+                    web_metrics.record(f"search:{engine.name}", True, 0)
                     if results:
                         content = {
                             "query": query,
@@ -657,13 +664,28 @@ class WebFetchTool(BaseTool):
                 }
                 _cache_put(url, mode, storable)
             # X2：出网可观测——耗时与返回正文大小（net 块不进缓存）
+            elapsed_ms = int((time.monotonic() - _t0) * 1000)
             content["net"] = {
-                "elapsed_ms": int((time.monotonic() - _t0) * 1000),
+                "elapsed_ms": elapsed_ms,
                 "bytes": len(str(content.get("content", ""))),
             }
+            # R15 M2：per-host 指标（escalated=静态被拦经渲染重放成功的次数）
+            from . import web_metrics
+            from .web_metrics import host_from_url
+
+            web_metrics.record(
+                host_from_url(url),
+                True,
+                elapsed_ms,
+                escalated=bool(content.get("escalated")),
+            )
             content["content"] = str(content.get("content", ""))[:max_length]
             return ToolResult(success=True, content=content)
         except httpx.HTTPStatusError as e:
+            from . import web_metrics
+            from .web_metrics import host_from_url
+
+            web_metrics.record(host_from_url(url), False, int((time.monotonic() - _t0) * 1000))
             status = e.response.status_code if e.response is not None else 0
             if status in _ANTIBOT_STATUS_CODES:
                 # G1：反爬拒绝 → 明示出路（browser 通道 / 代理 / 换源），不吞成通用失败
@@ -673,11 +695,23 @@ class WebFetchTool(BaseTool):
                 )
             return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
         except httpx.HTTPError as e:
+            from . import web_metrics
+            from .web_metrics import host_from_url
+
+            web_metrics.record(host_from_url(url), False, int((time.monotonic() - _t0) * 1000))
             return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
         except RenderError as e:
+            from . import web_metrics
+            from .web_metrics import host_from_url
+
+            web_metrics.record(host_from_url(url), False, int((time.monotonic() - _t0) * 1000))
             # 渲染失败单独语义：明确指引手动路径，不吞成"获取网页失败"
             return ToolResult(success=False, error=str(e))
         except Exception as e:
+            from . import web_metrics
+            from .web_metrics import host_from_url
+
+            web_metrics.record(host_from_url(url), False, int((time.monotonic() - _t0) * 1000))
             return ToolResult(success=False, error=f"获取网页失败: {str(e)}")
 
     @staticmethod

@@ -80,8 +80,8 @@ export interface WikiSettings {
   useFolderPicker: boolean;
 }
 
-// Wave 3 P2-9 (2026-08-14): 编排执行参数（前端 UI 渲染 5 个数值；scratchRoot
-// 仅后端配置，不在此 interface —— 见 storage 层注释）。
+// Wave 3 P2-9 (2026-08-14): 编排执行参数。RD16 (round26) 起前端键集与
+// 后端 OrchSettings 完全对齐（scratchRoot 此前仅后端配置，现透出设置页）。
 export interface OrchSettings {
   maxConcurrentSubagents: number; // 4
   maxAggregateChars: number; // 120 * 1024
@@ -92,6 +92,9 @@ export interface OrchSettings {
   // ``OrchSettings.max_subagent_iterations`` 默认对齐；用户可在此调整。
   maxSubagentIterations: number; // 6
   worktreeIsolation: boolean; // false
+  // RD16 (round26): scratch 根目录名（相对 data 目录），dispatcher 与
+  // orchestration_router 的子任务 scratch 目录均落在其下。
+  scratchRoot: string; // 'orch_scratch'
   // live-events P1 (2026-09-06): 新 run 子代理审批模式默认值。
   // "ask" = 风险工具逐次审批（子代理审批请求转发前端弹窗）;
   // "auto" = 非危险工具自动批准（破坏性/可疑命令/工作区越界仍转人工）。
@@ -99,7 +102,16 @@ export interface OrchSettings {
   subagentApprovalMode: 'ask' | 'auto';
   // BU4 (round11/14): run 级 token 预算（该 run 首次派发起，本 session 累计
   // total_tokens 上限）。0 = 关闭。超限后剩余任务收口、后续派发被拒。
-  runTokenBudget: number; // 0 // 'ask'
+  runTokenBudget: number; // 0
+  // BU11 (round21): run 级墙钟上限（分钟）。0 = 关闭。与 token 预算互补——
+  // 管住"每个任务都正常但整体跑飞"的失控形态。
+  runWallClockLimitMinutes: number; // 0
+  // O2 (round8): 单个子任务 wall-clock 超时（秒）。0 = 关闭。超时任务强制
+  // 终止置 failed（error 前缀 task_timeout:），下游依赖级联收口。
+  subagentTaskTimeoutS: number; // 900
+  // RD14 (round22): retry_of 重派链上限——同一任务被连续重派超过 N 次后
+  // 拒绝再次重派，防失败计划 rerun 无限循环。
+  maxRetryOfChains: number; // 10
 }
 
 /** All application settings */
@@ -186,8 +198,12 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   maxLaneIterations: 8,
   maxSubagentIterations: 6,
   worktreeIsolation: false,
+  scratchRoot: 'orch_scratch',
   subagentApprovalMode: 'ask',
   runTokenBudget: 0,
+  runWallClockLimitMinutes: 0,
+  subagentTaskTimeoutS: 900,
+  maxRetryOfChains: 10,
 };
 
 /** Sensible defaults for all settings */

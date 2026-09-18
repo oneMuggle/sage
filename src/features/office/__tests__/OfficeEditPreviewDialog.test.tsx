@@ -434,6 +434,9 @@ describe('buildUpdateOps — op composition table', () => {
     styleColor: '',
     styleAlign: '',
     commentId: '',
+    imagePath: '',
+    imageWidth: '',
+    imageHeight: '',
     sheet: '',
     cell: '',
     value: '',
@@ -444,6 +447,10 @@ describe('buildUpdateOps — op composition table', () => {
     notesText: '',
     appendTitle: '',
     appendNotes: '',
+    pictureIndex: '1',
+    picturePath: '',
+    pictureWidth: '',
+    pictureHeight: '',
   };
 
   it('word: requires find; empty replace means delete', () => {
@@ -629,6 +636,56 @@ describe('buildUpdateOps — op composition table', () => {
         excelKind: 'set_number_format',
         sheet: 'S',
         numFormatCells: 'B2',
+      }),
+    ).toBeNull();
+  });
+
+  it('word add_image: path required, optional inch dims', () => {
+    expect(buildUpdateOps('word', { ...base, wordKind: 'add_image' })).toBeNull();
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'add_image',
+        imagePath: ' images/logo.png ',
+        imageWidth: '4',
+        imageHeight: '3',
+      }),
+    ).toEqual([{ op: 'add_image', path: 'images/logo.png', width_inches: 4, height_inches: 3 }]);
+    expect(
+      buildUpdateOps('word', {
+        ...base,
+        wordKind: 'add_image',
+        imagePath: 'images/logo.png',
+      }),
+    ).toEqual([{ op: 'add_image', path: 'images/logo.png' }]);
+  });
+
+  it('ppt add_picture: 1-based slide + path required, optional dims', () => {
+    expect(buildUpdateOps('ppt', { ...base, pptKind: 'add_picture' })).toBeNull();
+    expect(
+      buildUpdateOps('ppt', {
+        ...base,
+        pptKind: 'add_picture',
+        pictureIndex: '2',
+        picturePath: ' images/logo.png ',
+        pictureWidth: '6',
+        pictureHeight: '4.5',
+      }),
+    ).toEqual([
+      {
+        op: 'add_picture',
+        index: 1,
+        path: 'images/logo.png',
+        width_inches: 6,
+        height_inches: 4.5,
+      },
+    ]);
+    expect(
+      buildUpdateOps('ppt', {
+        ...base,
+        pptKind: 'add_picture',
+        pictureIndex: '0',
+        picturePath: 'x',
       }),
     ).toBeNull();
   });

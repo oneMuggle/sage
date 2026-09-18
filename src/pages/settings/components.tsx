@@ -21,6 +21,8 @@ export interface ToggleProps {
   value: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
+  // RD16 (round26): 可选测试锚点 —— 设置页测试用 getByTestId 定位开关。
+  testId?: string;
 }
 
 // ==================== 共用组件 ====================
@@ -37,11 +39,12 @@ export function SettingRow({ label, desc, children }: SettingRowProps) {
   );
 }
 
-export function Toggle({ value, onChange, disabled = false }: ToggleProps) {
+export function Toggle({ value, onChange, disabled = false, testId }: ToggleProps) {
   return (
     <button
       type="button"
       disabled={disabled}
+      data-testid={testId}
       className={`w-9 h-5 rounded-full relative transition-colors ${
         value ? 'bg-primary' : 'bg-border'
       }`}

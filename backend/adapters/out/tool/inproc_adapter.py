@@ -48,6 +48,7 @@ from backend.tools.permissions import (
     load_enforcer_from_settings,
 )
 from backend.tools.registry import ToolRegistry as _ToolRegistry
+from backend.utils.py_compat import to_thread
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +130,7 @@ class InprocToolAdapter:
 
         try:
             raw = await asyncio.wait_for(
-                asyncio.to_thread(tool.execute, **args),
+                to_thread(tool.execute, **args),
                 timeout=self._policy.timeout_seconds,
             )
         except TIMEOUT_EXCEPTIONS:

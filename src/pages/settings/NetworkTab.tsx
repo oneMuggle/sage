@@ -536,10 +536,27 @@ function webAccessApiUrl(path: string): string {
   return path;
 }
 
+/** 与后端 GET /api/v1/diagnostic/browser 返回形态一致（Round 14） */
+interface BrowserHealth {
+  browserFound: boolean;
+  executable: string;
+  chromeMajor: number | null;
+  uaDeclaredMajor: number | null;
+  warning: string;
+}
+
+/** 与后端 GET /api/v1/web-access/metrics 返回形态一致（Round 15/16） */
+type HostMetrics = Record<string, { ok: number; fail: number; escalated: number; avg_elapsed_ms: number | null }>;
+
 function CredentialsSection() {
   const { t } = useI18n();
   const [creds, setCreds] = useState<CredentialRecord[] | null>(null);
   const [config, setConfig] = useState<WebAccessConfig>(DEFAULT_WEB_ACCESS_CONFIG);
+  const [browser, setBrowser] = useState<BrowserHealth | null>(null);
+  const [metrics, setMetrics] = useState<HostMetrics | null>(null);
+  const [headerDomain, setHeaderDomain] = useState('');
+  const [headerName, setHeaderName] = useState('');
+  const [headerValue, setHeaderValue] = useState('');
 
   const reload = (): void => {
     fetch(webAccessApiUrl('/api/v1/web-access/credentials'))
@@ -550,6 +567,14 @@ function CredentialsSection() {
 
   useEffect(() => {
     reload();
+    fetch(webAccessApiUrl('/api/v1/diagnostic/browser'))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: BrowserHealth | null) => setBrowser(data))
+      .catch(() => setBrowser(null));
+    fetch(webAccessApiUrl('/api/v1/web-access/metrics'))
+      .then((r) => (r.ok ? r.json() : { metrics: {} }))
+      .then((data: { metrics?: HostMetrics }) => setMetrics(data.metrics ?? {}))
+      .catch(() => setMetrics({}));
     void settingsClient.getPreference('web_access_config').then((raw) => {
       if (!raw) return;
       try {
@@ -574,6 +599,19 @@ function CredentialsSection() {
     }).catch(() => undefined);
   };
 
+  const refreshMetrics = (): void => {
+    fetch(webAccessApiUrl('/api/v1/web-access/metrics'))
+      .then((r) => (r.ok ? r.json() : { metrics: {} }))
+      .then((data: { metrics?: HostMetrics }) => setMetrics(data.metrics ?? {}))
+      .catch(() => setMetrics({}));
+  };
+
+  const resetMetrics = (): void => {
+    void fetch(webAccessApiUrl('/api/v1/web-access/metrics/reset'), { method: 'PUT' })
+      .then(() => setMetrics({}))
+      .catch(() => undefined);
+  };
+
   const removeCred = (domain: string): void => {
     if (!window.confirm(t('settings.network.creds.confirm'))) return;
     void fetch(
@@ -581,6 +619,30 @@ function CredentialsSection() {
       { method: 'DELETE' },
     )
       .then(() => reload())
+      .catch(() => undefined);
+  };
+
+  const addHeaderCred = (): void => {
+    if (!headerDomain.trim() || !headerName.trim() || !headerValue.trim()) return;
+    void fetch(webAccessApiUrl('/api/v1/web-access/credentials/header'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        domain: headerDomain.trim(),
+        header_name: headerName.trim(),
+        value: headerValue,
+      }),
+    })
+      .then((r) => {
+        if (r.ok) {
+          setHeaderDomain('');
+          setHeaderName('');
+          setHeaderValue('');
+          reload();
+        } else {
+          window.alert(t('settings.network.creds.add_header.invalid'));
+        }
+      })
       .catch(() => undefined);
   };
 
@@ -615,6 +677,97 @@ function CredentialsSection() {
             </span>
           </span>
         </label>
+        {browser && (
+          <div className="text-xs text-text-secondary" data-testid="browser-health">
+            {browser.browserFound
+              ? `${t('settings.network.creds.browser')}: Chrome ${browser.chromeMajor ?? '?'}`
+              : t('settings.network.creds.browser.missing')}
+            {browser.warning && <span className="block text-error">{browser.warning}</span>}
+          </div>
+        )}
+        {metrics !== null && Object.keys(metrics).length > 0 && (
+          <div className="flex flex-col gap-1" data-testid="host-metrics">
+            <div className="flex items-center gap-2 text-xs">
+              <span>{t('settings.network.creds.metrics')}</span>
+              <button
+                type="button"
+                data-testid="metrics-refresh-btn"
+                className="px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary"
+                onClick={refreshMetrics}
+              >
+                {t('settings.network.creds.metrics.refresh')}
+              </button>
+              <button
+                type="button"
+                data-testid="metrics-reset-btn"
+                className="px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary"
+                onClick={resetMetrics}
+              >
+                {t('settings.network.creds.metrics.reset')}
+              </button>
+            </div>
+            {Object.entries(metrics).map(([host, m]) => (
+              <div key={host} data-testid={`metric-row-${host}`} className="flex items-center gap-2 text-xs">
+                <span className="font-medium">{host}</span>
+                <span className="text-text-secondary">
+                  {t('settings.network.creds.metrics.ok')}: {m.ok}
+                </span>
+                <span className="text-text-secondary">
+                  {t('settings.network.creds.metrics.fail')}: {m.fail}
+                </span>
+                {m.escalated > 0 && (
+                  <span className="text-text-secondary">
+                    {t('settings.network.creds.metrics.escalated')}: {m.escalated}
+                  </span>
+                )}
+                {m.avg_elapsed_ms !== null && (
+                  <span className="text-text-secondary">
+                    {t('settings.network.creds.metrics.avg')}: {m.avg_elapsed_ms}ms
+                  </span>
+                )}
+              </div>
+            ))}
+            <div className="text-text-secondary text-xs">{t('settings.network.creds.metrics.hint')}</div>
+          </div>
+        )}
+        <div className="flex flex-col gap-1" data-testid="header-cred-form">
+          <div className="text-xs">{t('settings.network.creds.add_header')}</div>
+          <div className="flex gap-1">
+            <input
+              data-testid="header-domain-input"
+              aria-label={t('settings.network.creds.add_header.domain')}
+              value={headerDomain}
+              onChange={(e) => setHeaderDomain(e.target.value)}
+              placeholder={t('settings.network.creds.add_header.domain')}
+              className="flex-1 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+            <input
+              data-testid="header-name-input"
+              aria-label={t('settings.network.creds.add_header.name')}
+              value={headerName}
+              onChange={(e) => setHeaderName(e.target.value)}
+              placeholder={t('settings.network.creds.add_header.name')}
+              className="flex-1 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+            <input
+              data-testid="header-value-input"
+              aria-label={t('settings.network.creds.add_header.value')}
+              type="password"
+              value={headerValue}
+              onChange={(e) => setHeaderValue(e.target.value)}
+              placeholder={t('settings.network.creds.add_header.value')}
+              className="flex-1 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+            <button
+              type="button"
+              data-testid="header-save-btn"
+              className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary"
+              onClick={addHeaderCred}
+            >
+              {t('settings.network.creds.add_header.save')}
+            </button>
+          </div>
+        </div>
         {creds !== null && creds.length === 0 && (
           <div className="text-xs text-text-secondary" data-testid="creds-empty">
             {t('settings.network.creds.empty')}

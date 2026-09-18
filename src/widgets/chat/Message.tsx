@@ -14,6 +14,9 @@ import {
   Check,
   BrainCircuit,
   Quote,
+  FileText,
+  Package,
+  Zap
 } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
@@ -21,7 +24,9 @@ import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 
+import type { Artifact } from '../../features/artifacts/artifactApi';
 import { MediaAttachment } from '../../features/chat/MediaAttachment';
+import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { THINKING_PLACEHOLDER } from '../../features/send-message/thinkingPlaceholder';
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
@@ -53,6 +58,9 @@ interface MessageProps {
   onQuote?: (message: MessageType) => void;
   /** P0-1: 将此条消息内容保存到长期记忆 */
   onSaveToMemory?: (message: MessageType) => void;
+  /** right-panel R1 批次 B: tool_call_id → 产物[] 映射 —— 命中的工具卡片
+   * 下渲染内联产物 chip，点击直达右侧面板产物预览（对齐 Claude） */
+  artifactsByToolCall?: Record<string, Artifact[]>;
 }
 
 /** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
@@ -349,9 +357,7 @@ function ToolCallTitle({ name, args }: { name: string; args: Record<string, unkn
  *  阈值：超过 300 字符时自动折叠，用户可手动展开查看
  */
 function ToolCallResult({ result }: { result: unknown }) {
-  const safeResult = typeof result === 'string'
-    ? result
-    : JSON.stringify(result ?? '');
+  const safeResult = typeof result === 'string' ? result : JSON.stringify(result ?? '');
   const [isExpanded, setIsExpanded] = useState(false);
   const isLarge = safeResult.length > 300;
 
@@ -392,10 +398,12 @@ function MessageComponent({
   onDelete,
   onQuote,
   onSaveToMemory,
+  artifactsByToolCall,
 }: MessageProps) {
   const { t } = useI18n();
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
+  const isSystem = message.role === 'system';
   const isError = message.content?.startsWith('[错误') ?? false;
   // 2026-09-13 P0: 首个 token 到达前 content 是哨兵占位值 — 渲染 shimmer
   // 骨架而非把 "🤔 思考中…" 当 markdown 静态文本展示。agent 中间态文案
@@ -406,6 +414,7 @@ function MessageComponent({
   // tool_calls / reasoning_content。气泡只在有内容时渲染;其他部件
   // (ThinkingPanel / tool_calls) 始终渲染,确保中间步骤不会"空泡"。
   const showBubble = isUser || (isAssistant && Boolean((message.content ?? '').trim()));
+
   // P1 流式分块: 已确定前缀切稳定块（memo 化跳过重解析），只有 live 尾块
   // 随 delta 全量 re-parse；非流式整体单块渲染，DOM 与旧实现一致。
   const displayContent = useMemo(
@@ -458,6 +467,22 @@ function MessageComponent({
   // R17-E: 记忆召回明细展开态
   const [memoryExpanded, setMemoryExpanded] = useState(false);
   const memoryRefs = message.memory_refs ?? [];
+  // R38: 技能激活明细展开态
+  const [skillsExpanded, setSkillsExpanded] = useState(false);
+  const activatedSkills = message.activated_skills ?? [];
+
+  // R38: 系统消息（如压缩通知）居中渲染，无头像/气泡
+  // 必须在所有 Hooks 之后 return，否则违反 React Hooks 规则
+  if (isSystem && message.compact_info) {
+    return (
+      <div className="flex justify-center my-3">
+        <div className="px-3 py-1.5 rounded-radius-sm bg-bg-subtle border border-border text-xs text-text-secondary flex items-center gap-1.5">
+          <Package className="w-3 h-3 text-muted" />
+          <span>{message.content}</span>
+        </div>
+      </div>
+    );
+  }
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content);
@@ -543,6 +568,26 @@ function MessageComponent({
                       <ToolCallResult result={tc.result} />
                     </div>
                   )}
+                  {/* right-panel R1 批次 B: 该工具调用落库的产物 chip ——
+                      点击直达右侧面板产物预览（selectArtifact：开面板+切产物Tab+选中） */}
+                  {tc.id && artifactsByToolCall?.[tc.id]?.length ? (
+                    <div className="flex flex-wrap gap-1 px-2 pb-1.5">
+                      {artifactsByToolCall[tc.id].map((art) => (
+                        <button
+                          key={art.id}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-[11px] text-primary transition-colors"
+                          onClick={() =>
+                            useRightPanelStore.getState().selectArtifact(art.id)
+                          }
+                          title="在右侧面板中查看"
+                          data-testid="message-artifact-chip"
+                        >
+                          <FileText className="w-3 h-3 shrink-0" />
+                          <span className="truncate max-w-48">{art.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   {/* Inline image preview for diagram tools */}
                   {hasImage && (
                     <div className="px-2 pb-2">
@@ -630,6 +675,22 @@ function MessageComponent({
               />
             </button>
           )}
+          {/* R38: 技能激活展示 */}
+          {activatedSkills.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSkillsExpanded((v) => !v)}
+              className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400 hover:underline"
+              title={t('chat.skills_toggle')}
+              data-testid="skill-activated-toggle"
+            >
+              <Zap className="w-3 h-3" />
+              {activatedSkills.length} {t('chat.skills_activated')}
+              <ChevronDown
+                className={`w-3 h-3 transition-transform ${skillsExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+          )}
           <span>
             {new Date(message.created_at).toLocaleTimeString([], {
               hour: '2-digit',
@@ -650,6 +711,23 @@ function MessageComponent({
                   {ref.memory_type}
                 </span>
                 <span className="text-text-secondary break-all">{ref.preview}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* R38: 技能激活明细（skill_activated 流事件携带，可展开） */}
+        {skillsExpanded && activatedSkills.length > 0 && (
+          <div
+            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-1"
+            data-testid="skill-activated-list"
+          >
+            {activatedSkills.map((skill) => (
+              <div key={skill.name} className="flex items-start gap-1.5">
+                <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
+                  技能
+                </span>
+                <span className="text-text-secondary break-all">{skill.name}</span>
               </div>
             ))}
           </div>
@@ -778,6 +856,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.onRegenerate === next.onRegenerate &&
     prev.onDelete === next.onDelete &&
     prev.onQuote === next.onQuote &&
-    prev.onSaveToMemory === next.onSaveToMemory
+    prev.onSaveToMemory === next.onSaveToMemory &&
+    prev.artifactsByToolCall === next.artifactsByToolCall
   );
 });

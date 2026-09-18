@@ -12,7 +12,6 @@ from typing import Any, Callable, Dict, List, Optional
 
 from backend.data.database import get_database
 
-
 # S7 (2026-09-06): 产物事件监听器 —— record_artifact 成功后广播事件，
 # 让活跃 chat 流把 `artifact_created` 推给前端（右侧面板事件驱动刷新 +
 # 侧栏产物徽章）。与 tools/todo_state 的 add_todo_listener 同模式：
@@ -58,7 +57,7 @@ class Artifact:
     tool_call_id: Optional[str] = None
 
     @classmethod
-    def from_row(cls, row) -> "Artifact":
+    def from_row(cls, row) -> Artifact:
         return cls(
             id=row["id"],
             session_id=row["session_id"],

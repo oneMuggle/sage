@@ -29,6 +29,18 @@ from backend.core.legacy.llm_client import LLMClient, LLMConfig
 pytestmark = [pytest.mark.unit]
 
 
+@pytest.fixture(autouse=True)
+def _fast_llm_retry_backoff(monkeypatch):
+    """429/rate_limit 路径的退避（封顶 15s + 指数基数）在本文件的
+    rate_limit/server_error 用例里是纯等待；断言的是错误映射与解析
+    分支，不涉退避时长。压到近零后重试路径仍被真实执行。
+    见 test_llm_client_errors._fast_llm_retry_backoff。"""
+    monkeypatch.setattr(
+        "backend.core.legacy.llm_client._LLM_RETRY_MAX_DELAY_S", 0.01
+    )
+    monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "0.01")
+
+
 def _make_config(**overrides) -> LLMConfig:
     """构造测试用 LLMConfig（与 P0 mock fixture 的 base_url 对齐）。
 
@@ -654,8 +666,8 @@ async def test_use_proxy_false_bypasses_proxy(monkeypatch):
         with pytest.raises(RuntimeError, match="STOP_AT_INIT"):
             await client.chat([{"role": "user", "content": "hi"}])
 
-    # 直连上游,base_url 应该是用户填的真实 URL
-    assert captured["base_url"] == "https://api.example.com/"
+    # 直连上游,base_url 应该是用户填的真实 URL（r69: 规范化去尾斜杠）
+    assert captured["base_url"] == "https://api.example.com"
     # 不应发 X-LLM-Provider-Url(因为没走 proxy)
     assert "X-LLM-Provider-Url" not in captured["init_headers"]
     # 直连上游也不得携带本地 proxy capability

@@ -36,6 +36,27 @@ def _install_fake_deps(monkeypatch: pytest.MonkeyPatch, recognized: str) -> None
         return recognized
 
     pytesseract_mod.image_to_string = image_to_string
+
+    def get_languages(config=""):  # noqa: ANN001
+        return ["chi_sim", "eng"]
+
+    pytesseract_mod.get_languages = get_languages
+
+    class _Output:
+        DICT = "dict"
+
+    pytesseract_mod.Output = _Output
+
+    def image_to_data(img, lang=None, output_type=None):  # noqa: ANN001
+        return {
+            "text": ["OCR", "噪声", "识别文本"],
+            "conf": [95, 10, 88],
+            "block_num": [1, 1, 1],
+            "par_num": [1, 1, 2],
+            "line_num": [1, 1, 1],
+        }
+
+    pytesseract_mod.image_to_data = image_to_data
     monkeypatch.setitem(sys.modules, "pytesseract", pytesseract_mod)
 
     pil_mod = types.ModuleType("PIL")
@@ -59,6 +80,7 @@ def _install_fake_deps(monkeypatch: pytest.MonkeyPatch, recognized: str) -> None
 @pytest.fixture(name="ocr_enabled")
 def _ocr_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SAGE_OCR", "1")
+    monkeypatch.setenv("SAGE_OCR_MIN_CONFIDENCE", "40")
     _install_fake_deps(monkeypatch, "OCR 识别文本")
 
 
@@ -87,7 +109,10 @@ def test_missing_deps_passes_through(monkeypatch) -> None:
 def test_blank_page_ocr_recognizes(ocr_enabled) -> None:
     from backend.office.ocr import ocr_page_if_needed
 
-    assert ocr_page_if_needed(_FakePage(), "  ") == "OCR 识别文本"
+    text = ocr_page_if_needed(_FakePage(), "  ")
+    assert "OCR" in text
+    assert "识别文本" in text
+    assert "噪声" not in text  # conf=10 的词被置信度过滤
 
 
 def test_is_ocr_enabled_env(monkeypatch) -> None:
@@ -135,6 +160,68 @@ def test_read_pdf_without_ocr_marks_false(tmp_path, monkeypatch) -> None:
 
     result = read_pdf(pdf_path, workspace_path=str(tmp_path))
     assert all(p.ocr is False for p in result.pages)
+
+
+def test_confidence_filter_drops_low_confidence_words(ocr_enabled) -> None:
+    """P4-B: image_to_data 通道 conf<40 的词被过滤（噪声"噪声"不出现）。"""
+    from backend.office.ocr import ocr_page_if_needed
+
+    text = ocr_page_if_needed(_FakePage(), "")
+    assert text is not None
+    assert "OCR" in text
+    assert "识别文本" in text
+    assert "噪声" not in text
+
+
+def test_confidence_filter_disabled_by_zero_threshold(
+    ocr_enabled, monkeypatch
+) -> None:
+    """SAGE_OCR_MIN_CONFIDENCE=0 → 走 image_to_string 通道（不过滤）。"""
+    monkeypatch.setenv("SAGE_OCR_MIN_CONFIDENCE", "0")
+    from backend.office.ocr import ocr_page_if_needed
+
+    text = ocr_page_if_needed(_FakePage(), "")
+    assert text == "OCR 识别文本"
+
+
+def test_ocr_languages_listing(ocr_enabled) -> None:
+    from backend.office.ocr import ocr_languages
+
+    assert ocr_languages() == ["chi_sim", "eng"]
+
+
+def test_lang_fallback_to_installed(ocr_enabled, monkeypatch) -> None:
+    """P4-B: 请求语言全部未装 → 回退 eng。"""
+    from backend.office import ocr as ocr_mod
+
+    monkeypatch.setenv("SAGE_OCR_LANG", "jpn+kor")
+    assert ocr_mod._resolve_lang_with_fallback(_fake_pytesseract()) == "eng"
+
+
+def test_lang_keeps_installed_subset(ocr_enabled, monkeypatch) -> None:
+    from backend.office import ocr as ocr_mod
+
+    monkeypatch.setenv("SAGE_OCR_LANG", "eng+jpn")
+    assert ocr_mod._resolve_lang_with_fallback(_fake_pytesseract()) == "eng"
+
+
+def _fake_pytesseract():
+    mod = types.ModuleType("pytesseract")
+
+    def get_languages(config=""):  # noqa: ANN001
+        return ["chi_sim", "eng"]
+
+    mod.get_languages = get_languages
+    return mod
+
+
+def test_capabilities_reports_languages(monkeypatch) -> None:
+    from backend.office import capabilities
+
+    _install_fake_deps(monkeypatch, "x")
+    monkeypatch.setenv("SAGE_OCR", "1")
+    caps = capabilities.probe_capabilities(force=True)
+    assert caps.ocr_languages == ["chi_sim", "eng"]
 
 
 def test_capabilities_reports_ocr(monkeypatch) -> None:

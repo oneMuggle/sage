@@ -92,6 +92,8 @@ def test_body_documents_full_pipeline_tools() -> None:
         assert tool in report.body, f"report-writing 正文缺 {tool}"
     assert "office_parse_bibtex" in paper.body
     assert "office_update" in report.body
+    # Round 39 目录真页码：交付前刷新 TOC 域为真页码的可选通道。
+    assert "office_refresh_toc" in report.body
 
 
 # ──────────────────────────────────────────────────────────────────────

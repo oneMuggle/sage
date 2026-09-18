@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from backend.mcp.client import McpClientError
 from backend.mcp.config import McpConfigError, ServerConfig, validate_server_config
+from backend.mcp.oauth_store import get_oauth_token_store
 from backend.mcp.pool import McpServerPool, get_pool
 
 logger = logging.getLogger(__name__)
@@ -121,7 +122,13 @@ def _pool() -> McpServerPool:
 def mcp_status() -> Dict[str, Any]:
     """Status report across all configured servers. Always 200 — state
     travels in the body (degraded mode is not an HTTP error)."""
-    return _pool().status_report().to_dict()
+    report = _pool().status_report().to_dict()
+    # r65: OAuth 授权状态可见化（不透出 token 本体）
+    store = get_oauth_token_store()
+    for entry in report.get("servers", []):
+        if isinstance(entry, dict):
+            entry["has_oauth_token"] = store.has(str(entry.get("name", "")))
+    return report
 
 
 @router.get("/mcp/servers")
@@ -131,9 +138,13 @@ def list_mcp_servers() -> Dict[str, Any]:
 
     pool = _pool()
     builtins = set(builtin_names())
-    servers = [
-        _config_to_dict(c, builtin=c.name in builtins) for c in pool.effective_configs()
-    ]
+    store = get_oauth_token_store()
+    servers = []
+    for c in pool.effective_configs():
+        data = _config_to_dict(c, builtin=c.name in builtins)
+        # r65: OAuth 授权状态可见化（不透出 token 本体）
+        data["has_oauth_token"] = store.has(c.name)
+        servers.append(data)
     return {"servers": servers}
 
 
@@ -219,6 +230,75 @@ def list_mcp_server_tools(name: str) -> Dict[str, Any]:
     }
 
 
+@router.post("/mcp/servers/{name}/authorize")
+def authorize_mcp_server(name: str) -> Dict[str, Any]:
+    """r64: HTTP 传输 MCP 服务器的 OAuth 授权收口（切片 1-3b 组合）。
+
+    同步路由（线程池执行）——阻塞等待用户在浏览器完成登录属预期
+    （上限 300s）。流程：loopback 回听拿 redirect_uri → webbrowser.open
+    拉起授权页 → 回调捕获 → 动态注册 + code 交换 → TokenRecord 入库
+    （切片 2 的 Authorization 注入/过期刷新即刻生效）。响应不回传
+    token 本体。
+    """
+    import asyncio
+    import time
+    import webbrowser
+
+    import httpx
+
+    from backend.mcp.oauth_loopback import authorize_mcp_server_with_loopback
+    from backend.mcp.oauth_store import get_oauth_token_store
+
+    pool = _pool()
+    config = next((c for c in pool.effective_configs() if c.name == name), None)
+    if config is None:
+        raise HTTPException(status_code=404, detail=f"unknown MCP server: {name}")
+    if not config.url:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"服务器 {name} 不是 HTTP 传输（stdio 无需 OAuth）"},
+        )
+
+    async def _get_json(url: str) -> Any:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            return resp.json()
+
+    async def _post_json(url: str, headers: Dict[str, str], body: Dict[str, Any]) -> Any:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, headers=headers, json=body)
+            resp.raise_for_status()
+            return resp.json()
+
+    started = time.time()
+    try:
+        record = asyncio.run(
+            authorize_mcp_server_with_loopback(
+                config.url,
+                http_get_json=_get_json,
+                http_post_json=_post_json,
+                open_url=webbrowser.open,
+                callback_timeout=300.0,
+            )
+        )
+    except Exception as exc:
+        logger.warning("[MCP:%s] OAuth 授权失败: %s", name, exc)
+        return JSONResponse(status_code=400, content={"error": f"授权失败: {exc}"})
+
+    record.server_name = name
+    get_oauth_token_store().save(record)
+    logger.info(
+        "[MCP:%s] OAuth 授权完成 (%.0fs)", name, time.time() - started
+    )
+    return {
+        "ok": True,
+        "server": name,
+        "token_type": record.token_type,
+        "expires_at": record.expires_at,
+    }
+
+
 @router.delete("/mcp/servers/{name}")
 def delete_mcp_server(name: str) -> Dict[str, Any]:
     """Remove a user server entry + unregister its tools.
@@ -234,4 +314,9 @@ def delete_mcp_server(name: str) -> Dict[str, Any]:
     except OSError as exc:
         logger.error("MCP config persistence failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"config save failed: {exc}")
+    # r65: 删除服务器顺带清理 OAuth token（不留孤儿凭据）
+    try:
+        get_oauth_token_store().delete(name)
+    except OSError as exc:
+        logger.warning("[MCP:%s] OAuth token 清理失败: %s", name, exc)
     return {"ok": True, "name": name}
