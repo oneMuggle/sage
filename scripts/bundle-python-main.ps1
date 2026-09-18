@@ -209,8 +209,10 @@ if ($ProtectCode) {
   & $PythonExe -m compileall -b $BackendDir
   if ($LASTEXITCODE -ne 0) { throw "compileall for backend failed with exit code $LASTEXITCODE" }
 
-  # Strip .py files except main.py (keeps minimal entry point transparent to launcher)
-  Get-ChildItem -Path $BackendDir -Recurse -Filter "*.py" | Where-Object { $_.Name -ne "main.py" } | Remove-Item -Force
+  # Only the top-level entry point stays readable. Matching on Name alone would
+  # spare any nested main.py anywhere in the tree.
+  $EntryPoint = Join-Path $BackendDir "main.py"
+  Get-ChildItem -Path $BackendDir -Recurse -Filter "*.py" | Where-Object { $_.FullName -ne $EntryPoint } | Remove-Item -Force
   Write-Host "🛡️ Backend source stripping complete." -ForegroundColor Green
 }
 
@@ -281,9 +283,13 @@ if (Test-Path $SageCoreSource) {
     Get-ChildItem -Path $SageCorePkgDest -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
     if ($ProtectCode) {
-      # In protected mode, strip .py files (keeping only compiled extensions and __init__.py)
+      # Keep only compiled extensions + package markers.
+      # .py — every module except the package marker.
       Get-ChildItem -Path $SageCorePkgDest -Recurse -Filter "*.py" | Where-Object { $_.Name -ne "__init__.py" } | Remove-Item -Force
-      Write-Host "🛡️ Stripped sage_core .py source from site-packages (kept compiled binaries and __init__.py)." -ForegroundColor Green
+      # Cython intermediates — the generated .c carries the translated
+      # function bodies and .pyx is the original typed source.
+      Get-ChildItem -Path $SageCorePkgDest -Recurse -Include "*.c", "*.pyx" | Remove-Item -Force
+      Write-Host "🛡️ Stripped sage_core source (.py/.c/.pyx) from site-packages (kept .pyd + __init__.py)." -ForegroundColor Green
     }
   } else {
     Write-Host "WARNING: $SageCorePkgSource not found; sage_core will not be importable." -ForegroundColor Yellow
@@ -322,7 +328,17 @@ Write-Host ""
 # diagnose. An explicit `import sage_core` canary fails fast on the
 # specific missing module so the bundle-time error message is precise.
 Write-Host "Testing Python imports (backend.main + sage_core canary)..." -ForegroundColor Green
-$verifyOutput = & $PythonExe -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import sage_core; from sage_core.entities import AgentDecision; import backend.main; print('All critical imports successful (backend.main + sage_core OK)')" 2>&1
+$verifyCode = "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import sage_core; from sage_core.entities import AgentDecision; import backend.main; print('All critical imports successful (backend.main + sage_core OK)')"
+
+if ($ProtectCode) {
+  # Assert the compiled extension is what actually loaded. A stale editable
+  # .pth copied over from full Python's site-packages could otherwise satisfy
+  # `import sage_core` from source and hide a failed Cython build.
+  # NOTE: single-quoted so PowerShell leaves the Python `$_probe` alone.
+  $verifyCode += '; import sage_core.entities.agent as _probe; assert _probe.__file__.endswith(".pyd"), "sage_core.entities.agent loaded from " + _probe.__file__; print("Protected canary OK: " + _probe.__file__)'
+}
+
+$verifyOutput = & $PythonExe -c $verifyCode 2>&1
 $verifyExit = $LASTEXITCODE
 Write-Host $verifyOutput
 if ($verifyExit -ne 0) {

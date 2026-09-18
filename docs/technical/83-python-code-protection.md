@@ -53,6 +53,8 @@
 
 ## 5. 本地验证与排错
 
+> 脚本名按分支取用：`main` 用 `scripts/bundle-python-main.ps1`，`release/win7` 用 `scripts/bundle-python.ps1`。以下示例以 main 为例。
+
 ### 验证快速模式（开发默认）
 ```powershell
 pwsh scripts/bundle-python-main.ps1
