@@ -137,6 +137,8 @@ export const zhSettingsUi = {
   'settings.endpoints.result.model': '模型(高级):',
   'settings.endpoints.result.protocol': '协议:',
   'settings.endpoints.result.quantization': '量化:',
+  'settings.endpoints.result.quota_budget': '预算: ${usd}/月',
+  'settings.endpoints.result.quota_tokens': '限额: {tokens} tokens/日',
   'settings.endpoints.save': '保存',
   'settings.endpoints.test_connection': '测试连接',
   'settings.endpoints.testing': '测试中...',

@@ -143,6 +143,8 @@ export const enSettingsUi = {
   'settings.endpoints.result.model': 'Model (advanced):',
   'settings.endpoints.result.protocol': 'Protocol:',
   'settings.endpoints.result.quantization': 'Quantization:',
+  'settings.endpoints.result.quota_budget': 'Budget: ${usd}/month',
+  'settings.endpoints.result.quota_tokens': 'Quota: {tokens} tokens/day',
   'settings.endpoints.save': 'Save',
   'settings.endpoints.test_connection': 'Test connection',
   'settings.endpoints.testing': 'Testing...',
