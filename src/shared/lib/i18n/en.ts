@@ -193,7 +193,8 @@ export const en: Record<TranslationKey, string> = {
   'settings.network.creds.delete': 'Delete',
   'settings.network.creds.expired': 'expired',
   'settings.network.creds.browser': 'Browser',
-  'settings.network.creds.browser.missing': 'No usable browser found (JS render & browser channels unavailable)',
+  'settings.network.creds.browser.missing':
+    'No usable browser found (JS render & browser channels unavailable)',
   'settings.network.creds.add_header': 'Add header credential (Bearer / API key)',
   'settings.network.creds.add_header.domain': 'Domain (e.g. .api.example.com)',
   'settings.network.creds.add_header.name': 'Header name (e.g. Authorization)',
@@ -313,7 +314,8 @@ export const en: Record<TranslationKey, string> = {
   'settings.mcp.tools.disabled_tag': 'Disabled',
   'settings.mcp.authorize.button': 'Authorize',
   'settings.mcp.authorize.authorizing': 'Authorizing…',
-  'settings.mcp.authorize.success': 'OAuth authorization complete; tool calls now carry the new credentials.',
+  'settings.mcp.authorize.success':
+    'OAuth authorization complete; tool calls now carry the new credentials.',
   'settings.mcp.authorize.failed_prefix': 'Authorization failed: ',
   'settings.mcp.authorize.hint': 'Open the browser to finish OAuth login (HTTP transport only)',
   'settings.mcp.authorize.badge': 'OAuth authorized',
@@ -446,7 +448,8 @@ export const en: Record<TranslationKey, string> = {
   'sider.project.overview_description': 'Project Description',
   'sider.project.overview_description_placeholder': 'Brief description of project goals…',
   'sider.project.overview_instructions': 'Project Instructions',
-  'sider.project.overview_instructions_placeholder': 'Custom instructions injected into prompts for this project…',
+  'sider.project.overview_instructions_placeholder':
+    'Custom instructions injected into prompts for this project…',
   'sider.project.materials_title': 'Project Materials',
   'sider.project.save_answer_title': 'Save current answer as material',
   'sider.project.save_answer': 'Save current answer',
@@ -455,7 +458,8 @@ export const en: Record<TranslationKey, string> = {
   'sider.project.material_direct': 'Manual entry',
   'sider.project.material_remove': 'Remove material',
   'sider.project.materials_empty': 'No materials yet. Add below or save an answer.',
-  'sider.project.material_input_placeholder': 'Enter key context, reference material, or conventions…',
+  'sider.project.material_input_placeholder':
+    'Enter key context, reference material, or conventions…',
   'sider.project.material_add': 'Add Material',
   'sider.project.material_status_ready': 'Ready',
   'sider.project.material_status_pending': 'Processing',

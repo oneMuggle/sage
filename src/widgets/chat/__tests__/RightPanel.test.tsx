@@ -121,9 +121,7 @@ describe('RightPanel', () => {
     });
 
     it('selected artifact resolves to detail view, back clears selection', async () => {
-      const { useArtifactContent } = await import(
-        '../../../features/artifacts/useArtifactContent'
-      );
+      const { useArtifactContent } = await import('../../../features/artifacts/useArtifactContent');
       vi.mocked(useArtifactContent).mockReturnValue({
         content: { ok: true, kind: 'markdown', content: '# Hello' },
         loading: false,
@@ -189,9 +187,7 @@ describe('RightPanel', () => {
   describe('right-panel R1 批次 B: 产物自动唤起开关', () => {
     it('bell toggle only on artifacts tab, flips localStorage flag', () => {
       render(<RightPanel {...props} />);
-      expect(
-        screen.queryByTestId('right-panel-auto-open-toggle'),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId('right-panel-auto-open-toggle')).not.toBeInTheDocument();
       fireEvent.click(screen.getByText('产物'));
       const bell = screen.getByTestId('right-panel-auto-open-toggle');
       expect(bell).toBeInTheDocument();
