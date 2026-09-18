@@ -3019,7 +3019,45 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 request_endpoint_id=data.endpoint_id,
                 auto_context=data.auto_context,
             )
-            l9_budget = history_token_budget(effective_window=effective_window)
+            # 上下文明细改造: reserve 不再硬编码 16384——本轮非历史开销
+            # (system/附件/动态上下文/当前输入/工具 schema) 按实际大小实测,
+            # 另加输出预算 (LLMConfig.max_tokens 默认 4096)。测量失败或
+            # 窗口未知时回退旧默认口径,绝不阻断聊天。
+            l9_reserve: Optional[int] = None
+            try:
+                if effective_window:
+                    from backend.chat.context_breakdown import measure_request_reserve
+
+                    l9_trailing = (
+                        "\n\n".join(dynamic_context_parts)
+                        if dynamic_context_parts
+                        else None
+                    )
+                    l9_user_content: Any = data.message
+                    if data.images:
+                        l9_user_content = [
+                            {"type": "text", "text": data.message},
+                            *[
+                                {"type": "image_url", "image_url": {"url": image_url}}
+                                for image_url in data.images
+                            ],
+                        ]
+                    l9_reserve = measure_request_reserve(
+                        system_content,
+                        attachment_block=attachment_block or None,
+                        trailing_system=l9_trailing,
+                        user_content=l9_user_content,
+                        tools=agent.get_available_tools(),
+                    )
+            except Exception as reserve_err:  # noqa: BLE001 — 实测失败回退默认
+                logger.debug(
+                    f"[REQ {request_id}] 预留位实测失败(回退默认 16384): {reserve_err}"
+                )
+                l9_reserve = None
+            l9_budget = history_token_budget(
+                effective_window=effective_window,
+                reserve=l9_reserve if l9_reserve is not None else 16384,
+            )
             messages, omitted_history = build_request_messages(
                 system_content=system_content,
                 user_text=data.message,

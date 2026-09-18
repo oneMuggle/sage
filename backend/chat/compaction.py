@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any, Awaitable, Callable, List, Optional, Sequence, Tuple
@@ -78,6 +79,13 @@ def _msg_content(message: MessageLike) -> str:
 # ---- 核心 API ---------------------------------------------------------------
 
 
+def _msg_tool_calls(message: MessageLike) -> Any:
+    """统一读取 dict / Message 对象的 tool_calls 字段（无则 None）。"""
+    if isinstance(message, dict):
+        return message.get("tool_calls")
+    return getattr(message, "tool_calls", None)
+
+
 def estimate_messages_tokens(messages: Sequence[MessageLike]) -> int:
     """估算消息列表的总 token 数。
 
@@ -89,6 +97,16 @@ def estimate_messages_tokens(messages: Sequence[MessageLike]) -> int:
     for msg in messages:
         # role 前缀本身也占 context（"[user]: " 之类），计入估算
         total += estimate_tokens(_msg_role(msg) + _msg_content(msg))
+        # assistant 的 tool_calls 参数同样进 prompt 占 context——旧口径
+        # 漏算导致压缩/截断阈值对含工具往返的会话系统性低估。
+        tool_calls = _msg_tool_calls(msg)
+        if tool_calls:
+            raw = (
+                tool_calls
+                if isinstance(tool_calls, str)
+                else json.dumps(tool_calls, ensure_ascii=False, default=str)
+            )
+            total += estimate_tokens(raw)
     return total
 
 
