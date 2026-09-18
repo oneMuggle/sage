@@ -94,7 +94,7 @@ class FileMutationQueue:
             Exception: 操作执行时的异常
         """
         # 创建 Future 用于等待结果
-        future = asyncio.get_event_loop().create_future()
+        future = asyncio.get_running_loop().create_future()
 
         # 将操作和 Future 加入队列
         await self._queue.put((operation, future))
