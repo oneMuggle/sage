@@ -460,6 +460,7 @@ _VALID_AGENT_ROLES = {
     "coder",
     "memory_manager",
     "writer",
+    "slide-deck-creator",
     "reviewer",
 }
 
