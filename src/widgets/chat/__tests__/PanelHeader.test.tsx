@@ -70,3 +70,29 @@ describe('PanelHeader — right-panel R2 批次 C: 产物计数徽标', () => {
     expect(screen.getByRole('button', { name: '产物' })).toBeInTheDocument();
   });
 });
+
+describe('PanelHeader — right-panel R3 批次 C: 变更计数徽标', () => {
+  it('changesCount > 0 时变更 Tab 显示 (N)', () => {
+    render(
+      <PanelHeader
+        tab="changes"
+        onTabChange={vi.fn()}
+        onClose={vi.fn()}
+        changesCount={4}
+      />,
+    );
+    expect(screen.getByRole('button', { name: '变更 (4)' })).toBeInTheDocument();
+  });
+
+  it('changesCount 为 0 时不显示计数', () => {
+    render(
+      <PanelHeader
+        tab="changes"
+        onTabChange={vi.fn()}
+        onClose={vi.fn()}
+        changesCount={0}
+      />,
+    );
+    expect(screen.getByRole('button', { name: '变更' })).toBeInTheDocument();
+  });
+});

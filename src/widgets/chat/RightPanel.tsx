@@ -5,6 +5,7 @@ import { memo, useEffect, useState } from 'react';
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
+import { useChangesListStore } from '../../features/changes/changesListStore';
 import { useConversationOutline } from '../../features/chat/useConversationOutline';
 import {
   isArtifactAutoOpenEnabled,
@@ -77,6 +78,8 @@ interface PanelHeaderProps {
   showAutoOpenToggle?: boolean;
   /** R2 批次 C: 产物计数徽标（>0 时产物 Tab 显示 "产物 (N)"） */
   artifactCount?: number;
+  /** R3 批次 C: 变更计数徽标（>0 时变更 Tab 显示 "变更 (N)"） */
+  changesCount?: number;
 }
 
 /** 产物自动唤起开关（就地读写 localStorage；事件侧 isArtifactAutoOpenEnabled 同源） */
@@ -112,6 +115,7 @@ export function PanelHeader({
   onApplyPreset,
   showAutoOpenToggle,
   artifactCount = 0,
+  changesCount = 0,
 }: PanelHeaderProps) {
   // 宽度档位（三档小按钮；未提供回调时隐藏）
   const presets = onApplyPreset
@@ -174,7 +178,9 @@ export function PanelHeader({
           >
             {t === 'artifacts' && artifactCount > 0
               ? `${TAB_LABELS[t]} (${artifactCount})`
-              : TAB_LABELS[t]}
+              : t === 'changes' && changesCount > 0
+                ? `${TAB_LABELS[t]} (${changesCount})`
+                : TAB_LABELS[t]}
           </button>
         ))}
         <div className="flex items-center gap-0.5 ml-1 shrink-0">
@@ -218,6 +224,13 @@ function RightPanelInner({
   const setMaximized = useRightPanelStore((s) => s.setMaximized);
   const { artifacts, loading, refresh } = useArtifacts(sessionId);
   const { items: outlineItems, isLoading: outlineLoading } = useConversationOutline(sessionId);
+  // R3 批次 C: 变更计数徽标（changesListStore 缓存，ChangesSection 拉取后
+  // 这里同步可读；工作区干净/未拉取时不显示计数）
+  const changesCount = useChangesListStore((s) => {
+    if (!sessionId) return 0;
+    const c = s.bySession[sessionId];
+    return c && !c.clean ? c.changes.length : 0;
+  });
   // P0-3 (UI 优化方案 2026-09-12): 面板宽度可调 —— 拖拽左边缘手柄，
   // 持久化到 localStorage（范围 280~600，默认 320）。
   // 批次 D: applyWidth 供档位按钮/双击重置/键盘调整（clamp + 立即持久化）。
@@ -314,6 +327,7 @@ function RightPanelInner({
           onApplyPreset={applyWidth}
           showAutoOpenToggle={tab === 'artifacts'}
           artifactCount={sessionId ? artifacts.length : 0}
+          changesCount={changesCount}
         />
       )}
 
