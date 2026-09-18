@@ -342,13 +342,21 @@ def test_run_trace_resolver_invoked_on_ws_frame():
     """process_event must hand off WS frame payloads to the resolver."""
     import base64
     import json as _json
+    import time
 
     from backend.services.run_trace_resolver import RunTraceResolver
 
-    # Build a test JWT with run claim (3 parts: header.payload.signature)
+    # Build a test JWT with run claim + required validation claims
     header_b64 = base64.urlsafe_b64encode(b'{"alg":"RS256"}').rstrip(b"=").decode()
     payload_b64 = base64.urlsafe_b64encode(
-        _json.dumps({"run": "run_test_ws", "type": "run"}).encode()
+        _json.dumps({
+            "run": "run_test_ws",
+            "type": "run",
+            "iss": "https://id.trigger.dev",
+            "aud": "https://api.trigger.dev",
+            "exp": int(time.time()) + 3600,
+            "pub": True,
+        }).encode()
     ).rstrip(b"=").decode()
     token = f"{header_b64}.{payload_b64}.FAKE_SIG"
 

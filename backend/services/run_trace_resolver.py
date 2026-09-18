@@ -19,6 +19,8 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
+import time as _time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
@@ -33,6 +35,8 @@ class RunTraceEvidence:
     weight: float = 1.00
     source: str = "run.trace.model"
     provider: str = ""
+    tokens: Optional[int] = None
+    cost_usd: Optional[float] = None
 
 
 def _strip_sse_prefix(payload: str) -> str:
@@ -123,19 +127,114 @@ def extract_run_id_from_claims(claims: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+#: Expected JWT issuer for Trigger.dev public-access-tokens
+_TRIGGER_ISSUER = "https://id.trigger.dev"
+
+#: Expected JWT audience for Trigger.dev public-access-tokens
+_TRIGGER_AUDIENCE = "https://api.trigger.dev"
+
+
+def validate_jwt_claims(claims: Dict[str, Any]) -> bool:
+    """Validate JWT claims from a Trigger.dev public-access-token.
+
+    Checks:
+    - iss == "https://id.trigger.dev"
+    - aud == "https://api.trigger.dev" (if present)
+    - exp > current time (not expired)
+    - pub == True (public access token marker)
+
+    Returns True if all checks pass, False otherwise.
+    """
+    if not isinstance(claims, dict):
+        return False
+
+    # Issuer check (required)
+    iss = claims.get("iss")
+    if iss != _TRIGGER_ISSUER:
+        logger.debug("JWT issuer mismatch: %r", iss)
+        return False
+
+    # Audience check (optional but must match if present)
+    aud = claims.get("aud")
+    if aud is not None and aud != _TRIGGER_AUDIENCE:
+        logger.debug("JWT audience mismatch: %r", aud)
+        return False
+
+    # Expiration check (required)
+    exp = claims.get("exp")
+    if not isinstance(exp, (int, float)):
+        logger.debug("JWT missing or invalid exp claim")
+        return False
+    if exp <= _time.time():
+        logger.debug("JWT expired: exp=%s", exp)
+        return False
+
+    # Public access token marker (required)
+    pub = claims.get("pub")
+    if pub is not True:
+        logger.debug("JWT pub claim is not True: %r", pub)
+        return False
+
+    return True
+
+
+#: Pattern for token counts like "6.6k", "1.2M", "1500", "1,500"
+_TOKEN_RE = re.compile(r"^[\d,]+(?:\.\d+)?\s*([kKmMbB])?$")
+
+
+def parse_token_count(text: str) -> Optional[int]:
+    """Parse a token count string like '6.6k' or '1,500' into an integer.
+
+    Returns None if the text is not a valid token count.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return None
+    cleaned = text.strip().replace(",", "")
+    m = _TOKEN_RE.match(cleaned)
+    if not m:
+        return None
+    suffix = (m.group(1) or "").lower()
+    numeric = float(cleaned.rstrip("kKmMbB"))
+    multiplier = {"k": 1_000, "m": 1_000_000, "b": 1_000_000_000}.get(suffix, 1)
+    return int(numeric * multiplier)
+
+
+#: Pattern for cost strings like "$0.03", "$ 1.50", "0.05"
+_COST_RE = re.compile(r"^\$?\s*([\d,]+(?:\.\d+)?)$")
+
+
+def parse_cost_usd(text: str) -> Optional[float]:
+    """Parse a cost string like '$0.03' or '1.50' into a float.
+
+    Returns None if the text is not a valid cost.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return None
+    cleaned = text.strip().replace(",", "")
+    m = _COST_RE.match(cleaned)
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return None
+
+
 def extract_models_from_trace(
     trace_json: Dict[str, Any], run_id: str
-) -> List[Dict[str, str]]:
-    """Extract model + provider from Trigger.dev trace events.
+) -> List[Dict[str, Any]]:
+    """Extract model + provider + tokens + cost from Trigger.dev trace events.
 
     Looks for events with message="ai.streamText.doStream" matching runId.
     Model name comes from style.accessory.items[icon=tabler-cube].text.
     Provider comes from style.icon (format: "ai-provider-<name>").
+    Tokens come from style.accessory.items[icon=tabler-hash].text (e.g. "6.6k").
+    Cost comes from style.accessory.items[icon=tabler-currency-dollar].text.
     """
     events = trace_json.get("events") if isinstance(trace_json, dict) else None
     if not isinstance(events, list):
         return []
-    found: List[Dict[str, str]] = []
+    found: List[Dict[str, Any]] = []
     for event in events:
         if not isinstance(event, dict):
             continue
@@ -150,19 +249,32 @@ def extract_models_from_trace(
             provider = provider_icon[len("ai-provider-"):]
         accessory = style.get("accessory") or {}
         items = accessory.get("items") or []
+        tokens: Optional[int] = None
+        cost_usd: Optional[float] = None
+        models: List[str] = []
         for item in items:
             if not isinstance(item, dict):
                 continue
-            if item.get("icon") != "tabler-cube":
+            icon = item.get("icon") or ""
+            text = item.get("text")
+            if not isinstance(text, str) or not text.strip():
                 continue
-            model_text = item.get("text")
-            if isinstance(model_text, str) and model_text.strip():
-                model = model_text.strip()
-                entry: Dict[str, str] = {"model": model}
-                if provider:
-                    entry["provider"] = provider
-                if entry not in found:
-                    found.append(entry)
+            if icon == "tabler-cube":
+                models.append(text.strip())
+            elif icon == "tabler-hash":
+                tokens = parse_token_count(text)
+            elif icon == "tabler-currency-dollar":
+                cost_usd = parse_cost_usd(text)
+        for model in models:
+            entry: Dict[str, Any] = {"model": model}
+            if provider:
+                entry["provider"] = provider
+            if tokens is not None:
+                entry["tokens"] = tokens
+            if cost_usd is not None:
+                entry["cost_usd"] = cost_usd
+            if entry not in found:
+                found.append(entry)
     return found
 
 
@@ -171,16 +283,34 @@ class RunTraceResolver:
 
     The fetch of /api/runs/{id}/trace is delegated to an injected callable
     so tests can mock it without touching the network or browser.
+
+    Retry policy (per reference project background.js, 8×retry with 3s interval):
+    The trace fetch is retried up to ``max_attempts`` times on any exception
+    (connection error, HTTP 5xx, timeout). Sleep between attempts is
+    ``base_delay`` seconds (default 3.0, matching the reference project's
+    fixed interval). The resolver never raises — failures are logged and
+    silently dropped so the observation pipeline stays alive.
     """
+
+    #: Default retry count per reference project (background.js: 8 retries).
+    DEFAULT_MAX_ATTEMPTS = 8
+
+    #: Default delay between retries in seconds (reference project: 3s).
+    DEFAULT_BASE_DELAY_S = 3.0
 
     def __init__(
         self,
         fetch_trace: Callable[[str, Optional[str]], Dict[str, Any]],
         emit_evidence: Callable[[RunTraceEvidence], None],
+        *,
+        max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+        base_delay: float = DEFAULT_BASE_DELAY_S,
     ):
         self._fetch_trace = fetch_trace
         self._emit_evidence = emit_evidence
         self._last_run_id: Optional[str] = None
+        self._max_attempts = max(1, int(max_attempts))
+        self._base_delay = max(0.0, float(base_delay))
 
     def observe_sse_chunk(self, payload: str) -> None:
         """Hook called by arena_observation.process_event on WS frames.
@@ -204,14 +334,15 @@ class RunTraceResolver:
         except ValueError as exc:
             logger.debug("JWT decode failed: %s", exc)
             return
+        if not validate_jwt_claims(claims):
+            logger.debug("JWT claims validation failed, skipping token")
+            return
         run_id = extract_run_id_from_claims(claims)
         if not run_id or run_id == self._last_run_id:
             return
         self._last_run_id = run_id
-        try:
-            trace = self._fetch_trace(run_id, token)
-        except Exception as exc:
-            logger.warning("run trace fetch failed for %s: %s", run_id, exc)
+        trace = self._fetch_trace_with_retry(run_id, token)
+        if trace is None:
             return
         models = extract_models_from_trace(trace, run_id)
         for entry in models:
@@ -220,5 +351,38 @@ class RunTraceResolver:
                     model_id=entry["model"],
                     run_id=run_id,
                     provider=entry.get("provider", ""),
+                    tokens=entry.get("tokens"),
+                    cost_usd=entry.get("cost_usd"),
                 )
             )
+
+    def _fetch_trace_with_retry(
+        self, run_id: str, token: str
+    ) -> Optional[Dict[str, Any]]:
+        """Fetch the trace for ``run_id``, retrying up to ``_max_attempts``.
+
+        Retries on any exception (network error, HTTP 5xx, timeout). Sleeps
+        ``_base_delay`` seconds between attempts (fixed interval per the
+        reference project). Returns the trace dict on success, or ``None``
+        if all attempts failed. Never raises — failures are logged.
+        """
+        last_exc: Optional[BaseException] = None
+        for attempt in range(1, self._max_attempts + 1):
+            try:
+                return self._fetch_trace(run_id, token)
+            except Exception as exc:
+                last_exc = exc
+                if attempt < self._max_attempts:
+                    logger.debug(
+                        "run trace fetch attempt %d/%d failed for %s: %s; "
+                        "retrying in %.1fs",
+                        attempt, self._max_attempts, run_id, exc,
+                        self._base_delay,
+                    )
+                    if self._base_delay > 0:
+                        _time.sleep(self._base_delay)
+        logger.warning(
+            "run trace fetch failed after %d attempts for %s: %s",
+            self._max_attempts, run_id, last_exc,
+        )
+        return None
