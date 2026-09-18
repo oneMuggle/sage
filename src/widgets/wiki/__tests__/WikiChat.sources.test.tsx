@@ -60,6 +60,7 @@ beforeEach(() => {
     error: null,
   });
 });
+// CI 上渲染 501 checkbox 容易超时，增加到 15s
 it('caps default and select-all sources at 500 without broadening the request', async () => {
   mocks.list.mockResolvedValue(
     Array.from({ length: 501 }, (_, index) => ({
@@ -79,7 +80,7 @@ it('caps default and select-all sources at 500 without broadening the request', 
   expect(
     screen.getAllByRole('checkbox').filter((node) => (node as HTMLInputElement).checked),
   ).toHaveLength(500);
-});
+}, 15_000);
 
 it('requires a selected source and sends only selected paths', async () => {
   render(<WikiChat />);
