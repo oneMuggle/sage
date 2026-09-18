@@ -783,6 +783,30 @@
       "actual_reachability": "ASGI framework used by FastAPI; reachable via HTTP requests on the local backend port",
       "controls": "same as PYSEC-2026-161 (starlette 0.35.1 forced by fastapi 0.109.1, fix requires Py3.9+); local-only binding 127.0.0.1, LocalAuthMiddleware bearer token, request limits, response sanitization, quarterly review through Win7 LTS EOL 2027-12-13",
       "exception": "temporary exception pending fastapi upgrade that supports starlette 1.x on Py3.8, or Win7 LTS EOL"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-12-31",
+      "source": "pip",
+      "package": "anyio",
+      "package_version": "3.7.1",
+      "advisory": "GHSA-5p39-cfhj-2xmp",
+      "advisory_url": "https://osv.dev/vulnerability/GHSA-5p39-cfhj-2xmp",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "not reachable in product usage: anyio 3.7.1 是 Win7 LTS py3.8 兼容链 (httpx/starlette 传递依赖) 锁定的最后支持线, 两个 GHSA 的触发面 (TLS 握手异常路径 / HTTP/2 流控) 不在本产品的使用组合内; 升级 anyio>=4.3 需放弃 Python 3.8, 与 Win7 LTS EOL (2027-12-13) 冲突",
+      "controls": "Win7 LTS py3.8 依赖冻结 + 季度 pip-audit 复审; 出网仅限本地后端/用户配置的 LLM 端点; anyio 仅作为 httpx 异步内核, 不直接暴露 TLS 端点"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-12-31",
+      "source": "pip",
+      "package": "anyio",
+      "package_version": "3.7.1",
+      "advisory": "GHSA-82r6-8w77-94w6",
+      "advisory_url": "https://osv.dev/vulnerability/GHSA-82r6-8w77-94w6",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "not reachable in product usage: anyio 3.7.1 是 Win7 LTS py3.8 兼容链 (httpx/starlette 传递依赖) 锁定的最后支持线, 两个 GHSA 的触发面 (TLS 握手异常路径 / HTTP/2 流控) 不在本产品的使用组合内; 升级 anyio>=4.3 需放弃 Python 3.8, 与 Win7 LTS EOL (2027-12-13) 冲突",
+      "controls": "Win7 LTS py3.8 依赖冻结 + 季度 pip-audit 复审; 出网仅限本地后端/用户配置的 LLM 端点; anyio 仅作为 httpx 异步内核, 不直接暴露 TLS 端点"
     }
   ]
 }
