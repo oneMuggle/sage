@@ -127,6 +127,7 @@ describe('RightPanel', () => {
       vi.mocked(useArtifactContent).mockReturnValue({
         content: { ok: true, kind: 'markdown', content: '# Hello' },
         loading: false,
+        refresh: vi.fn(),
       });
       const { useArtifacts } = await import('../../../features/artifacts/useArtifacts');
       vi.mocked(useArtifacts).mockReturnValue({
