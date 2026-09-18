@@ -194,6 +194,23 @@ class WordHeaderFooterContent(BaseModel):
     has_page_number_field: bool = False
 
 
+class WordMetadataSpec(BaseModel):
+    """文档核心属性（Round 49）——Word「文件 → 信息」面板可见。
+
+    title 恒取请求 title，不在此重复；其余显式传入才写（不臆造作者）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    author: Optional[str] = Field(default=None, max_length=100)
+    subject: Optional[str] = Field(default=None, max_length=200)
+    keywords: Optional[str] = Field(
+        default=None, max_length=200, description="关键词（分号分隔）"
+    )
+    comments: Optional[str] = Field(default=None, max_length=500)
+    category: Optional[str] = Field(default=None, max_length=100)
+
+
 class OfficeWordReadResult(BaseModel):
     """Result of POST /api/v1/office/word/read."""
 
@@ -207,6 +224,9 @@ class OfficeWordReadResult(BaseModel):
     # keeps payloads produced before this field existed valid under
     # ``extra="forbid"`` (old consumers may ignore the field entirely).
     comments: List[WordCommentContent] = Field(default_factory=list)
+    # Round 51：core properties 回读（生成器 metadata 的对偶；文档无
+    # 属性时为 None）。
+    metadata: Optional[WordMetadataSpec] = None
     # Round 15：每节的页眉/页脚文本与页码域标记（生成器对偶——
     # format_spec.header/footer 写入的元素读取侧可见）。
     headers_footers: List[WordHeaderFooterContent] = Field(default_factory=list)
@@ -271,6 +291,8 @@ class OfficeExcelReadResult(BaseModel):
 
     summary: OfficeDocumentSummary
     sheets: List[ExcelSheetContent]
+    # Round 51：core properties 回读（文档无属性时为 None）。
+    metadata: Optional[WordMetadataSpec] = None
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -719,23 +741,6 @@ class WordSectionBreakSpec(BaseModel):
 
     start_paragraph: int = Field(ge=0, description="该 0-based 段落下标起进入新节")
     page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
-
-
-class WordMetadataSpec(BaseModel):
-    """文档核心属性（Round 49）——Word「文件 → 信息」面板可见。
-
-    title 恒取请求 title，不在此重复；其余显式传入才写（不臆造作者）。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    author: Optional[str] = Field(default=None, max_length=100)
-    subject: Optional[str] = Field(default=None, max_length=200)
-    keywords: Optional[str] = Field(
-        default=None, max_length=200, description="关键词（分号分隔）"
-    )
-    comments: Optional[str] = Field(default=None, max_length=500)
-    category: Optional[str] = Field(default=None, max_length=100)
 
 
 class OfficeWordGenerateRequest(BaseModel):

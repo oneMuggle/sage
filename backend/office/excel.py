@@ -512,7 +512,11 @@ def read_xlsx(
         sheet_count=len(sheets),
     )
 
-    return OfficeExcelReadResult(summary=summary, sheets=sheets)
+    return OfficeExcelReadResult(
+        summary=summary,
+        sheets=sheets,
+        metadata=_read_core_properties_metadata(wb),
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -833,6 +837,24 @@ def _apply_print_setup(writer, req) -> None:
                 )
         except Exception as exc:  # noqa: BLE001 — 单 sheet 失败不阻断
             logger_.warning("打印设置写入失败，跳过: %s (%s)", exc, sheet_spec.name)
+
+
+def _read_core_properties_metadata(wb):
+    """读 core properties 为 ExcelMetadataSpec（全空返回 None）。"""
+    from .models import ExcelMetadataSpec
+
+    props = wb.properties
+    meta = ExcelMetadataSpec(
+        author=props.creator or None,
+        subject=props.subject or None,
+        keywords=props.keywords or None,
+        comments=props.description or None,
+        category=props.category or None,
+    )
+    fields = ("author", "subject", "keywords", "comments", "category")
+    if all(getattr(meta, f) is None for f in fields):
+        return None
+    return meta
 
 
 def _apply_core_properties(wb, metadata) -> None:

@@ -177,6 +177,7 @@ from .models import (
     WordCommentContent,
     WordCommentsResult,
     WordHeaderFooterContent,
+    WordMetadataSpec,
     WordParagraphContent,
     WordTableContent,
 )
@@ -487,6 +488,22 @@ def _build_docx_summary(
     )
 
 
+def _read_core_metadata(doc: Document) -> Optional[WordMetadataSpec]:
+    """读 core properties 为 WordMetadataSpec（全空返回 None——不回填
+    python-docx 模板默认 author）。"""
+    core = doc.core_properties
+    meta = WordMetadataSpec(
+        author=core.author or None,
+        subject=core.subject or None,
+        keywords=core.keywords or None,
+        comments=core.comments or None,
+        category=core.category or None,
+    )
+    if all(getattr(meta, f) is None for f in ("author", "subject", "keywords", "comments", "category")):
+        return None
+    return meta
+
+
 def read_docx(
     file_path: Path,
     *,
@@ -571,6 +588,7 @@ def read_docx(
         image_previews=image_previews,
         headers_footers=_extract_headers_footers(doc),
         toc_fields=_extract_toc_fields(doc),
+        metadata=_read_core_metadata(doc),
     )
 
 
