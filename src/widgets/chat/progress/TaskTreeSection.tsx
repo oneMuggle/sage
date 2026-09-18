@@ -1,5 +1,5 @@
 // src/widgets/chat/progress/TaskTreeSection.tsx
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
@@ -18,6 +18,17 @@ const formatTokens = (tokens: number): string =>
 
 const formatDuration = (ms: number): string =>
   ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1).replace(/\.0$/, '')}s`;
+
+// BU15 (round29): 运行中任务实时耗时 —— <60s 显秒、<1h 显分秒、否则时分。
+const formatElapsed = (ms: number): string => {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  if (totalSec < 60) return `${totalSec}s`;
+  const hh = Math.floor(totalSec / 3600);
+  const mm = Math.floor((totalSec % 3600) / 60);
+  const ss = totalSec % 60;
+  if (hh > 0) return `${hh}h${String(mm).padStart(2, '0')}m`;
+  return `${mm}m${String(ss).padStart(2, '0')}s`;
+};
 
 const STATUS_ICON: Record<TaskStatusValue, string> = {
   queued: '○',
@@ -132,6 +143,18 @@ export function TaskTreeSection({
     (sum, st) => sum + (st.used_tokens ?? 0),
     0,
   );
+  // BU15 (round29): 存在 running 任务时 1s tick 驱动实时计时徽章；
+  // 全部终态后停止定时器（避免终态面板无谓重渲染）。
+  const hasRunning = useMemo(
+    () => Object.values(board.statuses).some((st) => st.status === 'running'),
+    [board.statuses],
+  );
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!hasRunning) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [hasRunning]);
 
   return (
     <div className="space-y-1" data-testid="task-tree">
@@ -246,6 +269,15 @@ export function TaskTreeSection({
               <span title={STATUS_TITLE[status]} className="w-4 text-center">
                 {STATUS_ICON[status]}
               </span>
+              {/* BU15 (round29): 运行中实时耗时 —— 卡住的子任务一眼可辨。 */}
+              {status === 'running' && st?.runningSince && (
+                <span
+                  data-testid={`task-tree-elapsed-${item.task_id}`}
+                  className="text-text-tertiary text-[10px] shrink-0 tabular-nums"
+                >
+                  {formatElapsed(now - st.runningSince)}
+                </span>
+              )}
               <span className="px-1 rounded bg-primary/10 text-primary">{item.agent_id}</span>
               <span className="text-text-secondary flex-1">{item.goal}</span>
               {/* B3 (2026-09-09): 单任务跳过 —— queued/running 行内按钮；
