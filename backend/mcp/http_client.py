@@ -170,7 +170,10 @@ class HttpClientMcpClient:
                 return None
             try:
                 url, req_headers, body = build_refresh_request(
-                    record.token_endpoint, record.client_id, record.refresh_token, record.scope or None
+                    record.token_endpoint,
+                    record.client_id,
+                    record.refresh_token,
+                    record.scope or None,
                 )
                 client = self._client
                 owned = False
@@ -272,6 +275,22 @@ class HttpClientMcpClient:
             self._session_id = None
             if expired:
                 raise _SessionExpiredError("MCP HTTP session expired") from exc
+            # r70: OAuth 自愈 —— 401 且本次带 token，说明凭据已被服务端
+            # 吊销/失效：清除记录（r65 角标同步消失），错误面点名重授权。
+            if (isinstance(exc, httpx.HTTPStatusError)
+                    and exc.response.status_code == 401
+                    and "Authorization" in headers
+                    and headers["Authorization"] == (oauth_header or "")):
+                try:
+                    self._oauth_store.delete(self._config.name)
+                except Exception as cleanup_err:  # noqa: BLE001 — 清理失败不掩盖 401
+                    logger.warning(
+                        "[MCP-HTTP:%s] OAuth token 清理失败: %s", self._config.name, cleanup_err
+                    )
+                raise McpClientError(
+                    f"MCP HTTP error ({method}): OAuth 凭据已失效（已清除），"
+                    f"请在设置中重新授权"
+                ) from exc
             raise McpClientError(f"MCP HTTP error ({method}): {exc}") from exc
         finally:
             if owned:
