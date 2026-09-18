@@ -694,7 +694,7 @@ export function useChat() {
                       typeof (s as { name?: unknown }).name === 'string',
                   );
                 if (isValidSkills) {
-                  updateMessage(userId, { activated_skills: skills });
+                  updateMessage(`u-${clientMessageId}`, { activated_skills: skills });
                 } else {
                   logger.warn(requestId, 'R38.skill_activated.malformed', skills);
                 }

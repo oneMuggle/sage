@@ -1492,9 +1492,9 @@ describe('useChat taskBoard', () => {
     });
   });
 
-  // r72 回归: skill_activated 明细必须写在 assistant 消息上,
-  // 而不是 userId（用户消息）——原实现写错目标,技能徽标永远不渲染。
-  it('routes skill_activated payload to the assistant message', async () => {
+  // r72 回归 + R38 修正: skill_activated 明细必须写在 user 消息上（技能由用户输入触发），
+  // 后端 legacy_routes.py:3350 将 activated_skills 写入 user message。
+  it('routes skill_activated payload to the user message', async () => {
     seedActiveEndpoint();
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-skills' });
     listenMock.mockImplementationOnce(
@@ -1520,16 +1520,17 @@ describe('useChat taskBoard', () => {
     });
 
     await waitFor(() => {
-      const assistant = useStore
-        .getState()
-        .messages.find((m) => m.role === 'assistant');
-      expect(assistant?.activated_skills).toEqual([
+      // R38: 技能激活明细写入 user 消息（后端 legacy_routes.py:3350 同口径）
+      const user = useStore.getState().messages.find((m) => m.role === 'user');
+      expect(user?.activated_skills).toEqual([
         { name: 'report-writing', triggers_matched: ['/report'] },
       ]);
     });
-    // 用户消息不得携带技能明细
-    const user = useStore.getState().messages.find((m) => m.role === 'user');
-    expect(user?.activated_skills).toBeUndefined();
+    // assistant 消息不携带技能明细
+    const assistant = useStore
+      .getState()
+      .messages.find((m) => m.role === 'assistant');
+    expect(assistant?.activated_skills).toBeUndefined();
   });
   // r77 回归: 重接(reattach)重放时 memory_used 也要写入 memory_refs,
   // 与主路径同口径 —— 否则页面刷新后完成的消息丢失记忆明细。
