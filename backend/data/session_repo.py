@@ -281,6 +281,7 @@ class Message:
 
     @classmethod
     def from_row(cls, row) -> Message:
+        row_keys = set(row.keys())  # set() 避免 sqlite3.Row.keys() 触发 SIM118
         return cls(
             id=row["id"],
             session_id=row["session_id"],
@@ -292,9 +293,9 @@ class Message:
             tool_calls=row["tool_calls"],
             tool_call_id=row["tool_call_id"],
             reasoning_content=row["reasoning_content"],
-            step_index=row["step_index"] if "step_index" in row.keys() else None,
-            segment_id=row["segment_id"] if "segment_id" in row.keys() else 0,
-            subtype=row["subtype"] if "subtype" in row.keys() else None,
+            step_index=row["step_index"] if "step_index" in row_keys else None,
+            segment_id=row["segment_id"] if "segment_id" in row_keys else 0,
+            subtype=row["subtype"] if "subtype" in row_keys else None,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -597,8 +598,8 @@ class MessageRepository:
                 cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
             cursor.execute(
                 """
-                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at, segment_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     continuation_message.id,
@@ -612,6 +613,7 @@ class MessageRepository:
                     continuation_message.reasoning_content,
                     continuation_message.step_index,
                     continuation_message.created_at,
+                    getattr(continuation_message, "segment_id", 0) or 0,
                 ),
             )
             cursor.execute(
