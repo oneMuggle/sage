@@ -199,10 +199,16 @@ def test_event_channel_receives_download_events(ws_server, tmp_path):
     )
     assert tracker.connected is True
     assert tracker.wait_for_complete(5.0) is True
+    # 等待记录到达且进入 completed（begin → progress completed 两步，存在先后）
+    record = None
     deadline = time.monotonic() + 5
-    while time.monotonic() < deadline and not tracker.snapshot():
+    while time.monotonic() < deadline:
+        snaps = tracker.snapshot()
+        if snaps and snaps[0].get("state") == "completed":
+            record = snaps[0]
+            break
         time.sleep(0.05)
-    record = tracker.snapshot()[0]
+    assert record is not None, "下载记录未在时限内到达 completed 状态"
     assert record["url"] == "https://s/x.pdf"
     assert record["state"] == "completed"
     assert record["path"] == str(tmp_path / "g")
