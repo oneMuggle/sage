@@ -105,10 +105,13 @@ async def test_no_hook_emitted_on_failure(tmp_db_path):
     task._hooks = hooks  # type: ignore[attr-defined]
 
     # Force a failure by swapping the cursor with one that raises.
+    # Mock _conn_proxy (not _connection): get_connection() returns the
+    # _LockedConnection wrapper stored in _conn_proxy, not _connection.
     bad_cursor = MagicMock()
     bad_cursor.execute.side_effect = RuntimeError("simulated db failure")
-    db._connection = MagicMock()
-    db._connection.cursor.return_value = bad_cursor
+    bad_conn = MagicMock()
+    bad_conn.cursor.return_value = bad_cursor
+    db._conn_proxy = bad_conn
 
     with pytest.raises(RuntimeError):
         await task.run_async()

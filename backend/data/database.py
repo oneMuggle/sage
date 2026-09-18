@@ -370,14 +370,7 @@ class Database:
         self._conn_proxy: Optional[_LockedConnection] = None
 
     def get_connection(self) -> sqlite3.Connection:
-        """获取数据库连接 (B2: 返回加锁代理, 全部 SQLite 访问共享 _SQLITE_LOCK)
-
-        代理与 ``self._connection`` 按身份绑定: 测试会直接替换 ``_connection``
-        注入 mock 连接 (如 evolution hooks 的故障注入), 身份变化时重建代理,
-        避免拿到包着旧真实连接的过期代理。(win7 保留)
-        """
-        if self._conn_proxy is not None and self._conn_proxy._conn is not self._connection:
-            self._conn_proxy = None
+        """获取数据库连接 (B2: 返回加锁代理, 全部 SQLite 访问共享 _SQLITE_LOCK)"""
         if self._connection is None:
             self._connection = sqlite3.connect(self.db_path, check_same_thread=False)
             self._connection.row_factory = sqlite3.Row
@@ -395,7 +388,6 @@ class Database:
             # 生产 DB（data/sage.db）始终保持 synchronous=FULL（默认值）。
             if os.environ.get("SAGE_TEST_FAST_SQLITE") == "1":
                 self._connection.execute("PRAGMA synchronous=OFF")
-        if self._conn_proxy is None:
             self._conn_proxy = _LockedConnection(self._connection)
         assert self._conn_proxy is not None
         return self._conn_proxy
@@ -535,6 +527,20 @@ class Database:
         if "step_index" not in columns:
             cursor.execute("ALTER TABLE messages ADD COLUMN step_index INTEGER")
             conn.commit()
+        # 2026-09-17 context-isolation: 老库加 segment_id/subtype 列；已有消息
+        # segment_id=0（属于第 0 段）,subtype=NULL（正常消息,不是切换标记）。
+        # 段索引 (session_id, segment_id, created_at) 用于按当前段过滤历史。
+        if "segment_id" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN segment_id INTEGER DEFAULT 0")
+            conn.commit()
+        if "subtype" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN subtype TEXT")
+            conn.commit()
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_messages_segment "
+            "ON messages(session_id, segment_id, created_at)"
+        )
+        conn.commit()
 
         # 会话摘要表（批次三 step 3，spec §4.3）
         # Dedicated table for compressed session summaries; deliberately

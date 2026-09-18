@@ -89,6 +89,8 @@ def db_rows_to_history(rows: Sequence[Any]) -> List[Dict[str, str]]:
     """把 MessageRepository 行（DbMessage）转成请求用 ``{"role", "content"}`` 列表。
 
     规则：
+    - 段感知切片（context-isolation）：找到最后一个 ``subtype='topic_separator'`` 行，
+      只保留它之后的行（包括分隔符之后的 user/assistant 消息）；
     - 只保留 ``user`` / ``assistant`` 行（tool 行 / 未知角色跳过）；
     - 带非空 ``tool_calls`` 的 assistant 行跳过 —— 那是裸 agent.chat() 路径
       可能留下的中间态，重放进请求缺 tool 结果配对会被 API 拒绝；
@@ -96,8 +98,21 @@ def db_rows_to_history(rows: Sequence[Any]) -> List[Dict[str, str]]:
       DeepSeek reasoner 会直接报错）；
     - 空 / 纯空白 content 跳过。
     """
+    # 段感知：找到最后一个未闭合切片 topic_separator,只保留之后的行
+    # 与 session_repo.get_active_segment 使用相同逻辑(双保险:即使上游忘了切片,
+    # 在请求边界仍能保持语义正确)
+    last_sep_idx = -1
+    for i in range(len(rows) - 1, -1, -1):
+        if getattr(rows[i], "subtype", None) == "topic_separator":
+            last_sep_idx = i
+            break
+    rows = rows[last_sep_idx + 1:]
+
     history: List[Dict[str, str]] = []
     for row in rows:
+        # 防御性:即使未先切片,也不允许 separator 进入请求
+        if getattr(row, "subtype", None) == "topic_separator":
+            continue
         role = (getattr(row, "role", None) or "").strip()
         if role not in _HISTORY_ROLES:
             continue
@@ -148,6 +163,7 @@ def build_request_messages(
     attachment_block: Optional[str] = None,
     budget_tokens: Optional[int] = None,
     trailing_system: Optional[str] = None,
+    turn_limit: Optional[int] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
     """组装 producer 的完整请求消息（L1 主入口，纯函数）。
 
@@ -160,11 +176,21 @@ def build_request_messages(
     命中，头部 system + 追加式历史保持跨请求稳定即可吃到缓存；易变块若
     混进头部 system，任何 git 状态/时间变化都会让整轮缓存失效。
 
+    Args:
+        turn_limit: 滑动窗口的 user 轮数上限（1 轮 = 1 user + 1 assistant）。
+            来自 settings ``context_turn_limit``。``None``/0/负数 → 不限。
+            在 ``truncate_history`` 之后再按轮数从最旧砍，``omitted`` 累加。
+
     Returns:
         ``(messages, omitted_count)``。任何失败都不抛错 —— 历史注入是
         best-effort 增强，绝不能阻断聊天。
     """
     kept, omitted = truncate_history(db_rows_to_history(history_rows), budget_tokens)
+    # 方案 B：滑动窗口（按 user 轮数）。
+    # 在 token 截断后再砍,缺的轮数加到 running omitted 上,统一反映在 system 提示里。
+    if turn_limit and turn_limit > 0:
+        kept, turn_omitted = apply_turn_limit(kept, turn_limit)
+        omitted += turn_omitted
 
     messages: List[Dict[str, Any]] = []
     system_text = system_content
@@ -189,7 +215,36 @@ def build_request_messages(
     return messages, omitted
 
 
+def apply_turn_limit(
+    messages: Sequence[Dict[str, str]],
+    turn_limit: Optional[int] = None,
+) -> Tuple[List[Dict[str, str]], int]:
+    """按 user 轮数从最旧开始丢，保留最近 ``turn_limit`` 轮。
+
+    一轮 = 1 user + 1 assistant。``turn_limit=None`` 或 ``<=0`` → 原样返回。
+
+    Returns:
+        ``(kept, omitted_count)``。
+    """
+    if not turn_limit or turn_limit <= 0:
+        return list(messages), 0
+    # 从尾部向前扫描，找到第 turn_limit 个 user 时停止。
+    # 它的位置即分界点；分界点之前（含）全丢，之后保留。
+    user_count = 0
+    cutoff = 0
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "user":
+            user_count += 1
+            if user_count == turn_limit:
+                cutoff = i
+                break
+    kept = messages[cutoff:]
+    omitted = len(messages) - len(kept)
+    return kept, omitted
+
+
 __all__ = [
+    "apply_turn_limit",
     "build_request_messages",
     "db_rows_to_history",
     "history_token_budget",

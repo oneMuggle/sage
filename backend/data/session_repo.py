@@ -271,6 +271,14 @@ class Message:
     tool_calls: Optional[str] = None
     tool_call_id: Optional[str] = None
     reasoning_content: Optional[str] = None  # LLM 思考/推理过程
+    # 2026-09 step-by-step: 同一 session 内 assistant 行的步序号（从 0 开始）。
+    # user/tool/system 行 → None。多步 run 时每个 ReAct 迭代产生一行 step_index=N。
+    step_index: Optional[int] = None
+    # 2026-09 context-isolation: 主题段隔离。segment_id 从 0 开始,每次"切话题"
+    # 增加。subtype='topic_separator' 标记这是一条段切换 marker(由 user 主动
+    # 调用 /topic-new 或类似动作产生),正常消息 subtype=None。
+    segment_id: int = 0
+    subtype: Optional[str] = None
 
     @classmethod
     def from_row(cls, row) -> Message:
@@ -285,6 +293,9 @@ class Message:
             tool_calls=row["tool_calls"],
             tool_call_id=row["tool_call_id"],
             reasoning_content=row["reasoning_content"],
+            step_index=row["step_index"] if "step_index" in row.keys() else None,
+            segment_id=row["segment_id"] if "segment_id" in row.keys() else 0,
+            subtype=row["subtype"] if "subtype" in row.keys() else None,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -299,6 +310,9 @@ class Message:
             "tool_calls": self.tool_calls,
             "tool_call_id": self.tool_call_id,
             "reasoning_content": self.reasoning_content,
+            "step_index": self.step_index,
+            "segment_id": self.segment_id,
+            "subtype": self.subtype,
         }
 
 
@@ -322,8 +336,8 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
     """
     cursor.execute(
         """
-        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             f"msg-{uuid.uuid4().hex[:12]}",  # 新 id，避免与源消息主键冲突
@@ -335,6 +349,7 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
             src_msg.tool_calls,
             src_msg.tool_call_id,
             src_msg.reasoning_content,
+            src_msg.step_index,
             src_msg.created_at,  # 保留原时间戳 → ORDER BY created_at ASC 保序
         ),
     )
@@ -462,7 +477,10 @@ def fork_session(
         from backend.data.message_search import get_message_search_index
 
         index = get_message_search_index()
-        for m in session_repo.get_by_session(new_session_id):
+        # win7 分支同款修复 (回流): 必须用 message_repo.get_by_session —
+        # SessionRepository 没有该方法, AttributeError 会被下面的 except
+        # 吞成一条 warning, fork 会话从此永远搜不到。
+        for m in message_repo.get_by_session(new_session_id, limit=100000):
             index.index_message(
                 m.id, m.session_id, m.role, m.content, m.created_at
             )
@@ -485,8 +503,8 @@ class MessageRepository:
 
         cursor.execute(
             """
-            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 message.id,
@@ -498,6 +516,7 @@ class MessageRepository:
                 message.tool_calls,
                 message.tool_call_id,
                 message.reasoning_content,
+                message.step_index,
                 message.created_at,
             ),
         )
@@ -567,8 +586,8 @@ class MessageRepository:
                 cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
             cursor.execute(
                 """
-                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     continuation_message.id,
@@ -580,6 +599,7 @@ class MessageRepository:
                     continuation_message.tool_calls,
                     continuation_message.tool_call_id,
                     continuation_message.reasoning_content,
+                    continuation_message.step_index,
                     continuation_message.created_at,
                 ),
             )
@@ -688,3 +708,76 @@ class MessageRepository:
         except Exception as exc:  # noqa: BLE001 — 索引故障不影响写入
             logger.warning("定时消息索引挂钩失败: %s", exc)
         return {"id": message_id}
+
+    def get_active_segment(self, session_id: str) -> List[Message]:
+        """Return messages after the last topic_separator (context-isolation)."""
+        all_msgs = self.get_by_session(session_id, limit=100000)
+        last_sep_idx = -1
+        for i in range(len(all_msgs) - 1, -1, -1):
+            if all_msgs[i].subtype == "topic_separator":
+                last_sep_idx = i
+                break
+        return all_msgs[last_sep_idx + 1:]
+
+    def get_active_segment_id(self, session_id: str) -> int:
+        """获取当前会话最新的 segment_id（如果不存在消息则返回 0）。
+
+        用于 L13 记忆上下文注入等场景，避免依赖 ``history_rows[-1].segment_id``
+        的脆弱推导（需要确保 history_rows 非空且最后一条携带正确 segment_id）。
+        直接查询 MAX(segment_id) 更健壮、语义更明确。
+
+        Args:
+            session_id: 会话 ID
+
+        Returns:
+            当前活跃段 id（0 表示初始段或无消息）
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COALESCE(MAX(segment_id), 0) FROM messages WHERE session_id = ?",
+            (session_id,),
+        )
+        row = cursor.fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    def advance_segment(self, session_id: str) -> int:
+        """Insert a topic_separator message and return the new segment_id.
+
+        Flow: query current max segment_id, insert a 'system' message with
+        sentinel content, then UPDATE it to mark subtype=topic_separator and
+        bump segment_id. Returns the new segment_id (0-based, incremented).
+        """
+        all_msgs = self.get_by_session(session_id, limit=100000)
+        max_seg = max((m.segment_id for m in all_msgs), default=-1)
+        new_seg = max_seg + 1
+        insert_result = self.insert(
+            session_id=session_id,
+            role="system",
+            content="[上下文已在此处重置]",
+            created_at=int(time.time() * 1000),
+        )
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE messages SET segment_id = ?, subtype = ? WHERE id = ?",
+            (new_seg, "topic_separator", insert_result["id"]),
+        )
+        conn.commit()
+        return new_seg
+
+    def retreat_segment(self, session_id: str) -> bool:
+        """Remove the last topic_separator (if any) and merge segments.
+
+        Returns True if a separator was deleted, False if none existed.
+        Used for 'undo' on false-positive auto-detection of topic shifts.
+        """
+        all_msgs = self.get_by_session(session_id, limit=100000)
+        for i in range(len(all_msgs) - 1, -1, -1):
+            if all_msgs[i].subtype == "topic_separator":
+                conn = self.db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM messages WHERE id = ?", (all_msgs[i].id,))
+                conn.commit()
+                return True
+        return False
