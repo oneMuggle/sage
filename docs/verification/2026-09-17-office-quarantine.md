@@ -79,9 +79,64 @@ python -m backend.office.staging_quarantine purge \
 - `0`：命令完成（含 `plan` 的 `no_reference_found` 结论，不代表可删除）。
 - `2`：参数无效、数据库/工作区缺失、核对不完整、恢复或清除被拒绝。
 
+## HTTP API（应用内接入）
+
+同一套裁决也可以通过后端 API 触发，无需登录远端主机跑 CLI。实现见
+`backend/api/office_quarantine_routes.py`，注册于 `backend/main.py`。
+
+| 端点 | 作用 | 是否改动磁盘 |
+| --- | --- | --- |
+| `GET /api/v1/office/quarantine/plan?workspace_path=<abs>` | 只读体检，等价 CLI `plan` | 否 |
+| `POST /api/v1/office/quarantine/run` | 计划 + 可选执行隔离 | `dry_run=false` 时是 |
+| `GET /api/v1/office/quarantine/report?workspace_path=<abs>` | 隔离区清单与保留期 | 否 |
+| `POST /api/v1/office/quarantine/{quarantine_id}/restore` | 还原一个隔离条目 | 是（复制回原路径） |
+
+```bash
+# 只读体检
+curl -s -H "X-Sage-Local-Authorization: Bearer <token>" \
+  "http://127.0.0.1:<port>/api/v1/office/quarantine/plan?workspace_path=/abs/path/workspace"
+
+# 干跑（默认 dry_run=true，不搬文件）
+curl -s -X POST -H "Content-Type: application/json" \
+  -H "X-Sage-Local-Authorization: Bearer <token>" \
+  -d '{"workspace_path":"/abs/path/workspace"}' \
+  "http://127.0.0.1:<port>/api/v1/office/quarantine/run"
+
+# 实际隔离（显式关闭干跑）
+curl -s -X POST -H "Content-Type: application/json" \
+  -H "X-Sage-Local-Authorization: Bearer <token>" \
+  -d '{"workspace_path":"/abs/path/workspace","dry_run":false,"doc_types":["word"]}' \
+  "http://127.0.0.1:<port>/api/v1/office/quarantine/run"
+
+# 还原
+curl -s -X POST -H "Content-Type: application/json" \
+  -H "X-Sage-Local-Authorization: Bearer <token>" \
+  -d '{"workspace_path":"/abs/path/workspace"}' \
+  "http://127.0.0.1:<port>/api/v1/office/quarantine/<quarantine_id>/restore"
+```
+
+API 层的安全约束（与 CLI 同一口径，另有路由级测试守护）：
+
+- **没有 purge 端点**。永久删除仍只有 CLI 一条路径，且需三重门禁；
+  `test_no_purge_route_is_exposed` 断言任何 quarantine 路由都不含
+  `purge`/`delete`/`remove`，也不允许 `DELETE` 方法。
+- `safe_to_delete` 恒为 `false`，`report` 恒返回
+  `automatic_deletion=false` / `purge_requires_human_confirmation=true`。
+- `dry_run` 默认 `true`；请求体 `extra="forbid"`，多传字段（例如想象中的
+  `allow_permanent_deletion`）直接 422，不会被静默忽略。
+- 数据库以 `mode=ro` 只读打开，API 层不写主库。
+- 输入早拒绝：工作区必须绝对且存在（400/404）、SQLite 文件必须存在（503）、
+  `doc_types` 必须属于 `word|ppt|excel|pdf`（400）、`quarantine_id` 必须匹配
+  严格字符集（400，路径分隔符永不进入文件系统调用）。
+- 候选列表按 500 条截断，`candidates_total` / `candidates_truncated` 明示。
+- 业务性拒绝（未知 id、原路径被占用、校验失败等）返回 HTTP 200 +
+  `status="error"` + 机器码；传输/输入错误走 legacy 信封
+  `{ok:false, error, message}`（见 `backend/api/error_contract.py`）。
+
 ## 仍未覆盖
 
 - 数据库与文件系统的共同原子快照；工具以「复制后逐文件校验 + 漂移即保留」替代。
 - 非 ASCII 编码或压缩后不可见的嵌入引用、外部备份与卷影副本。
-- 自动定时清理与 UI 入口（当前仅 CLI + 人工触发）。
+- **前端 UI 入口与自动定时清理**：已有 CLI 与 HTTP API，但渲染端还没有界面，
+  也没有任何自动触发；每次执行都需人工显式发起。
 - 真实 Windows 7 与安装包回滚验收（发布门禁，需对应环境）。

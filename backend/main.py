@@ -97,6 +97,7 @@ from backend.api.local_auth import (
 from backend.api.mcp_routes import router as mcp_router
 from backend.api.media_routes import router as media_router
 from backend.api.model_catalog_routes import build_router as build_model_catalog_router
+from backend.api.office_quarantine_routes import router as office_quarantine_router
 from backend.api.office_routes import (
     register_office_exception_handlers,
     router as office_router,
@@ -812,6 +813,9 @@ API_MODE = os.environ.get("API_MODE", "legacy").lower()
 app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/v1/theme")
 app.include_router(office_router, prefix="/api/v1")
+# Office 隔离式清理 (staging quarantine): plan/run/report/restore 四端点。
+# 有意不注册 purge —— 永久删除仍只保留 CLI 三重门禁（见模块 docstring）。
+app.include_router(office_quarantine_router, prefix="/api/v1")
 from backend.api.gateway_routes import router as gateway_router
 
 app.include_router(gateway_router, prefix="/api/v1")
