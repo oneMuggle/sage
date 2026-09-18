@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 47：论文场景能力可发现化收口**（方案 `docs/plans/2026-09-18_r47-paper-capabilities-plan.md`）
+
+### Changed(docs)
+- **paper-writing 技能补全 R39-R46 能力**：目录/图表目录（figure_index/table_index）/交叉引用占位符（{{fig:}}/{{tbl:}}）/真页码刷新（refresh_toc + office_refresh_toc）——论文场景才是这些能力的最大受益方，此前零覆盖；allowed-tools 补 office_refresh_toc
+- **用户手册 09-office.md**：目录描述从"打开后更新域生成"更新为真页码语义；图表与图片节补插图清单/表格清单与交叉引用说明
+- shipped 技能测试补论文场景可发现化断言（figure_index / {{fig:}} / office_refresh_toc）
+
 > 📝 **Word 写作能力 Round 46：交叉引用升级——REF 域 + 题注书签**（方案 `docs/plans/2026-09-18_r46-ref-fields-plan.md`）
 
 ### Added(office)
