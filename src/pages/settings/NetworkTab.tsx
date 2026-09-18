@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { BrowserEnvironmentSection } from '../../features/diagnostic/BrowserEnvironmentSection';
 import { settingsClient } from '../../shared/api/settingsClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
@@ -149,9 +150,8 @@ function parseSearchConfig(raw: string | null): SearchConfigPayload {
     if (typeof parsed !== 'object' || parsed === null) return DEFAULT_SEARCH_CONFIG;
     const candidate = parsed as Partial<SearchConfigPayload>;
     const order = Array.isArray(candidate.order)
-      ? candidate.order.filter(
-          (e): e is (typeof SEARCH_ENGINES)[number] =>
-            (SEARCH_ENGINES as readonly string[]).includes(e),
+      ? candidate.order.filter((e): e is (typeof SEARCH_ENGINES)[number] =>
+          (SEARCH_ENGINES as readonly string[]).includes(e),
         )
       : [];
     return {
@@ -495,12 +495,14 @@ export function NetworkTab() {
         </div>
       </SettingRow>
 
+      {/* 浏览器环境检测（Phase E3） */}
+      <BrowserEnvironmentSection />
+
       {/* Round 12：网站凭据（browser_cookies 档案 + web_access_config 开关） */}
       <CredentialsSection />
     </div>
   );
 }
-
 
 // ---------------------------------------------------------------------------
 // Round 12：网站凭据（browser_cookies 档案 + web_access_config 开关）
@@ -614,10 +616,9 @@ function CredentialsSection() {
 
   const removeCred = (domain: string): void => {
     if (!window.confirm(t('settings.network.creds.confirm'))) return;
-    void fetch(
-      webAccessApiUrl(`/api/v1/web-access/credentials/${encodeURIComponent(domain)}`),
-      { method: 'DELETE' },
-    )
+    void fetch(webAccessApiUrl(`/api/v1/web-access/credentials/${encodeURIComponent(domain)}`), {
+      method: 'DELETE',
+    })
       .then(() => reload())
       .catch(() => undefined);
   };
