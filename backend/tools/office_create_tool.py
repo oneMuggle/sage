@@ -365,6 +365,24 @@ class OfficeCreateTool(BaseTool):
                                                     "right": {"type": "number"},
                                                 },
                                             },
+                                            "page_number_format": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "decimal",
+                                                    "upperRoman",
+                                                    "lowerRoman",
+                                                    "upperLetter",
+                                                    "lowerLetter",
+                                                ],
+                                                "description": (
+                                                    "节内页码格式（论文前置"
+                                                    "罗马页码场景）"
+                                                ),
+                                            },
+                                            "page_number_start": {
+                                                "type": "integer",
+                                                "description": "页码起始号",
+                                            },
                                         },
                                     },
                                     "body": {

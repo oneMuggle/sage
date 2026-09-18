@@ -1467,6 +1467,14 @@ export interface WordPageSetupSpec {
   size?: 'A4' | 'letter';
   orientation?: 'portrait' | 'landscape';
   margins_cm?: WordPageMarginsSpec;
+  // Round 53：节内页码格式/起始号（论文前置罗马页码场景）
+  page_number_format?:
+    | 'decimal'
+    | 'upperRoman'
+    | 'lowerRoman'
+    | 'upperLetter'
+    | 'lowerLetter';
+  page_number_start?: number;
 }
 
 /**
