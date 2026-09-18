@@ -51,9 +51,15 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
     const taskId = evt.task_id;
     board.updateTaskBoard(sid, runId, (prev) => {
       if (!prev || prev.runId !== runId) return prev;
+      // BU15 (round29): running 行实时计时 —— 前端 ingestion 打点
+      // （后端事件不含 started_at）；终态事件整体替换后自然消失。
+      const incoming = evt as TaskStatusEvent;
       const nextStatuses = {
         ...prev.statuses,
-        [taskId]: evt as TaskStatusEvent,
+        [taskId]:
+          incoming.status === 'running'
+            ? { ...incoming, runningSince: Date.now() }
+            : incoming,
       };
       const counts = { done: 0, running: 0, queued: 0, failed: 0, cancelled: 0 };
       for (const st of Object.values(nextStatuses)) {

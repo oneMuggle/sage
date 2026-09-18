@@ -347,6 +347,9 @@ export interface TaskStatusEvent {
   // BU13 (round24): 终态任务执行时长（毫秒）—— started_at→finished_at；
   // 二者齐备才携带。任务树行内渲染耗时徽章。
   duration_ms?: number;
+  // BU15 (round29): 【UI 注入，后端不发】running 状态被前端 ingestion
+  // 观察到的本地时间戳（Date.now()），任务树行内实时计时用；终态后消失。
+  runningSince?: number;
   // live-events P0 (2026-09-06): 派发本批次的 conductor 工具调用 ID —— 聊天流内
   // 把子代理实时步骤关联到 "Delegate <goal>" 卡片的关联键。
   parent_tool_call_id?: string | null;

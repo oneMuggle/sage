@@ -188,3 +188,52 @@ describe('applyOrchestrationEventToBoard — R35', () => {
     expect(useRightPanelStore.getState().open).toBe(false);
   });
 });
+
+// ============================================================================
+// BU15 (round29): running 状态前端打点 runningSince
+// ============================================================================
+
+describe('orchestrationEvents — running 实时计时打点 (BU15)', () => {
+  it('running 事件打 runningSince，终态事件替换后消失', () => {
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'task_plan',
+        run_id: 'orch-bu15',
+        plan: [{ task_id: 'a', agent_id: 'r', goal: 'GA' }],
+      }),
+      SID,
+    );
+    const before = Date.now();
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'task_status',
+        run_id: 'orch-bu15',
+        task_id: 'a',
+        status: 'running',
+        agent_id: 'r',
+        goal: 'GA',
+      }),
+      SID,
+    );
+    const running = slots().taskBoard?.statuses.a;
+    expect(running?.status).toBe('running');
+    expect(running?.runningSince).toBeGreaterThanOrEqual(before);
+    expect(running?.runningSince).toBeLessThanOrEqual(Date.now());
+
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'task_status',
+        run_id: 'orch-bu15',
+        task_id: 'a',
+        status: 'done',
+        agent_id: 'r',
+        goal: 'GA',
+        output_preview: 'ok',
+      }),
+      SID,
+    );
+    const done = slots().taskBoard?.statuses.a;
+    expect(done?.status).toBe('done');
+    expect(done?.runningSince).toBeUndefined();
+  });
+});
