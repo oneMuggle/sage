@@ -5,6 +5,7 @@ import { memo, useEffect, useState } from 'react';
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
+import { useChangesListStore } from '../../features/changes/changesListStore';
 import { useConversationOutline } from '../../features/chat/useConversationOutline';
 import {
   isArtifactAutoOpenEnabled,
@@ -75,6 +76,10 @@ interface PanelHeaderProps {
   onApplyPreset?: (width: number) => void;
   /** 当前 Tab 是否为产物（决定是否显示自动唤起开关） */
   showAutoOpenToggle?: boolean;
+  /** R2 批次 C: 产物计数徽标（>0 时产物 Tab 显示 "产物 (N)"） */
+  artifactCount?: number;
+  /** R3 批次 C: 变更计数徽标（>0 时变更 Tab 显示 "变更 (N)"） */
+  changesCount?: number;
 }
 
 /** 产物自动唤起开关（就地读写 localStorage；事件侧 isArtifactAutoOpenEnabled 同源） */
@@ -109,6 +114,8 @@ export function PanelHeader({
   activePreset,
   onApplyPreset,
   showAutoOpenToggle,
+  artifactCount = 0,
+  changesCount = 0,
 }: PanelHeaderProps) {
   // 宽度档位（三档小按钮；未提供回调时隐藏）
   const presets = onApplyPreset
@@ -169,7 +176,11 @@ export function PanelHeader({
             }
             onClick={() => onTabChange(t)}
           >
-            {TAB_LABELS[t]}
+            {t === 'artifacts' && artifactCount > 0
+              ? `${TAB_LABELS[t]} (${artifactCount})`
+              : t === 'changes' && changesCount > 0
+                ? `${TAB_LABELS[t]} (${changesCount})`
+                : TAB_LABELS[t]}
           </button>
         ))}
         <div className="flex items-center gap-0.5 ml-1 shrink-0">
@@ -213,6 +224,13 @@ function RightPanelInner({
   const setMaximized = useRightPanelStore((s) => s.setMaximized);
   const { artifacts, loading, refresh } = useArtifacts(sessionId);
   const { items: outlineItems, isLoading: outlineLoading } = useConversationOutline(sessionId);
+  // R3 批次 C: 变更计数徽标（changesListStore 缓存，ChangesSection 拉取后
+  // 这里同步可读；工作区干净/未拉取时不显示计数）
+  const changesCount = useChangesListStore((s) => {
+    if (!sessionId) return 0;
+    const c = s.bySession[sessionId];
+    return c && !c.clean ? c.changes.length : 0;
+  });
   // P0-3 (UI 优化方案 2026-09-12): 面板宽度可调 —— 拖拽左边缘手柄，
   // 持久化到 localStorage（范围 280~600，默认 320）。
   // 批次 D: applyWidth 供档位按钮/双击重置/键盘调整（clamp + 立即持久化）。
@@ -245,6 +263,16 @@ function RightPanelInner({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [maximized, setMaximized]);
+
+  // R2 批次 B: overlay 模式 Esc 关闭面板（push 模式 Esc 不关面板，只退最大化）
+  useEffect(() => {
+    if (isPush || !open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') useRightPanelStore.getState().setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isPush, open]);
 
   const selected = selectedArtifactId
     ? (artifacts.find((a) => a.id === selectedArtifactId) ?? null)
@@ -298,6 +326,8 @@ function RightPanelInner({
           activePreset={activePreset}
           onApplyPreset={applyWidth}
           showAutoOpenToggle={tab === 'artifacts'}
+          artifactCount={sessionId ? artifacts.length : 0}
+          changesCount={changesCount}
         />
       )}
 
@@ -343,36 +373,54 @@ function RightPanelInner({
 
   const isMaximized = maximized && isPush && open;
 
+  // R2 批次 B: overlay 模式半透明遮罩 —— 点击关闭 + 随面板淡入淡出；
+  // push 模式无遮罩（面板参与布局，主区仍可见可点）。
+  const backdrop =
+    !isPush ? (
+      <div
+        className={
+          'fixed inset-0 z-20 bg-black/40 transition-opacity duration-200 ease-in-out ' +
+          (open ? 'opacity-100' : 'opacity-0 pointer-events-none')
+        }
+        onClick={() => useRightPanelStore.getState().setOpen(false)}
+        aria-hidden
+        data-testid="right-panel-overlay-backdrop"
+      />
+    ) : null;
+
   return (
-    <aside
-      data-testid="right-panel"
-      data-open={open ? 'true' : 'false'}
-      data-maximized={isMaximized ? 'true' : 'false'}
-      aria-hidden={isPush && !open ? true : undefined}
-      className={
-        isPush
-          ? // push: 参与父级 flex 布局，开合动画在宽度上（拖拽时禁用过渡保跟手）
-            // 批次 D: 最大化时覆盖内容行（父容器需 relative），宽度样式忽略
-            'relative h-full flex-shrink-0 overflow-hidden bg-surface border-l border-border ' +
-            (isMaximized ? 'absolute inset-0 z-20 ' : '') +
-            (isDragging ? '' : 'transition-[width] duration-200 ease-in-out')
-          : // overlay: fixed 覆盖层，平移进出（窄屏/移动端）
-            'fixed top-12 right-0 h-[calc(100vh-3rem)] bg-surface border-l border-border ' +
-            'transform transition-transform duration-200 ease-in-out z-30 ' +
-            (open ? 'translate-x-0' : 'translate-x-full')
-      }
-      style={isPush ? { width: open ? (isMaximized ? '100%' : `${width}px`) : 0 } : { width: `${width}px` }}
-    >
-      {isPush ? (
-        // push 模式: 内容容器固定宽度，动画期间不被压扁；最大化时随面板铺满
-        <div className="h-full" style={{ width: isMaximized ? '100%' : `${width}px` }}>
-          {content}
-        </div>
-      ) : (
-        // overlay 模式保持原有直接子元素结构（resize 手柄 parentElement 断言依赖）
-        content
-      )}
-    </aside>
+    <>
+      {backdrop}
+      <aside
+        data-testid="right-panel"
+        data-open={open ? 'true' : 'false'}
+        data-maximized={isMaximized ? 'true' : 'false'}
+        aria-hidden={isPush && !open ? true : undefined}
+        className={
+          isPush
+            ? // push: 参与父级 flex 布局，开合动画在宽度上（拖拽时禁用过渡保跟手）
+              // 批次 D: 最大化时覆盖内容行（父容器需 relative），宽度样式忽略
+              'relative h-full flex-shrink-0 overflow-hidden bg-surface border-l border-border ' +
+              (isMaximized ? 'absolute inset-0 z-20 ' : '') +
+              (isDragging ? '' : 'transition-[width] duration-200 ease-in-out')
+            : // overlay: fixed 覆盖层，平移进出（窄屏/移动端）
+              'fixed top-12 right-0 h-[calc(100vh-3rem)] bg-surface border-l border-border ' +
+              'transform transition-transform duration-200 ease-in-out z-30 ' +
+              (open ? 'translate-x-0' : 'translate-x-full')
+        }
+        style={isPush ? { width: open ? (isMaximized ? '100%' : `${width}px`) : 0 } : { width: `${width}px` }}
+      >
+        {isPush ? (
+          // push 模式: 内容容器固定宽度，动画期间不被压扁；最大化时随面板铺满
+          <div className="h-full" style={{ width: isMaximized ? '100%' : `${width}px` }}>
+            {content}
+          </div>
+        ) : (
+          // overlay 模式保持原有直接子元素结构（resize 手柄 parentElement 断言依赖）
+          content
+        )}
+      </aside>
+    </>
   );
 }
 
