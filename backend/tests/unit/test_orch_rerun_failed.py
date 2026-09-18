@@ -208,3 +208,189 @@ async def test_rerun_failed_endpoint_404_unknown_run(tmp_path, monkeypatch):
     ) as client:
         resp = await client.post("/api/v1/orch/runs/orch-nope/rerun-failed")
     assert resp.status_code == 404
+
+
+# ---- RV4 (round27): 单任务重试 —— task_ids 子集 -------------------------------
+
+
+def _seed_run_with_deps(run_id: str):
+    """t1(done) ← t2(failed) ← t3(failed)；t4(failed) 独立无依赖。"""
+    import json
+    import time
+
+    from backend.data.orch_run_repo import OrchRun, OrchRunRepository
+    from backend.data.orch_task_repo import OrchTaskRepository
+
+    plan_tasks = [
+        {"task_id": "t1", "goal": "目标1", "agent_id": "primary"},
+        {
+            "task_id": "t2",
+            "goal": "目标2",
+            "agent_id": "primary",
+            "depends_on": ["t1"],
+        },
+        {
+            "task_id": "t3",
+            "goal": "目标3",
+            "agent_id": "primary",
+            "depends_on": ["t2"],
+        },
+        {"task_id": "t4", "goal": "目标4", "agent_id": "primary"},
+    ]
+    run = OrchRun(
+        run_id=run_id,
+        session_id="sess-rerun",
+        status="failed",
+        created_at=int(time.time() * 1000),
+        plan_json=json.dumps({"tasks": plan_tasks, "reasoning": ""}, ensure_ascii=False),
+        original_request="做一个网站",
+    )
+    OrchRunRepository().upsert(run)
+    task_repo = OrchTaskRepository()
+    statuses = {
+        "t1": ("done", "结果预览1"),
+        "t2": ("failed", None),
+        "t3": ("failed", None),
+        "t4": ("failed", None),
+    }
+    for tid, (status, preview) in statuses.items():
+        task_repo.upsert_state(
+            run_id=run_id,
+            task_id=tid,
+            agent_id="primary",
+            goal=f"目标{tid[1:]}",
+            status=status,
+            output_preview=preview,
+        )
+
+
+@pytest.mark.asyncio()
+async def test_rerun_failed_single_task_subset(tmp_path, monkeypatch):
+    """RV4: 重试 t2 → 闭包 {t2, t3} 重建；t1 preset 回放；t4 排除并在 goal 说明。"""
+    from httpx import ASGITransport
+
+    from backend.main import app
+
+    _init_tmp_db(tmp_path, monkeypatch)
+    _seed_run_with_deps("orch-rerun-rv4a")
+
+    async with __import__("httpx").AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/api/v1/orch/runs/orch-rerun-rv4a/rerun-failed",
+            json={"task_ids": ["t2"]},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "单任务重试" in data["goal"]
+    assert "t2" in data["goal"]
+    assert "另有 1 个失败任务未包含" in data["goal"]
+    override = data["plan_override"]
+    ids = [item["task_id"] for item in override]
+    assert ids == ["t1", "t2", "t3"]  # t4 被排除
+    assert override[0]["preset_output"] == "结果预览1"
+    assert "preset_output" not in override[1]
+    assert override[2]["depends_on"] == ["t2"]
+
+
+@pytest.mark.asyncio()
+async def test_rerun_failed_single_task_404_unknown(tmp_path, monkeypatch):
+    from httpx import ASGITransport
+
+    from backend.main import app
+
+    _init_tmp_db(tmp_path, monkeypatch)
+    _seed_run_with_deps("orch-rerun-rv4b")
+
+    async with __import__("httpx").AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/api/v1/orch/runs/orch-rerun-rv4b/rerun-failed",
+            json={"task_ids": ["t9"]},
+        )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio()
+async def test_rerun_failed_single_task_409_done(tmp_path, monkeypatch):
+    from httpx import ASGITransport
+
+    from backend.main import app
+
+    _init_tmp_db(tmp_path, monkeypatch)
+    _seed_run_with_deps("orch-rerun-rv4c")
+
+    async with __import__("httpx").AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/api/v1/orch/runs/orch-rerun-rv4c/rerun-failed",
+            json={"task_ids": ["t1"]},
+        )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio()
+async def test_rerun_failed_single_task_closure_includes_pending_downstream(
+    tmp_path, monkeypatch
+):
+    """RV4: 所选任务的下游 pending 任务也进闭包重建。"""
+    import json
+    import time
+
+    from httpx import ASGITransport
+
+    from backend.data.orch_run_repo import OrchRun, OrchRunRepository
+    from backend.data.orch_task_repo import OrchTaskRepository
+    from backend.main import app
+
+    _init_tmp_db(tmp_path, monkeypatch)
+    plan_tasks = [
+        {"task_id": "t1", "goal": "g1", "agent_id": "primary"},
+        {
+            "task_id": "t2",
+            "goal": "g2",
+            "agent_id": "primary",
+            "depends_on": ["t1"],
+        },
+    ]
+    run = OrchRun(
+        run_id="orch-rerun-rv4d",
+        session_id="sess-rerun",
+        status="failed",
+        created_at=int(time.time() * 1000),
+        plan_json=json.dumps({"tasks": plan_tasks, "reasoning": ""}, ensure_ascii=False),
+        original_request="",
+    )
+    OrchRunRepository().upsert(run)
+    task_repo = OrchTaskRepository()
+    task_repo.upsert_state(
+        run_id="orch-rerun-rv4d",
+        task_id="t1",
+        agent_id="primary",
+        goal="g1",
+        status="failed",
+        output_preview=None,
+    )
+    task_repo.upsert_state(
+        run_id="orch-rerun-rv4d",
+        task_id="t2",
+        agent_id="primary",
+        goal="g2",
+        status="pending",
+        output_preview=None,
+    )
+
+    async with __import__("httpx").AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/api/v1/orch/runs/orch-rerun-rv4d/rerun-failed",
+            json={"task_ids": ["t1"]},
+        )
+    assert resp.status_code == 200
+    ids = [item["task_id"] for item in resp.json()["plan_override"]]
+    assert ids == ["t1", "t2"]  # pending 下游随闭包重建

@@ -35,6 +35,8 @@ interface RightPanelProps {
   onCancelExecution?: (runId: string) => void;
   // RV3 (round8): 终态且有失败任务时的重跑入口（透传 ProgressSection → TaskTreeSection）。
   onRerunFailed?: (runId: string) => void;
+  // RV4 (round27): 单任务重试入口（失败行内「重试」按钮）。
+  onRetryTask?: (runId: string, taskId: string) => void;
   // P1 (UI 优化方案 2026-09-13): push = 参与 flex 挤压主区（Claude
   // artifacts 风格，桌面端）；overlay = fixed 覆盖层（窄屏/移动端回退）。
   variant?: 'overlay' | 'push';
@@ -198,6 +200,7 @@ function RightPanelInner({
   taskBoard,
   onCancelExecution,
   onRerunFailed,
+  onRetryTask,
   variant = 'overlay',
 }: RightPanelProps) {
   // right-panel R1 批次 A: 开合/Tab/最大化/选中产物全部迁入全局 store ——
@@ -316,6 +319,7 @@ function RightPanelInner({
             sessionId={sessionId}
             onCancelExecution={onCancelExecution}
             onRerunFailed={onRerunFailed}
+            onRetryTask={onRetryTask}
           />
         ) : tab === 'changes' ? (
           <ChangesSection sessionId={sessionId} />
