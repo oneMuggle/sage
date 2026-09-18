@@ -50,9 +50,10 @@ httpx==0.26.0
 python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
 
 # Crypto (Arena account pool — Fernet symmetric encryption for passwords)
-# cryptography 43.0.3 ships cp311 win_amd64 wheels on PyPI (and cp310/cp38).
-# Pinned uniformly with requirements.txt / requirements-py38.txt.
-cryptography==43.0.3
+# cryptography 50.0.1 ships cp311 win_amd64 wheels for the bundled Python
+# 3.11 embeddable. Matches requirements.txt (main). requirements-py38.txt
+# carries 47.0.0 instead — the last release with cp38 wheels.
+cryptography==50.0.1
 
 # Observability
 prometheus-client==0.25.0

@@ -28,10 +28,10 @@ sqlite-vec>=0.1.9
 httpx==0.26.0
 
 # Crypto (Arena account pool — Fernet symmetric encryption for passwords)
-# cryptography 43.0.3 is the last release that ships cp38 wheels on PyPI;
-# 44+ drops Python 3.8. 43.x still supports the Fernet + PBKDF2HMAC APIs
-# used by backend/services/arena_accounts.py.
-cryptography==43.0.3
+# cryptography 47.0.0 is the last release shipping cp38 wheels (48.0.0
+# requires >=3.9). Pinned uniformly across requirements.txt /
+# requirements-bundled.txt so all channels share one audited version.
+cryptography==47.0.0
 
 # Observability
 prometheus-client==0.21.1  # py38 上限：0.22+ 要求 Python>=3.9
