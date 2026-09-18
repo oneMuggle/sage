@@ -2825,7 +2825,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # legacy /chat/stream 此前缺少 A16 自动激活(仅 hex 路径有),
             # 补齐后用户消息匹配 SKILL.md when_to_use 时自动注入技能指令。
             # fail-safe: 任何故障静默降级,不影响对话主流程。
-            r38_activated_skill_names: list[str] = []
+            r38_activated_skill_names: List[str] = []
             try:
                 from backend.application.services.chat_service import (
                     _skill_activation_block,
