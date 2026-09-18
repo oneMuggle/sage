@@ -865,7 +865,6 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
     messages = await asyncio.to_thread(
         lambda: message_repo.get_active_segment(session_id)
     )
-    )
     if not should_compact(messages):
         return None
 
