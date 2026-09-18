@@ -157,6 +157,57 @@ export interface OfficeElectronApiBridge {
 }
 
 /**
+ * Pet pack bridge (P2, 2026-09-18): 宠物包导入管线 —— zip → quarantine
+ * 校验 → userData/pets/<id>（electron/petImport.ts）。Web 通道（无
+ * Electron）整个 `pet` 缺省，渲染端据此隐藏导入入口。
+ */
+export interface PetPackManifestWire {
+  id: string;
+  name: string;
+  author?: string;
+  bodyClass: string;
+  /** PetState 名 → 动画 CSS 类；键集为主进程 PET_STATES 的子集 */
+  animations: Record<string, string>;
+}
+
+export interface PetImportPlanOk {
+  ok: true;
+  token: string;
+  manifest: PetPackManifestWire;
+  files: Array<{ path: string; sizeBytes: number }>;
+  totalBytes: number;
+  conflict: boolean;
+}
+
+export interface PetImportPlanFailed {
+  ok: false;
+  errors: string[];
+}
+
+export type PetImportPlan = PetImportPlanOk | PetImportPlanFailed;
+
+export interface ImportedPetPack extends PetPackManifestWire {
+  /** 包内 CSS 拼接，相对 url() 已内联为 data: URL */
+  cssText: string;
+  installedAt: number;
+}
+
+export interface PetMutationResult {
+  ok: boolean;
+  error?: string;
+}
+
+export interface PetElectronApiBridge {
+  listImports: () => Promise<ImportedPetPack[]>;
+  /** 原生选 zip → 校验/隔离；取消返回 null */
+  planImport: () => Promise<PetImportPlan | null>;
+  commitImport: (token: string, overwrite: boolean) => Promise<PetMutationResult>;
+  /** 幂等：未知 token 也算成功 */
+  discardImport: (token: string) => Promise<PetMutationResult>;
+  removePack: (id: string) => Promise<PetMutationResult>;
+}
+
+/**
  * Media bridge (Phase 2, 2026-09-12): multipart upload for chat attachments
  * and binary media fetching for TTS/ASR/image generation.
  */
@@ -308,6 +359,8 @@ export interface ElectronAPI {
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
   office: OfficeElectronApiBridge;
+  /** P2 桌宠：宠物包导入桥；缺省 = 非 Electron 环境，UI 隐藏导入入口 */
+  pet?: PetElectronApiBridge;
   media: MediaElectronApiBridge;
   journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;

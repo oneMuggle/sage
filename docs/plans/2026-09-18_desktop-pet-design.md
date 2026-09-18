@@ -52,9 +52,14 @@
 
 ```
 <pet-pack>/
-├── pet.yaml              # 清单：id / name / author / states 映射
-└── animations/<state>.css|.json   # 每态一个动画，缺省回退 idle + 滤镜
+├── pet.json              # 清单：id / name / author? / bodyClass / animations
+└── *.css | *.png | *.webp  # 每态动画类名在 CSS 中定义；图片仅经相对 url() 引用
 ```
+
+> **2026-09-18 P2 实施时修订**：清单定为 `pet.json`（JSON 而非 YAML）——
+> 主进程无 YAML 解析器，引入依赖违反门禁 3；JSON 同样满足"纯数据、
+> 禁可执行代码"。白名单 `.json/.css/.png/.webp`、限额 zip≤8MB /
+> 单文件≤2MB / 解压总量≤5MB / 条目≤64，均落在 `electron/petImport.ts`。
 
 P1 内置包以 TS descriptor 形式声明（`src/features/pet/builtin/`），但**渲染层只认 `PetPackDescriptor` 接口**（id、每状态 → CSS 关键帧类名或雪碧图参数），P2 导入的 zip 解包后生成同型 descriptor——两来源同一路径，无特例。
 
@@ -72,12 +77,13 @@ P1 内置包以 TS descriptor 形式声明（`src/features/pet/builtin/`），�
 
 `pet-enabled`（默认 off）、`pet-selected`（默认 `mint-blob`）走 **localStorage 手工持久化**（`rightPanelStore.ts:8-20` 先例，zustand module-singleton 内读写），**不进** `PreferenceKey` 白名单与后端 settings blob——保持"后端零触点"。设置面板 GeneralTab 加 `SettingRow`+`Toggle`（原语 `src/pages/settings/components.tsx:30,42`）+ 宠物单选预览列表（复用 `PetVisual`）。
 
-## 3. P2：宠物包导入管线（后续 PR）
+## 3. P2：宠物包导入管线（已实施，2026-09-18）
 
-- 全部落 **Electron 主进程**（新 `electron/petImport.ts`），复用 office staging quarantine 的 plan/run/report/restore 四段流程（`electron/officeStaging.ts`，#1111）：zip → 解包到 quarantine → 校验（清单 schema、扩展名白名单 `.css/.json/.png/.webp`、总大小上限、路径穿越检查）→ 通过才移入 `userData/pets/<id>/`（路径解析走 `electron/userDataPaths.ts`）
-- 渲染进程经 preload 新方法读包列表/导入，接口声明进 `src/shared/types/electron-api.d.ts`
-- 同 id 冲突提示覆盖或换 id；Web 通道（无 Electron）隐藏导入入口
-- 校验契约测试参照 skills spec-conformance 路子（`docs/technical/28-skill-md-spec-conformance.md`）
+- 全部落 **Electron 主进程**（新 `electron/petImport.ts` 纯逻辑 + `electron/petIpc.ts` 接线），复用 office staging quarantine 的 plan/commit/discard 分段：zip 字节 → 内存校验解包（新 `electron/zipRead.ts`，零依赖手写 reader：仅 method 0/8，拒加密/ZIP64/symlink/路径穿越/重复条目，CRC 校验，声明与实际解压双限幅防爆）→ 写入 `pet-quarantine/<token>/` → 渲染端确认（同 id 冲突需显式覆盖授权）→ commit 移入 `userData/pets/<id>/`（路径解析走 `electron/userDataPaths.ts`）
+- 校验：`pet.json` 清单字段白名单正则（id/bodyClass/动画类名即注入 DOM 的字符串）、扩展名白名单 `.css/.png/.webp`、CSS 拒 `@import` 与网络 `url()`、包内相对图片按引用内联为 data: URL 后经 IPC 一次返回
+- 渲染进程经 preload `pet` 桥（`electron/preload.ts`，接口声明进 `src/shared/types/electron-api.d.ts`）读包列表/导入/移除；`features/pet/importedPacks.ts` 把导入包转成同型 `PetPackDescriptor` 注册 + `<style data-pet-pack>` 注入——内置/导入同一路径
+- 同 id 冲突在确认行提示「覆盖导入」；Web 通道（无 Electron）桥缺省 → 隐藏导入入口
+- 契约测试：`electron/__tests__/petImport.test.ts`（手工 zip writer 构造合法/恶意包字节）+ `petIpc.test.ts` + `src/features/pet/__tests__/importedPacks.test.ts`
 
 ## 4. P3：桌面悬浮宠物窗（后续 PR）
 

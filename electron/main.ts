@@ -85,6 +85,7 @@ import {
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
 import { registerOfficeIpc } from './officeIpc';
+import { registerPetIpc } from './petIpc';
 import { registerMediaIpc } from './mediaIpc';
 import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
@@ -1639,6 +1640,16 @@ async function registerIpcHandlers(): Promise<void> {
   //   office:save-dialog → native save dialog
   // The 5 office_* HTTP routes are auto-routed via COMMAND_ROUTES in commands.ts.
   registerOfficeIpc((channel, handler) => {
+    ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+      if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+      return handler(evt, ...args);
+    });
+  });
+
+  // P2 (2026-09-18): Pet pack import IPC — zip → quarantine 校验 →
+  // userData/pets/<id>，纯本地文件通路（后端零触点，见 petImport.ts）。
+  registerPetIpc((channel, handler) => {
     ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
       if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
       if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');

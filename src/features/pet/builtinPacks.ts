@@ -46,9 +46,26 @@ export const VIOLET_CAT: PetPackDescriptor = {
 
 export const BUILTIN_PETS: readonly PetPackDescriptor[] = [MINT_BLOB, VIOLET_CAT];
 
-/** 按 id 取包；未知 id（如 P2 删除了当前选中项）回退内置第一只。 */
+// P2：导入包在运行时注册（importedPacks store 拉取成功后写入），
+// 与内置包共用 getPetPack 解析——两来源同一渲染路径，无特例。
+let importedPacks: readonly PetPackDescriptor[] = [];
+
+export function setImportedPacks(packs: readonly PetPackDescriptor[]): void {
+  importedPacks = packs;
+}
+
+/** 设置页选择器用：内置在前，导入包按 id 序追加。 */
+export function listAllPacks(): readonly PetPackDescriptor[] {
+  return [...BUILTIN_PETS, ...importedPacks];
+}
+
+/** 按 id 取包（内置 → 导入）；未知 id（如 P2 删除了当前选中项）回退内置第一只。 */
 export function getPetPack(petId: string): PetPackDescriptor {
-  return BUILTIN_PETS.find((pack) => pack.id === petId) ?? BUILTIN_PETS[0];
+  return (
+    BUILTIN_PETS.find((pack) => pack.id === petId) ??
+    importedPacks.find((pack) => pack.id === petId) ??
+    BUILTIN_PETS[0]
+  );
 }
 
 /** 状态 → 动画类，缺省回退 idle（渲染层唯一的兜底规则）。 */

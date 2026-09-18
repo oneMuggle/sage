@@ -8,6 +8,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { getPetPack } from '../../features/pet/builtinPacks';
+import { useImportedPacksBootstrap } from '../../features/pet/importedPacks';
 import { usePetStore } from '../../features/pet/petStore';
 import { usePetSnapshot } from '../../features/pet/usePetSnapshot';
 import { useChatStreamStore } from '../../features/send-message/chatStreamStore';
@@ -27,6 +28,7 @@ export function PetDock() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useI18n();
+  useImportedPacksBootstrap();
 
   if (!enabled) return null;
 
