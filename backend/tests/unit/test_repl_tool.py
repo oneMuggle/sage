@@ -446,7 +446,6 @@ def test_repl_cleanup_failure_does_not_raise():
 
 def test_periodic_cleanup_timer_starts_on_pending():
     """_retain_pending_cleanup 应启动定时清理线程。"""
-    import threading
     # 确保初始状态
     repl_module._cleanup_timer_stop.set()  # 停止任何已有线程
     if repl_module._cleanup_timer_thread is not None:

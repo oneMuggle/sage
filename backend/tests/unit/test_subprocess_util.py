@@ -425,7 +425,7 @@ class TestDecodeOutput:
 
     def test_utf8_passthrough(self) -> None:
         """合法 UTF-8 直接通过，无替换字符。"""
-        raw = "你好世界".encode("utf-8")
+        raw = "你好世界".encode()
         assert subprocess_util._decode_output(raw) == "你好世界"
 
     def test_ascii_passthrough(self) -> None:
