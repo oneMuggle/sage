@@ -94,6 +94,10 @@ def test_body_documents_full_pipeline_tools() -> None:
     assert "office_update" in report.body
     # Round 39 目录真页码：交付前刷新 TOC 域为真页码的可选通道。
     assert "office_refresh_toc" in report.body
+    # Round 47：论文场景可发现化收口——图表目录与交叉引用占位符。
+    assert "figure_index" in paper.body
+    assert "{{fig:" in paper.body
+    assert "office_refresh_toc" in paper.body
 
 
 # ──────────────────────────────────────────────────────────────────────

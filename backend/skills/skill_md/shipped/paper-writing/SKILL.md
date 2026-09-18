@@ -2,9 +2,9 @@
 name: paper-writing
 description: 撰写期刊论文/学术论文的完整工作流——大纲确认、分章起草、结构化引用（GB/T 7714）、docx 生成与格式自检。当用户要写论文、投稿稿件、毕业论文正文时使用。
 license: Apache-2.0
-compatibility: 需要 Round 7-10 的 office 工具面（office_create 的 format_spec/references/citations、office_lint_word）
+compatibility: 需要 Round 7-10 的 office 工具面（office_create 的 format_spec/references/citations、office_lint_word）；目录/图表目录/交叉引用与真页码刷新走 R39-R46 能力（office_refresh_toc 等）
 when_to_use: 当用户要撰写期刊论文、学术论文、投稿稿件、毕业论文、课程论文的正文/摘要/参考文献,或用"写论文""帮我写论文""论文投稿""期刊投稿""毕业论文""课程论文""论文大纲""论文初稿"等表达时使用
-allowed-tools: write_file office_create office_parse_bibtex office_lint_word office_repair_word ask_user_question
+allowed-tools: write_file office_create office_parse_bibtex office_lint_word office_repair_word office_refresh_toc ask_user_question
 triggers: []
 ---
 
@@ -42,6 +42,9 @@ triggers: []
 - 没有文献文件 → 把用户提供的文献手工整理成 `references` 条目
   （每条必有唯一 `key`，如 `zhang2023`）。
 - 引用标记不要手写 `[1]`——在段落 `citations` 里填 key，引擎自动编号。
+- 正文"如图 N 所示 / 见表 N"不要手编 N——写占位符 `{{fig:图题注}}` /
+  `{{tbl:表题注}}`，生成时写成 Word 交叉引用域（更新域自动跟随题注
+  重排；未匹配题注会生成失败并提示）。
 
 ### 4. 生成 docx（office_create 一次成形）
 
@@ -55,7 +58,10 @@ triggers: []
     "body": {"font_size_pt": 12, "line_spacing": 1.5, "first_line_indent_cm": 0.74},
     "headings": {"h1": {"font_size_pt": 15, "bold": true}},
     "footer": {"page_number": true},
-    "numbering": true
+    "numbering": true,
+    "toc": {},
+    "figure_index": {},
+    "table_index": {}
   },
   "references": [{"key": "zhang2023", "ref_type": "journal", "title": "...", "authors": ["..."], "year": "2023", "source": "..."}],
   "citation_style": "gbt7714",
@@ -68,6 +74,9 @@ triggers: []
 
 要点：`format_spec` 只在用户明示格式要求时才细配；参考文献节自动生成，
 标题不要写"参考文献"段；标题文本不要手写编号（numbering 引擎生成）。
+`toc`/`figure_index`/`table_index` 需要目录/插图清单/表格清单时才加；
+生成时在 office_create 带 `refresh_toc: true`（需本机 Word + pywin32），
+交付即真页码，无需手动更新域。
 
 ### 5. 自检与修复（交付前必做）
 
@@ -84,6 +93,12 @@ triggers: []
 - 首页不同页眉页脚（封面页无页眉/不同页脚，first_page_different）
 - 奇偶页页眉页脚（odd_even_pages，书籍排版场景）
 - 横排分节（section_breaks：宽表格页单独横排，其余纵向）
+- 目录域（toc）+ **真页码刷新**：office_create 带 `refresh_toc: true`
+  或事后调 `office_refresh_toc`（Word COM）；无 Word 环境在 Word 里
+  Ctrl+A → F9 手动更新
+- 图表目录（figure_index / table_index：插图清单/表格清单各占一页，
+  收录 SEQ 题注；随刷新域一并得真页码）
+- 交叉引用占位符（{{fig:题注}}/{{tbl:题注}} → REF 域，见第 2 步）
 - 嵌入照片/扫描件 >8MB 时，本机装有 Pillow 会自动压缩到阈值内
   （`pip install -r backend/requirements-optional.txt`）；未安装则
   >10MB 的图会被拒绝，请先手工压缩
