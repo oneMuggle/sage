@@ -18,6 +18,7 @@ import {
 } from '../../shared/api/usageApi';
 import { useI18n } from '../../shared/lib/i18n';
 
+import { EndpointQuotaSection } from './EndpointQuotaSection';
 import { UsageRequestsTable } from './UsageRequestsTable';
 import { UsageTrendChart } from './UsageTrendChart';
 
@@ -58,6 +59,8 @@ export function UsagePanel() {
   const [trend, setTrend] = useState<UsageTrend | null>(null);
   const [trendLoading, setTrendLoading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  // P0-B (2026-09-18): 刷新按钮同时驱动按端点限额区块重拉
+  const [quotaRefresh, setQuotaRefresh] = useState(0);
   // 卸载守卫: load 的异步 continuation 可能在组件卸载（含测试环境拆除）
   // 之后才 resolve,此刻 setState 会抛 unhandled rejection
   const mountedRef = useRef(true);
@@ -244,7 +247,10 @@ export function UsagePanel() {
         <button
           type="button"
           data-testid="usage-refresh"
-          onClick={() => void load()}
+          onClick={() => {
+            void load();
+            setQuotaRefresh((n) => n + 1);
+          }}
           disabled={loading}
           className="px-3 py-1.5 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted transition-colors disabled:opacity-50"
         >
@@ -267,6 +273,8 @@ export function UsagePanel() {
       )}
       {/* L8 PR-C: 趋势图 (双线 SVG, 跟随 range 重拉) */}
       <UsageTrendChart trend={trend} loading={trendLoading} />
+      {/* P0-B (2026-09-18): 按端点限额用量 + 80%/100% 预警 */}
+      <EndpointQuotaSection refreshToken={quotaRefresh} />
       {/* L8 PR-B: 单次请求明细表 (与 summary 解耦, 独立加载) */}
       <UsageRequestsTable />
     </div>

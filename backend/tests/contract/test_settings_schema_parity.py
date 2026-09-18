@@ -24,6 +24,7 @@ from backend.data.settings_canonicalizer import (
     LEGAL_MODEL_SELECTION_KEYS,
     LEGAL_MODEL_SELECTIONS_KEYS,
     LEGAL_ORCH_KEYS,
+    LEGAL_QUOTA_KEYS,
     LEGAL_TOP_KEYS,
     LEGAL_WIKI_KEYS,
     from_camel,
@@ -57,7 +58,8 @@ def test_legal_top_keys_matches_appsettings_interface() -> None:
 
 
 def test_legal_endpoint_keys_is_stable() -> None:
-    """LEGAL_ENDPOINT_KEYS 是 EndpointConfig 9 字段 (含 Task 1 新增 protocol / modelId / localModelPath)."""
+    """LEGAL_ENDPOINT_KEYS 是 EndpointConfig 字段 (含 protocol / modelId /
+    localModelPath / quota — 2026-09-18 端点限额嵌套对象)."""
     assert (
         frozenset(
             {
@@ -70,10 +72,16 @@ def test_legal_endpoint_keys_is_stable() -> None:
                 "localModelPath",
                 "discoveredModels",
                 "lastDiscoveredAt",
+                "quota",
             }
         )
         == LEGAL_ENDPOINT_KEYS
     )
+
+
+def test_legal_quota_keys_is_stable() -> None:
+    """LEGAL_QUOTA_KEYS 是 EndpointQuota 2 字段 (2026-09-18)."""
+    assert frozenset({"dailyTokens", "monthlyBudgetUsd"}) == LEGAL_QUOTA_KEYS
 
 
 def test_legal_model_selection_keys_is_stable() -> None:
@@ -152,6 +160,8 @@ def test_aliases_camel_side_subset_of_legal_keys() -> None:
         | LEGAL_MODEL_SELECTIONS_KEYS
         | LEGAL_DISCOVERED_MODEL_KEYS
         | LEGAL_WIKI_KEYS
+        # quota 子层 (2026-09-18): daily_tokens 等 ALIASES camel 侧在此白名单.
+        | LEGAL_QUOTA_KEYS
         # 2026-09 修复: orch 子层键进入 ALIASES (worktree_isolation 等),
         # 并集必须包含 LEGAL_ORCH_KEYS, 否则合法翻译被判为非法。
         | LEGAL_ORCH_KEYS

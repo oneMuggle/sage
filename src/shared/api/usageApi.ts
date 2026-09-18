@@ -95,6 +95,30 @@ export async function fetchUsageRequests(
   return invoke<UsageRequestsPage>('usage_list_requests', params);
 }
 
+/** P0-B (2026-09-18): 单端点聚合行 (GET /api/v1/usage/by-endpoint) */
+export interface UsageEndpointRow {
+  endpoint_id: string | null;
+  total_requests: number;
+  total_tokens: number;
+  today_requests: number;
+  today_tokens: number;
+  month_requests: number;
+  month_tokens: number;
+  /** 整月无已知成本时为 null (不折 0) */
+  month_cost_usd: number | null;
+}
+
+export interface UsageByEndpoint {
+  items: UsageEndpointRow[];
+  day_start_utc: string;
+  month_start_utc: string;
+  error?: string;
+}
+
+export async function fetchUsageByEndpoint(): Promise<UsageByEndpoint> {
+  return invoke<UsageByEndpoint>('usage_by_endpoint');
+}
+
 /** U14 (批次 C): 某会话的持久化用量聚合 (usage_events 表, 重启不丢) */
 export interface SessionUsage {
   session_id: string;

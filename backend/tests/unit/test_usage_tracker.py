@@ -673,3 +673,56 @@ def test_export_usage_csv_handles_none_ttft(monkeypatch: pytest.MonkeyPatch):
     assert len(rows) == 2
     ft_col = rows[0].index("first_token_ms")
     assert rows[1][ft_col] == ""
+
+
+# ==================== P0-B (2026-09-18): GET /usage/by-endpoint 聚合 ====================
+
+
+def test_usage_by_endpoint_aggregates_today_and_month(monkeypatch: pytest.MonkeyPatch):
+    """同端点多行合并; 无 endpoint_id 行归 null; 已知成本聚合非 null。"""
+    import asyncio
+
+    _patch_memory_db(monkeypatch)
+    from backend.api.usage_routes import get_usage_by_endpoint
+
+    tracker = UsageTracker()
+    tracker.record("gpt-4o", 100, 40, session_id="s1", endpoint_id="ep-a")  # 140
+    tracker.record("gpt-4o", 10, 5, session_id="s2", endpoint_id="ep-a")  # 15
+    tracker.record(
+        "unknown-model", 7, 3, session_id="s2", endpoint_id="ep-b"
+    )  # 10, 成本未知 → month_cost null
+
+    data = asyncio.run(get_usage_by_endpoint())
+    assert "error" not in data
+    assert data["day_start_utc"].endswith("T00:00:00Z")
+    assert data["month_start_utc"].endswith("T00:00:00Z")
+    by = {item["endpoint_id"]: item for item in data["items"]}
+    assert set(by) == {"ep-a", "ep-b"}
+
+    assert by["ep-a"]["today_requests"] == 2
+    assert by["ep-a"]["today_tokens"] == 155
+    assert by["ep-a"]["month_requests"] == 2
+    assert by["ep-a"]["month_tokens"] == 155
+    # gpt-4o 有目录价: 110/1e6*2.5 + 45/1e6*10
+    assert by["ep-a"]["month_cost_usd"] == pytest.approx(0.000725, abs=1e-6)
+
+    # 成本全未知的端点保持 null, 不折 0
+    assert by["ep-b"]["month_cost_usd"] is None
+    assert by["ep-b"]["today_tokens"] == 10
+
+
+def test_usage_by_endpoint_null_endpoint_id_groups_orphan(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """record 不带 endpoint_id → 聚合行 endpoint_id=None (前端归"未归属端点")。"""
+    import asyncio
+
+    _patch_memory_db(monkeypatch)
+    from backend.api.usage_routes import get_usage_by_endpoint
+
+    UsageTracker().record("gpt-4o", 5, 5, session_id="s3")
+    data = asyncio.run(get_usage_by_endpoint())
+    assert len(data["items"]) == 1
+    orphan = data["items"][0]
+    assert orphan["endpoint_id"] is None
+    assert orphan["today_tokens"] == 10

@@ -27,6 +27,17 @@ export interface DiscoveredModel {
  */
 export type EndpointProtocol = 'openai-compatible' | 'anthropic' | 'gemini' | 'ollama';
 
+/**
+ * 端点限额 (2026-09-18 端点限额用量优化 P0-B).
+ * 0 / 缺省 = 不限额。仅用于用量面板的进度与预警展示, 不做请求侧熔断 (P1)。
+ */
+export interface EndpointQuota {
+  /** 日 token 用量上限 (UTC 日) */
+  dailyTokens?: number;
+  /** 月费用预算 (USD, UTC 月) */
+  monthlyBudgetUsd?: number;
+}
+
 /** Configuration for a single endpoint */
 export interface EndpointConfig {
   id: string;
@@ -48,6 +59,8 @@ export interface EndpointConfig {
    * 与 modelId 互斥但并存以支持 hybrid; 留空表示走远端 modelId.
    */
   localModelPath: string;
+  /** 端点限额 (选填; 后端 LEGAL_ENDPOINT_KEYS 已放行 quota 嵌套对象) */
+  quota?: EndpointQuota;
   discoveredModels: DiscoveredModel[];
   lastDiscoveredAt: number | null;
   /**

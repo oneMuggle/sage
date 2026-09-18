@@ -45,6 +45,9 @@ ALIASES: Dict[str, str] = {
     # 2026-09-14: local_model_path 历史残留 (win7 安装包迁移数据), 不翻译会导致
     # validate_settings_shape 报 400 (field 不在 LEGAL_ENDPOINT_KEYS 白名单).
     "local_model_path": "localModelPath",
+    # quota 子层 (2026-09-18 端点限额): 与前端 EndpointQuota 字段同步.
+    "daily_tokens": "dailyTokens",
+    "monthly_budget_usd": "monthlyBudgetUsd",
     # ModelSelection 子层
     "endpoint_id": "endpointId",
     "model_id": "modelId",
@@ -102,6 +105,15 @@ LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
         "localModelPath",
         "discoveredModels",
         "lastDiscoveredAt",
+        # 2026-09-18 (端点限额): 可选嵌套配额对象 {dailyTokens, monthlyBudgetUsd}.
+        "quota",
+    }
+)
+# EndpointConfig.quota 子层白名单 (2026-09-18). 值语义校验见 validate_quota.
+LEGAL_QUOTA_KEYS: FrozenSet[str] = frozenset(
+    {
+        "dailyTokens",
+        "monthlyBudgetUsd",
     }
 )
 LEGAL_MODEL_SELECTION_KEYS: FrozenSet[str] = frozenset(
@@ -205,6 +217,16 @@ def validate_settings_shape(settings: dict) -> None:
         discovered_models = ep.get("discoveredModels")
         if discovered_models is not None and not isinstance(discovered_models, list):
             raise ValueError(f"endpoints[{i}].discoveredModels must be a list")
+        quota = ep.get("quota")
+        if quota is not None and not isinstance(quota, dict):
+            raise ValueError(f"endpoints[{i}].quota must be an object")
+        if isinstance(quota, dict):
+            bad_quota = [k for k in quota if k not in LEGAL_QUOTA_KEYS]
+            if bad_quota:
+                raise ValueError(
+                    f"unknown quota field {bad_quota[0]!r} at endpoints[{i}].quota; "
+                    f"allowed: {sorted(LEGAL_QUOTA_KEYS)}"
+                )
         for j, model in enumerate(discovered_models or []):
             if not isinstance(model, dict):
                 raise ValueError(f"endpoints[{i}].discoveredModels[{j}] is not a dict")
@@ -430,6 +452,11 @@ def strip_unknown_fields(settings: Any) -> Any:
                 cleaned_eps.append(ep)
                 continue
             clean_ep = {k: v for k, v in ep.items() if k in LEGAL_ENDPOINT_KEYS}
+            quota = clean_ep.get("quota")
+            if isinstance(quota, dict):
+                clean_ep["quota"] = {
+                    k: v for k, v in quota.items() if k in LEGAL_QUOTA_KEYS
+                }
             models = clean_ep.get("discoveredModels")
             if isinstance(models, list):
                 clean_models: List[Any] = []
@@ -626,6 +653,27 @@ def validate_protocol(value: Any) -> Any:
     return value
 
 
+def validate_quota(value: Any) -> Any:
+    """Endpoint.quota 值语义校验 (2026-09-18 端点限额).
+
+    - ``None`` 视为"未配置限额", 直接返回。
+    - 必须是 dict; 每个已知字段值必须是 None 或非负数字 (bool 拒收)。
+    - 未知键抛 ValueError (白名单最终由 validate_settings_shape 兜底)。
+    """
+    if value is None:
+        return value
+    if not isinstance(value, dict):
+        raise ValueError(f"quota must be an object, got {type(value).__name__}")
+    for k, v in value.items():
+        if k not in LEGAL_QUOTA_KEYS:
+            raise ValueError(f"unknown quota field {k!r}; allowed: {sorted(LEGAL_QUOTA_KEYS)}")
+        if v is None:
+            continue
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0:
+            raise ValueError(f"quota.{k} must be a non-negative number, got {v!r}")
+    return value
+
+
 def validate_local_model_path(value: Any, platform: str | None = None) -> Any:
     """Endpoint.localModelPath 平台路径分隔符校验.
 
@@ -680,6 +728,7 @@ def validate_endpoint_payload(ep: Any, platform: str | None = None) -> Any:
         raise ValueError(f"endpoint payload must be a dict, got {type(ep).__name__}")
     validate_protocol(ep.get("protocol"))
     validate_local_model_path(ep.get("localModelPath"), platform=platform)
+    validate_quota(ep.get("quota"))
     return ep
 
 

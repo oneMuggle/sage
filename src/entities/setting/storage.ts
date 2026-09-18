@@ -52,6 +52,9 @@ const ENDPOINT_KEYS: ReadonlySet<keyof EndpointConfig> = new Set([
   'apiKey',
   'protocol',
   'modelId',
+  // 2026-09-18 端点限额: 嵌套 {dailyTokens?, monthlyBudgetUsd?} 整树透传,
+  // 键名语义校验在后端 canonicalizer validate_quota。
+  'quota',
   'discoveredModels',
   'lastDiscoveredAt',
   // 'localModelPath' 不在此白名单内 — UI 已隐藏, 后端白名单已收紧.
