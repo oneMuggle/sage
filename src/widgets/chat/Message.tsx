@@ -357,9 +357,7 @@ function ToolCallTitle({ name, args }: { name: string; args: Record<string, unkn
  *  阈值：超过 300 字符时自动折叠，用户可手动展开查看
  */
 function ToolCallResult({ result }: { result: unknown }) {
-  const safeResult = typeof result === 'string'
-    ? result
-    : JSON.stringify(result ?? '');
+  const safeResult = typeof result === 'string' ? result : JSON.stringify(result ?? '');
   const [isExpanded, setIsExpanded] = useState(false);
   const isLarge = safeResult.length > 300;
 
@@ -417,17 +415,6 @@ function MessageComponent({
   // (ThinkingPanel / tool_calls) 始终渲染,确保中间步骤不会"空泡"。
   const showBubble = isUser || (isAssistant && Boolean((message.content ?? '').trim()));
 
-  // R38: 系统消息（如压缩通知）居中渲染，无头像/气泡
-  if (isSystem && message.compact_info) {
-    return (
-      <div className="flex justify-center my-3">
-        <div className="px-3 py-1.5 rounded-radius-sm bg-bg-subtle border border-border text-xs text-text-secondary flex items-center gap-1.5">
-          <Package className="w-3 h-3 text-muted" />
-          <span>{message.content}</span>
-        </div>
-      </div>
-    );
-  }
   // P1 流式分块: 已确定前缀切稳定块（memo 化跳过重解析），只有 live 尾块
   // 随 delta 全量 re-parse；非流式整体单块渲染，DOM 与旧实现一致。
   const displayContent = useMemo(
@@ -483,6 +470,19 @@ function MessageComponent({
   // R38: 技能激活明细展开态
   const [skillsExpanded, setSkillsExpanded] = useState(false);
   const activatedSkills = message.activated_skills ?? [];
+
+  // R38: 系统消息（如压缩通知）居中渲染，无头像/气泡
+  // 必须在所有 Hooks 之后 return，否则违反 React Hooks 规则
+  if (isSystem && message.compact_info) {
+    return (
+      <div className="flex justify-center my-3">
+        <div className="px-3 py-1.5 rounded-radius-sm bg-bg-subtle border border-border text-xs text-text-secondary flex items-center gap-1.5">
+          <Package className="w-3 h-3 text-muted" />
+          <span>{message.content}</span>
+        </div>
+      </div>
+    );
+  }
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content);
