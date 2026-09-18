@@ -311,10 +311,11 @@ class OfficeCreateTool(BaseTool):
                             "metadata": {
                                 "type": "object",
                                 "description": (
-                                    "word 可选：文档核心属性（Word「文件 "
-                                    "→ 信息」面板可见；期刊/公文归档要"
-                                    "求）。title 恒取请求标题；其余显式"
-                                    "传入才写。"
+                                    "word/excel 可选：文档核心属性"
+                                    "（「文件 → 信息」面板可见；期刊/"
+                                    "公文归档要求）。word 的 title 恒取"
+                                    "请求标题；其余显式传入才写，不臆"
+                                    "造作者。"
                                 ),
                                 "properties": {
                                     "author": {"type": "string"},
