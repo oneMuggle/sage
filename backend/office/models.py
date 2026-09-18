@@ -991,6 +991,11 @@ class ExcelChartSpec(BaseModel):
     title: Optional[str] = Field(default=None, max_length=200)
 
 
+#: Round 50：Excel 与 Word 的核心属性字段同一集合（author→creator 等
+#: 映射是格式差异，模型无差异）——别名复用避免双份定义漂移。
+ExcelMetadataSpec = WordMetadataSpec
+
+
 class OfficeExcelGenerateRequest(BaseModel):
     """POST /api/v1/office/excel/generate."""
 
@@ -1004,6 +1009,12 @@ class OfficeExcelGenerateRequest(BaseModel):
     sheets: _constrained_list(ExcelSheetSpec, min_length=1, max_length=50)
     # 批次 2.1：数据写完后统一挂载的原生图表。
     charts: _constrained_list(ExcelChartSpec, max_length=20) = Field(default_factory=list)
+    # Round 50：文档核心属性（与 Word R49 对称；author→creator 等映射
+    # 在生成器内完成）。
+    metadata: Optional[ExcelMetadataSpec] = Field(
+        default=None,
+        description="文档核心属性；None 不写（不臆造作者）",
+    )
 
 
 class ChartSeriesSpec(BaseModel):

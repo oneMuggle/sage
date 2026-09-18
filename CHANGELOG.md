@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 50：Excel core properties 对称支持**（方案 `docs/plans/2026-09-18_r50-excel-metadata-plan.md`）
+
+### Added(office)
+- **`OfficeExcelGenerateRequest.metadata`**（ExcelMetadataSpec = WordMetadataSpec 别名复用）：generate_xlsx 写 wb.properties（author→creator、comments→description 映射在生成器内完成）——台账/预算归档与 Word 同款文档属性；仅显式传入才写，不臆造作者
+- 契约同步：schema metadata 描述扩为 word/excel 通用；types.ts Excel 请求加 metadata；paper-writing 数据表附表节补说明
+
 > 📝 **Word 写作能力 Round 49：文档核心属性**（方案 `docs/plans/2026-09-18_r49-core-metadata-plan.md`）
 
 ### Added(office)

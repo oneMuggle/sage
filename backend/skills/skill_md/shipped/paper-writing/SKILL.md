@@ -111,6 +111,7 @@ triggers: []
 `autofit_columns` 自适应列宽、`number_formats` 数字格式（金额/百分比）、
 `conditional_formats` 数据条/色阶、`data_validations` 下拉选项、
 `print_setup` 打印横向单页宽——跟 Sage 说需求即可，无需手写格式。
+文档核心属性（作者/主题/关键词，`metadata`）与 Word 侧同款支持。
 
 ## 不做的事（YAGNI）
 
