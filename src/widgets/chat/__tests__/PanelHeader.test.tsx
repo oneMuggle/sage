@@ -52,3 +52,21 @@ describe('PanelHeader', () => {
     });
   });
 });
+
+describe('PanelHeader — right-panel R2 批次 C: 产物计数徽标', () => {
+  const listProps = {
+    tab: 'artifacts' as const,
+    onTabChange: vi.fn(),
+    onClose: vi.fn(),
+  };
+
+  it('artifactCount > 0 时产物 Tab 显示 (N)', () => {
+    render(<PanelHeader {...listProps} artifactCount={3} />);
+    expect(screen.getByRole('button', { name: '产物 (3)' })).toBeInTheDocument();
+  });
+
+  it('artifactCount 为 0 时不显示计数', () => {
+    render(<PanelHeader {...listProps} artifactCount={0} />);
+    expect(screen.getByRole('button', { name: '产物' })).toBeInTheDocument();
+  });
+});
