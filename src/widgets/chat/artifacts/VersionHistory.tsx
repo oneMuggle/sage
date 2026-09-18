@@ -31,7 +31,9 @@ export function VersionHistory({ sessionId, artifactId, onRestoreComplete }: Ver
   const [restoring, setRestoring] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   // right-panel R3 批次 A: 版本 diff —— diffFor = 正在展开对比的版本号
+  // right-panel R4 批次 A: diffAgainst = 对比右侧（'current' | 任意版本号）
   const [diffFor, setDiffFor] = useState<number | null>(null);
+  const [diffAgainst, setDiffAgainst] = useState<'current' | number>('current');
   const [diffText, setDiffText] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
 
@@ -68,7 +70,7 @@ export function VersionHistory({ sessionId, artifactId, onRestoreComplete }: Ver
     }
   };
 
-  // right-panel R3 批次 A: 展开/收起 指定版本 ↔ 当前内容 的 diff
+  // right-panel R3 批次 A: 展开/收起 指定版本 的 diff（R4 批次 A: 右侧可选）
   const toggleDiff = async (versionNum: number) => {
     if (diffFor === versionNum) {
       setDiffFor(null);
@@ -76,16 +78,34 @@ export function VersionHistory({ sessionId, artifactId, onRestoreComplete }: Ver
       return;
     }
     setDiffFor(versionNum);
+    setDiffAgainst('current');
+    await buildDiff(versionNum, 'current');
+  };
+
+  // right-panel R4 批次 A: 版本互比 —— 左固定 diffFor，右侧 'current' 或
+  // 任意其它版本；任一侧拉取失败只影响当前对比
+  const buildDiff = async (
+    leftVersion: number,
+    against: 'current' | number,
+  ) => {
     setDiffLoading(true);
     setError(null);
     try {
-      const [version, current] = await Promise.all([
-        getArtifactVersion(sessionId, artifactId, versionNum),
-        readArtifactContent(sessionId, artifactId),
-      ]);
-      const diff = unifiedDiff(version.content ?? '', current.content ?? '', {
-        oldLabel: `v${versionNum} (${version.created_at ? new Date(version.created_at).toISOString().slice(0, 16).replace('T', ' ') : ''})`,
-        newLabel: '当前版本',
+      const left = await getArtifactVersion(sessionId, artifactId, leftVersion);
+      const rightLabel =
+        against === 'current' ? '当前版本' : `v${against}`;
+      const right = await (against === 'current'
+        ? readArtifactContent(sessionId, artifactId).then((c) => ({
+            created_at: 0,
+            content: c.content ?? '',
+          }))
+        : getArtifactVersion(sessionId, artifactId, against).then((v) => ({
+            created_at: v.created_at,
+            content: v.content ?? '',
+          })));
+      const diff = unifiedDiff(left.content ?? '', right.content, {
+        oldLabel: `v${leftVersion} (${left.created_at ? new Date(left.created_at).toISOString().slice(0, 16).replace('T', ' ') : ''})`,
+        newLabel: rightLabel,
       });
       setDiffText(diff === '' ? '（两个版本内容相同）' : diff);
     } catch (e: unknown) {
@@ -94,6 +114,13 @@ export function VersionHistory({ sessionId, artifactId, onRestoreComplete }: Ver
     } finally {
       setDiffLoading(false);
     }
+  };
+
+  // R4 批次 A: 更换对比右侧
+  const changeDiffAgainst = async (against: 'current' | number) => {
+    if (diffFor === null) return;
+    setDiffAgainst(against);
+    await buildDiff(diffFor, against);
   };
 
   return (
@@ -169,6 +196,30 @@ export function VersionHistory({ sessionId, artifactId, onRestoreComplete }: Ver
                       className="px-1 pb-2"
                       data-testid={`version-diff-view-${v.version_num}`}
                     >
+                      {/* R4 批次 A: 对比右侧可选（当前版本 / 任意其它版本） */}
+                      <div className="flex items-center gap-1.5 py-1">
+                        <span className="text-muted shrink-0">对比对象</span>
+                        <select
+                          className="text-xs bg-surface border border-border rounded px-1 py-0.5 text-text"
+                          value={diffAgainst === 'current' ? 'current' : String(diffAgainst)}
+                          aria-label="选择对比对象版本"
+                          data-testid={`version-diff-against-${v.version_num}`}
+                          disabled={diffLoading}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            void changeDiffAgainst(val === 'current' ? 'current' : Number(val));
+                          }}
+                        >
+                          <option value="current">当前版本</option>
+                          {versions
+                            .filter((o) => o.version_num !== v.version_num)
+                            .map((o) => (
+                              <option key={o.version_num} value={o.version_num}>
+                                v{o.version_num}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
                       {diffLoading ? (
                         <div className="text-muted py-1">加载对比…</div>
                       ) : diffText ? (
