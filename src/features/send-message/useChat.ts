@@ -663,6 +663,10 @@ export function useChat() {
                 };
                 addMessage(compactMsg);
               }
+              // r71: 附件检索注入溯源 → 引用明细随消息落库（气泡内展示）
+              if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
+                updateMessage(assistantId, { rag_citations: evt.citations });
+              }
 
               // 处理 reasoning 事件：三种 state 不同处理 (2026-09-02 bug fix)
               //   - reasoning_delta: 增量, appendReasoning 累积
@@ -966,6 +970,10 @@ export function useChat() {
             // 完整重建（与主路径同一套 store 写入）。
             if (applyOrchestrationEventToBoard(evt, sid)) {
               return;
+            }
+            // r71: 重接路径同主路径 —— 检索引用明细随消息落库
+            if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
+              updateMessage(messageId, { rag_citations: evt.citations });
             }
             // 其余事件（工具 acting/observing 等）降级为 streaming meta 文案
             useChatStreamStore.getState().setStreamingMeta(sid, messageId, {

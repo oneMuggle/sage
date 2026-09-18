@@ -48,6 +48,10 @@ export interface StreamingState {
   currentAgentId: string | null;
   /** P2: 当前 ReAct 迭代轮次 */
   iteration: number;
+  /** R17-E 收尾（r71）: memory_used 载荷写入（气泡内可展开） */
+  memory_refs?: { id: string; memory_type: string; preview: string }[];
+  /** r71: attachment_rag_used 载荷写入 */
+  rag_citations?: { media_id: string; mode: string }[];
 }
 
 /** 进度可视化 5 元组（与 useChat 内 TaskBoard 同字段，提取独立文件便于 store 引用） */
@@ -179,7 +183,12 @@ interface ChatStreamStoreState {
   setStreamingMeta: (
     sessionId: string,
     messageId: string,
-    patch: Partial<Pick<StreamingState, 'state' | 'currentAgentId' | 'iteration'>>,
+    patch: Partial<
+      Pick<
+        StreamingState,
+        'state' | 'currentAgentId' | 'iteration' | 'memory_refs' | 'rag_citations'
+      >
+    >,
   ) => void;
   clearStream: (sessionId: string, messageId: string) => void;
 

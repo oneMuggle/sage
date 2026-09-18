@@ -9,6 +9,7 @@ import {
   GitBranch,
   Eye,
   EyeOff,
+  FileSearch,
   Pencil,
   RefreshCw,
   Check,
@@ -470,6 +471,9 @@ function MessageComponent({
   // R38: 技能激活明细展开态
   const [skillsExpanded, setSkillsExpanded] = useState(false);
   const activatedSkills = message.activated_skills ?? [];
+  // r71: 附件检索溯源展开态
+  const [ragExpanded, setRagExpanded] = useState(false);
+  const ragCitations = message.rag_citations ?? [];
 
   // R38: 系统消息（如压缩通知）居中渲染，无头像/气泡
   // 必须在所有 Hooks 之后 return，否则违反 React Hooks 规则
@@ -691,6 +695,21 @@ function MessageComponent({
               />
             </button>
           )}
+          {ragCitations.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setRagExpanded((v) => !v)}
+              className="inline-flex items-center gap-0.5 text-primary hover:underline"
+              title={t('chat.rag_citations_toggle')}
+              data-testid="rag-citations-toggle"
+            >
+              <FileSearch className="w-3 h-3" />
+              {t('chat.rag_citations_count').replace('{n}', String(ragCitations.length))}
+              <ChevronDown
+                className={`w-3 h-3 transition-transform ${ragExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+          )}
           <span>
             {new Date(message.created_at).toLocaleTimeString([], {
               hour: '2-digit',
@@ -728,6 +747,25 @@ function MessageComponent({
                   技能
                 </span>
                 <span className="text-text-secondary break-all">{skill.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* r71: 附件检索溯源明细（attachment_rag_used 流事件携带，可展开） */}
+        {ragExpanded && ragCitations.length > 0 && (
+          <div
+            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-1"
+            data-testid="rag-citations-list"
+          >
+            {ragCitations.map((c) => (
+              <div key={c.media_id} className="flex items-start gap-1.5">
+                <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
+                  {t('chat.rag_citation_chunk')}
+                </span>
+                <span className="text-text-secondary font-mono break-all">
+                  {c.media_id}
+                </span>
               </div>
             ))}
           </div>
