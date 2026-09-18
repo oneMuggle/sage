@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Optional
 
 from docx import Document
+from docx.oxml.ns import qn
 
 from .errors import OfficeParseError
 from .models import WordFormatSpec, WordRepairResult
@@ -74,14 +75,107 @@ def _renumber_headings(doc: Document, bib_heading: str) -> None:
         para.text = f"{prefix} {stripped}"
 
 
+def _rewrite_seq_caption_number(para, new_number: int) -> None:
+    """仅改 SEQ 题注段的缓存编号 run（Round 48 缺陷修复）。
+
+    ``para.text = ...`` 整体重写会摧毁 R42 引入的 SEQ 域与书签（交叉
+    引用/图表目录收录随之失效）——这里定位 separate 与 end 之间的纯
+    数字缓存 run，只改它的文本，域结构原样保留。
+    """
+    from docx.oxml.ns import qn
+
+    state = "outside"
+    for run in para.runs:
+        for fld in run._r.findall(qn("w:fldChar")):
+            fld_type = fld.get(qn("w:fldCharType"))
+            if fld_type == "begin":
+                state = "in_instr"
+            elif fld_type == "separate" and state == "in_instr":
+                state = "in_cache"
+            elif fld_type == "end":
+                state = "outside"
+        if state == "in_cache" and run.text.strip().isdigit():
+            run.text = str(new_number)
+            return
+
+
 def _renumber_captions(doc: Document) -> None:
-    """图/表题注按出现顺序重排编号（保留 "图N　" 之外的文本）。"""
+    """图/表题注按出现顺序重排编号（保留 "图N　" 之外的文本）。
+
+    携带 SEQ 域的题注段（Round 42）只改缓存编号 run，不整体重写。
+    """
     for label, regex in (("图", _FIGURE_CAPTION_RE), ("表", _TABLE_CAPTION_RE)):
         seq = 0
         for para in doc.paragraphs:
             if regex.match(para.text):
                 seq += 1
-                para.text = re.sub(rf"^{label}\d+", f"{label}{seq}", para.text, count=1)
+                has_seq = any(
+                    "SEQ" in (el.text or "")
+                    for el in para._p.findall(".//" + qn("w:instrText"))
+                )
+                if has_seq:
+                    _rewrite_seq_caption_number(para, seq)
+                else:
+                    para.text = re.sub(
+                        rf"^{label}\d+", f"{label}{seq}", para.text, count=1
+                    )
+
+
+def _collect_seq_captions(doc: Document, label: str) -> list:
+    """按文档顺序收集指定 label 的题注条目 [(编号, 文本)]。
+
+    与 lint 同款域缓存跳过——目录/图目录缓存行不当作题注。
+    """
+    from .word_lint import _iter_paragraphs_outside_fields
+
+    regex = _FIGURE_CAPTION_RE if label == "图" else _TABLE_CAPTION_RE
+    entries = []
+    for para in _iter_paragraphs_outside_fields(doc):
+        match = regex.match(para.text)
+        if match is not None:
+            entries.append((int(match.group(1)), regex.match(para.text).string[match.end():].strip()))
+    return entries
+
+
+def _insert_tof_before_body(doc, index_spec, label: str, entries: list) -> None:
+    """在文档前部插入 TOF 域（目录域之后；无目录则首段之前）。
+
+    insert_paragraph_before 逐段前插：按期望顺序依次插入即落在锚点前。
+    """
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Pt
+
+    from .word_layout import _fld_char
+
+    anchor = doc.paragraphs[0] if doc.paragraphs else None
+    if anchor is None:
+        return
+
+    def _new_para(text: str = "", bold: bool = False, size: Optional[object] = None):
+        para = anchor.insert_paragraph_before(text)
+        if bold and para.runs:
+            para.runs[0].bold = True
+        if size is not None and para.runs:
+            para.runs[0].font.size = size
+        return para
+
+    title = _new_para(str(index_spec.heading_text), bold=True, size=Pt(16))
+    _ = title
+    begin_para = anchor.insert_paragraph_before()
+    _fld_char(begin_para, "begin")
+    instr_el = OxmlElement("w:instrText")
+    instr_el.set(qn("xml:space"), "preserve")
+    instr_el.text = rf" TOC \h \z \c {label!r} ".replace("'", '"')
+    begin_para._p.append(instr_el)
+    _fld_char(begin_para, "separate")
+    if entries:
+        for number, text in entries:
+            anchor.insert_paragraph_before(f"{label}{number}　{text}")
+    else:
+        anchor.insert_paragraph_before(str(index_spec.placeholder_text))
+    end_para = anchor.insert_paragraph_before()
+    _fld_char(end_para, "end")
 
 
 def repair_docx(path: Path, spec: WordFormatSpec, *, overwrite: bool = False) -> WordRepairResult:
@@ -119,6 +213,25 @@ def repair_docx(path: Path, spec: WordFormatSpec, *, overwrite: bool = False) ->
     if any(i.rule_id == "caption/sequence" for i in before.issues):
         _renumber_captions(doc)
         repaired.add("caption/sequence")
+
+    # Round 48：图/表目录域在位修复——从文档自身 SEQ 题注构建条目，
+    # 在目录域之后（无目录则文档首段之前）插入 TOF 域。
+    index_fixes = {
+        "figure_index/presence": ("图", spec.figure_index),
+        "table_index/presence": ("表", spec.table_index),
+    }
+    for rule_id, (label, index_spec) in index_fixes.items():
+        if index_spec is None or not any(
+            i.rule_id == rule_id for i in before.issues
+        ):
+            continue
+        from .models import WordIndexSpec
+
+        entries = _collect_seq_captions(doc, label)
+        _insert_tof_before_body(
+            doc, index_spec if index_spec is not None else WordIndexSpec(), label, entries
+        )
+        repaired.add(rule_id)
 
     # 保存：默认新文件；overwrite 走临时名 + os.replace 原子替换
     # （Windows Defender 会短暂锁住新落盘文件，与 edit.py 同款退避重试）

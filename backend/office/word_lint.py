@@ -304,6 +304,7 @@ def _iter_paragraphs_outside_fields(doc: Document):
 def _check_captions(doc: Document, issues: List[WordLintIssue]) -> None:
     for label, regex in (("图", _FIGURE_CAPTION_RE), ("表", _TABLE_CAPTION_RE)):
         expected = 1
+        seen_texts: dict = {}
         for para in _iter_paragraphs_outside_fields(doc):
             match = regex.match(para.text)
             if match is None:
@@ -317,6 +318,18 @@ def _check_captions(doc: Document, issues: List[WordLintIssue]) -> None:
                 ))
                 expected = actual
             expected += 1
+            # Round 48：重复题注文本提示（交叉引用按题注文本匹配指向
+            # 首个；警告级——不阻断交付）。
+            caption_text = regex.sub("", para.text, count=1).strip()
+            if caption_text in seen_texts:
+                issues.append(_issue(
+                    "caption/duplicate", "warning",
+                    f'{label}题注文本重复："{caption_text}"（第 '
+                    f"{seen_texts[caption_text]} 处与当前处）",
+                    "区分同类题注的标题文本，避免交叉引用指向首个",
+                ))
+            else:
+                seen_texts[caption_text] = expected - 1
 
 
 _CROSS_REF_RESIDUE_RE = re.compile(r"\{\{(fig|tbl):[^}]+\}\}")

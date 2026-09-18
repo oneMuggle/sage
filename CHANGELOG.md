@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🧹 **Word 写作能力 Round 48：repair 补 index 域插入 + SEQ 题注重排兼容**（方案 `docs/plans/2026-09-18_r48-repair-index-plan.md`）
+
+### Added(office)
+- **repair 闭环 R44 规则**：spec 声明 figure_index/table_index 而文档缺失时，repair 从文档自身 SEQ 题注重建条目并插入对应 TOF 域（目录后/首段前），repaired_rules 记入 presence 规则
+- **`caption/duplicate` lint 警告**：同类题注文本重复提示（交叉引用按文本匹配指向首个），warning 级不阻断
+
+### Fixed(office)
+- **SEQ 题注重排摧毁域缺陷**：`_renumber_captions` 对携带 SEQ 的题注段不再整体重写 `para.text`（会抹掉 R42 的 SEQ 域与书签，重排触发即毁交叉引用/图表目录）——改为仅更新域内缓存编号 run，结构原样保留
+
 > 📝 **Word 写作能力 Round 47：论文场景能力可发现化收口**（方案 `docs/plans/2026-09-18_r47-paper-capabilities-plan.md`）
 
 ### Changed(docs)
