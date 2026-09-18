@@ -1,102 +1,121 @@
-// useWikiChatStream - 订阅 wiki-chat-stream-{id} 事件,累积 chunk
 import { useEffect, useState, useCallback } from 'react';
 
 import { listen, type UnlistenFn } from '../../shared/api/desktopEvent';
+import {
+  wikiChatStream,
+  cancelWikiChatStream,
+  type WikiChatStreamRequest,
+} from '../../shared/api-client/wiki';
+import type { WikiCitation } from '../../shared/types/wiki';
 
 export interface ChatStreamState {
-  /** 累积的完整回答 */
   answer: string;
-  /** 引用列表(stream 完成后填充) */
-  citations: string[];
-  /** 当前是否在流式 */
+  citations: WikiCitation[];
+  sources: WikiCitation[];
   streaming: boolean;
-  /** 错误 */
+  completed: boolean;
   error: string | null;
 }
 
-export function useWikiChatStream(streamId: string | null) {
-  const [state, setState] = useState<ChatStreamState>({
-    answer: '',
-    citations: [],
-    streaming: false,
-    error: null,
-  });
+const emptyState: ChatStreamState = {
+  answer: '',
+  citations: [],
+  sources: [],
+  streaming: false,
+  completed: false,
+  error: null,
+};
+
+export function useWikiChatStream(streamId: string | null, request?: WikiChatStreamRequest) {
+  const [state, setState] = useState<ChatStreamState>(emptyState);
 
   useEffect(() => {
-    if (!streamId) return;
-    setState({ answer: '', citations: [], streaming: true, error: null });
-    const chunkEvent = `wiki-chat-stream-${streamId}-chunk`;
-    const doneEvent = `wiki-chat-stream-${streamId}-done`;
-    const errorEvent = `wiki-chat-stream-${streamId}-error`;
-    let unlistenChunk: UnlistenFn | null = null;
-    let unlistenDone: UnlistenFn | null = null;
-    let unlistenError: UnlistenFn | null = null;
-
-    listen<string>(
-      chunkEvent,
-      (e) => {
-        setState((s) => ({ ...s, answer: s.answer + e.payload }));
-      },
-      { streamId },
-    )
-      .then((fn) => {
-        unlistenChunk = fn;
-      })
-      .catch((e) => {
-        setState((s) => ({ ...s, streaming: false, error: String(e) }));
-      });
-
-    listen<{ citations: string[] }>(
-      doneEvent,
-      (e) => {
-        setState((s) => ({
-          ...s,
-          streaming: false,
-          citations: e.payload.citations,
-        }));
-      },
-      { streamId },
-    )
-      .then((fn) => {
-        unlistenDone = fn;
-      })
-      .catch((e) => {
-        setState((s) => ({ ...s, streaming: false, error: String(e) }));
-      });
-
-    // Electron main relays 4 error payload shapes; only 2 distinct runtime
-    // shapes arrive here — an object `{ error: string }` (HTTP non-2xx,
-    // non-AbortError catch, synthetic NDJSON-parse error) and a bare `string`
-    // (backend error event data relayed verbatim). Normalize both to string.
-    listen<{ code?: string; message?: string; error?: string } | string>(
-      errorEvent,
-      (e) => {
-        const payload = e.payload;
-        const errorMessage =
-          typeof payload === 'string'
-            ? payload
-            : (payload?.message ?? payload?.error ?? 'Wiki 聊天失败');
-        setState((s) => ({ ...s, streaming: false, error: errorMessage }));
-      },
-      { streamId },
-    )
-      .then((fn) => {
-        unlistenError = fn;
-      })
-      .catch((e) => {
-        setState((s) => ({ ...s, streaming: false, error: String(e) }));
-      });
-
-    return () => {
-      if (unlistenChunk) unlistenChunk();
-      if (unlistenDone) unlistenDone();
-      if (unlistenError) unlistenError();
+    if (!streamId) {
+      setState(emptyState);
+      return;
+    }
+    setState({ ...emptyState, streaming: true });
+    let disposed = false;
+    const unlisteners: UnlistenFn[] = [];
+    const subscriptions: Promise<void>[] = [];
+    const ownerToken = crypto.randomUUID();
+    const register = (subscription: Promise<UnlistenFn>) => {
+      subscriptions.push(
+        subscription
+          .then((fn) => {
+            if (disposed) fn();
+            else unlisteners.push(fn);
+          })
+          .catch((error: unknown) => {
+            if (!disposed) {
+              setState((s) => ({ ...s, streaming: false, completed: true, error: String(error) }));
+              disposed = true;
+              unlisteners.forEach((unlisten) => unlisten());
+            }
+          }),
+      );
     };
-  }, [streamId]);
+    register(
+      listen<string>(
+        `wiki-chat-stream-${streamId}-chunk`,
+        (event) => {
+          if (!disposed)
+            setState((s) => (s.completed ? s : { ...s, answer: s.answer + event.payload }));
+        },
+        { streamId },
+      ),
+    );
+    register(
+      listen<{ citations: WikiCitation[]; sources: WikiCitation[] }>(
+        `wiki-chat-stream-${streamId}-done`,
+        (event) => {
+          if (!disposed)
+            setState((s) => ({
+              ...s,
+              streaming: false,
+              completed: true,
+              citations: event.payload.citations,
+              sources: event.payload.sources ?? [],
+            }));
+        },
+        { streamId },
+      ),
+    );
+    register(
+      listen<{ code?: string; message?: string; error?: string } | string>(
+        `wiki-chat-stream-${streamId}-error`,
+        (event) => {
+          const payload = event.payload;
+          const error =
+            typeof payload === 'string'
+              ? payload
+              : (payload?.message ?? payload?.error ?? 'Wiki 聊天失败');
+          if (!disposed) setState((s) => ({ ...s, streaming: false, completed: true, error }));
+        },
+        { streamId },
+      ),
+    );
+    void Promise.all(subscriptions).then(async () => {
+      if (disposed || !request) return;
+      try {
+        await wikiChatStream({ ...request, streamId, ownerToken });
+      } catch (error) {
+        if (!disposed)
+          setState((s) => ({
+            ...s,
+            streaming: false,
+            completed: true,
+            error: `查询失败：${String(error)}`,
+          }));
+      }
+    });
+    return () => {
+      disposed = true;
+      unlisteners.forEach((unlisten) => unlisten());
+      void cancelWikiChatStream(streamId, ownerToken).catch(() => {});
+    };
+  }, [streamId, request]);
 
-  const reset = useCallback(() => {
-    setState({ answer: '', citations: [], streaming: false, error: null });
-  }, []);
-
+  const reset = useCallback(() => setState(emptyState), []);
   return { ...state, reset };
 }

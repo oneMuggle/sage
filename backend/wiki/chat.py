@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import re
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +47,7 @@ class ChatConfig:
     embed_model: str
     embed_dim: int = DEFAULT_EMBED_DIM
     max_tokens: int = 4096
+    selected_paths: List[str] | None = None
 
 
 async def chat_with_wiki(
@@ -85,8 +88,9 @@ async def chat_with_wiki(
 
     return WikiChatOutcome(
         answer=answer,
-        citations=citations,
+        citations=_answer_citations(answer, citations),
         stats=stats,
+        sources=citations,
     )
 
 
@@ -95,14 +99,15 @@ async def _build_chat_context(
     project_root: Path,
     query: str,
     http_post: Callable[[str, Dict[str, str], dict], Any],
-) -> Tuple[str, List[str], RetrievalStats]:
-    """构建聊天上下文。
-
-    Returns:
-        tuple[str, list[str], RetrievalStats]: (context, citations, stats)
-    """
+) -> Tuple[str, List[dict], RetrievalStats]:
+    """构建实际进入模型上下文的证据目录。"""
     # Step 1: Token 搜索
-    token_results = search_wiki(project_root, query, limit=RETRIEVAL_LIMIT)
+    allowed_paths = None if config.selected_paths is None else set(config.selected_paths)
+    if allowed_paths == set():
+        return "", [], RetrievalStats(0, 0, 0.0, 0)
+    token_results = search_wiki(
+        project_root, query, limit=RETRIEVAL_LIMIT, allowed_paths=allowed_paths
+    )
     token_paths = [r.path for r in token_results.results]
 
     # Step 2: 向量搜索
@@ -122,7 +127,9 @@ async def _build_chat_context(
         query_vec = parse_embed_response(embed_response, config.embed_dim)[0]
 
         vector_store = VectorStore.open(project_root, config.embed_dim)
-        vector_hits = vector_store.search(query_vec, limit=RETRIEVAL_LIMIT)
+        vector_hits = vector_store.search(
+            query_vec, limit=RETRIEVAL_LIMIT, allowed_paths=allowed_paths
+        )
         vector_paths = [hit.page_path for hit in vector_hits]
     except Exception:
         # 向量搜索失败，仅使用 token 搜索
@@ -142,13 +149,12 @@ async def _build_chat_context(
     }
     for path in fused_paths:
         wiki_file = allowed_files.get(path)
-        if wiki_file is not None:
+        if wiki_file is not None and (allowed_paths is None or path in allowed_paths):
             try:
                 content = secure_read_text(project_root, wiki_file)
             except OSError:
                 continue
             pages.append((path, content))
-            citations.append(path)
 
     # Step 5: Token 预算 + 截断
     budget = ContextBudget.compute(config.max_tokens)
@@ -158,9 +164,30 @@ async def _build_chat_context(
     context_parts = []
     total_tokens = 0
 
+    originals = dict(pages)
     for chunk in chunks:
-        context_parts.append(f"\n--- 文件: {chunk.page_path} ---\n{chunk.content}\n")
-        total_tokens += len(chunk.content) // 3
+        if not chunk.content:
+            continue
+        source_id = f"S{len(citations) + 1}"
+        original = originals[chunk.page_path]
+        excerpt = "".join(chunk.content.splitlines(keepends=True)[:500])
+        title = next(
+            (line.lstrip("# ") for line in original.splitlines() if line.startswith("# ")),
+            Path(chunk.page_path).stem,
+        )
+        citations.append(
+            {
+                "id": source_id,
+                "path": chunk.page_path,
+                "title": title,
+                "excerpt": excerpt,
+                "content_hash": hashlib.sha256(original.encode("utf-8")).hexdigest(),
+                "line_start": 1,
+                "line_end": max(1, len(excerpt.splitlines())),
+            }
+        )
+        context_parts.append(f"\n--- [{source_id}] 文件: {chunk.page_path} ---\n{excerpt}\n")
+        total_tokens += len(excerpt) // 3
 
     context = "".join(context_parts)
 
@@ -172,6 +199,11 @@ async def _build_chat_context(
     )
 
     return context, citations, stats
+
+
+def _answer_citations(answer: str, sources: List[dict]) -> List[dict]:
+    used = set(re.findall(r"\[(S[1-9][0-9]*)\]", answer))
+    return [source for source in sources if source["id"] in used]
 
 
 def _build_rag_messages(query: str, context: str) -> List[Dict[str, str]]:
@@ -222,7 +254,7 @@ async def chat_with_wiki_stream(
             # 没有命中页面, 直接 done (无 chunk)。
             done_line = (
                 json.dumps(
-                    {"event": "done", "data": {"citations": []}},
+                    {"event": "done", "data": {"citations": [], "sources": []}},
                     ensure_ascii=False,
                 )
                 + "\n"
@@ -235,7 +267,9 @@ async def chat_with_wiki_stream(
         messages = _build_rag_messages(query, context)
 
         # 3. 流式调用 LLM
+        answer_parts = []
         async for delta in ctx.llm_stream_call(messages, temperature):
+            answer_parts.append(delta)
             chunk_line = (
                 json.dumps(
                     {"event": "chunk", "data": delta},
@@ -248,7 +282,13 @@ async def chat_with_wiki_stream(
         # 4. done 行带 citations
         done_line = (
             json.dumps(
-                {"event": "done", "data": {"citations": citations}},
+                {
+                    "event": "done",
+                    "data": {
+                        "citations": _answer_citations("".join(answer_parts), citations),
+                        "sources": citations,
+                    },
+                },
                 ensure_ascii=False,
             )
             + "\n"

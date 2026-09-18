@@ -7,7 +7,6 @@ Claude Code 项目 → 会话归属）。路由面刻意保持最小：
 - ``POST /projects``                     登记目录（validate_workspace 校验，幂等）
 - ``DELETE /projects/{project_id}``      从清单移除（不动磁盘与会话）
 - ``POST /projects/{project_id}/open``   打开项目：复用最近会话或新建并绑定
-- ``POST /projects/{project_id}/sessions`` 项目下显式新建绑定会话
 - ``GET  /projects/{project_id}/sessions`` 项目下未归档会话（新→旧）
 
 会话与目录的归属复用 ``session_workspace_bindings`` 活跃绑定（见
@@ -23,20 +22,34 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.compat.win7.pydantic_compat import ConfigDict
+from backend.data.database import get_database, make_with_db_lock
+from backend.data.project_material_repo import (
+    MAX_MATERIAL_CONTENT_CHARS,
+    ProjectMaterial,
+    ProjectMaterialContentTooLargeError,
+    ProjectMaterialRepository,
+)
 from backend.data.project_repo import (
     Project,
     ProjectNotFoundError,
     ProjectPathMissingError,
     ProjectRepository,
-    create_session_for_project,
     open_project,
 )
+from backend.data.session_repo import MessageRepository
 from backend.office.errors import OfficePathError
 from backend.office.models import _constrained_list
+from backend.office.session_workspace import get_workspace_binding
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+
+# review HIGH #3 fix: 用本地装饰器模式（参见 backend/api/legacy_routes.py
+# 同样的做法, 23 处引用）。所有 SQL 读写统一串行化到进程级 _SQLITE_LOCK。
+def with_db_lock(func):
+    return make_with_db_lock(globals())(func)
 
 
 class ProjectRegisterRequest(BaseModel):
@@ -52,9 +65,50 @@ class ProjectModel(BaseModel):
     name: str
     created_at: int
     last_opened_at: int
+    description: Optional[str] = None
+    instructions: Optional[str] = None
     session_count: int = 0
     last_session_id: Optional[str] = None
-    allowed_paths: List[str] = Field(default_factory=list)
+
+
+class ProjectUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    description: Optional[str] = Field(default=None, max_length=4000)
+    instructions: Optional[str] = Field(default=None, max_length=16000)
+
+
+class ProjectMaterialAddRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    content: str = Field(min_length=1, max_length=MAX_MATERIAL_CONTENT_CHARS)
+    source_message_id: Optional[str] = Field(default=None, max_length=256)
+
+
+class ProjectMaterialModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    project_id: str
+    source_message_id: Optional[str]
+    content_hash: str
+    content: str
+    status: str
+    wiki_page_path: Optional[str]
+    error_message: Optional[str]
+    created_at: int
+
+
+class ProjectMaterialsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    materials: List[ProjectMaterialModel]
+
+
+class MaterialMutationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    removed: bool
+
+
+class SaveAnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message_id: str = Field(min_length=1, max_length=256)
 
 
 class ProjectListResponse(BaseModel):
@@ -104,7 +158,19 @@ def _with_stats(project: Project, stats: Dict[str, Any]) -> ProjectModel:
     )
 
 
+def _get_project_or_404(project_id: str) -> Project:
+    project = ProjectRepository().get(project_id)
+    if project is None:
+        raise _error(404, "project_not_found", "项目不存在")
+    return project
+
+
+def _material_model(material: ProjectMaterial) -> ProjectMaterialModel:
+    return ProjectMaterialModel(**material.to_dict())
+
+
 @router.get("", response_model=ProjectListResponse)
+@with_db_lock
 def list_projects() -> ProjectListResponse:
     repo = ProjectRepository()
     stats = repo.session_stats()
@@ -114,47 +180,133 @@ def list_projects() -> ProjectListResponse:
 
 
 @router.post("", response_model=ProjectModel)
+@with_db_lock
 def register_project(request: ProjectRegisterRequest) -> ProjectModel:
     try:
-        project = ProjectRepository().register(
-            request.path,
-            allowed_paths=request.allowed_paths,
-        )
+        project = ProjectRepository().register(request.path)
     except OfficePathError as exc:
         raise _error(400, "invalid_workspace_path", "项目路径无效或目录不存在") from exc
     stats = ProjectRepository().session_stats()
     return _with_stats(project, stats)
 
 
-@router.put("/{project_id}/allowed-paths", response_model=ProjectAllowedPathsResponse)
-def update_project_allowed_paths(
-    project_id: str,
-    request: ProjectAllowedPathsRequest,
-) -> ProjectAllowedPathsResponse:
-    """更新项目的额外允许访问路径规则列表。
-
-    2026-09-17 allowed_paths 扩展: 用户可以在前端项目详情面板管理
-    项目的允许访问路径（除 workspace 内的文件之外）。
-
-    Raises:
-        404 ``project_not_found``: 项目 ID 不存在
-    """
+@router.patch("/{project_id}", response_model=ProjectModel)
+@with_db_lock
+def update_project(
+    project_id: str, request: ProjectUpdateRequest
+) -> ProjectModel:
+    """更新项目概览字段。未出现在请求中的字段保持不变。"""
     repo = ProjectRepository()
     project = repo.get(project_id)
     if project is None:
         raise _error(404, "project_not_found", "项目不存在")
 
-    updated = repo.update_allowed_paths(project_id, request.allowed_paths)
-    if not updated:
-        raise _error(404, "project_not_found", "项目不存在")
+    fields_set = getattr(request, "model_fields_set", request.__fields_set__)
+    if "description" in fields_set:
+        repo.update_description(project_id, request.description)
+    if "instructions" in fields_set:
+        repo.update_instructions(project_id, request.instructions)
 
-    return ProjectAllowedPathsResponse(
-        id=project_id,
-        allowed_paths=request.allowed_paths,
+    updated = repo.get(project_id)
+    assert updated is not None
+    return _with_stats(updated, repo.session_stats())
+
+
+@router.get("/{project_id}/materials", response_model=ProjectMaterialsResponse)
+@with_db_lock
+def list_project_materials(project_id: str) -> ProjectMaterialsResponse:
+    _get_project_or_404(project_id)
+    materials = ProjectMaterialRepository().list_by_project(project_id)
+    return ProjectMaterialsResponse(
+        materials=[_material_model(material) for material in materials]
     )
 
 
+@router.post(
+    "/{project_id}/materials",
+    response_model=ProjectMaterialModel,
+    status_code=201,
+)
+@with_db_lock
+def add_project_material(
+    project_id: str, request: ProjectMaterialAddRequest
+) -> ProjectMaterialModel:
+    _get_project_or_404(project_id)
+    try:
+        material = ProjectMaterialRepository().add(
+            project_id=project_id,
+            content=request.content,
+            source_message_id=request.source_message_id,
+        )
+    except ProjectMaterialContentTooLargeError as exc:
+        raise _error(413, "material_too_large", str(exc)) from exc
+    return _material_model(material)
+
+
+@router.delete(
+    "/{project_id}/materials/{material_id}",
+    response_model=MaterialMutationResponse,
+)
+@with_db_lock
+def remove_project_material(
+    project_id: str, material_id: str
+) -> MaterialMutationResponse:
+    _get_project_or_404(project_id)
+    materials = ProjectMaterialRepository()
+    material = materials.get(material_id)
+    if material is None or material.project_id != project_id:
+        raise _error(404, "material_not_found", "资料不存在")
+    if not materials.remove(material_id):
+        raise _error(404, "material_not_found", "资料不存在")
+    return MaterialMutationResponse(removed=True)
+
+
+@router.post(
+    "/{project_id}/materials/save-answer",
+    response_model=ProjectMaterialModel,
+    status_code=201,
+)
+@with_db_lock
+def save_answer_as_project_material(
+    project_id: str, request: SaveAnswerRequest
+) -> ProjectMaterialModel:
+    """把当前项目绑定会话中的可见回答保存为项目资料。
+
+    security MEDIUM fix: 仅允许 role == "assistant" 的消息——用户消息
+    (role=user) 内容可能携带 prompt injection 指令,不应直接进入项目
+    资料上下文(后续会被注入 LLM prompt)。
+    """
+    project = _get_project_or_404(project_id)
+    message = MessageRepository().get(request.message_id)
+    if message is None:
+        raise _error(404, "message_not_found", "消息不存在")
+    # security: 拒绝非 assistant 消息——避免 user-role 内容注入项目资料
+    if message.role != "assistant":
+        raise _error(
+            400,
+            "message_role_not_savable",
+            "仅可保存助手回答,用户消息不允许作为项目资料",
+        )
+
+    binding = get_workspace_binding(
+        get_database().get_connection(), message.session_id
+    )
+    if binding is None or binding.workspace_path != project.path:
+        raise _error(403, "message_project_mismatch", "消息不属于该项目")
+
+    try:
+        material = ProjectMaterialRepository().add(
+            project_id=project.id,
+            content=message.content,
+            source_message_id=message.id,
+        )
+    except ProjectMaterialContentTooLargeError as exc:
+        raise _error(413, "material_too_large", str(exc)) from exc
+    return _material_model(material)
+
+
 @router.delete("/{project_id}", response_model=ProjectMutationResponse)
+@with_db_lock
 def remove_project(project_id: str) -> ProjectMutationResponse:
     removed = ProjectRepository().remove(project_id)
     if not removed:
@@ -163,6 +315,7 @@ def remove_project(project_id: str) -> ProjectMutationResponse:
 
 
 @router.post("/{project_id}/open", response_model=ProjectOpenResponse)
+@with_db_lock
 def open_project_route(project_id: str) -> ProjectOpenResponse:
     """打开项目：最近活跃会话优先，否则新建会话并绑定项目目录。
 
@@ -183,29 +336,8 @@ def open_project_route(project_id: str) -> ProjectOpenResponse:
     )
 
 
-@router.post("/{project_id}/sessions", response_model=ProjectOpenResponse)
-def create_project_session_route(project_id: str) -> ProjectOpenResponse:
-    """项目下显式新建绑定会话（前端项目行 hover「新建会话」按钮）。
-
-    2026-09 修复: 前端 ``projects_create_session`` 一直 POST 本路由,
-    后端从未注册 → 405 Method Not Allowed, 按钮每次点击都报错。
-    响应复用 ProjectOpenResponse (project/session/created), created 恒 true。
-    """
-    try:
-        project, session = create_session_for_project(project_id)
-    except ProjectNotFoundError as exc:
-        raise _error(404, "project_not_found", "项目不存在") from exc
-    except ProjectPathMissingError as exc:
-        raise _error(410, "project_path_missing", "项目目录不存在或已被移动") from exc
-    stats = ProjectRepository().session_stats()
-    return ProjectOpenResponse(
-        project=_with_stats(project, stats),
-        session=session.to_dict(),
-        created=True,
-    )
-
-
 @router.get("/{project_id}/sessions", response_model=ProjectSessionsResponse)
+@with_db_lock
 def list_project_sessions(project_id: str) -> ProjectSessionsResponse:
     repo = ProjectRepository()
     project = repo.get(project_id)
