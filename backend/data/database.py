@@ -1404,6 +1404,12 @@ class Database:
             cursor.execute(
                 "ALTER TABLE orch_tasks ADD COLUMN revision INTEGER NOT NULL DEFAULT 0"
             )
+        # RT24 (round32): 任务级用量/时长持久化 —— run 历史回看有量化数据
+        # （对标 Claude Code 会话历史每 Task tokens）。终态由 dispatcher 写入。
+        if "used_tokens" not in _task_cols:
+            cursor.execute("ALTER TABLE orch_tasks ADD COLUMN used_tokens INTEGER")
+        if "duration_ms" not in _task_cols:
+            cursor.execute("ALTER TABLE orch_tasks ADD COLUMN duration_ms INTEGER")
 
         # Subagent 实时可观测性 schema (run-events@1.0)。全部 DDL 幂等，兼容旧库。
         cursor.execute(
