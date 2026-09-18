@@ -32,7 +32,9 @@ pytestmark = [pytest.mark.unit]
 
 
 def _project(
-    *, description: str | None = None, instructions: str | None = None
+    *,
+    description: Optional[str] = None,
+    instructions: Optional[str] = None,
 ) -> object:
     """轻量 duck-typed 替身 (不依赖真实 Project 构造以隔离单元测试)。"""
 
