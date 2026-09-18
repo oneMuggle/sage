@@ -783,6 +783,32 @@
       "actual_reachability": "ASGI framework used by FastAPI; reachable via HTTP requests on the local backend port",
       "controls": "same as PYSEC-2026-161 (starlette 0.35.1 forced by fastapi 0.109.1, fix requires Py3.9+); local-only binding 127.0.0.1, LocalAuthMiddleware bearer token, request limits, response sanitization, quarterly review through Win7 LTS EOL 2027-12-13",
       "exception": "temporary exception pending fastapi upgrade that supports starlette 1.x on Py3.8, or Win7 LTS EOL"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-12-19",
+      "source": "pip",
+      "package": "anyio",
+      "package_version": "3.7.1",
+      "advisory": "GHSA-82r6-8w77-94w6",
+      "advisory_url": "https://osv.dev/vulnerability/GHSA-82r6-8w77-94w6",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "conditional low exposure: backend never uses anyio.TLSStream for outbound TLS (HTTP TLS is handled by httpx via the ssl module's own cert verification), the ASGI server binds loopback 127.0.0.1 only, and configured LLM/gateway endpoints are ASCII hostnames (no IDN outbound surface)",
+      "controls": "Win7 LTS pinned to anyio 3.7.1, the terminal 3.x release; the advisory is fixed only in 4.14.2 which is not installable on the Python 3.8 runtime (fastapi 0.109 / starlette 0.35.1 constrain anyio>=3.7.1,<5); loopback-only ASGI, no IDN egress, quarterly policy review through Win7 LTS EOL 2027-12-13",
+      "exception": "temporary exception pending a Python 3.8-compatible patched release or Win7 LTS EOL"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-12-19",
+      "source": "pip",
+      "package": "anyio",
+      "package_version": "3.7.1",
+      "advisory": "GHSA-5p39-cfhj-2xmp",
+      "advisory_url": "https://osv.dev/vulnerability/GHSA-5p39-cfhj-2xmp",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "not reachable: the backend has no anyio.to_process / run_process / process-pool usage (git grep zero hits); async offloading goes through to_thread exclusively",
+      "controls": "Win7 LTS pinned to anyio 3.7.1, the terminal 3.x release; the advisory is fixed only in 4.14.2 which is not installable on the Python 3.8 runtime; no process-pool usage, quarterly policy review through Win7 LTS EOL 2027-12-13",
+      "exception": "temporary exception pending a Python 3.8-compatible patched release or Win7 LTS EOL"
     }
   ]
 }
