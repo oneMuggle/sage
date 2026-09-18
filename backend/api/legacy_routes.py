@@ -3267,15 +3267,34 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     if data.client_message_id
                     else str(uuid.uuid4())
                 )
-                message_repo.save(
-                    DbMessage(
-                        id=user_message_id,
-                        session_id=data.session_id,
-                        role="user",
-                        content=data.message,
-                        created_at=user_now,
+                # client_message_id 幂等 (2026-09): 同 cmid 重试时复用既有
+                # user 消息 (内容一致), 不再重复落库 —— 避免 INSERT 主键冲突
+                # 告警与重复行。仅在带 cmid 的路径检查 (UUID 路径天然唯一)。
+                reuse_existing = False
+                if data.client_message_id:
+                    existing_user = await asyncio.to_thread(
+                        message_repo.get, user_message_id
                     )
-                )
+                    reuse_existing = (
+                        existing_user is not None
+                        and existing_user.content == data.message
+                    )
+                    if reuse_existing:
+                        logger.info(
+                            "[REQ %s] client_message_id 幂等复用: %s",
+                            request_id,
+                            user_message_id,
+                        )
+                if not reuse_existing:
+                    message_repo.save(
+                        DbMessage(
+                            id=user_message_id,
+                            session_id=data.session_id,
+                            role="user",
+                            content=data.message,
+                            created_at=user_now,
+                        )
+                    )
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
@@ -3558,6 +3577,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 按 id 精确命中, 根治重复显示。
                     if assistant_persisted:
                         done_payload["message_id"] = assistant_db_id
+                    # 2026-09: 首轮对话的标题在后台生成 (DONE 先行) ——
+                    # 提示前端稍后补刷侧栏, 以呈现后台生成的标题。
+                    if sess is not None and sess.message_count <= 2:
+                        done_payload["title_pending"] = True
                     await entry.queue.put(done_payload)
 
                 # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
