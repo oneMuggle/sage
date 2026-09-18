@@ -64,6 +64,7 @@
 | 85   | [文档核心属性](./85-word-core-metadata.md) | R49：WordMetadataSpec（author/subject/keywords/comments/category）→ docx core properties（title 恒写、不臆造作者）|
 | 86   | [Excel core properties 对称支持](./86-excel-core-metadata.md) | R50：ExcelMetadataSpec 别名复用 + generate_xlsx 写 wb.properties（creator/description 映射）+ 契约同步 |
 | 87   | [读侧 core properties 回读](./87-read-core-metadata.md) | R51：read_docx/read_xlsx 回读 metadata（全空 None；模板默认如实回读）+ 契约同步 |
+| 88   | [PPT core properties 三件套对称](./88-ppt-core-metadata.md) | R52：generate_ppt/read_ppt metadata（python-pptx 属性名与 docx 一致）+ 属性家族 docx/xlsx/pptx 收口 |
 | 83   | [Python 后端代码保护方案](./83-python-code-protection.md) | Cython 二进制编译核心包 (sage_core) + Python 字节码混淆与源码剥离 (backend) + 开发与发布模式分离 (SAGE_PROTECT_CODE) |
 
 ---

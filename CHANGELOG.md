@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 52：PPT core properties 三件套对称**（方案 `docs/plans/2026-09-18_r52-ppt-metadata-plan.md`）
+
+### Added(office)
+- **`OfficePptGenerateRequest.metadata`**（PptMetadataSpec 别名复用）+ **`OfficePptReadResult.metadata`** 回读——docx/xlsx/pptx 三件套文档属性能力收口；python-pptx 属性名与 python-docx 一致（author/subject/keywords/comments/category），仅显式传入才写
+
 > 📝 **Word 写作能力 Round 51：读侧 core properties 回读**（方案 `docs/plans/2026-09-18_r51-read-metadata-plan.md`）
 
 ### Added(office)

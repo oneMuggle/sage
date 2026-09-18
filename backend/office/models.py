@@ -124,6 +124,23 @@ class PptSlideContent(BaseModel):
     notes: Optional[str] = None
 
 
+class WordMetadataSpec(BaseModel):
+    """文档核心属性（Round 49）——Word「文件 → 信息」面板可见。
+
+    title 恒取请求 title，不在此重复；其余显式传入才写（不臆造作者）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    author: Optional[str] = Field(default=None, max_length=100)
+    subject: Optional[str] = Field(default=None, max_length=200)
+    keywords: Optional[str] = Field(
+        default=None, max_length=200, description="关键词（分号分隔）"
+    )
+    comments: Optional[str] = Field(default=None, max_length=500)
+    category: Optional[str] = Field(default=None, max_length=100)
+
+
 class OfficePptReadResult(BaseModel):
     """Result of POST /api/v1/office/ppt/read."""
 
@@ -131,6 +148,8 @@ class OfficePptReadResult(BaseModel):
 
     summary: OfficeDocumentSummary
     slides: List[PptSlideContent]
+    # Round 52：core properties 回读（文档无属性时为 None）。
+    metadata: Optional[WordMetadataSpec] = None
 
 
 class WordParagraphContent(BaseModel):
@@ -192,23 +211,6 @@ class WordHeaderFooterContent(BaseModel):
     header_text: str = ""
     footer_text: str = ""
     has_page_number_field: bool = False
-
-
-class WordMetadataSpec(BaseModel):
-    """文档核心属性（Round 49）——Word「文件 → 信息」面板可见。
-
-    title 恒取请求 title，不在此重复；其余显式传入才写（不臆造作者）。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    author: Optional[str] = Field(default=None, max_length=100)
-    subject: Optional[str] = Field(default=None, max_length=200)
-    keywords: Optional[str] = Field(
-        default=None, max_length=200, description="关键词（分号分隔）"
-    )
-    comments: Optional[str] = Field(default=None, max_length=500)
-    category: Optional[str] = Field(default=None, max_length=100)
 
 
 class OfficeWordReadResult(BaseModel):
@@ -385,6 +387,10 @@ class PptSlideSpec(BaseModel):
     image: Optional[ImageSourceSpec] = None
 
 
+#: Round 52：PPT 与 Word/Excel 的核心属性字段同一集合（别名复用）。
+PptMetadataSpec = WordMetadataSpec
+
+
 class OfficePptGenerateRequest(BaseModel):
     """POST /api/v1/office/ppt/generate."""
 
@@ -400,6 +406,11 @@ class OfficePptGenerateRequest(BaseModel):
         description="Output filename (without .pptx extension is OK; we'll add it)",
     )
     slides: _constrained_list(PptSlideSpec, min_length=1, max_length=100)
+    # Round 52：文档核心属性（与 Word/Excel 对称）。
+    metadata: Optional[PptMetadataSpec] = Field(
+        default=None,
+        description="文档核心属性；None 不写（不臆造作者）",
+    )
 
 
 class WordParagraphSpec(BaseModel):
