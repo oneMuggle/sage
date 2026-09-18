@@ -15,6 +15,7 @@ import {
   loadAttachmentRagConfig,
 } from '../shared/api/attachmentRagConfig';
 import { orchRunClient } from '../shared/api/orchRunClient';
+import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import type { Message as MessageType } from '../shared/lib/store';
@@ -425,6 +426,12 @@ export function Chat() {
       // R23-D2: 图片通道打通 —— data URL 直传后端 ChatRequest.images。
       // 后端口径: ≤4 张、单张解码后 ≤5MiB；前端先行裁剪并提示。
       const MAX_IMAGES = 4;
+
+// r75: 聊天文档附件 MIME 映射（扩展名集合用 useFileUpload.CHAT_DOCUMENT_EXTENSIONS 共享口径）
+const CHAT_DOC_MIME: Record<string, string> = {
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+};
       const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
       const dataUrls = (options?.images ?? [])
         .map((img) => img.dataUrl)
@@ -437,12 +444,12 @@ export function Chat() {
       if (sized.length > MAX_IMAGES) {
         toast.warning(`最多发送 ${MAX_IMAGES} 张图片，已截取前 ${MAX_IMAGES} 张`);
       }
-      // R37: txt/md 附件 → 上传并收集 media id（与图片通道并行）
+      // R37/r75: 文档附件（txt/md/pdf/docx）→ 上传并收集 media id（与图片通道并行）
       const attachmentMediaIds: string[] = [];
       for (const att of options?.attachments ?? []) {
         if (!att.dataUrl) continue;
         const ext = att.name.split('.').pop()?.toLowerCase() ?? '';
-        if (ext !== 'txt' && ext !== 'md') continue;
+        if (!CHAT_DOCUMENT_EXTENSIONS.has(ext)) continue;
         try {
           const bytes = atob(att.dataUrl.split(',')[1] ?? '');
           const buffer = new Uint8Array(bytes.length);
@@ -450,7 +457,7 @@ export function Chat() {
           const res = (await window.electronAPI?.media?.uploadAttachment?.(
             buffer.buffer,
             att.name,
-            att.type || 'text/plain',
+            att.type || CHAT_DOC_MIME[ext] || 'text/plain',
           )) as { media_ref?: { id?: string } } | undefined;
           if (res?.media_ref?.id) {
             attachmentMediaIds.push(res.media_ref.id);
