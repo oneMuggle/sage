@@ -28,8 +28,9 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
+import { useChangesListStore } from '../../../features/changes/changesListStore';
 import { workspaceApi } from '../../../shared/api/workspaceApi';
-import type { WorkspaceChanges, WorkspaceCheckpoint } from '../../../shared/api/workspaceApi';
+import type { WorkspaceCheckpoint } from '../../../shared/api/workspaceApi';
 import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
 import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
@@ -66,9 +67,22 @@ function formatBytes(bytes: number): string {
 }
 
 export function ChangesSection({ sessionId }: ChangesSectionProps) {
-  const [changes, setChanges] = useState<WorkspaceChanges | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // right-panel R3 批次 C: 变更列表/加载/错误上抬 changesListStore（面板
+  // header 计数徽标需要 Tab 未激活时的数据）；selection/diff/checkpoint
+  // 等交互态保留组件本地。
+  const storedChanges = useChangesListStore((s) =>
+    sessionId ? s.bySession[sessionId] : undefined,
+  );
+  const storedError = useChangesListStore((s) =>
+    sessionId ? (s.errors[sessionId] ?? null) : null,
+  );
+  const loading = useChangesListStore((s) =>
+    sessionId ? (s.loadingBy[sessionId] ?? false) : false,
+  );
+  const fetchChanges = useChangesListStore((s) => s.fetch);
+  const changes = storedChanges ?? null;
+  const error = storedError;
+  const notBound = error?.includes('尚未绑定工作区') ?? false;
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [diff, setDiff] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
@@ -82,27 +96,11 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
   const [checkpoints, setCheckpoints] = useState<WorkspaceCheckpoint[] | null>(null);
   const [checkpointsOpen, setCheckpointsOpen] = useState(false);
   const [checkpointBusy, setCheckpointBusy] = useState(false);
-  const [notBound, setNotBound] = useState(false);
 
   const refresh = useCallback(() => {
     if (!sessionId) return;
-    setLoading(true);
-    setError(null);
-    workspaceApi
-      .getChanges(sessionId)
-      .then(setChanges)
-      .catch((e: unknown) => {
-        // 友好处理 workspace_not_bound 错误
-        const errMsg = e instanceof Error ? e.message : String(e);
-        if (errMsg.includes('workspace_not_bound') || errMsg.includes('尚未绑定工作区')) {
-          setError('当前会话尚未绑定工作区，无法查看变更');
-          setNotBound(true);
-        } else {
-          setError(errMsg);
-        }
-      })
-      .finally(() => setLoading(false));
-  }, [sessionId]);
+    void fetchChanges(sessionId);
+  }, [sessionId, fetchChanges]);
 
   const refreshCheckpoints = useCallback(() => {
     if (!sessionId) return;
@@ -114,13 +112,10 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
   }, [sessionId]);
 
   useEffect(() => {
-    setChanges(null);
     setSelectedPath(null);
     setDiff(null);
-    setError(null);
     setCheckpoints(null);
     setCheckpointsOpen(false);
-    setNotBound(false);
     refresh();
   }, [refresh]);
 
@@ -140,7 +135,7 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
           setDiff(d.diff);
           setDiffTruncated(d.truncated);
         })
-        .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+        .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)))
         .finally(() => setDiffLoading(false));
     },
     [sessionId],
@@ -480,8 +475,12 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
         ) : loading && !changes ? (
           <div className="p-3 text-sm text-muted">加载变更…</div>
         ) : !changes || changes.changes.length === 0 ? (
-          <div className="p-3 text-sm text-muted">
+          // R2 批次 C: 空态引导 —— 说明变更面板的数据来源
+          <div className="p-3 text-sm text-muted" data-testid="changes-empty">
             {changes?.clean ? '工作区干净,没有未提交变更' : '暂无变更信息'}
+            <div className="mt-1 text-xs text-muted/80">
+              agent 改动工作区文件后，这里会列出可审查/可回滚的变更
+            </div>
           </div>
         ) : (
           <div className="divide-y divide-border">

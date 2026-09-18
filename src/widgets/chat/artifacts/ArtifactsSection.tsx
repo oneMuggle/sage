@@ -65,7 +65,13 @@ export function ArtifactsSection({
       </div>
       <div className="flex-1 overflow-y-auto">
         {artifacts.length === 0 ? (
-          <div className="p-3 text-sm text-muted">暂无产物</div>
+          // R2 批次 C: 空态引导 —— 告诉用户产物从哪来（对齐主流空态文案）
+          <div className="p-3 text-sm text-muted" data-testid="artifacts-empty">
+            暂无产物
+            <div className="mt-1 text-xs text-muted/80">
+              让 agent 写文件或生成文档后，产物会自动出现在这里
+            </div>
+          </div>
         ) : (
           <div className="divide-y divide-border">
             {artifacts.map((a) => (

@@ -1,6 +1,22 @@
 // src/widgets/chat/artifacts/ArtifactViewer.tsx
-import { ArrowLeft, Copy, FolderOpen, Pencil, Save, X } from 'lucide-react';
+import CodeMirror from '@uiw/react-codemirror';
+import {
+  ArrowLeft,
+  ClipboardCopy,
+  Copy,
+  Eye,
+  FileCode,
+  FolderOpen,
+  Pencil,
+  RefreshCw,
+  Save,
+  X,
+} from 'lucide-react';
 import { useCallback, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import rehypeKatex from 'rehype-katex';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 
 import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
 import { revealArtifact, updateArtifactContent } from '../../../features/artifacts/artifactApi';
@@ -15,6 +31,7 @@ import type {
   OfficePptReadResult,
   OfficeWordReadResult,
 } from '../../../shared/api/types';
+import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
 import { VersionHistory } from './VersionHistory';
 
@@ -32,6 +49,80 @@ const EDITABLE_KINDS: ReadonlySet<ArtifactKind> = new Set([
   'text',
   'csv',
 ]);
+
+// right-panel R2 批次 A: 常用扩展名 → Shiki 语言（未识别回落纯文本 pre）
+const EXT_LANG: Record<string, string> = {
+  py: 'python',
+  ts: 'typescript',
+  tsx: 'typescript',
+  js: 'javascript',
+  jsx: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
+  json: 'json',
+  jsonc: 'json',
+  md: 'markdown',
+  markdown: 'markdown',
+  sh: 'bash',
+  bash: 'bash',
+  rs: 'rust',
+  go: 'go',
+  java: 'java',
+  kt: 'kotlin',
+  c: 'c',
+  h: 'c',
+  cpp: 'cpp',
+  hpp: 'cpp',
+  cs: 'csharp',
+  rb: 'ruby',
+  php: 'php',
+  sql: 'sql',
+  yaml: 'yaml',
+  yml: 'yaml',
+  toml: 'toml',
+  css: 'css',
+  scss: 'scss',
+  html: 'html',
+  xml: 'xml',
+  vue: 'vue',
+  swift: 'swift',
+  dart: 'dart',
+};
+
+function langFromName(name: string): string | undefined {
+  const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
+  return EXT_LANG[ext];
+}
+
+/** R2 批次 A: markdown 产物渲染视图 —— 与消息流同口径（gfm + math + Shiki 代码块） */
+const MD_REMARK = [remarkGfm, remarkMath];
+
+function MarkdownRendered({ text }: { text: string }) {
+  return (
+    <div className="text-sm leading-relaxed" data-testid="artifact-md-rendered">
+      <ReactMarkdown
+        remarkPlugins={MD_REMARK}
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          code({ className, children }) {
+            const match = /language-(\w+)/.exec(className || '');
+            const content = String(children).replace(/\n$/, '');
+            if (!match && !content.includes('\n')) {
+              return (
+                <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">
+                  {content}
+                </code>
+              );
+            }
+            return <ShikiCodeBlock language={match?.[1]}>{content}</ShikiCodeBlock>;
+          },
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+}
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -68,10 +159,27 @@ function parseCsv(text: string): string[][] {
 
 function CsvPreview({ text }: { text: string }) {
   const rows = parseCsv(text);
+  const [copied, setCopied] = useState(false);
   if (rows.length === 0) return <div className="text-sm text-muted">空文件</div>;
   const [head, ...body] = rows;
   return (
     <div className="overflow-auto">
+      <div className="flex justify-end mb-1">
+        <button
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs text-text-secondary hover:text-text hover:bg-bg-hover rounded transition-colors"
+          title="复制 CSV 全文"
+          aria-label="复制 CSV 全文"
+          data-testid="artifact-csv-copy"
+          onClick={() => {
+            void navigator.clipboard?.writeText(text)?.catch(() => {});
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }}
+        >
+          <ClipboardCopy className="w-3.5 h-3.5" />
+          {copied ? '已复制' : '复制全文'}
+        </button>
+      </div>
       <table className="text-xs border-collapse">
         <thead>
           <tr>
@@ -101,11 +209,19 @@ function CsvPreview({ text }: { text: string }) {
 
 export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerProps) {
   const { content, loading, refresh } = useArtifactContent(sessionId, artifact.id);
+  // R3 批次 B: 跟随应用主题（ThemeProvider 同步维护 .dark class，直读
+  // 避免 hook 依赖；主题切换在编辑态挂载后的场景极罕见，不订阅）
+  const themeResolved: 'light' | 'dark' = document.documentElement.classList.contains('dark')
+    ? 'dark'
+    : 'light';
   const [editMode, setEditMode] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [editBaseHash, setEditBaseHash] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // right-panel R2 批次 A: markdown 渲染/源码切换（默认渲染）+ HTML 预览刷新
+  const [mdRendered, setMdRendered] = useState(true);
+  const [htmlReloadKey, setHtmlReloadKey] = useState(0);
 
   const isEditable =
     content?.ok && content.kind && EDITABLE_KINDS.has(content.kind as ArtifactKind);
@@ -157,6 +273,29 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
           <span className="mx-1 text-muted">/</span>
           <span className="text-text">{artifact.name}</span>
         </div>
+        {/* right-panel R2 批次 A: markdown 渲染/源码切换 + HTML 预览刷新 */}
+        {content?.ok && content.kind === 'markdown' && !editMode && (
+          <button
+            className="p-1.5 rounded hover:bg-bg-hover text-text-secondary hover:text-text transition-colors"
+            title={mdRendered ? '查看源码' : '渲染预览'}
+            aria-label={mdRendered ? '查看源码' : '渲染预览'}
+            data-testid="artifact-md-toggle"
+            onClick={() => setMdRendered((v) => !v)}
+          >
+            {mdRendered ? <FileCode className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        )}
+        {content?.ok && content.kind === 'html' && (
+          <button
+            className="p-1.5 rounded hover:bg-bg-hover text-text-secondary hover:text-text transition-colors"
+            title="刷新预览"
+            aria-label="刷新预览"
+            data-testid="artifact-html-refresh"
+            onClick={() => setHtmlReloadKey((k) => k + 1)}
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        )}
         {isEditable && !editMode && (
           <button className="p-1.5 rounded hover:bg-bg-hover" title="编辑" onClick={enterEditMode}>
             <Pencil className="w-4 h-4" />
@@ -206,13 +345,18 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
 
       <div className="flex-1 overflow-auto p-3">
         {editMode ? (
-          <div className="flex flex-col h-full">
-            <textarea
-              className="flex-1 w-full p-2 text-sm font-mono bg-bg-input border border-border rounded resize-none focus:outline-none focus:ring-1 focus:ring-accent"
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              spellCheck={false}
-            />
+          <div className="flex flex-col h-full" data-testid="artifact-edit-codemirror">
+            {/* R3 批次 B: textarea → CodeMirror（行号 + 语法高亮编辑），
+                value/onChange 与乐观并发 hash 保存逻辑完全兼容 */}
+            <div className="flex-1 min-h-0 border border-border rounded overflow-auto bg-bg-input">
+              <CodeMirror
+                value={editContent}
+                height="100%"
+                theme={themeResolved}
+                basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
+                onChange={(value) => setEditContent(value)}
+              />
+            </div>
             {saveError && <div className="mt-2 text-xs text-error">{saveError}</div>}
           </div>
         ) : loading ? (
@@ -231,7 +375,10 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
         ) : content.kind === 'html' ? (
           // P1-3.5 (UI 优化方案 2026-09-13): HTML 产物沙盒 iframe 渲染。
           // sandbox="allow-scripts" 允许 JS 执行但阻止跨域/顶层导航/表单提交。
+          // right-panel R2 批次 A: key 随刷新计数重挂载 —— agent 迭代产物后
+          // 点刷新立即看到新画面（srcDoc 同值不会触发 iframe 重载）。
           <iframe
+            key={htmlReloadKey}
             srcDoc={content.content ?? ''}
             sandbox="allow-scripts"
             title={artifact.name}
@@ -262,9 +409,18 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             />
           )
         ) : content.kind === 'code' || content.kind === 'json' ? (
-          <pre className="whitespace-pre-wrap text-code font-mono bg-bg-hover p-2 rounded">
-            {content.content}
-          </pre>
+          // right-panel R2 批次 A: Shiki 语法高亮（消息流同源）；语言按扩展名
+          // 推断，json kind 直接映射 json；未识别回落纯文本
+          <ShikiCodeBlock language={content.kind === 'json' ? 'json' : langFromName(artifact.name)}>
+            {content.content ?? ''}
+          </ShikiCodeBlock>
+        ) : content.kind === 'markdown' ? (
+          // right-panel R2 批次 A: 默认渲染视图，header 可切源码（编辑态除外）
+          mdRendered ? (
+            <MarkdownRendered text={content.content ?? ''} />
+          ) : (
+            <ShikiCodeBlock language="markdown">{content.content ?? ''}</ShikiCodeBlock>
+          )
         ) : content.kind === 'csv' ? (
           <CsvPreview text={content.content ?? ''} />
         ) : (

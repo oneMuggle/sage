@@ -24,6 +24,7 @@
 | 16   | [项目上下文（description/instructions/资料）](./16-project-context.md) | 侧边栏项目区:项目说明 + 项目指令 + 资料管理(添加/删除/保存当前回答) + 三态 status 徽章 + 优先级链说明 + 跨会话保留上下文场景 |
 | 17   | [额外访问路径（Allowed Paths）](./16-allowed-paths.md) | 配置额外只读路径让 agent 访问 workspace 之外的文件；首次未授权路径会弹出审批对话框（拒绝/允许/项目级允许） |
 | 18   | [浏览器环境诊断](./18-browser-environments.md) | 检测本机浏览器可用性、Win7 必备补丁（KB4474419 / VC++ 2019）与 CDP 握手状态；Firefox 115 ESR 备选方案 |
+| 19   | [网页访问与登录态](./19-web-access.md) | 三条出网通道 / 网站凭据管理（含 header 型新增）/ 登录态自动刷新 / 浏览器健康 / 出网指标 / 常见错误出路 |
 
 ---
 
