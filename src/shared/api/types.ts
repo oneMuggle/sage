@@ -1386,6 +1386,8 @@ export interface PptSlideSpec {
   title: string;
   bullets?: string[];
   notes?: string;
+  /** P5-B: 版式名（title/title_content/blank），后端按模板版式名匹配；缺省为 Blank */
+  layout?: 'title_content' | 'title' | 'blank' | null;
 }
 
 export interface OfficePptGenerateRequest {
