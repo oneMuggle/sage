@@ -343,7 +343,6 @@ export function useChat() {
         content,
         created_at: Date.now(),
       };
-      const userId = userMessage.id;
       addMessage(userMessage);
 
       if (!chatEndpoint?.baseUrl) {
@@ -649,7 +648,7 @@ export function useChat() {
                 });
               }
               if (evt.state === 'skill_activated' && evt.skills) {
-                updateMessage(userId, { activated_skills: evt.skills });
+                updateMessage(assistantId, { activated_skills: evt.skills });
               }
               if (evt.state === 'compact_triggered' && evt.compact) {
                 // 插入特殊系统消息气泡（非普通 assistant 气泡）

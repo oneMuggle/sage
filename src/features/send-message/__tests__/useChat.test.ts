@@ -1492,6 +1492,46 @@ describe('useChat taskBoard', () => {
     });
   });
 
+  // r72 回归: skill_activated 明细必须写在 assistant 消息上,
+  // 而不是 userId（用户消息）——原实现写错目标,技能徽标永远不渲染。
+  it('routes skill_activated payload to the assistant message', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-skills' });
+    listenMock.mockImplementationOnce(
+      async (_name: string, cb: (e: { payload: Record<string, unknown> }) => void) => {
+        Promise.resolve().then(() => {
+          cb({
+            payload: {
+              state: 'skill_activated',
+              iteration: 0,
+              skills: [{ name: 'report-writing', triggers_matched: ['/report'] }],
+            },
+          });
+          cb({ payload: { state: 'done', iteration: 0, content: 'done' } });
+        });
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+    await act(async () => {
+      await result.current.sendMessage('写一份报告');
+    });
+
+    await waitFor(() => {
+      const assistant = useStore
+        .getState()
+        .messages.find((m) => m.role === 'assistant');
+      expect(assistant?.activated_skills).toEqual([
+        { name: 'report-writing', triggers_matched: ['/report'] },
+      ]);
+    });
+    // 用户消息不得携带技能明细
+    const user = useStore.getState().messages.find((m) => m.role === 'user');
+    expect(user?.activated_skills).toBeUndefined();
+  });
+
   it('falls back to statuses-driven progress when no task_progress arrives', async () => {
     seedActiveEndpoint();
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-4' });
