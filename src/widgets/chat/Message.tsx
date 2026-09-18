@@ -759,13 +759,13 @@ function MessageComponent({
             data-testid="rag-citations-list"
           >
             {ragCitations.map((c) => (
-              <div key={c.media_id} className="space-y-0.5">
+              <div key={c.filename || c.media_id} className="space-y-0.5">
                 <div className="flex items-start gap-1.5">
                   <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
                     {t('chat.rag_citation_source')}
                   </span>
                   <span className="text-text-secondary font-mono break-all">
-                    {c.media_id}
+                    {c.filename || c.media_id}
                   </span>
                 </div>
                 {(c.chunks ?? []).length > 0 && (
