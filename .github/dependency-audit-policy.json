@@ -791,7 +791,7 @@
       "package": "anyio",
       "package_version": "3.7.1",
       "advisory": "GHSA-82r6-8w77-94w6",
-      "advisory_url": "https://github.com/advisories/GHSA-82r6-8w77-94w6",
+      "advisory_url": "https://osv.dev/vulnerability/GHSA-82r6-8w77-94w6",
       "affected_path": "Win7 LTS Python 3.8 production path",
       "actual_reachability": "reachable; accepted risk — anyio 由 starlette/fastapi 引入，Sage 后端同步端点不直接调用 anyio 受影响 API（to_thread/blocking portal）；两个公告均为本地可用性影响（管道阻塞死锁），无远程代码执行路径",
       "controls": "anyio 4.14.2 修复版要求 Python>=3.10，Win7 LTS 钉死 Python 3.8 无法升级；后端仅监听本地回环（127.0.0.1:8765），单用户桌面场景下攻击者需本机执行权限；uvicorn 同步端点走线程池而非 anyio worker 路径，实际触达面有限；季度依赖审计复核 + 2026-12-01 复审（届时评估降级 anyio 或切换 async 栈的可行性）"
@@ -803,7 +803,7 @@
       "package": "anyio",
       "package_version": "3.7.1",
       "advisory": "GHSA-5p39-cfhj-2xmp",
-      "advisory_url": "https://github.com/advisories/GHSA-5p39-cfhj-2xmp",
+      "advisory_url": "https://osv.dev/vulnerability/GHSA-5p39-cfhj-2xmp",
       "affected_path": "Win7 LTS Python 3.8 production path",
       "actual_reachability": "reachable; accepted risk — anyio 由 starlette/fastapi 引入，Sage 后端同步端点不直接调用 anyio 受影响 API（to_thread/blocking portal）；两个公告均为本地可用性影响（管道阻塞死锁），无远程代码执行路径",
       "controls": "anyio 4.14.2 修复版要求 Python>=3.10，Win7 LTS 钉死 Python 3.8 无法升级；后端仅监听本地回环（127.0.0.1:8765），单用户桌面场景下攻击者需本机执行权限；uvicorn 同步端点走线程池而非 anyio worker 路径，实际触达面有限；季度依赖审计复核 + 2026-12-01 复审（届时评估降级 anyio 或切换 async 栈的可行性）"
