@@ -1,6 +1,6 @@
 // RV3 (round8): TaskTreeSection 重跑失败任务按钮 —— run 终态且有失败任务时
 // 显示，点击触发 onRerunFailed；进行中 / 无失败时隐藏。
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { TaskBoardState } from '../../../../features/send-message/chatStreamStore';
@@ -343,5 +343,132 @@ describe('TaskTreeSection — 任务行 usage 徽章 (BU13)', () => {
     );
     expect(screen.getByTestId('task-tree-usage-t1').textContent).toContain('450ms');
     expect(screen.getByTestId('task-tree-usage-t2').textContent).toContain('1s');
+  });
+});
+
+// ============================================================================
+// RV4 (round27): 单任务重试按钮
+// ============================================================================
+
+describe('TaskTreeSection — 单任务重试 (RV4)', () => {
+  it('failed 行渲染重试按钮，点击回调 (runId, taskId)；进行中不渲染', () => {
+    const onRetryTask = vi.fn();
+    // 终态：全部任务终态 → allDone
+    render(
+      <TaskTreeSection
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'done',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: null,
+              output_preview: null,
+              retry_count: 0,
+            },
+            t2: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't2',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g2',
+              error: 'boom',
+              output_preview: null,
+              retry_count: 0,
+            },
+          } as TaskBoardState['statuses'],
+          progress: { total: 2, done: 1, running: 0, queued: 0, failed: 1, cancelled: 0 },
+        })}
+      />,
+    );
+    expect(screen.queryByTestId('task-tree-retry-t2')).toBeNull(); // 未传回调
+    cleanup();
+
+    render(
+      <TaskTreeSection
+        onRetryTask={onRetryTask}
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'done',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: null,
+              output_preview: null,
+              retry_count: 0,
+            },
+            t2: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't2',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g2',
+              error: 'boom',
+              output_preview: null,
+              retry_count: 0,
+            },
+          } as TaskBoardState['statuses'],
+          progress: { total: 2, done: 1, running: 0, queued: 0, failed: 1, cancelled: 0 },
+        })}
+      />,
+    );
+    const btn = screen.getByTestId('task-tree-retry-t2');
+    fireEvent.click(btn);
+    expect(onRetryTask).toHaveBeenCalledWith('orch-rerun-ui', 't2');
+  });
+
+  it('run 进行中（inFlight>0）不渲染重试按钮', () => {
+    render(
+      <TaskTreeSection
+        onRetryTask={vi.fn()}
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'done',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: null,
+              output_preview: null,
+              retry_count: 0,
+            },
+            t2: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't2',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g2',
+              error: 'boom',
+              output_preview: null,
+              retry_count: 0,
+            },
+            t3: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't3',
+              status: 'running',
+              agent_id: 'primary',
+              goal: 'g3',
+              error: null,
+              output_preview: null,
+              retry_count: 0,
+            },
+          } as TaskBoardState['statuses'],
+          progress: { total: 3, done: 1, running: 1, queued: 0, failed: 1, cancelled: 0 },
+        })}
+      />,
+    );
+    expect(screen.queryByTestId('task-tree-retry-t2')).toBeNull();
   });
 });

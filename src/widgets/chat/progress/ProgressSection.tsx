@@ -24,6 +24,8 @@ interface ProgressSectionProps {
   onCancelExecution?: (runId: string) => void;
   // RV3 (round8): 终态且有失败任务时的"重跑失败任务"入口。
   onRerunFailed?: (runId: string) => void;
+  // RV4 (round27): 单任务重试入口透传。
+  onRetryTask?: (runId: string, taskId: string) => void;
 }
 
 const STATE_LABELS: Record<string, string> = {
@@ -41,6 +43,7 @@ export function ProgressSection({
   sessionId,
   onCancelExecution,
   onRerunFailed,
+  onRetryTask,
 }: ProgressSectionProps) {
   // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）。
   // S2: 按会话键控 —— 显示的是当前打开会话的清单。
@@ -95,6 +98,7 @@ export function ProgressSection({
           board={taskBoard}
           onCancel={() => onCancelExecution?.(taskBoard.runId)}
           onRerunFailed={() => onRerunFailed?.(taskBoard.runId)}
+          onRetryTask={onRetryTask}
         />
       )}
     </div>
