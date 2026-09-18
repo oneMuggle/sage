@@ -107,6 +107,18 @@ async def test_auto_compaction_before_chat_run_loop(client, monkeypatch):
     sess = SessionRepository().get(session_id)
     assert sess.message_count == 9
 
+    # R38 (2026-09-18): 续接行携带 compact_info，重载后前端据此渲染压缩横幅。
+    continuation = next(
+        r for r in rows if r.content.startswith("[上下文已压缩] 此前对话摘要：")
+    )
+    info = continuation.to_dict()["compact_info"]
+    assert info is not None
+    assert info["before"] == 14  # 压缩前历史条数
+    assert info["removed"] == 8  # 被摘要替代的前缀长度
+    assert info["after"] == 7  # 压缩后条数 (含续接行)
+    # 三数自洽 —— 续接摘要自身占一行，故 after 比 before 减去 removed 多一
+    assert info["before"] - info["removed"] + 1 == info["after"]
+
 
 @pytest.mark.asyncio()
 async def test_auto_compaction_failure_never_blocks_chat(client, monkeypatch):

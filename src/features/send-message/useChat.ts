@@ -660,65 +660,71 @@ export function useChat() {
               // R38: 透明度增强事件 — 技能激活 / 记忆召回 / 上下文压缩
               // 这些事件不影响对话主流程，仅用于 UI 展示。fail-safe: 任何
               // 异常只跳过更新，绝不阻断聊天。
-              // MEDIUM-2: 运行时载荷校验 — 防止伪造/畸形数据进入气泡文案
+              // MEDIUM-2: 运行时载荷校验 — 防止伪造/畸形数据进入气泡文案。
+              // 校验不通过时丢弃该事件（不更新 UI），而非按畸形值渲染。
               if (evt.state === 'memory_used' && evt.memories) {
                 // memories: 必须是数组，每项必须有 id (string)
+                const memories = evt.memories;
                 const isValidMemories =
-                  Array.isArray(evt.memories) &&
-                  evt.memories.every(
-                    (m: unknown) =>
+                  Array.isArray(memories) &&
+                  memories.every(
+                    (m) =>
                       typeof m === 'object' &&
                       m !== null &&
-                      typeof (m as Record<string, unknown>).id === 'string'
+                      typeof (m as { id?: unknown }).id === 'string',
                   );
                 if (isValidMemories) {
                   updateMessage(assistantId, {
-                    memory_refs: evt.memories,
-                    memory_applied: evt.memories.length,
+                    memory_refs: memories,
+                    memory_applied: memories.length,
                   });
                 } else {
-                  logger.warn('R38: malformed memory_used payload discarded', evt.memories);
+                  logger.warn(requestId, 'R38.memory_used.malformed', memories);
                 }
               }
               if (evt.state === 'skill_activated' && evt.skills) {
                 // MEDIUM-2: skills 必须是数组，每项必须有 name (string)
+                const skills = evt.skills;
                 const isValidSkills =
-                  Array.isArray(evt.skills) &&
-                  evt.skills.every(
-                    (s: unknown) =>
+                  Array.isArray(skills) &&
+                  skills.every(
+                    (s) =>
                       typeof s === 'object' &&
                       s !== null &&
-                      typeof (s as Record<string, unknown>).name === 'string'
+                      typeof (s as { name?: unknown }).name === 'string',
                   );
                 if (isValidSkills) {
-                  updateMessage(userId, { activated_skills: evt.skills });
+                  updateMessage(userId, { activated_skills: skills });
                 } else {
-                  logger.warn('R38: malformed skill_activated payload discarded', evt.skills);
+                  logger.warn(requestId, 'R38.skill_activated.malformed', skills);
                 }
               }
               if (evt.state === 'compact_triggered' && evt.compact) {
                 // compact: 必须有 before/after/removed 三个 number 字段
-                const c = evt.compact as Record<string, unknown>;
-                const isValidCompact =
-                  typeof c === 'object' &&
-                  c !== null &&
-                  typeof c.before === 'number' &&
-                  typeof c.after === 'number' &&
-                  typeof c.removed === 'number';
-                if (isValidCompact) {
+                const compact = evt.compact as {
+                  before?: unknown;
+                  after?: unknown;
+                  removed?: unknown;
+                };
+                const { before, after, removed } = compact;
+                if (
+                  typeof before === 'number' &&
+                  typeof after === 'number' &&
+                  typeof removed === 'number'
+                ) {
                   // 插入特殊系统消息气泡（非普通 assistant 气泡）
                   // LOW-1: 统一口径 —— "before → after 条（removed 条历史已合并为摘要）"
                   const compactMsg: Message = {
                     id: crypto.randomUUID(),
                     session_id: sid,
                     role: 'system',
-                    content: `📦 上下文已压缩：${c.before} → ${c.after} 条（${c.removed} 条历史已合并为摘要）`,
+                    content: `📦 上下文已压缩：${before} → ${after} 条（${removed} 条历史已合并为摘要）`,
                     created_at: Date.now(),
-                    compact_info: { before: c.before, after: c.after, removed: c.removed },
+                    compact_info: { before, after, removed },
                   };
                   addMessage(compactMsg);
                 } else {
-                  logger.warn('R38: malformed compact_triggered payload discarded', evt.compact);
+                  logger.warn(requestId, 'R38.compact_triggered.malformed', compact);
                 }
               }
               // r71: 附件检索注入溯源 → 引用明细随消息落库（气泡内展示）

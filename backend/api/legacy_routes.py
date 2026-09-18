@@ -816,16 +816,25 @@ def _persist_compaction(
     # Task 14 (context-isolation): 续接摘要继承被压缩段的 segment_id,
     # 避免落库为 segment_id=0 导致活跃段识别错乱或段感知切片丢弃压缩历史。
     last_removed = messages[removed_count - 1] if removed_count > 0 else None
+    # R38 (2026-09-18): 续接行携带压缩统计 —— 重载后前端据此渲染压缩横幅。
+    # 口径: before = 压缩前消息数, after = 压缩后消息数(含续接行),
+    # removed = 被摘要替代的前缀长度。注意 after = before - removed + 1
+    # (续接摘要自身占一行), 前端文案已按此解释。
+    before = len(messages)
+    after = len(new_messages)
     continuation = DbMessage(
         id=str(uuid.uuid4()),
         session_id=session_id,
         role=summary["role"],
         content=summary["content"],
+        compact_info=json.dumps(
+            {"before": before, "after": after, "removed": removed_count},
+            ensure_ascii=False,
+        ),
         created_at=created_at,
         segment_id=last_removed.segment_id if last_removed is not None else 0,
     )
 
-    after = len(new_messages)
     MessageRepository().replace_prefix_with_continuation(
         session_id,
         [stale.id for stale in messages[:removed_count]],
@@ -2836,6 +2845,52 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
             # ===== R38 A16 技能自动激活 END =====
 
+            # ===== L13 记忆上下文注入 BEGIN (对标增强第二轮批次 C) =====
+            # legacy /chat/stream 此前完全不注入记忆上下文(只能靠 LLM 主动
+            # 调 memory_search)——与 PHILOSOPHY"记忆优先"定位相悖。对齐
+            # agent.chat() 单发路径的注入口径(get_context limit=10),fail-safe。
+            # L4': 记忆随会话演进,同属易变上下文 → 并入尾部 dynamic 块。
+            try:
+                l13_memory_manager = getattr(agent, "memory_manager", None)
+                if l13_memory_manager is not None and not memory_off:
+                    l13_memory = l13_memory_manager.get_context(
+                        limit=10, session_id=data.session_id
+                    )
+                    if l13_memory and str(l13_memory).strip():
+                        dynamic_context_parts.append(
+                            "以下是相关的记忆上下文：\n" + str(l13_memory)
+                        )
+            except Exception as l13_mem_err:
+                logger.debug(
+                    f"[REQ {request_id}] L13 memory context skipped: {l13_mem_err}"
+                )
+            # ===== L13 记忆上下文注入 END =====
+
+            # ===== R17-E 记忆召回展示事件 BEGIN =====
+            # L13 注入是静默的 —— 用户无法知道回答用了哪些记忆。注入成功
+            # 后用 recall() 取结构化命中（top3），推送 memory_used 流事件；
+            # 前端 Message 气泡显示"N 条记忆已应用"并可展开查看明细。
+            # fail-safe：任何异常只跳过事件，绝不影响注入与对话主流程。
+            # R38 (2026-09-18): r38_memories 提升到本轮作用域 —— 除推事件外，
+            # 还要随 assistant 行落盘（重载后 memory chip 不丢）。
+            r38_memories: list = []
+            if dynamic_context_parts and not memory_off:
+                l13_evt = _build_memory_used_event(
+                    getattr(agent, "memory_manager", None),
+                    query=data.message,
+                    session_id=data.session_id,
+                )
+                if l13_evt is not None:
+                    r38_memories = l13_evt.get("memories", []) or []
+                    try:
+                        entry.queue.put_nowait(l13_evt)
+                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                        logger.debug(
+                            f"[REQ {request_id}] memory_used event push failed, ignored"
+                        )
+            # ===== R17-E 记忆召回展示事件 END =====
+
+
             # ===== R38 技能激活展示事件 BEGIN =====
             # A16 自动激活后推送 skill_activated 事件,前端渲染可展开 chip。
             # fail-safe: 任何异常只跳过事件,绝不影响对话主流程。
@@ -3267,6 +3322,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 不破坏流。
             message_repo = MessageRepository()
             session_repo = SessionRepository()
+            # R38 (2026-09-18): 通知载荷序列化 —— sqlite3 不能直接绑定
+            # dict/list，必须 json.dumps（ensure_ascii=False 保留中文）。
+            # memory_refs 落**本轮第一条** assistant 行（与前端把 chip 挂在
+            # 首个流式气泡上的行为一致）；flag 防多步 run 重复落盘。
+            r38_activated_skills_json = (
+                json.dumps(r38_activated_skill_list, ensure_ascii=False)
+                if r38_activated_skill_list
+                else None
+            )
+            r38_memory_refs_json = (
+                json.dumps(r38_memories, ensure_ascii=False) if r38_memories else None
+            )
+            r38_memory_refs_written = False
             user_now = int(time.time() * 1000)
             try:
                 # client_message_id (2026-09): 确定性 user id —— 前端乐观消息
@@ -3302,6 +3370,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             session_id=data.session_id,
                             role="user",
                             content=data.message,
+                            activated_skills=r38_activated_skills_json,
                             created_at=user_now,
                         )
                     )
@@ -3467,10 +3536,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 # step_index=evt.step_index (== evt.iteration,
                                 # agent.py 在并行/串行路径都同步设置)
                                 step_index=evt.step_index,
+                                # R38: 记忆召回挂本轮首条 assistant 行
+                                memory_refs=(
+                                    r38_memory_refs_json
+                                    if not r38_memory_refs_written
+                                    else None
+                                ),
                                 created_at=step_now,
                                 model=(llm_config.get("model") if llm_config else "local"),
                             ),
                         )
+                        if r38_memory_refs_json and not r38_memory_refs_written:
+                            r38_memory_refs_written = True
                         steps_completed += 1
                     except Exception as step_db_err:
                         logger.warning(
@@ -3517,11 +3594,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             step_index=(
                                 done_event.iteration if done_event is not None else 0
                             ),
+                            # R38: 单步 run 无 STEP_DONE，记忆召回挂这条终稿行
+                            memory_refs=(
+                                r38_memory_refs_json
+                                if not r38_memory_refs_written
+                                else None
+                            ),
                             created_at=assistant_now,
                             model=(llm_config.get("model") if llm_config else "local"),
                         )
                     )
                     assistant_persisted = True
+                    if r38_memory_refs_json and not r38_memory_refs_written:
+                        r38_memory_refs_written = True
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
                 # WS-C P0-2: 统一记忆写入路径 — assistant 落盘**成功后**才触发
