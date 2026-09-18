@@ -519,7 +519,11 @@ export interface AgentEvent {
   // R38: compact_triggered 事件载荷（M4 自动压缩统计）。
   compact?: { before: number; after: number; removed: number };
   // r71: attachment_rag_used 事件载荷（超长文档检索注入溯源）。
-  citations?: { media_id: string; mode: string }[];
+  citations?: {
+    media_id: string;
+    mode: string;
+    chunks?: { index: number; score: number }[];
+  }[];
 }
 
 // ==================== 错误类型定义 ====================

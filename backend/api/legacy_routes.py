@@ -2920,7 +2920,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     "state": "attachment_rag_used",
                                     "session_id": data.session_id,
                                     "citations": [
-                                        {"media_id": r37_mid, "mode": "rag"}
+                                        {
+                                            "media_id": r37_mid,
+                                            "mode": "rag",
+                                            "chunks": [
+                                                {"index": c.index, "score": round(c.score, 2)}
+                                                for c in r37_ctx.chunks
+                                            ],
+                                        }
                                     ],
                                 }
                             )

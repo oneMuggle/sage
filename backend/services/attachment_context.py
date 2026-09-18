@@ -28,13 +28,25 @@ _QUERY_EMBED_CHARS = 2_000
 
 
 @dataclass
+class ChunkCitation:
+    """检索命中片段的溯源信息（r73 引用明细）。"""
+
+    index: int  # chunk_index + 1（1 起始，与注入块内标注一致）
+    score: float  # 余弦相似度
+
+
+@dataclass
 class AttachmentContextResult:
     """注入决策结果：text 为注入块；mode = full | truncated | rag。"""
 
     text: str
     mode: str
-    #: mode=rag 时命中的 chunk 数（引用溯源事件用）
-    chunks: int = 0
+    #: mode=rag 时命中的片段明细（引用溯源事件用）
+    chunks: List[ChunkCitation] = None  # type: ignore[assignment] — 空列表由 __post_init__ 归一
+
+    def __post_init__(self) -> None:
+        if self.chunks is None:
+            self.chunks = []
 
 
 @dataclass
@@ -137,7 +149,7 @@ async def _rag_injection(
             + "\n\n".join(parts)
             + "\n</attached_document>",
             "rag",
-            len(hits),
+            [ChunkCitation(index=hit.chunk_index + 1, score=hit.score) for hit in hits],
         )
     except Exception as rag_exc:  # noqa: BLE001 — 检索失败回退截断注入
         logger.debug("附件检索失败，回退截断注入 %s: %s", media_id, rag_exc)
