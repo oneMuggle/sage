@@ -1209,6 +1209,8 @@ export interface OfficePptSlideContent {
 export interface OfficePptReadResult {
   summary: OfficeDocumentSummary;
   slides: OfficePptSlideContent[];
+  // Round 52：core properties 回读（无属性为 null）
+  metadata?: WordMetadataSpec | null;
 }
 
 export interface OfficeWordParagraphContent {
@@ -1438,6 +1440,8 @@ export interface OfficePptGenerateRequest {
   workspace_path: string;
   filename: string;
   slides: PptSlideSpec[];
+  // Round 52：文档核心属性（与 Word/Excel 对称）
+  metadata?: WordMetadataSpec;
 }
 
 export interface WordParagraphSpec {

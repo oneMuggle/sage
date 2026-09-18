@@ -213,7 +213,30 @@ def read_ppt(
         page_count=len(prs.slides),
     )
 
-    return OfficePptReadResult(summary=summary, slides=slides)
+    return OfficePptReadResult(
+        summary=summary,
+        slides=slides,
+        metadata=_read_core_metadata(prs),
+    )
+
+
+def _read_core_metadata(prs):
+    """读 core properties 为 PptMetadataSpec（全空返回 None——不回填
+    模板默认 author）。"""
+    from .models import PptMetadataSpec
+
+    core = prs.core_properties
+    meta = PptMetadataSpec(
+        author=core.author or None,
+        subject=core.subject or None,
+        keywords=core.keywords or None,
+        comments=core.comments or None,
+        category=core.category or None,
+    )
+    fields = ("author", "subject", "keywords", "comments", "category")
+    if all(getattr(meta, f) is None for f in fields):
+        return None
+    return meta
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -328,6 +351,14 @@ def generate_ppt(req, output_dir: Optional[str] = None) -> Path:
 
     try:
         prs = Presentation()
+        # Round 52：文档核心属性（与 Word/Excel 对称）。仅显式传入才写，
+        # 不臆造作者；python-pptx 属性名与 python-docx 一致。
+        if getattr(req, "metadata", None) is not None:
+            core = prs.core_properties
+            for field in ("author", "subject", "keywords", "comments", "category"):
+                value = getattr(req.metadata, field)
+                if value is not None:
+                    setattr(core, field, value)
         # Layout 6 is "Blank" — most flexible for any content
         blank_layout = prs.slide_layouts[6]
         total_slides = len(req.slides)
