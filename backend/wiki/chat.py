@@ -12,7 +12,7 @@ import re
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import llm_prompts
 from .context_budget import ContextBudget, truncate_pages
@@ -47,7 +47,7 @@ class ChatConfig:
     embed_model: str
     embed_dim: int = DEFAULT_EMBED_DIM
     max_tokens: int = 4096
-    selected_paths: List[str] | None = None
+    selected_paths: Optional[List[str]] = None
 
 
 async def chat_with_wiki(

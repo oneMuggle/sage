@@ -54,6 +54,7 @@ const projects: ProjectSummary[] = [
     lastSessionId: 's1',
     description: 'desc-p1',
     instructions: 'instr-p1',
+    allowedPaths: [],
   },
   {
     id: 'p2',
@@ -63,6 +64,7 @@ const projects: ProjectSummary[] = [
     lastOpenedAt: 5,
     sessionCount: 0,
     lastSessionId: null,
+    allowedPaths: [],
   },
 ];
 
