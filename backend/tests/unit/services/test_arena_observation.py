@@ -340,32 +340,54 @@ def test_observation_service_is_llm_relevant_empty_url():
 
 def test_run_trace_resolver_invoked_on_ws_frame():
     """process_event must hand off WS frame payloads to the resolver."""
-    from backend.services.run_trace_resolver import (
-        RunTraceEvidence, RunTraceResolver,
-    )
+    import base64
+    import json as _json
+
+    from backend.services.run_trace_resolver import RunTraceResolver
+
+    # Build a test JWT with run claim (3 parts: header.payload.signature)
+    header_b64 = base64.urlsafe_b64encode(b'{"alg":"RS256"}').rstrip(b"=").decode()
+    payload_b64 = base64.urlsafe_b64encode(
+        _json.dumps({"run": "run_test_ws", "type": "run"}).encode()
+    ).rstrip(b"=").decode()
+    token = f"{header_b64}.{payload_b64}.FAKE_SIG"
+
+    # Build SSE frame with token in records[].headers
+    sse_frame = {
+        "records": [{"headers": [["public-access-token", token]]}]
+    }
+    payload_data = f"data: {_json.dumps(sse_frame)}"
 
     emitted = []
 
-    def fetch(run_id, token):
+    def fetch(run_id, tok):
         return {
-            "spans": [
-                {"name": "ai.streamText.doStream", "attributes": {"model": "gpt-4o"}}
+            "events": [
+                {
+                    "runId": run_id,
+                    "message": "ai.streamText.doStream",
+                    "style": {
+                        "icon": "ai-provider-openai",
+                        "accessory": {
+                            "items": [{"icon": "tabler-cube", "text": "gpt-4o"}]
+                        },
+                    },
+                }
             ]
         }
 
-    def emit(ev):
-        emitted.append(ev)
-
-    resolver = RunTraceResolver(fetch_trace=fetch, emit_evidence=emit)
+    resolver = RunTraceResolver(fetch_trace=fetch, emit_evidence=emitted.append)
     bs = FakeBrowserSession()
     worker = FakeWorker()
-    obs = ModelObservationService(browser_session=bs, worker=worker, run_trace_resolver=resolver)
+    obs = ModelObservationService(
+        browser_session=bs, worker=worker, run_trace_resolver=resolver
+    )
     obs.process_event({
         "method": "Network.webSocketFrameReceived",
         "params": {
             "response": {"url": "https://api.openai.com/v1/chat/completions"},
-            "payloadData": '{"runId":"r1"}',
+            "payloadData": payload_data,
         },
     })
     assert any(e.model_id == "gpt-4o" for e in emitted)
-    assert any(e.run_id == "r1" for e in emitted)
+    assert any(e.run_id == "run_test_ws" for e in emitted)
