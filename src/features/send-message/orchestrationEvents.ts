@@ -18,6 +18,7 @@ import type {
   TaskStatusEvent,
 } from '../../shared/api/types';
 import { bumpArtifactEvent } from '../artifacts/artifactEventsStore';
+import { maybeAutoOpenArtifactPanel } from '../right-panel/rightPanelStore';
 
 import { mergeLiveEvent, useChatStreamStore } from './chatStreamStore';
 
@@ -25,8 +26,11 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
   const board = useChatStreamStore.getState();
 
   // S7: 产物事件 → 计数 store。
+  // right-panel R1 批次 B: 当前查看的会话产出产物且面板关着时自动展开
+  // （对齐 Claude artifacts；Bell 开关可关；后台会话不打扰，只走侧栏 📎N）。
   if (evt.state === 'artifact_created' && evt.artifact) {
     bumpArtifactEvent(sid);
+    maybeAutoOpenArtifactPanel(sid);
     return true;
   }
 
