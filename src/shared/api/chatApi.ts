@@ -183,6 +183,8 @@ export const chatApi = {
       plan_mode: config?.planMode ?? null,
       // 对标 S2: 临时聊天 → memory_mode='off'（缺省 'on'）
       memory_mode: config?.memoryDisabled ? 'off' : 'on',
+      // Task 5 (2026-09-17): 上下文重置 —— 后端在本轮消息前插入 topic_separator。
+      context_reset: config?.contextReset ?? false,
       // R23-D2: 聊天图片输入 —— 后端 ChatRequest.images（data URL 列表）
       images: images ?? [],
       attachment_media_ids: attachmentMediaIds ?? [],

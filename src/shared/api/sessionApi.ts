@@ -9,6 +9,7 @@ import type {
   SessionCompactResult,
   SessionExportResult,
   SessionLineage,
+  SessionRetreatResult,
 } from './types';
 import { ApiException, handleApiError, isValidSessionId, withRetry } from './utils';
 
@@ -108,6 +109,27 @@ export const sessionApi = {
     }
     try {
       return await invoke<SessionCompactResult>('session_compact', { sessionId });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Task 11 (2026-09-17): 撤回自动话题切换。
+   *
+   * 删掉最后一个 topic_separator,merge segments。
+   * 失败时只读 false（无可删 separator）,非重试场景;不走 withRetry。
+   */
+  async retreatSegment(sessionId: string): Promise<SessionRetreatResult> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    try {
+      return await invoke<SessionRetreatResult>('session_retreat_segment', { sessionId });
     } catch (error) {
       throw handleApiError(error);
     }

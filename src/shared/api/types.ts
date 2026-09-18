@@ -55,6 +55,12 @@ export interface SessionLineage {
   archives: LineageArchive[];
 }
 
+/** Task 11 (2026-09-17): POST /sessions/{id}/segments/retreat 响应 */
+export interface SessionRetreatResult {
+  /** true = 成功删除了一个 separator 并 merge segments；false = 无可删的 separator */
+  ok: boolean;
+}
+
 /** U18: POST /sessions/{id}/export 响应（JSON 信封，html 为自包含文档文本） */
 export interface SessionExportResult {
   /** 自包含导出 HTML 全文（内联 CSS/JS/marked/highlight.js，离线可开） */
@@ -140,6 +146,8 @@ export interface Message {
   step_index?: number | null;
   /** alpha.36 (Bug #4): 同一 message 行内携带的 LLM 推理过程（持久化在 DB）。 */
   reasoning_content?: string | null;
+  /** Task 5 (2026-09-17): 消息子类型 —— 'topic_separator' 渲染为分隔线。 */
+  subtype?: string | null;
 }
 
 export interface ToolCall {
@@ -205,7 +213,9 @@ export type AgentState =
   | 'skill_activated'
   // R38 (2026-09-18): 自动上下文压缩展示 —— M4 达到阈值触发压缩后推送
   // 压缩统计,载荷见 AgentEvent.compact。
-  | 'compact_triggered';
+  | 'compact_triggered'
+  // Task 10 (2026-09-17): 自动话题检测 — 切换 segment 时由 producer 推送。
+  | 'topic_shifted';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -474,6 +484,9 @@ export interface AgentEvent {
   // P1 todo 接线: todo_snapshot 全量快照字段,与 llmStream.ts 双处一致。
   todos?: TodoItem[];
   session_id?: string;
+  // Task 10 (2026-09-17): topic_shifted 事件载荷 — 自动切换 segment 时推送。
+  segment_id?: number;
+  reason?: string;
   // live-events P0 (2026-09-06): subagent_event 镜像字段(收敛类型见
   // SubagentLiveEvent,这里保持宽松 AgentEvent 可直接 cast)。
   phase?: SubagentEventPhase;
@@ -543,6 +556,11 @@ export interface ChatConfig {
   planMode?: boolean;
   // 对标 S2 (2026-09-13): 临时聊天 —— 本轮不注入记忆也不做记忆提取。
   memoryDisabled?: boolean;
+  /**
+   * Task 5 (2026-09-17): 上下文重置标记 —— true 时后端在本轮消息前插入
+   * topic_separator 并清空 LLM 历史窗口，实现"新话题"显式分界。
+   */
+  contextReset?: boolean;
 }
 
 // ==================== Memory 类型定义 ====================
