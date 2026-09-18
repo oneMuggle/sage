@@ -207,7 +207,36 @@ def _clean_cookie(item: Dict[str, Any], default_domain: str) -> Optional[Dict[st
     same_site = item.get("sameSite")
     if same_site:
         cleaned["sameSite"] = str(same_site)
+    else:
+        # Firefox CDP 可能省略 sameSite，默认为 "Lax"（RFC 6265bis 默认值）
+        cleaned["sameSite"] = "Lax"
     return cleaned
+
+
+def normalize_cookie_for_cdp(cookie: Dict[str, Any]) -> Dict[str, Any]:
+    """归一化 cookie 字段以兼容 Chrome/Firefox CDP ``Storage.setCookies``。
+
+    Firefox 的 ``Storage.setCookies`` 拒绝接收 Chromium 特有字段
+    （``priority`` / ``sameParty`` / ``sourceScheme`` / ``partitionKey``），
+    调用前必须剥离。同时确保 ``sameSite`` 存在（缺省按 ``Lax``）。
+
+    返回新 dict，不修改入参。
+    """
+    if not isinstance(cookie, dict):
+        return cookie
+    normalized: Dict[str, Any] = {}
+    # Firefox 兼容：仅保留标准字段
+    allowed_keys = {
+        "name", "value", "domain", "path", "expires",
+        "secure", "httpOnly", "sameSite", "session", "url",
+    }
+    for key in allowed_keys:
+        if key in cookie:
+            normalized[key] = cookie[key]
+    # 确保 sameSite 存在
+    if "sameSite" not in normalized or not normalized["sameSite"]:
+        normalized["sameSite"] = "Lax"
+    return normalized
 
 
 def save_credential(
@@ -741,8 +770,12 @@ def merge_cdp_cookies(
             cleaned_input["secure"] = True
         if item.get("httpOnly"):
             cleaned_input["httpOnly"] = True
-        if item.get("sameSite"):
-            cleaned_input["sameSite"] = str(item.get("sameSite"))
+        same_site = item.get("sameSite")
+        if same_site:
+            cleaned_input["sameSite"] = str(same_site)
+        else:
+            # Firefox CDP 可能省略 sameSite，默认为 "Lax"（RFC 6265bis 默认值）
+            cleaned_input["sameSite"] = "Lax"
         cleaned = _clean_cookie(cleaned_input, domain)
         if cleaned is None:
             continue

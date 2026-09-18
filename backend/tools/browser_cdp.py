@@ -31,6 +31,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .browser_launcher import (
+    BrowserCapability,
+    BrowserLauncher,
+    BrowserType,
+    ChromeLauncher,
+    FirefoxLauncher,
+    discover_and_select,
+)
 from .browser_ws import ws_close, ws_connect, ws_recv_text, ws_send_text
 
 logger = logging.getLogger(__name__)
@@ -82,21 +90,11 @@ def _windows_candidates() -> List[Path]:
 
 
 def discover_browser_executable() -> Optional[str]:
-    """按 环境变量 → 平台路径 → PATH 顺序找 Chromium 系浏览器。"""
-    env_override = os.environ.get("SAGE_BROWSER_PATH")
-    if env_override and Path(env_override).is_file():
-        return env_override
-    if os.name == "nt":
-        for candidate in _windows_candidates():
-            if candidate.is_file():
-                return str(candidate)
-        return None
-    # POSIX：Linux/WSL 走 PATH，macOS 走应用包路径
-    for name in _LINUX_CANDIDATES:
-        found = shutil.which(name)
-        if found:
-            return found
-    return _darwin_candidates()
+    """按 环境变量 → 平台路径 → PATH 顺序找 Chromium / Firefox 系浏览器。"""
+    cap = discover_and_select()
+    if cap:
+        return cap.executable
+    return None
 
 
 def _darwin_candidates() -> Optional[str]:
@@ -131,6 +129,8 @@ class BrowserSession:
     persistent: bool = False
     #: 持久 profile 目录名（persistent=True 时记录；AU3 自动刷新按名复用）
     profile_name: str = ""
+    #: 浏览器类型（Chrome/Edge/Chromium/Firefox）
+    browser_type: BrowserType = BrowserType.CHROME
 
     def is_alive(self) -> bool:
         return self.process.poll() is None
@@ -315,8 +315,14 @@ def launch_browser(
     executable = discover_browser_executable()
     if not executable:
         raise BrowserCDPError(
-            "未找到 Chrome/Edge 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH 指定可执行文件路径"
+            "未找到 Chrome/Edge/Firefox 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH / SAGE_FIREFOX_PATH 指定可执行文件路径"
         )
+    cap = discover_and_select()
+    if not cap:
+        raise BrowserCDPError(
+            "未找到 Chrome/Edge/Firefox 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH / SAGE_FIREFOX_PATH 指定可执行文件路径"
+        )
+    launcher = cap.launcher
 
     if persistent:
         from .download_tool import sanitize_filename
@@ -328,7 +334,7 @@ def launch_browser(
         user_data_dir = tempfile.mkdtemp(prefix="sage_browser_")
     from .http_factory import browser_proxy_flag
 
-    command = _build_launch_command(executable, headless, user_data_dir, browser_proxy_flag())
+    command = launcher.build_command(executable, headless, user_data_dir, browser_proxy_flag())
 
     try:
         process = subprocess.Popen(  # noqa: S603 — 可执行文件来自受控发现逻辑
@@ -342,46 +348,37 @@ def launch_browser(
             shutil.rmtree(user_data_dir, ignore_errors=True)
         raise BrowserCDPError(f"浏览器启动失败: {exc}")
 
-    deadline = time.monotonic() + LAUNCH_TIMEOUT_SECONDS
-    port_file = Path(user_data_dir) / "DevToolsActivePort"
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            if not persistent:
-                shutil.rmtree(user_data_dir, ignore_errors=True)
-            raise BrowserCDPError(
-                f"浏览器进程提前退出（退出码 {process.returncode}）——可尝试 headless=false 排查"
-            )
-        if port_file.is_file():
-            try:
-                lines = port_file.read_text(encoding="ascii").splitlines()
-                port, ws_path = int(lines[0]), lines[1].strip()
-            except (OSError, ValueError, IndexError):
-                time.sleep(_LAUNCH_POLL_INTERVAL)
-                continue
-            if port > 0 and ws_path.startswith("/devtools/"):
-                session = BrowserSession(
-                    browser_id=browser_id or uuid.uuid4().hex[:12],
-                    executable=executable,
-                    headless=headless,
-                    user_data_dir=user_data_dir,
-                    process=process,
-                    port=port,
-                    ws_path=ws_path,
-                    persistent=persistent,
-                    profile_name=str(profile_name or "") if persistent else "",
-                )
-                get_browser_manager().register(session)
-                return session
-        time.sleep(_LAUNCH_POLL_INTERVAL)
-
-    _terminate_session(
-        BrowserSession(
-            "", executable, headless, user_data_dir, process, 0, "", persistent=persistent
+    try:
+        port, ws_path = launcher.wait_for_cdp(process, user_data_dir, timeout=LAUNCH_TIMEOUT_SECONDS)
+        session = BrowserSession(
+            browser_id=browser_id or uuid.uuid4().hex[:12],
+            executable=executable,
+            headless=headless,
+            user_data_dir=user_data_dir,
+            process=process,
+            port=port,
+            ws_path=ws_path,
+            persistent=persistent,
+            profile_name=str(profile_name or "") if persistent else "",
+            browser_type=cap.browser_type,
         )
-    )
-    raise BrowserCDPError(
-        f"等待 DevToolsActivePort 超时（{LAUNCH_TIMEOUT_SECONDS:.0f} 秒）——浏览器可能未完成启动"
-    )
+        get_browser_manager().register(session)
+        return session
+    except Exception as exc:
+        _terminate_session(
+            BrowserSession(
+                "",
+                executable,
+                headless,
+                user_data_dir,
+                process,
+                0,
+                "",
+                persistent=persistent,
+                browser_type=cap.browser_type,
+            )
+        )
+        raise BrowserCDPError(f"浏览器启动握手失败: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -528,9 +525,14 @@ def apply_stealth(
 
 __all__ = [
     "BrowserCDPError",
+    "BrowserCapability",
+    "BrowserLauncher",
     "BrowserSession",
     "BrowserSessionManager",
+    "BrowserType",
     "CDP_TIMEOUT_SECONDS",
+    "ChromeLauncher",
+    "FirefoxLauncher",
     "LAUNCH_TIMEOUT_SECONDS",
     "MAX_BROWSER_SESSIONS",
     "RESERVED_BROWSER_ID",
@@ -538,6 +540,7 @@ __all__ = [
     "apply_stealth",
     "browser_downloads_root",
     "cdp_command",
+    "discover_and_select",
     "discover_browser_executable",
     "ensure_page_target",
     "get_browser_manager",
