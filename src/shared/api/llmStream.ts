@@ -24,7 +24,9 @@ export type AgentState =
   | 'todo_snapshot'
   // live-events P0/P1 (2026-09-06): 子代理实时镜像 + 审批模式回显。
   | 'subagent_event'
-  | 'approval_mode';
+  | 'approval_mode'
+  // Task 10 (2026-09-17): 自动话题检测 — 切换 segment 时由 producer 推送。
+  | 'topic_shifted';
 
 // 窄类型事件接口 —— useChat taskBoard 状态机的数据类型。
 // AgentState / AgentEvent（宽松字段）见 types.ts —— 双处保持一致。
@@ -148,6 +150,9 @@ export interface AgentEvent {
   // P1 todo 接线: todo_snapshot 全量快照字段。
   todos?: TodoItem[];
   session_id?: string;
+  // Task 10 (2026-09-17): topic_shifted 事件载荷 — 自动切换 segment 时推送。
+  segment_id?: number;
+  reason?: string;
 }
 
 export async function* parseNDJSONStream(

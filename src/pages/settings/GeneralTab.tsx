@@ -15,6 +15,7 @@ import { GatewayCard } from '../../widgets/settings/GatewayCard';
 import { HooksCard } from '../../widgets/settings/HooksCard';
 import { UsagePanel } from '../../widgets/settings/UsagePanel';
 
+import { ContextTurnLimitSelect } from './ContextTurnLimitSelect';
 import { FontSettingsSection } from './FontSettingsSection';
 import { ThemeSelector } from './ThemeSelector';
 import { SettingRow, Toggle } from './components';
@@ -455,6 +456,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
             onChange={(v) => updateSettings({ confirmDelete: v })}
           />
         </SettingRow>
+        <ContextTurnLimitSelect />
       </section>
       <AutoCheckpointCard />
       <CloseToTrayCard />
