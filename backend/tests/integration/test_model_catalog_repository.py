@@ -134,7 +134,10 @@ def test_parallel_snapshots_have_single_winner(repo):
 
     try:
         with ThreadPoolExecutor(2) as pool:
-            assert sorted(pool.map(review, zip((repo, other), ids, strict=False))) == [
+            # zip strict= 形参是 3.10+，py38 不支持
+            assert sorted(
+                pool.map(review, zip((repo, other), ids))  # noqa: B905 — 同上
+            ) == [
                 "applied",
                 "conflict",
             ]
