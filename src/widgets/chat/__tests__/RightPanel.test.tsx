@@ -2,6 +2,10 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+const { fetchChangesSpy } = vi.hoisted(() => ({
+  fetchChangesSpy: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../../features/artifacts/useArtifacts', () => ({
   useArtifacts: vi.fn(() => ({ artifacts: [], loading: false, refresh: vi.fn() })),
 }));
@@ -9,6 +13,14 @@ vi.mock('../../../features/artifacts/useArtifacts', () => ({
 vi.mock('../../../features/artifacts/useArtifactContent', () => ({
   useArtifactContent: vi.fn(() => ({ content: null, loading: false })),
 }));
+// R4 批次 B: 变更预取 —— mock store，验证会话切换时 fetch 被触发
+vi.mock('../../../features/changes/changesListStore', () => {
+  const state = { bySession: {}, fetch: fetchChangesSpy };
+  const hook = Object.assign((selector: (s: typeof state) => unknown) => selector(state), {
+    getState: () => state,
+  });
+  return { useChangesListStore: hook };
+});
 
 // C3 (2026-08-15): RightPanel → ProgressSection → TaskTreeSection 渲染链挂载即调
 // Wave 4 (2026-09-06): PlanCardList 已删,历史编排记录移除
@@ -226,6 +238,20 @@ describe('RightPanel', () => {
       expect(screen.queryByTestId('right-panel-overlay-backdrop')).not.toBeInTheDocument();
       fireEvent.keyDown(window, { key: 'Escape' });
       expect(useRightPanelStore.getState().open).toBe(true);
+    });
+  });
+
+  describe('right-panel R4 批次 B: 变更预取', () => {
+    it('挂载即按会话预取变更列表', () => {
+      render(<RightPanel {...props} />);
+      expect(fetchChangesSpy).toHaveBeenCalledWith('sess_001');
+    });
+
+    it('会话切换时重新预取', () => {
+      const { rerender } = render(<RightPanel {...props} sessionId="sA" />);
+      fetchChangesSpy.mockClear();
+      rerender(<RightPanel {...props} sessionId="sB" />);
+      expect(fetchChangesSpy).toHaveBeenCalledWith('sB');
     });
   });
 });
