@@ -308,6 +308,22 @@ class OfficeCreateTool(BaseTool):
                             "slides），只有 word 接受纯字符串。"
                         ),
                         "properties": {
+                            "metadata": {
+                                "type": "object",
+                                "description": (
+                                    "word 可选：文档核心属性（Word「文件 "
+                                    "→ 信息」面板可见；期刊/公文归档要"
+                                    "求）。title 恒取请求标题；其余显式"
+                                    "传入才写。"
+                                ),
+                                "properties": {
+                                    "author": {"type": "string"},
+                                    "subject": {"type": "string"},
+                                    "keywords": {"type": "string"},
+                                    "comments": {"type": "string"},
+                                    "category": {"type": "string"},
+                                },
+                            },
                             "title": {
                                 "type": "string",
                                 "description": "word 文档标题。",

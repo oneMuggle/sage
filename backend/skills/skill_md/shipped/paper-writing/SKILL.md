@@ -63,6 +63,7 @@ triggers: []
     "figure_index": {},
     "table_index": {}
   },
+  "metadata": {"author": "作者名", "keywords": "关键词1；关键词2"}
   "references": [{"key": "zhang2023", "ref_type": "journal", "title": "...", "authors": ["..."], "year": "2023", "source": "..."}],
   "citation_style": "gbt7714",
   "paragraphs": [
