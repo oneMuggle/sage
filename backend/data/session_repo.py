@@ -496,14 +496,24 @@ class MessageRepository:
         self.db = get_database()
 
     def save(self, message: Message) -> Message:
-        """保存消息"""
+        """保存消息。
+
+        context-isolation (2026-09): 调用方未显式指定 ``segment_id`` 时,
+        自动解析当前活跃段 id 落库,确保新消息和 WorkingMemory 的段过滤
+        保持一致 (get_active_segment_id 与 message.segment_id 对齐)。
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
+        # 默认取当前活跃段;显式传入 (含 0) 的调用方保持其语义
+        seg = message.segment_id
+        if seg == 0 and message.subtype != "topic_separator":
+            seg = self.get_active_segment_id(message.session_id)
+
         cursor.execute(
             """
-            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at, segment_id, subtype)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 message.id,
@@ -517,6 +527,8 @@ class MessageRepository:
                 message.reasoning_content,
                 message.step_index,
                 message.created_at,
+                seg,
+                message.subtype,
             ),
         )
 
@@ -680,21 +692,27 @@ class MessageRepository:
         role: str,
         content: str,
         created_at: int,
+        segment_id: int = 0,
+        subtype: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Insert a new message row and return the inserted record.
 
         The scheduler uses this to deliver one-shot/recurring task content
         into the target session. We deliberately bypass the LLM/agent path
         because scheduled messages are pre-formed (no streaming).
+
+        context-isolation (2026-09): ``segment_id`` / ``subtype`` 可选,
+        便于 ``advance_segment`` 在同一事务里插入已标记的 topic_separator,
+        避免 INSERT→UPDATE 之间的崩溃窗口。
         """
         message_id = f"msg-{uuid.uuid4().hex[:12]}"
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
         cursor.execute(
-            "INSERT INTO messages (id, session_id, role, content, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (message_id, session_id, role, content, created_at),
+            "INSERT INTO messages (id, session_id, role, content, created_at, segment_id, subtype) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (message_id, session_id, role, content, created_at, segment_id, subtype),
         )
         conn.commit()
         # Round 2: 定时消息同步全文索引（best-effort）
@@ -743,26 +761,25 @@ class MessageRepository:
     def advance_segment(self, session_id: str) -> int:
         """Insert a topic_separator message and return the new segment_id.
 
-        Flow: query current max segment_id, insert a 'system' message with
-        sentinel content, then UPDATE it to mark subtype=topic_separator and
-        bump segment_id. Returns the new segment_id (0-based, incremented).
+        context-isolation (2026-09, 单事务化): 直接 INSERT 一条带
+        ``segment_id=new_seg, subtype='topic_separator'`` 的 system 消息。
+        旧实现分 INSERT → UPDATE 两步,中间进程崩溃会留下没标记的 system
+        消息,下一次 ``get_active_segment()`` 无法识别本次上下文重置。
+
+        Flow: query current max segment_id → INSERT fully-marked separator
+        in one atomic write. Returns the new segment_id (0-based, incremented).
         """
         all_msgs = self.get_by_session(session_id, limit=100000)
         max_seg = max((m.segment_id for m in all_msgs), default=-1)
         new_seg = max_seg + 1
-        insert_result = self.insert(
+        self.insert(
             session_id=session_id,
             role="system",
             content="[上下文已在此处重置]",
             created_at=int(time.time() * 1000),
+            segment_id=new_seg,
+            subtype="topic_separator",
         )
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE messages SET segment_id = ?, subtype = ? WHERE id = ?",
-            (new_seg, "topic_separator", insert_result["id"]),
-        )
-        conn.commit()
         return new_seg
 
     def retreat_segment(self, session_id: str) -> bool:

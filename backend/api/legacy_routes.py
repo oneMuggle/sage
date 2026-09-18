@@ -3025,13 +3025,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # Task 10 (2026-09-17): 自动话题检测 — 用户未显式 context_reset
             # 且 auto_topic_detection 启用时，扫描最近 N 条 assistant 文本；
             # 正则层命中或向量层平均相似度 < 阈值即视作话题切换，自动
-            # advance_segment 并推 topic_shifted SSE。设置缺失或 "true" 视为启用。
+            # advance_segment 并推 topic_shifted SSE。设置严格 opt-in:
+            # 仅 "true" (大小写不敏感) 启用;缺失或其他值视为关闭,避免
+            # 未显式配置的会话发生隐式上下文切换 (2026-09-18)。
             try:
                 from backend.data.settings_repo import SettingsRepository as _SettingsRepo
                 _auto_detect_raw = _SettingsRepo().get("auto_topic_detection")
             except Exception:
                 _auto_detect_raw = None
-            _auto_detect_on = _auto_detect_raw is None or _auto_detect_raw.strip().lower() == "true"
+            _auto_detect_on = (
+                _auto_detect_raw is not None
+                and _auto_detect_raw.strip().lower() == "true"
+            )
             if not data.context_reset and _auto_detect_on:
                 recent_assistant = [
                     r.content for r in (history_rows or [])[-6:]
