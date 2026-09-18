@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.data.agent_repo import AgentRepository
 from backend.data.settings_canonicalizer import validate_settings_payload
@@ -69,7 +69,7 @@ def _prepare_settings_update(
     current_settings: Any,
     updates: Dict[str, Any],
     target: str,
-) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """Return a validated copy of settings before persisting an update."""
     if not isinstance(current_settings, dict):
         return None, "当前 app_settings 不是有效的对象"
