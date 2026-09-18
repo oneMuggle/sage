@@ -632,6 +632,11 @@ class WordPageSetupSpec(BaseModel):
     size: Optional[Literal["A4", "letter"]] = Field(default=None)
     orientation: Optional[Literal["portrait", "landscape"]] = Field(default=None)
     margins_cm: Optional[WordPageMarginsSpec] = Field(default=None)
+    # Round 53：节内页码格式/起始号（w:pgNumType，论文前置罗马页码场景）
+    page_number_format: Optional[
+        Literal["decimal", "upperRoman", "lowerRoman", "upperLetter", "lowerLetter"]
+    ] = Field(default=None)
+    page_number_start: Optional[int] = Field(default=None, ge=0)
 
 
 class WordBodyStyleSpec(BaseModel):

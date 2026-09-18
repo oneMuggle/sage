@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 53：分节页码格式与起始号（w:pgNumType）**（方案 `docs/plans/2026-09-18_r53-pgnum-format-plan.md`）
+
+### Added(office)
+- **`page_number_format` / `page_number_start`**（WordPageSetupSpec）：节内页码格式（decimal/upperRoman/lowerRoman/upperLetter/lowerLetter）与起始号——论文前置目录罗马页码、正文阿拉伯从 1 的惯例一次成型；主节（format_spec.page）与分节新节（section_breaks.page_setup）同一路径生效，页脚 PAGE 域自动跟随节格式
+- **lint `page/numbering` 对偶**：spec 声明 fmt/start 时校验首节 pgNumType 实际值（缺失/不符报 error）
+
 > 📝 **Word 写作能力 Round 52：PPT core properties 三件套对称**（方案 `docs/plans/2026-09-18_r52-ppt-metadata-plan.md`）
 
 ### Added(office)

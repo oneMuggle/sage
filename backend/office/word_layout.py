@@ -128,6 +128,18 @@ def _apply_page_setup_to_section(section, page: WordPageSetupSpec) -> None:
             section.left_margin = Cm(margins.left)
         if margins.right is not None:
             section.right_margin = Cm(margins.right)
+    # Round 53：节内页码格式/起始号（w:pgNumType）。两者都未指定时
+    # 不触碰（保持既有产物零变化）。
+    if page.page_number_format is not None or page.page_number_start is not None:
+        sect_pr = section._sectPr
+        pg = sect_pr.find(qn("w:pgNumType"))
+        if pg is None:
+            pg = OxmlElement("w:pgNumType")
+            sect_pr.append(pg)
+        if page.page_number_format is not None:
+            pg.set(qn("w:fmt"), page.page_number_format)
+        if page.page_number_start is not None:
+            pg.set(qn("w:start"), str(page.page_number_start))
 
 
 def _apply_body_style(doc: Document, body: WordBodyStyleSpec) -> None:

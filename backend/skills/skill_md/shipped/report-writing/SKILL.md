@@ -56,7 +56,9 @@ triggers: []
 即可一并刷出真页码）。正文写"如图 N 所示"不要手编 N——用交叉引用占位符
 `{{fig:图题注}}` / `{{tbl:表题注}}`，生成时写成 Word 交叉引用域
 （显示"图N"/"表N"，更新域自动跟随题注重排；未匹配题注会生成失败并
-提示）。
+提示）。页码惯例（前置目录罗马页码、正文阿拉伯从 1）：`format_spec.page`
+声明 `page_number_format: "lowerRoman"` 起始，`section_breaks` 新节用
+`"decimal"` + `page_number_start: 1`——页脚 PAGE 域自动跟随节格式。
 
 ### 4. 生成或修订 docx
 
