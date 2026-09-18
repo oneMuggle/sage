@@ -34,6 +34,12 @@ export interface ArtifactContent {
   data_url?: string;
   /** C-2 (round5 批次 C): office 三件套预览——后端已全转义的 HTML 片段 */
   html?: string;
+  /**
+   * Round B P3: read_* 结果的 JSON 序列化（与 /office/{kind}/read 同形状）。
+   * 存在时 ArtifactViewer 用 Office 页的结构化预览组件渲染；缺失/序列化
+   * 失败时回退 `html`。类型在消费端按 kind 收窄。
+   */
+  structured?: unknown;
   truncated?: boolean;
 }
 
@@ -81,4 +87,105 @@ export async function revealArtifact(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+// ==================== Version History (Phase 2 M2) ====================
+
+export interface ArtifactVersion {
+  artifact_id: string;
+  version_num: number;
+  content_hash: string;
+  snapshot_path: string;
+  created_at: number;
+  note: string | null;
+}
+
+export interface ArtifactVersionWithContent extends ArtifactVersion {
+  content: string;
+}
+
+export async function listArtifactVersions(
+  sessionId: string,
+  artifactId: string,
+): Promise<ArtifactVersion[]> {
+  ensureBackendAccess();
+  try {
+    const data = await backendRequest<{ versions?: ArtifactVersion[] }>({
+      path: `/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}/versions`,
+    });
+    return data.versions ?? [];
+  } catch (error) {
+    throw new Error(
+      `listArtifactVersions failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export async function getArtifactVersion(
+  sessionId: string,
+  artifactId: string,
+  versionNum: number,
+): Promise<ArtifactVersionWithContent> {
+  ensureBackendAccess();
+  try {
+    return await backendRequest<ArtifactVersionWithContent>({
+      path: `/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}/versions/${versionNum}`,
+    });
+  } catch (error) {
+    throw new Error(
+      `getArtifactVersion failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export interface RestoreVersionResponse {
+  restored_from: number;
+  new_version: ArtifactVersion;
+}
+
+export async function restoreArtifactVersion(
+  sessionId: string,
+  artifactId: string,
+  versionNum: number,
+  note = 'restore',
+): Promise<RestoreVersionResponse> {
+  ensureBackendAccess();
+  try {
+    return await backendRequest<RestoreVersionResponse>({
+      path: `/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}/versions/restore`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: { version_num: versionNum, note },
+    });
+  } catch (error) {
+    throw new Error(
+      `restoreArtifactVersion failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export interface UpdateArtifactResponse {
+  version: ArtifactVersion;
+}
+
+export async function updateArtifactContent(
+  sessionId: string,
+  artifactId: string,
+  baseHash: string,
+  content: string,
+  note = 'edit',
+): Promise<UpdateArtifactResponse> {
+  ensureBackendAccess();
+  try {
+    return await backendRequest<UpdateArtifactResponse>({
+      path: `/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`,
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: { base_hash: baseHash, content, note },
+    });
+  } catch (error) {
+    throw new Error(
+      `updateArtifactContent failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }

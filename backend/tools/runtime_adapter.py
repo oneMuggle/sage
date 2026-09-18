@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Protocol
+from typing import Dict, Iterable, List, Optional, Protocol, Tuple
 
 from backend.domain.runtime import (
     ExecutionRequest,
@@ -34,7 +34,7 @@ class CommandRequest:
     argv: List[str]
     stdin_payload: Optional[str] = None
     env: Optional[dict] = None
-    cleanup_paths: tuple[Path, ...] = ()
+    cleanup_paths: Tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -118,7 +118,7 @@ class AdapterRegistry:
     """运行时适配器注册中心。"""
 
     def __init__(self) -> None:
-        self._adapters: dict[str, RuntimeAdapter] = {}
+        self._adapters: Dict[str, RuntimeAdapter] = {}
 
     def register(self, adapter: RuntimeAdapter) -> None:
         language = adapter.language.lower()

@@ -80,4 +80,41 @@ describe('Message — R17 信任感交互', () => {
     renderWithI18n(<Message message={makeMsg()} />);
     expect(screen.queryByTestId('memory-used-toggle')).not.toBeInTheDocument();
   });
+
+  // R38: 技能激活与上下文压缩透明度测试
+  it('R38: activated_skills 存在时显示可展开的技能激活开关', () => {
+    const msg = makeMsg({
+      role: 'user',
+      activated_skills: [
+        { name: 'code-reviewer', triggers_matched: ['审查代码'] },
+        { name: 'tdd-guide', triggers_matched: ['测试'] },
+      ],
+    });
+    renderWithI18n(<Message message={msg} />);
+    expect(screen.getByTestId('skill-activated-toggle')).toHaveTextContent('2');
+    // 默认收起；点击展开后逐条可见
+    expect(screen.queryByTestId('skill-activated-list')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('skill-activated-toggle'));
+    const list = screen.getByTestId('skill-activated-list');
+    expect(list).toHaveTextContent('code-reviewer');
+    expect(list).toHaveTextContent('tdd-guide');
+  });
+
+  it('R38: 无 activated_skills 时不显示技能激活开关', () => {
+    renderWithI18n(<Message message={makeMsg({ role: 'user' })} />);
+    expect(screen.queryByTestId('skill-activated-toggle')).not.toBeInTheDocument();
+  });
+
+  it('R38: role=system 且含 compact_info 时渲染居中的压缩系统提示', () => {
+    const msg = makeMsg({
+      role: 'system',
+      content: '📦 上下文已压缩：20 → 8 条（移除 12 条）',
+      compact_info: { before: 20, after: 8, removed: 12 },
+    });
+    renderWithI18n(<Message message={msg} />);
+    expect(screen.getByText(/上下文已压缩：20 → 8 条/)).toBeInTheDocument();
+    // 系统提示不应渲染用户/助手头像
+    expect(screen.queryByText('U')).not.toBeInTheDocument();
+    expect(screen.queryByText('S')).not.toBeInTheDocument();
+  });
 });

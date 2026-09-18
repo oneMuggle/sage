@@ -39,3 +39,26 @@ describe('chatApi.interrupt (P0-2)', () => {
     await expect(chatApi.interrupt('s1')).resolves.toBeUndefined();
   });
 });
+
+describe('session-scoped fallback after reload', () => {
+  it('resolves exactly the requested session before interrupting', async () => {
+    mockInvoke.mockResolvedValueOnce({ streamId: 'stream-B' });
+    await chatApi.interrupt(undefined, 'session-B');
+    expect(mockInvoke.mock.calls).toEqual([
+      ['chat_stream_active', { sessionId: 'session-B' }],
+      ['interrupt_agent', { streamId: 'stream-B' }],
+    ]);
+  });
+
+  it('does not send an unscoped interrupt when the session is idle', async () => {
+    mockInvoke.mockResolvedValueOnce({ streamId: null });
+    await chatApi.interrupt(undefined, 'idle');
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fall back to another stream if lookup fails', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('offline'));
+    await expect(chatApi.interrupt(undefined, 'offline')).resolves.toBeUndefined();
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+  });
+});

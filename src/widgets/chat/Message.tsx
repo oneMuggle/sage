@@ -14,6 +14,9 @@ import {
   Check,
   BrainCircuit,
   Quote,
+  FileText,
+  Package,
+  Zap
 } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
@@ -21,7 +24,9 @@ import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 
+import type { Artifact } from '../../features/artifacts/artifactApi';
 import { MediaAttachment } from '../../features/chat/MediaAttachment';
+import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { THINKING_PLACEHOLDER } from '../../features/send-message/thinkingPlaceholder';
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
@@ -53,6 +58,9 @@ interface MessageProps {
   onQuote?: (message: MessageType) => void;
   /** P0-1: 将此条消息内容保存到长期记忆 */
   onSaveToMemory?: (message: MessageType) => void;
+  /** right-panel R1 批次 B: tool_call_id → 产物[] 映射 —— 命中的工具卡片
+   * 下渲染内联产物 chip，点击直达右侧面板产物预览（对齐 Claude） */
+  artifactsByToolCall?: Record<string, Artifact[]>;
 }
 
 /** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
@@ -348,12 +356,13 @@ function ToolCallTitle({ name, args }: { name: string; args: Record<string, unkn
 /** 工具调用结果可折叠面板 — 大文件内容默认收起，避免刷屏
  *  阈值：超过 300 字符时自动折叠，用户可手动展开查看
  */
-function ToolCallResult({ result }: { result: string }) {
+function ToolCallResult({ result }: { result: unknown }) {
+  const safeResult = typeof result === 'string' ? result : JSON.stringify(result ?? '');
   const [isExpanded, setIsExpanded] = useState(false);
-  const isLarge = result.length > 300;
+  const isLarge = safeResult.length > 300;
 
   if (!isLarge) {
-    return <span className="text-text-primary break-all">{result}</span>;
+    return <span className="text-text-primary break-all">{safeResult}</span>;
   }
 
   return (
@@ -363,11 +372,11 @@ function ToolCallResult({ result }: { result: string }) {
         className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
       >
         {isExpanded ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-        <span>{isExpanded ? '收起' : `展开 (${result.length} 字符)`}</span>
+        <span>{isExpanded ? '收起' : `展开 (${safeResult.length} 字符)`}</span>
       </button>
       {isExpanded && (
         <pre className="mt-1 p-2 bg-bg-subtle border border-border rounded-radius-sm text-[11px] text-text-secondary overflow-x-auto max-h-80 overflow-y-auto whitespace-pre-wrap break-all font-mono">
-          {result}
+          {safeResult}
         </pre>
       )}
     </div>
@@ -389,16 +398,23 @@ function MessageComponent({
   onDelete,
   onQuote,
   onSaveToMemory,
+  artifactsByToolCall,
 }: MessageProps) {
   const { t } = useI18n();
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
+  const isSystem = message.role === 'system';
   const isError = message.content?.startsWith('[错误') ?? false;
   // 2026-09-13 P0: 首个 token 到达前 content 是哨兵占位值 — 渲染 shimmer
   // 骨架而非把 "🤔 思考中…" 当 markdown 静态文本展示。agent 中间态文案
   // (思考/调用工具) 会覆盖占位值，覆盖后自动回退 markdown 渲染。
   const isThinkingPlaceholder =
     isAssistant && isStreaming === true && message.content === THINKING_PLACEHOLDER;
+  // 2026-09 step-by-step: 多步 run 中,中间步骤可能 content="" 但有
+  // tool_calls / reasoning_content。气泡只在有内容时渲染;其他部件
+  // (ThinkingPanel / tool_calls) 始终渲染,确保中间步骤不会"空泡"。
+  const showBubble = isUser || (isAssistant && Boolean((message.content ?? '').trim()));
+
   // P1 流式分块: 已确定前缀切稳定块（memo 化跳过重解析），只有 live 尾块
   // 随 delta 全量 re-parse；非流式整体单块渲染，DOM 与旧实现一致。
   const displayContent = useMemo(
@@ -417,7 +433,21 @@ function MessageComponent({
     () => isStreaming === true && hasUnclosedFence(displayContent),
     [displayContent, isStreaming],
   );
-  const toolCalls: ToolCall[] = message.tool_calls ?? [];
+  // 2026-09 修复: 历史消息的 tool_calls 从后端原样加载时是 JSON 字符串
+  // (session_repo 不做 parse), 直接 .map 会崩。双态归一化。
+  const toolCalls: ToolCall[] = useMemo(() => {
+    const raw = message.tool_calls;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string' && raw) {
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        return Array.isArray(parsed) ? (parsed as ToolCall[]) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }, [message.tool_calls]);
   // M4: 只有 user/assistant 消息可分叉（system/tool 行没有分叉语义）
   const canFork = Boolean(onFork) && (isUser || isAssistant);
   // U5': 编辑重发只对 user 消息有意义（重写用户输入，而非模型回答）
@@ -437,6 +467,22 @@ function MessageComponent({
   // R17-E: 记忆召回明细展开态
   const [memoryExpanded, setMemoryExpanded] = useState(false);
   const memoryRefs = message.memory_refs ?? [];
+  // R38: 技能激活明细展开态
+  const [skillsExpanded, setSkillsExpanded] = useState(false);
+  const activatedSkills = message.activated_skills ?? [];
+
+  // R38: 系统消息（如压缩通知）居中渲染，无头像/气泡
+  // 必须在所有 Hooks 之后 return，否则违反 React Hooks 规则
+  if (isSystem && message.compact_info) {
+    return (
+      <div className="flex justify-center my-3">
+        <div className="px-3 py-1.5 rounded-radius-sm bg-bg-subtle border border-border text-xs text-text-secondary flex items-center gap-1.5">
+          <Package className="w-3 h-3 text-muted" />
+          <span>{message.content}</span>
+        </div>
+      </div>
+    );
+  }
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content);
@@ -522,6 +568,26 @@ function MessageComponent({
                       <ToolCallResult result={tc.result} />
                     </div>
                   )}
+                  {/* right-panel R1 批次 B: 该工具调用落库的产物 chip ——
+                      点击直达右侧面板产物预览（selectArtifact：开面板+切产物Tab+选中） */}
+                  {tc.id && artifactsByToolCall?.[tc.id]?.length ? (
+                    <div className="flex flex-wrap gap-1 px-2 pb-1.5">
+                      {artifactsByToolCall[tc.id].map((art) => (
+                        <button
+                          key={art.id}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-[11px] text-primary transition-colors"
+                          onClick={() =>
+                            useRightPanelStore.getState().selectArtifact(art.id)
+                          }
+                          title="在右侧面板中查看"
+                          data-testid="message-artifact-chip"
+                        >
+                          <FileText className="w-3 h-3 shrink-0" />
+                          <span className="truncate max-w-48">{art.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   {/* Inline image preview for diagram tools */}
                   {hasImage && (
                     <div className="px-2 pb-2">
@@ -552,39 +618,45 @@ function MessageComponent({
           </div>
         )}
 
-        {/* 消息气泡 */}
-        <div
-          data-error={isError ? 'true' : undefined}
-          className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
-            isUser
-              ? 'bg-primary text-text-inverse'
-              : isError
-                ? 'bg-error/10 border border-error/40 text-error'
-                : 'bg-surface border border-border'
-          }`}
-        >
-          {/* Message content with Markdown */}
-          {isAssistant ? (
-            isThinkingPlaceholder ? (
-              <ThinkingShimmer />
-            ) : (
-              <div className="max-w-none max-w-3xl mx-auto w-full">
-                {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
+        {/* 消息气泡 — 2026-09 step-by-step: 空内容时不渲染,避免空白气泡 */}
+        {showBubble && (
+          <div
+            data-error={isError ? 'true' : undefined}
+            className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
+              isUser
+                ? 'bg-primary text-text-inverse'
+                : isError
+                  ? 'bg-error/10 border border-error/40 text-error'
+                  : 'bg-surface border border-border'
+            }`}
+          >
+            {/* Message content with Markdown */}
+            {isAssistant ? (
+              isThinkingPlaceholder ? (
+                <ThinkingShimmer />
+              ) : (
+                <div className="max-w-none max-w-3xl mx-auto w-full">
+                  {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
                     长文不再一行拉满；表格/代码块仍在容器内滚动 */}
-                {chunks.stable.map((md, i) => (
-                  <MarkdownChunk key={i} md={md} />
-                ))}
-                <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
-                {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
-                {isStreaming && (
-                  <span className="stream-cursor" aria-hidden="true" data-testid="stream-cursor" />
-                )}
-              </div>
-            )
-          ) : (
-            <p className="whitespace-pre-wrap">{renderTextWithLinks(message.content)}</p>
-          )}
-        </div>
+                  {chunks.stable.map((md, i) => (
+                    <MarkdownChunk key={i} md={md} />
+                  ))}
+                  <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
+                  {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
+                  {isStreaming && (
+                    <span
+                      className="stream-cursor"
+                      aria-hidden="true"
+                      data-testid="stream-cursor"
+                    />
+                  )}
+                </div>
+              )
+            ) : (
+              <p className="whitespace-pre-wrap">{renderTextWithLinks(message.content)}</p>
+            )}
+          </div>
+        )}
 
         {/* 底部信息 */}
         <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
@@ -600,6 +672,22 @@ function MessageComponent({
               {message.memory_applied} {t('chat.memory_applied')}
               <ChevronDown
                 className={`w-3 h-3 transition-transform ${memoryExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+          )}
+          {/* R38: 技能激活展示 */}
+          {activatedSkills.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSkillsExpanded((v) => !v)}
+              className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400 hover:underline"
+              title={t('chat.skills_toggle')}
+              data-testid="skill-activated-toggle"
+            >
+              <Zap className="w-3 h-3" />
+              {activatedSkills.length} {t('chat.skills_activated')}
+              <ChevronDown
+                className={`w-3 h-3 transition-transform ${skillsExpanded ? 'rotate-180' : ''}`}
               />
             </button>
           )}
@@ -623,6 +711,23 @@ function MessageComponent({
                   {ref.memory_type}
                 </span>
                 <span className="text-text-secondary break-all">{ref.preview}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* R38: 技能激活明细（skill_activated 流事件携带，可展开） */}
+        {skillsExpanded && activatedSkills.length > 0 && (
+          <div
+            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-1"
+            data-testid="skill-activated-list"
+          >
+            {activatedSkills.map((skill) => (
+              <div key={skill.name} className="flex items-start gap-1.5">
+                <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
+                  技能
+                </span>
+                <span className="text-text-secondary break-all">{skill.name}</span>
               </div>
             ))}
           </div>
@@ -751,6 +856,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.onRegenerate === next.onRegenerate &&
     prev.onDelete === next.onDelete &&
     prev.onQuote === next.onQuote &&
-    prev.onSaveToMemory === next.onSaveToMemory
+    prev.onSaveToMemory === next.onSaveToMemory &&
+    prev.artifactsByToolCall === next.artifactsByToolCall
   );
 });

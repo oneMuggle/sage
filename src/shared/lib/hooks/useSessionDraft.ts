@@ -60,3 +60,19 @@ export function useSessionDraft(sessionId: string | null): [string, (value: stri
 
   return [draft, setDraft];
 }
+
+/**
+ * 2026-09 修复: 删除会话时清理其草稿 —— 此前 sage-drafts 里的条目
+ * 无限累积 (隐私残留 + 存储缓慢增长)。由 deleteSessionCascade 调用。
+ */
+export function clearSessionDraft(sessionId: string): void {
+  try {
+    const store = JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? '{}') as DraftStore;
+    if (sessionId in store) {
+      delete store[sessionId];
+      localStorage.setItem(DRAFTS_KEY, JSON.stringify(store));
+    }
+  } catch {
+    // privacy mode or quota exceeded — same tolerance as writes
+  }
+}

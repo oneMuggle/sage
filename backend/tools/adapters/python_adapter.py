@@ -23,7 +23,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Set, Tuple
 
 from backend.domain.runtime import (
     Diagnostic,
@@ -78,7 +78,7 @@ class PythonAdapter:
         request: ProbeRequest,
         ctx: AdapterContext,
     ) -> List[RuntimeInfo]:
-        seen: set[str] = set()
+        seen: Set[str] = set()
         results: List[RuntimeInfo] = []
 
         for path in self._candidate_paths(request.include_paths):

@@ -76,6 +76,9 @@ OFFICE_TOOLS = (
     "office_lint_word",
     # 2026-09-12 Round 12 自动修复：lint→修复→复检（WRITE_LOCAL）
     "office_repair_word",
+    # 2026-09-18 Round 39 目录真页码：Word COM 刷新 TOC 域（WRITE_LOCAL，
+    # 可选通道——需本机 Word + pywin32，缺失时降级为可读理由）
+    "office_refresh_toc",
 )
 
 # 本地开发环境助手（2026-09-04）：只读探测/诊断两件 + 审批后执行一件。
@@ -122,7 +125,7 @@ SYMBOL_TOOLS = ("symbol_search",)
 
 # 浏览器自动化（2026-09-06 对标增强 G7）：CDP 驱动本机 Chrome/Edge。
 # launch=EXEC / navigate=EXTERNAL（逐次审批）/ snapshot+screenshot=READ /
-# interact+close+cookies=WRITE_LOCAL。v1 只给 coder（executor 边界）。
+# interact+close+cookies=WRITE_LOCAL / downloads=READ。v1 只给 coder（executor 边界）。
 BROWSER_TOOLS = (
     "browser_launch",
     "browser_navigate",
@@ -130,6 +133,7 @@ BROWSER_TOOLS = (
     "browser_interact",
     "browser_screenshot",
     "browser_cookies",
+    "browser_downloads",
     "browser_close",
 )
 

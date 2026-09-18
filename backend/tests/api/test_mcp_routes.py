@@ -265,6 +265,46 @@ class TestUpdateServer:
         assert resp.status_code == 422
 
 
+class TestServerTools:
+    def test_tools_listed_for_ready_server(self, client):
+        client.post("/api/v1/mcp/servers", json={"name": "srv", "command": "node"})
+        resp = client.get("/api/v1/mcp/servers/srv/tools")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body == {
+            "server": "srv",
+            "state": "ready",
+            "tools": [{"name": "echo", "description": "echo"}],
+            "disabled_tools": [],
+        }
+
+    def test_disabled_tools_echoed_after_patch(self, client):
+        client.post("/api/v1/mcp/servers", json={"name": "srv", "command": "node"})
+        patch = client.patch(
+            "/api/v1/mcp/servers/srv", json={"disabled_tools": ["echo"]}
+        )
+        assert patch.status_code == 200
+        body = client.get("/api/v1/mcp/servers/srv/tools").json()
+        assert body["disabled_tools"] == ["echo"]
+        # raw spec list is unaffected — filtering happens at registration
+        assert [t["name"] for t in body["tools"]] == ["echo"]
+
+    def test_unknown_server_404(self, client):
+        resp = client.get("/api/v1/mcp/servers/ghost/tools")
+        assert resp.status_code == 404
+
+    def test_disabled_server_reports_empty_tools_with_state(self, client):
+        client.post(
+            "/api/v1/mcp/servers",
+            json={"name": "srv", "command": "node", "enabled": False},
+        )
+        resp = client.get("/api/v1/mcp/servers/srv/tools")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["state"] == "disabled"
+        assert body["tools"] == []
+
+
 class TestDeleteServer:
     def test_delete_user_server(self, client, tmp_path):
         client.post("/api/v1/mcp/servers", json={"name": "srv", "command": "node"})
@@ -291,3 +331,59 @@ class TestDeleteServer:
     def test_delete_unknown_404(self, client):
         resp = client.delete("/api/v1/mcp/servers/ghost")
         assert resp.status_code == 404
+
+
+def test_http_url_create_roundtrip_and_patch_preserves_transport(client, tmp_path):
+    url = "https://mcp.example/rpc"
+    response = client.post("/api/v1/mcp/servers", json={
+        "name": "remote", "url": url, "headers": {"Authorization": "Bearer secret"},
+    })
+    assert response.status_code == 200
+    config = client.get("/api/v1/mcp/servers").json()["servers"][0]
+    assert config["url"] == url
+    assert config["command"] == ""
+    assert config["headers"]["Authorization"] == "***"
+    patch = client.patch("/api/v1/mcp/servers/remote", json={"enabled": False})
+    assert patch.status_code == 200
+    persisted = json.loads(_config_path(tmp_path).read_text())
+    assert persisted["servers"][0]["url"] == url
+    assert persisted["servers"][0]["headers"]["Authorization"] == "Bearer secret"
+    config = client.get("/api/v1/mcp/servers").json()["servers"][0]
+    assert config["url"] == url
+    assert config["enabled"] is False
+
+
+@pytest.mark.parametrize("payload", [{"name": "empty"}, {"name": "bad", "url": "ftp://host"}])
+def test_invalid_transport_is_rejected(client, payload):
+    assert client.post("/api/v1/mcp/servers", json=payload).status_code == 400
+
+
+class TestOAuthStatus:
+    """r65: OAuth 授权状态可见化 + 删除服务器清理 token。"""
+
+    def test_status_and_servers_expose_has_oauth_token(self, client, tmp_path):
+        from backend.mcp.oauth_store import OAuthTokenStore, TokenRecord
+
+        client.post("/api/v1/mcp/servers", json={"name": "srv", "command": "node"})
+        (entry,) = client.get("/api/v1/mcp/status").json()["servers"]
+        assert entry["has_oauth_token"] is False
+        (config,) = client.get("/api/v1/mcp/servers").json()["servers"]
+        assert config["has_oauth_token"] is False
+
+        OAuthTokenStore(root=tmp_path).save(
+            TokenRecord(server_name="srv", access_token="at", token_type="Bearer")
+        )
+        (entry,) = client.get("/api/v1/mcp/status").json()["servers"]
+        assert entry["has_oauth_token"] is True
+        (config,) = client.get("/api/v1/mcp/servers").json()["servers"]
+        assert config["has_oauth_token"] is True
+
+    def test_delete_cleans_oauth_token(self, client, tmp_path):
+        from backend.mcp.oauth_store import OAuthTokenStore, TokenRecord
+
+        client.post("/api/v1/mcp/servers", json={"name": "srv", "command": "node"})
+        store = OAuthTokenStore(root=tmp_path)
+        store.save(TokenRecord(server_name="srv", access_token="at", token_type="Bearer"))
+
+        assert client.delete("/api/v1/mcp/servers/srv").json()["ok"] is True
+        assert store.load("srv") is None

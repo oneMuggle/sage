@@ -12,7 +12,7 @@ import threading
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Deque, Dict, List
+from typing import Deque, Dict, List, Optional
 
 MAX_TRACE_RECORDS = 50
 
@@ -32,12 +32,12 @@ class TraceRecord:
     upstream_method: str
     request_headers: Dict[str, str]
     request_body: bytes
-    response_status: int | None
+    response_status: Optional[int]
     response_headers: Dict[str, str]
     response_body: bytes
     response_streamed: bool
     duration_ms: int
-    error_class: str | None = None
+    error_class: Optional[str] = None
 
 
 class _Recorder:

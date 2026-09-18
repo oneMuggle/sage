@@ -13,6 +13,9 @@ concurrency:
 permissions:
   contents: read
 jobs:
+  # stub-smoke / stub-deep 相互独立（两个 playwright project），并行跑：
+  # 原先 stub-deep needs stub-smoke 纯串行，白等 ~1.5 min（实测两 job
+  # 各 ~1.5 min，PR gate 链 5.5 → ~4 min）。live-boot 仍等两者全绿。
   stub-smoke:
     runs-on: ubuntu-latest
     steps:
@@ -27,7 +30,6 @@ jobs:
       - run: xvfb-run -a npm run test:smoke
   stub-deep:
     runs-on: ubuntu-latest
-    needs: stub-smoke
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,7 +41,7 @@ jobs:
       - run: xvfb-run -a npx playwright test --project=electron-stub-deep
   live-boot:
     runs-on: ubuntu-latest
-    needs: stub-deep
+    needs: [stub-smoke, stub-deep]
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4

@@ -26,7 +26,7 @@ import contextlib
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -55,14 +55,14 @@ class LaneHeartbeatOut(BaseModel):
 class LaneOut(BaseModel):
     lane_id: str
     task_id: str
-    agent_id: str | None = None
+    agent_id: Optional[str] = None
     status: LaneStatus
     created_at: int
-    started_at: int | None = None
-    completed_at: int | None = None
-    worktree: str | None = None
-    heartbeat: LaneHeartbeatOut | None = None
-    error: str | None = None
+    started_at: Optional[int] = None
+    completed_at: Optional[int] = None
+    worktree: Optional[str] = None
+    heartbeat: Optional[LaneHeartbeatOut] = None
+    error: Optional[str] = None
     permission_preset: str
     metadata: dict
 
@@ -74,8 +74,8 @@ class TaskOut(BaseModel):
     task_type: str
     status: str
     blocked_by: List[str]
-    team_id: str | None = None
-    agent_hint: str | None = None
+    team_id: Optional[str] = None
+    agent_hint: Optional[str] = None
 
 
 class LaneEventOut(BaseModel):
@@ -83,7 +83,7 @@ class LaneEventOut(BaseModel):
     event_type: str
     lane_id: str
     task_id: str
-    agent_id: str | None = None
+    agent_id: Optional[str] = None
     timestamp: int
     provenance: str
     metadata: dict
@@ -91,7 +91,7 @@ class LaneEventOut(BaseModel):
 
 class CreateLanesIn(BaseModel):
     goal: str = Field(max_length=MAX_GOAL_LENGTH)
-    agent: str | None = Field(default=None, max_length=100)
+    agent: Optional[str] = Field(default=None, max_length=100)
 
 
 class CreateLanesOut(BaseModel):
@@ -100,7 +100,7 @@ class CreateLanesOut(BaseModel):
     lanes: List[LaneOut]
     tasks: List[TaskOut]
     # Wave 3 B2 (2026-08-14): wait=true 时携带验证环结果（可选）。
-    review: Dict[str, Any] | None = None
+    review: Optional[Dict[str, Any]] = None
 
 
 class CancelIn(BaseModel):
@@ -118,8 +118,8 @@ class DecisionOut(BaseModel):
     decision: str
     merged: bool = False
     already: bool = False
-    warning: str | None = None
-    merge: Dict[str, Any] | None = None
+    warning: Optional[str] = None
+    merge: Optional[Dict[str, Any]] = None
 
 
 # ---------- serialization helpers ----------
@@ -184,8 +184,8 @@ def build_router() -> APIRouter:
 
     @router.get("/lanes", response_model=List[LaneOut])
     async def list_lanes(
-        status: LaneStatus | None = Query(default=None),
-        team_id: str | None = Query(default=None),
+        status: Optional[LaneStatus] = Query(default=None),
+        team_id: Optional[str] = Query(default=None),
         limit: int = Query(default=100, ge=1, le=500),
     ) -> List[LaneOut]:
         """List lanes with optional filters.
@@ -338,7 +338,7 @@ def build_router() -> APIRouter:
         # TypeError。
         # 另注意：plan.tasks 是 Task（无 lane_id），lane→task 映射必须来自上面
         # 实际创建的 created_lanes，不能从 plan.tasks 反推（brief 原文有该 bug）。
-        review: Dict[str, Any] | None = None
+        review: Optional[Dict[str, Any]] = None
         if wait:
             review = await _execute_plan_lanes(
                 plan=plan,

@@ -43,6 +43,7 @@ from backend.orchestration.topology import (
     downstream_closure,
     find_cycle,
 )
+from backend.services.usage_tracker import set_current_task_id
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +269,9 @@ class ChatDispatcher:
         # BD (round12): 后台派发句柄 —— 同一时刻至多一个在飞；collect 侧
         # shield 等待，超时/取消不杀派发本身。
         self._bg_task: Optional[asyncio.Task] = None
+        # RD14 (round22): 每 run 重派（retry_of）计数 —— 超过
+        # max_retry_of_chains 后降级普通任务。
+        self._redeploy_count = 0
         # B3 (2026-09-09): 单任务跳过 —— task_id → skip 信号（cancel_task 置位）
         # 与 task_id → merged 取消事件（skip ∨ run 级取消，SubagentRunner 的
         # interrupt_event 消费）。_run_one 建档、finally 注销。
@@ -648,6 +652,20 @@ class ChatDispatcher:
                 and self._states[retry_of_raw].status != "done"
                 else None
             )
+            # RD14 (round22): 重派链防失控上限 —— 每 run 重派次数超
+            # max_retry_of_chains 时降级普通任务，防止 conductor 误判时
+            # 无限链式重派（t3←t2←t1…）导致 token/时长成本失控。
+            _retry_cap = getattr(self.settings, "max_retry_of_chains", 10)
+            if state.retry_of is not None:
+                self._redeploy_count += 1
+                if self._redeploy_count > _retry_cap:
+                    logger.warning(
+                        "重派次数 %d 超过上限 %d，任务 %s 降级为普通新任务",
+                        self._redeploy_count,
+                        _retry_cap,
+                        task_id,
+                    )
+                    state.retry_of = None
             if retry_of_raw is not None and state.retry_of is None:
                 logger.warning(
                     "无效 retry_of=%r，任务 %s 降级为普通新任务",
@@ -742,6 +760,9 @@ class ChatDispatcher:
                 state.status = "running"
                 state.started_at = time.time()
                 self._emit_task_status(state)
+                # RT23 (round23): 设置任务归因 ContextVar —— 子代理执行期间
+                # LLM 用量自动携带 task_id（ContextVar 随 asyncio 任务传播）。
+                set_current_task_id(state.task_id)
                 # 让其他子任务也有机会 emit running,保证 queued/running/done 三阶段序
                 await asyncio.sleep(0)
                 # RV1 (round8): 已完成任务回放 —— 计划条目带 preset_output
@@ -800,6 +821,8 @@ class ChatDispatcher:
                     self._check_run_budget()
                     # BU11 (round21): 墙钟守门 —— run 整体时长超限同款收口。
                     self._check_run_wall_clock()
+                    # RT23 (round23): 清除任务归因 ContextVar。
+                    set_current_task_id(None)
 
         # P1 拓扑调度 (spec 2026-08-21): 依 depends_on 分波执行。
         # - 波内 asyncio.gather 全并行（信号量限流不变）
@@ -1252,30 +1275,6 @@ class ChatDispatcher:
             )
             self._cancelled.set()
 
-    def _check_run_wall_clock(self) -> None:
-        """BU11 (round21): run 级墙钟守门 —— 超限时触发与预算同款收口。
-
-        预算键 ``OrchSettings.run_wall_clock_limit_min``（分钟，0 = 关闭）。
-        窗口 = 首次派发起的墙钟时长（每个任务都正常也可能整体跑飞，token
-        预算管不住这种失控形态）。触发后经 ``_cancelled`` 传播收口；任务级
-        归因 ``wall_clock_exceeded: …``（先于用户取消判断，避免误归因）。
-        """
-        limit_min = getattr(self.settings, "run_wall_clock_limit_min", 0)
-        if limit_min <= 0 or self._wall_clock_exceeded:
-            return
-        if not self._first_dispatch_at:
-            return
-        elapsed_ms = int(time.time() * 1000) - int(self._first_dispatch_at * 1000)
-        if elapsed_ms >= limit_min * 60_000:
-            self._wall_clock_exceeded = True
-            self._wall_clock_limit_min = limit_min
-            logger.warning(
-                "run %s 触发墙钟上限：%d 分钟，剩余任务停止派发",
-                self.run_id,
-                limit_min,
-            )
-            self._cancelled.set()
-
     def _emit_task_status(self, state: ChatTaskState) -> None:
         """推 task_status 事件；队列满/关闭静默降级（进度尽力而为）。"""
         event: Dict[str, Any] = {
@@ -1294,23 +1293,32 @@ class ChatDispatcher:
         # "重派"徽章（用户可追溯哪些任务是重做的）。None 时不带键。
         if state.retry_of:
             event["retry_of"] = state.retry_of
-        # BU9 (round20): 终态任务附带动量消耗 —— 预算开启且归因就绪时查询
-        # session 窗口用量（fail-open 缺省不带键）；queued/running 不查询
-        # （减少 DB 次数，且进行中用量意义有限）。
+        # BU13 (round24): 任务级消耗与时长可见性 —— 终态事件携带本任务真实
+        # token 消耗与执行时长。BU9 曾带 run 窗口累计值（各任务重复计入，
+        # 且被 run_token_budget>0 门槛挡住）；RT23 task_id 归因就绪后改查
+        # task_usage_since（since 仍取 run 首派发，窗口不跨 run）。
+        # 预算关闭也可见（对标 Claude Code per-task token 始终展示）；
+        # queued/running 不查询（进行中用量意义有限，减少 DB 次数）。
         if (
             state.status in ("done", "failed", "cancelled")
-            and getattr(self.settings, "run_token_budget", 0) > 0
             and self.session_id
             and self._first_dispatch_at
         ):
             try:
                 from backend.services.usage_tracker import UsageTracker
 
-                event["used_tokens"] = UsageTracker().session_usage_since(
-                    self.session_id, int(self._first_dispatch_at * 1000)
+                event["used_tokens"] = UsageTracker().task_usage_since(
+                    self.session_id,
+                    state.task_id,
+                    int(self._first_dispatch_at * 1000),
                 )
             except Exception:  # noqa: BLE001 — 增强字段，失败不带键
                 pass
+            # BU13 (round24): 执行时长（秒级时间戳差 ×1000）；两脚齐备才带键。
+            if state.started_at and state.finished_at:
+                event["duration_ms"] = int(
+                    (state.finished_at - state.started_at) * 1000
+                )
         try:
             self.entry_queue.put_nowait(event)
         except Exception:  # noqa: BLE001

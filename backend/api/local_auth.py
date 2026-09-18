@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import os
 import secrets
+from typing import Optional
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -23,7 +24,7 @@ _OWNERSHIP_TOKEN_ENV = "SAGE_BACKEND_OWNERSHIP_TOKEN"
 _OWNERSHIP_HEADER = "x-sage-backend-ownership"
 _TOKEN_BYTES = 32
 _PUBLIC_PATHS = frozenset({"/health", "/health/proof", "/api/v1/scheduled/health"})
-_local_auth_token: str | None = None
+_local_auth_token: Optional[str] = None
 
 
 def ownership_health_proof(token: str, build_id: str, generation: int, pid: int) -> str:

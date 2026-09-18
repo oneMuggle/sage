@@ -486,28 +486,34 @@ class SageAgent:
                 "model": self.llm_config.model if self.llm_config else "local",
             }
 
-            # 持久化助手消息
-            try:
-                self.message_repo.save(
-                    DbMessage(
-                        id=assistant_message["id"],
-                        session_id=session_id,
-                        role="assistant",
-                        content=assistant_content,
-                        created_at=assistant_message["created_at"],
-                        model=assistant_message["model"],
+            # 2026-09 修复: LLM 未配置时的模拟响应只用于本轮 UI 反馈,
+            # 不落库、不进工作记忆/长期记忆 —— 避免 mock 文案进入真实会话
+            # 历史, 污染续聊上下文、全文检索与记忆提取。
+            if self.llm_client:
+                # 持久化助手消息
+                try:
+                    self.message_repo.save(
+                        DbMessage(
+                            id=assistant_message["id"],
+                            session_id=session_id,
+                            role="assistant",
+                            content=assistant_content,
+                            created_at=assistant_message["created_at"],
+                            model=assistant_message["model"],
+                        )
                     )
+                except Exception as db_err:
+                    logger.warning(f"助手消息持久化失败: {db_err}")
+
+                # 将助手消息添加到工作记忆
+                self.memory_manager.add_to_working(
+                    "assistant", assistant_message["content"], session_id=session_id
                 )
-            except Exception as db_err:
-                logger.warning(f"助手消息持久化失败: {db_err}")
 
-            # 将助手消息添加到工作记忆
-            self.memory_manager.add_to_working(
-                "assistant", assistant_message["content"], session_id=session_id
-            )
-
-            # 对话后：提取关键信息存入情景记忆
-            self._extract_and_save_memories(session_id, user_message, assistant_message)
+                # 对话后：提取关键信息存入情景记忆
+                self._extract_and_save_memories(session_id, user_message, assistant_message)
+            else:
+                logger.info("LLM 未配置, 模拟响应不落库 (session=%s)", session_id)
 
             # 对话后：检查是否需要压缩工作记忆
             if self.memory_manager.working.total_tokens_for(session_id) > 3000:
@@ -1166,7 +1172,20 @@ class SageAgent:
                                         else result_p.content
                                     )
                                     return json.dumps(value, ensure_ascii=False), False
-                                return result_p.error or "工具执行失败", True
+                                # error 规范化: str 直通, None 退化为默认文案, 其他类型 JSON 序列化
+                                err_value = result_p.error
+                                normalized = (
+                                    err_value
+                                    if isinstance(err_value, str)
+                                    else (
+                                        "工具执行失败"
+                                        if err_value is None
+                                        else json.dumps(
+                                            err_value, ensure_ascii=False, default=str
+                                        )
+                                    )
+                                )
+                                return (normalized or "工具执行失败"), True
                             return json.dumps(result_p, ensure_ascii=False, default=str), False
                         except Exception as exc:  # noqa: BLE001
                             logger.error(f"并行工具执行失败: {tc.name}, error: {exc}")
@@ -1247,6 +1266,15 @@ class SageAgent:
                                 is_error=err_p,
                             ),
                         )
+                    # 2026-09 step-by-step: 并行迭代边界，legacy_routes 收到后
+                    # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
+                    # 消息，并重置累加器准备下一步。
+                    yield AgentEvent(
+                        state=AgentState.STEP_DONE,
+                        iteration=i,
+                        step_index=i,
+                        agent_id=self.agent_id,
+                    )
                     continue
                 # ===== L6 并行只读批次 END =====
 
@@ -1332,6 +1360,70 @@ class SageAgent:
                             }
                         )
                         continue
+
+                    # L7+: args 非 dict 防御——json.loads 成功但结果是 list/scalar
+                    # 时，后续 tool.execute(**args) 会 TypeError。与 JSON 解析失败
+                    # 同构处理：回传 is_error 工具结果，LLM 可修正重试。
+                    if not isinstance(args, dict):
+                        _type_content = (
+                            f"[参数错误] 工具 {tc.name} 的 arguments 必须是对象(object)，"
+                            f"实际为 {type(args).__name__}。请修正参数后重新调用。"
+                        )
+                        yield AgentEvent(
+                            state=AgentState.OBSERVING,
+                            iteration=i,
+                            tool_call=ToolCallRequest(id=tc.id, name=tc.name, arguments={}),
+                            tool_result=ToolCallResult(
+                                tool_call_id=tc.id,
+                                content=_type_content,
+                                is_error=True,
+                            ),
+                            agent_id=self.agent_id,
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc.id,
+                                "content": _type_content,
+                            }
+                        )
+                        continue
+
+                    # L8: required 参数存在性校验——工具执行前拦截缺失参数,
+                    # 避免 Python TypeError 被 except Exception 捕获后变成不友好的
+                    # [工具错误] execute() missing ... 消息。
+                    # 与 hooks/runner.py:validate_modified_args 同构的轻量检查。
+                    _schema_tool = self.tool_registry.get(tc.name)
+                    if _schema_tool is not None and hasattr(_schema_tool, "schema"):
+                        _schema_required = _schema_tool.schema.parameters.get("required", [])
+                        if isinstance(_schema_required, list):
+                            _missing = [k for k in _schema_required if k not in args]
+                            if _missing:
+                                _missing_content = (
+                                    f"[参数错误] 工具 {tc.name} 缺少必需参数: {_missing}。"
+                                    "请提供这些参数后重新调用。"
+                                )
+                                yield AgentEvent(
+                                    state=AgentState.OBSERVING,
+                                    iteration=i,
+                                    tool_call=ToolCallRequest(
+                                        id=tc.id, name=tc.name, arguments=args
+                                    ),
+                                    tool_result=ToolCallResult(
+                                        tool_call_id=tc.id,
+                                        content=_missing_content,
+                                        is_error=True,
+                                    ),
+                                    agent_id=self.agent_id,
+                                )
+                                messages.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tc.id,
+                                        "content": _missing_content,
+                                    }
+                                )
+                                continue
 
                     # ===== M6 HOOKS BEGIN: pre_tool_use (deny/modify) =====
                     # 用户自定义钩子 (backend/hooks/)。Fail-open: 钩子故障
@@ -1556,7 +1648,15 @@ class SageAgent:
                                                 output_value, ensure_ascii=False, default=str
                                             )
                                         else:
-                                            result_content = result.error or "工具执行失败"
+                                            err_value = result.error
+                                            if isinstance(err_value, str):
+                                                result_content = err_value or "工具执行失败"
+                                            elif err_value is None:
+                                                result_content = "工具执行失败"
+                                            else:
+                                                result_content = json.dumps(
+                                                    err_value, ensure_ascii=False, default=str
+                                                )
                                     else:
                                         is_error = False
                                         result_content = json.dumps(
@@ -1603,6 +1703,16 @@ class SageAgent:
                         ),
                     )
                     # ===== M6 HOOKS END =====
+
+                # 2026-09 step-by-step: 串行迭代边界，legacy_routes 收到后
+                # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
+                # 消息，并重置累加器准备下一步。
+                yield AgentEvent(
+                    state=AgentState.STEP_DONE,
+                    iteration=i,
+                    step_index=i,
+                    agent_id=self.agent_id,
+                )
 
             yield AgentEvent(
                 state=AgentState.FAILED,

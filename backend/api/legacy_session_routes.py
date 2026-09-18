@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -79,15 +79,15 @@ def list_sessions(
     sessions = repo.list(limit=limit, offset=offset)
     result = [s.to_dict() for s in sessions]
     # P0-4 (UI 优化方案 2026-09-13): 批量附加 last_message_preview(每个会话最后一条
-    # user/assistant 消息截断 80 字符),空会话 → None。
+    # user/assistant 消息截断 40 字符),空会话 → None。
     previews = _batch_last_message_previews([s.id for s in sessions])
     for item in result:
         item["last_message_preview"] = previews.get(item["id"])
     return result
 
 
-def _batch_last_message_previews(session_ids: list[str]) -> dict[str, str]:
-    """批量取每个会话的最后一条 user/assistant 消息预览(截断 80 字符)。"""
+def _batch_last_message_previews(session_ids: List[str]) -> Dict[str, str]:
+    """批量取每个会话的最后一条 user/assistant 消息预览(截断 40 字符)。"""
     if not session_ids:
         return {}
     conn = get_database().get_connection()
@@ -95,7 +95,7 @@ def _batch_last_message_previews(session_ids: list[str]) -> dict[str, str]:
     placeholders = ",".join("?" for _ in session_ids)
     cursor.execute(
         f"""
-        SELECT m.session_id, SUBSTR(m.content, 1, 80) AS preview
+        SELECT m.session_id, SUBSTR(m.content, 1, 40) AS preview
         FROM messages m
         INNER JOIN (
             SELECT session_id, MAX(created_at) AS max_created
@@ -282,8 +282,8 @@ async def compact_session(session_id: str):
 class ForkSessionRequest(BaseModel):
     """POST /sessions/{session_id}/fork 请求体。"""
 
-    at_message_id: str | None = None
-    title: str | None = None
+    at_message_id: Optional[str] = None
+    title: Optional[str] = None
     # U5' (对标增强第五轮批次 A): 开区间截断——复制 at_message_id 之前的
     # 消息（不含本身）。编辑重发据此分叉出"被编辑消息之前"的前缀。
     before_message: bool = False
@@ -373,7 +373,7 @@ def _snippet_around(content: str, needle: str, window: int = 80) -> str:
 @with_db_lock
 def search_messages(
     q: str = Query(min_length=2, max_length=200),
-    session_id: str | None = None,
+    session_id: Optional[str] = None,
     limit: int = Query(default=20, ge=1, le=50),
 ):
     """跨会话消息全文搜索（F12，round5 批次 B）。

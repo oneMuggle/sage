@@ -9,7 +9,7 @@ SQLite 表 office_journal_specs 与 office_journal_generations 存元数据
 (spec_id / sha256 / created_at / ...) 供全局查询（跨 workspace 列表）。
 
 设计要点：
-- PEP 604/585 全部禁用（X | None / list[int]）；
+- PEP 604/585 全部禁用（X | None / List[int]）；
 - workspace 路径安全：所有落盘路径经 backend.office.path_safety.resolve_within；
 - SQLite 通过 backend.data.database.get_database().get_connection() 走统一加锁代理；
 - ensure_journal_tables() 由 init_db 末尾调用，幂等。

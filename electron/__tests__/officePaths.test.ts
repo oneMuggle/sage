@@ -16,12 +16,11 @@
  *     extension AND excludes legacy + "All Files" entries
  */
 
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
-import {
-  buildManagedPath,
-  isPathWithinWorkspace,
-  getOpenDialogFilters,
-} from '../officePaths';
+
+import { buildManagedPath, isPathWithinWorkspace, getOpenDialogFilters } from '../officePaths';
 
 const REF_PPT = {
   workspacePath: '/workspace',
@@ -45,10 +44,12 @@ const REF_EXCEL = {
 };
 
 describe('buildManagedPath', () => {
-  it('joins workspace + office + docType + id + filename on POSIX', () => {
+  it('joins workspace + office + docType + id + filename with a root-relative workspace', () => {
     const p = buildManagedPath(REF_PPT);
-    // Path joining on POSIX: workspace/office/ppt/doc-001/deck.pptx
-    expect(p.replace(/\\/g, '/')).toBe('/workspace/office/ppt/doc-001/deck.pptx');
+    // A root-relative path also acquires the current drive on Windows.
+    expect(p.replace(/\\/g, '/')).toBe(
+      path.resolve('/workspace/office/ppt/doc-001/deck.pptx').replace(/\\/g, '/'),
+    );
   });
 
   it('joins workspace + office + docType + id + filename with Windows-style workspace', () => {
@@ -78,21 +79,17 @@ describe('buildManagedPath', () => {
     // The runtime check that backs buildManagedPath internally — a
     // candidate path that starts with the workspace's *string* prefix
     // but lives outside it must NOT be accepted by isPathWithinWorkspace.
-    expect(
-      isPathWithinWorkspace('/tmp/workspace', '/tmp/workspace-evil/payload.pptx'),
-    ).toBe(false);
+    expect(isPathWithinWorkspace('/tmp/workspace', '/tmp/workspace-evil/payload.pptx')).toBe(false);
   });
 
   it('accepts valid paths inside the workspace', () => {
-    expect(
-      isPathWithinWorkspace('/tmp/workspace', '/tmp/workspace/office/ppt/d/file.pptx'),
-    ).toBe(true);
+    expect(isPathWithinWorkspace('/tmp/workspace', '/tmp/workspace/office/ppt/d/file.pptx')).toBe(
+      true,
+    );
   });
 
   it('rejects absolute paths that escape the workspace', () => {
-    expect(
-      isPathWithinWorkspace('/tmp/workspace', '/etc/passwd'),
-    ).toBe(false);
+    expect(isPathWithinWorkspace('/tmp/workspace', '/etc/passwd')).toBe(false);
   });
 
   it('rejects reversed-prefix escapes via .. segments', () => {
@@ -120,7 +117,7 @@ describe('extension mapping per doc type', () => {
   });
 });
 
-describe('dialog filter catalog (modern formats only)', () => {
+describe('dialog filter catalog (modern + legacy, P1-C)', () => {
   it('returns a filter entry for every doc type', () => {
     const filters = getOpenDialogFilters();
     expect(filters.ppt).toBeDefined();
@@ -137,29 +134,27 @@ describe('dialog filter catalog (modern formats only)', () => {
     }
   });
 
-  it('does not include legacy extensions (.doc, .xls, .ppt)', () => {
+  it('includes legacy counterparts per doc type (P1-C: converted on import)', () => {
     const filters = getOpenDialogFilters();
-    for (const f of Object.values(filters)) {
-      for (const ext of f.extensions) {
-        expect(ext, `${f.name} includes legacy ${ext}`).not.toBe('doc');
-        expect(ext, `${f.name} includes legacy ${ext}`).not.toBe('xls');
-        expect(ext, `${f.name} includes legacy ${ext}`).not.toBe('ppt');
-      }
-    }
+    expect(filters.ppt.extensions).toContain('ppt');
+    expect(filters.word.extensions).toContain('doc');
+    expect(filters.excel.extensions).toContain('xls');
+    // pdf 没有 legacy 对应物
+    expect(filters.pdf.extensions).toEqual(['pdf']);
   });
 
-  it('maps ppt filter to only the modern .pptx extension', () => {
+  it('maps ppt filter to modern + legacy extensions', () => {
     const filters = getOpenDialogFilters();
-    expect(filters.ppt.extensions).toEqual(['pptx']);
+    expect(filters.ppt.extensions).toEqual(['pptx', 'ppt']);
   });
 
-  it('maps word filter to only the modern .docx extension', () => {
+  it('maps word filter to modern + legacy extensions', () => {
     const filters = getOpenDialogFilters();
-    expect(filters.word.extensions).toEqual(['docx']);
+    expect(filters.word.extensions).toEqual(['docx', 'doc']);
   });
 
-  it('maps excel filter to only the modern .xlsx extension', () => {
+  it('maps excel filter to modern + legacy extensions', () => {
     const filters = getOpenDialogFilters();
-    expect(filters.excel.extensions).toEqual(['xlsx']);
+    expect(filters.excel.extensions).toEqual(['xlsx', 'xls']);
   });
 });

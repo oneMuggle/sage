@@ -17,7 +17,7 @@ sqlite-vec>=0.1.9
 
 # HTTP
 httpx==0.26.0
-python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
+python-multipart==0.0.32  # required for FastAPI File() / Form() in legacy_routes.py; >=0.0.18 fixes PYSEC-2026-1851/1852/3036-3040
 
 # Observability
 prometheus-client==0.25.0
@@ -41,10 +41,9 @@ networkx>=3.2.0
 # Pinned here to match the bundled Python 3.11 (see scripts/bundle-python-main.ps1).
 numpy>=1.24,<2
 
-# MCP (Model Context Protocol) - 可选依赖
-# 与 httpx==0.26.0 存在 starlette 版本冲突，需要 mcp 时手动安装：
-#   pip install mcp --no-deps
-# 或使用兼容版本：pip install 'mcp<1.0'（需自行测试）
+# MCP (Model Context Protocol) - 见 backend/requirements-optional.txt
+# 与 httpx==0.26.0 存在 starlette 版本冲突，默认不安装。
+# 启用步骤与原因见 requirements-optional.txt 头部注释。
 
 # Vector Index (HNSW)
 hnswlib>=0.8.0

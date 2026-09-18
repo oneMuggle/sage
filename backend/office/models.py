@@ -212,6 +212,32 @@ class OfficeWordReadResult(BaseModel):
     headers_footers: List[WordHeaderFooterContent] = Field(default_factory=list)
     # Round 15：文档中的目录域 instr 列表。
     toc_fields: List[str] = Field(default_factory=list)
+    # Office display round C (P4)：内嵌图片缩略预览。additive field ——
+    # default_factory 保持旧 payload 在 extra="forbid" 下有效（win7 回流
+    # 与旧客户端可整体忽略）。上限/降级策略见 word._extract_image_previews。
+    image_previews: List[WordImagePreview] = Field(default_factory=list)
+
+
+class WordImagePreview(BaseModel):
+    """One inline image thumbnail for preview (office display round C, P4).
+
+    ``data_url`` 是缩略后的 base64 data URL（Pillow 可用时最长边缩到
+    480px；不可用时仅 ≤150KB 的原图直接内联）。超限/无法内联的图片不产
+    生条目 —— ``OfficeWordReadResult.images``（总数）与
+    ``len(image_previews)`` 的差即被省略的数量。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(ge=0, description="文内出现顺序（0-based）")
+    content_type: str = Field(description="MIME，如 image/png")
+    data_url: str = Field(description="data:<mime>;base64,… 缩略图")
+    thumbnail: bool = Field(
+        default=False, description="True=经 Pillow 缩略；False=原图直接内联"
+    )
+
+
+OfficeWordReadResult.model_rebuild()
 
 
 class ExcelSheetContent(BaseModel):
@@ -534,6 +560,10 @@ class WordTableSpec(BaseModel):
         default=None,
         description="各列列宽（厘米）；None 不设置，长度须等于列数",
     )
+    # Round 36：表头行样式（加粗 + 浅灰底 + 居中），与 Excel header_style 对称。
+    header_style: bool = Field(
+        default=False, description="表头行加粗 + 浅灰底(D9D9D9) + 居中"
+    )
     merges: _constrained_list(WordCellMergeSpec, max_length=200) = Field(default_factory=list)
 
 
@@ -657,6 +687,27 @@ class WordFormatSpec(BaseModel):
     section_breaks: _constrained_list("WordSectionBreakSpec", max_length=20) = Field(
         default_factory=list
     )
+    # Round 42：图目录/表目录（TOC \c 收录 SEQ 题注；None = 不插入）。
+    figure_index: Optional[WordIndexSpec] = None
+    table_index: Optional[WordIndexSpec] = None
+
+
+class WordIndexSpec(BaseModel):
+    r"""图目录/表目录设置（Round 42）。
+
+    TOF 域（``TOC \h \z \c "<图|表>"``）由 Word 收录 SEQ 题注段；
+    生成器插入域与静态缓存条目（无页码——由渲染器/COM 刷新域计算），
+    与 R13 目录域同一思路。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    heading_text: str = Field(default="图目录", max_length=50)
+    placeholder_text: str = Field(
+        default='（图目录：在 Word 中按 F9 或右键"更新域"生成）',
+        max_length=200,
+        description="域未更新时的占位提示",
+    )
 
 
 class WordSectionBreakSpec(BaseModel):
@@ -736,6 +787,13 @@ class ExcelSheetSpec(BaseModel):
     freeze_header: bool = Field(
         default=False,
         description="冻结首行（滚动长表时表头保持可见）",
+    )
+    # Round 31：冻结窗格参数化（A1 记法）。与 freeze_header 同给时本字段优先。
+    freeze_panes: Optional[str] = Field(
+        default=None,
+        max_length=10,
+        pattern=r"^[A-Za-z]{1,3}[0-9]{1,7}$",
+        description="冻结窗格 A1 记法，如 'B2' 冻结首行+首列；None 不设置",
     )
     autofit_columns: bool = Field(
         default=False,
@@ -861,6 +919,13 @@ class ExcelPrintSetupSpec(BaseModel):
     )
     # Round 31：打印页边距（厘米），全可选；None 用 Excel 默认。
     margins_cm: Optional[ExcelPrintMarginsSpec] = None
+    # Round 32：打印页眉/页脚文本（页码用 &P 占位，Excel HeaderFooter 语法）。
+    print_header: Optional[str] = Field(
+        default=None, max_length=200, description="打印页眉文本"
+    )
+    print_footer: Optional[str] = Field(
+        default=None, max_length=200, description="打印页脚文本（&P = 页码）"
+    )
 
 
 class ExcelPrintMarginsSpec(BaseModel):
@@ -1182,6 +1247,9 @@ class PdfPageContent(BaseModel):
     text: str
     tables: List[List[List[str]]] = Field(default_factory=list)
     images: List[Dict[str, Any]] = Field(default_factory=list)
+    # P4-A (office-p4a): 该页文本是否来自 OCR 兜底（SAGE_OCR=1 且 pytesseract
+    # 可用时，扫描/纯图页触发）。additive 字段，前端/摘要可安全忽略。
+    ocr: bool = Field(default=False, description="文本来自 OCR 兜底（扫描页）")
 
 
 class PdfReadResult(BaseModel):
@@ -1201,6 +1269,36 @@ class PdfReadRequest(BaseModel):
 
     workspace_path: str
     file_path: str
+
+
+class PdfDataRequest(BaseModel):
+    """Request for the raw-PDF base64 preview (F3, office-p0).
+
+    Serves the /office page's 原文预览 toggle: the renderer embeds the
+    returned ``data:application/pdf`` URL in an iframe and Chromium's
+    built-in viewer renders it — same fidelity path as the chat artifact
+    viewer.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str
+
+
+class PdfDataResult(BaseModel):
+    """Raw-PDF base64 preview result.
+
+    Never raises for expected conditions: oversize / escape / unreadable
+    files return ``ok=False`` + a user-presentable ``error`` so the UI
+    can fall back to the structured page cards.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    data_url: Optional[str] = None
+    error: Optional[str] = None
 
 
 class PdfPageSpec(BaseModel):

@@ -27,8 +27,11 @@ def _symlink_or_skip(link: Path, target: Path, *, target_is_directory: bool = Fa
 
 
 def _make_hardlink_or_skip(source: Path, target: Path) -> None:
+    import os
+
     try:
-        target.hardlink_to(source)
+        # Path.hardlink_to 是 3.10+ 方法；os.link 全版本可用
+        os.link(source, target)
     except (OSError, NotImplementedError):
         pytest.skip("hardlinks are not supported")
 

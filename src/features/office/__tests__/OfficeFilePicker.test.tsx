@@ -88,7 +88,36 @@ describe('OfficeFilePicker — delegates to the hook', () => {
     expect(onPick).not.toHaveBeenCalled();
   });
 
-  it('dropping a legacy .doc/.xls/.ppt file shows an error and does NOT call onDropFile', async () => {
+  it('dropping a legacy .doc file now calls onDropFile (converted on import, P1-C)', async () => {
+    const onPick = vi.fn();
+    const onDropFile = vi.fn();
+
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeFilePicker
+          docType="word"
+          workspacePath="/tmp/ws"
+          onPick={onPick}
+          onDropFile={onDropFile}
+        />
+      </I18nProvider>,
+    );
+
+    const picker = screen.getByTestId('office-file-picker-word');
+    const fakeFile = Object.assign(
+      new File(['binary'], 'legacy.doc', { type: 'application/msword' }),
+      { path: '/tmp/legacy.doc' },
+    );
+    const dt = { files: [fakeFile] } as unknown as DataTransfer;
+    fireEvent.drop(picker, { dataTransfer: dt });
+
+    await waitFor(() => {
+      expect(onDropFile).toHaveBeenCalledWith('/tmp/legacy.doc');
+    });
+    expect(onPick).not.toHaveBeenCalled();
+  });
+
+  it('dropping an unrelated extension (e.g. .txt) still shows an error and does NOT call onDropFile', async () => {
     const onPick = vi.fn();
     const onDropFile = vi.fn();
 
@@ -106,10 +135,9 @@ describe('OfficeFilePicker — delegates to the hook', () => {
     const picker = screen.getByTestId('office-file-picker-word');
     // jsdom does not populate File.path; we simulate the Electron-provided
     // path to exercise the legacy-extension rejection branch.
-    const fakeFile = Object.assign(
-      new File(['binary'], 'legacy.doc', { type: 'application/msword' }),
-      { path: '/tmp/legacy.doc' },
-    );
+    const fakeFile = Object.assign(new File(['text'], 'notes.txt', { type: 'text/plain' }), {
+      path: '/tmp/notes.txt',
+    });
     const dt = { files: [fakeFile] } as unknown as DataTransfer;
     fireEvent.drop(picker, { dataTransfer: dt });
 

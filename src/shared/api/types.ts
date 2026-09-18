@@ -75,7 +75,19 @@ export interface SessionWorkspaceBinding {
   revokedAt: number | null;
 }
 
-export type WorkspaceSearchKind = 'file' | 'office-ppt' | 'office-word' | 'office-excel';
+export type WorkspaceSearchKind =
+  | 'file'
+  | 'office-ppt'
+  | 'office-word'
+  | 'office-excel'
+  | 'office-pdf'
+  // Phase 3.4 (2026-09-17): allowed_paths 搜索结果 —— 与上述 kind 同构但
+  // 带 `allowed-` 前缀，前端据此区分"workspace 内"与"allowed_paths 只读"。
+  | 'allowed-file'
+  | 'allowed-ppt'
+  | 'allowed-word'
+  | 'allowed-excel'
+  | 'allowed-pdf';
 
 export interface WorkspaceSearchResult {
   name: string;
@@ -95,13 +107,13 @@ export interface WorkspaceSearchResponse {
 export interface ChatOfficeRef {
   docId: string;
   /**
-   * Deliberately the narrow 3-union (NOT OfficeDocType): the chat @-menu
-   * chip surface does not render pdf refs yet — a managed pdf doc falls
-   * back to the plain-file path in workspace search results
-   * (fileSearchClient coalesces docType 'pdf' → null). Widen together
-   * with widgets/chat InputCard.OfficeRefChipType when chat gains pdf.
+   * B4 (office-p0): widened to include 'pdf' — the backend chat_refs
+   * DocTypeLiteral accepts pdf refs (OfficeToolService.read dispatches
+   * read_pdf) and the workspace search no longer coalesces managed pdf
+   * docs to the plain-file path. Must stay in sync with
+   * widgets/chat InputCard.OfficeRefChipType.
    */
-  docType: 'ppt' | 'word' | 'excel';
+  docType: 'ppt' | 'word' | 'excel' | 'pdf';
   filename: string;
 }
 
@@ -118,8 +130,16 @@ export interface Message {
   created_at: number;
   model?: string;
   provider?: string;
-  tool_calls?: ToolCall[];
+  /**
+   * wire 上是 JSON 字符串 (session_repo 原样存取, 不做 parse), 流式路径
+   * 是数组 —— 消费方必须双态兼容 (见 Message.tsx 的归一化)。
+   */
+  tool_calls?: ToolCall[] | string | null;
   tool_call_id?: string;
+  /** 2026-09 step-by-step: assistant 行的步序号（0 起；多步 run 时每步一行）。 */
+  step_index?: number | null;
+  /** alpha.36 (Bug #4): 同一 message 行内携带的 LLM 推理过程（持久化在 DB）。 */
+  reasoning_content?: string | null;
 }
 
 export interface ToolCall {
@@ -150,10 +170,14 @@ export type AgentState =
   | 'acting'
   | 'permission_request' // M1: 工具审批卡点 — 等待用户批准/拒绝
   | 'ask_user_question' // M2 part B: AskUserQuestion 卡点 — 等待用户选择/填写
+  | 'suspended' // A4 Suspend-Resume: producer 主动让出, 等 wake 触发下一轮 (2026-09 补齐, 与后端 chat_stream_registry 一致)
   | 'observing'
   | 'content_delta'
   | 'done'
   | 'failed'
+  // 2026-09 step-by-step: 每次 ReAct 迭代结束（OBSERVING 之后）由后端产出,
+  // 前端据此把当前 streaming 气泡快照为已完成 step + 准备下一步占位。
+  | 'step_done'
   // Multi-Agent Orchestration (2026-08-11)
   | 'task_plan'
   | 'task_status'
@@ -175,7 +199,13 @@ export type AgentState =
   | 'artifact_created'
   // R17-E: 记忆召回展示 —— L13 注入记忆上下文后推送本次命中条目,
   // 载荷见 AgentEvent.memories。
-  | 'memory_used';
+  | 'memory_used'
+  // R38 (2026-09-18): 技能激活展示 —— A16 自动激活或显式 /skill 调用后
+  // 推送本次激活的技能列表,载荷见 AgentEvent.skills。
+  | 'skill_activated'
+  // R38 (2026-09-18): 自动上下文压缩展示 —— M4 达到阈值触发压缩后推送
+  // 压缩统计,载荷见 AgentEvent.compact。
+  | 'compact_triggered';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -209,6 +239,12 @@ export interface PermissionRequest {
   };
   /** U15: 写类工具的将写入内容 unified diff（无法生成时缺省，回退 args_summary） */
   diff_preview?: string;
+  /**
+   * Phase 3.3 (2026-09-17): 工具参数中提取的目标路径（绝对路径），
+   * 用于前端"项目级允许"按钮 —— 用户可一键将该路径加入 allowed_paths。
+   * 无路径参数时缺省。
+   */
+  target_path?: string;
 }
 
 /** 问题选项 — QuestionDialog 渲染为可选卡片 */
@@ -291,9 +327,13 @@ export interface TaskStatusEvent {
   // RD13+ (round15): 重派来源任务 ID —— conductor 用 retry_of 重派时携带,
   // 任务树据此渲染"重派"徽章（可追溯哪些任务是重做的）。普通任务无此键。
   retry_of?: string;
-  // BU9 (round20): 终态任务附带的 run 窗口累计用量（tokens）—— 预算开启时
-  // 携带；queued/running 不带。任务树进度行渲染消耗可见性。
+  // BU9 (round20) + BU13 (round24): 终态任务附带的本任务 token 消耗 ——
+  // round24 起语义收敛为 per-task 归因（usage_events.task_id 过滤），
+  // 且预算关闭也携带；queued/running 不带。任务树渲染消耗可见性。
   used_tokens?: number;
+  // BU13 (round24): 终态任务执行时长（毫秒）—— started_at→finished_at；
+  // 二者齐备才携带。任务树行内渲染耗时徽章。
+  duration_ms?: number;
   // live-events P0 (2026-09-06): 派发本批次的 conductor 工具调用 ID —— 聊天流内
   // 把子代理实时步骤关联到 "Delegate <goal>" 卡片的关联键。
   parent_tool_call_id?: string | null;
@@ -393,11 +433,14 @@ export interface TodoSnapshotEvent {
 export interface AgentEvent {
   state: AgentState;
   iteration: number;
+  /** 2026-09 step-by-step: 当前事件所属 step 序号（与 iteration 对齐; STEP_DONE 时明确设置）。 */
+  step_index?: number;
   content?: string;
   reasoning?: string; // LLM 思考/推理过程内容
   tool_call?: AgentToolCall;
   tool_result?: AgentToolResult;
-  error?: string;
+  /** producer 失败信封: LLMError.to_dict() 为 dict; 旧路径/限额拦截为 str */
+  error?: string | { type?: string; message?: string; status_code?: number };
   /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
   agent_id?: string;
   /** M1: state === 'permission_request' 时携带的审批请求详情 */
@@ -455,6 +498,10 @@ export interface AgentEvent {
   };
   // R17-E: memory_used 事件载荷（L13 记忆注入命中条目,气泡内可展开）。
   memories?: { id: string; memory_type: string; preview: string }[];
+  // R38: skill_activated 事件载荷（A16 自动激活或显式 /skill 调用的技能列表）。
+  skills?: { name: string; triggers_matched: string[] }[];
+  // R38: compact_triggered 事件载荷（M4 自动压缩统计）。
+  compact?: { before: number; after: number; removed: number };
 }
 
 // ==================== 错误类型定义 ====================
@@ -853,6 +900,9 @@ export interface ScheduledTask {
   enabled: boolean;
   last_run?: number | null;
   next_run?: number | null;
+  last_attempt?: number | null;
+  last_status?: 'never' | 'succeeded' | 'failed';
+  last_error?: string | null;
   created_at: number;
 }
 
@@ -862,11 +912,16 @@ export interface CreateTaskInput {
   schedule: Schedule;
   session_id: string;
   content: string;
+  enabled?: boolean;
 }
 
 export interface UpdateTaskInput {
   name?: string;
   enabled?: boolean;
+  type?: ScheduleKind;
+  schedule?: Schedule;
+  session_id?: string;
+  content?: string;
 }
 
 // ============================================================================
@@ -1148,10 +1203,35 @@ export interface OfficeWordReadResult {
   paragraphs: OfficeWordParagraphContent[];
   tables: OfficeWordTableContent[];
   images: number;
-  comments?: unknown[];
+  // Round C P4: typed — the preview renders author/date/anchor bubbles.
+  // Backend: WordCommentContent in backend/office/models.py.
+  comments?: OfficeWordComment[];
   // Round 15：每节页眉/页脚与目录域 instr 列表
   headers_footers?: WordHeaderFooterContent[];
   toc_fields?: string[];
+  /**
+   * Round C P4: bounded inline-image thumbnails (≤10 entries, backend
+   * caps each data URL). `images - image_previews.length` = omitted count.
+   * Backend: WordImagePreview in backend/office/models.py.
+   */
+  image_previews?: OfficeWordImagePreview[];
+}
+
+/** One Word comment (backend WordCommentContent). */
+export interface OfficeWordComment {
+  id: string;
+  author?: string | null;
+  date?: string | null;
+  text: string;
+  anchor_text?: string;
+}
+
+/** One inline-image thumbnail (backend WordImagePreview, round C P4). */
+export interface OfficeWordImagePreview {
+  index: number;
+  content_type: string;
+  data_url: string;
+  thumbnail: boolean;
 }
 
 export interface OfficeExcelSheetContent {
@@ -1195,6 +1275,64 @@ export interface OfficePdfReadResult {
   summary: OfficeDocumentSummary;
   pages: OfficePdfPageContent[];
   metadata: Record<string, unknown>;
+}
+
+/**
+ * P1-C (office-p1c): result of POST /api/v1/office/import/convert-legacy
+ * (backend `LegacyImportResult`).
+ */
+export interface OfficeLegacyImportResult {
+  ok: boolean;
+  converted_path?: string | null;
+  converted_filename?: string | null;
+  doc_type?: string | null;
+  error?: string | null;
+}
+
+/**
+ * P2-D (office-p2d): PDF AcroForm field + read/fill results
+ * (backend `PdfFormField` / `PdfFormReadResult` / `PdfFormFillResult`).
+ */
+export interface OfficePdfFormField {
+  name: string;
+  type: string;
+  value?: unknown;
+  options?: string[] | null;
+  required: boolean;
+  read_only: boolean;
+}
+
+export interface OfficePdfFormReadResult {
+  file_path: string;
+  fields: OfficePdfFormField[];
+  has_xfa: boolean;
+}
+
+export interface OfficePdfFormFillResult {
+  output_path: string;
+  filename: string;
+  file_size_bytes: number;
+  filled_count: number;
+}
+
+/**
+ * P2-C (office-p2c): result of POST /api/v1/office/excel/recalc.
+ */
+export interface OfficeRecalcResult {
+  ok: boolean;
+  error?: string | null;
+}
+
+/**
+ * F3 (office-p0): result of POST /api/v1/office/pdf/data — raw-PDF
+ * base64 preview for the /office page's 原文预览 toggle (backend
+ * `PdfDataResult`). Expected failures (oversize / path escape) come
+ * back as `{ok:false,error}` rather than HTTP errors.
+ */
+export interface OfficePdfDataResult {
+  ok: boolean;
+  data_url?: string | null;
+  error?: string | null;
 }
 
 /**
@@ -1293,6 +1431,16 @@ export interface WordPageSetupSpec {
   margins_cm?: WordPageMarginsSpec;
 }
 
+/**
+ * Round 26/37：分节横排（宽表/财务页场景）。
+ * backend/office/models.py WordSectionBreakSpec 对应。
+ */
+export interface WordSectionBreakSpec {
+  /** 该 0-based 段落下标起进入新节 */
+  start_paragraph: number;
+  page_setup: WordPageSetupSpec;
+}
+
 export interface WordBodyStyleSpec {
   font_size_pt?: number;
   line_spacing?: number;
@@ -1318,6 +1466,15 @@ export interface WordHeaderFooterSpec {
 
 // 目录域设置（Round 13）：TOC 域由渲染器按标题样式生成（打开后更新域）。
 // Backend counterpart: WordTocSpec in backend/office/models.py。
+/**
+ * Round 42：图目录/表目录设置（TOF 域 `TOC \c "图|表"`）。
+ * backend/office/models.py WordIndexSpec 对应。
+ */
+export interface WordIndexSpec {
+  heading_text?: string;
+  placeholder_text?: string;
+}
+
 export interface WordTocSpec {
   heading_text?: string;
   levels?: string;
@@ -1338,12 +1495,17 @@ export interface WordFormatSpec {
   bibliography?: BibliographySpec;
   // Round 13：目录域（None = 不插入目录）
   toc?: WordTocSpec;
+  // Round 42：图目录/表目录（TOF 域，收录 SEQ 题注）
+  figure_index?: WordIndexSpec;
+  table_index?: WordIndexSpec;
   // Round 33：首页不同页眉页脚（封面页场景）
   first_page_different?: boolean;
   first_page_header?: WordHeaderFooterSpec;
   first_page_footer?: WordHeaderFooterSpec;
   // Round 34：奇偶页不同页眉页脚（书籍排版场景）
   odd_even_pages?: boolean;
+  // Round 26/37：分节横排（宽表/财务页场景）
+  section_breaks?: WordSectionBreakSpec[];
   even_page_header?: WordHeaderFooterSpec;
   even_page_footer?: WordHeaderFooterSpec;
 }
@@ -1410,6 +1572,8 @@ export interface WordTableSpec {
   header_repeat?: boolean;
   column_widths_cm?: number[];
   merges?: WordCellMergeSpec[];
+  // Round 36：表头行样式（加粗+浅灰底+居中）
+  header_style?: boolean;
 }
 
 // Word 格式 Linter（Round 10）：对照 FormatSpec 校验 docx。
@@ -1526,6 +1690,9 @@ export interface ExcelPrintSetupSpec {
     left?: number;
     right?: number;
   };
+  // Round 32：打印页眉/页脚文本（&P 为页码占位）
+  print_header?: string;
+  print_footer?: string;
 }
 
 export interface ExcelDataValidationSpec {
@@ -1727,6 +1894,50 @@ export interface OfficeExportPdfResult {
   ok: boolean;
   method?: 'libreoffice' | 'word_com' | null;
   output_path?: string | null;
+  error?: string | null;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Office display round A — P6 capability probe + P1 high-fidelity preview
+// Backend counterpart: backend/office/capabilities.py (OfficeCapabilities)
+// and backend/office/pdf_preview.py (PdfPreviewResult).
+// ──────────────────────────────────────────────────────────────────────
+
+/** Result of GET /office/capabilities (backend OfficeCapabilities). */
+export interface OfficeCapabilities {
+  platform: string;
+  soffice_available: boolean;
+  soffice_path?: string | null;
+  word_com_available: boolean;
+  pdf_export_available: boolean;
+  pillow_available: boolean;
+  formulas_available: boolean;
+  /** P4-A (office-p4a): OCR 兜底可用（pytesseract 已装且 tesseract 在 PATH）。 */
+  ocr_available: boolean;
+}
+
+/**
+ * Result of POST /office/pdf-preview (backend PdfPreviewResult).
+ * `data_url` is a data:application/pdf;base64 URL rendered by the
+ * embedded Chromium PDF viewer; `cached=true` means no converter ran.
+ */
+export interface OfficePdfPreviewResult {
+  ok: boolean;
+  data_url?: string | null;
+  cached?: boolean;
+  error?: string | null;
+}
+
+/**
+ * Round C P5: POST /office/templates/thumbnail — first-page PNG thumbnail
+ * of a library template (builtin or workspace). Failures fold to ok=false
+ * and the picker degrades silently (thumbnails are decorative).
+ */
+export interface OfficeTemplateThumbnailResult {
+  ok: boolean;
+  /** data:image/png;base64,… */
+  data_url?: string | null;
+  cached?: boolean;
   error?: string | null;
 }
 

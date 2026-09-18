@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.wiki.vectorstore import _cosine_similarity
+from backend.wiki.vectorstore import VectorStore, _cosine_similarity
 
 pytestmark = pytest.mark.skipif(
     os.name == "nt",
@@ -18,6 +18,65 @@ pytestmark = pytest.mark.skipif(
 def test_cosine_similarity_preserves_zip_truncation_for_unequal_vectors():
     # The former strict=False call intentionally used the shorter length.
     assert _cosine_similarity([1.0, 0.0, 99.0], [1.0, 0.0]) == pytest.approx(0.010100494835363)
+
+
+@pytest.fixture(params=["json", "hnsw"])
+def vector_store(tmp_path, request):
+    if request.param == "hnsw":
+        hnsw_module = pytest.importorskip("backend.wiki.vectorstore_hnsw")
+        return hnsw_module.HNSWVectorStore.open(tmp_path, dim=2)
+    return VectorStore.open(tmp_path, dim=2)
+
+
+@pytest.mark.parametrize("allowed_paths", [None, set(), {"wiki/selected.md"}])
+def test_vector_search_filters_sources_before_limit(vector_store, allowed_paths):
+    store = vector_store
+    store.upsert_chunks("wiki/selected.md", [(0, "selected evidence", [0.5, 0.5])])
+    for index in range(25):
+        store.upsert_chunks(f"wiki/excluded-{index}.md", [(0, "excluded", [1.0, 0.0])])
+
+    hits = store.search([1.0, 0.0], limit=1, allowed_paths=allowed_paths)
+
+    if allowed_paths is None:
+        assert len(hits) == 1
+        assert hits[0].page_path.startswith("wiki/excluded-")
+        assert hits == store.search([1.0, 0.0], limit=1)
+    else:
+        assert [hit.page_path for hit in hits] == sorted(allowed_paths)
+        if hits:
+            assert hits[0].content == "selected evidence"
+            assert hits[0].score == pytest.approx(2 ** -0.5)
+
+
+def test_filtered_search_excludes_deleted_and_replaced_chunks(vector_store):
+    vector_store.upsert_chunks("wiki/deleted.md", [(0, "deleted evidence", [1.0, 0.0])])
+    vector_store.upsert_chunks("wiki/selected.md", [(0, "old evidence", [1.0, 0.0])])
+    vector_store.delete_by_page("wiki/deleted.md")
+    vector_store.upsert_chunks("wiki/selected.md", [(0, "new evidence", [0.5, 0.5])])
+
+    hits = vector_store.search(
+        [1.0, 0.0], limit=10, allowed_paths={"wiki/deleted.md", "wiki/selected.md"}
+    )
+
+    assert [(hit.page_path, hit.chunk_index, hit.content) for hit in hits] == [
+        ("wiki/selected.md", 0, "new evidence")
+    ]
+    assert hits[0].score == pytest.approx(2 ** -0.5)
+
+
+def test_filtered_search_limit_can_exceed_selected_chunk_count(vector_store):
+    vector_store.upsert_chunks("wiki/excluded.md", [(0, "excluded evidence", [1.0, 0.0])])
+    vector_store.upsert_chunks(
+        "wiki/selected.md",
+        [(0, "first evidence", [0.8, 0.2]), (1, "second evidence", [0.2, 0.8])],
+    )
+
+    hits = vector_store.search([1.0, 0.0], limit=100, allowed_paths={"wiki/selected.md"})
+
+    assert [(hit.page_path, hit.chunk_index, hit.content) for hit in hits] == [
+        ("wiki/selected.md", 0, "first evidence"),
+        ("wiki/selected.md", 1, "second evidence"),
+    ]
 
 
 def test_vector_store_zip_calls_do_not_use_strict_keyword():

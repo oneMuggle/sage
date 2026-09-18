@@ -29,6 +29,7 @@ import hashlib
 import hmac
 import json
 from datetime import datetime, timezone
+from typing import List
 
 from pydantic import ValidationError
 
@@ -71,7 +72,7 @@ def _hash_payload(payload: dict) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def encode_bundle(records: list[CandidateModel], source: str) -> bytes:
+def encode_bundle(records: List[CandidateModel], source: str) -> bytes:
     """Validate records, then return a signed bundle as UTF-8 bytes."""
     if not isinstance(source, str) or not source.strip():
         raise BundleValidationError("source must be a non-blank string")
@@ -83,7 +84,7 @@ def encode_bundle(records: list[CandidateModel], source: str) -> bytes:
             f"bundle contains {len(records)} records (maximum {MAX_RECORDS})"
         )
 
-    validated: list[CandidateModel] = []
+    validated: List[CandidateModel] = []
     for record in records:
         if isinstance(record, CandidateModel):
             validated.append(record)
@@ -129,7 +130,7 @@ def encode_bundle(records: list[CandidateModel], source: str) -> bytes:
     return raw
 
 
-def decode_bundle(data: bytes | str) -> list[CandidateModel]:
+def decode_bundle(data: bytes | str) -> List[CandidateModel]:
     """Verify the envelope and return the validated records."""
     if not isinstance(data, (bytes, str)):  # noqa: UP038 - Py3.8 win7 LTS requires tuple form
         raise BundleValidationError("bundle must be bytes or str")

@@ -19,7 +19,13 @@ export type ProviderChannel = typeof CHANNELS[number];
 
 export function registerProviderIpc(
   ipcMain: IpcMain,
-  deps: { providerStore: ProviderStore; updateManager: UpdateManager }
+  deps: {
+    providerStore: ProviderStore;
+    updateManager: UpdateManager;
+    /** 2026-09 修复: provider 配置携带凭据, 所有通道必须过信任校验
+     *  (与 main.ts 的 isTrustedRenderer 同源, 由调用方注入)。 */
+    isTrustedSender: (sender: Electron.WebContents) => boolean;
+  }
 ): () => void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handlers: Record<string, (event: unknown, payload: any) => unknown> = {
@@ -87,7 +93,12 @@ export function registerProviderIpc(
   };
 
   for (const ch of CHANNELS) {
-    ipcMain.handle(ch, handlers[ch]);
+    ipcMain.handle(ch, (event, payload) => {
+      if (!deps.isTrustedSender(event.sender)) {
+        throw new Error('未授权的窗口请求');
+      }
+      return handlers[ch](event, payload);
+    });
   }
 
   return () => {

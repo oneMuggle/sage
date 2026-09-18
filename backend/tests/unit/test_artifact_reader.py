@@ -122,6 +122,26 @@ def test_read_office_docx_roundtrip(tmp_path):
     assert "&lt;script&gt;" in result["html"]
 
 
+def test_read_office_docx_paragraph_cap(tmp_path, monkeypatch):
+    """docx 段落预览按 MAX_DOCX_PREVIEW_PARAGRAPHS 截断并提示总段数。"""
+    from docx import Document
+
+    f = tmp_path / "long.docx"
+    doc = Document()
+    for i in range(10):
+        doc.add_paragraph(f"段落 {i}")
+    doc.save(str(f))
+
+    monkeypatch.setattr(artifact_reader, "MAX_DOCX_PREVIEW_PARAGRAPHS", 3)
+    aid = artifact_repo.record_artifact("sess_001", str(f), "long.docx", "docx", f.stat().st_size)
+    result = artifact_reader.read_office(aid, kind="docx")
+    assert result["ok"] is True
+    assert "预览已截断" in result["html"]
+    assert "共 10 段" in result["html"]
+    assert "段落 2" in result["html"]
+    assert "段落 3" not in result["html"]
+
+
 def test_read_office_xlsx_roundtrip_with_row_cap(tmp_path, monkeypatch):
     """C-2: xlsx → 分 sheet HTML 表格,行数按 MAX_SHEET_PREVIEW_ROWS 截断。"""
     from openpyxl import Workbook
@@ -131,7 +151,7 @@ def test_read_office_xlsx_roundtrip_with_row_cap(tmp_path, monkeypatch):
     ws = wb.active
     ws.title = "销售"
     ws.append(["月份", "金额"])
-    for i in range(1, 260):
+    for i in range(1, 360):
         ws.append([f"m{i}", i])
     wb.save(str(f))
 

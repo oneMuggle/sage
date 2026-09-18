@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query
 
@@ -17,11 +17,11 @@ router = APIRouter(prefix="/search", tags=["search"])
 def global_search(
     q: str = Query(..., min_length=1, description="搜索关键词"),
     limit: int = Query(10, ge=1, le=50, description="每类返回上限"),
-    types: str | None = Query(
+    types: Optional[str] = Query(
         None,
         description="逗号分隔的类型过滤: session,memory,knowledge,project (默认全部)",
     ),
-    knowledge_project: str | None = Query(
+    knowledge_project: Optional[str] = Query(
         None,
         description=(
             "P9/P13: 知识搜索范围（wiki 项目根目录，支持逗号分隔多根）。"

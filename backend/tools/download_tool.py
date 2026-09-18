@@ -434,6 +434,8 @@ class HttpDownloadTool(BaseTool):
             expected_sha256: 完成后校验的 SHA-256
             referer:   覆盖 Referer 头
         """
+        # R15 X2：per-host 出网指标计时起点
+        _t0 = time.monotonic()
         url_error = self._validate_target_url(url)
         if url_error:
             return ToolResult(success=False, error=url_error)
@@ -540,8 +542,14 @@ class HttpDownloadTool(BaseTool):
                 last_error = str(exc)
                 retry_after = exc.retry_after
             except httpx.HTTPError as e:
+                from backend.tools import web_metrics
+
+                web_metrics.record(web_metrics.host_from_url(ctx.url), False, int((time.monotonic() - _t0) * 1000))
                 return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
             except Exception as e:  # noqa: BLE001 — 兜底：不可重试的失败统一包装
+                from backend.tools import web_metrics
+
+                web_metrics.record(web_metrics.host_from_url(ctx.url), False, int((time.monotonic() - _t0) * 1000))
                 return ToolResult(success=False, error=f"下载失败: {str(e)}")
             else:
                 if result.success and isinstance(result.content, dict):
@@ -567,6 +575,35 @@ class HttpDownloadTool(BaseTool):
         )
 
     # ------------------------------------------------------------------ attempt
+
+    def _auto_refresh(self, ctx: _DownloadContext) -> Optional[str]:
+        """AU3：登录墙触发持久 profile 静默重导 cookie。
+
+        成功：更新 ``ctx.credential_headers`` 并返回 note（调用方从原始 URL
+        重放一次）；失败 / 未开启 / 档案无来源 profile / 已刷新过：返回 None
+        （调用方维持原 login_required 语义）。
+        """
+        from .credential_vault import get_source_profile, resolve_credential
+        from .web_render import _auto_refresh_enabled, refresh_credentials
+
+        if ctx.auto_refreshed or not ctx.credential_domain:
+            return None
+        source_profile = get_source_profile(ctx.credential_domain)
+        if not source_profile or not _auto_refresh_enabled():
+            ctx.auto_refreshed = True
+            return None
+        ok, refreshed = refresh_credentials(ctx.credential_domain, ctx.url, source_profile)
+        ctx.auto_refreshed = True
+        if not ok:
+            return None
+        resolution = resolve_credential(ctx.credential_domain, url=ctx.url)
+        if not resolution.ok or "Cookie" not in resolution.headers:
+            return None
+        ctx.credential_headers = resolution.headers
+        return (
+            "credential_auto_refreshed: 已用持久 profile 静默重导登录态"
+            f"（{', '.join(refreshed[:5])}）"
+        )
 
     def _attempt(self, ctx: _DownloadContext) -> ToolResult:  # noqa: PLR0911, PLR0912, PLR0915
         """一次完整尝试：重定向链 → 首块嗅探 → 流式落盘 → 完整性 → 原子改名。
@@ -645,6 +682,10 @@ class HttpDownloadTool(BaseTool):
                         from backend.tools.credential_vault import looks_like_login_url
 
                         if looks_like_login_url(current_url) and not looks_like_login_url(ctx.url):
+                            refreshed_note = self._auto_refresh(ctx)
+                            if refreshed_note is not None:
+                                current_url = ctx.url
+                                continue
                             return ToolResult(
                                 success=False,
                                 error=(
@@ -945,6 +986,11 @@ class HttpDownloadTool(BaseTool):
             content["total_bytes"] = meta["total"]
         if digest is not None:
             content["sha256"] = digest
+        # R15 X2：per-host 出网指标（成功）
+        from backend.tools import web_metrics
+
+        # 该方法在 execute 的 try 之外；耗时口径以 execute 层埋点为准，此处仅计数
+        web_metrics.record(web_metrics.host_from_url(ctx.url), True, 0)
         return ToolResult(success=True, content=content, output=str(target))
 
     # ------------------------------------------------------------------ misc
@@ -1001,6 +1047,8 @@ class _DownloadContext:
         self.network_policy = network_policy
         self.credential_headers = credential_headers
         self.credential_domain = credential_domain
+        #: AU3：登录墙触发静默刷新后置 True，防止刷新-重放死循环
+        self.auto_refreshed = False
         self.resume = resume
         self.expected_sha256 = expected_sha256
         self.referer = referer

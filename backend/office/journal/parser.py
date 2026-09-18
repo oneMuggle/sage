@@ -10,7 +10,7 @@
 - 同族字体归一化（_FONT_FAMILY_ALIASES）。
 
 设计要点：
-- PEP 604/585 全部禁用（X | None / list[int]）；运行时注解用 Optional/List/Dict；
+- PEP 604/585 全部禁用（X | None / List[int]）；运行时注解用 Optional/List/Dict；
 - `.doc` 输入委托 pandoc_adapter.convert_doc_to_docx；失败包装为 JournalParseError。
 """
 from __future__ import annotations

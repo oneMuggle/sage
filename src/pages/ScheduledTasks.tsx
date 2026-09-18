@@ -7,17 +7,22 @@ import { CreateTaskModal } from '../features/scheduled/CreateTaskModal';
 import { describeSchedule } from '../features/scheduled/cronValidator';
 import type { ScheduledTask } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
+import { useStore } from '../shared/lib/store';
 import { confirmDialog } from '../shared/ui/ConfirmDialog/confirmService';
 
 export function ScheduledTasks() {
   const { t, locale } = useI18n();
   const { tasks, loading, load, delete: deleteTask, runNow, update } = useScheduledTaskStore();
+  const sessions = useStore((s) => s.sessions);
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  const loadSessions = useStore((s) => s.loadSessions);
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<ScheduledTask | undefined>(undefined);
 
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadSessions();
+  }, [load, loadSessions]);
 
   const handleDelete = async (id: string) => {
     if (!(await confirmDialog({ title: t('scheduled.confirm.delete'), danger: true }))) return;
@@ -31,7 +36,14 @@ export function ScheduledTasks() {
 
   const handleRunNow = async (id: string) => {
     try {
-      await runNow(id);
+      const task = tasks.find((item) => item.id === id);
+      if (
+        task?.last_status === 'failed' &&
+        !(await confirmDialog({ title: t('scheduled.confirm.retry') }))
+      )
+        return;
+      const result = await runNow(id);
+      if (result.last_status === 'failed') toast.error(t('scheduled.run_failed'));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(message);
@@ -93,6 +105,14 @@ export function ScheduledTasks() {
                   {describeSchedule(task.schedule, locale as 'zh' | 'en')}
                 </span>
                 <span className="text-[10px] text-muted">session: {task.session_id}</span>
+                {task.last_status === 'failed' && (
+                  <p role="status" className="text-xs text-error">
+                    {t('scheduled.run_failed')} — {task.last_error}
+                  </p>
+                )}
+                {task.last_status === 'succeeded' && (
+                  <span className="text-xs text-success">{t('scheduled.run_succeeded')}</span>
+                )}
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <button
@@ -141,7 +161,8 @@ export function ScheduledTasks() {
       <CreateTaskModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        sessionId="default"
+        sessionId={currentSessionId ?? ''}
+        sessions={sessions}
         task={editing}
       />
     </div>

@@ -164,7 +164,7 @@ def relevance(query: str, graph: GraphData, k_hops: int = K_HOPS) -> List[Tuple[
         k_hops: 传播跳数
 
     Returns:
-        list[tuple[str, float]]: (node_id, score) 列表，按 score 降序
+        List[Tuple[str, float]]: (node_id, score) 列表，按 score 降序
     """
     if not query:
         return []

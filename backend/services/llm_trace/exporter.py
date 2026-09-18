@@ -19,7 +19,7 @@ import socket
 import sys
 import zipfile
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 from backend.services.llm_trace.recorder import TraceRecord
 from backend.services.llm_trace.redactor import (
@@ -176,9 +176,9 @@ def _serialize_record(rec: TraceRecord, *, include_prompts: bool) -> str:
 
     if rec_size > MAX_RECORD_BYTES:
         # 整条 record > 1MB → body 全丢弃,headers + status 保留
-        req_body_text: str | None = None
+        req_body_text: Optional[str] = None
         req_encoding: str = "utf-8"
-        resp_body_text: str | None = None
+        resp_body_text: Optional[str] = None
         resp_encoding: str = "utf-8"
         req_truncated = True
         resp_truncated = True
@@ -188,7 +188,7 @@ def _serialize_record(rec: TraceRecord, *, include_prompts: bool) -> str:
         req_encoding = "utf-8"
         if isinstance(req_body_obj, str):
             req_body_text = req_body_obj
-        elif isinstance(req_body_obj, dict | list):
+        elif isinstance(req_body_obj, (dict, list)):  # noqa: UP038 — py38 运行时 isinstance 不支持 X | Y
             req_body_text = json.dumps(req_body_obj, ensure_ascii=False)
         elif req_body_err == "binary":
             req_body_text = base64.b64encode(rec.request_body).decode("ascii")
@@ -199,7 +199,7 @@ def _serialize_record(rec: TraceRecord, *, include_prompts: bool) -> str:
         resp_encoding = "utf-8"
         if isinstance(resp_body_obj, str):
             resp_body_text = resp_body_obj
-        elif isinstance(resp_body_obj, dict | list):
+        elif isinstance(resp_body_obj, (dict, list)):  # noqa: UP038 — py38 运行时 isinstance 不支持 X | Y
             resp_body_text = json.dumps(resp_body_obj, ensure_ascii=False)
         elif resp_body_err == "binary":
             resp_body_text = base64.b64encode(rec.response_body).decode("ascii")
@@ -256,7 +256,7 @@ def _extract_error_message(body: bytes, status: int | None) -> str | None:
     try:
         parsed = json.loads(body.decode("utf-8"))
         if isinstance(parsed, dict):
-            raw: object | None = None
+            raw: Optional[object] = None
             err = parsed.get("error")
             if isinstance(err, dict) and "message" in err:
                 raw = err["message"]

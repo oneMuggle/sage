@@ -1,6 +1,7 @@
+from typing import List, Mapping
+
 """Resolve caller-filtered layers; this module does not select price scopes."""
 
-from collections.abc import Mapping
 
 from .schemas import ContextLimits, EffectiveModel, LayerValues, ModelKey, Price
 
@@ -17,7 +18,7 @@ def resolve_model_key(key: ModelKey, aliases: Mapping[ModelKey, ModelKey]) -> Mo
     return aliases.get(key, key)
 
 
-def resolve_layers(layers: list[LayerValues]) -> EffectiveModel:
+def resolve_layers(layers: List[LayerValues]) -> EffectiveModel:
     """First non-null value wins per field; list order, not revision, is priority.
 
     The repository must filter identity and quotation scope before calling.

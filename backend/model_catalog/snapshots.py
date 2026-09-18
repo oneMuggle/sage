@@ -1,3 +1,5 @@
+from typing import List, Optional
+
 """Pure snapshot field-selection helpers (no persistence or networking)."""
 
 import hashlib
@@ -32,13 +34,13 @@ def canonical_json(value) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def digest(records: list[CandidateModel]) -> str:
+def digest(records: List[CandidateModel]) -> str:
     return hashlib.sha256(
         canonical_json([r.model_dump(mode="json") for r in records]).encode()
     ).hexdigest()
 
 
-def selected_fields(fields: list[str]) -> list[str]:
+def selected_fields(fields: List[str]) -> List[str]:
     expanded = [
         path
         for field in fields
@@ -60,10 +62,10 @@ def field_value(data: dict, path: str):
 
 
 def merge_fields(
-    before: CandidateModel | None,
+    before: Optional[CandidateModel],
     after: CandidateModel,
-    fields: list[str],
-    clear_fields: list[str] = (),
+    fields: List[str],
+    clear_fields: List[str] = (),
 ) -> CandidateModel:
     """Missing/null source fields never erase values; clears are internal rollback instructions."""
     old = before.model_dump(mode="json") if before else {}

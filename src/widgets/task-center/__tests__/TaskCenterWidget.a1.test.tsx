@@ -37,6 +37,7 @@ const slot = (messageId: string, streaming: boolean): SessionStreamSlots => ({
   streamingToolCalls: [],
   taskBoard: null,
   todos: [],
+  completedSteps: [],
 });
 
 function seedLane(overrides: Partial<Lane> = {}): Lane {

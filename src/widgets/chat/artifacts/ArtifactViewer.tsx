@@ -1,15 +1,37 @@
 // src/widgets/chat/artifacts/ArtifactViewer.tsx
-import { ArrowLeft, Copy, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Copy, FolderOpen, Pencil, Save, X } from 'lucide-react';
+import { useCallback, useState } from 'react';
 
-import type { Artifact } from '../../../features/artifacts/artifactApi';
-import { revealArtifact } from '../../../features/artifacts/artifactApi';
+import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
+import { revealArtifact, updateArtifactContent } from '../../../features/artifacts/artifactApi';
 import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';
+// Round B P3（统一预览组件）: chat 端 office 产物复用 Office 页的结构化
+// 预览组件——公式视图/表头样式/渲染上限全部继承，两端视觉同源。
+// 后端 read_office 现在随 html 一起返回 structured（read_* 的 JSON 序列
+// 化）；缺失时回退旧的受控 HTML 路径。
+import { ExcelPreview, PptPreview, WordPreview } from '../../../features/office';
+import type {
+  OfficeExcelReadResult,
+  OfficePptReadResult,
+  OfficeWordReadResult,
+} from '../../../shared/api/types';
+
+import { VersionHistory } from './VersionHistory';
 
 interface ArtifactViewerProps {
   artifact: Artifact;
   sessionId: string;
   onBack: () => void;
 }
+
+/** Kinds eligible for the text edit panel. */
+const EDITABLE_KINDS: ReadonlySet<ArtifactKind> = new Set([
+  'markdown',
+  'code',
+  'json',
+  'text',
+  'csv',
+]);
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -78,7 +100,51 @@ function CsvPreview({ text }: { text: string }) {
 }
 
 export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerProps) {
-  const { content, loading } = useArtifactContent(sessionId, artifact.id);
+  const { content, loading, refresh } = useArtifactContent(sessionId, artifact.id);
+  const [editMode, setEditMode] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [editBaseHash, setEditBaseHash] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const isEditable =
+    content?.ok && content.kind && EDITABLE_KINDS.has(content.kind as ArtifactKind);
+
+  const enterEditMode = useCallback(async () => {
+    if (!content?.ok || !content.content) return;
+    setEditContent(content.content);
+    // Compute SHA-256 hash of current content for optimistic concurrency
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(content.content);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+      setEditBaseHash(hashHex);
+    } catch {
+      setEditBaseHash('');
+    }
+    setEditMode(true);
+    setSaveError(null);
+  }, [content]);
+
+  const handleSave = async () => {
+    if (!editBaseHash) {
+      setSaveError('无法保存：缺少内容哈希，请刷新后重试');
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await updateArtifactContent(sessionId, artifact.id, editBaseHash, editContent, 'edit');
+      setEditMode(false);
+      await refresh();
+    } catch (e: unknown) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -91,6 +157,33 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
           <span className="mx-1 text-muted">/</span>
           <span className="text-text">{artifact.name}</span>
         </div>
+        {isEditable && !editMode && (
+          <button className="p-1.5 rounded hover:bg-bg-hover" title="编辑" onClick={enterEditMode}>
+            <Pencil className="w-4 h-4" />
+          </button>
+        )}
+        {editMode && (
+          <>
+            <button
+              className="p-1.5 rounded hover:bg-bg-hover text-text-secondary disabled:opacity-50"
+              title="保存"
+              disabled={saving}
+              onClick={() => void handleSave()}
+            >
+              <Save className="w-4 h-4" />
+            </button>
+            <button
+              className="p-1.5 rounded hover:bg-bg-hover"
+              title="取消编辑"
+              onClick={() => {
+                setEditMode(false);
+                setSaveError(null);
+              }}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </>
+        )}
         <button
           className="p-1.5 rounded hover:bg-bg-hover"
           title="复制路径"
@@ -112,7 +205,17 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
       </div>
 
       <div className="flex-1 overflow-auto p-3">
-        {loading ? (
+        {editMode ? (
+          <div className="flex flex-col h-full">
+            <textarea
+              className="flex-1 w-full p-2 text-sm font-mono bg-bg-input border border-border rounded resize-none focus:outline-none focus:ring-1 focus:ring-accent"
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              spellCheck={false}
+            />
+            {saveError && <div className="mt-2 text-xs text-error">{saveError}</div>}
+          </div>
+        ) : loading ? (
           <div className="text-sm text-muted">加载中...</div>
         ) : !content || !content.ok ? (
           <div className="text-sm text-error">{content?.error ?? '加载失败'}</div>
@@ -136,13 +239,28 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             data-testid="html-artifact-preview"
           />
         ) : content.kind === 'docx' || content.kind === 'xlsx' || content.kind === 'pptx' ? (
-          // C-2 (round5 批次 C): office 三件套——后端已 html.escape 全转义,
-          // 此处受控渲染预览片段; 白底容器保证 dark 模式下文字可读
-          <div
-            data-testid="office-preview"
-            className="office-preview bg-white text-black text-sm rounded border border-border p-3 [&_h2]:text-base [&_h2]:font-bold [&_h2]:my-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:my-2 [&_p]:my-1 [&_table]:border-collapse [&_table]:w-full [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-0.5 [&_td]:align-top"
-            dangerouslySetInnerHTML={{ __html: content.html ?? '' }}
-          />
+          content.structured ? (
+            // Round B P3: 结构化路径 —— 与 Office 页同一组件渲染
+            <div data-testid="office-structured-preview">
+              {content.kind === 'docx' && (
+                <WordPreview data={content.structured as OfficeWordReadResult} />
+              )}
+              {content.kind === 'xlsx' && (
+                <ExcelPreview data={content.structured as OfficeExcelReadResult} />
+              )}
+              {content.kind === 'pptx' && (
+                <PptPreview data={content.structured as OfficePptReadResult} />
+              )}
+            </div>
+          ) : (
+            // 降级路径（旧后端 / structured 序列化失败）：受控 HTML —— 后端
+            // 已 html.escape 全转义；白底容器保证 dark 模式下文字可读
+            <div
+              data-testid="office-preview"
+              className="office-preview bg-white text-black text-sm rounded border border-border p-3 [&_h2]:text-base [&_h2]:font-bold [&_h2]:my-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:my-2 [&_p]:my-1 [&_table]:border-collapse [&_table]:w-full [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-0.5 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-0.5 [&_td]:align-top"
+              dangerouslySetInnerHTML={{ __html: content.html ?? '' }}
+            />
+          )
         ) : content.kind === 'code' || content.kind === 'json' ? (
           <pre className="whitespace-pre-wrap text-code font-mono bg-bg-hover p-2 rounded">
             {content.content}
@@ -153,6 +271,12 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
           <pre className="whitespace-pre-wrap text-sm">{content.content}</pre>
         )}
       </div>
+
+      <VersionHistory
+        sessionId={sessionId}
+        artifactId={artifact.id}
+        onRestoreComplete={() => void refresh()}
+      />
     </div>
   );
 }

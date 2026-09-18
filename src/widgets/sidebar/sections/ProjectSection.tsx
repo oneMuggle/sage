@@ -1,6 +1,6 @@
 /**
  * ProjectSection — 项目模块 P1 (2026-09-13) 侧边栏入口；P2 (2026-09-13)
- * 增加行内会话子列表。
+ * 增加行内会话子列表；P3 (2026-09-15) 增加概览面板与资料管理。
  *
  * 对标主流 AI 工具的"最近项目"概念（Cursor Recent Workspaces / Claude Code
  * 项目 → 会话归属）：列出用户登记的工作目录，点击即进入该项目 —— 后端
@@ -15,6 +15,14 @@
  * 订阅 5 个 store 且带全套会话操作，嵌套场景过重）；子行点击走
  * onOpenSession 与会话列表同一入口。
  *
+ * P3 概览面板：description/instructions 就地编辑保存（PATCH model_fields_set
+ * 语义，未改字段保留），与后端项目元数据块联动 system prompt 注入。
+ *
+ * P3 资料管理：列出 status=pending_index/ready/failed 资料（status 徽标），
+ * 支持用户粘贴文本新增（与 message_id 链路保存回答同入口），ready 状态
+ * 自动进 system prompt；失败状态显示 error_message 提示重试，pending
+ * 等待后台索引完成。
+ *
  * 目录在磁盘上消失时 open 返回 410 project_path_missing：该行标记"目录
  * 不存在"，仍可点击重试或移除。数据经 projectApi（invoke → IPC → 后端
  * /api/v1/projects），刷新走 store.loadSessions() 保证会话区即时同步。
@@ -26,12 +34,26 @@
  * 迁移注记：Electron ≥32 需改用 webUtils.getPathForFile。
  */
 
-import { AlertTriangle, ChevronDown, ChevronRight, Folder, Plus } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  FilePlus2,
+  FileText,
+  Folder,
+  Plus,
+  Save,
+  Trash2,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { InvokeError } from '../../../shared/api/desktopInvoke';
-import { projectApi, type ProjectSummary } from '../../../shared/api/projectApi';
+import {
+  projectApi,
+  type ProjectMaterial,
+  type ProjectSummary,
+} from '../../../shared/api/projectApi';
 import { sessionApi } from '../../../shared/api/sessionApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import { useStore, type Session } from '../../../shared/lib/store';
@@ -58,6 +80,8 @@ function isPathMissingError(err: unknown): boolean {
 
 /** P4: 会话数量变化触发的项目清单刷新防抖（ms）——吞掉连续增删的抖动 */
 const PROJECT_REFRESH_DEBOUNCE_MS = 400;
+/** P3: 资料文本上限(对齐后端 MAX_MATERIAL_CONTENT_CHARS=1 MiB); UI 提前拦截。 */
+const MATERIAL_TEXT_MAX = 1_000_000;
 
 export function ProjectSection({
   collapsed,
@@ -66,6 +90,8 @@ export function ProjectSection({
 }: ProjectSectionProps) {
   const { t } = useI18n();
   const loadSessions = useStore((s) => s.loadSessions);
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  const messages = useStore((s) => s.messages);
 
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -79,6 +105,18 @@ export function ProjectSection({
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   // ===== P5: 区块局部拖拽登记 =====
   const [dropActive, setDropActive] = useState(false);
+  // ===== P3: 资料 CRUD 状态 =====
+  const [materials, setMaterials] = useState<Record<string, ProjectMaterial[]>>({});
+  const [loadingMaterials, setLoadingMaterials] = useState<Set<string>>(new Set());
+  const [addingMaterial, setAddingMaterial] = useState<Set<string>>(new Set());
+  const [materialDraft, setMaterialDraft] = useState<Record<string, string>>({});
+  const [removingMaterialId, setRemovingMaterialId] = useState<string | null>(null);
+  const [savingAnswerProjectId, setSavingAnswerProjectId] = useState<string | null>(null);
+  // ===== P3: 概览编辑 =====
+  const [overviewDraft, setOverviewDraft] = useState<
+    Record<string, { description: string; instructions: string; dirty: boolean }>
+  >({});
+  const [overviewSavingId, setOverviewSavingId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -164,6 +202,49 @@ export function ProjectSection({
     return () => clearTimeout(timer);
   }, [sessionsCount, expandedIds, refresh, refreshSubSessions]);
 
+  /** P3: 拉取项目资料。失败仅 toast。 */
+  const refreshMaterials = useCallback(
+    async (projectId: string) => {
+      setLoadingMaterials((prev) => new Set(prev).add(projectId));
+      try {
+        const list = await projectApi.listMaterials(projectId);
+        setMaterials((prev) => ({ ...prev, [projectId]: list }));
+      } catch (err) {
+        toast.error(
+          t('sider.project.materials_load_failed').replace('{message}', errorMessage(err)),
+        );
+      } finally {
+        setLoadingMaterials((prev) => {
+          const next = new Set(prev);
+          next.delete(projectId);
+          return next;
+        });
+      }
+    },
+    [t],
+  );
+
+  /** P3: 初次展开时一次性拉资料 + 初始化概览草稿。 */
+  const ensureM3Loaded = useCallback(
+    async (project: ProjectSummary) => {
+      const tasks: Promise<unknown>[] = [];
+      if (!materials[project.id]) tasks.push(refreshMaterials(project.id));
+      setOverviewDraft((prev) => {
+        if (prev[project.id]) return prev;
+        return {
+          ...prev,
+          [project.id]: {
+            description: project.description ?? '',
+            instructions: project.instructions ?? '',
+            dirty: false,
+          },
+        };
+      });
+      await Promise.all(tasks);
+    },
+    [materials, refreshMaterials],
+  );
+
   /** P2: 展开/收起；首次展开时懒加载。 */
   const toggleExpand = useCallback(
     (project: ProjectSummary) => {
@@ -176,11 +257,12 @@ export function ProjectSection({
         }
         return next;
       });
-      if (!expandedIds.has(project.id) && !subSessions[project.id]) {
-        void refreshSubSessions(project.id);
+      if (!expandedIds.has(project.id)) {
+        if (!subSessions[project.id]) void refreshSubSessions(project.id);
+        void ensureM3Loaded(project);
       }
     },
-    [expandedIds, refreshSubSessions, subSessions],
+    [expandedIds, ensureM3Loaded, refreshSubSessions, subSessions],
   );
 
   const openProject = useCallback(
@@ -285,6 +367,147 @@ export function ProjectSection({
     [expandedIds, loadSessions, refresh, refreshSubSessions, t],
   );
 
+  // ===== P3: 概览/资料 handlers =====
+
+  const handleOverviewDraftChange = useCallback(
+    (projectId: string, field: 'description' | 'instructions', value: string) => {
+      setOverviewDraft((prev) => {
+        const cur = prev[projectId] ?? { description: '', instructions: '', dirty: false };
+        const original = projects.find((p) => p.id === projectId);
+        const originalValue =
+          field === 'description' ? (original?.description ?? '') : (original?.instructions ?? '');
+        const next = { ...cur, [field]: value };
+        return {
+          ...prev,
+          [projectId]: {
+            ...next,
+            dirty: next.description !== originalValue || next.instructions !== originalValue,
+          },
+        };
+      });
+    },
+    [projects],
+  );
+
+  const handleOverviewSave = useCallback(
+    async (project: ProjectSummary) => {
+      const draft = overviewDraft[project.id];
+      if (!draft || !draft.dirty || overviewSavingId) return;
+      setOverviewSavingId(project.id);
+      try {
+        const updated = await projectApi.update(project.id, {
+          description: draft.description,
+          instructions: draft.instructions,
+        });
+        setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        setOverviewDraft((prev) => ({
+          ...prev,
+          [project.id]: {
+            description: updated.description ?? '',
+            instructions: updated.instructions ?? '',
+            dirty: false,
+          },
+        }));
+        toast.success(t('sider.project.overview_saved'));
+      } catch (err) {
+        toast.error(
+          t('sider.project.overview_save_failed').replace('{message}', errorMessage(err)),
+        );
+      } finally {
+        setOverviewSavingId(null);
+      }
+    },
+    [overviewDraft, overviewSavingId, t],
+  );
+
+  const handleAddMaterial = useCallback(
+    async (project: ProjectSummary) => {
+      if (addingMaterial.has(project.id)) return;
+      const text = (materialDraft[project.id] ?? '').trim();
+      if (!text) return;
+      if (text.length > MATERIAL_TEXT_MAX) {
+        toast.error(t('sider.project.material_too_large'));
+        return;
+      }
+      setAddingMaterial((prev) => new Set(prev).add(project.id));
+      try {
+        await projectApi.addMaterial(project.id, { content: text });
+        setMaterialDraft((prev) => ({ ...prev, [project.id]: '' }));
+        await refreshMaterials(project.id);
+      } catch (err) {
+        toast.error(t('sider.project.material_add_failed').replace('{message}', errorMessage(err)));
+      } finally {
+        setAddingMaterial((prev) => {
+          const next = new Set(prev);
+          next.delete(project.id);
+          return next;
+        });
+      }
+    },
+    [addingMaterial, materialDraft, refreshMaterials, t],
+  );
+
+  const handleRemoveMaterial = useCallback(
+    async (project: ProjectSummary, materialId: string) => {
+      if (removingMaterialId) return;
+      setRemovingMaterialId(materialId);
+      try {
+        await projectApi.removeMaterial(project.id, materialId);
+        setMaterials((prev) => ({
+          ...prev,
+          [project.id]: (prev[project.id] ?? []).filter((m) => m.id !== materialId),
+        }));
+      } catch (err) {
+        toast.error(
+          t('sider.project.material_remove_failed').replace('{message}', errorMessage(err)),
+        );
+      } finally {
+        setRemovingMaterialId(null);
+      }
+    },
+    [removingMaterialId, t],
+  );
+
+  /**
+   * P3: 把当前 active 会话中"最近一条 assistant 消息"保存为项目资料。
+   * 前提: 当前会话 id 与项目的"绑定会话"一致 —— 后端按 session→workspace
+   * 绑定反向校验; 不一致时返回 403, UI 给"消息不属于该项目"提示。
+   */
+  const handleSaveAnswerAsMaterial = useCallback(
+    async (project: ProjectSummary) => {
+      if (savingAnswerProjectId) return;
+      if (!currentSessionId) {
+        toast.error(t('sider.project.save_answer_no_session'));
+        return;
+      }
+      const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+      if (!lastAssistant) {
+        toast.error(t('sider.project.save_answer_no_assistant'));
+        return;
+      }
+      setSavingAnswerProjectId(project.id);
+      try {
+        await projectApi.saveAnswerAsMaterial(project.id, lastAssistant.id);
+        await refreshMaterials(project.id);
+        toast.success(t('sider.project.save_answer_ok'));
+      } catch (err) {
+        const code = (err as InvokeError)?.status_code;
+        if (code === 403) {
+          toast.error(t('sider.project.save_answer_mismatch'));
+        } else if (code === 404) {
+          toast.error(t('sider.project.save_answer_not_found'));
+        } else {
+          toast.error(
+            t('sider.project.save_answer_failed').replace('{message}', errorMessage(err)),
+          );
+        }
+      } finally {
+        setSavingAnswerProjectId(null);
+      }
+    },
+    [currentSessionId, messages, refreshMaterials, savingAnswerProjectId, t],
+  );
+
   const renderSubSessions = (project: ProjectSummary) => {
     if (!expandedIds.has(project.id)) return null;
     const sessions = subSessions[project.id];
@@ -336,6 +559,182 @@ export function ProjectSection({
         </div>
       </div>
     ));
+  };
+
+  /** P3 渲染: 概览面板 (description + instructions 编辑) */
+  const renderOverviewPanel = (project: ProjectSummary) => {
+    if (!expandedIds.has(project.id)) return null;
+    const draft = overviewDraft[project.id];
+    const saving = overviewSavingId === project.id;
+    return (
+      <div
+        className="ml-5 mr-1.5 mt-1 p-2 rounded border border-border/50 bg-bg/40"
+        data-testid="project-overview-panel"
+      >
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] text-muted uppercase tracking-wide">
+            {t('sider.project.overview_title')}
+          </span>
+          <button
+            type="button"
+            data-testid="project-overview-save"
+            disabled={!draft?.dirty || saving}
+            onClick={() => void handleOverviewSave(project)}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Save className="w-3 h-3" aria-hidden="true" />
+            {saving ? t('sider.project.overview_saving') : t('sider.project.overview_save')}
+          </button>
+        </div>
+        <label className="block text-[10px] text-muted mb-0.5">
+          {t('sider.project.overview_description')}
+        </label>
+        <textarea
+          data-testid="project-overview-description"
+          value={draft?.description ?? ''}
+          onChange={(e) => handleOverviewDraftChange(project.id, 'description', e.target.value)}
+          rows={2}
+          className="w-full text-[11px] px-1.5 py-1 rounded border border-border bg-bg resize-y"
+          placeholder={t('sider.project.overview_description_placeholder')}
+        />
+        <label className="block text-[10px] text-muted mb-0.5 mt-1.5">
+          {t('sider.project.overview_instructions')}
+        </label>
+        <textarea
+          data-testid="project-overview-instructions"
+          value={draft?.instructions ?? ''}
+          onChange={(e) => handleOverviewDraftChange(project.id, 'instructions', e.target.value)}
+          rows={3}
+          className="w-full text-[11px] px-1.5 py-1 rounded border border-border bg-bg resize-y"
+          placeholder={t('sider.project.overview_instructions_placeholder')}
+        />
+      </div>
+    );
+  };
+
+  /** P3 渲染: 资料管理面板 */
+  const renderMaterialsPanel = (project: ProjectSummary) => {
+    if (!expandedIds.has(project.id)) return null;
+    const list = materials[project.id];
+    const isLoading = loadingMaterials.has(project.id) && !list;
+    const isAdding = addingMaterial.has(project.id);
+    const draftText = materialDraft[project.id] ?? '';
+    return (
+      <div
+        className="ml-5 mr-1.5 mt-1 p-2 rounded border border-border/50 bg-bg/40"
+        data-testid="project-materials-panel"
+      >
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] text-muted uppercase tracking-wide">
+            {t('sider.project.materials_title')}
+          </span>
+          <button
+            type="button"
+            data-testid="project-save-answer"
+            disabled={savingAnswerProjectId === project.id || !currentSessionId}
+            onClick={() => void handleSaveAnswerAsMaterial(project)}
+            title={
+              currentSessionId
+                ? t('sider.project.save_answer_title')
+                : t('sider.project.save_answer_no_session')
+            }
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <FilePlus2 className="w-3 h-3" aria-hidden="true" />
+            {t('sider.project.save_answer')}
+          </button>
+        </div>
+
+        {isLoading ? (
+          <div className="text-[10px] text-muted py-1" data-testid="project-materials-loading">
+            {t('sider.project.materials_loading')}
+          </div>
+        ) : list && list.length > 0 ? (
+          <ul className="space-y-1" data-testid="project-material-list">
+            {list.map((m) => (
+              <li
+                key={m.id}
+                data-testid="project-material-row"
+                data-status={m.status}
+                className="flex items-start gap-1.5 px-1.5 py-1 rounded bg-bg/60 border border-border/30"
+              >
+                <FileText className="w-3 h-3 mt-0.5 shrink-0 text-muted" aria-hidden="true" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 text-[10px]">
+                    <MaterialStatusBadge status={m.status} />
+                    <span className="text-muted truncate">
+                      {m.sourceMessageId
+                        ? t('sider.project.material_from_message').replace(
+                            '{id}',
+                            m.sourceMessageId,
+                          )
+                        : t('sider.project.material_direct')}
+                    </span>
+                    <span className="text-muted/60 tabular-nums ml-auto">
+                      {formatRelativeTime(m.createdAt)}
+                    </span>
+                  </div>
+                  {m.status === 'failed' && m.errorMessage && (
+                    <div
+                      className="text-[10px] text-warning mt-0.5 truncate"
+                      title={m.errorMessage}
+                      data-testid="project-material-error"
+                    >
+                      {m.errorMessage}
+                    </div>
+                  )}
+                  {m.status === 'ready' && m.content && (
+                    <div className="text-[10px] text-text-secondary mt-0.5 line-clamp-2">
+                      {m.content.slice(0, 120)}
+                      {m.content.length > 120 ? '…' : ''}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  data-testid="project-material-remove"
+                  aria-label={t('sider.project.material_remove')}
+                  disabled={removingMaterialId === m.id}
+                  onClick={() => void handleRemoveMaterial(project, m.id)}
+                  className="shrink-0 inline-flex items-center justify-center w-4 h-4 rounded text-muted hover:text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Trash2 className="w-3 h-3" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="text-[10px] text-muted py-1" data-testid="project-materials-empty">
+            {t('sider.project.materials_empty')}
+          </div>
+        )}
+
+        <div className="mt-2 space-y-1">
+          <textarea
+            data-testid="project-material-input"
+            value={draftText}
+            onChange={(e) =>
+              setMaterialDraft((prev) => ({ ...prev, [project.id]: e.target.value }))
+            }
+            rows={3}
+            placeholder={t('sider.project.material_input_placeholder')}
+            className="w-full text-[11px] px-1.5 py-1 rounded border border-border bg-bg resize-y"
+          />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              data-testid="project-material-add"
+              disabled={isAdding || !draftText.trim()}
+              onClick={() => void handleAddMaterial(project)}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Plus className="w-3 h-3" aria-hidden="true" />
+              {t('sider.project.material_add')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -476,6 +875,8 @@ export function ProjectSection({
                     </div>
                   </div>
                   {renderSubSessions(project)}
+                  {renderOverviewPanel(project)}
+                  {renderMaterialsPanel(project)}
                 </div>
               );
             })
@@ -490,6 +891,29 @@ export function ProjectSection({
 function MessageDot() {
   return (
     <span className="w-1 h-1 rounded-full bg-current opacity-40 shrink-0" aria-hidden="true" />
+  );
+}
+
+/** P3: 资料状态徽标——颜色映射 ready/pending/failed, 标签本地化 */
+function MaterialStatusBadge({ status }: { status: ProjectMaterial['status'] }) {
+  const { t } = useI18n();
+  const palette = {
+    ready: 'bg-success/15 text-success border-success/30',
+    pending_index: 'bg-muted/20 text-muted border-muted/30',
+    failed: 'bg-warning/15 text-warning border-warning/30',
+  } as const;
+  const labelKey = {
+    ready: 'sider.project.material_status_ready',
+    pending_index: 'sider.project.material_status_pending',
+    failed: 'sider.project.material_status_failed',
+  } as const;
+  return (
+    <span
+      data-testid={`project-material-status-${status}`}
+      className={`shrink-0 px-1 py-px rounded border text-[9px] ${palette[status]}`}
+    >
+      {t(labelKey[status])}
+    </span>
   );
 }
 

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -53,6 +54,41 @@ _STYLES_TO_PATCH = (
     "List Bullet",
     "List Number",
 )
+
+
+#: Round 45 交叉引用占位符：`{{fig:题注}}` / `{{tbl:题注}}`（按题注文本
+#: 匹配，生成时替换为"图N"/"表N"——编号由引擎分配，插图增删不错位）。
+_CROSS_REF_RE = re.compile(r"\{\{(fig|tbl):([^}]+)\}\}")
+
+
+def _resolve_cross_refs(
+    text: str,
+    figure_caption_numbers: Dict[str, int],
+    table_caption_numbers: Dict[str, int],
+) -> str:
+    """解析段落文本中的交叉引用占位符为"图N"/"表N"。
+
+    未命中任何题注即抛 ValueError（fail-fast，与 citations 未定义 key
+    同哲学）——静默保留占位符会让残渍流入交付文档。
+    """
+
+    def _sub(match: re.Match[str]) -> str:
+        kind, caption = match.group(1), match.group(2).strip()
+        if kind == "fig":
+            number = figure_caption_numbers.get(caption)
+            if number is None:
+                raise ValueError(
+                    f"cross_ref_not_found: {{{{fig:{caption}}}}} 未匹配任何图片题注"
+                )
+            return f"图{number}"
+        number = table_caption_numbers.get(caption)
+        if number is None:
+            raise ValueError(
+                f"cross_ref_not_found: {{{{tbl:{caption}}}}} 未匹配任何表格题注"
+            )
+        return f"表{number}"
+
+    return _CROSS_REF_RE.sub(_sub, text)
 
 
 def _patch_style_rfonts(style, ascii_name: str, ea_name: str) -> None:
@@ -242,6 +278,102 @@ def _count_images(doc: Document) -> int:
     return len(doc.inline_shapes)
 
 
+# ── Round C P4: inline image thumbnails ────────────────────────────────
+
+#: 最多内联的图片条目数（超出的只计数不内联，防止 payload 爆炸）。
+_IMAGE_PREVIEW_MAX_COUNT = 10
+#: Pillow 缩略的最长边（px）。
+_IMAGE_PREVIEW_MAX_EDGE = 480
+#: 无 Pillow 时允许直接内联的原图上限（bytes）。
+_IMAGE_PREVIEW_RAW_LIMIT = 150 * 1024
+#: 单条 data URL 的硬上限（bytes，base64 前）——缩略后仍超限则跳过。
+_IMAGE_PREVIEW_ENCODED_LIMIT = 300 * 1024
+
+
+def _extract_image_previews(doc: Document) -> List[WordImagePreview]:  # noqa: F821 — call-time import below
+    """Inline picture parts → bounded thumbnail data URLs.
+
+    Pillow available → RGB-convert + thumbnail to ``_IMAGE_PREVIEW_MAX_EDGE``
+    JPEG (small, predictable). Pillow missing → only parts already ≤
+    ``_IMAGE_PREVIEW_RAW_LIMIT`` are inlined as-is; larger ones are skipped
+    (the count field still reports them). Any per-image failure skips just
+    that image.
+    """
+    from .models import WordImagePreview
+
+    previews: List[WordImagePreview] = []
+    for index, shape in enumerate(doc.inline_shapes):
+        if len(previews) >= _IMAGE_PREVIEW_MAX_COUNT:
+            break
+        try:
+            # InlineShape → embedded rId → image part（charts 无 embed，跳过）
+            blip_fill = shape._inline.graphic.graphicData.pic.blipFill
+            r_id = blip_fill.blip.embed
+            # InlineShape 没有 .part —— 关系表挂在 document part 上
+            part = doc.part.related_parts[r_id]
+            blob = part.blob
+            content_type = part.content_type or "image/png"
+        except Exception:  # noqa: BLE001 — 单张图失败只跳过这张
+            continue
+        encoded = _thumbnail_or_none(blob, content_type)
+        if encoded is None:
+            continue
+        data, mime, thumbed = encoded
+        previews.append(
+            WordImagePreview(
+                index=index,
+                content_type=mime,
+                data_url=f"data:{mime};base64,{data}",
+                thumbnail=thumbed,
+            )
+        )
+    return previews
+
+
+def _thumbnail_or_none(blob: bytes, content_type: str):
+    """(base64_str, mime, thumbnailed) or None when the image can't be bounded.
+
+    Pillow path re-encodes to JPEG (RGBA → white matte). No-Pillow path
+    inlines small originals only. EMF/WMF 等 Pillow 打不开的格式走原图
+    小图路径或直接跳过。
+    """
+    import base64
+    import io
+
+    try:
+        from PIL import Image  # noqa: PLC0415 — optional dependency
+    except ImportError:
+        Image = None
+
+    if Image is not None:
+        try:
+            with Image.open(io.BytesIO(blob)) as img:
+                img.thumbnail((_IMAGE_PREVIEW_MAX_EDGE, _IMAGE_PREVIEW_MAX_EDGE))
+                if img.mode in ("RGBA", "LA", "P"):
+                    from PIL import Image as _Image
+
+                    background = _Image.new("RGB", img.size, (255, 255, 255))
+                    converted = img.convert("RGBA")
+                    background.paste(converted, mask=converted.split()[-1])
+                    out = background
+                elif img.mode != "RGB":
+                    out = img.convert("RGB")
+                else:
+                    out = img
+                buf = io.BytesIO()
+                out.save(buf, format="JPEG", quality=80)
+                data = buf.getvalue()
+            if len(data) <= _IMAGE_PREVIEW_ENCODED_LIMIT:
+                return base64.b64encode(data).decode("ascii"), "image/jpeg", True
+            return None
+        except Exception:  # noqa: BLE001 — Pillow 打不开（EMF/WMF 等）→ 原图小图路径
+            pass
+
+    if len(blob) <= _IMAGE_PREVIEW_RAW_LIMIT:
+        return base64.b64encode(blob).decode("ascii"), content_type, False
+    return None
+
+
 def _extract_headers_footers(doc: Document) -> List[WordHeaderFooterContent]:
     """提取每节的页眉/页脚文本与页码域标记（Round 15）。
 
@@ -377,6 +509,17 @@ def read_docx(
     paragraphs = _extract_paragraphs(doc)
     tables = _extract_tables(doc)
     images = _count_images(doc)
+    # Round C P4: inline image thumbnails. Best-effort like comments —
+    # a corrupt image part must not fail the read.
+    try:
+        image_previews = _extract_image_previews(doc)
+    except Exception:  # noqa: BLE001 — 图片部分损坏不阻断正文读取
+        logger.warning(
+            "Failed to extract image previews from %s; previews omitted",
+            file_path.name,
+            exc_info=True,
+        )
+        image_previews = []
     # Round 2 R3: comments ride along in the read result. A corrupt comments
     # part must not fail the whole read (body extraction already succeeded);
     # the dedicated read_docx_comments still surfaces it as OfficeParseError.
@@ -406,6 +549,7 @@ def read_docx(
         tables=tables,
         images=images,
         comments=comments,
+        image_previews=image_previews,
         headers_footers=_extract_headers_footers(doc),
         toc_fields=_extract_toc_fields(doc),
     )
@@ -702,6 +846,10 @@ def _style_table(doc: Document, table: Any, table_spec: Any) -> None:
     elif table_spec.style == "grid":
         with contextlib.suppress(KeyError):
             table.style = doc.styles["Table Grid"]
+    if getattr(table_spec, "header_style", False):
+        from .word_layout import apply_table_header_style
+
+        apply_table_header_style(table)
     if table_spec.header_repeat and table_spec.rows:
         enable_header_repeat(table)
     if table_spec.column_widths_cm:
@@ -821,6 +969,34 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
 
             apply_format_spec(doc, req.format_spec)
 
+        # Round 42：分桶前置——图目录条目预收集（目录段）与正文插图
+        # 共用同一 images_by_position/trailing_images，保证编号一致。
+        inline_images, trailing_images = _partition_images(
+            req.images, len(req.paragraphs)
+        )
+        images_by_position: Dict[int, List[Any]] = {}
+        for image in inline_images:
+            images_by_position.setdefault(image.after_paragraph or 0, []).append(image)
+        # Round 45：题注编号映射（caption 文本 → 首个编号）——交叉引用
+        # 占位符解析与图/表目录条目共用，保证三处编号严格一致。
+        figure_caption_numbers: Dict[str, int] = {}
+        _fig_no = 0
+        for pi in range(len(req.paragraphs)):
+            for image in images_by_position.get(pi, []):
+                if getattr(image, "caption", None):
+                    _fig_no += 1
+                    figure_caption_numbers.setdefault(image.caption, _fig_no)
+        for image in trailing_images:
+            if getattr(image, "caption", None):
+                _fig_no += 1
+                figure_caption_numbers.setdefault(image.caption, _fig_no)
+        table_caption_numbers: Dict[str, int] = {}
+        _tbl_no = 0
+        for table_spec in req.tables:
+            if table_spec.caption:
+                _tbl_no += 1
+                table_caption_numbers.setdefault(table_spec.caption, _tbl_no)
+
         # Title
         doc.add_heading(req.title, level=0)
 
@@ -850,6 +1026,31 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                         toc_headings.append((level, text))
 
             insert_toc_field(doc, req.format_spec.toc, toc_headings)
+
+        # ── Round 42：图目录/表目录（TOC \c 收录 SEQ 题注） ──────────────
+        # 条目按正文编号顺序预收集（无题注不占号——与正文 figure_no/
+        # table_no 同一守卫），缓存行"图N　标题"无页码（COM/渲染器更新
+        # 域后得真页码）；各自独占页（域后分页，同目录域惯例）。
+        if req.format_spec is not None and (
+            req.format_spec.figure_index is not None
+            or req.format_spec.table_index is not None
+        ):
+            from .word_layout import insert_tof_field
+
+            if req.format_spec.figure_index is not None:
+                figure_entries = sorted(
+                    figure_caption_numbers.items(), key=lambda kv: kv[1]
+                )
+                insert_tof_field(
+                    doc, req.format_spec.figure_index, "图", figure_entries
+                )
+            if req.format_spec.table_index is not None:
+                table_entries = sorted(
+                    table_caption_numbers.items(), key=lambda kv: kv[1]
+                )
+                insert_tof_field(
+                    doc, req.format_spec.table_index, "表", table_entries
+                )
 
         # ── Round 33：首页不同页眉页脚 ────────────────────────────────────
         # 启用后首页使用独立的页眉/页脚（封面页场景）；正文从第 2 页起
@@ -902,13 +1103,6 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # Round 20：counters 扩到 5 级（h4/h5 编号）。
         heading_counters = [0, 0, 0, 0, 0]
         numbering = bool(req.format_spec.numbering) if req.format_spec else False
-        inline_images, trailing_images = _partition_images(
-            req.images, len(req.paragraphs)
-        )
-        images_by_position: Dict[int, List[Any]] = {}
-        for image in inline_images:
-            images_by_position.setdefault(image.after_paragraph or 0, []).append(image)
-
         # ── Round 26：横排分节（section_breaks 按 start_paragraph 排序） ───
         pending_breaks: List[Any] = sorted(
             (req.format_spec.section_breaks if req.format_spec else []) or [],
@@ -933,9 +1127,13 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
 
                 apply_section_break(doc, pending_breaks[break_idx].page_setup)
                 break_idx += 1
+            # Round 45：交叉引用占位符解析（{{fig:}}/{{tbl:}} → 图N/表N）
+            body_text = _resolve_cross_refs(
+                para.text, figure_caption_numbers, table_caption_numbers
+            )
             if para.heading in ("h1", "h2", "h3", "h4", "h5"):
                 level = int(para.heading[1])
-                text = para.text
+                text = body_text
                 if numbering:
                     text = (
                         heading_number_prefix(heading_counters, level)
@@ -945,12 +1143,12 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                 created = doc.add_heading(text, level=level)
             elif para.style == "bullet":
                 # ★ 新增：bullet 列表
-                created = doc.add_paragraph(para.text, style="List Bullet")
+                created = doc.add_paragraph(body_text, style="List Bullet")
             elif para.style == "numbered":
                 # ★ 新增：numbered 列表
-                created = doc.add_paragraph(para.text, style="List Number")
+                created = doc.add_paragraph(body_text, style="List Number")
             else:
-                created = doc.add_paragraph(para.text)
+                created = doc.add_paragraph(body_text)
             # 批次 2.3：可选段落级样式（无样式字段时零改动）
             _apply_paragraph_run_style(created, para)
             # Round 9：文中引用上标标记（仅非标题段落，标题已在预检拒绝）

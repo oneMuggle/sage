@@ -670,7 +670,7 @@ class InprocSkillAdapter:
           - ``version`` (str | None): 仅 SKILL.md 有值, 是 frontmatter ``version`` 字段
           - ``license`` (str | None): agentskills.io spec 字段 (PR-84 后)
           - ``compatibility`` (str | None): agentskills.io spec 字段 (PR-84 后)
-          - ``allowed_tools`` (list[str]): agentskills.io spec 字段 (PR-84 后)
+          - ``allowed_tools`` (List[str]): agentskills.io spec 字段 (PR-84 后)
 
         builtin 技能只输出 SkillSpec 字段, **不** 输出扩展字段 (空 key 省略,
         避免 TS strict optional 报警)。

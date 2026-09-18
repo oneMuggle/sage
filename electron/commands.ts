@@ -212,6 +212,41 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/sessions`,
   },
+  // M3 项目上下文沉淀 (2026-09-15): 概览字段编辑 + 资料 CRUD + 保存回答。
+  // PATCH 用 model_fields_set 语义——只把前端实际改了/传了的字段写进 body,
+  // 没传的字段后端按"未出现"处理, 不清空现有值。
+  projects_update: {
+    method: 'PATCH',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}`,
+    body: (a) => {
+      const body: Record<string, unknown> = {};
+      if (a.description !== undefined) body.description = a.description;
+      if (a.instructions !== undefined) body.instructions = a.instructions;
+      return body;
+    },
+  },
+  projects_list_materials: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials`,
+  },
+  projects_add_material: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials`,
+    body: (a) => ({
+      content: a.content,
+      source_message_id: a.source_message_id ?? null,
+    }),
+  },
+  projects_remove_material: {
+    method: 'DELETE',
+    path: (a) =>
+      `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials/${encodeURIComponent(String(a.materialId))}`,
+  },
+  projects_save_answer: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials/save-answer`,
+    body: (a) => ({ message_id: a.message_id }),
+  },
 
   // R19: 数据安全 —— 备份清单/手动备份/记忆导出（system_routes，GET/POST
   // 均无业务 body，本机 token 由 fetch 桥统一注入）。
@@ -241,12 +276,6 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/prompts/templates/${encodeURIComponent(String(a.id))}`,
   },
-  // R42: 拖拽排序 —— 按新顺序排列的模板 id 列表
-  prompts_reorder: {
-    method: 'PUT',
-    path: () => '/api/v1/prompts/templates/reorder',
-    body: (a) => ({ ordered_ids: a.orderedIds }),
-  },
   // R30: 模板导入/导出（导出无 body；导入信封即 body）
   prompts_export: {
     method: 'GET',
@@ -261,7 +290,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/active?session_id=${encodeURIComponent(String(a.sessionId))}`,
   },
-    system_backups_list: {
+  system_backups_list: {
     method: 'GET',
     path: () => '/api/v1/system/backups',
   },
@@ -363,8 +392,6 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const body: Record<string, unknown> = {};
       // R18-B: is_pinned 置顶开关（后端 SessionUpdateIn.is_pinned 已支持）
       if (a.isPinned != null) body.is_pinned = a.isPinned;
-      // R51: is_archived 归档开关
-      if (a.isArchived != null) body.is_archived = a.isArchived;
       // title 缺省不下发 —— PATCH 只更新显式传入的字段
       if (a.title != null) body.title = a.title;
       return body;
@@ -923,12 +950,44 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const body: Record<string, unknown> = {};
       if (a.enabled !== undefined) body.enabled = a.enabled;
       if (a.timeout_seconds !== undefined) body.timeout_seconds = a.timeout_seconds;
+      // R53: 工具禁用列表（全量替换）
+      if (a.disabled_tools !== undefined) body.disabled_tools = a.disabled_tools;
       return body;
     },
+  },
+  // r53-B: per-tool 开关面板的只读清单（工具名 + 截断描述 + 当前禁用项）
+  mcp_server_tools: {
+    method: 'GET',
+    path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}/tools`,
+  },
+  // r64: OAuth 授权（长请求——后端阻塞等待浏览器回调，上限 300s）
+  mcp_server_authorize: {
+    method: 'POST',
+    path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}/authorize`,
   },
   mcp_server_delete: {
     method: 'DELETE',
     path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}`,
+  },
+  // r59: 附件向量索引三端点透传（backend/api/chat_attachment_routes.py r58）。
+  // embed 配置 / query_vector 由调用方构造，body 原样透传（键已 snake）。
+  attachment_rag_index: {
+    method: 'POST',
+    path: (a) => `/api/v1/chat/attachments/${encodeURIComponent(String(a.mediaId))}/index`,
+    body: (a) => {
+      const body: Record<string, unknown> = { embed: a.embed };
+      if (a.target_chunk_size !== undefined) body.target_chunk_size = a.target_chunk_size;
+      return body;
+    },
+  },
+  attachment_rag_search: {
+    method: 'POST',
+    path: () => '/api/v1/chat/attachments/search',
+    rawBody: true,
+  },
+  attachment_rag_delete_index: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/chat/attachments/${encodeURIComponent(String(a.mediaId))}/index`,
   },
   // M6 生态扩展: 用量/成本面板 (backend/services/usage_tracker.py 内存态)
   // L8 PR-A (2026-09-09): 支持 range=today|total 查询参数, 默认 today。

@@ -228,12 +228,22 @@ def read_pdf(
         for page_num in range(len(doc)):
             page = doc[page_num]
             text = page.get_text()
+            # P4-A (office-p4a): 扫描/纯图页 OCR 兜底 —— 仅 SAGE_OCR=1 且
+            # pytesseract+tesseract 可用时触发；否则保持原（空）文本。
+            ocr_used = False
+            from .ocr import ocr_page_if_needed
+
+            ocr_text = ocr_page_if_needed(page, text)
+            if ocr_text is not None:
+                text = ocr_text
+                ocr_used = True
             pages.append(
                 PdfPageContent(
                     page_number=page_num + 1,
                     text=text,
                     tables=_extract_page_tables(page, page_number=page_num + 1),
                     images=[],
+                    ocr=ocr_used,
                 )
             )
         metadata: Dict = dict(doc.metadata) if doc.metadata else {}
@@ -278,6 +288,13 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
         raise OfficePdfGenerateError("Invalid output filename")
     if output_path.exists():
         raise OfficePdfGenerateError("Invalid output filename")
+
+    # P2-A: soffice 可用时优先 HTML 路线（自动换行 + 真表格排版）；
+    # soffice 缺失/失败静默回落 reportlab 直绘 —— 能力降级对用户不可见。
+    from .pdf_html import generate_pdf_via_soffice
+
+    if generate_pdf_via_soffice(req, output_path):
+        return _finalize_pdf_result(output_path, filename, len(req.pages))
 
     page_size_map = {
         "A4": A4,
@@ -342,6 +359,11 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
         # GENERIC message — never interpolate ``exc`` or the path.
         raise OfficePdfGenerateError("PDF generation failed") from exc
 
+    return _finalize_pdf_result(output_path, filename, len(req.pages))
+
+
+def _finalize_pdf_result(output_path: Path, filename: str, page_count: int) -> PdfGenerateResult:
+    """产物校验（存在/大小上限）并组装结果；异常路径清理半成品。"""
     try:
         output_size = output_path.stat().st_size
     except OSError as exc:
@@ -358,5 +380,5 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
         output_path=str(output_path),
         filename=filename,
         file_size_bytes=output_size,
-        page_count=len(req.pages),
+        page_count=page_count,
     )

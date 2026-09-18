@@ -18,8 +18,10 @@ MAX_IMAGE_BYTES = 10_000_000
 MAX_PDF_BYTES = 20_000_000
 #: C-2 (round5 批次 C): docx/xlsx/pptx 内嵌预览上限（同 PDF 口径）
 MAX_OFFICE_BYTES = 20_000_000
-#: C-2: xlsx 单 sheet 预览行数截断
-MAX_SHEET_PREVIEW_ROWS = 200
+#: C-2: xlsx 单 sheet 预览行数截断（与 /office 页 ROW_RENDER_CAP 对齐）
+MAX_SHEET_PREVIEW_ROWS = 300
+#: docx 预览段落数截断（与 /office 页 PARAGRAPH_RENDER_CAP 对齐）
+MAX_DOCX_PREVIEW_PARAGRAPHS = 300
 
 _IMAGE_MIME = {
     ".png": "image/png",
@@ -100,15 +102,29 @@ def _esc(value: object) -> str:
     return _html_mod.escape(str(value), quote=False)
 
 
+def _is_numeric_cell(cell: object) -> bool:
+    """Excel 数字单元格判定 —— 与前端 OfficePreviewPanel.isNumericCell 同口径。"""
+    text = str(cell).strip()
+    if not text:
+        return False
+    try:
+        float(text)
+        return True
+    except ValueError:
+        return False
+
+
 def _docx_to_html(path: Path) -> str:
     from backend.office.word import read_docx
 
     result = read_docx(path)
     parts: list = []
-    for para in result.paragraphs:
+    non_blank = [p for p in result.paragraphs if (p.text or "").strip()]
+    for i, para in enumerate(non_blank):
+        if i >= MAX_DOCX_PREVIEW_PARAGRAPHS:
+            parts.append(f"<p>（预览已截断,共 {len(non_blank)} 段）</p>")
+            break
         text = _esc(para.text)
-        if not text.strip():
-            continue
         style = (para.style or "").lower()
         if style == "title":
             parts.append(f"<h2>{text}</h2>")
@@ -126,11 +142,11 @@ def _docx_to_html(path: Path) -> str:
             continue
         parts.append("<table>")
         for i, row in enumerate(rows):
-            cells = "".join(f"<td>{_esc(cell)}</td>" for cell in row)
-            if i == 0:
-                parts.append(f"<tr>{cells}</tr>")
-            else:
-                parts.append(f"<tr>{cells}</tr>")
+            # Round A 快速修补：首行渲染为表头 <th>（此前 if/else 两分支
+            # 代码相同，均为 <td> —— 死代码顺带清理）。
+            tag = "th" if i == 0 else "td"
+            cells = "".join(f"<{tag}>{_esc(cell)}</{tag}>" for cell in row)
+            parts.append(f"<tr>{cells}</tr>")
         parts.append("</table>")
     return "".join(parts) or "<p>（空文档）</p>"
 
@@ -147,8 +163,16 @@ def _xlsx_to_html(path: Path) -> str:
             parts.append("<p>（空表）</p>")
             continue
         parts.append("<table>")
-        for row in rows[:MAX_SHEET_PREVIEW_ROWS]:
-            cells = "".join(f"<td>{_esc(cell)}</td>" for cell in row)
+        for i, row in enumerate(rows[:MAX_SHEET_PREVIEW_ROWS]):
+            # Round A 快速修补：首行 <th> 表头；数字单元格右对齐（与
+            # OfficePreviewPanel 的 isNumericCell 视觉口径一致）。
+            tag = "th" if i == 0 else "td"
+            cells = "".join(
+                f'<{tag} style="text-align:right">{_esc(cell)}</{tag}>'
+                if _is_numeric_cell(cell)
+                else f"<{tag}>{_esc(cell)}</{tag}>"
+                for cell in row
+            )
             parts.append(f"<tr>{cells}</tr>")
         parts.append("</table>")
         if len(rows) > MAX_SHEET_PREVIEW_ROWS:
@@ -182,6 +206,11 @@ def read_office(artifact_id: str, kind: str, max_bytes: int = 0) -> dict:
 
     ``max_bytes<=0`` 时用模块级 ``MAX_OFFICE_BYTES``（运行时读取,测试可覆盖）;
     超限/解析失败返回 ok=False,引导用户走"在文件管理器中查看"。
+
+    Round B P3（统一预览组件）: 额外返回 ``structured`` —— read_* 结果的
+    JSON 序列化,与 /office/{kind}/read 端点同形状。chat 端 ArtifactViewer
+    据此复用 Office 页的结构化预览组件（公式视图/表头样式/渲染上限全部
+    继承）;``html`` 保留为降级路径（旧客户端/结构化序列化失败时）。
     """
     effective_max = max_bytes if max_bytes > 0 else MAX_OFFICE_BYTES
     artifact = artifact_repo.get_artifact(artifact_id)
@@ -198,16 +227,40 @@ def read_office(artifact_id: str, kind: str, max_bytes: int = 0) -> dict:
     try:
         if kind == "docx":
             html = _docx_to_html(path)
+            structured = _structured_or_none("docx", path)
         elif kind == "xlsx":
             html = _xlsx_to_html(path)
+            structured = _structured_or_none("xlsx", path)
         elif kind == "pptx":
             html = _pptx_to_html(path)
+            structured = _structured_or_none("pptx", path)
         else:
             return {"ok": False, "error": f"unsupported office kind: {kind}"}
     except Exception as exc:  # noqa: BLE001 — 解析失败降级为不可预览
         return {"ok": False, "error": f"文件解析失败: {exc}"}
 
-    return {"ok": True, "kind": kind, "html": html}
+    result = {"ok": True, "kind": kind, "html": html}
+    if structured is not None:
+        result["structured"] = structured
+    return result
+
+
+def _structured_or_none(kind: str, path: Path):
+    """read_* 结果的 JSON 序列化；失败返回 None（html 仍可渲染,不降级整体）。"""
+    try:
+        if kind == "docx":
+            from backend.office.word import read_docx
+
+            return read_docx(path).model_dump(mode="json")
+        if kind == "xlsx":
+            from backend.office.excel import read_xlsx
+
+            return read_xlsx(path).model_dump(mode="json")
+        from backend.office.ppt import read_ppt
+
+        return read_ppt(path).model_dump(mode="json")
+    except Exception:  # noqa: BLE001 — structured 尽力而为
+        return None
 
 
 def reveal_in_file_manager(artifact_id: str) -> dict:

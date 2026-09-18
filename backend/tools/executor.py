@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Tuple
 
 # Python 3.10: asyncio.TimeoutError ≠ builtin TimeoutError；3.11+ 为同一类，
 # 兼容两个名称（hex adapter 原内联写法收敛至此）。
@@ -18,7 +19,7 @@ def tool_timeout_message(timeout_seconds) -> str:
     return f"tool_timeout: exceeded {timeout_seconds}s"
 
 
-def truncate_output(output: str, max_output_bytes: int) -> tuple[str, dict]:
+def truncate_output(output: str, max_output_bytes: int) -> Tuple[str, dict]:
     """按 utf-8 字节截断工具输出（两栈统一，切片 A 收口）。
 
     Returns:

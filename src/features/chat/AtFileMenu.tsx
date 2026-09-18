@@ -16,6 +16,13 @@ const KIND_ICON: Record<FileSearchResult['kind'], string> = {
   'office-ppt': '📊',
   'office-word': '📝',
   'office-excel': '📈',
+  'office-pdf': '📄',
+  // Phase 3.4 (2026-09-17): allowed_paths 搜索结果，与 office-* 同图标。
+  'allowed-file': '📄',
+  'allowed-ppt': '📊',
+  'allowed-word': '📝',
+  'allowed-excel': '📈',
+  'allowed-pdf': '📄',
 };
 
 interface AtFileMenuProps {

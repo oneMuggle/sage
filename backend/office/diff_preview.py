@@ -80,6 +80,7 @@ _SNIPPET_LIMIT = 80
 _DOC_TYPES = {
     ".docx": "word",
     ".xlsx": "excel",
+    ".csv": "excel",  # P1-B: csv 归 excel 类型，预览按扩展名分流
     ".pptx": "ppt",
 }
 
@@ -224,6 +225,11 @@ def _read_structured(doc_type: str, path: Path):
     if doc_type == "word":
         return read_docx(path)
     if doc_type == "excel":
+        # P1-B: .csv 双扩展 —— 预览读取同样分流到字符串网格。
+        if path.suffix.lower() == ".csv":
+            from .excel import read_csv
+
+            return read_csv(path)
         return read_xlsx(path)
     return read_ppt(path)
 

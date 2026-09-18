@@ -6,6 +6,7 @@ Covers: PPT/Word/Excel generate from structured Pydantic input.
 
 from __future__ import annotations
 
+import os
 import zipfile
 from pathlib import Path
 
@@ -48,7 +49,7 @@ def test_generate_ppt_creates_file_with_slides(fixture_dir: Path) -> None:
     assert output_path.suffix == ".pptx"
     assert output_path.name == "my-deck.pptx"
     # The output path should be inside the workspace
-    assert output_path.is_relative_to(fixture_dir.resolve())
+    assert os.path.commonpath([str(output_path), str(fixture_dir.resolve())]) == str(fixture_dir.resolve())
 
 
 def test_generate_ppt_appends_pptx_extension_if_missing(fixture_dir: Path) -> None:
@@ -108,7 +109,7 @@ def test_generate_docx_creates_file_with_paragraphs(fixture_dir: Path) -> None:
     assert output_path.exists()
     assert output_path.suffix == ".docx"
     assert output_path.name == "my-report.docx"
-    assert output_path.is_relative_to(fixture_dir.resolve())
+    assert os.path.commonpath([str(output_path), str(fixture_dir.resolve())]) == str(fixture_dir.resolve())
 
 
 def test_generate_docx_with_table(fixture_dir: Path) -> None:
@@ -230,7 +231,7 @@ def test_generate_xlsx_creates_file_with_sheets(fixture_dir: Path) -> None:
     assert output_path.exists()
     assert output_path.suffix == ".xlsx"
     assert output_path.name == "my-data.xlsx"
-    assert output_path.is_relative_to(fixture_dir.resolve())
+    assert os.path.commonpath([str(output_path), str(fixture_dir.resolve())]) == str(fixture_dir.resolve())
 
 
 def test_generate_xlsx_appends_xlsx_extension_if_missing(fixture_dir: Path) -> None:

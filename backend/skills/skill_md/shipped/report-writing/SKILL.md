@@ -2,9 +2,9 @@
 name: report-writing
 description: 撰写项目文档/工作报告/内部资料/技术报告的完整工作流——格式来源三选一、大纲与术语表、分章起草、图表题注、docx 生成与格式自检。当用户要写正式项目文档或报告时使用。
 license: Apache-2.0
-compatibility: 需要 Round 7-10 的 office 工具面（office_create 的 format_spec、office_lint_word、office_update 快照回滚）
+compatibility: 需要 Round 7-10 的 office 工具面（office_create 的 format_spec、office_lint_word、office_update 快照回滚）；目录真页码走 office_refresh_toc（Word COM 可选通道）
 when_to_use: 当用户要撰写项目文档、项目总结、内部资料、需求文档、验收文档,或用"写报告""项目报告""阶段报告""写项目文档""项目文档""技术报告""内部资料""项目总结""验收文档"等表达时使用
-allowed-tools: write_file office_list office_read office_create office_update office_lint_word office_repair_word ask_user_question
+allowed-tools: write_file office_list office_read office_create office_update office_lint_word office_repair_word office_refresh_toc ask_user_question
 triggers: []
 ---
 
@@ -43,7 +43,19 @@ triggers: []
 逐章 `write_file` 落盘 markdown（如 `<工作区>/report/03-进度.md`）。
 图表描述写成"【图：架构图】说明文字"占位，生成时转为 `images`（配
 `caption`，题注自动编号"图N"）与 `tables`（正式数据表用
-`style: "three_line"` + `caption`）。
+`style: "three_line"` + `caption`；表头行加 `header_style: true` 得
+加粗+浅灰底+居中的表头样式）。
+
+宽表/财务附表排不下 A4 竖版时，用分节横排：`format_spec.section_breaks`
+声明 `{"start_paragraph": N, "page_setup": {"orientation": "landscape"}}`
+（N 为 0-based 段落下标，该段起进入 NEW_PAGE 新节并应用新页面设置，
+可再切回竖版）。组合示例："第 3 章整章横排放资金明细宽表，其余章节竖版"。
+
+期刊/正式报告要插图清单/表格清单时，`format_spec` 加 `figure_index` /
+`table_index`（各占一页，收录全部 SEQ 题注；生成时带 `refresh_toc: true`
+即可一并刷出真页码）。正文写"如图 N 所示"不要手编 N——用交叉引用占位符
+`{{fig:图题注}}` / `{{tbl:表题注}}`，生成时自动替换为"图N"/"表N"
+（题注增删自动重排，未匹配题注会生成失败并提示）。
 
 ### 4. 生成或修订 docx
 
@@ -58,14 +70,26 @@ triggers: []
 - 样式/编号/题注类违规 → `office_repair_word` 自动修复（默认写
   -repaired.docx 新文件；确认无误可 overwrite=true 原地替换），修复后
   自动复检；
-- 复检至 `ok=true` 或用户接受。正式交付提醒用户：文档在工作区
+- 复检至 `ok=true` 或用户接受。
+- 带目录的文档（`format_spec.toc`）→ 真页码两步走：生成时可直接带
+  `refresh_toc: true`（一步到位）；未带时交付前调 `office_refresh_toc`
+  刷新目录域。需本机 Word + pywin32，缺 pywin32 时按返回的安装引导
+  处理；无 Word 环境则提醒用户在 Word 里 Ctrl+A → F9 手动更新域。
+- 正式交付提醒用户：文档在工作区
 `office/word/` 受管目录下，可随时用 office_list / office_read 回看。
 
 ## Excel 附表与打印（可选）
 
-台账/预算等 xlsx 附表：表头样式、冻结首行、自适应列宽、数字格式、
-数据条/色阶/重复值高亮、下拉选项（data_validations）、打印设置
-（横向/缩放单页宽/打印区域）——跟 Sage 说需求即可。
+台账/预算等 xlsx 附表，跟 Sage 说需求即可：
+- 表头样式 / 冻结窗格（freeze_panes 如 B2 冻首行+首列）/ 自适应列宽
+- 数字格式（金额千分位/百分比）/ 条件格式（数据条/色阶/重复值高亮）
+- 下拉选项（data_validations，状态/分类列防手输错值）
+- 打印设置：横向/缩放单页宽/打印区域/每页重复标题行（title_rows）/
+  页边距（margins_cm，厘米）/ 打印页眉页脚（print_header/print_footer，
+  &P 为页码占位）
+- 组合示例："预算表横向打印、每页带标题行、金额千分位"——一次对话
+  即可同时满足格式+内容需求
+
 嵌入照片/扫描件 >8MB 时，本机装有 Pillow 会自动压缩到阈值内
 （`pip install -r backend/requirements-optional.txt`）；未安装则
 >10MB 的图会被拒绝，请先手工压缩。

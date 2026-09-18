@@ -7,7 +7,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from .files import secure_atomic_write_file, secure_read_text
 
@@ -53,19 +53,27 @@ class VectorStore:
 
     @classmethod
     def open(cls, project_root: Path, dim: int) -> "VectorStore":
-        """打开或创建向量存储。
+        """打开或创建向量存储（wiki 默认路径 .llm-wiki/vectors.json）。"""
+        return cls.open_at(project_root / ".llm-wiki" / "vectors.json", dim, project_root)
+
+    @classmethod
+    def open_at(cls, storage_path: Path, dim: int, project_root: Optional[Path] = None) -> "VectorStore":
+        """在任意路径打开或创建向量存储（r57：附件向量库与 wiki 库分存）。
 
         Args:
-            project_root: 项目根目录
+            storage_path: 存储文件路径（由调用方决定，不在构造时才落盘）
             dim: 向量维度
+            project_root: 传给 secure_read_text 的包含根；None 时直接读
+                （调用方为后端自身代码，路径非用户输入）
 
         Returns:
             VectorStore: 向量存储实例
         """
-        storage_path = project_root / ".llm-wiki" / "vectors.json"
-
         try:
-            data = json.loads(secure_read_text(project_root, storage_path))
+            if project_root is not None:
+                data = json.loads(secure_read_text(project_root, storage_path))
+            else:
+                data = json.loads(storage_path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             data = None
         if data is not None:
@@ -136,7 +144,9 @@ class VectorStore:
         self._flush()
         return len(indices_to_remove)
 
-    def search(self, query_vec: List[float], limit: int) -> List[SearchHit]:
+    def search(
+        self, query_vec: List[float], limit: int, allowed_paths: Optional[Set[str]] = None
+    ) -> List[SearchHit]:
         """搜索最相似的向量。
 
         Args:
@@ -144,13 +154,15 @@ class VectorStore:
             limit: 返回数量上限
 
         Returns:
-            list[SearchHit]: 搜索结果（按相似度降序）
+            List[SearchHit]: 搜索结果（按相似度降序）
         """
         if len(query_vec) != self.dim:
             raise ValueError(f"向量维度不匹配: 期望 {self.dim}, 实际 {len(query_vec)}")
 
         hits = []
         for rec in self.records:
+            if allowed_paths is not None and rec.page_path not in allowed_paths:
+                continue
             score = _cosine_similarity(query_vec, rec.vector)
             hits.append(
                 SearchHit(

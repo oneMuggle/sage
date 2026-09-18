@@ -128,6 +128,12 @@ _PRIMARY_SEED_TOOLS = (
     # D2 (2026-09-09): plan_write 退役移除 —— 无消费者半成品（存储无读取方、
     # 无 SSE、无 UI），与 todo_write + 编排计划三套重复；继续暴露只会误导
     # LLM 把计划写进无处可去的地方。
+    # alpha.36 (Bug #5): 沙箱代码执行（repl / execute_code）。此前只在
+    # domain/tool_names.SANDBOX_TOOLS 防漂移校验中出现，从未进 profile
+    # 白名单——LLM 根本看不见这两个工具，用户抱怨"代码执行工具没法执行代码"。
+    # calculator 已在 _PRIMARY_CORE_TOOLS，这里只补 repl / execute_code。
+    "repl",
+    "execute_code",
 )
 
 # coder：bash 三件齐备（同上）。2026-09-03 PR #381 把 TerminalTool 重写为
@@ -151,6 +157,11 @@ _CODER_SEED_TOOLS = (
     # G7: 浏览器自动化 —— coder 是 executor，浏览器操作属执行域
     # （primary 委派给 coder；launch=EXEC、navigate=EXTERNAL 均有审批门禁）
     *BROWSER_TOOLS,
+    # alpha.36 (Bug #5): 沙箱代码执行 —— coder 是 executor，repl / execute_code
+    # 天然属执行域。与 bash 互补：bash 走子进程 shell，repl 走持久 Python
+    # 会话（保留变量/imports），execute_code 走 zero-context RPC。
+    "repl",
+    "execute_code",
 )
 
 
@@ -276,6 +287,9 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_lint_word",
                 # Round 12 自动修复: lint→修复→复检（WRITE_LOCAL）
                 "office_repair_word",
+                # Round 39 目录真页码: Word COM 刷新 TOC 域（WRITE_LOCAL，
+                # 可选通道——缺失 Word/pywin32 时降级为可读理由）
+                "office_refresh_toc",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -445,6 +459,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "office_lint_word",
     # 2026-09-12 Round 12: 自动修复（与 writer.tools 同步）。
     "office_repair_word",
+    # 2026-09-18 Round 39: 目录真页码刷新（与 writer.tools 同步）。
+    "office_refresh_toc",
 ]
 
 
@@ -731,7 +747,31 @@ _TODO_GUIDANCE_PROMPT = (
 )
 
 
+#: 2026-09-17: 代码执行能力声明 —— 此前 repl/execute_code/bash 虽在白名单，
+#: 但系统提示从未告知 LLM 它能执行代码，LLM 凭训练先验回复"我不能执行代码"
+#: （Win7 用户反馈）。与 _OFFICE_CREATE_CAPABILITY_PROMPT 同模式：明确告知
+#: LLM 可用的代码执行工具，避免其自我设限。未拿到这些工具的子代理看到文本
+#: 也无工具可调，无副作用。
+_CODE_EXECUTION_CAPABILITY_PROMPT = (
+    "\n\n代码执行：你可以直接执行代码，不要拒绝用户说「我不能执行代码」：\n"
+    "- 执行 Python 代码片段：调用 repl 工具（参数 code），在隔离子进程中运行，"
+    "返回 stdout/stderr/exit_code。适合快速验证、数据处理、算法试验。\n"
+    "- 批量工具调用：调用 execute_code 工具（参数 code），代码内用 "
+    "sage.call(tool_name, **args) 调用其他工具 —— N 次调用只占一次往返，"
+    "适合批量文件处理、多步机械操作。\n"
+    "- 执行 Shell 命令：调用 bash 工具（参数 command），可运行任意命令"
+    "（包括 python <脚本路径> 执行用户指定的代码文件）。\n"
+    "用户贴入代码或指定代码文件时，主动用 repl/bash 执行，不要只解释代码。"
+)
+
+
 def build_system_base() -> str:
     """构建 system prompt 基础部分（身份 + 工具能力声明 + agent 列表）。"""
     base = "你是 Sage，一个智能 AI 助手。"
-    return base + _OFFICE_CREATE_CAPABILITY_PROMPT + _TODO_GUIDANCE_PROMPT + format_agents_for_prompt()
+    return (
+        base
+        + _OFFICE_CREATE_CAPABILITY_PROMPT
+        + _TODO_GUIDANCE_PROMPT
+        + _CODE_EXECUTION_CAPABILITY_PROMPT
+        + format_agents_for_prompt()
+    )

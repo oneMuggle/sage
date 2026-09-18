@@ -7,6 +7,7 @@ deliberately do NOT start a real backend — the checks that talk to a backend
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
@@ -23,8 +24,21 @@ PROJECT_ROOT = os.path.dirname(
 SAGE_BACKEND_PY = sys.executable
 
 
+@functools.lru_cache
 def _run_doctor(*args, timeout=30):
-    """Invoke ``python -m backend.cli.doctor`` and capture output."""
+    """Invoke ``python -m backend.cli.doctor`` and capture output.
+
+    Cached per args: each subprocess costs ~7s (interpreter startup + all
+    checks), and this module issues the identical no-arg command 6 times and
+    the identical ``--json`` command 11 times. All assertions are shape- or
+    range-based on a single run's output, so sharing one result per mode is
+    semantics-preserving and cuts ~15 redundant spawns (~110s) from the CI
+    hex step. Pass distinct args (or call .cache_clear()) if a future test
+    needs a fresh run.
+
+    Bare ``lru_cache`` (not ``functools.cache``): the latter is 3.9+ and this
+    file must stay importable on the win7 Python 3.8 line.
+    """
     cmd = [SAGE_BACKEND_PY, "-m", "backend.cli.doctor"] + list(args)
     return subprocess.run(
         cmd,

@@ -111,7 +111,7 @@ def _parse_list_value(value: str) -> List[str]:
         value: 值字符串
 
     Returns:
-        list[str]: 解析后的列表
+        List[str]: 解析后的列表
     """
     if value.startswith("[") and value.endswith("]"):
         value = value[1:-1]
@@ -127,7 +127,7 @@ def _parse_related_value(value: str) -> List[str]:
         value: 值字符串
 
     Returns:
-        list[str]: 提取的 wikilinks
+        List[str]: 提取的 wikilinks
     """
     return extract_wikilinks(value)
 
@@ -139,7 +139,7 @@ def extract_wikilinks(content: str) -> List[str]:
         content: Markdown 内容
 
     Returns:
-        list[str]: 提取的 wikilinks（去重，保持顺序）
+        List[str]: 提取的 wikilinks（去重，保持顺序）
     """
     links = []
     seen = set()

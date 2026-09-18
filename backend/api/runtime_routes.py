@@ -22,7 +22,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -89,11 +89,11 @@ async def _dispatch(
 
 
 class ProbeRequestBody(BaseModel):
-    languages: list | None = Field(default=None, description="可选: 仅探测这些语言")
+    languages: Optional[list] = Field(default=None, description="可选: 仅探测这些语言")
     include_tools: bool = Field(default=True, description="是否同时探测工具链")
-    target_version: str | None = Field(default=None, description="可选版本约束")
-    include_paths: list | None = Field(default=None, description="额外搜索路径")
-    workspace_root: str | None = Field(default=None, description="项目根目录")
+    target_version: Optional[str] = Field(default=None, description="可选版本约束")
+    include_paths: Optional[list] = Field(default=None, description="额外搜索路径")
+    workspace_root: Optional[str] = Field(default=None, description="项目根目录")
 
 
 @router.post("/probe")
@@ -114,10 +114,10 @@ async def runtime_probe(body: ProbeRequestBody, request: Request) -> Dict[str, A
 
 
 class DiagnoseRequestBody(BaseModel):
-    languages: list | None = Field(default=None, description="可选: 仅诊断这些语言")
+    languages: Optional[list] = Field(default=None, description="可选: 仅诊断这些语言")
     include_tools: bool = Field(default=True, description="是否同时探测工具链")
-    target_version: str | None = Field(default=None, description="可选版本约束")
-    project_root: str | None = Field(default=None, description="项目根目录")
+    target_version: Optional[str] = Field(default=None, description="可选版本约束")
+    project_root: Optional[str] = Field(default=None, description="项目根目录")
 
 
 @router.post("/diagnose")
@@ -139,13 +139,13 @@ class ExecRequestBody(BaseModel):
     language: str = Field(..., description="运行时语言: python / javascript")
     runtime_path: str = Field(..., description="运行时解释器路径; 需先经 runtime_probe 探测")
     code: str = Field(..., description="待执行源代码; 通过 stdin 传入")
-    cwd: str | None = Field(default=None, description="工作目录; 必须位于 workspace_root 内")
-    timeout: int | None = Field(default=None, description="超时秒数; 默认 60, 最大 600")
-    env_overrides: Dict[str, str] | None = Field(
+    cwd: Optional[str] = Field(default=None, description="工作目录; 必须位于 workspace_root 内")
+    timeout: Optional[int] = Field(default=None, description="超时秒数; 默认 60, 最大 600")
+    env_overrides: Optional[Dict[str, str]] = Field(
         default=None,
         description="附加环境变量; 不允许覆盖 SAGE_LOCAL_AUTH_TOKEN 等敏感凭据",
     )
-    workspace_root: str | None = Field(default=None, description="项目根目录")
+    workspace_root: Optional[str] = Field(default=None, description="项目根目录")
 
 
 @router.post("/exec")

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import List
 
 from .repository import CatalogRepository
 from .schemas import CandidateModel, ModelKey, Price
@@ -32,7 +33,7 @@ def _count_entries(repo: CatalogRepository) -> int:
         return row[0] if row else 0
 
 
-def _parse_builtin_json(raw: str) -> list[CandidateModel]:
+def _parse_builtin_json(raw: str) -> List[CandidateModel]:
     """Parse builtin.json into CandidateModel records.
 
     Pure function — no I/O, no side effects.
@@ -44,7 +45,7 @@ def _parse_builtin_json(raw: str) -> list[CandidateModel]:
     if not isinstance(models, list):
         raise ValueError("builtin.json 'models' must be a list")
     timestamp = data.get("generated_at")
-    records: list[CandidateModel] = []
+    records: List[CandidateModel] = []
     for model in models:
         if not isinstance(model, dict):
             continue

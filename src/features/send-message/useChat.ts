@@ -11,12 +11,14 @@ import {
   type ChatOfficeRef,
   type TaskPlanItem,
 } from '../../shared/api';
+import type { AttachmentEmbedConfig } from '../../shared/api/attachmentRagConfig';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import {
   mapAgentErrorToText,
   mapLLMErrorToText,
   type LLMErrorResponse,
 } from '../../shared/lib/errorMapping';
+import { clearSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { logger } from '../../shared/lib/logger';
 // Task 5: modelWindows imports removed — frontend no longer computes history budget.
 // Backend now resolves effective window from catalog and computes budget.
@@ -66,9 +68,6 @@ interface ActiveStreamHandle {
   finish: (() => void) | null;
 }
 
-// R25-D4: 本模块已 reattach 的会话（跨 hook 实例/StrictMode 双挂载去重）
-const reattachedSids = new Set<string>();
-
 // A1 (parity-s4): module-level registry of live stream handles.
 // Handles used to live only in the hook ref, so a background session stream
 // could be watched but never cancelled after leaving the Chat page.
@@ -83,19 +82,38 @@ const activeStreamRegistry = new Map<string, ActiveStreamHandle>();
  * handle exists (e.g. after a renderer reload) it still best-effort notifies
  * the backend and returns false. Never throws.
  */
+/**
+ * 2026-09 修复: 删除会话的级联清理 —— 旧路径只删 store 里的会话与消息:
+ * 1) 后端 agent 流继续跑, 白白消耗 token; 2) chatStreamStore 的会话槽位
+ * (streaming/toolCalls/taskBoard/todos)永久残留, 迟到事件可能复活死会话
+ * (clearSession 此前全仓库零调用)。顺序: 先取消流(防迟到事件重填),
+ * 再清槽位, 最后删会话记录。
+ */
+export async function deleteSessionCascade(sid: string): Promise<void> {
+  try {
+    await cancelSessionStream(sid);
+  } catch {
+    // 非活跃会话 / 后端未起 —— 忽略, 继续清理本地状态
+  }
+  useChatStreamStore.getState().clearSession(sid);
+  clearSessionDraft(sid);
+  await useStore.getState().deleteSession(sid);
+}
+
 export async function cancelSessionStream(sid: string): Promise<boolean> {
   const handle = activeStreamRegistry.get(sid);
   if (!handle) {
     try {
-      await chatApi.interrupt();
+      await chatApi.interrupt(undefined, sid);
     } catch {
       /* best-effort only */
     }
     return false;
   }
-  activeStreamRegistry.delete(sid);
+  const cancel = handle.cancel;
+  handle.cancel = null;
   try {
-    handle.cancel?.();
+    cancel?.();
   } catch {
     /* ignore listener teardown errors */
   }
@@ -104,7 +122,8 @@ export async function cancelSessionStream(sid: string): Promise<boolean> {
   } catch {
     /* ignore finish errors */
   }
-  chatApi.interrupt(handle.streamId ?? undefined).catch(() => {
+  if (activeStreamRegistry.get(sid) === handle) activeStreamRegistry.delete(sid);
+  chatApi.interrupt(handle.streamId ?? undefined, sid).catch(() => {
     /* Interrupt failures are non-critical */
   });
   return true;
@@ -120,6 +139,9 @@ export function useChat() {
   // sid → 活跃流句柄（S3: cancelRef/streamIdRef/finishStreamRef 单例的键控版）
   const activeHandleRef = useRef<Map<string, ActiveStreamHandle>>(new Map());
   const [error, setError] = useState<string | null>(null);
+  // 2026-09 修复: 记录错误归属会话 —— 后台会话 A 失败时, 横幅不应出现在
+  // 用户正在看的会话 B (且旧实现的"重试"按钮会重发 B 的消息)。
+  const [errorSessionId, setErrorSessionId] = useState<string | null>(null);
   // PM2 (round8): 计划模式完成的会话 ID —— 非空时 Chat 渲染"按计划执行"批准条。
   const [planApprovalFor, setPlanApprovalFor] = useState<string | null>(null);
   const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
@@ -143,7 +165,7 @@ export function useChat() {
   // widget 看到 '🤔 思考中…' 占位符看不到真实 LLM 进度。
   // S2: 读当前会话的槽位 —— 切到会话 B 就看 B 的实时进度(A 的流在后台
   // 继续累积,切回 A 时内容完整可见)。
-  const { streaming, streamingToolCalls, taskBoard } = useChatStreamStore((s) =>
+  const { streaming, streamingToolCalls, taskBoard, completedSteps } = useChatStreamStore((s) =>
     selectSessionSlots(s, currentSessionId),
   );
 
@@ -157,7 +179,8 @@ export function useChat() {
   //  会话 A 流式中切到 B,B 的输入框也被禁用）。Chat 页所有 isLoading 消费
   //  (ChatInput 禁用 / compact / learn / fork 守卫)都是当前会话语义,收窄后
   //  行为恰好正确;流仍在后台跑,不受影响。
-  const isLoading = currentSessionId != null && activeSids.has(currentSessionId);
+  const isLoading =
+    currentSessionId != null && (activeSids.has(currentSessionId) || streaming != null);
 
   const markStreamActive = useCallback((sid: string, handle: ActiveStreamHandle): void => {
     activeHandleRef.current.set(sid, handle);
@@ -183,20 +206,53 @@ export function useChat() {
   const streamingReasoning = streaming?.reasoning ?? '';
 
   const derivedMessages = useMemo<Message[]>(() => {
-    if (!streamingMessageId) return messages;
-    return messages.map((m) =>
-      m.id === streamingMessageId
-        ? {
-            ...m,
-            content: streamingContent,
-            reasoning_content: streamingReasoning || undefined,
-            tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
-          }
-        : m,
-    );
+    // 2026-09 step-by-step: 多步 run 时把已完成的步骤消息拼接在 store.messages 之后。
+    // 拼接顺序:store.messages(持久化/加载) → completedSteps(本 run 已完成步骤快照)
+    // → 流式覆盖层(若 streaming.messageId 不在 store.messages / completedSteps 中,
+    //   说明当前正在流的是新一步,需要追加一个虚拟消息承载流式内容)
+    if (!streamingMessageId) {
+      return completedSteps.length > 0 ? [...messages, ...completedSteps] : messages;
+    }
+    const overlay: Partial<Message> = {
+      content: streamingContent,
+      reasoning_content: streamingReasoning || null,
+      tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
+    };
+    const overlayInStore = messages.some((m) => m.id === streamingMessageId);
+    const overlayInCompleted = completedSteps.some((m) => m.id === streamingMessageId);
+    let next = messages.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m));
+    if (completedSteps.length > 0) {
+      next = [
+        ...next,
+        ...completedSteps.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m)),
+      ];
+    }
+    if (!overlayInStore && !overlayInCompleted && streaming) {
+      // 当前流式 messageId 不在 store.messages 也不在 completedSteps(说明是
+      // 刚切到下一步,还没序列化到 store),追加一个虚拟消息承载流式内容
+      next.push({
+        id: streamingMessageId,
+        session_id: currentSessionId ?? '',
+        role: 'assistant',
+        content: streamingContent,
+        reasoning_content: streamingReasoning || null,
+        tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
+        created_at: Date.now(),
+      });
+    }
+    return next;
     // MEDIUM-6: 拆细 deps — 仅依赖 streaming 中实际用到的字段,
     // 避免 currentAgentId/iteration/state 等无关变化触发 messages 数组重建
-  }, [messages, streamingMessageId, streamingContent, streamingReasoning, streamingToolCalls]);
+  }, [
+    messages,
+    streamingMessageId,
+    streamingContent,
+    streamingReasoning,
+    streamingToolCalls,
+    completedSteps,
+    streaming,
+    currentSessionId,
+  ]);
 
   const sendMessage = useCallback(
     async (
@@ -213,6 +269,8 @@ export function useChat() {
         /** R23-D2: 聊天图片输入（base64 data URL，≤4 张/单张 5MiB） */
         images?: string[];
         attachmentMediaIds?: string[];
+        /** r67: 附件检索注入配置（opt-in） */
+        attachmentRag?: { embed: AttachmentEmbedConfig; top_k: number } | null;
       },
     ) => {
       const sid = sessionId ?? currentSessionId;
@@ -252,7 +310,7 @@ export function useChat() {
           // MEDIUM-1: 同时通知后端中断正在跑的 stream,避免 cancel 只 unlisten 前端
           // 而后端继续消耗 LLM token。fire-and-forget — interrupt 失败不影响新消息发送
           // P0-2 (2026-08-20): 把 streamId 传给后端,让 /interrupt 命中真实 agent。
-          chatApi.interrupt(prevHandle.streamId ?? undefined).catch(() => {
+          chatApi.interrupt(prevHandle.streamId ?? undefined, sid).catch(() => {
             /* Interrupt failures are non-critical */
           });
         }
@@ -271,6 +329,7 @@ export function useChat() {
 
       markStreamActive(sid, { streamId: null, cancel: null, finish: null });
       setError(null);
+      setErrorSessionId(null);
 
       const userMessage: Message = {
         id: crypto.randomUUID(),
@@ -279,17 +338,20 @@ export function useChat() {
         content,
         created_at: Date.now(),
       };
+      const userId = userMessage.id;
       addMessage(userMessage);
 
       if (!chatEndpoint?.baseUrl) {
         // 仍记录错误供上层展示,但消息已经进 store
         setError('未配置 API 地址，请在设置中配置');
+        setErrorSessionId(sid);
         markStreamIdle(sid);
         return;
       }
 
       if (!settings.modelSelections.chatModel.modelId) {
         setError('未选择对话模型，请在设置中配置');
+        setErrorSessionId(sid);
         markStreamIdle(sid);
         return;
       }
@@ -297,7 +359,11 @@ export function useChat() {
       // PR-6: 先占位 assistant message, 流式过程中累积 content
       // 2026-09-13 P0: 哨兵值抽为 THINKING_PLACEHOLDER，Message 据此渲染
       // shimmer 占位而非把占位文案当 markdown 静态文本。
-      const assistantId = crypto.randomUUID();
+      // 2026-09 step-by-step: `let` 而非常量 —— step_done 时会切换到新的
+      // uuid,后续 deltas 路由到新的 messageId(与 chatStreamStore.streaming
+      // 槽位协同)。所有 closure(appendContent / replaceContent / finishStream
+      // / clearStream)按引用捕获,reassign 后 closure 看到最新值。
+      let assistantId = crypto.randomUUID();
       const assistantMessage: Message = {
         id: assistantId,
         session_id: sid,
@@ -364,6 +430,7 @@ export function useChat() {
         logger.error(requestId, 'useChat.send.failed', err);
         if (err instanceof ApiException && err.llmError) {
           setError(mapLLMErrorToText(err.llmError));
+          setErrorSessionId(sid);
           return;
         }
         const apiErr = err as {
@@ -373,6 +440,7 @@ export function useChat() {
         };
         if (apiErr.llmError || apiErr.error) {
           setError(mapLLMErrorToText(apiErr.llmError ?? apiErr.error!));
+          setErrorSessionId(sid);
           return;
         }
         // 后端 agent.run_loop / agent_tool 在 FAILED 收尾时把 ``payload.error``
@@ -383,6 +451,7 @@ export function useChat() {
         const raw = err instanceof Error ? err.message : String(err ?? '');
         const agentText = mapAgentErrorToText(raw);
         setError(agentText ?? raw ?? '发送消息失败');
+        setErrorSessionId(sid);
       };
 
       // 把流式最终 content 写回 store.messages,让 derivedMessages 退回
@@ -471,7 +540,12 @@ export function useChat() {
         }
       };
       // S3: 注册本会话句柄（HIGH-4: interrupt 经句柄触发 finishStream 清理）
-      markStreamActive(sid, { streamId: null, cancel: null, finish: finishStream });
+      const streamHandle: ActiveStreamHandle = {
+        streamId: null,
+        cancel: null,
+        finish: finishStream,
+      };
+      markStreamActive(sid, streamHandle);
 
       try {
         // 解构 cancel/streamId 存入本会话句柄
@@ -481,6 +555,7 @@ export function useChat() {
           content,
           {
             onEvent: (evt) => {
+              if (finished) return;
               // 会话标题更新事件 (producer 在 DONE 前推送)
               // 立即刷新侧栏会话列表, 这样 DONE 到达时标题已可见
               if (evt.type === 'session_updated') {
@@ -494,6 +569,39 @@ export function useChat() {
                   currentAgentId: evt.agent_id ?? null,
                   iteration: evt.iteration ?? 0,
                 });
+              }
+
+              // 2026-09 step-by-step: 收到 step_done → 把当前 streaming 快照成
+              // 一条 Message 推入 completedSteps,然后重置 streaming 并切换
+              // messageId,后续 deltas 路由到新消息。`return` 跳过本事件其余
+              // handler(step_done 无 uiText / content, 不应触发占位或累积)。
+              if (evt.state === 'step_done') {
+                const slots = selectSessionSlots(useChatStreamStore.getState(), sid);
+                const streamSnapshot = slots.streaming;
+                const toolCallsSnapshot = slots.streamingToolCalls;
+                // 优先用 lastDoneContent(本步 done.content 全量),否则退回 streaming 累积
+                // 2026-09 step-by-step: 过滤 THINKING_PLACEHOLDER — 若该步无 content_delta,
+                // streaming.content 仍是初始占位 '🤔 思考中…',不应作为静态内容渲染到气泡
+                const rawContent = lastDoneContent ?? streamSnapshot?.content ?? '';
+                const stepContent = rawContent === THINKING_PLACEHOLDER ? '' : rawContent;
+                const stepReasoning = streamSnapshot?.reasoning ?? '';
+                const completedMessage: Message = {
+                  id: assistantId,
+                  session_id: sid,
+                  role: 'assistant',
+                  content: stepContent,
+                  reasoning_content: stepReasoning || null,
+                  tool_calls: toolCallsSnapshot.length > 0 ? toolCallsSnapshot : undefined,
+                  created_at: Date.now(),
+                  step_index: typeof evt.step_index === 'number' ? evt.step_index : null,
+                };
+                useChatStreamStore.getState().addCompletedStep(sid, assistantId, completedMessage);
+                const nextAssistantId = crypto.randomUUID();
+                useChatStreamStore.getState().finalizeStep(sid, assistantId, nextAssistantId);
+                assistantId = nextAssistantId;
+                // 下一步有独立的 done.content;重置避免上一步的值污染
+                lastDoneContent = null;
+                return;
               }
 
               // M1 工具审批: permission_request 事件 → 写入 permission store,
@@ -522,6 +630,31 @@ export function useChat() {
               // 主路径与重接路径共用（重接重放时任务板完整重建）。
               if (applyOrchestrationEventToBoard(evt, sid)) {
                 return;
+              }
+
+              // R38: 透明度增强事件 — 技能激活 / 记忆召回 / 上下文压缩
+              // 这些事件不影响对话主流程，仅用于 UI 展示。fail-safe: 任何
+              // 异常只跳过更新，绝不阻断聊天。
+              if (evt.state === 'memory_used' && evt.memories) {
+                updateMessage(assistantId, {
+                  memory_refs: evt.memories,
+                  memory_applied: evt.memories.length,
+                });
+              }
+              if (evt.state === 'skill_activated' && evt.skills) {
+                updateMessage(userId, { activated_skills: evt.skills });
+              }
+              if (evt.state === 'compact_triggered' && evt.compact) {
+                // 插入特殊系统消息气泡（非普通 assistant 气泡）
+                const compactMsg: Message = {
+                  id: crypto.randomUUID(),
+                  session_id: sid,
+                  role: 'system',
+                  content: `📦 上下文已压缩：${evt.compact.before} → ${evt.compact.after} 条（移除 ${evt.compact.removed} 条）`,
+                  created_at: Date.now(),
+                  compact_info: evt.compact,
+                };
+                addMessage(compactMsg);
               }
 
               // 处理 reasoning 事件：三种 state 不同处理 (2026-09-02 bug fix)
@@ -596,9 +729,14 @@ export function useChat() {
                   } catch {
                     // Not JSON, ignore
                   }
+                  // 防御: 后端历史 bug (execute_code_tool 异常退出返回 dict error)
+                  // 可能让 tr.content 是对象而非字符串,这里强制序列化为字符串以避免
+                  // React 渲染对象时触发 "Objects are not valid as a React child"。
+                  const safeResult =
+                    typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content ?? '');
                   useChatStreamStore.getState().appendOrUpdateToolCall(sid, {
                     ...targetTc,
-                    result: tr.content,
+                    result: safeResult,
                     metadata,
                   });
                 }
@@ -638,12 +776,14 @@ export function useChat() {
               }
             },
             onError: (err) => {
+              if (finished) return;
               handleError(err);
               // S8: 后台会话失败提醒（前台当前会话不打扰）
               maybeNotify('failed', err instanceof Error ? err.message.slice(0, 120) : '运行失败');
               finishStream();
             },
             onDone: () => {
+              if (finished) return;
               // S8: 后台会话完成提醒
               maybeNotify('done', (lastDoneContent ?? '').slice(0, 120));
               // PM2: 计划模式 run 自然完成 → 该会话进入"待批准"状态
@@ -658,18 +798,23 @@ export function useChat() {
           officeRefs,
           opts?.images,
           opts?.attachmentMediaIds,
+          opts?.attachmentRag,
         );
-        // S3: 记入本会话句柄（cancel 用于同会话安全网取消 + interrupt 用）
-        const handle = activeHandleRef.current.get(sid);
-        if (handle) {
-          handle.cancel = cancel;
-          handle.streamId = streamId;
+        // Never let a late subscription overwrite a newer run's handle.
+        if (finished || activeStreamRegistry.get(sid) !== streamHandle) {
+          cancel();
+          void chatApi.interrupt(streamId);
+        } else {
+          streamHandle.cancel = cancel;
+          streamHandle.streamId = streamId;
         }
       } catch (err: unknown) {
         // chatStream 启动失败 (validate / listen 失败等)
         // onDone/onError 不会触发,这里兜底
-        handleError(err);
-        finishStream();
+        if (!finished) {
+          handleError(err);
+          finishStream();
+        }
       }
     },
     [
@@ -692,30 +837,7 @@ export function useChat() {
   }, [currentSessionId]);
 
   const interrupt = useCallback(async () => {
-    // S3: 只中断**当前会话**的活跃流(旧实现 cancelRef 单例只能表达一条流)。
-    // 其它会话的后台流不受影响 —— 这正是多会话并行的核心语义。
-    if (currentSessionId == null) return;
-    const handle = activeHandleRef.current.get(currentSessionId);
-    if (!handle) return;
-    // PR-6: 先取消前端 listener, 再请求后端中断
-    if (handle.cancel) {
-      try {
-        handle.cancel();
-      } catch {
-        // ignore
-      }
-    }
-    try {
-      // P0-2 (2026-08-20): 带上 streamId 让后端命中真实运行的 agent。
-      await chatApi.interrupt(handle.streamId ?? undefined);
-    } catch {
-      // Interrupt failures are non-critical
-    }
-    // HIGH-4: 触发 finishStream() 清理 streaming overlay
-    // (之前 interrupt 只调了 cancel + 后端 interrupt,没有清 setStreaming(null),
-    //  导致用户看到 '🤔 思考中…' 占位符永远不消失、ActiveAgentIndicator 不消失、
-    //  isLoading 不重置、streamingToolCallsRef 持有陈旧数据)
-    handle.finish?.();
+    if (currentSessionId != null) await cancelSessionStream(currentSessionId);
   }, [currentSessionId]);
 
   const loadMessagesCallback = useCallback(
@@ -732,34 +854,28 @@ export function useChat() {
   // 转发（R35: 编排任务板经 orchestrationEvents 在重放时完整重建）。
   const reattachActiveStream = useCallback(
     async (sid: string) => {
-      if (!sid || activeSidsRef.current.has(sid)) return;
-      // 模块级守卫: React StrictMode 双挂载/重复调用时只接一次
-      // （Electron main 对重复 listen 早退,双 handler 会重复累积内容）
-      if (reattachedSids.has(sid)) return;
-      let streamId: string | null = null;
-      try {
-        streamId = await chatApi.activeStream(sid);
-      } catch {
-        return; // 查询失败静默（后端未起/演示模式）
-      }
-      if (!streamId) return;
-      reattachedSids.add(sid);
-
-      const assistantId = crypto.randomUUID();
-      addMessage({
-        id: assistantId,
-        session_id: sid,
-        role: 'assistant',
-        content: '',
-        created_at: Date.now(),
-      });
-      useChatStreamStore.getState().startStream(sid, assistantId, {
-        initialContent: '',
-      });
-      markStreamActive(sid, { streamId, cancel: null, finish: () => {} });
-
+      // Reserve synchronously, BEFORE activeStream's first await. The same map
+      // also owns regular sends across hook remounts / StrictMode instances.
+      if (!sid || activeStreamRegistry.has(sid)) return;
+      let assistantId: string | null = null;
+      let finished = false;
+      let acc = '';
+      let accReasoning = '';
+      const handle: ActiveStreamHandle = { streamId: null, cancel: null, finish: null };
       const finishReattach = (finalContent: string | null, errText?: string) => {
-        reattachedSids.delete(sid);
+        if (finished) return;
+        finished = true;
+        try {
+          handle.cancel?.();
+        } catch {
+          // Listener teardown must not prevent clearing session state.
+        }
+        handle.cancel = null;
+        if (activeStreamRegistry.get(sid) !== handle) return;
+        if (assistantId === null) {
+          markStreamIdle(sid);
+          return;
+        }
         if (finalContent !== null) {
           updateMessage(assistantId, { content: finalContent });
         } else if (errText) {
@@ -775,23 +891,48 @@ export function useChat() {
         void useStore.getState().loadSessions();
       };
 
-      let acc = '';
-      let accReasoning = '';
+      handle.finish = () => finishReattach(acc || null);
+      // A lookup reservation is not a running reply: do not disable idle chat actions.
+      activeStreamRegistry.set(sid, handle);
       try {
-        await chatApi.listenStream(streamId, {
+        const streamId = await chatApi.activeStream(sid);
+        if (finished || activeStreamRegistry.get(sid) !== handle) return;
+        if (!streamId) {
+          finishReattach(null);
+          return;
+        }
+        handle.streamId = streamId;
+        markStreamActive(sid, handle);
+        const messageId = crypto.randomUUID();
+        assistantId = messageId;
+        addMessage({
+          id: messageId,
+          session_id: sid,
+          role: 'assistant',
+          content: '',
+          created_at: Date.now(),
+        });
+        useChatStreamStore.getState().startStream(sid, messageId, { initialContent: '' });
+        const { cancel } = await chatApi.listenStream(streamId, {
           onEvent: (evt) => {
+            if (finished) return;
             if (evt.type === 'session_updated') {
               void useStore.getState().loadSessions();
               return;
             }
             if (evt.state === 'content_delta' && evt.content) {
               acc += evt.content;
-              useChatStreamStore.getState().appendContent(sid, assistantId, acc);
+              useChatStreamStore.getState().replaceContent(sid, messageId, acc);
               return;
             }
             if ((evt.state === 'reasoning_delta' || evt.state === 'reasoning') && evt.reasoning) {
               accReasoning += evt.reasoning;
-              useChatStreamStore.getState().appendReasoning(sid, assistantId, accReasoning);
+              useChatStreamStore.getState().replaceReasoning(sid, messageId, accReasoning);
+              return;
+            }
+            if (evt.state === 'reasoning_final') {
+              accReasoning = evt.reasoning ?? accReasoning;
+              useChatStreamStore.getState().replaceReasoning(sid, messageId, accReasoning);
               return;
             }
             if (evt.state === 'permission_request' && evt.permission_request) {
@@ -808,7 +949,10 @@ export function useChat() {
               return;
             }
             if (evt.state === 'failed') {
-              finishReattach(null, evt.error ?? '流式失败');
+              // 2026-09 修复: error 信封统一为 dict | string 双态, 提取 message
+              const raw = evt.error;
+              const errText = typeof raw === 'string' ? raw : (raw?.message ?? '流式失败');
+              finishReattach(null, errText);
               return;
             }
             // R35: 编排/任务板事件走共享应用器 —— 重放时任务板/live 态
@@ -817,13 +961,15 @@ export function useChat() {
               return;
             }
             // 其余事件（工具 acting/observing 等）降级为 streaming meta 文案
-            useChatStreamStore.getState().setStreamingMeta(sid, assistantId, {
+            useChatStreamStore.getState().setStreamingMeta(sid, messageId, {
               state: evt.state,
             });
           },
           onError: (err) => finishReattach(null, err.message),
           onDone: () => finishReattach(acc || null),
         });
+        if (finished || activeStreamRegistry.get(sid) !== handle) cancel();
+        else handle.cancel = cancel;
       } catch {
         finishReattach(null, '重新接上流失败');
       }
@@ -909,9 +1055,13 @@ export function useChat() {
     [chatEndpoint, settings],
   );
 
-  const clearError = useCallback(() => setError(null), []);
+  const clearError = useCallback(() => {
+    setError(null);
+    setErrorSessionId(null);
+  }, []);
 
   return {
+    errorSessionId,
     messages: derivedMessages,
     isLoading,
     error,

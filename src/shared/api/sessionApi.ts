@@ -261,7 +261,10 @@ export const sessionApi = {
   /**
    * R18-C: 导出会话为 Markdown。
    *
-   * 后端同一导出端点按 format=markdown 分派，返回 {markdown, filename}。
+   * 注意: 后端 (export_routes.py) 对 html/markdown 两种 format 返回**同一**
+   * 响应形状, markdown 文本复用 `html` 字段携带 (SessionExport dataclass
+   * 复用)。读取 result.html 是正确行为, 不是 bug —— 改字段前先同步
+   * export_routes 的响应字典。
    */
   async exportMarkdown(sessionId: string): Promise<SessionExportResult> {
     if (!isValidSessionId(sessionId)) {

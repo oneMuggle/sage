@@ -6,7 +6,7 @@ import asyncio
 import contextlib
 from collections import defaultdict, deque
 from dataclasses import dataclass, replace
-from typing import Awaitable, Callable, Deque, Dict, Optional, Protocol, cast
+from typing import Awaitable, Callable, Deque, Dict, List, Optional, Protocol, cast
 
 from backend.domain.orch_events import RunEvent
 from backend.orchestration._lazy_lock import LazyLock
@@ -15,8 +15,8 @@ from backend.orchestration._lazy_lock import LazyLock
 class _EventRepository(Protocol):
     def max_seq(self, run_id: str) -> int: ...
     def append(self, event: RunEvent) -> None: ...
-    def list_after(self, run_id: str, after_seq: int = 0, limit: int = 1000) -> list[RunEvent]: ...
-    def list_runs(self) -> list[str]: ...
+    def list_after(self, run_id: str, after_seq: int = 0, limit: int = 1000) -> List[RunEvent]: ...
+    def list_runs(self) -> List[str]: ...
 
 
 @dataclass
@@ -80,7 +80,7 @@ class EventHub:
         self._next_seq: Dict[str, int] = defaultdict(int)
         self._event_repository = event_repository
         self._event_applier = event_applier
-        self._subscribers: Dict[str, list[_Subscriber]] = defaultdict(list)
+        self._subscribers: Dict[str, List[_Subscriber]] = defaultdict(list)
         self._lock = LazyLock()
 
     async def publish(self, event: RunEvent) -> RunEvent:
@@ -119,7 +119,7 @@ class EventHub:
                     await self._event_applier(event)
             return len(events)
 
-    async def restore_runs(self, run_ids: Optional[list[str]] = None) -> int:
+    async def restore_runs(self, run_ids: Optional[List[str]] = None) -> int:
         """Replay persisted events for selected runs, or all known runs."""
         if self._event_repository is None:
             return 0

@@ -24,8 +24,8 @@ pytestmark = pytest.mark.unit
 
 
 def test_agent_state_enum_has_ten_states():
-    """状态机应有 10 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
-    CONTENT_DELTA/PERMISSION_REQUEST/ASK_USER_QUESTION/DONE/FAILED。
+    """状态机应有 11 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
+    CONTENT_DELTA/PERMISSION_REQUEST/ASK_USER_QUESTION/STEP_DONE/DONE/FAILED。
 
     CONTENT_DELTA 由 I4 引入,用于流式 LLM 响应 — 每个 token chunk 推一个
     CONTENT_DELTA 事件,前端 appendContent 累积实现逐字渲染。
@@ -34,8 +34,10 @@ def test_agent_state_enum_has_ten_states():
     携带 permission_request 字段,前端渲染审批对话框。
     ASK_USER_QUESTION 由 M2 part B 引入 — ask_user_question 工具向用户
     提问时携带 user_question 字段,前端渲染提问对话框。
+    STEP_DONE 由 step-by-step ReAct 引入 — 每个 ReAct 迭代完成时触发,
+    前端据此快照当前步骤为独立气泡。
     """
-    assert len(AgentState) == 10
+    assert len(AgentState) == 11
 
 
 def test_agent_state_enum_string_inheritance():
@@ -77,6 +79,7 @@ def test_agent_state_iteration_order():
         "content_delta",
         "permission_request",  # M1 工具安全加固
         "ask_user_question",  # M2 part B: AskUserQuestion
+        "step_done",  # step-by-step ReAct: 每步完成信号
         "done",
         "failed",
     ]
@@ -88,10 +91,13 @@ def test_agent_state_iteration_order():
 
 
 def test_agent_event_to_dict_minimal():
-    """AgentEvent 最小字段(state + iteration) 序列化。"""
+    """AgentEvent 最小字段(state + iteration + step_index) 序列化。
+
+    step_index 字段由 step-by-step ReAct 引入，默认值为 0 与单步行为兼容。
+    """
     evt = AgentEvent(state=AgentState.THINKING, iteration=2)
     d = evt.to_dict()
-    assert d == {"state": "thinking", "iteration": 2}
+    assert d == {"state": "thinking", "iteration": 2, "step_index": 0}
 
 
 def test_agent_event_to_dict_with_error():

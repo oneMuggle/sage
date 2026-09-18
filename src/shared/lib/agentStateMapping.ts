@@ -61,9 +61,13 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'todo_snapshot': // P1 todo 接线 (2026-08-21): 清单快照进 store,不进消息气泡
     case 'artifact_created': // S7 (2026-09-06): 产物事件进计数 store,不进消息气泡
     case 'memory_used': // R17-E: 记忆召回写入消息 memory_refs,不进气泡占位
+    case 'skill_activated': // R38: 技能激活写入消息 activated_skills,不进气泡占位
+    case 'compact_triggered': // R38: 自动压缩插入系统消息,不进气泡占位
       return null;
+    case 'suspended': // A4 Suspend-Resume: 挂起等 wake, 不渲染气泡占位 (2026-09 补齐)
     case 'subagent_event': // live-events P0: 子代理镜像进任务板 live 态,不进消息气泡
     case 'approval_mode': // live-events P1: 审批模式回显进任务板,不进消息气泡
+    case 'step_done': // 2026-09 step-by-step: 每步完成信号,前端 store 据此快照气泡,不进消息气泡占位
       return null;
     default:
       return assertNever(state);
@@ -107,9 +111,13 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'todo_snapshot': // P1 todo 接线 (2026-08-21): 清单快照,无 UI 阶段展示
     case 'artifact_created': // S7 (2026-09-06): 产物事件,无 UI 阶段展示
     case 'memory_used': // R17-E: 记忆召回事件,无 UI 阶段展示
+    case 'skill_activated': // R38: 技能激活事件,无 UI 阶段展示
+    case 'compact_triggered': // R38: 自动压缩事件,无 UI 阶段展示
       return null;
+    case 'suspended': // A4 挂起态, 无 UI 阶段展示 (2026-09 补齐)
     case 'subagent_event': // live-events P0: 子代理镜像由任务树/内联面板展示
     case 'approval_mode': // live-events P1: 审批模式由任务树开关回显
+    case 'step_done': // 2026-09 step-by-step: 步完成信号,无独立 UI 阶段(快照进 store 后)
       return null;
     default:
       return assertNever(state);

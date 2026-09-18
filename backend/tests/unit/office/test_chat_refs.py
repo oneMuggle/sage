@@ -91,13 +91,14 @@ def _make_doc(
     doc_type: OfficeDocType = OfficeDocType.WORD,
     original_filename: Optional[str] = "doc.docx",
     archived_at: Optional[int] = None,
+    generated_filename: Optional[str] = None,
 ) -> OfficeDocumentSummary:
     return OfficeDocumentSummary(
         id=doc_id,
         workspace_path=workspace_path,
         doc_type=doc_type,
         original_filename=original_filename,
-        generated_filename=f"{doc_id}.docx",
+        generated_filename=generated_filename or f"{doc_id}.docx",
         status=OfficeDocStatus.GENERATED,
         created_at=1_700_000_000_000,
         updated_at=1_700_000_000_000,
@@ -147,8 +148,8 @@ def doc_b(conn: sqlite3.Connection, work_b: Path) -> OfficeDocumentSummary:
 
 
 def test_chatofficeref_accepts_valid_doc_type() -> None:
-    """All three doc_type literals are accepted."""
-    for t in ("ppt", "word", "excel"):
+    """All four doc_type literals are accepted."""
+    for t in ("ppt", "word", "excel", "pdf"):
         ref = ChatOfficeRef(doc_id="x", doc_type=t, filename="x.pptx")  # type: ignore[arg-type]
         assert ref.doc_type == t
 
@@ -156,7 +157,7 @@ def test_chatofficeref_accepts_valid_doc_type() -> None:
 def test_chatofficeref_rejects_unknown_doc_type() -> None:
     """Unknown doc_type literal fails with ValidationError."""
     with pytest.raises(ValidationError):
-        ChatOfficeRef(doc_id="x", doc_type="pdf", filename="x.pdf")  # type: ignore[arg-type]
+        ChatOfficeRef(doc_id="x", doc_type="video", filename="x.mp4")  # type: ignore[arg-type]
 
 
 def test_chatofficeref_rejects_extra_fields() -> None:
@@ -335,6 +336,26 @@ def test_authorize_rejects_filename_mismatch(
     refs = [ChatOfficeRef(doc_id=doc_a.id, doc_type="word", filename="wrong.docx")]
     with pytest.raises(WorkspaceDocumentNotFoundError):
         authorize_chat_office_request(conn, "session-a", None, refs)
+
+
+def test_authorize_accepts_pdf_ref(
+    conn: sqlite3.Connection, binding_a, work_a: Path
+) -> None:
+    """PDF 受管文档（office_routes /pdf/read 落库的类型）可被 @ 引用授权。"""
+    pdf_doc = save_document(
+        conn,
+        _make_doc(
+            doc_id="doc-pdf",
+            workspace_path=str(work_a.resolve()),
+            doc_type=OfficeDocType.PDF,
+            original_filename="a.pdf",
+            generated_filename="doc-pdf.pdf",
+        ),
+    )
+    refs = [ChatOfficeRef(doc_id=pdf_doc.id, doc_type="pdf", filename="a.pdf")]
+    result = authorize_chat_office_request(conn, "session-a", None, refs)
+    assert result is not None
+    assert result.office_doc_scope == frozenset({pdf_doc.id})
 
 
 # ──────────────────────────────────────────────────────────────────────

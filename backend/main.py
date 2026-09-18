@@ -2,6 +2,7 @@
 Sage - 记忆型 AI 桌面助手
 FastAPI 后端入口
 """
+
 import asyncio
 import logging
 import os
@@ -10,7 +11,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 # ── Startup diagnostic timer (module-level) ───────────────────────────────
 # 2026-09-10 (slow-startup incident): record monotonic start BEFORE any
@@ -25,6 +26,8 @@ def _startup_mark(step: str) -> None:
     """R22-D7: 启动逐步耗时埋点 —— 此前只有 4 个时点，db init 与
     lifespan-complete 之间的 ~20 步串行初始化是耗时黑盒。"""
     logger.info("[sage-startup] t=%.1fs %s complete", time.monotonic() - _startup_t0, step)
+
+
 if __name__ == "__main__":
     print(  # noqa: T201
         f"[sage-startup] t=0.0s module load begin (pid={os.getpid()})",
@@ -39,7 +42,7 @@ from fastapi.responses import JSONResponse
 from sage_core import Message, Role
 
 
-def configure_ssl_ca_bundle(where: Callable[[], str]) -> str | None:
+def configure_ssl_ca_bundle(where: Callable[[], str]) -> Optional[str]:
     """为 ``httpx`` / ``requests`` / ``curl`` 兜底注入 certifi 的 CA bundle。
 
     返回最终选中的 CA 路径；任何异常（certifi 缺失、文件不存在、文件为空）
@@ -94,6 +97,7 @@ from backend.api.local_auth import (
 from backend.api.mcp_routes import router as mcp_router
 from backend.api.media_routes import router as media_router
 from backend.api.model_catalog_routes import build_router as build_model_catalog_router
+from backend.api.office_quarantine_routes import router as office_quarantine_router
 from backend.api.office_routes import (
     register_office_exception_handlers,
     router as office_router,
@@ -109,6 +113,7 @@ from backend.api.system_routes import router as system_router
 from backend.api.theme_router import router as theme_router
 from backend.api.usage_routes import router as usage_router
 from backend.api.v1 import updates as updates_router_module
+from backend.api.web_access_routes import router as web_access_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.application.services.chat_service import ChatService
@@ -332,9 +337,7 @@ async def lifespan(app: FastAPI):
 
     _stale_orch_runs = OrchRunRepository().fail_stale_running_runs()
     if _stale_orch_runs:
-        logger.info(
-            "启动恢复: %d 个遗留 running 编排 run 已标记为 failed", _stale_orch_runs
-        )
+        logger.info("启动恢复: %d 个遗留 running 编排 run 已标记为 failed", _stale_orch_runs)
 
     # C2 (2026-09-09): 审批决策 run/task 归属解析器注册（依赖反转）——
     # services 层不得 import orchestration（六边形 import 契约），故由
@@ -455,10 +458,7 @@ async def lifespan(app: FastAPI):
 
     _threading.Thread(target=_startup_backup, name="startup-backup", daemon=True).start()
     try:
-
-        scheduler_service.register_system_task(
-            "daily-backup", _create_backup_daily, "10 3 * * *"
-        )
+        scheduler_service.register_system_task("daily-backup", _create_backup_daily, "10 3 * * *")
     except Exception:
         logger.exception("daily backup job registration failed (ignored)")
 
@@ -488,9 +488,7 @@ async def lifespan(app: FastAPI):
             )
             return
         content = f"[系统唤醒: {wake.kind.value}] {wake.note or '继续之前挂起的任务。'}"
-        await chat_service.run_turn(
-            wake.session_id, Message(role=Role.USER, content=content)
-        )
+        await chat_service.run_turn(wake.session_id, Message(role=Role.USER, content=content))
 
     app.state.wake_scheduler = WakeScheduler(
         store=app.state.wake_store,
@@ -510,11 +508,35 @@ async def lifespan(app: FastAPI):
         if _tg_gateway is not None:
             _tg_gateway.start_polling()
             app.state.telegram_gateway = _tg_gateway
-            logger.info("Telegram 网关已启动（长轮询，白名单 %d 个 chat）",
-                        len(_tg_gateway.config.allowed_chat_ids))
+            logger.info(
+                "Telegram 网关已启动（长轮询，白名单 %d 个 chat）",
+                len(_tg_gateway.config.allowed_chat_ids),
+            )
         _startup_mark("telegram-gateway")
     except Exception as exc:  # noqa: BLE001 — 网关失败不阻塞后端启动
         logger.warning("Telegram 网关启动失败（忽略）: %s", exc)
+
+    # Round 16: Discord / Slack 网关（同 telegram 模式，未配置零开销）
+    for _platform, _getter in (
+        ("Discord", "backend.gateway.discord:get_discord_gateway"),
+        ("Slack", "backend.gateway.slack:get_slack_gateway"),
+    ):
+        try:
+            import importlib
+
+            _mod_name, _fn_name = _getter.split(":")
+            _gateway = getattr(importlib.import_module(_mod_name), _fn_name)()
+            if _gateway is not None:
+                _gateway.start_polling()
+                setattr(app.state, f"{_platform.lower()}_gateway", _gateway)
+                logger.info(
+                    "%s 网关已启动（轮询，白名单 %d 个 channel）",
+                    _platform,
+                    len(_gateway.config.allowed_channel_ids),
+                )
+            _startup_mark(f"{_platform.lower()}-gateway")
+        except Exception as exc:  # noqa: BLE001 — 网关失败不阻塞后端启动
+            logger.warning("%s 网关启动失败（忽略）: %s", _platform, exc)
 
     # M1 工具安全加固: 全局审批闸口 — agent 循环 await 审批, 路由解析应答
     from backend.services.permission_gate import init_permission_gate
@@ -604,8 +626,11 @@ async def lifespan(app: FastAPI):
     # 矛盾默认值的巧合而非设计); hex /chat 是否挂载由模块级 API_MODE 决定。
     from backend.api.hex_routes import get_chat_service
 
-    app.dependency_overrides[get_chat_service] = _build_chat_service
+    # 2026-09 修复: 覆盖工厂此前每个请求都新建 ChatService —— prompt
+    # 快照缓存(_system_prompt_snapshots)跨请求永不命中, app.state 上的
+    # 单例反而无人使用。注入单例访问器。
     app.state.chat_service = _build_chat_service()
+    app.dependency_overrides[get_chat_service] = lambda: app.state.chat_service
     # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
     # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
     app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
@@ -630,6 +655,11 @@ async def lifespan(app: FastAPI):
     if _tg is not None:
         with suppress(Exception):
             _tg.stop_polling()
+    for _platform in ("discord", "slack"):
+        _gw = getattr(app.state, f"{_platform}_gateway", None)
+        if _gw is not None:
+            with suppress(Exception):
+                _gw.stop_polling()
     _shutdown_bash_sessions()
     _shutdown_browser_sessions()
     _shutdown_repl_cleanups()
@@ -783,6 +813,9 @@ API_MODE = os.environ.get("API_MODE", "legacy").lower()
 app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/v1/theme")
 app.include_router(office_router, prefix="/api/v1")
+# Office 隔离式清理 (staging quarantine): plan/run/report/restore 四端点。
+# 有意不注册 purge —— 永久删除仍只保留 CLI 三重门禁（见模块 docstring）。
+app.include_router(office_quarantine_router, prefix="/api/v1")
 from backend.api.gateway_routes import router as gateway_router
 
 app.include_router(gateway_router, prefix="/api/v1")
@@ -792,6 +825,7 @@ app.include_router(workspace_router, prefix="/api/v1")
 app.include_router(project_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
 app.include_router(permission_router, prefix="/api/v1")
+app.include_router(web_access_router, prefix="/api/v1")
 # M2 part B: /api/v1/questions/{pending, <id>/answer}（AskUserQuestion）
 app.include_router(question_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")
@@ -902,7 +936,7 @@ if __name__ == "__main__":
 if __name__ == "__main__":
     import uvicorn
 
-    from backend.utils.logging import setup_logging
+    from backend.utils.logging import set_log_timezone, setup_logging
 
     _elapsed_entry = time.monotonic() - _startup_t0
     print(  # noqa: T201
@@ -924,6 +958,11 @@ if __name__ == "__main__":
     _LEVEL_MAP = {"debug": "DEBUG", "info": "INFO", "warn": "WARNING", "error": "ERROR"}
     _level = _LEVEL_MAP.get(os.environ.get("SAGE_LOG_LEVEL", "info").lower(), "INFO")
     setup_logging(log_level=_level)
+
+    # 日志时区 (2026-09-17): 从 SAGE_LOG_TIMEZONE env 读取, 应用到 Python logger.
+    # 由 Electron main.ts 注入 (值来自用户设置 logTimezone). 默认 'UTC' 保持历史行为.
+    _log_tz = os.environ.get("SAGE_LOG_TIMEZONE", "UTC")
+    set_log_timezone(_log_tz)
 
     # uvicorn 自带 logger 默认 WARNING 且无 handler;显式放行到 INFO 并传播到
     # 根 logger,否则 log_config=None 后 access log 会被 uvicorn 自身级别过滤。

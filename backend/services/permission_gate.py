@@ -30,7 +30,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,28 @@ _DIFF_PREVIEW_TOOLS = frozenset({"write_file", "edit_file", "apply_patch"})
 #: 脱敏递归深度上限——防自引用结构（``d["self"] = d``）导致无限递归；
 #: 超限的嵌套子树整体替换为占位字符串，同时切断环路。
 MAX_SCRUB_DEPTH = 5
+
+
+#: 从工具参数中提取目标路径的候选键名（按优先级排序）
+_TARGET_PATH_KEYS: Tuple[str, ...] = ("path", "file_path", "target_path", "directory", "file")
+
+
+def extract_target_path(args: Dict[str, Any] | None) -> Optional[str]:
+    """从工具参数中提取目标路径（用于前端"项目级允许"按钮）。
+
+    依次检查常见路径键名，返回第一个非空字符串值。
+    路径必须为绝对路径或含 ``/`` 的相对路径，否则返回 None。
+    """
+    if not isinstance(args, dict):
+        return None
+    for key in _TARGET_PATH_KEYS:
+        value = args.get(key)
+        if isinstance(value, str) and value.strip():
+            candidate = value.strip()
+            # 只接受绝对路径或含目录分隔符的相对路径（避免纯文件名误命中）
+            if candidate.startswith("/") or "/" in candidate or "\\" in candidate:
+                return candidate
+    return None
 
 
 def _scrub_value(value: Any, depth: int) -> Any:
@@ -269,7 +291,8 @@ class ApprovalRequest:
     risk: str
     message: str
     created_at: float
-    diff_preview: str | None = None
+    diff_preview: Optional[str] = None
+    target_path: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """流事件 / REST 响应共用的 JSON 形态。"""
@@ -283,6 +306,8 @@ class ApprovalRequest:
         }
         if self.diff_preview:
             payload["diff_preview"] = self.diff_preview
+        if self.target_path:
+            payload["target_path"] = self.target_path
         return payload
 
     @classmethod
@@ -303,6 +328,7 @@ class ApprovalRequest:
             message=message,
             created_at=time.time(),
             diff_preview=build_diff_preview(tool_name, args, workspace_root),
+            target_path=extract_target_path(args),
         )
 
 
@@ -310,8 +336,8 @@ class ApprovalRequest:
 #: ``set_approval_context_resolver`` 注册（依赖反转）。services 层不得直接
 #: import orchestration（六边形 import 契约），故经此回调解耦；未注册时
 #: run/task 归属为空（主会话审批本就无编排归属）。
-ApprovalContextResolver = Callable[[str], Tuple[str | None, str | None]]
-_approval_context_resolver: ApprovalContextResolver | None = None
+ApprovalContextResolver = Callable[[str], Tuple[Optional[str], Optional[str]]]
+_approval_context_resolver: Optional[ApprovalContextResolver] = None
 
 
 def set_approval_context_resolver(resolver: ApprovalContextResolver) -> None:
@@ -365,9 +391,9 @@ class ApprovalGate:
                 ApprovalDecisionRepository,
             )
 
-            session_id: str | None = None
-            run_id: str | None = None
-            task_id: str | None = None
+            session_id: Optional[str] = None
+            run_id: Optional[str] = None
+            task_id: Optional[str] = None
             try:
                 from backend.tools.context import current_tool_context
 
@@ -433,7 +459,7 @@ class ApprovalGate:
 # 单例装配（与 backend.services.scheduler 相同模式）
 # ---------------------------------------------------------------------------
 
-_global_gate: ApprovalGate | None = None
+_global_gate: Optional[ApprovalGate] = None
 
 
 def init_permission_gate() -> ApprovalGate:

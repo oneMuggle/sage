@@ -37,7 +37,7 @@ collapses to the standard ``success=False`` error shape.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
@@ -163,6 +163,16 @@ class OfficeUpdateTool(BaseTool):
                             "true 时仅预览变更不落盘（返回 diff 变更清单），默认 false"
                         ),
                     },
+                    "refresh_toc": {
+                        "type": "boolean",
+                        "description": (
+                            "word 专用：修订成功后立即用 Word COM 把目录"
+                            "（TOC）域刷新为真页码并原地保存——增删段落后页码"
+                            "漂移的一次性修复。需本机 Word + pywin32；不可用时"
+                            "修订照常成功，结果附加 toc_refresh.error 说明。"
+                            "dry_run 预览下无效果；仅 word 文档可传。"
+                        ),
+                    },
                 },
                 "required": ["ops"],
             },
@@ -174,26 +184,30 @@ class OfficeUpdateTool(BaseTool):
         file_path: Optional[str] = None,
         ops: Optional[List[Dict[str, Any]]] = None,
         dry_run: bool = False,
+        refresh_toc: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
         normalized = _normalize_ops(ops)
         if normalized is None:
             return ToolResult(success=False, error="ops_required")
         if dry_run:
+            # dry_run 只预览不落盘，refresh_toc 自然无效果（不报错）。
             if isinstance(doc_id, str) and doc_id.strip():
                 return self._dry_run_bound(doc_id.strip(), normalized)
             if isinstance(file_path, str) and file_path.strip():
                 return self._dry_run_by_path(file_path.strip(), normalized)
             return ToolResult(success=False, error="doc_id_or_file_path_required")
         if isinstance(doc_id, str) and doc_id.strip():
-            return self._execute_bound(doc_id.strip(), normalized)
+            return self._execute_bound(doc_id.strip(), normalized, do_refresh=refresh_toc)
         if isinstance(file_path, str) and file_path.strip():
-            return self._execute_by_path(file_path.strip(), normalized)
+            return self._execute_by_path(file_path.strip(), normalized, do_refresh=refresh_toc)
         return ToolResult(success=False, error="doc_id_or_file_path_required")
 
     # ── doc_id 模式：走 service（授权 + DB 登记） ────────────────────
 
-    def _execute_bound(self, doc_id: str, ops: List[Dict[str, Any]]) -> ToolResult:
+    def _execute_bound(
+        self, doc_id: str, ops: List[Dict[str, Any]], *, do_refresh: bool = False
+    ) -> ToolResult:
         ctx = current_tool_context()
         if ctx is None or not ctx.session_id:
             return ToolResult(success=False, error="missing_tool_context")
@@ -201,6 +215,17 @@ class OfficeUpdateTool(BaseTool):
             conn = get_database().get_connection()
         except Exception:
             return ToolResult(success=False, error="document_not_found")
+        if do_refresh:
+            # upfront 守卫：修订尚未发生，非 word 此时拒绝语义最准确
+            # （解析失败则放行，由成功后的 attach 降级兜底）。
+            doc_info = self._managed_doc_info(ctx, doc_id)
+            if doc_info is not None:
+                _path, _ws, doc_type_value = doc_info
+                if doc_type_value != "word":
+                    return ToolResult(
+                        success=False,
+                        error="refresh_toc_only_supported_for_word: refresh_toc 仅支持 word 文档",
+                    )
         service = OfficeToolService(policy=self._policy)
         try:
             result = service.update(conn, ctx.session_id, ctx.binding_generation, doc_id, ops)
@@ -233,7 +258,69 @@ class OfficeUpdateTool(BaseTool):
                     self_check.get("summary"),
                     conn=conn,
                 )
+        if do_refresh and doc_type_value == "word":
+            doc_info = self._managed_doc_info(ctx, str(edited_id))
+            if doc_info is not None:
+                path, workspace, _dtype = doc_info
+                content = self._refresh_and_attach(content, path, workspace)
         return ToolResult(success=True, content=content)
+
+    def _managed_doc_info(
+        self, ctx: ToolExecutionContext, doc_id: str
+    ) -> Optional[Tuple[Path, Path, str]]:
+        """binding 内解析受管文档 → (落盘路径, 工作区, doc_type)。
+
+        binding 过期 / doc 消失 / DB 异常 → ``None``（调用方降级兜底）。
+        """
+        try:
+            conn = get_database().get_connection()
+            binding = get_active_workspace(
+                conn, ctx.session_id, expected_generation=ctx.binding_generation
+            )
+            if binding is None:
+                return None
+            doc = get_document_in_workspace(conn, doc_id, binding.workspace_path)
+            if doc is None:
+                return None
+            doc_type_value = str(
+                doc.doc_type.value if hasattr(doc.doc_type, "value") else doc.doc_type
+            )
+            return document_path(doc), Path(binding.workspace_path), doc_type_value
+        except Exception:  # noqa: BLE001 — 解析失败按「无法定位」折叠
+            return None
+
+    def _binding_workspace_or_none(self) -> Optional[Path]:
+        """有活动绑定 → 绑定工作区 Path；否则 ``None``（DB 不可用同样吞掉）。"""
+        ctx = current_tool_context()
+        if ctx is None or not ctx.session_id:
+            return None
+        try:
+            conn = get_database().get_connection()
+            binding = get_active_workspace(
+                conn, ctx.session_id, expected_generation=ctx.binding_generation
+            )
+        except Exception:
+            return None
+        if binding is None:
+            return None
+        return Path(binding.workspace_path)
+
+    def _refresh_and_attach(
+        self, content: Dict[str, Any], path: Path, workspace: Optional[Path]
+    ) -> Dict[str, Any]:
+        """执行 TOC 刷新并把摘要附加进 content（失败不改写成功态）。
+
+        workspace 传 ``None`` 时回退文件父目录（legacy file_path 无绑定）。
+        维持「不回显受管绝对路径」不变式——摘要只含 ok/toc_count/error。
+        """
+        from backend.office.toc_refresh import refresh_toc_page_numbers
+
+        refresh = refresh_toc_page_numbers(path, workspace or path.parent)
+        summary: Dict[str, Any] = {"ok": refresh.ok, "toc_count": refresh.toc_count}
+        if refresh.error:
+            summary["error"] = refresh.error
+        content["toc_refresh"] = summary
+        return content
 
     def _managed_self_check(
         self,
@@ -337,7 +424,7 @@ class OfficeUpdateTool(BaseTool):
     # ── file_path 模式：直接编辑（越界由权限层守卫） ─────────────────
 
     def _execute_by_path(  # noqa: PLR0911 — fail-fast 守卫链，逐条早退
-        self, file_path: str, ops: List[Dict[str, Any]]
+        self, file_path: str, ops: List[Dict[str, Any]], *, do_refresh: bool = False
     ) -> ToolResult:
         blocked = self._enforce_workspace(file_path)
         if blocked is not None:
@@ -353,6 +440,11 @@ class OfficeUpdateTool(BaseTool):
             return ToolResult(
                 success=False,
                 error="unsupported_file_type: 仅支持 .docx/.xlsx/.pptx",
+            )
+        if do_refresh and doc_type != "word":
+            return ToolResult(
+                success=False,
+                error="refresh_toc_only_supported_for_word: refresh_toc 仅支持 word 文档",
             )
         try:
             # 扩展名与文件名合法性共用 path_safety 校验（防路径怪字符）。
@@ -383,16 +475,18 @@ class OfficeUpdateTool(BaseTool):
             bool(self_check.get("ok")),
             self_check.get("summary"),
         )
-        return ToolResult(
-            success=True,
-            content={
-                "path": str(path.resolve()),
-                "filename": path.name,
-                "bytes": path.stat().st_size,
-                "results": results,
-                "self_check": self_check,
-            },
-        )
+        content: Dict[str, Any] = {
+            "path": str(path.resolve()),
+            "filename": path.name,
+            "bytes": path.stat().st_size,
+            "results": results,
+            "self_check": self_check,
+        }
+        if do_refresh:
+            content = self._refresh_and_attach(
+                content, path, self._binding_workspace_or_none()
+            )
+        return ToolResult(success=True, content=content)
 
 
 __all__ = ["OfficeUpdateTool"]

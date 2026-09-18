@@ -19,7 +19,7 @@ import threading
 import time
 from collections import OrderedDict, deque
 from dataclasses import asdict, dataclass
-from typing import Any, Deque, Dict, List
+from typing import Any, Deque, Dict, List, Optional
 
 PER_SESSION_LIMIT = 200
 SESSION_LIMIT = 64
@@ -122,7 +122,7 @@ class AutoApprovalLedger:
             self._buckets.pop(session_id, None)
 
 
-_ledger: AutoApprovalLedger | None = None
+_ledger: Optional[AutoApprovalLedger] = None
 _ledger_lock = threading.Lock()
 
 

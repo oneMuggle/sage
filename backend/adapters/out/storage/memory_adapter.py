@@ -6,14 +6,14 @@
 
 PR B §1.2 设计要点
 -------------------
-- 所有 async 方法包 asyncio.to_thread(与 SqliteStorageAdapter 同形)
+- 所有 async 方法包 to_thread(与 SqliteStorageAdapter 同形)
 - **不加锁**(纯内存 dict 操作,无并发问题)
 - 内存操作 μs 级,但仍包 to_thread 保持接口一致性、未来若换 redis
   后端同样行为、单测仍能断言"真在 thread 跑"
 
 其他要点
 --------
-- 会话存储为 dict[session_id, _SessionState],每会话内消息按追加顺序保存。
+- 会话存储为 Dict[session_id, _SessionState],每会话内消息按追加顺序保存。
 - get_messages(limit) 返回"最后" limit 条且保持时间正序。
 - create_session 生成 ID 形如 mem-<uuid4>,避免与真实 UUID 格式冲突。
   (原自增计数器实现有 RMW 竞态:`self._counter += 1` 是 4 条字节码,
@@ -23,13 +23,14 @@ PR B §1.2 设计要点
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 from sage_core import Message
 from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)
+
+from backend.utils.py_compat import to_thread
 
 
 @dataclass
@@ -52,7 +53,7 @@ class MemoryStorageAdapter:
     # ----- 会话 -----
 
     async def create_session(self, title: str = "") -> str:
-        return await asyncio.to_thread(self._sync_create_session, title)
+        return await to_thread(self._sync_create_session, title)
 
     def _sync_create_session(self, title: str) -> str:
         # PR B §1.2 (HIGH fix): 用 uuid4 而非自增计数器 —— `self._counter += 1`
@@ -62,16 +63,16 @@ class MemoryStorageAdapter:
         return session_id
 
     async def list_sessions(self) -> List[Dict[str, Any]]:
-        return await asyncio.to_thread(self._sync_list_sessions)
+        return await to_thread(self._sync_list_sessions)
 
     def _sync_list_sessions(self) -> List[Dict[str, Any]]:
         result = []
         for sid, state in self._sessions.items():
-            # P0-4 (UI 优化方案 2026-09-13): 取最后一条 user/assistant 消息预览(截断 80 字符)
+            # P0-4 (UI 优化方案 2026-09-13): 取最后一条 user/assistant 消息预览(截断 40 字符)
             preview = None
             for msg in reversed(state.messages):
                 if msg.role in ("user", "assistant"):
-                    preview = msg.content[:80] if msg.content else None
+                    preview = msg.content[:40] if msg.content else None
                     break
             result.append(
                 {
@@ -84,7 +85,7 @@ class MemoryStorageAdapter:
         return result
 
     async def get_session(self, session_id: str) -> Dict[str, Any] | None:
-        return await asyncio.to_thread(self._sync_get_session, session_id)
+        return await to_thread(self._sync_get_session, session_id)
 
     def _sync_get_session(self, session_id: str) -> Dict[str, Any] | None:
         state = self._sessions.get(session_id)
@@ -97,7 +98,7 @@ class MemoryStorageAdapter:
         }
 
     async def update_session(self, session_id: str, **fields: Any) -> int:
-        return await asyncio.to_thread(self._sync_update_session, session_id, fields)
+        return await to_thread(self._sync_update_session, session_id, fields)
 
     def _sync_update_session(self, session_id: str, fields: Dict[str, Any]) -> int:
         state = self._sessions.get(session_id)
@@ -108,7 +109,7 @@ class MemoryStorageAdapter:
         return 1
 
     async def delete_session(self, session_id: str) -> int:
-        return await asyncio.to_thread(self._sync_delete_session, session_id)
+        return await to_thread(self._sync_delete_session, session_id)
 
     def _sync_delete_session(self, session_id: str) -> int:
         existed = session_id in self._sessions
@@ -118,7 +119,7 @@ class MemoryStorageAdapter:
     # ----- 消息 -----
 
     async def append_message(self, session_id: str, message: Message) -> str:
-        return await asyncio.to_thread(self._sync_append_message, session_id, message)
+        return await to_thread(self._sync_append_message, session_id, message)
 
     def _sync_append_message(self, session_id: str, message: Message) -> str:
         if session_id not in self._sessions:
@@ -131,7 +132,7 @@ class MemoryStorageAdapter:
         session_id: str,
         limit: int = 50,
     ) -> List[Message]:
-        return await asyncio.to_thread(self._sync_get_messages, session_id, limit)
+        return await to_thread(self._sync_get_messages, session_id, limit)
 
     def _sync_get_messages(self, session_id: str, limit: int) -> List[Message]:
         state = self._sessions.get(session_id)

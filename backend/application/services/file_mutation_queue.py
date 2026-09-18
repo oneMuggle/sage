@@ -29,7 +29,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Callable, Coroutine, Optional, Tuple
+
+from backend.utils.py_compat import TIMEOUT_ERRORS
 
 # 操作类型：返回 Any 的异步函数
 FileOperation = Callable[[], Coroutine[Any, Any, Any]]
@@ -48,7 +50,7 @@ class FileMutationQueue:
     """
 
     def __init__(self) -> None:
-        self._queue: asyncio.Queue[tuple[FileOperation, asyncio.Future]] = asyncio.Queue()
+        self._queue: asyncio.Queue[Tuple[FileOperation, asyncio.Future]] = asyncio.Queue()
         self._running = False
         self._lock = asyncio.Lock()
         self._processor_task: Optional[asyncio.Task] = None
@@ -121,7 +123,7 @@ class FileMutationQueue:
                 # 标记任务完成
                 self._queue.task_done()
 
-            except TimeoutError:
+            except TIMEOUT_ERRORS:  # py38: wait_for 抛 asyncio.TimeoutError（与本型不同类）
                 # 超时检查 _running，继续循环
                 continue
             except asyncio.CancelledError:

@@ -88,7 +88,7 @@ logger = logging.getLogger(__name__)
 _MAX_DOC_ID_LEN = 256
 _MAX_FILENAME_LEN = 256
 
-DocTypeLiteral = Literal["ppt", "word", "excel"]
+DocTypeLiteral = Literal["ppt", "word", "excel", "pdf"]
 
 
 class ChatOfficeRef(BaseModel):

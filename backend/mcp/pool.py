@@ -147,7 +147,7 @@ class ServerRecord:
     #: of double-spawning subprocesses (last-writer-wins orphans N-1).
     discovering: bool = False
 
-    def set_state(self, state: ServerState, error: Optional[str] = None) -> None:
+    def set_state(self, state: ServerState, error: str | None = None) -> None:
         self.state = state
         if error is not None:
             self.last_error = error
@@ -310,7 +310,7 @@ class McpServerPool:
 
     # ---- config (re)loading ------------------------------------------------
 
-    def sync_configs(self, configs: Optional[List[ServerConfig]] = None) -> None:
+    def sync_configs(self, configs: List[ServerConfig] | None = None) -> None:
         """Load (merged) configs; create/update records, mark disabled.
 
         Does not start processes — call :meth:`discover_all` for that.
@@ -483,7 +483,7 @@ class McpServerPool:
                 record.discovering = False
 
     @staticmethod
-    def _stop_discarded_client(client: Optional[Any]) -> None:
+    def _stop_discarded_client(client: Any | None) -> None:
         """Stop a client discarded by a failed start/handshake/tools-list.
 
         McpClient.start() spawns Popen before the handshake, so any
@@ -630,10 +630,10 @@ class McpServerPool:
     def update_server(
         self,
         name: str,
-        enabled: Optional[bool] = None,
-        timeout_seconds: Optional[float] = None,
-        disabled_tools: Optional[List[str]] = None,
-        headers: Optional[Dict[str, str]] = None,
+        enabled: bool | None = None,
+        timeout_seconds: float | None = None,
+        disabled_tools: List[str] | None = None,
+        headers: Dict[str, str] | None = None,
     ) -> ServerRecord:
         """Merge-patch a server (enabled / timeout_seconds) and start/stop.
 
@@ -666,6 +666,7 @@ class McpServerPool:
             new_config = validate_server_config(
                 name=base.name,
                 command=base.command,
+                url=base.url,
                 args=base.args,
                 env=dict(base.env),
                 enabled=base.enabled if enabled is None else enabled,
@@ -775,7 +776,7 @@ class McpServerPool:
         with self._lock:
             return [r.config for r in sorted(self._records.values(), key=lambda r: r.config.name)]
 
-    def get_record(self, name: str) -> Optional[ServerRecord]:
+    def get_record(self, name: str) -> ServerRecord | None:
         with self._lock:
             return self._records.get(name)
 
@@ -906,7 +907,7 @@ def get_pool() -> McpServerPool:
     return _pool
 
 
-def reset_pool(pool: Optional[McpServerPool] = None) -> None:
+def reset_pool(pool: McpServerPool | None = None) -> None:
     """Replace (or clear) the singleton — test hook."""
     global _pool
     with _pool_lock:

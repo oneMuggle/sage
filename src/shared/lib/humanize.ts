@@ -111,6 +111,40 @@ export function humanizeToolCall(tool: string, args?: ToolArgs | null): Humanize
       return { verb: 'Fetch', object: trunc(target, MAX_OBJECT), scope: 'external' };
     }
 
+    // ---- browser（Round 5/6：受控浏览器通道；Round 12 补 humanize 名）----
+    case 'browser_launch':
+      return { verb: 'Open', object: 'browser', scope: 'local' };
+    case 'browser_navigate': {
+      let target = strArg(a, 'url');
+      try {
+        target = new URL(target).host || target;
+      } catch {
+        /* not a parseable URL — keep the raw string */
+      }
+      return { verb: 'Browse', object: trunc(target, MAX_OBJECT), scope: 'external' };
+    }
+    case 'browser_snapshot':
+      return { verb: 'Read', object: 'page', scope: 'local' };
+    case 'browser_interact':
+      return { verb: 'Interact', object: trunc(strArg(a, 'action'), MAX_OBJECT), scope: 'local' };
+    case 'browser_screenshot':
+      return { verb: 'Capture', object: 'screenshot', scope: 'local' };
+    case 'browser_cookies':
+      return { verb: 'Sync', object: 'login state', scope: 'local' };
+    case 'browser_downloads':
+      return { verb: 'Track', object: 'downloads', scope: 'local' };
+    case 'browser_close':
+      return { verb: 'Close', object: 'browser', scope: 'local' };
+    case 'http_download': {
+      let target = strArg(a, 'url');
+      try {
+        target = new URL(target).host || target;
+      } catch {
+        /* not a parseable URL — keep the raw string */
+      }
+      return { verb: 'Download', object: trunc(target, MAX_OBJECT), scope: 'external' };
+    }
+
     // ---- codebase search ----
     case 'grep_search':
       return { verb: 'Search', object: trunc(strArg(a, 'pattern'), MAX_OBJECT) };

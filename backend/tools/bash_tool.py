@@ -44,7 +44,7 @@ from .bash_session import (
     SessionLimitExceeded,
     get_registry,
 )
-from .shell_resolver import SHELL_FALLBACK_NOTE, ShellSpec, resolve_shell
+from .shell_resolver import ShellSpec, build_shell_fallback_note, resolve_shell
 from .subprocess_util import (
     VerifiedProcess,
     file_identity,
@@ -199,7 +199,7 @@ class BashTool(BaseTool):
             content["exec_backend"] = "docker"
         content["cwd"] = cwd or str(Path.cwd())
         if shell.is_fallback:
-            content["shell_fallback"] = SHELL_FALLBACK_NOTE
+            content["shell_fallback"] = build_shell_fallback_note()
         return content
 
     @staticmethod
@@ -245,13 +245,30 @@ class BashTool(BaseTool):
         # 刻意不用 with：句柄要跨越 Popen 存活，启动后立即关闭（子进程已继承 fd）
         out_handle = open(stdout_path, "wb")  # noqa: SIM115
         err_handle = open(stderr_path, "wb")  # noqa: SIM115
+        # 注入编码环境变量：让子进程输出 UTF-8，避免 Windows 中文系统
+        # GBK/CP936 输出在 read_capped_output 中被错误解码为乱码。
+        extra_env: Dict[str, str] = {
+            "PYTHONUTF8": "1",
+            "PYTHONIOENCODING": "utf-8",
+        }
+        if shell.kind != "powershell":
+            # bash/sh 尊重 LANG/LC_ALL；PowerShell 不尊重这些变量，
+            # 其编码由命令前缀 [Console]::OutputEncoding 控制（见下方）。
+            extra_env["LANG"] = "C.UTF-8"
+            extra_env["LC_ALL"] = "C.UTF-8"
+        else:
+            # PowerShell 不尊重 LANG/LC_ALL 环境变量。
+            # 在命令前注入 [Console]::OutputEncoding 使输出为 UTF-8，
+            # 避免中文 Windows 系统默认 GBK 输出导致乱码。
+            command = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; " + command
         try:
             # Round 13: docker 沙箱执行后端 —— SAGE_BASH_EXEC_BACKEND=docker
             # 时命令在容器内执行（文件系统/进程/网络与宿主隔离）。
             docker_argv, spawn_cwd = self._docker_maybe_wrap(command, cwd, shell)
             if docker_argv is not None:
                 verified = spawn_verified(
-                    docker_argv, cwd=spawn_cwd, stdout=out_handle, stderr=err_handle
+                    docker_argv, cwd=spawn_cwd, stdout=out_handle, stderr=err_handle,
+                    extra_env=extra_env,
                 )
             else:
                 verified = spawn_verified(
@@ -259,6 +276,7 @@ class BashTool(BaseTool):
                     cwd=cwd,
                     stdout=out_handle,
                     stderr=err_handle,
+                    extra_env=extra_env,
                 )
         except Exception:
             unlink_quietly(stdout_path)

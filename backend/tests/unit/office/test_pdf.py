@@ -99,13 +99,13 @@ def test_read_pdf_size_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     real_stat = Path.stat
 
-    def big_stat(self: Path, *, follow_symlinks: bool = True):
+    def big_stat(self: Path, *args, **kwargs):
         """Pretend any PDF is larger than the (monkeypatched) limit.
 
-        Python 3.12 新版 pathlib 内部会带 ``follow_symlinks`` 调用 stat——
-        桩签名必须兼容，否则 pytest 直接 INTERNALERROR。
+        Python 3.10+ pathlib 内部会带 ``follow_symlinks`` 调用 stat，
+        py38 则不带——签名必须双版本兼容，否则 pytest 直接 INTERNALERROR。
         """
-        st = real_stat(self, follow_symlinks=follow_symlinks)
+        st = real_stat(self, *args, **kwargs)
         if self.suffix == ".pdf":
             # Patch st_size to exceed the limit.
             class _BigStat:

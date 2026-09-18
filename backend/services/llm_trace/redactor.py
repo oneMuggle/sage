@@ -140,7 +140,7 @@ def redact_body(  # noqa: PLR0911
     """
     if body is None:
         return None, None
-    if isinstance(body, dict | list):
+    if isinstance(body, (dict, list)):  # noqa: UP038 — py38 运行时 isinstance 不支持 X | Y
         return _redact_json_value(body, include_prompts=include_prompts), None
     if isinstance(body, bytes):
         # 试图解析为 UTF-8 JSON

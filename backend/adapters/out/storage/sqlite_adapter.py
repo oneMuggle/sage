@@ -24,7 +24,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 import uuid
@@ -39,6 +38,7 @@ from backend.data.session_repo import (
     MessageRepository,
     SessionRepository,
 )
+from backend.utils.py_compat import to_thread
 
 _DEFAULT_TITLE = "新对话"
 
@@ -147,7 +147,7 @@ class SqliteStorageAdapter:
 
         PR B §1.2: async 包装负责调度,实际逻辑在 _sync_create_session 跑 threadpool。
         """
-        return await asyncio.to_thread(self._sync_create_session, title)
+        return await to_thread(self._sync_create_session, title)
 
     def _sync_create_session(self, title: str) -> str:
         """create_session 的同步实现,跑在 threadpool worker。
@@ -162,14 +162,19 @@ class SqliteStorageAdapter:
 
     async def list_sessions(self) -> List[Dict[str, Any]]:
         """列出当前所有会话（已过滤归档），返回 dict 列表。"""
-        return await asyncio.to_thread(self._sync_list_sessions)
+        return await to_thread(self._sync_list_sessions)
 
     def _sync_list_sessions(self) -> List[Dict[str, Any]]:
+        # 2026-09 修复: previews 查询移入同一把 _SQLITE_LOCK —— 本 adapter
+        # 约定所有路径共享 database._SQLITE_LOCK 串行化同一 sqlite3.Connection;
+        # 预览查询在锁外裸用 cursor 会与 to_thread worker / @with_db_lock /
+        # APScheduler 线程并发互踩 ("cannot start a transaction within a
+        # transaction"), 会话列表接口随机 500。
         with _SQLITE_LOCK:
             sessions = self._sessions.list(limit=1000, offset=0)
-        # P0-4 (UI 优化方案 2026-09-13): 批量查询每个会话的最后一条消息预览
-        # (最近一条 user/assistant 消息,截断 80 字符)。空会话 → preview 为 None。
-        previews = self._sync_last_message_previews([s.id for s in sessions])
+            # P0-4 (UI 优化方案 2026-09-13): 批量查询每个会话的最后一条消息预览
+            # (最近一条 user/assistant 消息,截断 80 字符)。空会话 → preview 为 None。
+            previews = self._sync_last_message_previews([s.id for s in sessions])
         return [
             {
                 "id": s.id,
@@ -185,7 +190,7 @@ class SqliteStorageAdapter:
         ]
 
     def _sync_last_message_previews(self, session_ids: List[str]) -> Dict[str, str]:
-        """批量获取每个会话的最后一条 user/assistant 消息预览(截断 80 字符)。"""
+        """批量获取每个会话的最后一条 user/assistant 消息预览(截断 40 字符)。"""
         if not session_ids:
             return {}
         conn = self._sessions.db.get_connection()
@@ -195,7 +200,7 @@ class SqliteStorageAdapter:
         cursor.execute(
             f"""
             SELECT m.session_id,
-                   SUBSTR(m.content, 1, 80) AS preview
+                   SUBSTR(m.content, 1, 40) AS preview
             FROM messages m
             INNER JOIN (
                 SELECT session_id, MAX(created_at) AS max_created
@@ -214,7 +219,7 @@ class SqliteStorageAdapter:
 
     async def get_session(self, session_id: str) -> Dict[str, Any] | None:
         """按 ID 取单个会话;不存在返 ``None``。"""
-        return await asyncio.to_thread(self._sync_get_session, session_id)
+        return await to_thread(self._sync_get_session, session_id)
 
     def _sync_get_session(self, session_id: str) -> Dict[str, Any] | None:
         with _SQLITE_LOCK:
@@ -236,7 +241,7 @@ class SqliteStorageAdapter:
         ``is_pinned`` 字段是 bool,持久化层需要 0/1 int,这里做转换。
         其他字段(如 ``title``)原样转发。
         """
-        return await asyncio.to_thread(self._sync_update_session, session_id, fields)
+        return await to_thread(self._sync_update_session, session_id, fields)
 
     def _sync_update_session(self, session_id: str, fields: Dict[str, Any]) -> int:
         """update_session 的同步实现。
@@ -259,7 +264,7 @@ class SqliteStorageAdapter:
 
     async def delete_session(self, session_id: str) -> int:
         """按 ID 删除会话;返受影响行数(0=不存在,1=已删除)。"""
-        return await asyncio.to_thread(self._sync_delete_session, session_id)
+        return await to_thread(self._sync_delete_session, session_id)
 
     def _sync_delete_session(self, session_id: str) -> int:
         with _SQLITE_LOCK:
@@ -275,7 +280,7 @@ class SqliteStorageAdapter:
             ``source_message_id``，让前端 ``data-turn-id`` 可精确命中）。
         """
         row = _domain_to_data_message(session_id, message)
-        return await asyncio.to_thread(self._sync_append_message, row)
+        return await to_thread(self._sync_append_message, row)
 
     def _sync_append_message(self, row: _DataMessage) -> str:
         """append_message 的同步实现。
@@ -295,7 +300,7 @@ class SqliteStorageAdapter:
 
         实现：先取全部历史，然后取尾部 ``limit`` 条并保持时间正序。
         """
-        return await asyncio.to_thread(self._sync_get_messages, session_id, limit)
+        return await to_thread(self._sync_get_messages, session_id, limit)
 
     def _sync_get_messages(self, session_id: str, limit: int) -> List[Message]:
         """get_messages 的同步实现。

@@ -321,6 +321,61 @@ describe('COMMAND_ROUTES', () => {
     );
   });
 
+  // M3 项目上下文沉淀 (2026-09-15): 概览字段 PATCH + 资料 CRUD + 保存回答
+  it('M3 projects_update is PATCH with partial body (model_fields_set semantics)', () => {
+    expect(COMMAND_ROUTES.projects_update.method).toBe('PATCH');
+    expect(COMMAND_ROUTES.projects_update.path({ id: 'p1' })).toBe('/api/v1/projects/p1');
+    // 单字段：description 改, instructions 不动 → body 只含 description
+    expect(COMMAND_ROUTES.projects_update.body?.({ description: 'd1' })).toEqual({
+      description: 'd1',
+    });
+    // 双字段
+    expect(
+      COMMAND_ROUTES.projects_update.body?.({
+        description: 'd1',
+        instructions: 'i1',
+      }),
+    ).toEqual({ description: 'd1', instructions: 'i1' });
+    // 空调用（容错）→ 空 body, 由后端处理成 noop
+    expect(COMMAND_ROUTES.projects_update.body?.({})).toEqual({});
+  });
+
+  it('M3 projects_list/add/remove_material + save_answer route to /api/v1/projects/{id}/materials', () => {
+    expect(COMMAND_ROUTES.projects_list_materials.method).toBe('GET');
+    expect(COMMAND_ROUTES.projects_list_materials.path({ id: 'p/1' })).toBe(
+      '/api/v1/projects/p%2F1/materials',
+    );
+
+    expect(COMMAND_ROUTES.projects_add_material.method).toBe('POST');
+    expect(COMMAND_ROUTES.projects_add_material.path({ id: 'p1' })).toBe(
+      '/api/v1/projects/p1/materials',
+    );
+    expect(
+      COMMAND_ROUTES.projects_add_material.body?.({
+        content: 'hello',
+        source_message_id: 'm1',
+      }),
+    ).toEqual({ content: 'hello', source_message_id: 'm1' });
+    // source_message_id 缺省 → null, 由后端 Pydantic 接受
+    expect(COMMAND_ROUTES.projects_add_material.body?.({ content: 'hello' })).toEqual({
+      content: 'hello',
+      source_message_id: null,
+    });
+
+    expect(COMMAND_ROUTES.projects_remove_material.method).toBe('DELETE');
+    expect(COMMAND_ROUTES.projects_remove_material.path({ id: 'p1', materialId: 'm/2' })).toBe(
+      '/api/v1/projects/p1/materials/m%2F2',
+    );
+
+    expect(COMMAND_ROUTES.projects_save_answer.method).toBe('POST');
+    expect(COMMAND_ROUTES.projects_save_answer.path({ id: 'p1' })).toBe(
+      '/api/v1/projects/p1/materials/save-answer',
+    );
+    expect(COMMAND_ROUTES.projects_save_answer.body?.({ message_id: 'msg-1' })).toEqual({
+      message_id: 'msg-1',
+    });
+  });
+
   it('defaults list_sessions limit/offset to 100/0', () => {
     expect(COMMAND_ROUTES.list_sessions.path({})).toBe('/api/v1/sessions?limit=100&offset=0');
   });
@@ -759,6 +814,23 @@ describe('MCP management IPC routes (M3)', () => {
       timeout_seconds: 45,
     });
     expect(r.body!({ name: 'srv', enabled: true })).toEqual({ enabled: true });
+    // r53-B: disabled_tools 走全量替换（数组原样透传，undefined 时省略）
+    expect(r.body!({ name: 'srv', disabled_tools: ['b', 'a'] })).toEqual({
+      disabled_tools: ['b', 'a'],
+    });
+    expect(r.body!({ name: 'srv', enabled: true })).not.toHaveProperty('disabled_tools');
+  });
+
+  it('mcp_server_tools reads the per-tool payload (r53-B)', () => {
+    const r = COMMAND_ROUTES.mcp_server_tools;
+    expect(r.method).toBe('GET');
+    expect(r.path({ name: 'a b' })).toBe('/api/v1/mcp/servers/a%20b/tools');
+  });
+
+  it('mcp_server_authorize posts to the per-server authorize route (r64)', () => {
+    const r = COMMAND_ROUTES.mcp_server_authorize;
+    expect(r.method).toBe('POST');
+    expect(r.path({ name: 'a b' })).toBe('/api/v1/mcp/servers/a%20b/authorize');
   });
 
   it('mcp_server_delete encodes the server name', () => {
@@ -768,6 +840,32 @@ describe('MCP management IPC routes (M3)', () => {
     expect(COMMAND_ROUTES.mcp_server_delete.path({ name: 'a b' })).toBe(
       '/api/v1/mcp/servers/a%20b',
     );
+  });
+});
+
+describe('Attachment RAG IPC routes (r59)', () => {
+  it('attachment_rag_index puts mediaId in path and embed in body', () => {
+    const r = COMMAND_ROUTES.attachment_rag_index;
+    expect(r.method).toBe('POST');
+    expect(r.path({ mediaId: 'm 1' })).toBe('/api/v1/chat/attachments/m%201/index');
+    const embed = { base_url: 'https://e/v1', api_key: 'k', model: 'emb-1', dim: 1536 };
+    expect(r.body!({ mediaId: 'm1', embed, target_chunk_size: 500 })).toEqual({
+      embed,
+      target_chunk_size: 500,
+    });
+    expect(r.body!({ mediaId: 'm1', embed })).toEqual({ embed });
+  });
+
+  it('attachment_rag_search posts to the search route', () => {
+    const r = COMMAND_ROUTES.attachment_rag_search;
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/chat/attachments/search');
+  });
+
+  it('attachment_rag_delete_index encodes the mediaId', () => {
+    const r = COMMAND_ROUTES.attachment_rag_delete_index;
+    expect(r.method).toBe('DELETE');
+    expect(r.path({ mediaId: 'a/b' })).toBe('/api/v1/chat/attachments/a%2Fb/index');
   });
 });
 

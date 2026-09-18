@@ -8,7 +8,7 @@ describe('providerIpc', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ipcMain = { handle: (ch: string, h: any) => { handlers[ch] = h; } };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    registerProviderIpc(ipcMain as any, { providerStore: {} as any, updateManager: {} as any });
+    registerProviderIpc(ipcMain as any, { providerStore: {} as any, updateManager: {} as any, isTrustedSender: () => true });
     expect(handlers['provider:list']).toBeDefined();
     expect(handlers['provider:get']).toBeDefined();
     expect(handlers['provider:add']).toBeDefined();

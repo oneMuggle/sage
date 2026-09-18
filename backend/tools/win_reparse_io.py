@@ -18,7 +18,7 @@ from __future__ import annotations
 import ctypes
 import os
 from ctypes import wintypes
-from typing import Optional
+from typing import Optional, Tuple
 
 # ---- Win32 常量（对照 shell_resolver.py / WinBase.h） ----
 _GENERIC_READ = 0x80000000
@@ -202,7 +202,7 @@ def _validate_info(info: _FileInfo, path: str) -> None:
         raise OSError(f"refusing non-private file (多链接 links={info.nNumberOfLinks}): {path}")
 
 
-def read_file_bound_reparse_safe(path: str) -> tuple[bytes, tuple[int, int, int]]:
+def read_file_bound_reparse_safe(path: str) -> Tuple[bytes, Tuple[int, int, int]]:
     """读取整文件并返回 Windows 文件身份绑定（R32 切片 B）。
 
     返回 ``(data, identity)``，identity =
@@ -213,7 +213,7 @@ def read_file_bound_reparse_safe(path: str) -> tuple[bytes, tuple[int, int, int]
     return _read_with_double_open(path)
 
 
-def _file_identity(handle, path: str) -> tuple[int, int, int]:
+def _file_identity(handle, path: str) -> Tuple[int, int, int]:
     info = _FileInfo()
     if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
         raise OSError(f"GetFileInformationByHandle failed: {path}")
@@ -224,7 +224,7 @@ def _file_identity(handle, path: str) -> tuple[int, int, int]:
     )
 
 
-def _read_with_double_open(path: str) -> tuple[bytes, tuple[int, int, int]]:
+def _read_with_double_open(path: str) -> Tuple[bytes, Tuple[int, int, int]]:
     first = _open_single(path)
     identity_before = _file_identity(first, path)
     data = _read_all(first, path)

@@ -34,7 +34,9 @@ import type {
   TaskStatusEvent,
   TodoItem,
 } from '../../shared/api';
-import type { ToolCall } from '../../shared/lib/store';
+import type { Message, ToolCall } from '../../shared/lib/store';
+
+import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 
 /** 流式消息的临时覆盖层（'🤔 思考中…' + LLM 累积的 content/reasoning） */
 export interface StreamingState {
@@ -91,9 +93,7 @@ export function mergeLiveEvent(
   event: SubagentLiveEvent,
 ): SubagentLiveState {
   const base = prev ?? emptyLiveState();
-  const events: SubagentLiveEvent[] = [...base.events, event].slice(
-    -LIVE_EVENT_BUFFER_SIZE,
-  );
+  const events: SubagentLiveEvent[] = [...base.events, event].slice(-LIVE_EVENT_BUFFER_SIZE);
   const next: SubagentLiveState = {
     liveStep: event.live_step ?? base.liveStep,
     waitingApproval: base.waitingApproval,
@@ -114,6 +114,15 @@ export interface SessionStreamSlots {
   taskBoard: TaskBoardState | null;
   // P1 todo 接线 (2026-08-21): todo_snapshot 全量快照（agent 自维护清单）。
   todos: TodoItem[];
+  /**
+   * 2026-09 step-by-step: 已完成 ReAct 步骤的快照数组（每条对应独立消息气泡）。
+   * - 收到 step_done 事件时,把当前 streaming state 打包成 Message 推入此数组
+   * - 同时重置 streaming.content=THINKING_PLACEHOLDER / streaming.reasoning=''
+   *   / streamingToolCalls=[],以便下一步的 deltas 路由到新的 messageId
+   * - DONE 事件不追加(最后一步走 finishStream 路径)
+   * - startStream / resetAll 时清空
+   */
+  completedSteps: Message[];
 }
 
 const EMPTY_SLOTS: SessionStreamSlots = {
@@ -121,6 +130,7 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   streamingToolCalls: [],
   taskBoard: null,
   todos: [],
+  completedSteps: [],
 };
 
 /** 读取某会话的槽位；无该会话（或 sessionId 为 null）时返回共享空槽位。
@@ -178,6 +188,20 @@ interface ChatStreamStoreState {
   // —— todo 清单（P1 接线） ——
   setTodos: (sessionId: string, todos: TodoItem[]) => void;
 
+  // —— 2026-09 step-by-step ——
+  /**
+   * 把当前 streaming 状态快照为一条已完成的 Message,推入 completedSteps。
+   * 不重置 streaming —— 由 finalizeStep 配套重置并切换 messageId。
+   * 调用方应保证此时 streaming.messageId === messageId（否则 action 静默 noop）。
+   */
+  addCompletedStep: (sessionId: string, messageId: string, message: Message) => void;
+  /**
+   * 完成一步:push 完成后重置 streaming.content/reasoning/streamingToolCalls 为占位态,
+   * 并切换 streaming.messageId 到 newMessageId,让后续 deltas 路由到新消息。
+   * 配套 addCompletedStep 使用:先 addCompletedStep,再 finalizeStep。
+   */
+  finalizeStep: (sessionId: string, oldMessageId: string, newMessageId: string) => void;
+
   // —— 会话删除时清理槽位，防 Map 泄漏 / 迟到事件复活死会话 ——
   clearSession: (sessionId: string) => void;
 
@@ -213,6 +237,7 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
         streamingToolCalls: [],
         taskBoard: null,
         todos: [],
+        completedSteps: [],
       }),
     })),
 
@@ -303,6 +328,38 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
 
   setTodos: (sessionId, todos) =>
     set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { todos }) })),
+
+  // 2026-09 step-by-step: 把当前 streaming 快照为 Message 推入 completedSteps
+  addCompletedStep: (sessionId, messageId, message) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
+      if (!slots.streaming || slots.streaming.messageId !== messageId) return prev;
+      return {
+        sessions: writeSlots(prev.sessions, sessionId, {
+          completedSteps: [...slots.completedSteps, message],
+        }),
+      };
+    }),
+
+  // 2026-09 step-by-step: 重置 streaming 为占位 + 切换 messageId; 下一步 deltas 路由到新 messageId
+  finalizeStep: (sessionId, oldMessageId, newMessageId) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
+      if (!slots.streaming || slots.streaming.messageId !== oldMessageId) return prev;
+      return {
+        sessions: writeSlots(prev.sessions, sessionId, {
+          streaming: {
+            messageId: newMessageId,
+            content: THINKING_PLACEHOLDER,
+            reasoning: '',
+            state: 'thinking',
+            currentAgentId: slots.streaming.currentAgentId,
+            iteration: slots.streaming.iteration,
+          },
+          streamingToolCalls: [],
+        }),
+      };
+    }),
 
   updateTaskBoard: (sessionId, _runId, updater) =>
     set((prev) => {

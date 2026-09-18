@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   HashRouter,
   Routes,
@@ -10,6 +10,7 @@ import {
 } from 'react-router-dom';
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
+import { useTheme } from './app/providers/useTheme';
 import { UpdateDialog } from './components/UpdateDialog';
 import { loadCurrentSessionId } from './entities/session/storage';
 import { useSettingsStore } from './features/manage-settings/settingsStore';
@@ -156,21 +157,24 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // R47: Ctrl+Shift+D 切换暗色/亮色主题
+  // R47: Ctrl+Shift+D 切换暗色/亮色主题。
+  // 2026-09 修复: 旧实现手写 DOM/localStorage —— 只切 .dark 不设 data-theme
+  // (暗色变量组不生效)、存储 key 写成 sage:theme-mode 而读取方是 sage-theme
+  // (重启后主题回滚)、且绕过 ThemeProvider 使其内部 resolved 变陈旧
+  // (之后用设置页/命令面板切主题方向反转)。改走 useTheme().setMode 单一来源。
+  const { resolved, setMode } = useTheme();
+  const themeToggleRef = useRef({ resolved });
+  themeToggleRef.current = { resolved };
   useEffect(() => {
     const onThemeToggle = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
         e.preventDefault();
-        const root = document.documentElement;
-        const isDark = root.classList.toggle('dark');
-        try {
-          localStorage.setItem('sage:theme-mode', isDark ? 'dark' : 'light');
-        } catch { /* ignore */ }
+        setMode(themeToggleRef.current.resolved === 'dark' ? 'light' : 'dark');
       }
     };
     window.addEventListener('keydown', onThemeToggle);
     return () => window.removeEventListener('keydown', onThemeToggle);
-  }, []);
+  }, [setMode]);
 
   return (
     <HashRouter>

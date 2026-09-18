@@ -182,7 +182,9 @@ from typing import Any
 
 import pytest
 
+from backend.adapters.out.storage import memory_adapter, sqlite_adapter
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
+from backend.utils import py_compat
 
 
 @pytest.mark.asyncio()
@@ -192,14 +194,16 @@ async def test_sqlite_adapter_uses_to_thread():
     call_log: list[str] = []
 
     # Monkey-patch asyncio.to_thread 记录调用
-    original_to_thread = asyncio.to_thread
+    original_to_thread = py_compat.to_thread
 
     async def spy_to_thread(func, *args, **kwargs):
         call_log.append(func.__name__)
         return await original_to_thread(func, *args, **kwargs)
 
     monkey = pytest.MonkeyPatch()
-    monkey.setattr(asyncio, "to_thread", spy_to_thread)
+    monkey.setattr(py_compat, "to_thread", spy_to_thread)
+    monkey.setattr(sqlite_adapter, "to_thread", spy_to_thread)
+    monkey.setattr(memory_adapter, "to_thread", spy_to_thread)
     try:
         # 触发 7 个方法
         sid = await adapter.create_session(title="t")
@@ -336,14 +340,16 @@ async def test_memory_adapter_uses_to_thread():
     adapter = MemoryStorageAdapter()
     call_log: list[str] = []
 
-    original_to_thread = asyncio.to_thread
+    original_to_thread = py_compat.to_thread
 
     async def spy_to_thread(func, *args, **kwargs):
         call_log.append(func.__name__)
         return await original_to_thread(func, *args, **kwargs)
 
     monkey = pytest.MonkeyPatch()
-    monkey.setattr(asyncio, "to_thread", spy_to_thread)
+    monkey.setattr(py_compat, "to_thread", spy_to_thread)
+    monkey.setattr(sqlite_adapter, "to_thread", spy_to_thread)
+    monkey.setattr(memory_adapter, "to_thread", spy_to_thread)
     try:
         sid = await adapter.create_session(title="t")
         await adapter.list_sessions()

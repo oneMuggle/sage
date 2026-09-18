@@ -11,12 +11,12 @@ import re
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import AsyncIterator, List, Tuple
+from typing import AsyncIterator, List, Optional, Tuple
 
 import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.wiki import (
     ChatConfig,
@@ -142,7 +142,9 @@ def _resolve_source_file(project_path: str, source_file: str) -> Tuple[Path, Pat
             try:
                 lexical.relative_to(root)
             except ValueError as containment_exc:
-                raise HTTPException(status_code=400, detail="源文件必须位于项目目录内") from containment_exc
+                raise HTTPException(
+                    status_code=400, detail="源文件必须位于项目目录内"
+                ) from containment_exc
             raise HTTPException(status_code=404, detail="源文件不存在") from exc
         raise HTTPException(status_code=400, detail="源文件必须位于项目目录内") from exc
     return root, resolved
@@ -359,7 +361,7 @@ async def list_projects(base_path: str = "") -> List[ProjectInfo]:
         base_path: 父目录路径（可选）
 
     Returns:
-        list[ProjectInfo]: 项目列表
+        List[ProjectInfo]: 项目列表
     """
     import uuid
     from datetime import datetime
@@ -427,6 +429,50 @@ class ChatRequest(BaseModel):
     embed_api_key: str
     embed_model: str
     max_tokens: int = 4096
+    selected_paths: Optional[List[str]] = Field(default=None, max_length=500)
+
+
+class CitationLocateRequest(BaseModel):
+    project_path: str
+    path: str = Field(min_length=1, max_length=4096)
+    content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    line_start: int = Field(ge=1, le=1_000_000)
+    line_end: int = Field(ge=1, le=1_000_000)
+
+
+def _citation_file(project_root: Path, path: str) -> Path:
+    allowed = {
+        file.relative_to(project_root).as_posix(): file for file in iter_wiki_markdown(project_root)
+    }
+    if path not in allowed:
+        raise HTTPException(status_code=403, detail="来源不是可访问的 Wiki 页面")
+    return allowed[path]
+
+
+@router.post("/citations/locate")
+async def locate_citation(req: CitationLocateRequest) -> dict:
+    import hashlib
+
+    root = authorize_registered_project(req.project_path)
+    target = _citation_file(root, req.path)
+    if req.line_end < req.line_start or req.line_end - req.line_start >= 500:
+        raise HTTPException(status_code=422, detail="引用行范围无效或超过500行")
+    try:
+        content = secure_read_file_bounded(root, target, 1024 * 1024).decode("utf-8")
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="来源读取失败") from exc
+    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    lines = content.splitlines()
+    if req.line_start > len(lines):
+        raise HTTPException(status_code=422, detail="引用位置已失效，请重新打开来源")
+    return {
+        "path": req.path,
+        "excerpt": "\n".join(lines[req.line_start - 1 : req.line_end])[:16000],
+        "content_hash": content_hash,
+        "line_start": req.line_start,
+        "line_end": min(req.line_end, len(lines)),
+        "changed": content_hash != req.content_hash,
+    }
 
 
 # ============================================================================
@@ -479,7 +525,7 @@ async def list_directory(path: str, project_path: str) -> List[dict]:
         project_path: 项目根目录
 
     Returns:
-        list[dict]: 文件节点列表
+        List[dict]: 文件节点列表
 
     Raises:
         HTTPException: 如果目标路径不存在
@@ -746,9 +792,9 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
     authorize_registered_project(req.project_path)
     project_root, source_file = _resolve_source_file(req.project_path, req.source_file)
 
-    source_snapshot: Path | None = None
-    temp_md: Path | None = None
-    parse_path: Path | None = None
+    source_snapshot: Optional[Path] = None
+    temp_md: Optional[Path] = None
+    parse_path: Optional[Path] = None
     try:
         payload = secure_read_file_bounded(project_root, source_file, MAX_FILE_BYTES)
         suffix = source_file.suffix.lower() or ".bin"
@@ -867,7 +913,8 @@ async def queue_status(project_path: str):
 
 
 @router.get("/ingest/queue/tasks")
-async def queue_tasks(project_path: str, status: str | None = None):
+# noqa py38: FastAPI 在装饰期求值路由签名，``str | None`` 会让 win7/py3.8 导入即崩
+async def queue_tasks(project_path: str, status: Optional[str] = None):
     """获取队列中的任务列表。
 
     Args:
@@ -939,7 +986,9 @@ async def queue_retry(task_id: str, project_path: str):
     success = queue.retry(task_id)
 
     if not success:
-        raise HTTPException(status_code=400, detail="无法重试任务（任务不存在、非失败状态或已达最大重试次数）")
+        raise HTTPException(
+            status_code=400, detail="无法重试任务（任务不存在、非失败状态或已达最大重试次数）"
+        )
 
     return {"success": True}
 
@@ -1009,6 +1058,12 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
         StreamingResponse: NDJSON 流式响应
     """
     project_root = authorize_registered_project(req.project_path)
+    if req.selected_paths:
+        allowed = {
+            file.relative_to(project_root).as_posix() for file in iter_wiki_markdown(project_root)
+        }
+        if not set(req.selected_paths).issubset(allowed):
+            raise HTTPException(status_code=403, detail="来源不是可访问的 Wiki 页面")
 
     # 配置
     config = ChatConfig(
@@ -1019,6 +1074,7 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
         embed_api_key=req.embed_api_key,
         embed_model=req.embed_model,
         max_tokens=req.max_tokens,
+        selected_paths=req.selected_paths,
     )
 
     # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON）
@@ -1044,7 +1100,7 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
 
 
 @router.get("/graph")
-async def get_graph(project_path: str, query: str | None = None, limit: int = 100) -> GraphData:
+async def get_graph(project_path: str, query: Optional[str] = None, limit: int = 100) -> GraphData:
     """获取知识图谱。
 
     Args:
@@ -1345,7 +1401,7 @@ async def clip_webpage(req: ClipRequest) -> dict:
 
     # 如果启用自动 Ingest
     if req.auto_ingest:
-        source_snapshot: Path | None = None
+        source_snapshot: Optional[Path] = None
         try:
             # Snapshot the authorized file before handing a pathname to ingest.
             # The saved source may be replaced after this point; ingest only sees
@@ -1503,12 +1559,13 @@ from backend.storage.recent_projects import (  # noqa: E402
 
 
 class ProjectCheckResponse(BaseModel):
+    # noqa py38: pydantic 在类创建期求值字段注解，win7/py3.8 需 Optional
     exists: bool
     writable: bool
     is_project: bool
     parent_writable: bool
-    warning: str | None = None
-    error: str | None = None
+    warning: Optional[str] = None
+    error: Optional[str] = None
 
 
 class RecordRecentRequest(BaseModel):
