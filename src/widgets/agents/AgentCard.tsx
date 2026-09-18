@@ -5,6 +5,8 @@ const ROLE_LABELS: Record<string, string> = {
   researcher: '研究员',
   coder: '工程师',
   memory_manager: '记忆管理',
+  writer: '文档写作',
+  'slide-deck-creator': '演示文稿',
 };
 
 const ROLE_COLORS: Record<string, string> = {
