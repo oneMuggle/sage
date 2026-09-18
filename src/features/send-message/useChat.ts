@@ -24,6 +24,7 @@ import { logger } from '../../shared/lib/logger';
 // Backend now resolves effective window from catalog and computes budget.
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
 import { useSettings } from '../manage-settings/useSettings';
+import { usePetStore } from '../pet/petStore';
 
 import { selectSessionSlots, useChatStreamStore, type TaskBoardState } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
@@ -787,12 +788,14 @@ export function useChat() {
               handleError(err);
               // S8: 后台会话失败提醒（前台当前会话不打扰）
               maybeNotify('failed', err instanceof Error ? err.message.slice(0, 120) : '运行失败');
+              usePetStore.getState().triggerFlash('failed', sid);
               finishStream();
             },
             onDone: () => {
               if (finished) return;
               // S8: 后台会话完成提醒
               maybeNotify('done', (lastDoneContent ?? '').slice(0, 120));
+              usePetStore.getState().triggerFlash('celebrate', sid);
               // PM2: 计划模式 run 自然完成 → 该会话进入"待批准"状态
               if (opts?.planMode) setPlanApprovalFor(sid);
               // 流自然结束 — 把 streaming.content 写回 store,
@@ -879,6 +882,7 @@ export function useChat() {
         }
         handle.cancel = null;
         if (activeStreamRegistry.get(sid) !== handle) return;
+        usePetStore.getState().triggerFlash(finalContent !== null ? 'celebrate' : 'failed', sid);
         if (assistantId === null) {
           markStreamIdle(sid);
           return;

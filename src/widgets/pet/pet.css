@@ -1,0 +1,299 @@
+/* src/widgets/pet/pet.css
+ *
+ * 桌宠 P1 视觉层：形状（bodyClass）与动画（pet-anim-<pack>-<state>）两张
+ * 表。动画规则按状态分组、各宠物包共用——包间差异全部收敛在 bodyClass。
+ * 只用 CSS transform/opacity（合成器属性，Chromium 106 / Win7 安全）。
+ */
+
+.pet-visual {
+  position: relative;
+  display: inline-block;
+  flex: none;
+}
+
+/* ==================== 本体形状 ==================== */
+
+/* 薄荷团子：上圆下扁的水滴形 + 高光 */
+.pet-body-mint-blob {
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.85) 0 12%, transparent 34%),
+    linear-gradient(150deg, #5eead4 0%, #2dd4bf 55%, #0d9488 100%);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.18);
+}
+
+/* 紫罗兰猫：品牌对角分割配色 + 双耳（::before/::after） */
+.pet-body-violet-cat {
+  border-radius: 50% 50% 50% 50% / 58% 58% 42% 42%;
+  background: linear-gradient(135deg, #5eead4 0 48%, #a855f7 52% 100%);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.18);
+}
+.pet-body-violet-cat::before,
+.pet-body-violet-cat::after {
+  content: '';
+  position: absolute;
+  top: -18%;
+  width: 26%;
+  height: 30%;
+  background: inherit;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.pet-body-violet-cat::before {
+  left: 10%;
+  transform: rotate(-14deg);
+}
+.pet-body-violet-cat::after {
+  right: 10%;
+  transform: rotate(14deg);
+}
+
+/* ==================== 五官与状态道具 ==================== */
+
+.pet-face {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 22%;
+  width: 58%;
+  justify-content: center;
+}
+.pet-eye {
+  width: 14%;
+  aspect-ratio: 1;
+  min-width: 4px;
+  border-radius: 50%;
+  background: #0f172a;
+}
+.pet-visual[data-state='sleeping'] .pet-eye {
+  height: 2px;
+  aspect-ratio: auto;
+  border-radius: 2px;
+  width: 20%;
+}
+.pet-visual[data-state='idle'] .pet-eye {
+  animation: pet-blink 4.2s infinite;
+}
+
+.pet-prop {
+  position: absolute;
+  top: -22%;
+  right: -14%;
+  font-size: 0.42em;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+}
+/* prop 字号跟随 --pet-size（PetVisual 内联 width/height 时按比例缩放） */
+.pet-visual {
+  font-size: var(--pet-size, 72px);
+}
+.pet-visual[data-state='thinking'] .pet-prop,
+.pet-visual[data-state='working'] .pet-prop,
+.pet-visual[data-state='reporting'] .pet-prop,
+.pet-visual[data-state='celebrate'] .pet-prop,
+.pet-visual[data-state='failed'] .pet-prop,
+.pet-visual[data-state='attention'] .pet-prop,
+.pet-visual[data-state='sleeping'] .pet-prop {
+  opacity: 1;
+  animation: pet-prop-float 1.6s ease-in-out infinite;
+}
+.pet-visual[data-state='thinking'] .pet-prop::before {
+  content: '💭';
+}
+.pet-visual[data-state='working'] .pet-prop::before {
+  content: '⚙️';
+}
+.pet-visual[data-state='reporting'] .pet-prop::before {
+  content: '📋';
+}
+.pet-visual[data-state='celebrate'] .pet-prop::before {
+  content: '🎉';
+}
+.pet-visual[data-state='failed'] .pet-prop::before {
+  content: '💧';
+}
+.pet-visual[data-state='attention'] .pet-prop::before {
+  content: '❗';
+}
+.pet-visual[data-state='sleeping'] .pet-prop::before {
+  content: '💤';
+}
+
+/* ==================== 状态动画（各包共用规则） ==================== */
+
+.pet-anim-mint-idle,
+.pet-anim-violet-idle {
+  animation: pet-bob 3.2s ease-in-out infinite;
+}
+.pet-anim-mint-sleeping,
+.pet-anim-violet-sleeping {
+  animation: pet-droop 4.8s ease-in-out infinite;
+}
+.pet-anim-mint-thinking,
+.pet-anim-violet-thinking {
+  animation: pet-sway 1.4s ease-in-out infinite;
+}
+.pet-anim-mint-working,
+.pet-anim-violet-working {
+  animation: pet-type 0.32s ease-in-out infinite;
+}
+.pet-anim-mint-reporting,
+.pet-anim-violet-reporting {
+  animation: pet-flag 1.2s ease-in-out infinite;
+}
+.pet-anim-mint-celebrate,
+.pet-anim-violet-celebrate {
+  animation: pet-hop 0.9s ease-in-out infinite;
+}
+.pet-anim-mint-failed,
+.pet-anim-violet-failed {
+  animation: pet-shake 1.8s ease-in-out infinite;
+}
+.pet-anim-mint-attention,
+.pet-anim-violet-attention {
+  animation: pet-knock 0.8s ease-in-out infinite;
+}
+/* descriptor 缺 idle 动画时的最终兜底（petAnimationClass 返回） */
+.pet-anim-fallback {
+  animation: pet-bob 3.2s ease-in-out infinite;
+}
+
+@keyframes pet-bob {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  50% {
+    transform: translateY(-4%) scale(1.01, 0.99);
+  }
+}
+@keyframes pet-droop {
+  0%,
+  100% {
+    transform: translateY(2%) scale(1.01, 0.97);
+  }
+  50% {
+    transform: translateY(3%) scale(0.99, 0.96);
+  }
+}
+@keyframes pet-sway {
+  0%,
+  100% {
+    transform: rotate(-2.5deg);
+  }
+  50% {
+    transform: rotate(2.5deg);
+  }
+}
+@keyframes pet-type {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1.2deg);
+  }
+  25% {
+    transform: translateY(-6%) rotate(1deg);
+  }
+  50% {
+    transform: translateY(0) rotate(1.2deg);
+  }
+  75% {
+    transform: translateY(-4%) rotate(-1deg);
+  }
+}
+@keyframes pet-flag {
+  0%,
+  100% {
+    transform: rotate(0) translateY(0);
+  }
+  30% {
+    transform: rotate(-4deg) translateY(-6%);
+  }
+  60% {
+    transform: rotate(4deg) translateY(-2%);
+  }
+}
+@keyframes pet-hop {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  30% {
+    transform: translateY(-26%) scale(0.96, 1.06);
+  }
+  55% {
+    transform: translateY(0) scale(1.05, 0.94);
+  }
+  70% {
+    transform: translateY(-10%) scale(1, 1);
+  }
+}
+@keyframes pet-shake {
+  0%,
+  55%,
+  100% {
+    transform: translateX(0);
+  }
+  60% {
+    transform: translateX(-5%);
+  }
+  65% {
+    transform: translateX(5%);
+  }
+  70% {
+    transform: translateX(-4%);
+  }
+  75% {
+    transform: translateX(4%);
+  }
+  80% {
+    transform: translateX(-2%);
+  }
+  85% {
+    transform: translateX(0);
+  }
+}
+@keyframes pet-knock {
+  0%,
+  100% {
+    transform: scale(1) rotate(0);
+  }
+  20% {
+    transform: scale(1.07) rotate(-5deg);
+  }
+  40% {
+    transform: scale(1) rotate(5deg);
+  }
+  60% {
+    transform: scale(1.05) rotate(-3deg);
+  }
+}
+@keyframes pet-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.12);
+  }
+}
+@keyframes pet-prop-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14%);
+  }
+}
+
+/* 系统"减少动态效果"：宠物静止但状态文字/道具仍可读 */
+@media (prefers-reduced-motion: reduce) {
+  .pet-visual,
+  .pet-visual .pet-eye,
+  .pet-visual .pet-prop {
+    animation: none;
+  }
+}
