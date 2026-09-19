@@ -2043,13 +2043,24 @@ class ChatDispatcher:
             # BU17 (round31): 任务级消耗标注 —— RT23 归因查询 + run 内
             # memoize；仅终态块标注（running 查询会缓存滞后值）；
             # N>0 才显（preset 回放 0 / 查询失败不显）。
+            # BU20 (round36): 并排追加任务级耗时（state 起止差，秒级）——
+            # conductor 判断"哪个子任务拖慢整体"的直接输入。
+            _terminal = state.status in ("done", "failed", "cancelled")
             _used = (
-                self._task_tokens_used(state.task_id)
-                if state.status in ("done", "failed", "cancelled")
+                self._task_tokens_used(state.task_id) if _terminal else None
+            )
+            _stats: List[str] = []
+            if _used:
+                _stats.append(f"消耗 {_used} tokens")
+            _duration_s = (
+                int(state.finished_at - state.started_at)
+                if _terminal and state.started_at and state.finished_at
                 else None
             )
-            if _used:
-                header_item += f"（消耗 {_used} tokens）"
+            if _duration_s is not None:
+                _stats.append(f"耗时 {_duration_s} 秒")
+            if _stats:
+                header_item += f"（{' · '.join(_stats)}）"
             if state.status == "done" and state.output:
                 body = state.output[: self.settings.max_subagent_result_chars]
                 block = f"{header_item}\n\n{body}"
