@@ -141,6 +141,32 @@ export interface Message {
   reasoning_content?: string | null;
   /** Task 5 (2026-09-17): 消息子类型 —— 'topic_separator' 渲染为分隔线。 */
   subtype?: string | null;
+  /** R81: r71 附件检索溯源（get_messages 回读；流式经 AgentEvent.citations）。 */
+  rag_citations?: RagCitation[] | null;
+  /** R81: 工具命中来源（web/wiki/MCP），终稿 assistant 行落库回读。 */
+  sources?: MessageSource[] | null;
+}
+
+/** R81: 统一参考来源条目 —— backend/chat/sources_extractor.py 的提取产物。 */
+export interface MessageSource {
+  kind: 'web' | 'wiki' | 'tool';
+  title?: string;
+  url?: string;
+  snippet?: string;
+  query?: string;
+  path?: string;
+  score?: number | null;
+  server?: string;
+  tool?: string;
+  preview?: string;
+}
+
+/** R81: 附件检索溯源（r71，原 inline 形状收敛为此类型）。 */
+export interface RagCitation {
+  media_id: string;
+  filename?: string;
+  mode: string;
+  chunks?: { index: number; score: number }[];
 }
 
 export interface ToolCall {
@@ -214,7 +240,10 @@ export type AgentState =
   | 'attachment_rag_used'
   // right-panel R5 (2026-09-19): 写文件工具落盘后经活跃流推送的变更信号,
   // 前端据此防抖刷新右侧变更列表,载荷见 AgentEvent.change。
-  | 'workspace_changed';
+  | 'workspace_changed'
+  // R81: 统一参考来源 —— 检索类工具命中（web/wiki/MCP）在 done 前
+  // 一次性推送, 载荷见 AgentEvent.sources。
+  | 'sources_used';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -541,6 +570,8 @@ export interface AgentEvent {
   // right-panel R5 (2026-09-19): workspace_changed 事件载荷（写文件工具
   // 落盘后经活跃流推送；path 为工具视角路径，刷新语义以 git status 为准）。
   change?: { path: string; kind?: string };
+  // R81: sources_used 事件载荷（检索类工具命中，done 前一次性推送）。
+  sources?: MessageSource[];
 }
 
 // ==================== 错误类型定义 ====================
