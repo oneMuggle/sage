@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, FrozenSet, List, Optional
 
-from backend.data.orchestration_repo import LaneEventRepository
+from backend.data.orch_lane_repo import OrchLaneEventRepository
 
 
 class LaneEvent(str, Enum):
@@ -140,8 +140,8 @@ class EventRecorder:
     Each event is persisted with full context for audit and replay.
     """
 
-    def __init__(self, repo: Optional[LaneEventRepository] = None) -> None:
-        self.repo = repo or LaneEventRepository()
+    def __init__(self, repo: Optional[OrchLaneEventRepository] = None) -> None:
+        self.repo = repo or OrchLaneEventRepository()
 
     def record(
         self,
@@ -197,8 +197,8 @@ class EventStream:
     - Time-range queries (for monitoring dashboards)
     """
 
-    def __init__(self, repo: Optional[LaneEventRepository] = None) -> None:
-        self.repo = repo or LaneEventRepository()
+    def __init__(self, repo: Optional[OrchLaneEventRepository] = None) -> None:
+        self.repo = repo or OrchLaneEventRepository()
 
     def get_lane_events(
         self, lane_id: str, limit: int = 100, offset: int = 0

@@ -1278,6 +1278,85 @@ class Database:
             ON orchestration_teams(status)
         """)
 
+        # ==================== 双轨合并 Phase 1 (P0, 2026-09-19) ====================
+        # orch_lanes / orch_lane_events 是新命名空间的 lane 持久化层，字段与老
+        # orchestration_lanes / orchestration_lane_events 同形。无 FK：Phase 1
+        # 与老表共存期 orchestration_tasks 与 orch_tasks 并存，强 FK 会限制 lane
+        # 关联的灵活性。Phase 5 清理老表时评估是否加 FK 指向 orch_tasks。
+        #
+        # 数据迁移：init_db 末尾 INSERT OR IGNORE 把老表存量复制到新表（详见
+        # §双轨合并数据迁移）。新老表双写由调用方（LaneRepository/OrchLaneRepository）
+        # 各自负责，直到 Phase 5 单写。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS orch_lanes (
+                lane_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                agent_id TEXT,
+                status TEXT NOT NULL DEFAULT 'created',
+                created_at INTEGER NOT NULL,
+                started_at INTEGER,
+                completed_at INTEGER,
+                worktree TEXT,
+                heartbeat TEXT,
+                error TEXT,
+                permission_preset TEXT NOT NULL DEFAULT 'implement',
+                metadata TEXT NOT NULL DEFAULT '{}'
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_lanes_by_task "
+            "ON orch_lanes(task_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_lanes_by_status "
+            "ON orch_lanes(status)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_lanes_by_agent "
+            "ON orch_lanes(agent_id)"
+        )
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS orch_lane_events (
+                event_id TEXT PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                lane_id TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                agent_id TEXT,
+                timestamp INTEGER NOT NULL,
+                provenance TEXT NOT NULL DEFAULT 'LiveLane',
+                metadata TEXT NOT NULL DEFAULT '{}'
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_lane_events_by_lane "
+            "ON orch_lane_events(lane_id, timestamp)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_lane_events_by_task "
+            "ON orch_lane_events(task_id)"
+        )
+
+        # ==================== 双轨合并 Phase 2: 数据迁移 ====================
+        # 启动时把老表存量 INSERT OR IGNORE 到新表（幂等；主键冲突保留新侧数据）。
+        # 老表保留不删 —— 双写期内允许回滚；Phase 5 清理时统一 DROP。
+        # 迁移失败不阻塞启动（降级铁律，例如全新安装下老表不存在）。
+        try:
+            cursor.execute(
+                "INSERT OR IGNORE INTO orch_lanes "
+                "SELECT lane_id, task_id, agent_id, status, created_at, started_at, "
+                "completed_at, worktree, heartbeat, error, permission_preset, metadata "
+                "FROM orchestration_lanes"
+            )
+            cursor.execute(
+                "INSERT OR IGNORE INTO orch_lane_events "
+                "SELECT event_id, event_type, lane_id, task_id, agent_id, timestamp, "
+                "provenance, metadata "
+                "FROM orchestration_lane_events"
+            )
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.warning("双轨合并数据迁移失败（老表可能不存在）: %s", exc)
+
         # ==================== Background Review 表 ====================
         # Task 4 of 2026-08-02-background-review:
         # review_events 与 skill_drafts 表放在主初始化路径, 确保任何进程启动
