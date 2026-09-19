@@ -331,6 +331,50 @@ describe('ChangesSection', () => {
     });
   });
 
+  it('P1-6: 逐 hunk 折叠 —— 折叠后内容不渲染,勾选框保留', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({ diff: TWO_HUNK_DIFF, truncated: false });
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('src/app.ts'));
+    await waitFor(
+      () => {
+        expect(screen.getByText('+a2-new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+
+    // 折叠 hunk 0 → 其内容消失,勾选框仍在（折叠态可勾选撤销）
+    fireEvent.click(screen.getByTestId('hunk-toggle-0'));
+    await waitFor(() => {
+      expect(screen.queryByText('+a2-new')).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId('hunk-checkbox-0')).toBeInTheDocument();
+    // hunk 1 不受影响
+    await waitFor(
+      () => {
+        expect(screen.getByText('+b2-new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+
+    // 再展开恢复
+    fireEvent.click(screen.getByTestId('hunk-toggle-0'));
+    await waitFor(
+      () => {
+        expect(screen.getByText('+a2-new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+  });
+
   it('U19: 勾选 hunk 后撤销所选（0-based 序号传后端）', async () => {
     mockGetChanges.mockResolvedValue(sampleChanges);
     mockGetChangeDiff.mockResolvedValue({ diff: TWO_HUNK_DIFF, truncated: false });

@@ -19,9 +19,14 @@
 // 未变化的上下文保持行底色。单侧超 300 字符时 diffSpans 自动退化为
 // 整行染色,与 office 预览同口径。
 //
+// right-panel R6 / P1-6: 大 diff 渐进渲染 —— 首屏只渲染前 INITIAL_ROWS
+// 行,滚动接近底部时经 IntersectionObserver 哨兵自动追加；无 IO 的环境
+// （jsdom / 旧内核）退化为"加载更多"按钮。避免几千行 diff 一次性挂全量 DOM。
+//
 // 本组件只读、不涉及 per-hunk 反向应用;如需撤销改动,请切换回 unified 视图。
 
-import { useMemo } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { diffSpans, type DiffSpan } from '../../../shared/lib/textDiff';
 
@@ -31,6 +36,10 @@ interface SplitDiffProps {
   /** 后端返回的 unified diff 字符串 (可能已被截断,截断提示由父组件渲染) */
   diff: string;
 }
+
+/** 首屏渲染行数与每次追加行数（分栏行含上下文,400 行 ≈ 数屏内容） */
+const INITIAL_ROWS = 400;
+const CHUNK_ROWS = 400;
 
 /** 行内片段染色: 变化段染深色,相同段保持行底色 */
 function SpanText({ spans, side }: { spans: DiffSpan[]; side: 'del' | 'add' }) {
@@ -59,17 +68,43 @@ function SpanText({ spans, side }: { spans: DiffSpan[]; side: 'del' | 'add' }) {
 
 export function SplitDiff({ diff }: SplitDiffProps) {
   const rows = useMemo(() => parseUnifiedDiff(diff), [diff]);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_ROWS);
+  const sentinelRef = useRef<HTMLTableRowElement | null>(null);
 
-  // 仅对 modify 行计算词级 spans（键为 rows 下标）;remove/add 行保持整行染色
+  // diff 变化（切换文件/刷新）后重置渐进渲染进度
+  useEffect(() => {
+    setVisibleCount(INITIAL_ROWS);
+  }, [diff]);
+
+  // 哨兵进入视口自动追加下一块；无 IntersectionObserver（jsdom）时仅按钮可用
+  const hasMore = rows.length > visibleCount;
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!hasMore || !sentinel || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCount((count) => Math.min(count + CHUNK_ROWS, rows.length));
+        }
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, rows.length]);
+
+  // 仅对 modify 行计算词级 spans（键为 rows 下标）;remove/add 行保持整行染色。
+  // 只算可见范围:渐进渲染下未挂载的行不付 diffSpans 的 O(n·m) 成本。
+  const visibleRows = hasMore ? rows.slice(0, visibleCount) : rows;
   const wordSpans = useMemo(() => {
     const map = new Map<number, { before: DiffSpan[]; after: DiffSpan[] }>();
-    rows.forEach((row, i) => {
+    visibleRows.forEach((row, i) => {
       if (row.kind === 'modify' && row.oldText !== '' && row.newText !== '') {
         map.set(i, diffSpans(row.oldText, row.newText));
       }
     });
     return map;
-  }, [rows]);
+  }, [visibleRows]);
 
   return (
     <div className="font-mono text-xs overflow-x-auto" data-testid="split-diff">
@@ -83,7 +118,7 @@ export function SplitDiff({ diff }: SplitDiffProps) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => {
+          {visibleRows.map((row, i) => {
             if (row.kind === 'header') {
               return (
                 <tr key={i} data-testid={`split-diff-header-${i}`}>
@@ -138,6 +173,20 @@ export function SplitDiff({ diff }: SplitDiffProps) {
               </tr>
             );
           })}
+          {hasMore && (
+            <tr ref={sentinelRef} data-testid="split-diff-more">
+              <td colSpan={4} className="px-2 py-2 text-center bg-bg-muted/30">
+                <button
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-border text-text-secondary hover:bg-bg-hover"
+                  onClick={() => setVisibleCount((count) => Math.min(count + CHUNK_ROWS, rows.length))}
+                  data-testid="split-diff-more-button"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  加载更多（已显示 {visibleCount}/{rows.length} 行）
+                </button>
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

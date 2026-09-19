@@ -2,7 +2,7 @@
 //
 // right-panel R6: 分栏 diff 词级行内高亮测试 —— modify 行应把行内真正
 // 变化的片段染深色（strong span），相同上下文与 remove/add 行不受影响。
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { SplitDiff } from '../SplitDiff';
@@ -56,5 +56,28 @@ describe('SplitDiff — 词级行内高亮 (right-panel R6)', () => {
   it('空 diff 渲染空表格', () => {
     const { container } = render(<SplitDiff diff="" />);
     expect(container.querySelector('tbody')?.children).toHaveLength(0);
+  });
+
+  it('P1-6: 大 diff 渐进渲染 —— 首屏 400 行,加载更多按钮追加至全部', () => {
+    // 3 行文件头 + 1 行 hunk 头 + 496 行上下文 = 500 行
+    const body = Array.from({ length: 496 }, (_, i) => ` line ${i}`).join('\n');
+    const big = ['diff --git a/big.ts b/big.ts', '--- a/big.ts', '+++ b/big.ts', '@@ -1,496 +1,496 @@', body].join('\n');
+    const { container } = render(<SplitDiff diff={big} />);
+
+    // 首屏 400 行 + 1 行哨兵/按钮
+    expect(screen.getByTestId('split-diff-more')).toBeInTheDocument();
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(401);
+    expect(screen.getByTestId('split-diff-more-button').textContent).toContain('400/500');
+
+    // 点击追加至全部,按钮消失
+    fireEvent.click(screen.getByTestId('split-diff-more-button'));
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(500);
+    expect(screen.queryByTestId('split-diff-more')).not.toBeInTheDocument();
+  });
+
+  it('P1-6: 小 diff 不出现加载更多（低于阈值全量渲染）', () => {
+    const { container } = render(<SplitDiff diff={DIFF} />);
+    expect(screen.queryByTestId('split-diff-more')).not.toBeInTheDocument();
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(7);
   });
 });

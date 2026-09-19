@@ -293,6 +293,26 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
 
   const hunks = useMemo(() => (diff ? splitDiffHunks(diff) : []), [diff]);
 
+  // P1-6: 逐 hunk 折叠态 —— 超过 HUNK_COLLAPSE_ABOVE 个 hunk 时,后面的
+  // 默认折叠（大 diff 导航 + 跳过 Shiki 渲染）;切换文件/重开 diff 重置。
+  const HUNK_COLLAPSE_ABOVE = 8;
+  const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    setCollapsedHunks(
+      hunks.length > HUNK_COLLAPSE_ABOVE
+        ? new Set(hunks.map((_, i) => i).slice(HUNK_COLLAPSE_ABOVE))
+        : new Set(),
+    );
+  }, [hunks]);
+  const toggleHunkCollapse = useCallback((index: number) => {
+    setCollapsedHunks((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }, []);
+
   const toggleHunk = useCallback((index: number, checked: boolean) => {
     setSelectedHunks((prev) => {
       const next = new Set(prev);
@@ -447,24 +467,45 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
                     </button>
                   </div>
                   <div className="flex flex-col gap-3">
-                    {hunks.map((hunk, index) => (
-                      <div key={index} className="rounded border border-border">
-                        <label className="flex items-center gap-2 px-2 py-1 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={selectedHunks.has(index)}
-                            onChange={(e) => toggleHunk(index, e.target.checked)}
-                            data-testid={`hunk-checkbox-${index}`}
-                          />
-                          <span className="text-xs text-text-secondary truncate">
-                            {index + 1}. {hunk.summary}
-                          </span>
-                        </label>
-                        <ShikiCodeBlock language="diff">
-                          {(hunk.header + hunk.body).trimEnd()}
-                        </ShikiCodeBlock>
-                      </div>
-                    ))}
+                    {hunks.map((hunk, index) => {
+                      // P1-6: 逐 hunk 折叠 —— 折叠时跳过 Shiki 渲染（大 diff
+                      // 导航），勾选框保留在头部，折叠态仍可勾选撤销
+                      const isCollapsed = collapsedHunks.has(index);
+                      return (
+                        <div key={index} className="rounded border border-border">
+                          <div className="flex items-center gap-1 px-2 py-1">
+                            <input
+                              type="checkbox"
+                              className="cursor-pointer"
+                              checked={selectedHunks.has(index)}
+                              onChange={(e) => toggleHunk(index, e.target.checked)}
+                              data-testid={`hunk-checkbox-${index}`}
+                            />
+                            <button
+                              className="flex items-center gap-1 min-w-0 flex-1 text-left cursor-pointer select-none"
+                              onClick={() => toggleHunkCollapse(index)}
+                              aria-expanded={!isCollapsed}
+                              title={isCollapsed ? '展开该 hunk' : '收起该 hunk'}
+                              data-testid={`hunk-toggle-${index}`}
+                            >
+                              {isCollapsed ? (
+                                <ChevronRight className="w-3.5 h-3.5 shrink-0 text-text-secondary" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5 shrink-0 text-text-secondary" />
+                              )}
+                              <span className="text-xs text-text-secondary truncate">
+                                {index + 1}. {hunk.summary}
+                              </span>
+                            </button>
+                          </div>
+                          {!isCollapsed && (
+                            <ShikiCodeBlock language="diff">
+                              {(hunk.header + hunk.body).trimEnd()}
+                            </ShikiCodeBlock>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               ) : (
