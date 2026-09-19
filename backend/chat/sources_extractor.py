@@ -121,6 +121,25 @@ def _extract_web_fetch(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     ]
 
 
+def _extract_browser_navigate(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """R87: browser_navigate 成功返回 {url, title}（headless 浏览器当前页）。
+
+    agent 经受控浏览器主动访问的页面同样是回答的参考资料 —— 导航即记录
+    （snippet 为空：页面正文由后续 snapshot/交互获得，不在此截取）。
+    """
+    url = str(payload.get("url") or "").strip()
+    if not url:
+        return []
+    return [
+        {
+            "kind": "web",
+            "title": _shorten(payload.get("title"), MAX_SNIPPET_CHARS) or _host_of(url),
+            "url": url,
+            "snippet": "",
+        }
+    ]
+
+
 def _extract_wiki_search(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     sources: List[Dict[str, Any]] = []
     for item in (payload.get("results") or [])[:MAX_SOURCES_PER_TOOL]:
@@ -221,6 +240,8 @@ _DICT_EXTRACTORS = {
     _WEB_FETCH: lambda payload: _extract_web_fetch(payload),
     _WIKI_SEARCH: lambda payload: _extract_wiki_search(payload),
     _WIKI_ANSWER: lambda payload: _extract_wiki_answer(payload),
+    # R87: agent 主动浏览的页面也是参考资料 —— 导航成功即记一条来源
+    "browser_navigate": lambda payload: _extract_browser_navigate(payload),
 }
 
 

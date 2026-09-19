@@ -996,24 +996,48 @@ export function useChat() {
               return;
             }
             // r77: 重接路径补 memory_used —— 重放时 memory_refs 不丢失（与主路径同口径）
-            if (evt.state === 'memory_used' && evt.memories?.length) {
-              updateMessage(messageId, {
-                memory_refs: evt.memories,
-                memory_applied: evt.memories.length,
-              });
+            // R87: 载荷校验对齐主路径 MEDIUM-2 口径（数组且每项 id 为字符串）
+            if (evt.state === 'memory_used' && evt.memories) {
+              const memories = evt.memories;
+              const isValidMemories =
+                Array.isArray(memories) &&
+                memories.every(
+                  (m) =>
+                    typeof m === 'object' &&
+                    m !== null &&
+                    typeof (m as { id?: unknown }).id === 'string',
+                );
+              if (isValidMemories && memories.length > 0) {
+                updateMessage(messageId, {
+                  memory_refs: memories,
+                  memory_applied: memories.length,
+                });
+              }
             }
             // r71: 重接路径同主路径 —— 检索引用明细随消息落库
+            // R87: 条目校验对齐主路径（每项须有字符串 media_id）
             if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
-              const existing = useStore
-                .getState()
-                .messages.find((m) => m.id === messageId)?.rag_citations;
-              const merged = [...(existing ?? [])];
-              for (const c of evt.citations) {
-                const idx = merged.findIndex((x) => x.media_id === c.media_id);
-                if (idx >= 0) merged[idx] = c;
-                else merged.push(c);
+              const citations = evt.citations;
+              const isValidCitations =
+                Array.isArray(citations) &&
+                citations.every(
+                  (c) =>
+                    typeof c === 'object' &&
+                    c !== null &&
+                    typeof (c as { media_id?: unknown }).media_id === 'string',
+                );
+              if (isValidCitations) {
+                const existing = useStore
+                  .getState()
+                  .messages.find((m) => m.id === messageId)?.rag_citations;
+                const merged = [...(existing ?? [])];
+                for (const c of citations) {
+                  const idx = merged.findIndex((x) => x.media_id === c.media_id);
+                  if (idx >= 0) merged[idx] = c;
+                  else merged.push(c);
+                }
+                updateMessage(messageId, { rag_citations: merged });
               }
-              updateMessage(messageId, { rag_citations: merged });
             }
             // R81: 重接路径同主路径 —— 统一参考来源回放
             // R85: 载荷校验对齐主路径 MEDIUM-2 口径（数组且每项 kind 合法），
