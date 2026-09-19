@@ -361,6 +361,10 @@ export interface TaskStatusEvent {
   // live-events P0 (2026-09-06): 派发本批次的 conductor 工具调用 ID —— 聊天流内
   // 把子代理实时步骤关联到 "Delegate <goal>" 卡片的关联键。
   parent_tool_call_id?: string | null;
+  // RP1 (round34, 2026-09-19): 被 LLM 动态调整过计划的任务 —— conductor 在 run
+  // 中改过目标 / 新增 / 取消该任务时携带，任务树渲染"已调整"徽章（可追溯哪些
+  // 任务偏离了初始计划）。普通任务无此键。
+  adjusted?: boolean;
 }
 
 // ─── live-events P0 (2026-09-06): 子代理实时执行镜像 ───────────────────

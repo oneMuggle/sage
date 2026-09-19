@@ -2457,6 +2457,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 from backend.orchestration.planner import Planner
                 from backend.orchestration.task_registry import TaskRegistry
                 from backend.orchestration.team_registry import TeamRegistry
+                from backend.tools.replan_tool import (
+                    AddTaskToPlanTool,
+                    CancelPendingTaskTool,
+                    UpdatePendingTaskTool,
+                )
                 from backend.tools.subagent_tool import (
                     CollectSubagentsTool,
                     DispatchSubagentsTool,
@@ -2589,6 +2594,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         agent.profile["tools"].append("dispatch_subagents")
                         # BD (round12): collect 与 dispatch 成对加入白名单。
                         agent.profile["tools"].append("collect_subagents")
+                    # RP1 (round34, 2026-09-19): re-plan 工具族 —— conductor 在
+                    # run 中动态调整计划（改 goal / 取消任务 / 加任务并声明依赖）。
+                    # 与 dispatch_subagents 同一 tool-toggle 门：仅 multi 模式注册。
+                    agent.tool_registry.register(UpdatePendingTaskTool(dispatcher))
+                    agent.tool_registry.register(CancelPendingTaskTool(dispatcher))
+                    agent.tool_registry.register(AddTaskToPlanTool(dispatcher))
+                    if (
+                        agent.profile is not None
+                        and agent.profile.get("tools") is not None
+                    ):
+                        agent.profile["tools"].append("update_pending_task")
+                        agent.profile["tools"].append("cancel_pending_task")
+                        agent.profile["tools"].append("add_task_to_plan")
                     # O4 (2026-09-08): observe_subagents 注册 —— conductor 主动
                     # 轮询子任务进度的只读工具（此前类已实现但从未接线，生产
                     # 不可用）。快照通道未装配时降级不注册，不阻塞编排。
@@ -2653,6 +2671,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         "collect 可传 wait=false 立即获取各子任务当前状态与结果"
                         "预览快照——若已有信息足以支撑最终结论，可据此提前汇总，"
                         "无需等待全部子任务完成。"
+                        # RP1 (round34, 2026-09-19): re-plan 工具族指引 ——
+                        # 此前 conductor 只能靠上段"失败处理指令"做任务级微调，
+                        # 无法主动调整计划结构（改目标/取消/加任务）。
+                        + "\n\n发现原计划不再适用时可主动调整计划，有三个工具："
+                        "\n- update_pending_task：修改尚未派发任务的 goal 或执行"
+                        "角色，参数 task_id 必填、goal 与 agent_id 至少给一个。"
+                        "\n- cancel_pending_task：取消不再需要的任务，参数 task_id "
+                        "必填、reason 可选。未派发的直接移出计划，已派发仍在排队的"
+                        "会被跳过，运行中的会被软中断；取消后请勿重派该任务。"
+                        "\n- add_task_to_plan：把新发现的工作加入计划，参数 task_id "
+                        "/ goal / agent_id 必填，depends_on 可选且只能引用已存在的"
+                        "task_id。添加后调用 dispatch_subagents 派发即可执行。"
+                        "\n任务失败时不要原样重派 —— 先判断该改目标、换角色、取消，"
+                        "还是补充新任务。"
                     )
                     # 计划先行：子 agent 跑之前先推 task_plan（可展示、可取消）
                     # Wave 2 P1-4: 首次 dispatch 前把 run + plan 落库,供 resume 端点重建。

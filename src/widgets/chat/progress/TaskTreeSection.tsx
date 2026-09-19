@@ -383,6 +383,19 @@ export function TaskTreeSection({
                   重派
                 </span>
               )}
+              {/* RP1 (round34, 2026-09-19): 已调整徽章 —— conductor 在 run 中
+                  改过目标 / 新增 / 取消过该任务时携带，用户可追溯哪些任务偏离
+                  了初始计划（与"重派"徽章区分：重派是同任务重做，已调整是计划
+                  本身被改）。 */}
+              {st?.adjusted && (
+                <span
+                  data-testid={`task-tree-adjusted-${item.task_id}`}
+                  title="该任务的计划由 AI 在执行过程中调整"
+                  className="text-warning text-[10px] shrink-0"
+                >
+                  已调整
+                </span>
+              )}
             </div>
             {/* live-events P0: 等待审批徽章（ApprovalDialog 之外的行内提示） */}
             {live?.waitingApproval && status === 'running' && (
