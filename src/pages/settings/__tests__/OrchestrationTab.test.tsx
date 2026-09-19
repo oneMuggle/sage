@@ -104,6 +104,18 @@ describe('OrchestrationTab 部分更新契约', () => {
     expect(mocks.updateSettings).not.toHaveBeenCalled();
   });
 
+  it('并发数为 0 时不提交 — 防 Semaphore(0) 编排挂死', () => {
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-max-concurrent'), { target: { value: '0' } });
+    expect(mocks.updateSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId('orch-max-concurrent'), { target: { value: '1' } });
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({ maxConcurrentSubagents: 1 }),
+    });
+  });
+
   it('墙钟上限修改走部分更新契约（RD15）', () => {
     renderTab();
 
@@ -119,7 +131,9 @@ describe('OrchestrationTab 部分更新契约', () => {
   it('单任务超时与重派链上限修改走部分更新契约（RD15）', () => {
     renderTab();
 
-    fireEvent.change(screen.getByTestId('orch-subagent-task-timeout'), { target: { value: '300' } });
+    fireEvent.change(screen.getByTestId('orch-subagent-task-timeout'), {
+      target: { value: '300' },
+    });
     expect(mocks.updateSettings).toHaveBeenCalledWith({
       orch: expect.objectContaining({ subagentTaskTimeoutS: 300 }),
     });
