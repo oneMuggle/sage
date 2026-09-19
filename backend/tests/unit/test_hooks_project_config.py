@@ -218,6 +218,23 @@ def test_too_many_project_hooks_rejected(tmp_path):
         validate_project_hooks(raw, str(tmp_path))
 
 
+def test_project_config_rejects_http_hook_type(tmp_path):
+    """项目级不开放 HTTP hook —— 防止仓库借信任门禁外联任意地址。"""
+    raw = {
+        "version": 1,
+        "hooks": [
+            {
+                "event": "pre_tool_use",
+                "matcher": "bash",
+                "hook_type": "http",
+                "url": "https://hooks.example.test/check",
+            }
+        ],
+    }
+    with pytest.raises(HookConfigError, match="http"):
+        validate_project_hooks(raw, str(tmp_path))
+
+
 def test_inline_python_handler_rejected(tmp_path):
     """项目级不允许无人认领的 python handler (等于允许仓库加载任意模块)。"""
     raw = {
