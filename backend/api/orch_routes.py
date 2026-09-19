@@ -486,9 +486,10 @@ _PLAN_ITEMS_PROMPT = """你是编排计划结构化助手。以下是一份用�
 1. 每个任务的 description 必须自包含——执行者只能看到它，看不到本计划全文；把该步骤做什么/涉及对象/预期产出写清楚，并给出可检验的完成定义（验收标准）。
 2. agent_hint 从这些角色中选最合适的一个（无法确定则省略）: researcher / coder / writer / reviewer / memory_manager
 3. depends_on 只引用更早任务的 id（t1、t2…）；任务总数不超过 {max_tasks} 个。
+4. 可选 parent_task_id 表示所属父任务，只引用更早任务的 id；它只影响归属和展示，不创建执行依赖。
 
 只返回 JSON（无 markdown 围栏、无多余文本）:
-{{"tasks": [{{"id": "t1", "title": "短标题", "description": "自包含目标", "depends_on": [], "agent_hint": "researcher"}}], "reasoning": "拆解策略说明"}}"""
+{{"tasks": [{{"id": "t1", "title": "短标题", "description": "自包含目标", "depends_on": [], "parent_task_id": null, "agent_hint": "researcher"}}], "reasoning": "拆解策略说明"}}"""
 
 
 class PlanItemsRequest(BaseModel):
