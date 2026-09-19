@@ -165,7 +165,102 @@ def _extract_footnotes(doc: Document) -> List[str]:
     return notes
 
 
-_CROSS_REF_RE = re.compile(r"\{\{(fig|tbl|fn):([^}]+)\}\}")
+_ENDNOTES_PARTNAME = "/word/endnotes.xml"
+_ENDNOTES_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml"
+)
+
+_ENDNOTE_SYSTEM_NOTES = (
+    '<w:endnote w:type="separator" w:id="-1"><w:p><w:r>'
+    "<w:separator/></w:r></w:p></w:endnote>"
+    '<w:endnote w:type="continuationSeparator" w:id="0"><w:p><w:r>'
+    "<w:continuationSeparator/></w:r></w:p></w:endnote>"
+)
+
+
+def _mount_endnotes_part(doc: Document, notes: List[str]) -> None:
+    """构造并挂载 word/endnotes.xml part（Round 59 Phase C，镜像脚注）。"""
+    from xml.sax.saxutils import escape
+
+    from docx.opc.constants import RELATIONSHIP_TYPE
+    from docx.opc.packuri import PackURI
+    from docx.opc.part import Part
+
+    notes_xml = "".join(
+        f'<w:endnote w:id="{i}"><w:p><w:pPr><w:pStyle w:val="EndnoteText"/>'
+        "</w:pPr><w:r><w:rPr><w:rStyle w:val='EndnoteReference'/></w:rPr>"
+        "<w:endnoteRef/></w:r>"
+        f'<w:r><w:t xml:space="preserve"> {escape(text)}</w:t></w:r></w:p></w:endnote>'
+        for i, text in enumerate(notes, start=1)
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:endnotes xmlns:w="http://schemas.openxmlformats.org/'
+        'wordprocessingml/2006/main">'
+        + _ENDNOTE_SYSTEM_NOTES
+        + notes_xml
+        + "</w:endnotes>"
+    ).encode("utf-8")
+
+    part = Part(
+        PackURI(_ENDNOTES_PARTNAME),
+        _ENDNOTES_CONTENT_TYPE,
+        xml,
+        doc.part.package,
+    )
+    doc.part.relate_to(part, RELATIONSHIP_TYPE.ENDNOTES)
+
+
+def _ensure_endnote_styles(doc: Document) -> None:
+    """向 styles.xml 注入 EndnoteText/EndnoteReference 定义（幂等）。"""
+    from lxml import etree
+
+    W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    styles_el = doc.styles.element
+    existing = {
+        style.get(qn("w:styleId"))
+        for style in styles_el.findall(qn("w:style"))
+    }
+    styles_xml = (
+        '<w:style w:type="paragraph" w:styleId="EndnoteText">'
+        '<w:name w:val="endnote text"/><w:basedOn w:val="Normal"/>'
+        '<w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'
+        '<w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>'
+        '<w:style w:type="character" w:styleId="EndnoteReference">'
+        '<w:name w:val="endnote reference"/><w:rPr>'
+        '<w:vertAlign w:val="superscript"/></w:rPr></w:style>'
+    )
+    for frag in etree.fromstring(
+        "<root xmlns:w='" + W + "'>" + styles_xml + "</root>"
+    ):
+        if frag.get(qn("w:styleId")) in existing:
+            continue
+        styles_el.append(frag)
+
+
+def _extract_endnotes(doc: Document) -> List[str]:
+    """从 endnotes part 回读尾注文本（无 part / 无真实尾注为空表）。"""
+    from xml.etree import ElementTree
+
+    W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    notes: List[str] = []
+    for part in doc.part.package.iter_parts():
+        if part.partname != _ENDNOTES_PARTNAME:
+            continue
+        root = ElementTree.fromstring(part.blob)
+        for note in root.findall(f"{{{W}}}endnote"):
+            if note.get(f"{{{W}}}type"):  # separator/continuation 跳过
+                continue
+            text = "".join(
+                t.text or "" for t in note.iter(f"{{{W}}}t")
+            ).strip()
+            if text:
+                notes.append(text)
+        break
+    return notes
+
+
+_CROSS_REF_RE = re.compile(r"\{\{(fig|tbl|fn|en):([^}]+)\}\}")
 
 
 def _split_cross_ref_segments(
@@ -173,6 +268,7 @@ def _split_cross_ref_segments(
     figure_caption_numbers: Dict[str, int],
     table_caption_numbers: Dict[str, int],
     footnotes: Optional[List[str]] = None,
+    endnotes: Optional[List[str]] = None,
 ) -> List[Tuple[str, str, str]]:
     """拆分段落文本为交叉引用/脚注段（Round 46/57）。
 
@@ -195,6 +291,13 @@ def _split_cross_ref_segments(
                 footnotes = []
             footnotes.append(caption)
             segments.append(("fnref", str(len(footnotes)), ""))
+            pos = match.end()
+            continue
+        if kind == "en":
+            if endnotes is None:
+                endnotes = []
+            endnotes.append(caption)
+            segments.append(("endref", str(len(endnotes)), ""))
             pos = match.end()
             continue
         if kind == "fig":
@@ -228,6 +331,14 @@ def _write_cross_ref_segment(paragraph, segment: Tuple[str, str, str]) -> None:
 
         run = paragraph.add_run()
         ref = OxmlElement("w:footnoteReference")
+        ref.set(qn("w:id"), segment[1])
+        run._r.append(ref)
+    elif segment[0] == "endref":
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        run = paragraph.add_run()
+        ref = OxmlElement("w:endnoteReference")
         ref.set(qn("w:id"), segment[1])
         run._r.append(ref)
     else:
@@ -716,6 +827,7 @@ def read_docx(
         toc_fields=_extract_toc_fields(doc),
         metadata=_read_core_metadata(doc),
         footnotes=_extract_footnotes(doc),
+        endnotes=_extract_endnotes(doc),
     )
 
 
@@ -1278,6 +1390,8 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         heading_counters = [0, 0, 0, 0, 0]
         # Round 57：内联脚注累积表（{{fn:备注}} → footnoteReference id 1..N）
         footnote_texts: List[str] = []
+        # Round 59：内联尾注累积表（{{en:备注}} → endnoteReference id 1..N）
+        endnote_texts: List[str] = []
         numbering = bool(req.format_spec.numbering) if req.format_spec else False
         # ── Round 26：横排分节（section_breaks 按 start_paragraph 排序） ───
         pending_breaks: List[Any] = sorted(
@@ -1312,6 +1426,7 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                     figure_caption_numbers,
                     table_caption_numbers,
                     footnotes=footnote_texts,
+                    endnotes=endnote_texts,
                 )
                 if _CROSS_REF_RE.search(para.text)
                 else None
@@ -1399,6 +1514,10 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         if footnote_texts:
             _mount_footnotes_part(doc, footnote_texts)
             _ensure_footnote_styles(doc)
+        # Round 59：内联尾注（无尾注零变化）。
+        if endnote_texts:
+            _mount_endnotes_part(doc, endnote_texts)
+            _ensure_endnote_styles(doc)
         doc.save(str(output_path))
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate DOCX: {exc}", file_path=output_path) from exc

@@ -234,6 +234,8 @@ class OfficeWordReadResult(BaseModel):
     headers_footers: List[WordHeaderFooterContent] = Field(default_factory=list)
     # Round 57：脚注文本清单（footnotes part 回读；无脚注为空表）。
     footnotes: List[str] = Field(default_factory=list)
+    # Round 59：尾注文本清单（endnotes part 回读；无尾注为空表）。
+    endnotes: List[str] = Field(default_factory=list)
     # Round 15：文档中的目录域 instr 列表。
     toc_fields: List[str] = Field(default_factory=list)
     # Office display round C (P4)：内嵌图片缩略预览。additive field ——
