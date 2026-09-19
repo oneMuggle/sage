@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`read_docx` 回读 `endnotes: List[str]`**；脚注与尾注同段混用各自独立 part 与编号；无尾注文档不挂载 part（产物零变化）
 - 契约同步：schema content 描述补 `{{en:}}`；types.ts 读结果加 `endnotes?: string[]`；SKILL 补脚注/尾注选型说明
 
+> 🌐 **网页访问能力优化 Round 20：并行聚合搜索指标 + 诊断导出集成**（方案 `docs/plans/2026-09-18_web-access-optimization-round20.md`）
+
+### Changed(web-access)
+- **搜索指标收尾（S1）**：`_search_parallel` 并行聚合模式逐引擎埋点（伪域 `search:<engine>`；成功含 0 条结果记 ok、异常记 fail）——R18 遗留尾巴闭环
+- **诊断导出集成（X2 完整闭环）**：诊断包 zip 新增 `web-metrics.json`（per-host 出网指标快照，非空时写入；快照失败静默不影响诊断包）
+
 > 📝 **Word 写作能力 Round 58：脚注 Phase B——样式注入 + 每节重编**（方案 `docs/plans/2026-09-19_r58-footnote-phase-b-plan.md`）
 
 ### Added(office)
@@ -59,7 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added(office)
 - **`metadata`（WordMetadataSpec）**：office_create word 请求支持 author/subject/keywords/comments/category → 写入 docx core properties（Word「文件 → 信息」面板可见）——期刊投稿/公文归档的常规要求；title 恒取请求标题，其余显式传入才写（不臆造作者）
 - 契约同步：schema content 层 metadata 对象 + types.ts WordMetadataSpec；paper-writing 第 4 步示例补 metadata
-
+ 诊断导出集成 per-host 指标)
 > 🧹 **Word 写作能力 Round 48：repair 补 index 域插入 + SEQ 题注重排兼容**（方案 `docs/plans/2026-09-18_r48-repair-index-plan.md`）
 
 ### Added(office)
