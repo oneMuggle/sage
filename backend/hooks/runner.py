@@ -14,18 +14,23 @@
 no-op (记 warning)。唯有显式 ``{"decision": "deny"}`` 会阻断工具执行。
 超时杀掉整个进程组 (``start_new_session`` + ``os.killpg``; Windows 上
 尽力而为)。
+
+Phase 1 扩展: ``hook_type="python"`` 的钩子在进程内直接调用 Python
+函数 (不 spawn subprocess), 用于内置钩子。
 """
 
 from __future__ import annotations
 
 import asyncio
+import importlib
+import inspect
 import json
 import logging
 import os
 import signal
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from backend.hooks.config import HookConfig
 
@@ -56,8 +61,16 @@ class HookOutcome:
 
 
 def matches_tool(matcher: str, tool_name: str) -> bool:
-    """glob 匹配钩子 matcher 与工具名 (``*`` 匹配全部)。"""
-    return fnmatch(tool_name, matcher or "*")
+    """glob 匹配钩子 matcher 与工具名。
+
+    - ``*`` / 空 matcher 匹配全部工具;
+    - ``|`` 分隔多个备选模式 (如 ``"write_file|edit_file"``), 任一命中即匹配。
+      不含 ``|`` 的模式行为与纯 fnmatch 完全一致 (向后兼容)。
+    """
+    pattern = (matcher or "*").strip()
+    if not pattern:
+        return True
+    return any(fnmatch(tool_name, part.strip()) for part in pattern.split("|") if part.strip())
 
 
 #: post_tool_use payload 中 tool_output 的截断上限 (审查加固: 工具结果
@@ -127,6 +140,101 @@ def _kill_process_group(proc: Optional[asyncio.subprocess.Process]) -> None:
         logger.debug("hooks: process group kill best-effort failed: %s", exc)
 
 
+# ── Python hook 进程内执行 (Phase 1: 内置钩子) ──────────────────────
+
+#: handler dotted-path → callable 缓存, 避免每次调用都 import_module
+_HANDLER_CACHE: Dict[str, Callable[..., Any]] = {}
+
+
+def _resolve_handler(handler_path: str) -> Optional[Callable[..., Any]]:
+    """解析 ``module.path:func`` 形式的 handler (fail-open → None)。
+
+    找不到 / 导入失败 / 属性非 callable 一律记 warning 并返回 None。
+    """
+    if not handler_path:
+        return None
+    cached = _HANDLER_CACHE.get(handler_path)
+    if cached is not None:
+        return cached
+    try:
+        if ":" in handler_path:
+            module_path, _, func_name = handler_path.partition(":")
+        else:
+            module_path, _, func_name = handler_path.rpartition(".")
+        if not module_path or not func_name:
+            logger.warning("hooks: malformed handler path %r (fail-open)", handler_path)
+            return None
+        module = importlib.import_module(module_path)
+        func = getattr(module, func_name, None)
+        if not callable(func):
+            logger.warning("hooks: handler %r is not callable (fail-open)", handler_path)
+            return None
+        _HANDLER_CACHE[handler_path] = func
+        return func
+    except Exception as exc:
+        logger.warning("hooks: failed to resolve handler %r (fail-open): %s", handler_path, exc)
+        return None
+
+
+async def _run_python_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:
+    """在进程内调用内置 Python 钩子处理函数。永不抛异常 (任何失败 → no-op)。
+
+    处理函数签名: ``async def handler(payload: dict, config: dict) -> dict``
+    返回的 dict 与 shell 钩子 STDOUT 同构 (decision / reason / updated_input)。
+
+    配置解析: 以 ``builtin_id`` 对应的注册表 ``default_config`` 为基底,
+    用用户的 ``config_override`` 覆盖 —— 未显式配置的钩子也拿到可用默认值
+    (否则空 config 会让安全守卫的黑名单为空 = 形同虚设)。
+    """
+    func = _resolve_handler(hook_cfg.handler)
+    if func is None:
+        return HookOutcome(decision=DECISION_NOOP, reason=f"handler not found: {hook_cfg.handler}")
+
+    config: Dict[str, Any] = {}
+    if hook_cfg.builtin_id:
+        default_config = _builtin_default_config(hook_cfg.builtin_id)
+        if default_config:
+            config.update(default_config)
+    if isinstance(hook_cfg.config_override, dict):
+        config.update(hook_cfg.config_override)
+
+    try:
+        result = func(payload_dict, config)
+        if inspect.isawaitable(result):
+            result = await asyncio.wait_for(result, timeout=hook_cfg.timeout_seconds)
+    except asyncio.TimeoutError:  # noqa: UP041 — py3.8 上不是 builtin TimeoutError 别名
+        logger.warning(
+            "hooks: python hook %s timed out after %.1fs (fail-open)",
+            hook_cfg.handler,
+            hook_cfg.timeout_seconds,
+        )
+        return HookOutcome(decision=DECISION_NOOP, reason="timeout")
+    except Exception as exc:
+        logger.warning("hooks: python hook %r raised (fail-open): %s", hook_cfg.handler, exc)
+        return HookOutcome(decision=DECISION_NOOP, reason=f"handler error: {exc}")
+
+    if not isinstance(result, dict):
+        logger.warning("hooks: python hook %r returned non-dict (fail-open)", hook_cfg.handler)
+        return HookOutcome(decision=DECISION_NOOP, reason="handler returned non-dict")
+
+    return _parse_decision_dict(result)
+
+
+def _builtin_default_config(builtin_id: str) -> Dict[str, Any]:
+    """取内置钩子的 default_config (未知 ID / 导入失败 → 空 dict, fail-open)。"""
+    try:
+        from backend.hooks.builtin import get_builtin
+
+        meta = get_builtin(builtin_id)
+        if isinstance(meta, dict):
+            defaults = meta.get("default_config")
+            if isinstance(defaults, dict):
+                return defaults
+    except Exception as exc:  # pragma: no cover — 防御性
+        logger.debug("hooks: builtin default_config lookup failed: %s", exc)
+    return {}
+
+
 def _parse_decision_dict(data: Dict[str, Any]) -> HookOutcome:
     """把钩子输出的 JSON 对象映射为 HookOutcome (未知 decision → no-op)。"""
     reason = data.get("reason")
@@ -165,15 +273,21 @@ def _parse_stdout(stdout_text: str) -> HookOutcome:
 
 
 async def run_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:
-    """执行单个钩子命令。永不抛异常 (任何失败 → no-op)。
+    """执行单个钩子。永不抛异常 (任何失败 → no-op)。
+
+    ``hook_type="python"`` 走进程内调用 (内置钩子); ``"shell"`` spawn
+    子进程 + STDIN/STDOUT JSON 协议。
 
     Args:
         hook_cfg: 已校验的钩子配置
-        payload_dict: 经 STDIN 传入的 JSON payload
+        payload_dict: 传给钩子的 JSON payload
 
     Returns:
         HookOutcome: allow / deny / modify / noop 之一
     """
+    if hook_cfg.hook_type == "python":
+        return await _run_python_hook(hook_cfg, payload_dict)
+
     env = os.environ.copy()
     env["SAGE_HOOK_EVENT"] = str(payload_dict.get("hook_event_name", hook_cfg.event))
     env["SAGE_TOOL_NAME"] = str(payload_dict.get("tool_name", ""))
