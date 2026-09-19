@@ -580,13 +580,13 @@ Phase 6  ─── 诊断与可视化 ────────── 1 周（远
 - [x] Phase 1, Step 6：`HooksCard.tsx` 新增"推荐 Hook"区域 + 一键启用
 - [x] Phase 1, Step 7：编写 `test_hooks_builtin.py` (61 用例) + `test_hooks_routes.py` (4 用例) + HooksCard 测试 (10 用例)
 - [x] 额外修复：`matches_tool` 支持 `|` 交替语法；内置 matcher 对齐真实工具名（`bash` / `write_file` / `edit_file` / `apply_patch`）
-- [ ] Phase 2, Step 1：`HOOK_EVENTS` 新增 `session_start` / `session_stop` / `error_occurred`
-- [ ] Phase 2, Step 2：`build_payload` 支持新事件的 payload 结构
-- [ ] Phase 2, Step 3：`agent.py` 集成 `session_start`（`__init__`）+ `error_occurred`（异常捕获）
-- [ ] Phase 2, Step 4：`legacy_routes.py` 集成 `session_stop`
-- [ ] Phase 3, Step 1：`HookOutcome` 新增 `additional_context` + `severity`
-- [ ] Phase 3, Step 2：`agent.py` post_tool_use 后检查并注入 working memory
-- [ ] Phase 3, Step 3：端到端测试（hook → additional_context → AI 可见）
+- [x] Phase 2, Step 1：`HOOK_EVENTS` 新增 `session_start` / `session_stop` / `error_occurred`
+- [x] Phase 2, Step 2：`build_session_payload` / `build_error_payload` + `run_event_hooks_sync` 同步桥接
+- [x] Phase 2, Step 3：`agent._maybe_fire_error_hook` 集成（串行 + 并行两条路径）
+- [x] Phase 2, Step 4：`legacy_session_routes.py` 集成 `session_start` / `session_stop`
+- [x] Phase 3, Step 1：`HookOutcome` 新增 `additional_context` + `severity` + `has_feedback`
+- [x] Phase 3, Step 2：`agent.py` post_tool_use 后注入 `system` 消息到对话历史（串行 + 并行）
+- [x] Phase 3, Step 3：端到端测试（hook → additional_context → 对话历史可见）
 - [ ] Phase 4, Step 1：`.sage/hooks.json` 加载 + `load_project_hooks()`
 - [ ] Phase 4, Step 2：`merger.py` 三级合并逻辑 + 安全约束
 - [ ] Phase 5, Step 1：`http_client.py` + `run_hook()` HTTP 分支

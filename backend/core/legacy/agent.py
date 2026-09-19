@@ -1290,7 +1290,8 @@ class SageAgent:
                                 "content": cap_result_for_context(content_p),
                             }
                         )
-                        await run_event_hooks(
+                        # Phase 3: 钩子反馈注入 (并行路径)
+                        parallel_outcome = await run_event_hooks(
                             m6_hooks,
                             "post_tool_use",
                             tc_p.name,
@@ -1302,6 +1303,21 @@ class SageAgent:
                                 is_error=err_p,
                             ),
                         )
+                        if parallel_outcome.has_feedback:
+                            severity_label = {
+                                "info": "提示",
+                                "warning": "警告",
+                                "error": "错误",
+                            }.get(parallel_outcome.severity, "提示")
+                            messages.append(
+                                {
+                                    "role": "system",
+                                    "content": (
+                                        f"[钩子反馈·{severity_label}] "
+                                        f"{parallel_outcome.additional_context}"
+                                    ),
+                                }
+                            )
                         # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
                         await self._maybe_fire_error_hook(
                             m6_hooks, tc_p.name, content_p, err_p
@@ -1792,7 +1808,9 @@ class SageAgent:
 
                     # ===== M6 HOOKS BEGIN: post_tool_use (observe-only) =====
                     # 观察/审计专用 — 无法修改工具结果。
-                    await run_event_hooks(
+                    # Phase 3: 若钩子返回 ``additional_context``，以 system 角色
+                    # 注入对话历史，供 LLM 下一轮感知（如 lint 反馈 / 格式提醒）。
+                    hook_outcome = await run_event_hooks(
                         m6_hooks,
                         "post_tool_use",
                         tc.name,
@@ -1804,6 +1822,21 @@ class SageAgent:
                             is_error=is_error,
                         ),
                     )
+                    if hook_outcome.has_feedback:
+                        severity_label = {
+                            "info": "提示",
+                            "warning": "警告",
+                            "error": "错误",
+                        }.get(hook_outcome.severity, "提示")
+                        messages.append(
+                            {
+                                "role": "system",
+                                "content": (
+                                    f"[钩子反馈·{severity_label}] "
+                                    f"{hook_outcome.additional_context}"
+                                ),
+                            }
+                        )
                     # ===== M6 HOOKS END =====
 
                     # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
