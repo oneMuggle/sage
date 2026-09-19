@@ -45,16 +45,18 @@ Tab 一打开就会自动扫描本机：
 推断项目类型，比对需要的运行时是否在"本机运行时"里都齐备。
 
 显示内容：
-- **项目类型**（如 `python-node`、`python-only`、`unknown`）
-- **满足度**：✓ 全部满足 / ⚠ 需要处理
+- **诊断等级**：`satisfied`（全部满足）、`partial`（部分满足）或 `unsatisfied`（需要处理）
+- 识别到的项目清单及需要的语言
+- 推荐运行时（如有）
 - 需要处理时，下方列出诊断条目，每条带：
-  - 严重度徽章：`INFO` / `WARN` / `ERROR`
+  - 严重度徽章：`INFO` / `WARNING` / `ERROR`
   - 诊断代码（如 `PYTHON_NOT_FOUND`）
-  - 说明文字 + 修复提示
+  - 说明文字、关联路径（如有）和修复提示（如有）
+- 探测过程中的异常会显示在 `probe_errors` 提示中
 
 **示例**：
-- ⚠ `NODE_NOT_FOUND` — "工作区需要 Node.js，但未发现任何 Node 运行时" → "安装 Node.js：https://nodejs.org/"
-- ⚠ `PYTHON_VERSION_OLD` — "发现 Python 3.8，但项目要求 >=3.10" → "安装更高版本的 Python 或在 venv 里使用 3.10+"
+- `PYTHON_NOT_FOUND` — "工作区需要 Python，但未发现任何 Python 运行时"
+- `PYTHON_VERSION_OLD` — "发现 Python 3.8，但项目要求 >=3.10" → 查看该条目的修复提示
 
 ### 3.3 试跑代码片段
 
@@ -92,7 +94,7 @@ A: 推荐规则是：is_default 标记最高的运行时 → 否则第一个能�
 
 ### Q: 项目诊断显示"需要处理"，我该怎么修？
 
-A: 看每条诊断下面的 `fix_hint`（蓝色小字），里面是给定的修复提示。
+A: 看每条诊断下面的 `remediation`（蓝色小字，如有），里面是给定的修复提示。
 典型修复：
 - `PYTHON_NOT_FOUND` → 安装 Python 3.10+
 - `NODE_NOT_FOUND` → 安装 Node.js（推荐 LTS）

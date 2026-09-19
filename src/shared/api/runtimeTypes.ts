@@ -54,33 +54,38 @@ export interface ProbeResult {
 }
 
 /** Diagnostic severity for project-level findings. */
-export type DiagnosticSeverity = 'info' | 'warn' | 'error';
+export type DiagnosticSeverity = 'info' | 'warning' | 'error';
 
 /** Diagnostic level — how deep into the project the finding reaches. */
-export type DiagnosticLevel = 'project' | 'runtime' | 'toolchain' | 'dependency';
+export type DiagnosticLevel = 'satisfied' | 'partial' | 'unsatisfied';
 
 /** A single finding from project diagnosis. */
 export interface Diagnostic {
-  level: DiagnosticLevel;
-  severity: DiagnosticSeverity;
-  /** Short slug (e.g. "missing-runtime", "version-mismatch"). */
   code: string;
+  severity: DiagnosticSeverity;
   /** Human-readable message. */
   message: string;
-  /** Optional remediation hint (may be empty string). */
-  fix_hint: string;
+  /** Optional remediation hint. */
+  remediation: string | null;
+  /** Optional manifest or project path related to the finding. */
+  related_path: string | null;
+}
+
+export interface ProjectManifest {
+  language: string;
+  path: string;
+  kind: string;
+  requires: string[];
+  extras: Record<string, unknown>;
 }
 
 /** Result of ``POST /api/v1/runtime/diagnose``. */
 export interface ProjectDiagnosis {
-  /** Inferred project type (e.g. "python-react", "node-only", "unknown"). */
-  project_type: string;
-  /** Required runtimes for this project type (inferred). */
-  required_languages: string[];
-  /** All diagnostics — empty array means "project fully satisfied". */
+  level: DiagnosticLevel;
   diagnostics: Diagnostic[];
-  /** Whether the project's runtime needs are fully satisfied. */
-  satisfied: boolean;
+  manifests: ProjectManifest[];
+  recommended_runtime: string | null;
+  probe_errors: string[];
 }
 
 /** Result of ``POST /api/v1/runtime/exec``. */
