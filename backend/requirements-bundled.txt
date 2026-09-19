@@ -47,6 +47,12 @@ sqlite-vec>=0.1.9
 
 # HTTP
 httpx==0.26.0
+
+# Crypto (Arena account pool — Fernet symmetric encryption for passwords)
+# cryptography 47.0.0 is the last release shipping cp38 wheels (48.0.0
+# requires >=3.9). Keep in sync across requirements-py38.txt /
+# requirements-bundled.txt so all Win7 channels share one audited version.
+cryptography==47.0.0
 python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
 
 # Observability
