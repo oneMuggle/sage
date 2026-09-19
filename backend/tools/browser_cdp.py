@@ -19,6 +19,7 @@ data（拒绝 file:// / chrome:// / javascript:，见 browser_tool 校验）。
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -30,6 +31,7 @@ import tempfile
 import threading
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional
