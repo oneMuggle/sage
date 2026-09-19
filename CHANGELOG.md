@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🧹 **Word 写作能力 Round 63：脚注/尾注引用一致性 lint**（方案 `docs/plans/2026-09-19_r63-ref-consistency-plan.md`）
+
+### Added(office)
+- **`footnote/broken_ref` / `endnote/broken_ref` lint 规则**：正文引用 run 的 id 对照 footnotes/endnotes part 的真实 note id 集合——损坏文档（引用无对应 note，Word 打开即报"内容有问题"）给出可定位的 error
+- 无引用文档零开销跳过；`ref_consistency` 无条件入 checked
+
 > 📝 **Word 写作能力 Round 62：用户手册补脚注/尾注/文档属性**（纯文档轮）
 
 ### Changed(docs)

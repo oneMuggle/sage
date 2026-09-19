@@ -379,6 +379,46 @@ def _check_cross_ref_residue(doc: Document, issues: List[WordLintIssue]) -> None
         ))
 
 
+def _check_ref_consistency(doc: Document, issues: List[WordLintIssue]) -> None:
+    """脚注/尾注引用 id 必须在对应 part 有 note（Round 63）。
+
+    正文 ``footnoteReference``/``endnoteReference`` 的 id 对照
+    footnotes/endnotes part 的真实 note id 集合（系统脚注跳过）；
+    无引用的文档零开销跳过。
+    """
+    W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    for kind, partname in (
+        ("footnote", "/word/footnotes.xml"),
+        ("endnote", "/word/endnotes.xml"),
+    ):
+        refs = [
+            int(el.get(qn("w:id")))
+            for p in doc.paragraphs
+            for el in p._p.findall(f".//{{{W}}}{kind}Reference")
+        ]
+        if not refs:
+            continue
+        note_ids: set = set()
+        for part in doc.part.package.iter_parts():
+            if str(part.partname) != partname:
+                continue
+            from xml.etree import ElementTree
+
+            root = ElementTree.fromstring(part.blob)
+            for note in root.findall(f"{{{W}}}{kind}"):
+                if note.get(f"{{{W}}}type") is None:
+                    note_ids.add(int(note.get(f"{{{W}}}id")))
+            break
+        broken = sorted({r for r in refs if r not in note_ids})
+        if broken:
+            issues.append(_issue(
+                f"{kind}/broken_ref", "error",
+                f"{len(broken)} 处 {kind}Reference 引用了不存在的 note id"
+                f"（{broken}）",
+                "文档可能被手工改动——用原 format_spec 重新生成",
+            ))
+
+
 def _check_citations(doc: Document, issues: List[WordLintIssue]) -> None:
     numbers: set = set()
     for para in doc.paragraphs:
@@ -480,6 +520,10 @@ def lint_docx(path: Path, spec: WordFormatSpec) -> WordLintResult:
     # 下都是死文本）。
     checked.append("cross_ref")
     _check_cross_ref_residue(doc, issues)
+    # Round 63：脚注/尾注引用一致性（损坏文档检出——引用 id 无对应
+    # note 时 Word 打开即报"内容有问题"）。
+    checked.append("ref_consistency")
+    _check_ref_consistency(doc, issues)
 
     errors = [i for i in issues if i.severity == "error"]
     warnings = [i for i in issues if i.severity == "warning"]
