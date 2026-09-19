@@ -174,6 +174,54 @@ async def test_create_header_credential_origin_guard(client):
     assert resp.status_code == 403
 
 
+# ---------- Round 19：cookie 型凭据导入入口 ----------
+
+
+async def test_create_cookie_credential_ok(client, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        routes,
+        "save_credential",
+        lambda domain, cookies: captured.update(domain=domain, cookies=cookies),
+    )
+    response = await client.post(
+        "/api/v1/web-access/credentials/cookie",
+        json={
+            "domain": ".example.com",
+            "cookies": [{"name": "SID", "value": "opaque", "path": "/"}],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+    assert captured == {
+        "domain": ".example.com",
+        "cookies": [{"name": "SID", "value": "opaque", "path": "/"}],
+    }
+
+
+async def test_create_cookie_credential_rejects_invalid_cookie(client, monkeypatch):
+    def reject(domain, cookies):
+        raise ValueError("save_credential: cookies 中没有可保存的条目")
+
+    monkeypatch.setattr(routes, "save_credential", reject)
+    response = await client.post(
+        "/api/v1/web-access/credentials/cookie",
+        json={"domain": ".example.com", "cookies": [{"name": "", "value": "x"}]},
+    )
+    assert response.status_code == 422
+    assert response.json()["ok"] is False
+    assert "opaque" not in response.text
+
+
+async def test_create_cookie_credential_origin_guard(client):
+    response = await client.post(
+        "/api/v1/web-access/credentials/cookie",
+        json={"domain": ".example.com", "cookies": [{"name": "SID", "value": "opaque"}]},
+        headers={"Origin": "https://evil.example"},
+    )
+    assert response.status_code == 403
+
+
 # ---------- Round 15：per-host 出网指标端点 ----------
 
 

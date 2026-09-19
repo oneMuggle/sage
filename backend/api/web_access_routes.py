@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -39,6 +39,7 @@ from backend.data.settings_repo import SettingsRepository
 from backend.tools.credential_vault import (
     delete_credential,
     list_credentials,
+    save_credential,
     save_header_credential,
 )
 
@@ -69,6 +70,16 @@ class HeaderCredentialBody(BaseModel):
     domain: str
     header_name: str
     value: str
+
+    class Config:
+        extra = Extra.forbid
+
+
+class CookieCredentialBody(BaseModel):
+    """POST cookie credential request; values are validated again by the vault."""
+
+    domain: str
+    cookies: List[Dict[str, Any]]
 
     class Config:
         extra = Extra.forbid
@@ -159,6 +170,21 @@ async def create_header_credential(request: Request, body: HeaderCredentialBody)
         save_header_credential(
             body.domain.strip().lower(), {body.header_name: body.value}
         )
+    except ValueError as exc:
+        return JSONResponse(status_code=422, content={"ok": False, "error": str(exc)[:200]})
+    return {"ok": True}
+
+
+@router.post("/web-access/credentials/cookie")
+async def create_cookie_credential(
+    request: Request, body: CookieCredentialBody
+) -> Dict[str, Any]:
+    """新增 cookie 型凭据，沿用凭据库校验并隐藏请求内容。"""
+    guard = _origin_guard(request)
+    if guard:
+        return guard
+    try:
+        save_credential(body.domain.strip().lower(), body.cookies)
     except ValueError as exc:
         return JSONResponse(status_code=422, content={"ok": False, "error": str(exc)[:200]})
     return {"ok": True}
