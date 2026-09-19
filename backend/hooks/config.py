@@ -32,7 +32,16 @@ logger = logging.getLogger(__name__)
 
 # L11 (批次 C-2): 新增 user_prompt_submit(提示词提交, deny 可拦截消息)
 # 与 stop(run 结束通知, observe-only)。
-HOOK_EVENTS = ("pre_tool_use", "post_tool_use", "user_prompt_submit", "stop")
+# Phase 2 (2026-09-19): 新增 session_start / session_stop / error_occurred 生命周期事件
+HOOK_EVENTS = (
+    "pre_tool_use",
+    "post_tool_use",
+    "user_prompt_submit",
+    "stop",
+    "session_start",
+    "session_stop",
+    "error_occurred",
+)
 HOOK_TYPES = ("shell", "python")
 MAX_HOOKS = 20
 DEFAULT_TIMEOUT_SECONDS = 10.0

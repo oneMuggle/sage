@@ -1296,6 +1296,10 @@ class SageAgent:
                                 is_error=err_p,
                             ),
                         )
+                        # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
+                        await self._maybe_fire_error_hook(
+                            m6_hooks, tc_p.name, content_p, err_p
+                        )
                     # 2026-09 step-by-step: 并行迭代边界，legacy_routes 收到后
                     # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
                     # 消息，并重置累加器准备下一步。
@@ -1760,6 +1764,11 @@ class SageAgent:
                     )
                     # ===== M6 HOOKS END =====
 
+                    # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
+                    await self._maybe_fire_error_hook(
+                        m6_hooks, tc.name, result_content, is_error
+                    )
+
                 # 2026-09 step-by-step: 串行迭代边界，legacy_routes 收到后
                 # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
                 # 消息，并重置累加器准备下一步。
@@ -1897,6 +1906,36 @@ class SageAgent:
         except Exception as exc:
             logger.warning("M6 hooks load failed (fail-open): %s", exc)
             return []
+
+    async def _maybe_fire_error_hook(
+        self,
+        hooks: List[HookConfig],
+        tool_name: str,
+        content: str,
+        is_error: bool,
+    ) -> None:
+        """Phase 2: 工具执行失败时触发 ``error_occurred`` 钩子 (observe-only)。
+
+        仅在 ``is_error=True`` 且确有钩子配置时触发; 任何故障都 fail-open。
+        供外部系统 (告警 / 自动修复 / 合规审计) 订阅工具级失败。
+        """
+        if not is_error or not hooks:
+            return
+        try:
+            from backend.hooks.runner import build_error_payload
+
+            await run_event_hooks(
+                hooks,
+                "error_occurred",
+                tool_name,
+                build_error_payload(
+                    error_type="tool_error",
+                    error_message=(content or "")[:1024],
+                    tool_name=tool_name,
+                ),
+            )
+        except Exception as exc:  # pragma: no cover — 防御性, fail-open
+            logger.debug("error_occurred hook dispatch failed (fail-open): %s", exc)
 
     # ===== M6 HOOKS END =====
 

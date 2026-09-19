@@ -65,9 +65,10 @@ describe('HooksCard', () => {
     await waitFor(() => {
       expect(mockSet).toHaveBeenCalled();
     });
-    const saved = JSON.parse(
-      (mockSet.mock.calls[0][0] as { value: string }).value,
-    ) as Array<{ event: string; command: string }>;
+    const saved = JSON.parse((mockSet.mock.calls[0][0] as { value: string }).value) as Array<{
+      event: string;
+      command: string;
+    }>;
     expect(saved).toHaveLength(1);
     expect(saved[0].event).toBe('pre_tool_use');
   });
@@ -97,9 +98,9 @@ describe('HooksCard', () => {
     await waitFor(() => {
       expect(mockSet).toHaveBeenCalled();
     });
-    const saved = JSON.parse(
-      (mockSet.mock.calls[0][0] as { value: string }).value,
-    ) as Array<{ command: string }>;
+    const saved = JSON.parse((mockSet.mock.calls[0][0] as { value: string }).value) as Array<{
+      command: string;
+    }>;
     expect(saved[0].command).toBe('new-cmd');
     expect(mockSet.mock.calls[0][0].valueType).toBe('json');
   });
@@ -119,9 +120,9 @@ describe('HooksCard', () => {
     await waitFor(() => {
       expect(mockSet).toHaveBeenCalled();
     });
-    const saved = JSON.parse(
-      (mockSet.mock.calls[0][0] as { value: string }).value,
-    ) as Array<{ command: string }>;
+    const saved = JSON.parse((mockSet.mock.calls[0][0] as { value: string }).value) as Array<{
+      command: string;
+    }>;
     expect(saved).toHaveLength(1);
     expect(saved[0].command).toBe('b');
   });
@@ -154,9 +155,10 @@ describe('HooksCard', () => {
     await waitFor(() => {
       expect(mockSet).toHaveBeenCalled();
     });
-    const saved = JSON.parse(
-      (mockSet.mock.calls[0][0] as { value: string }).value,
-    ) as Array<{ builtin_id?: string; hook_type?: string }>;
+    const saved = JSON.parse((mockSet.mock.calls[0][0] as { value: string }).value) as Array<{
+      builtin_id?: string;
+      hook_type?: string;
+    }>;
     expect(saved).toHaveLength(1);
     expect(saved[0].builtin_id).toBe('security_guard');
     expect(saved[0].hook_type).toBe('python');
@@ -184,9 +186,7 @@ describe('HooksCard', () => {
     await waitFor(() => {
       expect(mockSet).toHaveBeenCalled();
     });
-    const saved = JSON.parse(
-      (mockSet.mock.calls[0][0] as { value: string }).value,
-    ) as unknown[];
+    const saved = JSON.parse((mockSet.mock.calls[0][0] as { value: string }).value) as unknown[];
     expect(saved).toHaveLength(0);
   });
 
@@ -220,5 +220,26 @@ describe('HooksCard', () => {
       expect(screen.getByText(/暂无自定义钩子/)).toBeInTheDocument();
     });
     expect(screen.queryByText(/推荐 Hook/)).not.toBeInTheDocument();
+  });
+
+  // Phase 2: 生命周期事件进入下拉选项
+  it('offers lifecycle events in the event dropdown', async () => {
+    render(<HooksCard />);
+    const addBtn = await screen.findByTestId('hooks-add');
+    fireEvent.click(addBtn);
+    const select = await screen.findByLabelText('钩子事件');
+    const options = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+    expect(options).toEqual(
+      expect.arrayContaining(['session_start', 'session_stop', 'error_occurred']),
+    );
+    // 既有事件不丢
+    expect(options).toEqual(
+      expect.arrayContaining([
+        'pre_tool_use',
+        'post_tool_use',
+        'user_prompt_submit',
+        'stop',
+      ]),
+    );
   });
 });
