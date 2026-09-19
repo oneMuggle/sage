@@ -131,6 +131,36 @@ async def test_inproc_big_output_is_truncated_to_max_bytes():
 
 
 @pytest.mark.asyncio()
+async def test_inproc_structured_output_is_bounded():
+    """结构化 output 超限时返回截断标记，不绕过中心 byte 上限。"""
+    policy = ToolPolicy(max_output_bytes=64)
+    structured_tool = type("Structured", (), {})()
+    structured_tool.name = "structured"
+    structured_tool.description = "structured output"
+    structured_tool.parameters = {"type": "object"}
+    structured_tool.execute = lambda **_: BaseToolResult(
+        success=True,
+        content={"items": ["x" * 200]},
+        error=None,
+    )
+    adapter = _make_inproc(structured_tool, policy=policy)
+
+    result = await adapter.execute("structured", {})
+
+    assert result.success is True
+    assert result.output == {
+        "truncated": True,
+        "original_bytes": result.metadata["original_bytes"],
+        "max_output_bytes": 64,
+    }
+    assert result.metadata == {
+        "truncated": True,
+        "original_bytes": result.metadata["original_bytes"],
+        "max_output_bytes": 64,
+    }
+
+
+@pytest.mark.asyncio()
 async def test_inproc_small_output_is_not_truncated():
     policy = ToolPolicy(max_output_bytes=1024)
     small_tool = type("Small", (), {})()

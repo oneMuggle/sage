@@ -409,11 +409,7 @@ export class UpdateManager {
           fileUrl: firstAsset.downloadUrl,
         };
         const metaDir = path.dirname(managedPath);
-        await fs.writeFile(
-          path.join(metaDir, 'rollback-meta.json'),
-          JSON.stringify(meta),
-          'utf-8',
-        );
+        await fs.writeFile(path.join(metaDir, 'rollback-meta.json'), JSON.stringify(meta), 'utf-8');
       } catch (metaErr) {
         logger.warn?.('provider download: rollback meta write failed', metaErr);
       }
@@ -689,6 +685,26 @@ export class UpdateManager {
     this.lastCheckedUpdate = null;
   }
 
+  /**
+   * Apply a partial update-config change (Settings advanced controls).
+   *
+   * Reads the current validated config, merges the patch, and persists through
+   * ConfigManager so existing numeric/URL/enum validation still applies. Returns
+   * the stored config so the renderer can confirm what was accepted.
+   *
+   * Channel or server changes invalidate the cached check result, mirroring
+   * setChannel() — a stale manifest must not be reused for a new target.
+   */
+  async setConfigPatch(patch: Partial<UpdateConfig>): Promise<UpdateConfig> {
+    const config = await this.configManager.getConfig();
+    const next = { ...config, ...patch };
+    await this.configManager.setConfig(next);
+    if (next.channel !== config.channel || next.updateServerUrl !== config.updateServerUrl) {
+      this.lastCheckedUpdate = null;
+    }
+    return this.configManager.getConfig();
+  }
+
   private isUpdaterCachePath(filePath: string): boolean {
     const resolved = path.resolve(filePath);
     const cacheRoot = path.resolve(app.getPath('userData'));
@@ -815,11 +831,10 @@ export class UpdateManager {
       const installDir = path.dirname(process.execPath);
       const { spawn } = await import('child_process');
       try {
-        const installer = spawn(
-          this.providerInstallerPath,
-          ['/S', `/D=${installDir}`],
-          { detached: true, stdio: 'ignore' },
-        );
+        const installer = spawn(this.providerInstallerPath, ['/S', `/D=${installDir}`], {
+          detached: true,
+          stdio: 'ignore',
+        });
         installer.unref();
       } catch (spawnError) {
         const failedState: UpdateState = {
@@ -1190,9 +1205,7 @@ export class UpdateManager {
    * "当前版本"的安装包 + 元数据, 作为 last-known-good 回滚数据。
    * 版本不匹配 / 元数据缺失 / hash 非法 → null (如实记录, 不放宽校验)。
    */
-  private async findLastKnownGoodPackage(
-    version: string,
-  ): Promise<{
+  private async findLastKnownGoodPackage(version: string): Promise<{
     path: string;
     version: string;
     sha512: string;

@@ -122,6 +122,7 @@ async def test_diagnose_returns_tool_result(client, chat_service_injected):
     assert body["output"]["level"] == "satisfied"
     assert body["output"]["diagnostics"] == []
     assert body["output"]["manifests"] == []
+    assert body["output"]["probe_errors"] == []
     name, args = chat_service_injected.tools.calls[-1]
     assert name == "project_diagnose"
     assert args["project_root"] == "/tmp/x"

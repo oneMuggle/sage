@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import time
 import uuid
@@ -914,7 +915,13 @@ class ChatService:
             # 把工具结果作为 TOOL 消息回写会话历史
             tool_message = Message(
                 role=Role.TOOL,
-                content=result.output if result.success else (result.error or ""),
+                content=(
+                    result.output
+                    if isinstance(result.output, str)
+                    else json.dumps(result.output, ensure_ascii=False, default=str)
+                )
+                if result.success
+                else (result.error or ""),
                 tool_call_id=tc.id,
             )
             await self.storage.append_message(session_id, tool_message)

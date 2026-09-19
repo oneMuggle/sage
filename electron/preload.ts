@@ -314,6 +314,8 @@ const electronAPI = {
     getConfig: () => ipcRenderer.invoke('update:get-config') as Promise<UpdateConfig>,
     setChannel: (channel: UpdateChannel) =>
       ipcRenderer.invoke('update:set-channel', channel) as Promise<void>,
+    setConfigPatch: (patch: Partial<UpdateConfig>) =>
+      ipcRenderer.invoke('update:set-config-patch', patch) as Promise<UpdateConfig>,
     checkWith: (providerId: string, channel?: string) =>
       ipcRenderer.invoke('update:check-with', {
         providerId,
