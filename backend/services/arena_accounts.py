@@ -77,7 +77,7 @@ def get_or_create_master_key(settings_repo: Optional[Any] = None) -> bytes:
 
 
 def _utcnow_iso() -> str:
-    """Return naive UTC timestamp string. Py3.10 compatible (no datetime.UTC)."""
+    """Return naive UTC timestamp string (timezone-aware now, tzinfo stripped)."""
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")  # noqa: UP017
 
 
