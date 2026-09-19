@@ -17,8 +17,6 @@ describe('parseCookieHeader', () => {
   });
 
   it('does not decode or print cookie values', () => {
-    expect(parseCookieHeader('token=%2Bsecret')).toEqual([
-      { name: 'token', value: '%2Bsecret' },
-    ]);
+    expect(parseCookieHeader('token=%2Bsecret')).toEqual([{ name: 'token', value: '%2Bsecret' }]);
   });
 });

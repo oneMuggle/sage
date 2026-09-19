@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { settingsClient } from '../../shared/api/settingsClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
-import { parseCookieHeader } from './credentialCookieParser';
+import { parseCookieHeader, type CookieImportItem } from './credentialCookieParser';
 import { SettingRow } from './components';
 
 /** 与后端 NetworkMode 枚举值一致（backend/domain/network_policy.py） */
@@ -150,9 +150,8 @@ function parseSearchConfig(raw: string | null): SearchConfigPayload {
     if (typeof parsed !== 'object' || parsed === null) return DEFAULT_SEARCH_CONFIG;
     const candidate = parsed as Partial<SearchConfigPayload>;
     const order = Array.isArray(candidate.order)
-      ? candidate.order.filter(
-          (e): e is (typeof SEARCH_ENGINES)[number] =>
-            (SEARCH_ENGINES as readonly string[]).includes(e),
+      ? candidate.order.filter((e): e is (typeof SEARCH_ENGINES)[number] =>
+          (SEARCH_ENGINES as readonly string[]).includes(e),
         )
       : [];
     return {
@@ -512,7 +511,6 @@ export function NetworkTab() {
   );
 }
 
-
 // ---------------------------------------------------------------------------
 // Round 12：网站凭据（browser_cookies 档案 + web_access_config 开关）
 // ---------------------------------------------------------------------------
@@ -557,7 +555,10 @@ interface BrowserHealth {
 }
 
 /** 与后端 GET /api/v1/web-access/metrics 返回形态一致（Round 15/16） */
-type HostMetrics = Record<string, { ok: number; fail: number; escalated: number; avg_elapsed_ms: number | null }>;
+type HostMetrics = Record<
+  string,
+  { ok: number; fail: number; escalated: number; avg_elapsed_ms: number | null }
+>;
 
 function CredentialsSection() {
   const { t } = useI18n();
@@ -629,10 +630,9 @@ function CredentialsSection() {
 
   const removeCred = (domain: string): void => {
     if (!window.confirm(t('settings.network.creds.confirm'))) return;
-    void fetch(
-      webAccessApiUrl(`/api/v1/web-access/credentials/${encodeURIComponent(domain)}`),
-      { method: 'DELETE' },
-    )
+    void fetch(webAccessApiUrl(`/api/v1/web-access/credentials/${encodeURIComponent(domain)}`), {
+      method: 'DELETE',
+    })
       .then(() => reload())
       .catch(() => undefined);
   };
@@ -668,7 +668,7 @@ function CredentialsSection() {
       return;
     }
 
-    let cookies;
+    let cookies: CookieImportItem[];
     try {
       cookies = parseCookieHeader(cookieValue);
     } catch {
@@ -760,7 +760,11 @@ function CredentialsSection() {
               </button>
             </div>
             {Object.entries(metrics).map(([host, m]) => (
-              <div key={host} data-testid={`metric-row-${host}`} className="flex items-center gap-2 text-xs">
+              <div
+                key={host}
+                data-testid={`metric-row-${host}`}
+                className="flex items-center gap-2 text-xs"
+              >
                 <span className="font-medium">{host}</span>
                 <span className="text-text-secondary">
                   {t('settings.network.creds.metrics.ok')}: {m.ok}
@@ -780,7 +784,9 @@ function CredentialsSection() {
                 )}
               </div>
             ))}
-            <div className="text-text-secondary text-xs">{t('settings.network.creds.metrics.hint')}</div>
+            <div className="text-text-secondary text-xs">
+              {t('settings.network.creds.metrics.hint')}
+            </div>
           </div>
         )}
         <div className="flex flex-col gap-1" data-testid="header-cred-form">

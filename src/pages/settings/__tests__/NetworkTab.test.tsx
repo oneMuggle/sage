@@ -304,6 +304,15 @@ describe('NetworkTab search engine card (Round 4 F2)', () => {
     expect(await screen.findByTestId('search-first-engine')).toHaveValue('zhipu');
     expect(screen.getByTestId('search-zhipu-key')).toHaveValue('zp-stored');
   });
+});
+
+describe('NetworkTab cookie credential import', () => {
+  beforeEach(() => {
+    mocks.getPreference.mockReset();
+    mocks.setPreference.mockReset();
+    mocks.getPreference.mockResolvedValue(null);
+    mocks.setPreference.mockResolvedValue(undefined);
+  });
 
   it('submits cookie credentials and reloads the credential list', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
