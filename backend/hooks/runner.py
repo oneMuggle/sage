@@ -51,6 +51,9 @@ class HookOutcome:
     updated_input: Optional[Dict[str, Any]] = None
     reason: Optional[str] = None
     messages: List[str] = field(default_factory=list)
+    # Phase 3: hook 反馈注入 — 供 AI 下一轮读取
+    additional_context: Optional[str] = None
+    severity: str = "info"  # "info" | "warning" | "error"
 
     @property
     def denied(self) -> bool:
@@ -59,6 +62,11 @@ class HookOutcome:
     @property
     def modified(self) -> bool:
         return self.decision == DECISION_MODIFY and self.updated_input is not None
+
+    @property
+    def has_feedback(self) -> bool:
+        """是否有可注入给 AI 的反馈内容。"""
+        return bool(self.additional_context)
 
 
 def matches_tool(matcher: str, tool_name: str) -> bool:
@@ -301,6 +309,9 @@ def _builtin_default_config(builtin_id: str) -> Dict[str, Any]:
     return {}
 
 
+_VALID_SEVERITIES = ("info", "warning", "error")
+
+
 def _parse_decision_dict(data: Dict[str, Any]) -> HookOutcome:
     """把钩子输出的 JSON 对象映射为 HookOutcome (未知 decision → no-op)。"""
     reason = data.get("reason")
@@ -308,16 +319,45 @@ def _parse_decision_dict(data: Dict[str, Any]) -> HookOutcome:
         reason = None
     decision = data.get("decision", DECISION_ALLOW)
 
+    # Phase 3: additional_context 反馈注入
+    additional = data.get("additional_context")
+    if isinstance(additional, str):
+        # 截断到 2KB, 避免单个钩子污染整个上下文
+        if len(additional) > 2048:
+            additional = additional[:2048] + "…[截断]"
+    else:
+        additional = None
+
+    severity = data.get("severity", "info")
+    if severity not in _VALID_SEVERITIES:
+        severity = "info"
+
     if decision == DECISION_DENY:
-        return HookOutcome(decision=DECISION_DENY, reason=reason or "denied by hook")
+        return HookOutcome(
+            decision=DECISION_DENY,
+            reason=reason or "denied by hook",
+            additional_context=additional,
+            severity=severity,
+        )
     if decision == DECISION_MODIFY:
         updated = data.get("updated_input")
         if isinstance(updated, dict):
-            return HookOutcome(decision=DECISION_MODIFY, updated_input=updated, reason=reason)
+            return HookOutcome(
+                decision=DECISION_MODIFY,
+                updated_input=updated,
+                reason=reason,
+                additional_context=additional,
+                severity=severity,
+            )
         logger.warning("hooks: modify without object updated_input ignored (fail-open)")
         return HookOutcome(decision=DECISION_NOOP, reason="modify without updated_input")
     if decision == DECISION_ALLOW:
-        return HookOutcome(decision=DECISION_ALLOW, reason=reason)
+        return HookOutcome(
+            decision=DECISION_ALLOW,
+            reason=reason,
+            additional_context=additional,
+            severity=severity,
+        )
     logger.warning("hooks: unknown decision %r ignored (fail-open)", decision)
     return HookOutcome(decision=DECISION_NOOP, reason=f"unknown decision: {decision!r}")
 
@@ -403,6 +443,9 @@ async def run_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOu
     return _parse_stdout(stdout_b.decode("utf-8", "replace"))
 
 
+_SEVERITY_RANK = {"info": 0, "warning": 1, "error": 2}
+
+
 async def run_event_hooks(
     hooks: List[HookConfig],
     event: str,
@@ -414,15 +457,30 @@ async def run_event_hooks(
     - ``deny`` 立即短路返回;
     - 第一个有效 ``modify`` 生效 (后续钩子仍执行, 但不再覆盖参数);
     - 钩子故障是 no-op, 不影响合并结果。
+    - Phase 3: 多钩子反馈聚合 —— ``additional_context`` 以换行拼接 (总长
+      截断到 4KB), ``severity`` 取最严格等级 (error > warning > info)。
     """
     merged = HookOutcome(decision=DECISION_ALLOW)
+    feedback_parts: List[str] = []
+    merged_severity = "info"
+
     for cfg in hooks:
         if cfg.event != event or not matches_tool(cfg.matcher, tool_name):
             continue
         outcome = await run_hook(cfg, payload)
         merged.messages.extend(outcome.messages)
+        # 聚合反馈
+        if outcome.additional_context:
+            feedback_parts.append(outcome.additional_context)
+            if _SEVERITY_RANK.get(outcome.severity, 0) > _SEVERITY_RANK.get(merged_severity, 0):
+                merged_severity = outcome.severity
+        # deny 短路 (但仍先聚合已收集的反馈)
         if outcome.denied:
             outcome.messages = merged.messages
+            # 把已聚合的反馈带上
+            if feedback_parts:
+                outcome.additional_context = _merge_feedback(feedback_parts)
+                outcome.severity = merged_severity
             return outcome
         if outcome.modified and not merged.modified:
             merged = HookOutcome(
@@ -431,7 +489,20 @@ async def run_event_hooks(
                 reason=outcome.reason,
                 messages=merged.messages,
             )
+
+    # 聚合反馈到最终 outcome
+    if feedback_parts:
+        merged.additional_context = _merge_feedback(feedback_parts)
+        merged.severity = merged_severity
     return merged
+
+
+def _merge_feedback(parts: List[str], cap: int = 4096) -> str:
+    """把多钩子的反馈拼成单字符串, 超 cap 截断。"""
+    joined = "\n".join(parts)
+    if len(joined) > cap:
+        return joined[:cap] + "…[截断]"
+    return joined
 
 
 def run_event_hooks_sync(
