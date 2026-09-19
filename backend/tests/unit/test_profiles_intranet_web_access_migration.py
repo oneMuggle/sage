@@ -26,6 +26,7 @@ def test_default_web_profiles_route_blocked_fetch_to_browser():
     agents = {agent.id: agent for agent in profiles.create_default_agents()}
     assert "block_reason" in agents["primary"].system_prompt
     assert "browser_navigate" in agents["primary"].system_prompt
+    assert "browser_snapshot" in agents["primary"].system_prompt
     assert "credential_domain" in agents["researcher"].system_prompt
     assert "不要反复重试 web_fetch" in agents["researcher"].system_prompt
 
@@ -287,7 +288,7 @@ def test_default_seed_primary_includes_fetch_download():
     assert "http_download" in primary.tools
 
 
-def test_default_seed_primary_uses_fetch_direct_prompt():
+def test_default_seed_primary_uses_web_access_routing_prompt():
     """代码默认 primary system_prompt 升级为 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING。
 
     保留委派段（含 "委派" / "子代理"）— 复杂研究仍走 agent 工具委派。
@@ -340,6 +341,30 @@ def test_primary_system_prompt_with_delegation_one_step_migration(monkeypatch):
     assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
     primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
     assert len(primary_upserts) == 1
+
+
+def test_primary_system_prompt_fetch_direct_migrates_once(monkeypatch):
+    """DB system_prompt 是 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT 时，迁移一次且幂等。"""
+    stored = {
+        "primary": {
+            "id": "primary",
+            "enabled": True,
+            "tools": [],
+            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT,
+        },
+    }
+    repo = FakeRepo(stored)
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+
+    profiles.ensure_default_agents()
+
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
+    primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
+    assert len(primary_upserts) == 1
+
+    first_count = len(repo.upserts)
+    profiles.ensure_default_agents()
+    assert len(repo.upserts) == first_count
 
 
 def test_primary_system_prompt_already_web_access_routing_no_upsert(monkeypatch):
