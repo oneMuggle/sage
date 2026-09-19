@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import re
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from backend.services.http_retry import retry_on_status
 
@@ -136,6 +136,86 @@ class ArenaAdapter:
             "see docs/superpowers/specs/2026-09-16-arena-automation-model-probe-design.md §3.4"
         )
 
+    # -- registration assist (best-effort form filling; CAPTCHA stays manual) --
+
+    #: 候选选择器：arena 注册页/表单的具体结构会随站点改版漂移，按顺序试，
+    #: 全部失配抛 SelectorNotFoundError —— 上层降级为「请手动操作」而非失败。
+    SIGNUP_EMAIL_SELECTORS = [
+        "input[name='email']",
+        "input[type='email']",
+        "input[autocomplete='email']",
+    ]
+    SUBMIT_SELECTORS = [
+        "button[type='submit']",
+        "form button:not([type='reset']):not([type='button'])",
+    ]
+
+    def open_page(self, url: str) -> None:
+        """Navigate the current page target to ``url`` (user-visible browser)."""
+        result = self._bs.cdp_command("Page.navigate", {"url": url})
+        if not isinstance(result, dict):
+            raise CDPCommandError(f"Page.navigate returned non-dict: {result!r}")
+
+    def current_url(self) -> str:
+        result = self._eval_js("location.href")
+        return str(result or "")
+
+    def fill_first_input(self, selectors: List[str], text: str) -> str:
+        """Focus the first matching selector and type ``text``. Returns the
+        selector that matched; raises SelectorNotFoundError when none do."""
+        last_error: Optional[Exception] = None
+        for selector in selectors:
+            try:
+                self._focus_selector(selector)
+            except (SelectorNotFoundError, CDPCommandError) as exc:
+                last_error = exc
+                continue
+            self._type_chars(text)
+            return selector
+        raise SelectorNotFoundError(
+            f"no signup input matched any of {selectors!r}"
+        ) from last_error
+
+    def click_first(self, selectors: List[str]) -> str:
+        """Click the first matching selector; raises SelectorNotFoundError
+        when none do."""
+        for selector in selectors:
+            try:
+                self._click_selector(selector)
+                return selector
+            except (SelectorNotFoundError, CDPCommandError):
+                continue
+        raise SelectorNotFoundError(f"no submit button matched any of {selectors!r}")
+
+    def fill_signup_email(self, email: str) -> str:
+        return self.fill_first_input(self.SIGNUP_EMAIL_SELECTORS, email)
+
+    def submit_visible_form(self) -> str:
+        return self.click_first(self.SUBMIT_SELECTORS)
+
+    def fill_password_inputs(self, password: str) -> int:
+        """Type ``password`` into every input[type=password] on the page
+        (covers password + confirm fields). Returns the field count."""
+        count = self._eval_js(
+            '(function(){return document.querySelectorAll'
+            '("input[type=password]").length;})()'
+        )  # 无插值，纯字面量
+        count = int(count or 0)
+        if count < 1:
+            raise SelectorNotFoundError("no input[type=password] on page")
+        for index in range(count):
+            expr = (
+                '(function(){var els=document.querySelectorAll'
+                '("input[type=password]");'
+                f'var el=els[{index}];'
+                'if(!el){return false;}el.focus();return true;})()'
+            )
+            result = self._eval_js(expr)
+            if not result:
+                raise SelectorNotFoundError(f"password input #{index} not focusable")
+            self._type_chars(password)
+        return count
+
     # -- Thinking filter --------------------------------------------------
 
     @staticmethod
@@ -179,19 +259,23 @@ class ArenaAdapter:
         return inner.get("value")
 
     def _focus_selector(self, selector: str) -> None:
+        # 表达式必须返回值：`el?.focus()` 求值为 undefined，CDP returnByValue
+        # 不带 value 键会让 _eval_js 抛 CDPCommandError。用 IIFE 返回布尔。
         result = self._eval_js(
-            f"document.querySelector({selector!r})?.focus()"
+            f"(function(){{var el=document.querySelector({selector!r});"
+            f"if(!el){{return false;}}el.focus();return true;}})()"
         )
-        if result is None:
+        if not result:
             raise SelectorNotFoundError(
                 f"selector matched no element: {selector!r}"
             )
 
     def _click_selector(self, selector: str) -> None:
         result = self._eval_js(
-            f"document.querySelector({selector!r})?.click()"
+            f"(function(){{var el=document.querySelector({selector!r});"
+            f"if(!el){{return false;}}el.click();return true;}})()"
         )
-        if result is None:
+        if not result:
             raise SelectorNotFoundError(
                 f"selector matched no element: {selector!r}"
             )

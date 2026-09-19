@@ -51,9 +51,15 @@ class FakeBrowserSession:
     def cdp_command(self, method, params=None, **_):
         self.calls.append({"method": method, "params": params})
         if method == "Runtime.evaluate":
-            # Toggle captcha state on every check
-            self.captcha_detected = not self.captcha_detected
-            return {"result": {"value": self.captcha_detected}}
+            expr = (params or {}).get("expression", "")
+            if "iframe" in expr:
+                # Toggle captcha state on every check
+                self.captcha_detected = not self.captcha_detected
+                return {"result": {"value": self.captcha_detected}}
+            if "querySelector" in expr:
+                # focus/click 辅助表达式返回布尔（元素视为存在）
+                return {"result": {"value": True}}
+            return {"result": {"value": False}}
         return {"result": {"value": False}}
 
 
