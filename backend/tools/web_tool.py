@@ -571,6 +571,9 @@ class WebFetchTool(BaseTool):
                 "（仅附加到同域请求，跨域重定向自动剥离）。"
                 "静态请求被反爬拦截时默认自动升级到真浏览器通道重放（escalate）。"
                 "渲染分支内部会启动受控 headless 浏览器，不单独走启动审批。"
+                "失败结果会提供 block_reason：antibot 表示反爬拦截，login_wall 表示登录墙；"
+                "此时改用 browser_navigate 打开页面并用 browser_snapshot 读取，必要时使用 "
+                "credential_domain 提供登录态；不要反复重试 web_fetch。"
             ),
             parameters={
                 "type": "object",

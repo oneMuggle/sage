@@ -146,6 +146,22 @@ def test_web_fetch_schema():
     assert schema.parameters["required"] == ["url"]
 
 
+def test_web_fetch_schema_documents_blocked_fetch_routing():
+    tool = WebFetchTool()
+    description = tool.schema.description
+
+    for keyword in (
+        "block_reason",
+        "antibot",
+        "login_wall",
+        "browser_navigate",
+        "browser_snapshot",
+        "credential_domain",
+        "不要反复重试 web_fetch",
+    ):
+        assert keyword in description
+
+
 def test_web_fetch_success():
     """成功获取页面"""
     with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
