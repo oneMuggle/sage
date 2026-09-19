@@ -2532,16 +2532,32 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 "agent_id": str(it.get("agent_id", "primary")),
                                 "goal": str(it.get("goal", "")),
                                 "depends_on": list(it.get("depends_on") or []),
+                                # 层级透传（override 可带，也可省略由后端归一化）。
+                                "parent_task_id": it.get("parent_task_id"),
+                                "depth": it.get("depth"),
                             }
                             for it in data.plan_override
                         ]
                     else:
+                        # 任务层级（spec 2026-09-19）：Task 的 parent 是真实
+                        # task_id，计划项用 t1..tN 编号 → 需要索引映射后透传，
+                        # 否则前端树与 dispatcher 都拿不到父子关系。
+                        _index_by_task_id = {
+                            t.task_id: f"t{i}"
+                            for i, t in enumerate(plan_tasks, 1)
+                        }
                         plan_items = [
                             {
                                 "task_id": f"t{i}",
                                 "agent_id": t.parameters.get("agent_hint", "primary"),
                                 "goal": t.description or t.name,
                                 "depends_on": list(t.blocked_by),
+                                "parent_task_id": (
+                                    _index_by_task_id.get(t.parent_task_id)
+                                    if getattr(t, "parent_task_id", None)
+                                    else None
+                                ),
+                                "depth": int(getattr(t, "depth", 0) or 0),
                             }
                             for i, t in enumerate(plan_tasks, 1)
                         ]

@@ -61,6 +61,10 @@ class Task:
     started_at: Optional[int] = None
     completed_at: Optional[int] = None
     team_id: Optional[str] = None
+    # 任务层级（spec 2026-09-19）：parent 只表达归属与展示，不参与调度；
+    # 执行依赖一律由 blocked_by 决定。
+    parent_task_id: Optional[str] = None
+    depth: int = 0
 
     def mark_running(self) -> None:
         """Transition to RUNNING state."""
