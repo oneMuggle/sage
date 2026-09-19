@@ -96,7 +96,12 @@ export function TaskTreeSection({
   };
 
   const handleTaskClick = (taskId: string, runId: string) => {
-    selectTask(runId, taskId);
+    const st = board.statuses[taskId];
+    // RD19 (round35): 行内统计带入 Drawer 详情（终态事件携带的归因值）。
+    selectTask(runId, taskId, {
+      used_tokens: st?.used_tokens,
+      duration_ms: st?.duration_ms,
+    });
     setDrawerOpen(true);
   };
 

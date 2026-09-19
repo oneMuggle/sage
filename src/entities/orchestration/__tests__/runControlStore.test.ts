@@ -103,3 +103,24 @@ describe('useRunControlStore', () => {
     expect(run?.status).toBe('failed');
   });
 });
+
+// ============================================================================
+// RD19 (round35): selectTask meta 传递（Drawer 消耗/时长统计的数据源）
+// ============================================================================
+
+describe('runControlStore — selectTask meta (RD19)', () => {
+  it('meta 随 selectTask 写入，selectTask(null,null) 清空', () => {
+    const store = useRunControlStore.getState();
+    store.selectTask('run-1', 't1', { used_tokens: 4200, duration_ms: 2500 });
+    let s = useRunControlStore.getState();
+    expect(s.selectedTaskMeta).toEqual({ used_tokens: 4200, duration_ms: 2500 });
+
+    store.selectTask('run-1', 't2');
+    s = useRunControlStore.getState();
+    expect(s.selectedTaskMeta).toBeNull();
+
+    store.selectTask(null, null);
+    s = useRunControlStore.getState();
+    expect(s.selectedTaskMeta).toBeNull();
+  });
+});
