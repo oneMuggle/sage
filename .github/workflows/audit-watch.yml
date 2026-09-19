@@ -1,0 +1,74 @@
+# Audit Watch（对标总账优化建议 3，round40）
+# 目的：在审计门打红 PR 之前发现"新公告未入策略"——每日定时对
+# backend/requirements-py38.txt（Win7 LTS 依赖契约）跑 pip-audit，与
+# .github/dependency-audit-policy.json 求差；存在未覆盖发现时自动创建/
+# 追加 issue，附处置指引（增补豁免或升级修复版本）。
+# 说明：pip-audit 在 py3.11 下解析 py38 钉死清单，公告面与强制门一致；
+# 钉死版本以 requirements-py38.txt 为准，与运行时解释器版本解耦。
+name: Audit Watch
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 每日 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install --disable-pip-version-check pip-audit==2.9.0
+
+      - name: pip-audit (py38 requirements)
+        id: pip-audit
+        continue-on-error: true
+        run: |
+          pip-audit -r backend/requirements-py38.txt --format=json > pip-audit-py38.json
+
+      - name: Compute uncovered findings
+        id: uncovered
+        run: |
+          python scripts/audit_watch.py \
+            --pip pip-audit-py38.json \
+            --policy .github/dependency-audit-policy.json \
+            --out uncovered.txt \
+            --json-out uncovered.json
+          count=$(python -c "import json;print(len(json.load(open('uncovered.json'))))")
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update audit-watch issue
+        if: steps.uncovered.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NUM=$(gh issue list --label audit-watch --state open --json number \
+            --jq '.[0].number // empty')
+          if [ -n "$NUM" ]; then
+            gh issue comment "$NUM" --body-file uncovered.txt
+          else
+            gh issue create \
+              --title "audit-watch: 发现未覆盖的依赖公告（审计门即将打红）" \
+              --body-file uncovered.txt \
+              --label "security,audit-watch"
+          fi
+
+      - name: Close stale audit-watch issue
+        if: steps.uncovered.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NUM=$(gh issue list --label audit-watch --state open --json number \
+            --jq '.[0].number // empty')
+          if [ -n "$NUM" ]; then
+            gh issue close "$NUM" --comment "当前无未覆盖公告（或已全部入策略）。"
+          fi
