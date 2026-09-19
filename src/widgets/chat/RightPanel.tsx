@@ -254,6 +254,13 @@ function RightPanelInner({
     useRightPanelStore.getState().clearSelectedArtifact();
   }, [sessionId]);
 
+  // R4 批次 B: 会话切换即预取变更列表 —— 徽标计数即时可用，切到变更 Tab
+  // 无首次加载等待；store 层 inflight 去重，重复触发无额外成本。
+  useEffect(() => {
+    if (!sessionId) return;
+    void useChangesListStore.getState().fetch(sessionId);
+  }, [sessionId]);
+
   // 批次 D: Esc 退出最大化（最大化只在 push 模式出现）
   useEffect(() => {
     if (!maximized) return;

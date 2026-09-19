@@ -76,4 +76,28 @@ describe('VersionHistory 版本 diff（right-panel R3 批次 A）', () => {
     fireEvent.click(screen.getByTestId('version-diff-toggle-2'));
     await waitFor(() => expect(screen.getByText(/两个版本内容相同/)).toBeInTheDocument());
   });
+
+  it('right-panel R4 批次 A: 对比对象可选为其它版本（v2 ↔ v1 互比）', async () => {
+    mockedList.mockResolvedValue(versions);
+    mockedGet.mockImplementation((_s: string, _a: string, num: number) =>
+      Promise.resolve({
+        ...versions[num - 1],
+        content: num === 2 ? 'hello\nv2 body' : 'hello\nv1 body',
+      }),
+    );
+    mockedRead.mockResolvedValue({ ok: true, kind: 'text', content: 'hello\ncurrent' });
+    render(<VersionHistory sessionId="s1" artifactId="a1" />);
+    fireEvent.click(screen.getByRole('button', { name: /版本历史/ }));
+    await waitFor(() => expect(screen.getByText('v2')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('version-diff-toggle-2'));
+    await waitFor(() => expect(screen.getByTestId('split-diff')).toBeInTheDocument());
+    // 切换对比对象为 v1
+    fireEvent.change(screen.getByTestId('version-diff-against-2'), {
+      target: { value: '1' },
+    });
+    await waitFor(() => expect(mockedGet).toHaveBeenCalledWith('s1', 'a1', 1));
+    await waitFor(() =>
+      expect(screen.getByTestId('version-diff-view-2')).toBeInTheDocument(),
+    );
+  });
 });

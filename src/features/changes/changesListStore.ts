@@ -38,24 +38,25 @@ export const useChangesListStore = create<ChangesListState>((set) => ({
     const existing = inflight.get(sessionId);
     if (existing) return existing;
     set((prev) => ({ loadingBy: { ...prev.loadingBy, [sessionId]: true } }));
-    const task = workspaceApi
-      .getChanges(sessionId)
-      .then((changes) => {
+    // async IIFE：workspaceApi.getChanges 缺失（测试部分 mock / 旧宿主）时
+    // 同步抛错也进入统一错误通道，不会以 unhandled rejection 冒泡
+    const task = (async () => {
+      try {
+        const changes = await workspaceApi.getChanges(sessionId);
         set((prev) => ({
           bySession: { ...prev.bySession, [sessionId]: changes },
           errors: { ...prev.errors, [sessionId]: null },
         }));
-      })
-      .catch((e: unknown) => {
+      } catch (e: unknown) {
         const errMsg = e instanceof Error ? e.message : String(e);
         set((prev) => ({
           errors: { ...prev.errors, [sessionId]: friendlyError(errMsg) },
         }));
-      })
-      .finally(() => {
+      } finally {
         inflight.delete(sessionId);
         set((prev) => ({ loadingBy: { ...prev.loadingBy, [sessionId]: false } }));
-      });
+      }
+    })();
     inflight.set(sessionId, task);
     return task;
   },
