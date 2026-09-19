@@ -39,7 +39,12 @@ if not SAGE_CORE_DIR.is_dir():
 #
 # Instead we derive module names relative to the sage_core package root:
 #   sage_core/entities/agent.py → "sage_core.entities.agent"
-# This ensures build_ext --inplace places .pyd files alongside the .py sources.
+# and pass `package_dir={"sage_core": ...}` so that `build_ext --inplace` writes .pyd
+# files into the actual source tree (`packages/sage-core/sage_core/...`) regardless of
+# the caller's cwd. Without `package_dir`, setuptools resolves `sage_core` as a
+# top-level package and places .pyd at `<cwd>/sage_core/` — which is WRONG whenever
+# cwd != packages/sage-core (verified empirically: both path-based cythonize and the
+# plain-Extension version write .pyd to repo root).
 ext_modules = []
 for py_path in sorted(SAGE_CORE_DIR.rglob("*.py")):
     if py_path.name == "__init__.py":
@@ -62,6 +67,10 @@ compiler_directives = {
 
 setup(
     name="sage_core_compiled",
+    # Map the top-level `sage_core` package to the absolute source directory.
+    # Without this, `build_ext --inplace` resolves `sage_core` as a top-level
+    # package at cwd and places .pyd there — which is WRONG when cwd != packages/sage-core.
+    package_dir={"sage_core": str(SAGE_CORE_DIR)},
     ext_modules=cythonize(
         ext_modules,
         compiler_directives=compiler_directives,
