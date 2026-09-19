@@ -3488,6 +3488,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 推 sources_used 事件并随终稿 assistant 行落盘。提取/合并全
             # fail-safe（sources_extractor 内部吞异常）,绝不影响对话主流程。
             r81_turn_sources: list = []
+            # R83 增量推送: 每个 STEP_DONE 边界把已累积来源快照推给前端（长
+            # run 中"先搜索后长文写作"时用户不必等 DONE 才看到来源）。记录
+            # 上次推送时的条数,仅在有新增时推,避免逐 step 空转刷事件。
+            r81_pushed_sources_len: int = 0
 
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
@@ -3671,6 +3675,22 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     accumulated_tool_calls = []
                     done_reasoning = None
                     streamed_partial_parts = []
+                    # R83 增量推送: 有新增来源时在 step 边界推送累积快照 ——
+                    # 前端 updateMessage 对 sources 是整体替换语义,快照幂等。
+                    if len(r81_turn_sources) > r81_pushed_sources_len:
+                        r81_pushed_sources_len = len(r81_turn_sources)
+                        try:
+                            await entry.queue.put(
+                                {
+                                    "state": "sources_used",
+                                    "session_id": data.session_id,
+                                    "sources": list(r81_turn_sources),
+                                }
+                            )
+                        except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                            logger.debug(
+                                f"[REQ {request_id}] incremental sources_used push failed, ignored"
+                            )
                     # STEP_DONE 转发到前端,前端据此把当前 streaming 气泡快照成
                     # completed step + 重置 streaming 准备下一步。
                     await entry.queue.put(evt.to_dict())
@@ -3795,7 +3815,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # 任务生成; 完成后落库 (侧栏在下次自然刷新时呈现)。
                 # R81: DONE 之前推送 sources_used —— 前端在收到 DONE 收尾前
                 # 就能把参考来源挂到 assistant 气泡上（与 memory_used 同为
-                # 增强信息, 非空才推）。
+                # 增强信息, 非空才推）。R83: 这里是全量兜底推送 —— 覆盖无
+                # STEP_DONE 的单步 run（增量推送只在 step 边界触发）;对多步
+                # run 与前端整体替换语义幂等,重复无害。
                 if r81_turn_sources:
                     try:
                         await entry.queue.put(
