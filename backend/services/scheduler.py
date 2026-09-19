@@ -37,17 +37,18 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from croniter import croniter
 
+from backend.domain.scheduler import (
+    ScheduledTaskNotFoundError,
+    ScheduledTaskValidationError,
+)
+
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 
 
-class TaskNotFoundError(KeyError):
-    """Raised when the task id does not exist in the store."""
-
-
-class ValidationError(ValueError):
-    """Raised when input fails validation (bad cron, past timestamp, etc.)."""
+TaskNotFoundError = ScheduledTaskNotFoundError
+ValidationError = ScheduledTaskValidationError
 
 
 @dataclass
@@ -145,6 +146,15 @@ class SchedulerService:
                 raise ValidationError("one-shot 'at' must be a timestamp") from exc
             if require_future and at_ms <= int(time.time() * 1000):
                 raise ValidationError("one-shot 'at' must be in the future")
+            # 2026-09-19: 上界校验。此前只查下限，超出 datetime 可表示范围
+            # 的 at（如 1e17 ms）会先被持久化、再在 _schedule_job 抛
+            # ValueError —— 任务留在磁盘上但调度失败，且重启时
+            # _reschedule_all 抛同一异常导致 SchedulerService 构造失败
+            # （后端起不来）。必须在落盘前拦下。
+            try:
+                _epoch_ms_to_dt(at_ms)
+            except (ValueError, OverflowError, OSError) as exc:
+                raise ValidationError("one-shot 'at' is out of the representable date range") from exc
             return {"kind": "once", "at": at_ms}
         cron_expr = str(schedule.get("cron") or "").strip()
         try:
@@ -158,7 +168,17 @@ class SchedulerService:
     def _next_run_for(self, schedule: Dict[str, Any], enabled: bool) -> Optional[int]:
         if not enabled:
             return None
-        return schedule["at"] if schedule["kind"] == "once" else self._compute_next_cron_run(schedule["cron"])
+        try:
+            if schedule.get("kind") == "once":
+                return schedule["at"]
+            return self._compute_next_cron_run(schedule["cron"])
+        except (ValueError, KeyError, TypeError):
+            # 2026-09-19: 磁盘脏数据（损坏 cron / 缺字段）不得阻断启动。
+            # _record_run 会经此计算 next_run；若在此抛异常，_reschedule_all
+            # 的逐条容错会被击穿 —— croniter 的 CroniterBadCronError 继承
+            # ValueError，会一路穿透 __init__ 使后端起不来。
+            logger.warning("cannot compute next run for %r", schedule, exc_info=True)
+            return None
 
     def add_task(
         self,
@@ -233,10 +253,16 @@ class SchedulerService:
         logger.info("scheduled task updated: %s", task_id)
         return updated
 
-    def delete_task(self, task_id: str) -> None:
+    def delete_task(self, task_id: str, expected_session_id: Optional[str] = None) -> None:
+        """删除任务。``expected_session_id`` 非空时在同一把锁内校验归属，
+        不匹配则抛 ``ValidationError`` —— 供 LLM 工具原子地"只删本会话任务"，
+        避免先 get_task 校验、再 delete_task 之间的 TOCTOU 窗口（前端 UI 可
+        在该窗口把任务迁移到别的会话）。"""
         with self._lock:
             if task_id not in self._tasks:
                 raise TaskNotFoundError(task_id)
+            if expected_session_id is not None and self._tasks[task_id].session_id != expected_session_id:
+                raise ValidationError("task does not belong to the expected session")
             del self._tasks[task_id]
             try:
                 self._scheduler.remove_job(task_id)
@@ -380,8 +406,17 @@ class SchedulerService:
         return int(itr.get_next(float) * 1000)
 
     def _reschedule_all(self) -> None:
-        for task in self._tasks.values():
-            self._schedule_job(task)
+        # 2026-09-19: 单条坏任务不得阻断启动。磁盘上可能留有旧版本写入的
+        # 不可调度条目（如超出 datetime 范围的 once 'at'）；此前
+        # _schedule_job 抛出的异常会一路穿透 __init__，使 SchedulerService
+        # 构造失败 → 后端起不来，且用户无从下手（须手删 JSON）。现在逐条
+        # 容错：失败的那条标记为 missed 使 UI 可见，其余正常登记。
+        for task in list(self._tasks.values()):
+            try:
+                self._schedule_job(task)
+            except Exception:  # noqa: BLE001 — 隔离单条脏数据
+                logger.exception("task %s: scheduling failed, marking missed", task.id)
+                self._record_run(task, error="invalid: task could not be scheduled")
 
     def _reschedule_one(self, task: ScheduledTask) -> None:
         with suppress(JobLookupError):
@@ -403,8 +438,12 @@ class SchedulerService:
                     task.id,
                     run_dt.isoformat(),
                 )
-                with self._lock:
-                    self._record_run(task, error="missed: backend was down at fire time")
+                # 2026-09-19 安全审查修复: 去掉外层 `with self._lock:` —
+                # _record_run 内部自行获锁（scheduler.py:480），threading.Lock
+                # 不可重入，嵌套获锁会死锁。触发场景：后端重启时磁盘上有
+                # 已过期的一次性任务，_schedule_job 在 __init__ 的
+                # _reschedule_all 中被调用，导致后端永久挂起。
+                self._record_run(task, error="missed: backend was down at fire time")
                 return
             trigger = DateTrigger(run_date=run_dt)
         else:

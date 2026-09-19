@@ -16,7 +16,7 @@ import time
 import uuid
 from collections import deque
 from threading import Lock
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.chat.empty_response_guard import (
     EMPTY_RESPONSE_FALLBACK_TEXT,
@@ -34,6 +34,7 @@ from backend.core.legacy.context_first_aid import (
 from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
+from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_policy import ToolPolicy
 
 # ===== M6 HOOKS BEGIN: user-defined hooks around tool execution =====
@@ -243,6 +244,7 @@ class SageAgent:
         agent_id: Optional[str] = None,
         bare: bool = False,
         policy: Optional[ToolPolicy] = None,
+        scheduler_service_getter: Optional[Callable[[], Optional[SchedulerServicePort]]] = None,
     ):
         """初始化 SageAgent。
 
@@ -330,7 +332,11 @@ class SageAgent:
 
             # 初始化工具注册表
             self.tool_registry = ToolRegistry()
-            register_all_tools(self.tool_registry, policy=policy)
+            register_all_tools(
+                self.tool_registry,
+                policy=policy,
+                scheduler_service_getter=scheduler_service_getter,
+            )
             # 注入记忆管理器：register_all_tools 创建的 MemorySearchTool /
             # MemorySaveTool 默认 self.memory=None，runtime 调用会返回
             # "未初始化"。agent 路径直接把已构造的 self.memory_manager

@@ -20,9 +20,10 @@ from backend.adapters.out.llm.mock_adapter import MockLLMAdapter
 from backend.adapters.out.metric.noop_adapter import NoopMetricAdapter
 from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
-from backend.api.hex_routes import get_chat_service
+from backend.api.hex_routes import ChatRequest, chat, get_chat_service
 from backend.application.services.chat_service import ChatService
 from backend.main import app
+from backend.tools.context import current_tool_context
 
 pytestmark = pytest.mark.integration
 
@@ -73,6 +74,41 @@ async def hex_client():
             app.dependency_overrides[get_chat_service] = saved_override
         else:
             app.dependency_overrides.pop(get_chat_service, None)
+
+
+@pytest.mark.asyncio()
+async def test_hex_chat_binds_and_resets_tool_context():
+    observed = []
+
+    class _Storage:
+        async def append_message(self, _session_id, _message):
+            return None
+
+        async def get_messages(self, _session_id, limit=20):
+            return []
+
+    class _Service:
+        storage = _Storage()
+
+        async def run_turn(self, session_id, user_message, extra_system_messages=None):
+            context = current_tool_context()
+            observed.append(context)
+            return [
+                Message(role=Role.ASSISTANT, content="ok"),
+            ]
+
+    request = MagicMock()
+    request.state.request_id = "hex-context-test"
+    response = await chat(
+        ChatRequest(session_id="session-hex", message="hello"),
+        request,
+        _Service(),
+    )
+
+    assert response.session_id == "session-hex"
+    assert observed[0] is not None
+    assert observed[0].session_id == "session-hex"
+    assert current_tool_context() is None
 
 
 @pytest.mark.asyncio()

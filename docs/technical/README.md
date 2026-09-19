@@ -68,6 +68,7 @@
 | 89   | [分节页码格式与起始号](./89-pgnum-format.md) | R53：WordPageSetupSpec 增 page_number_format/start（w:pgNumType，论文前置罗马页码）+ 主节/分节同路径 + lint page/numbering 对偶 |
 | 90   | [Word 脚注/尾注设计评审稿](./90-word-footnotes-design.md) | R56：footnotes.xml 四件套结构分析 + {{fn:}} 内联锚点选型 + 三期分期与风险（评审稿）|
 | 91   | [脚注 Phase A 实现](./91-word-footnotes-phase-a.md) | R57：{{fn:}} 内联脚注（footnotes part 挂载 + footnoteReference + read 回读 + 无脚注零变化）|
+| 92   | [LLM 定时任务工具](./92-llm-scheduled-task-tool.md) | schedule_task / list_scheduled_tasks / cancel_scheduled_task 三件套：复用 SchedulerService 单一事实源 + 会话自动绑定 + once(ISO-8601)/recurring(cron) + coordinator-only 白名单 |
 | 83   | [Python 后端代码保护方案](./83-python-code-protection.md) | Cython 二进制编译核心包 (sage_core) + Python 字节码混淆与源码剥离 (backend) + 开发与发布模式分离 (SAGE_PROTECT_CODE) |
 
 ---
