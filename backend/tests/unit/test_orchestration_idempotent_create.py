@@ -4,7 +4,7 @@ Verifies that ``INSERT OR REPLACE`` semantics prevent UNIQUE constraint
 errors when callers create tasks/lanes with deterministic IDs multiple
 times (e.g. the review step uses ``task-review-{run_id}``).
 
-Regression test for: "UNIQUE constraint failed: orchestration_tasks.task_id"
+Regression test for: "UNIQUE constraint failed: orch_plan_tasks.task_id"
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ class TestTaskRepositoryIdempotentCreate:
 class TestLaneRepositoryIdempotentCreate:
     def test_create_twice_same_id_does_not_raise(self, task_repo, lane_repo):
         """Second create() with the same lane_id overwrites, not errors."""
-        # Lanes have a FK to orchestration_tasks, so create the parent first.
+        # Lanes have a FK to orch_plan_tasks (Phase 3 改名), so create the parent first.
         parent_task = Task(
             task_id="task-parent-1",
             name="parent",

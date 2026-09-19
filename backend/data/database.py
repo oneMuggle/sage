@@ -1181,9 +1181,45 @@ class Database:
         # ==================== 多智能体协调层表 ====================
         # Phase 1: 任务/Lane/Team/事件 持久化
 
-        # 任务表
+        # Phase 3 (2026-09-19): 老表改名 —— 消除与 orch_tasks / orch_runs 的命名
+        # 混淆，并解除老索引名 idx_orch_tasks_status 与 orch_tasks 同名索引的冲突
+        # （SQLite 索引名全局唯一，CREATE INDEX IF NOT EXISTS 遇同名会静默跳过
+        # → orch_tasks.status 索引长期缺失，按 status 查询退化为全表扫描）。
+        # 已部署用户 DB 经 RENAME 迁移（SQLite 自动更新其他表对它的 FK 引用）；
+        # 全新安装直接建新名表，本块为 no-op。
+        cursor.execute(
+            "SELECT COUNT(*) FROM sqlite_master "
+            "WHERE type='table' AND name='orchestration_tasks'"
+        )
+        _legacy_tasks_exists = cursor.fetchone()[0] > 0
+        cursor.execute(
+            "SELECT COUNT(*) FROM sqlite_master "
+            "WHERE type='table' AND name='orch_plan_tasks'"
+        )
+        _plan_tasks_exists = cursor.fetchone()[0] > 0
+        if _legacy_tasks_exists and not _plan_tasks_exists:
+            cursor.execute("ALTER TABLE orchestration_tasks RENAME TO orch_plan_tasks")
+            # RENAME 保留原索引名（仍与 orch_tasks 的索引同名）→ 先释放名字，
+            # 让下方 CREATE INDEX 重建为 idx_orch_plan_tasks_* 与 idx_orch_tasks_status。
+            cursor.execute("DROP INDEX IF EXISTS idx_orch_tasks_status")
+            cursor.execute("DROP INDEX IF EXISTS idx_orch_tasks_team")
+        cursor.execute(
+            "SELECT COUNT(*) FROM sqlite_master "
+            "WHERE type='table' AND name='orchestration_teams'"
+        )
+        _legacy_teams_exists = cursor.fetchone()[0] > 0
+        cursor.execute(
+            "SELECT COUNT(*) FROM sqlite_master "
+            "WHERE type='table' AND name='orch_plan_teams'"
+        )
+        _plan_teams_exists = cursor.fetchone()[0] > 0
+        if _legacy_teams_exists and not _plan_teams_exists:
+            cursor.execute("ALTER TABLE orchestration_teams RENAME TO orch_plan_teams")
+            cursor.execute("DROP INDEX IF EXISTS idx_orch_teams_status")
+
+        # 任务表（Phase 3 改名：orchestration_tasks → orch_plan_tasks）
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS orchestration_tasks (
+            CREATE TABLE IF NOT EXISTS orch_plan_tasks (
                 task_id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 description TEXT NOT NULL DEFAULT '',
@@ -1203,17 +1239,43 @@ class Database:
             )
         """)
         cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_tasks_status
-            ON orchestration_tasks(status)
+            CREATE INDEX IF NOT EXISTS idx_orch_plan_tasks_status
+            ON orch_plan_tasks(status)
         """)
         cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_tasks_team
-            ON orchestration_tasks(team_id)
+            CREATE INDEX IF NOT EXISTS idx_orch_plan_tasks_team
+            ON orch_plan_tasks(team_id)
         """)
 
-        # Lane 表（执行单元）
+
+        # Team 表（工作流分组；Phase 3 改名：orchestration_teams → orch_plan_teams）
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS orchestration_lanes (
+            CREATE TABLE IF NOT EXISTS orch_plan_teams (
+                team_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                task_ids TEXT NOT NULL DEFAULT '[]',
+                status TEXT NOT NULL DEFAULT 'created',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                metadata TEXT NOT NULL DEFAULT '{}'
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_orch_plan_teams_status
+            ON orch_plan_teams(status)
+        """)
+
+        # ==================== 双轨合并 Phase 1 (P0, 2026-09-19) ====================
+        # orch_lanes / orch_lane_events 是新命名空间的 lane 持久化层，字段与老
+        # orchestration_lanes / orchestration_lane_events 同形。无 FK：Phase 1
+        # 与计划层表共存期 orch_plan_tasks 与 orch_tasks 并存，强 FK 会限制 lane
+        # 关联的灵活性。Phase 5 清理老表时评估是否加 FK 指向 orch_tasks。
+        #
+        # 数据迁移（下方紧随的 INSERT OR IGNORE 块）：把老表存量一次性复制到
+        # 新表，让既有用户的 lane 历史在 GET /orchestration/lanes 等接口下仍可见。
+        # 幂等且 fail-open —— 老表不存在（全新安装）时静默跳过。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS orch_lanes (
                 lane_id TEXT PRIMARY KEY,
                 task_id TEXT NOT NULL,
                 agent_id TEXT,
@@ -1225,22 +1287,24 @@ class Database:
                 heartbeat TEXT,
                 error TEXT,
                 permission_preset TEXT NOT NULL DEFAULT 'implement',
-                metadata TEXT NOT NULL DEFAULT '{}',
-                FOREIGN KEY (task_id) REFERENCES orchestration_tasks(task_id) ON DELETE CASCADE
+                metadata TEXT NOT NULL DEFAULT '{}'
             )
         """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_lanes_task
-            ON orchestration_lanes(task_id)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_lanes_status
-            ON orchestration_lanes(status)
-        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_lanes_by_task "
+            "ON orch_lanes(task_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_lanes_by_status "
+            "ON orch_lanes(status)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_lanes_by_agent "
+            "ON orch_lanes(agent_id)"
+        )
 
-        # Lane 事件表（生命周期事件流）
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS orchestration_lane_events (
+            CREATE TABLE IF NOT EXISTS orch_lane_events (
                 event_id TEXT PRIMARY KEY,
                 event_type TEXT NOT NULL,
                 lane_id TEXT NOT NULL,
@@ -1248,35 +1312,66 @@ class Database:
                 agent_id TEXT,
                 timestamp INTEGER NOT NULL,
                 provenance TEXT NOT NULL DEFAULT 'LiveLane',
-                metadata TEXT NOT NULL DEFAULT '{}',
-                FOREIGN KEY (lane_id) REFERENCES orchestration_lanes(lane_id) ON DELETE CASCADE
-            )
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_events_lane
-            ON orchestration_lane_events(lane_id, timestamp)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_events_task
-            ON orchestration_lane_events(task_id)
-        """)
-
-        # Team 表（工作流分组）
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS orchestration_teams (
-                team_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                task_ids TEXT NOT NULL DEFAULT '[]',
-                status TEXT NOT NULL DEFAULT 'created',
-                created_at INTEGER NOT NULL,
-                updated_at INTEGER NOT NULL,
                 metadata TEXT NOT NULL DEFAULT '{}'
             )
         """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_teams_status
-            ON orchestration_teams(status)
-        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_lane_events_by_lane "
+            "ON orch_lane_events(lane_id, timestamp)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_lane_events_by_task "
+            "ON orch_lane_events(task_id)"
+        )
+
+        # 老表存量迁移（幂等 INSERT OR IGNORE；老表保留不删以便回滚）。
+        # 老表由早期版本创建，仅旧库存在 —— 全新安装下两块 SELECT 会抛
+        # no such table，被 except 吞掉（fail-open，不阻塞启动）。
+        try:
+            # 旧版 orchestration_lanes（早期 schema）可能没有后续增加的
+            # permission_preset/metadata 列。先幂等补列，再复制，避免首个 SELECT
+            # 因 no such column 中断并连带跳过 lane events 迁移。
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name='orchestration_lanes'"
+            )
+            if cursor.fetchone() is not None:
+                cursor.execute("PRAGMA table_info(orchestration_lanes)")
+                _legacy_lane_cols = {row["name"] for row in cursor.fetchall()}
+                if "permission_preset" not in _legacy_lane_cols:
+                    cursor.execute(
+                        "ALTER TABLE orchestration_lanes ADD COLUMN "
+                        "permission_preset TEXT NOT NULL DEFAULT 'implement'"
+                    )
+                if "metadata" not in _legacy_lane_cols:
+                    cursor.execute(
+                        "ALTER TABLE orchestration_lanes ADD COLUMN "
+                        "metadata TEXT NOT NULL DEFAULT '{}'"
+                    )
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO orch_lanes
+                (lane_id, task_id, agent_id, status, created_at, started_at,
+                 completed_at, worktree, heartbeat, error, permission_preset,
+                 metadata)
+                SELECT lane_id, task_id, agent_id, status, created_at, started_at,
+                       completed_at, worktree, heartbeat, error, permission_preset,
+                       metadata
+                FROM orchestration_lanes
+                """
+            )
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO orch_lane_events
+                (event_id, event_type, lane_id, task_id, agent_id, timestamp,
+                 provenance, metadata)
+                SELECT event_id, event_type, lane_id, task_id, agent_id, timestamp,
+                       provenance, metadata
+                FROM orchestration_lane_events
+                """
+            )
+        except Exception as exc:  # noqa: BLE001 — 旧库无老表属正常
+            logger.debug("lane 老表存量迁移跳过: %s", exc)
 
         # ==================== Background Review 表 ====================
         # Task 4 of 2026-08-02-background-review:
@@ -1429,6 +1524,19 @@ class Database:
             cursor.execute("ALTER TABLE orch_tasks ADD COLUMN used_tokens INTEGER")
         if "duration_ms" not in _task_cols:
             cursor.execute("ALTER TABLE orch_tasks ADD COLUMN duration_ms INTEGER")
+
+        # 任务层级化 (2026-09-19): 添加 parent_task_id 和 depth 列。
+        # 幂等迁移：检查列是否存在，不存在则添加，兼容既有数据库。
+        cursor.execute("PRAGMA table_info(orch_tasks)")
+        _task_cols = {row[1] for row in cursor.fetchall()}
+        if "parent_task_id" not in _task_cols:
+            cursor.execute(
+                "ALTER TABLE orch_tasks ADD COLUMN parent_task_id TEXT NULL"
+            )
+        if "depth" not in _task_cols:
+            cursor.execute(
+                "ALTER TABLE orch_tasks ADD COLUMN depth INTEGER NOT NULL DEFAULT 0"
+            )
 
         # Subagent 实时可观测性 schema (run-events@1.0)。全部 DDL 幂等，兼容旧库。
         cursor.execute(

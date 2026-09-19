@@ -322,6 +322,8 @@ export interface TaskPlanItem {
   goal: string;
   // P1-6 (2026-08-14): 依赖透传 —— 后端 task_plan 事件带 depends_on。
   depends_on?: string[];
+  parent_task_id?: string | null;
+  depth?: number;
 }
 
 export interface TaskPlanEvent {
@@ -359,6 +361,14 @@ export interface TaskStatusEvent {
   // live-events P0 (2026-09-06): 派发本批次的 conductor 工具调用 ID —— 聊天流内
   // 把子代理实时步骤关联到 "Delegate <goal>" 卡片的关联键。
   parent_tool_call_id?: string | null;
+  // 任务层级（spec 2026-09-19）：后端 _emit_task_status 固定携带，
+  // 前端据此渲染任务树缩进/折叠。旧事件缺省 → 根节点、深度 0。
+  parent_task_id?: string | null;
+  depth?: number;
+  // RP1 (round34, 2026-09-19): 被 LLM 动态调整过计划的任务 —— conductor 在 run
+  // 中改过目标 / 新增 / 取消该任务时携带，任务树渲染"已调整"徽章（可追溯哪些
+  // 任务偏离了初始计划）。普通任务无此键。
+  adjusted?: boolean;
 }
 
 // ─── live-events P0 (2026-09-06): 子代理实时执行镜像 ───────────────────
