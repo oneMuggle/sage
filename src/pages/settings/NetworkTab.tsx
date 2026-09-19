@@ -11,8 +11,8 @@ import { useEffect, useState } from 'react';
 import { settingsClient } from '../../shared/api/settingsClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
-import { parseCookieHeader, type CookieImportItem } from './credentialCookieParser';
 import { SettingRow } from './components';
+import { parseCookieHeader, type CookieImportItem } from './credentialCookieParser';
 
 /** 与后端 NetworkMode 枚举值一致（backend/domain/network_policy.py） */
 export const NETWORK_MODES = ['online', 'intranet', 'offline'] as const;
