@@ -275,32 +275,45 @@ function DiagnosePanel({ state, onRetry }: { state: DiagnoseState; onRetry: () =
     return <div className="text-sm text-muted">等待诊断…</div>;
   }
   const { data } = state;
+  const manifests = Array.isArray(data.manifests) ? data.manifests : [];
+  const diagnostics = Array.isArray(data.diagnostics) ? data.diagnostics : [];
+  const probeErrors = Array.isArray(data.probe_errors) ? data.probe_errors : [];
+  const requiredLanguages = [...new Set(manifests.map((manifest) => manifest.language))];
+  const satisfied = data.level === 'satisfied';
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm">
-        <span className="text-muted">项目类型:</span>
-        <span className="font-mono">{data.project_type}</span>
+        <span className="text-muted">项目清单:</span>
+        <span className="font-mono">
+          {manifests.length > 0 ? requiredLanguages.join(', ') : '未识别'}
+        </span>
         <span className="text-muted ml-4">满足度:</span>
-        {data.satisfied ? (
+        {satisfied ? (
           <span className="text-green-600 font-semibold">✓ 全部满足</span>
         ) : (
           <span className="text-amber-600 font-semibold">⚠ 需要处理</span>
         )}
       </div>
-      {data.required_languages.length > 0 && (
-        <div className="text-xs text-muted">需要的语言: {data.required_languages.join(', ')}</div>
+      {data.recommended_runtime && (
+        <div className="text-xs text-muted">推荐运行时: {data.recommended_runtime}</div>
       )}
-      {data.diagnostics.length > 0 && (
+      {requiredLanguages.length > 0 && (
+        <div className="text-xs text-muted">需要的语言: {requiredLanguages.join(', ')}</div>
+      )}
+      {diagnostics.length > 0 && (
         <ul className="space-y-1">
-          {data.diagnostics.map((d: Diagnostic, i: number) => (
+          {diagnostics.map((d: Diagnostic, i: number) => (
             <li key={i} className="text-sm">
               <SeverityBadge severity={d.severity} />
               <span className="ml-2 font-mono text-xs text-muted">{d.code}</span>
               <span className="ml-2">{d.message}</span>
-              {d.fix_hint && <span className="ml-2 text-xs text-primary">{d.fix_hint}</span>}
+              {d.remediation && <span className="ml-2 text-xs text-primary">{d.remediation}</span>}
             </li>
           ))}
         </ul>
+      )}
+      {probeErrors.length > 0 && (
+        <div className="text-xs text-amber-600">探测警告: {probeErrors.join('; ')}</div>
       )}
     </div>
   );
@@ -309,7 +322,7 @@ function DiagnosePanel({ state, onRetry }: { state: DiagnoseState; onRetry: () =
 function SeverityBadge({ severity }: { severity: Diagnostic['severity'] }) {
   const styles = {
     info: 'bg-blue-100 text-blue-700',
-    warn: 'bg-amber-100 text-amber-700',
+    warning: 'bg-amber-100 text-amber-700',
     error: 'bg-red-100 text-red-700',
   } as const;
   return (
