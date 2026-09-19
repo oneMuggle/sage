@@ -75,7 +75,9 @@ async def test_web_search_sources_flow_event_and_persistence(client):
             tool_call=ToolCallRequest(id="tc-1", name="web_search", arguments={"query": "sage"}),
             tool_result=ToolCallResult(tool_call_id="tc-1", content=WEB_RESULT_CONTENT, is_error=False),
         )
-        yield AgentEvent(state=AgentState.STEP_DONE, iteration=0, step_index=0)
+        # win7 差异: AgentState 无 STEP_DONE 成员（step-by-step 事件流未同步
+        # 到 win7），run_loop 不产 step_done —— R83 增量推送在此为沉睡代码，
+        # sources_used 仅由 DONE 前的全量兜底推送（单步 run 路径）。
         yield AgentEvent(state=AgentState.THINKING, iteration=1)
         yield AgentEvent(state=AgentState.DONE, iteration=1, content="根据搜索结果回答")
 
@@ -91,7 +93,7 @@ async def test_web_search_sources_flow_event_and_persistence(client):
         stream_id = create_stream.json()["streamId"]
         events_seen = await _drain_stream(client, stream_id)
 
-    # 1) 流事件: 至少一次 sources_used（STEP_DONE 边界增量推送）
+    # 1) 流事件: DONE 前全量兜底推送一次 sources_used
     sources_events = [e for e in events_seen if e.get("state") == "sources_used"]
     assert sources_events, f"expected sources_used event, got states={[e.get('state') for e in events_seen]}"
     first = sources_events[0]["sources"][0]
