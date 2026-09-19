@@ -73,6 +73,7 @@ from backend.orchestration.chat_dispatcher import (
     _classify_orchestration_mode,
 )
 from backend.orchestration.llm_factory import load_llm_config_for_chat
+from backend.utils import py_compat
 
 
 def _resolve_effective_window(  # noqa: PLR0911 — Task 5 priority cascade, each branch is a distinct user-facing mode
@@ -2879,7 +2880,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     _skill_activation_block,
                 )
 
-                r38_skills_port = await asyncio.to_thread(_get_skill_adapter)
+                r38_skills_port = await py_compat.to_thread(_get_skill_adapter)
                 r38_block, r38_activated_skill_list = _skill_activation_block(
                     data.message or "", r38_skills_port
                 )
