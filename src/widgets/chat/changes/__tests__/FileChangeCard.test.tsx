@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChangesListStore } from '../../../../features/changes/changesListStore';
 import { useRightPanelStore } from '../../../../features/right-panel/rightPanelStore';
 import type { WorkspaceChanges, WorkspaceDiff } from '../../../../shared/api/workspaceApi';
-import { FileChangeCard } from '../FileChangeCard';
+import { FileChangeCard, FileChangeCards } from '../FileChangeCard';
 
 const mockGetChangeDiff = vi.fn<(sessionId: string, path: string) => Promise<WorkspaceDiff>>();
 const mockGetChanges = vi.fn<(sessionId: string) => Promise<WorkspaceChanges>>();
@@ -112,5 +112,52 @@ describe('FileChangeCard', () => {
     expect(state.open).toBe(true);
     expect(state.tab).toBe('changes');
     expect(state.selectedChangePath).toBe('src/app.ts');
+  });
+});
+
+describe('FileChangeCards — ≥3 文件折叠汇总条 (right-panel R6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetStores();
+  });
+
+  it('少于阈值平铺逐文件卡片', () => {
+    render(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts']} />);
+    expect(screen.getByText('a.ts')).toBeInTheDocument();
+    expect(screen.getByText('b.ts')).toBeInTheDocument();
+    expect(screen.queryByTestId('file-change-group')).not.toBeInTheDocument();
+  });
+
+  it('达到阈值默认折叠为汇总条并显示合计行数，点击展开', () => {
+    useChangesListStore.setState({
+      bySession: {
+        s1: {
+          ...SAMPLE_CHANGES,
+          changes: [
+            { indexStatus: '', worktreeStatus: 'M', path: 'a.ts', insertions: 10, deletions: 2 },
+            { indexStatus: '', worktreeStatus: 'M', path: 'b.ts', insertions: 5, deletions: 1 },
+            { indexStatus: '', worktreeStatus: 'M', path: 'c.ts', insertions: 0, deletions: 0 },
+          ],
+        },
+      },
+    });
+    render(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts', 'c.ts']} />);
+
+    // 折叠态:汇总条 + 合计 +10/−3,卡片不渲染
+    expect(screen.getByTestId('file-change-group')).toBeInTheDocument();
+    expect(screen.getByText('修改了 3 个文件')).toBeInTheDocument();
+    expect(screen.getByText('+15')).toBeInTheDocument();
+    expect(screen.getByText('−3')).toBeInTheDocument();
+    expect(screen.queryByText('a.ts')).not.toBeInTheDocument();
+
+    // 展开后逐文件卡片
+    fireEvent.click(screen.getByTestId('file-change-group'));
+    expect(screen.getByText('a.ts')).toBeInTheDocument();
+    expect(screen.getByText('c.ts')).toBeInTheDocument();
+  });
+
+  it('空 paths 不渲染任何内容', () => {
+    const { container } = render(<FileChangeCards sessionId="s1" paths={[]} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

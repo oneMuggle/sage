@@ -36,6 +36,7 @@ import { useChangesListStore } from '../../../features/changes/changesListStore'
 import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';
 import { workspaceApi } from '../../../shared/api/workspaceApi';
 import type { WorkspaceCheckpoint } from '../../../shared/api/workspaceApi';
+import { langFromPath } from '../../../shared/lib/fileLang';
 import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
 import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
@@ -101,6 +102,12 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
   const [checkpoints, setCheckpoints] = useState<WorkspaceCheckpoint[] | null>(null);
   const [checkpointsOpen, setCheckpointsOpen] = useState(false);
   const [checkpointBusy, setCheckpointBusy] = useState(false);
+  // right-panel R6: diff / 文件预览 视图切换与预览内容懒加载
+  const [viewMode, setViewMode] = useState<'diff' | 'preview'>('diff');
+  const [fileContent, setFileContent] = useState<string | null>(null);
+  const [fileContentTruncated, setFileContentTruncated] = useState(false);
+  const [fileContentLoading, setFileContentLoading] = useState(false);
+  const [fileContentError, setFileContentError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     if (!sessionId) return;
@@ -119,6 +126,10 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
       setDiffTruncated(false);
       setSelectedHunks(new Set());
       setSplitView(false); // P1-3.8: 切换文件时重置为 unified 视图,避免 per-hunk 撤销 UI 错位
+      setViewMode('diff'); // R6: 切换文件回到 diff 视图,预览内容一并失效
+      setFileContent(null);
+      setFileContentTruncated(false);
+      setFileContentError(null);
       if (path.endsWith('/')) return; // 目录条目不拉 diff
       setDiffLoading(true);
       workspaceApi
@@ -132,6 +143,24 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
     },
     [sessionId],
   );
+
+  // right-panel R6: 切到"预览"视图时懒加载文件内容（切回 diff 不重拉）
+  const showPreview = useCallback(() => {
+    setViewMode('preview');
+    if (!sessionId || !selectedPath || fileContent !== null || fileContentLoading) return;
+    setFileContentLoading(true);
+    setFileContentError(null);
+    workspaceApi
+      .getChangeFile(sessionId, selectedPath)
+      .then((f) => {
+        setFileContent(f.content);
+        setFileContentTruncated(f.truncated);
+      })
+      .catch((e: unknown) => {
+        setFileContentError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setFileContentLoading(false));
+  }, [sessionId, selectedPath, fileContent, fileContentLoading]);
 
   const refreshCheckpoints = useCallback(() => {
     if (!sessionId) return;
@@ -313,9 +342,62 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
           >
             <Columns className="w-4 h-4" />
           </button>
+          {/* right-panel R6: Diff / 预览 分段切换（预览 = 修改后全文，懒加载） */}
+          <div
+            className="flex items-center rounded border border-border text-xs overflow-hidden shrink-0"
+            role="group"
+            aria-label="切换 diff/文件预览视图"
+          >
+            <button
+              className={
+                'px-2 py-1 transition-colors ' +
+                (viewMode === 'diff'
+                  ? 'text-primary bg-primary/10'
+                  : 'text-text-secondary hover:bg-bg-hover')
+              }
+              title="查看未提交 diff"
+              aria-pressed={viewMode === 'diff'}
+              data-testid="view-mode-diff"
+              onClick={() => setViewMode('diff')}
+            >
+              Diff
+            </button>
+            <button
+              className={
+                'px-2 py-1 transition-colors ' +
+                (viewMode === 'preview'
+                  ? 'text-primary bg-primary/10'
+                  : 'text-text-secondary hover:bg-bg-hover')
+              }
+              title="查看修改后文件全文"
+              aria-pressed={viewMode === 'preview'}
+              data-testid="view-mode-preview"
+              onClick={showPreview}
+            >
+              预览
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-2">
-          {diffLoading ? (
+          {viewMode === 'preview' ? (
+            // right-panel R6: 修改后文件全文预览（按扩展名选 Shiki 语言）
+            fileContentLoading ? (
+              <div className="text-sm text-muted p-2">加载文件…</div>
+            ) : fileContentError ? (
+              <div className="text-sm text-red-500 p-2">{fileContentError}</div>
+            ) : fileContent !== null ? (
+              <>
+                {fileContentTruncated && (
+                  <div className="text-xs text-amber-600 dark:text-amber-400 p-1">
+                    文件过长，已截断显示前 512KiB
+                  </div>
+                )}
+                <ShikiCodeBlock language={langFromPath(selectedPath)}>
+                  {fileContent}
+                </ShikiCodeBlock>
+              </>
+            ) : null
+          ) : diffLoading ? (
             <div className="text-sm text-muted p-2">加载 diff…</div>
           ) : selectedPath.endsWith('/') ? (
             <div className="text-sm text-muted p-2">目录条目不展示 diff</div>

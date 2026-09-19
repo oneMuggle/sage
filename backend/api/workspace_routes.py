@@ -102,6 +102,13 @@ class WorkspaceDiffResponse(BaseModel):
     truncated: bool
 
 
+class WorkspaceFileContentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+    content: str
+    truncated: bool
+
+
 def _connection() -> sqlite3.Connection:
     return get_database().get_connection()
 
@@ -395,6 +402,53 @@ def get_workspace_change_diff(
         diff=diff_text,
         truncated=truncated,
     )
+
+
+#: 变更面板"预览"读取上限（字节）——超过直接 413，不做部分读取
+_WS_FILE_PREVIEW_READ_CAP = 2 * 1024 * 1024
+#: 预览返回内容的字符上限——超出截断并置 truncated
+_WS_FILE_PREVIEW_CONTENT_CAP = 512 * 1024
+
+
+@router.get("/changes/file", response_model=WorkspaceFileContentResponse)
+def get_workspace_change_file(
+    session_id: str,
+    path: str = Query(min_length=1, max_length=1024),
+) -> WorkspaceFileContentResponse:
+    """工作区文件内容（变更面板"预览"视图数据源，只读，right-panel R6）。
+
+    ``path`` 为相对仓库根路径。realpath 边界守卫（防 ``../`` 与 symlink
+    逃逸，口径同 write_file 的 WRITE 边界）+ 2MiB 读取上限 + 二进制嗅探
+    （NUL → 415）+ 512KiB 内容截断。
+    """
+    from backend.tools.file_tool import _path_within_workspace
+
+    root = _bound_workspace_or_raise(_connection(), session_id)
+    joined = str(Path(root) / path)
+    if not _path_within_workspace(joined, root):
+        raise _error(403, "path_outside_workspace", "仅支持工作区内的相对路径")
+    resolved = Path(os.path.realpath(joined))
+    if not resolved.is_file():
+        raise _error(404, "file_not_found", "文件不存在")
+
+    try:
+        data = resolved.read_bytes()
+    except OSError as exc:
+        raise _error(502, "file_read_error", f"读取失败: {exc}") from exc
+    if len(data) > _WS_FILE_PREVIEW_READ_CAP:
+        raise _error(
+            413,
+            "file_too_large",
+            f"文件 {len(data)} 字节超过预览上限 {_WS_FILE_PREVIEW_READ_CAP} 字节",
+        )
+    if b"\x00" in data[:8192]:
+        raise _error(415, "binary_file", "二进制文件不支持预览")
+
+    text = data.decode("utf-8", errors="replace")
+    truncated = len(text) > _WS_FILE_PREVIEW_CONTENT_CAP
+    if truncated:
+        text = text[:_WS_FILE_PREVIEW_CONTENT_CAP]
+    return WorkspaceFileContentResponse(path=path, content=text, truncated=truncated)
 
 
 class WorkspaceRevertRequest(BaseModel):

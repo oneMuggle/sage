@@ -14,9 +14,16 @@
 // - 行号列固定宽度,select-none 防止误选
 // - 等宽字体 + white-space-pre 保持缩进
 //
+// right-panel R6 (2026-09-19): modify 行词级行内高亮 —— 复用 textDiff 的
+// 字符级 diffSpans 把行内真正变化的部分染深色（GitHub / VSCode 观感）,
+// 未变化的上下文保持行底色。单侧超 300 字符时 diffSpans 自动退化为
+// 整行染色,与 office 预览同口径。
+//
 // 本组件只读、不涉及 per-hunk 反向应用;如需撤销改动,请切换回 unified 视图。
 
 import { useMemo } from 'react';
+
+import { diffSpans, type DiffSpan } from '../../../shared/lib/textDiff';
 
 import { parseUnifiedDiff } from './splitDiffParser';
 
@@ -25,8 +32,44 @@ interface SplitDiffProps {
   diff: string;
 }
 
+/** 行内片段染色: 变化段染深色,相同段保持行底色 */
+function SpanText({ spans, side }: { spans: DiffSpan[]; side: 'del' | 'add' }) {
+  if (spans.length === 0) return null;
+  return (
+    <>
+      {spans.map((span, i) =>
+        span.kind === 'same' ? (
+          <span key={i}>{span.text}</span>
+        ) : (
+          <span
+            key={i}
+            className={
+              side === 'del'
+                ? 'rounded-sm bg-red-300/70 dark:bg-red-700/60'
+                : 'rounded-sm bg-green-300/70 dark:bg-green-700/60'
+            }
+          >
+            {span.text}
+          </span>
+        ),
+      )}
+    </>
+  );
+}
+
 export function SplitDiff({ diff }: SplitDiffProps) {
   const rows = useMemo(() => parseUnifiedDiff(diff), [diff]);
+
+  // 仅对 modify 行计算词级 spans（键为 rows 下标）;remove/add 行保持整行染色
+  const wordSpans = useMemo(() => {
+    const map = new Map<number, { before: DiffSpan[]; after: DiffSpan[] }>();
+    rows.forEach((row, i) => {
+      if (row.kind === 'modify' && row.oldText !== '' && row.newText !== '') {
+        map.set(i, diffSpans(row.oldText, row.newText));
+      }
+    });
+    return map;
+  }, [rows]);
 
   return (
     <div className="font-mono text-xs overflow-x-auto" data-testid="split-diff">
@@ -66,6 +109,7 @@ export function SplitDiff({ diff }: SplitDiffProps) {
                 : row.kind === 'add'
                   ? 'bg-green-50 dark:bg-green-900/15'
                   : '';
+            const spans = wordSpans.get(i);
 
             return (
               <tr key={i} data-testid={`split-diff-row-${i}`}>
@@ -75,14 +119,22 @@ export function SplitDiff({ diff }: SplitDiffProps) {
                 >
                   {row.oldLine ?? ''}
                 </td>
-                <td className={`px-2 whitespace-pre align-top ${leftBg}`}>{row.oldText}</td>
+                <td className={`px-2 whitespace-pre align-top ${leftBg}`}>
+                  {spans ? (
+                    <SpanText spans={spans.before} side="del" />
+                  ) : (
+                    row.oldText
+                  )}
+                </td>
                 <td
                   className="w-10 text-right pr-2 text-text-muted select-none align-top"
                   aria-label="新文件行号"
                 >
                   {row.newLine ?? ''}
                 </td>
-                <td className={`px-2 whitespace-pre align-top ${rightBg}`}>{row.newText}</td>
+                <td className={`px-2 whitespace-pre align-top ${rightBg}`}>
+                  {spans ? <SpanText spans={spans.after} side="add" /> : row.newText}
+                </td>
               </tr>
             );
           })}

@@ -39,7 +39,7 @@ import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownImage } from './MarkdownImage';
 import { MermaidBlock } from './MermaidBlock';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
-import { FileChangeCard } from './changes/FileChangeCard';
+import { FileChangeCards } from './changes/FileChangeCard';
 
 interface MessageProps {
   message: MessageType;
@@ -597,13 +597,9 @@ function MessageComponent({
                     <ToolCallTitle name={tc.name} args={tc.args} />
                     <span className="font-mono text-[10px] text-muted">{tc.name}</span>
                   </div>
-                  {/* right-panel R5: 文件修改卡片（路径 + +/- 徽章 + 折叠 diff） */}
+                  {/* right-panel R5/R6: 文件修改卡组（<3 个平铺,≥3 个折叠为汇总条） */}
                   {changePaths.length > 0 && (
-                    <div className="flex flex-col">
-                      {changePaths.map((path) => (
-                        <FileChangeCard key={path} sessionId={message.session_id} path={path} />
-                      ))}
-                    </div>
+                    <FileChangeCards sessionId={message.session_id} paths={changePaths} />
                   )}
                   {/* Tool result — 大文件内容可折叠 */}
                   {tc.result !== undefined && tc.result !== '' && !hasImage && (

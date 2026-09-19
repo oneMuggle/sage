@@ -80,6 +80,13 @@ export interface WorkspaceDiff {
   truncated: boolean;
 }
 
+/** right-panel R6: 变更面板"预览"视图的工作区文件内容（可能截断） */
+export interface WorkspaceFileContent {
+  path: string;
+  content: string;
+  truncated: boolean;
+}
+
 /** U19 逐文件撤销结果 */
 export interface WorkspaceRevertResult {
   reverted: string[];
@@ -241,6 +248,18 @@ export const workspaceApi = {
         sessionId,
         path,
         staged,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** right-panel R6: 工作区文件内容（变更面板"预览"视图，只读；超长截断）。 */
+  async getChangeFile(sessionId: string, path: string): Promise<WorkspaceFileContent> {
+    try {
+      return await invoke<WorkspaceFileContent>('workspace_get_change_file', {
+        sessionId,
+        path,
       });
     } catch (error) {
       throw handleApiError(error);

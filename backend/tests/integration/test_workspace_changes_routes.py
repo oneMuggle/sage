@@ -232,6 +232,86 @@ async def test_diff_tracked_unchanged_file_stays_empty(
     assert response.json()["diff"] == ""
 
 
+# ============================================================================
+# right-panel R6: 变更面板"预览"视图（GET /changes/file 文件内容只读）
+# ============================================================================
+
+
+@pytest.mark.asyncio()
+async def test_file_preview_returns_content(
+    client: httpx.AsyncClient, bound_session: str, git_workspace: Path
+) -> None:
+    response = await client.get(
+        f"/api/v1/sessions/{bound_session}/workspace/changes/file",
+        params={"path": "tracked.py"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["path"] == "tracked.py"
+    # 接口返回原始文件字节（Windows 夹具落盘为 CRLF,归一化后断言）
+    assert body["content"].replace("\r\n", "\n") == "print('v2')\n"
+    assert body["truncated"] is False
+
+
+@pytest.mark.asyncio()
+async def test_file_preview_rejects_path_traversal(
+    client: httpx.AsyncClient, bound_session: str
+) -> None:
+    response = await client.get(
+        f"/api/v1/sessions/{bound_session}/workspace/changes/file",
+        params={"path": "../outside.py"},
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "path_outside_workspace"
+
+
+@pytest.mark.asyncio()
+async def test_file_preview_missing_file_is_404(
+    client: httpx.AsyncClient, bound_session: str
+) -> None:
+    response = await client.get(
+        f"/api/v1/sessions/{bound_session}/workspace/changes/file",
+        params={"path": "nope.py"},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "file_not_found"
+
+
+@pytest.mark.asyncio()
+async def test_file_preview_binary_file_is_415(
+    client: httpx.AsyncClient, bound_session: str, git_workspace: Path
+) -> None:
+    (git_workspace / "logo.bin").write_bytes(b"\x00\x01\x02binary")
+    response = await client.get(
+        f"/api/v1/sessions/{bound_session}/workspace/changes/file",
+        params={"path": "logo.bin"},
+    )
+    assert response.status_code == 415
+    assert response.json()["detail"]["code"] == "binary_file"
+
+
+@pytest.mark.asyncio()
+async def test_file_preview_truncates_large_content(
+    client: httpx.AsyncClient, conn: sqlite3.Connection, session_id: str, tmp_path: Path
+) -> None:
+    """超 512KiB 的文本内容截断并置 truncated=true。"""
+    repo = tmp_path / "bigws"
+    repo.mkdir()
+    repo.mkdir(exist_ok=True)
+    big = "x" * 1024 + "\n"
+    (repo / "big.txt").write_text(big * 600, encoding="utf-8")  # ~614KiB
+    bind_session_workspace(conn, session_id, str(repo))
+
+    response = await client.get(
+        f"/api/v1/sessions/{session_id}/workspace/changes/file",
+        params={"path": "big.txt"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["truncated"] is True
+    assert len(body["content"]) < len(big) * 600
+
+
 @pytest.mark.asyncio()
 async def test_diff_path_outside_repo_rejected(
     client: httpx.AsyncClient, bound_session: str, tmp_path: Path

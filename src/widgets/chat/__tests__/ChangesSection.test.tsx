@@ -7,6 +7,7 @@ import type {
   WorkspaceChanges,
   WorkspaceCheckpoint,
   WorkspaceDiff,
+  WorkspaceFileContent,
 } from '../../../shared/api/workspaceApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
@@ -14,6 +15,9 @@ import { ChangesSection } from '../changes/ChangesSection';
 
 const mockGetChanges = vi.fn<() => Promise<WorkspaceChanges>>();
 const mockGetChangeDiff = vi.fn<(path?: string, staged?: boolean) => Promise<WorkspaceDiff>>();
+const mockGetChangeFile = vi.fn<
+  (sessionId: string, path: string) => Promise<WorkspaceFileContent>
+>();
 const mockRevertChanges =
   vi.fn<
     (
@@ -37,6 +41,7 @@ vi.mock('../../../shared/api/workspaceApi', () => ({
   workspaceApi: {
     getChanges: () => mockGetChanges(),
     getChangeDiff: (path?: string, staged?: boolean) => mockGetChangeDiff(path, staged),
+    getChangeFile: (sessionId: string, path: string) => mockGetChangeFile(sessionId, path),
     revertChanges: (...args: unknown[]) => mockRevertChanges(...args),
     revertChangeHunks: (...args: unknown[]) => mockRevertHunks(...args),
     listCheckpoints: (...args: unknown[]) => mockListCheckpoints(...args),
@@ -189,6 +194,50 @@ describe('ChangesSection', () => {
     expect(mockGetChangeDiff).toHaveBeenCalledWith('s1', 'src/app.ts');
     // 一次性消费:选中路径被清除,避免切会话串台
     expect(useRightPanelStore.getState().selectedChangePath).toBeNull();
+  });
+
+  it('right-panel R6: 切换预览视图懒加载文件全文', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({
+      diff: '--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new',
+      truncated: false,
+    });
+    mockGetChangeFile.mockResolvedValue({
+      path: 'src/app.ts',
+      content: "print('v2')\n",
+      truncated: false,
+    });
+    const { container } = render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('src/app.ts'));
+    await waitFor(
+      () => {
+        expect(screen.getByText('+new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+
+    // 切到预览:懒加载文件内容并渲染全文
+    fireEvent.click(screen.getByTestId('view-mode-preview'));
+    await waitFor(() => {
+      expect(mockGetChangeFile).toHaveBeenCalledWith('s1', 'src/app.ts');
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("print('v2')");
+    });
+
+    // 切回 diff 视图
+    fireEvent.click(screen.getByTestId('view-mode-diff'));
+    await waitFor(() => {
+      expect(screen.getByText('+new')).toBeInTheDocument();
+    });
   });
 
   it('opens diff view on file click and goes back', async () => {
