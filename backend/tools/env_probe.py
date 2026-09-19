@@ -42,6 +42,10 @@ _observations: dict = {}
 _OBS_MAX_PER_SESSION = 3
 _OBS_MAX_CHARS = 200
 
+#: fallback shell 下 per-session「上一条失败命令」（用于失败→重试成功的命令对采集）。
+_last_failed: dict = {}
+_CMD_MAX_CHARS = 90
+
 
 def record_observation(session_id: Optional[str], text: str) -> None:
     """记录一条本轮工具执行观察到的环境事实（best-effort，绝不抛错）。"""
@@ -55,6 +59,30 @@ def record_observation(session_id: Optional[str], text: str) -> None:
         if text not in bucket:
             bucket.append(text)
             del bucket[:-_OBS_MAX_PER_SESSION]
+
+
+def note_command_result(
+    session_id: Optional[str], command: str, exit_code: Optional[int]
+) -> None:
+    """记录 fallback shell 下的一次命令结果，配对「失败→改用 X 成功」。
+
+    exit≠0 记下该命令；下一条 exit==0 时把这对命令写入观察缓冲
+    （轮末随记忆蒸馏进 environment 事实）。best-effort，绝不抛错。
+    """
+    if not session_id or not command:
+        return
+    cmd = command.strip().replace("\n", " ")[:_CMD_MAX_CHARS]
+    if not cmd:
+        return
+    with _obs_lock:
+        if exit_code is not None and exit_code != 0:
+            _last_failed[session_id] = cmd
+            return
+        prev = _last_failed.pop(session_id, None)
+    if prev is not None and exit_code == 0:
+        record_observation(
+            session_id, f"命令「{prev}」执行失败，改用「{cmd}」成功"
+        )
 
 
 def pop_observations(session_id: Optional[str]) -> str:
@@ -185,6 +213,7 @@ def _build_snapshot_uncached() -> str:
 __all__ = [
     "SNAPSHOT_TTL_SECONDS",
     "build_snapshot",
+    "note_command_result",
     "pop_observations",
     "probe_node",
     "probe_python",
