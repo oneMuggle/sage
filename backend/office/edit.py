@@ -585,17 +585,36 @@ def _apply_docx_op(doc: Any, op: Dict[str, Any], doc_path: Optional[Path] = None
         for spec in paragraphs:
             if not isinstance(spec, dict) or not str(spec.get("text", "")).strip():
                 return {"op": op_name, "ok": False, "error": "paragraph_text_required"}
+
+        # Round 60：追加段落支持交叉引用占位符（{{fig:}}/{{tbl:}} → REF
+        # 复杂域，复用生成期书签）。预校验全部 spec 可解析后再写入
+        # （all-or-nothing）；{{fn:}}/{{en:}} 需 part 追加语义，暂不
+        # 支持（写入会被 lint cross_ref/residue 提示）。
+        caption_map = _collect_caption_bookmarks(doc)
+        parsed: list = []
         for spec in paragraphs:
+            try:
+                parsed.append(_parse_cross_ref_text(str(spec["text"]), caption_map))
+            except KeyError as exc:
+                return {"op": op_name, "ok": False, "error": f"cross_ref_not_found: {exc}"}
+
+        from .word_layout import append_ref_field
+
+        for spec, segments in zip(paragraphs, parsed, strict=False):
             heading = spec.get("heading")
-            text = str(spec["text"])
             if heading == "h1":
-                doc.add_heading(text, level=1)
+                created = doc.add_heading("", level=1)
             elif heading == "h2":
-                doc.add_heading(text, level=2)
+                created = doc.add_heading("", level=2)
             elif heading == "h3":
-                doc.add_heading(text, level=3)
+                created = doc.add_heading("", level=3)
             else:
-                doc.add_paragraph(text)
+                created = doc.add_paragraph()
+            for seg in segments:
+                if seg[0] == "text":
+                    created.add_run(seg[1])
+                else:
+                    append_ref_field(created, seg[1], seg[2])
         return {"op": op_name, "ok": True, "appended": len(paragraphs)}
 
     if op_name == "append_table":
@@ -1156,6 +1175,57 @@ def update_pptx(file_path: Path, ops: List[Dict[str, Any]]) -> Tuple[bool, List[
 #: OfficeDocType value → editor. Populated lazily to avoid importing the
 #: backend domain layer from the (domain-pure) office package unexpectedly.
 Editors = Dict[str, Callable[[Path, List[Dict[str, Any]]], Tuple[bool, List[Dict[str, Any]]]]]
+
+
+_CROSS_REF_TEXT_RE = re.compile(r"\{\{(fig|tbl):([^}]+)\}\}")
+
+
+def _collect_caption_bookmarks(doc) -> Dict[str, Tuple[str, str]]:
+    """域外扫描 SEQ 题注段，构建 题注文本 → (书签名, 缓存显示) 映射。
+
+    Round 60：append_paragraphs 的交叉引用占位符据此解析（生成期书签
+    `_RefFig{n}`/`_RefTbl{n}` 随题注写入，REF 域复用）。重复题注文本
+    取首个（与生成期映射同口径）。
+    """
+    from .word_lint import (
+        _FIGURE_CAPTION_RE,
+        _TABLE_CAPTION_RE,
+        _iter_paragraphs_outside_fields,
+    )
+
+    mapping: Dict[str, Tuple[str, str]] = {}
+    for para in _iter_paragraphs_outside_fields(doc):
+        for label, regex, prefix in (
+            ("图", _FIGURE_CAPTION_RE, "_RefFig"),
+            ("表", _TABLE_CAPTION_RE, "_RefTbl"),
+        ):
+            match = regex.match(para.text)
+            if match is None:
+                continue
+            number = int(match.group(1))
+            text = para.text[match.end():].strip()
+            mapping.setdefault(text, (f"{prefix}{number}", f"{label}{number}"))
+    return mapping
+
+
+def _parse_cross_ref_text(
+    text: str, caption_map: Dict[str, Tuple[str, str]]
+) -> List[Tuple[str, str, str]]:
+    """拆段解析交叉引用占位符；未知题注抛 KeyError（all-or-nothing）。"""
+    segments: List[Tuple[str, str, str]] = []
+    pos = 0
+    for match in _CROSS_REF_TEXT_RE.finditer(text):
+        if match.start() > pos:
+            segments.append(("text", text[pos:match.start()], ""))
+        kind, caption = match.group(1), match.group(2).strip()
+        entry = caption_map.get(caption)
+        if entry is None:
+            raise KeyError(f"{{{{{kind}:{caption}}}}} 未匹配任何题注")
+        segments.append(("ref", entry[0], entry[1]))
+        pos = match.end()
+    if pos < len(text):
+        segments.append(("text", text[pos:], ""))
+    return segments
 
 
 def update_document(

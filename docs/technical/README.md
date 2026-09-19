@@ -70,6 +70,7 @@
 | 91   | [脚注 Phase A 实现](./91-word-footnotes-phase-a.md) | R57：{{fn:}} 内联脚注（footnotes part 挂载 + footnoteReference + read 回读 + 无脚注零变化）|
 | 92   | [脚注 Phase B：样式注入 + 每节重编](./92-footnote-phase-b.md) | R58：FootnoteText/FootnoteReference 样式注入（幂等）+ w:footnotePr/numRestart=eachSect 节级开关 + 契约同步 |
 | 93   | [尾注 endnotes（Phase C）](./93-word-endnotes.md) | R59：{{en:}} 内联尾注（endnotes part + endnoteReference + Endnote 样式注入 + read 回读）+ 脚注/尾注混用与选型说明 |
+| 94   | [residue 补全 + append_paragraphs 交叉引用](./94-residue-update-marks.md) | R60：residue 正则补 fn/en + append_paragraphs 支持 {{fig:}}/{{tbl:}}（预校验 all-or-nothing，复用生成期书签）|
 | 92   | [LLM 定时任务工具](./92-llm-scheduled-task-tool.md) | schedule_task / list_scheduled_tasks / cancel_scheduled_task 三件套：复用 SchedulerService 单一事实源 + 会话自动绑定 + once(ISO-8601)/recurring(cron) + coordinator-only 白名单 |
 | 83   | [Python 后端代码保护方案](./83-python-code-protection.md) | Cython 二进制编译核心包 (sage_core) + Python 字节码混淆与源码剥离 (backend) + 开发与发布模式分离 (SAGE_PROTECT_CODE) |
 
