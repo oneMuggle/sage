@@ -7,10 +7,12 @@ import { useSettings } from '../../../features/manage-settings/useSettings';
 // TaskStatusValue 定义在 shared/api（Task 7 已 re-export），不从 useChat import
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue } from '../../../shared/api';
+import type { TaskPlanItem } from '../../../shared/api/types';
 import { orchRunClient } from '../../../shared/api/orchRunClient';
 import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
 
 import { SubagentDetailDrawer } from './SubagentDetailDrawer';
+import { buildTaskTree, descendantsOf } from './taskTree';
 
 // BU13 (round24): 徽章数值格式化 —— token ≥1k 显 k（1 位小数去尾 0），
 // 时长 <1s 显 ms，其余显秒（1 位小数）。纯展示，不做四舍五入承诺。
@@ -170,6 +172,41 @@ export function TaskTreeSection({
     return () => clearInterval(timer);
   }, [hasRunning, inFlightTasks]);
 
+  // 任务层级（spec 2026-09-19）：把平铺计划索引成树，支持缩进与折叠。
+  // 旧计划（无 parent_task_id）全部为根 → 渲染结果与既有平铺一致。
+  const treeIndex = useMemo(() => buildTaskTree(board.plan), [board.plan]);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const visibleRows = useMemo(() => {
+    const hidden = new Set<string>();
+    for (const taskId of collapsed) {
+      for (const descendant of descendantsOf(treeIndex, taskId)) {
+        hidden.add(descendant);
+      }
+    }
+    return [...treeIndex.roots]
+      .map((rootId) => {
+        const rows: Array<{ item: TaskPlanItem; depth: number; childIds: string[] }> = [];
+        const walk = (id: string) => {
+          const node = treeIndex.nodes.get(id);
+          if (!node || hidden.has(id)) return;
+          rows.push({ item: node.item, depth: node.depth, childIds: node.childIds });
+          for (const childId of node.childIds) walk(childId);
+        };
+        walk(rootId);
+        return rows;
+      })
+      .flat();
+  }, [treeIndex, collapsed]);
+
+  const toggleCollapsed = (taskId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-1" data-testid="task-tree">
       {!allDone && (
@@ -252,7 +289,7 @@ export function TaskTreeSection({
             : `⚠ 复核存疑（${board.review.assertion_count} 项断言）：${board.review.summary}`}
         </div>
       )}
-      {board.plan.map((item) => {
+      {visibleRows.map(({ item, depth, childIds }) => {
         const st = board.statuses[item.task_id];
         const status: TaskStatusValue = st?.status ?? 'queued';
         const preview = st?.output_preview ?? st?.error ?? null;
@@ -262,10 +299,14 @@ export function TaskTreeSection({
         // P1-6 (2026-08-14): depends_on 透传 —— 有依赖的任务缩进 + 标记行。
         const dependsOn = item.depends_on ?? [];
         const hasDeps = dependsOn.length > 0;
+        const hasChildren = childIds.length > 0;
+        const isCollapsed = collapsed.has(item.task_id);
         return (
           <div
             key={item.task_id}
             data-testid={`task-tree-item-${item.task_id}`}
+            data-depth={depth}
+            style={depth > 0 ? { paddingLeft: depth * 16 } : undefined}
             className={`flex flex-col gap-1 px-2 py-1 rounded text-xs bg-bg-hover cursor-pointer hover:bg-bg-active transition-colors ${
               hasDeps ? 'ml-4' : ''
             }`}
@@ -288,6 +329,23 @@ export function TaskTreeSection({
               </div>
             )}
             <div className="flex items-center gap-2">
+              {/* 任务层级（spec 2026-09-19）：有子任务时提供折叠/展开入口。
+                  stopPropagation 防止触发整行 Drawer 点击。 */}
+              {hasChildren && (
+                <button
+                  type="button"
+                  data-testid={`task-tree-toggle-${item.task_id}`}
+                  aria-label={isCollapsed ? `展开 ${item.goal}` : `折叠 ${item.goal}`}
+                  aria-expanded={!isCollapsed}
+                  className="w-3 text-[10px] text-text-tertiary hover:text-text-secondary shrink-0"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleCollapsed(item.task_id);
+                  }}
+                >
+                  {isCollapsed ? '▶' : '▼'}
+                </button>
+              )}
               <span title={STATUS_TITLE[status]} className="w-4 text-center">
                 {STATUS_ICON[status]}
               </span>
