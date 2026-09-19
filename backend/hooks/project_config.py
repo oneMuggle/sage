@@ -172,6 +172,8 @@ def validate_project_hooks(raw: Any, workspace: str) -> List[HookConfig]:
     configs = validate_hooks(hooks_raw)  # 复用用户级严格校验
 
     for idx, cfg in enumerate(configs):
+        if cfg.hook_type == "http":
+            raise HookConfigError("project hooks do not support http hook_type")
         if cfg.hook_type == "shell" and not _command_path_is_safe(cfg.command, workspace):
             raise HookConfigError(
                 f"project hooks[{idx}].command references a path outside the workspace"

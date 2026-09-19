@@ -378,11 +378,28 @@ def _parse_stdout(stdout_text: str) -> HookOutcome:
     return _parse_decision_dict(data)
 
 
-async def run_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:
+async def _run_http_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:
+    """调用 HTTP hook; 所有网络故障 fail-open。"""
+    from backend.hooks.http_client import send_http_hook
+
+    config = hook_cfg.config_override if isinstance(hook_cfg.config_override, dict) else {}
+    result = await send_http_hook(
+        config.get("url", ""),
+        payload_dict,
+        method=config.get("method", "POST"),
+        headers=config.get("headers", {}),
+        timeout_seconds=hook_cfg.timeout_seconds,
+    )
+    if result is None:
+        return HookOutcome(decision=DECISION_NOOP, reason="http hook failed")
+    return _parse_decision_dict(result)
+
+
+async def run_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:  # noqa: PLR0911 — fail-open 分支式守卫, 每路 return 都清晰
     """执行单个钩子。永不抛异常 (任何失败 → no-op)。
 
-    ``hook_type="python"`` 走进程内调用 (内置钩子); ``"shell"`` spawn
-    子进程 + STDIN/STDOUT JSON 协议。
+    ``hook_type="python"`` 走进程内调用 (内置钩子); ``"http"`` 走异步
+    HTTP 回调; ``"shell"`` spawn 子进程 + STDIN/STDOUT JSON 协议。
 
     Args:
         hook_cfg: 已校验的钩子配置
@@ -393,6 +410,8 @@ async def run_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOu
     """
     if hook_cfg.hook_type == "python":
         return await _run_python_hook(hook_cfg, payload_dict)
+    if hook_cfg.hook_type == "http":
+        return await _run_http_hook(hook_cfg, payload_dict)
 
     env = os.environ.copy()
     env["SAGE_HOOK_EVENT"] = str(payload_dict.get("hook_event_name", hook_cfg.event))
