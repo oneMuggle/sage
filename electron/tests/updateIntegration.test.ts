@@ -830,7 +830,7 @@ describe('Update System Integration', () => {
 
       // Mock spawn: 记录安装包路径并模拟退出码 0
       const spawnCalls: Array<{ file: string; args: string[] }> = [];
-      const mockSpawn = vi.fn().mockImplementation((_file: string, _args: string[]) => ({
+      const mockSpawn = vi.fn().mockImplementation(() => ({
         on: (event: string, callback: (code: number) => void) => {
           if (event === 'exit') setTimeout(() => callback(0), 0);
         },
