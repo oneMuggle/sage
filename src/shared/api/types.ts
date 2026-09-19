@@ -1501,6 +1501,8 @@ export interface WordPageSetupSpec {
     | 'upperLetter'
     | 'lowerLetter';
   page_number_start?: number;
+  // Round 58：该节脚注编号每节重排（分章脚注场景）
+  footnote_restart_each_section?: boolean;
 }
 
 /**

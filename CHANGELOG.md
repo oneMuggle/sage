@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 58：脚注 Phase B——样式注入 + 每节重编**（方案 `docs/plans/2026-09-19_r58-footnote-phase-b-plan.md`）
+
+### Added(office)
+- **脚注样式注入**：挂载 footnotes part 时幂等注入 FootnoteText 段落样式（10pt）与 FootnoteReference 字符样式（上标）——脚注按 Word 惯例渲染，不再回退默认
+- **`footnote_restart_each_section`**（WordPageSetupSpec）：节级 `w:footnotePr/numRestart=eachSect` 开关——论文/书籍分章脚注编号每节从 1 重排；默认 False 零触碰
+- 契约同步：schema format_spec.page 增开关；types.ts WordPageSetupSpec 同步
+
 > 📝 **Word 写作能力 Round 57：内联脚注 Phase A**（方案 `docs/plans/2026-09-19_r57-footnotes-phase-a-plan.md`，设计稿 90 号）
 
 ### Added(office)

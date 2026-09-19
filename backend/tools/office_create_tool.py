@@ -384,6 +384,14 @@ class OfficeCreateTool(BaseTool):
                                                 "type": "integer",
                                                 "description": "页码起始号",
                                             },
+                                            "footnote_restart_each_section": {
+                                                "type": "boolean",
+                                                "description": (
+                                                    "该节脚注编号每节重排"
+                                                    "（numRestart=eachSect，"
+                                                    "分章脚注场景）"
+                                                ),
+                                            },
                                         },
                                     },
                                     "body": {

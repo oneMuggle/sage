@@ -140,6 +140,18 @@ def _apply_page_setup_to_section(section, page: WordPageSetupSpec) -> None:
             pg.set(qn("w:fmt"), page.page_number_format)
         if page.page_number_start is not None:
             pg.set(qn("w:start"), str(page.page_number_start))
+    # Round 58：脚注编号每节重排（w:footnotePr/numRestart=eachSect）。
+    if getattr(page, "footnote_restart_each_section", False):
+        sect_pr = section._sectPr
+        fn_pr = sect_pr.find(qn("w:footnotePr"))
+        if fn_pr is None:
+            fn_pr = OxmlElement("w:footnotePr")
+            sect_pr.append(fn_pr)
+        num_restart = fn_pr.find(qn("w:numRestart"))
+        if num_restart is None:
+            num_restart = OxmlElement("w:numRestart")
+            fn_pr.append(num_restart)
+        num_restart.set(qn("w:val"), "eachSect")
 
 
 def _apply_body_style(doc: Document, body: WordBodyStyleSpec) -> None:
