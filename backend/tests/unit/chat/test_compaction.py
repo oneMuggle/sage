@@ -69,6 +69,31 @@ def test_estimate_messages_tokens_matches_module_level_helper():
     assert estimate_messages_tokens(messages) == estimate_tokens("user" + "你好世界 hello world")
 
 
+def test_estimate_messages_tokens_includes_tool_calls():
+    """assistant 的 tool_calls 参数必须计入估算（旧口径漏算 → 低估）。"""
+    import json
+
+    calls = [
+        {"id": "c1", "type": "function",
+         "function": {"name": "bash", "arguments": '{"command": "ls -la"}'}}
+    ]
+    plain = estimate_messages_tokens([{"role": "assistant", "content": "调用工具"}])
+    counted = estimate_messages_tokens(
+        [{"role": "assistant", "content": "调用工具", "tool_calls": calls}]
+    )
+    assert counted > plain
+    # Message 对象的 tool_calls 是落库 JSON 字符串形态 —— 两种形态口径一致
+    msg_obj = Message(
+        id="m1",
+        session_id="s1",
+        role="assistant",
+        content="调用工具",
+        created_at=0,
+        tool_calls=json.dumps(calls, ensure_ascii=False),
+    )
+    assert estimate_messages_tokens([msg_obj]) == counted
+
+
 def test_estimate_messages_tokens_supports_message_objects():
     """session_repo.Message 对象与 dict 走同一读取路径。"""
     messages = _db_messages(3)
