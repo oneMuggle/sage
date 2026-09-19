@@ -807,6 +807,58 @@
       "affected_path": "Win7 LTS Python 3.8 production path",
       "actual_reachability": "reachable; accepted risk — anyio 由 starlette/fastapi 引入，Sage 后端同步端点不直接调用 anyio 受影响 API（to_thread/blocking portal）；两个公告均为本地可用性影响（管道阻塞死锁），无远程代码执行路径",
       "controls": "anyio 4.14.2 修复版要求 Python>=3.10，Win7 LTS 钉死 Python 3.8 无法升级；后端仅监听本地回环（127.0.0.1:8765），单用户桌面场景下攻击者需本机执行权限；uvicorn 同步端点走线程池而非 anyio worker 路径，实际触达面有限；季度依赖审计复核 + 2026-12-01 复审（届时评估降级 anyio 或切换 async 栈的可行性）"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-12-01",
+      "source": "pip",
+      "package": "cryptography",
+      "package_version": "47.0.0",
+      "advisory": "GHSA-537c-gmf6-5ccf",
+      "advisory_url": "https://github.com/advisories/GHSA-537c-gmf6-5ccf",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "conditional; vulnerable surfaces are certificate/TLS/SSH parsing not exercised by sage, which uses only Fernet for local at-rest encryption",
+      "controls": "cryptography 47.0.0 is the last release shipping cp38 wheels (48.0.0 requires Python>=3.9), so no fixed version is installable on the Win7 Python 3.8.10 embeddable runtime; sage uses only Fernet symmetric encryption for local at-rest credential encryption (key held in the OS keystore via SecretBox), not the vulnerable certificate/TLS/SSH parsing surfaces; Win7 LTS long-term support decision (2026-09-15); quarterly pip-audit review",
+      "exception": "temporary exception: no py38-compatible fixed release exists; revisit at next quarterly audit or Win7 LTS EOL (2027-12-13)"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-12-01",
+      "source": "pip",
+      "package": "cryptography",
+      "package_version": "47.0.0",
+      "advisory": "PYSEC-2026-3552",
+      "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-3552",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "conditional; vulnerable surfaces are certificate/TLS/SSH parsing not exercised by sage, which uses only Fernet for local at-rest encryption",
+      "controls": "cryptography 47.0.0 is the last release shipping cp38 wheels (48.0.0 requires Python>=3.9), so no fixed version is installable on the Win7 Python 3.8.10 embeddable runtime; sage uses only Fernet symmetric encryption for local at-rest credential encryption (key held in the OS keystore via SecretBox), not the vulnerable certificate/TLS/SSH parsing surfaces; Win7 LTS long-term support decision (2026-09-15); quarterly pip-audit review",
+      "exception": "temporary exception: no py38-compatible fixed release exists; revisit at next quarterly audit or Win7 LTS EOL (2027-12-13)"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-12-01",
+      "source": "pip",
+      "package": "cryptography",
+      "package_version": "47.0.0",
+      "advisory": "PYSEC-2026-3553",
+      "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-3553",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "conditional; vulnerable surfaces are certificate/TLS/SSH parsing not exercised by sage, which uses only Fernet for local at-rest encryption",
+      "controls": "cryptography 47.0.0 is the last release shipping cp38 wheels (48.0.0 requires Python>=3.9), so no fixed version is installable on the Win7 Python 3.8.10 embeddable runtime; sage uses only Fernet symmetric encryption for local at-rest credential encryption (key held in the OS keystore via SecretBox), not the vulnerable certificate/TLS/SSH parsing surfaces; Win7 LTS long-term support decision (2026-09-15); quarterly pip-audit review",
+      "exception": "temporary exception: no py38-compatible fixed release exists; revisit at next quarterly audit or Win7 LTS EOL (2027-12-13)"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2026-12-01",
+      "source": "pip",
+      "package": "cryptography",
+      "package_version": "47.0.0",
+      "advisory": "PYSEC-2026-3554",
+      "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-3554",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "conditional; vulnerable surfaces are certificate/TLS/SSH parsing not exercised by sage, which uses only Fernet for local at-rest encryption",
+      "controls": "cryptography 47.0.0 is the last release shipping cp38 wheels (48.0.0 requires Python>=3.9), so no fixed version is installable on the Win7 Python 3.8.10 embeddable runtime; sage uses only Fernet symmetric encryption for local at-rest credential encryption (key held in the OS keystore via SecretBox), not the vulnerable certificate/TLS/SSH parsing surfaces; Win7 LTS long-term support decision (2026-09-15); quarterly pip-audit review",
+      "exception": "temporary exception: no py38-compatible fixed release exists; revisit at next quarterly audit or Win7 LTS EOL (2027-12-13)"
     }
   ]
 }
