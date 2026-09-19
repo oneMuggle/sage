@@ -32,11 +32,6 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
-const baseProps = {
-  settings: { memoryServerSync: false },
-  updateSettings: vi.fn(),
-} as unknown as Parameters<typeof MemoryTab>[0];
-
 describe('MemoryTab 记忆固化卡 (R17-B)', () => {
   beforeEach(() => {
     runConsolidationMock.mockReset();
@@ -47,7 +42,7 @@ describe('MemoryTab 记忆固化卡 (R17-B)', () => {
   it('runs consolidation and shows the result summary', async () => {
     runConsolidationMock.mockResolvedValue({ promoted: 2, decayed: 5, total: 7 });
 
-    render(<MemoryTab {...baseProps} />);
+    render(<MemoryTab />);
     fireEvent.click(screen.getByTestId('memory-consolidation-run'));
 
     await waitFor(() =>
@@ -61,7 +56,7 @@ describe('MemoryTab 记忆固化卡 (R17-B)', () => {
   it('shows an error toast when consolidation fails', async () => {
     runConsolidationMock.mockRejectedValue(new Error('后端 503'));
 
-    render(<MemoryTab {...baseProps} />);
+    render(<MemoryTab />);
     fireEvent.click(screen.getByTestId('memory-consolidation-run'));
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('固化失败: 后端 503'));
@@ -76,7 +71,7 @@ describe('MemoryTab 记忆固化卡 (R17-B)', () => {
       }),
     );
 
-    render(<MemoryTab {...baseProps} />);
+    render(<MemoryTab />);
     const button = screen.getByTestId('memory-consolidation-run');
     fireEvent.click(button);
 

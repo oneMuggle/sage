@@ -1,7 +1,7 @@
 # ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容，保留 typing 注解
 """B-2 (round5 批次 B): 发送前自动快照单元测试。
 
-_auto_checkpoint_if_enabled 的三分支：开+绑定→快照 id；关→None；
+_auto_checkpoint_if_enabled 的分支：缺省/"1"+绑定→快照 id；显式 "0"→None；
 开+未绑定→None。快照存储经 SAGE_USER_DATA_DIR 隔离到 tmp_path。
 """
 
@@ -62,14 +62,24 @@ def test_enabled_and_bound_creates_checkpoint(db: Database, tmp_path: Path) -> N
     assert (checkpoint_dir / f"{checkpoint_id}.zip").is_file()
 
 
-def test_disabled_skips(db: Database, tmp_path: Path) -> None:
+def test_default_on_and_bound_creates_checkpoint(db: Database, tmp_path: Path) -> None:
+    """默认开：偏好缺省（None）也应打快照。"""
+    session = SessionRepository().create(title="缺省会话")
+    workspace = tmp_path / "ws-default"
+    workspace.mkdir()
+    bind_session_workspace(db.get_connection(), session.id, str(workspace))
+
+    _set_pref(None)  # 不写偏好
+    assert _auto_checkpoint_if_enabled(session.id)
+
+
+def test_explicit_disabled_skips(db: Database, tmp_path: Path) -> None:
     session = SessionRepository().create(title="未开启")
     workspace = tmp_path / "ws2"
     workspace.mkdir()
     bind_session_workspace(db.get_connection(), session.id, str(workspace))
 
-    # 缺省（None）与显式 "0" 均跳过
-    assert _auto_checkpoint_if_enabled(session.id) is None
+    # 仅显式 "0" 跳过
     _set_pref("0")
     assert _auto_checkpoint_if_enabled(session.id) is None
 

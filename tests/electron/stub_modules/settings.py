@@ -25,7 +25,6 @@ _STUB_SETTINGS: dict = {
     "streaming": True,
     "autoMemory": False,
     "confirmDelete": True,
-    "memoryServerSync": False,
     "endpoints": [],
     "modelSelections": {},
     "maxContext": 8192,
