@@ -125,6 +125,27 @@ def test_wiki_answer_uses_citations():
     assert source["snippet"] == "所有权系统"
 
 
+# ── browser_navigate ──────────────────────────────────────────────────
+
+
+def test_browser_navigate_extracts_source():
+    content = _dumps({"url": "https://example.com/page", "title": "示例页"})
+    (source,) = extract_sources_from_tool("browser_navigate", content)
+    assert source["kind"] == "web"
+    assert source["url"] == "https://example.com/page"
+    assert source["title"] == "示例页"
+
+
+def test_browser_navigate_missing_title_falls_back_to_host():
+    content = _dumps({"url": "https://docs.example.com/deep/path"})
+    (source,) = extract_sources_from_tool("browser_navigate", content)
+    assert source["title"] == "docs.example.com"
+
+
+def test_browser_navigate_without_url_returns_empty():
+    assert extract_sources_from_tool("browser_navigate", _dumps({"title": "无 url"})) == []
+
+
 # ── MCP ───────────────────────────────────────────────────────────────
 
 
