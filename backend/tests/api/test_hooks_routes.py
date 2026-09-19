@@ -58,3 +58,96 @@ async def test_builtins_handlers_are_resolvable(client):
         assert _resolve_handler(entry["handler"]) is not None, (
             f"{entry['id']} handler {entry['handler']!r} not resolvable"
         )
+
+
+# ==================== Phase 4: 项目信任管理 ====================
+
+
+@pytest.mark.asyncio()
+async def test_project_status_rejects_relative_path(client):
+    resp = await client.get("/api/v1/hooks/project/status", params={"workspace": "relative/dir"})
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio()
+async def test_project_status_rejects_missing_dir(client, tmp_path):
+    missing = tmp_path / "nope"
+    resp = await client.get("/api/v1/hooks/project/status", params={"workspace": str(missing)})
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio()
+async def test_project_status_defaults_to_untrusted(client, tmp_path):
+    resp = await client.get("/api/v1/hooks/project/status", params={"workspace": str(tmp_path)})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["trusted"] is False
+    assert data["config_exists"] is False
+    assert data["hook_count"] == 0
+
+
+@pytest.mark.asyncio()
+async def test_project_status_detects_config_file(client, tmp_path):
+    config_dir = tmp_path / ".sage"
+    config_dir.mkdir()
+    (config_dir / "hooks.json").write_text(
+        '{"version": 1, "hooks": []}', encoding="utf-8"
+    )
+    resp = await client.get("/api/v1/hooks/project/status", params={"workspace": str(tmp_path)})
+    assert resp.status_code == 200
+    assert resp.json()["config_exists"] is True
+
+
+@pytest.mark.asyncio()
+async def test_project_trust_then_status_reflects_it(client, tmp_path):
+    trust_resp = await client.post(
+        "/api/v1/hooks/project/trust", json={"workspace": str(tmp_path)}
+    )
+    assert trust_resp.status_code == 200
+    assert trust_resp.json()["trusted"] is True
+
+    status = await client.get(
+        "/api/v1/hooks/project/status", params={"workspace": str(tmp_path)}
+    )
+    assert status.json()["trusted"] is True
+
+
+@pytest.mark.asyncio()
+async def test_project_untrust_reverts(client, tmp_path):
+    await client.post("/api/v1/hooks/project/trust", json={"workspace": str(tmp_path)})
+    resp = await client.post(
+        "/api/v1/hooks/project/untrust", json={"workspace": str(tmp_path)}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["trusted"] is False
+
+    status = await client.get(
+        "/api/v1/hooks/project/status", params={"workspace": str(tmp_path)}
+    )
+    assert status.json()["trusted"] is False
+
+
+@pytest.mark.asyncio()
+async def test_project_trust_rejects_relative_path(client):
+    resp = await client.post("/api/v1/hooks/project/trust", json={"workspace": "relative"})
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio()
+async def test_trusted_workspace_reports_hook_count(client, tmp_path):
+    """信任后, status 应报告实际生效的钩子条数。"""
+    config_dir = tmp_path / ".sage"
+    config_dir.mkdir()
+    (config_dir / "hooks.json").write_text(
+        '{"version": 1, "hooks": ['
+        '{"event": "pre_tool_use", "matcher": "bash", "command": "ruff"},'
+        '{"event": "post_tool_use", "matcher": "*", "command": "echo done"}'
+        "]}",
+        encoding="utf-8",
+    )
+    await client.post("/api/v1/hooks/project/trust", json={"workspace": str(tmp_path)})
+
+    status = await client.get(
+        "/api/v1/hooks/project/status", params={"workspace": str(tmp_path)}
+    )
+    assert status.json()["hook_count"] == 2

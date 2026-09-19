@@ -587,7 +587,8 @@ Phase 6  ─── 诊断与可视化 ────────── 1 周（远
 - [x] Phase 3, Step 1：`HookOutcome` 新增 `additional_context` + `severity` + `has_feedback`
 - [x] Phase 3, Step 2：`agent.py` post_tool_use 后注入 `system` 消息到对话历史（串行 + 并行）
 - [x] Phase 3, Step 3：端到端测试（hook → additional_context → 对话历史可见）
-- [ ] Phase 4, Step 1：`.sage/hooks.json` 加载 + `load_project_hooks()`
-- [ ] Phase 4, Step 2：`merger.py` 三级合并逻辑 + 安全约束
+- [x] Phase 4, Step 1：`.sage/hooks.json` 加载 + `load_project_hooks()`（信任门禁 + 路径约束）
+- [x] Phase 4, Step 2：`merger.py` 合并逻辑 + 信任管理 REST 端点（UI 待后续）
+- [ ] Phase 4, Step 3（后续）：信任状态前端 UI（需 workspace 上下文管道）
 - [ ] Phase 5, Step 1：`http_client.py` + `run_hook()` HTTP 分支
 - [ ] Phase 6, Step 1：`history.py` + `hook_executions` 表 + API 端点 + UI 面板

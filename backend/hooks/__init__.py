@@ -26,6 +26,17 @@ from backend.hooks.config import (
     load_hooks,
     validate_hooks,
 )
+from backend.hooks.merger import merge_hooks
+from backend.hooks.project_config import (
+    PROJECT_CONFIG_REL_PATH,
+    TRUSTED_WORKSPACES_KEY,
+    is_workspace_trusted,
+    load_project_hooks,
+    load_trusted_workspaces,
+    trust_workspace,
+    untrust_workspace,
+    validate_project_hooks,
+)
 from backend.hooks.runner import (
     DECISION_ALLOW,
     DECISION_DENY,
@@ -52,6 +63,8 @@ __all__ = [
     "HOOK_EVENTS",
     "HOOK_TYPES",
     "MAX_HOOKS",
+    "PROJECT_CONFIG_REL_PATH",
+    "TRUSTED_WORKSPACES_KEY",
     "HookConfig",
     "HookConfigError",
     "HookOutcome",
@@ -59,13 +72,20 @@ __all__ = [
     "build_payload",
     "build_session_payload",
     "get_builtin",
+    "is_workspace_trusted",
     "list_builtins",
     "load_hooks",
+    "load_project_hooks",
+    "load_trusted_workspaces",
     "make_hook_entry",
     "matches_tool",
+    "merge_hooks",
     "run_event_hooks",
     "run_event_hooks_sync",
     "run_hook",
+    "trust_workspace",
+    "untrust_workspace",
     "validate_hooks",
     "validate_modified_args",
+    "validate_project_hooks",
 ]
