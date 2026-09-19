@@ -156,6 +156,18 @@ def export_to_zip_bytes(
         zf.writestr("trace.jsonl", "\n".join(trace_lines).encode("utf-8"))
         # 5. README
         zf.writestr("README.txt", _README_TEMPLATE)
+        # 6. web-metrics（Round 20 X2 闭环）：per-host 出网指标快照，支持人员可见
+        try:
+            from backend.tools import web_metrics
+
+            snapshot = web_metrics.snapshot()
+            if snapshot:
+                zf.writestr(
+                    "web-metrics.json",
+                    json.dumps(snapshot, ensure_ascii=False, indent=2),
+                )
+        except Exception:  # noqa: BLE001 — 指标快照失败不影响诊断包
+            pass
     if buf.tell() > MAX_TOTAL_BYTES:
         raise ValueError(f"zip too large: {buf.tell()} > {MAX_TOTAL_BYTES}")
     return buf.getvalue()
