@@ -151,3 +151,81 @@ async def test_trusted_workspace_reports_hook_count(client, tmp_path):
         "/api/v1/hooks/project/status", params={"workspace": str(tmp_path)}
     )
     assert status.json()["hook_count"] == 2
+
+
+# ==================== Phase 6: 执行历史 ====================
+
+
+@pytest.mark.asyncio()
+async def test_history_empty_by_default(client):
+    from backend.hooks.history import get_history_repo
+
+    get_history_repo().clear()
+    resp = await client.get("/api/v1/hooks/history")
+    assert resp.status_code == 200
+    assert resp.json()["records"] == []
+
+
+@pytest.mark.asyncio()
+async def test_history_returns_records_after_run_hook(client):
+    from backend.hooks.history import get_history_repo, make_record, reset_history_repo
+
+    reset_history_repo()
+    repo = get_history_repo()
+    repo.clear()
+    repo.save(make_record(
+        hook_type="python", event="pre_tool_use", tool_name="bash",
+        builtin_id="security_guard", decision="deny", duration_ms=1.5,
+        reason="blocked",
+    ))
+
+    resp = await client.get("/api/v1/hooks/history")
+    assert resp.status_code == 200
+    records = resp.json()["records"]
+    assert len(records) == 1
+    assert records[0]["hook_id"] == "security_guard"
+    assert records[0]["decision"] == "deny"
+    assert records[0]["duration_ms"] == 1.5
+    assert records[0]["reason"] == "blocked"
+
+
+@pytest.mark.asyncio()
+async def test_history_filter_by_hook_id(client):
+    from backend.hooks.history import get_history_repo, make_record, reset_history_repo
+
+    reset_history_repo()
+    repo = get_history_repo()
+    repo.save(make_record(
+        hook_type="python", event="pre_tool_use", tool_name="bash",
+        builtin_id="a", decision="deny", duration_ms=0,
+    ))
+    repo.save(make_record(
+        hook_type="python", event="pre_tool_use", tool_name="bash",
+        builtin_id="b", decision="allow", duration_ms=0,
+    ))
+
+    resp = await client.get("/api/v1/hooks/history", params={"hook_id": "a"})
+    assert resp.status_code == 200
+    records = resp.json()["records"]
+    assert len(records) == 1
+    assert records[0]["hook_id"] == "a"
+
+
+@pytest.mark.asyncio()
+async def test_history_clear(client):
+    from backend.hooks.history import get_history_repo, make_record, reset_history_repo
+
+    reset_history_repo()
+    repo = get_history_repo()
+    repo.save(make_record(
+        hook_type="python", event="pre_tool_use", tool_name="bash",
+        builtin_id="sec", decision="deny", duration_ms=0,
+    ))
+
+    resp = await client.delete("/api/v1/hooks/history")
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    assert resp.json()["deleted"] >= 1
+
+    status = await client.get("/api/v1/hooks/history")
+    assert status.json()["records"] == []

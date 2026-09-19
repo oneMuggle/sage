@@ -26,6 +26,13 @@ from backend.hooks.config import (
     load_hooks,
     validate_hooks,
 )
+from backend.hooks.history import (
+    HookExecutionRecord,
+    HookHistoryRepository,
+    get_history_repo,
+    make_record,
+    reset_history_repo,
+)
 from backend.hooks.http_client import resolve_header_value, resolve_headers, send_http_hook
 from backend.hooks.merger import merge_hooks
 from backend.hooks.project_config import (
@@ -68,21 +75,26 @@ __all__ = [
     "TRUSTED_WORKSPACES_KEY",
     "HookConfig",
     "HookConfigError",
+    "HookExecutionRecord",
+    "HookHistoryRepository",
     "HookOutcome",
     "build_error_payload",
     "build_payload",
     "build_session_payload",
     "get_builtin",
+    "get_history_repo",
     "is_workspace_trusted",
     "list_builtins",
     "load_hooks",
     "load_project_hooks",
     "load_trusted_workspaces",
     "make_hook_entry",
+    "make_record",
     "matches_tool",
     "merge_hooks",
     "resolve_headers",
     "resolve_header_value",
+    "reset_history_repo",
     "run_event_hooks",
     "run_event_hooks_sync",
     "run_hook",
