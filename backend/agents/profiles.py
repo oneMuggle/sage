@@ -5,6 +5,7 @@ Agent Profiles - Agent 角色定义和配置
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
@@ -939,7 +940,11 @@ _CODE_EXECUTION_CAPABILITY_PROMPT = (
     "适合批量文件处理、多步机械操作。\n"
     "- 执行 Shell 命令：调用 bash 工具（参数 command），可运行任意命令"
     "（包括 python <脚本路径> 执行用户指定的代码文件）。\n"
-    "用户贴入代码或指定代码文件时，主动用 repl/bash 执行，不要只解释代码。"
+    "用户贴入代码或指定代码文件时，主动用 repl/bash 执行，不要只解释代码。\n"
+    "环境经验固化：当命令因环境原因失败（shell/解释器版本不支持、找不到 "
+    "python/node 等），且你试出了可用写法时，立即用 memory_save 把该事实"
+    "固化下来（memory_type='semantic', importance=8, tags=['environment']，"
+    "内容=失败现象+可用写法/可用路径各一句），下个会话就不必重新踩坑。"
 )
 
 
@@ -956,10 +961,27 @@ _CONFIG_CAPABILITY_PROMPT = (
 )
 
 
+def _windows_env_snapshot() -> str:
+    """Windows 工具链快照块；非 Windows 或探测失败返回空串。
+
+    见 backend/tools/env_probe.py 模块注释：解决 win7 环境事实
+    （PS 版本/python 路径）只在 tool result 里一闪而过、agent 反复踩同一坑。
+    """
+    if os.name != "nt":
+        return ""
+    try:
+        from backend.tools.env_probe import build_snapshot
+
+        return build_snapshot()
+    except Exception as exc:  # noqa: BLE001 — 快照失败绝不影响对话
+        logger.debug("Windows 环境快照注入跳过: %s", exc)
+        return ""
+
+
 def build_system_base() -> str:
     """构建 system prompt 基础部分（身份 + 工具能力声明 + agent 列表）。"""
     base = "你是 Sage，一个智能 AI 助手。"
-    return (
+    prompt = (
         base
         + _OFFICE_CREATE_CAPABILITY_PROMPT
         + _TODO_GUIDANCE_PROMPT
@@ -968,3 +990,7 @@ def build_system_base() -> str:
         + _CONFIG_CAPABILITY_PROMPT
         + format_agents_for_prompt()
     )
+    env_snapshot = _windows_env_snapshot()
+    if env_snapshot:
+        prompt += "\n\n" + env_snapshot
+    return prompt

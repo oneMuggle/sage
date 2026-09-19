@@ -33,8 +33,13 @@ logger = logging.getLogger(__name__)
 DEFAULT_CHAR_LIMIT = 1400
 
 #: category 白名单（写入时校验，防脏数据）。
-#: 含 extractor 已产出的 ``goal``（用户目标属画像类知识）。
-VALID_CATEGORIES = ("preference", "communication_style", "workflow_habit", "identity", "goal")
+#: 含 extractor 已产出的 ``goal``（用户目标属画像类知识）与
+#: ``environment``（本机工具链事实：PS 版本/python 路径等，PR 环境记忆化）。
+VALID_CATEGORIES = ("preference", "communication_style", "workflow_habit", "identity", "goal", "environment")
+
+#: environment 类画像最多保留条数（超出删最旧）：环境事实重要但同机数量应少，
+#: 防止反复试错把 1400 字符的快照预算挤爆。
+ENVIRONMENT_MAX_ENTRIES = 3
 
 #: 去重判定：新内容与存量内容的最相似度阈值（> 视为重复）
 DEDUPE_RATIO = 0.95
@@ -176,6 +181,8 @@ class UserProfileStore:
             "VALUES (?, ?, ?, ?, ?, ?)",
             (profile_id, content, category, importance, now, now),
         )
+        if category == "environment":
+            self._prune_environment_overflow(conn, keep=ENVIRONMENT_MAX_ENTRIES)
         conn.commit()
         # 写入路径不刷新冻结快照（hermes 语义：保 prefix cache）
         self._entries.append(
@@ -201,6 +208,20 @@ class UserProfileStore:
         return False
 
     # ---- 内部实现 ----------------------------------------------------------
+
+    def _prune_environment_overflow(self, conn, keep: int = ENVIRONMENT_MAX_ENTRIES) -> None:
+        """environment 画像超出 keep 条时删除最旧的（DB + 内存条目同步）。"""
+        rows = conn.execute(
+            "SELECT id FROM user_profile WHERE category = 'environment' "
+            "ORDER BY created_at DESC, rowid DESC"
+        ).fetchall()
+        stale_ids = {row["id"] for row in list(rows)[keep:]}
+        if not stale_ids:
+            return
+        conn.executemany(
+            "DELETE FROM user_profile WHERE id = ?", [(pid,) for pid in stale_ids]
+        )
+        self._entries = [e for e in self._entries if e["id"] not in stale_ids]
 
     def _query_all(self) -> List[Dict[str, Any]]:
         """从 DB 读取全部画像条目。"""

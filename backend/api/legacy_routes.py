@@ -1022,14 +1022,16 @@ async def _extract_legacy_chat_memory(
 
         from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
         from backend.adapters.out.memory.adapter import MemoryAdapter
+
+        # 记忆提取异步化：廉价装配（读设置/建 adapter）仍在本函数内完成，
+        # 仅把耗时的 LLM 提取投递到后台队列，不阻塞流式请求收尾。
+        from backend.application.services.chat_service import _pop_env_observations
         from backend.memory.async_extractor import (
             ExtractionRequest,
             get_memory_extraction_queue,
         )
         from backend.memory.extractor import MemoryExtractor
 
-        # 记忆提取异步化：廉价装配（读设置/建 adapter）仍在本函数内完成，
-        # 仅把耗时的 LLM 提取投递到后台队列，不阻塞流式请求收尾。
         get_memory_extraction_queue().submit(
             ExtractionRequest(
                 memory_port=MemoryAdapter(get_memory_manager()),
@@ -1038,6 +1040,7 @@ async def _extract_legacy_chat_memory(
                 assistant_text=assistant_text,
                 session_id=session_id,
                 enabled=True,
+                tool_observations=_pop_env_observations(session_id),
             )
         )
     except Exception as exc:
