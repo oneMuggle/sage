@@ -147,6 +147,18 @@ async def _classify_orchestration_mode(
         return "single"
 
 
+def _safe_depth(value: Any) -> int:
+    """把计划里的 depth 安全转成非负整数 —— 手写 plan_json 可能是字符串或 None。
+
+    解析失败一律回落 0（层级是展示信息，绝不因脏值让任务派发/取消失败）。
+    """
+    try:
+        depth = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, depth)
+
+
 @dataclass
 class ChatTaskState:
     """单个子任务的可变状态（dispatcher 内存态，不落库）。"""
@@ -647,7 +659,7 @@ class ChatDispatcher:
                 agent_id=str(item.get("agent_id", "")),
                 goal=str(item.get("goal", "")),
                 parent_task_id=item.get("parent_task_id"),
-                depth=int(item.get("depth", 0) or 0),
+                depth=_safe_depth(item.get("depth", 0)),
                 status="cancelled",
                 error=(
                     f"cancelled by llm: {reason}" if reason else "cancelled by llm"
@@ -709,19 +721,39 @@ class ChatDispatcher:
                 "error": f"parent_task_id 引用了不存在的任务: {new_parent}",
             }
         # 归一化：先剔除既有条目中已失效的 parent 引用（fail-open，与
-        # Planner 同风格），再对新任务施加严格校验。
+        # Planner 同风格），再对新任务施加严格校验。剥离判据必须与
+        # normalize 的论域一致（只在计划内的条目）—— 否则指向"仅在 _states"
+        # 的父引用会被保留，仍导致无关新任务被连坐拒绝。
+        plan_ids = set(self._plan_by_id)
         baseline: List[Dict[str, Any]] = []
         for existing in self._plan_by_id.values():
             entry = dict(existing)
             parent = entry.get("parent_task_id")
-            if parent is not None and str(parent) not in known:
+            if parent is not None and str(parent) not in plan_ids:
                 entry.pop("parent_task_id", None)
             baseline.append(entry)
         candidate_plan = baseline + [item]
         try:
             normalized_plan = normalize_task_hierarchy(candidate_plan)
         except HierarchyError as exc:
-            return {"success": False, "error": str(exc)}
+            # 新任务的父级可能指向"仅在 _states"（已派发未进计划）的任务 ——
+            # 此时归一化论域（计划内）无法解析该父边。此类父级已在上面按
+            # known 校验通过，这里退化为只归一化计划内图，并手工置 depth=1。
+            if new_parent is not None and new_parent not in plan_ids:
+                item_without_parent = dict(item)
+                item_without_parent.pop("parent_task_id", None)
+                try:
+                    normalized_plan = normalize_task_hierarchy(
+                        baseline + [item_without_parent]
+                    )
+                except HierarchyError:
+                    return {"success": False, "error": str(exc)}
+                for candidate in normalized_plan:
+                    if candidate["task_id"] == task_id:
+                        candidate["parent_task_id"] = new_parent
+                        candidate["depth"] = 1
+            else:
+                return {"success": False, "error": str(exc)}
         candidate_deps = {
             candidate["task_id"]: [str(dep) for dep in candidate.get("depends_on", [])]
             for candidate in normalized_plan
@@ -967,7 +999,7 @@ class ChatDispatcher:
             plan_parent_task_id = (
                 plan_item.get("parent_task_id") if plan_item else None
             )
-            plan_depth = int(plan_item.get("depth", 0) or 0) if plan_item else 0
+            plan_depth = _safe_depth(plan_item.get("depth", 0)) if plan_item else 0
             # L1 (2026-08-23): 自指 followup 守卫 —— task 引用自身不构成有效续聊。
             # 缺守卫时隐式自环依赖会被 build_waves 判环拒掉整批；改为 warning 后
             # 降级普通任务（与其余无效 followup_of 同一降级路径）。
