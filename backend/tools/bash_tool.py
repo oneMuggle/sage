@@ -199,7 +199,20 @@ class BashTool(BaseTool):
             content["exec_backend"] = "docker"
         content["cwd"] = cwd or str(Path.cwd())
         if shell.is_fallback:
-            content["shell_fallback"] = build_shell_fallback_note()
+            note = build_shell_fallback_note()
+            content["shell_fallback"] = note
+            # 环境降级事实进 per-session 观察缓冲，轮末记忆蒸馏读取（PR 环境记忆化）。
+            # best-effort：记录失败不影响工具结果。
+            try:
+                from backend.tools.context import current_tool_context
+                from backend.tools.env_probe import record_observation
+
+                ctx = current_tool_context()
+                record_observation(
+                    getattr(ctx, "session_id", None) if ctx is not None else None, note
+                )
+            except Exception:  # noqa: BLE001
+                pass
         return content
 
     @staticmethod

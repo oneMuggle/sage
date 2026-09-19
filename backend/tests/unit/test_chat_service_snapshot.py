@@ -301,6 +301,8 @@ class TestExtractAndStoreMemory:
         mock_extractor.extract.assert_awaited_once_with(
             user_message="我想吃火锅, 成都有什么推荐?",
             assistant_message="好的, 推荐小龙坎和大龙燚",
+            existing_facts=[],
+            tool_observations="",
         )
         assert mock_memory.store.await_count == 2
         first_kwargs = mock_memory.store.call_args_list[0][1]

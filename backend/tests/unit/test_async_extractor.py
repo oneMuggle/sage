@@ -77,7 +77,7 @@ async def test_submits_processed_in_order(queue):
     """多请求按提交顺序消费。"""
     order = []
 
-    async def fake_extract(memory_port, extractor, user_text, assistant_text, session_id, enabled):
+    async def fake_extract(memory_port, extractor, user_text, assistant_text, session_id, enabled, tool_observations=""):
         order.append(user_text)
         return 1
 
@@ -98,7 +98,7 @@ async def test_single_worker_serial(queue):
     active = 0
     max_active = 0
 
-    async def fake_extract(memory_port, extractor, user_text, assistant_text, session_id, enabled):
+    async def fake_extract(memory_port, extractor, user_text, assistant_text, session_id, enabled, tool_observations=""):
         nonlocal active, max_active
         active += 1
         max_active = max(max_active, active)
@@ -120,7 +120,7 @@ async def test_single_worker_serial(queue):
 async def test_worker_survives_single_failure(queue):
     """单条失败不杀 worker，后续项继续，failed 计数 +1。"""
 
-    async def fake_extract(memory_port, extractor, user_text, assistant_text, session_id, enabled):
+    async def fake_extract(memory_port, extractor, user_text, assistant_text, session_id, enabled, tool_observations=""):
         if user_text == "boom":
             raise RuntimeError("extractor boom")
         return 1
@@ -140,7 +140,7 @@ async def test_worker_survives_single_failure(queue):
 async def test_drain_waits_and_times_out_gracefully(queue):
     """drain 等待完成；超时返回不抛，worker 存活继续处理。"""
 
-    async def slow_extract(memory_port, extractor, user_text, assistant_text, session_id, enabled):
+    async def slow_extract(memory_port, extractor, user_text, assistant_text, session_id, enabled, tool_observations=""):
         await asyncio.sleep(0.5)
         return 1
 

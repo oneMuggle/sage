@@ -406,12 +406,14 @@ class MemoryPruningTask(BaseEvolutionTask):
             )
 
         # 2. 删除极低价值且长期未访问的记忆
+        # （environment 标签 = 本机工具链事实，豁免清理：环境记忆化 PR）
         cursor.execute(
             """
             DELETE FROM memories_episodic
             WHERE importance <= 1
             AND access_count = 0
             AND created_at < ?
+            AND COALESCE(tags, '') NOT LIKE '%environment%'
         """,
             [thirty_days_ago],
         )
@@ -436,6 +438,7 @@ class MemoryPruningTask(BaseEvolutionTask):
             AND importance <= 3
             AND access_count = 0
             AND created_at < ?
+            AND COALESCE(tags, '') NOT LIKE '%environment%'
         """,
             [thirty_days_ago],
         )
@@ -463,6 +466,7 @@ class MemoryPruningTask(BaseEvolutionTask):
                 DELETE FROM memories_episodic
                 WHERE id IN (
                     SELECT id FROM memories_episodic
+                    WHERE COALESCE(tags, '') NOT LIKE '%environment%'
                     ORDER BY importance ASC, created_at ASC
                     LIMIT ?
                 )
@@ -927,6 +931,7 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
         total_adjusted = 0
 
         # 1. 重评估长期未访问的高重要性记忆
+        # （environment 标签豁免：环境事实不因低频而降权）
         cursor.execute(
             """
             SELECT id, importance, access_count, content
@@ -934,6 +939,7 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
             WHERE importance >= 7
             AND access_count < 2
             AND created_at < ?
+            AND COALESCE(tags, '') NOT LIKE '%environment%'
         """,
             [seven_days_ago],
         )

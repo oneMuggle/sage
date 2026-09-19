@@ -390,6 +390,23 @@ class MemoryAdapter:
                 tags=[category],
             )
 
+    def recent_fact_contents(self, limit: int = 20) -> List[str]:
+        """近期 episodic+semantic 记忆内容列表（供提取器 existing_facts 去重）。
+
+        best-effort：任何失败返回空列表，不影响记忆写入主流程。
+        """
+        contents: List[str] = []
+        try:
+            half = max(1, limit // 2)
+            for store in (self.memory_manager.episodic, self.memory_manager.semantic):
+                for mem in store.get_recent(limit=half) or []:
+                    text = (mem.get("summary") or mem.get("content") or "").strip()
+                    if text:
+                        contents.append(text[:100])
+        except Exception as exc:  # noqa: BLE001 — 去重提示失败可容忍
+            logger.debug(f"读取近期记忆内容失败(existing_facts 降级为空): {exc}")
+        return contents[:limit]
+
     async def compress(self, session_id: str) -> None:
         """压缩工作记忆
 
