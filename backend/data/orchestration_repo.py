@@ -37,7 +37,7 @@ def _to_jsonable(obj: Any) -> Any:
         return {k: _to_jsonable(v) for k, v in asdict(obj).items()}
     if isinstance(obj, dict):
         return {k: _to_jsonable(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
+    if isinstance(obj, list | tuple):
         return [_to_jsonable(v) for v in obj]
     return obj
 
@@ -65,7 +65,7 @@ class TaskRepository:
 
         cursor.execute(
             """
-            INSERT OR REPLACE INTO orchestration_tasks
+            INSERT OR REPLACE INTO orch_plan_tasks
             (task_id, name, description, status, priority, executor_type,
              parameters, packet, blocks, blocked_by, created_at, team_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -93,7 +93,7 @@ class TaskRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT * FROM orchestration_tasks WHERE task_id = ?", (task_id,))
+        cursor.execute("SELECT * FROM orch_plan_tasks WHERE task_id = ?", (task_id,))
         row = cursor.fetchone()
         return self._row_to_task(row) if row else None
 
@@ -104,7 +104,7 @@ class TaskRepository:
 
         cursor.execute(
             """
-            UPDATE orchestration_tasks
+            UPDATE orch_plan_tasks
             SET status = ?, priority = ?, parameters = ?, result = ?,
                 started_at = ?, completed_at = ?, blocks = ?, blocked_by = ?,
                 packet = ?
@@ -131,7 +131,7 @@ class TaskRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("DELETE FROM orchestration_tasks WHERE task_id = ?", (task_id,))
+        cursor.execute("DELETE FROM orch_plan_tasks WHERE task_id = ?", (task_id,))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -146,7 +146,7 @@ class TaskRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        query = "SELECT * FROM orchestration_tasks WHERE 1=1"
+        query = "SELECT * FROM orch_plan_tasks WHERE 1=1"
         params: List[Any] = []
 
         if status is not None:
@@ -174,7 +174,7 @@ class TaskRepository:
         cursor = conn.cursor()
 
         query = """
-            SELECT t.* FROM orchestration_tasks t
+            SELECT t.* FROM orch_plan_tasks t
             WHERE t.status = 'created'
         """
         params: List[Any] = []
@@ -443,7 +443,7 @@ class TeamRepository:
 
         cursor.execute(
             """
-            INSERT INTO orchestration_teams
+            INSERT INTO orch_plan_teams
             (team_id, name, task_ids, status, created_at, updated_at, metadata)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
@@ -465,7 +465,7 @@ class TeamRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT * FROM orchestration_teams WHERE team_id = ?", (team_id,))
+        cursor.execute("SELECT * FROM orch_plan_teams WHERE team_id = ?", (team_id,))
         row = cursor.fetchone()
         return self._row_to_team(row) if row else None
 
@@ -476,7 +476,7 @@ class TeamRepository:
 
         cursor.execute(
             """
-            UPDATE orchestration_teams
+            UPDATE orch_plan_teams
             SET task_ids = ?, status = ?, updated_at = ?, metadata = ?
             WHERE team_id = ?
             """,
@@ -496,7 +496,7 @@ class TeamRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("DELETE FROM orchestration_teams WHERE team_id = ?", (team_id,))
+        cursor.execute("DELETE FROM orch_plan_teams WHERE team_id = ?", (team_id,))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -505,7 +505,7 @@ class TeamRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        query = "SELECT * FROM orchestration_teams"
+        query = "SELECT * FROM orch_plan_teams"
         params: List[Any] = []
 
         if status is not None:

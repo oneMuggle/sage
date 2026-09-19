@@ -47,11 +47,11 @@ def _repo():
 
 
 def _seed_legacy_task(db, task_id: str = "t1") -> None:
-    """老表 orchestration_lanes 有 FK 指向 orchestration_tasks —— 插 lane 前
+    """老表 orchestration_lanes 有 FK 指向 orch_plan_tasks（Phase 3 改名） —— 插 lane 前
     必须先建 task 行（生产中由 Planner 写入）。"""
     conn = db.get_connection()
     conn.execute(
-        "INSERT OR IGNORE INTO orchestration_tasks (task_id, name, created_at) "
+        "INSERT OR IGNORE INTO orch_plan_tasks (task_id, name, created_at) "
         "VALUES (?, ?, ?)",
         (task_id, f"任务 {task_id}", 1700000000000),
     )
@@ -346,3 +346,97 @@ class TestLegacyMigration:
             .fetchone()["n"]
         )
         assert count == 0
+
+
+class TestLegacyTableRename:
+    """Phase 3：orchestration_tasks / orchestration_teams 改名消除命名混淆，
+    并解除 idx_orch_tasks_status 与 orch_tasks 同名索引的冲突。"""
+
+    def test_legacy_plan_tasks_renamed(self, tmp_path, monkeypatch):
+        db = _fresh_db(tmp_path, monkeypatch, "rename.db")
+        conn = db.get_connection()
+        # 删掉 init_db 建的新表，让 migration 块认为"旧版 DB"。
+        conn.execute("DROP TABLE IF EXISTS orch_plan_tasks")
+        # 释放老索引名（init_db 已在 orch_tasks 上建了 idx_orch_tasks_status）。
+        conn.execute("DROP INDEX IF EXISTS idx_orch_tasks_status")
+        # 建老表 + 老索引（模拟旧版部署；含 status/team_id 列以支持索引）。
+        conn.execute(
+            "CREATE TABLE orchestration_tasks "
+            "(task_id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, "
+            "status TEXT NOT NULL DEFAULT 'created', team_id TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO orchestration_tasks VALUES (?, ?, ?, ?, ?)",
+            ("t-old", "老任务", 1700000000000, "created", None),
+        )
+        conn.execute("CREATE INDEX idx_orch_tasks_status ON orchestration_tasks(status)")
+        conn.commit()
+
+        db2 = _reopen(tmp_path, monkeypatch, "rename.db")
+        conn2 = db2.get_connection()
+
+        tables = {
+            r["name"]
+            for r in conn2.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        assert "orch_plan_tasks" in tables
+        assert "orchestration_tasks" not in tables
+
+        row = conn2.execute(
+            "SELECT name FROM orch_plan_tasks WHERE task_id = ?", ("t-old",)
+        ).fetchone()
+        assert row["name"] == "老任务"
+
+    def test_index_name_conflict_resolved(self, tmp_path, monkeypatch):
+        """改名后 idx_orch_tasks_status 归属 orch_tasks（此前被老表占用而缺失）。"""
+        db = _fresh_db(tmp_path, monkeypatch, "idxfix.db")
+        conn = db.get_connection()
+        conn.execute("DROP TABLE IF EXISTS orch_plan_tasks")
+        conn.execute("DROP INDEX IF EXISTS idx_orch_tasks_status")
+        conn.execute(
+            "CREATE TABLE orchestration_tasks "
+            "(task_id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, "
+            "status TEXT NOT NULL DEFAULT 'created', team_id TEXT)"
+        )
+        conn.execute("CREATE INDEX idx_orch_tasks_status ON orchestration_tasks(status)")
+        conn.commit()
+
+        db2 = _reopen(tmp_path, monkeypatch, "idxfix.db")
+        owner = (
+            db2.get_connection()
+            .execute(
+                "SELECT tbl_name FROM sqlite_master "
+                "WHERE type='index' AND name='idx_orch_tasks_status'"
+            )
+            .fetchone()
+        )
+        assert owner is not None
+        assert owner["tbl_name"] == "orch_tasks"
+
+    def test_legacy_teams_renamed(self, tmp_path, monkeypatch):
+        db = _fresh_db(tmp_path, monkeypatch, "renameteam.db")
+        conn = db.get_connection()
+        conn.execute(
+            "INSERT INTO orch_plan_teams (team_id, name, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?)",
+            ("team-old", "老团队", 1700000000000, 1700000000000),
+        )
+        conn.execute("ALTER TABLE orch_plan_teams RENAME TO orchestration_teams")
+        conn.commit()
+
+        db2 = _reopen(tmp_path, monkeypatch, "renameteam.db")
+        conn2 = db2.get_connection()
+        tables = {
+            r["name"]
+            for r in conn2.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        assert "orch_plan_teams" in tables
+        assert "orchestration_teams" not in tables
+        row = conn2.execute(
+            "SELECT name FROM orch_plan_teams WHERE team_id = ?", ("team-old",)
+        ).fetchone()
+        assert row["name"] == "老团队"

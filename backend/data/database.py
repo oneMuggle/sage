@@ -1181,9 +1181,45 @@ class Database:
         # ==================== 多智能体协调层表 ====================
         # Phase 1: 任务/Lane/Team/事件 持久化
 
-        # 任务表
+        # Phase 3 (2026-09-19): 老表改名 —— 消除与 orch_tasks / orch_runs 的命名
+        # 混淆，并解除老索引名 idx_orch_tasks_status 与 orch_tasks 同名索引的冲突
+        # （SQLite 索引名全局唯一，CREATE INDEX IF NOT EXISTS 遇同名会静默跳过
+        # → orch_tasks.status 索引长期缺失，按 status 查询退化为全表扫描）。
+        # 已部署用户 DB 经 RENAME 迁移（SQLite 自动更新其他表对它的 FK 引用）；
+        # 全新安装直接建新名表，本块为 no-op。
+        cursor.execute(
+            "SELECT COUNT(*) FROM sqlite_master "
+            "WHERE type='table' AND name='orchestration_tasks'"
+        )
+        _legacy_tasks_exists = cursor.fetchone()[0] > 0
+        cursor.execute(
+            "SELECT COUNT(*) FROM sqlite_master "
+            "WHERE type='table' AND name='orch_plan_tasks'"
+        )
+        _plan_tasks_exists = cursor.fetchone()[0] > 0
+        if _legacy_tasks_exists and not _plan_tasks_exists:
+            cursor.execute("ALTER TABLE orchestration_tasks RENAME TO orch_plan_tasks")
+            # RENAME 保留原索引名（仍与 orch_tasks 的索引同名）→ 先释放名字，
+            # 让下方 CREATE INDEX 重建为 idx_orch_plan_tasks_* 与 idx_orch_tasks_status。
+            cursor.execute("DROP INDEX IF EXISTS idx_orch_tasks_status")
+            cursor.execute("DROP INDEX IF EXISTS idx_orch_tasks_team")
+        cursor.execute(
+            "SELECT COUNT(*) FROM sqlite_master "
+            "WHERE type='table' AND name='orchestration_teams'"
+        )
+        _legacy_teams_exists = cursor.fetchone()[0] > 0
+        cursor.execute(
+            "SELECT COUNT(*) FROM sqlite_master "
+            "WHERE type='table' AND name='orch_plan_teams'"
+        )
+        _plan_teams_exists = cursor.fetchone()[0] > 0
+        if _legacy_teams_exists and not _plan_teams_exists:
+            cursor.execute("ALTER TABLE orchestration_teams RENAME TO orch_plan_teams")
+            cursor.execute("DROP INDEX IF EXISTS idx_orch_teams_status")
+
+        # 任务表（Phase 3 改名：orchestration_tasks → orch_plan_tasks）
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS orchestration_tasks (
+            CREATE TABLE IF NOT EXISTS orch_plan_tasks (
                 task_id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 description TEXT NOT NULL DEFAULT '',
@@ -1203,12 +1239,12 @@ class Database:
             )
         """)
         cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_tasks_status
-            ON orchestration_tasks(status)
+            CREATE INDEX IF NOT EXISTS idx_orch_plan_tasks_status
+            ON orch_plan_tasks(status)
         """)
         cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_tasks_team
-            ON orchestration_tasks(team_id)
+            CREATE INDEX IF NOT EXISTS idx_orch_plan_tasks_team
+            ON orch_plan_tasks(team_id)
         """)
 
         # Lane 表（执行单元）
@@ -1226,7 +1262,7 @@ class Database:
                 error TEXT,
                 permission_preset TEXT NOT NULL DEFAULT 'implement',
                 metadata TEXT NOT NULL DEFAULT '{}',
-                FOREIGN KEY (task_id) REFERENCES orchestration_tasks(task_id) ON DELETE CASCADE
+                FOREIGN KEY (task_id) REFERENCES orch_plan_tasks(task_id) ON DELETE CASCADE
             )
         """)
         cursor.execute("""
@@ -1261,9 +1297,9 @@ class Database:
             ON orchestration_lane_events(task_id)
         """)
 
-        # Team 表（工作流分组）
+        # Team 表（工作流分组；Phase 3 改名：orchestration_teams → orch_plan_teams）
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS orchestration_teams (
+            CREATE TABLE IF NOT EXISTS orch_plan_teams (
                 team_id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 task_ids TEXT NOT NULL DEFAULT '[]',
@@ -1274,14 +1310,14 @@ class Database:
             )
         """)
         cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_teams_status
-            ON orchestration_teams(status)
+            CREATE INDEX IF NOT EXISTS idx_orch_plan_teams_status
+            ON orch_plan_teams(status)
         """)
 
         # ==================== 双轨合并 Phase 1 (P0, 2026-09-19) ====================
         # orch_lanes / orch_lane_events 是新命名空间的 lane 持久化层，字段与老
         # orchestration_lanes / orchestration_lane_events 同形。无 FK：Phase 1
-        # 与老表共存期 orchestration_tasks 与 orch_tasks 并存，强 FK 会限制 lane
+        # 与计划层表共存期 orch_plan_tasks 与 orch_tasks 并存，强 FK 会限制 lane
         # 关联的灵活性。Phase 5 清理老表时评估是否加 FK 指向 orch_tasks。
         #
         # 数据迁移：init_db 末尾 INSERT OR IGNORE 把老表存量复制到新表（详见
