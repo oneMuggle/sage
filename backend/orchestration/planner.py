@@ -130,6 +130,7 @@ def sanitize_llm_plan_tasks(raw_tasks: Any) -> List[Dict[str, Any]]:
                 "blocked_by": [],  # resolved below, once all ids are known
                 "_placeholder": placeholder,
                 "_raw_depends_on": raw.get("depends_on") or [],
+                "_raw_parent": raw.get("parent_task_id"),
             }
         )
 
@@ -153,9 +154,80 @@ def sanitize_llm_plan_tasks(raw_tasks: Any) -> List[Dict[str, Any]]:
                 ):
                     resolved.append(target)
         item["blocked_by"] = resolved
+        # 层级父级：同样只接受更早任务的引用（结构性无环），非法引用静默剪枝
+        # —— 与 depends_on 同款纪律，坏引用不让整批计划降级。
+        raw_parent = item.pop("_raw_parent", None)
+        parent_placeholder = None
+        if isinstance(raw_parent, str):
+            candidate = id_map.get(raw_parent.strip())
+            if (
+                candidate is not None
+                and candidate in seen_placeholders
+                and candidate != placeholder
+            ):
+                parent_placeholder = candidate
+        item["_parent_placeholder"] = parent_placeholder
         seen_placeholders.add(placeholder)
 
     return sanitized
+
+
+def resolve_plan_hierarchy(
+    tasks: List[Dict[str, Any]],
+    placeholder_to_id: Dict[str, str],
+) -> Dict[str, Dict[str, Any]]:
+    """把占位符域层级解析为真实 task_id 域，返回 ``task_id -> {parent, depth}``。
+
+    fail-open：层级归一化失败（超深/意外环）时整体退化为无层级 —— 层级只是
+    展示信息，绝不因它让整批计划不可执行（与 Planner 既有降级纪律一致）。
+    """
+    from backend.orchestration.plan_hierarchy import (
+        HierarchyError,
+        normalize_task_hierarchy,
+    )
+
+    placeholder_plan = [
+        {
+            "task_id": item["_placeholder"],
+            "parent_task_id": item.get("_parent_placeholder"),
+        }
+        for item in tasks
+        if item.get("_placeholder")
+    ]
+    if not placeholder_plan:
+        # 降级路径（单任务兜底/模板）不携带占位符 —— 无层级可言。
+        return {}
+    try:
+        normalized = normalize_task_hierarchy(placeholder_plan)
+    except HierarchyError:
+        return {
+            placeholder_to_id.get(item["_placeholder"], item["_placeholder"]): {
+                "parent_task_id": None,
+                "depth": 0,
+            }
+            for item in tasks
+            if item.get("_placeholder")
+        }
+    result: Dict[str, Dict[str, Any]] = {}
+    by_placeholder = {item["task_id"]: item for item in normalized}
+    for item in tasks:
+        placeholder = item.get("_placeholder")
+        if not placeholder:
+            continue
+        real_id = placeholder_to_id.get(placeholder)
+        if real_id is None:
+            continue
+        normalized_item = by_placeholder[placeholder]
+        parent_placeholder = normalized_item.get("parent_task_id")
+        result[real_id] = {
+            "parent_task_id": (
+                placeholder_to_id.get(parent_placeholder)
+                if parent_placeholder
+                else None
+            ),
+            "depth": int(normalized_item.get("depth", 0) or 0),
+        }
+    return result
 
 
 @dataclass
@@ -279,6 +351,17 @@ class Planner:
                 if dep_task is not None and created_tasks[index].task_id not in dep_task.blocks:
                     dep_task.blocks.append(created_tasks[index].task_id)
                     self.task_registry.repo.update(dep_task)
+
+        # 层级解析（spec 2026-09-19）：parent 只表达归属，不写 blocked_by。
+        hierarchy = resolve_plan_hierarchy(tasks, placeholder_to_id)
+        for task in created_tasks:
+            info = hierarchy.get(task.task_id)
+            if info is None:
+                continue
+            task.parent_task_id = info["parent_task_id"]
+            task.depth = info["depth"]
+            if task.parent_task_id is not None or task.depth:
+                self.task_registry.repo.update(task)
 
         return Plan(
             plan_id=f"plan-{uuid.uuid4().hex[:12]}",
@@ -444,6 +527,9 @@ Context:
 Instructions:
 1. Break the goal into discrete, actionable tasks (at most {MAX_PLAN_TASKS}).
 2. Express dependencies via "depends_on" referencing earlier task ids only.
+2b. Optionally group tasks into a hierarchy via "parent_task_id" referencing an
+    earlier task id. It expresses ownership/display only — it never creates an
+    execution dependency, so add "depends_on" as well when a child must wait.
 3. Use "agent_hint" to suggest an executor role (e.g. researcher, coder, memory_manager) or omit.
 4. Keep titles short; descriptions carry the detail (做什么 / 涉及对象 / 预期产出 / 完成定义（验收标准）).{extra_rule}
 
@@ -455,6 +541,7 @@ Output format — return ONLY valid JSON, no markdown fences, no extra text:
       "title": "Short task title",
       "description": "Detailed description of the work",
       "depends_on": [],
+      "parent_task_id": null,
       "agent_hint": "researcher"
     }}
   ],

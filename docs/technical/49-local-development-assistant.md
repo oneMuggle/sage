@@ -73,8 +73,9 @@ Python 解释器版本冲突、Node.js 缺失、venv 没激活、conda 环境指
 | `RuntimeCapability` | `can_execute` / `can_install_packages` / `has_build_tools` | 能力旗标 |
 | `RuntimeInfo` | `language`, `path`, `version`, `is_default`, `is_compatible`, `source`, `capabilities`, `labels`, `manifest` | 单个运行时 |
 | `ProbeResult` | `runtimes`, `recommended`, `errors` | probe 输出 |
-| `Diagnostic` | `level`, `severity`, `code`, `message`, `fix_hint` | 单个诊断 |
-| `ProjectDiagnosis` | `project_type`, `required_languages`, `diagnostics`, `satisfied` | diagnose 输出 |
+| `Diagnostic` | `code`, `severity`, `message`, `remediation`, `related_path` | 单个诊断 |
+| `ProjectManifest` | `language`, `path`, `kind`, `requires`, `extras` | 识别到的项目清单 |
+| `ProjectDiagnosis` | `level`, `diagnostics`, `manifests`, `recommended_runtime`, `probe_errors` | diagnose 输出 |
 | `ExecutionResult` | `exit_code`, `stdout`, `stderr`, `duration_seconds`, `success` | exec 输出 |
 | `ProbeRequest` / `DiagnoseRequest` / `ExecRequest` | … | 输入请求 |
 
@@ -149,7 +150,7 @@ runtimeApi.exec(req: ExecRequest): Promise<ToolCallEnvelope<ExecutionResult>>
 
 三区块：
 - **ProbePanel** — 本机运行时按语言分组，推荐项带"推荐"徽章
-- **DiagnosePanel** — 项目类型 + 满足度 + severity 着色徽章的诊断列表
+- **DiagnosePanel** — 项目清单与满足度（`satisfied` / `partial` / `unsatisfied`）+ severity 着色徽章的诊断列表；每条诊断可显示 `remediation`，探测异常显示为 `probe_errors`
 - **ExecPanel** — 运行时下拉 + 代码文本域 + 执行按钮 + 输出渲染（success/denied/error 三态）
 
 进入 tab 自动 `useEffect` 触发 probe + diagnose；exec 需用户主动点击。

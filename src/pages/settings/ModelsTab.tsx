@@ -129,14 +129,19 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
 
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-text">模型参数</h3>
-        <SettingRow label="最大上下文长度" desc="单次对话发送给模型的最大 token 数">
+        <SettingRow
+          label="最大上下文长度"
+          desc="单次对话发送给模型的最大 token 数；自动模式下此值不生效"
+        >
           <input
             type="number"
+            data-testid="settings-max-context"
             min={256}
             max={128000}
+            disabled={settings.autoContext}
             value={settings.maxContext}
             onChange={(e) => updateSettings({ maxContext: Number(e.target.value) })}
-            className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
+            className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text disabled:opacity-50 disabled:cursor-not-allowed"
           />
         </SettingRow>
         {/* Task 6 (2026-09-15): 自动上下文开关 — 保留固定值 / 未知显示未知 */}
@@ -156,7 +161,10 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
             </span>
           </label>
         </SettingRow>
-        <SettingRow label="Temperature" desc="控制输出的随机性，0 最确定，1 最随机">
+        <SettingRow
+          label="Temperature"
+          desc="控制输出的随机性：数值越高越随机；0 最稳定，2 最随机。实际效果取决于模型实现"
+        >
           <input
             type="number"
             min={0}

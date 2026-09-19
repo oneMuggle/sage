@@ -278,4 +278,28 @@ describe('TaskTreeSection', () => {
     expect(screen.queryByTestId('task-tree-retry-t1')).not.toBeInTheDocument();
     expect(screen.queryByTestId('task-tree-retry-t2')).not.toBeInTheDocument();
   });
+
+  // RP1 (round34, 2026-09-19): LLM 动态调整计划的"已调整"徽章 —— conductor
+  // 在 run 中改过目标 / 新增 / 取消过的任务，用户可追溯偏离初始计划的部分。
+  it('shows adjusted badge for tasks whose plan was changed by the LLM', () => {
+    const board = makeBoard({
+      statuses: {
+        t1: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't1',
+          status: 'done',
+          agent_id: 'researcher',
+          goal: '改后的目标',
+          error: null,
+          output_preview: '完成',
+          adjusted: true,
+        },
+      },
+    });
+    render(<TaskTreeSection board={board} />);
+    expect(screen.getByTestId('task-tree-adjusted-t1')).toHaveTextContent('已调整');
+    // 未被调整的任务不显示徽章。
+    expect(screen.queryByTestId('task-tree-adjusted-t2')).not.toBeInTheDocument();
+  });
 });

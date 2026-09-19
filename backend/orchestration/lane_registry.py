@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
-from backend.data.orchestration_repo import LaneRepository
+from backend.data.orch_lane_repo import OrchLaneRepository
 from backend.orchestration.models import (
     HeartbeatStatus,
     Lane,
@@ -30,8 +30,8 @@ class LaneRegistry:
     specific agent and tracks execution health via heartbeats.
     """
 
-    def __init__(self, repo: Optional[LaneRepository] = None) -> None:
-        self.repo = repo or LaneRepository()
+    def __init__(self, repo: Optional[OrchLaneRepository] = None) -> None:
+        self.repo = repo or OrchLaneRepository()
 
     def create_lane(
         self,

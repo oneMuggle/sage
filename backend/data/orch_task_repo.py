@@ -32,6 +32,8 @@ class OrchTask:
     # RT24 (round32): 任务级用量/时长 —— 终态落库（dispatcher 写入）。
     used_tokens: Optional[int] = None
     duration_ms: Optional[int] = None
+    parent_task_id: Optional[str] = None
+    depth: int = 0
 
 
 class OrchTaskRepository:
@@ -56,6 +58,8 @@ class OrchTaskRepository:
         finished_at: Optional[int] = None,
         used_tokens: Optional[int] = None,
         duration_ms: Optional[int] = None,
+        parent_task_id: Optional[str] = None,
+        depth: int = 0,
     ) -> None:
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -64,9 +68,10 @@ class OrchTaskRepository:
             INSERT INTO orch_tasks (
                 task_id, run_id, agent_id, goal, status, retry_count,
                 error, output_preview, blocked_by, scratch_dir,
-                started_at, finished_at, used_tokens, duration_ms
+                started_at, finished_at, used_tokens, duration_ms,
+                parent_task_id, depth
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(task_id) DO UPDATE SET
                 status=excluded.status,
                 retry_count=excluded.retry_count,
@@ -75,7 +80,9 @@ class OrchTaskRepository:
                 started_at=excluded.started_at,
                 finished_at=excluded.finished_at,
                 used_tokens=excluded.used_tokens,
-                duration_ms=excluded.duration_ms
+                duration_ms=excluded.duration_ms,
+                parent_task_id=excluded.parent_task_id,
+                depth=excluded.depth
                 -- revision is intentionally NOT touched here: it is an
                 -- append-only audit counter bumped only by
                 -- ``bump_revision_for_steer`` after a successful steer INSERT.
@@ -95,6 +102,8 @@ class OrchTaskRepository:
                 finished_at,
                 used_tokens,
                 duration_ms,
+                parent_task_id,
+                depth,
             ),
         )
         conn.commit()
@@ -133,6 +142,8 @@ class OrchTaskRepository:
             scratch_dir=row["scratch_dir"],
             used_tokens=row["used_tokens"] if "used_tokens" in _cols else None,
             duration_ms=row["duration_ms"] if "duration_ms" in _cols else None,
+            parent_task_id=row["parent_task_id"] if "parent_task_id" in _cols else None,
+            depth=row["depth"] if "depth" in _cols else 0,
             started_at=row["started_at"],
             finished_at=row["finished_at"],
         )

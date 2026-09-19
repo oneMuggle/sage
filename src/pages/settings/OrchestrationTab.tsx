@@ -16,6 +16,9 @@ import { SettingRow, Toggle } from './components';
 /**
  * 编排数字输入。部分更新契约：onChange 收到的 v 已通过非负有限数校验；
  * 调用方负责 spread settings.orch 保留其余键。
+ *
+ * min 默认 0（允许“不限/关闭”语义的字段）。不允许 0 的字段（如并发数）
+ * 由调用方传 min=1 —— 0 会落库成 Semaphore(0) 导致编排挂死。
  */
 function NumberField({
   label,
@@ -23,25 +26,33 @@ function NumberField({
   dataTestId,
   value,
   onChange,
+  min = 0,
+  max,
 }: {
   label: string;
   desc?: string;
   dataTestId: string;
   value: number;
   onChange: (v: number) => void;
+  min?: number;
+  max?: number;
 }) {
   return (
     <SettingRow label={label} desc={desc}>
       <input
         type="number"
         data-testid={dataTestId}
+        min={min}
+        max={max}
         value={value}
         onChange={(e) => {
-          // 空输入 = 不修改：Number('') === 0 会经 n >= 0 守卫提交 0，
+          // 空输入 = 不修改：Number('') === 0 会经 n >= min 守卫提交 0，
           // 落库后 load_orch_settings() 读到 0 → asyncio.Semaphore(0) → 编排挂死。
           if (e.target.value === '') return;
           const n = Number(e.target.value);
-          if (Number.isFinite(n) && n >= 0) onChange(Math.floor(n));
+          if (Number.isFinite(n) && n >= min && (max === undefined || n <= max)) {
+            onChange(Math.floor(n));
+          }
         }}
         className="w-32 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
       />
@@ -87,8 +98,8 @@ export function OrchestrationTab() {
   return (
     <div className="space-y-6" data-testid="orch-settings-section">
       <p className="text-xs text-muted leading-relaxed">
-        编排器派发子代理的执行参数（orch 段）。修改即保存并生效于新发起的
-        run；预算与守门项设 0 表示不限制，请谨慎放开。
+        编排器派发子代理的执行参数（orch 段）。修改即保存并生效于新发起的 run；预算与守门项设 0
+        表示不限制，请谨慎放开。
       </p>
       <section>
         {/* Round 1/3 (2026-09-19) 计划前置旋钮 —— 管线级开关排最前。
@@ -119,9 +130,11 @@ export function OrchestrationTab() {
         <h3 className="text-sm font-semibold text-text mb-3">并发与迭代</h3>
         <NumberField
           label="最大并发子任务数"
+          desc="必须大于 0；设 0 会让编排信号量归零并挂死"
           dataTestId="orch-max-concurrent"
           value={settings.orch.maxConcurrentSubagents}
           onChange={(v) => setOrch({ maxConcurrentSubagents: v })}
+          min={1}
         />
         <NumberField
           label="子任务重试次数"
