@@ -3500,7 +3500,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
                         if r38_memory_refs_json and not r38_memory_refs_written:
                             r38_memory_refs_written = True
-                        steps_completed += 1
                     except Exception as step_db_err:
                         logger.warning(
                             f"[REQ {request_id}] step {evt.step_index} 持久化失败: {step_db_err}"
@@ -3553,7 +3552,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         ),
                     )
                     assistant_message_id = getattr(saved, "id", None)
-                    assistant_persisted = True
                     if r38_memory_refs_json and not r38_memory_refs_written:
                         r38_memory_refs_written = True
                 except Exception as db_err:
