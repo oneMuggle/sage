@@ -5,18 +5,33 @@
  * 覆盖：扩展名白名单、绝对路径、realpath 工作区包含、符号链接逃逸阻断、
  * 空注册表 fail-closed、allowed_paths 通配符匹配。
  */
-import { mkdtempSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { resolveSageFileUrl, SAGE_FILE_URL_PREFIX } from '../sageFileUrl';
+
+// 本文件创建的所有临时目录都要在 afterAll 回收——此前 8 处 mkdtempSync
+// 无清理，每跑一次泄漏 8 个 %TEMP% 目录。
+const tempDirs: string[] = [];
+
+function mkTemp(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
+afterAll(() => {
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+  rmSync(join(tmpdir(), 'sage-file-outside.png'), { force: true });
+});
 
 // Windows 上临时目录本身已含符号链接分量（如 RUNNER~1），realpath 后
 // 直接使用真实根目录构造 URL，保证与实现使用同一归一基准。
 const wsRoot = (() => {
-  const dir = mkdtempSync(join(tmpdir(), 'sage-file-test-'));
+  const dir = mkTemp('sage-file-test-');
   return realpathSync(dir);
 })();
 
@@ -110,7 +125,7 @@ describe('resolveSageFileUrl', () => {
   // ===== P22 (2026-09-17): 项目级 allowed_paths 支持 =====
 
   it('P22: allowed_paths 命中工作区外的文件 → 放行', () => {
-    const allowedDir = mkdtempSync(join(tmpdir(), 'sage-allowed-'));
+    const allowedDir = mkTemp('sage-allowed-');
     mkdirSync(join(allowedDir, 'Documents'), { recursive: true });
     const photo = join(allowedDir, 'Documents', 'photo.png');
     writeFileSync(photo, 'png');
@@ -120,7 +135,7 @@ describe('resolveSageFileUrl', () => {
   });
 
   it('P22: allowed_paths 通配符 ** 命中任意子层', () => {
-    const allowedDir = mkdtempSync(join(tmpdir(), 'sage-allowed-'));
+    const allowedDir = mkTemp('sage-allowed-');
     mkdirSync(join(allowedDir, 'a', 'b', 'c'), { recursive: true });
     const deepFile = join(allowedDir, 'a', 'b', 'c', 'deep.png');
     writeFileSync(deepFile, 'png');
@@ -130,7 +145,7 @@ describe('resolveSageFileUrl', () => {
   });
 
   it('P22: allowed_paths 单层 * 不命中子目录', () => {
-    const allowedDir = mkdtempSync(join(tmpdir(), 'sage-allowed-'));
+    const allowedDir = mkTemp('sage-allowed-');
     mkdirSync(join(allowedDir, 'sub'), { recursive: true });
     const subFile = join(allowedDir, 'sub', 'deep.png');
     writeFileSync(subFile, 'png');
@@ -140,7 +155,7 @@ describe('resolveSageFileUrl', () => {
   });
 
   it('P22: allowed_paths 规则不匹配 → 拒绝', () => {
-    const allowedDir = mkdtempSync(join(tmpdir(), 'sage-allowed-'));
+    const allowedDir = mkTemp('sage-allowed-');
     mkdirSync(join(allowedDir, 'Documents'), { recursive: true });
     const photo = join(allowedDir, 'Documents', 'photo.png');
     writeFileSync(photo, 'png');
@@ -150,8 +165,8 @@ describe('resolveSageFileUrl', () => {
   });
 
   it('P22: 多个项目规则任一命中即放行', () => {
-    const allowedDirA = mkdtempSync(join(tmpdir(), 'sage-allowed-a-'));
-    const allowedDirB = mkdtempSync(join(tmpdir(), 'sage-allowed-b-'));
+    const allowedDirA = mkTemp('sage-allowed-a-');
+    const allowedDirB = mkTemp('sage-allowed-b-');
     mkdirSync(join(allowedDirA, 'Documents'), { recursive: true });
     mkdirSync(join(allowedDirB, 'Desktop'), { recursive: true });
     const fileInA = join(allowedDirA, 'Documents', 'a.png');
@@ -173,7 +188,7 @@ describe('resolveSageFileUrl', () => {
   });
 
   it('P22: workspace 根 OR allowed_paths 任一命中即放行', () => {
-    const allowedDir = mkdtempSync(join(tmpdir(), 'sage-allowed-'));
+    const allowedDir = mkTemp('sage-allowed-');
     mkdirSync(join(allowedDir, 'Documents'), { recursive: true });
     const photo = join(allowedDir, 'Documents', 'photo.png');
     writeFileSync(photo, 'png');
