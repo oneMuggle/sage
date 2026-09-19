@@ -646,3 +646,37 @@ async def test_aggregate_block_shows_duration_alone_when_no_tokens(tmp_path, mon
     assert "## 子任务 t1（primary）（耗时" in agg
     assert "## 子任务 t2（primary）（耗时" in agg
     assert "消耗" not in agg.split("已收到")[1].split("## 子任务 t1")[0]
+
+
+# ---- BU21 (round38): 聚合头部消耗速率 ------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_budget_line_includes_recent_rate(tmp_path, monkeypatch):
+    """BU21: 预算行带近5分钟速率；窗口外的历史用量不计入速率段。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-bu21-1",
+        session_id="sess-bu21",
+    )
+    d._semaphore = asyncio.Semaphore(4)
+    d.settings.run_token_budget = 1000
+
+    async def fake_run(state):
+        _seed_task_usage("sess-bu21", state.task_id, 120, int(time.time() * 1000))
+        # 10 分钟前的旧用量 —— 不进"近5分钟"窗口
+        _seed_task_usage(
+            "sess-bu21", state.task_id, 999, int((time.time() - 600) * 1000)
+        )
+        state.status = "done"
+        state.output = "ok"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+    agg = d._aggregate(list(d._states.values()))
+    # run 窗口（首派发起）本就排除 10 分钟前的旧行；速率段只含近 5 分钟
+    assert "已消耗 120 / 预算 1000 tokens（12%），剩余 880，近5分钟 120。" in agg

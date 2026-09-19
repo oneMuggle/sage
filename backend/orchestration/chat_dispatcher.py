@@ -2020,9 +2020,19 @@ class ChatDispatcher:
                 # BU18 (round34): 剩余额度 —— conductor 判断"是否值得再派
                 # 一轮"的直接输入。
                 remaining = max(0, self.settings.run_token_budget - used)
+                # BU21 (round38): 近 5 分钟消耗速率 —— 剩余额度在快烧/慢烧
+                # 下含义不同，趋势让 conductor 提前一轮预判触顶。fail-open：
+                # 速率查询失败省略该段，不影响总量行。
+                try:
+                    recent = UsageTracker().session_usage_since(
+                        self.session_id, int((time.time() - 300) * 1000)
+                    )
+                    rate_note = f"，近5分钟 {recent}"
+                except Exception:  # noqa: BLE001
+                    rate_note = ""
                 header += (
                     f"- 已消耗 {used} / 预算 {self.settings.run_token_budget} tokens"
-                    f"（{pct}%），剩余 {remaining}。\n"
+                    f"（{pct}%），剩余 {remaining}{rate_note}。\n"
                 )
             except Exception:  # noqa: BLE001 — 消耗行是增强信息，失败跳过
                 pass
