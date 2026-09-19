@@ -59,6 +59,8 @@ triggers: []
 提示）。页码惯例（前置目录罗马页码、正文阿拉伯从 1）：`format_spec.page`
 声明 `page_number_format: "lowerRoman"` 起始，`section_breaks` 新节用
 `"decimal"` + `page_number_start: 1`——页脚 PAGE 域自动跟随节格式。
+备注的落位可选脚注（页脚，`{{fn:}}`）或尾注（文末清单，`{{en:}}`）：
+随文查阅选脚注，集中查阅选尾注。
 
 ### 4. 生成或修订 docx
 

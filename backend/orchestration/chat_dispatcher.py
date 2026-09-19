@@ -2017,11 +2017,25 @@ class ChatDispatcher:
                     self.session_id, int(self._first_dispatch_at * 1000)
                 )
                 pct = min(100, used * 100 // self.settings.run_token_budget)
+                # BU18 (round34): 剩余额度 —— conductor 判断"是否值得再派
+                # 一轮"的直接输入。
+                remaining = max(0, self.settings.run_token_budget - used)
                 header += (
-                    f"- 已消耗 {used} / 预算 {self.settings.run_token_budget} tokens（{pct}%）。\n"
+                    f"- 已消耗 {used} / 预算 {self.settings.run_token_budget} tokens"
+                    f"（{pct}%），剩余 {remaining}。\n"
                 )
             except Exception:  # noqa: BLE001 — 消耗行是增强信息，失败跳过
                 pass
+
+        # BU18 (round34): 墙钟进度行 —— 启用未触顶时给出已用/上限分钟数，
+        # 与触顶标注（BU11）互斥；未启用不出现。
+        if not self._wall_clock_exceeded and not self._budget_exceeded:
+            limit_min = getattr(self.settings, "run_wall_clock_limit_min", 0)
+            if limit_min > 0 and self._first_dispatch_at:
+                elapsed_min = int((time.time() - self._first_dispatch_at) // 60)
+                header += (
+                    f"- 已运行 {elapsed_min} 分钟 / 上限 {limit_min} 分钟。\n"
+                )
 
         blocks: List[str] = []
         for state in states:

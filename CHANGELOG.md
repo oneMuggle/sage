@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 59：尾注 endnotes（Phase C）**（方案 `docs/plans/2026-09-19_r59-endnotes-plan.md`）
+
+### Added(office)
+- **`{{en:备注文本}}` 内联尾注**：镜像脚注实现——`w:endnoteReference` run（id 按出现顺序 1..N）+ `word/endnotes.xml` part（含系统尾注）+ EndnoteText/EndnoteReference 样式注入（幂等）
+- **`read_docx` 回读 `endnotes: List[str]`**；脚注与尾注同段混用各自独立 part 与编号；无尾注文档不挂载 part（产物零变化）
+- 契约同步：schema content 描述补 `{{en:}}`；types.ts 读结果加 `endnotes?: string[]`；SKILL 补脚注/尾注选型说明
+
 > 🌐 **网页访问能力优化 Round 20：并行聚合搜索指标 + 诊断导出集成**（方案 `docs/plans/2026-09-18_web-access-optimization-round20.md`）
 
 ### Changed(web-access)
