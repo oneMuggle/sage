@@ -44,4 +44,7 @@ runControlStore（`selectTask` 增可选 meta），Drawer 头部渲染统计行�
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1265（squash `e3f1d7a1`，2026-09-19 merge，CI 全绿）。
+- **win7 对齐**：PR #1268（squash `fbbb2886`，2026-09-19 merge，win7 必过项
+  全绿）。cherry-pick 干净落位，win7 基底 vitest 10 例本地全绿。
+- **回填分支**：`docs/r35-backfill`（本提交）。
