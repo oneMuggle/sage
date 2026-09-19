@@ -196,6 +196,38 @@ class TestAddTaskToPlan:
         assert d._plan_by_id["t9"]["goal"] == "新任务"
         assert d._plan_by_id["t9"]["added_by_llm"] is True
 
+    def test_adds_task_with_parent(self, tmp_path, monkeypatch):
+        d = _mk_dispatcher(tmp_path, monkeypatch, _plan(_t("t1")))
+        result = AddTaskToPlanTool(d).execute(
+            task_id="t9",
+            goal="g",
+            agent_id="r",
+            depends_on=[],
+            parent_task_id="t1",
+        )
+        assert result.success is True
+        assert result.content["parent_task_id"] == "t1"
+        assert result.content["depth"] == 1
+        assert d._plan_by_id["t9"]["parent_task_id"] == "t1"
+        assert d._plan_by_id["t9"]["depth"] == 1
+
+    def test_rejects_invalid_parent(self, tmp_path, monkeypatch):
+        d = _mk_dispatcher(tmp_path, monkeypatch, _plan(_t("t1")))
+        result = AddTaskToPlanTool(d).execute(
+            task_id="t9",
+            goal="g",
+            agent_id="r",
+            parent_task_id="missing",
+        )
+        assert result.success is False
+        assert "parent" in result.error.lower()
+        assert "t9" not in d._plan_by_id
+
+    def test_schema_exposes_optional_parent(self, tmp_path, monkeypatch):
+        d = _mk_dispatcher(tmp_path, monkeypatch, _plan(_t("t1")))
+        parent = AddTaskToPlanTool(d).schema.parameters["properties"]["parent_task_id"]
+        assert parent["type"] == ["string", "null"]
+
     def test_adds_task_with_valid_deps(self, tmp_path, monkeypatch):
         d = _mk_dispatcher(tmp_path, monkeypatch, _plan(_t("t1"), _t("t2")))
         result = AddTaskToPlanTool(d).execute(

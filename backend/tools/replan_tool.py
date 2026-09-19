@@ -73,6 +73,10 @@ _ADD_SCHEMA: Dict[str, Any] = {
             "items": {"type": "string"},
             "description": "可选：依赖的已有任务编号列表（只能引用已存在的 task_id）",
         },
+        "parent_task_id": {
+            "type": ["string", "null"],
+            "description": "可选：计划层级父任务编号；仅影响归属和展示，不自动增加执行依赖",
+        },
     },
     "required": ["task_id", "goal", "agent_id"],
 }
@@ -173,4 +177,5 @@ class AddTaskToPlanTool(_ReplanToolBase):
             goal=str(kwargs.get("goal", "")),
             agent_id=str(kwargs.get("agent_id", "")),
             depends_on=deps,
+            parent_task_id=kwargs.get("parent_task_id"),
         )

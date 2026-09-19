@@ -29,6 +29,7 @@ from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.models import Lane, RecoveryPolicy, Task, TaskPacket
 from backend.orchestration.orch_settings import OrchSettings, load_orch_settings
+from backend.orchestration.plan_hierarchy import HierarchyError, normalize_task_hierarchy
 from backend.orchestration.report_schema import Assertion
 from backend.orchestration.subagent_events import SubagentEventSink
 from backend.orchestration.subagent_runner import (
@@ -658,12 +659,13 @@ class ChatDispatcher:
             "reason": reason,
         }
 
-    def add_task_to_plan(
+    def add_task_to_plan(  # noqa: PLR0911
         self,
         task_id: str,
         goal: str,
         agent_id: str,
         depends_on: Optional[List[str]] = None,
+        parent_task_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """添加新任务到计划，可声明依赖（计划层）。
 
@@ -693,23 +695,38 @@ class ChatDispatcher:
             "depends_on": deps,
             "added_by_llm": True,
         }
-        # 环检测（含新边）—— 拒绝时不留痕。
-        self._plan_by_id[task_id] = item
-        cycle = find_cycle(self._plan_deps_map())
+        if parent_task_id is not None:
+            item["parent_task_id"] = str(parent_task_id)
+        # Normalize and validate the hierarchy before mutating plan state.
+        candidate_plan = list(self._plan_by_id.values()) + [item]
+        try:
+            normalized_plan = normalize_task_hierarchy(candidate_plan)
+        except HierarchyError as exc:
+            return {"success": False, "error": str(exc)}
+        candidate_deps = {
+            candidate["task_id"]: [str(dep) for dep in candidate.get("depends_on", [])]
+            for candidate in normalized_plan
+        }
+        cycle = find_cycle(candidate_deps)
         if cycle:
-            self._plan_by_id.pop(task_id, None)
             return {
                 "success": False,
                 "error": "新增依赖引入环，已拒绝：" + " -> ".join(cycle),
             }
+        self._plan_by_id = {
+            candidate["task_id"]: candidate for candidate in normalized_plan
+        }
         self._mark_plan_adjusted(task_id)
         self._persist_plan()
+        normalized_item = self._plan_by_id[task_id]
         return {
             "success": True,
             "task_id": task_id,
             "goal": goal,
             "agent_id": agent_id,
             "depends_on": deps,
+            "parent_task_id": normalized_item.get("parent_task_id"),
+            "depth": normalized_item.get("depth", 0),
         }
 
     def adjusted_plan_ids(self) -> Set[str]:
