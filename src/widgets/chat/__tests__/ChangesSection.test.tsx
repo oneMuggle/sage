@@ -1,6 +1,6 @@
 // src/widgets/chat/__tests__/ChangesSection.test.tsx
 // U1 变更面板组件测试 — workspaceApi 全 mock,不发真实请求。
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type {
@@ -69,9 +69,10 @@ const sampleChanges: WorkspaceChanges = {
   behind: 0,
   clean: false,
   changes: [
-    { indexStatus: '', worktreeStatus: 'M', path: 'src/app.ts' },
-    { indexStatus: 'A', worktreeStatus: '', path: 'src/new.py' },
-    { indexStatus: '', worktreeStatus: '?', path: 'notes.md' },
+    // right-panel R5: insertions/deletions 来自后端 numstat；null = 二进制/未知
+    { indexStatus: '', worktreeStatus: 'M', path: 'src/app.ts', insertions: 12, deletions: 3 },
+    { indexStatus: 'A', worktreeStatus: '', path: 'src/new.py', insertions: 40, deletions: 0 },
+    { indexStatus: '', worktreeStatus: '?', path: 'notes.md', insertions: 5, deletions: null },
   ],
 };
 
@@ -139,6 +140,55 @@ describe('ChangesSection', () => {
     await waitFor(() => {
       expect(screen.getByText(/git 不可用/)).toBeInTheDocument();
     });
+  });
+
+  it('right-panel R5: 渲染 +/- 行数徽章（0/null 不渲染）', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+    // 已修改: +12 −3；新增: +40（deletions=0 不渲染）；未跟踪: +5（null 不渲染）
+    expect(screen.getByText('+12')).toBeInTheDocument();
+    expect(screen.getByText('−3')).toBeInTheDocument();
+    expect(screen.getByText('+40')).toBeInTheDocument();
+    expect(screen.queryByText('−40')).not.toBeInTheDocument();
+    expect(screen.getByText('+5')).toBeInTheDocument();
+    expect(screen.queryByText('−5')).not.toBeInTheDocument();
+    expect(screen.queryByText('−0')).not.toBeInTheDocument();
+  });
+
+  it('right-panel R5: selectedChangePath 直达对应文件 diff 视图并清除选中', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({
+      diff: '--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new',
+      truncated: false,
+    });
+    const { useRightPanelStore } = await import('../../../features/right-panel/rightPanelStore');
+    act(() => {
+      useRightPanelStore.getState().selectChange('src/app.ts');
+    });
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    // 直达 diff 视图（跳过列表点击）
+    await waitFor(
+      () => {
+        expect(screen.getByText('+new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+    expect(mockGetChangeDiff).toHaveBeenCalledWith('s1', 'src/app.ts');
+    // 一次性消费:选中路径被清除,避免切会话串台
+    expect(useRightPanelStore.getState().selectedChangePath).toBeNull();
   });
 
   it('opens diff view on file click and goes back', async () => {

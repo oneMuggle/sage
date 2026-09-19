@@ -64,6 +64,7 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'skill_activated': // R38: 技能激活写入消息 activated_skills,不进气泡占位
     case 'compact_triggered': // R38: 自动压缩插入系统消息,不进气泡占位
     case 'attachment_rag_used': // r71: 附件检索溯源写入消息 rag_citations,不进气泡占位
+    case 'workspace_changed': // right-panel R5: 变更信号进 changesListStore,不进气泡占位
       return null;
     case 'suspended': // A4 Suspend-Resume: 挂起等 wake, 不渲染气泡占位 (2026-09 补齐)
     case 'subagent_event': // live-events P0: 子代理镜像进任务板 live 态,不进消息气泡
@@ -116,6 +117,8 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'skill_activated': // R38: 技能激活事件,无 UI 阶段展示
     case 'compact_triggered': // R38: 自动压缩事件,无 UI 阶段展示
     case 'attachment_rag_used': // r71: 附件检索溯源事件,无 UI 阶段展示
+      return null;
+    case 'workspace_changed': // right-panel R5: 变更信号进 changesListStore,无 UI 阶段展示
       return null;
     case 'suspended': // A4 挂起态, 无 UI 阶段展示 (2026-09 补齐)
     case 'subagent_event': // live-events P0: 子代理镜像由任务树/内联面板展示

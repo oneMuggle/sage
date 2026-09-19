@@ -38,6 +38,12 @@ GIT_DIFF_OUTPUT_CAP = 64 * 1024
 #: git_log 单次最多返回的提交数
 GIT_LOG_MAX_LIMIT = 100
 
+#: numstat 解析上限（防御性：超大变更集不拖垮 payload，与 commit_message_tool 同思路）
+GIT_NUMSTAT_MAX_ENTRIES = 500
+
+#: 未跟踪文件行数统计的读取上限（字节）——超过即放弃统计（返回 None）
+_UNTRACKED_READ_CAP = 8 * 1024 * 1024
+
 #: %x1f = ASCII Unit Separator —— 字段分隔符，杜绝提交信息内嵌分隔歧义
 _LOG_FIELD_SEP = "\x1f"
 _LOG_PRETTY = f"%H{_LOG_FIELD_SEP}%an{_LOG_FIELD_SEP}%ci{_LOG_FIELD_SEP}%s"
@@ -98,6 +104,112 @@ class GitToolBase(BaseTool):
         """path 参数既过 workspace 守卫，也保证按仓库根解析（防 cwd 漂移）。"""
         absolute = os.path.abspath(os.path.join(root, path))
         return self._enforce_workspace(absolute)
+
+
+def _count_file_lines(file_path: str) -> Optional[int]:
+    """统计文本文件行数；不可读 / 二进制 / 超限返回 None（U1 行数徽章口径）。"""
+    try:
+        with open(file_path, "rb") as f:
+            data = f.read(_UNTRACKED_READ_CAP + 1)
+    except OSError:
+        return None
+    if b"\x00" in data[:8192]:
+        return None
+    if not data or len(data) > _UNTRACKED_READ_CAP:
+        return None
+    lines = data.count(b"\n")
+    if not data.endswith(b"\n"):
+        lines += 1
+    return lines
+
+
+def collect_change_stats(
+    root: str, changes: List[Dict[str, str]]
+) -> Dict[str, Dict[str, Optional[int]]]:
+    """变更清单 → 每文件插入/删除行数（GET /changes 的 +/- 徽章数据源）。
+
+    已跟踪文件走 ``git diff HEAD --numstat``（staged + unstaged 对 HEAD 的
+    合并口径，单次调用）；未跟踪文件（worktree_status='?'，numstat 看不到）
+    退化为读文件行数，deletions 恒 0；二进制 / 超限 / 读取失败对应字段
+    为 None。输出以 status 条目的 path 字符串为键，调用方按原样合并。
+    """
+    stats: Dict[str, Dict[str, Optional[int]]] = {}
+
+    stdout, error = _run_git(["diff", "HEAD", "--numstat"], root)
+    if error is None and stdout:
+        for line in stdout.splitlines()[:GIT_NUMSTAT_MAX_ENTRIES]:
+            parts = line.split("\t")
+            if len(parts) != 3:
+                continue
+            ins_raw, del_raw, path_field = parts
+            entry: Dict[str, Optional[int]] = {
+                "insertions": int(ins_raw) if ins_raw.isdigit() else None,
+                "deletions": int(del_raw) if del_raw.isdigit() else None,
+            }
+            stats[path_field] = entry
+            if "=>" in path_field:
+                # rename 行（"{old => new}" 或 "old => new"）按新旧两个形态各
+                # 映射一份，status 侧 "old -> new" 的新段即可命中
+                new_part = path_field.rsplit("=>", 1)[-1].strip("{} ")
+                if new_part:
+                    stats[new_part] = entry
+
+    for change in changes:
+        if change.get("worktree_status") != "?":
+            continue
+        rel = change.get("path", "")
+        if not rel or rel in stats:
+            continue
+        stats[rel] = {"insertions": _count_file_lines(os.path.join(root, rel)), "deletions": 0}
+    return stats
+
+
+def untracked_file_diff(root: str, path: str) -> Optional[Tuple[str, bool]]:
+    """未跟踪文件 → "新增文件" unified diff（/dev/null → 全加号）。
+
+    ``git diff`` 对未跟踪文件输出为空，变更面板此前只能显示空态；这里
+    生成 ``new file`` 形态的 diff 补齐 Cursor 风格的"全绿新文件"观感。
+    仅当 path 确为未跟踪文件时生成；不存在 / 目录 / 二进制返回 None，
+    超 64KiB 截断并置 truncated（口径同 GitDiffTool）。
+    """
+    stdout, error = _run_git(["status", "--porcelain=v1", "--", path], root)
+    if error is not None:
+        return None
+    status_lines = [ln for ln in stdout.splitlines() if ln.strip()]
+    if not status_lines or not status_lines[0].startswith("??"):
+        return None
+
+    absolute = os.path.join(root, path)
+    try:
+        with open(absolute, "rb") as f:
+            data = f.read()
+    except OSError:
+        return None
+    if not data or b"\x00" in data[:8192]:
+        return None
+
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    body: List[str] = []
+    size = 0
+    truncated = False
+    for line in lines:
+        encoded = ("+" + line + "\n").encode("utf-8")
+        if size + len(encoded) > GIT_DIFF_OUTPUT_CAP:
+            truncated = True
+            break
+        body.append("+" + line)
+        size += len(encoded)
+    header = (
+        f"diff --git a/{path} b/{path}\n"
+        "new file mode 100644\n"
+        "--- /dev/null\n"
+        f"+++ b/{path}\n"
+        f"@@ -0,0 +1,{len(body)} @@\n"
+    )
+    text = header + "\n".join(body)
+    if body:
+        text += "\n"
+    return text, truncated
 
 
 class GitStatusTool(GitToolBase):
@@ -572,6 +684,7 @@ __all__ = [
     "GIT_BINARY",
     "GIT_DIFF_OUTPUT_CAP",
     "GIT_LOG_MAX_LIMIT",
+    "GIT_NUMSTAT_MAX_ENTRIES",
     "GIT_TIMEOUT_SECONDS",
     "GitBranchTool",
     "GitCheckoutTool",
@@ -581,4 +694,6 @@ __all__ = [
     "GitStashTool",
     "GitStatusTool",
     "_valid_ref",
+    "collect_change_stats",
+    "untracked_file_diff",
 ]

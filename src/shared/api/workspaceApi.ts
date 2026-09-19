@@ -51,6 +51,9 @@ interface WorkspaceChangesWire {
     index_status: string;
     worktree_status: string;
     path: string;
+    /** right-panel R5: +/- 行数；二进制/统计失败为 null（旧宿主可能缺省） */
+    insertions?: number | null;
+    deletions?: number | null;
   }>;
 }
 
@@ -65,6 +68,9 @@ export interface WorkspaceChanges {
     indexStatus: string;
     worktreeStatus: string;
     path: string;
+    /** right-panel R5: +/- 行数（numstat）；二进制/统计失败为 null */
+    insertions: number | null;
+    deletions: number | null;
   }>;
 }
 
@@ -215,6 +221,8 @@ export const workspaceApi = {
           indexStatus: entry.index_status,
           worktreeStatus: entry.worktree_status,
           path: entry.path,
+          insertions: entry.insertions ?? null,
+          deletions: entry.deletions ?? null,
         })),
       };
     } catch (error) {

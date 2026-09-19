@@ -12,6 +12,10 @@
 // U2' 检查点面板 (对标增强第五轮批次 A, docs/plans/2026-09-08_coding-agent-parity-round5.md):
 // 工作区快照的列表 / 手动创建 / 覆盖恢复。restore 走 confirm 对话框
 // (用户主动操作,与 U19 revert 同先例,不经 agent 审批门禁)。
+//
+// right-panel R5 (2026-09-19): 列表行 +/- 行数徽章 (GET /changes 的
+// numstat 字段) + 消费 rightPanelStore.selectedChangePath —— 聊天流内
+// 文件修改卡片点击后直达本面板对应文件的 diff 视图。
 
 import {
   Archive,
@@ -29,6 +33,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useChangesListStore } from '../../../features/changes/changesListStore';
+import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';
 import { workspaceApi } from '../../../shared/api/workspaceApi';
 import type { WorkspaceCheckpoint } from '../../../shared/api/workspaceApi';
 import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
@@ -102,23 +107,10 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
     void fetchChanges(sessionId);
   }, [sessionId, fetchChanges]);
 
-  const refreshCheckpoints = useCallback(() => {
-    if (!sessionId) return;
-    // 检查点是辅助信息:失败静默(列表置空),不与变更错误通道互相干扰
-    workspaceApi
-      .listCheckpoints(sessionId)
-      .then(setCheckpoints)
-      .catch(() => setCheckpoints(null));
-  }, [sessionId]);
-
-  useEffect(() => {
-    setSelectedPath(null);
-    setDiff(null);
-    setCheckpoints(null);
-    setCheckpointsOpen(false);
-    refresh();
-  }, [refresh]);
-
+  // right-panel R5: 聊天流文件修改卡片（selectChange）直达入口 —— 消费
+  // 一次性选中路径,打开对应文件的 diff 视图后立即清除,避免切会话串台。
+  const pendingChangePath = useRightPanelStore((s) => s.selectedChangePath);
+  const clearSelectedChange = useRightPanelStore((s) => s.clearSelectedChange);
   const openDiff = useCallback(
     (path: string) => {
       if (!sessionId) return;
@@ -140,6 +132,32 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
     },
     [sessionId],
   );
+
+  const refreshCheckpoints = useCallback(() => {
+    if (!sessionId) return;
+    // 检查点是辅助信息:失败静默(列表置空),不与变更错误通道互相干扰
+    workspaceApi
+      .listCheckpoints(sessionId)
+      .then(setCheckpoints)
+      .catch(() => setCheckpoints(null));
+  }, [sessionId]);
+
+  useEffect(() => {
+    setSelectedPath(null);
+    setDiff(null);
+    setCheckpoints(null);
+    setCheckpointsOpen(false);
+    refresh();
+  }, [refresh]);
+
+  // right-panel R5: 消费 pendingChangePath 的 effect 刻意放在重置 effect
+  // 之后 —— 面板从关闭态被 selectChange 唤起时组件是首次挂载,若声明在
+  // 重置之前,同一 commit 内的重置 effect 会把 openDiff 的选中态清掉。
+  useEffect(() => {
+    if (!pendingChangePath) return;
+    openDiff(pendingChangePath);
+    clearSelectedChange();
+  }, [pendingChangePath, openDiff, clearSelectedChange]);
 
   // U19: 撤销单个文件的工作区改动 (未跟踪条目 = 删除)
   const revertFile = useCallback(
@@ -505,6 +523,23 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
                     <span className="text-sm truncate" title={entry.path}>
                       {entry.path}
                     </span>
+                    {/* right-panel R5: +/- 行数徽章（numstat；null=二进制/未知不渲染） */}
+                    {entry.insertions !== null && entry.insertions > 0 && (
+                      <span
+                        className="shrink-0 font-mono text-[11px] text-green-600 dark:text-green-400"
+                        data-testid="change-insertions"
+                      >
+                        +{entry.insertions}
+                      </span>
+                    )}
+                    {entry.deletions !== null && entry.deletions > 0 && (
+                      <span
+                        className="shrink-0 font-mono text-[11px] text-red-500"
+                        data-testid="change-deletions"
+                      >
+                        −{entry.deletions}
+                      </span>
+                    )}
                   </button>
                   {untracked ? (
                     <button

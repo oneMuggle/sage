@@ -39,6 +39,7 @@ import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownImage } from './MarkdownImage';
 import { MermaidBlock } from './MermaidBlock';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
+import { FileChangeCard } from './changes/FileChangeCard';
 
 interface MessageProps {
   message: MessageType;
@@ -354,6 +355,32 @@ function ToolCallTitle({ name, args }: { name: string; args: Record<string, unkn
   );
 }
 
+/** right-panel R5: 会改工作区文件的工具 —— 命中即渲染内联 diff 卡片 */
+const FILE_WRITE_TOOLS = new Set(['write_file', 'edit_file', 'apply_patch']);
+
+/**
+ * 从工具调用参数提取目标文件路径（相对工作区根,与 git 接口口径一致）。
+ * apply_patch 一次动多个文件 → 返回去重后的路径列表,逐文件各渲染一张卡。
+ * 参数畸形（LLM 输出不可信）时返回空数组,不渲染卡片。
+ */
+function fileChangePaths(tc: ToolCall): string[] {
+  if (!FILE_WRITE_TOOLS.has(tc.name)) return [];
+  const args = (tc.args && typeof tc.args === 'object' ? tc.args : {}) as Record<string, unknown>;
+  if (tc.name === 'apply_patch') {
+    if (!Array.isArray(args.patches)) return [];
+    const paths: string[] = [];
+    for (const patch of args.patches) {
+      const filePath = (patch as Record<string, unknown> | null)?.file_path;
+      if (typeof filePath === 'string' && filePath.trim() && !paths.includes(filePath.trim())) {
+        paths.push(filePath.trim());
+      }
+    }
+    return paths;
+  }
+  const raw = tc.name === 'edit_file' ? args.file_path : args.path;
+  return typeof raw === 'string' && raw.trim() ? [raw.trim()] : [];
+}
+
 /** 工具调用结果可折叠面板 — 大文件内容默认收起，避免刷屏
  *  阈值：超过 300 字符时自动折叠，用户可手动展开查看
  */
@@ -556,6 +583,9 @@ function MessageComponent({
           <div className="mb-2 flex flex-col gap-1.5">
             {toolCalls.map((tc, idx) => {
               const hasImage = tc.metadata?.imageData;
+              // right-panel R5: 写文件工具的内联 diff 卡片（展开懒加载,
+              // 点击面板按钮直达右侧变更 Tab）
+              const changePaths = message.session_id ? fileChangePaths(tc) : [];
               return (
                 <div
                   key={`${tc.name}-${idx}`}
@@ -567,6 +597,14 @@ function MessageComponent({
                     <ToolCallTitle name={tc.name} args={tc.args} />
                     <span className="font-mono text-[10px] text-muted">{tc.name}</span>
                   </div>
+                  {/* right-panel R5: 文件修改卡片（路径 + +/- 徽章 + 折叠 diff） */}
+                  {changePaths.length > 0 && (
+                    <div className="flex flex-col">
+                      {changePaths.map((path) => (
+                        <FileChangeCard key={path} sessionId={message.session_id} path={path} />
+                      ))}
+                    </div>
+                  )}
                   {/* Tool result — 大文件内容可折叠 */}
                   {tc.result !== undefined && tc.result !== '' && !hasImage && (
                     <div className="px-2 pb-1.5">

@@ -114,6 +114,50 @@ async def test_changes_lists_modified_and_untracked(
     assert isinstance(body["branch"], str)
 
 
+# right-panel R5: 每文件 +/- 行数（numstat / 未跟踪文件行数统计）
+@pytest.mark.asyncio()
+async def test_changes_includes_numstat(
+    client: httpx.AsyncClient, bound_session: str
+) -> None:
+    response = await client.get(f"/api/v1/sessions/{bound_session}/workspace/changes")
+    assert response.status_code == 200
+    body = response.json()
+    tracked = next(e for e in body["changes"] if e["path"] == "tracked.py")
+    untracked = next(e for e in body["changes"] if e["path"] == "untracked.py")
+    # v1 → v2 单行替换：+1/−1（numstat 口径）
+    assert tracked["insertions"] == 1
+    assert tracked["deletions"] == 1
+    # 未跟踪文件退化为行数统计（"print('new')\n" = 1 行），deletions 恒 0
+    assert untracked["insertions"] == 1
+    assert untracked["deletions"] == 0
+
+
+@pytest.mark.asyncio()
+async def test_changes_numstat_binary_file_is_none(
+    client: httpx.AsyncClient, conn: sqlite3.Connection, session_id: str, tmp_path: Path
+) -> None:
+    repo = tmp_path / "binws"
+    repo.mkdir()
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+    git("init")
+    git("config", "user.email", "test@sage.local")
+    git("config", "user.name", "Sage Test")
+    (repo / "logo.bin").write_bytes(b"\x00\x01\x02binary")
+    git("add", ".")
+    git("commit", "-m", "init")
+    (repo / "logo.bin").write_bytes(b"\x00\x99changed")
+    bind_session_workspace(conn, session_id, str(repo))
+
+    response = await client.get(f"/api/v1/sessions/{session_id}/workspace/changes")
+    assert response.status_code == 200
+    entry = next(e for e in response.json()["changes"] if e["path"] == "logo.bin")
+    assert entry["insertions"] is None
+    assert entry["deletions"] is None
+
+
 @pytest.mark.asyncio()
 async def test_changes_clean_repo_has_empty_list(
     client: httpx.AsyncClient, conn: sqlite3.Connection, session_id: str, tmp_path: Path
@@ -142,6 +186,50 @@ async def test_diff_returns_file_diff(
     assert body["truncated"] is False
     assert "-print('v1')" in body["diff"]
     assert "+print('v2')" in body["diff"]
+
+
+# right-panel R5: 未跟踪文件的 "new file" 全加号 diff
+@pytest.mark.asyncio()
+async def test_diff_untracked_file_renders_new_file_diff(
+    client: httpx.AsyncClient, bound_session: str
+) -> None:
+    response = await client.get(
+        f"/api/v1/sessions/{bound_session}/workspace/changes/diff",
+        params={"path": "untracked.py"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["truncated"] is False
+    assert "new file mode 100644" in body["diff"]
+    assert "--- /dev/null" in body["diff"]
+    assert "+print('new')" in body["diff"]
+
+
+@pytest.mark.asyncio()
+async def test_diff_tracked_unchanged_file_stays_empty(
+    client: httpx.AsyncClient, conn: sqlite3.Connection, session_id: str, tmp_path: Path
+) -> None:
+    """未变更的已跟踪文件不误触 new-file 回退，diff 维持空串。"""
+    repo = tmp_path / "cleantracked"
+    repo.mkdir()
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+    git("init")
+    git("config", "user.email", "test@sage.local")
+    git("config", "user.name", "Sage Test")
+    (repo / "same.py").write_text("print('same')\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-m", "init")
+    bind_session_workspace(conn, session_id, str(repo))
+
+    response = await client.get(
+        f"/api/v1/sessions/{session_id}/workspace/changes/diff",
+        params={"path": "same.py"},
+    )
+    assert response.status_code == 200
+    assert response.json()["diff"] == ""
 
 
 @pytest.mark.asyncio()

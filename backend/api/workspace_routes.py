@@ -80,6 +80,10 @@ class WorkspaceChangeEntryModel(BaseModel):
     index_status: str
     worktree_status: str
     path: str
+    # right-panel R5: 每文件 +/- 行数（numstat / 未跟踪文件行数统计）；
+    # 二进制 / 统计失败为 None，前端不渲染徽章
+    insertions: Optional[int] = None
+    deletions: Optional[int] = None
 
 
 class WorkspaceChangesResponse(BaseModel):
@@ -320,13 +324,16 @@ def get_workspace_changes(session_id: str) -> WorkspaceChangesResponse:
     解析、30s 超时、utf-8 replace 解码。非 git 仓库 / git 不可用 → 502。
     """
     from backend.domain.tool_policy import ToolPolicy
-    from backend.tools.git_tool import GitStatusTool
+    from backend.tools.git_tool import GitStatusTool, collect_change_stats
 
     root = _bound_workspace_or_raise(_connection(), session_id)
     result = GitStatusTool(ToolPolicy(workspace_root=root)).execute()
     if not result.success:
         raise _error(502, "git_error", result.error or "git 命令失败")
     content = result.content if isinstance(result.content, dict) else {}
+    raw_changes = [entry for entry in content.get("changes", []) if isinstance(entry, dict)]
+    # right-panel R5: 每文件 +/- 行数（失败降级为 None，不影响清单本身）
+    change_stats = collect_change_stats(root, raw_changes)
     return WorkspaceChangesResponse(
         branch=str(content.get("branch", "")),
         upstream=str(content.get("upstream", "")),
@@ -338,11 +345,21 @@ def get_workspace_changes(session_id: str) -> WorkspaceChangesResponse:
                 index_status=str(entry.get("index_status", "")),
                 worktree_status=str(entry.get("worktree_status", "")),
                 path=str(entry.get("path", "")),
+                **_stats_for_path(change_stats, str(entry.get("path", ""))),
             )
-            for entry in content.get("changes", [])
-            if isinstance(entry, dict)
+            for entry in raw_changes
         ],
     )
+
+
+def _stats_for_path(change_stats: dict, path: str) -> dict:
+    """按 status path 取 +/- 行数；重命名条目（"old -> new"）回落匹配新段。"""
+    stats = change_stats.get(path)
+    if stats is None and " -> " in path:
+        stats = change_stats.get(path.split(" -> ")[-1])
+    if stats is None:
+        return {}
+    return {"insertions": stats.get("insertions"), "deletions": stats.get("deletions")}
 
 
 @router.get("/changes/diff", response_model=WorkspaceDiffResponse)
@@ -357,7 +374,7 @@ def get_workspace_change_diff(
     避免一次性传输超大 diff）。
     """
     from backend.domain.tool_policy import ToolPolicy
-    from backend.tools.git_tool import GitDiffTool
+    from backend.tools.git_tool import GitDiffTool, untracked_file_diff
 
     root = _bound_workspace_or_raise(_connection(), session_id)
     result = GitDiffTool(ToolPolicy(workspace_root=root)).execute(
@@ -366,9 +383,17 @@ def get_workspace_change_diff(
     if not result.success:
         raise _error(502, "git_error", result.error or "git 命令失败")
     content = result.content if isinstance(result.content, dict) else {}
+    diff_text = str(content.get("diff", ""))
+    truncated = bool(content.get("truncated", False))
+    # right-panel R5: 未跟踪文件在 ``git diff`` 下输出为空——补一份
+    # "new file" 形态的全加号 diff（Cursor 观感）；非未跟踪路径维持空态。
+    if not diff_text.strip() and path and not staged:
+        new_file = untracked_file_diff(root, path)
+        if new_file is not None:
+            return WorkspaceDiffResponse(diff=new_file[0], truncated=new_file[1])
     return WorkspaceDiffResponse(
-        diff=str(content.get("diff", "")),
-        truncated=bool(content.get("truncated", False)),
+        diff=diff_text,
+        truncated=truncated,
     )
 
 
