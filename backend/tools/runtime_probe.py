@@ -118,9 +118,11 @@ class RuntimeProbeTool(BaseTool):
             recommended=recommended,
             errors=tuple(errors),
         )
+        payload = result.to_dict()
         return ToolResult(
             success=True,
-            content=result.to_dict(),
+            content=payload,
+            output=payload,
         )
 
 
