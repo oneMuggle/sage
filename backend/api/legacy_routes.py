@@ -3005,50 +3005,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
             # ===== R38 A16 技能自动激活 END =====
 
-            # ===== L13 记忆上下文注入 BEGIN (对标增强第二轮批次 C) =====
-            # legacy /chat/stream 此前完全不注入记忆上下文(只能靠 LLM 主动
-            # 调 memory_search)——与 PHILOSOPHY"记忆优先"定位相悖。对齐
-            # agent.chat() 单发路径的注入口径(get_context limit=10),fail-safe。
-            # L4': 记忆随会话演进,同属易变上下文 → 并入尾部 dynamic 块。
-            try:
-                l13_memory_manager = getattr(agent, "memory_manager", None)
-                if l13_memory_manager is not None and not memory_off:
-                    l13_memory = l13_memory_manager.get_context(
-                        limit=10, session_id=data.session_id
-                    )
-                    if l13_memory and str(l13_memory).strip():
-                        dynamic_context_parts.append(
-                            "以下是相关的记忆上下文：\n" + str(l13_memory)
-                        )
-            except Exception as l13_mem_err:
-                logger.debug(
-                    f"[REQ {request_id}] L13 memory context skipped: {l13_mem_err}"
-                )
-            # ===== L13 记忆上下文注入 END =====
-
-            # ===== R17-E 记忆召回展示事件 BEGIN =====
-            # L13 注入是静默的 —— 用户无法知道回答用了哪些记忆。注入成功
-            # 后用 recall() 取结构化命中（top3），推送 memory_used 流事件；
-            # 前端 Message 气泡显示"N 条记忆已应用"并可展开查看明细。
-            # fail-safe：任何异常只跳过事件，绝不影响注入与对话主流程。
-            # R38 (2026-09-18): r38_memories 提升到本轮作用域 —— 除推事件外，
-            # 还要随 assistant 行落盘（重载后 memory chip 不丢）。
+            # R82 (2026-09-19) 去重说明: 此处原有的第一段 L13 记忆注入 + R17-E
+            # 召回事件已删除 —— 它与下方 Task 14 段隔离版完全重复,导致每次
+            # 请求把记忆上下文注入两遍（双倍 token）,且旧版无 segment 隔离,
+            # 会把旧段工作记忆残留在 Task 14 修复后继续漏进请求。召回事件与
+            # r38_memories 捕获统一收敛到下方段隔离版本。
+            # R38 (2026-09-18): r38_memories 提升到本轮作用域 —— 随 assistant
+            # 行落盘（重载后 memory chip 不丢）；捕获点在下方段隔离召回处。
             r38_memories: list = []
-            if dynamic_context_parts and not memory_off:
-                l13_evt = _build_memory_used_event(
-                    getattr(agent, "memory_manager", None),
-                    query=data.message,
-                    session_id=data.session_id,
-                )
-                if l13_evt is not None:
-                    r38_memories = l13_evt.get("memories", []) or []
-                    try:
-                        entry.queue.put_nowait(l13_evt)
-                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
-                        logger.debug(
-                            f"[REQ {request_id}] memory_used event push failed, ignored"
-                        )
-            # ===== R17-E 记忆召回展示事件 END =====
 
 
             # ===== R38 技能激活展示事件 BEGIN =====
@@ -3290,6 +3254,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 后用 recall() 取结构化命中（top3），推送 memory_used 流事件；
             # 前端 Message 气泡显示"N 条记忆已应用"并可展开查看明细。
             # fail-safe：任何异常只跳过事件，绝不影响注入与对话主流程。
+            # R82 (2026-09-19): 本事件唯一推送点（原上方无段隔离的重复推送
+            # 已删除）；r38_memories 捕获同步收敛至此 —— 落库条目与实际注入
+            # 上下文（段隔离召回）同源。
             if dynamic_context_parts and not memory_off:
                 l13_evt = _build_memory_used_event(
                     getattr(agent, "memory_manager", None),
@@ -3297,6 +3264,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     session_id=data.session_id,
                 )
                 if l13_evt is not None:
+                    r38_memories = l13_evt.get("memories", []) or []
                     try:
                         entry.queue.put_nowait(l13_evt)
                     except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
