@@ -237,7 +237,7 @@ class TestInprocAdapterRequiredValidation:
             "mock_required", {"doc_id": "doc-42", "section": "full"}
         )
         assert result.success is True
-        assert "doc-42" in (result.output or "")
+        assert result.output == {"doc_id": "doc-42", "section": "full"}
 
     @pytest.mark.asyncio()
     async def test_tool_not_registered_returns_not_registered(
