@@ -322,6 +322,8 @@ export interface TaskPlanItem {
   goal: string;
   // P1-6 (2026-08-14): 依赖透传 —— 后端 task_plan 事件带 depends_on。
   depends_on?: string[];
+  parent_task_id?: string | null;
+  depth?: number;
 }
 
 export interface TaskPlanEvent {
