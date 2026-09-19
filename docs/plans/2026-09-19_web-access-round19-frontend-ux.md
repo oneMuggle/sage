@@ -60,29 +60,14 @@
 
 ### 2.2 R19-W2 凭据管理 UI（P1）
 
-**方案**：Settings → Privacy → Credential Vault 页，CRUD 管理已存凭据。
+**方案**：**复用既有 `NetworkTab/CredentialsSection` 组件与 `/api/v1/web-access/credentials` 路由族**（list / delete / header 入口早已存在），零新页面、零重复路由；本批次仅新增 **cookie 导入**。
 
-**实际交付（批次 2，2026-09-19）**：**复用既有 `NetworkTab/CredentialsSection` 组件与 `/api/v1/web-access/credentials` 路由族**（list / delete / header 入口早已存在），零新页面、零重复路由；本批次仅新增 **cookie 导入**：
+**实际交付（批次 2，2026-09-19）**：
 
 - 后端：`POST /api/v1/web-access/credentials/cookie`（`backend/api/web_access_routes.py`），沿用既有 `credential_vault.save_credential` 做校验 + 加密存储（不引入新存储路径）；保留 `_origin_guard` Origin 守卫；校验失败统一返回固定文案 `invalid_cookie_credential`，**不回显提交值**。
 - 前端：`CredentialsSection` 内新增 cookie 表单（域名 + `document.cookie` 文本），解析器 `src/pages/settings/credentialCookieParser.ts` 按首个 `=` 切分、不解码、不在成功/失败态回显值。
-- 原方案中「新增 `CredentialVaultTab.tsx` + `/credentials/list`、`/credentials/{domain}`、`/credentials/import` 三端点」**未采纳** —— 既有能力已覆盖需求，新增会造成重复路由/页面。
 
-**前端改动**：
-- 新增 `src/components/settings/CredentialVaultTab.tsx`：
-  - 列表：域名 + 类型（cookie/header）+ 创建时间 + 过期时间
-  - 操作：查看详情（脱敏）/ 删除 / 导出（仅 cookie）
-  - 新增：手动添加 cookie（粘贴 `document.cookie` 输出）
-- 后端新增 API：
-  - `GET /api/v1/credentials/list` → 返回域名列表（脱敏）
-  - `DELETE /api/v1/credentials/{domain}` → 删除指定域名凭据
-  - `POST /api/v1/credentials/import` → 导入 cookie（body: `{domain, cookies: [{name, value}]}`）
-
-**后端改动**：
-- `routes/credentials.py`（新文件）：3 个 API 端点。
-- `credential_vault.py` 新增 `list_credentials()` → 返回域名列表（不解密 value）。
-
-**工作量**：~1.5 天（前端 1 天 + 后端 0.5 天）。
+**工作量**：已交付（复用既有能力，实际约 0.7 天）。
 
 ### 2.3 R19-W3 模型主动引导（P1）
 
@@ -92,21 +77,7 @@
 
 - `backend/agents/profiles.py` 新增 `_WEB_ACCESS_ROUTING_GUIDANCE`，并派生 `PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING`（= `PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT` + 引导段）与 `RESEARCHER_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING`（= 旧字面量常量 `_RESEARCHER_SYSTEM_PROMPT_BEFORE_WEB_ACCESS_ROUTING` + 引导段）。
 - 存量 DB 迁移按**精确字符串匹配**：primary 链 `BEFORE_DELEGATION → WITH_DELEGATION → WITH_FETCH_DIRECT → WITH_WEB_ACCESS_ROUTING` 一气呵成；researcher 旧默认字面量 → 新常量。任一段非精确命中（即用户自定义 prompt）一律跳过，**字节级不动**。
-- `web_fetch` 工具 description 追加引导段（**纯描述性，不改运行时行为**）：仅当 `success=False` 且失败内容提供 `content.block_reason`（`antibot_cf` / `antibot_other` / `login_wall`）时才转 `browser_navigate` + `browser_snapshot`，必要时经 `credential_domain` 提供登录态，不反复重试 `web_fetch`。
-
-**后端改动**：
-- `agents/profiles.py` primary prompt 追加：
-  ```
-  当 web_fetch 返回 success=False 且 block_reason 为 antibot/login_wall 时，
-  优先使用 browser_navigate + browser_snapshot 手动访问（需 coder 工具集），
-  或提示用户配置 credential_domain 凭据。不要反复重试 web_fetch。
-  ```
-- researcher prompt 追加同样语义（researcher 是浏览场景主消费者）。
-- `web_fetch` 工具 description 追加：
-  ```
-  返回 success=False 且 block_reason=antibot 时，表示被反爬拦截，
-  应转 browser_navigate 手动通道或提示用户配置代理/凭据。
-  ```
+- `web_fetch` 工具 description 追加引导段（**纯描述性，不改运行时行为**）：仅当 `success=False` 且结果 JSON 含 `metadata.blockReason`（`antibot_cf` / `antibot_other` / `login_wall`）时才转 `browser_navigate` + `browser_snapshot`，必要时经 `credential_domain` 提供登录态，不反复重试 `web_fetch`。字段名取模型实际可见的失败信封（`backend/core/legacy/agent.py` 失败分支产出的 `metadata.blockReason`），而非内部载荷键 `block_reason`。
 
 **工作量**：~0.2 天（改常量 + 测试）。
 
