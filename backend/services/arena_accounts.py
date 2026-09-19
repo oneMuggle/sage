@@ -17,7 +17,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -41,6 +41,39 @@ def derive_arena_key(token: str, machine_id: str) -> bytes:
     )
     raw = kdf.derive(token.encode("utf-8"))
     return base64.urlsafe_b64encode(raw)
+
+
+#: preferences 键：SecretBox 包装后的账号池 Fernet 主密钥（白名单见 settings_repo）
+MASTER_KEY_PREFERENCE = "arena_master_key"
+
+
+def get_or_create_master_key(settings_repo: Optional[Any] = None) -> bytes:
+    """Load the account-pool Fernet master key, creating it on first use.
+
+    The key is generated once, wrapped via SecretBox (Windows DPAPI / macOS
+    keychain / Linux secret-tool) and stored in the preferences table under
+    ``arena_master_key``. Losing the OS keystore entry therefore loses the
+    stored passwords — that is inherent to the SecretBox scheme used across
+    sage (same tradeoff as app_settings apiKey encryption).
+
+    ``settings_repo`` is injectable for tests; defaults to SettingsRepository.
+    """
+    from backend.data.settings_repo import SettingsRepository
+    from backend.services.secret_box import decrypt_secret, encrypt_secret
+
+    repo = settings_repo or SettingsRepository()
+    stored = repo.get(MASTER_KEY_PREFERENCE)
+    if stored:
+        try:
+            return decrypt_secret(stored).encode("utf-8")
+        except Exception:  # noqa: BLE001 — keystore 丢失/换机器：重生成而非拒绝启动
+            logger.warning(
+                "arena_master_key 解包失败（OS 凭据库变更?），重新生成主密钥；"
+                "旧账号池密码将无法解密"
+            )
+    key = Fernet.generate_key()
+    repo.set(MASTER_KEY_PREFERENCE, encrypt_secret(key.decode("utf-8"), account="arena.master"))
+    return key
 
 
 def _utcnow_iso() -> str:
