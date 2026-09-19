@@ -7,7 +7,7 @@
  * 白名单，加字段要同步改前后端三处）。
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { NetworkTab } from '../NetworkTab';
@@ -32,6 +32,10 @@ function renderTab(): void {
     </I18nProvider>,
   );
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function lastSavedPolicy(): Record<string, unknown> {
   const calls = mocks.setPreference.mock.calls;
@@ -299,5 +303,93 @@ describe('NetworkTab search engine card (Round 4 F2)', () => {
 
     expect(await screen.findByTestId('search-first-engine')).toHaveValue('zhipu');
     expect(screen.getByTestId('search-zhipu-key')).toHaveValue('zp-stored');
+  });
+
+  it('submits cookie credentials and reloads the credential list', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ credentials: [] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderTab();
+
+    const domainInput = await screen.findByTestId('cookie-domain-input');
+    const valueInput = screen.getByTestId('cookie-value-input');
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(
+          ([url, init]) =>
+            String(url) === '/api/v1/web-access/credentials' &&
+            !(init as RequestInit | undefined)?.method,
+        ),
+      ).toHaveLength(1);
+    });
+    const initialReloadCount = fetchMock.mock.calls.filter(
+      ([url, init]) =>
+        String(url) === '/api/v1/web-access/credentials' &&
+        !(init as RequestInit | undefined)?.method,
+    ).length;
+
+    fireEvent.change(domainInput, { target: { value: 'example.test' } });
+    fireEvent.change(valueInput, { target: { value: 'sid=abc' } });
+    fireEvent.click(screen.getByTestId('cookie-save-btn'));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url) === '/api/v1/web-access/credentials/cookie' &&
+            (init as RequestInit | undefined)?.method === 'POST',
+        ),
+      ).toBe(true);
+    });
+    const [postUrl, postInit] = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url) === '/api/v1/web-access/credentials/cookie' &&
+        (init as RequestInit | undefined)?.method === 'POST',
+    ) as [string, RequestInit];
+    expect(postUrl).toBe('/api/v1/web-access/credentials/cookie');
+    expect(postInit.method).toBe('POST');
+    expect(JSON.parse(postInit.body as string)).toEqual({
+      domain: 'example.test',
+      cookies: [{ name: 'sid', value: 'abc' }],
+    });
+    expect(domainInput).toHaveValue('');
+    expect(valueInput).toHaveValue('');
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(
+          ([url, init]) =>
+            String(url) === '/api/v1/web-access/credentials' &&
+            !(init as RequestInit | undefined)?.method,
+        ).length,
+      ).toBeGreaterThan(initialReloadCount);
+    });
+  });
+
+  it('shows a fixed error for malformed cookies without posting', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ credentials: [] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderTab();
+
+    fireEvent.change(await screen.findByTestId('cookie-domain-input'), {
+      target: { value: 'example.test' },
+    });
+    fireEvent.change(screen.getByTestId('cookie-value-input'), {
+      target: { value: 'malformed' },
+    });
+    fireEvent.click(screen.getByTestId('cookie-save-btn'));
+
+    expect(await screen.findByTestId('cookie-error')).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url) === '/api/v1/web-access/credentials/cookie' &&
+          (init as RequestInit | undefined)?.method === 'POST',
+      ),
+    ).toBe(false);
   });
 });

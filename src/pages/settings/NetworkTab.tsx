@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { settingsClient } from '../../shared/api/settingsClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
+import { parseCookieHeader } from './credentialCookieParser';
 import { SettingRow } from './components';
 
 /** 与后端 NetworkMode 枚举值一致（backend/domain/network_policy.py） */
@@ -567,6 +568,10 @@ function CredentialsSection() {
   const [headerDomain, setHeaderDomain] = useState('');
   const [headerName, setHeaderName] = useState('');
   const [headerValue, setHeaderValue] = useState('');
+  const [cookieDomain, setCookieDomain] = useState('');
+  const [cookieValue, setCookieValue] = useState('');
+  const [cookieError, setCookieError] = useState<TranslationKey | null>(null);
+  const [cookieSaving, setCookieSaving] = useState(false);
 
   const reload = (): void => {
     fetch(webAccessApiUrl('/api/v1/web-access/credentials'))
@@ -654,6 +659,42 @@ function CredentialsSection() {
         }
       })
       .catch(() => undefined);
+  };
+
+  const addCookieCred = async (): Promise<void> => {
+    setCookieError(null);
+    if (!cookieDomain.trim()) {
+      setCookieError('settings.network.creds.add_cookie.invalid');
+      return;
+    }
+
+    let cookies;
+    try {
+      cookies = parseCookieHeader(cookieValue);
+    } catch {
+      setCookieError('settings.network.creds.add_cookie.invalid');
+      return;
+    }
+
+    setCookieSaving(true);
+    try {
+      const response = await fetch(webAccessApiUrl('/api/v1/web-access/credentials/cookie'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: cookieDomain.trim(), cookies }),
+      });
+      if (!response.ok) {
+        setCookieError('settings.network.creds.add_cookie.failed');
+        return;
+      }
+      setCookieDomain('');
+      setCookieValue('');
+      reload();
+    } catch {
+      setCookieError('settings.network.creds.add_cookie.failed');
+    } finally {
+      setCookieSaving(false);
+    }
   };
 
   return (
@@ -780,6 +821,48 @@ function CredentialsSection() {
             </button>
           </div>
         </div>
+        <form
+          data-testid="cookie-cred-form"
+          className="flex flex-col gap-1"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void addCookieCred();
+          }}
+        >
+          <div className="text-xs">{t('settings.network.creds.add_cookie.label')}</div>
+          <div className="flex gap-1">
+            <input
+              data-testid="cookie-domain-input"
+              aria-label={t('settings.network.creds.add_cookie.domain')}
+              value={cookieDomain}
+              onChange={(e) => setCookieDomain(e.target.value)}
+              placeholder={t('settings.network.creds.add_cookie.domain')}
+              className="flex-1 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+            <textarea
+              data-testid="cookie-value-input"
+              aria-label={t('settings.network.creds.add_cookie.value')}
+              value={cookieValue}
+              onChange={(e) => setCookieValue(e.target.value)}
+              placeholder={t('settings.network.creds.add_cookie.value')}
+              rows={2}
+              className="flex-1 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+            <button
+              type="submit"
+              data-testid="cookie-save-btn"
+              disabled={cookieSaving}
+              className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary disabled:opacity-50"
+            >
+              {t('settings.network.creds.add_cookie.save')}
+            </button>
+          </div>
+          {cookieError && (
+            <div data-testid="cookie-error" className="text-xs text-error">
+              {t(cookieError)}
+            </div>
+          )}
+        </form>
         {creds !== null && creds.length === 0 && (
           <div className="text-xs text-text-secondary" data-testid="creds-empty">
             {t('settings.network.creds.empty')}
