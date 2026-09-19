@@ -13,6 +13,7 @@ import { settingsClient } from '../../shared/api/settingsClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
 import { SettingRow } from './components';
+import { parseCookieHeader, type CookieImportItem } from './credentialCookieParser';
 
 /** 与后端 NetworkMode 枚举值一致（backend/domain/network_policy.py） */
 export const NETWORK_MODES = ['online', 'intranet', 'offline'] as const;
@@ -558,7 +559,10 @@ interface BrowserHealth {
 }
 
 /** 与后端 GET /api/v1/web-access/metrics 返回形态一致（Round 15/16） */
-type HostMetrics = Record<string, { ok: number; fail: number; escalated: number; avg_elapsed_ms: number | null }>;
+type HostMetrics = Record<
+  string,
+  { ok: number; fail: number; escalated: number; avg_elapsed_ms: number | null }
+>;
 
 function CredentialsSection() {
   const { t } = useI18n();
@@ -569,6 +573,10 @@ function CredentialsSection() {
   const [headerDomain, setHeaderDomain] = useState('');
   const [headerName, setHeaderName] = useState('');
   const [headerValue, setHeaderValue] = useState('');
+  const [cookieDomain, setCookieDomain] = useState('');
+  const [cookieValue, setCookieValue] = useState('');
+  const [cookieError, setCookieError] = useState<TranslationKey | null>(null);
+  const [cookieSaving, setCookieSaving] = useState(false);
 
   const reload = (): void => {
     fetch(webAccessApiUrl('/api/v1/web-access/credentials'))
@@ -657,6 +665,42 @@ function CredentialsSection() {
       .catch(() => undefined);
   };
 
+  const addCookieCred = async (): Promise<void> => {
+    setCookieError(null);
+    if (!cookieDomain.trim()) {
+      setCookieError('settings.network.creds.add_cookie.invalid');
+      return;
+    }
+
+    let cookies: CookieImportItem[];
+    try {
+      cookies = parseCookieHeader(cookieValue);
+    } catch {
+      setCookieError('settings.network.creds.add_cookie.invalid');
+      return;
+    }
+
+    setCookieSaving(true);
+    try {
+      const response = await fetch(webAccessApiUrl('/api/v1/web-access/credentials/cookie'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: cookieDomain.trim(), cookies }),
+      });
+      if (!response.ok) {
+        setCookieError('settings.network.creds.add_cookie.failed');
+        return;
+      }
+      setCookieDomain('');
+      setCookieValue('');
+      reload();
+    } catch {
+      setCookieError('settings.network.creds.add_cookie.failed');
+    } finally {
+      setCookieSaving(false);
+    }
+  };
+
   return (
     <section>
       <h3 className="text-sm font-semibold text-text mb-3">{t('settings.network.creds')}</h3>
@@ -720,7 +764,11 @@ function CredentialsSection() {
               </button>
             </div>
             {Object.entries(metrics).map(([host, m]) => (
-              <div key={host} data-testid={`metric-row-${host}`} className="flex items-center gap-2 text-xs">
+              <div
+                key={host}
+                data-testid={`metric-row-${host}`}
+                className="flex items-center gap-2 text-xs"
+              >
                 <span className="font-medium">{host}</span>
                 <span className="text-text-secondary">
                   {t('settings.network.creds.metrics.ok')}: {m.ok}
@@ -740,7 +788,9 @@ function CredentialsSection() {
                 )}
               </div>
             ))}
-            <div className="text-text-secondary text-xs">{t('settings.network.creds.metrics.hint')}</div>
+            <div className="text-text-secondary text-xs">
+              {t('settings.network.creds.metrics.hint')}
+            </div>
           </div>
         )}
         <div className="flex flex-col gap-1" data-testid="header-cred-form">
@@ -781,6 +831,48 @@ function CredentialsSection() {
             </button>
           </div>
         </div>
+        <form
+          data-testid="cookie-cred-form"
+          className="flex flex-col gap-1"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void addCookieCred();
+          }}
+        >
+          <div className="text-xs">{t('settings.network.creds.add_cookie.label')}</div>
+          <div className="flex gap-1">
+            <input
+              data-testid="cookie-domain-input"
+              aria-label={t('settings.network.creds.add_cookie.domain')}
+              value={cookieDomain}
+              onChange={(e) => setCookieDomain(e.target.value)}
+              placeholder={t('settings.network.creds.add_cookie.domain')}
+              className="flex-1 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+            <textarea
+              data-testid="cookie-value-input"
+              aria-label={t('settings.network.creds.add_cookie.value')}
+              value={cookieValue}
+              onChange={(e) => setCookieValue(e.target.value)}
+              placeholder={t('settings.network.creds.add_cookie.value')}
+              rows={2}
+              className="flex-1 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+            <button
+              type="submit"
+              data-testid="cookie-save-btn"
+              disabled={cookieSaving}
+              className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary disabled:opacity-50"
+            >
+              {t('settings.network.creds.add_cookie.save')}
+            </button>
+          </div>
+          {cookieError && (
+            <div data-testid="cookie-error" className="text-xs text-error">
+              {t(cookieError)}
+            </div>
+          )}
+        </form>
         {creds !== null && creds.length === 0 && (
           <div className="text-xs text-text-secondary" data-testid="creds-empty">
             {t('settings.network.creds.empty')}

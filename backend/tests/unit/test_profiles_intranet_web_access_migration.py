@@ -21,11 +21,57 @@ def test_default_seed_includes_researcher_http_download():
     assert "http_download" in researcher.tools
 
 
+def test_default_web_profiles_route_blocked_fetch_to_browser():
+    """默认 web profile 应引导 blocked fetch 转 browser 或凭据通道。
+
+    字段名必须与模型实际可见的失败信封一致（agent.py 失败分支产出的
+    ``metadata.blockReason``），否则引导指向一个模型看不到的路径。
+    """
+    agents = {agent.id: agent for agent in profiles.create_default_agents()}
+    assert "metadata.blockReason" in agents["primary"].system_prompt
+    assert "antibot_cf" in agents["primary"].system_prompt
+    assert "antibot_other" in agents["primary"].system_prompt
+    assert "login_wall" in agents["primary"].system_prompt
+    assert "browser_navigate" in agents["primary"].system_prompt
+    assert "browser_snapshot" in agents["primary"].system_prompt
+    assert "metadata.blockReason" in agents["researcher"].system_prompt
+    assert "credential_domain" in agents["researcher"].system_prompt
+    assert "不要反复重试 web_fetch" in agents["researcher"].system_prompt
+
+
 def test_default_primary_system_prompt_has_delegation_hint():
     """代码默认 primary system_prompt 含 agent 子代理委派提示。"""
     primary = next(a for a in profiles.create_default_agents() if a.id == "primary")
     assert "agent" in primary.system_prompt
     assert "委派" in primary.system_prompt or "子代理" in primary.system_prompt
+
+
+def test_researcher_legacy_prompt_migrates_once(monkeypatch):
+    """旧 researcher 默认 prompt 只迁移一次到 web access routing prompt。"""
+    stored = {
+        "researcher": {
+            "id": "researcher",
+            "enabled": True,
+            "tools": ["web_search", "web_fetch", "http_download", "memory_search"],
+            "system_prompt": "你是一个专业的研究 Agent。负责搜索信息、综合资料、生成研究报告。",
+        }
+    }
+    repo = FakeRepo(stored)
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+    profiles.ensure_default_agents()
+    assert stored["researcher"]["system_prompt"] == profiles.RESEARCHER_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
+    first_count = len(repo.upserts)
+    profiles.ensure_default_agents()
+    assert len(repo.upserts) == first_count
+
+
+def test_custom_web_profile_prompt_is_unchanged(monkeypatch):
+    """用户自定义 researcher prompt 不应被默认迁移覆盖。"""
+    custom = "用户自定义研究流程"
+    repo = FakeRepo({"researcher": {"id": "researcher", "tools": [], "system_prompt": custom}})
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+    profiles.ensure_default_agents()
+    assert repo.get("researcher")["system_prompt"] == custom
 
 
 def test_default_seed_coder_uses_current_tool_names():
@@ -144,9 +190,9 @@ def test_current_shape_researcher_untouched(monkeypatch):
 
 
 def test_legacy_primary_system_prompt_gets_upgraded(monkeypatch):
-    """旧 primary system_prompt（无委派提示）→ 升级到 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT。
+    """旧 primary system_prompt（无委派提示）→ 升级到 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING。
 
-    2026-09-03: chain migration 合并为单次 upsert, final state 是 WITH_FETCH_DIRECT
+    2026-09-03: chain migration 合并为单次 upsert, final state 是 WITH_WEB_ACCESS_ROUTING
     (含直接 fetch/download 段 + 保留委派段)。"""
     stored = {
         "primary": {
@@ -159,7 +205,7 @@ def test_legacy_primary_system_prompt_gets_upgraded(monkeypatch):
     repo = FakeRepo(stored)
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
     profiles.ensure_default_agents()
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
 
 
 def test_customized_primary_system_prompt_untouched(monkeypatch):
@@ -180,22 +226,22 @@ def test_customized_primary_system_prompt_untouched(monkeypatch):
 
 
 def test_current_primary_system_prompt_untouched(monkeypatch):
-    """已是当前形状（含 fetch_direct 提示）→ 绝不再覆写（防重复写入 + updated_at 抖动）。
+    """已是当前形状（含 web_access_routing 提示）→ 绝不再覆写（防重复写入 + updated_at 抖动）。
 
-    2026-09-03: '当前' 改为 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT；WITH_DELEGATION
+    2026-09-03: '当前' 改为 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING；WITH_DELEGATION
     已不再是 current, 见 test_primary_system_prompt_with_delegation_one_step_migration。"""
     stored = {
         "primary": {
             "id": "primary",
             "enabled": True,
             "tools": [],
-            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT,
+            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING,
         },
     }
     repo = FakeRepo(stored)
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
     profiles.ensure_default_agents()
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
     # 应只发生"已有 primary 不插入"的写入 —— 即没有针对 primary 的 upsert
     primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
     assert primary_upserts == [], f"primary 不应被 upsert，但收到: {primary_upserts}"
@@ -231,8 +277,8 @@ def test_legacy_db_full_migration_chain(monkeypatch):
     # primary 应完成两段升级 + system_prompt 升级
     assert "agent" in stored["primary"]["tools"]
     assert "todo_write" in stored["primary"]["tools"]
-    # 2026-09-03: chain migration 合并, 终态是 WITH_FETCH_DIRECT
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+    # 2026-09-03: chain migration 合并, 终态是 WITH_WEB_ACCESS_ROUTING
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
 
     # researcher 应追加 http_download
     assert "http_download" in stored["researcher"]["tools"]
@@ -250,14 +296,14 @@ def test_default_seed_primary_includes_fetch_download():
     assert "http_download" in primary.tools
 
 
-def test_default_seed_primary_uses_fetch_direct_prompt():
-    """代码默认 primary system_prompt 升级为 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT。
+def test_default_seed_primary_uses_web_access_routing_prompt():
+    """代码默认 primary system_prompt 升级为 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING。
 
     保留委派段（含 "委派" / "子代理"）— 复杂研究仍走 agent 工具委派。
     新增直接 fetch/download 段 — 用户可见 LLM 行为, 便于分步指导。
     """
     primary = next(a for a in profiles.create_default_agents() if a.id == "primary")
-    assert primary.system_prompt == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+    assert primary.system_prompt == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
     assert "委派" in primary.system_prompt or "子代理" in primary.system_prompt
     # 直接 fetch/download 段必须新增
     assert "web_fetch" in primary.system_prompt
@@ -266,7 +312,7 @@ def test_default_seed_primary_uses_fetch_direct_prompt():
 
 def test_primary_system_prompt_legacy_two_step_chain_migration(monkeypatch):
     """DB system_prompt 是 _PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION →
-    一气呵成升级到 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT (合并为单次 upsert)。
+    一气呵成升级到 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING (合并为单次 upsert)。
     """
     stored = {
         "primary": {
@@ -279,7 +325,7 @@ def test_primary_system_prompt_legacy_two_step_chain_migration(monkeypatch):
     repo = FakeRepo(stored)
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
     profiles.ensure_default_agents()
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
     # 链式合并: 仅 1 次 primary upsert (而不是 2 次)
     primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
     assert len(primary_upserts) == 1, f"应有 1 次 upsert（链式合并），收到 {len(primary_upserts)}"
@@ -287,7 +333,7 @@ def test_primary_system_prompt_legacy_two_step_chain_migration(monkeypatch):
 
 def test_primary_system_prompt_with_delegation_one_step_migration(monkeypatch):
     """DB system_prompt 是 PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION →
-    一步升级到 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT。
+    一步升级到 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING。
     """
     stored = {
         "primary": {
@@ -300,13 +346,13 @@ def test_primary_system_prompt_with_delegation_one_step_migration(monkeypatch):
     repo = FakeRepo(stored)
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
     profiles.ensure_default_agents()
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
     primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
     assert len(primary_upserts) == 1
 
 
-def test_primary_system_prompt_already_fetch_direct_no_upsert(monkeypatch):
-    """DB system_prompt 已是 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT → 0 upsert。"""
+def test_primary_system_prompt_fetch_direct_migrates_once(monkeypatch):
+    """DB system_prompt 是 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT 时，迁移一次且幂等。"""
     stored = {
         "primary": {
             "id": "primary",
@@ -317,8 +363,32 @@ def test_primary_system_prompt_already_fetch_direct_no_upsert(monkeypatch):
     }
     repo = FakeRepo(stored)
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+
     profiles.ensure_default_agents()
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
+    primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
+    assert len(primary_upserts) == 1
+
+    first_count = len(repo.upserts)
+    profiles.ensure_default_agents()
+    assert len(repo.upserts) == first_count
+
+
+def test_primary_system_prompt_already_web_access_routing_no_upsert(monkeypatch):
+    """DB system_prompt 已是 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING → 0 upsert。"""
+    stored = {
+        "primary": {
+            "id": "primary",
+            "enabled": True,
+            "tools": [],
+            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING,
+        },
+    }
+    repo = FakeRepo(stored)
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+    profiles.ensure_default_agents()
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
     primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
     assert primary_upserts == [], f"primary 不应被 upsert，但收到: {primary_upserts}"
 
