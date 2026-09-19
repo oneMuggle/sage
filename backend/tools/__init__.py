@@ -81,6 +81,11 @@ from .registry import ToolRegistry
 from .repl_tool import ReplTool
 from .runtime_exec import RuntimeExecTool
 from .runtime_probe import RuntimeProbeTool
+from .schedule_tool import (
+    CancelScheduledTaskTool,
+    ListScheduledTasksTool,
+    ScheduleTaskTool,
+)
 from .search_tools import GlobSearchTool, GrepSearchTool
 from .session_search_tool import SessionSearchTool
 from .skill import SkillHotLoader
@@ -297,6 +302,12 @@ def register_all_tools(
     registry.register(ReadSageConfigTool(policy=policy))
     registry.register(UpdateSageConfigTool(policy=policy))
 
+    # 定时任务派发工具（feat/llm-schedule-tool）：把 SchedulerService 暴露给 LLM。
+    # list 为 READ；schedule / cancel 为 WRITE_LOCAL（持久化副作用，走审批）。
+    registry.register(ScheduleTaskTool(policy=policy))
+    registry.register(ListScheduledTasksTool(policy=policy))
+    registry.register(CancelScheduledTaskTool(policy=policy))
+
     # Register MCP tools (from external MCP servers like draw.io)
     try:
         from backend.mcp import register_mcp_tools
@@ -391,5 +402,8 @@ __all__ = [
     "ImageGenerationTool",
     "ReadSageConfigTool",
     "UpdateSageConfigTool",
+    "ScheduleTaskTool",
+    "ListScheduledTasksTool",
+    "CancelScheduledTaskTool",
     "register_all_tools",
 ]

@@ -249,6 +249,11 @@ class TestBuiltinToolDeclarations:
             "office_create": RiskClass.WRITE_LOCAL,
             "office_update": RiskClass.WRITE_LOCAL,
             "office_delete": RiskClass.WRITE_LOCAL,
+            # feat/llm-schedule-tool: 定时任务三件套（base.py 要求新增工具
+            # 必须同步扩充本验收表，防漏写 risk 的工具被静默放行）
+            "schedule_task": RiskClass.WRITE_LOCAL,
+            "list_scheduled_tasks": RiskClass.READ,
+            "cancel_scheduled_task": RiskClass.WRITE_LOCAL,
         }
         for name, risk in expected.items():
             assert registry.risk_of(name) is risk, f"{name} risk mismatch"
