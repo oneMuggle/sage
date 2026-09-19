@@ -49,6 +49,41 @@ def test_orch_tasks_schema_has_parent_and_depth_columns(tmp_path, monkeypatch):
     assert columns["depth"] == "INTEGER"
 
 
+def test_upsert_state_roundtrips_hierarchy_fields(repo):
+    _upsert_run()
+    repo.upsert_state(
+        task_id="child",
+        run_id="orch-1",
+        agent_id="writer",
+        goal="child",
+        status="done",
+        parent_task_id="root",
+        depth=1,
+    )
+
+    row = repo.get("child")
+    assert row is not None
+    assert row.parent_task_id == "root"
+    assert row.depth == 1
+
+
+def test_upsert_state_defaults_hierarchy_fields(repo):
+    _upsert_run()
+    repo.upsert_state(
+        task_id="root",
+        run_id="orch-1",
+        agent_id="writer",
+        goal="root",
+        status="queued",
+    )
+
+    row = repo.get("root")
+    assert row is not None
+    assert row.parent_task_id is None
+    assert row.depth == 0
+
+
+
 def test_upsert_state_insert_and_get(repo):
     """upsert_state 插入新行 → get 拿到全部字段。"""
     _upsert_run()

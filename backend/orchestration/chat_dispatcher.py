@@ -1613,6 +1613,8 @@ class ChatDispatcher:
                     if _terminal and state.started_at and state.finished_at
                     else None
                 ),
+                parent_task_id=state.parent_task_id,
+                depth=state.depth,
             )
         except Exception as exc:  # noqa: BLE001 — 降级铁律
             logger.warning("orch_task 落库失败 task_id=%s err=%s", state.task_id, exc)
