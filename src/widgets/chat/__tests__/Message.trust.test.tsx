@@ -134,6 +134,26 @@ describe('Message — R17 信任感交互', () => {
     expect(screen.getByTestId('message-sources-list')).toHaveTextContent('无链接条目');
   });
 
+  // R86: @memory: 实体引用命中（kind='memory'）渲染进记忆分组，编号与记忆召回连续
+  it('R86: memory 来源渲染进记忆分组且编号连续, 计数计入总数', () => {
+    const msg = makeMsg({
+      memory_refs: [{ id: 'a', memory_type: 'semantic', preview: '偏好深色' }],
+      sources: [
+        { kind: 'memory', title: '@memory:火锅 [episodic]', snippet: '爱吃火锅' },
+        { kind: 'web', title: '例站', url: 'https://example.com' },
+      ],
+    });
+    renderWithI18n(<Message message={msg} />);
+    expect(screen.getByTestId('message-sources-toggle')).toHaveTextContent('3');
+    fireEvent.click(screen.getByTestId('message-sources-toggle'));
+    const list = screen.getByTestId('message-sources-list');
+    expect(list).toHaveTextContent('@memory');
+    expect(list).toHaveTextContent('爱吃火锅');
+    // 记忆召回[1] + @memory 命中[2] 同组；网页条目续 [3]
+    expect(list).toHaveTextContent('[2]');
+    expect(list).toHaveTextContent('[3]');
+  });
+
   // R38: 技能激活与上下文压缩透明度测试
   it('R38: activated_skills 存在时显示可展开的技能激活开关', () => {
     const msg = makeMsg({
