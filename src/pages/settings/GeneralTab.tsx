@@ -506,6 +506,30 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
       <FallbackModelInput />
       <section data-testid="orch-settings-section">
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.orch')}</h3>
+        {/* Round 1/3 (2026-09-19) 计划前置旋钮透出 —— 管线级开关排最前。
+            关闭后 multi 拆解行为与 2026-09-19 之前完全一致。 */}
+        <SettingRow
+          label="拆解前澄清需求"
+          desc="复杂任务进入编排前,先判断目标是否有歧义并向你提问(≤3 问);超时或跳过则按合理默认值执行并在计划中写明假设"
+        >
+          <Toggle
+            testId="orch-plan-preflight"
+            value={settings.orch.planPreflightEnabled}
+            onChange={(v) =>
+              updateSettings({ orch: { ...settings.orch, planPreflightEnabled: v } })
+            }
+          />
+        </SettingRow>
+        <SettingRow
+          label="拆解前事实侦察"
+          desc="拆解任务前派一个只读子代理快速收集工作区/网络/记忆事实,作为计划依据;会增加少量等待时间"
+        >
+          <Toggle
+            testId="orch-plan-scout"
+            value={settings.orch.planScoutEnabled}
+            onChange={(v) => updateSettings({ orch: { ...settings.orch, planScoutEnabled: v } })}
+          />
+        </SettingRow>
         <NumberField
           label="最大并发子任务数"
           dataTestId="orch-max-concurrent"

@@ -63,6 +63,101 @@ KNOWN_TASK_TYPES = frozenset({"general", "research", "coding", "analysis", "test
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
 
+def sanitize_llm_plan_tasks(raw_tasks: Any) -> List[Dict[str, Any]]:
+    """Validate/clean LLM-emitted tasks into registry-ready dicts（模块级）。
+
+    Round 2 (2026-09-19) 自 ``Planner._sanitize_tasks`` 提升，供编排端点
+    （``POST /orch/plan-items`` 计划文本结构化）复用同一套清洗纪律。
+    非 list 输入返回 []（端点侧无需重复防御）。
+
+    Guarantees: at most MAX_PLAN_TASKS tasks; blocked_by only references
+    earlier tasks in the list (structurally acyclic); every task has a
+    non-empty name and description; names capped at 200 chars and
+    descriptions at MAX_TASK_DESCRIPTION_CHARS.
+    """
+    if not isinstance(raw_tasks, list):
+        return []
+    sanitized: List[Dict[str, Any]] = []
+    id_map: Dict[str, str] = {}  # LLM-provided id -> positional placeholder
+
+    for index, raw in enumerate(raw_tasks[:MAX_PLAN_TASKS]):
+        if not isinstance(raw, dict):
+            continue
+
+        title = raw.get("title") or raw.get("name")
+        description = raw.get("description")
+        if not isinstance(title, str) or not title.strip():
+            if isinstance(description, str) and description.strip():
+                title = description.strip()[:60]
+            else:
+                title = f"Task {index + 1}"
+        if not isinstance(description, str) or not description.strip():
+            description = title
+
+        task_type = raw.get("task_type", "general")
+        if task_type not in KNOWN_TASK_TYPES:
+            task_type = "general"
+
+        # Placeholder id used for dependency resolution; the registry
+        # assigns the real id at creation time (callers re-map via the
+        # returned order — blocked_by here uses placeholder tokens that
+        # decompose_request's caller resolves). Simpler contract: we
+        # resolve dependencies to *positional indexes* encoded as
+        # "prev:<n>" tokens, then map to real ids post-creation.
+        provided_id = raw.get("id")
+        placeholder = f"idx:{index}"
+        if isinstance(provided_id, str) and provided_id.strip():
+            id_map[provided_id.strip()] = placeholder
+        id_map[f"t{index + 1}"] = placeholder  # common default scheme
+
+        agent_hint = raw.get("agent_hint")
+        parameters: Dict[str, Any] = {}
+        if (
+            isinstance(agent_hint, str)
+            and agent_hint.strip()
+            and _is_dispatchable_agent(agent_hint.strip())
+        ):
+            # F4 (2026-08-12): 只接受可派发角色，非法 hint 静默丢弃
+            # （见 _is_dispatchable_agent docstring）。
+            parameters["agent_hint"] = agent_hint.strip()
+
+        sanitized.append(
+            {
+                "name": title.strip()[:200],
+                "description": description.strip()[:MAX_TASK_DESCRIPTION_CHARS],
+                "task_type": task_type,
+                "parameters": parameters,
+                "blocked_by": [],  # resolved below, once all ids are known
+                "_placeholder": placeholder,
+                "_raw_depends_on": raw.get("depends_on") or [],
+            }
+        )
+
+    # Second pass: resolve depends_on to placeholders of EARLIER tasks
+    # only (forward references / cycles are dropped — keeps a DAG).
+    seen_placeholders = set()
+    for item in sanitized:
+        resolved: List[str] = []
+        deps = item.pop("_raw_depends_on")
+        placeholder = item["_placeholder"]
+        if isinstance(deps, list):
+            for dep in deps:
+                if not isinstance(dep, str):
+                    continue
+                target = id_map.get(dep.strip())
+                if (
+                    target is not None
+                    and target in seen_placeholders
+                    and target not in resolved
+                    and target != placeholder
+                ):
+                    resolved.append(target)
+        item["blocked_by"] = resolved
+        seen_placeholders.add(placeholder)
+
+    return sanitized
+
+
 @dataclass
 class Plan:
     """Represents a decomposition plan."""
@@ -301,20 +396,56 @@ class Planner:
         request: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """Build the JSON-DAG decomposition prompt."""
-        context_str = json.dumps(context, indent=2, ensure_ascii=False) if context else "None"
+        """Build the JSON-DAG decomposition prompt.
+
+        计划前置 (2026-09-19): context 支持两个具名键（由
+        ``plan_preflight.run_plan_preflight`` 注入），以独立区块渲染并附
+        拆解约束，其余键维持原样 JSON dump：
+
+        - ``clarifications``: List[str] —— 用户澄清结论，拆解必须遵守；
+        - ``scout_facts``: str —— 只读侦察员产出的事实清单，拆解的依据。
+        """
+        clarifications: List[str] = []
+        scout_facts = ""
+        rest: Dict[str, Any] = {}
+        if isinstance(context, dict):
+            for key, value in context.items():
+                if key == "clarifications" and isinstance(value, list):
+                    clarifications = [str(item) for item in value if str(item).strip()]
+                elif key == "scout_facts" and isinstance(value, str) and value.strip():
+                    scout_facts = value.strip()
+                else:
+                    rest[key] = value
+
+        sections: List[str] = []
+        if scout_facts:
+            sections.append(f"侦察发现（只读侦察员产出，拆解的事实依据）:\n{scout_facts}")
+        if clarifications:
+            bullets = "\n".join(f"- {item}" for item in clarifications)
+            sections.append(f"用户澄清结论（必须遵守，不得偏离）:\n{bullets}")
+        if rest:
+            sections.append(f"其他上下文: {json.dumps(rest, indent=2, ensure_ascii=False)}")
+        context_str = "\n\n".join(sections) if sections else "None"
+
+        extra_rule = ""
+        if clarifications:
+            extra_rule = (
+                "\n5. 用户澄清结论必须反映到相关任务的 description 中"
+                "（范围/格式/验收标准），不得偏离。"
+            )
 
         return f"""You are a task planning assistant. Decompose the following goal into a directed acyclic graph of tasks.
 
 Goal: {request}
 
-Context: {context_str}
+Context:
+{context_str}
 
 Instructions:
 1. Break the goal into discrete, actionable tasks (at most {MAX_PLAN_TASKS}).
 2. Express dependencies via "depends_on" referencing earlier task ids only.
 3. Use "agent_hint" to suggest an executor role (e.g. researcher, coder, memory_manager) or omit.
-4. Keep titles short; descriptions carry the detail.
+4. Keep titles short; descriptions carry the detail (做什么 / 涉及对象 / 预期产出).{extra_rule}
 
 Output format — return ONLY valid JSON, no markdown fences, no extra text:
 {{
@@ -360,92 +491,8 @@ Output format — return ONLY valid JSON, no markdown fences, no extra text:
         return self._sanitize_tasks(raw_tasks), reasoning
 
     def _sanitize_tasks(self, raw_tasks: List[Any]) -> List[Dict[str, Any]]:
-        """Validate/clean LLM-emitted tasks into registry-ready dicts.
-
-        Guarantees: at most MAX_PLAN_TASKS tasks; blocked_by only references
-        earlier tasks in the list (structurally acyclic); every task has a
-        non-empty name and description; names capped at 200 chars and
-        descriptions at MAX_TASK_DESCRIPTION_CHARS.
-        """
-        sanitized: List[Dict[str, Any]] = []
-        id_map: Dict[str, str] = {}  # LLM-provided id -> positional placeholder
-
-        for index, raw in enumerate(raw_tasks[:MAX_PLAN_TASKS]):
-            if not isinstance(raw, dict):
-                continue
-
-            title = raw.get("title") or raw.get("name")
-            description = raw.get("description")
-            if not isinstance(title, str) or not title.strip():
-                if isinstance(description, str) and description.strip():
-                    title = description.strip()[:60]
-                else:
-                    title = f"Task {index + 1}"
-            if not isinstance(description, str) or not description.strip():
-                description = title
-
-            task_type = raw.get("task_type", "general")
-            if task_type not in KNOWN_TASK_TYPES:
-                task_type = "general"
-
-            # Placeholder id used for dependency resolution; the registry
-            # assigns the real id at creation time (callers re-map via the
-            # returned order — blocked_by here uses placeholder tokens that
-            # decompose_request's caller resolves). Simpler contract: we
-            # resolve dependencies to *positional indexes* encoded as
-            # "prev:<n>" tokens, then map to real ids post-creation.
-            provided_id = raw.get("id")
-            placeholder = f"idx:{index}"
-            if isinstance(provided_id, str) and provided_id.strip():
-                id_map[provided_id.strip()] = placeholder
-            id_map[f"t{index + 1}"] = placeholder  # common default scheme
-
-            agent_hint = raw.get("agent_hint")
-            parameters: Dict[str, Any] = {}
-            if (
-                isinstance(agent_hint, str)
-                and agent_hint.strip()
-                and _is_dispatchable_agent(agent_hint.strip())
-            ):
-                # F4 (2026-08-12): 只接受可派发角色，非法 hint 静默丢弃
-                # （见 _is_dispatchable_agent docstring）。
-                parameters["agent_hint"] = agent_hint.strip()
-
-            sanitized.append(
-                {
-                    "name": title.strip()[:200],
-                    "description": description.strip()[:MAX_TASK_DESCRIPTION_CHARS],
-                    "task_type": task_type,
-                    "parameters": parameters,
-                    "blocked_by": [],  # resolved below, once all ids are known
-                    "_placeholder": placeholder,
-                    "_raw_depends_on": raw.get("depends_on") or [],
-                }
-            )
-
-        # Second pass: resolve depends_on to placeholders of EARLIER tasks
-        # only (forward references / cycles are dropped — keeps a DAG).
-        seen_placeholders = set()
-        for item in sanitized:
-            resolved: List[str] = []
-            deps = item.pop("_raw_depends_on")
-            placeholder = item["_placeholder"]
-            if isinstance(deps, list):
-                for dep in deps:
-                    if not isinstance(dep, str):
-                        continue
-                    target = id_map.get(dep.strip())
-                    if (
-                        target is not None
-                        and target in seen_placeholders
-                        and target not in resolved
-                        and target != placeholder
-                    ):
-                        resolved.append(target)
-            item["blocked_by"] = resolved
-            seen_placeholders.add(placeholder)
-
-        return sanitized
+        """Validate/clean LLM-emitted tasks（主体在模块级 sanitize_llm_plan_tasks）。"""
+        return sanitize_llm_plan_tasks(raw_tasks)
 
     def _simple_decompose(
         self,

@@ -275,3 +275,52 @@ describe('orchestrationEvents — running 实时计时打点 (BU15)', () => {
     expect(done?.runningSince).toBeUndefined();
   });
 });
+
+// ============================================================================
+// Round 3 (2026-09-19): 编排拆解前置阶段指示（orch_preflight）
+// ============================================================================
+
+describe('applyOrchestrationEventToBoard — orch_preflight (Round 3)', () => {
+  it('orch_preflight 写入前置阶段槽位并消费事件', () => {
+    useChatStreamStore.getState().setPreflightPhase(SID, null);
+    const handled = applyOrchestrationEventToBoard(
+      evt({ state: 'orch_preflight', preflight_phase: 'clarify' }),
+      SID,
+    );
+    expect(handled).toBe(true);
+    expect(slots().preflightPhase).toBe('clarify');
+  });
+
+  it('scout 阶段覆盖 clarify', () => {
+    useChatStreamStore.getState().setPreflightPhase(SID, 'clarify');
+    applyOrchestrationEventToBoard(
+      evt({ state: 'orch_preflight', preflight_phase: 'scout' }),
+      SID,
+    );
+    expect(slots().preflightPhase).toBe('scout');
+  });
+
+  it('task_plan 到达即清空前置阶段（进入确认/执行阶段）', () => {
+    useChatStreamStore.getState().setPreflightPhase(SID, 'scout');
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'task_plan',
+        run_id: 'orch-pf',
+        plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }],
+      }),
+      SID,
+    );
+    expect(slots().preflightPhase).toBeNull();
+    expect(slots().taskBoard?.runId).toBe('orch-pf');
+  });
+
+  it('无 phase 载荷的 orch_preflight 不消费（防御畸形事件）', () => {
+    useChatStreamStore.getState().setPreflightPhase(SID, null);
+    const handled = applyOrchestrationEventToBoard(
+      evt({ state: 'orch_preflight' }),
+      SID,
+    );
+    expect(handled).toBe(false);
+    expect(slots().preflightPhase).toBeNull();
+  });
+});

@@ -61,6 +61,9 @@ ALIASES: Dict[str, str] = {
     "subagent_approval_mode": "subagentApprovalMode",
     "run_token_budget": "runTokenBudget",
     "scratch_root": "scratchRoot",
+    # Round 1/3 (2026-09-19) 计划前置旋钮（orch_settings.plan_*_enabled）。
+    "plan_preflight_enabled": "planPreflightEnabled",
+    "plan_scout_enabled": "planScoutEnabled",
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单
@@ -152,6 +155,10 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "subagentApprovalMode",
         "runTokenBudget",
         "scratchRoot",
+        # Round 1/3 (2026-09-19) 计划前置旋钮 —— 白名单缺失会让设置页编排段
+        # 任一保存 400 invalid_settings_shape（round26 同款回归,前端静默吞错）。
+        "planPreflightEnabled",
+        "planScoutEnabled",
     }
 )
 

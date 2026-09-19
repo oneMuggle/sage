@@ -816,6 +816,13 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/rerun-failed`,
   },
+  // Round 2 (2026-09-19): 计划模式 × 编排打通 —— 已批准计划文本 → 结构化
+  // 任务项（plan_override 形状）。503/502 语义见后端 orch_routes.plan_items。
+  orchestration_plan_items: {
+    method: 'POST',
+    path: () => '/api/v1/orch/plan-items',
+    body: (a) => ({ text: a.text }),
+  },
 
   // Office document features (Phase 1.3, plan §4.1.3 step 14).
   // 5 routes for Phase 1.2 backend (3 read + list + delete).

@@ -71,6 +71,7 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'approval_mode': // live-events P1: 审批模式回显进任务板,不进消息气泡
     case 'step_done': // 2026-09 step-by-step: 每步完成信号,前端 store 据此快照气泡,不进消息气泡占位
     case 'topic_shifted': // Task 10 (2026-09-17): 自动话题切换事件,segment 边界进 store,不进消息气泡占位
+    case 'orch_preflight': // Round 3 (2026-09-19): 前置阶段由任务板区域指示条展示,不进消息气泡占位
       return null;
     default:
       return assertNever(state);
@@ -125,6 +126,7 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'approval_mode': // live-events P1: 审批模式由任务树开关回显
     case 'step_done': // 2026-09 step-by-step: 步完成信号,无独立 UI 阶段(快照进 store 后)
     case 'topic_shifted': // Task 10 (2026-09-17): 自动话题切换事件,segment 边界进 store,无独立 UI 阶段
+    case 'orch_preflight': // Round 3 (2026-09-19): 前置阶段由任务板区域指示条展示
       return null;
     default:
       return assertNever(state);
