@@ -184,7 +184,7 @@ def to_camel(value: Any) -> Any:
 
 def from_camel(value: Any) -> Any:
     """反向: ALIASES 仅翻译已知 snake↔camel 对; 其它 camelCase key 原样保留."""
-    if not isinstance(value, (dict, list)):
+    if not isinstance(value, (dict, list)):  # noqa: UP038 — py38 运行时 isinstance 不支持 union
         return value
     inverse = {v: k for k, v in ALIASES.items()}
     if isinstance(value, dict):
@@ -303,7 +303,7 @@ def _is_secret_key(key: Any) -> bool:
         return True
     # ``hasApiKey`` is response metadata, not the credential itself; retain it
     # so repeated redaction remains idempotent and endpoint state is preserved.
-    if normalized == "hasapikey" or normalized == "haskey":
+    if normalized in {"hasapikey", "haskey"}:
         return False
     if any(normalized.endswith(suffix) for suffix in _SECRET_SUFFIXES):
         return True
