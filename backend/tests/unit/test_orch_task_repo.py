@@ -31,6 +31,24 @@ def _upsert_run(run_id: str = "orch-1") -> None:
     ))
 
 
+def test_orch_tasks_schema_has_parent_and_depth_columns(tmp_path, monkeypatch):
+    """orch_tasks 表必须包含 parent_task_id 和 depth 列。"""
+    db_path = tmp_path / "test.db"
+    monkeypatch.setenv("SAGE_DB_PATH", str(db_path))
+    monkeypatch.setattr(db_mod, "_db", None)
+    db = db_mod.get_database()
+    db.init_db()
+
+    conn = db.get_connection()
+    cursor = conn.execute("PRAGMA table_info(orch_tasks)")
+    columns = {row["name"]: row["type"] for row in cursor.fetchall()}
+
+    assert "parent_task_id" in columns
+    assert columns["parent_task_id"] == "TEXT"
+    assert "depth" in columns
+    assert columns["depth"] == "INTEGER"
+
+
 def test_upsert_state_insert_and_get(repo):
     """upsert_state 插入新行 → get 拿到全部字段。"""
     _upsert_run()

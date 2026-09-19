@@ -1476,6 +1476,19 @@ class Database:
         if "duration_ms" not in _task_cols:
             cursor.execute("ALTER TABLE orch_tasks ADD COLUMN duration_ms INTEGER")
 
+        # 任务层级化 (2026-09-19): 添加 parent_task_id 和 depth 列。
+        # 幂等迁移：检查列是否存在，不存在则添加，兼容既有数据库。
+        cursor.execute("PRAGMA table_info(orch_tasks)")
+        _task_cols = {row[1] for row in cursor.fetchall()}
+        if "parent_task_id" not in _task_cols:
+            cursor.execute(
+                "ALTER TABLE orch_tasks ADD COLUMN parent_task_id TEXT NULL"
+            )
+        if "depth" not in _task_cols:
+            cursor.execute(
+                "ALTER TABLE orch_tasks ADD COLUMN depth INTEGER NOT NULL DEFAULT 0"
+            )
+
         # Subagent 实时可观测性 schema (run-events@1.0)。全部 DDL 幂等，兼容旧库。
         cursor.execute(
             """
