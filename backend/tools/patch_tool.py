@@ -28,7 +28,11 @@ from .edit_tool import (
     _validate_edit_params,
     _validate_target_file,
 )
-from .file_tool import MAX_WRITE_SIZE_BYTES, detect_bom_encoding
+from .file_tool import (
+    MAX_WRITE_SIZE_BYTES,
+    _notify_workspace_changed_safely,
+    detect_bom_encoding,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -300,6 +304,8 @@ class ApplyPatchTool(BaseTool):
                     "fuzzy": planned_edit.fuzzy,
                 }
             )
+            # right-panel R5: 逐文件广播 workspace_changed（失败静默）
+            _notify_workspace_changed_safely(written[-1]["path"], "patch")
 
         # G8 (2026-09-06): Python 文件批量写后语法诊断 —— 逐文件收集，不失败
         from .write_diagnostics import _syntax_check

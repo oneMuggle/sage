@@ -153,6 +153,8 @@ export interface AgentEvent {
   // Task 10 (2026-09-17): topic_shifted 事件载荷 — 自动切换 segment 时推送。
   segment_id?: number;
   reason?: string;
+  // right-panel R5 (2026-09-19): workspace_changed 事件载荷（与 types.ts 同步）。
+  change?: { path: string; kind?: string };
 }
 
 export async function* parseNDJSONStream(

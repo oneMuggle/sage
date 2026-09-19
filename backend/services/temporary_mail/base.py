@@ -49,6 +49,45 @@ class TemporaryMailProvider(abc.ABC):
         """Poll the inbox for a message matching subject_pattern and extract
         a verification code from the body. Returns None on timeout."""
 
+    async def wait_for_message(
+        self,
+        mailbox: Mailbox,
+        subject_pattern: str = DEFAULT_SUBJECT_PATTERN,
+        body_pattern: Optional[str] = None,
+        timeout_sec: int = 120,
+        poll_interval_sec: int = 5,
+    ) -> Optional[Dict[str, Any]]:
+        """Poll the inbox for a message matching subject_pattern; when
+        body_pattern is given the message body must also match.
+
+        Returns the full message dict (with body), or None on timeout.
+        Shared implementation on top of _fetch_messages — providers only
+        need to implement fetching. Cancelled externally by closing the
+        provider's HTTP client (poll loop sees the error and returns None).
+        """
+        import asyncio
+        import time
+
+        body_re = re.compile(body_pattern) if body_pattern else None
+        subject_re = re.compile(subject_pattern, re.IGNORECASE)
+
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline:
+            try:
+                messages = await self._fetch_messages(mailbox)
+            except Exception:  # noqa: BLE001 — provider 网络抖动：继续轮询直至超时
+                messages = []
+            for message in messages:
+                if not subject_re.search(str(message.get("subject") or "")):
+                    continue
+                if body_re is not None and not body_re.search(
+                    str(message.get("body") or "")
+                ):
+                    continue
+                return message
+            await asyncio.sleep(max(1, poll_interval_sec))
+        return None
+
     @abc.abstractmethod
     async def destroy_mailbox(self, mailbox: Mailbox) -> None:
         """Best-effort cleanup. Must never raise."""

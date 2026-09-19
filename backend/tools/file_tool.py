@@ -24,7 +24,7 @@ import os
 from pathlib import Path
 from typing import Optional, Tuple
 
-from backend.data import artifact_repo
+from backend.data import artifact_repo, workspace_events
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
 from backend.office.allowed_paths import get_session_allowed_paths, is_allowed
@@ -150,6 +150,20 @@ def _record_artifact_safely(resolved_path: str, size: int) -> None:
         )
     except Exception:  # noqa: BLE001 — 记录产物失败绝不阻断写入
         logger.debug("write_file: 记录产物失败", exc_info=True)
+
+
+def _notify_workspace_changed_safely(path: str, change_kind: str) -> None:
+    """写盘成功后广播 workspace_changed（右侧变更面板事件驱动刷新）;失败静默。
+
+    edit_tool / patch_tool 复用本函数,保证三个写文件工具的降级口径一致。
+    """
+    try:
+        ctx = current_tool_context()
+        if ctx is None or not ctx.session_id:
+            return
+        workspace_events.notify_workspace_changed(ctx.session_id, path, change_kind)
+    except Exception:  # noqa: BLE001 — 事件广播失败绝不阻断写入
+        logger.debug("%s: workspace_changed 广播失败", change_kind, exc_info=True)
 
 
 def _pre_read_checks(file_path: Path, original_bytes: int) -> Optional[ToolResult]:
@@ -447,6 +461,8 @@ class WriteFileTool(BaseTool):
 
             # 记录产物(供 Chat 右侧 Artifacts 面板展示)
             _record_artifact_safely(result["path"], content_bytes)
+            # right-panel R5: 广播 workspace_changed(变更面板事件驱动刷新)
+            _notify_workspace_changed_safely(result["path"], "write")
 
             # G8 (2026-09-06): Python 文件写后语法诊断 —— 失败不影响写入结果
             from .write_diagnostics import attach_diagnostics

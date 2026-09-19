@@ -397,3 +397,73 @@ def test_run_trace_resolver_invoked_on_ws_frame():
     })
     assert any(e.model_id == "gpt-4o" for e in emitted)
     assert any(e.run_id == "run_test_ws" for e in emitted)
+
+
+# ---------------------------------------------------------------------------
+# 事件泵实装（pump 注入；2026-09-19 start/stop 真实化）
+# ---------------------------------------------------------------------------
+
+class FakePump:
+    def __init__(self, label: str = ""):
+        self.label = label
+        self.started = 0
+        self.stopped = 0
+
+    def start(self):
+        self.started += 1
+
+    def stop(self):
+        self.stopped += 1
+
+
+def _request_event():
+    return {
+        "method": "Network.requestWillBeSent",
+        "params": {
+            "request": {
+                "url": "https://api.openai.com/v1/chat/completions",
+                "postData": '{"model": "gpt-4o", "messages": []}',
+            }
+        },
+    }
+
+
+def test_start_with_injected_pump_starts_and_stops():
+    bs = FakeBrowserSession()
+    pump = FakePump()
+    svc = ModelObservationService(
+        browser_session=bs, worker=FakeWorker(), pump_factory=lambda s: pump
+    )
+    assert svc._running is False
+    svc.start()
+    assert svc._running is True
+    assert pump.started == 1
+    svc.start()  # 幂等：已在跑不重复启动
+    assert pump.started == 1
+    svc.stop()
+    assert svc._running is False
+    assert pump.stopped == 1
+
+
+def test_start_without_pump_factory_is_manual_mode():
+    bs = FakeBrowserSession()
+    svc = ModelObservationService(browser_session=bs, worker=FakeWorker())
+    svc.start()  # 不建真实连接，仅 running 标志（既有契约）
+    assert svc._running is True
+    # 手动喂事件仍可用
+    verdict = svc.process_event(_request_event())
+    assert verdict is not None
+    svc.stop()
+    assert svc._running is False
+
+
+def test_recorded_verdicts_carry_observed_at():
+    bs = FakeBrowserSession()
+    svc = ModelObservationService(browser_session=bs, worker=FakeWorker())
+    svc.process_event(_request_event())
+    verdicts = svc.get_recent_verdicts()
+    assert len(verdicts) == 1
+    assert verdicts[0]["observed_at"]  # ISO 时间戳
+    # process_event 的返回值保持 worker 原样（不带时间戳）
+    fresh = svc.process_event(_request_event())
+    assert "observed_at" not in fresh

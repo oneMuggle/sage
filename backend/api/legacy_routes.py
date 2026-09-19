@@ -57,6 +57,10 @@ from backend.data.session_repo import (
     MessageRepository,
     SessionRepository,
 )
+from backend.data.workspace_events import (  # right-panel R5: 工作区变更事件 → 活跃流推送
+    add_workspace_listener,
+    remove_workspace_listener,
+)
 from backend.memory import get_memory_manager
 from backend.memory.summary import (
     list_summaries_for_session as _list_summaries_for_session,
@@ -890,9 +894,8 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
     # 且破坏"segment 间互相隔离"的口径.
     # 2026-09 修复: producer 是 async task, 全量历史读是秒级同步 IO,
     # 直接跑在事件循环上会冻结所有并发流的 NDJSON attach 与 HTTP 路由。
-    messages = await asyncio.to_thread(
-        lambda: message_repo.get_active_segment(session_id)
-    )
+    # py_compat.to_thread: py3.8 无 asyncio.to_thread（win7 同步预铺）
+    messages = await to_thread(lambda: message_repo.get_active_segment(session_id))
     if not should_compact(messages):
         return None
 
@@ -2197,6 +2200,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug("artifact_created 推送失败（队列满/关闭），忽略")
 
         add_artifact_listener(_push_artifact_event)
+
+        # right-panel R5: 写文件工具落盘 → workspace_changed 事件 → 活跃流
+        # 推送。前端变更列表据此防抖刷新（徽标实时化，不再依赖手动刷新）。
+        # 队列满静默降级（尽力而为），与 artifact 推送同口径。
+        def _push_workspace_event(event: Dict[str, Any]) -> None:
+            if event.get("session_id") != data.session_id:
+                return
+            try:
+                entry.queue.put_nowait(event)
+            except Exception:  # noqa: BLE001 — 降级铁律
+                logger.debug("workspace_changed 推送失败（队列满/关闭），忽略")
+
+        add_workspace_listener(_push_workspace_event)
         try:
             # P0-4 (2026-08-20): 终态变量前置到 try 顶部 —— finally 无条件读取
             # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
@@ -3817,6 +3833,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug("会话运行态(%s)写入失败: %s", _terminal_status, status_err)
             # S7: 注销产物事件监听器（闭包持有 entry/queue 引用，不注销会泄漏）
             remove_artifact_listener(_push_artifact_event)
+            # right-panel R5: 注销工作区变更事件监听器（理由同上）
+            remove_workspace_listener(_push_workspace_event)
             # P2-9 (2026-08-14): 长连接结束注销注册表条目（run 级 cancel 不再命中）。
             # run_id 为 None（single 路径）时跳过 —— 从未注册过。
             if run_id:
