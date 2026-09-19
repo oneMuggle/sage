@@ -646,6 +646,8 @@ class ChatDispatcher:
                 task_id=task_id,
                 agent_id=str(item.get("agent_id", "")),
                 goal=str(item.get("goal", "")),
+                parent_task_id=item.get("parent_task_id"),
+                depth=int(item.get("depth", 0) or 0),
                 status="cancelled",
                 error=(
                     f"cancelled by llm: {reason}" if reason else "cancelled by llm"
