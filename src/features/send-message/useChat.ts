@@ -163,9 +163,8 @@ export function useChat() {
   // widget 看到 '🤔 思考中…' 占位符看不到真实 LLM 进度。
   // S2: 读当前会话的槽位 —— 切到会话 B 就看 B 的实时进度(A 的流在后台
   // 继续累积,切回 A 时内容完整可见)。
-  const { streaming, streamingToolCalls, taskBoard } = useChatStreamStore((s) =>
-    selectSessionSlots(s, currentSessionId),
-  );
+  const { streaming, streamingToolCalls, taskBoard, preflightPhase } =
+    useChatStreamStore((s) => selectSessionSlots(s, currentSessionId));
 
   // Phase 6: /btw 补充消息状态(component-local,与流式 chat 无关)
   const [isBtwStreaming, setIsBtwStreaming] = useState(false);
@@ -440,6 +439,9 @@ export function useChat() {
       const finishStream = (flushQueue = false): void => {
         if (finished) return;
         finished = true;
+        // Round 3 (2026-09-19): 流结束兜底清掉编排前置阶段指示 —— 拆解失败
+        // 降级 single 时不会有 task_plan 来清，防止指示条跨 run 残留。
+        useChatStreamStore.getState().setPreflightPhase(sid, null);
         // 2026-08-19: 从 store 读最新流式内容(跨路由保留,finishStream 内
         // 不再持有 ref — store 是单一数据源)。S2: 读本会话槽位。
         const streamSnapshot = selectSessionSlots(useChatStreamStore.getState(), sid).streaming;
@@ -1088,6 +1090,8 @@ export function useChat() {
     isBtwStreaming,
     /** PM2 (round8): 计划模式已完成、待用户批准的会话 ID（null = 无） */
     planApprovalFor,
+    /** Round 3 (2026-09-19): 编排拆解前置阶段（澄清/侦察指示） */
+    preflightPhase,
     /** PM2: 清除计划批准状态（批准执行或忽略时调用） */
     clearPlanApproval: useCallback(() => setPlanApprovalFor(null), []),
     reattachActiveStream,

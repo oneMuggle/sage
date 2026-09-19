@@ -822,3 +822,22 @@ def test_redact_secrets_json_is_idempotent():
     parsed = json.loads(twice)
     assert parsed["endpoints"][0]["apiKey"] == ""
     assert parsed["endpoints"][0]["hasApiKey"] is True
+
+
+# --- Round 3 (2026-09-19): 计划前置旋钮白名单（planPreflight/planScout） ---
+
+
+def test_validate_settings_shape_accepts_plan_preflight_keys() -> None:
+    """orch 段的两个计划前置开关必须过白名单（缺失 = 设置页保存 400）。"""
+    validate_settings_shape(
+        {"orch": {"planPreflightEnabled": True, "planScoutEnabled": False}}
+    )
+
+
+def test_to_camel_back_translates_plan_preflight_snake() -> None:
+    """relay 把前端 payload 整体转 snake 后，ALIASES 必须能翻回 camel。"""
+    from backend.data.settings_canonicalizer import to_camel
+
+    out = to_camel({"orch": {"plan_preflight_enabled": True, "plan_scout_enabled": False}})
+    assert out["orch"]["planPreflightEnabled"] is True
+    assert out["orch"]["planScoutEnabled"] is False

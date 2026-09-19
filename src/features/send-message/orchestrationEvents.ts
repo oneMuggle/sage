@@ -34,8 +34,17 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
     return true;
   }
 
+  // Round 3 (2026-09-19): 编排拆解前置进度（需求澄清/事实侦察）——先于
+  // task_plan 到达时任务板尚不存在，写独立槽位供指示条消费。
+  if (evt.state === 'orch_preflight' && evt.preflight_phase) {
+    board.setPreflightPhase(sid, evt.preflight_phase);
+    return true;
+  }
+
   // Multi-Agent Orchestration: task_plan → 初始化编排任务板。
   if (evt.state === 'task_plan' && evt.run_id && evt.plan) {
+    // 前置阶段结束（进入确认/执行阶段）——清掉指示。
+    board.setPreflightPhase(sid, null);
     board.setTaskBoard(sid, {
       runId: evt.run_id,
       plan: evt.plan,
