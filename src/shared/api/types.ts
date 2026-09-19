@@ -218,7 +218,10 @@ export type AgentState =
   | 'topic_shifted'
   // r71: 附件检索注入溯源（引用块在气泡内可展开）,
   // 载荷见 AgentEvent.citations。
-  | 'attachment_rag_used';
+  | 'attachment_rag_used'
+  // Round 3 (2026-09-19): 编排拆解前置进度（需求澄清/事实侦察）,
+  // 载荷见 AgentEvent.preflight_phase。先于 task_plan 到达。
+  | 'orch_preflight';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -471,6 +474,8 @@ export interface AgentEvent {
   type?: string;
   subtype?: string;
   title?: string;
+  // Round 3 (2026-09-19): state === 'orch_preflight' 时的阶段载荷。
+  preflight_phase?: 'clarify' | 'scout';
   // Multi-Agent Orchestration (2026-08-11): 宽松字段（与 llmStream.ts AgentEvent 同步）
   run_id?: string;
   plan?: TaskPlanItem[];

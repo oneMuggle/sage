@@ -74,6 +74,7 @@ export function Chat() {
     reattachActiveStream, // R25-D4: renderer 重载后重接后端仍在跑的流
     clearTaskBoard, // Wave 3: 取消执行后清空任务板
     planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
+    preflightPhase, // Round 3 (2026-09-19): 编排拆解前置阶段（澄清/侦察指示）
     clearPlanApproval, // PM2: 清除批准状态
   } = useChat();
   // P1 (UI 优化方案 2026-09-13): 开关状态持久化 —— 重启恢复上次的面板开合
@@ -1011,6 +1012,19 @@ const CHAT_DOC_MIME: Record<string, string> = {
                       忽略
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+            {/* Round 3 (2026-09-19): 编排拆解前置指示 —— 澄清/侦察窗口期
+            的状态可见性。taskBoard 出现（task_plan 到达）即消失。 */}
+            {preflightPhase && !taskBoard && (
+              <div className="px-4 pb-2" data-testid="orch-preflight-indicator">
+                <div className="flex items-center gap-2 px-3 py-2 rounded border border-border bg-bg-muted/40">
+                  <span className="text-xs text-text-secondary animate-pulse">
+                    {preflightPhase === 'clarify'
+                      ? '正在澄清需求…（如在输入框中回答提问，将据此生成更准的计划）'
+                      : '正在侦察收集事实…（随后生成任务计划）'}
+                  </span>
                 </div>
               </div>
             )}
