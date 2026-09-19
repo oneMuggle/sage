@@ -1,0 +1,15 @@
+# Arena 自动化功能开关（默认关闭）。
+# 所有端点在此处未显式启用时一律返回 403。
+#
+# 字段说明（模型见 backend/config/arena_automation.py）：
+#   enabled                   总开关；false 时账号池/注册辅助/观测全部不可用
+#   max_accounts              账号池容量上限（1-20）
+#   max_concurrent_sessions   并发浏览器会话上限
+#   mail_provider             临时邮箱 provider 名（见 temporary_mail/registry.py）
+#   mail_api_key              provider 需要的 key（mail.tm 免费层不需要）
+#   probe_backend             模型观测分类后端："python"（跨平台）/"node"（仅主通道）
+enabled: false
+max_accounts: 5
+max_concurrent_sessions: 2
+mail_provider: mailtm
+probe_backend: python

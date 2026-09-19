@@ -86,6 +86,9 @@ class SettingsRepository:
             "context_turn_limit",
             "auto_topic_detection",
             "topic_detection_threshold",
+            # Arena automation: 账号池 Fernet 主密钥（SecretBox 包装后落库，
+            # 见 backend/services/arena_accounts.py:get_or_create_master_key）
+            "arena_master_key",
         }
     )
 

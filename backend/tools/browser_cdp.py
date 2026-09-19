@@ -19,17 +19,20 @@ data（拒绝 file:// / chrome:// / javascript:，见 browser_tool 校验）。
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
 import shutil
+import socket
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from .browser_launcher import (
     BrowserCapability,
@@ -523,6 +526,272 @@ def apply_stealth(
         return False
 
 
+# ---------------------------------------------------------------------------
+# Persistent CDP session (Phase 2 of arena automation)
+# ---------------------------------------------------------------------------
+#
+# Unlike cdp_command() (short-lived, one command per connection), a persistent
+# session holds a single WebSocket open for the lifetime of the observation
+# and routes incoming CDP event frames to an in-memory queue.
+
+_message_id_lock = threading.Lock()
+_message_id_counter = 0
+
+
+def _next_message_id() -> int:
+    global _message_id_counter
+    with _message_id_lock:
+        _message_id_counter += 1
+        return _message_id_counter
+
+
+def _reset_message_id() -> None:
+    """Reset the counter; intended for tests only."""
+    global _message_id_counter
+    with _message_id_lock:
+        _message_id_counter = 0
+
+
+class PersistentCDPSession:
+    """Context manager wrapping a long-lived CDP WebSocket.
+
+    Usage:
+        with cdp_persistent_session(session) as cdp:
+            await cdp.send_async("Network.enable")
+            while True:
+                event = await cdp.next_event()
+                ...
+
+    For sync (test) usage, the constructor accepts an injected ``ws_factory``
+    that returns an object with ``send`` / ``recv`` / ``close`` async methods.
+    """
+
+    #: Incoming CDP event frames (asyncio.Queue when async, deque when sync).
+    events: Any = None
+
+    def __init__(
+        self,
+        browser_session: Any,
+        ws_factory: Optional[Any] = None,
+    ):
+        self._browser_session = browser_session
+        self._ws_factory = ws_factory  # for tests
+        self._ws: Any = None
+        self._reader_task: Optional[asyncio.Task] = None
+        self._sync_queue: deque = deque()  # for sync test mode
+        self.events: Any = None  # asyncio.Queue when async, deque when sync
+
+    def __enter__(self) -> PersistentCDPSession:
+        if self._ws_factory is not None:
+            # Sync test path: caller provides a fake WS; we just queue frames manually
+            self._ws = self._ws_factory()
+            self.events = self._sync_queue
+            return self
+        # Real path: caller should use cdp_persistent_session() async helper below
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self._ws is not None:
+            with contextlib.suppress(Exception):
+                if hasattr(self._ws, "close"):
+                    # close may be async; for sync we accept either
+                    result = self._ws.close()
+                    if asyncio.iscoroutine(result):
+                        # In sync context, schedule and wait
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                loop.create_task(result)
+                            else:
+                                loop.run_until_complete(result)
+                        except RuntimeError:
+                            asyncio.run(result)
+
+    async def send_async(self, method: str, params: Optional[Dict] = None) -> Dict:
+        """Send a command and return the response dict."""
+        if self._ws is None:
+            raise BrowserCDPError("session not connected")
+        msg_id = _next_message_id()
+        payload = {"id": msg_id, "method": method, "params": params or {}}
+        if hasattr(self._ws, "send"):
+            await self._ws.send(json.dumps(payload))
+        # Caller is responsible for matching responses via the event queue
+        return {"id": msg_id, "method": method}
+
+    # Public alias matching the interface spec (send).
+    send = send_async
+
+    def push_event(self, frame: Dict) -> None:
+        """Inject an event frame (used by tests and by the async reader task)."""
+        if isinstance(self.events, deque):
+            self.events.append(frame)
+        elif self.events is not None:
+            self.events.put_nowait(frame)
+
+    def close(self) -> None:
+        """Close the underlying WebSocket."""
+        self.__exit__(None, None, None)
+
+
+@contextlib.contextmanager
+def cdp_persistent_session(browser_session: Any) -> Iterator[PersistentCDPSession]:
+    """Sync entry point. For full async lifecycle, use PersistentCDPSession directly."""
+    sess = PersistentCDPSession(browser_session)
+    try:
+        yield sess
+    finally:
+        sess.close()
+
+
+class CdpEventPump:
+    """长连 CDP WebSocket：attach 页面目标 → Network.enable → 线程回吐事件帧。
+
+    与 ``cdp_command``（一命令一短连接、事件帧被丢弃）互补：模型观测需要的
+    恰恰是事件流本身。``stop()`` 置停止位并关 socket，读线程在 socket 超时
+    （1s）内感知并退出；连接断开时线程自终，由 ``alive`` 反映真实状态。
+
+    用法::
+
+        pump = CdpEventPump(session, on_event=handler.handle)
+        pump.start()
+        ...
+        pump.stop()
+    """
+
+    #: 读线程 socket 超时（决定 stop 的最长感知延迟）
+    POLL_TIMEOUT_SEC = 1.0
+
+    def __init__(
+        self,
+        session: Any,
+        on_event: Callable[[Dict[str, Any]], None],
+        target_id: Optional[str] = None,
+        connect_fn: Optional[Callable[[Any], Any]] = None,
+    ):
+        self._session = session
+        self._on_event = on_event
+        self._target_id = target_id
+        self._connect_fn = connect_fn  # 测试注入：返回带 send/recv 语义的假 socket
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._sock: Any = None
+
+    # -- lifecycle ---------------------------------------------------------
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(
+            target=self._run, name="sage-cdp-event-pump", daemon=True
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        sock = self._sock
+        if sock is not None:
+            with contextlib.suppress(Exception):
+                ws_close(sock)
+        thread = self._thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=self.POLL_TIMEOUT_SEC * 3)
+        self._thread = None
+
+    @property
+    def alive(self) -> bool:
+        return bool(self._thread is not None and self._thread.is_alive())
+
+    # -- internals ---------------------------------------------------------
+
+    def _connect(self) -> Any:
+        if self._connect_fn is not None:
+            return self._connect_fn(self._session)
+        return ws_connect(
+            "127.0.0.1", self._session.port, self._session.ws_path, timeout=10
+        )
+
+    def _dispatch(self, frame: Dict[str, Any]) -> None:
+        try:
+            self._on_event(frame)
+        except Exception:  # noqa: BLE001 — 回调异常不能带垮泵线程
+            logger.debug("CdpEventPump on_event 回调异常（忽略）", exc_info=True)
+
+    def _rpc(
+        self,
+        sock: Any,
+        msg_id: int,
+        method: str,
+        params: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+        timeout: float = 10.0,
+    ) -> Dict[str, Any]:
+        """发送命令并等到同 id 响应；途中收到的事件帧照常转发给回调。"""
+        payload: Dict[str, Any] = {"id": msg_id, "method": method, "params": params or {}}
+        if session_id:
+            payload["sessionId"] = session_id
+        ws_send_text(sock, json.dumps(payload))
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                sock.settimeout(0.5)
+                raw = ws_recv_text(sock)
+            except socket.timeout:  # noqa: UP041 — py38 上 socket.timeout ≠ TimeoutError
+                continue
+            try:
+                frame = json.loads(raw)
+            except ValueError:
+                continue
+            if frame.get("id") == msg_id:
+                if "error" in frame:
+                    message = (frame.get("error") or {}).get("message", "unknown")
+                    raise BrowserCDPError(f"CDP 错误 ({method}): {message}")
+                return frame.get("result") or {}
+            if "method" in frame:
+                self._dispatch(frame)
+        raise BrowserCDPError(f"CDP 命令超时: {method}")
+
+    def _run(self) -> None:
+        try:
+            sock = self._connect()
+            self._sock = sock
+            resolved = ensure_page_target(self._session, self._target_id)
+            attached = self._rpc(
+                sock, 1, "Target.attachToTarget",
+                {"targetId": resolved, "flatten": True},
+            )
+            page_session_id = str(attached.get("sessionId") or "")
+            if not page_session_id:
+                raise BrowserCDPError("attach 页面目标失败（无 sessionId）")
+            self._rpc(
+                sock, 2, "Network.enable", {}, session_id=page_session_id
+            )
+            while not self._stop.is_set():
+                try:
+                    sock.settimeout(self.POLL_TIMEOUT_SEC)
+                    raw = ws_recv_text(sock)
+                except socket.timeout:  # noqa: UP041 — py38 上 socket.timeout ≠ TimeoutError
+                    continue
+                except Exception:  # noqa: BLE001 — 连接关闭/对端断开
+                    break
+                try:
+                    frame = json.loads(raw)
+                except ValueError:
+                    continue
+                if "method" not in frame:
+                    continue  # 无对应命令的响应（理论不应出现）
+                self._dispatch(frame)
+        except Exception as exc:  # noqa: BLE001 — 建连/握手失败：泵退出
+            logger.info("CdpEventPump 退出: %s", exc)
+        finally:
+            sock = self._sock
+            self._sock = None
+            if sock is not None:
+                with contextlib.suppress(Exception):
+                    ws_close(sock)
+            self._stop.set()
+
+
 __all__ = [
     "BrowserCDPError",
     "BrowserCapability",
@@ -530,6 +799,7 @@ __all__ = [
     "BrowserSession",
     "BrowserSessionManager",
     "BrowserType",
+    "CdpEventPump",
     "CDP_TIMEOUT_SECONDS",
     "ChromeLauncher",
     "FirefoxLauncher",
