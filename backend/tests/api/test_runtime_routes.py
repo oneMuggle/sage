@@ -54,10 +54,11 @@ class _FakeTools:
             "project_diagnose": _FakeResult(
                 success=True,
                 output={
-                    "project_type": "unknown",
-                    "required_languages": [],
+                    "level": "satisfied",
+                    "manifests": [],
                     "diagnostics": [],
-                    "satisfied": True,
+                    "recommended_runtime": None,
+                    "probe_errors": [],
                 },
             ),
             "runtime_exec": _FakeResult(
@@ -115,7 +116,9 @@ async def test_diagnose_returns_tool_result(client, chat_service_injected):
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
-    assert "project_type" in body["output"]
+    assert body["output"]["level"] == "satisfied"
+    assert body["output"]["manifests"] == []
+    assert body["output"]["probe_errors"] == []
     name, args = chat_service_injected.tools.calls[-1]
     assert name == "project_diagnose"
     assert args["project_root"] == "/tmp/x"

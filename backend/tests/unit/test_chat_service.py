@@ -94,6 +94,28 @@ async def test_run_turn_handles_llm_error():
         await service.run_turn(sid, Message(role=Role.USER, content="hi"))
 
 
+async def test_run_turn_serializes_structured_tool_output_for_messages():
+    """结构化工具结果写入 TOOL 消息时保持 JSON 文本契约。"""
+    llm_response = Message(
+        role=Role.ASSISTANT,
+        content="",
+        tool_calls=[ToolCall(name="runtime_probe", args={})],
+    )
+    service = _make_service(llm_responses=[llm_response])
+    service.tools._registry.get.return_value.execute.return_value = MagicMock(
+        success=True,
+        output={"runtimes": [], "recommended": None},
+        error=None,
+    )  # type: ignore[attr-defined]
+    sid = await service.storage.create_session()
+
+    await service.run_turn(sid, Message(role=Role.USER, content="probe"))
+
+    messages = await service.storage.get_messages(sid)
+    tool_message = next(message for message in messages if message.role == Role.TOOL)
+    assert tool_message.content == '{"runtimes": [], "recommended": null}'
+
+
 async def test_run_turn_uses_mock_tool_registry():
     """当 LLM 返回含 tool_calls 时执行工具"""
     llm_response = Message(

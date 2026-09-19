@@ -147,9 +147,14 @@ class ProjectDiagnoseTool(BaseTool):
             manifests=manifests,
             recommended_runtime=recommended,
         )
+        payload = {
+            **result.to_dict(),
+            "probe_errors": probe_errors,
+        }
         return ToolResult(
             success=True,
-            content={**result.to_dict(), "probe_errors": probe_errors},
+            content=payload,
+            output=payload,
         )
 
 
