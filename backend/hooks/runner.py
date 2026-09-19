@@ -29,6 +29,7 @@ import logging
 import os
 import signal
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from fnmatch import fnmatch
 from typing import Any, Callable, Dict, List, Optional
 
@@ -97,6 +98,71 @@ def build_payload(
             capped_output = capped_output[:PAYLOAD_OUTPUT_CAP] + "…[截断]"
         payload["tool_output"] = capped_output
         payload["tool_result_is_error"] = is_error
+    return payload
+
+
+# ── Phase 2: 生命周期事件 payload 构建 ──────────────────────────────
+
+
+def build_session_payload(
+    event: str,
+    session_id: str,
+    workspace: Optional[str] = None,
+    git_branch: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """构造 session_start / session_stop 事件的 payload。
+
+    Args:
+        event: "session_start" | "session_stop"
+        session_id: 会话 UUID
+        workspace: 工作区根目录
+        git_branch: 当前 git 分支
+        extra: 调用方注入的额外字段 (如 token 计数等)
+    """
+    payload: Dict[str, Any] = {
+        "hook_event_name": event,
+        "session_id": session_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),  # noqa: UP017 — py3.10 不支持 datetime.UTC
+    }
+    if workspace:
+        payload["workspace"] = workspace
+    if git_branch:
+        payload["git_branch"] = git_branch
+    if isinstance(extra, dict):
+        payload.update(extra)
+    return payload
+
+
+def build_error_payload(
+    error_type: str,
+    error_message: str,
+    tool_name: Optional[str] = None,
+    attempt_count: int = 1,
+    error_traceback: Optional[str] = None,
+) -> Dict[str, Any]:
+    """构造 error_occurred 事件的 payload。
+
+    Args:
+        error_type: "tool_error" | "llm_error" | "parse_error"
+        error_message: 错误描述
+        tool_name: 触发错误的工具名 (可选)
+        attempt_count: 当前重试次数
+        error_traceback: 堆栈 (截断到 4KB)
+    """
+    payload: Dict[str, Any] = {
+        "hook_event_name": "error_occurred",
+        "error_type": error_type,
+        "error_message": error_message,
+        "timestamp": datetime.now(timezone.utc).isoformat(),  # noqa: UP017 — py3.10 不支持 datetime.UTC
+    }
+    if tool_name:
+        payload["tool_name"] = tool_name
+    if attempt_count > 1:
+        payload["attempt_count"] = attempt_count
+    if error_traceback:
+        # 截断到 4KB 避免 payload 过大
+        payload["error_traceback"] = error_traceback[:4096]
     return payload
 
 
@@ -366,3 +432,29 @@ async def run_event_hooks(
                 messages=merged.messages,
             )
     return merged
+
+
+def run_event_hooks_sync(
+    hooks: List[HookConfig],
+    event: str,
+    tool_name: str,
+    payload: Dict[str, Any],
+) -> HookOutcome:
+    """同步上下文触发钩子 (sync FastAPI 端点 / 非 async 调用方)。
+
+    FastAPI 的 ``def`` 端点在 threadpool 中执行, 该线程无运行中的事件
+    循环, 因此可以安全地 ``asyncio.run`` 一个新循环。若检测到当前线程
+    已有运行中的循环 (不应发生), 则降级为 no-op (fail-open) —— 绝不因
+    为钩子桥接失败而中断调用方。
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # 无运行循环 → 安全新建 (标准 sync 端点路径)
+        try:
+            return asyncio.run(run_event_hooks(hooks, event, tool_name, payload))
+        except Exception as exc:
+            logger.warning("hooks: sync fire failed (fail-open): %s", exc)
+            return HookOutcome(decision=DECISION_NOOP, reason=f"sync dispatch error: {exc}")
+    logger.debug("hooks: sync fire skipped — event loop already running (fail-open)")
+    return HookOutcome(decision=DECISION_NOOP, reason="event loop running")
