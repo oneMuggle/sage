@@ -64,6 +64,51 @@ class TestObservationBuffer:
         assert env_probe.pop_observations(None) == ""
 
 
+# ---- env_probe 失败→成功命令对采集 ---------------------------------------- #
+
+
+class TestCommandPairTracking:
+    def test_fail_then_ok_records_pair(self):
+        env_probe.note_command_result("p1", "Get-ChildItem -Directory", 1)
+        env_probe.note_command_result("p1", "Get-ChildItem | ? { $_.PSIsContainer }", 0)
+        text = env_probe.pop_observations("p1")
+        assert "Get-ChildItem -Directory" in text
+        assert "执行失败" in text
+        assert "成功" in text
+
+    def test_consecutive_fails_keep_latest(self):
+        env_probe.note_command_result("p2", "cmd-a", 2)
+        env_probe.note_command_result("p2", "cmd-b", 1)
+        env_probe.note_command_result("p2", "cmd-ok", 0)
+        text = env_probe.pop_observations("p2")
+        assert "cmd-b" in text
+        assert "cmd-a" not in text
+
+    def test_ok_without_prior_fail_noop(self):
+        env_probe.note_command_result("p3", "echo hi", 0)
+        assert env_probe.pop_observations("p3") == ""
+
+    def test_unknown_exit_code_discards_pair(self):
+        env_probe.note_command_result("p4", "cmd-x", 1)
+        env_probe.note_command_result("p4", "cmd-y", None)  # 超时/被杀 → 信息不足，丢弃
+        assert env_probe.pop_observations("p4") == ""
+        # 丢弃后不应再和后续成功命令配对
+        env_probe.note_command_result("p4", "cmd-z", 0)
+        assert env_probe.pop_observations("p4") == ""
+
+    def test_long_command_truncated(self):
+        env_probe.note_command_result("p5", "x" * 500, 1)
+        env_probe.note_command_result("p5", "y" * 500, 0)
+        text = env_probe.pop_observations("p5")
+        assert len(text) <= env_probe._OBS_MAX_CHARS
+        assert "x" * env_probe._CMD_MAX_CHARS in text
+
+    def test_no_session_noop(self):
+        env_probe.note_command_result(None, "cmd", 1)
+        env_probe.note_command_result(None, "cmd", 0)
+        assert env_probe.pop_observations(None) == ""
+
+
 # ---- extractor prompt ------------------------------------------------------ #
 
 

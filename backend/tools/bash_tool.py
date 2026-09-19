@@ -348,6 +348,21 @@ class BashTool(BaseTool):
                 test_failures = parse_test_failures(stdout, stderr)
                 if test_failures is not None:
                     content["test_failures"] = test_failures
+            if shell.is_fallback:
+                # 环境经验采集：fallback 下「失败→重试成功」命令对进观察缓冲，
+                # 轮末随记忆蒸馏固化为 environment 事实。best-effort。
+                try:
+                    from backend.tools.context import current_tool_context
+                    from backend.tools.env_probe import note_command_result
+
+                    ctx = current_tool_context()
+                    note_command_result(
+                        getattr(ctx, "session_id", None) if ctx is not None else None,
+                        command,
+                        process.returncode,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
             return ToolResult(
                 success=True,
                 content=self._decorate(content, shell, cwd),
