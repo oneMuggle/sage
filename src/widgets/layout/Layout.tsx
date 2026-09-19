@@ -5,6 +5,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { ErrorBoundary } from '../../app/providers/ErrorBoundary';
 import { useResizableSidebar } from '../../shared/lib/useResizableSidebar';
 import { PageSkeleton } from '../../shared/ui';
+import { PetDock } from '../pet/PetDock';
 import { DeliveryDrawerHost } from '../task-center/DeliveryDrawerHost';
 import { TaskCenterWidget } from '../task-center/TaskCenterWidget';
 
@@ -160,6 +161,8 @@ export function Layout() {
       </div>
       {/* P4: 全局任务中心胶囊 —— 跨页面聚合 office/wiki 等长任务与后台聊天流 */}
       <TaskCenterWidget />
+      {/* 桌宠 P1: 会话状态联动宠物（开关在 设置-常规，默认关） */}
+      <PetDock />
       {/* A4: 全局交付抽屉（lane / office 验收） */}
       <DeliveryDrawerHost />
     </div>

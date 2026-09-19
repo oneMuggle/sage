@@ -1109,6 +1109,17 @@ export const en: Record<TranslationKey, string> = {
   // U-Brand: a11y alt text. Only rendered on <img>; sidebar.brand is the wordmark.
   'brand.alt': 'Sage logo',
 
+  // ─── Desktop pet P1 (widgets/pet) ──────
+  'pet.state.idle': 'Pet on standby',
+  'pet.state.sleeping': 'Pet is asleep — poke it',
+  'pet.state.thinking': 'Pet is thinking…',
+  'pet.state.working': 'Pet is working',
+  'pet.state.reporting': 'Subtasks in progress',
+  'pet.state.celebrate': 'Turn completed 🎉',
+  'pet.state.failed': 'Turn failed',
+  'pet.state.attention': 'Waiting for your confirmation',
+  'pet.click.jump': 'Click to jump to session',
+
   // ─── Skill Draft (PR-2 UX closure) ─────
   'skill_draft.loading': 'Loading drafts...',
   'skill_draft.load_failed': 'Failed to load: {error}',

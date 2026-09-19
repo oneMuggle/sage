@@ -23,12 +23,12 @@
 
 ## 🪟 双轨分支（main + release/win7）
 
-Sage 维护两条独立分支：
+Sage 维护两条**对齐优先**的分支（新功能默认同步到 `release/win7`，政策见 [`technical/31-win7-lts.md`](./technical/31-win7-lts.md) §2）：
 
 | 分支 | 目标平台 | 文档 |
 |---|---|---|
 | `main` | Win10+ / macOS / Linux | 本目录所有章节 |
-| `release/win7` | **Windows 7 SP1 x64**（完全离线部署）| [`../../BRANCH_NOTES.md`](../../BRANCH_NOTES.md) |
+| `release/win7` | **Windows 7 SP1 x64**（完全离线部署）| [`technical/31-win7-lts.md`](./technical/31-win7-lts.md) |
 
 设计 spec §2.3 "桌面：Tauri 2 + Win7 全兼容" 的实现已迁出 main，详见 [`superpowers/specs/2026-06-05-sage-quality-optimization-design.md`](./superpowers/specs/2026-06-05-sage-quality-optimization-design.md) §2.3 的实现状态注脚。
 
@@ -76,7 +76,7 @@ Sage 维护两条独立分支：
 
 | 模块     | Chatbox 实现     | Sage 实现 |
 | -------- | ---------------- | --------- |
-| 桌面框架 | Electron         | Tauri 2.x（main）/ Tauri 1.6（release/win7）|
+| 桌面框架 | Electron         | Electron 21.4.4（main 与 release/win7 一致）|
 | 前端框架 | React 18         | React 18  |
 | 构建工具 | electron-vite    | Vite      |
 | 状态管理 | zustand          | zustand   |

@@ -1084,6 +1084,17 @@ export const zh = {
   // U-Brand: a11y alt 文本。仅在 <img> 渲染时使用，sidebar.brand 是 wordmark 文案。
   'brand.alt': 'Sage 标志',
 
+  // ─── 桌面宠物 P1 (widgets/pet) ──────
+  'pet.state.idle': '宠物待命中',
+  'pet.state.sleeping': '宠物睡着了，戳它一下',
+  'pet.state.thinking': '宠物正在思考…',
+  'pet.state.working': '宠物正在干活',
+  'pet.state.reporting': '多子任务进行中',
+  'pet.state.celebrate': '本轮已完成 🎉',
+  'pet.state.failed': '本轮运行失败',
+  'pet.state.attention': '等你确认中',
+  'pet.click.jump': '点击跳转会话',
+
   // ─── Skill Draft (PR-2 UX closure) ─────
   'skill_draft.loading': '加载草稿中...',
   'skill_draft.load_failed': '加载失败: {error}',

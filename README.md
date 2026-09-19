@@ -66,7 +66,7 @@ Sage 维护两条独立的 GitHub Release 通道：
 | 通道 | 触发分支 | 目标平台 | 产物 | Electron | Python | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | **main release** | `main` | Win10+ / Linux / macOS | `Sage-Setup-${version}-win10.exe` / `sage_${version}_amd64.deb` / `Sage-${version}.AppImage` | 21.4.4 | 3.11+ | ✅ 主线持续迭代 |
-| **LTS release** | `release/win7` | **Windows 7 SP1 x64**（完全离线部署） | `Sage-Setup-${version}-win7.exe` | 21.4.4（冻结） | 3.8 | ⚠️ 仅 hotfix，2027-12-13 EOL |
+| **LTS release** | `release/win7` | **Windows 7 SP1 x64**（完全离线部署） | `Sage-Setup-${version}-win7.exe` | 21.4.4（冻结） | 3.8 | 🔁 对齐优先：新功能默认同步至此分支；2027-12-13 EOL |
 
 **预发布档位**（main 与 win7 LTS 同步）：
 

@@ -212,7 +212,7 @@
 
 ### 交付物
 
-- [x] Windows 安装包（main: .msi + .exe via Tauri 2；`release/win7`: .msi + .exe via Tauri 1.6 + offlineInstaller 嵌入 WebView2 v109）
+- [x] Windows 安装包（main: `Sage-Setup-${version}-win10.exe`；`release/win7`: `Sage-Setup-${version}-win7.exe`——均为 Electron 21.4.4 + electron-builder NSIS，win7 包含 VCRedist 内嵌，见 [`technical/26-packaging-matrix.md`](./technical/26-packaging-matrix.md)）
 - [ ] 用户文档
 - [ ] GitHub Release
 
