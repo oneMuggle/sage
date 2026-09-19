@@ -127,6 +127,64 @@ def _iso_from_ms(ms: int) -> str:
         return ""
 
 
+@router.get("/by-endpoint")
+async def get_usage_by_endpoint() -> Dict[str, Any]:
+    """P0-B (2026-09-18): 按 endpoint_id 聚合今日/本月用量 (端点限额面板)。
+
+    - ``today_*``: UTC 当日 0 点起
+    - ``month_*``: UTC 当月 1 号 0 点起
+    - ``month_cost_usd`` 保持 null 语义 (整月无已知成本 → None, 不折 0)
+    - ``endpoint_id`` 为 null 的行原样透出, 前端归入"未归属端点"
+    """
+    try:
+        from backend.data.database import _SQLITE_LOCK, get_database
+
+        now = datetime.now(timezone.utc)
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        month_start = day_start.replace(day=1)
+        day_ms = int(day_start.timestamp() * 1000)
+        month_ms = int(month_start.timestamp() * 1000)
+        with _SQLITE_LOCK:
+            conn = get_database().get_connection()
+            rows = conn.execute(
+                "SELECT endpoint_id,"
+                " COUNT(*) AS total_requests,"
+                " COALESCE(SUM(total_tokens), 0) AS total_tokens,"
+                " SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today_requests,"
+                " COALESCE(SUM(CASE WHEN created_at >= ? THEN total_tokens ELSE 0 END), 0)"
+                " AS today_tokens,"
+                " SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS month_requests,"
+                " COALESCE(SUM(CASE WHEN created_at >= ? THEN total_tokens ELSE 0 END), 0)"
+                " AS month_tokens,"
+                " SUM(CASE WHEN created_at >= ? THEN estimated_cost_usd ELSE NULL END)"
+                " AS month_cost"
+                " FROM usage_events GROUP BY endpoint_id ORDER BY total_tokens DESC",
+                (day_ms, day_ms, month_ms, month_ms, month_ms),
+            ).fetchall()
+        items = [
+            {
+                "endpoint_id": row["endpoint_id"],
+                "total_requests": int(row["total_requests"] or 0),
+                "total_tokens": int(row["total_tokens"] or 0),
+                "today_requests": int(row["today_requests"] or 0),
+                "today_tokens": int(row["today_tokens"] or 0),
+                "month_requests": int(row["month_requests"] or 0),
+                "month_tokens": int(row["month_tokens"] or 0),
+                "month_cost_usd": (
+                    None if row["month_cost"] is None else round(float(row["month_cost"]), 6)
+                ),
+            }
+            for row in rows
+        ]
+        return {
+            "items": items,
+            "day_start_utc": day_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "month_start_utc": month_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"items": [], "error": str(exc)}
+
+
 @router.get("/session/{session_id}")
 async def get_session_usage(session_id: str) -> Dict[str, Any]:
     """返回某会话的持久化用量聚合 (U14 头部徽章数据源)。

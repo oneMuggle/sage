@@ -107,4 +107,23 @@ describe('sanitizeForBackend (2026-08-26 canonical cleanup)', () => {
     expect(__test__SNAKE_KEYS_TO_DROP.has('memory_server_sync')).toBe(true);
     expect(__test__SNAKE_KEYS_TO_DROP.has('local_model_path')).toBe(true);
   });
+
+  // P0-B (2026-09-18): quota 嵌套限额对象已进 ENDPOINT_KEYS 白名单,
+  // 整树透传 (嵌套键语义校验在后端 canonicalizer validate_quota)。
+  it('preserves endpoint quota nested object', () => {
+    const out = __test__sanitizeForBackend({
+      endpoints: [
+        {
+          id: 'ep1',
+          name: 'OpenAI',
+          baseUrl: 'https://api.example.com/v1',
+          apiKey: '',
+          protocol: 'openai-compatible',
+          quota: { dailyTokens: 512000, monthlyBudgetUsd: 20 },
+        },
+      ],
+    } as unknown as LooseSettings) as unknown as LooseSettings;
+    const ep = (out.endpoints as unknown as Record<string, unknown>[])[0];
+    expect(ep.quota).toEqual({ dailyTokens: 512000, monthlyBudgetUsd: 20 });
+  });
 });

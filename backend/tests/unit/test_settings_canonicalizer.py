@@ -25,6 +25,7 @@ from backend.data.settings_canonicalizer import (
     validate_endpoint_payload,
     validate_local_model_path,
     validate_protocol,
+    validate_quota,
     validate_settings_payload,
     validate_settings_shape,
 )
@@ -563,6 +564,71 @@ def test_validate_endpoint_payload_rejects_non_dict() -> None:
         validate_endpoint_payload("not-a-dict")
     with pytest.raises(ValueError, match="endpoint payload must be a dict"):
         validate_endpoint_payload([1, 2, 3])
+
+
+# === P0-B (2026-09-18): endpoint quota 校验 ===
+
+
+def test_validate_quota_accepts_none_empty_and_non_negative_numbers() -> None:
+    assert validate_quota(None) is None
+    assert validate_quota({}) == {}
+    ok = {"dailyTokens": 512000, "monthlyBudgetUsd": 20.5}
+    assert validate_quota(ok) == ok
+    # 显式 null 视为"该字段未限额"
+    assert validate_quota({"dailyTokens": None}) == {"dailyTokens": None}
+
+
+def test_validate_quota_rejects_non_dict() -> None:
+    with pytest.raises(ValueError, match="quota must be an object"):
+        validate_quota("512K")
+    with pytest.raises(ValueError, match="quota must be an object"):
+        validate_quota([1, 2])
+
+
+def test_validate_quota_rejects_negative_bool_and_unknown_keys() -> None:
+    with pytest.raises(ValueError, match="quota.dailyTokens must be a non-negative number"):
+        validate_quota({"dailyTokens": -1})
+    with pytest.raises(ValueError, match="quota.monthlyBudgetUsd must be a non-negative number"):
+        validate_quota({"monthlyBudgetUsd": True})
+    with pytest.raises(ValueError, match="unknown quota field"):
+        validate_quota({"weeklyTokens": 100})
+
+
+def test_validate_endpoint_payload_rejects_bad_quota() -> None:
+    ep = {"id": "e1", "protocol": "ollama", "quota": {"dailyTokens": -5}}
+    with pytest.raises(ValueError, match="quota.dailyTokens must be a non-negative number"):
+        validate_endpoint_payload(ep, platform="linux")
+
+
+def test_validate_settings_shape_accepts_quota_and_rejects_unknown_nested_key() -> None:
+    base = {
+        "endpoints": [
+            {"id": "e1", "protocol": "openai-compatible", "quota": {"dailyTokens": 500000}}
+        ]
+    }
+    validate_settings_shape(base)  # 不抛
+
+    bad = {
+        "endpoints": [
+            {"id": "e1", "protocol": "openai-compatible", "quota": {"bogus": 1}}
+        ]
+    }
+    with pytest.raises(ValueError, match="unknown quota field 'bogus'"):
+        validate_settings_shape(bad)
+
+
+def test_strip_unknown_fields_drops_unknown_quota_keys_only() -> None:
+    cleaned = strip_unknown_fields(
+        {
+            "endpoints": [
+                {
+                    "id": "e1",
+                    "quota": {"dailyTokens": 100, "legacy_field": "x"},
+                }
+            ]
+        }
+    )
+    assert cleaned["endpoints"][0]["quota"] == {"dailyTokens": 100}
 
 
 def test_validate_settings_payload_rejects_bad_timezone() -> None:

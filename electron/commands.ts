@@ -1039,6 +1039,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       return url;
     },
   },
+  // P0-B (2026-09-18): 端点限额面板 — 按 endpoint_id 聚合今日/本月用量
+  usage_by_endpoint: {
+    method: 'GET',
+    path: () => '/api/v1/usage/by-endpoint',
+  },
   // L8 PR-C (2026-09-09): 趋势图时序 (按桶聚合)
   usage_trend: {
     method: 'GET',

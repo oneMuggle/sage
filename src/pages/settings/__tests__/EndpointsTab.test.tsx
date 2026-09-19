@@ -143,4 +143,28 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
 
     expect(screen.getByPlaceholderText('留空走 ModelsTab 选择')).toBeInTheDocument();
   });
+
+  // P0-B (2026-09-18): 端点限额编辑区 — 日 token 限额按单位归一化并随保存写回。
+  it('quota editor normalizes daily tokens by unit and saves into endpoints', () => {
+    const props = makeProps();
+    render(<EndpointsTab {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+
+    expect(screen.getByTestId('endpoint-quota-editor')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('日 token 限额数值'), { target: { value: '512' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    expect(props.updateSettings).toHaveBeenCalledWith({
+      endpoints: [expect.objectContaining({ id: 'ep1', quota: { dailyTokens: 512000 } })],
+    });
+  });
+
+  it('collapsed endpoint card shows quota summary', () => {
+    const props = makeProps();
+    props.settings.endpoints[0].quota = { dailyTokens: 524288, monthlyBudgetUsd: 20 };
+    render(<EndpointsTab {...props} />);
+
+    expect(screen.getByText('限额: 512K tokens/日')).toBeInTheDocument();
+    expect(screen.getByText('预算: $20/月')).toBeInTheDocument();
+  });
 });
