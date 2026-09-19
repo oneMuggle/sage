@@ -29,6 +29,7 @@ from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.models import Lane, RecoveryPolicy, Task, TaskPacket
 from backend.orchestration.orch_settings import OrchSettings, load_orch_settings
+from backend.orchestration.plan_hierarchy import HierarchyError, normalize_task_hierarchy
 from backend.orchestration.report_schema import Assertion
 from backend.orchestration.subagent_events import SubagentEventSink
 from backend.orchestration.subagent_runner import (
@@ -146,6 +147,18 @@ async def _classify_orchestration_mode(
         return "single"
 
 
+def _safe_depth(value: Any) -> int:
+    """把计划里的 depth 安全转成非负整数 —— 手写 plan_json 可能是字符串或 None。
+
+    解析失败一律回落 0（层级是展示信息，绝不因脏值让任务派发/取消失败）。
+    """
+    try:
+        depth = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, depth)
+
+
 @dataclass
 class ChatTaskState:
     """单个子任务的可变状态（dispatcher 内存态，不落库）。"""
@@ -174,6 +187,12 @@ class ChatTaskState:
     # （executor 回传：{"all_passed": bool, "checks": [...]}）。None = 未跑
     # 验收（disabled / reviewer lane）。advisory 语义不变：不翻转任务结论。
     acceptance: Optional[Dict[str, Any]] = None
+    # 任务层级：计划声明的父任务 ID。仅用于归属与展示，**不参与调度**；
+    # 执行依赖一律由计划的 depends_on 决定（spec 2026-09-19 §设计原则）。
+    depth: int = 0
+    # 续聊父任务（由 followup_of 解析而来）：与计划层级父任务是两个概念 ——
+    # 只有它构成隐式执行依赖并继承父任务对话历史。
+    followup_parent_id: Optional[str] = None
 
 
 def build_acceptance_block(states: Iterable[ChatTaskState]) -> str:
@@ -298,6 +317,13 @@ class ChatDispatcher:
         self._plan_by_id: Dict[str, dict] = {}
         self._plan_loaded = False
         self._dispatched_plan_ids: Set[str] = set()
+        # RP1 (round34, 2026-09-19): LLM 动态调整计划（re-plan Phase 1）——
+        # conductor 经 update/cancel/add 三工具在 run 中调整计划层。
+        # _cancelled_plan_ids: cancel_pending_task 置位；dispatch 时拒绝派发
+        # （否则取消的任务会走"未知 task_id 回退 tool-passed 值"路径复活）。
+        # _adjusted_plan_ids: 三工具任一动过的 task_id；前端展示"已调整"标记。
+        self._cancelled_plan_ids: Set[str] = set()
+        self._adjusted_plan_ids: Set[str] = set()
         # P2-9 (2026-08-14): 取消事件 —— cancel() 幂等 set；_run_one 开头检查。
         self._cancelled = asyncio.Event()
         # BU2 (round11): run 级 token 预算守门状态 —— 触发一次即置位
@@ -483,6 +509,281 @@ class ChatDispatcher:
         skip.set()
         return True
 
+    # ------------------------------------------------------------------
+    # RP1 (round34, 2026-09-19): LLM 动态调整计划（re-plan Phase 1）
+    #
+    # conductor 在 run 中发现原计划不再适用时，经三个工具主动调整：
+    #   update_pending_task  —— 改未启动任务的 goal / agent
+    #   cancel_pending_task  —— 取消不需要的任务
+    #   add_task_to_plan     —— 添加新任务并声明依赖
+    #
+    # 为何必须走计划层：dispatch 的"计划权威"逻辑（本文件 dispatch()）在
+    # task_id 命中 _plan_by_id 时以计划为准、忽略工具传入的 goal —— 因此
+    # conductor 直接改 dispatch 参数无效，必须改计划本身。
+    # ------------------------------------------------------------------
+
+    def _plan_deps_map(self) -> Dict[str, List[str]]:
+        """计划层依赖图 —— 环检测与波次重算共用。"""
+        return {
+            tid: [str(d) for d in (item.get("depends_on") or [])]
+            for tid, item in self._plan_by_id.items()
+        }
+
+    def _mark_plan_adjusted(self, task_id: str) -> None:
+        """记录"被 LLM 调整过"的 task_id（前端展示标记）。"""
+        self._adjusted_plan_ids.add(task_id)
+
+    def _persist_plan(self) -> None:
+        """把内存计划回写 orch_runs.plan_json（动态调整持久化）。
+
+        保留原 JSON 的其他字段（team / reasoning 等），只替换 tasks ——
+        resume 端点据此重建调整后的计划。失败降级（logger.warning）：
+        调整已生效于内存态，持久化是增强而非必需。
+        """
+        try:
+            run = self._orch_run_repo.get(self.run_id)
+            if run is None:
+                return
+            raw: Dict[str, Any] = {}
+            if run.plan_json:
+                try:
+                    loaded = json.loads(run.plan_json)
+                    if isinstance(loaded, dict):
+                        raw = loaded
+                except (ValueError, TypeError):
+                    raw = {}
+            raw["tasks"] = list(self._plan_by_id.values())
+            run.plan_json = json.dumps(raw, ensure_ascii=False)
+            self._orch_run_repo.upsert(run)
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.warning("plan 回写失败 run_id=%s err=%s", self.run_id, exc)
+
+    def update_pending_task(
+        self,
+        task_id: str,
+        goal: Optional[str] = None,
+        agent_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """修改未启动任务的 goal / agent_id（计划层）。
+
+        只操作 ``_plan_by_id`` —— 已派发任务拒改：运行层（``_states``）的
+        goal 已被 ``_run_one_inner`` 读走，改动存在竞态且不保证生效。需要
+        调整已派发任务时，conductor 应 cancel 后 add 重建。
+
+        Returns:
+            ``{"success": bool, ...}`` —— 失败含 ``error`` 文案（工具层回传
+            conductor 自纠）。
+        """
+        self._ensure_plan_loaded()
+        if not goal and not agent_id:
+            return {"success": False, "error": "至少需要提供 goal 或 agent_id 之一"}
+        if task_id in self._dispatched_plan_ids:
+            return {
+                "success": False,
+                "error": (
+                    f"任务 {task_id} 已派发，无法修改。如需调整，请用 "
+                    "cancel_pending_task 取消后 add_task_to_plan 重建。"
+                ),
+            }
+        if task_id in self._cancelled_plan_ids:
+            return {"success": False, "error": f"任务 {task_id} 已取消，无法修改"}
+        item = self._plan_by_id.get(task_id)
+        if item is None:
+            return {
+                "success": False,
+                "error": f"任务 {task_id} 不在计划中（可用 task_plan 的 t1..tN 编号）",
+            }
+        updated: List[str] = []
+        if goal:
+            item["goal"] = goal
+            updated.append("goal")
+        if agent_id:
+            item["agent_id"] = agent_id
+            updated.append("agent_id")
+        self._mark_plan_adjusted(task_id)
+        self._persist_plan()
+        return {
+            "success": True,
+            "task_id": task_id,
+            "updated_fields": updated,
+            "new_goal": item.get("goal"),
+            "new_agent_id": item.get("agent_id"),
+        }
+
+    def cancel_pending_task(
+        self, task_id: str, reason: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """取消任务（未派发的计划任务 or 已派发的 queued/running）。
+
+        两段路由：
+        - 已派发（``_states`` 命中）→ 复用 ``cancel_task`` 的 skip 事件通道
+          （queued 排队守卫短路 / running 软中断），语义与 HTTP 端点一致。
+        - 未派发（仅计划层）→ 记入 ``_cancelled_plan_ids``；dispatch 时拒绝
+          派发（否则会走"未知 task_id 回退 tool-passed 值"路径复活）。
+        """
+        self._ensure_plan_loaded()
+        if task_id in self._cancelled_plan_ids:
+            return {"success": False, "error": f"任务 {task_id} 已是取消状态"}
+        state = self._states.get(task_id)
+        if state is not None:
+            if state.status in ("done", "failed", "cancelled"):
+                return {
+                    "success": False,
+                    "error": f"任务 {task_id} 已终态（{state.status}），无法取消",
+                }
+            if not self.cancel_task(task_id):
+                return {
+                    "success": False,
+                    "error": f"任务 {task_id} 取消信号置位失败（可能刚进终态），请重试",
+                }
+            self._mark_plan_adjusted(task_id)
+            return {
+                "success": True,
+                "task_id": task_id,
+                "status": "cancelling",
+                "reason": reason,
+            }
+        if task_id not in self._plan_by_id:
+            return {"success": False, "error": f"任务 {task_id} 不存在"}
+        item = self._plan_by_id[task_id]
+        self._cancelled_plan_ids.add(task_id)
+        self._mark_plan_adjusted(task_id)
+        if reason:
+            item["cancel_reason"] = reason
+        self._persist_plan()
+        # RP1: 未派发任务从未进过任务树 —— 补一条 cancelled 事件让前端即时
+        # 可见（否则用户看到的是任务凭空消失，无法区分"取消"与"遗漏"）。
+        self._emit_task_status(
+            ChatTaskState(
+                task_id=task_id,
+                agent_id=str(item.get("agent_id", "")),
+                goal=str(item.get("goal", "")),
+                parent_task_id=item.get("parent_task_id"),
+                depth=_safe_depth(item.get("depth", 0)),
+                status="cancelled",
+                error=(
+                    f"cancelled by llm: {reason}" if reason else "cancelled by llm"
+                ),
+            )
+        )
+        return {
+            "success": True,
+            "task_id": task_id,
+            "status": "cancelled",
+            "reason": reason,
+        }
+
+    def add_task_to_plan(  # noqa: PLR0911
+        self,
+        task_id: str,
+        goal: str,
+        agent_id: str,
+        depends_on: Optional[List[str]] = None,
+        parent_task_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """添加新任务到计划，可声明依赖（计划层）。
+
+        悬空依赖与环均在写入前校验并拒绝 —— 拒绝时不落任何状态（原子）。
+        新任务立即进 ``_plan_by_id``，之后 dispatch 即可派发；``depends_on``
+        的下游任务在依赖完成前会被拓扑分波自动阻塞。
+        """
+        self._ensure_plan_loaded()
+        if not task_id or not goal or not agent_id:
+            return {"success": False, "error": "task_id / goal / agent_id 均必填"}
+        if task_id in self._plan_by_id or task_id in self._states:
+            return {"success": False, "error": f"任务 {task_id} 已存在"}
+        deps = [str(d) for d in (depends_on or [])]
+        if task_id in deps:
+            return {"success": False, "error": "任务不能依赖自身"}
+        known = set(self._plan_by_id) | set(self._states)
+        dangling = [d for d in deps if d not in known]
+        if dangling:
+            return {
+                "success": False,
+                "error": f"depends_on 引用了不存在的任务: {dangling}（只能引用已有 task_id）",
+            }
+        item: Dict[str, Any] = {
+            "task_id": task_id,
+            "goal": goal,
+            "agent_id": agent_id,
+            "depends_on": deps,
+            "added_by_llm": True,
+        }
+        if parent_task_id is not None:
+            item["parent_task_id"] = str(parent_task_id)
+        # 新增任务的父级校验（只针对新边，避免既有脏数据连坐拒绝 —— 旧
+        # plan_json 可能残留已失效的 parent 引用，不应阻塞无关的新增）。
+        known = set(self._plan_by_id) | set(self._states)
+        new_parent = item.get("parent_task_id")
+        if new_parent is not None and new_parent not in known:
+            return {
+                "success": False,
+                "error": f"parent_task_id 引用了不存在的任务: {new_parent}",
+            }
+        # 归一化：先剔除既有条目中已失效的 parent 引用（fail-open，与
+        # Planner 同风格），再对新任务施加严格校验。剥离判据必须与
+        # normalize 的论域一致（只在计划内的条目）—— 否则指向"仅在 _states"
+        # 的父引用会被保留，仍导致无关新任务被连坐拒绝。
+        plan_ids = set(self._plan_by_id)
+        baseline: List[Dict[str, Any]] = []
+        for existing in self._plan_by_id.values():
+            entry = dict(existing)
+            parent = entry.get("parent_task_id")
+            if parent is not None and str(parent) not in plan_ids:
+                entry.pop("parent_task_id", None)
+            baseline.append(entry)
+        candidate_plan = baseline + [item]
+        try:
+            normalized_plan = normalize_task_hierarchy(candidate_plan)
+        except HierarchyError as exc:
+            # 新任务的父级可能指向"仅在 _states"（已派发未进计划）的任务 ——
+            # 此时归一化论域（计划内）无法解析该父边。此类父级已在上面按
+            # known 校验通过，这里退化为只归一化计划内图，并手工置 depth=1。
+            if new_parent is not None and new_parent not in plan_ids:
+                item_without_parent = dict(item)
+                item_without_parent.pop("parent_task_id", None)
+                try:
+                    normalized_plan = normalize_task_hierarchy(
+                        baseline + [item_without_parent]
+                    )
+                except HierarchyError:
+                    return {"success": False, "error": str(exc)}
+                for candidate in normalized_plan:
+                    if candidate["task_id"] == task_id:
+                        candidate["parent_task_id"] = new_parent
+                        candidate["depth"] = 1
+            else:
+                return {"success": False, "error": str(exc)}
+        candidate_deps = {
+            candidate["task_id"]: [str(dep) for dep in candidate.get("depends_on", [])]
+            for candidate in normalized_plan
+        }
+        cycle = find_cycle(candidate_deps)
+        if cycle:
+            return {
+                "success": False,
+                "error": "新增依赖引入环，已拒绝：" + " -> ".join(cycle),
+            }
+        self._plan_by_id = {
+            candidate["task_id"]: candidate for candidate in normalized_plan
+        }
+        self._mark_plan_adjusted(task_id)
+        self._persist_plan()
+        normalized_item = self._plan_by_id[task_id]
+        return {
+            "success": True,
+            "task_id": task_id,
+            "goal": goal,
+            "agent_id": agent_id,
+            "depends_on": deps,
+            "parent_task_id": normalized_item.get("parent_task_id"),
+            "depth": normalized_item.get("depth", 0),
+        }
+
+    def adjusted_plan_ids(self) -> Set[str]:
+        """被 LLM 动态调整过的 task_id 集合（前端"已调整"标记用）。"""
+        return set(self._adjusted_plan_ids)
+
     def _ensure_plan_loaded(self) -> None:
         """首 dispatch 时从 orch_runs.plan_json 读权威计划建索引（DB 单源）。
 
@@ -649,8 +950,20 @@ class ChatDispatcher:
         # P2-7: 首 dispatch 从 orch_runs.plan_json 读权威计划建索引（只建一次）。
         self._ensure_plan_loaded()
         states: List[ChatTaskState] = []
+        # RP1 (round34): 被 cancel_pending_task 取消、本次派发请求中被跳过的
+        # 任务编号 —— 聚合尾部显式告知 conductor，避免其反复重派已取消任务。
+        skipped_cancelled: List[str] = []
         for raw in tasks:
             raw_task_id = raw.get("task_id")
+            # RP1 (round34): 已取消任务拒绝派发 —— cancel_pending_task 对未派发
+            # 任务只置计划层标记，若放行会走下方"未知 task_id 回退 tool-passed
+            # 值"路径复活（旧行为下取消形同虚设）。
+            if raw_task_id and raw_task_id in self._cancelled_plan_ids:
+                skipped_cancelled.append(str(raw_task_id))
+                logger.info(
+                    "跳过已取消任务 task_id=%s run=%s", raw_task_id, self.run_id
+                )
+                continue
             raw_schema = raw.get("output_schema")
             output_schema = raw_schema if isinstance(raw_schema, dict) else None
             if raw_task_id and raw_task_id in self._plan_by_id:
@@ -682,6 +995,11 @@ class ChatDispatcher:
                 logger.warning("task_id 不合规，已替换: %r -> %s", task_id, safe_id)
                 task_id = safe_id
             followup_of = raw.get("followup_of")
+            plan_item = self._plan_by_id.get(task_id)
+            plan_parent_task_id = (
+                plan_item.get("parent_task_id") if plan_item else None
+            )
+            plan_depth = _safe_depth(plan_item.get("depth", 0)) if plan_item else 0
             # L1 (2026-08-23): 自指 followup 守卫 —— task 引用自身不构成有效续聊。
             # 缺守卫时隐式自环依赖会被 build_waves 判环拒掉整批；改为 warning 后
             # 降级普通任务（与其余无效 followup_of 同一降级路径）。
@@ -707,11 +1025,13 @@ class ChatDispatcher:
                 agent_id=agent_id,
                 goal=goal,
                 output_schema=output_schema,
-                parent_task_id=parent_task_id,
+                parent_task_id=plan_parent_task_id,
+                depth=plan_depth,
+                followup_parent_id=parent_task_id,
                 followup_degraded=followup_degraded,
                 parent_tool_call_id=self._current_tool_call_id,
             )
-            if followup_of is not None and state.parent_task_id is None:
+            if followup_of is not None and state.followup_parent_id is None:
                 logger.warning(
                     "无效 followup_of=%r，任务 %s 降级为普通新任务",
                     followup_of,
@@ -920,11 +1240,13 @@ class ChatDispatcher:
             deps_by_id[state.task_id] = [
                 d for d in raw_deps if d in self._states and d != state.task_id
             ]
+            # 仅续聊父任务构成隐式执行依赖；计划层级父任务不参与调度
+            # （spec 2026-09-19 §设计原则：parent 只表达归属与展示）。
             if (
-                state.parent_task_id
-                and state.parent_task_id not in deps_by_id[state.task_id]
+                state.followup_parent_id
+                and state.followup_parent_id not in deps_by_id[state.task_id]
             ):
-                deps_by_id[state.task_id].append(state.parent_task_id)
+                deps_by_id[state.task_id].append(state.followup_parent_id)
 
         # RD13 (round13): 重派任务剥离指向重派源的依赖 —— 源在同批先行失败
         # 时，波间闭包会把依赖它的重派任务连带判死（blocked_by_failed:），
@@ -977,6 +1299,15 @@ class ChatDispatcher:
                 cumulative_failed.add(tid)
                 downstream.finished_at = time.time()
                 self._emit_task_status(downstream)
+        # RP1 (round34): 本次请求的任务全部已被取消 —— 直接回错误，不跑聚合
+        # 与 reviewer（空 states 会让复核收到无意义载荷）。
+        if not states and skipped_cancelled:
+            raise ValueError(
+                "all_tasks_cancelled: 本次请求的任务（"
+                + ", ".join(skipped_cancelled)
+                + "）均已被取消，未派发任何子任务。如需执行请先用 "
+                "add_task_to_plan 重新添加。"
+            )
         aggregated = self._aggregate(states)
         # P0-2 验证环：仅当本次调用已覆盖 plan 全部任务后跑 reviewer；
         # 失败降级跳过（绝不阻塞聊天）。
@@ -1014,6 +1345,14 @@ class ChatDispatcher:
                     )
                 except Exception as exc:  # noqa: BLE001 — 复核失败降级
                     logger.warning("编排复核失败，跳过验证: %s", exc)
+        # RP1 (round34): 部分跳过时显式告知 —— 否则 conductor 看到"已收到
+        # X/X"会误判全部完成，或反复重派已取消任务。
+        if skipped_cancelled:
+            aggregated += (
+                "\n\n[注意] 以下任务已被取消，本次未派发："
+                + ", ".join(skipped_cancelled)
+                + "。请勿重派；如需执行请用 add_task_to_plan 重新添加。"
+            )
         return aggregated
 
     async def _run_subagent(self, state: ChatTaskState) -> str:
@@ -1087,8 +1426,8 @@ class ChatDispatcher:
             "workspace_dir": str(workspace_dir) if workspace_dir else None,
         }
         self._apply_retry_inheritance(state, parameters)
-        if state.parent_task_id is not None:
-            parameters["history"] = self._histories.get(state.parent_task_id, [])
+        if state.followup_parent_id is not None:
+            parameters["history"] = self._histories.get(state.followup_parent_id, [])
         if state.output_schema is not None:
             parameters["output_schema"] = state.output_schema
 
@@ -1376,11 +1715,18 @@ class ChatDispatcher:
             "retry_count": state.retry_count,
             "output_preview": self._preview(state),
             "parent_tool_call_id": state.parent_tool_call_id,
+            "parent_task_id": state.parent_task_id,
+            "depth": state.depth,
         }
         # RD13+ (round15): 重派任务向前端透出 retry_of —— 任务树可标注
         # "重派"徽章（用户可追溯哪些任务是重做的）。None 时不带键。
         if state.retry_of:
             event["retry_of"] = state.retry_of
+        # RP1 (round34): 被 LLM 动态调整过计划的任务透出 adjusted —— 任务树
+        # 标"已调整"徽章，用户可追溯哪些任务是 conductor 在 run 中改过目标/
+        # 新增/取消的。False 时不带键（保持事件体精简）。
+        if state.task_id in self._adjusted_plan_ids:
+            event["adjusted"] = True
         # BU13 (round24): 任务级消耗与时长可见性 —— 终态事件携带本任务真实
         # token 消耗与执行时长。BU9 曾带 run 窗口累计值（各任务重复计入，
         # 且被 run_token_budget>0 门槛挡住）；RT23 task_id 归因就绪后改查
@@ -1599,6 +1945,8 @@ class ChatDispatcher:
                     if _terminal and state.started_at and state.finished_at
                     else None
                 ),
+                parent_task_id=state.parent_task_id,
+                depth=state.depth,
             )
         except Exception as exc:  # noqa: BLE001 — 降级铁律
             logger.warning("orch_task 落库失败 task_id=%s err=%s", state.task_id, exc)

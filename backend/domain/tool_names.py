@@ -22,7 +22,10 @@
 
 不在清单内的名字（引用它们的白名单会收到启动告警，仅告警不剔除）：
 - ``wiki_search`` / ``wiki_answer``：定义于 tools/wiki_tool.py，当前未注册；
-- ``dispatch_subagents``：legacy_routes 编排模式下按会话动态注册；
+- ``dispatch_subagents`` / ``collect_subagents`` / ``observe_subagents``：
+  legacy_routes 编排模式下按会话动态注册；
+- ``update_pending_task`` / ``cancel_pending_task`` / ``add_task_to_plan``：
+  同上（re-plan 工具族，tools/replan_tool.py，与 dispatch 同一 tool-toggle 门）；
 - MCP 工具：外部服务器运行期提供。
 """
 

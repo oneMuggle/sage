@@ -14,16 +14,15 @@ from __future__ import annotations
 from typing import Optional
 
 import json
-import time
-import uuid
 from dataclasses import asdict, is_dataclass
 from typing import Any, List, Optional
 
 from backend.data.database import get_database
+from backend.data.orch_lane_repo import (
+    OrchLaneEventRepository,
+    OrchLaneRepository,
+)
 from backend.orchestration.models import (
-    Lane,
-    LaneHeartbeat,
-    LaneStatus,
     RecoveryPolicy,
     Task,
     TaskStatus,
@@ -38,7 +37,7 @@ def _to_jsonable(obj: Any) -> Any:
         return {k: _to_jsonable(v) for k, v in asdict(obj).items()}
     if isinstance(obj, dict):
         return {k: _to_jsonable(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
+    if isinstance(obj, (list, tuple)):  # noqa: UP038 — py3.8 运行期兼容（win7 cherry-pick）
         return [_to_jsonable(v) for v in obj]
     return obj
 
@@ -66,7 +65,7 @@ class TaskRepository:
 
         cursor.execute(
             """
-            INSERT OR REPLACE INTO orchestration_tasks
+            INSERT OR REPLACE INTO orch_plan_tasks
             (task_id, name, description, status, priority, executor_type,
              parameters, packet, blocks, blocked_by, created_at, team_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -94,7 +93,7 @@ class TaskRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT * FROM orchestration_tasks WHERE task_id = ?", (task_id,))
+        cursor.execute("SELECT * FROM orch_plan_tasks WHERE task_id = ?", (task_id,))
         row = cursor.fetchone()
         return self._row_to_task(row) if row else None
 
@@ -105,7 +104,7 @@ class TaskRepository:
 
         cursor.execute(
             """
-            UPDATE orchestration_tasks
+            UPDATE orch_plan_tasks
             SET status = ?, priority = ?, parameters = ?, result = ?,
                 started_at = ?, completed_at = ?, blocks = ?, blocked_by = ?,
                 packet = ?
@@ -132,7 +131,7 @@ class TaskRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("DELETE FROM orchestration_tasks WHERE task_id = ?", (task_id,))
+        cursor.execute("DELETE FROM orch_plan_tasks WHERE task_id = ?", (task_id,))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -147,7 +146,7 @@ class TaskRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        query = "SELECT * FROM orchestration_tasks WHERE 1=1"
+        query = "SELECT * FROM orch_plan_tasks WHERE 1=1"
         params: List[Any] = []
 
         if status is not None:
@@ -175,7 +174,7 @@ class TaskRepository:
         cursor = conn.cursor()
 
         query = """
-            SELECT t.* FROM orchestration_tasks t
+            SELECT t.* FROM orch_plan_tasks t
             WHERE t.status = 'created'
         """
         params: List[Any] = []
@@ -242,190 +241,6 @@ class TaskRepository:
 # ============================================================================
 
 
-class LaneRepository:
-    """SQLite-backed lane storage."""
-
-    def __init__(self) -> None:
-        self.db = get_database()
-
-    def create(self, lane: Lane) -> Lane:
-        """Insert or replace a lane (idempotent upsert).
-
-        Uses ``INSERT OR REPLACE`` so callers that generate deterministic IDs
-        (e.g. the review step ``lane-review-{run_id}``) are safe to invoke
-        multiple times without hitting a UNIQUE constraint error.
-        """
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO orchestration_lanes
-            (lane_id, task_id, agent_id, status, created_at, worktree,
-             permission_preset, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                str(lane.lane_id),
-                str(lane.task_id) if lane.task_id is not None else None,
-                str(lane.agent_id) if lane.agent_id is not None else None,
-                lane.status.value,
-                lane.created_at,
-                lane.worktree,
-                lane.permission_preset,
-                json.dumps(_to_jsonable(lane.metadata or {})),
-            ),
-        )
-        conn.commit()
-        return lane
-
-    def get(self, lane_id: str) -> Optional[Lane]:
-        """Fetch a lane by ID."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT * FROM orchestration_lanes WHERE lane_id = ?", (lane_id,))
-        row = cursor.fetchone()
-        return self._row_to_lane(row) if row else None
-
-    def update(self, lane: Lane) -> bool:
-        """Update an existing lane."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            UPDATE orchestration_lanes
-            SET status = ?, agent_id = ?, started_at = ?, completed_at = ?,
-                heartbeat = ?, error = ?, permission_preset = ?, metadata = ?
-            WHERE lane_id = ?
-            """,
-            (
-                lane.status.value,
-                lane.agent_id,
-                lane.started_at,
-                lane.completed_at,
-                json.dumps(lane.heartbeat.__dict__) if lane.heartbeat else None,
-                lane.error,
-                lane.permission_preset,
-                json.dumps(_to_jsonable(lane.metadata or {})),
-                lane.lane_id,
-            ),
-        )
-        conn.commit()
-        return cursor.rowcount > 0
-
-    def delete(self, lane_id: str) -> bool:
-        """Delete a lane."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("DELETE FROM orchestration_lanes WHERE lane_id = ?", (lane_id,))
-        conn.commit()
-        return cursor.rowcount > 0
-
-    def list_by_task(self, task_id: str) -> List[Lane]:
-        """List all lanes for a task."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT * FROM orchestration_lanes
-            WHERE task_id = ?
-            ORDER BY created_at ASC
-            """,
-            (task_id,),
-        )
-        return [self._row_to_lane(row) for row in cursor.fetchall()]
-
-    def list_by_status(self, status: LaneStatus, limit: int = 100) -> List[Lane]:
-        """List lanes by status."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT * FROM orchestration_lanes
-            WHERE status = ?
-            ORDER BY created_at ASC
-            LIMIT ?
-            """,
-            (status.value, limit),
-        )
-        return [self._row_to_lane(row) for row in cursor.fetchall()]
-
-    def list_by_agent(self, agent_id: str) -> List[Lane]:
-        """List all lanes assigned to an agent."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT * FROM orchestration_lanes
-            WHERE agent_id = ?
-            ORDER BY created_at ASC
-            """,
-            (agent_id,),
-        )
-        return [self._row_to_lane(row) for row in cursor.fetchall()]
-
-    def list_all(self) -> List[Lane]:
-        """List all lanes."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT * FROM orchestration_lanes
-            ORDER BY created_at ASC
-            """
-        )
-        return [self._row_to_lane(row) for row in cursor.fetchall()]
-
-    def update_heartbeat(self, lane_id: str, heartbeat: LaneHeartbeat) -> bool:
-        """Update lane heartbeat."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            UPDATE orchestration_lanes
-            SET heartbeat = ?
-            WHERE lane_id = ?
-            """,
-            (json.dumps(heartbeat.__dict__), lane_id),
-        )
-        conn.commit()
-        return cursor.rowcount > 0
-
-    def _row_to_lane(self, row) -> Lane:
-        """Convert a database row to a Lane object."""
-        heartbeat_data = json.loads(row["heartbeat"]) if row["heartbeat"] else None
-        heartbeat = LaneHeartbeat(**heartbeat_data) if heartbeat_data else None
-
-        metadata = {}
-        try:
-            metadata = json.loads(row["metadata"]) if row["metadata"] else {}
-        except (json.JSONDecodeError, TypeError):
-            metadata = {}
-
-        return Lane(
-            lane_id=row["lane_id"],
-            task_id=row["task_id"],
-            agent_id=row["agent_id"],
-            status=LaneStatus(row["status"]),
-            created_at=row["created_at"],
-            started_at=row["started_at"],
-            completed_at=row["completed_at"],
-            worktree=row["worktree"],
-            heartbeat=heartbeat,
-            error=row["error"],
-            permission_preset=row["permission_preset"] or "implement",
-            metadata=metadata if isinstance(metadata, dict) else {},
-        )
-
-
 # ============================================================================
 # Team Repository
 # ============================================================================
@@ -444,7 +259,7 @@ class TeamRepository:
 
         cursor.execute(
             """
-            INSERT INTO orchestration_teams
+            INSERT INTO orch_plan_teams
             (team_id, name, task_ids, status, created_at, updated_at, metadata)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
@@ -466,7 +281,7 @@ class TeamRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT * FROM orchestration_teams WHERE team_id = ?", (team_id,))
+        cursor.execute("SELECT * FROM orch_plan_teams WHERE team_id = ?", (team_id,))
         row = cursor.fetchone()
         return self._row_to_team(row) if row else None
 
@@ -477,7 +292,7 @@ class TeamRepository:
 
         cursor.execute(
             """
-            UPDATE orchestration_teams
+            UPDATE orch_plan_teams
             SET task_ids = ?, status = ?, updated_at = ?, metadata = ?
             WHERE team_id = ?
             """,
@@ -497,7 +312,7 @@ class TeamRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("DELETE FROM orchestration_teams WHERE team_id = ?", (team_id,))
+        cursor.execute("DELETE FROM orch_plan_teams WHERE team_id = ?", (team_id,))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -506,7 +321,7 @@ class TeamRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        query = "SELECT * FROM orchestration_teams"
+        query = "SELECT * FROM orch_plan_teams"
         params: List[Any] = []
 
         if status is not None:
@@ -537,89 +352,19 @@ class TeamRepository:
 # ============================================================================
 
 
-class LaneEventRepository:
-    """SQLite-backed lane event storage."""
+# ============================================================================
+# 向后兼容别名（双轨合并 Phase 5，2026-09-19）
+# ============================================================================
+# LaneRepository / LaneEventRepository 的实现在 Phase 1 已迁到
+# ``orch_lane_repo.py``（表 orchestration_lanes → orch_lanes）。此处保留旧类名
+# 作为别名，让既有调用方（主要是测试）零改动切换到新表；新代码请直接用
+# ``OrchLaneRepository`` / ``OrchLaneEventRepository``。
+LaneRepository = OrchLaneRepository
+LaneEventRepository = OrchLaneEventRepository
 
-    def __init__(self) -> None:
-        self.db = get_database()
-
-    def append(
-        self,
-        event_type: str,
-        lane_id: str,
-        task_id: str,
-        agent_id: Optional[str] = None,
-        provenance: str = "LiveLane",
-        metadata: Optional[dict] = None,
-    ) -> str:
-        """Record a lane event. Returns the event_id."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        event_id = f"evt-{uuid.uuid4().hex[:12]}"
-        timestamp = int(time.time() * 1000)
-
-        cursor.execute(
-            """
-            INSERT INTO orchestration_lane_events
-            (event_id, event_type, lane_id, task_id, agent_id, timestamp, provenance, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                event_id,
-                event_type,
-                lane_id,
-                task_id,
-                agent_id,
-                timestamp,
-                provenance,
-                json.dumps(metadata or {}),
-            ),
-        )
-        conn.commit()
-        return event_id
-
-    def list_by_lane(self, lane_id: str, limit: int = 100, offset: int = 0) -> List[dict]:
-        """List events for a lane, ordered by timestamp."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT * FROM orchestration_lane_events
-            WHERE lane_id = ?
-            ORDER BY timestamp ASC
-            LIMIT ? OFFSET ?
-            """,
-            (lane_id, limit, offset),
-        )
-        return [self._row_to_dict(row) for row in cursor.fetchall()]
-
-    def list_by_task(self, task_id: str, limit: int = 100) -> List[dict]:
-        """List events for a task (across all lanes)."""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT * FROM orchestration_lane_events
-            WHERE task_id = ?
-            ORDER BY timestamp ASC
-            LIMIT ?
-            """,
-            (task_id, limit),
-        )
-        return [self._row_to_dict(row) for row in cursor.fetchall()]
-
-    def _row_to_dict(self, row) -> dict:
-        """Convert a database row to a dict."""
-        return {
-            "event_id": row["event_id"],
-            "event_type": row["event_type"],
-            "lane_id": row["lane_id"],
-            "task_id": row["task_id"],
-            "agent_id": row["agent_id"],
-            "timestamp": row["timestamp"],
-            "provenance": row["provenance"],
-            "metadata": json.loads(row["metadata"]),
-        }
+__all__ = [
+    "LaneEventRepository",
+    "LaneRepository",
+    "TaskRepository",
+    "TeamRepository",
+]

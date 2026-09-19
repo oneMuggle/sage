@@ -678,7 +678,10 @@ async def test_followup_task_inherits_done_parent_history(monkeypatch):
         ]
     )
 
-    assert dispatcher._states["t2"].parent_task_id == "t1"
+    # 续聊父级走 followup_parent_id（隐式依赖 + 历史继承）；计划层级
+    # parent_task_id 保持独立，本用例无计划父任务故为 None（spec 2026-09-19）。
+    assert dispatcher._states["t2"].followup_parent_id == "t1"
+    assert dispatcher._states["t2"].parent_task_id is None
     assert dispatcher._states["t2"].agent_id == "primary"
     assert dispatcher.task_registry.get_task("task-t2").parameters["history"] == history
     assert dispatcher._histories["t2"] == history
