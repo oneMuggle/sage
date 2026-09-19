@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(),
   setStrategy: vi.fn(),
   setChannel: vi.fn(),
+  setConfigPatch: vi.fn(),
   check: vi.fn(),
 }));
 
@@ -35,12 +36,14 @@ beforeEach(() => {
   mocks.getConfig.mockReset().mockResolvedValue(defaultConfig);
   mocks.setStrategy.mockReset().mockResolvedValue(undefined);
   mocks.setChannel.mockReset().mockResolvedValue(undefined);
+  mocks.setConfigPatch.mockReset().mockResolvedValue(defaultConfig);
   mocks.check.mockReset().mockResolvedValue({ updateAvailable: false });
   (window as unknown as { electronAPI?: unknown }).electronAPI = {
     updates: {
       getConfig: mocks.getConfig,
       setStrategy: mocks.setStrategy,
       setChannel: mocks.setChannel,
+      setConfigPatch: mocks.setConfigPatch,
       check: mocks.check,
     },
   };
@@ -121,5 +124,89 @@ describe('UpdatesTab', () => {
 
     fireEvent.click(await screen.findByTestId('updates-check-button'));
     await waitFor(() => expect(screen.getByText('检查更新失败，请稍后重试')).toBeInTheDocument());
+  });
+
+  describe('advanced controls', () => {
+    it('collapses advanced section by default', async () => {
+      renderTab();
+
+      await waitFor(() => expect(mocks.getConfig).toHaveBeenCalledOnce());
+      const button = screen.getByRole('button', { name: /高级更新设置/i });
+      expect(button).toHaveAttribute('aria-expanded', 'false');
+      // The content div has the hidden attribute
+      const content = screen.getByTestId('advanced-section-content-advanced-settings-高级更新设置');
+      expect(content).toHaveAttribute('hidden');
+    });
+
+    it('expands and renders all advanced fields', async () => {
+      renderTab();
+
+      await waitFor(() => expect(mocks.getConfig).toHaveBeenCalledOnce());
+      fireEvent.click(screen.getByRole('button', { name: /高级更新设置/i }));
+
+      expect(screen.getByTestId('updates-rollback-window')).toBeInTheDocument();
+      expect(screen.getByTestId('updates-rollback-threshold')).toBeInTheDocument();
+      expect(screen.getByTestId('updates-check-interval')).toBeInTheDocument();
+      expect(screen.getByTestId('updates-server-url')).toBeInTheDocument();
+      expect(screen.getByTestId('updates-telemetry')).toBeInTheDocument();
+      expect(screen.getByTestId('updates-cache-retention')).toBeInTheDocument();
+    });
+
+    it('shows correct default values in advanced fields', async () => {
+      renderTab();
+
+      await waitFor(() => expect(mocks.getConfig).toHaveBeenCalledOnce());
+      fireEvent.click(screen.getByRole('button', { name: /高级更新设置/i }));
+
+      expect(screen.getByTestId('updates-rollback-window')).toHaveValue(7);
+      expect(screen.getByTestId('updates-rollback-threshold')).toHaveValue(3);
+      expect(screen.getByTestId('updates-check-interval')).toHaveValue(24);
+      expect(screen.getByTestId('updates-server-url')).toHaveValue('https://updates.sage.app');
+      expect(screen.getByTestId('updates-telemetry')).not.toBeChecked();
+      expect(screen.getByTestId('updates-cache-retention')).toHaveValue(30);
+    });
+
+    it('persists rollback window changes via setConfigPatch', async () => {
+      renderTab();
+
+      await waitFor(() => expect(mocks.getConfig).toHaveBeenCalledOnce());
+      fireEvent.click(screen.getByRole('button', { name: /高级更新设置/i }));
+
+      const input = screen.getByTestId('updates-rollback-window');
+      fireEvent.change(input, { target: { value: '14' } });
+
+      expect(mocks.setConfigPatch).toHaveBeenCalledWith({ rollbackWindowDays: 14 });
+    });
+
+    it('persists telemetry toggle changes', async () => {
+      renderTab();
+
+      await waitFor(() => expect(mocks.getConfig).toHaveBeenCalledOnce());
+      fireEvent.click(screen.getByRole('button', { name: /高级更新设置/i }));
+
+      const checkbox = screen.getByTestId('updates-telemetry');
+      fireEvent.click(checkbox);
+
+      expect(mocks.setConfigPatch).toHaveBeenCalledWith({ enableTelemetry: true });
+    });
+
+    it('persists cache retention changes', async () => {
+      renderTab();
+
+      await waitFor(() => expect(mocks.getConfig).toHaveBeenCalledOnce());
+      fireEvent.click(screen.getByRole('button', { name: /高级更新设置/i }));
+
+      const input = screen.getByTestId('updates-cache-retention');
+      fireEvent.change(input, { target: { value: '60' } });
+
+      expect(mocks.setConfigPatch).toHaveBeenCalledWith({ cacheRetentionDays: 60 });
+    });
+
+    it('shows ApplyModeBadge indicating immediate effect', async () => {
+      renderTab();
+
+      await waitFor(() => expect(mocks.getConfig).toHaveBeenCalledOnce());
+      expect(screen.getByText('保存后：立即生效')).toBeInTheDocument();
+    });
   });
 });
