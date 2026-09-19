@@ -10,9 +10,16 @@ PostToolUse 事件, allow/deny/modify 决策, JSON over STDIN 协议。
 
 from __future__ import annotations
 
+from backend.hooks.builtin import (
+    BUILTIN_HOOKS,
+    get_builtin,
+    list_builtins,
+    make_hook_entry,
+)
 from backend.hooks.config import (
     DEFAULT_TIMEOUT_SECONDS,
     HOOK_EVENTS,
+    HOOK_TYPES,
     MAX_HOOKS,
     HookConfig,
     HookConfigError,
@@ -33,18 +40,23 @@ from backend.hooks.runner import (
 )
 
 __all__ = [
+    "BUILTIN_HOOKS",
     "DECISION_ALLOW",
     "DECISION_DENY",
     "DECISION_MODIFY",
     "DECISION_NOOP",
     "DEFAULT_TIMEOUT_SECONDS",
     "HOOK_EVENTS",
+    "HOOK_TYPES",
     "MAX_HOOKS",
     "HookConfig",
     "HookConfigError",
     "HookOutcome",
     "build_payload",
+    "get_builtin",
+    "list_builtins",
     "load_hooks",
+    "make_hook_entry",
     "matches_tool",
     "run_event_hooks",
     "run_hook",
