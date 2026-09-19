@@ -513,6 +513,11 @@ class Database:
                 activated_skills TEXT,
                 compact_info TEXT,
                 memory_refs TEXT,
+                -- R81 统一参考来源 (2026-09-19): 引用溯源 JSON-in-TEXT 列。
+                -- rag_citations: [{media_id, filename, mode, chunks}]  附着于 assistant 行
+                -- sources:       [{kind: web|wiki|tool, ...}]          附着于终稿 assistant 行
+                rag_citations TEXT,
+                sources TEXT,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
         """)
@@ -549,6 +554,17 @@ class Database:
             if r38_col not in columns:
                 try:
                     cursor.execute(f"ALTER TABLE messages ADD COLUMN {r38_col} TEXT")
+                    conn.commit()
+                except sqlite3.OperationalError:
+                    pass
+        # R81 统一参考来源 (2026-09-19): 老库补两列引用载荷。
+        # rag_citations: r71 附件检索溯源（原先只推事件不落库,重载即丢）;
+        # sources:       web/wiki/MCP 工具命中（sources_extractor 提取）。
+        # 同款双进程防御: try/except 包住 ALTER。
+        for r81_col in ("rag_citations", "sources"):
+            if r81_col not in columns:
+                try:
+                    cursor.execute(f"ALTER TABLE messages ADD COLUMN {r81_col} TEXT")
                     conn.commit()
                 except sqlite3.OperationalError:
                     pass

@@ -9,11 +9,9 @@ import {
   GitBranch,
   Eye,
   EyeOff,
-  FileSearch,
   Pencil,
   RefreshCw,
   Check,
-  BrainCircuit,
   Quote,
   FileText,
   Zap,
@@ -501,15 +499,24 @@ function MessageComponent({
   const canQuote = Boolean(onQuote) && (isUser || isAssistant);
   const canSaveToMemory = Boolean(onSaveToMemory) && (isUser || isAssistant);
   const [copied, setCopied] = useState(false);
-  // R17-E: 记忆召回明细展开态
-  const [memoryExpanded, setMemoryExpanded] = useState(false);
-  const memoryRefs = message.memory_refs ?? [];
   // R38: 技能激活明细展开态
   const [skillsExpanded, setSkillsExpanded] = useState(false);
   const activatedSkills = message.activated_skills ?? [];
-  // r71: 附件检索溯源展开态
-  const [ragExpanded, setRagExpanded] = useState(false);
+  // R81: 统一参考来源 —— 记忆召回 + 附件检索溯源 + 工具命中(web/wiki/MCP)
+  // 收编为一个折叠区块（类文章引用列表），N=0 时整个 chip 不渲染。
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const memoryRefs = message.memory_refs ?? [];
   const ragCitations = message.rag_citations ?? [];
+  const toolSources = message.sources ?? [];
+  const wikiSources = toolSources.filter((s) => s.kind === 'wiki');
+  const webSources = toolSources.filter((s) => s.kind === 'web');
+  const mcpSources = toolSources.filter((s) => s.kind === 'tool');
+  const sourcesTotal = memoryRefs.length + ragCitations.length + toolSources.length;
+  // 各分组在统一编号里的起始偏移（列表带 [1][2]… 序号, 类文章引用）
+  const ragOffset = memoryRefs.length;
+  const wikiOffset = ragOffset + ragCitations.length;
+  const webOffset = wikiOffset + wikiSources.length;
+  const toolOffset = webOffset + webSources.length;
 
   // R38: 系统消息（如压缩通知）居中渲染，无头像/气泡
   // 必须在所有 Hooks 之后 return，否则违反 React Hooks 规则
@@ -718,18 +725,20 @@ function MessageComponent({
 
         {/* 底部信息 */}
         <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
-          {message.memory_applied != null && message.memory_applied > 0 && (
+          {/* R81: 统一参考来源 chip（记忆 + 附件检索 + 工具命中收编，
+              原 memory-used / rag-citations 两个分散 chip 合并为此处） */}
+          {sourcesTotal > 0 && (
             <button
               type="button"
-              onClick={() => setMemoryExpanded((v) => !v)}
+              onClick={() => setSourcesExpanded((v) => !v)}
               className="inline-flex items-center gap-0.5 text-primary hover:underline"
-              title={t('chat.memory_toggle')}
-              data-testid="memory-used-toggle"
+              title={t('chat.sources_toggle')}
+              data-testid="message-sources-toggle"
             >
-              <BrainCircuit className="w-3 h-3" />
-              {message.memory_applied} {t('chat.memory_applied')}
+              <BookOpen className="w-3 h-3" />
+              {t('chat.sources_count').replace('{n}', String(sourcesTotal))}
               <ChevronDown
-                className={`w-3 h-3 transition-transform ${memoryExpanded ? 'rotate-180' : ''}`}
+                className={`w-3 h-3 transition-transform ${sourcesExpanded ? 'rotate-180' : ''}`}
               />
             </button>
           )}
@@ -749,21 +758,6 @@ function MessageComponent({
               />
             </button>
           )}
-          {ragCitations.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setRagExpanded((v) => !v)}
-              className="inline-flex items-center gap-0.5 text-primary hover:underline"
-              title={t('chat.rag_citations_toggle')}
-              data-testid="rag-citations-toggle"
-            >
-              <FileSearch className="w-3 h-3" />
-              {t('chat.rag_citations_count').replace('{n}', String(ragCitations.length))}
-              <ChevronDown
-                className={`w-3 h-3 transition-transform ${ragExpanded ? 'rotate-180' : ''}`}
-              />
-            </button>
-          )}
           <span>
             {new Date(message.created_at).toLocaleTimeString([], {
               hour: '2-digit',
@@ -772,20 +766,127 @@ function MessageComponent({
           </span>
         </div>
 
-        {/* R17-E: 记忆召回明细（memory_used 流事件携带，可展开） */}
-        {memoryExpanded && memoryRefs.length > 0 && (
+        {/* R81: 统一参考来源区块 —— 记忆 / 附件检索 / 知识库 / 网页 / 工具，
+            每条带统一序号 [n]（类文章引用），供用户核对来源可靠性。 */}
+        {sourcesExpanded && sourcesTotal > 0 && (
           <div
-            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-1"
-            data-testid="memory-used-list"
+            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-2"
+            data-testid="message-sources-list"
           >
-            {memoryRefs.map((ref) => (
-              <div key={ref.id} className="flex items-start gap-1.5">
-                <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
-                  {ref.memory_type}
-                </span>
-                <span className="text-text-secondary break-all">{ref.preview}</span>
+            {memoryRefs.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                  {t('chat.sources_group_memory')}
+                </div>
+                {memoryRefs.map((ref, i) => (
+                  <div key={`mem-${ref.id}-${i}`} className="flex items-start gap-1.5">
+                    <span className="text-muted flex-shrink-0 font-mono">[{i + 1}]</span>
+                    <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
+                      {ref.memory_type}
+                    </span>
+                    <span className="text-text-secondary break-all">{ref.preview}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+
+            {ragCitations.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                  {t('chat.sources_group_attachment')}
+                </div>
+                {ragCitations.map((c, i) => (
+                  <div key={`rag-${c.media_id}-${i}`} className="space-y-0.5">
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-muted flex-shrink-0 font-mono">[{ragOffset + i + 1}]</span>
+                      <span className="text-text-secondary font-mono break-all">
+                        {c.filename || c.media_id}
+                      </span>
+                    </div>
+                    {(c.chunks ?? []).length > 0 && (
+                      <div className="pl-5 text-muted font-mono">
+                        {(c.chunks ?? [])
+                          .map((ch) => `#${ch.index} (${ch.score.toFixed(2)})`)
+                          .join(' ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {wikiSources.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                  {t('chat.sources_group_wiki')}
+                </div>
+                {wikiSources.map((s, i) => (
+                  <div key={`wiki-${s.path}-${i}`} className="space-y-0.5">
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-muted flex-shrink-0 font-mono">[{wikiOffset + i + 1}]</span>
+                      <span className="text-text-secondary font-mono break-all">{s.title || s.path}</span>
+                      {s.score != null && (
+                        <span className="text-muted flex-shrink-0">({s.score.toFixed(2)})</span>
+                      )}
+                    </div>
+                    {s.snippet && (
+                      <div className="pl-5 text-muted break-all">{s.snippet}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {webSources.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                  {t('chat.sources_group_web')}
+                </div>
+                {webSources.map((s, i) => (
+                  <div key={`web-${s.url}-${i}`} className="space-y-0.5">
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-muted flex-shrink-0 font-mono">[{webOffset + i + 1}]</span>
+                      {s.url ? (
+                        <a
+                          href={s.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline break-all"
+                        >
+                          {s.title || s.url}
+                        </a>
+                      ) : (
+                        <span className="text-text-secondary break-all">{s.title}</span>
+                      )}
+                    </div>
+                    {s.snippet && (
+                      <div className="pl-5 text-muted break-all">{s.snippet}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {mcpSources.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                  {t('chat.sources_group_tool')}
+                </div>
+                {mcpSources.map((s, i) => (
+                  <div key={`tool-${s.server}-${s.tool}-${i}`} className="space-y-0.5">
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-muted flex-shrink-0 font-mono">[{toolOffset + i + 1}]</span>
+                      <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
+                        {s.server}/{s.tool}
+                      </span>
+                    </div>
+                    {s.preview && (
+                      <div className="pl-5 text-muted break-all">{s.preview}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -814,34 +915,6 @@ function MessageComponent({
                         {trigger}
                       </span>
                     ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* r71: 附件检索溯源明细（attachment_rag_used 流事件携带，可展开） */}
-        {ragExpanded && ragCitations.length > 0 && (
-          <div
-            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-1"
-            data-testid="rag-citations-list"
-          >
-            {ragCitations.map((c) => (
-              <div key={c.filename || c.media_id} className="space-y-0.5">
-                <div className="flex items-start gap-1.5">
-                  <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
-                    {t('chat.rag_citation_source')}
-                  </span>
-                  <span className="text-text-secondary font-mono break-all">
-                    {c.filename || c.media_id}
-                  </span>
-                </div>
-                {(c.chunks ?? []).length > 0 && (
-                  <div className="pl-5 text-muted font-mono">
-                    {(c.chunks ?? [])
-                      .map((ch) => `#${ch.index} (${ch.score.toFixed(2)})`)
-                      .join(' ')}
                   </div>
                 )}
               </div>

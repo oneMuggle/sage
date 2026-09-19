@@ -730,9 +730,38 @@ export function useChat() {
                   logger.warn(requestId, 'R38.compact_triggered.malformed', compact);
                 }
               }
-              // r71: 附件检索注入溯源 → 引用明细随消息落库（气泡内展示）
+              // r71: 附件检索注入溯源 → 引用明细随消息落库（气泡内展示）。
+              // R81 修复: 多附件各推一个事件, 按 media_id 合并而非整体替换
+              // （updateMessage 是浅合并, 直接赋值会丢掉前一个附件的引用）。
               if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
-                updateMessage(assistantId, { rag_citations: evt.citations });
+                const existing = useStore
+                  .getState()
+                  .messages.find((m) => m.id === assistantId)?.rag_citations;
+                const merged = [...(existing ?? [])];
+                for (const c of evt.citations) {
+                  const idx = merged.findIndex((x) => x.media_id === c.media_id);
+                  if (idx >= 0) merged[idx] = c;
+                  else merged.push(c);
+                }
+                updateMessage(assistantId, { rag_citations: merged });
+              }
+              // R81: 统一参考来源 —— 检索类工具命中（web/wiki/MCP）done 前
+              // 一次性推送。载荷校验对齐 MEDIUM-2: 数组且每项 kind 合法。
+              if (evt.state === 'sources_used' && evt.sources) {
+                const sources = evt.sources;
+                const isValidSources =
+                  Array.isArray(sources) &&
+                  sources.every(
+                    (s) =>
+                      typeof s === 'object' &&
+                      s !== null &&
+                      ['web', 'wiki', 'tool'].includes((s as { kind?: unknown }).kind as string),
+                  );
+                if (isValidSources) {
+                  updateMessage(assistantId, { sources });
+                } else {
+                  logger.warn(requestId, 'R81.sources_used.malformed', sources);
+                }
               }
 
               // 处理 reasoning 事件：三种 state 不同处理 (2026-09-02 bug fix)
@@ -1054,7 +1083,20 @@ export function useChat() {
             }
             // r71: 重接路径同主路径 —— 检索引用明细随消息落库
             if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
-              updateMessage(messageId, { rag_citations: evt.citations });
+              const existing = useStore
+                .getState()
+                .messages.find((m) => m.id === messageId)?.rag_citations;
+              const merged = [...(existing ?? [])];
+              for (const c of evt.citations) {
+                const idx = merged.findIndex((x) => x.media_id === c.media_id);
+                if (idx >= 0) merged[idx] = c;
+                else merged.push(c);
+              }
+              updateMessage(messageId, { rag_citations: merged });
+            }
+            // R81: 重接路径同主路径 —— 统一参考来源回放
+            if (evt.state === 'sources_used' && evt.sources?.length) {
+              updateMessage(messageId, { sources: evt.sources });
             }
             // 其余事件（工具 acting/observing 等）降级为 streaming meta 文案
             useChatStreamStore.getState().setStreamingMeta(sid, messageId, {
