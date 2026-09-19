@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ChevronRight,
   Columns,
+  Files,
   GitBranch,
   History,
   RefreshCw,
@@ -40,6 +41,7 @@ import { langFromPath } from '../../../shared/lib/fileLang';
 import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
 import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
+import { ReviewAll } from './ReviewAll';
 import { SplitDiff } from './SplitDiff';
 import { splitDiffHunks } from './diffHunks';
 
@@ -104,6 +106,8 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
   const [checkpointBusy, setCheckpointBusy] = useState(false);
   // right-panel R6: diff / 文件预览 视图切换与预览内容懒加载
   const [viewMode, setViewMode] = useState<'diff' | 'preview'>('diff');
+  // right-panel R6 / P2-7: "全部审查" 多文件连续 diff 视图
+  const [reviewAll, setReviewAll] = useState(false);
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [fileContentTruncated, setFileContentTruncated] = useState(false);
   const [fileContentLoading, setFileContentLoading] = useState(false);
@@ -176,6 +180,7 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
     setDiff(null);
     setCheckpoints(null);
     setCheckpointsOpen(false);
+    setReviewAll(false);
     refresh();
   }, [refresh]);
 
@@ -299,6 +304,11 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
 
   if (!sessionId) {
     return <div className="p-3 text-sm text-muted">请先选择会话</div>;
+  }
+
+  // ---- 全部审查汇总视图 (right-panel R6 / P2-7) ----
+  if (reviewAll) {
+    return <ReviewAll sessionId={sessionId} onBack={() => setReviewAll(false)} />;
   }
 
   // ---- diff 视图 ----
@@ -489,14 +499,29 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
             </span>
           )}
         </div>
-        <button
-          className="p-1.5 rounded hover:bg-bg-hover text-text-secondary"
-          title="刷新"
-          aria-label="刷新"
-          onClick={refresh}
-        >
-          <RefreshCw className={'w-4 h-4' + (loading ? ' animate-spin' : '')} />
-        </button>
+        <div className="flex items-center shrink-0">
+          {/* right-panel R6 / P2-7: 全部审查汇总视图入口 */}
+          {changes && changes.changes.length > 0 && (
+            <button
+              className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-bg-hover text-xs text-text-secondary"
+              title="连续查看全部文件 diff"
+              aria-label="全部审查"
+              data-testid="review-all-button"
+              onClick={() => setReviewAll(true)}
+            >
+              <Files className="w-3.5 h-3.5" />
+              全部审查
+            </button>
+          )}
+          <button
+            className="p-1.5 rounded hover:bg-bg-hover text-text-secondary"
+            title="刷新"
+            aria-label="刷新"
+            onClick={refresh}
+          >
+            <RefreshCw className={'w-4 h-4' + (loading ? ' animate-spin' : '')} />
+          </button>
+        </div>
       </div>
       {!notBound && (
         <div className="border-b border-border">

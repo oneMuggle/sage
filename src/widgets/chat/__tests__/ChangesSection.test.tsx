@@ -240,6 +240,43 @@ describe('ChangesSection', () => {
     });
   });
 
+  it('right-panel R6: 全部审查按钮进入汇总视图', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({
+      diff: 'diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new',
+      truncated: false,
+    });
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+    // 无变更时按钮不渲染
+    expect(screen.getByTestId('review-all-button')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('review-all-button'));
+    // 进入汇总视图:返回按钮 + 文件小节（diff 内容经真实 Shiki 异步渲染）
+    await waitFor(() => {
+      expect(screen.getByTestId('review-all-back')).toBeInTheDocument();
+    });
+    await waitFor(
+      () => {
+        expect(screen.getByText('+new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+
+    // 返回列表
+    fireEvent.click(screen.getByTestId('review-all-back'));
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+  });
+
   it('opens diff view on file click and goes back', async () => {
     mockGetChanges.mockResolvedValue(sampleChanges);
     mockGetChangeDiff.mockResolvedValue({
