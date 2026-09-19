@@ -639,6 +639,9 @@ class WordPageSetupSpec(BaseModel):
         Literal["decimal", "upperRoman", "lowerRoman", "upperLetter", "lowerLetter"]
     ] = Field(default=None)
     page_number_start: Optional[int] = Field(default=None, ge=0)
+    # Round 58：该节脚注编号每节重排（w:footnotePr/numRestart=eachSect；
+    # 论文/书籍分章脚注场景）。默认 False 零触碰。
+    footnote_restart_each_section: bool = Field(default=False)
 
 
 class WordBodyStyleSpec(BaseModel):

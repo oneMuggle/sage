@@ -71,6 +71,39 @@ _FOOTNOTE_SYSTEM_NOTES = (
 )
 
 
+_FOOTNOTE_STYLES_XML = (
+    '<w:style w:type="paragraph" w:styleId="FootnoteText">'
+    '<w:name w:val="footnote text"/><w:basedOn w:val="Normal"/>'
+    '<w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'
+    '<w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>'
+    '<w:style w:type="character" w:styleId="FootnoteReference">'
+    '<w:name w:val="footnote reference"/><w:rPr><w:vertAlign w:val="superscript"/>'
+    "</w:rPr></w:style>"
+)
+
+
+def _ensure_footnote_styles(doc: Document) -> None:
+    """向 styles.xml 注入 FootnoteText/FootnoteReference 定义（幂等）。
+
+    Phase A 的引用 run 引用了这两个样式但未定义——Word 回退默认渲染
+    （脚注文本不缩小、引用不上标）。styleId 已存在时跳过。
+    """
+    styles_el = doc.styles.element
+    existing = {
+        style.get(qn("w:styleId"))
+        for style in styles_el.findall(qn("w:style"))
+    }
+    from lxml import etree
+
+    W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    for frag in etree.fromstring(
+        f"<root xmlns:w='{W}'>{_FOOTNOTE_STYLES_XML}</root>"
+    ):
+        if frag.get(qn("w:styleId")) in existing:
+            continue
+        styles_el.append(frag)
+
+
 def _mount_footnotes_part(doc: Document, notes: List[str]) -> None:
     """构造并挂载 word/footnotes.xml part（Round 57 Phase A）。
 
@@ -1365,6 +1398,7 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # Round 57：有内联脚注时挂载 footnotes part（无脚注零变化）。
         if footnote_texts:
             _mount_footnotes_part(doc, footnote_texts)
+            _ensure_footnote_styles(doc)
         doc.save(str(output_path))
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate DOCX: {exc}", file_path=output_path) from exc
