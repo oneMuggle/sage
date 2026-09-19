@@ -40,6 +40,16 @@ function createManager() {
       cacheRetentionDays: 30,
     }),
     setChannel: vi.fn().mockResolvedValue(undefined),
+    setConfigPatch: vi.fn().mockResolvedValue({
+      updateStrategy: 'auto-download',
+      channel: 'stable',
+      rollbackWindowDays: 7,
+      autoRollbackThreshold: 3,
+      checkIntervalHours: 12,
+      updateServerUrl: 'https://updates.sage.app',
+      enableTelemetry: true,
+      cacheRetentionDays: 30,
+    }),
     onDownloadProgress: vi.fn().mockReturnValue(() => undefined),
     onStateChange: vi.fn().mockReturnValue(() => undefined),
   };
@@ -124,6 +134,41 @@ describe('registerUpdateIpc', () => {
     );
   });
 
+  it('forwards a validated config patch and returns the resulting config', async () => {
+    const ipc = createIpcMain();
+    const manager = createManager();
+    registerUpdateIpc(ipc as never, manager as never, {
+      isTrustedRenderer: () => true,
+    });
+
+    const result = await ipc.handlers.get('update:set-config-patch')?.(trustedEvent, {
+      checkIntervalHours: 12,
+      enableTelemetry: true,
+    });
+
+    expect(manager.setConfigPatch).toHaveBeenCalledWith({
+      checkIntervalHours: 12,
+      enableTelemetry: true,
+    });
+    expect(result).toEqual(expect.objectContaining({ checkIntervalHours: 12 }));
+  });
+
+  it('rejects non-object config patches before calling the manager', async () => {
+    const ipc = createIpcMain();
+    const manager = createManager();
+    registerUpdateIpc(ipc as never, manager as never, {
+      isTrustedRenderer: () => true,
+    });
+
+    await expect(
+      ipc.handlers.get('update:set-config-patch')?.(trustedEvent, 'nope'),
+    ).rejects.toThrow('无效的更新配置');
+    await expect(ipc.handlers.get('update:set-config-patch')?.(trustedEvent, null)).rejects.toThrow(
+      '无效的更新配置',
+    );
+    expect(manager.setConfigPatch).not.toHaveBeenCalled();
+  });
+
   it('trims rollback reason uniformly before passing to manager', async () => {
     const ipc = createIpcMain();
     const manager = createManager();
@@ -206,6 +251,7 @@ describe('preload update bridge', () => {
     await exposed.updates.setStrategy('manual');
     await exposed.updates.getConfig();
     await exposed.updates.setChannel('beta');
+    await exposed.updates.setConfigPatch({ checkIntervalHours: 12 });
     expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([
       'update:check',
       'update:download',
@@ -215,6 +261,7 @@ describe('preload update bridge', () => {
       'update:set-strategy',
       'update:get-config',
       'update:set-channel',
+      'update:set-config-patch',
     ]);
 
     const handler = vi.fn();
