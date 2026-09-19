@@ -118,13 +118,14 @@ def test_legal_model_selections_obj_keys_is_stable() -> None:
 
 
 def test_legal_orch_keys_is_stable() -> None:
-    """LEGAL_ORCH_KEYS 是前端 OrchSettings 12 键（含 scratchRoot，后端存）。
+    """LEGAL_ORCH_KEYS 必须与前端 OrchSettings interface 15 键逐字同步.
 
-    2026-09 修复: 前端 OrchSettings 演进出 worktreeIsolation /
-    subagentApprovalMode / runTokenBudget 三键, 白名单未跟导致编排设置
-    保存整体 400 (且被前端静默吞掉)。此测试钉住同步义务。
-    Round 3 (2026-09-19): 补计划前置开关 planPreflightEnabled /
-    planScoutEnabled (orch-plan-preflight-round3-plan.md)。
+    历史事故两次: 2026-09 漏 worktreeIsolation / subagentApprovalMode /
+    runTokenBudget, RD15 后又漏 runWallClockLimitMinutes /
+    subagentTaskTimeoutS / maxRetryOfChains, 均导致编排段任一保存 400
+    且被前端静默吞掉。Round 3 (2026-09-19) 补计划前置开关
+    planPreflightEnabled / planScoutEnabled。新增 orch 键时此处与
+    canonicalizer 必须同改。
     """
     assert frozenset(
         {
@@ -140,6 +141,9 @@ def test_legal_orch_keys_is_stable() -> None:
             "scratchRoot",
             "planPreflightEnabled",
             "planScoutEnabled",
+            "runWallClockLimitMinutes",
+            "subagentTaskTimeoutS",
+            "maxRetryOfChains",
         }
     ) == LEGAL_ORCH_KEYS
 

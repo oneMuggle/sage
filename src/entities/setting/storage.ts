@@ -266,7 +266,8 @@ export function mergeWithDefaults(partial: Partial<AppSettings>): AppSettings {
     ...partial,
     endpoints: mergedEndpoints,
     modelSelections: mergedModelSelections,
-    // Task 1 (2026-08-23): 缺省时区补 'Asia/Shanghai' — 与 DEFAULT_SETTINGS.timezone 对齐.
+    // Task 1 (2026-08-23): 缺省时区补 DEFAULT_SETTINGS.timezone（系统时区探测,
+    // 兜底 Asia/Shanghai）。
     timezone: partial.timezone ?? DEFAULT_SETTINGS.timezone,
     // 日志时区 (2026-09-17): 缺省补 'UTC' — 与 DEFAULT_SETTINGS.logTimezone 对齐,
     // 保持历史行为 (历史日志全部 UTC 时间戳). 用户可改 'local' 或 IANA 时区.
@@ -345,7 +346,48 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<void>
 }
 
 /**
- * 重置为默认值
+ * 恢复默认 - preferences KV 层（补齐 resetSettings 只覆盖 app_settings blob 的缺口）。
+ *
+ * 只重置「设置页自己写入」的行为类 KV；刻意不碰：
+ * - browser_credential_vault / permission_rules：用户攒下的登录凭据与审批规则，属数据；
+ * - current_session_id / session_model_overrides：运行时状态；
+ * - theme / font 系列 key：外观项，由各自 entity store 在启动时同步。
+ *
+ * 各 key 的默认值与 category 都对齐对应 Tab 的正常写入，重置后落库形态与
+ * 用户手动改回默认一致。后端 preferences 路由只有 PUT 没有 DELETE，所以写
+ * 显式默认值而非删行。
+ */
+export async function resetPreferencesToDefaults(): Promise<void> {
+  await Promise.all([
+    settingsClient.setPreference('permission_mode', 'workspace_write', 'permissions'),
+    settingsClient.setPreference(
+      'network_policy',
+      JSON.stringify({ mode: 'online', allowed_hosts: [], insecure_tls_hosts: [] }),
+      'network',
+    ),
+    settingsClient.setPreference('web_proxy', JSON.stringify({ http: '', https: '' }), 'network'),
+    settingsClient.setPreference(
+      'search_config',
+      JSON.stringify({ order: ['bing', 'ddg'], tavily_key: '', zhipu_key: '' }),
+      'network',
+    ),
+    settingsClient.setPreference(
+      'web_access_config',
+      JSON.stringify({ render_persistent: false, auto_refresh_credentials: false }),
+      'network',
+    ),
+    settingsClient.setPreference('fallback_model', ''),
+    // Context Isolation (Task 8): 空串 = 不限轮数, 与 ContextTurnLimitSelect 默认一致
+    settingsClient.setPreference('context_turn_limit', ''),
+    // '1' = 开，与 auto_checkpoint 新默认（安全网默认开，显式 '0' 才关）一致
+    settingsClient.setPreference('auto_checkpoint', '1'),
+    settingsClient.setPreference('spend_limit_usd', '0', 'general'),
+    settingsClient.setPreference('hooks', '[]', 'general'),
+  ]);
+}
+
+/**
+ * 重置为默认值：app_settings blob（local cache + 后端）+ preferences KV 行为项
  */
 export async function resetSettings(): Promise<void> {
   writeLocalCacheSync({ ...DEFAULT_SETTINGS });
@@ -354,6 +396,7 @@ export async function resetSettings(): Promise<void> {
   } catch {
     // 静默
   }
+  await resetPreferencesToDefaults();
 }
 
 // 旧同步签名保留为 fallback（@deprecated；新代码用 async 版本）

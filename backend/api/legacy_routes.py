@@ -927,12 +927,13 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
 
 
 def _auto_checkpoint_if_enabled(session_id: str) -> str | None:
-    """round5 批次 B-2: 发送前自动快照（偏好 "auto_checkpoint" = "1" 时）。
+    """round5 批次 B-2: 发送前自动快照（偏好 "auto_checkpoint" 缺省/"1" 时）。
 
     在 run 开始前为会话绑定的工作区打一份 checkpoint，提供"整轮改动
     一键回滚"安全网。设计口径：
 
-    - **默认关**（偏好缺省/非 "1" 一律跳过）——不改变既有行为；
+    - **默认开**（偏好缺省即开启；仅显式 "0" 关闭）——安全网类开关，
+      2026-09-18 默认值收口时从"默认关"翻转；
     - 全程 fail-open：任何一步（偏好读 / 绑定 / zip）失败只记 debug，
       返回 None，绝不阻塞聊天流；
     - 快照即 CheckpointCreateTool（与 U2' 面板同一实现口径，受 8MiB/
@@ -948,7 +949,7 @@ def _auto_checkpoint_if_enabled(session_id: str) -> str | None:
         from backend.data.settings_repo import SettingsRepository
 
         enabled = SettingsRepository().get("auto_checkpoint")
-        if enabled != "1":
+        if enabled == "0":
             return None
         from backend.office.session_workspace import get_workspace_binding
 
@@ -2236,8 +2237,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug("会话运行态(running)写入失败: %s", status_err)
 
             # ===== B-2 (round5 批次 B): 发送前自动快照 BEGIN =====
-            # 偏好 auto_checkpoint="1" 且会话绑定工作区时, run 开始前打一份
-            # checkpoint（一键回滚安全网）。zip 是秒级同步操作, 丢 executor
+            # 偏好 auto_checkpoint 非显式 "0"（缺省=开）且会话绑定工作区时, run
+            # 开始前打一份 checkpoint（一键回滚安全网）。zip 是秒级同步操作, 丢 executor
             # 跑, 不阻塞事件循环与流启动; 全程 fail-open（函数内部已兜底）。
             try:
                 loop = asyncio.get_running_loop()
