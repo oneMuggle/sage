@@ -253,7 +253,7 @@ def _build_chat_service(lifecycle=None) -> ChatService:
 
     skills_adapter = InprocSkillAdapter()
 
-    inner_tools = InprocToolAdapter()
+    inner_tools = InprocToolAdapter(scheduler_service_getter=get_scheduler_service)
     compute = _build_compute_adapter()
     if compute is not None:
         from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter

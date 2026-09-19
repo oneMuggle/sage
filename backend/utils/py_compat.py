@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import functools
 import sys
 from typing import Any, Callable
@@ -16,11 +17,12 @@ _has_native_to_thread = sys.version_info >= (3, 9)
 
 async def to_thread(func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
     """``asyncio.to_thread`` 的 py38 等价实现。"""
+    call = functools.partial(func, *args, **kwargs)
     if _has_native_to_thread:
         return await asyncio.to_thread(func, *args, **kwargs)
-    call = functools.partial(func, **kwargs)
+    ctx = contextvars.copy_context()
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, call, *args)
+    return await loop.run_in_executor(None, ctx.run, call)
 
 
 # wait_for / wait 超时异常族：py38 中 asyncio.TimeoutError 与 builtin

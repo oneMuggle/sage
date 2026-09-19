@@ -25,6 +25,7 @@ from backend.domain.tool_names import (
     PATCH_TOOLS,
     RUNTIME_EXEC_TOOLS,
     RUNTIME_PROBE_TOOLS,
+    SCHEDULE_TOOLS,
     SYMBOL_TOOLS,
     WEB_FETCH_TOOLS,
 )
@@ -137,6 +138,11 @@ _PRIMARY_SEED_TOOLS = (
     "execute_code",
     # 2026-09-18 feat/agents-entry-config-query: 系统自省与配置工具 read_sage_config 与 update_sage_config
     *CONFIG_TOOLS,
+    # 2026-09-19 feat/llm-schedule-tool: 定时任务派发三件套（schedule / list /
+    # cancel）。primary 作为 coordinator 直接代用户创建/查看/取消定时任务，
+    # 把此前仅前端 UI 可用的 SchedulerService 暴露给自然语言对话。
+    # 与 CONFIG_TOOLS 同样 coordinator-only —— 子代理白名单严禁纳入。
+    *SCHEDULE_TOOLS,
 )
 
 # coder：bash 三件齐备（同上）。2026-09-03 PR #381 把 TerminalTool 重写为

@@ -35,6 +35,7 @@ from typing import Any, Callable, Dict, List, Optional
 from sage_core import ToolResult, ToolSpec
 from sage_core.repositories import ToolPort  # noqa: F401  (structural typing target)
 
+from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools.bash_validation import validate_bash
 from backend.tools.executor import (
@@ -63,6 +64,7 @@ class InprocToolAdapter:
         registry: Optional[_ToolRegistry] = None,
         policy: Optional[ToolPolicy] = None,
         enforcer_factory: Optional[Callable[[], PermissionEnforcer]] = None,
+        scheduler_service_getter: Optional[Callable[[], Optional[SchedulerServicePort]]] = None,
     ) -> None:
         # 接受外部注入（用于测试）或使用新建 registry
         self._registry = registry if registry is not None else _ToolRegistry()
@@ -78,7 +80,11 @@ class InprocToolAdapter:
             from backend.tools import register_all_tools
             from backend.tools.memory_tool import inject_memory_manager
 
-            register_all_tools(self._registry, policy=self._policy)
+            register_all_tools(
+                self._registry,
+                policy=self._policy,
+                scheduler_service_getter=scheduler_service_getter,
+            )
             # 注入共享 MemoryManager：register_all_tools 创建的 MemorySearchTool /
             # MemorySaveTool 默认 self.memory=None，runtime 调用会返回
             # "未初始化"。adapter 是 agent-less 路径（hex API 等），

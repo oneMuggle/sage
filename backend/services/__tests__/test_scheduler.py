@@ -200,6 +200,37 @@ class TestDeleteTask:
         with pytest.raises(TaskNotFoundError):
             scheduler.delete_task("task-missing")
 
+    def test_expected_session_mismatch_refuses_delete(
+        self, scheduler: SchedulerService
+    ) -> None:
+        """2026-09-19 安全审查修复: expected_session_id 与任务归属不符时
+        拒绝删除（原子校验，供 LLM 工具消除 TOCTOU 窗口）。"""
+        task = scheduler.add_task(
+            name="owned by s-1",
+            task_type="recurring",
+            schedule={"kind": "recurring", "cron": "0 8 * * *"},
+            session_id="s-1",
+            content="x",
+        )
+        with pytest.raises(ValidationError):
+            scheduler.delete_task(task.id, expected_session_id="s-2")
+        # 任务未被删除
+        assert len(scheduler.list_tasks()) == 1
+
+    def test_expected_session_match_deletes(
+        self, scheduler: SchedulerService
+    ) -> None:
+        """归属一致时原子删除成功。"""
+        task = scheduler.add_task(
+            name="owned by s-1",
+            task_type="recurring",
+            schedule={"kind": "recurring", "cron": "0 8 * * *"},
+            session_id="s-1",
+            content="x",
+        )
+        scheduler.delete_task(task.id, expected_session_id="s-1")
+        assert scheduler.list_tasks() == []
+
 
 class TestRunNow:
     def test_fires_task_immediately_and_inserts_message(
@@ -310,6 +341,109 @@ class TestAddTaskValidation:
             )
 
 
+class TestOnceAtRangeGuard:
+    """2026-09-19: 越界 once 'at' 必须在落盘前拦下，且不得阻断重启。
+
+    修复前：at 超界（如 1e17 ms）先被持久化，再在 _schedule_job 抛
+    ValueError —— 磁盘上留下无法调度的任务，重启时 _reschedule_all 抛同一
+    异常使 SchedulerService 构造失败（后端起不来）。
+    """
+
+    def test_unrepresentable_at_rejected_without_persisting(
+        self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
+    ) -> None:
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
+        with pytest.raises(ValidationError, match="representable"):
+            svc.add_task(
+                name="越界",
+                task_type="once",
+                schedule={"kind": "once", "at": 99999999999999999},
+                session_id="s",
+                content="x",
+            )
+        assert svc.list_tasks() == []
+        assert not store_path.exists()
+
+    def test_restart_survives_persisted_unrepresentable_at(
+        self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
+    ) -> None:
+        """磁盘上已有坏条目时，构造不得抛异常（旧版本写入的脏数据）。"""
+        store_path.parent.mkdir(parents=True, exist_ok=True)
+        store_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "tasks": [
+                        {
+                            "id": "task-bad",
+                            "name": "bad",
+                            "type": "once",
+                            "schedule": {"kind": "once", "at": 99999999999999999},
+                            "session_id": "s",
+                            "content": "x",
+                            "enabled": True,
+                            "created_at": 0,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
+        tasks = svc.list_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].last_status == "failed"
+        assert tasks[0].last_error
+
+    @pytest.mark.timeout(15)
+    def test_restart_with_expired_once_task_does_not_deadlock(
+        self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
+    ) -> None:
+        """2026-09-19 安全审查修复: 合法但已过期的一次性任务在重启登记时
+        走 missed 分支 → _record_run。修复前 _schedule_job 在持
+        ``threading.Lock`` 状态下调用 _record_run（内部再获同一把非重入锁）
+        → 死锁，后端 __init__ 永久挂起。
+
+        与上一个用例的区别：``at`` 是**合法可表示但已过去**的毫秒值，能通过
+        ``_epoch_ms_to_dt``，从而真正走到锁嵌套代码；越界值在更早处就抛异常，
+        掩盖了这条路径。用 pytest-timeout 防止回归时测试自身挂死。"""
+        past_ms = int(time.time() * 1000) - 60_000
+        store_path.parent.mkdir(parents=True, exist_ok=True)
+        store_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "tasks": [
+                        {
+                            "id": "task-expired",
+                            "name": "expired",
+                            "type": "once",
+                            "schedule": {"kind": "once", "at": past_ms},
+                            "session_id": "s",
+                            "content": "x",
+                            "enabled": True,
+                            "created_at": 0,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
+        tasks = svc.list_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].last_status == "failed"
+        assert "missed" in (tasks[0].last_error or "")
+        # 一次性任务错过触发点后停用，不自动重放
+        assert tasks[0].enabled is False
+
+
 class TestLoadEdgeCases:
     def test_corrupt_json_falls_back(
         self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
@@ -358,6 +492,43 @@ class TestLoadEdgeCases:
         tasks = svc.list_tasks()
         assert len(tasks) == 1
         assert tasks[0].id == "good"
+
+    def test_corrupt_recurring_cron_does_not_block_startup(
+        self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
+    ) -> None:
+        """2026-09-19: 结构合法但 cron 损坏的 recurring 任务（磁盘脏数据 /
+        手改 JSON）此前会在 __init__ → _reschedule_all → _schedule_job 抛
+        ValueError，随后 _record_run 经 _next_run_for 再抛 CroniterBadCronError
+        （继承 ValueError），击穿逐条容错使后端构造失败。现在 _next_run_for
+        对损坏 cron 返回 None，任务标记 failed 但启动不受影响。"""
+        store_path.parent.mkdir(parents=True, exist_ok=True)
+        store_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "tasks": [
+                        {
+                            "id": "task-corrupt-cron",
+                            "name": "corrupt",
+                            "type": "recurring",
+                            "schedule": {"kind": "recurring", "cron": "totally-not-a-cron"},
+                            "session_id": "s",
+                            "content": "x",
+                            "enabled": True,
+                            "created_at": 0,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
+        tasks = svc.list_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].last_status == "failed"
+        assert tasks[0].next_run is None
 
 
 class TestRunNowEdgeCases:
