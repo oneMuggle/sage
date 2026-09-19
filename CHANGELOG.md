@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 57：内联脚注 Phase A**（方案 `docs/plans/2026-09-19_r57-footnotes-phase-a-plan.md`，设计稿 90 号）
+
+### Added(office)
+- **`{{fn:备注文本}}` 内联脚注**：正文占位符生成 `w:footnoteReference` run（id 按出现顺序 1..N），备注文本写入挂载的 `word/footnotes.xml` part（含 separator/continuationSeparator 系统脚注）——学术论文脚注支持的最小闭环
+- **`read_docx` 回读 `footnotes: List[str]`**（无脚注空表）；无脚注文档不挂载 part（产物零变化）
+
+> 📝 **Word 写作能力 Round 56：脚注/尾注设计评审稿**（设计文档，非实现）
+
+### Added(docs)
+- **`docs/technical/90-word-footnotes-design.md`**：脚注支持的设计评审稿——python-docx 无原生 API 的 OOXML 四件套结构分析（footnotes.xml part/relationship/content-type/系统脚注）、`{{fn:}}` 内联锚点选型、三期分期（Phase A 写侧最小闭环 ~1 轮）与风险清单（part 手术的半公开 API、WPS 兼容验证）
+
+> 📝 **Word 写作能力 Round 53：分节页码格式与起始号（w:pgNumType）**（方案 `docs/plans/2026-09-18_r53-pgnum-format-plan.md`）
+
+### Added(office)
+- **`page_number_format` / `page_number_start`**（WordPageSetupSpec）：节内页码格式（decimal/upperRoman/lowerRoman/upperLetter/lowerLetter）与起始号——论文前置目录罗马页码、正文阿拉伯从 1 的惯例一次成型；主节（format_spec.page）与分节新节（section_breaks.page_setup）同一路径生效，页脚 PAGE 域自动跟随节格式
+- **lint `page/numbering` 对偶**：spec 声明 fmt/start 时校验首节 pgNumType 实际值（缺失/不符报 error）
+
+> 📝 **Word 写作能力 Round 52：PPT core properties 三件套对称**（方案 `docs/plans/2026-09-18_r52-ppt-metadata-plan.md`）
+
+### Added(office)
+- **`OfficePptGenerateRequest.metadata`**（PptMetadataSpec 别名复用）+ **`OfficePptReadResult.metadata`** 回读——docx/xlsx/pptx 三件套文档属性能力收口；python-pptx 属性名与 python-docx 一致（author/subject/keywords/comments/category），仅显式传入才写
+
+> 📝 **Word 写作能力 Round 51：读侧 core properties 回读**（方案 `docs/plans/2026-09-18_r51-read-metadata-plan.md`）
+
+### Added(office)
+- **`read_docx` / `read_xlsx` 回读 `metadata`**（WordMetadataSpec，全空为 None）——R49/R50 写入的文档属性在读取侧可见，Sage 可回答"这篇文档的作者/关键词是什么"；读侧映射与写侧对偶（xlsx creator/description ↔ author/comments）
+
+> 📝 **Word 写作能力 Round 50：Excel core properties 对称支持**（方案 `docs/plans/2026-09-18_r50-excel-metadata-plan.md`）
+
+### Added(office)
+- **`OfficeExcelGenerateRequest.metadata`**（ExcelMetadataSpec = WordMetadataSpec 别名复用）：generate_xlsx 写 wb.properties（author→creator、comments→description 映射在生成器内完成）——台账/预算归档与 Word 同款文档属性；仅显式传入才写，不臆造作者
+- 契约同步：schema metadata 描述扩为 word/excel 通用；types.ts Excel 请求加 metadata；paper-writing 数据表附表节补说明
+
+> 📝 **Word 写作能力 Round 49：文档核心属性**（方案 `docs/plans/2026-09-18_r49-core-metadata-plan.md`）
+
+### Added(office)
+- **`metadata`（WordMetadataSpec）**：office_create word 请求支持 author/subject/keywords/comments/category → 写入 docx core properties（Word「文件 → 信息」面板可见）——期刊投稿/公文归档的常规要求；title 恒取请求标题，其余显式传入才写（不臆造作者）
+- 契约同步：schema content 层 metadata 对象 + types.ts WordMetadataSpec；paper-writing 第 4 步示例补 metadata
+
+> 🧹 **Word 写作能力 Round 48：repair 补 index 域插入 + SEQ 题注重排兼容**（方案 `docs/plans/2026-09-18_r48-repair-index-plan.md`）
+
+### Added(office)
+- **repair 闭环 R44 规则**：spec 声明 figure_index/table_index 而文档缺失时，repair 从文档自身 SEQ 题注重建条目并插入对应 TOF 域（目录后/首段前），repaired_rules 记入 presence 规则
+- **`caption/duplicate` lint 警告**：同类题注文本重复提示（交叉引用按文本匹配指向首个），warning 级不阻断
+
+### Fixed(office)
+- **SEQ 题注重排摧毁域缺陷**：`_renumber_captions` 对携带 SEQ 的题注段不再整体重写 `para.text`（会抹掉 R42 的 SEQ 域与书签，重排触发即毁交叉引用/图表目录）——改为仅更新域内缓存编号 run，结构原样保留
+
+> 📝 **Word 写作能力 Round 47：论文场景能力可发现化收口**（方案 `docs/plans/2026-09-18_r47-paper-capabilities-plan.md`）
+
+### Changed(docs)
+- **paper-writing 技能补全 R39-R46 能力**：目录/图表目录（figure_index/table_index）/交叉引用占位符（{{fig:}}/{{tbl:}}）/真页码刷新（refresh_toc + office_refresh_toc）——论文场景才是这些能力的最大受益方，此前零覆盖；allowed-tools 补 office_refresh_toc
+- **用户手册 09-office.md**：目录描述从"打开后更新域生成"更新为真页码语义；图表与图片节补插图清单/表格清单与交叉引用说明
+- shipped 技能测试补论文场景可发现化断言（figure_index / {{fig:}} / office_refresh_toc）
+
+> 📝 **Word 写作能力 Round 46：交叉引用升级——REF 域 + 题注书签**（方案 `docs/plans/2026-09-18_r46-ref-fields-plan.md`）
+
+### Added(office)
+- **占位符产物原生化**：`{{fig:}}/{{tbl:}}` 不再写成纯文本"图N"，改为 `REF _RefFig{n} \h` 复杂域（缓存"图N"）+ 题注编号套书签——F9/COM 更新域后正文引用自动跟随题注重排；R39 COM 刷新通道（Fields.Update）零新增编排即覆盖
+- **零回归双路径**：有占位符的段落走分段写 run 路径（标题 numbering 前缀为首段），无占位符段落保持既有单次写入（产物逐字节不变）
+
 > 📝 **Word 写作能力 Round 45：交叉引用占位符**（方案 `docs/plans/2026-09-18_r45-cross-ref-plan.md`）
 
 ### Added(office)
@@ -108,6 +169,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed(web-access)
 - `BROWSER_TOOLS` 新增 `browser_downloads`（READ）；coder 默认工具白名单经 `*BROWSER_TOOLS` 自动带上；`browser_launch` 结果新增 `download_tracking`
+
+
+## [v0.4.9-alpha.45] - 2026-09-19
+
+### Added
+- feat(chat): RD18 级联跳过根因徽章——任务树失败行直读 blocked_by_failed 根因 (#1208)
+- feat(office): Round 57 — 内联脚注 Phase A（{{fn:}} + footnotes part 挂载 + 回读） (#1204)
+- feat(right-panel): R4——版本互比 + 变更预取 + 产物类型过滤 (#1198)
+- feat(p11): client_message_id 幂等复用 + 标题后台生成的前端补刷 (#1196)
+- feat(orch): RT24 编排任务持久化携带用量与时长——orch_tasks 增 used_tokens/duration_ms (#1195)
+- feat(chat): 引用溯源展示增强——附件名优先 + 溯源明细完善（r80） (#1194)
+- feat(orch): BU17 聚合块任务级消耗标注——终态块标题带（消耗 N tokens） (#1188)
+- feat(office): Round 53 — 分节页码格式与起始号（w:pgNumType） (#1185)
+- feat(chat): 文件选择器 accept 过滤——从源头防误选（r78） (#1184)
+- feat(chat): BU16 run 级耗时与上限提示——进度行实时计时，终态冻结 (#1183)
+- feat(p10): 回滚语义重做 Round 1——last-known-good 回滚数据 + RunOnce 交换执行 (#1180)
+- feat(office): Round 52 — PPT core properties 三件套对称（generate/read metadata） (#1181)
+- feat(right-panel): R3 - version diff view + CodeMirror editing + changes count badge (#1172)
+- feat(office): Round 51 — 读侧 core properties 回读（read_docx/read_xlsx metadata） (#1174)
+- feat(chat): BU15 运行中子任务实时耗时——任务树 running 行计时徽章 (#1169)
+- feat(office): Round 50 — Excel core properties 对称支持（generate_xlsx metadata） (#1170)
+- feat(chat): 聊天文档附件支持 pdf/docx——打通 R39/RAG UI 断点（r75） (#1167)
+- feat(office): Round 49 — 文档核心属性（WordMetadataSpec → docx core properties） (#1164)
+- feat(rag): 附件上传后自动建立检索索引——opt-in fire-and-forget（r74） (#1161)
+- feat(orch): BU14/BD8 守门状态透出——快照带 wall_clock_exceeded，partial 归因触顶 (#1160)
+- feat(office): Round 48 — repair 补 index 域插入 + SEQ 题注重排兼容（缺陷修复） (#1159)
+- feat(p9): client_message_id 消息身份协议——根治乐观 id 与服务端 id 失配的重复显示 (#1155)
+- feat(rag): 引用溯源明细增强——chunk 索引/相关度进事件与气泡（r73） (#1156)
+- feat(right-panel): R2——预览升级 + overlay 抽屉三件套 + 信息密度打磨 (#1153)
+- feat(orch): RV4 单任务重试——rerun-failed 支持 task_ids 子集 + 任务树行内重试按钮 (#1150)
+- feat(office): Round 46 — 交叉引用升级（REF 域 + 题注书签） (#1143)
+- feat(office): office-p5b 批次——ppt 生成表单版式选择 (#1148)
+- feat(chat): RAG 引用溯源事件 + R17-E memory_used 接线收尾（r71） (#1115)
+- feat(usage): 上下文占用分类明细统计 + ContextMeter 弹层 (#1128)
+- feat(office): Word/PPT 专用角色收口——ppt-maker 种子 + PPT 模板工具面 + writer 门禁 prompt (#1129)
+- feat(arena): automation + model probe (27 commits, evidence/JWT/retry hardening) (#1030)
+- feat(context-isolation): 三层上下文隔离 (#1032)
+- feat: /agents 侧边栏入口与 Sage 自省/配置工具 (#1126)
+- feat: 用户通知透明度增强 - 技能激活与上下文压缩可见化 (#1122)
+- feat: protect Python backend code in release builds (#1124)
+- feat(settings): RD16 编排设置全量收口——worktree 隔离开关 + scratch 根目录名 (#1113)
+- feat(right-panel): R1——面板状态全局化 + 自动唤起/内联产物卡片 + 上下文持久化 + 全屏/宽度档位 (#1112)
+- feat(office): expose staging quarantine over HTTP (plan/run/report/restore) (#1111)
+- feat(office): Round 45 — 交叉引用占位符（{{fig:}}/{{tbl:}} → 图N/表N + residue lint） (#1109)
+- feat(workspace): 三阶段 AI 工作区优化（来源/产物/项目上下文） (#857)
+- feat(office): Round 44 — lint 面补强（index 域在位校验 + lint schema 子集白名单） (#1102)
+- feat(office): honour Electron import sentinels as a cross-process lease (#1101)
+- feat(settings): RD15 编排守门键透出设置页——墙钟上限/单任务超时/重派链上限 (#1099)
+- feat(web-access): Round 18——web_search 纳入 per-host 指标 + 指标 UI 刷新/重置 (#1092)
+- feat(office): Round 42 — 图目录/表目录（TOF 域 + SEQ 题注升级） (#1090)
+- feat(orchestration): BU13 任务级消耗准确性 + 时长可见性——终态事件 per-task 归因 (#1088)
+- feat(office): Round 41 — office_update 修订后 TOC 刷新（refresh_toc）+ 横排宽表场景文档 (#1085)
+- feat(rag): RAG 切片 4b——附件检索注入前端配置与请求接线（r67） (#1079)
+- feat(office): Round 40 — office_create 一键 TOC 刷新（refresh_toc）+ rollback 遥测测试竞态修复 (#1083)
+- feat(office): Round 39 — Word 目录真页码（Word COM 刷新域可选通道） (#1073)
+- feat(web-access): Round 16——设置页展示 per-host 出网指标 (#1077)
+- feat(rag): RAG 切片 4a——producer 超长附件检索注入（opt-in 请求级嵌入）（r66） (#1069)
+- feat(office): office-p5a 批次——PPT 模板占位符分析与填充 (#1071)
+- feat(web-access): Round 15——per-host 出网指标 + 渲染 net 块 (#1068)
+- feat(mcp): OAuth 状态可见化——has_oauth_token + 授权角标（r65） (#1066)
+- feat(office): office-p4b 批次——OCR 语言/精度扩展 (#1062)
+- feat(mcp): OAuth 收口——授权 API 路由 + IPC + McpTab 授权按钮（r64） (#1056)
+- feat(office): office-p4c 批次——ppt 插入图片 UI 入口 (#1052)
+- feat(mcp): OAuth 切片 3a——授权编排层（发现→注册→授权→交换）（r62） (#998) (#1049)
+- feat(web-access): Round 14——浏览器健康自检 + 凭据 UI header 型新增 (#1047)
+- feat(office): Word 表头行样式（header_style，与 Excel header_style 对称） (#1048)
+- feat(office): quarantine-based staging cleanup with recoverable moves (#1044)
+- feat(mcp): OAuth 切片 3b——loopback 回听 + 浏览器拉起编排（r63） (#1039)
+- feat(office): office-p4b 批次——OCR 能力徽章 + word 插图入口 (#1042)
+- feat(mcp): OAuth 切片 3a——授权编排层（发现→注册→授权→交换）（r62） (#998)
+
+### Fixed
+- fix(py38): legacy_routes 新增 to_thread 调用对齐 py_compat——预铺 win7 同步 (#1205)
+- fix(r38): 修复用户通知透明度合并后审查发现的 6 项缺陷 (#1140)
+- fix(test): office_create 审批链测试 Windows 适配——LLM JSON 模板路径经 json.dumps 转义 (#1192)
+- fix(chat): InputCard 文件选择器补 accept=".txt,.md,.pdf,.docx"（r79） (#1189)
+- fix(chat): 重接路径补 memory_used——重放不丢记忆明细（r77） (#1178)
+- fix(chat): 补回 #1167 丢失的 pdf/docx 白名单 + 修正过时附件提示（r76） (#1171)
+- fix(py38): zip strict= 形参残留清零——chat/topic_detection._cosine + model_catalog 并发测试 (#1162)
+- fix(chat): skill_activated 明细写错消息目标——userId→assistantId（r72） (#1151)
+- fix(chat): 段级工作记忆清空改为经 agent.memory_manager 共享实例 (#1139)
+- fix(packaging): 保护模式 .pyc 被 filter 剔除 + 源码泄漏修复 (#1136)
+- fix(win7): Windows bash/REPL spawn_verified + kill_process_tree (#855)
+- fix(projects): restore allowed_paths support lost in workspace optimization (#1120)
+- fix(tools): bash/repl 中文编码乱码 + repl 资源清理覆盖成功结果 (#1118)
+- fix(py38): Round 23——行为类遗留修复（事件循环生命周期 + TimeoutError 双型 + 测试竞态） (#1106)
+- fix(mcp): OAuth 401 自愈——失效 token 清理 + 错误面点名重授权（r70） (#1105)
+- fix(p7): 第七批收尾二——mock 响应不落库 / 标题生成移出 DONE 关键路径 / 长会话分页 / 信封统一收尾 (#1100)
+- fix(llm): 直连模式 base_url 带 /v1 后缀去重——不再请求 /v1/v1/… 404 路径（r69） (#1089)
+- fix(office): Round 43 — office_create schema 漂移卫生修复（toc/section_breaks 可发现化 + 三方防漂移门禁） (#1095)
+- fix(win7): 内网闪退三层防御 — 运行时检测 + Chromium 开关 + 崩溃事件 (#1040)
+- fix(chat): pdf/docx 附件提取挪线程池——避免卡聊天事件循环（r68） (#1086)
+- fix(py38): py39+ 标准库 API 兜底——to_thread 垫片 + hardlink_to/write_text(newline) 适配 (#1070)
+- fix(doctor): 端口占用检测 Windows 语义修复——SO_EXCLUSIVEADDRUSE + 平台化修复提示 (#1057)
+- fix(chat): ignore skill loads after input unmount (#1035)
 
 ## [v0.4.9-alpha.43] - 2026-09-14
 
@@ -580,4 +736,5 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 [v0.1.2]: https://github.com/oneMuggle/sage/compare/v0.1.1...v0.1.2
 [v0.1.1]: https://github.com/oneMuggle/sage/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/oneMuggle/sage/releases/tag/v0.1.0
+
 

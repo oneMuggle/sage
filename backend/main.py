@@ -483,6 +483,36 @@ async def lifespan(app: FastAPI):
     logger.info("ReviewQueue 协作对象已注入且 worker 已启动")
     _startup_mark("review-queue")
 
+    # Arena 自动化装配（feature flag 默认关）：账号池 + 单账号注册辅助。
+    # 修复既有缺口：arena 路由早已挂载但 init_arena_service 从未被调用，
+    # 端点恒 503。enabled=false 时保持 403 语义（路由侧 _config 为 None）。
+    try:
+        from backend.api.arena_routes import (
+            init_arena_service,
+            init_registration_service,
+        )
+        from backend.config.arena_automation import load_arena_automation_config
+        from backend.services.arena_accounts import get_or_create_master_key
+
+        _arena_cfg = load_arena_automation_config()
+        if _arena_cfg.enabled:
+            _arena_dir = os.environ.get("SAGE_USER_DATA_DIR") or "backend/data"
+            _arena_db = str(Path(_arena_dir) / "arena_accounts.sqlite")
+            _arena_service = init_arena_service(
+                db_path=_arena_db,
+                encryption_key=get_or_create_master_key(),
+                config=_arena_cfg,
+            )
+            init_registration_service(
+                config=_arena_cfg, account_service=_arena_service
+            )
+            logger.info("Arena 自动化已启用（账号池 + 注册辅助，db=%s）", _arena_db)
+            _startup_mark("arena")
+        else:
+            logger.info("Arena 自动化未启用（arena_automation.yaml enabled=false）")
+    except Exception:  # noqa: BLE001 — 装配失败不阻塞启动
+        logger.exception("Arena 自动化装配失败（忽略）")
+
     # A4 Suspend-Resume: wake 仓储 + 唤醒调度器 — tick 扫描到期 wake,
     # 在对应 session 注入新一轮对话恢复挂起的 agent。resumer 走
     # ChatService.run_turn（hex 模式装配后可用）；legacy 模式下记录并跳过。
@@ -677,6 +707,13 @@ async def lifespan(app: FastAPI):
     _shutdown_bash_sessions()
     _shutdown_browser_sessions()
     _shutdown_repl_cleanups()
+    # Arena：停观测泵 + 关账号池 SQLite 连接（best-effort，见 arena_routes）
+    try:
+        from backend.api.arena_routes import shutdown_arena_services
+
+        shutdown_arena_services()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.debug("arena shutdown cleanup failed: %s", exc)
     sweeper_task.cancel()
     with suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
         await sweeper_task
@@ -905,6 +942,11 @@ app.include_router(chat_attachment_router, prefix="/api/v1")
 
 # Model catalog: candidate review, overrides, snapshot import/export, OpenRouter sync
 app.include_router(build_model_catalog_router(), prefix="/api/v1/model-catalog")
+
+# Arena automation: account pool management (feature-flagged via arena_automation.yaml)
+from backend.api.arena_routes import router as arena_router
+
+app.include_router(arena_router)
 
 
 @app.get("/health/proof")

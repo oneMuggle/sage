@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -62,11 +63,14 @@ def _office_agent(workspace_out: Path) -> SageAgent:
                     LLMToolCall(
                         id="call_office",
                         name="office_create",
+                        # Windows 路径含反斜杠（\U 等是非法 JSON 转义）——
+                        # 必须 json.dumps 转义，否则 json.loads 解析失败，
+                        # 工具调用在审批前就报错，权限请求永远不会入队。
                         arguments=(
-                            '{"doc_type": "word", "output_dir": "%s", '  # noqa: UP031  # JSON 模板保留 % 占位
+                            '{"doc_type": "word", "output_dir": %s, '  # noqa: UP031  # JSON 模板保留 % 占位
                             '"filename": "天气.docx", "content": {"title": "天气", '
                             '"paragraphs": [{"text": "今天天气很好"}]}}'
-                            % str(workspace_out)
+                            % json.dumps(str(workspace_out))
                         ),
                     )
                 ],

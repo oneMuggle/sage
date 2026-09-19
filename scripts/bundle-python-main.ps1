@@ -66,6 +66,13 @@
 # Output: resources/python/, resources/backend/, resources/sage-core/,
 #         resources/python/Lib/site-packages/sage_core/
 
+# Code protection mode: set SAGE_PROTECT_CODE=true (or pass -ProtectCode) during release builds
+# to compile sage_core to native C-extensions (.pyd) and byte-compile/strip backend .py files.
+# In dev/CI mode (default), source .py files are copied directly for rapid build times.
+param(
+    [switch]$ProtectCode = ($env:SAGE_PROTECT_CODE -eq "true")
+)
+
 $ErrorActionPreference = "Stop"
 
 # Configuration — 3.11 is main's stable Python line (matches backend Dockerfile
@@ -176,6 +183,43 @@ $PipExe = Join-Path $PythonDir "Scripts\pip.exe"
 & $PipExe install --no-warn-script-location -r $RequirementsFile
 if ($LASTEXITCODE -ne 0) { throw "pip install -r $RequirementsFile failed with exit code $LASTEXITCODE" }
 
+if ($ProtectCode) {
+  Write-Host "🛡️ Code protection ENABLED: Installing Cython..." -ForegroundColor Yellow
+  & $PipExe install --no-warn-script-location "cython>=3.0.0" "setuptools"
+  if ($LASTEXITCODE -ne 0) { throw "pip install cython failed with exit code $LASTEXITCODE" }
+
+  # Cython build_ext needs Python.h (headers) and python311.lib (import libs).
+  # The embeddable Python zip lacks both. The full Python from actions/setup-python
+  # (on PATH) has them. Copy into the embeddable so distutils finds them at the
+  # standard sysconfig paths (resources/python/include, resources/python/libs).
+  # ABI-safe: both are CPython 3.11.x, same stable ABI.
+  $SystemPythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+  if (-not $SystemPythonExe) {
+    throw "System Python not found on PATH. Add 'actions/setup-python@v5' with python-version: '3.11' to the workflow."
+  }
+  $SystemPythonRoot = Split-Path -Parent (Split-Path -Parent $SystemPythonExe)
+  # actions/setup-python puts python.exe under <tool-cache>/Python/<version>/x64/python.exe
+  # but Get-Command may resolve to a shim. Walk up to find include/ dir.
+  $SystemInclude = $null
+  foreach ($candidate in @($SystemPythonRoot, (Split-Path -Parent $SystemPythonRoot))) {
+    $inc = Join-Path $candidate "include"
+    if (Test-Path $inc) { $SystemInclude = $inc; $SystemPythonRoot = $candidate; break }
+  }
+  if (-not $SystemInclude) {
+    throw "System Python include dir not found. Searched from $SystemPythonExe"
+  }
+  $SystemLibs = Join-Path $SystemPythonRoot "libs"
+
+  Write-Host "🛡️ Copying Python dev headers from system Python ($SystemPythonRoot) to embeddable..." -ForegroundColor Yellow
+  $EmbedInclude = Join-Path $PythonDir "include"
+  Copy-Item -Path $SystemInclude -Destination $EmbedInclude -Recurse -Force
+  if (Test-Path $SystemLibs) {
+    $EmbedLibs = Join-Path $PythonDir "libs"
+    Copy-Item -Path $SystemLibs -Destination $EmbedLibs -Recurse -Force
+  }
+  Write-Host "🛡️ Python dev headers copied successfully." -ForegroundColor Green
+}
+
 # Copy backend code
 Write-Host "Copying backend code..." -ForegroundColor Green
 $BackendItems = Get-ChildItem -Path $BackendSourceDir -Exclude "__pycache__", "*.pyc", ".pytest_cache", "*.egg-info"
@@ -188,6 +232,19 @@ foreach ($item in $BackendItems) {
   } else {
     Copy-Item -Path $item.FullName -Destination $dest -Force
   }
+}
+
+# In protected mode, compile backend to .pyc and strip source .py files (except main.py)
+if ($ProtectCode) {
+  Write-Host "🛡️ Compiling backend to bytecode (.pyc) and stripping source .py..." -ForegroundColor Yellow
+  & $PythonExe -m compileall -b $BackendDir
+  if ($LASTEXITCODE -ne 0) { throw "compileall for backend failed with exit code $LASTEXITCODE" }
+
+  # Only the top-level entry point stays readable. Matching on Name alone would
+  # spare any nested main.py anywhere in the tree.
+  $EntryPoint = Join-Path $BackendDir "main.py"
+  Get-ChildItem -Path $BackendDir -Recurse -Filter "*.py" | Where-Object { $_.FullName -ne $EntryPoint } | Remove-Item -Force
+  Write-Host "🛡️ Backend source stripping complete." -ForegroundColor Green
 }
 
 # Copy packages/sage-core if it exists.
@@ -230,32 +287,57 @@ foreach ($item in $BackendItems) {
 Write-Host "Copying sage-core package..." -ForegroundColor Green
 $SageCoreSource = Join-Path $PSScriptRoot "..\packages\sage-core"
 if (Test-Path $SageCoreSource) {
-  # 1) Mirror source layout to resources/sage-core/ (debug + dev parity)
-  Copy-Item -Path $SageCoreSource -Destination $SageCoreDir -Recurse -Force
-  if ($LASTEXITCODE -ne 0) { throw "Copy-Item sage-core (mirror) failed with exit code $LASTEXITCODE" }
-  # Strip __pycache__ that may have leaked from a prior local dev run; the
-  # mirror is debug-only but we keep it clean for consistency with the inner
-  # copy + to avoid shipping stale .pyc bytecode to a Windows machine that
-  # may be running a different Python minor (which would ignore them).
-  Get-ChildItem -Path $SageCoreDir -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  if ($ProtectCode) {
+    Write-Host "🛡️ Code protection: Compiling sage_core with Cython..." -ForegroundColor Yellow
+    $CompileScript = Join-Path $PSScriptRoot "compile-sage-core.py"
+    & $PythonExe $CompileScript build_ext --inplace
+    if ($LASTEXITCODE -ne 0) { throw "Cython compilation for sage_core failed with exit code $LASTEXITCODE" }
 
-  # 2) Copy inner sage_core/ package directly into bundled site-packages so
-  #    `import sage_core` works at runtime. Done as a separate step (instead
-  #    of relying on resources/sage-core/sage_core/) because the parent dir
-  #    uses a hyphen (sage-core) but the importable module uses an underscore
-  #    (sage_core) — Python's import machinery walks sys.path literally and
-  #    would not find the package under a hyphen-named directory.
+    # Diagnostic: verify .pyd files were actually produced in the source tree.
+    $SageCorePkgCheck = Join-Path $SageCoreSource "sage_core"
+    $pydFiles = Get-ChildItem -Path $SageCorePkgCheck -Recurse -Filter "*.pyd" -ErrorAction SilentlyContinue
+    if ($pydFiles.Count -eq 0) {
+      throw "Cython build produced no .pyd files under $SageCorePkgCheck. Check compile-sage-core.py module names."
+    }
+    Write-Host "🛡️ Cython produced $($pydFiles.Count) .pyd files." -ForegroundColor Green
+
+    # Clean up Python dev headers (include/ + libs/) — they're only needed for
+    # Cython compilation and should NOT be shipped in the installer (~8MB).
+    $EmbedInclude = Join-Path $PythonDir "include"
+    $EmbedLibs = Join-Path $PythonDir "libs"
+    if (Test-Path $EmbedInclude) { Remove-Item -Recurse -Force $EmbedInclude }
+    if (Test-Path $EmbedLibs) { Remove-Item -Recurse -Force $EmbedLibs }
+    Write-Host "🛡️ Cleaned up Python dev headers from embeddable (not shipped)." -ForegroundColor Green
+
+    # In protected mode, do not leak source in resources/sage-core, just keep an empty dir for electron-builder
+    Write-Host "🛡️ Omitting source tree mirror in resources/sage-core for protection." -ForegroundColor Yellow
+  } else {
+    # 1) Mirror source layout to resources/sage-core/ (debug + dev parity)
+    Copy-Item -Path $SageCoreSource -Destination $SageCoreDir -Recurse -Force
+    if ($LASTEXITCODE -ne 0) { throw "Copy-Item sage-core (mirror) failed with exit code $LASTEXITCODE" }
+    Get-ChildItem -Path $SageCoreDir -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  }
+
+  # 2) Copy inner sage_core/ package into bundled site-packages
   $SageCorePkgSource = Join-Path $SageCoreSource "sage_core"
   $SageCorePkgDest = Join-Path $PythonDir "Lib\site-packages\sage_core"
   if (Test-Path $SageCorePkgSource) {
     if (Test-Path $SageCorePkgDest) {
-      # Idempotent on re-run: clean any previous copy.
       Remove-Item -Recurse -Force $SageCorePkgDest
     }
     Copy-Item -Path $SageCorePkgSource -Destination $SageCorePkgDest -Recurse -Force
     if ($LASTEXITCODE -ne 0) { throw "Copy-Item sage_core package to site-packages failed with exit code $LASTEXITCODE" }
-    # Strip __pycache__ that might sneak in from a prior dev run
     Get-ChildItem -Path $SageCorePkgDest -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+    if ($ProtectCode) {
+      # Keep only compiled extensions + package markers.
+      # .py — every module except the package marker.
+      Get-ChildItem -Path $SageCorePkgDest -Recurse -Filter "*.py" | Where-Object { $_.Name -ne "__init__.py" } | Remove-Item -Force
+      # Cython intermediates — the generated .c carries the translated
+      # function bodies and .pyx is the original typed source.
+      Get-ChildItem -Path $SageCorePkgDest -Recurse -Include "*.c", "*.pyx" | Remove-Item -Force
+      Write-Host "🛡️ Stripped sage_core source (.py/.c/.pyx) from site-packages (kept .pyd + __init__.py)." -ForegroundColor Green
+    }
   } else {
     Write-Host "WARNING: $SageCorePkgSource not found; sage_core will not be importable." -ForegroundColor Yellow
   }
@@ -293,7 +375,17 @@ Write-Host ""
 # diagnose. An explicit `import sage_core` canary fails fast on the
 # specific missing module so the bundle-time error message is precise.
 Write-Host "Testing Python imports (backend.main + sage_core canary)..." -ForegroundColor Green
-$verifyOutput = & $PythonExe -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import sage_core; from sage_core.entities import AgentDecision; import backend.main; print('All critical imports successful (backend.main + sage_core OK)')" 2>&1
+$verifyCode = "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import sage_core; from sage_core.entities import AgentDecision; import backend.main; print('All critical imports successful (backend.main + sage_core OK)')"
+
+if ($ProtectCode) {
+  # Assert the compiled extension is what actually loaded. A stale editable
+  # .pth copied over from full Python's site-packages could otherwise satisfy
+  # `import sage_core` from source and hide a failed Cython build.
+  # NOTE: single-quoted so PowerShell leaves the Python `$_probe` alone.
+  $verifyCode += '; import sage_core.entities.agent as _probe; assert _probe.__file__.endswith(".pyd"), "sage_core.entities.agent loaded from " + _probe.__file__; print("Protected canary OK: " + _probe.__file__)'
+}
+
+$verifyOutput = & $PythonExe -c $verifyCode 2>&1
 $verifyExit = $LASTEXITCODE
 Write-Host $verifyOutput
 if ($verifyExit -ne 0) {

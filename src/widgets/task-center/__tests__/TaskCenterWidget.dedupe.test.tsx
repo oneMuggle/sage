@@ -30,6 +30,7 @@ const slot = (messageId: string, streaming: boolean): SessionStreamSlots => ({
   taskBoard: null,
   todos: [],
   completedSteps: [],
+  shiftInfo: null,
 });
 
 function seed(opts: {

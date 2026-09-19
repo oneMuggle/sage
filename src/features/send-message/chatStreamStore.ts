@@ -48,6 +48,10 @@ export interface StreamingState {
   currentAgentId: string | null;
   /** P2: 当前 ReAct 迭代轮次 */
   iteration: number;
+  /** R17-E 收尾（r71）: memory_used 载荷写入（气泡内可展开） */
+  memory_refs?: { id: string; memory_type: string; preview: string }[];
+  /** r71: attachment_rag_used 载荷写入 */
+  rag_citations?: { media_id: string; mode: string }[];
 }
 
 /** 进度可视化 5 元组（与 useChat 内 TaskBoard 同字段，提取独立文件便于 store 引用） */
@@ -123,6 +127,15 @@ export interface SessionStreamSlots {
    * - startStream / resetAll 时清空
    */
   completedSteps: Message[];
+  /**
+   * Task 11 (2026-09-17): topic_shifted 事件 — 收到自动话题切换通知时
+   * 写入,前端 TopicShiftBanner 展示"恢复完整上下文"入口;用户点恢复
+   * 或点关闭时调用 clearShiftInfo 清掉;切会话 / startStream 也会清。
+   *
+   * created_at 用于自动过期:后台会话的 shiftInfo 不会被 banner 消费,
+   * 30 秒后读取时自动视为 null,避免用户切回时会话看到陈旧横幅。
+   */
+  shiftInfo: { segmentId: number; reason: string; createdAt: number } | null;
 }
 
 const EMPTY_SLOTS: SessionStreamSlots = {
@@ -131,6 +144,7 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   taskBoard: null,
   todos: [],
   completedSteps: [],
+  shiftInfo: null,
 };
 
 /** 读取某会话的槽位；无该会话（或 sessionId 为 null）时返回共享空槽位。
@@ -169,7 +183,12 @@ interface ChatStreamStoreState {
   setStreamingMeta: (
     sessionId: string,
     messageId: string,
-    patch: Partial<Pick<StreamingState, 'state' | 'currentAgentId' | 'iteration'>>,
+    patch: Partial<
+      Pick<
+        StreamingState,
+        'state' | 'currentAgentId' | 'iteration' | 'memory_refs' | 'rag_citations'
+      >
+    >,
   ) => void;
   clearStream: (sessionId: string, messageId: string) => void;
 
@@ -201,6 +220,13 @@ interface ChatStreamStoreState {
    * 配套 addCompletedStep 使用:先 addCompletedStep,再 finalizeStep。
    */
   finalizeStep: (sessionId: string, oldMessageId: string, newMessageId: string) => void;
+
+  // —— Task 11 (2026-09-17): topic_shifted 横幅态 ——
+  /** 收到 topic_shifted 事件时写入;前端 TopicShiftBanner 立刻可见。 */
+  setShiftInfo: (
+    sessionId: string,
+    info: { segmentId: number; reason: string; createdAt: number } | null,
+  ) => void;
 
   // —— 会话删除时清理槽位，防 Map 泄漏 / 迟到事件复活死会话 ——
   clearSession: (sessionId: string) => void;
@@ -238,6 +264,8 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
         taskBoard: null,
         todos: [],
         completedSteps: [],
+        // Task 11 (2026-09-17): 新一轮流式清掉 topic_shifted 横幅态
+        shiftInfo: null,
       }),
     })),
 
@@ -360,6 +388,10 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
         }),
       };
     }),
+
+  // Task 11 (2026-09-17): topic_shifted 横幅态 — 写入后由 TopicShiftBanner 展示
+  setShiftInfo: (sessionId, info) =>
+    set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { shiftInfo: info }) })),
 
   updateTaskBoard: (sessionId, _runId, updater) =>
     set((prev) => {

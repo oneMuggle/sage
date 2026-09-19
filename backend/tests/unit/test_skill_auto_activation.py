@@ -454,9 +454,12 @@ class TestInprocAutoActivate:
 class _FakeActivationResult:
     """模拟 AutoActivationResult 的鸭子类型。"""
 
-    def __init__(self, block: str) -> None:
+    def __init__(self, block: str, matches: dict | None = None) -> None:
         self.names = ("fake-skill",) if block else ()
         self.context_block = block
+        # matches 字段可选（测试 duck-type 兼容性）
+        if matches is not None:
+            self.matches = matches
 
 
 class _FakeSkillPort:
@@ -576,17 +579,23 @@ class TestChatServiceInjection:
 
 class TestSkillActivationBlockHelper:
     def test_empty_message_returns_empty(self):
-        """空消息 → 空串。"""
-        assert _skill_activation_block("", _FakeSkillPort(block="x")) == ""
+        """空消息 → 空串和空列表。"""
+        block, skills = _skill_activation_block("", _FakeSkillPort(block="x"))
+        assert block == ""
+        assert skills == []
 
     def test_none_skills_returns_empty(self):
-        """skills=None → 空串。"""
-        assert _skill_activation_block("hello", None) == ""
+        """skills=None → 空串和空列表。"""
+        block, skills = _skill_activation_block("hello", None)
+        assert block == ""
+        assert skills == []
 
     def test_block_prefixed_with_newlines(self):
-        """非空块前置双换行 (便于直接 += 拼接)。"""
-        result = _skill_activation_block("hello", _FakeSkillPort(block="BLOCK"))
-        assert result == "\n\nBLOCK"
+        """非空块前置双换行 (便于直接 += 拼接)，skills 返回事件载荷形状。"""
+        block, skills = _skill_activation_block("hello", _FakeSkillPort(block="BLOCK"))
+        assert block == "\n\nBLOCK"
+        # MEDIUM-3: 返回形状改为 [{"name": str, "triggers_matched": list}]
+        assert skills == [{"name": "fake-skill", "triggers_matched": []}]
 
 
 # =====================================================================

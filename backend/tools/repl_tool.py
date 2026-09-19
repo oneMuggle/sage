@@ -25,7 +25,6 @@ REPL 工具 - Python 代码片段隔离执行（移植 claw-code execute_repl）
 import contextlib
 import logging
 import math
-import os
 import subprocess
 import sys
 import tempfile
@@ -80,6 +79,12 @@ class _PendingReplCleanup:
 _PENDING_CLEANUPS: List[_PendingReplCleanup] = []
 _PENDING_CLEANUPS_LOCK = threading.RLock()
 
+#: 定时清理线程的轮询间隔（秒）
+_CLEANUP_TIMER_INTERVAL = 60.0
+#: 定时清理线程引用；惰性启动，队列空时自动退出
+_cleanup_timer_thread: Optional[threading.Thread] = None
+_cleanup_timer_stop = threading.Event()
+
 
 def _close_process_streams(process: Any) -> None:
     for stream in (process.stdout, process.stderr):
@@ -110,6 +115,10 @@ def _attempt_process_group_kill(
         return leader_exit_observed, True
     if process_group_id is None:
         return leader_exit_observed, False
+    if process_group_id != process.pid:
+        # spawn_verified 在 Windows 上仍以 process.pid 作为 group id；任何
+        # 漂移都意味着不可安全发信号，遵循 POSIX 的 fail-closed 行为。
+        return leader_exit_observed, False
     observed = True if leader_exit_observed else observe_process_exit(process, 0.0)
     if observed is True:
         leader_exit_observed = True
@@ -126,7 +135,14 @@ def _attempt_process_group_kill(
             reap=False,
             process_group_id=process_group_id,
         )
-    return leader_exit_observed, False
+    # observed is None：Windows 上 waitid 不可用，observe_process_exit 永远
+    # 返回 None。仍需尝试 kill_process_tree——后者在 Windows 上走 taskkill
+    # 分支或回退到 leader kill，避免后台会话泄漏在 _PENDING_CLEANUPS 中堆积。
+    return leader_exit_observed, kill_process_tree(
+        process,
+        reap=False,
+        process_group_id=process_group_id,
+    )
 
 
 def _retry_pending_cleanups() -> None:
@@ -171,7 +187,31 @@ def _retry_pending_cleanups() -> None:
 
 def shutdown_pending_cleanups() -> None:
     """在后端关闭时尝试一次待处理的 REPL 资源清理。"""
+    _cleanup_timer_stop.set()
     _retry_pending_cleanups()
+
+
+def _cleanup_timer_loop() -> None:
+    """定时清理线程主循环：每 _CLEANUP_TIMER_INTERVAL 秒重试一次，队列空时退出。"""
+    while not _cleanup_timer_stop.wait(timeout=_CLEANUP_TIMER_INTERVAL):
+        _retry_pending_cleanups()
+        with _PENDING_CLEANUPS_LOCK:
+            if not _PENDING_CLEANUPS:
+                return
+
+
+def _ensure_cleanup_timer() -> None:
+    """确保定时清理线程已启动。仅在有待处理项且线程未运行时启动。"""
+    global _cleanup_timer_thread
+    if _cleanup_timer_thread is not None and _cleanup_timer_thread.is_alive():
+        return
+    _cleanup_timer_stop.clear()
+    _cleanup_timer_thread = threading.Thread(
+        target=_cleanup_timer_loop,
+        name="sage-repl-cleanup-timer",
+        daemon=True,
+    )
+    _cleanup_timer_thread.start()
 
 
 def _retain_pending_cleanup(
@@ -200,6 +240,7 @@ def _retain_pending_cleanup(
                 process_group_killed=process_group_killed,
             )
         )
+    _ensure_cleanup_timer()
 
 
 def clamp_timeout(value: float) -> float:
@@ -342,14 +383,13 @@ class ReplTool(BaseTool):
         stdout_identity: Optional[Tuple[int, int]] = None
         stderr_identity: Optional[Tuple[int, int]] = None
         try:
-            if os.name == "nt" or not hasattr(os, "waitid"):
-                raise RuntimeError("REPL 平台不支持安全进程组回收")
             try:
                 verified = spawn_verified(
                     [sys.executable, "-I", script_path],
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
+                    extra_env={"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
                 )
             except ProcessGroupVerificationError as exc:
                 # Popen succeeded; retain the exposed process for fail-closed
@@ -528,7 +568,6 @@ class ReplTool(BaseTool):
                             process_group_killed=process_group_killed,
                         )
                     logger.error(
-                        "repl 资源清理失败（异常类型=%s）",
+                        "repl 资源清理失败（异常类型=%s），临时文件已入队延迟重试",
                         type(final_cleanup_error).__name__,
                     )
-                    raise final_cleanup_error

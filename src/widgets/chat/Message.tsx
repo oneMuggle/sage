@@ -9,12 +9,14 @@ import {
   GitBranch,
   Eye,
   EyeOff,
+  FileSearch,
   Pencil,
   RefreshCw,
   Check,
   BrainCircuit,
   Quote,
   FileText,
+  Zap,
 } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
@@ -32,6 +34,7 @@ import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownCh
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
+import { CompactBanner } from './CompactBanner';
 import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownImage } from './MarkdownImage';
 import { MermaidBlock } from './MermaidBlock';
@@ -355,9 +358,7 @@ function ToolCallTitle({ name, args }: { name: string; args: Record<string, unkn
  *  阈值：超过 300 字符时自动折叠，用户可手动展开查看
  */
 function ToolCallResult({ result }: { result: unknown }) {
-  const safeResult = typeof result === 'string'
-    ? result
-    : JSON.stringify(result ?? '');
+  const safeResult = typeof result === 'string' ? result : JSON.stringify(result ?? '');
   const [isExpanded, setIsExpanded] = useState(false);
   const isLarge = safeResult.length > 300;
 
@@ -403,6 +404,7 @@ function MessageComponent({
   const { t } = useI18n();
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
+  const isSystem = message.role === 'system';
   const isError = message.content?.startsWith('[错误') ?? false;
   // 2026-09-13 P0: 首个 token 到达前 content 是哨兵占位值 — 渲染 shimmer
   // 骨架而非把 "🤔 思考中…" 当 markdown 静态文本展示。agent 中间态文案
@@ -413,6 +415,7 @@ function MessageComponent({
   // tool_calls / reasoning_content。气泡只在有内容时渲染;其他部件
   // (ThinkingPanel / tool_calls) 始终渲染,确保中间步骤不会"空泡"。
   const showBubble = isUser || (isAssistant && Boolean((message.content ?? '').trim()));
+
   // P1 流式分块: 已确定前缀切稳定块（memo 化跳过重解析），只有 live 尾块
   // 随 delta 全量 re-parse；非流式整体单块渲染，DOM 与旧实现一致。
   const displayContent = useMemo(
@@ -465,6 +468,22 @@ function MessageComponent({
   // R17-E: 记忆召回明细展开态
   const [memoryExpanded, setMemoryExpanded] = useState(false);
   const memoryRefs = message.memory_refs ?? [];
+  // R38: 技能激活明细展开态
+  const [skillsExpanded, setSkillsExpanded] = useState(false);
+  const activatedSkills = message.activated_skills ?? [];
+  // r71: 附件检索溯源展开态
+  const [ragExpanded, setRagExpanded] = useState(false);
+  const ragCitations = message.rag_citations ?? [];
+
+  // R38: 系统消息（如压缩通知）居中渲染，无头像/气泡
+  // 必须在所有 Hooks 之后 return，否则违反 React Hooks 规则
+  if (isSystem && message.compact_info) {
+    return (
+      <div className="flex justify-center my-3">
+        <CompactBanner info={message.compact_info} />
+      </div>
+    );
+  }
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content);
@@ -487,6 +506,10 @@ function MessageComponent({
       </div>
 
       <div className={`flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
+        {/* R38: 压缩续接行 —— 横幅置于气泡上方，摘要正文/Thinking/
+            copy/regenerate/delete 等正文与 affordance 全部保留。 */}
+        {message.compact_info && <CompactBanner info={message.compact_info} />}
+
         {/* ThinkingPanel - LLM 思考过程展示（仅 assistant 消息且有 reasoning_content 时） */}
         {isAssistant && message.reasoning_content && (
           <ThinkingPanel reasoning={message.reasoning_content} isStreaming={isStreaming} />
@@ -558,9 +581,7 @@ function MessageComponent({
                         <button
                           key={art.id}
                           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-[11px] text-primary transition-colors"
-                          onClick={() =>
-                            useRightPanelStore.getState().selectArtifact(art.id)
-                          }
+                          onClick={() => useRightPanelStore.getState().selectArtifact(art.id)}
                           title="在右侧面板中查看"
                           data-testid="message-artifact-chip"
                         >
@@ -657,6 +678,37 @@ function MessageComponent({
               />
             </button>
           )}
+          {/* R38: 技能激活展示 */}
+          {activatedSkills.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSkillsExpanded((v) => !v)}
+              className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400 hover:underline"
+              title={t('chat.skills_toggle')}
+              data-testid="skill-activated-toggle"
+            >
+              <Zap className="w-3 h-3" />
+              {activatedSkills.length} {t('chat.skills_activated')}
+              <ChevronDown
+                className={`w-3 h-3 transition-transform ${skillsExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+          )}
+          {ragCitations.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setRagExpanded((v) => !v)}
+              className="inline-flex items-center gap-0.5 text-primary hover:underline"
+              title={t('chat.rag_citations_toggle')}
+              data-testid="rag-citations-toggle"
+            >
+              <FileSearch className="w-3 h-3" />
+              {t('chat.rag_citations_count').replace('{n}', String(ragCitations.length))}
+              <ChevronDown
+                className={`w-3 h-3 transition-transform ${ragExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+          )}
           <span>
             {new Date(message.created_at).toLocaleTimeString([], {
               hour: '2-digit',
@@ -677,6 +729,66 @@ function MessageComponent({
                   {ref.memory_type}
                 </span>
                 <span className="text-text-secondary break-all">{ref.preview}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* R38: 技能激活明细（skill_activated 流事件携带，可展开） */}
+        {skillsExpanded && activatedSkills.length > 0 && (
+          <div
+            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-1"
+            data-testid="skill-activated-list"
+          >
+            {activatedSkills.map((skill) => (
+              <div key={skill.name} className="flex flex-col gap-0.5">
+                <div className="flex items-start gap-1.5">
+                  <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
+                    技能
+                  </span>
+                  <span className="text-text-secondary break-all">{skill.name}</span>
+                </div>
+                {/* MEDIUM-3: 展示命中的触发词（extract_triggers 已小写化） */}
+                {skill.triggers_matched && skill.triggers_matched.length > 0 && (
+                  <div className="ml-5 flex flex-wrap gap-1">
+                    {skill.triggers_matched.map((trigger, idx) => (
+                      <span
+                        key={idx}
+                        className="px-1 py-0.5 rounded bg-bg-hover text-text-tertiary text-[10px]"
+                      >
+                        {trigger}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* r71: 附件检索溯源明细（attachment_rag_used 流事件携带，可展开） */}
+        {ragExpanded && ragCitations.length > 0 && (
+          <div
+            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-1"
+            data-testid="rag-citations-list"
+          >
+            {ragCitations.map((c) => (
+              <div key={c.filename || c.media_id} className="space-y-0.5">
+                <div className="flex items-start gap-1.5">
+                  <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
+                    {t('chat.rag_citation_source')}
+                  </span>
+                  <span className="text-text-secondary font-mono break-all">
+                    {c.filename || c.media_id}
+                  </span>
+                </div>
+                {(c.chunks ?? []).length > 0 && (
+                  <div className="pl-5 text-muted font-mono">
+                    {(c.chunks ?? [])
+                      .map((ch) => `#${ch.index} (${ch.score.toFixed(2)})`)
+                      .join(' ')}
+                  </div>
+                )}
               </div>
             ))}
           </div>

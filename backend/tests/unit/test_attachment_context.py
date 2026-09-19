@@ -70,7 +70,9 @@ class TestBuildAttachmentContext:
                 store_path=tmp_path / "none.json",
             )
         )
-        assert ctx == "短文档内容"
+        assert ctx.text == "短文档内容"
+        assert ctx.mode == "full"
+        assert ctx.chunks == []
 
     def test_over_limit_without_rag_truncates(self, tmp_path):
         full = "长" * (MAX_TEXT_INJECT_CHARS + 500)
@@ -80,7 +82,9 @@ class TestBuildAttachmentContext:
             )
         )
         assert ctx is not None
-        assert len(ctx) == MAX_TEXT_INJECT_CHARS
+        assert ctx.mode == "truncated"
+        assert len(ctx.text) == MAX_TEXT_INJECT_CHARS
+        assert ctx.chunks == []
 
     def test_over_limit_with_rag_and_hits_injects_chunks(self, tmp_path):
         seeded = _seed_index(tmp_path, range(4))
@@ -97,10 +101,13 @@ class TestBuildAttachmentContext:
             )
         )
         assert ctx is not None
-        assert "mode=rag" in ctx
-        assert "[chunk" in ctx
+        assert ctx.mode == "rag"
+        assert [c.index for c in ctx.chunks] == [1, 2]
+        assert all(abs(c.score - 1.0) < 1e-6 for c in ctx.chunks)  # 同向量余弦=1
+        assert "mode=rag" in ctx.text
+        assert "[chunk" in ctx.text
         # 含文档开头（head）
-        assert "长" * 10 in ctx
+        assert "长" * 10 in ctx.text
 
     def test_over_limit_rag_no_hits_truncates(self, tmp_path):
         full = "长" * (MAX_TEXT_INJECT_CHARS + 500)
@@ -116,7 +123,9 @@ class TestBuildAttachmentContext:
             )
         )
         assert ctx is not None
-        assert len(ctx) == MAX_TEXT_INJECT_CHARS
+        assert ctx.mode == "truncated"
+        assert ctx.chunks == []
+        assert len(ctx.text) == MAX_TEXT_INJECT_CHARS
 
     def test_embed_failure_falls_back_to_truncate(self, tmp_path):
         full = "长" * (MAX_TEXT_INJECT_CHARS + 500)
@@ -135,7 +144,9 @@ class TestBuildAttachmentContext:
             )
         )
         assert ctx is not None
-        assert len(ctx) == MAX_TEXT_INJECT_CHARS
+        assert ctx.mode == "truncated"
+        assert ctx.chunks == []
+        assert len(ctx.text) == MAX_TEXT_INJECT_CHARS
 
     def test_rag_without_embedder_truncates(self, tmp_path):
         full = "长" * (MAX_TEXT_INJECT_CHARS + 500)
@@ -150,4 +161,6 @@ class TestBuildAttachmentContext:
             )
         )
         assert ctx is not None
-        assert len(ctx) == MAX_TEXT_INJECT_CHARS
+        assert ctx.mode == "truncated"
+        assert ctx.chunks == []
+        assert len(ctx.text) == MAX_TEXT_INJECT_CHARS

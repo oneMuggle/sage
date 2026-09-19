@@ -260,6 +260,9 @@ class ChatDispatcher:
         # BU2 (round11): run 级 token 预算守门状态 —— 触发一次即置位
         # （_cancelled 随之置位收口剩余任务），dispatch 入口据此拒绝后续批次。
         self._budget_exceeded = False
+        # BU17 (round31): 任务级消耗 memo —— _aggregate 块标题标注用；
+        # 终态即定格，preset 回放（0 消耗）与查询失败（None）不缓存值。
+        self._task_tokens: Dict[str, int] = {}
         self._budget_limit = 0
         # BU7 (round18): 80% 预警一次性标志。
         self._budget_warned = False
@@ -473,6 +476,27 @@ class ChatDispatcher:
         )
         return self._bg_task
 
+    def _task_tokens_used(self, task_id: str) -> Optional[int]:
+        """BU17 (round31): 任务级累计 tokens（RT23 归因，run 内 memoize）。
+
+        查询失败返 None（不缓存，下次聚合重试）；成功后缓存 —— 调用方
+        保证仅终态块查询（终态消耗定格，memo 安全）。
+        """
+        if task_id in self._task_tokens:
+            return self._task_tokens[task_id]
+        if not self.session_id or not self._first_dispatch_at:
+            return None
+        try:
+            from backend.services.usage_tracker import UsageTracker
+
+            used = UsageTracker().task_usage_since(
+                self.session_id, task_id, int(self._first_dispatch_at * 1000)
+            )
+        except Exception:  # noqa: BLE001 — 增强信息，失败跳过
+            return None
+        self._task_tokens[task_id] = used
+        return used
+
     def background_snapshot(self) -> Dict[str, Any]:
         """BD3 (round13): 非阻塞快照 —— 各子任务当前状态与结果预览。
 
@@ -501,6 +525,9 @@ class ChatDispatcher:
         if self._bg_task is not None:
             snapshot["aggregate"] = self._aggregate(list(self._states.values()))
         snapshot["budget_exceeded"] = self._budget_exceeded
+        # BU14 (round28): 墙钟触顶标志与预算对称透出 —— conductor 在
+        # wait=false 快照上可区分"还在跑"与"守门已停派"。
+        snapshot["wall_clock_exceeded"] = self._wall_clock_exceeded
         return snapshot
 
     async def wait_background(self, timeout: Optional[float] = None) -> str:
@@ -527,11 +554,20 @@ class ChatDispatcher:
         total = len(states)
         done = sum(1 for s in states if s.status == "done")
         aggregate = self._aggregate(states)
+        # BD8 (round28): 守门归因 —— 触顶时载荷带标志且在聚合文本尾部注入
+        # 说明行，conductor 的 LLM 语境直接可读（"没跑完"≠"还在跑"）。
+        notes = ""
+        if self._budget_exceeded:
+            notes = "\n\n[预算已触顶，剩余任务已停止派发]"
+        elif self._wall_clock_exceeded:
+            notes = "\n\n[墙钟上限已到，剩余任务已停止派发]"
         return {
             "status": "partial",
             "done": done,
             "total": total,
-            "aggregate": aggregate,
+            "aggregate": aggregate + notes,
+            "budget_exceeded": self._budget_exceeded,
+            "wall_clock_exceeded": self._wall_clock_exceeded,
         }
 
     async def dispatch(self, tasks: List[Dict[str, str]]) -> str:
@@ -1491,6 +1527,9 @@ class ChatDispatcher:
     def _persist_task_state(self, state: ChatTaskState) -> None:
         """状态迁移同步写库；写失败降级（logger.warning，绝不阻塞聊天）。"""
         try:
+            # RT24 (round32): 终态携带任务级用量/时长（BU17 memo 查询 +
+            # started/finished 差），run 历史回看有量化数据。非终态不传。
+            _terminal = state.status in ("done", "failed", "cancelled")
             self._orch_task_repo.upsert_state(
                 task_id=state.task_id,
                 run_id=self.run_id,
@@ -1502,6 +1541,12 @@ class ChatDispatcher:
                 output_preview=self._preview(state),
                 started_at=int(state.started_at * 1000) if state.started_at else None,
                 finished_at=int(state.finished_at * 1000) if state.finished_at else None,
+                used_tokens=self._task_tokens_used(state.task_id) if _terminal else None,
+                duration_ms=(
+                    int((state.finished_at - state.started_at) * 1000)
+                    if _terminal and state.started_at and state.finished_at
+                    else None
+                ),
             )
         except Exception as exc:  # noqa: BLE001 — 降级铁律
             logger.warning("orch_task 落库失败 task_id=%s err=%s", state.task_id, exc)
@@ -1581,6 +1626,16 @@ class ChatDispatcher:
         blocks: List[str] = []
         for state in states:
             header_item = f"## 子任务 {state.task_id}（{state.agent_id}）"
+            # BU17 (round31): 任务级消耗标注 —— RT23 归因查询 + run 内
+            # memoize；仅终态块标注（running 查询会缓存滞后值）；
+            # N>0 才显（preset 回放 0 / 查询失败不显）。
+            _used = (
+                self._task_tokens_used(state.task_id)
+                if state.status in ("done", "failed", "cancelled")
+                else None
+            )
+            if _used:
+                header_item += f"（消耗 {_used} tokens）"
             if state.status == "done" and state.output:
                 body = state.output[: self.settings.max_subagent_result_chars]
                 block = f"{header_item}\n\n{body}"

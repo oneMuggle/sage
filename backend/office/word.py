@@ -58,37 +58,149 @@ _STYLES_TO_PATCH = (
 
 #: Round 45 交叉引用占位符：`{{fig:题注}}` / `{{tbl:题注}}`（按题注文本
 #: 匹配，生成时替换为"图N"/"表N"——编号由引擎分配，插图增删不错位）。
-_CROSS_REF_RE = re.compile(r"\{\{(fig|tbl):([^}]+)\}\}")
+_FOOTNOTES_PARTNAME = "/word/footnotes.xml"
+_FOOTNOTES_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"
+)
+
+_FOOTNOTE_SYSTEM_NOTES = (
+    '<w:footnote w:type="separator" w:id="-1"><w:p><w:r>'
+    "<w:separator/></w:r></w:p></w:footnote>"
+    '<w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r>'
+    "<w:continuationSeparator/></w:r></w:p></w:footnote>"
+)
 
 
-def _resolve_cross_refs(
+def _mount_footnotes_part(doc: Document, notes: List[str]) -> None:
+    """构造并挂载 word/footnotes.xml part（Round 57 Phase A）。
+
+    四件套：part 本体 + relationship + content-type（python-docx 序列化
+    时按 part 自动写入）+ 系统脚注（separator/-1、continuationSeparator/0，
+    缺失时 Word 脚注分隔线异常）。真实脚注 id 从 1 起，与正文
+    ``w:footnoteReference`` 的 id 对应；编号由 Word 渲染期自动维护。
+    """
+    from xml.sax.saxutils import escape
+
+    from docx.opc.constants import RELATIONSHIP_TYPE
+    from docx.opc.packuri import PackURI
+    from docx.opc.part import Part
+
+    notes_xml = "".join(
+        f'<w:footnote w:id="{i}"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/>'
+        "</w:pPr><w:r><w:rPr><w:rStyle w:val='FootnoteReference'/></w:rPr>"
+        "<w:footnoteRef/></w:r>"
+        f'<w:r><w:t xml:space="preserve"> {escape(text)}</w:t></w:r></w:p></w:footnote>'
+        for i, text in enumerate(notes, start=1)
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/'
+        'wordprocessingml/2006/main">'
+        + _FOOTNOTE_SYSTEM_NOTES
+        + notes_xml
+        + "</w:footnotes>"
+    ).encode("utf-8")
+
+    part = Part(
+        PackURI(_FOOTNOTES_PARTNAME),
+        _FOOTNOTES_CONTENT_TYPE,
+        xml,
+        doc.part.package,
+    )
+    doc.part.relate_to(part, RELATIONSHIP_TYPE.FOOTNOTES)
+
+
+def _extract_footnotes(doc: Document) -> List[str]:
+    """从 footnotes part 回读脚注文本（无 part / 无真实脚注为空表）。"""
+    from xml.etree import ElementTree
+
+    W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    notes: List[str] = []
+    for part in doc.part.package.iter_parts():
+        if part.partname != _FOOTNOTES_PARTNAME:
+            continue
+        root = ElementTree.fromstring(part.blob)
+        for note in root.findall(f"{{{W}}}footnote"):
+            if note.get(f"{{{W}}}type"):  # separator/continuation 跳过
+                continue
+            text = "".join(
+                t.text or "" for t in note.iter(f"{{{W}}}t")
+            ).strip()
+            if text:
+                notes.append(text)
+        break
+    return notes
+
+
+_CROSS_REF_RE = re.compile(r"\{\{(fig|tbl|fn):([^}]+)\}\}")
+
+
+def _split_cross_ref_segments(
     text: str,
     figure_caption_numbers: Dict[str, int],
     table_caption_numbers: Dict[str, int],
-) -> str:
-    """解析段落文本中的交叉引用占位符为"图N"/"表N"。
+    footnotes: Optional[List[str]] = None,
+) -> List[Tuple[str, str, str]]:
+    """拆分段落文本为交叉引用/脚注段（Round 46/57）。
 
+    返回 ``[("text", 文本, "") | ("ref", 书签名, 缓存文本) |
+    ("fnref", 脚注 id, "")]``——ref 段由调用方写成 REF 复杂域（缓存
+    "图N"）；fnref 段写成 ``w:footnoteReference`` run（id 按出现顺序
+    1..N），备注文本累积进 ``footnotes`` 供挂载 footnotes part。
     未命中任何题注即抛 ValueError（fail-fast，与 citations 未定义 key
     同哲学）——静默保留占位符会让残渍流入交付文档。
     """
 
-    def _sub(match: re.Match[str]) -> str:
+    segments: List[Tuple[str, str, str]] = []
+    pos = 0
+    for match in _CROSS_REF_RE.finditer(text):
+        if match.start() > pos:
+            segments.append(("text", text[pos : match.start()], ""))
         kind, caption = match.group(1), match.group(2).strip()
+        if kind == "fn":
+            if footnotes is None:
+                footnotes = []
+            footnotes.append(caption)
+            segments.append(("fnref", str(len(footnotes)), ""))
+            pos = match.end()
+            continue
         if kind == "fig":
             number = figure_caption_numbers.get(caption)
             if number is None:
                 raise ValueError(
                     f"cross_ref_not_found: {{{{fig:{caption}}}}} 未匹配任何图片题注"
                 )
-            return f"图{number}"
-        number = table_caption_numbers.get(caption)
-        if number is None:
-            raise ValueError(
-                f"cross_ref_not_found: {{{{tbl:{caption}}}}} 未匹配任何表格题注"
-            )
-        return f"表{number}"
+            segments.append(("ref", f"_RefFig{number}", f"图{number}"))
+        else:
+            number = table_caption_numbers.get(caption)
+            if number is None:
+                raise ValueError(
+                    f"cross_ref_not_found: {{{{tbl:{caption}}}}} 未匹配任何表格题注"
+                )
+            segments.append(("ref", f"_RefTbl{number}", f"表{number}"))
+        pos = match.end()
+    if pos < len(text):
+        segments.append(("text", text[pos:], ""))
+    return segments
 
-    return _CROSS_REF_RE.sub(_sub, text)
+
+def _write_cross_ref_segment(paragraph, segment: Tuple[str, str, str]) -> None:
+    """把单个交叉引用/脚注段写入段落（text → run；ref → REF 域；
+    fnref → w:footnoteReference run）。"""
+    if segment[0] == "text":
+        paragraph.add_run(segment[1])
+    elif segment[0] == "fnref":
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        run = paragraph.add_run()
+        ref = OxmlElement("w:footnoteReference")
+        ref.set(qn("w:id"), segment[1])
+        run._r.append(ref)
+    else:
+        from .word_layout import append_ref_field
+
+        append_ref_field(paragraph, segment[1], segment[2])
 
 
 def _patch_style_rfonts(style, ascii_name: str, ea_name: str) -> None:
@@ -158,6 +270,7 @@ from .models import (
     WordCommentContent,
     WordCommentsResult,
     WordHeaderFooterContent,
+    WordMetadataSpec,
     WordParagraphContent,
     WordTableContent,
 )
@@ -468,6 +581,22 @@ def _build_docx_summary(
     )
 
 
+def _read_core_metadata(doc: Document) -> Optional[WordMetadataSpec]:
+    """读 core properties 为 WordMetadataSpec（全空返回 None——不回填
+    python-docx 模板默认 author）。"""
+    core = doc.core_properties
+    meta = WordMetadataSpec(
+        author=core.author or None,
+        subject=core.subject or None,
+        keywords=core.keywords or None,
+        comments=core.comments or None,
+        category=core.category or None,
+    )
+    if all(getattr(meta, f) is None for f in ("author", "subject", "keywords", "comments", "category")):
+        return None
+    return meta
+
+
 def read_docx(
     file_path: Path,
     *,
@@ -552,6 +681,8 @@ def read_docx(
         image_previews=image_previews,
         headers_footers=_extract_headers_footers(doc),
         toc_fields=_extract_toc_fields(doc),
+        metadata=_read_core_metadata(doc),
+        footnotes=_extract_footnotes(doc),
     )
 
 
@@ -1000,6 +1131,16 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # Title
         doc.add_heading(req.title, level=0)
 
+        # Round 49：文档核心属性（core properties）。title 恒为请求
+        # 标题；其余显式传入才写（不臆造作者）。
+        core = doc.core_properties
+        core.title = req.title
+        if req.metadata is not None:
+            for field in ("author", "subject", "keywords", "comments", "category"):
+                value = getattr(req.metadata, field)
+                if value is not None:
+                    setattr(core, field, value)
+
         # Round 13/29：目录域（标题之后、正文之前；分页使正文另起一页）。
         # 目录标题为普通段落，不参与多级标题编号检查（Linter 对偶跳过）。
         # Round 29：预收集标题清单回填为 TOC 域的静态缓存——打开文档即见
@@ -1102,6 +1243,8 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         table_no = 0
         # Round 20：counters 扩到 5 级（h4/h5 编号）。
         heading_counters = [0, 0, 0, 0, 0]
+        # Round 57：内联脚注累积表（{{fn:备注}} → footnoteReference id 1..N）
+        footnote_texts: List[str] = []
         numbering = bool(req.format_spec.numbering) if req.format_spec else False
         # ── Round 26：横排分节（section_breaks 按 start_paragraph 排序） ───
         pending_breaks: List[Any] = sorted(
@@ -1127,13 +1270,41 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
 
                 apply_section_break(doc, pending_breaks[break_idx].page_setup)
                 break_idx += 1
-            # Round 45：交叉引用占位符解析（{{fig:}}/{{tbl:}} → 图N/表N）
-            body_text = _resolve_cross_refs(
-                para.text, figure_caption_numbers, table_caption_numbers
+            # Round 45/46：交叉引用占位符——有占位符走分段写 run 路径
+            # （ref 段为 REF 复杂域，更新域自动同步题注重排）；无占位符
+            # 段落保持既有单次写入（产物零变化）。
+            ref_segments = (
+                _split_cross_ref_segments(
+                    para.text,
+                    figure_caption_numbers,
+                    table_caption_numbers,
+                    footnotes=footnote_texts,
+                )
+                if _CROSS_REF_RE.search(para.text)
+                else None
             )
-            if para.heading in ("h1", "h2", "h3", "h4", "h5"):
+            if ref_segments is not None and para.heading in (
+                "h1", "h2", "h3", "h4", "h5"
+            ):
                 level = int(para.heading[1])
-                text = body_text
+                created = doc.add_heading("", level=level)
+                if numbering:
+                    created.add_run(
+                        heading_number_prefix(heading_counters, level) + " "
+                    )
+                for seg in ref_segments:
+                    _write_cross_ref_segment(created, seg)
+            elif ref_segments is not None:
+                created = doc.add_paragraph(
+                    style="List Bullet" if para.style == "bullet"
+                    else "List Number" if para.style == "numbered"
+                    else None
+                )
+                for seg in ref_segments:
+                    _write_cross_ref_segment(created, seg)
+            elif para.heading in ("h1", "h2", "h3", "h4", "h5"):
+                level = int(para.heading[1])
+                text = para.text
                 if numbering:
                     text = (
                         heading_number_prefix(heading_counters, level)
@@ -1143,12 +1314,12 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                 created = doc.add_heading(text, level=level)
             elif para.style == "bullet":
                 # ★ 新增：bullet 列表
-                created = doc.add_paragraph(body_text, style="List Bullet")
+                created = doc.add_paragraph(para.text, style="List Bullet")
             elif para.style == "numbered":
                 # ★ 新增：numbered 列表
-                created = doc.add_paragraph(body_text, style="List Number")
+                created = doc.add_paragraph(para.text, style="List Number")
             else:
-                created = doc.add_paragraph(body_text)
+                created = doc.add_paragraph(para.text)
             # 批次 2.3：可选段落级样式（无样式字段时零改动）
             _apply_paragraph_run_style(created, para)
             # Round 9：文中引用上标标记（仅非标题段落，标题已在预检拒绝）
@@ -1191,6 +1362,9 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         # 多级标题编号——编号只作用于 req.paragraphs 的显式标题）
         if ordered_refs:
             _add_bibliography(doc, ordered_refs, req.citation_style, cite_numbers, bib_spec)
+        # Round 57：有内联脚注时挂载 footnotes part（无脚注零变化）。
+        if footnote_texts:
+            _mount_footnotes_part(doc, footnote_texts)
         doc.save(str(output_path))
     except Exception as exc:
         raise OfficeGenerateError(f"Failed to generate DOCX: {exc}", file_path=output_path) from exc

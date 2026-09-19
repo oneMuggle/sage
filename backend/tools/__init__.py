@@ -27,6 +27,7 @@ from .calculator import CalculatorTool
 from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, CheckpointRestoreTool
 from .codebase_search_tool import CodebaseSearchTool
 from .commit_message_tool import GitCommitMessageTool
+from .config_tool import ReadSageConfigTool, UpdateSageConfigTool
 from .download_tool import HttpDownloadTool
 from .edit_tool import EditTool
 from .execute_code_tool import ExecuteCodeTool
@@ -61,6 +62,10 @@ from .office_pdf_tool import (
     OfficeGeneratePdfTool,
     OfficeReadPdfFormTool,
     OfficeReadPdfTool,
+)
+from .office_ppt_template_tool import (
+    OfficeAnalyzePptTemplateTool,
+    OfficeFillPptTemplateTool,
 )
 from .office_repair_tool import OfficeRepairWordTool
 from .office_restore_tool import OfficeRestoreTool
@@ -190,6 +195,11 @@ def register_all_tools(
     registry.register(OfficeFillPdfFormTool(policy=policy))
     registry.register(OfficeAnalyzeWordTemplateTool(policy=policy))
     registry.register(OfficeFillWordTemplateTool(policy=policy))
+    # PPT 模板两件套（office-p5a 能力的 LLM 工具面镜像）：analyze 枚举母版
+    # 版式/占位符（READ，无绑定隐藏）；fill 以模板副本另存新 .pptx
+    # （WRITE_LOCAL，file_path 模式始终可见）。
+    registry.register(OfficeAnalyzePptTemplateTool(policy=policy))
+    registry.register(OfficeFillPptTemplateTool(policy=policy))
     # Office Parity Batch-2: office_analyze —— pandas 本地数据分析
     # （describe/计数/聚合/相关性，可选分析报告 xlsx）。读类工具
     # requires_tool_context=True（无绑定自动隐藏）；报告只写源文件同目录
@@ -286,6 +296,10 @@ def register_all_tools(
     registry.register(SpeechToTextTool(policy=policy))
     registry.register(ImageGenerationTool(policy=policy))
 
+    # Sage 自省与配置工具：read_sage_config 为 READ，update_sage_config 为 WRITE_LOCAL。
+    registry.register(ReadSageConfigTool(policy=policy))
+    registry.register(UpdateSageConfigTool(policy=policy))
+
     # Register MCP tools (from external MCP servers like draw.io)
     try:
         from backend.mcp import register_mcp_tools
@@ -330,6 +344,8 @@ __all__ = [
     "OfficeFillPdfFormTool",
     "OfficeAnalyzeWordTemplateTool",
     "OfficeFillWordTemplateTool",
+    "OfficeAnalyzePptTemplateTool",
+    "OfficeFillPptTemplateTool",
     "OfficeAnalyzeTool",
     "OfficeBibTexTool",
     "OfficeLintWordTool",
@@ -377,5 +393,7 @@ __all__ = [
     "TextToSpeechTool",
     "SpeechToTextTool",
     "ImageGenerationTool",
+    "ReadSageConfigTool",
+    "UpdateSageConfigTool",
     "register_all_tools",
 ]

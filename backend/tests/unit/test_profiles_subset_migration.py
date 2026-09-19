@@ -133,6 +133,10 @@ def test_already_current_no_upsert(monkeypatch):
             "tools": list(profiles._CODER_SEED_TOOLS),
         },
         "memory_manager": {"id": "memory_manager", "enabled": True, "tools": ["memory_search", "memory_save"]},
+        "ppt-maker": {
+            "id": "ppt-maker", "enabled": True,
+            "tools": list(profiles._PPT_MAKER_SEED_TOOLS),
+        },
         "reviewer": {"id": "reviewer", "enabled": True, "tools": []},
     }
     repo = _seed_repo(monkeypatch, stored)

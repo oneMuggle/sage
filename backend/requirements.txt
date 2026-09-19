@@ -19,6 +19,13 @@ sqlite-vec>=0.1.9
 httpx==0.26.0
 python-multipart==0.0.32  # required for FastAPI File() / Form() in legacy_routes.py; >=0.0.18 fixes PYSEC-2026-1851/1852/3036-3040
 
+# Crypto (Arena account pool — Fernet symmetric encryption for passwords)
+# cryptography 50.0.1 is the latest release; main runs on Python 3.10+/3.11
+# so it is unconstrained. requirements-py38.txt pins 47.0.0 instead — the
+# last release shipping cp38 wheels (48.0.0 requires >=3.9) — so the Win7
+# LTS channel can keep installing. Divergence is intentional and documented.
+cryptography==50.0.1
+
 # Observability
 prometheus-client==0.25.0
 

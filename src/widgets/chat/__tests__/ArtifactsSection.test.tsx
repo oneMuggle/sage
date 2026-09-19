@@ -35,3 +35,36 @@ describe('ArtifactsSection', () => {
     expect(screen.getByText(/请先选择会话/)).toBeInTheDocument();
   });
 });
+
+describe('ArtifactsSection — right-panel R4 批次 C: 类型过滤', () => {
+  it('默认全部显示，过滤 chips 渲染', () => {
+    render(<ArtifactsSection artifacts={arts} {...base} />);
+    expect(screen.getByTestId('artifact-filter-all')).toBeInTheDocument();
+    expect(screen.getByTestId('artifact-filter-code')).toBeInTheDocument();
+    expect(screen.getByTestId('artifact-filter-doc')).toBeInTheDocument();
+  });
+
+  it('点击代码 chip 后只显示代码类产物', () => {
+    render(<ArtifactsSection artifacts={arts} {...base} />);
+    fireEvent.click(screen.getByTestId('artifact-filter-code'));
+    expect(screen.getByText('b.py')).toBeInTheDocument();
+    expect(screen.queryByText('a.md')).not.toBeInTheDocument();
+  });
+
+  it('切回全部恢复完整列表', () => {
+    render(<ArtifactsSection artifacts={arts} {...base} />);
+    fireEvent.click(screen.getByTestId('artifact-filter-code'));
+    fireEvent.click(screen.getByTestId('artifact-filter-all'));
+    expect(screen.getByText('a.md')).toBeInTheDocument();
+    expect(screen.getByText('b.py')).toBeInTheDocument();
+  });
+
+  it('过滤后无匹配显示空提示', () => {
+    const imgOnly: Artifact[] = [
+      { id: 'i1', session_id: 's', tool_call_id: null, path: '/c.png', name: 'c.png', kind: 'image', size: 10, created_at: 3 },
+    ];
+    render(<ArtifactsSection artifacts={imgOnly} {...base} />);
+    fireEvent.click(screen.getByTestId('artifact-filter-code'));
+    expect(screen.getByTestId('artifacts-filter-empty')).toBeInTheDocument();
+  });
+});

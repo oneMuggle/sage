@@ -12,6 +12,7 @@ import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { type AtFileSelection } from '../../shared/api/fileSearchClient';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
+import { CHAT_DOCUMENT_EXTENSIONS } from '../../shared/lib/hooks/useFileUpload';
 import { useSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
@@ -65,6 +66,11 @@ interface ChatInputProps {
        * 普通消息不传（undefined → 后端 auto）。
        */
       orchestrationMode?: string;
+      /**
+       * Task 5 (2026-09-17): 上下文重置标记 —— "新话题" 按钮触发，
+       * 后端在本轮消息前插入 topic_separator 并清空 LLM 历史窗口。
+       */
+      contextReset?: boolean;
     },
   ) => void;
   onInterrupt?: () => void;
@@ -339,11 +345,16 @@ function ChatInputInner({
     // RT5 (round7): 运行中允许发送 —— onSend（useChat.sendMessage）按会话
     // 活跃流先走 steering 注入当前 run，失败回退队列；不再 UI 硬拦截。
     if (!value.trim()) return;
-    // R17-F→R23: 图片通道已打通（images data URL 直传后端）。仍被丢弃的
-    // 只有 files 与 knowledgeRefs（officeRefs 走 office_refs 通道不受影响
-    // ）—— 诚实提示而不是静默丢失。
-    if (files.length > 0 || knowledgeRefs.length > 0) {
-      toast.warning(t('chat.attachment_not_sent'));
+    // R37/r75 后 files（txt/md/pdf/docx）会随消息上传注入——仅对其余
+    // 不受支持的扩展名提示（诚实提示而不是静默丢失）。
+    const unsupportedFiles = files.filter((f) => {
+      const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+      return !CHAT_DOCUMENT_EXTENSIONS.has(ext);
+    });
+    if (unsupportedFiles.length > 0) {
+      toast.warning(
+        `${t('chat.attachment_not_sent')}: ${unsupportedFiles.map((f) => f.name).join('、')}`,
+      );
     }
     onSend(value.trim(), {
       knowledgeRefs: knowledgeRefs.length > 0 ? knowledgeRefs : undefined,
@@ -359,6 +370,16 @@ function ChatInputInner({
     setOfficeRefs([]);
     clearAll();
   };
+
+  /**
+   * Task 5 (2026-09-17): "新话题" 按钮 —— 空内容 + contextReset 走 onSend，
+   * 后端在消息前插入 topic_separator 并清空 LLM 上下文。
+   */
+  const handleNewTopic = useCallback(() => {
+    if (isLoading || disabled) return;
+    onSend('', { contextReset: true });
+    setValue('');
+  }, [onSend, isLoading, disabled, setValue]);
 
   const handleSlashSelect = useCallback(
     (cmd: SlashCommand) => {
@@ -451,6 +472,8 @@ function ChatInputInner({
           .then((result) => {
             const body =
               typeof result.content === 'string' ? result.content : `/${skillName} ${args}`.trim();
+            // R38: 显式调用技能成功后提示用户
+            toast.info(t('chat.skill_loaded').replace('{name}', skillName));
             onSend(body);
             setValue('');
           })
@@ -610,6 +633,7 @@ function ChatInputInner({
         value={value}
         onChange={handleChange}
         onSubmit={handleSend}
+        onNewTopic={handleNewTopic}
         placeholder={placeholder ?? t('chat.placeholder')}
         disabled={disabled}
         isLoading={isLoading}

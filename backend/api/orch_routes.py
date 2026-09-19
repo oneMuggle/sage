@@ -82,6 +82,9 @@ def _run_detail(run: OrchRun) -> OrchRunDetail:
             "output_preview": t.output_preview,
             "started_at": t.started_at,
             "finished_at": t.finished_at,
+            # RT24 (round32): 任务级用量/时长 —— 终态落库值，历史回看可见。
+            "used_tokens": getattr(t, "used_tokens", None),
+            "duration_ms": getattr(t, "duration_ms", None),
         }
         for t in task_repo.list_by_run(run.run_id)
     ]
@@ -130,9 +133,42 @@ class RerunFailedResponse(BaseModel):
     plan_override: List[Dict[str, Any]]
 
 
+class RerunFailedRequest(BaseModel):
+    """RV4 (round27): 可选任务子集 —— 单任务重试。
+
+    提供 ``task_ids`` 时只重建所选失败任务及其下游未完成闭包；缺省
+    （或 None）保持 RV2 语义：全部失败任务重建。
+    """
+
+    task_ids: Optional[List[str]] = None
+
+    model_config = {"extra": "forbid"}
+
+
+def _depends_closure(
+    selected: List[str], deps_of: Dict[str, List[str]]
+) -> List[str]:
+    """所选任务 + 传递依赖闭包（下游引用所选者）。"""
+    dependents: Dict[str, List[str]] = {}
+    for tid, deps in deps_of.items():
+        for d in deps:
+            dependents.setdefault(d, []).append(tid)
+    seen = list(selected)
+    queue = list(selected)
+    while queue:
+        cur = queue.pop(0)
+        for child in dependents.get(cur, []):
+            if child not in seen:
+                seen.append(child)
+                queue.append(child)
+    return seen
+
+
 @router.post("/runs/{run_id}/rerun-failed", response_model=RerunFailedResponse)
 @with_db_lock
-def rerun_failed(run_id: str) -> RerunFailedResponse:
+def rerun_failed(
+    run_id: str, payload: Optional[RerunFailedRequest] = None
+) -> RerunFailedResponse:
     """RV2 (round8): 构造"只重跑失败任务"的计划覆盖。
 
     - done 任务 → 原条目 + ``preset_output``（orch_tasks.output_preview），
@@ -140,6 +176,9 @@ def rerun_failed(run_id: str) -> RerunFailedResponse:
     - failed/cancelled/blocked/pending 任务 → 原条目重建（goal/agent_id/
       depends_on 保持）；
     - run 非终态 → 409；无失败任务 → 409；无计划 → 409。
+
+    RV4 (round27): 带 ``task_ids`` 时退化为单任务重试 —— 只重建所选任务
+    及其下游未完成闭包，其余失败任务不进入新计划（goal 文案说明）。
     """
     run_repo = OrchRunRepository()
     run = run_repo.get(run_id)
@@ -151,15 +190,53 @@ def rerun_failed(run_id: str) -> RerunFailedResponse:
     if not detail.plan:
         raise HTTPException(status_code=409, detail="run has no plan to rebuild")
     status_by_id = {t["task_id"]: t for t in detail.tasks}
+
+    # RV4 (round27): 单任务重试 —— 解析所选子集与下游未完成闭包。
+    selected: List[str] = []
+    if payload is not None and payload.task_ids:
+        plan_ids = {
+            str(it.get("task_id") or f"t{i + 1}")
+            for i, it in enumerate(detail.plan)
+            if isinstance(it, dict)
+        }
+        deps_of: Dict[str, List[str]] = {}
+        for i, it in enumerate(detail.plan):
+            if not isinstance(it, dict):
+                continue
+            tid = str(it.get("task_id") or f"t{i + 1}")
+            raw = it.get("depends_on")
+            deps_of[tid] = [str(d) for d in raw] if isinstance(raw, list) else []
+        for tid in payload.task_ids:
+            if tid not in plan_ids:
+                raise HTTPException(status_code=404, detail=f"task not found: {tid}")
+            st = str((status_by_id.get(tid) or {}).get("status") or "pending")
+            if st == "done":
+                raise HTTPException(
+                    status_code=409, detail=f"task already done: {tid}"
+                )
+            selected.append(tid)
+        closure = set(_depends_closure(selected, deps_of))
+    else:
+        closure = None  # None = RV2 全量失败重建语义
+
     override: List[Dict[str, Any]] = []
     done_count = 0
     failed_count = 0
+    excluded_count = 0
     for idx, item in enumerate(detail.plan):
         if not isinstance(item, dict):
             continue
         tid = str(item.get("task_id") or f"t{idx + 1}")
         task = status_by_id.get(tid) or {}
         status = str(task.get("status") or "pending")
+        # RV4: 子集模式下，闭包外的未完成任务不进入新计划。
+        if (
+            closure is not None
+            and tid not in closure
+            and status in ("failed", "cancelled", "blocked", "pending")
+        ):
+            excluded_count += 1
+            continue
         entry: Dict[str, Any] = {
             "task_id": tid,
             "goal": str(item.get("goal") or task.get("goal") or ""),
@@ -182,11 +259,22 @@ def rerun_failed(run_id: str) -> RerunFailedResponse:
     if failed_count == 0:
         raise HTTPException(status_code=409, detail="no failed tasks to rerun")
     original = (run.original_request or "").strip()
-    goal = (
-        f"重跑失败任务（已完成 {done_count} 个子任务结果保留）：{original}"
-        if original
-        else f"重跑失败任务（已完成 {done_count} 个子任务结果保留）"
-    )
+    if closure is not None:
+        excluded_note = (
+            "，另有 %d 个失败任务未包含" % excluded_count if excluded_count else ""
+        )
+        head = "单任务重试（%s，已完成 %d 个子任务结果保留%s）" % (
+            ", ".join(selected),
+            done_count,
+            excluded_note,
+        )
+        goal = f"{head}：{original}" if original else head
+    else:
+        goal = (
+            f"重跑失败任务（已完成 {done_count} 个子任务结果保留）：{original}"
+            if original
+            else f"重跑失败任务（已完成 {done_count} 个子任务结果保留）"
+        )
     return RerunFailedResponse(
         session_id=run.session_id, goal=goal, plan_override=override
     )

@@ -100,6 +100,8 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   // PPT
   const [pptTitle, setPptTitle] = useState('Slide 1');
   const [pptBullets, setPptBullets] = useState('First point\nSecond point');
+  // P5-B: 版式选择（title_content/title/blank），透传到 slides[].layout
+  const [pptLayout, setPptLayout] = useState<'title_content' | 'title' | 'blank'>('title_content');
 
   // Word — free-form
   const [wordTitle, setWordTitle] = useState('Document Title');
@@ -341,7 +343,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
         out = await officeApi.generatePpt({
           workspace_path: workspacePath,
           filename,
-          slides: [{ title: pptTitle, bullets }],
+          slides: [{ title: pptTitle, bullets, layout: pptLayout }],
           task_id: taskId,
         });
       } else if (docType === 'word') {
@@ -487,6 +489,19 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
               onChange={(e) => setPptTitle(e.target.value)}
               className={inputClass}
             />
+          </div>
+          <div>
+            <label className="block text-xs text-muted mb-1">{t('office.generate.pptLayout')}</label>
+            <select
+              value={pptLayout}
+              onChange={(e) => setPptLayout(e.target.value as 'title_content' | 'title' | 'blank')}
+              className={inputClass}
+              data-testid="office-gen-ppt-layout"
+            >
+              <option value="title_content">{t('office.generate.layoutTitleContent')}</option>
+              <option value="title">{t('office.generate.layoutTitle')}</option>
+              <option value="blank">{t('office.generate.layoutBlank')}</option>
+            </select>
           </div>
           <div>
             <label className="block text-xs text-muted mb-1">

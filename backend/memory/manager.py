@@ -119,6 +119,7 @@ class MemoryManager:
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
+        segment_id: int = 0,
     ) -> Optional[str]:
         """
         通用记忆存储接口
@@ -130,6 +131,9 @@ class MemoryManager:
             tags: 标签列表
             metadata: 额外元数据
             session_id: 可选会话 ID，用于工作记忆按会话隔离 / 情景记忆关联会话
+            segment_id: 上下文段 id（PF-2 context-isolation）。默认 0 — 向后兼容
+                既有调用方；同会话多段时区分工作记忆的可见范围。仅当
+                ``resolved == "working"`` 时生效（episodic/semantic 无段概念）。
 
         Returns:
             记忆 ID：
@@ -140,7 +144,9 @@ class MemoryManager:
         resolved = classify_memory_type(memory_type, importance, content)
 
         if resolved == "working":
-            seq = self.working.add(session_id, {"role": "system", "content": content})
+            seq = self.working.add(
+                session_id, {"role": "system", "content": content}, segment_id=segment_id
+            )
             sid = self.working.resolve_session_id(session_id)
             return f"wm:{sid}:{seq}"
 
@@ -234,13 +240,21 @@ class MemoryManager:
 
         return results
 
-    def get_context(self, limit: int = 10, session_id: Optional[str] = None) -> str:
+    def get_context(
+        self,
+        limit: int = 10,
+        session_id: Optional[str] = None,
+        segment_id: Optional[int] = None,
+    ) -> str:
         """
         获取上下文用于 Agent
 
         Args:
             limit: 上下文消息数量限制
             session_id: 可选会话 ID，限定工作记忆上下文的范围
+            segment_id: 可选段 id（Task 14 context-isolation）。
+                透传给 :meth:`WorkingMemory.get_context`，仅返回该段消息。
+                ``None`` → 返回该会话全部段（向后兼容）。
 
         Returns:
             格式化的上下文字符串
@@ -260,8 +274,10 @@ class MemoryManager:
         except Exception as exc:
             logger.debug(f"用户画像快照注入失败: {exc}")
 
-        # 获取工作记忆上下文（按 session 隔离）
-        working_context = self.working.get_context(session_id, limit=limit)
+        # 获取工作记忆上下文（按 session 隔离 + Task 14 按 segment_id 隔离）
+        working_context = self.working.get_context(
+            session_id, limit=limit, segment_id=segment_id
+        )
         if working_context:
             parts.append("【当前对话】")
             for msg in working_context:
@@ -311,15 +327,24 @@ class MemoryManager:
 
         return "\n".join(parts) if parts else ""
 
-    def compress(self, session_id: Optional[str] = None) -> None:
+    def compress(
+        self,
+        session_id: Optional[str] = None,
+        segment_id: Optional[int] = None,
+    ) -> None:
         """
         压缩指定会话的工作记忆
         生成摘要并保存到情景记忆
 
         Args:
             session_id: 会话 ID（None → 默认会话），仅压缩并清空该会话
+            segment_id: 上下文段 id（PF-3 context-isolation）。若指定，则仅压缩
+                并清空该段的工作记忆（使用 ``clear_segment``）；若为 None，则
+                维持默认行为，清空整个会话的工作记忆（向后兼容）。
         """
-        messages = self.working.get_context(session_id)
+        messages = self.working.get_context(
+            session_id, segment_id=segment_id
+        )
 
         if not messages:
             return
@@ -336,17 +361,26 @@ class MemoryManager:
                 session_id=session_id,
             )
 
-            # 清空该会话的工作记忆
-            self.working.clear(session_id)
+            # 清空工作记忆：段级或会话级
+            if segment_id is not None:
+                self.working.clear_segment(session_id, segment_id)
+            else:
+                self.working.clear(session_id)
 
             logger.info(
                 f"工作记忆已压缩: session={normalize_session_id(session_id)}, "
-                f"保存了 {len(messages)} 条消息的摘要"
+                f"segment={segment_id}, 保存了 {len(messages)} 条消息的摘要"
             )
         except Exception as e:
             logger.error(f"压缩工作记忆失败: {e}")
 
-    def add_to_working(self, role: str, content: str, session_id: Optional[str] = None) -> None:
+    def add_to_working(
+        self,
+        role: str,
+        content: str,
+        session_id: Optional[str] = None,
+        segment_id: int = 0,
+    ) -> None:
         """
         添加消息到工作记忆
 
@@ -354,8 +388,12 @@ class MemoryManager:
             role: 角色 (user/assistant/system)
             content: 消息内容
             session_id: 可选会话 ID（None → 默认会话）
+            segment_id: 上下文段 id（PF-2 context-isolation）。默认 0 — 向后兼容
+                既有调用方；同会话多段时区分工作记忆的可见范围。
         """
-        self.working.add(session_id, {"role": role, "content": content})
+        self.working.add(
+            session_id, {"role": role, "content": content}, segment_id=segment_id
+        )
 
     def search_memories(
         self,

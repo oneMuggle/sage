@@ -55,6 +55,12 @@ export interface SessionLineage {
   archives: LineageArchive[];
 }
 
+/** Task 11 (2026-09-17): POST /sessions/{id}/segments/retreat 响应 */
+export interface SessionRetreatResult {
+  /** true = 成功删除了一个 separator 并 merge segments；false = 无可删的 separator */
+  ok: boolean;
+}
+
 /** U18: POST /sessions/{id}/export 响应（JSON 信封，html 为自包含文档文本） */
 export interface SessionExportResult {
   /** 自包含导出 HTML 全文（内联 CSS/JS/marked/highlight.js，离线可开） */
@@ -140,6 +146,8 @@ export interface Message {
   step_index?: number | null;
   /** alpha.36 (Bug #4): 同一 message 行内携带的 LLM 推理过程（持久化在 DB）。 */
   reasoning_content?: string | null;
+  /** Task 5 (2026-09-17): 消息子类型 —— 'topic_separator' 渲染为分隔线。 */
+  subtype?: string | null;
 }
 
 export interface ToolCall {
@@ -199,7 +207,18 @@ export type AgentState =
   | 'artifact_created'
   // R17-E: 记忆召回展示 —— L13 注入记忆上下文后推送本次命中条目,
   // 载荷见 AgentEvent.memories。
-  | 'memory_used';
+  | 'memory_used'
+  // R38 (2026-09-18): 技能激活展示 —— A16 自动激活或显式 /skill 调用后
+  // 推送本次激活的技能列表,载荷见 AgentEvent.skills。
+  | 'skill_activated'
+  // R38 (2026-09-18): 自动上下文压缩展示 —— M4 达到阈值触发压缩后推送
+  // 压缩统计,载荷见 AgentEvent.compact。
+  | 'compact_triggered'
+  // Task 10 (2026-09-17): 自动话题检测 — 切换 segment 时由 producer 推送。
+  | 'topic_shifted'
+  // r71: 附件检索注入溯源（引用块在气泡内可展开）,
+  // 载荷见 AgentEvent.citations。
+  | 'attachment_rag_used';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -328,6 +347,9 @@ export interface TaskStatusEvent {
   // BU13 (round24): 终态任务执行时长（毫秒）—— started_at→finished_at；
   // 二者齐备才携带。任务树行内渲染耗时徽章。
   duration_ms?: number;
+  // BU15 (round29): 【UI 注入，后端不发】running 状态被前端 ingestion
+  // 观察到的本地时间戳（Date.now()），任务树行内实时计时用；终态后消失。
+  runningSince?: number;
   // live-events P0 (2026-09-06): 派发本批次的 conductor 工具调用 ID —— 聊天流内
   // 把子代理实时步骤关联到 "Delegate <goal>" 卡片的关联键。
   parent_tool_call_id?: string | null;
@@ -435,6 +457,10 @@ export interface AgentEvent {
   tool_result?: AgentToolResult;
   /** producer 失败信封: LLMError.to_dict() 为 dict; 旧路径/限额拦截为 str */
   error?: string | { type?: string; message?: string; status_code?: number };
+  /** client_message_id 协议: DONE 附带 assistant 消息的服务端 id, 供前端替换占位 id */
+  message_id?: string;
+  /** 首轮对话标记: 标题将在后台生成, 前端稍后补刷侧栏 (2026-09) */
+  title_pending?: boolean;
   /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
   agent_id?: string;
   /** M1: state === 'permission_request' 时携带的审批请求详情 */
@@ -468,6 +494,9 @@ export interface AgentEvent {
   // P1 todo 接线: todo_snapshot 全量快照字段,与 llmStream.ts 双处一致。
   todos?: TodoItem[];
   session_id?: string;
+  // Task 10 (2026-09-17): topic_shifted 事件载荷 — 自动切换 segment 时推送。
+  segment_id?: number;
+  reason?: string;
   // live-events P0 (2026-09-06): subagent_event 镜像字段(收敛类型见
   // SubagentLiveEvent,这里保持宽松 AgentEvent 可直接 cast)。
   phase?: SubagentEventPhase;
@@ -492,6 +521,17 @@ export interface AgentEvent {
   };
   // R17-E: memory_used 事件载荷（L13 记忆注入命中条目,气泡内可展开）。
   memories?: { id: string; memory_type: string; preview: string }[];
+  // R38: skill_activated 事件载荷（A16 自动激活或显式 /skill 调用的技能列表）。
+  skills?: { name: string; triggers_matched: string[] }[];
+  // R38: compact_triggered 事件载荷（M4 自动压缩统计）。
+  compact?: { before: number; after: number; removed: number };
+  // r71: attachment_rag_used 事件载荷（超长文档检索注入溯源）。
+  citations?: {
+    media_id: string;
+    mode: string;
+    chunks?: { index: number; score: number }[];
+    filename?: string;
+  }[];
 }
 
 // ==================== 错误类型定义 ====================
@@ -533,6 +573,11 @@ export interface ChatConfig {
   planMode?: boolean;
   // 对标 S2 (2026-09-13): 临时聊天 —— 本轮不注入记忆也不做记忆提取。
   memoryDisabled?: boolean;
+  /**
+   * Task 5 (2026-09-17): 上下文重置标记 —— true 时后端在本轮消息前插入
+   * topic_separator 并清空 LLM 历史窗口，实现"新话题"显式分界。
+   */
+  contextReset?: boolean;
 }
 
 // ==================== Memory 类型定义 ====================
@@ -1167,6 +1212,8 @@ export interface OfficePptSlideContent {
 export interface OfficePptReadResult {
   summary: OfficeDocumentSummary;
   slides: OfficePptSlideContent[];
+  // Round 52：core properties 回读（无属性为 null）
+  metadata?: WordMetadataSpec | null;
 }
 
 export interface OfficeWordParagraphContent {
@@ -1205,6 +1252,8 @@ export interface OfficeWordReadResult {
    * Backend: WordImagePreview in backend/office/models.py.
    */
   image_previews?: OfficeWordImagePreview[];
+  // Round 57：脚注文本清单（无脚注为空表）
+  footnotes?: string[];
 }
 
 /** One Word comment (backend WordCommentContent). */
@@ -1386,6 +1435,8 @@ export interface PptSlideSpec {
   title: string;
   bullets?: string[];
   notes?: string;
+  /** P5-B: 版式名（title/title_content/blank），后端按模板版式名匹配；缺省为 Blank */
+  layout?: 'title_content' | 'title' | 'blank' | null;
 }
 
 export interface OfficePptGenerateRequest {
@@ -1394,6 +1445,8 @@ export interface OfficePptGenerateRequest {
   workspace_path: string;
   filename: string;
   slides: PptSlideSpec[];
+  // Round 52：文档核心属性（与 Word/Excel 对称）
+  metadata?: WordMetadataSpec;
 }
 
 export interface WordParagraphSpec {
@@ -1419,6 +1472,14 @@ export interface WordPageSetupSpec {
   size?: 'A4' | 'letter';
   orientation?: 'portrait' | 'landscape';
   margins_cm?: WordPageMarginsSpec;
+  // Round 53：节内页码格式/起始号（论文前置罗马页码场景）
+  page_number_format?:
+    | 'decimal'
+    | 'upperRoman'
+    | 'lowerRoman'
+    | 'upperLetter'
+    | 'lowerLetter';
+  page_number_start?: number;
 }
 
 /**
@@ -1487,8 +1548,7 @@ export interface WordFormatSpec {
   toc?: WordTocSpec;
   // Round 42：图目录/表目录（TOF 域，收录 SEQ 题注）
   figure_index?: WordIndexSpec;
-  table_index?: WordIndexSpec;
-  // Round 33：首页不同页眉页脚（封面页场景）
+  table_index?: WordIndexSpec;  // Round 33：首页不同页眉页脚（封面页场景）
   first_page_different?: boolean;
   first_page_header?: WordHeaderFooterSpec;
   first_page_footer?: WordHeaderFooterSpec;
@@ -1632,6 +1692,19 @@ export interface OfficeWordLintRequest {
   max_size_bytes?: number;
 }
 
+/**
+ * Round 49：文档核心属性（core properties，期刊/公文归档要求）。
+ * backend/office/models.py WordMetadataSpec 对应。
+ */
+export interface WordMetadataSpec {
+  author?: string;
+  subject?: string;
+  /** 关键词（分号分隔） */
+  keywords?: string;
+  comments?: string;
+  category?: string;
+}
+
 export interface OfficeWordGenerateRequest {
   /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
   task_id?: string;
@@ -1647,6 +1720,8 @@ export interface OfficeWordGenerateRequest {
   // Round 9 引用体系：结构化文献 + 引用样式
   references?: ReferenceSpec[];
   citation_style?: 'gbt7714' | 'apa';
+  // Round 49：文档核心属性（core properties）
+  metadata?: WordMetadataSpec;
 }
 
 export interface ExcelSheetSpec {

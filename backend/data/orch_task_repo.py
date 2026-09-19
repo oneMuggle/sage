@@ -29,6 +29,9 @@ class OrchTask:
     scratch_dir: Optional[str] = None
     started_at: Optional[int] = None
     finished_at: Optional[int] = None
+    # RT24 (round32): 任务级用量/时长 —— 终态落库（dispatcher 写入）。
+    used_tokens: Optional[int] = None
+    duration_ms: Optional[int] = None
 
 
 class OrchTaskRepository:
@@ -51,6 +54,8 @@ class OrchTaskRepository:
         scratch_dir: Optional[str] = None,
         started_at: Optional[int] = None,
         finished_at: Optional[int] = None,
+        used_tokens: Optional[int] = None,
+        duration_ms: Optional[int] = None,
     ) -> None:
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -59,16 +64,18 @@ class OrchTaskRepository:
             INSERT INTO orch_tasks (
                 task_id, run_id, agent_id, goal, status, retry_count,
                 error, output_preview, blocked_by, scratch_dir,
-                started_at, finished_at
+                started_at, finished_at, used_tokens, duration_ms
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(task_id) DO UPDATE SET
                 status=excluded.status,
                 retry_count=excluded.retry_count,
                 error=excluded.error,
                 output_preview=excluded.output_preview,
                 started_at=excluded.started_at,
-                finished_at=excluded.finished_at
+                finished_at=excluded.finished_at,
+                used_tokens=excluded.used_tokens,
+                duration_ms=excluded.duration_ms
                 -- revision is intentionally NOT touched here: it is an
                 -- append-only audit counter bumped only by
                 -- ``bump_revision_for_steer`` after a successful steer INSERT.
@@ -86,6 +93,8 @@ class OrchTaskRepository:
                 scratch_dir,
                 started_at,
                 finished_at,
+                used_tokens,
+                duration_ms,
             ),
         )
         conn.commit()
@@ -108,6 +117,8 @@ class OrchTaskRepository:
 
     def _row_to_task(self, row: Any) -> OrchTask:
         blocked_by = json.loads(row["blocked_by"]) if row["blocked_by"] else None
+        # RT24: 旧库可能尚未迁移出新列（init_db 前置保证一般已迁移，防御）。
+        _cols = set(row.keys())
         return OrchTask(
             task_id=row["task_id"],
             run_id=row["run_id"],
@@ -115,11 +126,13 @@ class OrchTaskRepository:
             goal=row["goal"],
             status=row["status"],
             retry_count=row["retry_count"],
-            revision=row["revision"] if "revision" in row.keys() else 0,
+            revision=row["revision"] if "revision" in _cols else 0,
             error=row["error"],
             output_preview=row["output_preview"],
             blocked_by=blocked_by,
             scratch_dir=row["scratch_dir"],
+            used_tokens=row["used_tokens"] if "used_tokens" in _cols else None,
+            duration_ms=row["duration_ms"] if "duration_ms" in _cols else None,
             started_at=row["started_at"],
             finished_at=row["finished_at"],
         )

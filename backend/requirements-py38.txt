@@ -27,6 +27,12 @@ sqlite-vec>=0.1.9
 # HTTP
 httpx==0.26.0
 
+# Crypto (Arena account pool — Fernet symmetric encryption for passwords)
+# cryptography 47.0.0 is the last release shipping cp38 wheels (48.0.0
+# requires >=3.9). Pinned uniformly across requirements.txt /
+# requirements-bundled.txt so all channels share one audited version.
+cryptography==47.0.0
+
 # Observability
 prometheus-client==0.21.1  # py38 上限：0.22+ 要求 Python>=3.9
 

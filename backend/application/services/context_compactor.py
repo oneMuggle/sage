@@ -57,6 +57,7 @@ import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from backend.application.services.branch_summarizer import BranchSummarizer
+from backend.memory.working import estimate_tokens as _shared_estimate_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -106,9 +107,6 @@ _WINDOW_CONTENT_CHARS = 800
 # 滑窗默认保留的非 system 消息条数
 _DEFAULT_WINDOW_SIZE = 12
 
-# 粗估 token 用的字符/token 比例（英文约 4 字符/token）
-_DEFAULT_CHARS_PER_TOKEN = 4.0
-
 # Layer 3 摘要消息前缀
 SUMMARY_PREFIX = "[Earlier conversation summary]"
 
@@ -119,11 +117,13 @@ _TOOL_MARKER = re.compile(r"<<<TOOL_RESULT>>>\s*\nTool:\s*(\S+)")
 Summarizer = Callable[[List[Dict[str, Any]], str], Awaitable[str]]
 
 
-def _rough_estimate(text: str, chars_per_token: float = _DEFAULT_CHARS_PER_TOKEN) -> int:
-    """基于字符数的粗粒度 token 估算。"""
+def _rough_estimate(text: str) -> int:
+    """token 估算——委托全仓统一口径 ``backend.memory.working.estimate_tokens``
+    （中文按字符、其余 4 字符≈1 token），非空文本保底 1。此前本模块独立的
+    len/4 粗估对中文严重低估,与压缩/截断主链路口径漂移。"""
     if not text:
         return 0
-    return max(1, round(len(text) / chars_per_token))
+    return max(1, _shared_estimate_tokens(text))
 
 
 def _split_system(messages: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:

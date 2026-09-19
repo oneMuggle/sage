@@ -15,6 +15,7 @@ import pytest
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.agent_state import AgentState
 from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
+from backend.domain.risk import RiskClass
 
 pytestmark = pytest.mark.unit
 
@@ -55,6 +56,10 @@ async def _collect(agent, **kwargs):
     async for evt in agent.run_loop(messages, **kwargs):
         events.append(evt)
     return events, messages
+
+
+def states_of(events):
+    return [e.state for e in events]
 
 
 class TestEmptyResponseGuard:
@@ -163,5 +168,22 @@ class TestRepetitionGuard:
         assert AgentState.DONE in states_of(events)
 
 
-def states_of(events):
-    return [e.state for e in events]
+
+
+class TestProfileParallelGuard:
+    def test_parallel_batch_rejects_tool_outside_profile_whitelist(self):
+        agent = SageAgent()
+        agent.profile = {"tools": ["calculator"]}
+        allowed_tool = MagicMock(risk=RiskClass.READ, is_blocking=False)
+        agent.tool_registry.get = MagicMock(return_value=allowed_tool)
+        enforcer = MagicMock()
+        enforcer.check.return_value = MagicMock(allowed=True, needs_approval=False)
+        batch = [
+            LLMToolCall(id="call_1", name="calculator", arguments='{"expression":"1+1"}'),
+            LLMToolCall(id="call_2", name="read_file", arguments='{"path":"x"}'),
+        ]
+
+        assert agent._is_parallel_eligible(batch, enforcer, [], 0) is False
+        enforcer.check.assert_not_called()
+
+

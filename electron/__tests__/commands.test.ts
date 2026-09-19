@@ -415,6 +415,15 @@ describe('COMMAND_ROUTES', () => {
     expect(r.path({ sessionId: 's/1' })).toBe('/api/v1/sessions/s%2F1/fork');
   });
 
+  it('builds session_retreat_segment as POST /api/v1/sessions/{sessionId}/segments/retreat', () => {
+    // Task 11 (2026-09-17): context-isolation — 撤回自动话题切换
+    const r = COMMAND_ROUTES.session_retreat_segment;
+    expect(r.method).toBe('POST');
+    expect(r.path({ sessionId: 's/1' })).toBe(
+      '/api/v1/sessions/s%2F1/segments/retreat',
+    );
+  });
+
   it('session_fork body maps camelCase args to backend snake_case fields', () => {
     const r = COMMAND_ROUTES.session_fork;
     expect(r.body).toBeDefined();

@@ -93,6 +93,29 @@ def _cm(value: Optional[Any]) -> Optional[float]:
 
 def _check_page(doc: Document, page: WordPageSetupSpec, issues: List[WordLintIssue]) -> None:
     section = doc.sections[0]
+
+    # Round 53：节内页码格式/起始号校验（spec 声明了才校验）。
+    if page.page_number_format is not None or page.page_number_start is not None:
+        sect_pr = section._sectPr
+        pg = sect_pr.find(qn("w:pgNumType"))
+        actual_fmt = pg.get(qn("w:fmt")) if pg is not None else None
+        actual_start = pg.get(qn("w:start")) if pg is not None else None
+        if page.page_number_format is not None and actual_fmt != page.page_number_format:
+            issues.append(_issue(
+                "page/numbering", "error",
+                f"页码格式实测 {actual_fmt or '未设置'}，期望 {page.page_number_format}",
+                f"在节属性的 pgNumType 设置 fmt={page.page_number_format}"
+                "（或用 format_spec.page.page_number_format 重新生成）",
+            ))
+        if page.page_number_start is not None and (
+            actual_start is None or int(actual_start) != page.page_number_start
+        ):
+            issues.append(_issue(
+                "page/numbering", "error",
+                f"页码起始号实测 {actual_start or '未设置'}，期望 {page.page_number_start}",
+                f"在节属性的 pgNumType 设置 start={page.page_number_start}"
+                "（或用 format_spec.page.page_number_start 重新生成）",
+            ))
     if page.margins_cm is not None:
         margins = page.margins_cm
         actual = {
@@ -304,6 +327,7 @@ def _iter_paragraphs_outside_fields(doc: Document):
 def _check_captions(doc: Document, issues: List[WordLintIssue]) -> None:
     for label, regex in (("图", _FIGURE_CAPTION_RE), ("表", _TABLE_CAPTION_RE)):
         expected = 1
+        seen_texts: dict = {}
         for para in _iter_paragraphs_outside_fields(doc):
             match = regex.match(para.text)
             if match is None:
@@ -317,6 +341,18 @@ def _check_captions(doc: Document, issues: List[WordLintIssue]) -> None:
                 ))
                 expected = actual
             expected += 1
+            # Round 48：重复题注文本提示（交叉引用按题注文本匹配指向
+            # 首个；警告级——不阻断交付）。
+            caption_text = regex.sub("", para.text, count=1).strip()
+            if caption_text in seen_texts:
+                issues.append(_issue(
+                    "caption/duplicate", "warning",
+                    f'{label}题注文本重复："{caption_text}"（第 '
+                    f"{seen_texts[caption_text]} 处与当前处）",
+                    "区分同类题注的标题文本，避免交叉引用指向首个",
+                ))
+            else:
+                seen_texts[caption_text] = expected - 1
 
 
 _CROSS_REF_RESIDUE_RE = re.compile(r"\{\{(fig|tbl):[^}]+\}\}")

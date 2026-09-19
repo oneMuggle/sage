@@ -69,6 +69,10 @@ OFFICE_TOOLS = (
     "office_fill_pdf_form",
     "office_analyze_word_template",
     "office_fill_word_template",
+    # 2026-09-18 PPT 模板两件套（office-p5a HTTP 能力的 LLM 工具面镜像）：
+    # analyze 枚举版式/占位符（READ）；fill 以模板副本另存新 .pptx（WRITE_LOCAL）。
+    "office_analyze_ppt_template",
+    "office_fill_ppt_template",
     "office_analyze",
     # 2026-09-11 Round 9 引用体系：BibTeX 解析（READ，纯文本、无工作区依赖）
     "office_parse_bibtex",
@@ -153,6 +157,12 @@ ORCH_TOOLS = ("agent", "todo_write", "structured_output", "ask_user_question")
 # Round 8: execute_code —— 子进程 RPC 工具调用（EXEC 级权限面与 bash 等同）
 SANDBOX_TOOLS = ("calculator", "repl", "execute_code")
 
+# 系统自省与配置（2026-09-18 feat/agents-entry-config-query）：
+# ``read_sage_config`` READ 自动放行，``update_sage_config`` WRITE_LOCAL 走权限审批。
+# 仅赋给 primary 主助手；子代理白名单严禁纳入，防止自我提权或篡改凭证。
+# 字段白名单由工具实现内部维护，这里只登记名称。
+CONFIG_TOOLS = ("read_sage_config", "update_sage_config")
+
 #: 全部静态注册的内置工具名（排序去重）。新增内置工具时把名字加进对应
 #: 分组即可；tests/unit/test_tool_names.py 会对照 register_all_tools 的
 #: 实际注册面校验本清单无遗漏、无多余。
@@ -176,6 +186,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(MULTIMODAL_TOOLS)
         | set(ORCH_TOOLS)
         | set(SANDBOX_TOOLS)
+        | set(CONFIG_TOOLS)
     )
 )
 
@@ -184,6 +195,7 @@ __all__ = [
     "BROWSER_TOOLS",
     "CHECKPOINT_TOOLS",
     "CODE_SEARCH_TOOLS",
+    "CONFIG_TOOLS",
     "EXEC_TOOLS",
     "FILE_TOOLS",
     "GIT_TOOLS",

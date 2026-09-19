@@ -273,9 +273,20 @@ class Message:
     # 2026-09 step-by-step: 同一 session 内 assistant 行的步序号（从 0 开始）。
     # user/tool/system 行 → None。多步 run 时每个 ReAct 迭代产生一行 step_index=N。
     step_index: Optional[int] = None
+    # 2026-09 context-isolation: 主题段隔离。segment_id 从 0 开始,每次"切话题"
+    # 增加。subtype='topic_separator' 标记这是一条段切换 marker(由 user 主动
+    # 调用 /topic-new 或类似动作产生),正常消息 subtype=None。
+    segment_id: int = 0
+    subtype: Optional[str] = None
+    # R38 透明度增强 (2026-09-18): 三条通知信息的 JSON-in-TEXT 载荷（原样字符串）。
+    # 写入端 json.dumps(..., ensure_ascii=False)；to_dict 解析成结构化值。
+    activated_skills: Optional[str] = None
+    compact_info: Optional[str] = None
+    memory_refs: Optional[str] = None
 
     @classmethod
     def from_row(cls, row) -> Message:
+        row_keys = set(row.keys())  # set() 避免 sqlite3.Row.keys() 触发 SIM118
         return cls(
             id=row["id"],
             session_id=row["session_id"],
@@ -287,7 +298,14 @@ class Message:
             tool_calls=row["tool_calls"],
             tool_call_id=row["tool_call_id"],
             reasoning_content=row["reasoning_content"],
-            step_index=row["step_index"] if "step_index" in row.keys() else None,
+            step_index=row["step_index"] if "step_index" in row_keys else None,
+            segment_id=row["segment_id"] if "segment_id" in row_keys else 0,
+            subtype=row["subtype"] if "subtype" in row_keys else None,
+            activated_skills=(
+                row["activated_skills"] if "activated_skills" in row_keys else None
+            ),
+            compact_info=row["compact_info"] if "compact_info" in row_keys else None,
+            memory_refs=row["memory_refs"] if "memory_refs" in row_keys else None,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -303,7 +321,28 @@ class Message:
             "tool_call_id": self.tool_call_id,
             "reasoning_content": self.reasoning_content,
             "step_index": self.step_index,
+            "segment_id": self.segment_id,
+            "subtype": self.subtype,
+            # R38: 解析成结构化值供前端直接消费；形状不符 → None（降级不报错）。
+            "activated_skills": _parse_json_column(self.activated_skills, list),
+            "compact_info": _parse_json_column(self.compact_info, dict),
+            "memory_refs": _parse_json_column(self.memory_refs, list),
         }
+
+
+def _parse_json_column(raw: Optional[str], expected: type):
+    """把 JSON-in-TEXT 列解析成结构化值；类型不符或解析失败一律降级为 None。
+
+    降级而非抛错：历史行可能由更早版本写入、或手工改库留下畸形值，
+    读路径不应因此整批失败（前端视 None 为"无信息"）。
+    """
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return parsed if isinstance(parsed, expected) else None
 
 
 class ForkSourceNotFoundError(LookupError):
@@ -326,8 +365,8 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
     """
     cursor.execute(
         """
-        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             f"msg-{uuid.uuid4().hex[:12]}",  # 新 id，避免与源消息主键冲突
@@ -340,6 +379,9 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
             src_msg.tool_call_id,
             src_msg.reasoning_content,
             src_msg.step_index,
+            src_msg.activated_skills,  # R38: fork 同步复制通知列，避免子会话丢通知
+            src_msg.compact_info,
+            src_msg.memory_refs,
             src_msg.created_at,  # 保留原时间戳 → ORDER BY created_at ASC 保序
         ),
     )
@@ -487,14 +529,24 @@ class MessageRepository:
         self.db = get_database()
 
     def save(self, message: Message) -> Message:
-        """保存消息"""
+        """保存消息。
+
+        context-isolation (2026-09): 调用方未显式指定 ``segment_id`` 时,
+        自动解析当前活跃段 id 落库,确保新消息和 WorkingMemory 的段过滤
+        保持一致 (get_active_segment_id 与 message.segment_id 对齐)。
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
+        # 默认取当前活跃段;显式传入 (含 0) 的调用方保持其语义
+        seg = message.segment_id
+        if seg == 0 and message.subtype != "topic_separator":
+            seg = self.get_active_segment_id(message.session_id)
+
         cursor.execute(
             """
-            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, created_at, segment_id, subtype)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 message.id,
@@ -507,7 +559,12 @@ class MessageRepository:
                 message.tool_call_id,
                 message.reasoning_content,
                 message.step_index,
+                message.activated_skills,
+                message.compact_info,
+                message.memory_refs,
                 message.created_at,
+                seg,
+                message.subtype,
             ),
         )
 
@@ -576,8 +633,8 @@ class MessageRepository:
                 cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
             cursor.execute(
                 """
-                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, created_at, segment_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     continuation_message.id,
@@ -590,7 +647,11 @@ class MessageRepository:
                     continuation_message.tool_call_id,
                     continuation_message.reasoning_content,
                     continuation_message.step_index,
+                    continuation_message.activated_skills,
+                    continuation_message.compact_info,
+                    continuation_message.memory_refs,
                     continuation_message.created_at,
+                    getattr(continuation_message, "segment_id", 0) or 0,
                 ),
             )
             cursor.execute(
@@ -671,21 +732,27 @@ class MessageRepository:
         role: str,
         content: str,
         created_at: int,
+        segment_id: int = 0,
+        subtype: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Insert a new message row and return the inserted record.
 
         The scheduler uses this to deliver one-shot/recurring task content
         into the target session. We deliberately bypass the LLM/agent path
         because scheduled messages are pre-formed (no streaming).
+
+        context-isolation (2026-09): ``segment_id`` / ``subtype`` 可选,
+        便于 ``advance_segment`` 在同一事务里插入已标记的 topic_separator,
+        避免 INSERT→UPDATE 之间的崩溃窗口。
         """
         message_id = f"msg-{uuid.uuid4().hex[:12]}"
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
         cursor.execute(
-            "INSERT INTO messages (id, session_id, role, content, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (message_id, session_id, role, content, created_at),
+            "INSERT INTO messages (id, session_id, role, content, created_at, segment_id, subtype) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (message_id, session_id, role, content, created_at, segment_id, subtype),
         )
         conn.commit()
         # Round 2: 定时消息同步全文索引（best-effort）
@@ -698,3 +765,75 @@ class MessageRepository:
         except Exception as exc:  # noqa: BLE001 — 索引故障不影响写入
             logger.warning("定时消息索引挂钩失败: %s", exc)
         return {"id": message_id}
+
+    def get_active_segment(self, session_id: str) -> List[Message]:
+        """Return messages after the last topic_separator (context-isolation)."""
+        all_msgs = self.get_by_session(session_id, limit=100000)
+        last_sep_idx = -1
+        for i in range(len(all_msgs) - 1, -1, -1):
+            if all_msgs[i].subtype == "topic_separator":
+                last_sep_idx = i
+                break
+        return all_msgs[last_sep_idx + 1:]
+
+    def get_active_segment_id(self, session_id: str) -> int:
+        """获取当前会话最新的 segment_id（如果不存在消息则返回 0）。
+
+        用于 L13 记忆上下文注入等场景，避免依赖 ``history_rows[-1].segment_id``
+        的脆弱推导（需要确保 history_rows 非空且最后一条携带正确 segment_id）。
+        直接查询 MAX(segment_id) 更健壮、语义更明确。
+
+        Args:
+            session_id: 会话 ID
+
+        Returns:
+            当前活跃段 id（0 表示初始段或无消息）
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COALESCE(MAX(segment_id), 0) FROM messages WHERE session_id = ?",
+            (session_id,),
+        )
+        row = cursor.fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    def advance_segment(self, session_id: str) -> int:
+        """Insert a topic_separator message and return the new segment_id.
+
+        context-isolation (2026-09, 单事务化): 直接 INSERT 一条带
+        ``segment_id=new_seg, subtype='topic_separator'`` 的 system 消息。
+        旧实现分 INSERT → UPDATE 两步,中间进程崩溃会留下没标记的 system
+        消息,下一次 ``get_active_segment()`` 无法识别本次上下文重置。
+
+        Flow: query current max segment_id → INSERT fully-marked separator
+        in one atomic write. Returns the new segment_id (0-based, incremented).
+        """
+        all_msgs = self.get_by_session(session_id, limit=100000)
+        max_seg = max((m.segment_id for m in all_msgs), default=-1)
+        new_seg = max_seg + 1
+        self.insert(
+            session_id=session_id,
+            role="system",
+            content="[上下文已在此处重置]",
+            created_at=int(time.time() * 1000),
+            segment_id=new_seg,
+            subtype="topic_separator",
+        )
+        return new_seg
+
+    def retreat_segment(self, session_id: str) -> bool:
+        """Remove the last topic_separator (if any) and merge segments.
+
+        Returns True if a separator was deleted, False if none existed.
+        Used for 'undo' on false-positive auto-detection of topic shifts.
+        """
+        all_msgs = self.get_by_session(session_id, limit=100000)
+        for i in range(len(all_msgs) - 1, -1, -1):
+            if all_msgs[i].subtype == "topic_separator":
+                conn = self.db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM messages WHERE id = ?", (all_msgs[i].id,))
+                conn.commit()
+                return True
+        return False

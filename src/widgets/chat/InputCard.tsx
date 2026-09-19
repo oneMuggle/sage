@@ -1,4 +1,4 @@
-import { BookOpen, Clock, Image, Paperclip, Send, Square, X } from 'lucide-react';
+import { BookOpen, Clock, Image, Paperclip, Plus, Send, Square, X } from 'lucide-react';
 import { memo, useEffect, useRef } from 'react';
 import type React from 'react';
 
@@ -50,6 +50,11 @@ export interface InputCardProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  /**
+   * Task 5 (2026-09-17): "新话题" 按钮回调 —— 上下文重置，不发送消息。
+   * 提供时渲染按钮，点击后触发此回调（ChatInput 负责组装 contextReset）。
+   */
+  onNewTopic?: () => void;
   placeholder?: string;
   disabled?: boolean;
   isLoading?: boolean;
@@ -127,6 +132,7 @@ function InputCardInner({
   value,
   onChange,
   onSubmit,
+  onNewTopic,
   placeholder = '',
   disabled = false,
   isLoading = false,
@@ -505,16 +511,30 @@ function InputCardInner({
             <Square className="w-3.5 h-3.5" />
           </button>
         ) : (
-          <button
-            type="button"
-            data-testid="chat-send"
-            onClick={onSubmit}
-            disabled={(!value.trim() && !hasAttachments) || disabled}
-            className="h-9 px-4 bg-primary text-text-inverse border-none rounded-radius-sm text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {t('chat.send')}
-            <Send className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {onNewTopic && (
+              <button
+                type="button"
+                data-testid="chat-new-topic"
+                onClick={onNewTopic}
+                title="新话题（重置上下文）"
+                className="h-9 px-3 text-text-secondary border border-border rounded-radius-sm text-xs flex items-center gap-1 hover:bg-bg-hover transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>新话题</span>
+              </button>
+            )}
+            <button
+              type="button"
+              data-testid="chat-send"
+              onClick={onSubmit}
+              disabled={(!value.trim() && !hasAttachments) || disabled}
+              className="h-9 px-4 bg-primary text-text-inverse border-none rounded-radius-sm text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {t('chat.send')}
+              <Send className="w-3.5 h-3.5" />
+            </button>
+          </div>
         )}
       </div>
 
@@ -532,6 +552,7 @@ function InputCardInner({
         <input
           type="file"
           id="chat-input-file"
+          accept=".txt,.md,.pdf,.docx"
           multiple
           className="hidden"
           onChange={onFileSelect}

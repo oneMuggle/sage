@@ -277,6 +277,7 @@ app.commandLine.appendSwitch(
   'VizDisplayCompositor,Vulkan,UseSkiaRenderer,CalculateNativeWinOcclusion,UseChromeOSDirectVideoDecoder',
 );
 app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}`);
+app.commandLine.appendSwitch('force-webrtc-ip-handling-policy', 'disable_non_proxied_udp');
 // Win7 旧版 Windows 进一步降级: 关闭 GPU 合成 + GPU sandbox + /dev/shm
 // (Chromium 在 Win7 上 /dev/shm 不存在会 fallback 到 tmp, 提前关掉减少日志噪音)
 if (isLegacyWindows()) {

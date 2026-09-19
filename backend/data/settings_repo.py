@@ -66,6 +66,16 @@ class SettingsRepository:
             # P11: 记忆检索嵌入器模式 ("onnx"/"hash")。
             # 读取口径见 backend/memory/embedder_factory._preferred_mode_from_settings
             "embedding_mode",
+            # Context Isolation (Task 6): turn limit + topic detection keys
+            # - context_turn_limit: int, applied by Task 7 turn-limit logic
+            # - auto_topic_detection: "true"/"false", enables auto detection in Task 10
+            # - topic_detection_threshold: float (0.0~1.0), detection sensitivity in Task 10
+            "context_turn_limit",
+            "auto_topic_detection",
+            "topic_detection_threshold",
+            # Arena automation: 账号池 Fernet 主密钥（SecretBox 包装后落库，
+            # 见 backend/services/arena_accounts.py:get_or_create_master_key）
+            "arena_master_key",
         }
     )
 

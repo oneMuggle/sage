@@ -10,10 +10,12 @@ import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
 import { useChat } from '../features/send-message/useChat';
 import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
+import { maybeIndexAttachment } from '../shared/api/attachmentAutoIndex';
 import {
   loadAttachmentRagConfig,
 } from '../shared/api/attachmentRagConfig';
 import { orchRunClient } from '../shared/api/orchRunClient';
+import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import type { Message as MessageType } from '../shared/lib/store';
@@ -30,6 +32,7 @@ import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
 import { SessionUsageBadge } from '../widgets/chat/SessionUsageBadge';
+import { TopicShiftBanner } from '../widgets/chat/TopicShiftBanner';
 import { ArchivesModal } from '../widgets/session';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
@@ -135,6 +138,37 @@ export function Chat() {
     }
     void sendMessage(lastUser.content, currentSessionId);
   }, [currentSessionId, messages, sendMessage]);
+
+  // Task 11 (2026-09-17): topic shift 横幅 — 监听当前会话的 shiftInfo 槽位;
+  // 仅在当前会话命中时显示,避免后台会话触发的事件串台。`handleRetreat`
+  // 由 TopicShiftBanner 在用户点"恢复完整上下文"后调用,组件已先调
+  // sessionApi.retreatSegment 删 separator,这里再 loadMessages 重拉并清
+  // 掉 store 里的 shiftInfo(防止 banner 重渲染)。
+  //
+  // Fix round 1 (2026-09-17): 后台会话触发的 topic_shifted 不会被 banner
+  // 消费,如果一直留在 store 里,用户后续切回该会话就会看到陈旧横幅。
+  // 这里读出时检查 createdAt:超过 30s(> 10s 自动消失时长,留足边界)
+  // 视为过期,清掉 store 并返回 null。
+  const SHIFT_INFO_TTL_MS = 30_000;
+  const rawShiftInfo = useChatStreamStore((s) =>
+    currentSessionId != null ? (s.sessions[currentSessionId]?.shiftInfo ?? null) : null,
+  );
+  const shiftInfo = useMemo(() => {
+    if (!rawShiftInfo) return null;
+    if (!currentSessionId) return null;
+    if (Date.now() - rawShiftInfo.createdAt > SHIFT_INFO_TTL_MS) {
+      // 过期:清掉 store,避免下次重渲染再次进入此分支
+      useChatStreamStore.getState().setShiftInfo(currentSessionId, null);
+      return null;
+    }
+    return rawShiftInfo;
+  }, [rawShiftInfo, currentSessionId]);
+  const handleRetreat = useCallback(async () => {
+    if (!currentSessionId) return;
+    useChatStreamStore.getState().setShiftInfo(currentSessionId, null);
+    await loadMessages(currentSessionId);
+  }, [currentSessionId, loadMessages]);
+  const showTopicShiftBanner = currentSessionId != null && shiftInfo != null && !isLoading;
 
   const { t } = useI18n();
   const isTempChat = currentSessionId != null && tempChatSessions.has(currentSessionId);
@@ -345,7 +379,16 @@ export function Chat() {
       // router API 只清业务 state。
       navigate(location.pathname + location.search, { replace: true, state: null });
     }
-  }, [pendingMessage, currentSessionId, sendMessage, settingsLoading, storeLoading, location.pathname, location.search, navigate]);
+  }, [
+    pendingMessage,
+    currentSessionId,
+    sendMessage,
+    settingsLoading,
+    storeLoading,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   const handleNewSession = async () => {
     // 与 Sidebar 的 "+ 新对话" 行为对齐:跳到欢迎页由用户输入后再创建会话。
@@ -370,6 +413,11 @@ export function Chat() {
         orchestrationMode?: string;
         // PM1 (round8): /plan 计划模式 —— 本次 run 只读 + 计划产出。
         planMode?: boolean;
+        /**
+         * Task 5 (2026-09-17): 上下文重置标记 —— "新话题" 按钮触发，
+         * 后端在本轮消息前插入 topic_separator 并清空 LLM 历史窗口。
+         */
+        contextReset?: boolean;
       },
     ) => {
       clearError();
@@ -378,6 +426,12 @@ export function Chat() {
       // R23-D2: 图片通道打通 —— data URL 直传后端 ChatRequest.images。
       // 后端口径: ≤4 张、单张解码后 ≤5MiB；前端先行裁剪并提示。
       const MAX_IMAGES = 4;
+
+// r75: 聊天文档附件 MIME 映射（扩展名集合用 useFileUpload.CHAT_DOCUMENT_EXTENSIONS 共享口径）
+const CHAT_DOC_MIME: Record<string, string> = {
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+};
       const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
       const dataUrls = (options?.images ?? [])
         .map((img) => img.dataUrl)
@@ -390,12 +444,12 @@ export function Chat() {
       if (sized.length > MAX_IMAGES) {
         toast.warning(`最多发送 ${MAX_IMAGES} 张图片，已截取前 ${MAX_IMAGES} 张`);
       }
-      // R37: txt/md 附件 → 上传并收集 media id（与图片通道并行）
+      // R37/r75: 文档附件（txt/md/pdf/docx）→ 上传并收集 media id（与图片通道并行）
       const attachmentMediaIds: string[] = [];
       for (const att of options?.attachments ?? []) {
         if (!att.dataUrl) continue;
         const ext = att.name.split('.').pop()?.toLowerCase() ?? '';
-        if (ext !== 'txt' && ext !== 'md') continue;
+        if (!CHAT_DOCUMENT_EXTENSIONS.has(ext)) continue;
         try {
           const bytes = atob(att.dataUrl.split(',')[1] ?? '');
           const buffer = new Uint8Array(bytes.length);
@@ -403,10 +457,13 @@ export function Chat() {
           const res = (await window.electronAPI?.media?.uploadAttachment?.(
             buffer.buffer,
             att.name,
-            att.type || 'text/plain',
+            att.type || CHAT_DOC_MIME[ext] || 'text/plain',
           )) as { media_ref?: { id?: string } } | undefined;
-          if (res?.media_ref?.id) attachmentMediaIds.push(res.media_ref.id);
-          else toast.warning(`附件上传失败: ${att.name}`);
+          if (res?.media_ref?.id) {
+            attachmentMediaIds.push(res.media_ref.id);
+            // r74: 检索配置启用时自动建索引（fire-and-forget，不阻断发送）
+            maybeIndexAttachment(res.media_ref.id);
+          } else toast.warning(`附件上传失败: ${att.name}`);
         } catch {
           toast.warning(`附件上传失败: ${att.name}`);
         }
@@ -426,6 +483,8 @@ export function Chat() {
           images,
           attachmentMediaIds,
           attachmentRag,
+          // Task 5 (2026-09-17): 上下文重置 —— "新话题" 按钮触发
+          contextReset: options?.contextReset,
         });
       } else {
         await sendMessage(content, undefined, officeRefs, orchestrationMode, {
@@ -434,6 +493,8 @@ export function Chat() {
           images,
           attachmentMediaIds,
           attachmentRag,
+          // Task 5 (2026-09-17): 上下文重置 —— "新话题" 按钮触发
+          contextReset: options?.contextReset,
         });
       }
     },
@@ -711,10 +772,11 @@ export function Chat() {
 
   // RV3 (round8): 只重跑失败任务 —— 调 rerun-failed 拿 planOverride
   // （done 子任务带 preset_output 回放），经 chatStream 重发全新 run。
-  const handleRerunFailed = async (runId: string) => {
+  // RV4 (round27): taskIds 提供时为单任务重试（只重建所选任务及其下游）。
+  const handleRerunFailed = async (runId: string, taskIds?: string[]) => {
     if (!currentSessionId) return;
     try {
-      const res = await orchRunClient.rerunFailed(runId);
+      const res = await orchRunClient.rerunFailed(runId, taskIds);
       const sid = res.session_id ?? currentSessionId;
       await sendMessage(res.goal, sid, undefined, 'force_multi', {
         planOverride: res.plan_override,
@@ -787,6 +849,14 @@ export function Chat() {
           right-panel R1 批次 D: relative 供面板最大化时 absolute 覆盖。 */}
       <div className="flex-1 flex min-h-0 overflow-hidden relative">
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
+          {showTopicShiftBanner && (
+            <TopicShiftBanner
+              sessionId={currentSessionId!}
+              reason={shiftInfo.reason}
+              onRetreat={() => void handleRetreat()}
+            />
+          )}
+
           {showInterruptBanner && (
             <InterruptedRunBanner
               onRetry={retryInterruptedRun}
@@ -980,6 +1050,7 @@ export function Chat() {
           // 自动派发）+ 清空 taskBoard。
           onCancelExecution={(runId) => void handleCancelRun(runId)}
           onRerunFailed={(runId) => void handleRerunFailed(runId)}
+          onRetryTask={(runId, taskId) => void handleRerunFailed(runId, [taskId])}
         />
       </div>
       {/* /内容行 */}

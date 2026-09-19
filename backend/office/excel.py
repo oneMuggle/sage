@@ -512,7 +512,11 @@ def read_xlsx(
         sheet_count=len(sheets),
     )
 
-    return OfficeExcelReadResult(summary=summary, sheets=sheets)
+    return OfficeExcelReadResult(
+        summary=summary,
+        sheets=sheets,
+        metadata=_read_core_properties_metadata(wb),
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -835,6 +839,46 @@ def _apply_print_setup(writer, req) -> None:
             logger_.warning("打印设置写入失败，跳过: %s (%s)", exc, sheet_spec.name)
 
 
+def _read_core_properties_metadata(wb):
+    """读 core properties 为 ExcelMetadataSpec（全空返回 None）。"""
+    from .models import ExcelMetadataSpec
+
+    props = wb.properties
+    meta = ExcelMetadataSpec(
+        author=props.creator or None,
+        subject=props.subject or None,
+        keywords=props.keywords or None,
+        comments=props.description or None,
+        category=props.category or None,
+    )
+    fields = ("author", "subject", "keywords", "comments", "category")
+    if all(getattr(meta, f) is None for f in fields):
+        return None
+    return meta
+
+
+def _apply_core_properties(wb, metadata) -> None:
+    """写文档核心属性（Round 50，与 Word R49 对称）。
+
+    仅显式传入才写，不臆造作者；openpyxl 的 author 即 creator，
+    comments 对应 description。
+    """
+    if metadata is None:
+        return
+    meta_map = {
+        "author": "creator",
+        "subject": "subject",
+        "keywords": "keywords",
+        "comments": "description",
+        "category": "category",
+    }
+    props = wb.properties
+    for src, dst in meta_map.items():
+        value = getattr(metadata, src)
+        if value is not None:
+            setattr(props, dst, value)
+
+
 def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .xlsx file from structured Pydantic input.
 
@@ -942,6 +986,8 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
             # Item 1.4: '=' 前缀的字符串单元格统一兜底为真公式
             # （无公式时零改动；见 _mark_formula_cells）。
             _mark_formula_cells(writer.book)
+            # Round 50：文档核心属性（与 Word R49 对称）
+            _apply_core_properties(writer.book, getattr(req, "metadata", None))
             # 批次 2.3：按 sheet 写入可选列宽；批次 2.1：挂载原生图表
             # （必须在 writer 保存前，图表才会随工作簿序列化）。
             _apply_sheet_column_widths(writer, req)

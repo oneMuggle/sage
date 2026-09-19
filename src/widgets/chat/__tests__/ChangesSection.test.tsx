@@ -158,11 +158,16 @@ describe('ChangesSection', () => {
     });
     fireEvent.click(screen.getByText('src/app.ts'));
 
-    // diff 视图:文件名标题 + diff 内容经 ShikiCodeBlock 渲染(高亮异步,
-    // 断言返回的原始 diff 行)
-    await waitFor(() => {
-      expect(screen.getByText('+new')).toBeInTheDocument();
-    });
+    // diff 视图:文件名标题 + diff 内容经 ShikiCodeBlock 异步高亮渲染。
+    // 全量并行跑时 worker CPU 争抢会拖慢 Shiki 高亮,默认 1s 超时不够,
+    // 显式放宽到 10s;离开 diff 视图时 onFileClick 可能再次触发加载,
+    // 因此用 findBy 轮询而非同步断言。
+    await waitFor(
+      () => {
+        expect(screen.getByText('+new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
     expect(mockGetChangeDiff).toHaveBeenCalledWith('s1', 'src/app.ts');
 
     // 返回列表

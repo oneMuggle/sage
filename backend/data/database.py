@@ -505,6 +505,14 @@ class Database:
                 step_index INTEGER,
                 created_at INTEGER NOT NULL,
                 latency_ms INTEGER,
+                -- R38 透明度增强 (2026-09-18): 三条通知信息的持久化列。
+                -- 均为 JSON-in-TEXT（同 tool_calls 先例）；解析失败时仓储层降级为 None。
+                -- activated_skills: [{"name": str, "triggers_matched": [str]}]  附着于 user 行
+                -- compact_info:     {"before": int, "after": int, "removed": int} 附着于续接 assistant 行
+                -- memory_refs:      [{...}]                                      附着于 assistant 行
+                activated_skills TEXT,
+                compact_info TEXT,
+                memory_refs TEXT,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
         """)
@@ -519,6 +527,31 @@ class Database:
         if "step_index" not in columns:
             cursor.execute("ALTER TABLE messages ADD COLUMN step_index INTEGER")
             conn.commit()
+        # 2026-09-17 context-isolation: 老库加 segment_id/subtype 列；已有消息
+        # segment_id=0（属于第 0 段）,subtype=NULL（正常消息,不是切换标记）。
+        # 段索引 (session_id, segment_id, created_at) 用于按当前段过滤历史。
+        if "segment_id" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN segment_id INTEGER DEFAULT 0")
+            conn.commit()
+        if "subtype" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN subtype TEXT")
+            conn.commit()
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_messages_segment "
+            "ON messages(session_id, segment_id, created_at)"
+        )
+        conn.commit()
+        # R38 透明度增强 (2026-09-18): 老库补三条通知列。
+        # 用 try/except 包住而非仅靠 `if not in columns` 守卫：两个进程（如两个
+        # worktree 共用同一 data/sage.db）可能同时读到"缺列"并都执行 ALTER，
+        # 后者抛 duplicate column name 而 init_db 在 lifespan 内无兜底 → 启动失败。
+        for r38_col in ("activated_skills", "compact_info", "memory_refs"):
+            if r38_col not in columns:
+                try:
+                    cursor.execute(f"ALTER TABLE messages ADD COLUMN {r38_col} TEXT")
+                    conn.commit()
+                except sqlite3.OperationalError:
+                    pass
 
         # 会话摘要表（批次三 step 3，spec §4.3）
         # Dedicated table for compressed session summaries; deliberately
@@ -1030,6 +1063,13 @@ class Database:
                 "ALTER TABLE usage_events ADD COLUMN task_id TEXT"
             )
             conn.commit()
+        # 上下文分类明细快照 (backend/chat/context_breakdown.py) ——
+        # JSON: {categories, estimated_total, prompt_tokens, calibrated}。
+        if "context_breakdown" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN context_breakdown TEXT"
+            )
+            conn.commit()
         # L8 PR-B (2026-09-09): 用量日聚合表 — 7d/30d 时间范围查询的预聚合层,
         # 避免每次都扫 usage_events 全量。days_bucket 0=今天, 1=昨天 ... 6=6 天前
         # (7d 范围), >=7 即 30d 范围折叠到月聚合。模型维度另算。
@@ -1383,6 +1423,12 @@ class Database:
             cursor.execute(
                 "ALTER TABLE orch_tasks ADD COLUMN revision INTEGER NOT NULL DEFAULT 0"
             )
+        # RT24 (round32): 任务级用量/时长持久化 —— run 历史回看有量化数据
+        # （对标 Claude Code 会话历史每 Task tokens）。终态由 dispatcher 写入。
+        if "used_tokens" not in _task_cols:
+            cursor.execute("ALTER TABLE orch_tasks ADD COLUMN used_tokens INTEGER")
+        if "duration_ms" not in _task_cols:
+            cursor.execute("ALTER TABLE orch_tasks ADD COLUMN duration_ms INTEGER")
 
         # Subagent 实时可观测性 schema (run-events@1.0)。全部 DDL 幂等，兼容旧库。
         cursor.execute(
