@@ -22,11 +22,19 @@ def test_default_seed_includes_researcher_http_download():
 
 
 def test_default_web_profiles_route_blocked_fetch_to_browser():
-    """默认 web profile 应引导 blocked fetch 转 browser 或凭据通道。"""
+    """默认 web profile 应引导 blocked fetch 转 browser 或凭据通道。
+
+    字段名必须与模型实际可见的失败信封一致（agent.py 失败分支产出的
+    ``metadata.blockReason``），否则引导指向一个模型看不到的路径。
+    """
     agents = {agent.id: agent for agent in profiles.create_default_agents()}
-    assert "block_reason" in agents["primary"].system_prompt
+    assert "metadata.blockReason" in agents["primary"].system_prompt
+    assert "antibot_cf" in agents["primary"].system_prompt
+    assert "antibot_other" in agents["primary"].system_prompt
+    assert "login_wall" in agents["primary"].system_prompt
     assert "browser_navigate" in agents["primary"].system_prompt
     assert "browser_snapshot" in agents["primary"].system_prompt
+    assert "metadata.blockReason" in agents["researcher"].system_prompt
     assert "credential_domain" in agents["researcher"].system_prompt
     assert "不要反复重试 web_fetch" in agents["researcher"].system_prompt
 

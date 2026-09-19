@@ -527,9 +527,13 @@ PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT = (
 
 
 # 2026-09-19 (R19-W3): web_fetch 遇到反爬/登录墙时，模型应转浏览器或凭据通道。
+# 字段名以模型实际可见的失败信封为准：agent.py 的失败分支把结构化 block 载荷
+# 改写为顶层 JSON 信封 ``{"content": ..., "metadata": {"blockReason": ...}}``，
+# 模型看到的是 ``metadata.blockReason``（camelCase），不是内部的 block_reason。
 _WEB_ACCESS_ROUTING_GUIDANCE = (
-    "\n\n当 web_fetch 返回 success=False 时，先读取 block_reason：若为 antibot 或 "
-    "login_wall，优先使用 browser_navigate + browser_snapshot 手动访问；"
+    "\n\n当 web_fetch 返回 success=False 时，先读取结果 JSON 的 metadata.blockReason："
+    "反爬具体值为 antibot_cf / antibot_other（antibot 仅作统称），登录墙为 login_wall。"
+    "命中后优先使用 browser_navigate + browser_snapshot 手动访问；"
     "若需要登录，提示用户配置 credential_domain 凭据。不要反复重试 web_fetch。"
 )
 
