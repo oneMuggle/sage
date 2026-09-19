@@ -235,6 +235,21 @@ def test_default_registry_is_used_when_none_provided() -> None:
     assert "web_search" in names
 
 
+def test_default_registry_propagates_scheduler_getter() -> None:
+    """自建 registry 时把 scheduler getter 传给三件调度工具。"""
+    def getter() -> None:
+        return None
+
+    adapter = InprocToolAdapter(scheduler_service_getter=getter)
+
+    for name in (
+        "schedule_task",
+        "list_scheduled_tasks",
+        "cancel_scheduled_task",
+    ):
+        assert adapter._registry.get(name)._service_getter is getter
+
+
 async def test_default_registry_execute_unknown_tool() -> None:
     """缺省 registry 调未注册工具也按契约返回失败结果。"""
     adapter = InprocToolAdapter()

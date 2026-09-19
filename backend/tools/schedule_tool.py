@@ -240,6 +240,8 @@ class ScheduleTaskTool(BaseTool):
                 return ToolResult(success=False, error=str(exc))
             schedule = {"kind": "once", "at": at_ms}
 
+        if resolved_session is None:
+            return ToolResult(success=False, error=NO_CONTEXT_ERROR)
         service = self._service_getter()
         if service is None:
             return ToolResult(success=False, error=NO_SERVICE_ERROR)
