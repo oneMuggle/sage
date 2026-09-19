@@ -84,69 +84,6 @@ function PermissionModeSelector() {
 }
 
 /**
- * Wave 3 P2-9 编排设置数字输入。部分更新契约：onChange 收到的 v 已通过
- * 非负有限数校验；调用方负责 spread settings.orch 保留其余键。
- */
-function NumberField({
-  label,
-  dataTestId,
-  value,
-  onChange,
-}: {
-  label: string;
-  dataTestId: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <SettingRow label={label}>
-      <input
-        type="number"
-        data-testid={dataTestId}
-        value={value}
-        onChange={(e) => {
-          // 空输入 = 不修改：Number('') === 0 会经 n >= 0 守卫提交 0，
-          // 落库后 load_orch_settings() 读到 0 → asyncio.Semaphore(0) → 编排挂死。
-          if (e.target.value === '') return;
-          const n = Number(e.target.value);
-          if (Number.isFinite(n) && n >= 0) onChange(Math.floor(n));
-        }}
-        className="w-32 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
-      />
-    </SettingRow>
-  );
-}
-
-// RD16 (round26): scratch 根目录名 —— 后端 scratch_root 键的文本输入
-// （相对 data 目录的目录名，空/空白输入不提交）。
-function TextField({
-  label,
-  dataTestId,
-  value,
-  onChange,
-}: {
-  label: string;
-  dataTestId: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <SettingRow label={label}>
-      <input
-        type="text"
-        data-testid={dataTestId}
-        value={value}
-        onChange={(e) => {
-          if (e.target.value.trim() === '') return;
-          onChange(e.target.value.trim());
-        }}
-        className="w-48 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
-      />
-    </SettingRow>
-  );
-}
-
-/**
  * 演示模式开关 (2026-08-27): 用户开启后, renderer 立即通过 IPC 写
  * `<userData>/sage-demo-mode.json`; 下次启动 main 进程读取该文件
  * 决定是否跳过 Python 后端 spawn. 当前会话不会立即生效, 需重启应用.
@@ -336,7 +273,8 @@ function AutoCheckpointCard() {
   useEffect(() => {
     let mounted = true;
     void settingsClient.getPreference('auto_checkpoint').then((v) => {
-      if (mounted) setEnabled(v === '1');
+      // 缺省(null)=开；仅显式 '0' 关 — 与后端 _auto_checkpoint_if_enabled 口径一致
+      if (mounted) setEnabled(v !== '0');
     });
     return () => {
       mounted = false;
@@ -353,7 +291,7 @@ function AutoCheckpointCard() {
       <h3 className="text-sm font-semibold text-text mb-3">安全网</h3>
       <SettingRow
         label="发送前自动快照"
-        desc="每轮对话开始前为绑定的工作区创建检查点，可在变更面板一键回滚（默认关）"
+        desc="每轮对话开始前为绑定的工作区创建检查点，可在变更面板一键回滚（默认开）"
       >
         {enabled === null ? (
           <span className="text-xs text-muted">…</span>
@@ -410,7 +348,100 @@ function CloseToTrayCard(): JSX.Element {
   );
 }
 
-export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
+/**
+ * 「恢复默认」= app_settings blob + preferences KV 行为项全量回默认。
+ * 破坏性操作走两步确认（项目内惯例：面板内确认，不用 window.confirm）。
+ * 实现见 storage.resetSettings / resetPreferencesToDefaults 的排除清单。
+ */
+function ResetDefaultsSection({ resetSettings }: { resetSettings: () => Promise<void> }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<'done' | 'error' | null>(null);
+
+  const handleConfirm = async (): Promise<void> => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await resetSettings();
+      setMessage('done');
+    } catch {
+      setMessage('error');
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  };
+
+  if (!confirming) {
+    return (
+      <>
+        <SettingRow
+          label="恢复默认设置"
+          desc="将外观 / 模型上下文 / 编排 / 权限模式 / 网络 / 钩子 / 花费限额等全部设置项恢复默认"
+        >
+          <button
+            type="button"
+            data-testid="settings-reset-button"
+            onClick={() => {
+              setMessage(null);
+              setConfirming(true);
+            }}
+            className="px-3 py-1.5 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted transition-colors"
+          >
+            恢复默认设置
+          </button>
+        </SettingRow>
+        {message === 'done' && (
+          <div data-testid="settings-reset-done" className="text-xs text-success mt-1">
+            已恢复默认设置
+          </div>
+        )}
+        {message === 'error' && (
+          <div data-testid="settings-reset-error" className="text-xs text-error mt-1">
+            恢复失败，请重试
+          </div>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div
+      data-testid="settings-reset-confirm"
+      className="p-3 border border-border rounded-radius-sm bg-surface space-y-2"
+    >
+      <div className="text-sm text-text">确认恢复所有设置为默认值？</div>
+      <p className="text-xs text-muted leading-relaxed">
+        端点与模型选择、界面外观、权限模式、网络 / 代理 / 搜索、钩子、花费限额都会回到默认。
+        已保存的站点登录凭据、工具审批规则与当前会话不受影响。部分面板需切换标签页后刷新。
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          data-testid="settings-reset-confirm-yes"
+          disabled={busy}
+          onClick={() => {
+            void handleConfirm();
+          }}
+          className="px-3 py-1 text-xs bg-error text-text-inverse rounded-radius-sm hover:opacity-90 disabled:opacity-50"
+        >
+          {busy ? '恢复中…' : '确认恢复'}
+        </button>
+        <button
+          type="button"
+          data-testid="settings-reset-confirm-no"
+          disabled={busy}
+          onClick={() => setConfirming(false)}
+          className="px-3 py-1 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted"
+        >
+          取消
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function GeneralTab({ resetSettings }: { resetSettings: () => Promise<void> }) {
   const { settings, updateSettings } = useSettings();
   const { t } = useI18n();
 
@@ -437,7 +468,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
         <h3 className="text-sm font-semibold text-text mb-3">时区 (Task 1 2026-08-23)</h3>
         <SettingRow
           label="IANA 时区"
-          desc="后端 zoneinfo 校验；非法值会被拒绝 (422)。默认 Asia/Shanghai"
+          desc="后端 zoneinfo 校验；非法值会被拒绝 (422)。默认取系统时区（探测失败回退 Asia/Shanghai）"
         >
           <input
             type="text"
@@ -497,145 +528,13 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.permission')}</h3>
         <PermissionModeSelector />
       </section>
-      <FallbackModelInput />
-      <section data-testid="orch-settings-section">
-        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.orch')}</h3>
-        {/* Round 1/3 (2026-09-19) 计划前置旋钮透出 —— 管线级开关排最前。
-            关闭后 multi 拆解行为与 2026-09-19 之前完全一致。 */}
-        <SettingRow
-          label="拆解前澄清需求"
-          desc="复杂任务进入编排前,先判断目标是否有歧义并向你提问(≤3 问);超时或跳过则按合理默认值执行并在计划中写明假设"
-        >
-          <Toggle
-            testId="orch-plan-preflight"
-            value={settings.orch.planPreflightEnabled}
-            onChange={(v) =>
-              updateSettings({ orch: { ...settings.orch, planPreflightEnabled: v } })
-            }
-          />
-        </SettingRow>
-        <SettingRow
-          label="拆解前事实侦察"
-          desc="拆解任务前派一个只读子代理快速收集工作区/网络/记忆事实,作为计划依据;会增加少量等待时间"
-        >
-          <Toggle
-            testId="orch-plan-scout"
-            value={settings.orch.planScoutEnabled}
-            onChange={(v) => updateSettings({ orch: { ...settings.orch, planScoutEnabled: v } })}
-          />
-        </SettingRow>
-        <NumberField
-          label="最大并发子任务数"
-          dataTestId="orch-max-concurrent"
-          value={settings.orch.maxConcurrentSubagents}
-          onChange={(v) =>
-            updateSettings({ orch: { ...settings.orch, maxConcurrentSubagents: v } })
-          }
-        />
-        <NumberField
-          label="聚合结果上限（字符）"
-          dataTestId="orch-max-aggregate"
-          value={settings.orch.maxAggregateChars}
-          onChange={(v) => updateSettings({ orch: { ...settings.orch, maxAggregateChars: v } })}
-        />
-        <NumberField
-          label="单结果截断上限（字符）"
-          dataTestId="orch-max-subagent-result"
-          value={settings.orch.maxSubagentResultChars}
-          onChange={(v) =>
-            updateSettings({ orch: { ...settings.orch, maxSubagentResultChars: v } })
-          }
-        />
-        <NumberField
-          label="子任务重试次数"
-          dataTestId="orch-max-retries"
-          value={settings.orch.maxRetries}
-          onChange={(v) => updateSettings({ orch: { ...settings.orch, maxRetries: v } })}
-        />
-        <NumberField
-          label="Lane 迭代上限"
-          dataTestId="orch-max-lane-iterations"
-          value={settings.orch.maxLaneIterations}
-          onChange={(v) => updateSettings({ orch: { ...settings.orch, maxLaneIterations: v } })}
-        />
-        <NumberField
-          label="子代理迭代上限"
-          dataTestId="orch-max-subagent-iterations"
-          value={settings.orch.maxSubagentIterations}
-          onChange={(v) => updateSettings({ orch: { ...settings.orch, maxSubagentIterations: v } })}
-        />
-        <NumberField
-          label="Run token 预算（tokens，0=不限）"
-          dataTestId="orch-run-token-budget"
-          value={settings.orch.runTokenBudget}
-          onChange={(v) => updateSettings({ orch: { ...settings.orch, runTokenBudget: v } })}
-        />
-        {/* RD15 (round25): round21 BU11 / round8 O2 / round22 RD14 后端守门键
-            透出设置页——后端有闸门、用户找得到旋钮。 */}
-        <NumberField
-          label="Run 墙钟上限（分钟，0=不限）"
-          dataTestId="orch-run-wall-clock-limit"
-          value={settings.orch.runWallClockLimitMinutes}
-          onChange={(v) =>
-            updateSettings({ orch: { ...settings.orch, runWallClockLimitMinutes: v } })
-          }
-        />
-        <NumberField
-          label="单子任务超时（秒，0=不限）"
-          dataTestId="orch-subagent-task-timeout"
-          value={settings.orch.subagentTaskTimeoutS}
-          onChange={(v) =>
-            updateSettings({ orch: { ...settings.orch, subagentTaskTimeoutS: v } })
-          }
-        />
-        <NumberField
-          label="重派链上限（次）"
-          dataTestId="orch-max-retry-of-chains"
-          value={settings.orch.maxRetryOfChains}
-          onChange={(v) => updateSettings({ orch: { ...settings.orch, maxRetryOfChains: v } })}
-        />
-        <SettingRow
-          label="子代理自动批准非危险工具"
-          desc="编排子代理遇到需审批的工具时,自动放行非危险调用;破坏性/可疑命令与工作区越界仍弹窗确认"
-        >
-          <Toggle
-            value={settings.orch.subagentApprovalMode === 'auto'}
-            onChange={(v) =>
-              updateSettings({
-                orch: { ...settings.orch, subagentApprovalMode: v ? 'auto' : 'ask' },
-              })
-            }
-          />
-        </SettingRow>
-        {/* RD16 (round26): 后端 P2 隔离层旋钮 —— 仅隔离，不自动合并产物；
-            非 git 仓库 / git 不可用时自动降级 scratch 目录隔离。 */}
-        <SettingRow
-          label="子任务 git worktree 隔离"
-          desc="会话绑定 git 仓库时,每个子任务在临时 worktree 副本中工作(仅文件系统隔离,产物不自动合并回主工作区);非仓库或 git 失败自动降级"
-        >
-          <Toggle
-            testId="orch-worktree-isolation"
-            value={settings.orch.worktreeIsolation}
-            onChange={(v) =>
-              updateSettings({ orch: { ...settings.orch, worktreeIsolation: v } })
-            }
-          />
-        </SettingRow>
-        <TextField
-          label="Scratch 根目录名（data 目录下）"
-          dataTestId="orch-scratch-root"
-          value={settings.orch.scratchRoot}
-          onChange={(v) => updateSettings({ orch: { ...settings.orch, scratchRoot: v } })}
-        />
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">模型降级</h3>
+        <FallbackModelInput />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">数据</h3>
-        <button
-          onClick={resetSettings}
-          className="px-3 py-1.5 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted transition-colors"
-        >
-          恢复默认设置
-        </button>
+        <ResetDefaultsSection resetSettings={resetSettings} />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">钩子 (Hooks)</h3>

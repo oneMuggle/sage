@@ -385,115 +385,125 @@ export function NetworkTab() {
   };
 
   return (
-    <div className="space-y-2">
-      <SettingRow
-        label={t('settings.network.mode')}
-        desc={t(`settings.network.mode.${policy.mode}.desc` as TranslationKey)}
-      >
-        <select
-          data-testid="network-mode-select"
-          aria-label={t('settings.network.mode')}
-          value={policy.mode}
-          onChange={(e) => handleModeChange(e.target.value as NetworkMode)}
-          className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+    <div className="space-y-6">
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.section.network.access')}
+        </h3>
+        <SettingRow
+          label={t('settings.network.mode')}
+          desc={t(`settings.network.mode.${policy.mode}.desc` as TranslationKey)}
         >
-          {NETWORK_MODES.map((mode) => (
-            <option key={mode} value={mode}>
-              {t(`settings.network.mode.${mode}` as TranslationKey)}
-            </option>
-          ))}
-        </select>
-      </SettingRow>
-
-      {policy.mode === 'intranet' && policy.allowed_hosts.length === 0 && (
-        <div
-          data-testid="empty-whitelist-warning"
-          className="px-3 py-2 text-xs text-warning bg-surface rounded-radius-sm"
-        >
-          {t('settings.network.empty_whitelist_warning')}
-        </div>
-      )}
-
-      {policy.mode === 'intranet' && (
-        <>
-          <HostListEditor
-            testIdPrefix="allowed-host"
-            label={t('settings.network.allowed_hosts')}
-            hint={t('settings.network.allowed_hosts.hint')}
-            hosts={policy.allowed_hosts}
-            onAdd={addAllowedHost}
-            onRemove={removeAllowedHost}
-          />
-          <HostListEditor
-            testIdPrefix="insecure-tls"
-            label={t('settings.network.insecure_tls')}
-            hint={t('settings.network.insecure_tls.hint')}
-            hosts={policy.insecure_tls_hosts}
-            onAdd={addInsecureTlsHost}
-            onRemove={removeInsecureTlsHost}
-          />
-        </>
-      )}
-
-      {/* F1 抓取代理（Round 2 批次2 后端：web_proxy KV，逐调用现读即时生效） */}
-      <SettingRow label={t('settings.network.proxy')} desc={t('settings.network.proxy.hint')}>
-        <div className="flex flex-col gap-1 w-64" data-testid="proxy-fields">
-          <input
-            data-testid="proxy-http-input"
-            aria-label={t('settings.network.proxy.http')}
-            value={proxy.http}
-            onChange={(e) => setProxy({ ...proxy, http: e.target.value })}
-            onBlur={(e) => saveProxy('http', e.target.value)}
-            placeholder={t('settings.network.proxy.placeholder')}
-            className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
-          />
-          <input
-            data-testid="proxy-https-input"
-            aria-label={t('settings.network.proxy.https')}
-            value={proxy.https}
-            onChange={(e) => setProxy({ ...proxy, https: e.target.value })}
-            onBlur={(e) => saveProxy('https', e.target.value)}
-            placeholder={t('settings.network.proxy.placeholder')}
-            className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
-          />
-          {proxyError && (
-            <div data-testid="proxy-error" className="text-xs text-error">
-              {t(proxyError)}
-            </div>
-          )}
-        </div>
-      </SettingRow>
-
-      {/* F2 搜索引擎（Round 1 批次1 后端：search_config KV，key 落库自动加密） */}
-      <SettingRow label={t('settings.network.search')} desc={t('settings.network.search.hint')}>
-        <div className="flex flex-col gap-1 w-64" data-testid="search-fields">
           <select
-            data-testid="search-first-engine"
-            aria-label={t('settings.network.search.first')}
-            value={searchConfig.order[0] ?? 'bing'}
-            onChange={(e) => changeFirstEngine(e.target.value as (typeof SEARCH_ENGINES)[number])}
+            data-testid="network-mode-select"
+            aria-label={t('settings.network.mode')}
+            value={policy.mode}
+            onChange={(e) => handleModeChange(e.target.value as NetworkMode)}
             className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           >
-            {SEARCH_ENGINES.map((engine) => (
-              <option key={engine} value={engine}>
-                {t(`settings.network.search.engine.${engine}` as TranslationKey)}
+            {NETWORK_MODES.map((mode) => (
+              <option key={mode} value={mode}>
+                {t(`settings.network.mode.${mode}` as TranslationKey)}
               </option>
             ))}
           </select>
-          <KeyFieldEditor
-            testId="search-tavily-key"
-            label={t('settings.network.search.tavily_key')}
-            value={searchConfig.tavily_key}
-            onSave={(value) => saveSearchConfig({ ...searchConfig, tavily_key: value })}
-          />
-          <KeyFieldEditor
-            testId="search-zhipu-key"
-            label={t('settings.network.search.zhipu_key')}
-            value={searchConfig.zhipu_key}
-            onSave={(value) => saveSearchConfig({ ...searchConfig, zhipu_key: value })}
-          />
-        </div>
-      </SettingRow>
+        </SettingRow>
+
+        {policy.mode === 'intranet' && policy.allowed_hosts.length === 0 && (
+          <div
+            data-testid="empty-whitelist-warning"
+            className="px-3 py-2 text-xs text-warning bg-surface rounded-radius-sm"
+          >
+            {t('settings.network.empty_whitelist_warning')}
+          </div>
+        )}
+
+        {policy.mode === 'intranet' && (
+          <>
+            <HostListEditor
+              testIdPrefix="allowed-host"
+              label={t('settings.network.allowed_hosts')}
+              hint={t('settings.network.allowed_hosts.hint')}
+              hosts={policy.allowed_hosts}
+              onAdd={addAllowedHost}
+              onRemove={removeAllowedHost}
+            />
+            <HostListEditor
+              testIdPrefix="insecure-tls"
+              label={t('settings.network.insecure_tls')}
+              hint={t('settings.network.insecure_tls.hint')}
+              hosts={policy.insecure_tls_hosts}
+              onAdd={addInsecureTlsHost}
+              onRemove={removeInsecureTlsHost}
+            />
+          </>
+        )}
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.section.network.fetch')}
+        </h3>
+        {/* F1 抓取代理（Round 2 批次2 后端：web_proxy KV，逐调用现读即时生效） */}
+        <SettingRow label={t('settings.network.proxy')} desc={t('settings.network.proxy.hint')}>
+          <div className="flex flex-col gap-1 w-64" data-testid="proxy-fields">
+            <input
+              data-testid="proxy-http-input"
+              aria-label={t('settings.network.proxy.http')}
+              value={proxy.http}
+              onChange={(e) => setProxy({ ...proxy, http: e.target.value })}
+              onBlur={(e) => saveProxy('http', e.target.value)}
+              placeholder={t('settings.network.proxy.placeholder')}
+              className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+            <input
+              data-testid="proxy-https-input"
+              aria-label={t('settings.network.proxy.https')}
+              value={proxy.https}
+              onChange={(e) => setProxy({ ...proxy, https: e.target.value })}
+              onBlur={(e) => saveProxy('https', e.target.value)}
+              placeholder={t('settings.network.proxy.placeholder')}
+              className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+            {proxyError && (
+              <div data-testid="proxy-error" className="text-xs text-error">
+                {t(proxyError)}
+              </div>
+            )}
+          </div>
+        </SettingRow>
+
+        {/* F2 搜索引擎（Round 1 批次1 后端：search_config KV，key 落库自动加密） */}
+        <SettingRow label={t('settings.network.search')} desc={t('settings.network.search.hint')}>
+          <div className="flex flex-col gap-1 w-64" data-testid="search-fields">
+            <select
+              data-testid="search-first-engine"
+              aria-label={t('settings.network.search.first')}
+              value={searchConfig.order[0] ?? 'bing'}
+              onChange={(e) => changeFirstEngine(e.target.value as (typeof SEARCH_ENGINES)[number])}
+              className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            >
+              {SEARCH_ENGINES.map((engine) => (
+                <option key={engine} value={engine}>
+                  {t(`settings.network.search.engine.${engine}` as TranslationKey)}
+                </option>
+              ))}
+            </select>
+            <KeyFieldEditor
+              testId="search-tavily-key"
+              label={t('settings.network.search.tavily_key')}
+              value={searchConfig.tavily_key}
+              onSave={(value) => saveSearchConfig({ ...searchConfig, tavily_key: value })}
+            />
+            <KeyFieldEditor
+              testId="search-zhipu-key"
+              label={t('settings.network.search.zhipu_key')}
+              value={searchConfig.zhipu_key}
+              onSave={(value) => saveSearchConfig({ ...searchConfig, zhipu_key: value })}
+            />
+          </div>
+        </SettingRow>
+      </section>
 
       {/* 浏览器环境检测（Phase E3） */}
       <BrowserEnvironmentSection />
@@ -648,7 +658,9 @@ function CredentialsSection() {
   };
 
   return (
-    <SettingRow label={t('settings.network.creds')} desc={t('settings.network.creds.hint')}>
+    <section>
+      <h3 className="text-sm font-semibold text-text mb-3">{t('settings.network.creds')}</h3>
+      <p className="text-xs text-muted mb-2">{t('settings.network.creds.hint')}</p>
       <div className="flex flex-col gap-2 w-full" data-testid="web-credentials">
         <label className="flex items-start gap-2 text-xs" data-testid="cred-render-persistent-row">
           <input
@@ -812,6 +824,6 @@ function CredentialsSection() {
           </div>
         )}
       </div>
-    </SettingRow>
+    </section>
   );
 }

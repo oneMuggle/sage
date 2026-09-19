@@ -62,11 +62,11 @@ vi.mock('../../../entities/font/fontStorage', () => ({
   saveFontSettings: async () => undefined,
 }));
 
-function renderTab(): void {
+function renderTab(resetSettings = vi.fn()): void {
   render(
     <I18nProvider>
       <FontProvider>
-        <GeneralTab resetSettings={vi.fn()} />
+        <GeneralTab resetSettings={resetSettings} />
       </FontProvider>
     </I18nProvider>,
   );
@@ -225,5 +225,61 @@ describe('GeneralTab demo mode', () => {
       expect(screen.getByTestId('demo-mode-error')).toHaveTextContent('storage unavailable'),
     );
     expect(screen.queryByText('正在保存…')).toBeNull();
+  });
+});
+
+describe('GeneralTab reset-to-defaults confirmation', () => {
+  it('requires explicit confirmation before resetting', async () => {
+    const resetSettings = vi.fn().mockResolvedValue(undefined);
+    renderTab(resetSettings);
+
+    fireEvent.click(screen.getByTestId('settings-reset-button'));
+    expect(screen.getByTestId('settings-reset-confirm')).toBeInTheDocument();
+    expect(resetSettings).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('settings-reset-confirm-no'));
+    expect(screen.queryByTestId('settings-reset-confirm')).toBeNull();
+    expect(resetSettings).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('settings-reset-button'));
+    fireEvent.click(screen.getByTestId('settings-reset-confirm-yes'));
+    await waitFor(() => expect(resetSettings).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('settings-reset-done')).toBeInTheDocument();
+  });
+
+  it('surfaces a failure instead of claiming success', async () => {
+    const resetSettings = vi.fn().mockRejectedValue(new Error('backend down'));
+    renderTab(resetSettings);
+
+    fireEvent.click(screen.getByTestId('settings-reset-button'));
+    fireEvent.click(screen.getByTestId('settings-reset-confirm-yes'));
+
+    await waitFor(() => expect(screen.getByTestId('settings-reset-error')).toBeInTheDocument());
+    expect(screen.queryByTestId('settings-reset-done')).toBeNull();
+  });
+});
+
+describe('GeneralTab auto checkpoint (B-2, 默认开)', () => {
+  const toggle = () =>
+    screen.getByTestId('auto-checkpoint-section').querySelector('button') as HTMLButtonElement;
+
+  it('missing preference = on (safe-by-default)', async () => {
+    renderTab();
+    await waitFor(() => {
+      expect(mocks.getPreference).toHaveBeenCalledWith('auto_checkpoint');
+    });
+    await waitFor(() => {
+      expect(toggle().className).toContain('bg-primary');
+    });
+  });
+
+  it('explicit "0" stays off', async () => {
+    mocks.getPreference.mockImplementation(async (key: string) =>
+      key === 'auto_checkpoint' ? '0' : null,
+    );
+    renderTab();
+    await waitFor(() => {
+      expect(toggle().className).toContain('bg-border');
+    });
   });
 });

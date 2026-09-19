@@ -40,7 +40,11 @@ export type PreferenceKey =
   | 'web_access_config'
   | 'browser_credential_vault'
   // Context Isolation (Task 8): 上下文轮数限制 — null/空 = 不限
-  | 'context_turn_limit';
+  | 'context_turn_limit'
+  // M6 生态扩展 / F5 花费限额 —— 此前只有 HooksCard / SpendLimitInput 经裸
+  // invoke 写；resetPreferencesToDefaults 需要走类型化客户端。
+  | 'hooks'
+  | 'spend_limit_usd';
 
 async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {

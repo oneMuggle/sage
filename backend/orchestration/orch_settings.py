@@ -23,7 +23,9 @@ _RAW_KEYS = {
     "maxCoderIterations": "max_coder_iterations",
     "maxReviewerIterations": "max_reviewer_iterations",
     "maxWriterIterations": "max_writer_iterations",
-    "taskTimeoutSeconds": "subagent_task_timeout_s",
+    # 键名必须与前端 OrchSettings.subagentTaskTimeoutS 逐字一致
+    # (此前写成 taskTimeoutSeconds, 永远取不到值回落默认 900)。
+    "subagentTaskTimeoutS": "subagent_task_timeout_s",
     "scratchRoot": "scratch_root",
     "worktreeIsolation": "worktree_isolation",
     "subagentApprovalMode": "subagent_approval_mode",
