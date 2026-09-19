@@ -11,7 +11,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # ── Startup diagnostic timer (module-level) ───────────────────────────────
 # 2026-09-10 (slow-startup incident): record monotonic start BEFORE any
@@ -936,43 +936,63 @@ app = FastAPI(
 )
 
 
+#: 请求体校验失败时必须隐藏输入值的路由 → 固定非敏感错误体。
+#:
+#: 这些路径的 body 携带凭据或敏感设置；FastAPI 默认 422 会把
+#: ``exc.errors()`` 里的 ``input`` 原样回显（含明文 cookie / token / 设置值），
+#: 因此在这条边界上换成不含任何输入值的定值响应。
+_SILENT_VALIDATION_RESPONSES: Dict[Tuple[str, str], Dict[str, Any]] = {
+    ("PUT", "/api/v1/settings"): {
+        "detail": {
+            "type": "invalid_settings_payload",
+            "message": "设置内容无效，请检查字段格式",
+        }
+    },
+    ("POST", "/api/v1/web-access/credentials/cookie"): {
+        "ok": False,
+        "error": "invalid_cookie_credential",
+    },
+    ("POST", "/api/v1/web-access/credentials/header"): {
+        "ok": False,
+        "error": "invalid_header_credential",
+    },
+}
+
+
 @app.exception_handler(RequestValidationError)
 async def settings_validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    """Prevent Pydantic input values from leaking on the settings PUT boundary.
+    """Prevent Pydantic input values from leaking on sensitive request bodies.
 
     FastAPI's default validation response includes ``exc.errors()``.  That
-    structure can contain the rejected input value, so this narrowly scoped
-    handler replaces it only for the settings route; every other route keeps
-    FastAPI's default validation behavior.
+    structure can contain the rejected input value, so this handler replaces
+    it with a fixed, non-sensitive body only for routes whose payload carries
+    credentials or settings; every other route keeps FastAPI's default
+    validation behavior.
     """
-    if request.method == "PUT" and request.url.path.rstrip("/") == "/api/v1/settings":
-        # 从 exc.errors() 提取第一个错误的字段路径作为 ``field`` —
-        # test_put_settings_prevalidation_error_is_fixed_and_non_echoing 断言
-        # detail 必须含 ``field`` 键 (legacy_routes.py:1634 handler 也提供
-        # 该键, 这里 Pydantic pre-handler 422 必须与之对齐).
-        # 字段路径形如 ('body', 'endpoints', 0, 'protocol'), join 成 "endpoints.0.protocol".
-        field = "value"
-        try:
-            errors = exc.errors()
-            if errors:
-                loc = errors[0].get("loc", ())
-                parts = [str(p) for p in loc if p != "body"]
-                if parts:
-                    field = ".".join(parts)
-        except Exception:  # noqa: BLE001 — Pydantic v1/v2 errors() 形态差异, 失败回退 "value"
+    fixed_content = _SILENT_VALIDATION_RESPONSES.get(
+        (request.method, request.url.path.rstrip("/"))
+    )
+    if fixed_content is not None:
+        # settings PUT: 额外提取字段路径以对齐 legacy_routes.py handler 的
+        # ``field`` 键约定 (test_put_settings_prevalidation_error_is_fixed_and_non_echoing
+        # 断言 detail 必须含 ``field``). 字段路径形如 ('body', 'endpoints', 0, 'protocol')
+        # → join 成 "endpoints.0.protocol".
+        if request.method == "PUT" and request.url.path.rstrip("/") == "/api/v1/settings":
             field = "value"
-        return JSONResponse(
-            status_code=422,
-            content={
-                "detail": {
-                    "type": "invalid_settings_payload",
-                    "message": "设置内容无效，请检查字段格式",
-                    "field": field,
-                }
-            },
-        )
+            try:
+                errors = exc.errors()
+                if errors:
+                    loc = errors[0].get("loc", ())
+                    parts = [str(p) for p in loc if p != "body"]
+                    if parts:
+                        field = ".".join(parts)
+            except Exception:  # noqa: BLE001 — Pydantic v1/v2 errors() 形态差异, 失败回退 "value"
+                field = "value"
+            fixed_content = {**fixed_content}
+            fixed_content["detail"] = {**fixed_content.get("detail", {}), "field": field}
+        return JSONResponse(status_code=422, content=fixed_content)
     from fastapi.exception_handlers import request_validation_exception_handler
 
     return await request_validation_exception_handler(request, exc)
