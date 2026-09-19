@@ -205,6 +205,9 @@ export function Chat() {
   const [archivesOpen, setArchivesOpen] = useState(false);
   const lastMsg = messages[messages.length - 1];
   const previousMessagesRef = useRef<typeof messages>([]);
+  // Round 2 (2026-09-19): 计划批准条"按计划执行（编排）"防双击 —— 结构化
+  // 请求在途时忽略再次点击，避免重复创建编排 run。
+  const planOrchBusyRef = useRef(false);
 
   // A session switch replaces the scrollable content; discard the previous
   // session's sticky-bottom state before the new message list is measured.
@@ -948,6 +951,56 @@ const CHAT_DOC_MIME: Record<string, string> = {
                       }}
                     >
                       按计划执行
+                    </button>
+                    {/* Round 2 (2026-09-19): 计划模式 × 编排打通 —— 计划文本
+                    经 /orch/plan-items 结构化为任务项，走 plan_override 派发
+                    （PlanCard 确认门可再编辑）。失败 toast 引导回落上方单
+                    agent 按钮。 */}
+                    <button
+                      type="button"
+                      data-testid="plan-approve-orch"
+                      className="px-2 py-1 text-xs rounded border border-primary/60 text-primary font-medium"
+                      onClick={() => {
+                        const sid = planApprovalFor;
+                        if (!sid || planOrchBusyRef.current) return;
+                        const planText =
+                          [...messages]
+                            .reverse()
+                            .find((m) => m.role === 'assistant')?.content ?? '';
+                        if (!planText.trim()) {
+                          toast.error('找不到可结构化的计划内容');
+                          return;
+                        }
+                        planOrchBusyRef.current = true;
+                        orchRunClient
+                          .planItemsFromText(planText)
+                          .then(({ items }) => {
+                            clearPlanApproval();
+                            if (items.length > 0) {
+                              void sendMessage(
+                                '请按上述已批准的计划编排执行（已生成任务卡，确认后并行执行）。',
+                                sid,
+                                undefined,
+                                undefined,
+                                { planOverride: items },
+                              );
+                            } else {
+                              toast.error('未能从计划解析出任务，请改用「按计划执行」');
+                            }
+                          })
+                          .catch((err: unknown) => {
+                            toast.error(
+                              err instanceof Error
+                                ? `计划转编排失败：${err.message.slice(0, 120)}`
+                                : '计划转编排失败（需要已配置 LLM 端点）',
+                            );
+                          })
+                          .finally(() => {
+                            planOrchBusyRef.current = false;
+                          });
+                      }}
+                    >
+                      按计划执行（编排）
                     </button>
                     <button
                       type="button"
