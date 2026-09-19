@@ -250,6 +250,11 @@ def rerun_failed(
         deps = item.get("depends_on")
         if isinstance(deps, list) and deps:
             entry["depends_on"] = [str(d) for d in deps]
+        # 重跑保留层级（spec 2026-09-19）：否则重跑后的任务树退化为平铺。
+        if item.get("parent_task_id"):
+            entry["parent_task_id"] = str(item["parent_task_id"])
+        if item.get("depth") is not None:
+            entry["depth"] = int(item["depth"])
         if status == "done":
             entry["preset_output"] = (
                 str(task.get("output_preview") or "").strip()
@@ -492,6 +497,9 @@ class PlanItem(BaseModel):
     agent_id: str
     goal: str
     depends_on: List[str] = Field(default_factory=list)
+    # 任务层级（spec 2026-09-19）：parent 只表达归属，不参与调度。
+    parent_task_id: Optional[str] = None
+    depth: Optional[int] = None
 
 
 class PlanItemsResponse(BaseModel):
@@ -570,12 +578,19 @@ async def plan_items(body: PlanItemsRequest) -> PlanItemsResponse:
         )
     tasks, reasoning = parsed
 
+    # 占位符 → 计划项编号（sanitize 保证父级只引更早任务）。
+    _id_by_placeholder = {
+        task["_placeholder"]: f"t{index}" for index, task in enumerate(tasks, 1)
+    }
     items = [
         PlanItem(
             task_id=f"t{index}",
             agent_id=task["parameters"].get("agent_hint", "primary"),
             goal=task["description"],
             depends_on=placeholder_deps_to_ids(task["blocked_by"]),
+            parent_task_id=_id_by_placeholder.get(
+                task.get("_parent_placeholder") or ""
+            ),
         )
         for index, task in enumerate(tasks, 1)
     ]

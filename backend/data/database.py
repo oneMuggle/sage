@@ -1271,9 +1271,9 @@ class Database:
         # 与计划层表共存期 orch_plan_tasks 与 orch_tasks 并存，强 FK 会限制 lane
         # 关联的灵活性。Phase 5 清理老表时评估是否加 FK 指向 orch_tasks。
         #
-        # 数据迁移：init_db 末尾 INSERT OR IGNORE 把老表存量复制到新表（详见
-        # §双轨合并数据迁移）。新老表双写由调用方（LaneRepository/OrchLaneRepository）
-        # 各自负责，直到 Phase 5 单写。
+        # 数据迁移（下方紧随的 INSERT OR IGNORE 块）：把老表存量一次性复制到
+        # 新表，让既有用户的 lane 历史在 GET /orchestration/lanes 等接口下仍可见。
+        # 幂等且 fail-open —— 老表不存在（全新安装）时静默跳过。
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS orch_lanes (
                 lane_id TEXT PRIMARY KEY,
@@ -1323,6 +1323,35 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_orch_lane_events_by_task "
             "ON orch_lane_events(task_id)"
         )
+
+        # 老表存量迁移（幂等 INSERT OR IGNORE；老表保留不删以便回滚）。
+        # 老表由早期版本创建，仅旧库存在 —— 全新安装下两块 SELECT 会抛
+        # no such table，被 except 吞掉（fail-open，不阻塞启动）。
+        try:
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO orch_lanes
+                (lane_id, task_id, agent_id, status, created_at, started_at,
+                 completed_at, worktree, heartbeat, error, permission_preset,
+                 metadata)
+                SELECT lane_id, task_id, agent_id, status, created_at, started_at,
+                       completed_at, worktree, heartbeat, error, permission_preset,
+                       metadata
+                FROM orchestration_lanes
+                """
+            )
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO orch_lane_events
+                (event_id, event_type, lane_id, task_id, agent_id, timestamp,
+                 provenance, metadata)
+                SELECT event_id, event_type, lane_id, task_id, agent_id, timestamp,
+                       provenance, metadata
+                FROM orchestration_lane_events
+                """
+            )
+        except Exception as exc:  # noqa: BLE001 — 旧库无老表属正常
+            logger.debug("lane 老表存量迁移跳过: %s", exc)
 
         # ==================== Background Review 表 ====================
         # Task 4 of 2026-08-02-background-review:

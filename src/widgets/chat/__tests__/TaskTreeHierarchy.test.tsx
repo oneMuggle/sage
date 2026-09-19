@@ -91,14 +91,8 @@ describe('TaskTreeSection hierarchy', () => {
       />,
     );
 
-    expect(screen.getByTestId('task-tree-item-t1')).toHaveAttribute(
-      'data-depth',
-      '0',
-    );
-    expect(screen.getByTestId('task-tree-item-t2')).toHaveAttribute(
-      'data-depth',
-      '1',
-    );
+    expect(screen.getByTestId('task-tree-item-t1')).toHaveAttribute('data-depth', '0');
+    expect(screen.getByTestId('task-tree-item-t2')).toHaveAttribute('data-depth', '1');
   });
 
   it('collapses and expands descendants', () => {
@@ -118,6 +112,21 @@ describe('TaskTreeSection hierarchy', () => {
     expect(screen.getByTestId('task-tree-item-t2')).toBeInTheDocument();
   });
 
+  it('renders a cyclic parent chain without hanging or crashing', () => {
+    // spec 要求「遇到异常环时递归失控」必须被防住：override/update_plan
+    // 通道可写入未校验的 parent 引用，渲染层必须自保。
+    render(
+      <TaskTreeSection
+        board={makeBoard([
+          { task_id: 't1', agent_id: 'a', goal: 'one', parent_task_id: 't2' },
+          { task_id: 't2', agent_id: 'b', goal: 'two', parent_task_id: 't1' },
+        ])}
+      />,
+    );
+    expect(screen.getByTestId('task-tree-item-t1')).toBeInTheDocument();
+    expect(screen.getByTestId('task-tree-item-t2')).toBeInTheDocument();
+  });
+
   it('renders legacy plans without toggles', () => {
     render(
       <TaskTreeSection
@@ -128,9 +137,6 @@ describe('TaskTreeSection hierarchy', () => {
       />,
     );
     expect(screen.queryByTestId('task-tree-toggle-t1')).not.toBeInTheDocument();
-    expect(screen.getByTestId('task-tree-item-t2')).toHaveAttribute(
-      'data-depth',
-      '0',
-    );
+    expect(screen.getByTestId('task-tree-item-t2')).toHaveAttribute('data-depth', '0');
   });
 });

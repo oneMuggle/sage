@@ -69,22 +69,28 @@ export function buildTaskTree(plan: TaskPlanItem[]): TaskTreeIndex {
   return { roots, nodes };
 }
 
-/** 某节点折叠时应隐藏的全部后代 task_id。 */
+/** 某节点折叠时应隐藏的全部后代 task_id（visited 守卫防父链成环死循环）。 */
 export function descendantsOf(index: TaskTreeIndex, taskId: string): string[] {
   const out: string[] = [];
+  const seen = new Set<string>([taskId]);
   const stack = [...(index.nodes.get(taskId)?.childIds ?? [])];
   while (stack.length > 0) {
     const current = stack.pop()!;
+    if (seen.has(current)) continue;
+    seen.add(current);
     out.push(current);
     stack.push(...(index.nodes.get(current)?.childIds ?? []));
   }
   return out;
 }
 
-/** 先序展开为渲染顺序（父在子前）。 */
+/** 先序展开为渲染顺序（父在子前）；visited 守卫防环。 */
 export function flattenTree(index: TaskTreeIndex): TaskTreeNode[] {
   const out: TaskTreeNode[] = [];
+  const seen = new Set<string>();
   const walk = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
     const node = index.nodes.get(id);
     if (!node) return;
     out.push(node);

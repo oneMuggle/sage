@@ -275,3 +275,51 @@ class TestLegacyTableRename:
             "SELECT name FROM orch_plan_teams WHERE team_id = ?", ("team-old",)
         ).fetchone()
         assert row["name"] == "老团队"
+
+class TestLegacyLaneMigration:
+    """Phase 1/5：老表存量在 init_db 时复制到新表（老表无 DDL，仅旧库存在）。"""
+
+    def test_legacy_lanes_copied_on_init(self, tmp_path, monkeypatch):
+        db = _fresh_db(tmp_path, monkeypatch, "lanemig.db")
+        conn = db.get_connection()
+        # 手工重建老表（Phase 5 已移除其 DDL，仅模拟旧库残留）。
+        conn.execute(
+            "CREATE TABLE orchestration_lanes ("
+            "lane_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, agent_id TEXT, "
+            "status TEXT NOT NULL DEFAULT 'created', created_at INTEGER NOT NULL, "
+            "started_at INTEGER, completed_at INTEGER, worktree TEXT, "
+            "heartbeat TEXT, error TEXT, "
+            "permission_preset TEXT NOT NULL DEFAULT 'implement', "
+            "metadata TEXT NOT NULL DEFAULT '{}')"
+        )
+        conn.execute(
+            "INSERT INTO orchestration_lanes "
+            "(lane_id, task_id, agent_id, status, created_at, permission_preset, metadata) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("lane-legacy", "t1", "writer", "running", 1700000000000, "implement", "{}"),
+        )
+        conn.commit()
+
+        db2 = _reopen(tmp_path, monkeypatch, "lanemig.db")
+        row = (
+            db2.get_connection()
+            .execute(
+                "SELECT agent_id, status FROM orch_lanes WHERE lane_id = ?",
+                ("lane-legacy",),
+            )
+            .fetchone()
+        )
+        assert row is not None
+        assert row["agent_id"] == "writer"
+        assert row["status"] == "running"
+
+    def test_missing_legacy_table_is_fail_open(self, tmp_path, monkeypatch):
+        """全新安装无老表 → 迁移静默跳过，不阻塞 init_db。"""
+        _fresh_db(tmp_path, monkeypatch, "nolegacy.db")
+        db2 = _reopen(tmp_path, monkeypatch, "nolegacy.db")
+        count = (
+            db2.get_connection()
+            .execute("SELECT COUNT(*) AS n FROM orch_lanes")
+            .fetchone()["n"]
+        )
+        assert count == 0

@@ -36,7 +36,7 @@ def _to_jsonable(obj: Any) -> Any:
         return {k: _to_jsonable(v) for k, v in asdict(obj).items()}
     if isinstance(obj, dict):
         return {k: _to_jsonable(v) for k, v in obj.items()}
-    if isinstance(obj, list | tuple):
+    if isinstance(obj, (list, tuple)):  # noqa: UP038 — py3.8 运行期兼容（win7 cherry-pick）
         return [_to_jsonable(v) for v in obj]
     return obj
 

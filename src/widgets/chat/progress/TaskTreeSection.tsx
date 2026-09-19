@@ -7,12 +7,11 @@ import { useSettings } from '../../../features/manage-settings/useSettings';
 // TaskStatusValue 定义在 shared/api（Task 7 已 re-export），不从 useChat import
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue } from '../../../shared/api';
-import type { TaskPlanItem } from '../../../shared/api/types';
 import { orchRunClient } from '../../../shared/api/orchRunClient';
 import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
 
 import { SubagentDetailDrawer } from './SubagentDetailDrawer';
-import { buildTaskTree, descendantsOf } from './taskTree';
+import { buildTaskTree, descendantsOf, flattenTree } from './taskTree';
 
 // BU13 (round24): 徽章数值格式化 —— token ≥1k 显 k（1 位小数去尾 0），
 // 时长 <1s 显 ms，其余显秒（1 位小数）。纯展示，不做四舍五入承诺。
@@ -70,8 +69,7 @@ export function TaskTreeSection({
   onRetryTask,
 }: TaskTreeSectionProps) {
   // BU16 (round30): run 起始时刻与墙钟上限（round25 设置键；未设置 = 0 不提示）。
-  const runWallClockLimitMinutes =
-    useSettings().settings.orch?.runWallClockLimitMinutes ?? 0;
+  const runWallClockLimitMinutes = useSettings().settings.orch?.runWallClockLimitMinutes ?? 0;
   const runStartedAt = board.dispatchedAt ?? null;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectTask = useRunControlStore((s) => s.selectTask);
@@ -80,9 +78,7 @@ export function TaskTreeSection({
   const [skipping, setSkipping] = useState<ReadonlySet<string>>(new Set());
   // live-events P1: run 级审批模式开关（乐观更新，后端 approval_mode 事件
   // 回显为准；失败回滚到 board 上的值）。
-  const [approvalMode, setApprovalMode] = useState<'ask' | 'auto'>(
-    board.approvalMode ?? 'ask',
-  );
+  const [approvalMode, setApprovalMode] = useState<'ask' | 'auto'>(board.approvalMode ?? 'ask');
   const [approvalPending, setApprovalPending] = useState(false);
 
   const toggleApprovalMode = () => {
@@ -183,19 +179,10 @@ export function TaskTreeSection({
         hidden.add(descendant);
       }
     }
-    return [...treeIndex.roots]
-      .map((rootId) => {
-        const rows: Array<{ item: TaskPlanItem; depth: number; childIds: string[] }> = [];
-        const walk = (id: string) => {
-          const node = treeIndex.nodes.get(id);
-          if (!node || hidden.has(id)) return;
-          rows.push({ item: node.item, depth: node.depth, childIds: node.childIds });
-          for (const childId of node.childIds) walk(childId);
-        };
-        walk(rootId);
-        return rows;
-      })
-      .flat();
+    // flattenTree 自带 visited 守卫（父链成环时不会无限递归）。
+    return flattenTree(treeIndex).filter(
+      (node) => !hidden.has(node.item.task_id),
+    );
   }, [treeIndex, collapsed]);
 
   const toggleCollapsed = (taskId: string) => {
@@ -418,19 +405,16 @@ export function TaskTreeSection({
               {/* RD18 (round33): 级联跳过根因徽章 —— 上游失败导致本任务
                   未启动即置 failed（error 前缀 blocked_by_failed:<root>），
                   行内直读根因，不必开 Drawer 翻原始文本。 */}
-              {status === 'failed' &&
-                st?.error?.startsWith('blocked_by_failed:') && (
-                  <span
-                    data-testid={`task-tree-blocked-${item.task_id}`}
-                    title={st.error}
-                    className="text-text-tertiary text-[10px] shrink-0"
-                  >
-                    因 {st.error
-                      .slice('blocked_by_failed:'.length)
-                      .split(',')
-                      .join('、')} 失败级联跳过
-                  </span>
-                )}
+              {status === 'failed' && st?.error?.startsWith('blocked_by_failed:') && (
+                <span
+                  data-testid={`task-tree-blocked-${item.task_id}`}
+                  title={st.error}
+                  className="text-text-tertiary text-[10px] shrink-0"
+                >
+                  因 {st.error.slice('blocked_by_failed:'.length).split(',').join('、')}{' '}
+                  失败级联跳过
+                </span>
+              )}
               {/* RD13+ (round15): 重派徽章 —— retry_of 重派的任务可追溯 */}
               {st?.retry_of && (
                 <span
@@ -486,7 +470,13 @@ export function TaskTreeSection({
                   {recentEvents.map((evt, idx) => (
                     <li key={`${evt.ts ?? idx}-${idx}`} className="truncate">
                       <span className="text-text-tertiary">
-                        {evt.ts ? new Date(evt.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}
+                        {evt.ts
+                          ? new Date(evt.ts).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                            })
+                          : ''}
                       </span>{' '}
                       {evt.phase === 'approval_requested'
                         ? `⏳ 等待审批: ${evt.tool_name ?? 'tool'}`

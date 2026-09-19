@@ -1,5 +1,7 @@
 # 任务层级化实施计划
 
+> **状态**：已完成（2026-09-19，9/9 Task 落地；ledger 见 .superpowers/sdd/2026-09-19-task-hierarchy/progress.md）
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 实现增量任务层级模型，支持 `parent_task_id` 和 `depth` 字段，前后端完整透传，前端展示可折叠树形任务视图。
@@ -32,7 +34,7 @@
 - Consumes: 现有 `orch_tasks` 表结构
 - Produces: `orch_tasks` 表增加 `parent_task_id TEXT NULL` 和 `depth INTEGER NOT NULL DEFAULT 0` 列
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_orch_task_repo.py
@@ -57,7 +59,7 @@ def test_orch_tasks_schema_has_parent_and_depth_columns(tmp_path, monkeypatch):
     assert columns["depth"] == "INTEGER"
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 ```bash
 cd /home/fz/project/sage/.worktrees/feat-task-replan-capability
@@ -66,7 +68,7 @@ cd /home/fz/project/sage/.worktrees/feat-task-replan-capability
 
 Expected: FAIL with "parent_task_id" not in columns
 
-- [ ] **Step 3: 实现数据库迁移**
+- [x] **Step 3: 实现数据库迁移**
 
 ```python
 # backend/data/database.py，在 orch_tasks 表定义后添加
@@ -81,7 +83,7 @@ if "depth" not in _existing_cols:
     cursor.execute("ALTER TABLE orch_tasks ADD COLUMN depth INTEGER NOT NULL DEFAULT 0")
 ```
 
-- [ ] **Step 4: 运行测试验证通过**
+- [x] **Step 4: 运行测试验证通过**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_orch_task_repo.py::test_orch_tasks_schema_has_parent_and_depth_columns -v
@@ -89,7 +91,7 @@ if "depth" not in _existing_cols:
 
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/data/database.py backend/tests/unit/test_orch_task_repo.py
@@ -109,7 +111,7 @@ git commit -m "feat(orchestration): 添加 orch_tasks parent_task_id 和 depth �
 - Consumes: 现有 `TaskPlanItem` 接口
 - Produces: `TaskPlanItem` 增加 `parent_task_id?: string | null` 和 `depth?: number`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 // src/shared/api/__tests__/types.test.ts
@@ -141,7 +143,7 @@ describe("TaskPlanItem", () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 ```bash
 cd /home/fz/project/sage/.worktrees/feat-task-replan-capability
@@ -150,7 +152,7 @@ npm run test:run -- src/shared/api/__tests__/types.test.ts
 
 Expected: FAIL with TypeScript compilation error
 
-- [ ] **Step 3: 扩展 TaskPlanItem 类型**
+- [x] **Step 3: 扩展 TaskPlanItem 类型**
 
 ```typescript
 // src/shared/api/types.ts
@@ -165,7 +167,7 @@ export interface TaskPlanItem {
 }
 ```
 
-- [ ] **Step 4: 同步 llmStream.ts 的类型**
+- [x] **Step 4: 同步 llmStream.ts 的类型**
 
 ```typescript
 // src/shared/api/llmStream.ts
@@ -180,7 +182,7 @@ export interface TaskPlanItem {
 }
 ```
 
-- [ ] **Step 5: 运行测试验证通过**
+- [x] **Step 5: 运行测试验证通过**
 
 ```bash
 npm run test:run -- src/shared/api/__tests__/types.test.ts
@@ -188,7 +190,7 @@ npm run test:run -- src/shared/api/__tests__/types.test.ts
 
 Expected: PASS
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/shared/api/types.ts src/shared/api/llmStream.ts src/shared/api/__tests__/types.test.ts
@@ -208,7 +210,7 @@ git commit -m "feat(shared): 扩展 TaskPlanItem 支持 parent_task_id 和 depth
 - Produces: 校验后的 `TaskPlanItem[]`（带规范化的 `depth`）
 - Raises: `HierarchyError`（父引用非法、自环、父环、超深）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_plan_hierarchy.py
@@ -292,7 +294,7 @@ def test_normalize_preserves_existing_fields():
     assert result[0]["goal"] == "g1"
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_plan_hierarchy.py -v
@@ -300,7 +302,7 @@ def test_normalize_preserves_existing_fields():
 
 Expected: FAIL with ModuleNotFoundError: No module named 'backend.orchestration.plan_hierarchy'
 
-- [ ] **Step 3: 实现计划规范化器**
+- [x] **Step 3: 实现计划规范化器**
 
 ```python
 # backend/orchestration/plan_hierarchy.py
@@ -399,7 +401,7 @@ def normalize_task_hierarchy(
     return result
 ```
 
-- [ ] **Step 4: 运行测试验证通过**
+- [x] **Step 4: 运行测试验证通过**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_plan_hierarchy.py -v
@@ -407,7 +409,7 @@ def normalize_task_hierarchy(
 
 Expected: PASS (all 7 tests)
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/orchestration/plan_hierarchy.py backend/tests/unit/test_plan_hierarchy.py
@@ -427,7 +429,7 @@ git commit -m "feat(orchestration): 添加任务层级规范化器"
 - Consumes: `ChatTaskState`, `_emit_task_status()`, `_persist_task_state()`
 - Produces: `ChatTaskState` 增加 `parent_task_id`（来自计划），`task_status` 事件携带层级字段
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_chat_dispatcher_hierarchy.py
@@ -523,7 +525,7 @@ def test_dispatcher_persists_parent_task_id_to_orch_tasks(tmp_path, monkeypatch)
     assert task.depth == 0
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_chat_dispatcher_hierarchy.py -v
@@ -531,7 +533,7 @@ def test_dispatcher_persists_parent_task_id_to_orch_tasks(tmp_path, monkeypatch)
 
 Expected: FAIL with AttributeError: 'ChatTaskState' object has no attribute 'parent_task_id'
 
-- [ ] **Step 3: 扩展 ChatTaskState 增加 parent_task_id**
+- [x] **Step 3: 扩展 ChatTaskState 增加 parent_task_id**
 
 ```python
 # backend/orchestration/chat_dispatcher.py，在 ChatTaskState dataclass 定义处
@@ -554,7 +556,7 @@ class ChatTaskState:
     parent_tool_call_id: Optional[str] = None
 ```
 
-- [ ] **Step 4: 在 dispatch 中读取 parent_task_id 并写入 ChatTaskState**
+- [x] **Step 4: 在 dispatch 中读取 parent_task_id 并写入 ChatTaskState**
 
 ```python
 # backend/orchestration/chat_dispatcher.py，在 dispatch() 方法中构建 ChatTaskState 的位置
@@ -573,7 +575,7 @@ state = ChatTaskState(
 )
 ```
 
-- [ ] **Step 5: 在 _emit_task_status 中透传层级字段**
+- [x] **Step 5: 在 _emit_task_status 中透传层级字段**
 
 ```python
 # backend/orchestration/chat_dispatcher.py，_emit_task_status 方法
@@ -607,7 +609,7 @@ def _emit_task_status(self, state: ChatTaskState) -> None:
     self._persist_task_state(state)
 ```
 
-- [ ] **Step 6: 在 _persist_task_state 中写入层级字段**
+- [x] **Step 6: 在 _persist_task_state 中写入层级字段**
 
 ```python
 # backend/orchestration/chat_dispatcher.py，_persist_task_state 方法
@@ -643,7 +645,7 @@ def _persist_task_state(self, state: ChatTaskState) -> None:
     )
 ```
 
-- [ ] **Step 7: 运行测试验证通过**
+- [x] **Step 7: 运行测试验证通过**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_chat_dispatcher_hierarchy.py -v
@@ -651,7 +653,7 @@ def _persist_task_state(self, state: ChatTaskState) -> None:
 
 Expected: PASS (all 3 tests)
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add backend/orchestration/chat_dispatcher.py backend/tests/unit/test_chat_dispatcher_hierarchy.py
@@ -672,7 +674,7 @@ git commit -m "feat(orchestration): ChatTaskState 和事件透传层级字段"
 - Consumes: `OrchTask` dataclass, `upsert_state()` 方法
 - Produces: `OrchTask` 增加 `parent_task_id` 和 `depth`，`upsert_state()` 接受并写入这两个字段
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_orch_task_repo.py
@@ -748,7 +750,7 @@ def test_get_returns_defaults_for_missing_columns(tmp_path, monkeypatch):
     assert task.depth == 0
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_orch_task_repo.py::test_upsert_state_with_parent_and_depth -v
@@ -756,7 +758,7 @@ def test_get_returns_defaults_for_missing_columns(tmp_path, monkeypatch):
 
 Expected: FAIL with TypeError: upsert_state() got an unexpected keyword argument 'parent_task_id'
 
-- [ ] **Step 3: 扩展 OrchTask dataclass**
+- [x] **Step 3: 扩展 OrchTask dataclass**
 
 ```python
 # backend/data/orch_task_repo.py
@@ -782,7 +784,7 @@ class OrchTask:
     depth: int = 0  # 新增
 ```
 
-- [ ] **Step 4: 扩展 upsert_state 方法**
+- [x] **Step 4: 扩展 upsert_state 方法**
 
 ```python
 # backend/data/orch_task_repo.py，upsert_state 方法
@@ -851,7 +853,7 @@ def upsert_state(
     conn.commit()
 ```
 
-- [ ] **Step 5: 扩展 _row_to_task 方法**
+- [x] **Step 5: 扩展 _row_to_task 方法**
 
 ```python
 # backend/data/orch_task_repo.py，_row_to_task 方法
@@ -880,7 +882,7 @@ def _row_to_task(self, row: Any) -> OrchTask:
     )
 ```
 
-- [ ] **Step 6: 运行测试验证通过**
+- [x] **Step 6: 运行测试验证通过**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_orch_task_repo.py::test_upsert_state_with_parent_and_depth backend/tests/unit/test_orch_task_repo.py::test_get_returns_defaults_for_missing_columns -v
@@ -888,7 +890,7 @@ def _row_to_task(self, row: Any) -> OrchTask:
 
 Expected: PASS (both tests)
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add backend/data/orch_task_repo.py backend/tests/unit/test_orch_task_repo.py
@@ -907,7 +909,7 @@ git commit -m "feat(data): OrchTaskRepository 支持 parent_task_id 和 depth"
 - Consumes: `ChatDispatcher.add_task_to_plan()`, `normalize_task_hierarchy()`
 - Produces: `add_task_to_plan` 工具接受可选 `parent_task_id` 参数
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_replan_tool.py
@@ -981,7 +983,7 @@ def test_add_task_rejects_invalid_parent(tmp_path, monkeypatch):
     assert "parent" in result["error"].lower()
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_replan_tool.py::test_add_task_with_parent_task_id -v
@@ -989,7 +991,7 @@ def test_add_task_rejects_invalid_parent(tmp_path, monkeypatch):
 
 Expected: FAIL with TypeError: execute() got an unexpected keyword argument 'parent_task_id'
 
-- [ ] **Step 3: 扩展 AddTaskToPlanTool execute 方法**
+- [x] **Step 3: 扩展 AddTaskToPlanTool execute 方法**
 
 ```python
 # backend/tools/replan_tool.py，AddTaskToPlanTool.execute 方法
@@ -1019,7 +1021,7 @@ def execute(self, **kwargs: Any) -> ToolResult:
         return ToolResult(success=False, error=str(e))
 ```
 
-- [ ] **Step 4: 在 ChatDispatcher.add_task_to_plan 中接受 parent_task_id**
+- [x] **Step 4: 在 ChatDispatcher.add_task_to_plan 中接受 parent_task_id**
 
 ```python
 # backend/orchestration/chat_dispatcher.py，add_task_to_plan 方法
@@ -1070,7 +1072,7 @@ def add_task_to_plan(
     return {"success": True, "task_id": task_id}
 ```
 
-- [ ] **Step 5: 运行测试验证通过**
+- [x] **Step 5: 运行测试验证通过**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_replan_tool.py::test_add_task_with_parent_task_id backend/tests/unit/test_replan_tool.py::test_add_task_rejects_invalid_parent -v
@@ -1078,7 +1080,7 @@ def add_task_to_plan(
 
 Expected: PASS (both tests)
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/tools/replan_tool.py backend/orchestration/chat_dispatcher.py backend/tests/unit/test_replan_tool.py
@@ -1097,7 +1099,7 @@ git commit -m "feat(orchestration): add_task_to_plan 支持 parent_task_id"
 - Consumes: `normalize_task_hierarchy()`, `TaskPlanItem[]`
 - Produces: Planner 输出规范化后的计划（带 `depth`）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_planner_hierarchy.py
@@ -1154,7 +1156,7 @@ async def test_planner_normalizes_hierarchy(tmp_path, monkeypatch):
     assert task_map["t2"].depth == 1
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_planner_hierarchy.py::test_planner_normalizes_hierarchy -v
@@ -1162,7 +1164,7 @@ async def test_planner_normalizes_hierarchy(tmp_path, monkeypatch):
 
 Expected: FAIL with AttributeError: 'Task' object has no attribute 'depth'
 
-- [ ] **Step 3: 扩展 Task dataclass**
+- [x] **Step 3: 扩展 Task dataclass**
 
 ```python
 # backend/orchestration/models.py，Task dataclass
@@ -1189,7 +1191,7 @@ class Task:
     depth: int = 0  # 新增
 ```
 
-- [ ] **Step 4: 在 Planner.decompose_request 中调用规范化器**
+- [x] **Step 4: 在 Planner.decompose_request 中调用规范化器**
 
 ```python
 # backend/orchestration/planner.py，decompose_request 方法
@@ -1227,7 +1229,7 @@ async def decompose_request(self, request: str) -> Optional[Plan]:
     # ... 返回 Plan ...
 ```
 
-- [ ] **Step 5: 运行测试验证通过**
+- [x] **Step 5: 运行测试验证通过**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_planner_hierarchy.py::test_planner_normalizes_hierarchy -v
@@ -1235,7 +1237,7 @@ async def decompose_request(self, request: str) -> Optional[Plan]:
 
 Expected: PASS
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/orchestration/models.py backend/orchestration/planner.py backend/tests/unit/test_planner_hierarchy.py
@@ -1255,7 +1257,7 @@ git commit -m "feat(orchestration): Planner 集成层级规范化"
 - Consumes: `TaskPlanItem[]`（带 `parent_task_id` 和 `depth`）
 - Produces: 树形任务视图（支持折叠/展开）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 // src/widgets/chat/__tests__/TaskTreeHierarchy.test.tsx
@@ -1357,7 +1359,7 @@ describe("TaskTreeSection with hierarchy", () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 ```bash
 npm run test:run -- src/widgets/chat/__tests__/TaskTreeHierarchy.test.tsx
@@ -1365,7 +1367,7 @@ npm run test:run -- src/widgets/chat/__tests__/TaskTreeHierarchy.test.tsx
 
 Expected: FAIL with TypeScript errors or test failures
 
-- [ ] **Step 3: 实现 TaskTreeNode 组件**
+- [x] **Step 3: 实现 TaskTreeNode 组件**
 
 ```typescript
 // src/widgets/chat/progress/TaskTreeNode.tsx
@@ -1413,7 +1415,7 @@ export function TaskTreeNode({ task, status, children = [], depth }: TaskTreeNod
 }
 ```
 
-- [ ] **Step 4: 重构 TaskTreeSection 使用树形结构**
+- [x] **Step 4: 重构 TaskTreeSection 使用树形结构**
 
 ```typescript
 // src/widgets/chat/progress/TaskTreeSection.tsx
@@ -1482,7 +1484,7 @@ export function TaskTreeSection({ board }: TaskTreeSectionProps) {
 }
 ```
 
-- [ ] **Step 5: 运行测试验证通过**
+- [x] **Step 5: 运行测试验证通过**
 
 ```bash
 npm run test:run -- src/widgets/chat/__tests__/TaskTreeHierarchy.test.tsx
@@ -1490,7 +1492,7 @@ npm run test:run -- src/widgets/chat/__tests__/TaskTreeHierarchy.test.tsx
 
 Expected: PASS (all 4 tests)
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/widgets/chat/progress/TaskTreeNode.tsx src/widgets/chat/progress/TaskTreeSection.tsx src/widgets/chat/__tests__/TaskTreeHierarchy.test.tsx
@@ -1509,7 +1511,7 @@ git commit -m "feat(ui): 前端任务树形渲染"
 - Consumes: 所有已实现的功能
 - Produces: 端到端验证层级化功能
 
-- [ ] **Step 1: 写集成测试**
+- [x] **Step 1: 写集成测试**
 
 ```python
 # backend/tests/integration/test_task_hierarchy_integration.py
@@ -1640,7 +1642,7 @@ def test_add_task_with_hierarchy_integration(tmp_path, monkeypatch):
     assert task_map["t2"]["parent_task_id"] == "t1"
 ```
 
-- [ ] **Step 2: 运行集成测试**
+- [x] **Step 2: 运行集成测试**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/integration/test_task_hierarchy_integration.py -v
@@ -1648,7 +1650,7 @@ def test_add_task_with_hierarchy_integration(tmp_path, monkeypatch):
 
 Expected: PASS (both tests)
 
-- [ ] **Step 3: 运行所有编排后端测试**
+- [x] **Step 3: 运行所有编排后端测试**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_orch*.py backend/tests/unit/test_chat_dispatcher*.py backend/tests/unit/test_planner*.py backend/tests/unit/test_plan_hierarchy.py backend/tests/unit/test_replan_tool.py -v --tb=short
@@ -1656,7 +1658,7 @@ Expected: PASS (both tests)
 
 Expected: All tests PASS
 
-- [ ] **Step 4: 运行所有前端测试**
+- [x] **Step 4: 运行所有前端测试**
 
 ```bash
 npm run test:run -- --testPathPattern="TaskTree|types"
@@ -1664,7 +1666,7 @@ npm run test:run -- --testPathPattern="TaskTree|types"
 
 Expected: All tests PASS
 
-- [ ] **Step 5: 运行 TypeScript 类型检查**
+- [x] **Step 5: 运行 TypeScript 类型检查**
 
 ```bash
 npx tsc --noEmit
@@ -1672,7 +1674,7 @@ npx tsc --noEmit
 
 Expected: No errors
 
-- [ ] **Step 6: 运行 Ruff 检查**
+- [x] **Step 6: 运行 Ruff 检查**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m ruff check backend/
@@ -1680,14 +1682,14 @@ Expected: No errors
 
 Expected: No errors
 
-- [ ] **Step 7: 提交集成测试**
+- [x] **Step 7: 提交集成测试**
 
 ```bash
 git add backend/tests/integration/test_task_hierarchy_integration.py
 git commit -m "test(orchestration): 添加任务层级化集成测试"
 ```
 
-- [ ] **Step 8: 创建 PR**
+- [x] **Step 8: 创建 PR**
 
 ```bash
 git push origin HEAD

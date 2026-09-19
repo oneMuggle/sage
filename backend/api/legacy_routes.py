@@ -2532,9 +2532,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 "agent_id": str(it.get("agent_id", "primary")),
                                 "goal": str(it.get("goal", "")),
                                 "depends_on": list(it.get("depends_on") or []),
-                                # 层级透传（override 可带，也可省略由后端归一化）。
+                                # 层级透传（override 可带 parent；depth 由下方
+                                # 归一化统一重算，客户端值不作权威）。
                                 "parent_task_id": it.get("parent_task_id"),
-                                "depth": it.get("depth"),
                             }
                             for it in data.plan_override
                         ]
@@ -2561,6 +2561,23 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             }
                             for i, t in enumerate(plan_tasks, 1)
                         ]
+                    # 层级归一化（spec 2026-09-19）：depth 以后端计算为准，
+                    # override 传入值不采信；坏引用/超深 fail-open 剪枝为根。
+                    try:
+                        from backend.orchestration.plan_hierarchy import (
+                            normalize_task_hierarchy,
+                        )
+
+                        plan_items = normalize_task_hierarchy(plan_items)
+                    except Exception as hierarchy_err:  # noqa: BLE001 — 降级铁律
+                        logger.warning(
+                            "计划层级归一化失败，回落无层级: %s", hierarchy_err
+                        )
+                        plan_items = [
+                            {k: v for k, v in item.items() if k != "depth"}
+                            for item in plan_items
+                        ]
+
                     dispatcher_workspace_root = None
                     try:
                         from backend.office.session_workspace import get_workspace_binding
