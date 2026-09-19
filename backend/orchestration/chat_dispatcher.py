@@ -1527,6 +1527,9 @@ class ChatDispatcher:
     def _persist_task_state(self, state: ChatTaskState) -> None:
         """状态迁移同步写库；写失败降级（logger.warning，绝不阻塞聊天）。"""
         try:
+            # RT24 (round32): 终态携带任务级用量/时长（BU17 memo 查询 +
+            # started/finished 差），run 历史回看有量化数据。非终态不传。
+            _terminal = state.status in ("done", "failed", "cancelled")
             self._orch_task_repo.upsert_state(
                 task_id=state.task_id,
                 run_id=self.run_id,
@@ -1538,6 +1541,12 @@ class ChatDispatcher:
                 output_preview=self._preview(state),
                 started_at=int(state.started_at * 1000) if state.started_at else None,
                 finished_at=int(state.finished_at * 1000) if state.finished_at else None,
+                used_tokens=self._task_tokens_used(state.task_id) if _terminal else None,
+                duration_ms=(
+                    int((state.finished_at - state.started_at) * 1000)
+                    if _terminal and state.started_at and state.finished_at
+                    else None
+                ),
             )
         except Exception as exc:  # noqa: BLE001 — 降级铁律
             logger.warning("orch_task 落库失败 task_id=%s err=%s", state.task_id, exc)

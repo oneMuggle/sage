@@ -83,6 +83,9 @@ def _run_detail(run: OrchRun) -> OrchRunDetail:
             "output_preview": t.output_preview,
             "started_at": t.started_at,
             "finished_at": t.finished_at,
+            # RT24 (round32): 任务级用量/时长 —— 终态落库值，历史回看可见。
+            "used_tokens": getattr(t, "used_tokens", None),
+            "duration_ms": getattr(t, "duration_ms", None),
         }
         for t in task_repo.list_by_run(run.run_id)
     ]
