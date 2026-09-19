@@ -20,6 +20,137 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 > 🌐 **网页访问能力优化 Round 18：web_search 纳入 per-host 指标 + 指标 UI 刷新/重置**（方案 `docs/plans/2026-09-18_web-access-optimization-round18.md`）
 
+### Added(office)
+- **`{{en:备注文本}}` 内联尾注**：镜像脚注实现——`w:endnoteReference` run（id 按出现顺序 1..N）+ `word/endnotes.xml` part（含系统尾注）+ EndnoteText/EndnoteReference 样式注入（幂等）
+- **`read_docx` 回读 `endnotes: List[str]`**；脚注与尾注同段混用各自独立 part 与编号；无尾注文档不挂载 part（产物零变化）
+- 契约同步：schema content 描述补 `{{en:}}`；types.ts 读结果加 `endnotes?: string[]`；SKILL 补脚注/尾注选型说明
+
+> 🌐 **网页访问能力优化 Round 20：并行聚合搜索指标 + 诊断导出集成**（方案 `docs/plans/2026-09-18_web-access-optimization-round20.md`）
+
+### Changed(web-access)
+- **搜索指标收尾（S1）**：`_search_parallel` 并行聚合模式逐引擎埋点（伪域 `search:<engine>`；成功含 0 条结果记 ok、异常记 fail）——R18 遗留尾巴闭环
+- **诊断导出集成（X2 完整闭环）**：诊断包 zip 新增 `web-metrics.json`（per-host 出网指标快照，非空时写入；快照失败静默不影响诊断包）
+
+> 📝 **Word 写作能力 Round 58：脚注 Phase B——样式注入 + 每节重编**（方案 `docs/plans/2026-09-19_r58-footnote-phase-b-plan.md`）
+
+### Added(office)
+- **脚注样式注入**：挂载 footnotes part 时幂等注入 FootnoteText 段落样式（10pt）与 FootnoteReference 字符样式（上标）——脚注按 Word 惯例渲染，不再回退默认
+- **`footnote_restart_each_section`**（WordPageSetupSpec）：节级 `w:footnotePr/numRestart=eachSect` 开关——论文/书籍分章脚注编号每节从 1 重排；默认 False 零触碰
+- 契约同步：schema format_spec.page 增开关；types.ts WordPageSetupSpec 同步
+
+> 📝 **Word 写作能力 Round 57：内联脚注 Phase A**（方案 `docs/plans/2026-09-19_r57-footnotes-phase-a-plan.md`，设计稿 90 号）
+
+### Added(office)
+- **`{{fn:备注文本}}` 内联脚注**：正文占位符生成 `w:footnoteReference` run（id 按出现顺序 1..N），备注文本写入挂载的 `word/footnotes.xml` part（含 separator/continuationSeparator 系统脚注）——学术论文脚注支持的最小闭环
+- **`read_docx` 回读 `footnotes: List[str]`**（无脚注空表）；无脚注文档不挂载 part（产物零变化）
+
+> 📝 **Word 写作能力 Round 56：脚注/尾注设计评审稿**（设计文档，非实现）
+
+### Added(docs)
+- **`docs/technical/90-word-footnotes-design.md`**：脚注支持的设计评审稿——python-docx 无原生 API 的 OOXML 四件套结构分析（footnotes.xml part/relationship/content-type/系统脚注）、`{{fn:}}` 内联锚点选型、三期分期（Phase A 写侧最小闭环 ~1 轮）与风险清单（part 手术的半公开 API、WPS 兼容验证）
+
+> 📝 **Word 写作能力 Round 53：分节页码格式与起始号（w:pgNumType）**（方案 `docs/plans/2026-09-18_r53-pgnum-format-plan.md`）
+
+### Added(office)
+- **`page_number_format` / `page_number_start`**（WordPageSetupSpec）：节内页码格式（decimal/upperRoman/lowerRoman/upperLetter/lowerLetter）与起始号——论文前置目录罗马页码、正文阿拉伯从 1 的惯例一次成型；主节（format_spec.page）与分节新节（section_breaks.page_setup）同一路径生效，页脚 PAGE 域自动跟随节格式
+- **lint `page/numbering` 对偶**：spec 声明 fmt/start 时校验首节 pgNumType 实际值（缺失/不符报 error）
+
+> 📝 **Word 写作能力 Round 52：PPT core properties 三件套对称**（方案 `docs/plans/2026-09-18_r52-ppt-metadata-plan.md`）
+
+### Added(office)
+- **`OfficePptGenerateRequest.metadata`**（PptMetadataSpec 别名复用）+ **`OfficePptReadResult.metadata`** 回读——docx/xlsx/pptx 三件套文档属性能力收口；python-pptx 属性名与 python-docx 一致（author/subject/keywords/comments/category），仅显式传入才写
+
+> 📝 **Word 写作能力 Round 51：读侧 core properties 回读**（方案 `docs/plans/2026-09-18_r51-read-metadata-plan.md`）
+
+### Added(office)
+- **`read_docx` / `read_xlsx` 回读 `metadata`**（WordMetadataSpec，全空为 None）——R49/R50 写入的文档属性在读取侧可见，Sage 可回答"这篇文档的作者/关键词是什么"；读侧映射与写侧对偶（xlsx creator/description ↔ author/comments）
+
+> 📝 **Word 写作能力 Round 50：Excel core properties 对称支持**（方案 `docs/plans/2026-09-18_r50-excel-metadata-plan.md`）
+
+### Added(office)
+- **`OfficeExcelGenerateRequest.metadata`**（ExcelMetadataSpec = WordMetadataSpec 别名复用）：generate_xlsx 写 wb.properties（author→creator、comments→description 映射在生成器内完成）——台账/预算归档与 Word 同款文档属性；仅显式传入才写，不臆造作者
+- 契约同步：schema metadata 描述扩为 word/excel 通用；types.ts Excel 请求加 metadata；paper-writing 数据表附表节补说明
+
+> 📝 **Word 写作能力 Round 49：文档核心属性**（方案 `docs/plans/2026-09-18_r49-core-metadata-plan.md`）
+
+### Added(office)
+- **`metadata`（WordMetadataSpec）**：office_create word 请求支持 author/subject/keywords/comments/category → 写入 docx core properties（Word「文件 → 信息」面板可见）——期刊投稿/公文归档的常规要求；title 恒取请求标题，其余显式传入才写（不臆造作者）
+- 契约同步：schema content 层 metadata 对象 + types.ts WordMetadataSpec；paper-writing 第 4 步示例补 metadata
+ 诊断导出集成 per-host 指标)
+> 🧹 **Word 写作能力 Round 48：repair 补 index 域插入 + SEQ 题注重排兼容**（方案 `docs/plans/2026-09-18_r48-repair-index-plan.md`）
+
+### Added(office)
+- **repair 闭环 R44 规则**：spec 声明 figure_index/table_index 而文档缺失时，repair 从文档自身 SEQ 题注重建条目并插入对应 TOF 域（目录后/首段前），repaired_rules 记入 presence 规则
+- **`caption/duplicate` lint 警告**：同类题注文本重复提示（交叉引用按文本匹配指向首个），warning 级不阻断
+
+### Fixed(office)
+- **SEQ 题注重排摧毁域缺陷**：`_renumber_captions` 对携带 SEQ 的题注段不再整体重写 `para.text`（会抹掉 R42 的 SEQ 域与书签，重排触发即毁交叉引用/图表目录）——改为仅更新域内缓存编号 run，结构原样保留
+
+> 📝 **Word 写作能力 Round 47：论文场景能力可发现化收口**（方案 `docs/plans/2026-09-18_r47-paper-capabilities-plan.md`）
+
+### Changed(docs)
+- **paper-writing 技能补全 R39-R46 能力**：目录/图表目录（figure_index/table_index）/交叉引用占位符（{{fig:}}/{{tbl:}}）/真页码刷新（refresh_toc + office_refresh_toc）——论文场景才是这些能力的最大受益方，此前零覆盖；allowed-tools 补 office_refresh_toc
+- **用户手册 09-office.md**：目录描述从"打开后更新域生成"更新为真页码语义；图表与图片节补插图清单/表格清单与交叉引用说明
+- shipped 技能测试补论文场景可发现化断言（figure_index / {{fig:}} / office_refresh_toc）
+
+> 📝 **Word 写作能力 Round 46：交叉引用升级——REF 域 + 题注书签**（方案 `docs/plans/2026-09-18_r46-ref-fields-plan.md`）
+
+### Added(office)
+- **占位符产物原生化**：`{{fig:}}/{{tbl:}}` 不再写成纯文本"图N"，改为 `REF _RefFig{n} \h` 复杂域（缓存"图N"）+ 题注编号套书签——F9/COM 更新域后正文引用自动跟随题注重排；R39 COM 刷新通道（Fields.Update）零新增编排即覆盖
+- **零回归双路径**：有占位符的段落走分段写 run 路径（标题 numbering 前缀为首段），无占位符段落保持既有单次写入（产物逐字节不变）
+
+> 📝 **Word 写作能力 Round 45：交叉引用占位符**（方案 `docs/plans/2026-09-18_r45-cross-ref-plan.md`）
+
+### Added(office)
+- **`{{fig:图题注}}` / `{{tbl:表题注}}` 交叉引用占位符**：段落文本按题注文本引用插图/表格，生成时替换为"图N"/"表N"——LLM 不必猜编号，插图增删自动重排；未匹配题注即生成失败（fail-fast，与 citations 同哲学）
+- **题注编号映射前置**：编号映射与 R42 图/表目录条目共用同一来源，正文题注/目录条目/交叉引用三处编号严格一致
+- **`cross_ref/residue` lint 规则**：正文残留未解析占位符（手工编辑/外部导入）→ error 提示
+
+> 🧹 **Word 写作能力 Round 44：lint 面补强——index 域在位校验**（方案 `docs/plans/2026-09-18_r44-lint-index-plan.md`）
+
+### Added(office)
+- **`figure_index/presence` / `table_index/presence` lint 规则**：format_spec 声明了图/表目录即校验文档存在对应 `TOC \c` 域（字面"图N"文本不算——必须是 Word 可收录的域形态）
+- **toc/presence 精度修复**：TOF 的 instr 同含 "TOC" 前缀，目录域检测排除 `\c` 载体，R42 引入 TOF 后不再误满足
+- **lint schema 可检查子集白名单**：toc/figure_index/table_index 进 lint 工具 schema；对偶测试锁"声明=有规则的子集且 ⊆ 模型字段"
+
+> 🧹 **Word 写作能力 Round 43：office_create schema 漂移卫生修复**（方案 `docs/plans/2026-09-18_r43-schema-drift-plan.md`）
+
+### Fixed(office)
+- **schema 可发现化缺口**：format_spec 补 `toc`（R13 交付却从未进 LLM schema）与 `section_breaks`（R26 同病）声明——目录域与分节横排能力对模型可见；types.ts 补 `WordSectionBreakSpec` 接口与字段
+- **防漂移门禁**：新增对偶测试——工具 schema format_spec 属性集合与 WordFormatSpec 模型字段全等、types.ts 接口覆盖模型全部字段，今后单侧加字段即 CI 红
+
+> 📝 **Word 写作能力 Round 42：图目录/表目录（TOF 域 + SEQ 题注升级）**（方案 `docs/plans/2026-09-18_r42-caption-index-plan.md`）
+
+### Added(office)
+- **题注编号 SEQ 域化**：add_caption 的"图N/表N"编号改为 SEQ 复杂域（缓存编号显示不变）——Word 语义上成为可收录的题注条目，python-docx 回读文本与 lint 规则零改动
+- **`figure_index` / `table_index`**（format_spec 新增，WordIndexSpec）：插入图/表目录 TOF 域（`TOC \c`），缓存条目按正文编号顺序预收集（无题注不占号口径一致），各占一页；生成时带 `refresh_toc: true` 或事后 office_refresh_toc/office_update 刷新即得真页码
+- **COM 刷新扩展**：TOC 之外追加 Fields.Update（SEQ 重编号 + TOF 收录一次完成），纯 TOF 文档也落盘
+- **lint 兼容**：目录/图目录缓存行不再误判为题注重复（fldChar begin/end 之间的缓存段跳过 caption/sequence 规则）
+
+> 📝 **Word 写作能力 Round 41：office_update 修订后 TOC 刷新**（方案 `docs/plans/2026-09-18_r41-update-toc-refresh-plan.md`）
+
+### Added(office)
+- **`office_update` 新增 `refresh_toc` 标志**（word 专用）：修订成功后立即用 Word COM 刷新目录域为真页码——增删段落后的页码漂移一次性修复；doc_id 受管路径 upfront 非 word 守卫（修订尚未发生即拒绝，语义准确），file_path 路径同口径
+- **降级契约**：刷新失败/不可用时修订保持 success=True，仅附加 `toc_refresh: {ok: false, error}` 说明（与 R40 生成侧同口径）
+- **横排宽表场景文档（搭车）**：report-writing 技能补 R37 `section_breaks` 分节横排说明与组合示例（技能正文可发现化缺口）
+
+> 📝 **Word 写作能力 Round 40：office_create 一键 TOC 刷新**（方案 `docs/plans/2026-09-18_r40-create-toc-refresh-plan.md`）
+
+### Added(office)
+- **`office_create` 新增 `refresh_toc` 标志**（word 专用）：生成成功后立即用 Word COM 把目录域刷新为真页码并原地保存——带目录报告一步到位，省一次 LLM 往返；受管/legacy 双路径接线，受管路径维持「不回显绝对路径」不变式；非 word 传参显式报错（strict）
+- **降级契约**：Word COM/pywin32 不可用时生成照常成功，结果附加 `toc_refresh: {ok: false, error}` 安装引导说明，绝不因刷新失败回滚已落盘文档
+
+### Fixed(test)
+- **rollback 遥测测试竞态修复（搭车，test-only）**：`updateManager.test.ts` 的 fetch 断言包进 `vi.waitFor`——`rollback()` 刻意 fire-and-forget 发遥测，立即断言与微任务调度存在竞态（R38 轮 CI 实际 flake 一次）
+
+> 📝 **Word 写作能力 Round 39：目录真页码（Word COM 刷新域可选通道）**（方案 `docs/plans/2026-09-18_r39-toc-page-refresh-plan.md`）
+
+### Added(office)
+- **`office_refresh_toc` 工具**：把托管 .docx 的 TOC 域经 Word COM 刷新为真页码并落盘（TablesOfContents 逐个 Update + Save）——R29 静态缓存目录打开即真页码，无需用户手动 F9；WRITE_LOCAL 审批 + 工作区围栏，writer/primary 白名单可见
+- **降级契约**：无 Word/pywin32 时返回带安装引导的失败（`pip install pywin32` 或 Word 内 Ctrl+A → F9），绝不抛异常、绝不泄漏 WINWORD.EXE（finally Close/Quit + AutomationSecurity=3 禁宏）
+- **pywin32 进 requirements-optional.txt**（懒加载，与 Word COM 导出 PDF 共用通道；win7 手动启用钉 306）
+- report-writing 技能交付步骤接入刷新通道，并补上 R36 Word 表头行样式 header_style 的文档（搭车）
+
 ### Changed(web-access)
 - **搜索指标（S1）**：WebSearchTool 串行路径逐引擎埋点——伪域 `search:<engine>`，请求成功即 ok（0 条结果按 Round 9 口径仍 ok）、异常记 fail；并行聚合模式暂不埋点（串行为默认路径）
 - **指标 UI（U1）**：设置页指标区块加"刷新"与"重置"（PUT /web-access/metrics/reset）按钮
