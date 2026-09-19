@@ -301,20 +301,56 @@ class Planner:
         request: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """Build the JSON-DAG decomposition prompt."""
-        context_str = json.dumps(context, indent=2, ensure_ascii=False) if context else "None"
+        """Build the JSON-DAG decomposition prompt.
+
+        计划前置 (2026-09-19): context 支持两个具名键（由
+        ``plan_preflight.run_plan_preflight`` 注入），以独立区块渲染并附
+        拆解约束，其余键维持原样 JSON dump：
+
+        - ``clarifications``: List[str] —— 用户澄清结论，拆解必须遵守；
+        - ``scout_facts``: str —— 只读侦察员产出的事实清单，拆解的依据。
+        """
+        clarifications: List[str] = []
+        scout_facts = ""
+        rest: Dict[str, Any] = {}
+        if isinstance(context, dict):
+            for key, value in context.items():
+                if key == "clarifications" and isinstance(value, list):
+                    clarifications = [str(item) for item in value if str(item).strip()]
+                elif key == "scout_facts" and isinstance(value, str) and value.strip():
+                    scout_facts = value.strip()
+                else:
+                    rest[key] = value
+
+        sections: List[str] = []
+        if scout_facts:
+            sections.append(f"侦察发现（只读侦察员产出，拆解的事实依据）:\n{scout_facts}")
+        if clarifications:
+            bullets = "\n".join(f"- {item}" for item in clarifications)
+            sections.append(f"用户澄清结论（必须遵守，不得偏离）:\n{bullets}")
+        if rest:
+            sections.append(f"其他上下文: {json.dumps(rest, indent=2, ensure_ascii=False)}")
+        context_str = "\n\n".join(sections) if sections else "None"
+
+        extra_rule = ""
+        if clarifications:
+            extra_rule = (
+                "\n5. 用户澄清结论必须反映到相关任务的 description 中"
+                "（范围/格式/验收标准），不得偏离。"
+            )
 
         return f"""You are a task planning assistant. Decompose the following goal into a directed acyclic graph of tasks.
 
 Goal: {request}
 
-Context: {context_str}
+Context:
+{context_str}
 
 Instructions:
 1. Break the goal into discrete, actionable tasks (at most {MAX_PLAN_TASKS}).
 2. Express dependencies via "depends_on" referencing earlier task ids only.
 3. Use "agent_hint" to suggest an executor role (e.g. researcher, coder, memory_manager) or omit.
-4. Keep titles short; descriptions carry the detail.
+4. Keep titles short; descriptions carry the detail (做什么 / 涉及对象 / 预期产出).{extra_rule}
 
 Output format — return ONLY valid JSON, no markdown fences, no extra text:
 {{

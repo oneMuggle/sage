@@ -644,3 +644,60 @@ async def test_override_path_skips_decompose_and_preserves_task_id():
     assert tp_event["queued"] == 1
     # override 也算 multi：dispatch 工具必注册
     assert "dispatch_subagents" in registered_tools
+
+
+@pytest.mark.asyncio()
+async def test_multi_mode_passes_preflight_context_to_planner(monkeypatch):
+    """计划前置 (2026-09-19, plan_preflight): preflight 产出必须作为 context
+    透传 ``decompose_request``（侦察事实 + 澄清结论 → 拆解依据）。"""
+    preflight_context = {
+        "clarifications": ["问: 交付格式？\n用户已回答:\n- Markdown 文档"],
+        "scout_facts": "1. 工作区含 backend/ 目录",
+    }
+
+    async def fake_preflight(message, emit=None):
+        return preflight_context
+
+    captured: dict = {}
+    inner_decompose = _mock_plan()
+
+    async def _decompose_capture(message, context=None):
+        captured["context"] = context
+        return await inner_decompose(message, context)
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="汇总完成")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: None}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch("backend.orchestration.planner.Planner") as MockPlanner:
+            MockPlanner.return_value.decompose_request = _decompose_capture
+            with patch(
+                "backend.orchestration.plan_preflight.run_plan_preflight",
+                fake_preflight,
+            ):
+                async with httpx.AsyncClient(
+                    transport=ASGITransport(app=app), base_url="http://test"
+                ) as ac:
+                    events = await _stream_events(
+                        ac,
+                        {
+                            "session_id": "s",
+                            "message": "搜集量化交易资料并整理学习指南",
+                            "orchestration_mode": "force_multi",
+                        },
+                    )
+
+    states = [e["state"] for e in events]
+    assert "task_plan" in states, f"multi 必出 task_plan: {states}"
+    assert captured["context"] == preflight_context, (
+        "preflight 产出必须透传 decompose_request 的 context 参数"
+    )

@@ -295,10 +295,16 @@ class SessionUpdate(BaseModel):
 
 #: PM1 (round8): 计划模式 system 指令 —— 只读调研 + 结构化计划产出；
 #: 执行被权限门（per-run READ_ONLY）与指令双重约束，批准后由前端衔接。
+#: 计划前置 Round (2026-09-19): 追加"歧义先澄清"——对照 Claude Code plan
+#: mode，调研之前先把范围/格式/验收标准的歧义问清（≤2 问），未答按合理
+#: 默认并在计划中写明假设。
 _PLAN_MODE_DIRECTIVE = (
 
     "\n\n【计划模式】当前为计划模式：你只能做只读调研（读文件/搜索/列目录等），"
-    "不能写文件、执行命令或出网修改任何状态。请基于调研输出一份结构化执行计划，"
+    "不能写文件、执行命令或出网修改任何状态。"
+    "若目标存在会显著影响方案的歧义（范围/交付格式/验收标准），先用 "
+    "ask_user_question 向用户澄清（至多 2 个问题）；用户未回答则按合理默认值"
+    "执行，并在计划中写明关键假设。请基于调研输出一份结构化执行计划，"
     "格式：\n## 目标\n## 分步计划\n（每步：做什么 / 涉及哪些文件或命令 / 预期结果）\n"
     "## 验收标准\n## 风险与注意\n计划要具体到可直接执行。用户批准计划后，"
     "你将在后续消息中被要求严格按计划执行——本轮不要尝试执行任何计划步骤。"
@@ -2453,11 +2459,23 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 llm_client=build_llm_client_from_settings(),
                             ).decompose_from_template(template_id, data.message)
                         else:
+                            # 计划前置 (2026-09-19, docs/plans/2026-09-19_
+                            # orch-plan-preflight-plan.md): 拆解前先澄清需求
+                            # （QuestionGate 结构化提问）+ 只读侦察（事实清单），
+                            # 产出注入 planner context。内部任何失败降级为
+                            # None —— 等价于现状 decompose_request(message)。
+                            from backend.orchestration.plan_preflight import (
+                                run_plan_preflight,
+                            )
+
+                            preflight_context = await run_plan_preflight(
+                                data.message, emit=entry.queue.put
+                            )
                             plan = await Planner(
                                 task_registry=TaskRegistry(),
                                 team_registry=TeamRegistry(),
                                 llm_client=build_llm_client_from_settings(),
-                            ).decompose_request(data.message)
+                            ).decompose_request(data.message, context=preflight_context)
                         plan_tasks = list(plan.tasks if plan else [])
                     except Exception as exc:  # noqa: BLE001 — 模板/规划失败降级 single
                         if template_id is not None:
