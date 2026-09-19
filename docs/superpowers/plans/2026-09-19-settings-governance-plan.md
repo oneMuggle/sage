@@ -531,7 +531,7 @@ git add src/entities/setting/__tests__ src/pages/settings/__tests__ docs/user-ma
 - [x] No credentials appear in registry labels, search entries, summaries, or docs.
 - [x] `git diff --check` succeeds.
 - [x] Unrelated pre-existing changes were kept outside this worktree.
-- [ ] Run code review on the complete diff before declaring completion.
+- [x] Run code review on the complete diff before declaring completion (first review completed; HIGH findings fixed and verified).
 
 ## Execution Status
 
