@@ -11,6 +11,7 @@ import { orchRunClient } from '../../../shared/api/orchRunClient';
 import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
 
 import { SubagentDetailDrawer } from './SubagentDetailDrawer';
+import { buildTaskTree, descendantsOf, flattenTree } from './taskTree';
 
 // BU13 (round24): 徽章数值格式化 —— token ≥1k 显 k（1 位小数去尾 0），
 // 时长 <1s 显 ms，其余显秒（1 位小数）。纯展示，不做四舍五入承诺。
@@ -68,8 +69,7 @@ export function TaskTreeSection({
   onRetryTask,
 }: TaskTreeSectionProps) {
   // BU16 (round30): run 起始时刻与墙钟上限（round25 设置键；未设置 = 0 不提示）。
-  const runWallClockLimitMinutes =
-    useSettings().settings.orch?.runWallClockLimitMinutes ?? 0;
+  const runWallClockLimitMinutes = useSettings().settings.orch?.runWallClockLimitMinutes ?? 0;
   const runStartedAt = board.dispatchedAt ?? null;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectTask = useRunControlStore((s) => s.selectTask);
@@ -78,9 +78,7 @@ export function TaskTreeSection({
   const [skipping, setSkipping] = useState<ReadonlySet<string>>(new Set());
   // live-events P1: run 级审批模式开关（乐观更新，后端 approval_mode 事件
   // 回显为准；失败回滚到 board 上的值）。
-  const [approvalMode, setApprovalMode] = useState<'ask' | 'auto'>(
-    board.approvalMode ?? 'ask',
-  );
+  const [approvalMode, setApprovalMode] = useState<'ask' | 'auto'>(board.approvalMode ?? 'ask');
   const [approvalPending, setApprovalPending] = useState(false);
 
   const toggleApprovalMode = () => {
@@ -170,6 +168,30 @@ export function TaskTreeSection({
     return () => clearInterval(timer);
   }, [hasRunning, inFlightTasks]);
 
+  // 任务层级（spec 2026-09-19）：把平铺计划索引成树，支持缩进与折叠。
+  // 旧计划（无 parent_task_id）全部为根 → 渲染结果与既有平铺一致。
+  const treeIndex = useMemo(() => buildTaskTree(board.plan), [board.plan]);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const visibleRows = useMemo(() => {
+    const hidden = new Set<string>();
+    for (const taskId of collapsed) {
+      for (const descendant of descendantsOf(treeIndex, taskId)) {
+        hidden.add(descendant);
+      }
+    }
+    // flattenTree 自带 visited 守卫（父链成环时不会无限递归）。
+    return flattenTree(treeIndex).filter((node) => !hidden.has(node.item.task_id));
+  }, [treeIndex, collapsed]);
+
+  const toggleCollapsed = (taskId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-1" data-testid="task-tree">
       {!allDone && (
@@ -252,7 +274,7 @@ export function TaskTreeSection({
             : `⚠ 复核存疑（${board.review.assertion_count} 项断言）：${board.review.summary}`}
         </div>
       )}
-      {board.plan.map((item) => {
+      {visibleRows.map(({ item, depth, childIds }) => {
         const st = board.statuses[item.task_id];
         const status: TaskStatusValue = st?.status ?? 'queued';
         const preview = st?.output_preview ?? st?.error ?? null;
@@ -262,10 +284,14 @@ export function TaskTreeSection({
         // P1-6 (2026-08-14): depends_on 透传 —— 有依赖的任务缩进 + 标记行。
         const dependsOn = item.depends_on ?? [];
         const hasDeps = dependsOn.length > 0;
+        const hasChildren = childIds.length > 0;
+        const isCollapsed = collapsed.has(item.task_id);
         return (
           <div
             key={item.task_id}
             data-testid={`task-tree-item-${item.task_id}`}
+            data-depth={depth}
+            style={depth > 0 ? { paddingLeft: depth * 16 } : undefined}
             className={`flex flex-col gap-1 px-2 py-1 rounded text-xs bg-bg-hover cursor-pointer hover:bg-bg-active transition-colors ${
               hasDeps ? 'ml-4' : ''
             }`}
@@ -288,6 +314,23 @@ export function TaskTreeSection({
               </div>
             )}
             <div className="flex items-center gap-2">
+              {/* 任务层级（spec 2026-09-19）：有子任务时提供折叠/展开入口。
+                  stopPropagation 防止触发整行 Drawer 点击。 */}
+              {hasChildren && (
+                <button
+                  type="button"
+                  data-testid={`task-tree-toggle-${item.task_id}`}
+                  aria-label={isCollapsed ? `展开 ${item.goal}` : `折叠 ${item.goal}`}
+                  aria-expanded={!isCollapsed}
+                  className="w-3 text-[10px] text-text-tertiary hover:text-text-secondary shrink-0"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleCollapsed(item.task_id);
+                  }}
+                >
+                  {isCollapsed ? '▶' : '▼'}
+                </button>
+              )}
               <span title={STATUS_TITLE[status]} className="w-4 text-center">
                 {STATUS_ICON[status]}
               </span>
@@ -357,6 +400,19 @@ export function TaskTreeSection({
                   {(st?.duration_ms ?? 0) > 0 && formatDuration(st!.duration_ms!)}
                 </span>
               ) : null}
+              {/* RD18 (round33): 级联跳过根因徽章 —— 上游失败导致本任务
+                  未启动即置 failed（error 前缀 blocked_by_failed:<root>），
+                  行内直读根因，不必开 Drawer 翻原始文本。 */}
+              {status === 'failed' && st?.error?.startsWith('blocked_by_failed:') && (
+                <span
+                  data-testid={`task-tree-blocked-${item.task_id}`}
+                  title={st.error}
+                  className="text-text-tertiary text-[10px] shrink-0"
+                >
+                  因 {st.error.slice('blocked_by_failed:'.length).split(',').join('、')}{' '}
+                  失败级联跳过
+                </span>
+              )}
               {/* RD13+ (round15): 重派徽章 —— retry_of 重派的任务可追溯 */}
               {st?.retry_of && (
                 <span
@@ -365,6 +421,19 @@ export function TaskTreeSection({
                   className="text-primary text-[10px] shrink-0"
                 >
                   重派
+                </span>
+              )}
+              {/* RP1 (round34, 2026-09-19): 已调整徽章 —— conductor 在 run 中
+                  改过目标 / 新增 / 取消过该任务时携带，用户可追溯哪些任务偏离
+                  了初始计划（与"重派"徽章区分：重派是同任务重做，已调整是计划
+                  本身被改）。 */}
+              {st?.adjusted && (
+                <span
+                  data-testid={`task-tree-adjusted-${item.task_id}`}
+                  title="该任务的计划由 AI 在执行过程中调整"
+                  className="text-warning text-[10px] shrink-0"
+                >
+                  已调整
                 </span>
               )}
             </div>
@@ -399,7 +468,13 @@ export function TaskTreeSection({
                   {recentEvents.map((evt, idx) => (
                     <li key={`${evt.ts ?? idx}-${idx}`} className="truncate">
                       <span className="text-text-tertiary">
-                        {evt.ts ? new Date(evt.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}
+                        {evt.ts
+                          ? new Date(evt.ts).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                            })
+                          : ''}
                       </span>{' '}
                       {evt.phase === 'approval_requested'
                         ? `⏳ 等待审批: ${evt.tool_name ?? 'tool'}`

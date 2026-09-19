@@ -11,7 +11,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from backend.data.orchestration_repo import LaneEventRepository
+from backend.data.orch_lane_repo import OrchLaneEventRepository
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.task_registry import TaskRegistry
 
@@ -46,7 +46,7 @@ def _seed_lane(worktree=None, status: str = "succeeded"):
         name="t1", description="d", task_type="general"
     )
     reg = LaneRegistry()
-    # worktree 必须在 create 时传入——LaneRepository.update 不落 worktree 列
+    # worktree 必须在 create 时传入——OrchLaneRepository.update 不落 worktree 列
     # （与 dispatcher 建 lane 时预置 worktree 的生产路径一致）。
     lane = reg.create_lane(
         task_id=task.task_id,
@@ -64,7 +64,7 @@ def _seed_lane(worktree=None, status: str = "succeeded"):
 
 
 def _events_for(lane_id: str):
-    return LaneEventRepository().list_by_lane(lane_id)
+    return OrchLaneEventRepository().list_by_lane(lane_id)
 
 
 class TestDecisionRoute:

@@ -86,6 +86,9 @@ def _run_detail(run: OrchRun) -> OrchRunDetail:
             # RT24 (round32): 任务级用量/时长 —— 终态落库值，历史回看可见。
             "used_tokens": getattr(t, "used_tokens", None),
             "duration_ms": getattr(t, "duration_ms", None),
+            # 任务层级：历史回放需返回父子与深度（spec 2026-09-19）。
+            "parent_task_id": getattr(t, "parent_task_id", None),
+            "depth": getattr(t, "depth", 0),
         }
         for t in task_repo.list_by_run(run.run_id)
     ]
@@ -248,6 +251,14 @@ def rerun_failed(
         deps = item.get("depends_on")
         if isinstance(deps, list) and deps:
             entry["depends_on"] = [str(d) for d in deps]
+        # 重跑保留层级（spec 2026-09-19）：否则重跑后的任务树退化为平铺。
+        if item.get("parent_task_id"):
+            entry["parent_task_id"] = str(item["parent_task_id"])
+        if item.get("depth") is not None:
+            try:
+                entry["depth"] = max(0, int(item["depth"]))
+            except (TypeError, ValueError):
+                entry["depth"] = 0
         if status == "done":
             entry["preset_output"] = (
                 str(task.get("output_preview") or "").strip()
@@ -476,9 +487,10 @@ _PLAN_ITEMS_PROMPT = """你是编排计划结构化助手。以下是一份用�
 1. 每个任务的 description 必须自包含——执行者只能看到它，看不到本计划全文；把该步骤做什么/涉及对象/预期产出写清楚，并给出可检验的完成定义（验收标准）。
 2. agent_hint 从这些角色中选最合适的一个（无法确定则省略）: researcher / coder / writer / reviewer / memory_manager
 3. depends_on 只引用更早任务的 id（t1、t2…）；任务总数不超过 {max_tasks} 个。
+4. 可选 parent_task_id 表示所属父任务，只引用更早任务的 id；它只影响归属和展示，不创建执行依赖。
 
 只返回 JSON（无 markdown 围栏、无多余文本）:
-{{"tasks": [{{"id": "t1", "title": "短标题", "description": "自包含目标", "depends_on": [], "agent_hint": "researcher"}}], "reasoning": "拆解策略说明"}}"""
+{{"tasks": [{{"id": "t1", "title": "短标题", "description": "自包含目标", "depends_on": [], "parent_task_id": null, "agent_hint": "researcher"}}], "reasoning": "拆解策略说明"}}"""
 
 
 class PlanItemsRequest(BaseModel):
@@ -490,6 +502,9 @@ class PlanItem(BaseModel):
     agent_id: str
     goal: str
     depends_on: List[str] = Field(default_factory=list)
+    # 任务层级（spec 2026-09-19）：parent 只表达归属，不参与调度。
+    parent_task_id: Optional[str] = None
+    depth: Optional[int] = None
 
 
 class PlanItemsResponse(BaseModel):
@@ -568,12 +583,19 @@ async def plan_items(body: PlanItemsRequest) -> PlanItemsResponse:
         )
     tasks, reasoning = parsed
 
+    # 占位符 → 计划项编号（sanitize 保证父级只引更早任务）。
+    _id_by_placeholder = {
+        task["_placeholder"]: f"t{index}" for index, task in enumerate(tasks, 1)
+    }
     items = [
         PlanItem(
             task_id=f"t{index}",
             agent_id=task["parameters"].get("agent_hint", "primary"),
             goal=task["description"],
             depends_on=placeholder_deps_to_ids(task["blocked_by"]),
+            parent_task_id=_id_by_placeholder.get(
+                task.get("_parent_placeholder") or ""
+            ),
         )
         for index, task in enumerate(tasks, 1)
     ]
