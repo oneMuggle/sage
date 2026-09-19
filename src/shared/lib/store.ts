@@ -132,10 +132,21 @@ export function mergeLoadedMessages(
     const key = `${m.role}\u0000${m.content}`;
     serverKeyCount.set(key, (serverKeyCount.get(key) ?? 0) + 1);
   }
+  // R38 (2026-09-18): 压缩通知单独去重。本地合成的即时通知是 role=system，
+  // 持久化的续接摘要行是 role=assistant 且 content 是 LLM 写的摘要 ——
+  // (role, content) 双双不同，上面的计数去重无法命中，同一压缩会留下两条
+  // 通知。改为按 compact_info 深度相等剔除本地那条。
+  const serverCompactKeys = new Set(
+    sessionMessages.filter((m) => m.compact_info).map((m) => JSON.stringify(m.compact_info)),
+  );
   const mergedMessages = [
     ...sessionMessages,
     ...localMessages.filter((message) => {
       if (message.session_id !== sessionId || loadedIds.has(message.id)) return false;
+      // R38: 本地合成压缩通知与持久化续接行按 compact_info 去重
+      if (message.compact_info && serverCompactKeys.has(JSON.stringify(message.compact_info))) {
+        return false;
+      }
       const key = `${message.role}\u0000${message.content}`;
       const remaining = serverKeyCount.get(key) ?? 0;
       if (remaining > 0) {
