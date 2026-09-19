@@ -20,7 +20,7 @@ import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from backend.data.database import get_database
 from backend.domain.orch_events import RunEvent, make_event
@@ -170,6 +170,49 @@ class ChatTaskState:
     # live-events P0: 派发本次批次的 conductor 工具调用 ID —— 前端聊天流内
     # 把 subagent_event 实时步骤关联到 "Delegate <goal>" 卡片的关联键。
     parent_tool_call_id: Optional[str] = None
+    # Round 4 (2026-09-19, orch-acceptance-review-plan): 自动验收摘要
+    # （executor 回传：{"all_passed": bool, "checks": [...]}）。None = 未跑
+    # 验收（disabled / reviewer lane）。advisory 语义不变：不翻转任务结论。
+    acceptance: Optional[Dict[str, Any]] = None
+
+
+def build_acceptance_block(states: Iterable[ChatTaskState]) -> str:
+    """Round 4 (2026-09-19): 子任务验收摘要 → reviewer 输入区块。
+
+    - 无任何验收记录（disabled / reviewer lane / 旧结果）→ 空串，
+      review 目标与现状完全一致；
+    - 有记录 → 头部统计 + 未通过明细行（task_id + check 名 + 摘要截断）；
+    - 纯展示层组装，不做任何裁决（verdict 仍由 reviewer assertions 决定）。
+    """
+    entries: List[Tuple[str, Dict[str, Any]]] = []
+    for state in states:
+        acc = getattr(state, "acceptance", None)
+        if isinstance(acc, dict) and acc.get("checks"):
+            entries.append((getattr(state, "task_id", "?"), acc))
+    if not entries:
+        return ""
+    failed_lines: List[str] = []
+    failed_tasks = 0
+    for task_id, acc in entries:
+        failed = [
+            c for c in acc.get("checks", [])
+            if isinstance(c, dict) and not c.get("passed") and not c.get("skipped")
+        ]
+        if not failed:
+            continue
+        failed_tasks += 1
+        detail = "; ".join(
+            f"{c.get('name', 'check')}（{(c.get('summary') or '')[:120]}）"
+            for c in failed
+        )
+        failed_lines.append(f"- [{task_id}] 验收未通过：{detail}")
+    header = (
+        f"本轮 {len(entries)} 个子任务执行了自动验收检查，"
+        f"其中 {failed_tasks} 个存在未通过项。"
+    )
+    lines = ["## 验收检查结果", "", header]
+    lines.extend(failed_lines)
+    return "\n".join(lines)
 
 
 # P2-9 (2026-08-14): 进程内活动 dispatcher 注册表 —— 供 run 级 cancel 端点
@@ -954,7 +997,12 @@ class ChatDispatcher:
             if plan_covered:
                 self._reviewed = True
                 try:
-                    review = await self._run_review(aggregated)
+                    # Round 4 (2026-09-19): 验收检查结果注入 reviewer 输入
+                    # （advisory → 经 NEGATIVE_EVIDENCE 规则联动 verdict）。
+                    acceptance_block = build_acceptance_block(states)
+                    review = await self._run_review(
+                        aggregated, acceptance_block=acceptance_block
+                    )
                     aggregated = aggregated + review["block"]
                     # A4：verdict 写回各子 lane + review lane 自身 metadata，
                     # 交付抽屉经 listLanes 直接展示（review.submitted 事件只
@@ -1151,6 +1199,10 @@ class ChatDispatcher:
 
         # 重试信息回填 state → task_status 事件携带
         state.retry_count = lane.metadata.get("retry_count", 0) if lane.metadata else 0
+        # Round 4 (2026-09-19): 验收摘要回填 → 聚合时注入 reviewer 输入。
+        raw_acceptance = result.get("acceptance")
+        if isinstance(raw_acceptance, dict):
+            state.acceptance = raw_acceptance
         if result.get("status") == "failed":
             raise RuntimeError(result.get("error", "subtask failed"))
         if result.get("status") != "succeeded":
@@ -1668,11 +1720,18 @@ class ChatDispatcher:
 
         return parse_assertions(raw)
 
-    async def _run_review(self, aggregated: str) -> dict:
-        """P0-2 验证环 —— 委托 review.run_review（Wave 3 B1 提取，行为不变）。"""
+    async def _run_review(
+        self, aggregated: str, acceptance_block: str = ""
+    ) -> dict:
+        """P0-2 验证环 —— 委托 review.run_review（Wave 3 B1 提取，行为不变）。
+
+        Round 4 (2026-09-19): ``acceptance_block`` 非空时注入 reviewer 目标
+        （验收检查结果 + NEGATIVE_EVIDENCE 裁决指令）。
+        """
         from backend.orchestration.review import run_review
 
         return await run_review(
+            acceptance_block=acceptance_block,
             run_id=self.run_id,
             aggregated=aggregated,
             task_registry=self.task_registry,
