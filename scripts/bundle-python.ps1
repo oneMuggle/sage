@@ -195,6 +195,17 @@ if (Test-Path $SageCoreSource) {
         $CompileScript = Join-Path $PSScriptRoot "compile-sage-core.py"
         & $PythonExe $CompileScript build_ext --inplace
         if ($LASTEXITCODE -ne 0) { throw "Cython compilation for sage_core failed with exit code $LASTEXITCODE" }
+        # Diagnostics: .pyd must land inside the source tree. If compile-sage-core.py
+        # resolves `sage_core` as a top-level package (missing package_dir), the .pyd
+        # land at <repo>/sage_core/ instead and the copy below silently ships a
+        # package with __init__.py but no compiled modules — surfacing only at
+        # end-user startup as `ModuleNotFoundError: No module named 'sage_core.entities.agent'`.
+        $SageCorePkgCheck = Join-Path $SageCoreSource "sage_core"
+        $pydFiles = Get-ChildItem -Path $SageCorePkgCheck -Recurse -Filter "*.pyd" -ErrorAction SilentlyContinue
+        if ($pydFiles.Count -eq 0) {
+            throw "Cython build produced no .pyd files under $SageCorePkgCheck. Check compile-sage-core.py package_dir."
+        }
+        Write-Host "🛡️ Cython produced $($pydFiles.Count) .pyd files." -ForegroundColor Green
         # electron-builder's extraResources still lists resources/sage-core, so the
         # directory must exist — keep it empty rather than mirroring .py source.
         New-Item -ItemType Directory -Force -Path $SageCoreDest | Out-Null
