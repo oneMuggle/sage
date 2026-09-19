@@ -485,6 +485,25 @@ class ChatService:
             {"session_id": session_id},
         )
 
+        # 5.5) Repeated Pattern Signal (2026-09-14): 检测当前会话是否
+        #      出现了同一工具签名的重复调用（>= 3 次）。命中则入队
+        #      ``repeated_pattern`` review event, 由后台 worker 起草 skill.
+        #      best-effort：异常仅 logger.debug, 不影响 chat 主路径.
+        #      复用 history + 当前 response (line 277-280 已加载 history),
+        #      不额外查 DB.
+        try:
+            from backend.skills.repeated_pattern_signal import (
+                detect_and_enqueue as _detect_repeated_pattern,
+            )
+
+            _detect_repeated_pattern(
+                session_id=session_id,
+                history_messages=[*history, response],
+                span=span,
+            )
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.debug(f"Repeated pattern signal skipped: {exc}")
+
         # 6) 埋点：token 消耗（9 指标之一）— 仅在响应携带 usage 时记录
         # MetricPort 的 counter 只能 inc(1)；此处用 Counter 表示
         # "至少发生了一次 token 消耗" 的事件计数。精确的 token 总数
