@@ -31,6 +31,7 @@ import type {
   OfficePptReadResult,
   OfficeWordReadResult,
 } from '../../../shared/api/types';
+import { langFromPath } from '../../../shared/lib/fileLang';
 import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
 import { VersionHistory } from './VersionHistory';
@@ -51,47 +52,9 @@ const EDITABLE_KINDS: ReadonlySet<ArtifactKind> = new Set([
 ]);
 
 // right-panel R2 批次 A: 常用扩展名 → Shiki 语言（未识别回落纯文本 pre）
-const EXT_LANG: Record<string, string> = {
-  py: 'python',
-  ts: 'typescript',
-  tsx: 'typescript',
-  js: 'javascript',
-  jsx: 'javascript',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  json: 'json',
-  jsonc: 'json',
-  md: 'markdown',
-  markdown: 'markdown',
-  sh: 'bash',
-  bash: 'bash',
-  rs: 'rust',
-  go: 'go',
-  java: 'java',
-  kt: 'kotlin',
-  c: 'c',
-  h: 'c',
-  cpp: 'cpp',
-  hpp: 'cpp',
-  cs: 'csharp',
-  rb: 'ruby',
-  php: 'php',
-  sql: 'sql',
-  yaml: 'yaml',
-  yml: 'yaml',
-  toml: 'toml',
-  css: 'css',
-  scss: 'scss',
-  html: 'html',
-  xml: 'xml',
-  vue: 'vue',
-  swift: 'swift',
-  dart: 'dart',
-};
-
+// R6: 映射表上抬至 shared/lib/fileLang（变更面板预览共用），此处仅引用
 function langFromName(name: string): string | undefined {
-  const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
-  return EXT_LANG[ext];
+  return langFromPath(name);
 }
 
 /** R2 批次 A: markdown 产物渲染视图 —— 与消息流同口径（gfm + math + Shiki 代码块） */

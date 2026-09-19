@@ -346,6 +346,15 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       return `/api/v1/sessions/${sessionId}/workspace/changes/diff?path=${path}&staged=${staged}`;
     },
   },
+  // right-panel R6: 变更面板"预览"视图 —— 工作区文件内容只读
+  workspace_get_change_file: {
+    method: 'GET',
+    path: (a) => {
+      const sessionId = encodeURIComponent(String(a.sessionId));
+      const path = encodeURIComponent(String(a.path ?? ''));
+      return `/api/v1/sessions/${sessionId}/workspace/changes/file?path=${path}`;
+    },
+  },
   // U19 变更面板可操作化 (对标增强第四轮批次 B): 逐文件/逐 hunk 撤销
   workspace_revert_changes: {
     method: 'POST',
