@@ -8,10 +8,13 @@ claw-code ``rust/crates/runtime/src/hooks.rs`` (PreToolUse / PostToolUse
 
     {
         "event": "pre_tool_use" | "post_tool_use"
-                 | "user_prompt_submit" | "stop",   # L11 (批次 C-2)
-        "matcher": "tool-name glob",   # 可选, 默认 "*"; 提示词/停止事件
-                                       # 的 matcher 匹配空工具名(即只 "*" 有意义)
-        "command": "shell command",    # 必填; STDIN 收 JSON payload
+                 | "user_prompt_submit" | "stop",
+        "matcher": "tool-name glob",   # 可选, 默认 "*"
+        "command": "shell command",    # hook_type="shell" 时必填
+        "hook_type": "shell" | "python",  # 可选, 默认 "shell"
+        "handler": "dotted.path.func", # hook_type="python" 时必填
+        "builtin_id": "security_guard",  # 可选, 内置钩子标识
+        "config": {...},               # 可选, 内置钩子参数覆盖
         "timeout_seconds": 10          # 可选, 默认 10
     }
 
@@ -22,14 +25,15 @@ claw-code ``rust/crates/runtime/src/hooks.rs`` (PreToolUse / PostToolUse
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import Any, List
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
 # L11 (批次 C-2): 新增 user_prompt_submit(提示词提交, deny 可拦截消息)
 # 与 stop(run 结束通知, observe-only)。
 HOOK_EVENTS = ("pre_tool_use", "post_tool_use", "user_prompt_submit", "stop")
+HOOK_TYPES = ("shell", "python")
 MAX_HOOKS = 20
 DEFAULT_TIMEOUT_SECONDS = 10.0
 _MIN_TIMEOUT_SECONDS = 0.1
@@ -43,12 +47,17 @@ class HookConfigError(ValueError):
 
 @dataclass
 class HookConfig:
-    """一条已校验的用户自定义钩子。"""
+    """一条已校验的钩子 (用户自定义或内置)。"""
 
     event: str
-    command: str
+    command: str = ""
     matcher: str = "*"
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+    # Phase 1 扩展: python 内置钩子
+    hook_type: str = "shell"  # "shell" | "python"
+    handler: str = ""  # python hook 的 dotted path
+    builtin_id: str = ""  # 内置钩子 ID (空 = 用户自定义)
+    config_override: Dict[str, Any] = field(default_factory=dict)  # 内置钩子参数覆盖
 
 
 def _coerce_one(raw: Any, index: int) -> HookConfig:
@@ -60,9 +69,17 @@ def _coerce_one(raw: Any, index: int) -> HookConfig:
     if event not in HOOK_EVENTS:
         raise HookConfigError(f"hooks[{index}].event {event!r} not in {list(HOOK_EVENTS)}")
 
-    command = raw.get("command")
-    if not isinstance(command, str) or not command.strip():
-        raise HookConfigError(f"hooks[{index}].command must be a non-empty string")
+    hook_type = raw.get("hook_type", "shell")
+    if hook_type not in HOOK_TYPES:
+        raise HookConfigError(f"hooks[{index}].hook_type {hook_type!r} not in {list(HOOK_TYPES)}")
+
+    # shell hook: command 必填; python hook: handler 必填
+    command = raw.get("command", "")
+    handler = raw.get("handler", "")
+    if hook_type == "shell" and (not isinstance(command, str) or not command.strip()):
+        raise HookConfigError(f"hooks[{index}].command must be a non-empty string for shell hooks")
+    if hook_type == "python" and (not isinstance(handler, str) or not handler.strip()):
+        raise HookConfigError(f"hooks[{index}].handler must be a non-empty string for python hooks")
 
     matcher = raw.get("matcher", "*")
     if not isinstance(matcher, str) or not matcher.strip():
@@ -77,11 +94,23 @@ def _coerce_one(raw: Any, index: int) -> HookConfig:
     if timeout > MAX_TIMEOUT_SECONDS:
         raise HookConfigError(f"hooks[{index}].timeout_seconds must be <= {MAX_TIMEOUT_SECONDS}")
 
+    builtin_id = raw.get("builtin_id", "")
+    if not isinstance(builtin_id, str):
+        builtin_id = ""
+
+    config_override = raw.get("config", {})
+    if not isinstance(config_override, dict):
+        config_override = {}
+
     return HookConfig(
         event=event,
-        command=command.strip(),
+        command=command.strip() if isinstance(command, str) else "",
         matcher=matcher.strip(),
         timeout_seconds=float(timeout),
+        hook_type=hook_type,
+        handler=handler.strip() if isinstance(handler, str) else "",
+        builtin_id=builtin_id.strip(),
+        config_override=config_override,
     )
 
 
