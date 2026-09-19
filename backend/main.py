@@ -172,6 +172,16 @@ def _shutdown_browser_sessions() -> None:
         logger.warning("浏览器 shutdown failed（异常类型=%s）", type(exc).__name__)
 
 
+def _startup_browser_temp_sweep() -> None:
+    """启动兜底清扫：回收此前进程被硬杀（未走 shutdown）遗留的浏览器临时目录。"""
+    try:
+        from backend.tools.browser_cdp import sweep_stale_browser_dirs
+
+        sweep_stale_browser_dirs()
+    except Exception as exc:  # noqa: BLE001 — 清扫失败不阻断启动
+        logger.warning("浏览器临时目录启动清扫失败（非致命，异常类型=%s）", type(exc).__name__)
+
+
 def _shutdown_repl_cleanups() -> None:
     """在后端退出时尽力清理 REPL 残留资源。"""
     try:
@@ -759,6 +769,10 @@ async def lifespan(app: FastAPI):
         "ChatService 已装配 (runtime 与 hex /chat 共享); API_MODE=%s (路由挂载见模块级常量)",
         API_MODE,
     )
+
+    # 浏览器一次性目录的启动兜底清扫（与下方 _shutdown_browser_sessions 对称）：
+    # 进程被硬杀时 shutdown 钩子不会执行，遗留目录靠下次启动按 mtime 回收。
+    _startup_browser_temp_sweep()
 
     if __name__ == "__main__":
         _elapsed_lifespan = time.monotonic() - _startup_t0

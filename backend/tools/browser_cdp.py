@@ -50,6 +50,12 @@ MAX_BROWSER_SESSIONS = 4
 #: 跳过它 —— 渲染池后台常驻时 browser_snapshot 仍应能免 id 解析用户实例。
 RESERVED_BROWSER_ID = "render-pool"
 
+#: 一次性（非持久）浏览器 user-data-dir 的目录名前缀，启动清扫按此匹配
+EPHEMERAL_PREFIX = "sage_browser_"
+
+#: 启动清扫的默认判龄阈值：24 小时未被写过的临时目录视为孤儿
+SWEEP_MAX_AGE_SECONDS = 24 * 3600.0
+
 #: 启动握手超时（等待 DevToolsActivePort 文件出现）
 LAUNCH_TIMEOUT_SECONDS = 30.0
 
@@ -143,6 +149,16 @@ class BrowserSessionManager:
         self._sessions: Dict[str, BrowserSession] = {}
 
     def register(self, session: BrowserSession) -> None:
+        old = self._sessions.pop(session.browser_id, None)
+        if old is not None and old is not session:
+            # 固定 id 的池并发重建时曾会静默覆盖旧会话对象（连带其临时目录
+            # 永久遗留）——改为显式回收旧实例并留痕。
+            logger.warning(
+                "browser_id 冲突（%s）：回收旧实例 pid=%s",
+                session.browser_id,
+                getattr(old.process, "pid", None),
+            )
+            _terminate_session(old)
         if len(self._sessions) >= MAX_BROWSER_SESSIONS:
             raise BrowserCDPError(
                 f"浏览器实例数已达上限 {MAX_BROWSER_SESSIONS}，请先用 browser_close 关闭"
@@ -175,6 +191,9 @@ class BrowserSessionManager:
             )
         if not session.is_alive():
             self._sessions.pop(session.browser_id, None)
+            # 进程已自行退出（崩溃/用户关窗）：terminate 部分幂等跳过，
+            # 重点是回收其一次性目录，否则永久遗留。
+            _terminate_session(session)
             raise BrowserCDPError("浏览器进程已退出（可能被用户关闭）——请重新 browser_launch")
         return session
 
@@ -217,25 +236,132 @@ def _terminate_session(session: BrowserSession) -> None:
             session.process.kill()
     except OSError as exc:
         logger.warning("browser terminate 失败: %s", exc)
+    # Windows 上 terminate/kill 只作用于父进程；renderer/gpu/network 子进程
+    # 仍持有 user_data_dir 文件句柄，直接 rmtree 会失败 —— 强杀整棵进程树。
+    _kill_process_tree(session.process)
     if getattr(session, "persistent", False):
         return
-    shutil.rmtree(session.user_data_dir, ignore_errors=True)
+    _remove_dir_with_retry(session.user_data_dir)
+
+
+def _kill_process_tree(process: subprocess.Popen) -> None:
+    """Windows：taskkill /T /F 强杀整棵进程树（进程已退出时静默无操作）。
+
+    POSIX 上 Chromium 子进程随父进程退出自行收尾，暂不引入进程组/psutil。
+    """
+    if os.name != "nt":
+        return
+    pid = getattr(process, "pid", None)  # 测试假体可能无 pid
+    if pid is None:
+        return
+    try:
+        subprocess.run(  # noqa: S603 — taskkill 是系统命令，参数均为整数 pid
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        logger.debug("taskkill 进程树失败（忽略）: pid=%s", pid, exc_info=True)
+
+
+def _remove_dir_with_retry(path: str, attempts: int = 5) -> None:
+    """带退避重试删除目录；最终失败留 warning（由启动清扫兜底）。
+
+    不再用 ``ignore_errors=True`` 静默吞错——历史上 38/41 个泄漏目录
+    证明"失败无声"让问题积累数周不可见。
+    """
+    for attempt in range(attempts):
+        try:
+            shutil.rmtree(path)
+            return
+        except FileNotFoundError:
+            return
+        except OSError:
+            if attempt < attempts - 1:
+                time.sleep(0.2 * (attempt + 1))
+    logger.warning("浏览器临时目录清理失败（将由启动清扫兜底）: %s", path)
+
+
+def _data_root() -> Path:
+    """应用数据根：packaged 模式 = %APPDATA%/Sage，开发态 = 项目 ``data/``。"""
+    env_path = os.environ.get("SAGE_DB_PATH")
+    if env_path:
+        return Path(env_path).parent
+    return Path(__file__).parent.parent.parent / "data"
 
 
 def _profiles_root() -> Path:
-    """持久 profile 根目录。
-
-    跟随 ``SAGE_DB_PATH`` 的数据根（packaged 模式 = %APPDATA%/Sage，与
-    Database 同一数据目录）；无该环境变量时退回项目 ``data/`` 目录。
-    """
-    env_path = os.environ.get("SAGE_DB_PATH")
-    if env_path:
-        root = Path(env_path).parent / "browser-profiles"
-    else:
-        base_dir = Path(__file__).parent.parent.parent
-        root = base_dir / "data" / "browser-profiles"
+    """持久 profile 根目录（见 ``_data_root``）。"""
+    root = _data_root() / "browser-profiles"
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _ephemeral_root() -> Path:
+    """一次性浏览器 user-data-dir 根目录。
+
+    与持久 profile 同数据根（E: 盘 / APPDATA），不再挤占 C 盘 %TEMP%；
+    清扫、配额、大小统计都只在这一个目录下进行。
+    """
+    root = _data_root() / "browser-ephemeral"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _dir_is_stale(path: Path, cutoff: float) -> bool:
+    """子树内最大 mtime 早于 cutoff 才算过期；一发现不早于 cutoff 的项即短路。
+
+    不能只看顶层目录 mtime：Windows 上它只在顶层增删条目时更新，而运行中的
+    Chromium 持续写的是深层 cache/leveldb 文件——长活会话会被顶层判龄误删。
+    """
+    try:
+        if path.stat().st_mtime >= cutoff:
+            return False
+        for root, dirs, files in os.walk(path):
+            for name in dirs + files:
+                try:
+                    if (Path(root) / name).stat().st_mtime >= cutoff:
+                        return False  # 仍在被写：非孤儿
+                except OSError:
+                    continue
+    except OSError:
+        return False
+    return True
+
+
+def sweep_stale_browser_dirs(max_age_seconds: float = SWEEP_MAX_AGE_SECONDS) -> int:
+    """启动兜底清扫：删除超龄的浏览器一次性目录，返回回收数。
+
+    进程被硬杀（Electron 退出 kill 后端、开发期重启、崩溃、断电）时进程内
+    清理无法执行，只能靠下一次启动回收。两处都扫：新数据根
+    ``browser-ephemeral/`` 与旧版遗留在 ``%TEMP%`` 的 ``sage_browser_*``。
+
+    只按 **mtime** 判龄（运行中的 profile 持续被写，mtime 恒新），不会误删
+    其他后端实例正在使用的目录。``SAGE_TEMP_PROFILE_SWEEP=0`` 可关闭。
+    幂等，可反复执行；被占用的目录本次删不掉，下次启动再试。
+    """
+    if os.environ.get("SAGE_TEMP_PROFILE_SWEEP", "1") == "0":
+        return 0
+    now = time.time()
+    removed = 0
+    roots = [_ephemeral_root(), Path(tempfile.gettempdir())]
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for candidate in root.glob(f"{EPHEMERAL_PREFIX}*"):
+            if not candidate.is_dir():
+                continue
+            if not _dir_is_stale(candidate, now - max_age_seconds):
+                continue
+            try:
+                shutil.rmtree(candidate)
+                removed += 1
+            except OSError:
+                logger.debug("启动清扫暂无法删除（下次启动重试）: %s", candidate)
+    if removed:
+        logger.info("启动清扫回收 %d 个过期浏览器临时目录", removed)
+    return removed
 
 
 def browser_downloads_root() -> Path:
@@ -331,7 +457,7 @@ def launch_browser(
         profile_dir.mkdir(parents=True, exist_ok=True)
         user_data_dir = str(profile_dir)
     else:
-        user_data_dir = tempfile.mkdtemp(prefix="sage_browser_")
+        user_data_dir = tempfile.mkdtemp(prefix=EPHEMERAL_PREFIX, dir=str(_ephemeral_root()))
     from .http_factory import browser_proxy_flag
 
     command = launcher.build_command(executable, headless, user_data_dir, browser_proxy_flag())
@@ -345,7 +471,7 @@ def launch_browser(
         )
     except OSError as exc:
         if not persistent:
-            shutil.rmtree(user_data_dir, ignore_errors=True)
+            _remove_dir_with_retry(user_data_dir)
         raise BrowserCDPError(f"浏览器启动失败: {exc}")
 
     try:
@@ -365,6 +491,8 @@ def launch_browser(
         get_browser_manager().register(session)
         return session
     except Exception as exc:
+        # 提前退出/握手异常统一走 _terminate_session：其中已含杀进程树 +
+        # 一次性目录带重试的回收（main 线 2a44025d 语义在此结构下的落点）。
         _terminate_session(
             BrowserSession(
                 "",
@@ -532,11 +660,13 @@ __all__ = [
     "BrowserType",
     "CDP_TIMEOUT_SECONDS",
     "ChromeLauncher",
+    "EPHEMERAL_PREFIX",
     "FirefoxLauncher",
     "LAUNCH_TIMEOUT_SECONDS",
     "MAX_BROWSER_SESSIONS",
     "RESERVED_BROWSER_ID",
     "STEALTH_SCRIPT",
+    "SWEEP_MAX_AGE_SECONDS",
     "apply_stealth",
     "browser_downloads_root",
     "cdp_command",
@@ -545,4 +675,5 @@ __all__ = [
     "ensure_page_target",
     "get_browser_manager",
     "launch_browser",
+    "sweep_stale_browser_dirs",
 ]
