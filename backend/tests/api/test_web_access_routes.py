@@ -200,17 +200,25 @@ async def test_create_cookie_credential_ok(client, monkeypatch):
 
 
 async def test_create_cookie_credential_rejects_invalid_cookie(client, monkeypatch):
+    cookie_value = "cookie-secret-123"
+
     def reject(domain, cookies):
-        raise ValueError("save_credential: cookies 中没有可保存的条目")
+        raise ValueError(f"cookie validation failed for {cookie_value}")
 
     monkeypatch.setattr(routes, "save_credential", reject)
     response = await client.post(
         "/api/v1/web-access/credentials/cookie",
-        json={"domain": ".example.com", "cookies": [{"name": "", "value": "x"}]},
+        json={
+            "domain": ".example.com",
+            "cookies": [{"name": "SID", "value": cookie_value}],
+        },
     )
     assert response.status_code == 422
-    assert response.json()["ok"] is False
-    assert "opaque" not in response.text
+    assert response.json() == {
+        "ok": False,
+        "error": "invalid_cookie_credential",
+    }
+    assert cookie_value not in response.text
 
 
 async def test_create_cookie_credential_origin_guard(client):

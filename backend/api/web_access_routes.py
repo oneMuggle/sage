@@ -185,8 +185,11 @@ async def create_cookie_credential(
         return guard
     try:
         save_credential(body.domain.strip().lower(), body.cookies)
-    except ValueError as exc:
-        return JSONResponse(status_code=422, content={"ok": False, "error": str(exc)[:200]})
+    except ValueError:
+        return JSONResponse(
+            status_code=422,
+            content={"ok": False, "error": "invalid_cookie_credential"},
+        )
     return {"ok": True}
 
 
