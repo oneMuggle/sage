@@ -35,7 +35,9 @@ async def test_put_invalid_settings_uses_safe_structured_error_and_log(client, c
 
     caplog.set_level(logging.WARNING)
     protocol = "sk-secret-protocol-value"
-    local_path = r"C:\Users\synthetic\private-model.gguf"
+    # 混用两种分隔符：win32 因裸 POSIX '/' 拒，POSIX 因 '\\' 拒 —— 任何宿主都非法
+    # （validate_local_model_path 按 sys.platform 分支，纯单侧路径是平台相关的）。
+    local_path = r"C:\Users\synthetic/mixed.gguf"
 
     invalid_protocol = await client.put(
         "/api/v1/settings",
@@ -307,6 +309,14 @@ async def test_settings_migrates_legacy_snake_case_and_rejects_invalid_timezone(
 async def test_settings_accepts_protocol_model_id_local_model_path(client):
     """Task 1: EndpointConfig 新字段 protocol / modelId / localModelPath 应通过
     canonicalizer 白名单校验 + 存到 DB."""
+    import sys
+
+    # validate_local_model_path 按 sys.platform 校验分隔符, 路径须随宿主平台取
+    local_path = (
+        "C:\\Users\\me\\Models\\qwen.gguf"
+        if sys.platform.startswith("win")
+        else "/Users/me/Models/qwen.gguf"
+    )
     resp = await client.put(
         "/api/v1/settings",
         json={
@@ -318,7 +328,7 @@ async def test_settings_accepts_protocol_model_id_local_model_path(client):
                     "apiKey": "",
                     "protocol": "openai-compatible",
                     "modelId": "qwen2.5-7b-instruct",
-                    "localModelPath": "/Users/me/Models/qwen.gguf",
+                    "localModelPath": local_path,
                     "discoveredModels": [],
                     "lastDiscoveredAt": 0,
                 }
@@ -331,7 +341,7 @@ async def test_settings_accepts_protocol_model_id_local_model_path(client):
     ep = persisted["endpoints"][0]
     assert ep["protocol"] == "openai-compatible"
     assert ep["modelId"] == "qwen2.5-7b-instruct"
-    assert ep["localModelPath"] == "/Users/me/Models/qwen.gguf"
+    assert ep["localModelPath"] == local_path
 
 
 @pytest.mark.asyncio()
