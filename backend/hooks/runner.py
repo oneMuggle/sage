@@ -395,24 +395,8 @@ async def _run_http_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> 
     return _parse_decision_dict(result)
 
 
-async def run_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:  # noqa: PLR0911 — fail-open 分支式守卫, 每路 return 都清晰
-    """执行单个钩子。永不抛异常 (任何失败 → no-op)。
-
-    ``hook_type="python"`` 走进程内调用 (内置钩子); ``"http"`` 走异步
-    HTTP 回调; ``"shell"`` spawn 子进程 + STDIN/STDOUT JSON 协议。
-
-    Args:
-        hook_cfg: 已校验的钩子配置
-        payload_dict: 传给钩子的 JSON payload
-
-    Returns:
-        HookOutcome: allow / deny / modify / noop 之一
-    """
-    if hook_cfg.hook_type == "python":
-        return await _run_python_hook(hook_cfg, payload_dict)
-    if hook_cfg.hook_type == "http":
-        return await _run_http_hook(hook_cfg, payload_dict)
-
+async def _run_shell_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:
+    """执行 shell 钩子: spawn 子进程, STDIN/STDOUT JSON 协议。"""
     env = os.environ.copy()
     env["SAGE_HOOK_EVENT"] = str(payload_dict.get("hook_event_name", hook_cfg.event))
     env["SAGE_TOOL_NAME"] = str(payload_dict.get("tool_name", ""))
@@ -460,6 +444,75 @@ async def run_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOu
         return HookOutcome(decision=DECISION_NOOP, reason=f"exit code {proc.returncode}")
 
     return _parse_stdout(stdout_b.decode("utf-8", "replace"))
+
+
+def _record_execution(
+    hook_cfg: HookConfig,
+    payload_dict: Dict[str, Any],
+    outcome: HookOutcome,
+    duration_ms: float,
+) -> None:
+    """写入 hook 执行历史 (best-effort, 任何故障都不冒泡)。"""
+    try:
+        from backend.hooks.history import get_history_repo, make_record
+
+        config_snapshot: Dict[str, Any] = {
+            "event": hook_cfg.event,
+            "matcher": hook_cfg.matcher,
+            "hook_type": hook_cfg.hook_type,
+        }
+        if hook_cfg.hook_type == "shell":
+            config_snapshot["command"] = hook_cfg.command
+        elif hook_cfg.hook_type == "python":
+            config_snapshot["handler"] = hook_cfg.handler
+        elif hook_cfg.hook_type == "http":
+            cfg_dict = hook_cfg.config_override if isinstance(hook_cfg.config_override, dict) else {}
+            config_snapshot["url"] = cfg_dict.get("url", "")
+            config_snapshot["method"] = cfg_dict.get("method", "POST")
+
+        record = make_record(
+            hook_type=hook_cfg.hook_type,
+            event=hook_cfg.event,
+            tool_name=str(payload_dict.get("tool_name", "")),
+            builtin_id=hook_cfg.builtin_id,
+            command=hook_cfg.command,
+            handler=hook_cfg.handler,
+            url=hook_cfg.config_override.get("url", "") if isinstance(hook_cfg.config_override, dict) else "",
+            decision=outcome.decision,
+            duration_ms=duration_ms,
+            reason=outcome.reason,
+            hook_config_snapshot=config_snapshot,
+        )
+        get_history_repo().save(record)
+    except Exception as exc:  # pragma: no cover — 防御性
+        logger.debug("hooks: record execution failed (best-effort): %s", exc)
+
+
+async def run_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:  # noqa: PLR0911 — fail-open 分支式守卫, 每路 return 都清晰
+    """执行单个钩子并记录到执行历史。永不抛异常 (任何失败 → no-op)。
+
+    ``hook_type="python"`` 走进程内调用 (内置钩子); ``"http"`` 走异步
+    HTTP 回调; ``"shell"`` spawn 子进程 + STDIN/STDOUT JSON 协议。
+
+    Args:
+        hook_cfg: 已校验的钩子配置
+        payload_dict: 传给钩子的 JSON payload
+
+    Returns:
+        HookOutcome: allow / deny / modify / noop 之一
+    """
+    import time as _time
+
+    start = _time.monotonic()
+    if hook_cfg.hook_type == "python":
+        outcome = await _run_python_hook(hook_cfg, payload_dict)
+    elif hook_cfg.hook_type == "http":
+        outcome = await _run_http_hook(hook_cfg, payload_dict)
+    else:
+        outcome = await _run_shell_hook(hook_cfg, payload_dict)
+    duration_ms = (_time.monotonic() - start) * 1000
+    _record_execution(hook_cfg, payload_dict, outcome, duration_ms)
+    return outcome
 
 
 _SEVERITY_RANK = {"info": 0, "warning": 1, "error": 2}

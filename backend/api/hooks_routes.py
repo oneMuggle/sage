@@ -49,6 +49,63 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/hooks", tags=["hooks"])
 
 
+@router.get("/history")
+async def list_hook_history(
+    request: Request,
+    limit: int = 50,
+    hook_id: str = "",
+    event: str = "",
+    since: str = "",
+):
+    """返回最近的钩子执行记录 (供设置页诊断面板)。"""
+    blocked = forbidden_origin_response(request)
+    if blocked is not None:
+        return blocked
+
+    from backend.hooks.history import get_history_repo
+
+    records = get_history_repo().list_records(
+        limit=limit,
+        hook_id=hook_id or None,
+        event=event or None,
+        since=since or None,
+    )
+    return JSONResponse(
+        {
+            "records": [
+                {
+                    "id": r.id,
+                    "occurred_at": r.occurred_at,
+                    "hook_id": r.hook_id,
+                    "hook_type": r.hook_type,
+                    "event": r.event,
+                    "tool_name": r.tool_name,
+                    "decision": r.decision,
+                    "duration_ms": r.duration_ms,
+                    "reason": r.reason,
+                    "stdout_snippet": r.stdout_snippet,
+                    "stderr_snippet": r.stderr_snippet,
+                    "hook_config_snapshot": r.hook_config_snapshot,
+                }
+                for r in records
+            ]
+        }
+    )
+
+
+@router.delete("/history")
+async def clear_hook_history(request: Request):
+    """清空钩子执行历史。"""
+    blocked = forbidden_origin_response(request)
+    if blocked is not None:
+        return blocked
+
+    from backend.hooks.history import get_history_repo
+
+    deleted = get_history_repo().clear()
+    return JSONResponse({"ok": True, "deleted": deleted})
+
+
 class WorkspaceBody(BaseModel):
     """信任/解除信任请求体。"""
 
