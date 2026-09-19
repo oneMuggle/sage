@@ -75,7 +75,7 @@ class Project:
 
 def _row_to_project(row) -> Project:  # noqa: ANN001 — sqlite3.Row
     # allowed_paths 存为 JSON 字符串，反序列化为 List[str]。旧行 NULL/缺失 → 空列表。
-    raw_paths = row["allowed_paths"] if "allowed_paths" in row.keys() else None
+    raw_paths = row["allowed_paths"] if "allowed_paths" in row.keys() else None  # noqa: SIM118 — sqlite3.Row 的 in 检查值而非键
     try:
         allowed_paths = json.loads(raw_paths) if raw_paths else []
     except (json.JSONDecodeError, TypeError):
@@ -88,8 +88,8 @@ def _row_to_project(row) -> Project:  # noqa: ANN001 — sqlite3.Row
         last_opened_at=row["last_opened_at"],
         allowed_paths=allowed_paths,
         # M3: 新列可能不存在（旧 schema）或为 NULL（旧行）
-        description=row["description"] if "description" in row.keys() else None,
-        instructions=row["instructions"] if "instructions" in row.keys() else None,
+        description=row["description"] if "description" in row.keys() else None,  # noqa: SIM118,
+        instructions=row["instructions"] if "instructions" in row.keys() else None,  # noqa: SIM118
     )
 
 

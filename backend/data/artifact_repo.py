@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 import uuid
 from dataclasses import dataclass
@@ -29,18 +30,14 @@ def add_artifact_listener(fn: Callable[[Dict[str, Any]], None]) -> Callable[[Dic
 
 def remove_artifact_listener(fn: Callable[[Dict[str, Any]], None]) -> None:
     """注销产物事件监听器（producer finally 必须配对调用，防闭包泄漏）。"""
-    try:
+    with contextlib.suppress(ValueError):
         _ARTIFACT_LISTENERS.remove(fn)
-    except ValueError:
-        pass
 
 
 def _emit_artifact_event(event: Dict[str, Any]) -> None:
     for fn in list(_ARTIFACT_LISTENERS):
-        try:
+        with contextlib.suppress(Exception):  # noqa: BLE001 — 降级铁律，见模块注释
             fn(event)
-        except Exception:  # noqa: BLE001 — 降级铁律，见模块注释
-            pass
 
 
 @dataclass
