@@ -76,8 +76,9 @@ def test_empty_spec_checks_nothing(tmp_path: Path) -> None:
     _generate(tmp_path, "any.docx", {})
     result = _lint(tmp_path, "any.docx", {})
     assert result.ok
-    # Round 45 起 cross_ref/residue 无条件启用（残渍在任何语境都是死文本）
-    assert result.checked_rules == ["citations", "cross_ref"]
+    # Round 45 起 cross_ref/residue、Round 63 起 ref_consistency 均无条件
+    # 启用（残渍/损坏引用在任何语境都值得报告）。
+    assert result.checked_rules == ["citations", "cross_ref", "ref_consistency"]
 
 
 # ──────────────────────────────────────────────────────────────────────
