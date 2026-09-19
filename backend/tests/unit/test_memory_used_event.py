@@ -96,3 +96,26 @@ def test_skips_blank_entries_and_non_dicts():
 def test_returns_none_on_recall_error():
     mgr = _FakeMemoryManager(error=RuntimeError("db locked"))
     assert _build_memory_used_event(mgr, query="q", session_id="s1") is None
+
+
+# ── R82 (2026-09-19): L13 注入唯一性护栏 ────────────────────────────────
+
+
+def test_l13_memory_injection_is_single():
+    """源码级护栏：L13 记忆注入与召回事件在整个路由文件中各只有一个标记块。
+
+    背景：producer 曾同时存在"对标增强批次 C"与"Task 14 段隔离"两段完全
+    重复的注入，导致每次请求记忆上下文进两遍（双倍 token）且旧段工作记忆
+    经无隔离版本漏进请求。此测试防止未来 merge/rebase 把重复块带回来。
+    """
+    from pathlib import Path
+
+    import backend.api.legacy_routes as legacy_routes_module
+
+    src = Path(legacy_routes_module.__file__).read_text(encoding="utf-8")
+    assert src.count("L13 记忆上下文注入 BEGIN") == 1
+    assert src.count("L13 记忆上下文注入 END") == 1
+    assert src.count("R17-E 记忆召回展示事件 BEGIN") == 1
+    assert src.count("R17-E 记忆召回展示事件 END") == 1
+    # 注入文本本身也只允许出现一次
+    assert src.count("以下是相关的记忆上下文：") == 1
