@@ -260,6 +260,71 @@ def _extract_endnotes(doc: Document) -> List[str]:
     return notes
 
 
+def _append_notes(doc: Document, partname: str, kind: str, existing: List[str], new_texts: List[str]) -> None:
+    """向已存在的 footnotes/endnotes part 追加 note（lxml 改 blob）。
+
+    ``kind``: "footnote"/"endnote"；编号从 len(existing)+1 续接（与
+    read 侧跳过系统脚注的口径一致）。
+    """
+    from lxml import etree
+
+    W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    style_prefix = "Footnote" if kind == "footnote" else "Endnote"
+    part = next(
+        (p for p in doc.part.package.iter_parts() if str(p.partname) == partname),
+        None,
+    )
+    if part is None:
+        return
+    root = etree.fromstring(part.blob)
+    for offset, text in enumerate(new_texts, start=len(existing) + 1):
+        note = etree.SubElement(root, f"{{{W}}}{kind}")
+        note.set(f"{{{W}}}id", str(offset))
+        para = etree.SubElement(note, f"{{{W}}}p")
+        ppr = etree.SubElement(para, f"{{{W}}}pPr")
+        pstyle = etree.SubElement(ppr, f"{{{W}}}pStyle")
+        pstyle.set(f"{{{W}}}val", f"{style_prefix}Text")
+        run = etree.SubElement(para, f"{{{W}}}r")
+        rpr = etree.SubElement(run, f"{{{W}}}rPr")
+        rstyle = etree.SubElement(rpr, f"{{{W}}}rStyle")
+        rstyle.set(f"{{{W}}}val", f"{style_prefix}Reference")
+        etree.SubElement(run, f"{{{W}}}{kind}Ref")
+        run_text = etree.SubElement(para, f"{{{W}}}r")
+        t = etree.SubElement(run_text, f"{{{W}}}t")
+        t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+        t.text = " " + text
+    part._blob = etree.tostring(
+        root, xml_declaration=True, encoding="UTF-8", standalone=True
+    )
+
+
+def _append_footnotes(doc: Document, new_texts: List[str]) -> None:
+    """追加脚注：part 不存在时全量挂载，已存在时 blob 增补。"""
+    existing = _extract_footnotes(doc)
+    part = next(
+        (p for p in doc.part.package.iter_parts() if str(p.partname) == _FOOTNOTES_PARTNAME),
+        None,
+    )
+    if part is None:
+        _mount_footnotes_part(doc, list(existing) + list(new_texts))
+    else:
+        _append_notes(doc, _FOOTNOTES_PARTNAME, "footnote", existing, new_texts)
+
+
+def _append_endnotes(doc: Document, new_texts: List[str]) -> None:
+    """追加尾注：part 不存在时全量挂载（含样式注入），否则 blob 增补。"""
+    existing = _extract_endnotes(doc)
+    part = next(
+        (p for p in doc.part.package.iter_parts() if str(p.partname) == _ENDNOTES_PARTNAME),
+        None,
+    )
+    if part is None:
+        _mount_endnotes_part(doc, list(existing) + list(new_texts))
+        _ensure_endnote_styles(doc)
+    else:
+        _append_notes(doc, _ENDNOTES_PARTNAME, "endnote", existing, new_texts)
+
+
 _CROSS_REF_RE = re.compile(r"\{\{(fig|tbl|fn|en):([^}]+)\}\}")
 
 

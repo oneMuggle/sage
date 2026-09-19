@@ -586,21 +586,36 @@ def _apply_docx_op(doc: Any, op: Dict[str, Any], doc_path: Optional[Path] = None
             if not isinstance(spec, dict) or not str(spec.get("text", "")).strip():
                 return {"op": op_name, "ok": False, "error": "paragraph_text_required"}
 
-        # Round 60：追加段落支持交叉引用占位符（{{fig:}}/{{tbl:}} → REF
-        # 复杂域，复用生成期书签）。预校验全部 spec 可解析后再写入
-        # （all-or-nothing）；{{fn:}}/{{en:}} 需 part 追加语义，暂不
-        # 支持（写入会被 lint cross_ref/residue 提示）。
+        # Round 60/61：追加段落支持四类占位符——fig/tbl 解析为 REF 域
+        # （复用生成期书签），fn/en 写成 footnote/endnoteReference run 并
+        # 把备注文本追加进对应 part（编号续接）。预校验全部 spec 可解析
+        # 后再写入（all-or-nothing）。
+        from .word import (
+            _append_endnotes,
+            _append_footnotes,
+            _extract_endnotes,
+            _extract_footnotes,
+            _write_cross_ref_segment,
+        )
+
         caption_map = _collect_caption_bookmarks(doc)
+        fn_existing = len(_extract_footnotes(doc))
+        en_existing = len(_extract_endnotes(doc))
         parsed: list = []
         for spec in paragraphs:
             try:
-                parsed.append(_parse_cross_ref_text(str(spec["text"]), caption_map))
+                segments, new_fn, new_en = _parse_cross_ref_text(
+                    str(spec["text"]), caption_map, fn_existing, en_existing
+                )
             except KeyError as exc:
                 return {"op": op_name, "ok": False, "error": f"cross_ref_not_found: {exc}"}
+            fn_existing += len(new_fn)
+            en_existing += len(new_en)
+            parsed.append((spec, segments, new_fn, new_en))
 
         from .word_layout import append_ref_field
 
-        for spec, segments in zip(paragraphs, parsed, strict=False):
+        for spec, segments, new_fn, new_en in parsed:
             heading = spec.get("heading")
             if heading == "h1":
                 created = doc.add_heading("", level=1)
@@ -613,8 +628,14 @@ def _apply_docx_op(doc: Any, op: Dict[str, Any], doc_path: Optional[Path] = None
             for seg in segments:
                 if seg[0] == "text":
                     created.add_run(seg[1])
-                else:
+                elif seg[0] == "ref":
                     append_ref_field(created, seg[1], seg[2])
+                else:
+                    _write_cross_ref_segment(created, seg)
+            if new_fn:
+                _append_footnotes(doc, new_fn)
+            if new_en:
+                _append_endnotes(doc, new_en)
         return {"op": op_name, "ok": True, "appended": len(paragraphs)}
 
     if op_name == "append_table":
@@ -1177,7 +1198,7 @@ def update_pptx(file_path: Path, ops: List[Dict[str, Any]]) -> Tuple[bool, List[
 Editors = Dict[str, Callable[[Path, List[Dict[str, Any]]], Tuple[bool, List[Dict[str, Any]]]]]
 
 
-_CROSS_REF_TEXT_RE = re.compile(r"\{\{(fig|tbl):([^}]+)\}\}")
+_CROSS_REF_TEXT_RE = re.compile(r"\{\{(fig|tbl|fn|en):([^}]+)\}\}")
 
 
 def _collect_caption_bookmarks(doc) -> Dict[str, Tuple[str, str]]:
@@ -1209,23 +1230,41 @@ def _collect_caption_bookmarks(doc) -> Dict[str, Tuple[str, str]]:
 
 
 def _parse_cross_ref_text(
-    text: str, caption_map: Dict[str, Tuple[str, str]]
-) -> List[Tuple[str, str, str]]:
-    """拆段解析交叉引用占位符；未知题注抛 KeyError（all-or-nothing）。"""
+    text: str,
+    caption_map: Dict[str, Tuple[str, str]],
+    fn_start: int = 0,
+    en_start: int = 0,
+) -> Tuple[List[Tuple[str, str, str]], List[str], List[str]]:
+    """拆段解析四类占位符（Round 61）。
+
+    fig/tbl 经 caption_map 解析为 REF 域段（未知题注抛 KeyError，
+    all-or-nothing）；fn/en 为内联内容段（引用 id 从 fn_start/en_start
+    续接），备注文本由调用方落 part。返回 (segments, 新脚注文本, 新尾注
+    文本)。
+    """
     segments: List[Tuple[str, str, str]] = []
+    new_fn: List[str] = []
+    new_en: List[str] = []
     pos = 0
     for match in _CROSS_REF_TEXT_RE.finditer(text):
         if match.start() > pos:
             segments.append(("text", text[pos:match.start()], ""))
         kind, caption = match.group(1), match.group(2).strip()
-        entry = caption_map.get(caption)
-        if entry is None:
-            raise KeyError(f"{{{{{kind}:{caption}}}}} 未匹配任何题注")
-        segments.append(("ref", entry[0], entry[1]))
+        if kind in ("fn", "en"):
+            bucket = new_fn if kind == "fn" else new_en
+            bucket.append(caption)
+            base = fn_start if kind == "fn" else en_start
+            ref_kind = "fnref" if kind == "fn" else "endref"
+            segments.append((ref_kind, str(base + len(bucket)), ""))
+        else:
+            entry = caption_map.get(caption)
+            if entry is None:
+                raise KeyError(f"{{{{{kind}:{caption}}}}} 未匹配任何题注")
+            segments.append(("ref", entry[0], entry[1]))
         pos = match.end()
     if pos < len(text):
         segments.append(("text", text[pos:], ""))
-    return segments
+    return segments, new_fn, new_en
 
 
 def update_document(
