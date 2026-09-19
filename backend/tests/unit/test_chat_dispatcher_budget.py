@@ -542,3 +542,69 @@ async def test_persist_task_state_records_usage_and_duration(tmp_path, monkeypat
     tasks = {t["task_id"]: t for t in resp.json()["tasks"]}
     assert tasks["t1"]["used_tokens"] == 4321
     assert tasks["t1"]["duration_ms"] is not None
+
+
+# ---- BU18 (round34): 聚合头部守门行量化补全 ------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_budget_line_includes_remaining(tmp_path, monkeypatch):
+    """BU18: 预算行追加剩余额度。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-bu18-1",
+        session_id="sess-bu18a",
+    )
+    d._semaphore = asyncio.Semaphore(4)
+    d.settings.run_token_budget = 1000
+
+    async def fake_run(state):
+        _seed_task_usage("sess-bu18a", state.task_id, 120, int(time.time() * 1000))
+        state.status = "done"
+        state.output = "ok"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+    agg = d._aggregate(list(d._states.values()))  # 直跑 dispatch 无 bg_task
+    assert "剩余 880" in agg  # 1000 - 120（仅 t1 各 120）
+
+@pytest.mark.asyncio()
+async def test_aggregate_wall_clock_line_when_enabled(tmp_path, monkeypatch):
+    """BU18: 墙钟启用未触顶 → 已运行/上限行；未启用 → 无该行。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-bu18-2",
+        session_id="sess-bu18b",
+    )
+    d._semaphore = asyncio.Semaphore(4)
+    d.settings.run_wall_clock_limit_min = 30
+    d._first_dispatch_at = time.time() - 120  # 已"运行" 2 分钟
+
+    async def fake_run(state):
+        state.status = "done"
+        state.output = "ok"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+    agg = d._aggregate(list(d._states.values()))
+    assert "已运行 2 分钟 / 上限 30 分钟" in agg
+
+    d2 = ChatDispatcher(
+        stream_id="s2",
+        entry_queue=_make_queue(),
+        run_id="orch-bu18-3",
+        session_id="sess-bu18c",
+    )
+    d2._semaphore = asyncio.Semaphore(4)
+    d2._run_subagent = fake_run
+    await d2.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+    agg2 = d2._aggregate(list(d2._states.values()))
+    assert "上限" not in agg2
