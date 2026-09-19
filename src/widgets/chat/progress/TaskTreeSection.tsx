@@ -180,9 +180,7 @@ export function TaskTreeSection({
       }
     }
     // flattenTree 自带 visited 守卫（父链成环时不会无限递归）。
-    return flattenTree(treeIndex).filter(
-      (node) => !hidden.has(node.item.task_id),
-    );
+    return flattenTree(treeIndex).filter((node) => !hidden.has(node.item.task_id));
   }, [treeIndex, collapsed]);
 
   const toggleCollapsed = (taskId: string) => {

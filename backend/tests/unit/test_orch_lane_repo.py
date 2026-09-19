@@ -313,6 +313,36 @@ class TestLegacyLaneMigration:
         assert row["agent_id"] == "writer"
         assert row["status"] == "running"
 
+    def test_legacy_lane_missing_new_columns_is_migrated(self, tmp_path, monkeypatch):
+        """早期老表缺 permission_preset/metadata 时仍应完成迁移。"""
+        db = _fresh_db(tmp_path, monkeypatch, "oldlane.db")
+        conn = db.get_connection()
+        conn.execute(
+            "CREATE TABLE orchestration_lanes ("
+            "lane_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, agent_id TEXT, "
+            "status TEXT NOT NULL DEFAULT 'created', created_at INTEGER NOT NULL, "
+            "started_at INTEGER, completed_at INTEGER, worktree TEXT, "
+            "heartbeat TEXT, error TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO orchestration_lanes "
+            "(lane_id, task_id, agent_id, status, created_at) VALUES (?, ?, ?, ?, ?)",
+            ("lane-old", "t1", "writer", "running", 1700000000000),
+        )
+        conn.commit()
+
+        db2 = _reopen(tmp_path, monkeypatch, "oldlane.db")
+        row = (
+            db2.get_connection()
+            .execute(
+                "SELECT permission_preset, metadata FROM orch_lanes WHERE lane_id = ?",
+                ("lane-old",),
+            )
+            .fetchone()
+        )
+        assert row["permission_preset"] == "implement"
+        assert row["metadata"] == "{}"
+
     def test_missing_legacy_table_is_fail_open(self, tmp_path, monkeypatch):
         """全新安装无老表 → 迁移静默跳过，不阻塞 init_db。"""
         _fresh_db(tmp_path, monkeypatch, "nolegacy.db")

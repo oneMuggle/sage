@@ -1328,6 +1328,26 @@ class Database:
         # 老表由早期版本创建，仅旧库存在 —— 全新安装下两块 SELECT 会抛
         # no such table，被 except 吞掉（fail-open，不阻塞启动）。
         try:
+            # 旧版 orchestration_lanes（早期 schema）可能没有后续增加的
+            # permission_preset/metadata 列。先幂等补列，再复制，避免首个 SELECT
+            # 因 no such column 中断并连带跳过 lane events 迁移。
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name='orchestration_lanes'"
+            )
+            if cursor.fetchone() is not None:
+                cursor.execute("PRAGMA table_info(orchestration_lanes)")
+                _legacy_lane_cols = {row["name"] for row in cursor.fetchall()}
+                if "permission_preset" not in _legacy_lane_cols:
+                    cursor.execute(
+                        "ALTER TABLE orchestration_lanes ADD COLUMN "
+                        "permission_preset TEXT NOT NULL DEFAULT 'implement'"
+                    )
+                if "metadata" not in _legacy_lane_cols:
+                    cursor.execute(
+                        "ALTER TABLE orchestration_lanes ADD COLUMN "
+                        "metadata TEXT NOT NULL DEFAULT '{}'"
+                    )
             cursor.execute(
                 """
                 INSERT OR IGNORE INTO orch_lanes
