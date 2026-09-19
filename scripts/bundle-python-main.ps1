@@ -197,16 +197,31 @@ if ($ProtectCode) {
   if (-not $SystemPythonExe) {
     throw "System Python not found on PATH. Add 'actions/setup-python@v5' with python-version: '3.11' to the workflow."
   }
-  $SystemPythonRoot = Split-Path -Parent (Split-Path -Parent $SystemPythonExe)
-  # actions/setup-python puts python.exe under <tool-cache>/Python/<version>/x64/python.exe
-  # but Get-Command may resolve to a shim. Walk up to find include/ dir.
+
+  # Locate Include/ + libs/. In every supported layout they are SIBLINGS of
+  # python.exe, but the directory depth varies:
+  #   python.org installer:   <root>\python.exe          <root>\Include\    <root>\libs\
+  #   actions/setup-python:   <cache>\Python\<ver>\x64\python.exe
+  #                           <cache>\Python\<ver>\x64\Include\  ...\x64\libs\
+  # Get-Command may also resolve a shim rather than the real exe, so start at
+  # python.exe's own directory and walk up until an Include/ dir shows up.
+  # (Earlier versions walked up a fixed two levels, which skipped the x64/
+  # segment entirely and threw "include dir not found" on the setup-python
+  # layout — see release run 35419041018.)
   $SystemInclude = $null
-  foreach ($candidate in @($SystemPythonRoot, (Split-Path -Parent $SystemPythonRoot))) {
-    $inc = Join-Path $candidate "include"
+  $SystemPythonRoot = $null
+  $candidate = Split-Path -Parent $SystemPythonExe
+  for ($depth = 0; $depth -lt 4; $depth++) {
+    if (-not $candidate) { break }
+    $inc = Join-Path $candidate "Include"
+    if (-not (Test-Path $inc)) { $inc = Join-Path $candidate "include" }
     if (Test-Path $inc) { $SystemInclude = $inc; $SystemPythonRoot = $candidate; break }
+    $parent = Split-Path -Parent $candidate
+    if ($parent -eq $candidate) { break }
+    $candidate = $parent
   }
   if (-not $SystemInclude) {
-    throw "System Python include dir not found. Searched from $SystemPythonExe"
+    throw "System Python include dir not found. Searched upward from $SystemPythonExe"
   }
   $SystemLibs = Join-Path $SystemPythonRoot "libs"
 
