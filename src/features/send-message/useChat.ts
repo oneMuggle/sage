@@ -309,7 +309,6 @@ export function useChat() {
         content,
         created_at: Date.now(),
       };
-      const userId = userMessage.id;
       addMessage(userMessage);
 
       if (!chatEndpoint?.baseUrl) {
