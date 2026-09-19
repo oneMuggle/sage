@@ -15,8 +15,7 @@ import {
   BrainCircuit,
   Quote,
   FileText,
-  Package,
-  Zap
+  Zap,
 } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
@@ -34,6 +33,7 @@ import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownCh
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
+import { CompactBanner } from './CompactBanner';
 import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownImage } from './MarkdownImage';
 import { MermaidBlock } from './MermaidBlock';
@@ -475,10 +475,7 @@ function MessageComponent({
   if (isSystem && message.compact_info) {
     return (
       <div className="flex justify-center my-3">
-        <div className="px-3 py-1.5 rounded-radius-sm bg-bg-subtle border border-border text-xs text-text-secondary flex items-center gap-1.5">
-          <Package className="w-3 h-3 text-muted" />
-          <span>{message.content}</span>
-        </div>
+        <CompactBanner info={message.compact_info} />
       </div>
     );
   }
@@ -504,6 +501,10 @@ function MessageComponent({
       </div>
 
       <div className={`flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
+        {/* R38: 压缩续接行 —— 横幅置于气泡上方，摘要正文/Thinking/
+            copy/regenerate/delete 等正文与 affordance 全部保留。 */}
+        {message.compact_info && <CompactBanner info={message.compact_info} />}
+
         {/* ThinkingPanel - LLM 思考过程展示（仅 assistant 消息且有 reasoning_content 时） */}
         {isAssistant && message.reasoning_content && (
           <ThinkingPanel reasoning={message.reasoning_content} isStreaming={isStreaming} />
@@ -575,9 +576,7 @@ function MessageComponent({
                         <button
                           key={art.id}
                           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-[11px] text-primary transition-colors"
-                          onClick={() =>
-                            useRightPanelStore.getState().selectArtifact(art.id)
-                          }
+                          onClick={() => useRightPanelStore.getState().selectArtifact(art.id)}
                           title="在右侧面板中查看"
                           data-testid="message-artifact-chip"
                         >
@@ -718,11 +717,26 @@ function MessageComponent({
             data-testid="skill-activated-list"
           >
             {activatedSkills.map((skill) => (
-              <div key={skill.name} className="flex items-start gap-1.5">
-                <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
-                  技能
-                </span>
-                <span className="text-text-secondary break-all">{skill.name}</span>
+              <div key={skill.name} className="flex flex-col gap-0.5">
+                <div className="flex items-start gap-1.5">
+                  <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
+                    技能
+                  </span>
+                  <span className="text-text-secondary break-all">{skill.name}</span>
+                </div>
+                {/* MEDIUM-3: 展示命中的触发词（extract_triggers 已小写化） */}
+                {skill.triggers_matched && skill.triggers_matched.length > 0 && (
+                  <div className="ml-5 flex flex-wrap gap-1">
+                    {skill.triggers_matched.map((trigger, idx) => (
+                      <span
+                        key={idx}
+                        className="px-1 py-0.5 rounded bg-bg-hover text-text-tertiary text-[10px]"
+                      >
+                        {trigger}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
