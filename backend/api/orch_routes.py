@@ -254,7 +254,10 @@ def rerun_failed(
         if item.get("parent_task_id"):
             entry["parent_task_id"] = str(item["parent_task_id"])
         if item.get("depth") is not None:
-            entry["depth"] = int(item["depth"])
+            try:
+                entry["depth"] = max(0, int(item["depth"]))
+            except (TypeError, ValueError):
+                entry["depth"] = 0
         if status == "done":
             entry["preset_output"] = (
                 str(task.get("output_preview") or "").strip()

@@ -2574,7 +2574,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             "计划层级归一化失败，回落无层级: %s", hierarchy_err
                         )
                         plan_items = [
-                            {k: v for k, v in item.items() if k != "depth"}
+                            {
+                                k: v
+                                for k, v in item.items()
+                                if k not in {"depth", "parent_task_id"}
+                            }
                             for item in plan_items
                         ]
 
