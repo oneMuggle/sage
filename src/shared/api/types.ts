@@ -1768,6 +1768,8 @@ export interface OfficeCapabilities {
   pdf_export_available: boolean;
   pillow_available: boolean;
   formulas_available: boolean;
+  /** Round D P10: RapidOCR importable — 扫描件 PDF→Word 本地 OCR 回退 */
+  ocr_available?: boolean;
 }
 
 /**

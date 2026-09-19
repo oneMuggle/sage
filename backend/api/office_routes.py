@@ -26,7 +26,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import Database, get_database
-from backend.office import progress as office_progress
+from backend.office import progress as office_progress, read_cache
 from backend.office.apply_update import (
     OfficeDocUpdateRequest,
     OfficeDocUpdateResult,
@@ -362,11 +362,18 @@ def read_ppt_endpoint(req: OfficeReadRequest) -> OfficePptReadResult:
     # Canonicalize workspace_path so the row's ``workspace_path`` matches
     # the same canonical form used by list_documents() and the generators.
     canonical_workspace = str(Path(req.workspace_path).resolve())
-    result = read_ppt(
-        file_path=file_path,
-        workspace_path=canonical_workspace,
-        generated_filename=file_path.name,
-        original_filename=req.original_filename,
+    # Round D P8: (path, mtime, size) 缓存 —— 预览/列表/编辑的同文档三连
+    # 读只解析一次。options_key 覆盖影响 summary 的所有请求参数。
+    result = read_cache.get_or_read(
+        "ppt",
+        file_path,
+        f"{canonical_workspace}|{req.original_filename or ''}",
+        lambda: read_ppt(
+            file_path=file_path,
+            workspace_path=canonical_workspace,
+            generated_filename=file_path.name,
+            original_filename=req.original_filename,
+        ),
     )
     _persist_read_summary(
         result,
@@ -384,11 +391,16 @@ def read_word_endpoint(req: OfficeReadRequest) -> OfficeWordReadResult:
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
     _check_size_limit(file_path, req.max_size_bytes)
     canonical_workspace = str(Path(req.workspace_path).resolve())
-    result = read_docx(
-        file_path=file_path,
-        workspace_path=canonical_workspace,
-        generated_filename=file_path.name,
-        original_filename=req.original_filename,
+    result = read_cache.get_or_read(
+        "word",
+        file_path,
+        f"{canonical_workspace}|{req.original_filename or ''}",
+        lambda: read_docx(
+            file_path=file_path,
+            workspace_path=canonical_workspace,
+            generated_filename=file_path.name,
+            original_filename=req.original_filename,
+        ),
     )
     _persist_read_summary(
         result,
@@ -406,11 +418,16 @@ def read_excel_endpoint(req: OfficeReadRequest) -> OfficeExcelReadResult:
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
     _check_size_limit(file_path, req.max_size_bytes)
     canonical_workspace = str(Path(req.workspace_path).resolve())
-    result = read_xlsx(
-        file_path=file_path,
-        workspace_path=canonical_workspace,
-        generated_filename=file_path.name,
-        original_filename=req.original_filename,
+    result = read_cache.get_or_read(
+        "excel",
+        file_path,
+        f"{canonical_workspace}|{req.original_filename or ''}",
+        lambda: read_xlsx(
+            file_path=file_path,
+            workspace_path=canonical_workspace,
+            generated_filename=file_path.name,
+            original_filename=req.original_filename,
+        ),
     )
     _persist_read_summary(
         result,
@@ -512,6 +529,8 @@ def restore_snapshot_endpoint(doc_id: str, snapshot_id: str) -> OfficeDocumentAc
     conn = _db().get_connection()
     doc = _require_document(conn, doc_id)
     updated = restore_from_snapshot(conn, doc, snapshot_id)
+    # Round D P8: 同 update —— 恢复覆写了主文件字节。
+    read_cache.invalidate(document_path(updated))
     return OfficeDocumentActionResponse(ok=True, summary=updated)
 
 
@@ -940,7 +959,11 @@ def update_document_endpoint(
     """
     conn = _db().get_connection()
     doc = _require_document(conn, doc_id)
-    return apply_doc_update(conn, doc, req.ops)
+    result = apply_doc_update(conn, doc, req.ops)
+    # Round D P8: 写后显式失效读缓存（mtime 指纹本会自动失效，这里只为
+    # 同秒写读的极端时序兜底）。
+    read_cache.invalidate(document_path(doc))
+    return result
 
 
 # ──────────────────────────────────────────────────────────────────────

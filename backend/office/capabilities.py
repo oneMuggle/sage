@@ -51,6 +51,11 @@ class OfficeCapabilities(BaseModel):
     )
     pillow_available: bool = Field(description="Pillow 是否可导入（图片自动压缩）")
     formulas_available: bool = Field(description="formulas 引擎是否可导入（公式本地求值）")
+    # Round D P10: additive 字段（default 保证旧 payload 兼容）。
+    ocr_available: bool = Field(
+        default=False,
+        description="RapidOCR 是否可导入（扫描件 PDF→Word 本地 OCR 回退）",
+    )
 
 
 #: (探测时间戳, 结果)。探测无副作用，进程内共享一份即可。
@@ -70,6 +75,7 @@ def _probe() -> OfficeCapabilities:
         pdf_export_available=soffice_path is not None or word_com,
         pillow_available=find_spec("PIL") is not None,
         formulas_available=find_spec("formulas") is not None,
+        ocr_available=find_spec("rapidocr_onnxruntime") is not None,
     )
 
 

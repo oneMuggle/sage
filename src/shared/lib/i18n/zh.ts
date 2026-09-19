@@ -693,11 +693,13 @@ export const zh = {
   'office.caps.image': '图片压缩',
   'office.caps.formula': '公式求值',
   'office.caps.refresh': '重新检测',
+  'office.caps.ocr': '扫描件 OCR',
   'office.caps.install.pdf.win': '未检测到转换器：安装 LibreOffice（libreoffice.org/download）或 MS Word 后可导出/高保真预览 PDF',
   'office.caps.install.pdf.mac': '未检测到转换器：brew install --cask libreoffice 后可导出/高保真预览 PDF',
   'office.caps.install.pdf.linux': '未检测到转换器：sudo apt install libreoffice（或发行版等价命令）后可导出/高保真预览 PDF',
   'office.caps.install.pillow': '未安装 Pillow：pip install -r backend/requirements-optional.txt 后 >8MB 图片将自动压缩',
   'office.caps.install.formulas': '未安装 formulas：pip install -r backend/requirements-optional.txt 后 Excel 公式可本地求值',
+  'office.caps.install.ocr': '未安装 RapidOCR：pip install -r backend/requirements-optional.txt 后扫描件 PDF 转 Word 可本地识别文字（零外发）',
 
   // ─── Office display round B: P2 快照可视 diff ─────
   'office.snapshot.diff': '与当前版本对比',

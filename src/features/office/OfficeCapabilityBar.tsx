@@ -91,6 +91,12 @@ export function OfficeCapabilityBar({ onCapabilities }: OfficeCapabilityBarProps
       label: t('office.caps.formula'),
       hint: caps.formulas_available ? 'formulas' : t('office.caps.install.formulas'),
     },
+    {
+      key: 'ocr',
+      ok: caps.ocr_available ?? false,
+      label: t('office.caps.ocr'),
+      hint: caps.ocr_available ? 'RapidOCR' : t('office.caps.install.ocr'),
+    },
   ];
 
   return (

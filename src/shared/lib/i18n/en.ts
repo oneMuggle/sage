@@ -708,11 +708,13 @@ export const en: Record<TranslationKey, string> = {
   'office.caps.image': 'Image compression',
   'office.caps.formula': 'Formula evaluation',
   'office.caps.refresh': 'Re-detect',
+  'office.caps.ocr': 'Scanned-PDF OCR',
   'office.caps.install.pdf.win': 'No converter detected: install LibreOffice (libreoffice.org/download) or MS Word to enable PDF export / high-fidelity preview',
   'office.caps.install.pdf.mac': 'No converter detected: brew install --cask libreoffice to enable PDF export / high-fidelity preview',
   'office.caps.install.pdf.linux': 'No converter detected: sudo apt install libreoffice (or your distro equivalent) to enable PDF export / high-fidelity preview',
   'office.caps.install.pillow': 'Pillow not installed: pip install -r backend/requirements-optional.txt to auto-compress images >8MB',
   'office.caps.install.formulas': 'formulas not installed: pip install -r backend/requirements-optional.txt to evaluate Excel formulas locally',
+  'office.caps.install.ocr': 'RapidOCR not installed: pip install -r backend/requirements-optional.txt to extract text from scanned PDFs locally (nothing leaves the machine)',
 
   // ─── Office display round B: P2 snapshot visual diff ─────
   'office.snapshot.diff': 'Compare with current',

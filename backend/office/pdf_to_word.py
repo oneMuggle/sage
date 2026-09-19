@@ -125,6 +125,17 @@ class PdfToWordResult(BaseModel):
         description="源 PDF 中的图片数量（转换跳过图片，仅计数上报）",
     )
     page_count: Optional[int] = Field(default=None, ge=0)
+    # Round D P10: OCR 回退。additive 字段（win7 兼容）——扫描页（无文本
+    # 层且含图片）在 RapidOCR 可用时经本地 OCR 识别为普通段落。
+    ocr_pages: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="经 OCR 回退识别的页数；None/0 = 未用到 OCR",
+    )
+    ocr_available: Optional[bool] = Field(
+        default=None,
+        description="本机 OCR 引擎是否可用（False 且存在扫描页时提示安装）",
+    )
     error: Optional[str] = Field(default=None, description="失败原因；成功时为 None")
 
 
@@ -282,13 +293,14 @@ def _build_docx(
     # 避免转换产物在中文 Word 里回退到日文 theme 字体。
     set_doc_default_font(doc, "Times New Roman", "宋体")
 
-    counters = {"paragraphs": 0, "tables": 0, "images": 0}
+    counters = {"paragraphs": 0, "tables": 0, "images": 0, "ocr_pages": 0}
     for page in pdf:
         page_dict = page.get_text("dict")
         page_tables = _extract_tables_for_page(page, page_number=page.number + 1)
         # 只对真正渲染成 docx 表格的区域去重（bbox 与提取结果同序同源；
         # 提取被截断时以较少者为准，宁重复不丢内容）。
         detected_rects = _table_bboxes(page)[: len(page_tables)]
+        page_paragraphs = 0
         for block in page_dict.get("blocks", []):
             if block.get("type") != 0:  # 0 = text block; image blocks are skipped
                 continue
@@ -303,6 +315,20 @@ def _build_docx(
             else:
                 doc.add_paragraph(text)
             counters["paragraphs"] += 1
+            page_paragraphs += 1
+        # Round D P10: 扫描页回退 —— 该页无文本层、无表格但有图片时，
+        # 尝试本地 OCR（RapidOCR，可选依赖）。识别行作为普通段落追加；
+        # 引擎缺失/识别失败保持原行为（近空页）。
+        page_images = _page_image_count(page)
+        if page_paragraphs == 0 and not page_tables and page_images > 0:
+            from . import ocr as _ocr  # call-time import — optional heavy dep
+
+            ocr_lines = _ocr.ocr_pdf_page(page)
+            if ocr_lines:
+                for line in ocr_lines:
+                    doc.add_paragraph(line)
+                    counters["paragraphs"] += 1
+                counters["ocr_pages"] += 1
         for table_rows in page_tables:
             col_count = max(len(row) for row in table_rows)
             table = doc.add_table(rows=len(table_rows), cols=col_count)
@@ -313,7 +339,7 @@ def _build_docx(
                         row[col_idx] if col_idx < len(row) else ""
                     )
             counters["tables"] += 1
-        counters["images"] += _page_image_count(page)
+        counters["images"] += page_images
     return doc, counters
 
 
@@ -397,6 +423,8 @@ def _convert_inner(source: Path, workspace: Path, out_filename: str) -> PdfToWor
     )
     doc.save(str(output_path))
 
+    from . import ocr as _ocr  # call-time import — availability flag only
+
     return PdfToWordResult(
         ok=True,
         output_path=str(output_path),
@@ -406,4 +434,6 @@ def _convert_inner(source: Path, workspace: Path, out_filename: str) -> PdfToWor
         table_count=counters["tables"],
         image_count=counters["images"],
         page_count=page_count,
+        ocr_pages=counters.get("ocr_pages", 0),
+        ocr_available=_ocr.is_ocr_available(),
     )
