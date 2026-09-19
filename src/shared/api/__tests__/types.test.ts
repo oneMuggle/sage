@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { TaskPlanItem } from '../types';
 import type { TaskPlanItem as StreamTaskPlanItem } from '../llmStream';
+import type { TaskPlanItem } from '../types';
 
 describe('TaskPlanItem', () => {
   it('supports optional parent_task_id and depth', () => {
