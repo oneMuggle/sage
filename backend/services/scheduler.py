@@ -37,17 +37,18 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from croniter import croniter
 
+from backend.domain.scheduler import (
+    ScheduledTaskNotFoundError,
+    ScheduledTaskValidationError,
+)
+
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 
 
-class TaskNotFoundError(KeyError):
-    """Raised when the task id does not exist in the store."""
-
-
-class ValidationError(ValueError):
-    """Raised when input fails validation (bad cron, past timestamp, etc.)."""
+TaskNotFoundError = ScheduledTaskNotFoundError
+ValidationError = ScheduledTaskValidationError
 
 
 @dataclass

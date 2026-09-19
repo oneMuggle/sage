@@ -39,6 +39,11 @@ from backend.api.settings_models import SettingsPayload, model_dump_compat
 from backend.application.services.chat_service import ChatService
 from backend.application.services.session_service import SessionService
 from backend.chat.executors import resolve_attachments
+from backend.tools.context import (
+    ToolExecutionContext,
+    reset_tool_context,
+    set_tool_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -142,42 +147,53 @@ async def chat(
         ]
 
     user_msg = Message(role=Role.USER, content=req.message)
+    context_token = set_tool_context(
+        ToolExecutionContext(
+            session_id=req.session_id,
+            stream_id=request_id,
+            binding_generation=0,
+            office_doc_scope=frozenset(),
+        )
+    )
     try:
-        msgs = await svc.run_turn(
-            req.session_id,
-            user_msg,
-            extra_system_messages=extra_system_messages,
-        )
-    except LLMError as exc:
-        logger.warning(
-            f"[HEX REQ {request_id}] /chat LLM error: type={exc.type.value}, "
-            f"message={exc.message}"
-        )
-        raise HTTPException(
-            status_code=exc.status_code or 502,
-            detail={
-                "type": exc.type.value,
-                "message": exc.message,
-                "status_code": exc.status_code,
-                "retry_after": exc.retry_after,
-            },
-        ) from exc
-    except Exception:
-        logger.exception(f"[HEX REQ {request_id}] /chat unexpected error")
-        raise HTTPException(
-            status_code=500,
-            detail={"type": "unknown", "message": "服务内部错误"},
-        )
+        try:
+            msgs = await svc.run_turn(
+                req.session_id,
+                user_msg,
+                extra_system_messages=extra_system_messages,
+            )
+        except LLMError as exc:
+            logger.warning(
+                f"[HEX REQ {request_id}] /chat LLM error: type={exc.type.value}, "
+                f"message={exc.message}"
+            )
+            raise HTTPException(
+                status_code=exc.status_code or 502,
+                detail={
+                    "type": exc.type.value,
+                    "message": exc.message,
+                    "status_code": exc.status_code,
+                    "retry_after": exc.retry_after,
+                },
+            ) from exc
+        except Exception:
+            logger.exception(f"[HEX REQ {request_id}] /chat unexpected error")
+            raise HTTPException(
+                status_code=500,
+                detail={"type": "unknown", "message": "服务内部错误"},
+            )
 
-    assistant = next((m for m in reversed(msgs) if m.role == Role.ASSISTANT), None)
-    if assistant is None:
-        logger.error(f"[HEX REQ {request_id}] /chat no assistant response in messages")
-        raise HTTPException(
-            status_code=500,
-            detail={"type": "no_assistant_response", "message": "no assistant response"},
-        )
+        assistant = next((m for m in reversed(msgs) if m.role == Role.ASSISTANT), None)
+        if assistant is None:
+            logger.error(f"[HEX REQ {request_id}] /chat no assistant response in messages")
+            raise HTTPException(
+                status_code=500,
+                detail={"type": "no_assistant_response", "message": "no assistant response"},
+            )
 
-    return ChatResponse(session_id=req.session_id, reply=assistant.content)
+        return ChatResponse(session_id=req.session_id, reply=assistant.content)
+    finally:
+        reset_tool_context(context_token)
 
 
 # ==================== Prometheus /metrics 端点 ====================

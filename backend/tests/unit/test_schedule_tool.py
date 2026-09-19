@@ -20,6 +20,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from backend.services.scheduler import SchedulerService
+from backend.tools import ToolRegistry, register_all_tools
 from backend.tools.context import (
     ToolExecutionContext,
     reset_tool_context,
@@ -74,6 +75,23 @@ def _bind_session(session_id: str):
 
 def _future_iso(minutes: int = 30) -> str:
     return (datetime.now() + timedelta(minutes=minutes)).isoformat()
+
+
+class TestScheduleToolRegistration:
+    def test_scheduler_getter_is_injected_into_all_tools(self) -> None:
+        def getter() -> object:
+            return object()
+
+        registry = ToolRegistry()
+
+        register_all_tools(registry, scheduler_service_getter=getter)
+
+        for name in (
+            "schedule_task",
+            "list_scheduled_tasks",
+            "cancel_scheduled_task",
+        ):
+            assert registry.get(name)._service_getter is getter
 
 
 class TestScheduleTaskTool:
@@ -357,6 +375,7 @@ class TestCancelScheduledTaskTool:
             reset_tool_context(token)
 
         assert result.success is False
+        assert "不存在或不属于当前会话" in (result.error or "")
         assert len(service.list_tasks()) == 1
 
     def test_cancel_unknown_id_returns_error(self, service: SchedulerService) -> None:
