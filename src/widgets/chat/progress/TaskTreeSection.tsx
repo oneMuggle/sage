@@ -357,6 +357,22 @@ export function TaskTreeSection({
                   {(st?.duration_ms ?? 0) > 0 && formatDuration(st!.duration_ms!)}
                 </span>
               ) : null}
+              {/* RD18 (round33): 级联跳过根因徽章 —— 上游失败导致本任务
+                  未启动即置 failed（error 前缀 blocked_by_failed:<root>），
+                  行内直读根因，不必开 Drawer 翻原始文本。 */}
+              {status === 'failed' &&
+                st?.error?.startsWith('blocked_by_failed:') && (
+                  <span
+                    data-testid={`task-tree-blocked-${item.task_id}`}
+                    title={st.error}
+                    className="text-text-tertiary text-[10px] shrink-0"
+                  >
+                    因 {st.error
+                      .slice('blocked_by_failed:'.length)
+                      .split(',')
+                      .join('、')} 失败级联跳过
+                  </span>
+                )}
               {/* RD13+ (round15): 重派徽章 —— retry_of 重派的任务可追溯 */}
               {st?.retry_of && (
                 <span

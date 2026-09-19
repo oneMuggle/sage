@@ -715,3 +715,45 @@ describe('TaskTreeSection — run 级耗时 (BU16)', () => {
     }
   });
 });
+
+// ============================================================================
+// RD18 (round33): 级联跳过根因徽章
+// ============================================================================
+
+describe('TaskTreeSection — 级联跳过根因 (RD18)', () => {
+  it('blocked_by_failed 前缀 → 行内根因徽章（多根因顿号连接）', () => {
+    render(
+      <TaskTreeSection
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: 'blocked_by_failed:t0,t9',
+              output_preview: null,
+              retry_count: 0,
+            },
+            t2: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't2',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g2',
+              error: '普通失败：boom',
+              output_preview: null,
+              retry_count: 0,
+            },
+          } as TaskBoardState['statuses'],
+        })}
+      />,
+    );
+    const badge = screen.getByTestId('task-tree-blocked-t1');
+    expect(badge.textContent).toBe('因 t0、t9 失败级联跳过');
+    expect(screen.queryByTestId('task-tree-blocked-t2')).toBeNull();
+  });
+});
