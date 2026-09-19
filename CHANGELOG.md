@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 61：append_paragraphs 支持 {{fn:}}/{{en:}}**（方案 `docs/plans/2026-09-19_r61-append-fn-en-plan.md`）
+
+### Added(office)
+- **update 通路四类占位符全支持**：append_paragraphs 的 {{fn:}}/{{en:}} 写成 footnote/endnoteReference run 并把备注文本追加进对应 part——part 不存在时全量挂载（含样式注入），已存在时 blob 增补、编号从现有数+1 续接；与 fig/tbl 同段混用、预校验 all-or-nothing 语义不变
+
 > 🧹 **Word 写作能力 Round 60：residue 补全 + append_paragraphs 交叉引用**（方案 `docs/plans/2026-09-19_r60-residue-update-marks-plan.md`）
 
 ### Fixed(office)
