@@ -49,6 +49,8 @@ export function SubagentDetailDrawer({ open, onClose }: SubagentDetailDrawerProp
   const runs = useRunControlStore((s) => s.runs);
   const selectedRunId = useRunControlStore((s) => s.selectedRunId);
   const selectedTaskId = useRunControlStore((s) => s.selectedTaskId);
+  // RD19 (round35): 聊天任务板带来的任务级统计（非编排运行视图数据）。
+  const selectedTaskMeta = useRunControlStore((s) => s.selectedTaskMeta);
   const eventsByRunId = useRunControlStore((s) => s.eventsByRunId);
 
   // Subscribe to events when drawer is open and a run is selected
@@ -110,6 +112,25 @@ export function SubagentDetailDrawer({ open, onClose }: SubagentDetailDrawerProp
         </div>
       </div>
 
+      {/* RD19 (round35): 任务级消耗/时长统计（来源：聊天任务板终态事件，
+          经 selectTask meta 传入；orch 运行视图无此数据时自然不渲染）。 */}
+      {(selectedTaskMeta?.used_tokens ?? 0) > 0 ||
+      (selectedTaskMeta?.duration_ms ?? 0) > 0 ? (
+        <div
+          className="px-4 py-2 border-b border-border-primary text-xs text-text-secondary flex gap-3"
+          data-testid="drawer-task-stats"
+        >
+          {(selectedTaskMeta?.used_tokens ?? 0) > 0 && (
+            <span>
+              消耗 {selectedTaskMeta!.used_tokens!.toLocaleString()} tokens
+            </span>
+          )}
+          {(selectedTaskMeta!.duration_ms ?? 0) > 0 && (
+            <span>时长 {formatDrawerDuration(selectedTaskMeta!.duration_ms!)}</span>
+          )}
+        </div>
+      ) : null}
+
       {/* Current step */}
       <div className="px-4 py-3 border-b border-border-primary">
         <div className="text-xs text-text-tertiary mb-1">当前步骤</div>
@@ -146,4 +167,15 @@ export function SubagentDetailDrawer({ open, onClose }: SubagentDetailDrawerProp
       )}
     </div>
   );
+}
+
+// BU15 同款时长格式化（Drawer 局部）：<60s 秒、<1h 分秒、否则时分。
+function formatDrawerDuration(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  if (totalSec < 60) return `${totalSec}s`;
+  const hh = Math.floor(totalSec / 3600);
+  const mm = Math.floor((totalSec % 3600) / 60);
+  const ss = totalSec % 60;
+  if (hh > 0) return `${hh}h${String(mm).padStart(2, '0')}m`;
+  return `${mm}m${String(ss).padStart(2, '0')}s`;
 }
