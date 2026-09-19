@@ -174,6 +174,12 @@ class ChatTaskState:
     # （executor 回传：{"all_passed": bool, "checks": [...]}）。None = 未跑
     # 验收（disabled / reviewer lane）。advisory 语义不变：不翻转任务结论。
     acceptance: Optional[Dict[str, Any]] = None
+    # 任务层级：计划声明的父任务 ID。仅用于归属与展示，**不参与调度**；
+    # 执行依赖一律由计划的 depends_on 决定（spec 2026-09-19 §设计原则）。
+    depth: int = 0
+    # 续聊父任务（由 followup_of 解析而来）：与计划层级父任务是两个概念 ——
+    # 只有它构成隐式执行依赖并继承父任务对话历史。
+    followup_parent_id: Optional[str] = None
 
 
 def build_acceptance_block(states: Iterable[ChatTaskState]) -> str:
@@ -682,6 +688,11 @@ class ChatDispatcher:
                 logger.warning("task_id 不合规，已替换: %r -> %s", task_id, safe_id)
                 task_id = safe_id
             followup_of = raw.get("followup_of")
+            plan_item = self._plan_by_id.get(task_id)
+            plan_parent_task_id = (
+                plan_item.get("parent_task_id") if plan_item else None
+            )
+            plan_depth = int(plan_item.get("depth", 0) or 0) if plan_item else 0
             # L1 (2026-08-23): 自指 followup 守卫 —— task 引用自身不构成有效续聊。
             # 缺守卫时隐式自环依赖会被 build_waves 判环拒掉整批；改为 warning 后
             # 降级普通任务（与其余无效 followup_of 同一降级路径）。
@@ -707,7 +718,8 @@ class ChatDispatcher:
                 agent_id=agent_id,
                 goal=goal,
                 output_schema=output_schema,
-                parent_task_id=parent_task_id,
+                parent_task_id=plan_parent_task_id,
+                depth=plan_depth,
                 followup_degraded=followup_degraded,
                 parent_tool_call_id=self._current_tool_call_id,
             )
@@ -1376,6 +1388,8 @@ class ChatDispatcher:
             "retry_count": state.retry_count,
             "output_preview": self._preview(state),
             "parent_tool_call_id": state.parent_tool_call_id,
+            "parent_task_id": state.parent_task_id,
+            "depth": state.depth,
         }
         # RD13+ (round15): 重派任务向前端透出 retry_of —— 任务树可标注
         # "重派"徽章（用户可追溯哪些任务是重做的）。None 时不带键。
