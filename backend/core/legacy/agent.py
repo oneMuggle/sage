@@ -1921,7 +1921,7 @@ class SageAgent:
         if not required:
             return None
         # required 应该是字符串列表
-        if not isinstance(required, list | tuple):
+        if not isinstance(required, (list, tuple)):  # noqa: UP038 — py38 运行时 isinstance 不支持 PEP604 union
             return None
         missing = [name for name in required if name not in parameters]
         if not missing:
