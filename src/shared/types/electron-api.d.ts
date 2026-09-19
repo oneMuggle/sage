@@ -277,6 +277,11 @@ export interface UpdateElectronApiBridge {
   setStrategy: (strategy: UpdateStrategy) => Promise<void>;
   getConfig: () => Promise<UpdateConfig>;
   setChannel: (channel: UpdateChannel) => Promise<void>;
+  /**
+   * 2026-09-19 设置治理: 部分更新更新配置（回滚窗口/检查周期/服务器/遥测/缓存）。
+   * 主进程合并后经 ConfigManager 校验落盘，并返回生效后的完整配置。
+   */
+  setConfigPatch: (patch: Partial<UpdateConfig>) => Promise<UpdateConfig>;
   onStateChanged: (handler: (payload: UpdateStateChangedEvent) => void) => UnlistenFn;
   checkWith: (providerId: string, channel?: string) => Promise<CheckResult | null>;
 }
