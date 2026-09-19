@@ -41,8 +41,8 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, replace
-from typing import Iterable, List, Sequence, Tuple
+from dataclasses import dataclass, field, replace
+from typing import Dict, Iterable, List, Sequence, Tuple
 
 from .resources import render_body_with_resources
 from .skill import SkillMdDocument
@@ -120,9 +120,14 @@ def extract_triggers(when_to_use: str) -> List[str]:
     return unique
 
 
-def _matches(message_lower: str, when_to_use: str) -> bool:
-    """消息 (已小写) 是否命中 ``when_to_use`` 的任一触发短语。"""
-    return any(trigger in message_lower for trigger in extract_triggers(when_to_use))
+def _matches(message_lower: str, when_to_use: str) -> Tuple[str, ...]:
+    """返回消息 (已小写) 命中的 ``when_to_use`` 触发短语元组。
+
+    空元组表示无命中 (与先前 bool 语义等价: ``bool(result)`` 仍可用)。
+    """
+    return tuple(
+        trigger for trigger in extract_triggers(when_to_use) if trigger in message_lower
+    )
 
 
 def build_context_block(activated: Sequence[SkillMdDocument]) -> str:
@@ -180,10 +185,14 @@ class AutoActivationResult:
     Attributes:
         names: 命中的技能名 (按匹配顺序, 截断到上限后)。
         context_block: 可直接追加到 system prompt 的文本; 无命中为空串。
+        matches: 每个激活技能命中的触发短语元组, 键为技能名。
+            仅记录最终进入 ``names`` 的技能 (通过数量/尺寸闸门的),
+            被跳过的技能不包含在内。
     """
 
     names: Tuple[str, ...] = ()
     context_block: str = ""
+    matches: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
 
     @property
     def activated(self) -> bool:
@@ -211,11 +220,13 @@ def auto_activate(
 
     message_lower = message.lower()
     activated: List[SkillMdDocument] = []
+    matches: Dict[str, Tuple[str, ...]] = {}
     projected_chars = 0
     for doc in docs:
         if not doc.when_to_use:
             continue
-        if not _matches(message_lower, doc.when_to_use):
+        matched_triggers = _matches(message_lower, doc.when_to_use)
+        if not matched_triggers:
             continue
         rendered_doc = doc
         if doc.base_dir is not None and doc.resources is not None:
@@ -249,6 +260,8 @@ def auto_activate(
             )
             continue
         activated.append(rendered_doc)
+        # 仅在技能通过所有闸门后才记录匹配触发词
+        matches[rendered_doc.name] = matched_triggers
         projected_chars = next_chars
 
     if not activated:
@@ -259,4 +272,5 @@ def auto_activate(
     return AutoActivationResult(
         names=names,
         context_block=build_context_block(activated),
+        matches=matches,
     )

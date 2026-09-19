@@ -86,8 +86,12 @@ describe('chatApi.chatStream (PR-6)', () => {
       images: [],
       // R37: 文本文档附件 id, 缺省空数组
       attachment_media_ids: [],
+      // client_message_id 协议 (同步 #1155): 未传 → null (兼容旧客户端)
+      clientMessageId: null,
       // Task 5 (2026-09-15): context window resolver toggle, 缺省 null
       autoContext: null,
+      // Task 5 (2026-09-17): 显式上下文重置, 缺省 false
+      context_reset: false,
     });
     // 2) listen 订阅 chat-stream-{id} (从 {streamId} 对象解构得到)
     expect(listenMock).toHaveBeenCalledWith(`chat-stream-${streamId}`, expect.any(Function));

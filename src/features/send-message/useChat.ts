@@ -141,7 +141,8 @@ export function useChat() {
   const [errorSessionId, setErrorSessionId] = useState<string | null>(null);
   // PM2 (round8): 计划模式完成的会话 ID —— 非空时 Chat 渲染"按计划执行"批准条。
   const [planApprovalFor, setPlanApprovalFor] = useState<string | null>(null);
-  const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
+  const { messages, addMessage, updateMessage, replaceMessageId, currentSessionId, loadMessages } =
+    useStore();
   const { settings } = useSettings();
 
   // U5 (对标增强第二轮批次 B): 流式中用户继续发送 → 入队,当前回复自然
@@ -233,6 +234,11 @@ export function useChat() {
         /** R23-D2: 聊天图片输入（base64 data URL，≤4 张/单张 5MiB） */
         images?: string[];
         attachmentMediaIds?: string[];
+        /**
+         * Task 5 (2026-09-17): 上下文重置 —— 后端在本轮消息前插入
+         * topic_separator 并清空 LLM 历史窗口。
+         */
+        contextReset?: boolean;
       },
     ) => {
       const sid = sessionId ?? currentSessionId;
@@ -293,14 +299,16 @@ export function useChat() {
       setError(null);
       setErrorSessionId(null);
 
+      // client_message_id 协议 (同步 #1155): 乐观 user 消息直接使用与服务端
+      // 相同的确定性 id (u-<cmid>) —— 流结束对账按 id 精确命中, 根治重复。
+      const clientMessageId = crypto.randomUUID();
       const userMessage: Message = {
-        id: crypto.randomUUID(),
+        id: `u-${clientMessageId}`,
         session_id: sid,
         role: 'user',
         content,
         created_at: Date.now(),
       };
-      const userId = userMessage.id;
       addMessage(userMessage);
 
       if (!chatEndpoint?.baseUrl) {
@@ -359,6 +367,8 @@ export function useChat() {
         // PM1 (round8): 计划模式透传（本次 run 只读 + 计划指令）
         planMode: opts?.planMode,
         memoryDisabled: opts?.memoryDisabled,
+        // Task 5 (2026-09-17): 上下文重置 —— "新话题" 按钮触发
+        contextReset: opts?.contextReset,
       };
 
       const appendContent = (next: string): void => {
@@ -422,6 +432,10 @@ export function useChat() {
       // 因为 ref 里混了 '🤔 思考中…' 占位符)。finishStream 用这个写 store。
       let finished = false;
       let lastDoneContent: string | null = null;
+      // client_message_id 协议 (同步 #1155): DONE 携带 assistant 消息服务端 id
+      let lastDoneMessageId: string | null = null;
+      // 同步 #1196: 首轮标题将在后台生成 —— 延迟补刷侧栏
+      let lastDoneTitlePending = false;
       // flushQueue=true 仅限流自然结束(onDone) —— 错误/中断不自动发队列消息
       const finishStream = (flushQueue = false): void => {
         if (finished) return;
@@ -455,6 +469,11 @@ export function useChat() {
             tool_calls: finalToolCalls.length > 0 ? finalToolCalls : undefined,
           });
         }
+        // client_message_id 协议 (同步 #1155): DONE 带回服务端 id 时, 把
+        // 乐观占位 id 原地替换 —— 此后 loadMessages 对账按 id 精确命中。
+        if (lastDoneMessageId && lastDoneMessageId !== assistantId) {
+          replaceMessageId(assistantId, lastDoneMessageId);
+        }
         // 2026-08-19: 精准重置流式 state + toolCalls,**不清 taskBoard**
         // (与原 commit 一致:finishStream 旧实现只 setStreaming(null) + 清 ref,
         //  taskBoard 留到下条消息 startStream 触发重置。
@@ -475,6 +494,12 @@ export function useChat() {
         // 流结束后刷新侧栏会话列表（获取自动生成的标题 + S1 落库的运行态徽章）
         // hex 路径无 NDJSON session_updated 事件，此处兜底刷新
         void useStore.getState().loadSessions();
+        // 同步 #1196: 首轮标题在后台生成 (DONE 先行) —— 延迟补刷两次,
+        // 覆盖后台标题 LLM 生成/重试的常见耗时区间。
+        if (lastDoneTitlePending) {
+          window.setTimeout(() => void useStore.getState().loadSessions(), 8000);
+          window.setTimeout(() => void useStore.getState().loadSessions(), 16000);
+        }
         // R25-D5: 消息对账 —— 网关/scheduler 等外部写库方不经本渲染进程，
         // 流结束后以服务端为准刷新一次，消除"开着会话看不到新消息"的窗口
         // （loadMessages 每次直查 get_messages，无缓存问题）。
@@ -560,26 +585,72 @@ export function useChat() {
               // R38: 透明度增强事件 — 技能激活 / 记忆召回 / 上下文压缩
               // 这些事件不影响对话主流程，仅用于 UI 展示。fail-safe: 任何
               // 异常只跳过更新，绝不阻断聊天。
+              // MEDIUM-2: 运行时载荷校验 — 防止伪造/畸形数据进入气泡文案。
+              // 校验不通过时丢弃该事件（不更新 UI），而非按畸形值渲染。
               if (evt.state === 'memory_used' && evt.memories) {
-                updateMessage(assistantId, {
-                  memory_refs: evt.memories,
-                  memory_applied: evt.memories.length,
-                });
+                // memories: 必须是数组，每项必须有 id (string)
+                const memories = evt.memories;
+                const isValidMemories =
+                  Array.isArray(memories) &&
+                  memories.every(
+                    (m) =>
+                      typeof m === 'object' &&
+                      m !== null &&
+                      typeof (m as { id?: unknown }).id === 'string',
+                  );
+                if (isValidMemories) {
+                  updateMessage(assistantId, {
+                    memory_refs: memories,
+                    memory_applied: memories.length,
+                  });
+                } else {
+                  logger.warn(requestId, 'R38.memory_used.malformed', memories);
+                }
               }
               if (evt.state === 'skill_activated' && evt.skills) {
-                updateMessage(userId, { activated_skills: evt.skills });
+                // MEDIUM-2: skills 必须是数组，每项必须有 name (string)
+                const skills = evt.skills;
+                const isValidSkills =
+                  Array.isArray(skills) &&
+                  skills.every(
+                    (s) =>
+                      typeof s === 'object' &&
+                      s !== null &&
+                      typeof (s as { name?: unknown }).name === 'string',
+                  );
+                if (isValidSkills) {
+                  updateMessage(`u-${clientMessageId}`, { activated_skills: skills });
+                } else {
+                  logger.warn(requestId, 'R38.skill_activated.malformed', skills);
+                }
               }
               if (evt.state === 'compact_triggered' && evt.compact) {
-                // 插入特殊系统消息气泡（非普通 assistant 气泡）
-                const compactMsg: Message = {
-                  id: crypto.randomUUID(),
-                  session_id: sid,
-                  role: 'system',
-                  content: `📦 上下文已压缩：${evt.compact.before} → ${evt.compact.after} 条（移除 ${evt.compact.removed} 条）`,
-                  created_at: Date.now(),
-                  compact_info: evt.compact,
+                // compact: 必须有 before/after/removed 三个 number 字段
+                const compact = evt.compact as {
+                  before?: unknown;
+                  after?: unknown;
+                  removed?: unknown;
                 };
-                addMessage(compactMsg);
+                const { before, after, removed } = compact;
+                if (
+                  typeof before === 'number' &&
+                  typeof after === 'number' &&
+                  typeof removed === 'number'
+                ) {
+                  // 插入特殊系统消息气泡（非普通 assistant 气泡）
+                  // LOW-1: 统一口径 —— "before → after 条（removed 条历史已合并为摘要）"
+                  const compactMsg: Message = {
+                    id: crypto.randomUUID(),
+                    session_id: sid,
+                    role: 'system',
+                    content: `📦 上下文已压缩：${before} → ${after} 条（${removed} 条历史已合并为摘要）`,
+                    created_at: Date.now(),
+                    compact_info: { before, after, removed },
+                  };
+                  addMessage(compactMsg);
+                } else {
+                  logger.warn(requestId, 'R38.compact_triggered.malformed', compact);
+                }
               }
 
               // 处理 reasoning 事件：三种 state 不同处理 (2026-09-02 bug fix)
@@ -689,6 +760,8 @@ export function useChat() {
                 appendContent(evt.content);
                 if (evt.state === 'done') {
                   lastDoneContent = evt.content;
+                  if (evt.message_id) lastDoneMessageId = evt.message_id;
+                  lastDoneTitlePending = evt.title_pending === true;
                 }
                 useChatStreamStore
                   .getState()
@@ -723,6 +796,7 @@ export function useChat() {
           officeRefs,
           opts?.images,
           opts?.attachmentMediaIds,
+          clientMessageId,
         );
         // Never let a late subscription overwrite a newer run's handle.
         if (finished || activeStreamRegistry.get(sid) !== streamHandle) {
@@ -747,6 +821,7 @@ export function useChat() {
       settings,
       addMessage,
       updateMessage,
+      replaceMessageId,
       markStreamActive,
       markStreamIdle,
     ],

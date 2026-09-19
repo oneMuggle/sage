@@ -14,8 +14,8 @@ import {
   Check,
   BrainCircuit,
   Quote,
-  Package,
-  Zap
+  FileText,
+  Zap,
 } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
@@ -23,7 +23,9 @@ import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 
+import type { Artifact } from '../../features/artifacts/artifactApi';
 import { MediaAttachment } from '../../features/chat/MediaAttachment';
+import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { THINKING_PLACEHOLDER } from '../../features/send-message/thinkingPlaceholder';
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
@@ -31,6 +33,7 @@ import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownCh
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
+import { CompactBanner } from './CompactBanner';
 import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownImage } from './MarkdownImage';
 import { MermaidBlock } from './MermaidBlock';
@@ -55,6 +58,9 @@ interface MessageProps {
   onQuote?: (message: MessageType) => void;
   /** P0-1: 将此条消息内容保存到长期记忆 */
   onSaveToMemory?: (message: MessageType) => void;
+  /** right-panel R1 批次 B: tool_call_id → 产物[] 映射 —— 命中的工具卡片
+   * 下渲染内联产物 chip，点击直达右侧面板产物预览（对齐 Claude） */
+  artifactsByToolCall?: Record<string, Artifact[]>;
 }
 
 /** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
@@ -391,6 +397,7 @@ function MessageComponent({
   onDelete,
   onQuote,
   onSaveToMemory,
+  artifactsByToolCall,
 }: MessageProps) {
   const { t } = useI18n();
   const isUser = message.role === 'user';
@@ -468,10 +475,7 @@ function MessageComponent({
   if (isSystem && message.compact_info) {
     return (
       <div className="flex justify-center my-3">
-        <div className="px-3 py-1.5 rounded-radius-sm bg-bg-subtle border border-border text-xs text-text-secondary flex items-center gap-1.5">
-          <Package className="w-3 h-3 text-muted" />
-          <span>{message.content}</span>
-        </div>
+        <CompactBanner info={message.compact_info} />
       </div>
     );
   }
@@ -497,6 +501,10 @@ function MessageComponent({
       </div>
 
       <div className={`flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
+        {/* R38: 压缩续接行 —— 横幅置于气泡上方，摘要正文/Thinking/
+            copy/regenerate/delete 等正文与 affordance 全部保留。 */}
+        {message.compact_info && <CompactBanner info={message.compact_info} />}
+
         {/* ThinkingPanel - LLM 思考过程展示（仅 assistant 消息且有 reasoning_content 时） */}
         {isAssistant && message.reasoning_content && (
           <ThinkingPanel reasoning={message.reasoning_content} isStreaming={isStreaming} />
@@ -560,6 +568,24 @@ function MessageComponent({
                       <ToolCallResult result={tc.result} />
                     </div>
                   )}
+                  {/* right-panel R1 批次 B: 该工具调用落库的产物 chip ——
+                      点击直达右侧面板产物预览（selectArtifact：开面板+切产物Tab+选中） */}
+                  {tc.id && artifactsByToolCall?.[tc.id]?.length ? (
+                    <div className="flex flex-wrap gap-1 px-2 pb-1.5">
+                      {artifactsByToolCall[tc.id].map((art) => (
+                        <button
+                          key={art.id}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-[11px] text-primary transition-colors"
+                          onClick={() => useRightPanelStore.getState().selectArtifact(art.id)}
+                          title="在右侧面板中查看"
+                          data-testid="message-artifact-chip"
+                        >
+                          <FileText className="w-3 h-3 shrink-0" />
+                          <span className="truncate max-w-48">{art.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   {/* Inline image preview for diagram tools */}
                   {hasImage && (
                     <div className="px-2 pb-2">
@@ -691,11 +717,26 @@ function MessageComponent({
             data-testid="skill-activated-list"
           >
             {activatedSkills.map((skill) => (
-              <div key={skill.name} className="flex items-start gap-1.5">
-                <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
-                  技能
-                </span>
-                <span className="text-text-secondary break-all">{skill.name}</span>
+              <div key={skill.name} className="flex flex-col gap-0.5">
+                <div className="flex items-start gap-1.5">
+                  <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
+                    技能
+                  </span>
+                  <span className="text-text-secondary break-all">{skill.name}</span>
+                </div>
+                {/* MEDIUM-3: 展示命中的触发词（extract_triggers 已小写化） */}
+                {skill.triggers_matched && skill.triggers_matched.length > 0 && (
+                  <div className="ml-5 flex flex-wrap gap-1">
+                    {skill.triggers_matched.map((trigger, idx) => (
+                      <span
+                        key={idx}
+                        className="px-1 py-0.5 rounded bg-bg-hover text-text-tertiary text-[10px]"
+                      >
+                        {trigger}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -824,6 +865,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.onRegenerate === next.onRegenerate &&
     prev.onDelete === next.onDelete &&
     prev.onQuote === next.onQuote &&
-    prev.onSaveToMemory === next.onSaveToMemory
+    prev.onSaveToMemory === next.onSaveToMemory &&
+    prev.artifactsByToolCall === next.artifactsByToolCall
   );
 });

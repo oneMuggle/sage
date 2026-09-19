@@ -124,3 +124,46 @@ async def test_ensure_upgrades_stale_primary_tools_with_agent():
     ensure_default_agents()
 
     assert "agent" in repo.get("primary")["tools"]
+
+
+# ---------------------------------------------------------------------------
+# 2026-09-18 (PPT/Word 专用角色收口): ppt-maker 种子 + writer prompt 迁移链
+# ---------------------------------------------------------------------------
+
+
+def test_ppt_maker_seed_shape():
+    """ppt-maker 种子：deck 闭环工具齐备，不含删档与 Word 系工具。"""
+    from backend.agents.profiles import create_default_agents
+
+    ppt = next(a for a in create_default_agents() if a.id == "ppt-maker")
+    assert ppt.role == "slide-deck-creator"
+    for name in ("office_create", "office_update", "office_analyze_ppt_template",
+                 "office_fill_ppt_template", "repl", "ask_user_question"):
+        assert name in ppt.tools, name
+    assert "office_delete" not in ppt.tools
+    assert "office_lint_word" not in ppt.tools  # Word 质检归 writer
+
+
+@pytest.mark.asyncio()
+async def test_ensure_upgrades_legacy_writer_prompt_but_not_custom():
+    """存量 DB writer prompt 逐字等于旧种子 → 升级；用户自定义不动。"""
+    from backend.agents.profiles import (
+        _WRITER_SYSTEM_PROMPT_BEFORE_WORKFLOW,
+        WRITER_SYSTEM_PROMPT,
+        ensure_default_agents,
+    )
+
+    repo = AgentRepository()
+    ensure_default_agents()
+
+    stale = repo.get("writer")
+    stale["system_prompt"] = _WRITER_SYSTEM_PROMPT_BEFORE_WORKFLOW
+    repo.upsert(stale)
+    ensure_default_agents()
+    assert repo.get("writer")["system_prompt"] == WRITER_SYSTEM_PROMPT
+
+    custom = repo.get("writer")
+    custom["system_prompt"] = "我只写科幻小说"
+    repo.upsert(custom)
+    ensure_default_agents()
+    assert repo.get("writer")["system_prompt"] == "我只写科幻小说"

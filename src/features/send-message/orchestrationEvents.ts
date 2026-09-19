@@ -18,18 +18,19 @@ import type {
   TaskStatusEvent,
 } from '../../shared/api/types';
 import { bumpArtifactEvent } from '../artifacts/artifactEventsStore';
+import { maybeAutoOpenArtifactPanel } from '../right-panel/rightPanelStore';
 
-import {
-  mergeLiveEvent,
-  useChatStreamStore,
-} from './chatStreamStore';
+import { mergeLiveEvent, useChatStreamStore } from './chatStreamStore';
 
 export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): boolean {
   const board = useChatStreamStore.getState();
 
   // S7: 产物事件 → 计数 store。
+  // right-panel R1 批次 B: 当前查看的会话产出产物且面板关着时自动展开
+  // （对齐 Claude artifacts；Bell 开关可关；后台会话不打扰，只走侧栏 📎N）。
   if (evt.state === 'artifact_created' && evt.artifact) {
     bumpArtifactEvent(sid);
+    maybeAutoOpenArtifactPanel(sid);
     return true;
   }
 
@@ -50,9 +51,15 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
     const taskId = evt.task_id;
     board.updateTaskBoard(sid, runId, (prev) => {
       if (!prev || prev.runId !== runId) return prev;
+      // BU15 (round29): running 行实时计时 —— 前端 ingestion 打点
+      // （后端事件不含 started_at）；终态事件整体替换后自然消失。
+      const incoming = evt as TaskStatusEvent;
       const nextStatuses = {
         ...prev.statuses,
-        [taskId]: evt as TaskStatusEvent,
+        [taskId]:
+          incoming.status === 'running'
+            ? { ...incoming, runningSince: Date.now() }
+            : incoming,
       };
       const counts = { done: 0, running: 0, queued: 0, failed: 0, cancelled: 0 };
       for (const st of Object.values(nextStatuses)) {
@@ -156,6 +163,15 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
   // todo 快照。
   if (evt.state === 'todo_snapshot' && Array.isArray(evt.todos)) {
     board.setTodos(sid, evt.todos);
+    return true;
+  }
+
+  // Task 11 (2026-09-17): topic_shifted 横幅态 — 写入 shiftInfo
+  // 由 Chat.tsx 渲染 TopicShiftBanner;banner 自身持有可见性计时。
+  if (evt.state === 'topic_shifted') {
+    const segId = typeof evt.segment_id === 'number' ? evt.segment_id : 0;
+    const reason = typeof evt.reason === 'string' ? evt.reason : '';
+    board.setShiftInfo(sid, { segmentId: segId, reason, createdAt: Date.now() });
     return true;
   }
 

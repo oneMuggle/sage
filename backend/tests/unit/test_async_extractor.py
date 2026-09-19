@@ -1,6 +1,7 @@
 """Unit tests for MemoryExtractionQueue — 记忆提取异步化队列。"""
 
 import asyncio
+import contextlib
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -13,9 +14,16 @@ from backend.memory.async_extractor import (
 
 
 @pytest.fixture()
-def queue():
+async def queue():
+    """在测试自身的事件循环内创建/关闭队列——避免跨 loop 的 Task/Future 污染。"""
     reset_memory_extraction_queue()
-    yield get_memory_extraction_queue()
+    q = get_memory_extraction_queue()
+    yield q
+    q.stop()
+    # 让被 cancel 的 worker 有机会在循环关闭前收尾
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(q.drain(0.05), timeout=0.2)
+    await asyncio.sleep(0)
     reset_memory_extraction_queue()
 
 

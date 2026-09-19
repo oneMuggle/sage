@@ -15,6 +15,7 @@ import { GatewayCard } from '../../widgets/settings/GatewayCard';
 import { HooksCard } from '../../widgets/settings/HooksCard';
 import { UsagePanel } from '../../widgets/settings/UsagePanel';
 
+import { ContextTurnLimitSelect } from './ContextTurnLimitSelect';
 import { FontSettingsSection } from './FontSettingsSection';
 import { ThemeSelector } from './ThemeSelector';
 import { SettingRow, Toggle } from './components';
@@ -111,6 +112,35 @@ function NumberField({
           if (Number.isFinite(n) && n >= 0) onChange(Math.floor(n));
         }}
         className="w-32 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+      />
+    </SettingRow>
+  );
+}
+
+// RD16 (round26): scratch 根目录名 —— 后端 scratch_root 键的文本输入
+// （相对 data 目录的目录名，空/空白输入不提交）。
+function TextField({
+  label,
+  dataTestId,
+  value,
+  onChange,
+}: {
+  label: string;
+  dataTestId: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <SettingRow label={label}>
+      <input
+        type="text"
+        data-testid={dataTestId}
+        value={value}
+        onChange={(e) => {
+          if (e.target.value.trim() === '') return;
+          onChange(e.target.value.trim());
+        }}
+        className="w-48 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
       />
     </SettingRow>
   );
@@ -455,6 +485,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
             onChange={(v) => updateSettings({ confirmDelete: v })}
           />
         </SettingRow>
+        <ContextTurnLimitSelect />
       </section>
       <AutoCheckpointCard />
       <CloseToTrayCard />
@@ -552,6 +583,26 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
             }
           />
         </SettingRow>
+        {/* RD16 (round26): 后端 P2 隔离层旋钮 —— 仅隔离，不自动合并产物；
+            非 git 仓库 / git 不可用时自动降级 scratch 目录隔离。 */}
+        <SettingRow
+          label="子任务 git worktree 隔离"
+          desc="会话绑定 git 仓库时,每个子任务在临时 worktree 副本中工作(仅文件系统隔离,产物不自动合并回主工作区);非仓库或 git 失败自动降级"
+        >
+          <Toggle
+            testId="orch-worktree-isolation"
+            value={settings.orch.worktreeIsolation}
+            onChange={(v) =>
+              updateSettings({ orch: { ...settings.orch, worktreeIsolation: v } })
+            }
+          />
+        </SettingRow>
+        <TextField
+          label="Scratch 根目录名（data 目录下）"
+          dataTestId="orch-scratch-root"
+          value={settings.orch.scratchRoot}
+          onChange={(v) => updateSettings({ orch: { ...settings.orch, scratchRoot: v } })}
+        />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">数据</h3>

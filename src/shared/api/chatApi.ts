@@ -131,6 +131,8 @@ export const chatApi = {
     /** R23-D2: 聊天图片输入（base64 data URL），后端限 4 张/单张 5MiB */
     images?: string[],
     attachmentMediaIds?: string[],
+    /** client_message_id (2026-09, 同步 #1155): 乐观 id 与服务端落库 id 对齐 */
+    clientMessageId?: string,
   ): Promise<{ streamId: string; cancel: () => void }> {
     // 消息原文直传,理由同 chat()。
     if (!handlers || typeof handlers.onEvent !== 'function') {
@@ -159,6 +161,7 @@ export const chatApi = {
     const { streamId } = await invoke<{ streamId: string }>('agent_chat_stream', {
       sessionId,
       message,
+      clientMessageId: clientMessageId ?? null,
       apiKey: config?.apiKey ?? null,
       apiUrl: config?.apiUrl ?? null,
       model: config?.model ?? null,
@@ -180,6 +183,8 @@ export const chatApi = {
       plan_mode: config?.planMode ?? null,
       // 对标 S2: 临时聊天 → memory_mode='off'（缺省 'on'）
       memory_mode: config?.memoryDisabled ? 'off' : 'on',
+      // Task 5 (2026-09-17): 上下文重置 —— 后端在本轮消息前插入 topic_separator。
+      context_reset: config?.contextReset ?? false,
       // R23-D2: 聊天图片输入 —— 后端 ChatRequest.images（data URL 列表）
       images: images ?? [],
       attachment_media_ids: attachmentMediaIds ?? [],

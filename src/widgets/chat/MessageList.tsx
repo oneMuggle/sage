@@ -1,16 +1,22 @@
 import { ChevronUp } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
+import type { Artifact } from '../../features/artifacts/artifactApi';
+import { useArtifacts } from '../../features/artifacts/useArtifacts';
 import { BtwOverlay } from '../../features/chat';
 import type { Message as MessageType } from '../../shared/lib/store';
 
 import { Message } from './Message';
+import { TopicSeparator } from './TopicSeparator';
 
 /** U11 (批次 C-3): 尾窗渲染步长 —— "加载更早"每次多显示的条数 */
 const WINDOW_STEP = 60;
 
 interface MessageListProps {
   messages: MessageType[];
+  /** right-panel R1 批次 B: 当前会话 ID —— 拉取产物列表建立
+   * tool_call_id → 产物[] 映射，供消息内联产物 chip 点击直达预览 */
+  sessionId?: string | null;
   knowledgeRefs?: Record<string, { id: string; title: string }[]>;
   attachments?: Record<string, { name: string; size: number; type: string; dataUrl?: string }[]>;
   /** P1: 当前正在流式输出的消息 ID (用于 ThinkingPanel 自动展开) */
@@ -31,6 +37,7 @@ interface MessageListProps {
 
 export function MessageList({
   messages,
+  sessionId,
   knowledgeRefs,
   attachments,
   streamingMessageId,
@@ -45,6 +52,18 @@ export function MessageList({
   // 重渲染(每条 Message 都可能含 ReactMarkdown/Shiki)。
   const [windowSize, setWindowSize] = useState(WINDOW_STEP);
   const firstId = messages[0]?.id;
+
+  // right-panel R1 批次 B: 产物列表（与右侧面板共享 artifactListStore 缓存，
+  // 事件驱动刷新同源）→ tool_call_id 映射，供 Message 渲染内联产物 chip。
+  const { artifacts } = useArtifacts(sessionId ?? null);
+  const artifactsByToolCall = useMemo(() => {
+    const map: Record<string, Artifact[]> = {};
+    for (const a of artifacts) {
+      if (!a.tool_call_id) continue;
+      (map[a.tool_call_id] ??= []).push(a);
+    }
+    return map;
+  }, [artifacts]);
 
   // 切会话时重置窗口
   useEffect(() => {
@@ -76,21 +95,26 @@ export function MessageList({
             加载更早消息（还有 {hiddenCount} 条）
           </button>
         )}
-        {visible.map((message) => (
-          <Message
-            key={message.id}
-            message={message}
-            knowledgeRefs={knowledgeRefs?.[message.id]}
-            attachments={attachments?.[message.id]}
-            isStreaming={message.id === streamingMessageId}
-            onFork={onFork}
-            onEditResend={onEditResend}
-            onRegenerate={onRegenerate}
-            onDelete={onDelete}
-            onQuote={onQuote}
-            onSaveToMemory={onSaveToMemory}
-          />
-        ))}
+        {visible.map((message) =>
+          message.subtype === 'topic_separator' ? (
+            <TopicSeparator key={message.id} content={message.content} />
+          ) : (
+            <Message
+              key={message.id}
+              message={message}
+              knowledgeRefs={knowledgeRefs?.[message.id]}
+              attachments={attachments?.[message.id]}
+              isStreaming={message.id === streamingMessageId}
+              onFork={onFork}
+              onEditResend={onEditResend}
+              onRegenerate={onRegenerate}
+              onDelete={onDelete}
+              onQuote={onQuote}
+              onSaveToMemory={onSaveToMemory}
+              artifactsByToolCall={artifactsByToolCall}
+            />
+          ),
+        )}
       </div>
       <BtwOverlay />
     </>

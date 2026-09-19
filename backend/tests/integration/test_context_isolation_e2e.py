@@ -19,7 +19,7 @@ import pytest
 from backend.chat.history_context import apply_turn_limit, db_rows_to_history
 from backend.chat.topic_detection import detect_topic_shift
 from backend.data import session_repo
-from backend.data.session_repo import MessageRepository
+from backend.data.session_repo import Message, MessageRepository
 from backend.data.settings_repo import SettingsRepository
 from backend.tests.conftest import ensure_session
 
@@ -111,3 +111,78 @@ def test_topic_detection_triggers_separator(setup_test_db, monkeypatch):
     assert any(getattr(m, "content", "") == "Weather question" for m in active), (
         "new user message not found in active segment"
     )
+
+
+def test_save_persists_active_segment_id(setup_test_db):
+    """Regression (2026-09-18): save() must persist segment_id aligned with
+    get_active_segment_id() so MemoryManager.get_context(segment_id=N) can
+    filter working memory correctly after advance_segment().
+
+    Bug: earlier save() INSERT omitted segment_id, so post-advance user/assistant
+    rows stayed at default 0 while MAX(segment_id)=1, causing segment-scoped
+    memory queries to miss freshly written messages.
+    """
+    ensure_session(setup_test_db, "s1")
+    repo = MessageRepository()
+
+    # Segment 0: one user message via save()
+    repo.save(
+        Message(
+            id="m0",
+            session_id="s1",
+            role="user",
+            content="initial topic",
+            created_at=1,
+        )
+    )
+    assert repo.get_active_segment_id("s1") == 0
+    assert repo.save.__self__  # sanity: repo usable
+
+    # Advance → segment 1
+    new_seg = repo.advance_segment("s1")
+    assert new_seg == 1
+
+    # Post-advance user message via save()
+    repo.save(
+        Message(
+            id="m1",
+            session_id="s1",
+            role="user",
+            content="new topic question",
+            created_at=200,
+        )
+    )
+    # And an assistant reply via save()
+    repo.save(
+        Message(
+            id="m2",
+            session_id="s1",
+            role="assistant",
+            content="new topic answer",
+            created_at=201,
+        )
+    )
+
+    # Critical assertion: get_active_segment_id returns 1, and the messages
+    # saved AFTER advance_segment must persist segment_id=1 (not 0)
+    assert repo.get_active_segment_id("s1") == 1
+
+    conn = repo.db.get_connection()
+    rows = conn.execute(
+        "SELECT id, segment_id, subtype FROM messages WHERE session_id = ? ORDER BY created_at",
+        ("s1",),
+    ).fetchall()
+    by_id = {r["id"]: dict(r) for r in rows}
+
+    # Initial segment 0 message stays at segment 0
+    assert by_id["m0"]["segment_id"] == 0
+    assert by_id["m0"]["subtype"] is None
+    # Post-advance messages land on segment 1 (not stuck at 0)
+    assert by_id["m1"]["segment_id"] == 1, (
+        "save() failed to persist active segment_id — memory filter will miss this row"
+    )
+    assert by_id["m2"]["segment_id"] == 1
+    # advance_segment separator is fully marked in a single INSERT
+    sep_row = next(r for r in rows if r["id"] != "m0" and r["id"] not in ("m1", "m2"))
+    assert sep_row["segment_id"] == 1
+    assert sep_row["subtype"] == "topic_separator"
