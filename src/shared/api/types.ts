@@ -1275,6 +1275,8 @@ export interface OfficeWordReadResult {
   image_previews?: OfficeWordImagePreview[];
   // Round 57：脚注文本清单（无脚注为空表）
   footnotes?: string[];
+  // Round 59：尾注文本清单（无尾注为空表）
+  endnotes?: string[];
 }
 
 /** One Word comment (backend WordCommentContent). */
