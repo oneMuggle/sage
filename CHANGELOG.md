@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🧹 **Word 写作能力 Round 60：residue 补全 + append_paragraphs 交叉引用**（方案 `docs/plans/2026-09-19_r60-residue-update-marks-plan.md`）
+
+### Fixed(office)
+- **`cross_ref/residue` lint 补 fn/en**：`{{fn:}}/{{en:}}` 残渍（R57/R59 引入）此前不告警——正则扩为四类占位符
+
+### Added(office)
+- **`append_paragraphs` 支持交叉引用占位符**（{{fig:}}/{{tbl:}} → REF 域）：追加段落复用生成期书签（题注扫描构建映射，`append_ref_field` 写 REF）；预校验 all-or-nothing——未知题注拒绝且零写入
+
 > 📝 **Word 写作能力 Round 59：尾注 endnotes（Phase C）**（方案 `docs/plans/2026-09-19_r59-endnotes-plan.md`）
 
 ### Added(office)

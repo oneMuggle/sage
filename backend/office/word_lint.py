@@ -355,7 +355,7 @@ def _check_captions(doc: Document, issues: List[WordLintIssue]) -> None:
                 seen_texts[caption_text] = expected - 1
 
 
-_CROSS_REF_RESIDUE_RE = re.compile(r"\{\{(fig|tbl):[^}]+\}\}")
+_CROSS_REF_RESIDUE_RE = re.compile(r"\{\{(fig|tbl|fn|en):[^}]+\}\}")
 
 
 def _check_cross_ref_residue(doc: Document, issues: List[WordLintIssue]) -> None:
