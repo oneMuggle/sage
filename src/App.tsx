@@ -44,6 +44,10 @@ const Help = lazy(() => import('./pages/Help').then((m) => ({ default: m.Help })
 const ModelCatalog = lazy(() =>
   import('./pages/ModelCatalog').then((m) => ({ default: m.default })),
 );
+// 2026-09-19: Arena 账号池 + 注册辅助 + 模型观测
+const ArenaAccounts = lazy(() =>
+  import('./pages/ArenaAccounts').then((m) => ({ default: m.default })),
+);
 
 // ChatRoute 内直接调用 hook 形式的 useStore setter 会引入条件调用问题,
 // 用 getState() 命令式写入更直白(与 App useEffect 里的用法一致)。
@@ -190,6 +194,8 @@ function App() {
             <Route path="help" element={<Help />} />
             {/* Task 6 (2026-09-15): 模型目录管理 */}
             <Route path="model-catalog" element={<ModelCatalog />} />
+            {/* 2026-09-19: Arena 账号池 + 注册辅助 + 模型观测 */}
+            <Route path="arena-accounts" element={<ArenaAccounts />} />
           </Route>
         </Routes>
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />

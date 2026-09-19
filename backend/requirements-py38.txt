@@ -28,6 +28,12 @@ sqlite-vec>=0.1.9
 
 # HTTP
 httpx==0.26.0
+
+# Crypto (Arena account pool — Fernet symmetric encryption for passwords)
+# cryptography 47.0.0 is the last release shipping cp38 wheels (48.0.0
+# requires >=3.9). Keep in sync across requirements-py38.txt /
+# requirements-bundled.txt so all Win7 channels share one audited version.
+cryptography==47.0.0
 python-multipart==0.0.20  # required for FastAPI File() / Form() in legacy_routes.py; latest Python 3.8-compatible release, target CVE fixes require >=0.0.22
 certifi>=2024.7.4  # CA bundle required by httpx in the Win7 embeddable Python
 # requests 依赖已移除 — starlette 0.35.1 TestClient 走 httpx（上面已 pin），无代码 import requests
