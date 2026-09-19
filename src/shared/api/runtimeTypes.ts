@@ -17,31 +17,37 @@ export type RuntimeSource = 'system' | 'conda' | 'venv' | 'project' | 'toolchain
 export interface RuntimeCapability {
   /** Can execute arbitrary code (Python / Node). */
   can_execute: boolean;
-  /** Can run ``-m pip install ...`` (Python) or ``npm install`` (Node). */
-  can_install_packages: boolean;
-  /** Has a usable build toolchain (gcc / make / etc.) alongside. */
-  has_build_tools: boolean;
+  /** Can inspect installed packages for compatibility checks. */
+  can_package_check: boolean;
+  /** Can receive source code through stdin. */
+  supports_stdin_source: boolean;
+  /** Can receive source code through a temporary file. */
+  supports_tempfile_source: boolean;
+  /** Adapter-specific capability notes. */
+  notes: string;
 }
 
 /** One discovered runtime (interpreter + metadata). */
 export interface RuntimeInfo {
   language: 'python' | 'javascript' | string;
+  /** Adapter name for the discovered runtime. */
+  name: string;
   /** Absolute path to the interpreter binary. */
   path: string;
   /** Version string (e.g. "3.11.5", "20.9.0"). */
-  version: string | null;
-  /** Whether this is the "recommended" runtime for the current project. */
+  version: string;
+  /** Discovery source — system / conda / venv / project / toolchain / unknown. */
+  source: RuntimeSource;
+  /** Whether the runtime is the "recommended" runtime for the current project. */
   is_default: boolean;
   /** Whether the runtime meets an optional target_version constraint. */
   is_compatible: boolean | null;
-  /** Discovery source — system / conda / venv / project / toolchain / unknown. */
-  source: RuntimeSource;
+  /** Human-readable compatibility notes. */
+  compatibility_notes: string[];
   /** Capability flags. */
   capabilities: RuntimeCapability;
-  /** Free-form labels (e.g. "conda-env", "pyenv-shim"). */
-  labels: string[];
-  /** Optional project manifest that this runtime satisfies. */
-  manifest: string | null;
+  /** Adapter-specific diagnostics. */
+  diagnostics: string[];
 }
 
 /** Result of ``POST /api/v1/runtime/probe``. */
@@ -88,18 +94,24 @@ export interface ProjectDiagnosis {
   probe_errors: string[];
 }
 
-/** Result of ``POST /api/v1/runtime/exec``. */
+/** Result of ``POST /api/v1/runtime/exec`` (``ExecutionResult.to_dict()``). */
 export interface ExecutionResult {
-  /** Process exit code (0 = success). */
-  exit_code: number;
+  /** Process exit code; ``null`` when the process was killed or never started. */
+  exit_code: number | null;
   /** Captured stdout (64 KiB cap in backend, may be truncated). */
   stdout: string;
   /** Captured stderr. */
   stderr: string;
   /** Execution wall-clock in seconds. */
   duration_seconds: number;
-  /** True iff exit_code === 0 and no fatal signal. */
-  success: boolean;
+  /** True when the process was killed after exceeding the timeout. */
+  timed_out: boolean;
+  /** True when stdout/stderr hit the per-stream byte cap. */
+  output_truncated: boolean;
+  /** Fatal spawn/exec error, if any (``null`` on a normal run). */
+  error: string | null;
+  /** The argv actually executed. */
+  command: string[] | null;
 }
 
 /** Shared "tool call" envelope — what the REST endpoints return. */

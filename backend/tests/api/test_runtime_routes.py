@@ -5,10 +5,12 @@
 - 3 端点 200 路径: probe / diagnose / exec 走 mock chat_service.tools.execute
 - 503 路径: chat_service 未注入、工具未注册
 - 工具结果透传: ToolResult 字段 (success / output / error / metadata) 一一映射
+- probe/diagnose 返回 JSON 字符串，路由层反序列化为 dict
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
@@ -42,14 +44,15 @@ class _FakeTools:
         ]
         self.calls: List[tuple[str, Dict[str, Any]]] = []
         # tool name -> _FakeResult
+        # probe/diagnose 返回 JSON 字符串（与实际工具行为一致）
         self.results: Dict[str, _FakeResult] = {
             "runtime_probe": _FakeResult(
                 success=True,
-                output={
+                output=json.dumps({
                     "runtimes": [],
                     "recommended": None,
                     "errors": [],
-                },
+                }),
             ),
             "project_diagnose": _FakeResult(
                 success=True,
@@ -63,12 +66,12 @@ class _FakeTools:
             ),
             "runtime_exec": _FakeResult(
                 success=True,
-                output={
+                output=json.dumps({
                     "exit_code": 0,
                     "stdout": "hi",
                     "stderr": "",
                     "duration_seconds": 0.1,
-                },
+                }),
             ),
         }
 
@@ -117,6 +120,7 @@ async def test_diagnose_returns_tool_result(client, chat_service_injected):
     body = resp.json()
     assert body["success"] is True
     assert body["output"]["level"] == "satisfied"
+    assert body["output"]["diagnostics"] == []
     assert body["output"]["manifests"] == []
     assert body["output"]["probe_errors"] == []
     name, args = chat_service_injected.tools.calls[-1]

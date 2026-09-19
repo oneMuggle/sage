@@ -16,6 +16,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { runtimeApi } from '../../shared/api/runtimeApi';
 import type {
   Diagnostic,
+  ExecutionResult,
   ProbeResult,
   ProjectDiagnosis,
   RuntimeInfo,
@@ -36,12 +37,41 @@ type DiagnoseState =
   | { kind: 'error'; message: string }
   | { kind: 'ok'; data: ProjectDiagnosis };
 
+/** Exec 输出视图 —— 前端渲染用的字段集合，与后端 ``ExecutionResult`` 镜像
+ *  但 key 用 camelCase 贴合 React 习惯。成功与失败路径都复用同一类型，
+ *  因为子进程失败时后端同样会返回结构化的 ExecutionResult（含 stdout/stderr/
+ *  error/timed_out），前端需要这些字段做诊断。
+ */
+interface ExecResultView {
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  timedOut: boolean;
+  duration: number;
+  error: string | null;
+  outputTruncated: boolean;
+  command: string[] | null;
+}
+
 type ExecState =
   | { kind: 'idle' }
   | { kind: 'running' }
-  | { kind: 'error'; message: string }
+  | { kind: 'error'; message: string; result?: ExecResultView }
   | { kind: 'denied'; message: string }
-  | { kind: 'success'; stdout: string; stderr: string; exitCode: number; duration: number };
+  | { kind: 'success'; result: ExecResultView };
+
+function toView(r: ExecutionResult): ExecResultView {
+  return {
+    stdout: r.stdout,
+    stderr: r.stderr,
+    exitCode: r.exit_code,
+    timedOut: r.timed_out,
+    duration: r.duration_seconds,
+    error: r.error,
+    outputTruncated: r.output_truncated,
+    command: r.command,
+  };
+}
 
 export function RuntimeEnvTab() {
   const [probe, setProbe] = useState<ProbeState>({ kind: 'idle' });
@@ -114,31 +144,22 @@ export function RuntimeEnvTab() {
     }
   }, [selectedRuntime, code]);
 
-  function handleExecResult(
-    result: ToolCallEnvelope<{
-      exit_code: number;
-      stdout: string;
-      stderr: string;
-      duration_seconds: number;
-    }>,
-  ) {
+  function handleExecResult(result: ToolCallEnvelope<ExecutionResult>) {
     if (result.success && result.output) {
-      setExec({
-        kind: 'success',
-        stdout: result.output.stdout,
-        stderr: result.output.stderr,
-        exitCode: result.output.exit_code,
-        duration: result.output.duration_seconds,
-      });
-    } else {
-      // 权限拒绝 vs 其他失败
-      const err = result.error ?? '执行失败';
-      if (err.includes('权限') || err.includes('Permission') || err.includes('denied')) {
-        setExec({ kind: 'denied', message: err });
-      } else {
-        setExec({ kind: 'error', message: err });
-      }
+      setExec({ kind: 'success', result: toView(result.output) });
+      return;
     }
+    // 权限拒绝 vs 其他失败
+    const err = result.error ?? '执行失败';
+    if (err.includes('权限') || err.includes('Permission') || err.includes('denied')) {
+      setExec({ kind: 'denied', message: err });
+      return;
+    }
+    // 子进程失败（exit_code!=0 / spawn 失败 / 超时）—— 后端 success=false，
+    // 但 output 仍携带结构化的 ExecutionResult，含 error/timed_out/stdout/
+    // stderr，前端需要展示这些诊断字段而不是只显示一个笼统的「执行失败」。
+    const subprocess = result.output ? toView(result.output) : undefined;
+    setExec({ kind: 'error', message: err, result: subprocess });
   }
 
   // 进入 tab 自动探测一次
@@ -279,7 +300,18 @@ function DiagnosePanel({ state, onRetry }: { state: DiagnoseState; onRetry: () =
   const diagnostics = Array.isArray(data.diagnostics) ? data.diagnostics : [];
   const probeErrors = Array.isArray(data.probe_errors) ? data.probe_errors : [];
   const requiredLanguages = [...new Set(manifests.map((manifest) => manifest.language))];
-  const satisfied = data.level === 'satisfied';
+  const levelLabel =
+    {
+      satisfied: '✓ 全部满足',
+      partial: '⚠ 部分满足',
+      unsatisfied: '✕ 未满足',
+    }[data.level] ?? '未知等级';
+  const levelClassName =
+    {
+      satisfied: 'text-green-600',
+      partial: 'text-amber-600',
+      unsatisfied: 'text-red-600',
+    }[data.level] ?? 'text-muted';
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm">
@@ -288,11 +320,7 @@ function DiagnosePanel({ state, onRetry }: { state: DiagnoseState; onRetry: () =
           {manifests.length > 0 ? requiredLanguages.join(', ') : '未识别'}
         </span>
         <span className="text-muted ml-4">满足度:</span>
-        {satisfied ? (
-          <span className="text-green-600 font-semibold">✓ 全部满足</span>
-        ) : (
-          <span className="text-amber-600 font-semibold">⚠ 需要处理</span>
-        )}
+        <span className={`${levelClassName} font-semibold`}>{levelLabel}</span>
       </div>
       {data.recommended_runtime && (
         <div className="text-xs text-muted">推荐运行时: {data.recommended_runtime}</div>
@@ -320,14 +348,17 @@ function DiagnosePanel({ state, onRetry }: { state: DiagnoseState; onRetry: () =
 }
 
 function SeverityBadge({ severity }: { severity: Diagnostic['severity'] }) {
-  const styles = {
+  const styles: Record<'info' | 'warning' | 'error', string> = {
     info: 'bg-blue-100 text-blue-700',
     warning: 'bg-amber-100 text-amber-700',
     error: 'bg-red-100 text-red-700',
-  } as const;
+  };
+  const fallback = 'bg-bg-muted text-muted';
   return (
     <span
-      className={`inline-block px-1.5 py-0.5 text-[10px] rounded uppercase font-semibold ${styles[severity]}`}
+      className={`inline-block px-1.5 py-0.5 text-[10px] rounded uppercase font-semibold ${
+        styles[severity as 'info' | 'warning' | 'error'] ?? fallback
+      }`}
     >
       {severity}
     </span>
@@ -406,26 +437,61 @@ function ExecOutput({ state }: { state: ExecState }) {
   }
   if (state.kind === 'error') {
     return (
-      <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">
-        执行失败: {state.message}
+      <div className="space-y-2">
+        <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">
+          执行失败: {state.message}
+        </div>
+        {state.result && <ExecResultBody result={state.result} tone="error" />}
       </div>
     );
   }
+  // success
   return (
     <div className="space-y-1">
-      <div className="text-xs text-muted">
-        退出码 {state.exitCode} · 耗时 {state.duration.toFixed(2)}s
-      </div>
-      {state.stdout && (
-        <pre className="text-xs font-mono bg-bg-muted px-2 py-1 rounded whitespace-pre-wrap">
-          {state.stdout}
-        </pre>
-      )}
-      {state.stderr && (
-        <pre className="text-xs font-mono bg-red-50 text-red-700 px-2 py-1 rounded whitespace-pre-wrap">
-          {state.stderr}
-        </pre>
-      )}
+      <ExecResultBody result={state.result} tone="success" />
     </div>
+  );
+}
+
+function ExecResultBody({ result, tone }: { result: ExecResultView; tone: 'success' | 'error' }) {
+  // 退出码 / 超时 / 截断 / 耗时 —— 成功与失败路径共用。
+  // 超时和信号杀死时 exitCode 为 null，分别显示为「执行超时」和「被信号终止」。
+  const exitLabel = result.timedOut
+    ? '执行超时（进程已被终止）'
+    : result.exitCode === null
+      ? '无退出码（进程被信号终止或未启动）'
+      : `退出码 ${result.exitCode}`;
+  return (
+    <>
+      <div className="text-xs text-muted">
+        <span className={tone === 'error' ? 'text-red-600' : undefined}>{exitLabel}</span>
+        {' · '}耗时 {result.duration.toFixed(2)}s
+        {result.outputTruncated && (
+          <span className="ml-2 text-amber-700" title="单个流（stdout / stderr）超过 64 KiB 被截断">
+            ⚠ 输出已截断
+          </span>
+        )}
+      </div>
+      {result.error && (
+        <div className="text-sm text-red-600" title="子进程报告的致命错误（如 spawn 失败、超时）">
+          错误: {result.error}
+        </div>
+      )}
+      {result.command && result.command.length > 0 && tone === 'error' && (
+        <div className="text-[11px] text-muted font-mono truncate" title={result.command.join(' ')}>
+          命令: {result.command.join(' ')}
+        </div>
+      )}
+      {result.stdout && (
+        <pre className="text-xs font-mono bg-bg-muted px-2 py-1 rounded whitespace-pre-wrap">
+          {result.stdout}
+        </pre>
+      )}
+      {result.stderr && (
+        <pre className="text-xs font-mono bg-red-50 text-red-700 px-2 py-1 rounded whitespace-pre-wrap">
+          {result.stderr}
+        </pre>
+      )}
+    </>
   );
 }

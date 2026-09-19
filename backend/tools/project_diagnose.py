@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -125,6 +126,19 @@ class ProjectDiagnoseTool(BaseTool):
             if diag.level is DiagnosticLevel.PARTIAL and level is DiagnosticLevel.SATISFIED:
                 level = DiagnosticLevel.PARTIAL
 
+        # 适配器异常(continue 分支)与探测错误只写进 diagnostics /
+        # probe_errors，不进入 per_language，因此必须单独纳入等级判定 ——
+        # 否则会出现 level=satisfied 却带着 warning 诊断的自相矛盾结果，
+        # 前端会同时显示「✓ 全部满足」和一条警告。只降级、不升级。
+        if level is DiagnosticLevel.SATISFIED and (
+            probe_errors
+            or any(
+                d.severity in (DiagnosticSeverity.WARNING, DiagnosticSeverity.ERROR)
+                for d in diagnostics
+            )
+        ):
+            level = DiagnosticLevel.PARTIAL
+
         recommended: Optional[str] = None
         for diag in per_language.values():
             if diag.recommended_runtime:
@@ -151,10 +165,13 @@ class ProjectDiagnoseTool(BaseTool):
             **result.to_dict(),
             "probe_errors": probe_errors,
         }
+        # content 保持结构化 dict（base.ToolResult 契约）；output 设为 JSON
+        # 字符串，供 InprocToolAdapter 按字符串契约转发，再由 runtime REST
+        # 路由层反序列化给前端。
         return ToolResult(
             success=True,
             content=payload,
-            output=payload,
+            output=json.dumps(payload, ensure_ascii=False),
         )
 
 

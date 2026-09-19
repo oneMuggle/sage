@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Dict, Optional
 
@@ -85,6 +86,36 @@ async def _dispatch(
     return payload
 
 
+async def _dispatch_structured(
+    request: Request,
+    tool_name: str,
+    args: Dict[str, Any],
+) -> Dict[str, Any]:
+    """为 probe/diagnose/exec 等返回结构化数据的工具提供 JSON 反序列化。
+
+    工具层将 payload 序列化为 JSON 字符串以保持 ToolResult.output 的字符串契约；
+    本函数负责反序列化，向前端返回原始 dict 结构。
+
+    不论 ``success`` 是 True 还是 False 都尝试反序列化 —— ``runtime_exec``
+    在子进程失败时也会把 ``ExecutionResult`` 序列化为 JSON 字符串放进 output，
+    前端需要在错误分支读取 ``error`` / ``timed_out`` / ``stdout`` 等字段做诊断。
+    若只反序列化成功路径，子进程的错误信息就退化成原始 JSON 字符串，前端
+    无法识别。
+    """
+    payload = await _dispatch(request, tool_name, args)
+    if "output" in payload:
+        output = payload["output"]
+        if isinstance(output, str) and output:
+            try:
+                payload["output"] = json.loads(output)
+            except json.JSONDecodeError as exc:
+                logger.warning(
+                    "工具 %s 的 output 不是有效 JSON: %s", tool_name, exc
+                )
+                # 解析失败时保留原始字符串，前端可降级处理
+    return payload
+
+
 # ----- /probe -----
 
 
@@ -107,7 +138,7 @@ async def runtime_probe(body: ProbeRequestBody, request: Request) -> Dict[str, A
     }
     if body.workspace_root:
         args["workspace_root"] = body.workspace_root
-    return await _dispatch(request, "runtime_probe", args)
+    return await _dispatch_structured(request, "runtime_probe", args)
 
 
 # ----- /diagnose -----
@@ -129,7 +160,7 @@ async def runtime_diagnose(body: DiagnoseRequestBody, request: Request) -> Dict[
         "target_version": body.target_version,
         "project_root": body.project_root,
     }
-    return await _dispatch(request, "project_diagnose", args)
+    return await _dispatch_structured(request, "project_diagnose", args)
 
 
 # ----- /exec -----
@@ -165,7 +196,7 @@ async def runtime_exec(body: ExecRequestBody, request: Request) -> Dict[str, Any
     }
     if body.workspace_root:
         args["workspace_root"] = body.workspace_root
-    return await _dispatch(request, "runtime_exec", args)
+    return await _dispatch_structured(request, "runtime_exec", args)
 
 
 __all__ = ["router"]
