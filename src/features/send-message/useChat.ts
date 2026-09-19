@@ -1095,8 +1095,21 @@ export function useChat() {
               updateMessage(messageId, { rag_citations: merged });
             }
             // R81: 重接路径同主路径 —— 统一参考来源回放
-            if (evt.state === 'sources_used' && evt.sources?.length) {
-              updateMessage(messageId, { sources: evt.sources });
+            // R85: 载荷校验对齐主路径 MEDIUM-2 口径（数组且每项 kind 合法），
+            // 重放数据源自服务端队列，风险低，但两路径口径应一致。
+            if (evt.state === 'sources_used' && evt.sources) {
+              const sources = evt.sources;
+              const isValidSources =
+                Array.isArray(sources) &&
+                sources.every(
+                  (s) =>
+                    typeof s === 'object' &&
+                    s !== null &&
+                    ['web', 'wiki', 'tool'].includes((s as { kind?: unknown }).kind as string),
+                );
+              if (isValidSources && sources.length > 0) {
+                updateMessage(messageId, { sources });
+              }
             }
             // 其余事件（工具 acting/observing 等）降级为 streaming meta 文案
             useChatStreamStore.getState().setStreamingMeta(sid, messageId, {
