@@ -11,9 +11,7 @@ import { useChatStreamStore, type TaskBoardState } from '../features/send-messag
 import { useChat } from '../features/send-message/useChat';
 import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
 import { maybeIndexAttachment } from '../shared/api/attachmentAutoIndex';
-import {
-  loadAttachmentRagConfig,
-} from '../shared/api/attachmentRagConfig';
+import { loadAttachmentRagConfig } from '../shared/api/attachmentRagConfig';
 import { orchRunClient } from '../shared/api/orchRunClient';
 import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../shared/lib/i18n';
@@ -431,11 +429,11 @@ export function Chat() {
       // 后端口径: ≤4 张、单张解码后 ≤5MiB；前端先行裁剪并提示。
       const MAX_IMAGES = 4;
 
-// r75: 聊天文档附件 MIME 映射（扩展名集合用 useFileUpload.CHAT_DOCUMENT_EXTENSIONS 共享口径）
-const CHAT_DOC_MIME: Record<string, string> = {
-  pdf: 'application/pdf',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-};
+      // r75: 聊天文档附件 MIME 映射（扩展名集合用 useFileUpload.CHAT_DOCUMENT_EXTENSIONS 共享口径）
+      const CHAT_DOC_MIME: Record<string, string> = {
+        pdf: 'application/pdf',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      };
       const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
       const dataUrls = (options?.images ?? [])
         .map((img) => img.dataUrl)
@@ -475,9 +473,7 @@ const CHAT_DOC_MIME: Record<string, string> = {
 
       // r67: 超长文档检索注入（opt-in，localStorage 配置）
       const r67Rag = loadAttachmentRagConfig();
-      const attachmentRag = r67Rag.enabled
-        ? { embed: r67Rag.embed, top_k: r67Rag.top_k }
-        : null;
+      const attachmentRag = r67Rag.enabled ? { embed: r67Rag.embed, top_k: r67Rag.top_k } : null;
 
       if (!currentSessionId) {
         const sessionId = await createSession();

@@ -83,7 +83,10 @@ export function MessageList({
         <p className="text-lg mb-1">欢迎使用 Sage</p>
         <p className="text-sm mb-4">开始一段新对话吧</p>
         {onSuggestionClick && (
-          <div className="flex flex-col gap-2 w-full max-w-xs px-4" data-testid="chat-empty-suggestions">
+          <div
+            className="flex flex-col gap-2 w-full max-w-xs px-4"
+            data-testid="chat-empty-suggestions"
+          >
             {['帮我写一段代码', '帮我搜索最新资讯', '帮我整理一份笔记', '帮我分析一个问题'].map(
               (prompt) => (
                 <button

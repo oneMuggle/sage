@@ -72,9 +72,7 @@ export function BlockedCard({
       {/* 标题栏 */}
       <div className="flex items-center gap-2 px-3 py-2 bg-warning/10 border-b border-warning/30">
         <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
-        <span className="text-[13px] font-medium text-warning">
-          {t('chat.blocked.title')}
-        </span>
+        <span className="text-[13px] font-medium text-warning">{t('chat.blocked.title')}</span>
         <span className="ml-auto text-[11px] px-1.5 py-0.5 rounded bg-warning/15 text-warning/80 font-mono">
           {blockReason}
         </span>

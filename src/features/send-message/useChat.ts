@@ -814,10 +814,12 @@ export function useChat() {
                     typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content ?? '');
                   // R19-W1: 拦截信封归一化（提取可读 content + 提升 metadata 到
                   // ToolCall.metadata），与 Message 历史回读路径共用同一实现
-                  useChatStreamStore.getState().appendOrUpdateToolCall(
-                    sid,
-                    normalizeToolCallEnvelope({ ...targetTc, result: safeResult, metadata }),
-                  );
+                  useChatStreamStore
+                    .getState()
+                    .appendOrUpdateToolCall(
+                      sid,
+                      normalizeToolCallEnvelope({ ...targetTc, result: safeResult, metadata }),
+                    );
                 }
               }
 
@@ -1045,9 +1047,12 @@ export function useChat() {
             }
             // r77: 重接路径补 memory_used —— 重放时 memory_refs 不丢失（与主路径同口径）
             if (evt.state === 'memory_used' && evt.memories?.length) {
-              updateMessage(messageId, { memory_refs: evt.memories, memory_applied: evt.memories.length });
+              updateMessage(messageId, {
+                memory_refs: evt.memories,
+                memory_applied: evt.memories.length,
+              });
             }
-                        // r71: 重接路径同主路径 —— 检索引用明细随消息落库
+            // r71: 重接路径同主路径 —— 检索引用明细随消息落库
             if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
               updateMessage(messageId, { rag_citations: evt.citations });
             }
