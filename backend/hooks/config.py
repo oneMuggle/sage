@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ HOOK_EVENTS = (
     "session_stop",
     "error_occurred",
 )
-HOOK_TYPES = ("shell", "python")
+HOOK_TYPES = ("shell", "python", "http")
 MAX_HOOKS = 20
 DEFAULT_TIMEOUT_SECONDS = 10.0
 _MIN_TIMEOUT_SECONDS = 0.1
@@ -110,6 +111,30 @@ def _coerce_one(raw: Any, index: int) -> HookConfig:
     config_override = raw.get("config", {})
     if not isinstance(config_override, dict):
         config_override = {}
+
+    if hook_type == "http":
+        url = raw.get("url") or config_override.get("url")
+        if not isinstance(url, str) or not url.strip():
+            raise HookConfigError(f"hooks[{index}].url must be a non-empty string for http hooks")
+        parsed_url = urlparse(url.strip())
+        if parsed_url.scheme not in ("http", "https") or not parsed_url.netloc:
+            raise HookConfigError(
+                f"hooks[{index}].url must use http/https and include a host"
+            )
+        method = raw.get("method", config_override.get("method", "POST"))
+        if method not in ("GET", "POST", "PUT", "PATCH"):
+            raise HookConfigError(f"hooks[{index}].method is not supported: {method!r}")
+        headers = raw.get("headers", config_override.get("headers", {}))
+        if not isinstance(headers, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in headers.items()
+        ):
+            raise HookConfigError(f"hooks[{index}].headers must be a string-to-string object")
+        config_override = {
+            **config_override,
+            "url": url.strip(),
+            "method": method,
+            "headers": headers,
+        }
 
     return HookConfig(
         event=event,

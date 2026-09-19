@@ -26,6 +26,7 @@ from backend.hooks.config import (
     load_hooks,
     validate_hooks,
 )
+from backend.hooks.http_client import resolve_header_value, resolve_headers, send_http_hook
 from backend.hooks.merger import merge_hooks
 from backend.hooks.project_config import (
     PROJECT_CONFIG_REL_PATH,
@@ -80,9 +81,12 @@ __all__ = [
     "make_hook_entry",
     "matches_tool",
     "merge_hooks",
+    "resolve_headers",
+    "resolve_header_value",
     "run_event_hooks",
     "run_event_hooks_sync",
     "run_hook",
+    "send_http_hook",
     "trust_workspace",
     "untrust_workspace",
     "validate_hooks",
