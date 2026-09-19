@@ -292,3 +292,55 @@ describe('GeneralTab — 隔离与 scratch 旋钮 (RD16)', () => {
     expect(updateSettings).toHaveBeenCalledTimes(1); // 空白输入未追加提交
   });
 });
+
+// ============================================================================
+// Round 3 (2026-09-19): 计划前置旋钮（orch-plan-preflight / orch-plan-scout）
+// ============================================================================
+
+describe('GeneralTab — 计划前置旋钮 (Round 3)', () => {
+  it('澄清/侦察两个开关默认渲染', () => {
+    renderTab();
+    expect(screen.getByTestId('orch-plan-preflight')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-plan-scout')).toBeInTheDocument();
+  });
+
+  it('澄清开关默认开，关闭走部分更新契约', () => {
+    const updateSettings = vi.fn();
+    vi.mocked(useSettings).mockReturnValue({
+      settings: { ...DEFAULT_SETTINGS, orch: { ...DEFAULT_SETTINGS.orch } },
+      isLoading: false,
+      loadSettings: vi.fn().mockResolvedValue(undefined),
+      updateSettings,
+      resetSettings: vi.fn(),
+    });
+    renderTab();
+
+    fireEvent.click(screen.getByTestId('orch-plan-preflight'));
+    expect(updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({
+        planPreflightEnabled: false,
+        maxRetryOfChains: 10, // 保留其余键（部分更新契约）
+      }),
+    });
+  });
+
+  it('侦察开关默认开，关闭走部分更新契约', () => {
+    const updateSettings = vi.fn();
+    vi.mocked(useSettings).mockReturnValue({
+      settings: { ...DEFAULT_SETTINGS, orch: { ...DEFAULT_SETTINGS.orch } },
+      isLoading: false,
+      loadSettings: vi.fn().mockResolvedValue(undefined),
+      updateSettings,
+      resetSettings: vi.fn(),
+    });
+    renderTab();
+
+    fireEvent.click(screen.getByTestId('orch-plan-scout'));
+    expect(updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({
+        planScoutEnabled: false,
+        maxRetryOfChains: 10, // 保留其余键（部分更新契约）
+      }),
+    });
+  });
+});

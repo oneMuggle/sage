@@ -12,7 +12,7 @@ ResumeResponse)。
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -453,3 +453,128 @@ def confirm_run(run_id: str) -> ConfirmRunResponse:
             "confirm_run: failed to set confirm event for %s: %s", run_id, exc
         )
     return ConfirmRunResponse(ok=True, run_id=run_id)
+
+
+# ---------------------------------------------------------------------------
+# Round 2 (2026-09-19): 计划模式 × 编排打通 —— 已批准计划文本 → 结构化任务项
+# （docs/plans/2026-09-19_orch-plan-preflight-round2-plan.md）。前端批准条
+# "按计划执行（编排）" → 本端点 → plan_override 通道派发（复用恢复流管道）。
+# ---------------------------------------------------------------------------
+
+#: 计划文本上限 —— /plan 产出的 markdown 实际远小于此；防病态输入。
+PLAN_TEXT_MAX_CHARS = 20000
+
+#: 计划文本结构化 prompt。要求 goal 自包含（子代理执行者看不到计划全文），
+#: agent_hint 取种子角色；清洗交给 ``sanitize_llm_plan_tasks``（与 Planner
+#: 同款纪律：≤8 任务、depends 只引更早任务、非法 hint 丢弃）。
+_PLAN_ITEMS_PROMPT = """你是编排计划结构化助手。以下是一份用户已批准的执行计划文本，把它转换为可派发的任务列表。
+
+计划文本:
+{text}
+
+要求:
+1. 每个任务的 description 必须自包含——执行者只能看到它，看不到本计划全文；把该步骤做什么/涉及对象/预期产出写清楚，并给出可检验的完成定义（验收标准）。
+2. agent_hint 从这些角色中选最合适的一个（无法确定则省略）: researcher / coder / writer / reviewer / memory_manager
+3. depends_on 只引用更早任务的 id（t1、t2…）；任务总数不超过 {max_tasks} 个。
+
+只返回 JSON（无 markdown 围栏、无多余文本）:
+{{"tasks": [{{"id": "t1", "title": "短标题", "description": "自包含目标", "depends_on": [], "agent_hint": "researcher"}}], "reasoning": "拆解策略说明"}}"""
+
+
+class PlanItemsRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=PLAN_TEXT_MAX_CHARS)
+
+
+class PlanItem(BaseModel):
+    task_id: str
+    agent_id: str
+    goal: str
+    depends_on: List[str] = Field(default_factory=list)
+
+
+class PlanItemsResponse(BaseModel):
+    items: List[PlanItem]
+    reasoning: str = ""
+
+
+def placeholder_deps_to_ids(blocked_by: List[str]) -> List[str]:
+    """sanitized 任务的 ``idx:k`` 占位依赖 → plan_override 的 ``t{k+1}`` id。
+
+    sanitize 保证依赖只引更早任务，因此映射后仍是无环前向引用。
+    """
+    ids: List[str] = []
+    for dep in blocked_by:
+        if dep.startswith("idx:"):
+            try:
+                ids.append(f"t{int(dep.split(':', 1)[1]) + 1}")
+            except ValueError:
+                continue
+    return ids
+
+
+def _parse_plan_items_response(raw: Any) -> Optional[Tuple[List[Dict[str, Any]], str]]:
+    """解析 LLM 结构化响应 → (sanitized tasks, reasoning)；不可用返回 None。"""
+    from backend.orchestration.planner import _CODE_FENCE_RE
+
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = _CODE_FENCE_RE.sub("", raw.strip()).strip()
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    from backend.orchestration.planner import sanitize_llm_plan_tasks
+
+    tasks = sanitize_llm_plan_tasks(data.get("tasks"))
+    if not tasks:
+        return None
+    reasoning = data.get("reasoning")
+    return tasks, reasoning if isinstance(reasoning, str) else ""
+
+
+@router.post("/plan-items", response_model=PlanItemsResponse)
+async def plan_items(body: PlanItemsRequest) -> PlanItemsResponse:
+    """已批准计划文本 → 结构化编排任务项（plan_override 形状）。
+
+    供前端"按计划执行（编排）"调用。显式用户动作，失败响亮：
+    - 503 no_llm_configured —— 未配置 LLM 端点；
+    - 502 llm_call_failed / plan_items_parse_failed —— LLM 调用失败或输出
+      无法解析为任务列表（前端 toast 引导回落单 agent 执行按钮）。
+    """
+    from backend.orchestration.llm_factory import build_llm_client_from_settings
+    from backend.orchestration.planner import MAX_PLAN_TASKS
+
+    client = build_llm_client_from_settings()
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="no_llm_configured: 计划结构化需要已配置的 LLM 端点",
+        )
+
+    prompt = _PLAN_ITEMS_PROMPT.replace("{text}", body.text).replace(
+        "{max_tasks}", str(MAX_PLAN_TASKS)
+    )
+    try:
+        raw = await client.complete(prompt)
+    except Exception as exc:  # noqa: BLE001 — 上游错误原样透出给前端 toast
+        raise HTTPException(status_code=502, detail=f"llm_call_failed: {exc}")
+
+    parsed = _parse_plan_items_response(raw)
+    if parsed is None:
+        raise HTTPException(
+            status_code=502, detail="plan_items_parse_failed: 未能从计划文本解析出任务列表"
+        )
+    tasks, reasoning = parsed
+
+    items = [
+        PlanItem(
+            task_id=f"t{index}",
+            agent_id=task["parameters"].get("agent_hint", "primary"),
+            goal=task["description"],
+            depends_on=placeholder_deps_to_ids(task["blocked_by"]),
+        )
+        for index, task in enumerate(tasks, 1)
+    ]
+    return PlanItemsResponse(items=items, reasoning=reasoning)

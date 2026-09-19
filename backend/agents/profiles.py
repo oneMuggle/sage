@@ -873,6 +873,18 @@ _TODO_GUIDANCE_PROMPT = (
 )
 
 
+#: 计划前置 Round (2026-09-19): 全局需求澄清指引 —— 此前"先澄清"只存在于
+#: 个别角色提示词（ppt-maker/writer），通用基座无任何澄清引导，复杂任务
+#: 的需求歧义全靠模型自觉。与 _TODO_GUIDANCE_PROMPT 同模式：未拿到
+#: ask_user_question 工具的子代理看到文本也无工具可调，无副作用。
+#: 编排路径的结构化澄清前置见 backend.orchestration.plan_preflight。
+_CLARIFY_GUIDANCE_PROMPT = (
+    "\n\n需求澄清：接到多步骤或高投入任务，且关键约束（范围、交付格式、"
+    "验收标准）不明确时，先用 ask_user_question 向用户澄清（至多 2 个问题），"
+    "得到回答后再动手；用户未回答则选择合理默认值，并在产出中写明关键假设。"
+)
+
+
 #: 2026-09-17: 代码执行能力声明 —— 此前 repl/execute_code/bash 虽在白名单，
 #: 但系统提示从未告知 LLM 它能执行代码，LLM 凭训练先验回复"我不能执行代码"
 #: （Win7 用户反馈）。与 _OFFICE_CREATE_CAPABILITY_PROMPT 同模式：明确告知
@@ -911,6 +923,7 @@ def build_system_base() -> str:
         base
         + _OFFICE_CREATE_CAPABILITY_PROMPT
         + _TODO_GUIDANCE_PROMPT
+        + _CLARIFY_GUIDANCE_PROMPT
         + _CODE_EXECUTION_CAPABILITY_PROMPT
         + _CONFIG_CAPABILITY_PROMPT
         + format_agents_for_prompt()

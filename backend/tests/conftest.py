@@ -27,6 +27,12 @@ os.environ.setdefault("SAGE_TEST_FAST_SQLITE", "1")
 # setenv("SAGE_ORCH_CONFIRM_TIMEOUT", ...) 在用例内覆盖。
 os.environ.setdefault("SAGE_ORCH_CONFIRM_TIMEOUT", "1")
 
+# 计划前置 (2026-09-19, plan_preflight): multi 拆解前的澄清+侦察默认关闭，
+# 保证存量 multi-mode 集成测试零感知（无 ask_user_question 事件、拆解
+# context 不变、无额外 LLM 调用）。preflight 自身的用例在
+# tests/unit/test_plan_preflight.py 内用 monkeypatch.setenv 显式开启。
+os.environ.setdefault("SAGE_ORCH_PLAN_PREFLIGHT", "0")
+
 # 确保项目根目录在 sys.path 中
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:

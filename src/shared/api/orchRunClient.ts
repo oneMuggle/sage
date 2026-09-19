@@ -68,4 +68,10 @@ export const orchRunClient = {
       taskIds && taskIds.length > 0 ? { run_id: runId, task_ids: taskIds } : { run_id: runId },
     );
   },
+  // Round 2 (2026-09-19): 计划模式 × 编排打通 —— 已批准计划文本 → 结构化
+  // 任务项（plan_override 形状）。503 = 未配置 LLM；502 = 解析失败（前端
+  // toast 引导回落单 agent 执行按钮）。
+  planItemsFromText(text: string): Promise<{ items: TaskPlanItem[]; reasoning: string }> {
+    return invoke('orchestration_plan_items', { text });
+  },
 };
