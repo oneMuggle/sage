@@ -3224,19 +3224,35 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 if data.client_message_id
                 else str(uuid.uuid4())
             )
-            try:
-                await _run_db_sync(
-                    message_repo.save,
-                    DbMessage(
-                        id=user_message_id,
-                        session_id=data.session_id,
-                        role="user",
-                        content=data.message,
-                        created_at=user_now,
-                    ),
+            # client_message_id 幂等 (同步 #1196): 同 cmid 重试时复用既有
+            # user 消息 (内容一致), 不再重复落库/触发主键冲突告警。
+            reuse_existing_user = False
+            if data.client_message_id:
+                existing_user = await _run_db_sync(message_repo.get, user_message_id)
+                reuse_existing_user = (
+                    existing_user is not None
+                    and existing_user.content == data.message
                 )
-            except Exception as db_err:
-                logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
+                if reuse_existing_user:
+                    logger.info(
+                        "[REQ %s] client_message_id 幂等复用: %s",
+                        request_id,
+                        user_message_id,
+                    )
+            if not reuse_existing_user:
+                try:
+                    await _run_db_sync(
+                        message_repo.save,
+                        DbMessage(
+                            id=user_message_id,
+                            session_id=data.session_id,
+                            role="user",
+                            content=data.message,
+                            created_at=user_now,
+                        ),
+                    )
+                except Exception as db_err:
+                    logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
             done_reasoning: Optional[str] = None
 
@@ -3485,6 +3501,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 同步 #1155: DONE 附带 assistant 消息服务端 id
                     if assistant_message_id is not None:
                         done_payload["message_id"] = assistant_message_id
+                    # 同步 #1196: 首轮对话标题将在后台生成 —— 提示前端稍后
+                    # 补刷侧栏 (2026-09)。
+                    if sess is not None and sess.message_count <= 2:
+                        done_payload["title_pending"] = True
                     await entry.queue.put(done_payload)
 
                 # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。

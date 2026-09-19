@@ -435,6 +435,8 @@ export function useChat() {
       let lastDoneContent: string | null = null;
       // client_message_id 协议 (同步 #1155): DONE 携带 assistant 消息服务端 id
       let lastDoneMessageId: string | null = null;
+      // 同步 #1196: 首轮标题将在后台生成 —— 延迟补刷侧栏
+      let lastDoneTitlePending = false;
       // flushQueue=true 仅限流自然结束(onDone) —— 错误/中断不自动发队列消息
       const finishStream = (flushQueue = false): void => {
         if (finished) return;
@@ -493,6 +495,12 @@ export function useChat() {
         // 流结束后刷新侧栏会话列表（获取自动生成的标题 + S1 落库的运行态徽章）
         // hex 路径无 NDJSON session_updated 事件，此处兜底刷新
         void useStore.getState().loadSessions();
+        // 同步 #1196: 首轮标题在后台生成 (DONE 先行) —— 延迟补刷两次,
+        // 覆盖后台标题 LLM 生成/重试的常见耗时区间。
+        if (lastDoneTitlePending) {
+          window.setTimeout(() => void useStore.getState().loadSessions(), 8000);
+          window.setTimeout(() => void useStore.getState().loadSessions(), 16000);
+        }
         // R25-D5: 消息对账 —— 网关/scheduler 等外部写库方不经本渲染进程，
         // 流结束后以服务端为准刷新一次，消除"开着会话看不到新消息"的窗口
         // （loadMessages 每次直查 get_messages，无缓存问题）。
@@ -708,6 +716,7 @@ export function useChat() {
                 if (evt.state === 'done') {
                   lastDoneContent = evt.content;
                   if (evt.message_id) lastDoneMessageId = evt.message_id;
+                  lastDoneTitlePending = evt.title_pending === true;
                 }
                 useChatStreamStore
                   .getState()

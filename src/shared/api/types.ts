@@ -444,6 +444,8 @@ export interface AgentEvent {
   error?: string | { type?: string; message?: string; status_code?: number };
   /** client_message_id 协议 (同步 #1155): DONE 附带 assistant 消息的服务端 id */
   message_id?: string;
+  /** 首轮对话标记: 标题将在后台生成, 前端稍后补刷侧栏 (同步 #1196) */
+  title_pending?: boolean;
   /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
   agent_id?: string;
   /** M1: state === 'permission_request' 时携带的审批请求详情 */
