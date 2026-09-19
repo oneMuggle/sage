@@ -875,9 +875,8 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
     # 且破坏"segment 间互相隔离"的口径.
     # 2026-09 修复: producer 是 async task, 全量历史读是秒级同步 IO,
     # 直接跑在事件循环上会冻结所有并发流的 NDJSON attach 与 HTTP 路由。
-    messages = await asyncio.to_thread(
-        lambda: message_repo.get_active_segment(session_id)
-    )
+    # py_compat.to_thread: py3.8 无 asyncio.to_thread（win7 同步预铺）
+    messages = await to_thread(lambda: message_repo.get_active_segment(session_id))
     if not should_compact(messages):
         return None
 
