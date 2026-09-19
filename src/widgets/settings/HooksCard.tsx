@@ -49,6 +49,9 @@ const HOOK_EVENT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'post_tool_use', label: '工具执行后' },
   { value: 'user_prompt_submit', label: '消息提交时' },
   { value: 'stop', label: '回复结束时' },
+  { value: 'session_start', label: '会话创建时' },
+  { value: 'session_stop', label: '会话删除时' },
+  { value: 'error_occurred', label: '工具出错时' },
 ];
 
 const MAX_HOOKS = 20;
@@ -161,10 +164,7 @@ export function HooksCard(): JSX.Element | null {
       toast.error(`最多 ${MAX_HOOKS} 条钩子`);
       return;
     }
-    save([
-      ...hooks,
-      { event: 'pre_tool_use', matcher: '*', command: '', timeout_seconds: 10 },
-    ]);
+    save([...hooks, { event: 'pre_tool_use', matcher: '*', command: '', timeout_seconds: 10 }]);
   };
 
   const toggleBuiltin = (builtin: BuiltinHook): void => {
@@ -231,7 +231,9 @@ export function HooksCard(): JSX.Element | null {
 
       {/* 自定义钩子 CRUD */}
       {customHooksWithOriginalIdx.length === 0 ? (
-        <p className="text-xs text-muted mb-2">暂无自定义钩子。钩子是你在事件点自动执行的 shell 命令(收 JSON payload)。</p>
+        <p className="text-xs text-muted mb-2">
+          暂无自定义钩子。钩子是你在事件点自动执行的 shell 命令(收 JSON payload)。
+        </p>
       ) : (
         <div className="space-y-2 mb-2">
           {customHooksWithOriginalIdx.map(({ hook, originalIdx }) => (
@@ -287,7 +289,9 @@ export function HooksCard(): JSX.Element | null {
           <Plus className="w-3 h-3" /> 添加钩子
         </button>
         {saving && <span className="text-xs text-muted">保存中…</span>}
-        <span className="text-[10px] text-muted">修改即时保存;事件点: 工具前/后、消息提交、回复结束</span>
+        <span className="text-[10px] text-muted">
+          修改即时保存;事件点: 工具前/后、消息提交、回复结束、会话创建/删除、工具出错
+        </span>
       </div>
     </div>
   );
