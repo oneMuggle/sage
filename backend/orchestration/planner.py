@@ -445,7 +445,7 @@ Instructions:
 1. Break the goal into discrete, actionable tasks (at most {MAX_PLAN_TASKS}).
 2. Express dependencies via "depends_on" referencing earlier task ids only.
 3. Use "agent_hint" to suggest an executor role (e.g. researcher, coder, memory_manager) or omit.
-4. Keep titles short; descriptions carry the detail (做什么 / 涉及对象 / 预期产出).{extra_rule}
+4. Keep titles short; descriptions carry the detail (做什么 / 涉及对象 / 预期产出 / 完成定义（验收标准）).{extra_rule}
 
 Output format — return ONLY valid JSON, no markdown fences, no extra text:
 {{

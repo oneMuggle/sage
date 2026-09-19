@@ -208,13 +208,17 @@ class LaneExecutor:
 
             # Step 6.5 (A4): best-effort acceptance checks — advisory only.
             # Never flips the lane outcome; failures are recorded, not raised.
+            acceptance_summary = None
             with contextlib.suppress(Exception):
-                await self._run_acceptance(lane)
+                acceptance_summary = await self._run_acceptance(lane)
 
+            # Round 4 (2026-09-19, orch-acceptance-review-plan): 验收摘要随
+            # lane 结果回传（dispatcher 收集后注入 reviewer 输入）。
             return {
                 "status": "succeeded",
                 "lane_id": lane.lane_id,
                 "result": result,
+                "acceptance": acceptance_summary,
             }
 
         except Exception as exc:
@@ -225,12 +229,17 @@ class LaneExecutor:
             error_code = exc.error_code if isinstance(exc, LaneExecutionError) else None
             return await self._handle_failure(lane, task, str(exc), error_code=error_code)
 
-    async def _run_acceptance(self, lane: Lane) -> None:
-        """Run A4 acceptance checks and record the result event (best-effort)."""
+    async def _run_acceptance(self, lane: Lane) -> Optional[Dict[str, Any]]:
+        """Run A4 acceptance checks and record the result event (best-effort).
+
+        Round 4 (2026-09-19): 返回验收摘要（``{"all_passed": bool, "checks":
+        [CheckResult.to_dict()]}``），随 lane 结果回传供复核环消费；
+        disabled / reviewer lane 返回 None（语义不变：advisory，不翻转结论）。
+        """
         if not self.acceptance_enabled:
-            return
+            return None
         if lane.agent_id == "reviewer":
-            return  # reviewer 自检无意义，跳过
+            return None  # reviewer 自检无意义，跳过
         loop = asyncio.get_running_loop()
         report = await loop.run_in_executor(
             None,
@@ -240,6 +249,10 @@ class LaneExecutor:
             ),
         )
         record_acceptance_event(self.event_recorder, lane, report)
+        return {
+            "all_passed": report.all_passed,
+            "checks": [c.to_dict() for c in report.checks],
+        }
 
     async def _validate_permissions(self, lane: Lane) -> bool:
         """
