@@ -8,6 +8,9 @@
 
 export type SettingsTabKey =
   | 'general'
+  | 'basic'
+  | 'memory-knowledge'
+  | 'tools-connections'
   | 'endpoints'
   | 'models'
   | 'orchestration'
@@ -34,30 +37,30 @@ export interface SettingsSearchEntry {
 
 export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // ── 通用 ──
-  { key: 'theme', tab: 'general', label: '主题', labelEn: 'Theme', keywords: 'theme 主题 深色 浅色 dark light 外观' },
-  { key: 'locale', tab: 'general', label: '界面语言', labelEn: 'Language', keywords: 'locale language 语言 中文 english' },
-  { key: 'font_ui', tab: 'general', label: '界面字体', labelEn: 'UI font', keywords: 'font 字体 ui interface 外观' },
-  { key: 'font_size_ui', tab: 'general', label: '界面字号', labelEn: 'UI font size', keywords: 'font size 字号 字体大小' },
-  { key: 'font_code', tab: 'general', label: '代码字体', labelEn: 'Code font', keywords: 'code font 代码字体 等宽 mono' },
-  { key: 'font_size_code', tab: 'general', label: '代码字号', labelEn: 'Code font size', keywords: 'code font size 代码字号' },
-  { key: 'streaming', tab: 'general', label: '流式输出', labelEn: 'Streaming', keywords: 'streaming 流式 逐字 输出' },
-  { key: 'timezone', tab: 'general', label: 'IANA 时区', labelEn: 'Timezone', keywords: 'timezone 时区 iana asia/shanghai' },
-  { key: 'logTimezone', tab: 'general', label: '日志时区', labelEn: 'Log timezone', keywords: 'log timezone 日志时区 utc' },
-  { key: 'autoMemory', tab: 'general', label: '自动记忆提取', labelEn: 'Auto memory extraction', keywords: 'automemory 记忆 自动提取' },
-  { key: 'confirmDelete', tab: 'general', label: '确认后再删除记忆', labelEn: 'Confirm before deleting memory', keywords: 'confirmdelete 删除记忆 确认' },
-  { key: 'context_turn_limit', tab: 'general', label: '上下文轮数限制', labelEn: 'Context turn limit', keywords: 'context turn limit 上下文 轮数 隔离 不限' },
-  { key: 'attachment_rag', tab: 'general', label: '超长文档检索注入', labelEn: 'Attachment RAG', keywords: 'rag 附件 检索 embedding 长文档 top_k' },
-  { key: 'auto_checkpoint', tab: 'general', label: '发送前自动快照', labelEn: 'Auto checkpoint', keywords: 'checkpoint 快照 安全网 回滚 撤销' },
-  { key: 'close_to_tray', tab: 'general', label: '关闭时隐藏到托盘', labelEn: 'Close to tray', keywords: 'tray 托盘 关闭 最小化' },
-  { key: 'demoMode', tab: 'general', label: '演示模式', labelEn: 'Demo mode', keywords: 'demo 演示 示例数据 离线' },
-  { key: 'permission_mode', tab: 'general', label: '权限模式', labelEn: 'Permission mode', keywords: 'permission 权限 只读 full_access workspace_write 审批' },
-  { key: 'fallback_model', tab: 'general', label: '降级模型 (fallback)', labelEn: 'Fallback model', keywords: 'fallback 降级模型 限流 重试' },
-  { key: 'hooks', tab: 'general', label: '钩子 (Hooks)', labelEn: 'Hooks', keywords: 'hooks 钩子 pre_tool_use 命令' },
-  { key: 'spend_limit', tab: 'general', label: '每日花费限额', labelEn: 'Daily spend limit', keywords: 'spend limit 花费 限额 usd 预算' },
-  { key: 'usage', tab: 'general', label: '用量统计', labelEn: 'Usage', keywords: 'usage 用量 token 统计 导出' },
-  { key: 'diagnostics', tab: 'general', label: '诊断与日志级别', labelEn: 'Diagnostics', keywords: 'diagnostics 诊断 日志级别 log level' },
-  { key: 'gateway', tab: 'general', label: '消息网关 (Telegram/Discord/Slack)', labelEn: 'Chat gateways', keywords: 'gateway telegram discord slack 网关 绑定' },
-  { key: 'reset', tab: 'general', label: '恢复默认设置', labelEn: 'Reset settings', keywords: 'reset 恢复默认 重置 数据' },
+  { key: 'theme', tab: 'basic', label: '主题', labelEn: 'Theme', keywords: 'theme 主题 深色 浅色 dark light 外观' },
+  { key: 'locale', tab: 'basic', label: '界面语言', labelEn: 'Language', keywords: 'locale language 语言 中文 english' },
+  { key: 'font_ui', tab: 'basic', label: '界面字体', labelEn: 'UI font', keywords: 'font 字体 ui interface 外观' },
+  { key: 'font_size_ui', tab: 'basic', label: '界面字号', labelEn: 'UI font size', keywords: 'font size 字号 字体大小' },
+  { key: 'font_code', tab: 'basic', label: '代码字体', labelEn: 'Code font', keywords: 'code font 代码字体 等宽 mono' },
+  { key: 'font_size_code', tab: 'basic', label: '代码字号', labelEn: 'Code font size', keywords: 'code font size 代码字号' },
+  { key: 'streaming', tab: 'basic', label: '流式输出', labelEn: 'Streaming', keywords: 'streaming 流式 逐字 输出' },
+  { key: 'timezone', tab: 'basic', label: 'IANA 时区', labelEn: 'Timezone', keywords: 'timezone 时区 iana asia/shanghai' },
+  { key: 'logTimezone', tab: 'basic', label: '日志时区', labelEn: 'Log timezone', keywords: 'log timezone 日志时区 utc' },
+  { key: 'autoMemory', tab: 'memory-knowledge', label: '自动记忆提取', labelEn: 'Auto memory extraction', keywords: 'automemory 记忆 自动提取' },
+  { key: 'confirmDelete', tab: 'memory-knowledge', label: '确认后再删除记忆', labelEn: 'Confirm before deleting memory', keywords: 'confirmdelete 删除记忆 确认' },
+  { key: 'context_turn_limit', tab: 'memory-knowledge', label: '上下文轮数限制', labelEn: 'Context turn limit', keywords: 'context turn limit 上下文 轮数 隔离 不限' },
+  { key: 'attachment_rag', tab: 'basic', label: '超长文档检索注入', labelEn: 'Attachment RAG', keywords: 'rag 附件 检索 embedding 长文档 top_k' },
+  { key: 'auto_checkpoint', tab: 'memory-knowledge', label: '发送前自动快照', labelEn: 'Auto checkpoint', keywords: 'checkpoint 快照 安全网 回滚 撤销' },
+  { key: 'close_to_tray', tab: 'basic', label: '关闭时隐藏到托盘', labelEn: 'Close to tray', keywords: 'tray 托盘 关闭 最小化' },
+  { key: 'demoMode', tab: 'basic', label: '演示模式', labelEn: 'Demo mode', keywords: 'demo 演示 示例数据 离线' },
+  { key: 'permission_mode', tab: 'tools-connections', label: '权限模式', labelEn: 'Permission mode', keywords: 'permission 权限 只读 full_access workspace_write 审批' },
+  { key: 'fallback_model', tab: 'tools-connections', label: '降级模型 (fallback)', labelEn: 'Fallback model', keywords: 'fallback 降级模型 限流 重试' },
+  { key: 'hooks', tab: 'tools-connections', label: '钩子 (Hooks)', labelEn: 'Hooks', keywords: 'hooks 钩子 pre_tool_use 命令' },
+  { key: 'spend_limit', tab: 'basic', label: '每日花费限额', labelEn: 'Daily spend limit', keywords: 'spend limit 花费 限额 usd 预算' },
+  { key: 'usage', tab: 'basic', label: '用量统计', labelEn: 'Usage', keywords: 'usage 用量 token 统计 导出' },
+  { key: 'diagnostics', tab: 'basic', label: '诊断与日志级别', labelEn: 'Diagnostics', keywords: 'diagnostics 诊断 日志级别 log level' },
+  { key: 'gateway', tab: 'tools-connections', label: '消息网关 (Telegram/Discord/Slack)', labelEn: 'Chat gateways', keywords: 'gateway telegram discord slack 网关 绑定' },
+  { key: 'reset', tab: 'basic', label: '恢复默认设置', labelEn: 'Reset settings', keywords: 'reset 恢复默认 重置 数据' },
 
   // ── 端点 ──
   { key: 'endpoints', tab: 'endpoints', label: '端点管理', labelEn: 'Endpoints', keywords: 'endpoint base url api key 端点 协议 模型探测' },

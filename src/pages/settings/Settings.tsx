@@ -18,15 +18,19 @@ import { ENABLE_UPDATE_PROVIDERS_UI } from '../../shared/updateFeatureFlag';
 import { EvolutionLog } from '../../widgets/evolution/EvolutionLog';
 import { EvolutionPanel } from '../../widgets/evolution/EvolutionPanel';
 
+import { BasicTab } from './BasicTab';
+import { EffectiveSettingsSummary } from './EffectiveSettingsSummary';
 import { EndpointsTab } from './EndpointsTab';
 import { GeneralTab } from './GeneralTab';
 import { McpTab } from './McpTab';
+import { MemoryKnowledgeTab } from './MemoryKnowledgeTab';
 import { MemoryTab } from './MemoryTab';
 import { ModelsTab } from './ModelsTab';
 import { NetworkTab } from './NetworkTab';
 import { OrchestrationTab } from './OrchestrationTab';
 import { ProvidersManager } from './ProvidersManager';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
+import { ToolsConnectionsTab } from './ToolsConnectionsTab';
 import { UpdatesTab } from './UpdatesTab';
 import { searchSettings, type SettingsSearchEntry, type SettingsTabKey } from './settingsSearchIndex';
 
@@ -37,7 +41,7 @@ export function Settings() {
   const [activeTab, setActiveTabState] = useState<SettingsTab>(() => {
     try {
       const saved = localStorage.getItem('sage:settings-tab');
-      if (saved) return saved as SettingsTab;
+      if (saved) return (saved === 'general' ? 'basic' : saved) as SettingsTab;
     } catch { /* ignore */ }
     return 'general';
   });
@@ -52,7 +56,9 @@ export function Settings() {
   const { t, locale } = useI18n();
 
   const tabs: { key: SettingsTab; label: string }[] = [
-    { key: 'general', label: t('settings.tab.general') },
+    { key: 'basic', label: t('settings.tab.basic') },
+    { key: 'memory-knowledge', label: t('settings.tab.memory-knowledge') },
+    { key: 'tools-connections', label: t('settings.tab.tools-connections') },
     { key: 'endpoints', label: t('settings.tab.endpoints') },
     { key: 'models', label: t('settings.tab.models') },
     { key: 'orchestration', label: t('settings.tab.orchestration') },
@@ -152,7 +158,11 @@ export function Settings() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-3xl mx-auto">
+            <EffectiveSettingsSummary />
             {activeTab === 'general' && <GeneralTab resetSettings={resetSettings} />}
+            {activeTab === 'basic' && <BasicTab />}
+            {activeTab === 'memory-knowledge' && <MemoryKnowledgeTab />}
+            {activeTab === 'tools-connections' && <ToolsConnectionsTab />}
             {activeTab === 'endpoints' && (
               <EndpointsTab settings={settings} updateSettings={updateSettings} />
             )}

@@ -524,11 +524,18 @@ git add src/entities/setting/__tests__ src/pages/settings/__tests__ docs/user-ma
 
 ## Final Verification Checklist
 
-- [ ] `npm run build` succeeds.
-- [ ] All focused settings tests pass.
-- [ ] Electron update tests pass.
-- [ ] No `console.log` added in modified production files.
-- [ ] No credentials appear in registry labels, search entries, summaries, or docs.
-- [ ] `git diff --check` succeeds.
-- [ ] Run `git status --short` and verify unrelated pre-existing changes were not modified.
+- [x] `npm run build` succeeds.
+- [x] All focused settings tests pass (25 files, 199 tests).
+- [x] Electron update tests pass.
+- [x] No `console.log` added in modified production files.
+- [x] No credentials appear in registry labels, search entries, summaries, or docs.
+- [x] `git diff --check` succeeds.
+- [x] Unrelated pre-existing changes were kept outside this worktree.
 - [ ] Run code review on the complete diff before declaring completion.
+
+## Execution Status
+
+- [x] Phase 1: metadata registry, P0 fixes, apply-mode UI, complete update configuration.
+- [x] Phase 2: Basic/MemoryKnowledge/ToolsConnections tabs, advanced grouping, navigation integration.
+- [x] Phase 3: metadata-driven settings adapter and effective configuration summary.
+- [x] Phase 4: settings contract tests and user manual chapter 20.

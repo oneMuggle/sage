@@ -5,6 +5,7 @@
  */
 
 import type { SettingMetadata } from './metadata';
+import { DEFAULT_SETTINGS } from './types';
 
 const booleanSetting = (
   key: string,
@@ -149,7 +150,7 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     description: '后端使用的时区；默认取系统时区，非法值会被拒绝',
     scope: 'global',
     storage: 'app_settings',
-    defaultValue: 'Asia/Shanghai',
+    defaultValue: DEFAULT_SETTINGS.timezone,
     applyMode: 'next-request',
     visibility: 'basic',
     riskLevel: 'low',
@@ -167,19 +168,22 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     riskLevel: 'low',
     constraints: { type: 'string' },
   },
-  permission_mode: enumSetting(
-    'permission_mode',
-    '权限模式',
-    '控制工具执行时的权限要求',
-    'preference',
-    'workspace_write',
-    [
-      { value: 'read_only', label: '只读' },
-      { value: 'workspace_write', label: '工作区写入' },
-      { value: 'prompt', label: '逐次审批' },
-      { value: 'full_access', label: '完全访问' },
-    ],
-  ),
+  permission_mode: {
+    ...enumSetting(
+      'permission_mode',
+      '权限模式',
+      '控制工具执行时的权限要求',
+      'preference',
+      'workspace_write',
+      [
+        { value: 'read_only', label: '只读' },
+        { value: 'workspace_write', label: '工作区写入' },
+        { value: 'prompt', label: '逐次审批' },
+        { value: 'full_access', label: '完全访问' },
+      ],
+    ),
+    riskLevel: 'high',
+  },
   network_policy: {
     key: 'network_policy',
     label: '网络模式',

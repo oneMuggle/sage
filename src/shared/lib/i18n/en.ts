@@ -208,6 +208,9 @@ export const en: Record<TranslationKey, string> = {
   // ─── Settings ─────────────────────
   'settings.title': 'Settings',
   'settings.tab.general': 'General',
+  'settings.tab.basic': 'Basic',
+  'settings.tab.memory-knowledge': 'Memory & Knowledge',
+  'settings.tab.tools-connections': 'Tools & Connections',
   'settings.tab.endpoints': 'Endpoints',
   'settings.tab.models': 'Models',
   'settings.tab.orchestration': 'Orchestration',
