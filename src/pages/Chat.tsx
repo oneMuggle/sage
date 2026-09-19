@@ -11,14 +11,12 @@ import { useChatStreamStore, type TaskBoardState } from '../features/send-messag
 import { useChat } from '../features/send-message/useChat';
 import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
 import { maybeIndexAttachment } from '../shared/api/attachmentAutoIndex';
-import {
-  loadAttachmentRagConfig,
-} from '../shared/api/attachmentRagConfig';
+import { loadAttachmentRagConfig } from '../shared/api/attachmentRagConfig';
 import { orchRunClient } from '../shared/api/orchRunClient';
 import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
-import type { Message as MessageType } from '../shared/lib/store';
+import type { BlockedAction, Message as MessageType } from '../shared/lib/store';
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { LoadingState } from '../shared/ui/LoadingState';
@@ -431,11 +429,11 @@ export function Chat() {
       // 后端口径: ≤4 张、单张解码后 ≤5MiB；前端先行裁剪并提示。
       const MAX_IMAGES = 4;
 
-// r75: 聊天文档附件 MIME 映射（扩展名集合用 useFileUpload.CHAT_DOCUMENT_EXTENSIONS 共享口径）
-const CHAT_DOC_MIME: Record<string, string> = {
-  pdf: 'application/pdf',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-};
+      // r75: 聊天文档附件 MIME 映射（扩展名集合用 useFileUpload.CHAT_DOCUMENT_EXTENSIONS 共享口径）
+      const CHAT_DOC_MIME: Record<string, string> = {
+        pdf: 'application/pdf',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      };
       const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
       const dataUrls = (options?.images ?? [])
         .map((img) => img.dataUrl)
@@ -475,9 +473,7 @@ const CHAT_DOC_MIME: Record<string, string> = {
 
       // r67: 超长文档检索注入（opt-in，localStorage 配置）
       const r67Rag = loadAttachmentRagConfig();
-      const attachmentRag = r67Rag.enabled
-        ? { embed: r67Rag.embed, top_k: r67Rag.top_k }
-        : null;
+      const attachmentRag = r67Rag.enabled ? { embed: r67Rag.embed, top_k: r67Rag.top_k } : null;
 
       if (!currentSessionId) {
         const sessionId = await createSession();
@@ -761,6 +757,36 @@ const CHAT_DOC_MIME: Record<string, string> = {
     [t],
   );
 
+  // R19-W1: 网页访问拦截卡片动作 —— 把后端的建议动作翻译成前端语义。
+  // open_browser: 发一条消息请 agent 用 browser_navigate 打开（走完整工具链）；
+  // configure_credentials / configure_proxy: 跳设置网络 tab（凭据库 + 代理配置）；
+  // view_docs: 新窗口打开文档。
+  const handleBlockedAction = useCallback(
+    (action: BlockedAction) => {
+      const url = typeof action.params?.url === 'string' ? action.params.url : undefined;
+      switch (action.action) {
+        case 'open_browser':
+          if (url) void sendMessage(`请用 browser_navigate 工具打开 ${url} 并提取正文。`);
+          break;
+        case 'configure_credentials':
+        case 'configure_proxy':
+          try {
+            localStorage.setItem('sage:settings-tab', 'network');
+          } catch {
+            /* ignore */
+          }
+          navigate('/settings');
+          break;
+        case 'view_docs':
+          if (url) window.open(url, '_blank');
+          break;
+        default:
+          break;
+      }
+    },
+    [sendMessage, navigate],
+  );
+
   // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
   // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
   // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
@@ -922,6 +948,7 @@ const CHAT_DOC_MIME: Record<string, string> = {
                 onDelete={handleDeleteMessage}
                 onQuote={handleQuote}
                 onSaveToMemory={handleSaveToMemory}
+                onBlockedAction={handleBlockedAction}
               />
             )}
             {/* 对标 S2: 内联记忆提示（"已记住"可撤销）；临时聊天不显示 */}
