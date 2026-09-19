@@ -43,8 +43,8 @@ async def _drain_stream(client, stream_id: str) -> list:
     """attach NDJSON 流并逐行收集事件,直到 producer 收尾。"""
     events = []
     async with client.stream("GET", f"{CHAT_STREAM_PATH}/{stream_id}") as resp:
-        async for line in resp.aiter_lines():
-            line = line.strip()
+        async for raw_line in resp.aiter_lines():
+            line = raw_line.strip()
             if not line:
                 continue
             with contextlib.suppress(ValueError):
