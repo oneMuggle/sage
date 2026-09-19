@@ -146,6 +146,32 @@ def test_web_fetch_schema():
     assert schema.parameters["required"] == ["url"]
 
 
+def test_web_fetch_schema_documents_blocked_fetch_routing():
+    tool = WebFetchTool()
+    description = tool.schema.description
+
+    routing_contract = (
+        "失败结果仅在 web_fetch 返回 success=False 且结果 JSON 含 metadata.blockReason 时才按路由处理："
+        "反爬具体值为 antibot_cf 或 antibot_other（generic antibot 仅作统称），登录墙具体值为 login_wall；"
+        "命中这些值后用 browser_navigate 打开页面并用 browser_snapshot 读取，必要时通过 "
+        "credential_domain 提供登录态；不要反复重试 web_fetch。"
+    )
+    assert routing_contract in description
+
+    for keyword in (
+        "metadata.blockReason",
+        "antibot",
+        "antibot_cf",
+        "antibot_other",
+        "login_wall",
+        "browser_navigate",
+        "browser_snapshot",
+        "credential_domain",
+        "不要反复重试 web_fetch",
+    ):
+        assert keyword in description
+
+
 def test_web_fetch_success():
     """成功获取页面"""
     with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:

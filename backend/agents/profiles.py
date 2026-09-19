@@ -283,10 +283,10 @@ def create_default_agents() -> List[AgentProfile]:
             name="Sage 主助手",
             role="coordinator",
             description="面向用户的协调 Agent，负责意图识别和任务分发",
-            # 2026-09-03: 改用 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT 常量。
+            # 2026-09-03: 改用 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING 常量。
             # 简单 fetch/download 由 primary 直调 (用户可见 LLM 行为, 便于分步指导)；
             # 复杂多步研究仍走 agent 工具委派给只读子代理 —— 守 PR #396 coordinator/executor 边界。
-            system_prompt=PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT,
+            system_prompt=PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING,
             # 组成见 _PRIMARY_CORE_TOOLS / _PRIMARY_SEED_TOOLS 注释：
             # 记忆 + 文件读 + 代码探索 + agent/todo_write + 出网两件套 +
             # office 六件套 + runtime 探测两件 + bash 三件套（2026-09-04 D1）。
@@ -302,7 +302,7 @@ def create_default_agents() -> List[AgentProfile]:
             name="研究 Agent",
             role="researcher",
             description="负责网络搜索和信息收集的 Agent",
-            system_prompt="你是一个专业的研究 Agent。负责搜索信息、综合资料、生成研究报告。",
+            system_prompt=RESEARCHER_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING,
             # Round 6 B2: 浏览器通道并入——登录态/动态页面场景委派可达
             tools=[
                 "web_search",
@@ -526,6 +526,33 @@ PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT = (
 )
 
 
+# 2026-09-19 (R19-W3): web_fetch 遇到反爬/登录墙时，模型应转浏览器或凭据通道。
+# 字段名以模型实际可见的失败信封为准：agent.py 的失败分支把结构化 block 载荷
+# 改写为顶层 JSON 信封 ``{"content": ..., "metadata": {"blockReason": ...}}``，
+# 模型看到的是 ``metadata.blockReason``（camelCase），不是内部的 block_reason。
+_WEB_ACCESS_ROUTING_GUIDANCE = (
+    "\n\n当 web_fetch 返回 success=False 时，先读取结果 JSON 的 metadata.blockReason："
+    "反爬具体值为 antibot_cf / antibot_other（antibot 仅作统称），登录墙为 login_wall。"
+    "命中后优先使用 browser_navigate + browser_snapshot 手动访问；"
+    "若需要登录，提示用户配置 credential_domain 凭据。不要反复重试 web_fetch。"
+)
+
+
+PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING = (
+    PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT + _WEB_ACCESS_ROUTING_GUIDANCE
+)
+
+
+_RESEARCHER_SYSTEM_PROMPT_BEFORE_WEB_ACCESS_ROUTING = (
+    "你是一个专业的研究 Agent。负责搜索信息、综合资料、生成研究报告。"
+)
+
+
+RESEARCHER_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING = (
+    _RESEARCHER_SYSTEM_PROMPT_BEFORE_WEB_ACCESS_ROUTING + _WEB_ACCESS_ROUTING_GUIDANCE
+)
+
+
 # 2026-09-03: PR #381 把 TerminalTool 重写为 BashTool (name="bash"),
 # file_read/file_write 是拼写错位(真实工具名 read_file/write_file)。
 # 重命名段遍历所有 agent 的 tools 列表, 按此映射逐元素 in-place 替换;
@@ -672,15 +699,17 @@ def ensure_default_agents() -> int:
         if set(tools) == _PRIMARY_TOOLS_BEFORE_BASH:
             primary["tools"] = tools + list(EXEC_TOOLS)
             repo.upsert(primary)
-        # 2026-09-03 (PR #396 后置迁移): 存量 DB primary system_prompt 升级。
-        # 链式合并：BEFORE_DELEGATION → WITH_DELEGATION → WITH_FETCH_DIRECT。
-        # 任一段命中就一气呵成, 合并为单次 upsert 防 updated_at 抖动。
-        # 用户自定义 system_prompt（不等于任一旧字符串）→ 全段跳过 → 不动。
+        # 2026-09-03 (PR #396 后置迁移): primary system_prompt 升级。
+        # 链式合并：BEFORE_DELEGATION → WITH_DELEGATION → WITH_FETCH_DIRECT
+        # → WITH_WEB_ACCESS_ROUTING。任一段命中就一气呵成, 合并为单次 upsert
+        # 防 updated_at 抖动；用户自定义 system_prompt 一律不动。
         prompt = primary.get("system_prompt")
         if prompt == _PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION:
             prompt = PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION
         if prompt == PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION:
             prompt = PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+        if prompt == PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT:
+            prompt = PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
         if prompt != primary.get("system_prompt"):
             primary["system_prompt"] = prompt
             repo.upsert(primary)
@@ -692,6 +721,9 @@ def ensure_default_agents() -> int:
         tools = researcher.get("tools") or []
         if set(tools) == _RESEARCHER_TOOLS_BEFORE_HTTP_DOWNLOAD:
             researcher["tools"] = tools + ["http_download"]
+            repo.upsert(researcher)
+        if researcher.get("system_prompt") == _RESEARCHER_SYSTEM_PROMPT_BEFORE_WEB_ACCESS_ROUTING:
+            researcher["system_prompt"] = RESEARCHER_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
             repo.upsert(researcher)
     # 2026-09-18 (writer 门禁式工作流): 存量 DB writer system_prompt 升级 ——
     # 仅当 DB 值与旧种子逐字相等才替换；用户自定义 prompt 一律不动（与
