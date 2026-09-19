@@ -1931,11 +1931,29 @@ class SageAgent:
 
     # ===== M6 HOOKS BEGIN: config loader (fail-open) =====
     def _load_m6_hooks(self) -> List[HookConfig]:
-        """加载用户自定义钩子; 任何故障 → 空列表 (fail-open)。"""
+        """加载钩子 = 项目级 + 用户级 (fail-open, 任何故障 → 空列表)。
+
+        Phase 4: 项目级来自 ``<workspace>/.sage/hooks.json``, 受信任门禁
+        约束 (未信任的工作区不加载)。合并顺序 project 在前 —— 团队策略
+        优先裁决且无法被用户级配置遮蔽。
+        """
         try:
             from backend.data.settings_repo import SettingsRepository
+            from backend.hooks.merger import merge_hooks
+            from backend.hooks.project_config import load_project_hooks
 
-            return load_hooks(SettingsRepository())
+            settings_repo = SettingsRepository()
+            user_hooks = load_hooks(settings_repo)
+
+            workspace: Optional[str] = None
+            try:
+                workspace = self._office_boundary_resolver()
+            except Exception as exc:
+                # workspace 解析失败 (DB 故障等) → 跳过项目级, 用户级照常生效
+                logger.debug("M6 hooks: workspace resolution failed (project hooks skipped): %s", exc)
+
+            project_hooks = load_project_hooks(workspace, settings_repo) if workspace else []
+            return merge_hooks(project_hooks, user_hooks)
         except Exception as exc:
             logger.warning("M6 hooks load failed (fail-open): %s", exc)
             return []
