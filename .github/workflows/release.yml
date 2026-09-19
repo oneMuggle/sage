@@ -96,6 +96,15 @@ jobs:
       - name: Build frontend + Electron
         run: npm run electron:build
 
+      - name: Setup Python 3.11 (Cython compilation headers)
+        # bundle-python-main.ps1 needs Python.h for Cython build_ext.
+        # The embeddable Python zip lacks dev headers; setup-python provides a full
+        # installation whose Include/ and libs/ are copied into the embeddable tree.
+        if: matrix.os == 'windows-latest'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Bundle Python backend (main, Windows)
         # Bundles Python 3.11 + backend + sage-core into resources/ so
         # electron-builder.yml's extraResources picks them up.

@@ -187,6 +187,37 @@ if ($ProtectCode) {
   Write-Host "🛡️ Code protection ENABLED: Installing Cython..." -ForegroundColor Yellow
   & $PipExe install --no-warn-script-location "cython>=3.0.0" "setuptools"
   if ($LASTEXITCODE -ne 0) { throw "pip install cython failed with exit code $LASTEXITCODE" }
+
+  # Cython build_ext needs Python.h (headers) and python311.lib (import libs).
+  # The embeddable Python zip lacks both. The full Python from actions/setup-python
+  # (on PATH) has them. Copy into the embeddable so distutils finds them at the
+  # standard sysconfig paths (resources/python/include, resources/python/libs).
+  # ABI-safe: both are CPython 3.11.x, same stable ABI.
+  $SystemPythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+  if (-not $SystemPythonExe) {
+    throw "System Python not found on PATH. Add 'actions/setup-python@v5' with python-version: '3.11' to the workflow."
+  }
+  $SystemPythonRoot = Split-Path -Parent (Split-Path -Parent $SystemPythonExe)
+  # actions/setup-python puts python.exe under <tool-cache>/Python/<version>/x64/python.exe
+  # but Get-Command may resolve to a shim. Walk up to find include/ dir.
+  $SystemInclude = $null
+  foreach ($candidate in @($SystemPythonRoot, (Split-Path -Parent $SystemPythonRoot))) {
+    $inc = Join-Path $candidate "include"
+    if (Test-Path $inc) { $SystemInclude = $inc; $SystemPythonRoot = $candidate; break }
+  }
+  if (-not $SystemInclude) {
+    throw "System Python include dir not found. Searched from $SystemPythonExe"
+  }
+  $SystemLibs = Join-Path $SystemPythonRoot "libs"
+
+  Write-Host "🛡️ Copying Python dev headers from system Python ($SystemPythonRoot) to embeddable..." -ForegroundColor Yellow
+  $EmbedInclude = Join-Path $PythonDir "include"
+  Copy-Item -Path $SystemInclude -Destination $EmbedInclude -Recurse -Force
+  if (Test-Path $SystemLibs) {
+    $EmbedLibs = Join-Path $PythonDir "libs"
+    Copy-Item -Path $SystemLibs -Destination $EmbedLibs -Recurse -Force
+  }
+  Write-Host "🛡️ Python dev headers copied successfully." -ForegroundColor Green
 }
 
 # Copy backend code
@@ -261,6 +292,22 @@ if (Test-Path $SageCoreSource) {
     $CompileScript = Join-Path $PSScriptRoot "compile-sage-core.py"
     & $PythonExe $CompileScript build_ext --inplace
     if ($LASTEXITCODE -ne 0) { throw "Cython compilation for sage_core failed with exit code $LASTEXITCODE" }
+
+    # Diagnostic: verify .pyd files were actually produced in the source tree.
+    $SageCorePkgCheck = Join-Path $SageCoreSource "sage_core"
+    $pydFiles = Get-ChildItem -Path $SageCorePkgCheck -Recurse -Filter "*.pyd" -ErrorAction SilentlyContinue
+    if ($pydFiles.Count -eq 0) {
+      throw "Cython build produced no .pyd files under $SageCorePkgCheck. Check compile-sage-core.py module names."
+    }
+    Write-Host "🛡️ Cython produced $($pydFiles.Count) .pyd files." -ForegroundColor Green
+
+    # Clean up Python dev headers (include/ + libs/) — they're only needed for
+    # Cython compilation and should NOT be shipped in the installer (~8MB).
+    $EmbedInclude = Join-Path $PythonDir "include"
+    $EmbedLibs = Join-Path $PythonDir "libs"
+    if (Test-Path $EmbedInclude) { Remove-Item -Recurse -Force $EmbedInclude }
+    if (Test-Path $EmbedLibs) { Remove-Item -Recurse -Force $EmbedLibs }
+    Write-Host "🛡️ Cleaned up Python dev headers from embeddable (not shipped)." -ForegroundColor Green
 
     # In protected mode, do not leak source in resources/sage-core, just keep an empty dir for electron-builder
     Write-Host "🛡️ Omitting source tree mirror in resources/sage-core for protection." -ForegroundColor Yellow
