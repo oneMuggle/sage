@@ -31,9 +31,11 @@ import { THINKING_PLACEHOLDER } from '../../features/send-message/thinkingPlaceh
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownChunks';
-import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
+import type { BlockedAction, Message as MessageType, ToolCall } from '../../shared/lib/store';
+import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
+import { BlockedCard } from './BlockedCard';
 import { CompactBanner } from './CompactBanner';
 import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownImage } from './MarkdownImage';
@@ -63,6 +65,8 @@ interface MessageProps {
   /** right-panel R1 批次 B: tool_call_id → 产物[] 映射 —— 命中的工具卡片
    * 下渲染内联产物 chip，点击直达右侧面板产物预览（对齐 Claude） */
   artifactsByToolCall?: Record<string, Artifact[]>;
+  /** R19-W1: 网页访问拦截卡片动作回调 —— 由 Chat 层处理语义（发消息/跳设置/开浏览器） */
+  onBlockedAction?: (action: BlockedAction) => void;
 }
 
 /** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
@@ -427,6 +431,7 @@ function MessageComponent({
   onQuote,
   onSaveToMemory,
   artifactsByToolCall,
+  onBlockedAction,
 }: MessageProps) {
   const { t } = useI18n();
   const isUser = message.role === 'user';
@@ -463,18 +468,22 @@ function MessageComponent({
   );
   // 2026-09 修复: 历史消息的 tool_calls 从后端原样加载时是 JSON 字符串
   // (session_repo 不做 parse), 直接 .map 会崩。双态归一化。
+  // R19-W1: 归一化拦截信封 —— 历史回读时 metadata 只存在于 result JSON 串内，
+  // 需提升到 tc.metadata 才能渲染拦截卡片（直播路径由 chatStreamStore 同源处理）。
   const toolCalls: ToolCall[] = useMemo(() => {
     const raw = message.tool_calls;
-    if (Array.isArray(raw)) return raw;
-    if (typeof raw === 'string' && raw) {
+    let list: ToolCall[] = [];
+    if (Array.isArray(raw)) {
+      list = raw;
+    } else if (typeof raw === 'string' && raw) {
       try {
         const parsed = JSON.parse(raw) as unknown;
-        return Array.isArray(parsed) ? (parsed as ToolCall[]) : [];
+        if (Array.isArray(parsed)) list = parsed as ToolCall[];
       } catch {
-        return [];
+        list = [];
       }
     }
-    return [];
+    return list.map(normalizeToolCallEnvelope);
   }, [message.tool_calls]);
   // M4: 只有 user/assistant 消息可分叉（system/tool 行没有分叉语义）
   const canFork = Boolean(onFork) && (isUser || isAssistant);
@@ -586,6 +595,7 @@ function MessageComponent({
               // right-panel R5: 写文件工具的内联 diff 卡片（展开懒加载,
               // 点击面板按钮直达右侧变更 Tab）
               const changePaths = message.session_id ? fileChangePaths(tc) : [];
+              const isBlocked = Boolean(tc.metadata?.blockReason);
               return (
                 <div
                   key={`${tc.name}-${idx}`}
@@ -601,8 +611,19 @@ function MessageComponent({
                   {changePaths.length > 0 && (
                     <FileChangeCards sessionId={message.session_id} paths={changePaths} />
                   )}
-                  {/* Tool result — 大文件内容可折叠 */}
-                  {tc.result !== undefined && tc.result !== '' && !hasImage && (
+                  {/* R19-W1: 拦截卡片 — 网页访问被反爬/登录墙/网络错误拦截时，
+                      渲染可视化卡片（原因 + 目标 URL + 建议动作按钮）代替原始错误文本 */}
+                  {isBlocked && (
+                    <BlockedCard
+                      blockReason={tc.metadata!.blockReason!}
+                      blockedUrl={tc.metadata?.blockedUrl}
+                      suggestedActions={tc.metadata?.suggestedActions}
+                      errorMessage={typeof tc.result === 'string' ? tc.result : undefined}
+                      onAction={onBlockedAction}
+                    />
+                  )}
+                  {/* Tool result — 大文件内容可折叠（拦截卡片已承载错误信息时跳过裸文本） */}
+                  {!isBlocked && tc.result !== undefined && tc.result !== '' && !hasImage && (
                     <div className="px-2 pb-1.5">
                       <ToolCallResult result={tc.result} />
                     </div>
@@ -952,6 +973,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.onDelete === next.onDelete &&
     prev.onQuote === next.onQuote &&
     prev.onSaveToMemory === next.onSaveToMemory &&
-    prev.artifactsByToolCall === next.artifactsByToolCall
+    prev.artifactsByToolCall === next.artifactsByToolCall &&
+    prev.onBlockedAction === next.onBlockedAction
   );
 });

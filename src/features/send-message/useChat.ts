@@ -23,6 +23,7 @@ import { logger } from '../../shared/lib/logger';
 // Task 5: modelWindows imports removed — frontend no longer computes history budget.
 // Backend now resolves effective window from catalog and computes budget.
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
+import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
 import { useSettings } from '../manage-settings/useSettings';
 
 import { selectSessionSlots, useChatStreamStore, type TaskBoardState } from './chatStreamStore';
@@ -811,11 +812,12 @@ export function useChat() {
                   // React 渲染对象时触发 "Objects are not valid as a React child"。
                   const safeResult =
                     typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content ?? '');
-                  useChatStreamStore.getState().appendOrUpdateToolCall(sid, {
-                    ...targetTc,
-                    result: safeResult,
-                    metadata,
-                  });
+                  // R19-W1: 拦截信封归一化（提取可读 content + 提升 metadata 到
+                  // ToolCall.metadata），与 Message 历史回读路径共用同一实现
+                  useChatStreamStore.getState().appendOrUpdateToolCall(
+                    sid,
+                    normalizeToolCallEnvelope({ ...targetTc, result: safeResult, metadata }),
+                  );
                 }
               }
 

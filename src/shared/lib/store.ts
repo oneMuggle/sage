@@ -36,6 +36,18 @@ export interface Session {
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）
+/** R19-W1: 网页访问被拦截时后端给出的建议操作（拦截卡片按钮）。 */
+export interface BlockedAction {
+  /** 动作标识: open_browser | configure_credentials | configure_proxy | view_docs */
+  action: string;
+  /** 按钮文案（后端已本地化） */
+  label: string;
+  /** 可选图标（emoji） */
+  icon?: string;
+  /** 动作参数（如 url / domain / topic） */
+  params?: Record<string, unknown>;
+}
+
 export interface ToolCall {
   /** 后端 tool_call.id, 用于 observing 事件精确匹配 (HIGH-3 修复) */
   id?: string;
@@ -54,6 +66,14 @@ export interface ToolCall {
       source?: string;
     }>;
     apiUrls?: string[];
+    /** R19-W1: 网页访问拦截原因枚举（antibot_cf | antibot_other | login_wall |
+     *  http_4xx | http_5xx | timeout | dns | render | generic）。
+     *  存在时 chat 流渲染拦截卡片而非原始结果文本。 */
+    blockReason?: string;
+    /** R19-W1: 被拦截的目标 URL */
+    blockedUrl?: string;
+    /** R19-W1: 建议操作按钮 */
+    suggestedActions?: BlockedAction[];
   };
 }
 

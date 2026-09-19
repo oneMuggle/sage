@@ -1704,15 +1704,51 @@ class SageAgent:
                                                 output_value, ensure_ascii=False, default=str
                                             )
                                         else:
-                                            err_value = result.error
-                                            if isinstance(err_value, str):
-                                                result_content = err_value or "工具执行失败"
-                                            elif err_value is None:
-                                                result_content = "工具执行失败"
-                                            else:
-                                                result_content = json.dumps(
-                                                    err_value, ensure_ascii=False, default=str
+                                            # R19-W1：web_fetch 反爬/登录墙拦截时
+                                            # result.content 是结构化 block 载荷
+                                            # （block_reason/blocked_url/suggested_actions）。
+                                            # 失败路径默认只取 error 纯字符串，前端
+                                            # JSON.parse 会抛错、结构化通道断开。此处仅
+                                            # 对该载荷改用 JSON 信封（顶层 metadata 键，
+                                            # 见 useChat.ts 的 parsed.metadata 提取），
+                                            # 前端据此渲染拦截卡片。其余工具保持原样。
+                                            block_payload = (
+                                                result.content
+                                                if isinstance(
+                                                    getattr(result, "content", None), dict
                                                 )
+                                                and result.content.get("block_reason")
+                                                else None
+                                            )
+                                            if block_payload is not None:
+                                                result_content = json.dumps(
+                                                    {
+                                                        "content": result.error or "工具执行失败",
+                                                        "metadata": {
+                                                            "blockReason": block_payload.get(
+                                                                "block_reason"
+                                                            ),
+                                                            "blockedUrl": block_payload.get(
+                                                                "blocked_url"
+                                                            ),
+                                                            "suggestedActions": block_payload.get(
+                                                                "suggested_actions", []
+                                                            ),
+                                                        },
+                                                    },
+                                                    ensure_ascii=False,
+                                                    default=str,
+                                                )
+                                            else:
+                                                err_value = result.error
+                                                if isinstance(err_value, str):
+                                                    result_content = err_value or "工具执行失败"
+                                                elif err_value is None:
+                                                    result_content = "工具执行失败"
+                                                else:
+                                                    result_content = json.dumps(
+                                                        err_value, ensure_ascii=False, default=str
+                                                    )
                                     else:
                                         is_error = False
                                         result_content = json.dumps(

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
 import { BtwOverlay } from '../../features/chat';
-import type { Message as MessageType } from '../../shared/lib/store';
+import type { BlockedAction, Message as MessageType } from '../../shared/lib/store';
 
 import { Message } from './Message';
 import { TopicSeparator } from './TopicSeparator';
@@ -35,6 +35,8 @@ interface MessageListProps {
   onSaveToMemory?: (message: MessageType) => void;
   /** R44: 空态建议提示词点击回调 */
   onSuggestionClick?: (prompt: string) => void;
+  /** R19-W1: 网页访问拦截卡片动作回调（透传给 Message → BlockedCard） */
+  onBlockedAction?: (action: BlockedAction) => void;
 }
 
 export function MessageList({
@@ -49,7 +51,9 @@ export function MessageList({
   onDelete,
   onQuote,
   onSaveToMemory,
-  onSuggestionClick,}: MessageListProps) {
+  onSuggestionClick,
+  onBlockedAction,
+}: MessageListProps) {
   // U11: 只渲染最近 WINDOW_STEP 条, 更早的按需加载 —— 避免长会话全量
   // 重渲染(每条 Message 都可能含 ReactMarkdown/Shiki)。
   const [windowSize, setWindowSize] = useState(WINDOW_STEP);
@@ -132,6 +136,7 @@ export function MessageList({
               onQuote={onQuote}
               onSaveToMemory={onSaveToMemory}
               artifactsByToolCall={artifactsByToolCall}
+              onBlockedAction={onBlockedAction}
             />
           ),
         )}

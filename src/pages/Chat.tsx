@@ -18,7 +18,7 @@ import { orchRunClient } from '../shared/api/orchRunClient';
 import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
-import type { Message as MessageType } from '../shared/lib/store';
+import type { BlockedAction, Message as MessageType } from '../shared/lib/store';
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { LoadingState } from '../shared/ui/LoadingState';
@@ -761,6 +761,36 @@ const CHAT_DOC_MIME: Record<string, string> = {
     [t],
   );
 
+  // R19-W1: 网页访问拦截卡片动作 —— 把后端的建议动作翻译成前端语义。
+  // open_browser: 发一条消息请 agent 用 browser_navigate 打开（走完整工具链）；
+  // configure_credentials / configure_proxy: 跳设置网络 tab（凭据库 + 代理配置）；
+  // view_docs: 新窗口打开文档。
+  const handleBlockedAction = useCallback(
+    (action: BlockedAction) => {
+      const url = typeof action.params?.url === 'string' ? action.params.url : undefined;
+      switch (action.action) {
+        case 'open_browser':
+          if (url) void sendMessage(`请用 browser_navigate 工具打开 ${url} 并提取正文。`);
+          break;
+        case 'configure_credentials':
+        case 'configure_proxy':
+          try {
+            localStorage.setItem('sage:settings-tab', 'network');
+          } catch {
+            /* ignore */
+          }
+          navigate('/settings');
+          break;
+        case 'view_docs':
+          if (url) window.open(url, '_blank');
+          break;
+        default:
+          break;
+      }
+    },
+    [sendMessage, navigate],
+  );
+
   // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
   // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
   // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
@@ -922,6 +952,7 @@ const CHAT_DOC_MIME: Record<string, string> = {
                 onDelete={handleDeleteMessage}
                 onQuote={handleQuote}
                 onSaveToMemory={handleSaveToMemory}
+                onBlockedAction={handleBlockedAction}
               />
             )}
             {/* 对标 S2: 内联记忆提示（"已记住"可撤销）；临时聊天不显示 */}
