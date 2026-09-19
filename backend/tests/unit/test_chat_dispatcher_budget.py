@@ -418,8 +418,9 @@ async def test_aggregate_block_shows_per_task_tokens(tmp_path, monkeypatch):
     await d.wait_background(timeout=5)
     snap = d.background_snapshot()
     agg = snap["aggregate"]
-    assert "## 子任务 t1（primary）（消耗 777 tokens）" in agg
-    assert "## 子任务 t2（primary）（消耗" not in agg
+    # BU20 (round36): 消耗与耗时并排标注
+    assert "## 子任务 t1（primary）（消耗 777 tokens · 耗时" in agg
+    assert "消耗 777" in agg
 
 
 @pytest.mark.asyncio()
@@ -608,3 +609,40 @@ async def test_aggregate_wall_clock_line_when_enabled(tmp_path, monkeypatch):
     await d2.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
     agg2 = d2._aggregate(list(d2._states.values()))
     assert "上限" not in agg2
+
+
+# ---- BU20 (round36): 聚合块任务级时长标注 --------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_block_shows_duration_alone_when_no_tokens(tmp_path, monkeypatch):
+    """BU20: 无用量任务只显耗时；两数据皆无的任务不显标注。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-bu20-1",
+        session_id="sess-bu20",
+    )
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        if state.task_id == "t2":
+            await asyncio.sleep(0.05)
+        state.status = "done"
+        state.output = f"产出 {state.task_id}"
+        return state.output
+
+    d._run_subagent = fake_run
+    await d.dispatch(
+        [
+            {"task_id": "t1", "agent_id": "primary", "goal": "g1"},
+            {"task_id": "t2", "agent_id": "primary", "goal": "g2"},
+        ]
+    )
+    agg = d._aggregate(list(d._states.values()))
+    # 两任务都有起止 → 都有耗时；t1 无用量 → 只有耗时
+    assert "## 子任务 t1（primary）（耗时" in agg
+    assert "## 子任务 t2（primary）（耗时" in agg
+    assert "消耗" not in agg.split("已收到")[1].split("## 子任务 t1")[0]
