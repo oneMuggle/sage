@@ -174,6 +174,22 @@ async def test_create_header_credential_origin_guard(client):
     assert resp.status_code == 403
 
 
+async def test_create_header_credential_malformed_body_hides_values(client):
+    """Pydantic 请求体校验失败（缺 domain）不得回显提交的凭据值。
+
+    FastAPI 默认 422 会在 ``detail[].input`` 原样回显 body，header 的
+    ``value`` 与 cookie 值同属敏感凭据，故与 cookie 路由统一走脱敏响应。
+    """
+    secret = "header-secret-422"
+    resp = await client.post(
+        "/api/v1/web-access/credentials/header",
+        json={"header_name": "Authorization", "value": secret},
+    )
+    assert resp.status_code == 422
+    assert resp.json() == {"ok": False, "error": "invalid_header_credential"}
+    assert secret not in resp.text
+
+
 # ---------- Round 19：cookie 型凭据导入入口 ----------
 
 
@@ -219,6 +235,34 @@ async def test_create_cookie_credential_rejects_invalid_cookie(client, monkeypat
         "error": "invalid_cookie_credential",
     }
     assert cookie_value not in response.text
+
+
+async def test_create_cookie_credential_malformed_body_hides_values(client):
+    """Pydantic 请求体校验失败（cookies 类型错误）不得回显提交的 cookie 值。
+
+    FastAPI 默认 422 把 ``detail[].input`` 原样回显，明文 cookie 会随响应
+    外泄；本批次凭据路由必须统一回固定非敏感错误。
+    """
+    secret = "cookie-secret-422"
+    response = await client.post(
+        "/api/v1/web-access/credentials/cookie",
+        json={"domain": ".example.com", "cookies": secret},
+    )
+    assert response.status_code == 422
+    assert response.json() == {"ok": False, "error": "invalid_cookie_credential"}
+    assert secret not in response.text
+
+
+async def test_create_cookie_credential_missing_domain_hides_values(client):
+    """缺 domain 的 422 不得回显 cookies 列表里的明文值。"""
+    secret = "cookie-secret-missing-domain"
+    response = await client.post(
+        "/api/v1/web-access/credentials/cookie",
+        json={"cookies": [{"name": "SID", "value": secret}]},
+    )
+    assert response.status_code == 422
+    assert response.json() == {"ok": False, "error": "invalid_cookie_credential"}
+    assert secret not in response.text
 
 
 async def test_create_cookie_credential_origin_guard(client):
