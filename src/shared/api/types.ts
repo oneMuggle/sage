@@ -156,7 +156,8 @@ export interface Message {
 
 /** R81: 统一参考来源条目 —— backend/chat/sources_extractor.py 的提取产物。 */
 export interface MessageSource {
-  kind: 'web' | 'wiki' | 'tool';
+  /** R86: 新增 'memory' —— @memory: 实体引用命中（渲染进记忆分组）。 */
+  kind: 'web' | 'wiki' | 'tool' | 'memory';
   title?: string;
   url?: string;
   snippet?: string;

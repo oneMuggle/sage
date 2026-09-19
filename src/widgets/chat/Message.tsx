@@ -508,12 +508,14 @@ function MessageComponent({
   const memoryRefs = message.memory_refs ?? [];
   const ragCitations = message.rag_citations ?? [];
   const toolSources = message.sources ?? [];
+  // R86: @memory: 实体引用命中（kind='memory'）——与记忆召回同渲染进记忆分组
+  const memorySources = toolSources.filter((s) => s.kind === 'memory');
   const wikiSources = toolSources.filter((s) => s.kind === 'wiki');
   const webSources = toolSources.filter((s) => s.kind === 'web');
   const mcpSources = toolSources.filter((s) => s.kind === 'tool');
   const sourcesTotal = memoryRefs.length + ragCitations.length + toolSources.length;
   // 各分组在统一编号里的起始偏移（列表带 [1][2]… 序号, 类文章引用）
-  const ragOffset = memoryRefs.length;
+  const ragOffset = memoryRefs.length + memorySources.length;
   const wikiOffset = ragOffset + ragCitations.length;
   const webOffset = wikiOffset + wikiSources.length;
   const toolOffset = webOffset + webSources.length;
@@ -773,7 +775,7 @@ function MessageComponent({
             className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-2"
             data-testid="message-sources-list"
           >
-            {memoryRefs.length > 0 && (
+            {(memoryRefs.length > 0 || memorySources.length > 0) && (
               <div className="space-y-1">
                 <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
                   {t('chat.sources_group_memory')}
@@ -785,6 +787,18 @@ function MessageComponent({
                       {ref.memory_type}
                     </span>
                     <span className="text-text-secondary break-all">{ref.preview}</span>
+                  </div>
+                ))}
+                {/* R86: @memory: 实体引用命中，序号与记忆召回连续 */}
+                {memorySources.map((s, i) => (
+                  <div key={`memsrc-${s.title}-${i}`} className="flex items-start gap-1.5">
+                    <span className="text-muted flex-shrink-0 font-mono">
+                      [{memoryRefs.length + i + 1}]
+                    </span>
+                    <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
+                      @memory
+                    </span>
+                    <span className="text-text-secondary break-all">{s.snippet || s.title}</span>
                   </div>
                 ))}
               </div>

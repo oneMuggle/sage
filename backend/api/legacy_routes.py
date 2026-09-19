@@ -3100,17 +3100,23 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 对标 S3（统一入口）：把消息里的实体引用解析为 <references> 块，
             # 并入尾部 dynamic system（易变上下文，保前缀缓存）。同步 I/O
             # 走附件线程池；任何失败静默省略，绝不阻断聊天。
+            # R86: @memory:/@wiki: 的命中同时抽取为结构化来源（process_with_sources
+            # 一次解析两用，不为溯源重跑检索），暂存后并入 r81_turn_sources。
+            r81_entity_sources: list = []
             try:
                 from backend.chat import entity_refs as _entity_refs
                 from backend.chat.executors import ATTACHMENT_EXECUTOR
 
                 if _entity_refs.extract_entity_refs(data.message):
-                    refs_block = await asyncio.get_running_loop().run_in_executor(
-                        ATTACHMENT_EXECUTOR,
-                        _entity_refs.process,
-                        data.message,
-                        data.session_id,
+                    refs_block, r81_entity_hits = (
+                        await asyncio.get_running_loop().run_in_executor(
+                            ATTACHMENT_EXECUTOR,
+                            _entity_refs.process_with_sources,
+                            data.message,
+                            data.session_id,
+                        )
                     )
+                    r81_entity_sources.extend(r81_entity_hits)
                     if refs_block:
                         dynamic_context_parts.append(refs_block)
             except Exception as refs_err:  # noqa: BLE001
@@ -3488,6 +3494,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 推 sources_used 事件并随终稿 assistant 行落盘。提取/合并全
             # fail-safe（sources_extractor 内部吞异常）,绝不影响对话主流程。
             r81_turn_sources: list = []
+            # R86: @memory:/@wiki: 实体引用命中并入统一来源（按 url/path/title 去重）
+            r81_turn_sources[:] = merge_sources(r81_turn_sources, r81_entity_sources)
             # R83 增量推送: 每个 STEP_DONE 边界把已累积来源快照推给前端（长
             # run 中"先搜索后长文写作"时用户不必等 DONE 才看到来源）。记录
             # 上次推送时的条数,仅在有新增时推,避免逐 step 空转刷事件。

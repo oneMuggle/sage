@@ -755,7 +755,7 @@ export function useChat() {
                     (s) =>
                       typeof s === 'object' &&
                       s !== null &&
-                      ['web', 'wiki', 'tool'].includes((s as { kind?: unknown }).kind as string),
+                      ['web', 'wiki', 'tool', 'memory'].includes((s as { kind?: unknown }).kind as string),
                   );
                 if (isValidSources) {
                   updateMessage(assistantId, { sources });
@@ -1105,7 +1105,7 @@ export function useChat() {
                   (s) =>
                     typeof s === 'object' &&
                     s !== null &&
-                    ['web', 'wiki', 'tool'].includes((s as { kind?: unknown }).kind as string),
+                    ['web', 'wiki', 'tool', 'memory'].includes((s as { kind?: unknown }).kind as string),
                 );
               if (isValidSources && sources.length > 0) {
                 updateMessage(messageId, { sources });
