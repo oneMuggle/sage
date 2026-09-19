@@ -73,6 +73,7 @@ from backend.orchestration.chat_dispatcher import (
     _classify_orchestration_mode,
 )
 from backend.orchestration.llm_factory import load_llm_config_for_chat
+from backend.services.scheduler import get_scheduler_service
 from backend.utils import py_compat
 
 
@@ -689,7 +690,7 @@ def _build_orchestration_dispatcher(
 
 
 def get_agent() -> SageAgent:
-    return SageAgent()
+    return SageAgent(scheduler_service_getter=get_scheduler_service)
 
 
 # ==================== 会话 API ====================
@@ -1941,7 +1942,10 @@ async def chat(
 
         # 2026-07-30: chat 默认加载 primary profile,让 profile.tools 白名单生效
         # (memory_manager 之类窄权限 agent 才不会拿到 list_dir/read_file 全部工具)
-        agent = SageAgent(agent_id=data.agent_id or "primary")
+        agent = SageAgent(
+            agent_id=data.agent_id or "primary",
+            scheduler_service_getter=get_scheduler_service,
+        )
         # G5 (2026-09-06): 请求未显式带端点配置时，用「全局端点 + 会话覆盖/
         # profile 模型」解析 —— 会话里切换模型不影响其他会话与全局设置。
         if llm_config is None:
@@ -2416,7 +2420,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     return
 
-            agent = SageAgent(agent_id=data.agent_id or "primary")
+            agent = SageAgent(
+                agent_id=data.agent_id or "primary",
+                scheduler_service_getter=get_scheduler_service,
+            )
             # PM1 (round8): 计划模式 per-run 只读门 —— 实例级 enforcer 注入
             # （run_loop 对非空 permission_enforcer 直接复用），override 为
             # READ_ONLY；全局 settings 的 permission_mode 不动。失败降级为

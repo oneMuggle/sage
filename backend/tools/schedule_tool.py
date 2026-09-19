@@ -30,20 +30,18 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.domain.risk import RiskClass
-from backend.domain.tool_policy import ToolPolicy
-from backend.services.scheduler import (
-    SchedulerService,
-    TaskNotFoundError,
-    ValidationError,
-    get_scheduler_service,
+from backend.domain.scheduler import (
+    ScheduledTaskNotFoundError,
+    ScheduledTaskValidationError,
+    SchedulerServicePort,
 )
+from backend.domain.tool_policy import ToolPolicy
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import current_tool_context
 
 logger = logging.getLogger(__name__)
 
-#: 服务解析器签名 —— 返回进程内的 ``SchedulerService``，未初始化时为 ``None``。
-ServiceGetter = Callable[[], Optional[SchedulerService]]
+ServiceGetter = Callable[[], Optional[SchedulerServicePort]]
 
 NO_CONTEXT_ERROR = (
     "无法确定目标会话：当前没有工具执行上下文（session_id 缺失）。"
@@ -52,8 +50,13 @@ NO_CONTEXT_ERROR = (
 NO_SERVICE_ERROR = "定时任务服务未初始化，无法执行本操作。"
 
 
-def _default_service_getter() -> Optional[SchedulerService]:
-    return get_scheduler_service()
+def _default_service_getter() -> Optional[SchedulerServicePort]:
+    """Return no service unless the application composition root injects one.
+
+    Schedule tools are primary-agent-only; subagents and standalone registries
+    intentionally remain unable to create persistent tasks.
+    """
+    return None
 
 
 def _resolve_session_id(explicit: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
@@ -249,7 +252,7 @@ class ScheduleTaskTool(BaseTool):
                 session_id=resolved_session,
                 content=prompt.strip(),
             )
-        except ValidationError as exc:
+        except ScheduledTaskValidationError as exc:
             return ToolResult(success=False, error=f"创建定时任务失败：{exc}")
         except Exception as exc:  # noqa: BLE001 — 工具边界，异常不穿透
             logger.exception("schedule_task 执行异常: %s", exc)
@@ -412,11 +415,17 @@ class CancelScheduledTaskTool(BaseTool):
             # TOCTOU 窗口：前端 UI 可把任务迁移到别的会话后，本工具仍按旧归属
             # 删除。2026-09-19 安全审查修复。
             service.delete_task(task_id, expected_session_id=resolved_session)
-        except ValidationError:
-            # 不回显 task.session_id 或 resolved_session（防会话 id 探测）
-            return ToolResult(success=False, error="拒绝取消：该任务不属于当前会话。")
-        except TaskNotFoundError:
-            return ToolResult(success=False, error=f"未找到任务：{task_id}")
+        except ScheduledTaskValidationError:
+            # 归属失败与未知 ID 使用相同文案，避免枚举其他会话任务。
+            return ToolResult(
+                success=False,
+                error="无法取消任务：任务不存在或不属于当前会话。",
+            )
+        except ScheduledTaskNotFoundError:
+            return ToolResult(
+                success=False,
+                error="无法取消任务：任务不存在或不属于当前会话。",
+            )
         except Exception as exc:  # noqa: BLE001 — 工具边界
             logger.exception("cancel_scheduled_task 执行异常: %s", exc)
             # 2026-09-19 安全审查修复: 不回显原始异常文本
