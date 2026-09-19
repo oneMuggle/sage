@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 62：用户手册补脚注/尾注/文档属性**（纯文档轮）
+
+### Changed(docs)
+- **用户手册 09-office.md**：图表与图片节补脚注（{{fn:}}）与尾注（{{en:}}）说明（含 office_update 追加续接编号）与文档属性（metadata）——R49-R61 能力的手册层收口
+
 > 📝 **Word 写作能力 Round 61：append_paragraphs 支持 {{fn:}}/{{en:}}**（方案 `docs/plans/2026-09-19_r61-append-fn-en-plan.md`）
 
 ### Added(office)
