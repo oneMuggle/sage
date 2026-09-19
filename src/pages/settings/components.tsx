@@ -4,8 +4,8 @@
 
 import { useState } from 'react';
 
-import type { useSettings } from '../../features/manage-settings/useSettings';
 import { APPLY_MODE_LABELS, type ApplyMode } from '../../entities/setting/metadata';
+import type { useSettings } from '../../features/manage-settings/useSettings';
 
 // ==================== 共用类型 ====================
 

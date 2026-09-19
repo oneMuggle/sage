@@ -1,5 +1,5 @@
-import { getSettingMetadata } from './settingsRegistry';
 import type { SettingMetadata } from './metadata';
+import { getSettingMetadata } from './settingsRegistry';
 
 function validateConstraint(metadata: SettingMetadata, value: unknown): string | null {
   const constraint = metadata.constraints;

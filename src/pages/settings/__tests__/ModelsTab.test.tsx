@@ -2,8 +2,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ModelsTab } from '../ModelsTab';
 import { DEFAULT_SETTINGS, type ModelCapability } from '../../../entities/setting/types';
+import { ModelsTab } from '../ModelsTab';
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
 
