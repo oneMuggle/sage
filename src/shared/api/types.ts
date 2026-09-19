@@ -208,7 +208,13 @@ export type AgentState =
   | 'topic_shifted'
   // Round 3 (2026-09-19): 编排拆解前置进度（需求澄清/事实侦察）,
   // 载荷见 AgentEvent.preflight_phase。先于 task_plan 到达。
-  | 'orch_preflight';
+  | 'orch_preflight'
+  // r71: 附件检索注入溯源（引用块在气泡内可展开）,
+  // 载荷见 AgentEvent.citations。
+  | 'attachment_rag_used'
+  // right-panel R5 (2026-09-19): 写文件工具落盘后经活跃流推送的变更信号,
+  // 前端据此防抖刷新右侧变更列表,载荷见 AgentEvent.change。
+  | 'workspace_changed';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -515,6 +521,16 @@ export interface AgentEvent {
   skills?: { name: string; triggers_matched: string[] }[];
   // R38: compact_triggered 事件载荷（M4 自动压缩统计）。
   compact?: { before: number; after: number; removed: number };
+  // r71: attachment_rag_used 事件载荷（超长文档检索注入溯源）。
+  citations?: {
+    media_id: string;
+    mode: string;
+    chunks?: { index: number; score: number }[];
+    filename?: string;
+  }[];
+  // right-panel R5 (2026-09-19): workspace_changed 事件载荷（写文件工具
+  // 落盘后经活跃流推送；path 为工具视角路径，刷新语义以 git status 为准）。
+  change?: { path: string; kind?: string };
 }
 
 // ==================== 错误类型定义 ====================
