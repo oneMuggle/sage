@@ -283,6 +283,11 @@ class Message:
     activated_skills: Optional[str] = None
     compact_info: Optional[str] = None
     memory_refs: Optional[str] = None
+    # R81 统一参考来源 (2026-09-19): 引用溯源 JSON-in-TEXT 载荷，同上序列化约定。
+    # rag_citations: r71 附件检索溯源 [{media_id, filename, mode, chunks}]；
+    # sources:       工具命中 [{kind: web|wiki|tool, ...}]（sources_extractor 提取）。
+    rag_citations: Optional[str] = None
+    sources: Optional[str] = None
 
     @classmethod
     def from_row(cls, row) -> Message:
@@ -306,6 +311,10 @@ class Message:
             ),
             compact_info=row["compact_info"] if "compact_info" in row_keys else None,
             memory_refs=row["memory_refs"] if "memory_refs" in row_keys else None,
+            rag_citations=(
+                row["rag_citations"] if "rag_citations" in row_keys else None
+            ),
+            sources=row["sources"] if "sources" in row_keys else None,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -327,6 +336,9 @@ class Message:
             "activated_skills": _parse_json_column(self.activated_skills, list),
             "compact_info": _parse_json_column(self.compact_info, dict),
             "memory_refs": _parse_json_column(self.memory_refs, list),
+            # R81: 引用溯源同款解析口径（list / 畸形降级 None）。
+            "rag_citations": _parse_json_column(self.rag_citations, list),
+            "sources": _parse_json_column(self.sources, list),
         }
 
 
@@ -365,8 +377,8 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
     """
     cursor.execute(
         """
-        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             f"msg-{uuid.uuid4().hex[:12]}",  # 新 id，避免与源消息主键冲突
@@ -382,6 +394,9 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
             src_msg.activated_skills,  # R38: fork 同步复制通知列，避免子会话丢通知
             src_msg.compact_info,
             src_msg.memory_refs,
+            # R81: 引用溯源列随 fork 复制，子会话保留完整引用区块
+            src_msg.rag_citations,
+            src_msg.sources,
             src_msg.created_at,  # 保留原时间戳 → ORDER BY created_at ASC 保序
         ),
     )
@@ -539,8 +554,8 @@ class MessageRepository:
 
         cursor.execute(
             """
-            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, created_at, segment_id, subtype)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at, segment_id, subtype)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 message.id,
@@ -556,6 +571,8 @@ class MessageRepository:
                 message.activated_skills,
                 message.compact_info,
                 message.memory_refs,
+                message.rag_citations,
+                message.sources,
                 message.created_at,
                 active_segment_id,
                 message.subtype,
@@ -627,8 +644,8 @@ class MessageRepository:
                 cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
             cursor.execute(
                 """
-                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, created_at, segment_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at, segment_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     continuation_message.id,
@@ -644,6 +661,8 @@ class MessageRepository:
                     continuation_message.activated_skills,
                     continuation_message.compact_info,
                     continuation_message.memory_refs,
+                    continuation_message.rag_citations,
+                    continuation_message.sources,
                     continuation_message.created_at,
                     getattr(continuation_message, "segment_id", 0) or 0,
                 ),

@@ -1887,4 +1887,91 @@ describe('useChat subagent_event synthesized board (agent tool)', () => {
       expect(asstMsg?.memory_applied).toBeUndefined();
     });
   });
+
+  describe('R81 sources_used 载荷校验', () => {
+    async function setupCapture() {
+      seedActiveEndpoint();
+      invokeMock.mockResolvedValueOnce({ streamId: 'stream-r58' });
+      let capturedCb: ((e: unknown) => void) | null = null;
+      listenMock.mockImplementationOnce(async (_name: string, cb: (e: unknown) => void) => {
+        capturedCb = cb;
+        return vi.fn();
+      });
+      const { result } = renderHook(() => useChat());
+      await waitForSettingsLoaded();
+      await act(async () => {
+        (result.current.sendMessage('ping') as unknown as Promise<void>).catch(() => {});
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(capturedCb).not.toBeNull();
+      return { result, capturedCb: capturedCb! };
+    }
+
+    it('合法 sources → 写入 assistant 消息', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'sources_used',
+            iteration: 0,
+            sources: [
+              { kind: 'web', title: 'Sage', url: 'https://sage.example.com', snippet: '官网' },
+              { kind: 'wiki', path: 'wiki/arch.md', title: '架构', snippet: '分层', score: 0.9 },
+              { kind: 'tool', server: 'github', tool: 'search', preview: 'issues' },
+            ],
+          },
+        });
+      });
+
+      const asstMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(asstMsg?.sources).toHaveLength(3);
+      expect(asstMsg?.sources?.[0]).toMatchObject({ kind: 'web', url: 'https://sage.example.com' });
+    });
+
+    it('kind 非法 → 整批丢弃, 不写 sources', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'sources_used',
+            iteration: 0,
+            sources: [{ kind: 'hacker-news', title: '伪造来源' }],
+          },
+        });
+      });
+
+      const asstMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(asstMsg?.sources).toBeUndefined();
+    });
+
+    it('attachment_rag_used 多事件按 media_id 合并, 不再整体覆盖', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'attachment_rag_used',
+            iteration: 0,
+            citations: [{ media_id: 'doc1', filename: 'a.pdf', mode: 'rag', chunks: [] }],
+          },
+        });
+      });
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'attachment_rag_used',
+            iteration: 0,
+            citations: [{ media_id: 'doc2', filename: 'b.pdf', mode: 'rag', chunks: [] }],
+          },
+        });
+      });
+
+      const asstMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(asstMsg?.rag_citations).toHaveLength(2);
+      expect(asstMsg?.rag_citations?.map((c) => c.media_id)).toEqual(['doc1', 'doc2']);
+    });
+  });
 });

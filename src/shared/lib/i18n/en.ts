@@ -54,6 +54,14 @@ export const en: Record<TranslationKey, string> = {
   'chat.hint':
     'Sage remembers your project context · Supports Markdown · Type / for commands, @ to reference workspace files',
   'chat.memory_applied': 'memories applied',
+  // R81: Unified sources block (memory / attachments / wiki / web / tools)
+  'chat.sources_toggle': 'View sources used for this reply',
+  'chat.sources_count': '{n} sources',
+  'chat.sources_group_memory': 'Memory',
+  'chat.sources_group_attachment': 'Attachments',
+  'chat.sources_group_wiki': 'Knowledge base',
+  'chat.sources_group_web': 'Web',
+  'chat.sources_group_tool': 'Tools',
   // R38: Skill activation display
   'chat.skills_activated': 'skills activated',
   'chat.skills_toggle': 'View activated skills',

@@ -45,6 +45,7 @@ from backend.chat.compaction import (
 )
 from backend.chat.executors import resolve_attachments
 from backend.chat.history_context import build_request_messages, history_token_budget
+from backend.chat.sources_extractor import extract_sources_from_tool, merge_sources
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data.artifact_repo import (  # S7: 产物事件 → 活跃流推送
@@ -3071,6 +3072,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # ===== R37 文本文档附件注入 BEGIN =====
             # 已上传文本文档（attachment_media_ids）按 id 读全文，截断后并入
             # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
+            # R81 (2026-09-19): rag_citations 列与 main 对齐；win7 暂无 r71
+            # RAG 检索（无捕获来源），恒空，待 r66/r71 同步后启用。
+            r81_rag_citations: list = []
+            r81_rag_citations_written = False
             try:
                 from backend.services.multimodal.media_store import (
                     MEDIA_ROOT,
@@ -3095,6 +3100,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         continue
                     if not r37_text.strip():
                         continue
+                    # R81: win7 暂无 r66/r71 附件 RAG 检索注入（超长文档仍全文
+                    # 截断），此处恒为空 —— rag_citations 列与 main 保持 schema
+                    # 对齐，待 r66/r71 同步到 win7 后在此补捕获。
                     dynamic_context_parts.append(
                         "<attached_document id=" + repr(r37_mid) + ">" + chr(10)
                         + r37_text + chr(10) + "</attached_document>"
@@ -3441,6 +3449,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 json.dumps(r38_memories, ensure_ascii=False) if r38_memories else None
             )
             r38_memory_refs_written = False
+            # R81: r71 附件检索 citations 与本轮工具来源落库载荷 —— 均为
+            # JSON-in-TEXT 列, 序列化失败降级 None（列缺失仅丢展示不丢消息）。
+            r81_rag_citations_json = (
+                json.dumps(r81_rag_citations, ensure_ascii=False)
+                if r81_rag_citations
+                else None
+            )
+            r81_sources_json: Optional[str] = None
             user_now = int(time.time() * 1000)
             # client_message_id (同步 #1155): 确定性 user id —— 前端乐观消息
             # 用同一 id, 对账按 id 精确命中; 未传时维持 UUID。
@@ -3497,6 +3513,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 内容落盘（DONE 才落盘的旧语义会留下无回复的悬空 user 消息，
             # 已渲染内容重载即丢）。
             streamed_partial_parts: List[str] = []
+
+            # R81 统一参考来源: OBSERVING 事件里的检索类工具命中（web_search/
+            # web_fetch/wiki_search/wiki_answer/MCP）解析成结构化来源,done 前
+            # 推 sources_used 事件并随终稿 assistant 行落盘。提取/合并全
+            # fail-safe（sources_extractor 内部吞异常）,绝不影响对话主流程。
+            r81_turn_sources: list = []
 
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
@@ -3614,6 +3636,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         if tc.get("id") == tr.tool_call_id:
                             tc["result"] = tr.content
                             break
+                    # R81: 检索类工具命中 → 解析成参考来源条目（fail-safe）
+                    r81_tool_name = getattr(evt.tool_call, "name", "") or ""
+                    if r81_tool_name:
+                        r81_turn_sources[:] = merge_sources(
+                            r81_turn_sources,
+                            extract_sources_from_tool(r81_tool_name, tr.content),
+                        )
                     await entry.queue.put(evt.to_dict())
                 # 2026-09 step-by-step: 每完成一次 ReAct 迭代(OBSERVING 之后),
                 # agent.py 在该迭代边界 yield STEP_DONE。这里把"当前 step 的累加器"
@@ -3645,12 +3674,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     if not r38_memory_refs_written
                                     else None
                                 ),
+                                # R81: 附件检索 citations 同挂首条 assistant 行
+                                rag_citations=(
+                                    r81_rag_citations_json
+                                    if not r81_rag_citations_written
+                                    else None
+                                ),
                                 created_at=step_now,
                                 model=(llm_config.get("model") if llm_config else "local"),
                             ),
                         )
                         if r38_memory_refs_json and not r38_memory_refs_written:
                             r38_memory_refs_written = True
+                        if r81_rag_citations_json and not r81_rag_citations_written:
+                            r81_rag_citations_written = True
                     except Exception as step_db_err:
                         logger.warning(
                             f"[REQ {request_id}] step {evt.step_index} 持久化失败: {step_db_err}"
@@ -3671,6 +3708,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             if done_content:
                 assistant_now = int(time.time() * 1000)
                 assistant_message_id: Optional[str] = None
+                # R81: 本轮工具来源此时已收集完毕,序列化一次供终稿行落库。
+                if r81_turn_sources:
+                    r81_sources_json = json.dumps(
+                        r81_turn_sources, ensure_ascii=False
+                    )
                 try:
                     saved = await _run_db_sync(
                         message_repo.save,
@@ -3698,6 +3740,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 if not r38_memory_refs_written
                                 else None
                             ),
+                            # R81: 引用落库 —— 附件 citations 同款首写 flag；
+                            # 工具来源挂终稿行（前端来源区块所在的气泡）。
+                            rag_citations=(
+                                r81_rag_citations_json
+                                if not r81_rag_citations_written
+                                else None
+                            ),
+                            sources=r81_sources_json,
                             created_at=assistant_now,
                             model=(llm_config.get("model") if llm_config else "local"),
                         ),
@@ -3705,6 +3755,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     assistant_message_id = getattr(saved, "id", None)
                     if r38_memory_refs_json and not r38_memory_refs_written:
                         r38_memory_refs_written = True
+                    if r81_rag_citations_json and not r81_rag_citations_written:
+                        r81_rag_citations_written = True
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
                 sess = None
@@ -3783,6 +3835,22 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # 标题生成内部自带 3 次退避重试, 最长可拖 15s+, 此前阻塞在
                 # DONE 之前, 内容已生成完用户仍在转圈。现 DONE 立即推送,
                 # 标题转后台任务生成, 完成后落库并补发 title_updated。
+                # R81: DONE 之前推送 sources_used —— 前端在收到 DONE 收尾前
+                # 就能把参考来源挂到 assistant 气泡上（与 memory_used 同为
+                # 增强信息, 非空才推）。
+                if r81_turn_sources:
+                    try:
+                        await entry.queue.put(
+                            {
+                                "state": "sources_used",
+                                "session_id": data.session_id,
+                                "sources": r81_turn_sources,
+                            }
+                        )
+                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                        logger.debug(
+                            f"[REQ {request_id}] sources_used event push failed, ignored"
+                        )
                 if done_event:
                     done_payload = done_event.to_dict()
                     # 同步 #1155: DONE 附带 assistant 消息服务端 id
@@ -3864,6 +3932,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 tool_calls=(
                                     json.dumps(accumulated_tool_calls, ensure_ascii=False)
                                     if accumulated_tool_calls
+                                    else None
+                                ),
+                                # R81: 中断行也带上已捕获的引用信息（首写 flag
+                                # 置位防与已落库的 step 行重复）。win7 无
+                                # step-by-step 落库, 不写 step_index。
+                                rag_citations=(
+                                    r81_rag_citations_json
+                                    if not r81_rag_citations_written
+                                    else None
+                                ),
+                                sources=(
+                                    json.dumps(r81_turn_sources, ensure_ascii=False)
+                                    if r81_turn_sources
                                     else None
                                 ),
                                 created_at=int(time.time() * 1000),
