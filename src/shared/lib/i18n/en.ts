@@ -141,7 +141,9 @@ export const en: Record<TranslationKey, string> = {
   'chat.delete_confirm': 'Are you sure you want to delete this session?',
 
   // ─── M4 session compact / fork ────
-  'chat.compact_success': 'Context compacted: {before} → {after} messages ({removed} removed)',
+  // LOW-1: unified phrasing — "before → after messages (removed merged into summary)"
+  'chat.compact_success':
+    'Context compacted: {before} → {after} messages ({removed} merged into summary)',
   'chat.compact_skipped': 'Conversation too short to compact',
   'chat.compact_failed': 'Compaction failed: {message}',
   'chat.fork_from_here': 'Fork from here',

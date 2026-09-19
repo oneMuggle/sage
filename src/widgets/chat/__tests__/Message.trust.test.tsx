@@ -108,7 +108,8 @@ describe('Message — R17 信任感交互', () => {
   it('R38: role=system 且含 compact_info 时渲染居中的压缩系统提示', () => {
     const msg = makeMsg({
       role: 'system',
-      content: '📦 上下文已压缩：20 → 8 条（移除 12 条）',
+      // LOW-1: 统一口径
+      content: '📦 上下文已压缩：20 → 8 条（12 条历史已合并为摘要）',
       compact_info: { before: 20, after: 8, removed: 12 },
     });
     renderWithI18n(<Message message={msg} />);
@@ -116,5 +117,25 @@ describe('Message — R17 信任感交互', () => {
     // 系统提示不应渲染用户/助手头像
     expect(screen.queryByText('U')).not.toBeInTheDocument();
     expect(screen.queryByText('S')).not.toBeInTheDocument();
+  });
+
+  it('R38: assistant 续接行 —— 横幅在气泡上方, 摘要正文与操作按钮仍保留', () => {
+    const msg = makeMsg({
+      role: 'assistant',
+      content: '这是 LLM 写的摘要正文',
+      compact_info: { before: 20, after: 8, removed: 12 },
+    });
+    renderWithI18n(<Message message={msg} />);
+    // 横幅出现
+    expect(screen.getByTestId('compact-banner')).toBeInTheDocument();
+    // 摘要正文（assistant 气泡）仍在
+    expect(screen.getByText('这是 LLM 写的摘要正文')).toBeInTheDocument();
+    // affordance 未丢失
+    expect(screen.getByTestId('copy-message')).toBeInTheDocument();
+  });
+
+  it('R38: 无 compact_info 时不渲染横幅', () => {
+    renderWithI18n(<Message message={makeMsg()} />);
+    expect(screen.queryByTestId('compact-banner')).not.toBeInTheDocument();
   });
 });

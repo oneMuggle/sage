@@ -278,6 +278,11 @@ class Message:
     # 调用 /topic-new 或类似动作产生),正常消息 subtype=None。
     segment_id: int = 0
     subtype: Optional[str] = None
+    # R38 透明度增强 (2026-09-18): 三条通知信息的 JSON-in-TEXT 载荷（原样字符串）。
+    # 写入端 json.dumps(..., ensure_ascii=False)；to_dict 解析成结构化值。
+    activated_skills: Optional[str] = None
+    compact_info: Optional[str] = None
+    memory_refs: Optional[str] = None
 
     @classmethod
     def from_row(cls, row) -> Message:
@@ -296,6 +301,11 @@ class Message:
             step_index=row["step_index"] if "step_index" in row_keys else None,
             segment_id=row["segment_id"] if "segment_id" in row_keys else 0,
             subtype=row["subtype"] if "subtype" in row_keys else None,
+            activated_skills=(
+                row["activated_skills"] if "activated_skills" in row_keys else None
+            ),
+            compact_info=row["compact_info"] if "compact_info" in row_keys else None,
+            memory_refs=row["memory_refs"] if "memory_refs" in row_keys else None,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -313,7 +323,26 @@ class Message:
             "step_index": self.step_index,
             "segment_id": self.segment_id,
             "subtype": self.subtype,
+            # R38: 解析成结构化值供前端直接消费；形状不符 → None（降级不报错）。
+            "activated_skills": _parse_json_column(self.activated_skills, list),
+            "compact_info": _parse_json_column(self.compact_info, dict),
+            "memory_refs": _parse_json_column(self.memory_refs, list),
         }
+
+
+def _parse_json_column(raw: Optional[str], expected: type):
+    """把 JSON-in-TEXT 列解析成结构化值；类型不符或解析失败一律降级为 None。
+
+    降级而非抛错：历史行可能由更早版本写入、或手工改库留下畸形值，
+    读路径不应因此整批失败（前端视 None 为"无信息"）。
+    """
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return parsed if isinstance(parsed, expected) else None
 
 
 class ForkSourceNotFoundError(LookupError):
@@ -336,8 +365,8 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
     """
     cursor.execute(
         """
-        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             f"msg-{uuid.uuid4().hex[:12]}",  # 新 id，避免与源消息主键冲突
@@ -350,6 +379,9 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
             src_msg.tool_call_id,
             src_msg.reasoning_content,
             src_msg.step_index,
+            src_msg.activated_skills,  # R38: fork 同步复制通知列，避免子会话丢通知
+            src_msg.compact_info,
+            src_msg.memory_refs,
             src_msg.created_at,  # 保留原时间戳 → ORDER BY created_at ASC 保序
         ),
     )
@@ -513,8 +545,8 @@ class MessageRepository:
 
         cursor.execute(
             """
-            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at, segment_id, subtype)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, created_at, segment_id, subtype)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 message.id,
@@ -527,6 +559,9 @@ class MessageRepository:
                 message.tool_call_id,
                 message.reasoning_content,
                 message.step_index,
+                message.activated_skills,
+                message.compact_info,
+                message.memory_refs,
                 message.created_at,
                 seg,
                 message.subtype,
@@ -598,8 +633,8 @@ class MessageRepository:
                 cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
             cursor.execute(
                 """
-                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, created_at, segment_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, created_at, segment_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     continuation_message.id,
@@ -612,6 +647,9 @@ class MessageRepository:
                     continuation_message.tool_call_id,
                     continuation_message.reasoning_content,
                     continuation_message.step_index,
+                    continuation_message.activated_skills,
+                    continuation_message.compact_info,
+                    continuation_message.memory_refs,
                     continuation_message.created_at,
                     getattr(continuation_message, "segment_id", 0) or 0,
                 ),

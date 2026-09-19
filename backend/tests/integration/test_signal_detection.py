@@ -292,7 +292,11 @@ class TestComplexTurnSignalDetection:
             return_value=mock_review_queue,
         ), patch(
             "backend.application.services.chat_service._skill_activation_block",
-            return_value=("\n\n# Activated Skill\nsome content", ["deploy"]),
+            # MEDIUM-3: 返回形状改为 (block, [{"name": str, "triggers_matched": list}])
+            return_value=(
+                "\n\n# Activated Skill\nsome content",
+                [{"name": "deploy", "triggers_matched": ["deploy"]}],
+            ),
         ):
             service = ChatService(
                 llm=mock_llm,

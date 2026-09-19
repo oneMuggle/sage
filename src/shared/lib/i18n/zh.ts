@@ -137,7 +137,8 @@ export const zh = {
   'chat.delete_confirm': '确定要删除这个会话吗？',
 
   // ─── M4 会话压缩 / 分叉 ───────────
-  'chat.compact_success': '上下文已压缩：{before} → {after} 条消息（移除 {removed} 条）',
+  // LOW-1: 统一口径 —— "before → after 条（removed 条历史已合并为摘要）"
+  'chat.compact_success': '上下文已压缩：{before} → {after} 条（{removed} 条历史已合并为摘要）',
   'chat.compact_skipped': '对话较短，无需压缩',
   'chat.compact_failed': '压缩失败：{message}',
   'chat.fork_from_here': '从此处分叉',

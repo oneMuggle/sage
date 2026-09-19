@@ -65,3 +65,49 @@ describe('mergeLoadedMessages 计数感知去重 (R25-D5 对账重复修复)', (
     expect(merged).toHaveLength(1);
   });
 });
+
+describe('mergeLoadedMessages R38 压缩通知去重', () => {
+  const COMPACT = { before: 20, after: 8, removed: 12 };
+
+  it('本地合成通知(role=system) 与服务端续接行(role=assistant) 同 compact_info → 去重', () => {
+    const server: Message[] = [
+      msg('sv-1', 'user', 'hi'),
+      { ...msg('sv-2', 'assistant', '摘要正文'), compact_info: COMPACT },
+    ];
+    const local: Message[] = [
+      {
+        ...msg('local-c', 'assistant', '📦 上下文已压缩：20 → 8 条（12 条历史已合并为摘要）'),
+        role: 'system',
+        compact_info: COMPACT,
+      },
+    ];
+    const merged = mergeLoadedMessages(server, local, 's1');
+    // 同一压缩只保留服务端一条, 且是带摘要正文的续接行
+    expect(merged.filter((m) => m.compact_info)).toHaveLength(1);
+    expect(merged.find((m) => m.compact_info)?.id).toBe('sv-2');
+  });
+
+  it('compact_info 不同 → 不去重 (两次独立压缩各自保留)', () => {
+    const server: Message[] = [
+      { ...msg('sv-1', 'assistant', '摘要 A'), compact_info: { before: 10, after: 5, removed: 6 } },
+    ];
+    const local: Message[] = [
+      {
+        ...msg('local-c', 'assistant', '通知 B'),
+        role: 'system',
+        compact_info: { before: 20, after: 8, removed: 13 },
+      },
+    ];
+    const merged = mergeLoadedMessages(server, local, 's1');
+    expect(merged.filter((m) => m.compact_info)).toHaveLength(2);
+  });
+
+  it('服务端尚无续接行(流未结束) → 本地通知保留', () => {
+    const server: Message[] = [msg('sv-1', 'user', 'hi')];
+    const local: Message[] = [
+      { ...msg('local-c', 'assistant', '通知'), role: 'system', compact_info: COMPACT },
+    ];
+    const merged = mergeLoadedMessages(server, local, 's1');
+    expect(merged.some((m) => m.id === 'local-c')).toBe(true);
+  });
+});

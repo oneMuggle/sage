@@ -1492,9 +1492,9 @@ describe('useChat taskBoard', () => {
     });
   });
 
-  // r72 回归: skill_activated 明细必须写在 assistant 消息上,
-  // 而不是 userId（用户消息）——原实现写错目标,技能徽标永远不渲染。
-  it('routes skill_activated payload to the assistant message', async () => {
+  // r72 回归 + R38 修正: skill_activated 明细必须写在 user 消息上（技能由用户输入触发），
+  // 后端 legacy_routes.py:3350 将 activated_skills 写入 user message。
+  it('routes skill_activated payload to the user message', async () => {
     seedActiveEndpoint();
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-skills' });
     listenMock.mockImplementationOnce(
@@ -1520,16 +1520,17 @@ describe('useChat taskBoard', () => {
     });
 
     await waitFor(() => {
-      const assistant = useStore
-        .getState()
-        .messages.find((m) => m.role === 'assistant');
-      expect(assistant?.activated_skills).toEqual([
+      // R38: 技能激活明细写入 user 消息（后端 legacy_routes.py:3350 同口径）
+      const user = useStore.getState().messages.find((m) => m.role === 'user');
+      expect(user?.activated_skills).toEqual([
         { name: 'report-writing', triggers_matched: ['/report'] },
       ]);
     });
-    // 用户消息不得携带技能明细
-    const user = useStore.getState().messages.find((m) => m.role === 'user');
-    expect(user?.activated_skills).toBeUndefined();
+    // assistant 消息不携带技能明细
+    const assistant = useStore
+      .getState()
+      .messages.find((m) => m.role === 'assistant');
+    expect(assistant?.activated_skills).toBeUndefined();
   });
   // r77 回归: 重接(reattach)重放时 memory_used 也要写入 memory_refs,
   // 与主路径同口径 —— 否则页面刷新后完成的消息丢失记忆明细。
@@ -1772,5 +1773,119 @@ describe('useChat subagent_event synthesized board (agent tool)', () => {
     expect(board?.plan).toHaveLength(1);
     expect(board?.plan[0]?.goal).toBe('编排目标');
     expect(board?.live?.['a1']).toBeUndefined();
+  });
+
+  // ── R38 MEDIUM-2: SSE 载荷运行时校验 ──────────────────────────────
+  // 畸形载荷必须被丢弃（不更新 UI），合法载荷正常消费。
+  describe('R38 透明度事件载荷校验', () => {
+    async function setupCapture() {
+      seedActiveEndpoint();
+      invokeMock.mockResolvedValueOnce({ streamId: 'stream-r38' });
+      let capturedCb: ((e: unknown) => void) | null = null;
+      listenMock.mockImplementationOnce(async (_name: string, cb: (e: unknown) => void) => {
+        capturedCb = cb;
+        return vi.fn();
+      });
+      const { result } = renderHook(() => useChat());
+      await waitForSettingsLoaded();
+      await act(async () => {
+        // 不驱动 done：本组用例只验证事件载荷校验，流保持挂起即可
+        (result.current.sendMessage('ping') as unknown as Promise<void>).catch(() => {});
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(capturedCb).not.toBeNull();
+      return { result, capturedCb: capturedCb! };
+    }
+
+    it('compact_triggered 字段类型不符（string 而非 number）→ 丢弃, 不插入系统消息', async () => {
+      const { result, capturedCb } = await setupCapture();
+      const before = result.current.messages.length;
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'compact_triggered',
+            iteration: 0,
+            compact: { before: '20', after: 8, removed: 12 },
+          },
+        });
+      });
+
+      expect(result.current.messages.length).toBe(before);
+      expect(result.current.messages.some((m) => m.compact_info)).toBe(false);
+    });
+
+    it('compact_triggered 合法 → 插入带 compact_info 的系统消息', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'compact_triggered',
+            iteration: 0,
+            compact: { before: 20, after: 8, removed: 12 },
+          },
+        });
+      });
+
+      const compactMsg = result.current.messages.find((m) => m.compact_info);
+      expect(compactMsg).toBeDefined();
+      expect(compactMsg?.compact_info).toEqual({ before: 20, after: 8, removed: 12 });
+    });
+
+    it('skill_activated 条目 name 非字符串 → 丢弃, 不写 activated_skills', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'skill_activated',
+            iteration: 0,
+            skills: [{ name: 123, triggers_matched: [] }],
+          },
+        });
+      });
+
+      const userMsg = result.current.messages.find((m) => m.role === 'user');
+      expect(userMsg?.activated_skills).toBeUndefined();
+    });
+
+    it('skill_activated 合法 → 命中触发词写入用户消息', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'skill_activated',
+            iteration: 0,
+            skills: [{ name: 'deploy', triggers_matched: ['部署'] }],
+          },
+        });
+      });
+
+      const userMsg = result.current.messages.find((m) => m.role === 'user');
+      expect(userMsg?.activated_skills).toEqual([
+        { name: 'deploy', triggers_matched: ['部署'] },
+      ]);
+    });
+
+    it('memory_used 条目缺 id → 丢弃, 不写 memory_refs', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'memory_used',
+            iteration: 0,
+            memories: [{ preview: '没有 id 的脏数据' }],
+          },
+        });
+      });
+
+      const asstMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(asstMsg?.memory_refs).toBeUndefined();
+      expect(asstMsg?.memory_applied).toBeUndefined();
+    });
   });
 });

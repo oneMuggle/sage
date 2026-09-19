@@ -837,8 +837,10 @@ class ChatService:
 # --------------------------------------------------------------------------- #
 
 
-def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> Tuple[str, List[str]]:
-    """计算本轮用户消息自动激活的技能上下文块及激活技能名列表。
+def _skill_activation_block(
+    message: str, skills: Optional[SkillPort]
+) -> Tuple[str, List[Dict[str, Any]]]:
+    """计算本轮用户消息自动激活的技能上下文块及激活技能列表。
 
     结构性探测：仅当 skills adapter 实现 ``auto_activate(message)`` 扩展
     方法（``InprocSkillAdapter``）时生效；纯 ``SkillPort`` mock / 其他
@@ -849,8 +851,10 @@ def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> Tuple[
     绝不能破坏对话轮次（与记忆上下文注入同语义）。
 
     Returns:
-        ``(block, names)`` —— block 为可追加到 system prompt 的文本（含前导换行），
-        names 为激活的技能名列表（用于推送 skill_activated 事件）。
+        ``(block, skills_list)`` —— block 为可追加到 system prompt 的文本
+        （含前导换行），skills_list 为技能信息列表，每个元素形如
+        ``{"name": str, "triggers_matched": List[str]}``（用于推送
+        skill_activated 事件，调用方零翻译）。
     """
     if not message or skills is None:
         return "", []
@@ -861,10 +865,22 @@ def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> Tuple[
         result = auto_activate(message)
         block = getattr(result, "context_block", "")
         names = list(getattr(result, "names", ()))
+        # matches 字段可能不存在（duck-type 兼容 _FakeActivationResult 等测试 mock）
+        matches = getattr(result, "matches", {}) or {}
     except Exception as exc:
         logger.debug(f"A16 skill auto-activation skipped: {exc}")
         return "", []
-    return (f"\n\n{block}" if isinstance(block, str) and block else "", names if isinstance(names, list) else [])
+    if not isinstance(names, list):
+        return ("", [])
+    # 构造事件载荷形状：每个技能带其命中的触发词列表
+    skills_list: List[Dict[str, Any]] = []
+    for name in names:
+        matched = matches.get(name, ())
+        skills_list.append({
+            "name": name,
+            "triggers_matched": list(matched) if matched else [],
+        })
+    return (f"\n\n{block}" if isinstance(block, str) and block else "", skills_list)
 
 
 # --------------------------------------------------------------------------- #
