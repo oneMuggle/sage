@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 📝 **Word 写作能力 Round 57：内联脚注 Phase A**（方案 `docs/plans/2026-09-19_r57-footnotes-phase-a-plan.md`，设计稿 90 号）
+
+### Added(office)
+- **`{{fn:备注文本}}` 内联脚注**：正文占位符生成 `w:footnoteReference` run（id 按出现顺序 1..N），备注文本写入挂载的 `word/footnotes.xml` part（含 separator/continuationSeparator 系统脚注）——学术论文脚注支持的最小闭环
+- **`read_docx` 回读 `footnotes: List[str]`**（无脚注空表）；无脚注文档不挂载 part（产物零变化）
+
 > 📝 **Word 写作能力 Round 56：脚注/尾注设计评审稿**（设计文档，非实现）
 
 ### Added(docs)

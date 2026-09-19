@@ -1252,6 +1252,8 @@ export interface OfficeWordReadResult {
    * Backend: WordImagePreview in backend/office/models.py.
    */
   image_previews?: OfficeWordImagePreview[];
+  // Round 57：脚注文本清单（无脚注为空表）
+  footnotes?: string[];
 }
 
 /** One Word comment (backend WordCommentContent). */

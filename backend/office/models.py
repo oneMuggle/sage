@@ -232,6 +232,8 @@ class OfficeWordReadResult(BaseModel):
     # Round 15：每节的页眉/页脚文本与页码域标记（生成器对偶——
     # format_spec.header/footer 写入的元素读取侧可见）。
     headers_footers: List[WordHeaderFooterContent] = Field(default_factory=list)
+    # Round 57：脚注文本清单（footnotes part 回读；无脚注为空表）。
+    footnotes: List[str] = Field(default_factory=list)
     # Round 15：文档中的目录域 instr 列表。
     toc_fields: List[str] = Field(default_factory=list)
     # Office display round C (P4)：内嵌图片缩略预览。additive field ——
