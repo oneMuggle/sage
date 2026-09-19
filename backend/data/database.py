@@ -1247,55 +1247,6 @@ class Database:
             ON orch_plan_tasks(team_id)
         """)
 
-        # Lane 表（执行单元）
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS orchestration_lanes (
-                lane_id TEXT PRIMARY KEY,
-                task_id TEXT NOT NULL,
-                agent_id TEXT,
-                status TEXT NOT NULL DEFAULT 'created',
-                created_at INTEGER NOT NULL,
-                started_at INTEGER,
-                completed_at INTEGER,
-                worktree TEXT,
-                heartbeat TEXT,
-                error TEXT,
-                permission_preset TEXT NOT NULL DEFAULT 'implement',
-                metadata TEXT NOT NULL DEFAULT '{}',
-                FOREIGN KEY (task_id) REFERENCES orch_plan_tasks(task_id) ON DELETE CASCADE
-            )
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_lanes_task
-            ON orchestration_lanes(task_id)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_lanes_status
-            ON orchestration_lanes(status)
-        """)
-
-        # Lane 事件表（生命周期事件流）
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS orchestration_lane_events (
-                event_id TEXT PRIMARY KEY,
-                event_type TEXT NOT NULL,
-                lane_id TEXT NOT NULL,
-                task_id TEXT NOT NULL,
-                agent_id TEXT,
-                timestamp INTEGER NOT NULL,
-                provenance TEXT NOT NULL DEFAULT 'LiveLane',
-                metadata TEXT NOT NULL DEFAULT '{}',
-                FOREIGN KEY (lane_id) REFERENCES orchestration_lanes(lane_id) ON DELETE CASCADE
-            )
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_events_lane
-            ON orchestration_lane_events(lane_id, timestamp)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_orch_events_task
-            ON orchestration_lane_events(task_id)
-        """)
 
         # Team 表（工作流分组；Phase 3 改名：orchestration_teams → orch_plan_teams）
         cursor.execute("""
@@ -1372,26 +1323,6 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_orch_lane_events_by_task "
             "ON orch_lane_events(task_id)"
         )
-
-        # ==================== 双轨合并 Phase 2: 数据迁移 ====================
-        # 启动时把老表存量 INSERT OR IGNORE 到新表（幂等；主键冲突保留新侧数据）。
-        # 老表保留不删 —— 双写期内允许回滚；Phase 5 清理时统一 DROP。
-        # 迁移失败不阻塞启动（降级铁律，例如全新安装下老表不存在）。
-        try:
-            cursor.execute(
-                "INSERT OR IGNORE INTO orch_lanes "
-                "SELECT lane_id, task_id, agent_id, status, created_at, started_at, "
-                "completed_at, worktree, heartbeat, error, permission_preset, metadata "
-                "FROM orchestration_lanes"
-            )
-            cursor.execute(
-                "INSERT OR IGNORE INTO orch_lane_events "
-                "SELECT event_id, event_type, lane_id, task_id, agent_id, timestamp, "
-                "provenance, metadata "
-                "FROM orchestration_lane_events"
-            )
-        except Exception as exc:  # noqa: BLE001 — 降级铁律
-            logger.warning("双轨合并数据迁移失败（老表可能不存在）: %s", exc)
 
         # ==================== Background Review 表 ====================
         # Task 4 of 2026-08-02-background-review:
