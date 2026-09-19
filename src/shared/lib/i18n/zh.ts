@@ -75,6 +75,14 @@ export const zh = {
   'chat.rag_citation_source': '来源',
   'chat.rag_citation_chunk': '片段',
   'chat.memory_applied': '条记忆已应用',
+  // R81: 统一参考来源区块（记忆/附件/知识库/网页/工具收编）
+  'chat.sources_toggle': '查看本次回答的参考来源',
+  'chat.sources_count': '{n} 条参考来源',
+  'chat.sources_group_memory': '记忆',
+  'chat.sources_group_attachment': '附件检索',
+  'chat.sources_group_wiki': '知识库',
+  'chat.sources_group_web': '网页',
+  'chat.sources_group_tool': '工具',
   // R38: 技能激活展示
   'chat.skills_activated': '个技能已激活',
   'chat.skills_toggle': '查看激活的技能',
