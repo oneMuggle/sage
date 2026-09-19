@@ -187,6 +187,9 @@ def _dedup_key(source: Dict[str, Any]) -> tuple:
         return ("web", str(source.get("url") or ""))
     if kind == "wiki":
         return ("wiki", str(source.get("path") or ""))
+    if kind == "memory":
+        # R86: @memory: 实体引用命中（title = @memory:query [类型]）
+        return ("memory", str(source.get("title") or ""))
     return ("tool", str(source.get("server") or ""), str(source.get("tool") or ""))
 
 
