@@ -699,8 +699,25 @@ class ChatDispatcher:
         }
         if parent_task_id is not None:
             item["parent_task_id"] = str(parent_task_id)
-        # Normalize and validate the hierarchy before mutating plan state.
-        candidate_plan = list(self._plan_by_id.values()) + [item]
+        # 新增任务的父级校验（只针对新边，避免既有脏数据连坐拒绝 —— 旧
+        # plan_json 可能残留已失效的 parent 引用，不应阻塞无关的新增）。
+        known = set(self._plan_by_id) | set(self._states)
+        new_parent = item.get("parent_task_id")
+        if new_parent is not None and new_parent not in known:
+            return {
+                "success": False,
+                "error": f"parent_task_id 引用了不存在的任务: {new_parent}",
+            }
+        # 归一化：先剔除既有条目中已失效的 parent 引用（fail-open，与
+        # Planner 同风格），再对新任务施加严格校验。
+        baseline: List[Dict[str, Any]] = []
+        for existing in self._plan_by_id.values():
+            entry = dict(existing)
+            parent = entry.get("parent_task_id")
+            if parent is not None and str(parent) not in known:
+                entry.pop("parent_task_id", None)
+            baseline.append(entry)
+        candidate_plan = baseline + [item]
         try:
             normalized_plan = normalize_task_hierarchy(candidate_plan)
         except HierarchyError as exc:
@@ -978,10 +995,11 @@ class ChatDispatcher:
                 output_schema=output_schema,
                 parent_task_id=plan_parent_task_id,
                 depth=plan_depth,
+                followup_parent_id=parent_task_id,
                 followup_degraded=followup_degraded,
                 parent_tool_call_id=self._current_tool_call_id,
             )
-            if followup_of is not None and state.parent_task_id is None:
+            if followup_of is not None and state.followup_parent_id is None:
                 logger.warning(
                     "无效 followup_of=%r，任务 %s 降级为普通新任务",
                     followup_of,
@@ -1190,11 +1208,13 @@ class ChatDispatcher:
             deps_by_id[state.task_id] = [
                 d for d in raw_deps if d in self._states and d != state.task_id
             ]
+            # 仅续聊父任务构成隐式执行依赖；计划层级父任务不参与调度
+            # （spec 2026-09-19 §设计原则：parent 只表达归属与展示）。
             if (
-                state.parent_task_id
-                and state.parent_task_id not in deps_by_id[state.task_id]
+                state.followup_parent_id
+                and state.followup_parent_id not in deps_by_id[state.task_id]
             ):
-                deps_by_id[state.task_id].append(state.parent_task_id)
+                deps_by_id[state.task_id].append(state.followup_parent_id)
 
         # RD13 (round13): 重派任务剥离指向重派源的依赖 —— 源在同批先行失败
         # 时，波间闭包会把依赖它的重派任务连带判死（blocked_by_failed:），
@@ -1374,8 +1394,8 @@ class ChatDispatcher:
             "workspace_dir": str(workspace_dir) if workspace_dir else None,
         }
         self._apply_retry_inheritance(state, parameters)
-        if state.parent_task_id is not None:
-            parameters["history"] = self._histories.get(state.parent_task_id, [])
+        if state.followup_parent_id is not None:
+            parameters["history"] = self._histories.get(state.followup_parent_id, [])
         if state.output_schema is not None:
             parameters["output_schema"] = state.output_schema
 
