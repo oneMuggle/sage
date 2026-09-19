@@ -80,6 +80,10 @@ class WorkspaceChangeEntryModel(BaseModel):
     index_status: str
     worktree_status: str
     path: str
+    # right-panel R5: 每文件 +/- 行数（numstat / 未跟踪文件行数统计）；
+    # 二进制 / 统计失败为 None，前端不渲染徽章
+    insertions: Optional[int] = None
+    deletions: Optional[int] = None
 
 
 class WorkspaceChangesResponse(BaseModel):
@@ -95,6 +99,13 @@ class WorkspaceChangesResponse(BaseModel):
 class WorkspaceDiffResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     diff: str
+    truncated: bool
+
+
+class WorkspaceFileContentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+    content: str
     truncated: bool
 
 
@@ -320,13 +331,16 @@ def get_workspace_changes(session_id: str) -> WorkspaceChangesResponse:
     解析、30s 超时、utf-8 replace 解码。非 git 仓库 / git 不可用 → 502。
     """
     from backend.domain.tool_policy import ToolPolicy
-    from backend.tools.git_tool import GitStatusTool
+    from backend.tools.git_tool import GitStatusTool, collect_change_stats
 
     root = _bound_workspace_or_raise(_connection(), session_id)
     result = GitStatusTool(ToolPolicy(workspace_root=root)).execute()
     if not result.success:
         raise _error(502, "git_error", result.error or "git 命令失败")
     content = result.content if isinstance(result.content, dict) else {}
+    raw_changes = [entry for entry in content.get("changes", []) if isinstance(entry, dict)]
+    # right-panel R5: 每文件 +/- 行数（失败降级为 None，不影响清单本身）
+    change_stats = collect_change_stats(root, raw_changes)
     return WorkspaceChangesResponse(
         branch=str(content.get("branch", "")),
         upstream=str(content.get("upstream", "")),
@@ -338,11 +352,21 @@ def get_workspace_changes(session_id: str) -> WorkspaceChangesResponse:
                 index_status=str(entry.get("index_status", "")),
                 worktree_status=str(entry.get("worktree_status", "")),
                 path=str(entry.get("path", "")),
+                **_stats_for_path(change_stats, str(entry.get("path", ""))),
             )
-            for entry in content.get("changes", [])
-            if isinstance(entry, dict)
+            for entry in raw_changes
         ],
     )
+
+
+def _stats_for_path(change_stats: dict, path: str) -> dict:
+    """按 status path 取 +/- 行数；重命名条目（"old -> new"）回落匹配新段。"""
+    stats = change_stats.get(path)
+    if stats is None and " -> " in path:
+        stats = change_stats.get(path.split(" -> ")[-1])
+    if stats is None:
+        return {}
+    return {"insertions": stats.get("insertions"), "deletions": stats.get("deletions")}
 
 
 @router.get("/changes/diff", response_model=WorkspaceDiffResponse)
@@ -357,7 +381,7 @@ def get_workspace_change_diff(
     避免一次性传输超大 diff）。
     """
     from backend.domain.tool_policy import ToolPolicy
-    from backend.tools.git_tool import GitDiffTool
+    from backend.tools.git_tool import GitDiffTool, untracked_file_diff
 
     root = _bound_workspace_or_raise(_connection(), session_id)
     result = GitDiffTool(ToolPolicy(workspace_root=root)).execute(
@@ -366,10 +390,65 @@ def get_workspace_change_diff(
     if not result.success:
         raise _error(502, "git_error", result.error or "git 命令失败")
     content = result.content if isinstance(result.content, dict) else {}
+    diff_text = str(content.get("diff", ""))
+    truncated = bool(content.get("truncated", False))
+    # right-panel R5: 未跟踪文件在 ``git diff`` 下输出为空——补一份
+    # "new file" 形态的全加号 diff（Cursor 观感）；非未跟踪路径维持空态。
+    if not diff_text.strip() and path and not staged:
+        new_file = untracked_file_diff(root, path)
+        if new_file is not None:
+            return WorkspaceDiffResponse(diff=new_file[0], truncated=new_file[1])
     return WorkspaceDiffResponse(
-        diff=str(content.get("diff", "")),
-        truncated=bool(content.get("truncated", False)),
+        diff=diff_text,
+        truncated=truncated,
     )
+
+
+#: 变更面板"预览"读取上限（字节）——超过直接 413，不做部分读取
+_WS_FILE_PREVIEW_READ_CAP = 2 * 1024 * 1024
+#: 预览返回内容的字符上限——超出截断并置 truncated
+_WS_FILE_PREVIEW_CONTENT_CAP = 512 * 1024
+
+
+@router.get("/changes/file", response_model=WorkspaceFileContentResponse)
+def get_workspace_change_file(
+    session_id: str,
+    path: str = Query(min_length=1, max_length=1024),
+) -> WorkspaceFileContentResponse:
+    """工作区文件内容（变更面板"预览"视图数据源，只读，right-panel R6）。
+
+    ``path`` 为相对仓库根路径。realpath 边界守卫（防 ``../`` 与 symlink
+    逃逸，口径同 write_file 的 WRITE 边界）+ 2MiB 读取上限 + 二进制嗅探
+    （NUL → 415）+ 512KiB 内容截断。
+    """
+    from backend.tools.file_tool import _path_within_workspace
+
+    root = _bound_workspace_or_raise(_connection(), session_id)
+    joined = str(Path(root) / path)
+    if not _path_within_workspace(joined, root):
+        raise _error(403, "path_outside_workspace", "仅支持工作区内的相对路径")
+    resolved = Path(os.path.realpath(joined))
+    if not resolved.is_file():
+        raise _error(404, "file_not_found", "文件不存在")
+
+    try:
+        data = resolved.read_bytes()
+    except OSError as exc:
+        raise _error(502, "file_read_error", f"读取失败: {exc}") from exc
+    if len(data) > _WS_FILE_PREVIEW_READ_CAP:
+        raise _error(
+            413,
+            "file_too_large",
+            f"文件 {len(data)} 字节超过预览上限 {_WS_FILE_PREVIEW_READ_CAP} 字节",
+        )
+    if b"\x00" in data[:8192]:
+        raise _error(415, "binary_file", "二进制文件不支持预览")
+
+    text = data.decode("utf-8", errors="replace")
+    truncated = len(text) > _WS_FILE_PREVIEW_CONTENT_CAP
+    if truncated:
+        text = text[:_WS_FILE_PREVIEW_CONTENT_CAP]
+    return WorkspaceFileContentResponse(path=path, content=text, truncated=truncated)
 
 
 class WorkspaceRevertRequest(BaseModel):

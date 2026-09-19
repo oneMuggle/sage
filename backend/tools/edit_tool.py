@@ -339,6 +339,11 @@ class EditTool(BaseTool):
 
         target.write_bytes(updated_bytes)
 
+        # right-panel R5: 广播 workspace_changed（变更面板事件驱动刷新，失败静默）
+        from .file_tool import _notify_workspace_changed_safely
+
+        _notify_workspace_changed_safely(str(target.resolve()), "edit")
+
         # G8 (2026-09-06): Python 文件编辑后语法诊断 —— 失败不影响编辑结果
         from .write_diagnostics import attach_diagnostics
 

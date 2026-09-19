@@ -18,6 +18,7 @@ import type {
   TaskStatusEvent,
 } from '../../shared/api/types';
 import { bumpArtifactEvent } from '../artifacts/artifactEventsStore';
+import { useChangesListStore } from '../changes/changesListStore';
 import { maybeAutoOpenArtifactPanel } from '../right-panel/rightPanelStore';
 
 import { mergeLiveEvent, useChatStreamStore } from './chatStreamStore';
@@ -31,6 +32,13 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
   if (evt.state === 'artifact_created' && evt.artifact) {
     bumpArtifactEvent(sid);
     maybeAutoOpenArtifactPanel(sid);
+    return true;
+  }
+
+  // right-panel R5: 写文件工具落盘 → 变更列表防抖刷新（徽标实时化，
+  // 不再依赖手动刷新/重进面板）。防抖合并一轮连续写入的多条事件。
+  if (evt.state === 'workspace_changed') {
+    useChangesListStore.getState().fetchDebounced(sid);
     return true;
   }
 

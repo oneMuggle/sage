@@ -5,10 +5,11 @@
  * 会话槽位：任务板建立/合并/进度聚合/复核/live 合成/approval_mode/
  * todo 快照/产物计数，以及跨 run 防串扰。
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentEvent } from '../../../shared/api/types';
 import { useStore } from '../../../shared/lib/store';
+import { useChangesListStore } from '../../changes/changesListStore';
 import { useRightPanelStore } from '../../right-panel/rightPanelStore';
 import {
   selectSessionSlots,
@@ -186,6 +187,43 @@ describe('applyOrchestrationEventToBoard — R35', () => {
       SID,
     );
     expect(useRightPanelStore.getState().open).toBe(false);
+  });
+});
+
+// ============================================================================
+// right-panel R5: workspace_changed → 变更列表防抖刷新
+// ============================================================================
+
+describe('orchestrationEvents — workspace_changed 防抖刷新 (right-panel R5)', () => {
+  it('事件被消费,防抖窗口内多条合并为一次 fetch', () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi
+        .spyOn(useChangesListStore.getState(), 'fetch')
+        .mockImplementation(() => Promise.resolve());
+
+      const handled = applyOrchestrationEventToBoard(
+        evt({ state: 'workspace_changed', change: { path: 'src/app.ts', kind: 'write' } }),
+        SID,
+      );
+      expect(handled).toBe(true);
+
+      // 一轮写入连续到达 3 条事件（write_file + edit_file + patch）
+      applyOrchestrationEventToBoard(evt({ state: 'workspace_changed' }), SID);
+      applyOrchestrationEventToBoard(evt({ state: 'workspace_changed' }), SID);
+
+      // 防抖窗口内不拉取
+      vi.advanceTimersByTime(799);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      // 窗口尾沿合并为一次
+      vi.advanceTimersByTime(2);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(SID);
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
   });
 });
 

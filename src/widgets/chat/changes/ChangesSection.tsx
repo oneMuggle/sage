@@ -12,6 +12,10 @@
 // U2' 检查点面板 (对标增强第五轮批次 A, docs/plans/2026-09-08_coding-agent-parity-round5.md):
 // 工作区快照的列表 / 手动创建 / 覆盖恢复。restore 走 confirm 对话框
 // (用户主动操作,与 U19 revert 同先例,不经 agent 审批门禁)。
+//
+// right-panel R5 (2026-09-19): 列表行 +/- 行数徽章 (GET /changes 的
+// numstat 字段) + 消费 rightPanelStore.selectedChangePath —— 聊天流内
+// 文件修改卡片点击后直达本面板对应文件的 diff 视图。
 
 import {
   Archive,
@@ -19,6 +23,7 @@ import {
   ChevronDown,
   ChevronRight,
   Columns,
+  Files,
   GitBranch,
   History,
   RefreshCw,
@@ -29,11 +34,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useChangesListStore } from '../../../features/changes/changesListStore';
+import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';
 import { workspaceApi } from '../../../shared/api/workspaceApi';
 import type { WorkspaceCheckpoint } from '../../../shared/api/workspaceApi';
+import { langFromPath } from '../../../shared/lib/fileLang';
 import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
 import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
+import { ReviewAll } from './ReviewAll';
 import { SplitDiff } from './SplitDiff';
 import { splitDiffHunks } from './diffHunks';
 
@@ -96,11 +104,67 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
   const [checkpoints, setCheckpoints] = useState<WorkspaceCheckpoint[] | null>(null);
   const [checkpointsOpen, setCheckpointsOpen] = useState(false);
   const [checkpointBusy, setCheckpointBusy] = useState(false);
+  // right-panel R6: diff / 文件预览 视图切换与预览内容懒加载
+  const [viewMode, setViewMode] = useState<'diff' | 'preview'>('diff');
+  // right-panel R6 / P2-7: "全部审查" 多文件连续 diff 视图
+  const [reviewAll, setReviewAll] = useState(false);
+  const [fileContent, setFileContent] = useState<string | null>(null);
+  const [fileContentTruncated, setFileContentTruncated] = useState(false);
+  const [fileContentLoading, setFileContentLoading] = useState(false);
+  const [fileContentError, setFileContentError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     if (!sessionId) return;
     void fetchChanges(sessionId);
   }, [sessionId, fetchChanges]);
+
+  // right-panel R5: 聊天流文件修改卡片（selectChange）直达入口 —— 消费
+  // 一次性选中路径,打开对应文件的 diff 视图后立即清除,避免切会话串台。
+  const pendingChangePath = useRightPanelStore((s) => s.selectedChangePath);
+  const clearSelectedChange = useRightPanelStore((s) => s.clearSelectedChange);
+  const openDiff = useCallback(
+    (path: string) => {
+      if (!sessionId) return;
+      setSelectedPath(path);
+      setDiff(null);
+      setDiffTruncated(false);
+      setSelectedHunks(new Set());
+      setSplitView(false); // P1-3.8: 切换文件时重置为 unified 视图,避免 per-hunk 撤销 UI 错位
+      setViewMode('diff'); // R6: 切换文件回到 diff 视图,预览内容一并失效
+      setFileContent(null);
+      setFileContentTruncated(false);
+      setFileContentError(null);
+      if (path.endsWith('/')) return; // 目录条目不拉 diff
+      setDiffLoading(true);
+      workspaceApi
+        .getChangeDiff(sessionId, path)
+        .then((d) => {
+          setDiff(d.diff);
+          setDiffTruncated(d.truncated);
+        })
+        .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)))
+        .finally(() => setDiffLoading(false));
+    },
+    [sessionId],
+  );
+
+  // right-panel R6: 切到"预览"视图时懒加载文件内容（切回 diff 不重拉）
+  const showPreview = useCallback(() => {
+    setViewMode('preview');
+    if (!sessionId || !selectedPath || fileContent !== null || fileContentLoading) return;
+    setFileContentLoading(true);
+    setFileContentError(null);
+    workspaceApi
+      .getChangeFile(sessionId, selectedPath)
+      .then((f) => {
+        setFileContent(f.content);
+        setFileContentTruncated(f.truncated);
+      })
+      .catch((e: unknown) => {
+        setFileContentError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setFileContentLoading(false));
+  }, [sessionId, selectedPath, fileContent, fileContentLoading]);
 
   const refreshCheckpoints = useCallback(() => {
     if (!sessionId) return;
@@ -116,30 +180,18 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
     setDiff(null);
     setCheckpoints(null);
     setCheckpointsOpen(false);
+    setReviewAll(false);
     refresh();
   }, [refresh]);
 
-  const openDiff = useCallback(
-    (path: string) => {
-      if (!sessionId) return;
-      setSelectedPath(path);
-      setDiff(null);
-      setDiffTruncated(false);
-      setSelectedHunks(new Set());
-      setSplitView(false); // P1-3.8: 切换文件时重置为 unified 视图,避免 per-hunk 撤销 UI 错位
-      if (path.endsWith('/')) return; // 目录条目不拉 diff
-      setDiffLoading(true);
-      workspaceApi
-        .getChangeDiff(sessionId, path)
-        .then((d) => {
-          setDiff(d.diff);
-          setDiffTruncated(d.truncated);
-        })
-        .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)))
-        .finally(() => setDiffLoading(false));
-    },
-    [sessionId],
-  );
+  // right-panel R5: 消费 pendingChangePath 的 effect 刻意放在重置 effect
+  // 之后 —— 面板从关闭态被 selectChange 唤起时组件是首次挂载,若声明在
+  // 重置之前,同一 commit 内的重置 effect 会把 openDiff 的选中态清掉。
+  useEffect(() => {
+    if (!pendingChangePath) return;
+    openDiff(pendingChangePath);
+    clearSelectedChange();
+  }, [pendingChangePath, openDiff, clearSelectedChange]);
 
   // U19: 撤销单个文件的工作区改动 (未跟踪条目 = 删除)
   const revertFile = useCallback(
@@ -241,6 +293,26 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
 
   const hunks = useMemo(() => (diff ? splitDiffHunks(diff) : []), [diff]);
 
+  // P1-6: 逐 hunk 折叠态 —— 超过 HUNK_COLLAPSE_ABOVE 个 hunk 时,后面的
+  // 默认折叠（大 diff 导航 + 跳过 Shiki 渲染）;切换文件/重开 diff 重置。
+  const HUNK_COLLAPSE_ABOVE = 8;
+  const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    setCollapsedHunks(
+      hunks.length > HUNK_COLLAPSE_ABOVE
+        ? new Set(hunks.map((_, i) => i).slice(HUNK_COLLAPSE_ABOVE))
+        : new Set(),
+    );
+  }, [hunks]);
+  const toggleHunkCollapse = useCallback((index: number) => {
+    setCollapsedHunks((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }, []);
+
   const toggleHunk = useCallback((index: number, checked: boolean) => {
     setSelectedHunks((prev) => {
       const next = new Set(prev);
@@ -252,6 +324,11 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
 
   if (!sessionId) {
     return <div className="p-3 text-sm text-muted">请先选择会话</div>;
+  }
+
+  // ---- 全部审查汇总视图 (right-panel R6 / P2-7) ----
+  if (reviewAll) {
+    return <ReviewAll sessionId={sessionId} onBack={() => setReviewAll(false)} />;
   }
 
   // ---- diff 视图 ----
@@ -295,9 +372,62 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
           >
             <Columns className="w-4 h-4" />
           </button>
+          {/* right-panel R6: Diff / 预览 分段切换（预览 = 修改后全文，懒加载） */}
+          <div
+            className="flex items-center rounded border border-border text-xs overflow-hidden shrink-0"
+            role="group"
+            aria-label="切换 diff/文件预览视图"
+          >
+            <button
+              className={
+                'px-2 py-1 transition-colors ' +
+                (viewMode === 'diff'
+                  ? 'text-primary bg-primary/10'
+                  : 'text-text-secondary hover:bg-bg-hover')
+              }
+              title="查看未提交 diff"
+              aria-pressed={viewMode === 'diff'}
+              data-testid="view-mode-diff"
+              onClick={() => setViewMode('diff')}
+            >
+              Diff
+            </button>
+            <button
+              className={
+                'px-2 py-1 transition-colors ' +
+                (viewMode === 'preview'
+                  ? 'text-primary bg-primary/10'
+                  : 'text-text-secondary hover:bg-bg-hover')
+              }
+              title="查看修改后文件全文"
+              aria-pressed={viewMode === 'preview'}
+              data-testid="view-mode-preview"
+              onClick={showPreview}
+            >
+              预览
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-2">
-          {diffLoading ? (
+          {viewMode === 'preview' ? (
+            // right-panel R6: 修改后文件全文预览（按扩展名选 Shiki 语言）
+            fileContentLoading ? (
+              <div className="text-sm text-muted p-2">加载文件…</div>
+            ) : fileContentError ? (
+              <div className="text-sm text-red-500 p-2">{fileContentError}</div>
+            ) : fileContent !== null ? (
+              <>
+                {fileContentTruncated && (
+                  <div className="text-xs text-amber-600 dark:text-amber-400 p-1">
+                    文件过长，已截断显示前 512KiB
+                  </div>
+                )}
+                <ShikiCodeBlock language={langFromPath(selectedPath)}>
+                  {fileContent}
+                </ShikiCodeBlock>
+              </>
+            ) : null
+          ) : diffLoading ? (
             <div className="text-sm text-muted p-2">加载 diff…</div>
           ) : selectedPath.endsWith('/') ? (
             <div className="text-sm text-muted p-2">目录条目不展示 diff</div>
@@ -337,24 +467,45 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
                     </button>
                   </div>
                   <div className="flex flex-col gap-3">
-                    {hunks.map((hunk, index) => (
-                      <div key={index} className="rounded border border-border">
-                        <label className="flex items-center gap-2 px-2 py-1 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={selectedHunks.has(index)}
-                            onChange={(e) => toggleHunk(index, e.target.checked)}
-                            data-testid={`hunk-checkbox-${index}`}
-                          />
-                          <span className="text-xs text-text-secondary truncate">
-                            {index + 1}. {hunk.summary}
-                          </span>
-                        </label>
-                        <ShikiCodeBlock language="diff">
-                          {(hunk.header + hunk.body).trimEnd()}
-                        </ShikiCodeBlock>
-                      </div>
-                    ))}
+                    {hunks.map((hunk, index) => {
+                      // P1-6: 逐 hunk 折叠 —— 折叠时跳过 Shiki 渲染（大 diff
+                      // 导航），勾选框保留在头部，折叠态仍可勾选撤销
+                      const isCollapsed = collapsedHunks.has(index);
+                      return (
+                        <div key={index} className="rounded border border-border">
+                          <div className="flex items-center gap-1 px-2 py-1">
+                            <input
+                              type="checkbox"
+                              className="cursor-pointer"
+                              checked={selectedHunks.has(index)}
+                              onChange={(e) => toggleHunk(index, e.target.checked)}
+                              data-testid={`hunk-checkbox-${index}`}
+                            />
+                            <button
+                              className="flex items-center gap-1 min-w-0 flex-1 text-left cursor-pointer select-none"
+                              onClick={() => toggleHunkCollapse(index)}
+                              aria-expanded={!isCollapsed}
+                              title={isCollapsed ? '展开该 hunk' : '收起该 hunk'}
+                              data-testid={`hunk-toggle-${index}`}
+                            >
+                              {isCollapsed ? (
+                                <ChevronRight className="w-3.5 h-3.5 shrink-0 text-text-secondary" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5 shrink-0 text-text-secondary" />
+                              )}
+                              <span className="text-xs text-text-secondary truncate">
+                                {index + 1}. {hunk.summary}
+                              </span>
+                            </button>
+                          </div>
+                          {!isCollapsed && (
+                            <ShikiCodeBlock language="diff">
+                              {(hunk.header + hunk.body).trimEnd()}
+                            </ShikiCodeBlock>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               ) : (
@@ -389,14 +540,29 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
             </span>
           )}
         </div>
-        <button
-          className="p-1.5 rounded hover:bg-bg-hover text-text-secondary"
-          title="刷新"
-          aria-label="刷新"
-          onClick={refresh}
-        >
-          <RefreshCw className={'w-4 h-4' + (loading ? ' animate-spin' : '')} />
-        </button>
+        <div className="flex items-center shrink-0">
+          {/* right-panel R6 / P2-7: 全部审查汇总视图入口 */}
+          {changes && changes.changes.length > 0 && (
+            <button
+              className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-bg-hover text-xs text-text-secondary"
+              title="连续查看全部文件 diff"
+              aria-label="全部审查"
+              data-testid="review-all-button"
+              onClick={() => setReviewAll(true)}
+            >
+              <Files className="w-3.5 h-3.5" />
+              全部审查
+            </button>
+          )}
+          <button
+            className="p-1.5 rounded hover:bg-bg-hover text-text-secondary"
+            title="刷新"
+            aria-label="刷新"
+            onClick={refresh}
+          >
+            <RefreshCw className={'w-4 h-4' + (loading ? ' animate-spin' : '')} />
+          </button>
+        </div>
       </div>
       {!notBound && (
         <div className="border-b border-border">
@@ -505,6 +671,23 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
                     <span className="text-sm truncate" title={entry.path}>
                       {entry.path}
                     </span>
+                    {/* right-panel R5: +/- 行数徽章（numstat；null=二进制/未知不渲染） */}
+                    {entry.insertions !== null && entry.insertions > 0 && (
+                      <span
+                        className="shrink-0 font-mono text-[11px] text-green-600 dark:text-green-400"
+                        data-testid="change-insertions"
+                      >
+                        +{entry.insertions}
+                      </span>
+                    )}
+                    {entry.deletions !== null && entry.deletions > 0 && (
+                      <span
+                        className="shrink-0 font-mono text-[11px] text-red-500"
+                        data-testid="change-deletions"
+                      >
+                        −{entry.deletions}
+                      </span>
+                    )}
                   </button>
                   {untracked ? (
                     <button
