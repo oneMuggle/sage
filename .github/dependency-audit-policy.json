@@ -815,7 +815,7 @@
       "package": "cryptography",
       "package_version": "47.0.0",
       "advisory": "GHSA-537c-gmf6-5ccf",
-      "advisory_url": "https://github.com/advisories/GHSA-537c-gmf6-5ccf",
+      "advisory_url": "https://osv.dev/vulnerability/GHSA-537c-gmf6-5ccf",
       "affected_path": "Win7 LTS Python 3.8 production path",
       "actual_reachability": "conditional; vulnerable surfaces are certificate/TLS/SSH parsing not exercised by sage, which uses only Fernet for local at-rest encryption",
       "controls": "cryptography 47.0.0 is the last release shipping cp38 wheels (48.0.0 requires Python>=3.9), so no fixed version is installable on the Win7 Python 3.8.10 embeddable runtime; sage uses only Fernet symmetric encryption for local at-rest credential encryption (key held in the OS keystore via SecretBox), not the vulnerable certificate/TLS/SSH parsing surfaces; Win7 LTS long-term support decision (2026-09-15); quarterly pip-audit review",
