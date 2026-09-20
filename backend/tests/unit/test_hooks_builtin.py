@@ -397,7 +397,7 @@ async def test_builtin_config_override_replaces_defaults():
     out = await run_hook(cfg, _pre("bash", {"command": "echo dangerous"}))
     assert out.decision == DECISION_DENY
 
-    # 默认黑名单里的命令不再命中 —— 因为被覆盖
+    # 默认黑名单里的命令因被覆盖而不再命中
     rm_cmd = "rm" + " -rf /tmp/x"
     other = await run_hook(cfg, _pre("bash", {"command": rm_cmd}))
     assert other.decision == DECISION_ALLOW

@@ -18,7 +18,7 @@ import { memoryApi } from '../shared/api';
 import type { Memory } from '../shared/api/types';
 import { useStore } from '../shared/lib/store';
 import { ErrorState } from '../shared/ui/ErrorState';
-import { NewMemoryModal, UserProfileCard } from '../widgets/memory';
+import { NewMemoryModal, ProjectProfileCard, UserProfileCard } from '../widgets/memory';
 import { MemoryCard, type MemoryItem } from '../widgets/memory/MemoryCard';
 import { MemoryTabs, type MemoryTab } from '../widgets/memory/MemoryTabs';
 
@@ -386,6 +386,9 @@ export function Memory() {
 
       {/* 对标 S2 (2026-09-13): 可编辑的用户画像卡片 */}
       <UserProfileCard />
+
+      {/* P2 scope 轴: 项目级 MEMORY.md */}
+      <ProjectProfileCard />
 
       {showSearch && (
         <div className="flex gap-2 mb-4">

@@ -54,6 +54,7 @@ def test_save_memory_forwards_session_id_and_returns_stable_envelope(monkeypatch
             "importance": 8,
             "tags": ["preference"],
             "session_id": "session-1",
+            "scope": None,
         }
     ]
 
@@ -76,6 +77,7 @@ def test_search_memory_forwards_session_id_and_normalizes_limit(monkeypatch) -> 
             "memory_type": "semantic",
             "limit": 100,
             "session_id": "session-1",
+            "scope": None,
         }
     ]
 

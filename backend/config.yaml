@@ -51,6 +51,13 @@ evolution:
       enabled: true
       day: 'sunday'
       time: '04:30'
+    # P4 每周记忆反思（近重复去重 + LLM 合并/否定）；缺省每周一 05:00
+    memory_reflection:
+      enabled: true
+      day: 'monday'
+      time: '05:00'
+      window_days: 7
+      sample_limit: 120
 
 # 调度器配置
 scheduler:

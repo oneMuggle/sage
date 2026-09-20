@@ -69,12 +69,24 @@ class MemoryContext:
         used_tokens = 0
 
         # ---- 核心记忆：始终注入（类似 Hermes 的 MEMORY.md）----
+        # P2: core 里 scope='project' 的条目来自项目画像（ProjectProfileStore），
+        # 单独用【项目画像】标签, 避免与用户画像混读。
         if self.core:
-            core_lines = []
+            user_lines: List[str] = []
+            project_lines: List[str] = []
             for mem in self.core:
                 content = mem.get("content", "")[:150]
-                core_lines.append(f"- {content}")
-            core_text = "【用户画像】\n" + "\n".join(core_lines)
+                line = f"- {content}"
+                if mem.get("scope") == "project":
+                    project_lines.append(line)
+                else:
+                    user_lines.append(line)
+            core_blocks = []
+            if user_lines:
+                core_blocks.append("【用户画像】\n" + "\n".join(user_lines))
+            if project_lines:
+                core_blocks.append("【项目画像】\n" + "\n".join(project_lines))
+            core_text = "\n\n".join(core_blocks)
             core_tokens = self._estimate_tokens(core_text)
             if core_tokens <= budget_tokens:
                 parts.append(core_text)
@@ -94,9 +106,13 @@ class MemoryContext:
                 used_tokens += working_tokens
 
         # ---- 情景 + 语义记忆：按重要性排序，填充剩余预算 ----
+        # P4: 混合检索路径会带上 composite_score（四因子综合分），
+        # 优先按它排；旧调用方未打分时退回 importance/rrf_score。
         memory_items = list(self.episodic) + list(self.semantic)
         memory_items.sort(
-            key=lambda m: m.get("importance", m.get("rrf_score", 0)),
+            key=lambda m: m.get(
+                "composite_score", m.get("importance", m.get("rrf_score", 0))
+            ),
             reverse=True,
         )
 
