@@ -12,6 +12,7 @@ import { parseEntityRefQuery } from '../../features/chat/entityRefs';
 import { appendQuoteToDraft } from '../../features/chat/selectionQuote';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { importOfficeReference } from '../../features/office/importOfficeReference';
+import type { DeliveryMode } from '../../features/send-message/deliveryMode';
 import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { type AtFileSelection } from '../../shared/api/fileSearchClient';
 import type { ChatOfficeRef } from '../../shared/api/types';
@@ -68,6 +69,11 @@ interface ChatInputProps extends Pick<InputCardProps, 'composerControls'> {
       orchestrationMode?: string;
       /** Task 5 (2026-09-17): 上下文重置标记 —— "新话题" 按钮触发， 后端在本轮消息前插入 topic_separator 并清空 LLM 历史窗口。 */
       contextReset?: boolean;
+      /**
+       * P2-a: 投递通道（插话 / 排队 / 打断并发送）。只在会话有活跃流时有意
+       * 义；空闲时 useChat 忽略此字段直接正常发送，因此无修饰的 Enter 不传。
+       */
+      delivery?: DeliveryMode;
     },
   ) => void;
   onInterrupt?: () => void;
@@ -352,7 +358,7 @@ function ChatInputInner({
     setCursorPos(atQuery.startIdx);
   }, [value, atQuery, setValue]);
 
-  const handleSend = () => {
+  const handleSend = (mode?: DeliveryMode) => {
     // RT5 (round7): 运行中允许发送 —— onSend（useChat.sendMessage）按会话
     // 活跃流先走 steering 注入当前 run，失败回退队列；不再 UI 硬拦截。
     if (
@@ -386,6 +392,8 @@ function ChatInputInner({
       // Wave 3 C6: auto 不传键 → 保持既有 undefined → auto 语义；
       // force_multi / template:<id> 显式透传。
       ...(orchMode !== 'auto' ? { orchestrationMode: orchMode } : {}),
+      // P2-a: 仅在用户显式选通道（分体菜单 / Alt / Ctrl+Enter）时传键。
+      ...(mode ? { delivery: mode } : {}),
     });
     // 记录到输入历史（用于上下键导航）
     addToHistory(value.trim());
@@ -747,6 +755,7 @@ function ChatInputInner({
         value={value}
         onChange={handleChange}
         onSubmit={handleSend}
+        onSubmitWithMode={handleSend}
         onNewTopic={hideNewTopic ? undefined : handleNewTopic}
         placeholder={placeholder ?? t('chat.placeholder')}
         disabled={disabled}

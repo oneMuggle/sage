@@ -142,7 +142,7 @@ export function useChatMessageActions({
     text: string;
     nonce: number;
   } | null>(null);
-  const { quotedDraft, quoteText } = useQuoteDraft();
+  const { quotedDraft, quoteText, setDraftText } = useQuoteDraft();
   const cancelEditResend = useCallback(() => setEditResendTarget(null), []);
   const editResendNotice = useMemo(
     () => (editResendTarget ? { onCancel: cancelEditResend } : null),
@@ -352,6 +352,7 @@ export function useChatMessageActions({
     editResendNotice,
     quotedDraft,
     quoteText,
+    setDraftText,
     handleStartEditResend,
     handleSendMessageWithEditResend,
     handleRegenerate,

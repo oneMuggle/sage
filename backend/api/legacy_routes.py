@@ -638,11 +638,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as pm_exc:  # noqa: BLE001 — 降级不阻塞
                     logger.warning("计划模式只读门注入失败（仅指令约束）: %s", pm_exc)
             # P0 cancellation: register the primary before any blocking await.
+            # session_id 供 /chat/steer 落库插话消息时确定归属会话。
             _ACTIVE_STREAMS[stream_id] = {
                 "agent": agent,
                 "run_id": None,
                 "dispatcher": None,
                 "cancelled": False,
+                "session_id": data.session_id,
             }
 
             # Build system prompt with optional diagram tool guidance

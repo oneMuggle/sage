@@ -8,7 +8,11 @@ import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStor
 import { useSessionMemoryPause } from '../features/chat/useSessionMemoryPause';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
-import { useChatStreamStore } from '../features/send-message/chatStreamStore';
+import {
+  useChatStreamStore,
+  type QueuedChatMessage,
+} from '../features/send-message/chatStreamStore';
+import type { DeliveryMode } from '../features/send-message/deliveryMode';
 import { restoreRunToBoard } from '../features/send-message/orchestrationEvents';
 import { useChat } from '../features/send-message/useChat';
 import { useTerminalPanelStore } from '../features/terminal-panel/terminalPanelStore';
@@ -25,7 +29,6 @@ import {
   ActiveAgentIndicator,
   ChatInput,
   MessageList,
-  PendingQueueStrip,
   RunSummaryPanel,
   SubagentLivePanel,
 } from '../widgets/chat';
@@ -34,6 +37,7 @@ import { CHAT_NOTICE_PRIORITY, ChatNoticeStack } from '../widgets/chat/ChatNotic
 import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from '../widgets/chat/InterruptedRunBanner';
 import { KeyboardShortcutsHelp } from '../widgets/chat/KeyboardShortcutsHelp';
 import { MemoryWriteHints } from '../widgets/chat/MemoryWriteHints';
+import { PendingQueuePanel } from '../widgets/chat/PendingQueuePanel';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { TerminalPanel } from '../widgets/chat/TerminalPanel';
 import { TopicShiftBanner } from '../widgets/chat/TopicShiftBanner';
@@ -47,6 +51,9 @@ import { useChatStickyScroll } from './chat/useChatStickyScroll';
 
 /** 稳定空数组: toolCalls 缺省时避免每次渲染产生新引用击穿 RightPanel memo (F1) */
 const EMPTY_TOOL_CALLS: readonly never[] = [];
+
+/** 队列空态的稳定引用：useChat 在部分测试里被 mock 掉字段，兜底值必须是同一引用。 */
+const EMPTY_PENDING_QUEUE: readonly QueuedChatMessage[] = [];
 
 export function Chat() {
   const {
@@ -69,9 +76,14 @@ export function Chat() {
     planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
     preflightPhase, // Round 3 (2026-09-19): 编排拆解前置阶段（澄清/侦察指示）
     clearPlanApproval, // PM2: 清除批准状态
-    pendingMessages, // P1-6: 排队待发消息（会自动连发，需可见可撤）
-    cancelPending, // P1-6: 撤回单条排队消息
-    clearPendingForSession, // P1-6: 清空本会话排队消息
+    pendingQueue, // U5 (2026-09-18): 本会话待发送队列
+    queuePaused, // U5: 队列是否因上一轮异常收尾而暂停
+    removeQueuedMessage,
+    moveQueuedMessageToFront,
+    clearQueuedMessages,
+    editQueuedMessage,
+    sendQueuedMessageNow,
+    resumeQueuedMessages,
   } = useChat();
   // right-panel R1 批次 A: 开合上抬 rightPanelStore（自动唤起/内联卡片需要
   // 跨组件写面板状态）；localStorage 迁移进 store，此处只读订阅。
@@ -228,6 +240,11 @@ export function Chat() {
         planMode?: boolean;
         /** Task 5 (2026-09-17): 上下文重置标记 —— "新话题" 按钮触发， 后端在本轮消息前插入 topic_separator 并清空 LLM 历史窗口。 */
         contextReset?: boolean;
+        /**
+         * P2-a: 投递通道（插话 / 排队 / 打断并发送）—— 只在当前会话已有活跃
+         * 流时有语义，空闲发送时 useChat 会忽略。
+         */
+        delivery?: DeliveryMode;
       },
     ) => {
       clearError();
@@ -301,6 +318,8 @@ export function Chat() {
           attachmentMediaIds,
           attachmentRag,
           contextReset: options?.contextReset,
+          // P2-a: 会话忙时的投递通道（插话 / 排队 / 打断并发送）
+          delivery: options?.delivery,
         });
       }
     },
@@ -319,6 +338,7 @@ export function Chat() {
     editResendNotice,
     quotedDraft,
     quoteText,
+    setDraftText,
     handleStartEditResend,
     handleSendMessageWithEditResend,
     handleRegenerate,
@@ -385,6 +405,46 @@ export function Chat() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // U5 (2026-09-18): 待发送队列操作。"编辑"复用 injectedDraft 通道把排队
+  // 内容回填输入框（不触发编辑重发的 fork 语义）；"立即发送"由 useChat
+  // 负责先停当前流再发。可选调用是兜底:部分测试 mock useChat 时缺这些键。
+  const handleEditQueuedMessage = useCallback(
+    (id: string) => {
+      // 编辑重发态下 injectedDraft 被 editResendTarget 占用（约定：编辑态优先），
+      // 此时取走排队消息会无处回填、内容静默丢失 —— 因此先挡住，不动队列。
+      if (editResendTarget) {
+        toast.info('请先完成或取消当前消息的编辑');
+        return;
+      }
+      const item = editQueuedMessage?.(id);
+      if (item) setDraftText?.(item.content);
+    },
+    [editQueuedMessage, editResendTarget, setDraftText],
+  );
+  const handleSendQueuedNow = useCallback(
+    (id: string) => {
+      void sendQueuedMessageNow?.(id);
+    },
+    [sendQueuedMessageNow],
+  );
+  const handleMoveQueuedToFront = useCallback(
+    (id: string) => {
+      moveQueuedMessageToFront?.(id);
+    },
+    [moveQueuedMessageToFront],
+  );
+  const handleRemoveQueuedMessage = useCallback(
+    (id: string) => {
+      removeQueuedMessage?.(id);
+    },
+    [removeQueuedMessage],
+  );
+  const handleClearQueue = useCallback(() => {
+    clearQueuedMessages?.();
+  }, [clearQueuedMessages]);
+  const handleResumeQueue = useCallback(() => {
+    resumeQueuedMessages?.();
+  }, [resumeQueuedMessages]);
   // R17-D: 顶层错误不再整页替换 —— 历史消息全部被顶掉、上下文丢失
   // 是主流应用的反模式。改为在消息区下方渲染内联错误条，历史与输入框
   // 保持可见可用，用户可"关闭"清除错误继续对话。
@@ -540,17 +600,17 @@ export function Chat() {
 
           {/* TM2 (DSH 对标 R11): 上下文水位徽章（≥0.6 才渲染） */}
           <KeyboardShortcutsHelp />
-          {/* P1-6: 排队队列常驻可见。放在输入框正上方 —— 队列会在当前回复
-              结束后自动连发，用户必须能在真正发出去之前看见并撤回。
-              只展示当前会话的条目（队列按会话隔离，见 useChat S3）。 */}
-          <PendingQueueStrip
-            items={pendingMessages
-              .filter((p) => p.sid === currentSessionId)
-              .map((p) => ({ id: p.id, content: p.content }))}
-            onCancel={cancelPending}
-            onClearAll={() => {
-              if (currentSessionId) clearPendingForSession(currentSessionId);
-            }}
+          {/* U5: 待发送队列常驻可见 —— 队列会在当前回复结束后自动连发，
+              用户必须能在真正发出去之前看见 / 撤回 / 置顶 / 立即发送。 */}
+          <PendingQueuePanel
+            items={pendingQueue ?? EMPTY_PENDING_QUEUE}
+            paused={Boolean(queuePaused)}
+            onSendNow={handleSendQueuedNow}
+            onEdit={handleEditQueuedMessage}
+            onMoveToFront={handleMoveQueuedToFront}
+            onRemove={handleRemoveQueuedMessage}
+            onClear={handleClearQueue}
+            onResume={handleResumeQueue}
           />
           {/* 滚动到底部按钮：居中显示在输入框上方，用户离开底部时显示 */}
           {showScrollToBottom && (
