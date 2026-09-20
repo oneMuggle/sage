@@ -456,11 +456,25 @@ class LLMClient:
         try:
             from backend.chat.context_breakdown import build_breakdown_snapshot
 
-            return build_breakdown_snapshot(
-                body.get("messages") or [], body.get("tools"), prompt_tokens
-            )
+            msgs = body.get("messages") or []
+            tools = body.get("tools")
+            if not msgs:
+                logger.warning(
+                    "context breakdown: body.messages 为空 (body keys=%s), 跳过",
+                    list(body.keys()),
+                )
+                return None
+            result = build_breakdown_snapshot(msgs, tools, prompt_tokens)
+            # 诊断: 记录分类非零项, 便于排查全 NULL 问题
+            nonzero = {
+                k: v
+                for k, v in (result.get("categories") or {}).items()
+                if v and v > 0
+            }
+            logger.debug("context breakdown: %d msgs, tools=%s, 非零分类=%s", len(msgs), bool(tools), nonzero)
+            return result
         except Exception as bd_err:  # noqa: BLE001 — 明细是增强信息
-            logger.debug("context breakdown 跳过: %s", bd_err)
+            logger.warning("context breakdown 异常: %s", bd_err, exc_info=True)
             return None
 
     @staticmethod
