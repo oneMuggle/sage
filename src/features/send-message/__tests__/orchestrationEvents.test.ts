@@ -5,10 +5,11 @@
  * 会话槽位：任务板建立/合并/进度聚合/复核/live 合成/approval_mode/
  * todo 快照/产物计数，以及跨 run 防串扰。
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentEvent } from '../../../shared/api/types';
 import { useStore } from '../../../shared/lib/store';
+import { useChangesListStore } from '../../changes/changesListStore';
 import { useRightPanelStore } from '../../right-panel/rightPanelStore';
 import {
   selectSessionSlots,
@@ -186,5 +187,140 @@ describe('applyOrchestrationEventToBoard — R35', () => {
       SID,
     );
     expect(useRightPanelStore.getState().open).toBe(false);
+  });
+});
+
+// ============================================================================
+// right-panel R5: workspace_changed → 变更列表防抖刷新
+// ============================================================================
+
+describe('orchestrationEvents — workspace_changed 防抖刷新 (right-panel R5)', () => {
+  it('事件被消费,防抖窗口内多条合并为一次 fetch', () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi
+        .spyOn(useChangesListStore.getState(), 'fetch')
+        .mockImplementation(() => Promise.resolve());
+
+      const handled = applyOrchestrationEventToBoard(
+        evt({ state: 'workspace_changed', change: { path: 'src/app.ts', kind: 'write' } }),
+        SID,
+      );
+      expect(handled).toBe(true);
+
+      // 一轮写入连续到达 3 条事件（write_file + edit_file + patch）
+      applyOrchestrationEventToBoard(evt({ state: 'workspace_changed' }), SID);
+      applyOrchestrationEventToBoard(evt({ state: 'workspace_changed' }), SID);
+
+      // 防抖窗口内不拉取
+      vi.advanceTimersByTime(799);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      // 窗口尾沿合并为一次
+      vi.advanceTimersByTime(2);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(SID);
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+});
+
+// ============================================================================
+// BU15 (round29): running 状态前端打点 runningSince
+// ============================================================================
+
+describe('orchestrationEvents — running 实时计时打点 (BU15)', () => {
+  it('running 事件打 runningSince，终态事件替换后消失', () => {
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'task_plan',
+        run_id: 'orch-bu15',
+        plan: [{ task_id: 'a', agent_id: 'r', goal: 'GA' }],
+      }),
+      SID,
+    );
+    const before = Date.now();
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'task_status',
+        run_id: 'orch-bu15',
+        task_id: 'a',
+        status: 'running',
+        agent_id: 'r',
+        goal: 'GA',
+      }),
+      SID,
+    );
+    const running = slots().taskBoard?.statuses.a;
+    expect(running?.status).toBe('running');
+    expect(running?.runningSince).toBeGreaterThanOrEqual(before);
+    expect(running?.runningSince).toBeLessThanOrEqual(Date.now());
+
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'task_status',
+        run_id: 'orch-bu15',
+        task_id: 'a',
+        status: 'done',
+        agent_id: 'r',
+        goal: 'GA',
+        output_preview: 'ok',
+      }),
+      SID,
+    );
+    const done = slots().taskBoard?.statuses.a;
+    expect(done?.status).toBe('done');
+    expect(done?.runningSince).toBeUndefined();
+  });
+});
+
+// ============================================================================
+// Round 3 (2026-09-19): 编排拆解前置阶段指示（orch_preflight）
+// ============================================================================
+
+describe('applyOrchestrationEventToBoard — orch_preflight (Round 3)', () => {
+  it('orch_preflight 写入前置阶段槽位并消费事件', () => {
+    useChatStreamStore.getState().setPreflightPhase(SID, null);
+    const handled = applyOrchestrationEventToBoard(
+      evt({ state: 'orch_preflight', preflight_phase: 'clarify' }),
+      SID,
+    );
+    expect(handled).toBe(true);
+    expect(slots().preflightPhase).toBe('clarify');
+  });
+
+  it('scout 阶段覆盖 clarify', () => {
+    useChatStreamStore.getState().setPreflightPhase(SID, 'clarify');
+    applyOrchestrationEventToBoard(
+      evt({ state: 'orch_preflight', preflight_phase: 'scout' }),
+      SID,
+    );
+    expect(slots().preflightPhase).toBe('scout');
+  });
+
+  it('task_plan 到达即清空前置阶段（进入确认/执行阶段）', () => {
+    useChatStreamStore.getState().setPreflightPhase(SID, 'scout');
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'task_plan',
+        run_id: 'orch-pf',
+        plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }],
+      }),
+      SID,
+    );
+    expect(slots().preflightPhase).toBeNull();
+    expect(slots().taskBoard?.runId).toBe('orch-pf');
+  });
+
+  it('无 phase 载荷的 orch_preflight 不消费（防御畸形事件）', () => {
+    useChatStreamStore.getState().setPreflightPhase(SID, null);
+    const handled = applyOrchestrationEventToBoard(
+      evt({ state: 'orch_preflight' }),
+      SID,
+    );
+    expect(handled).toBe(false);
+    expect(slots().preflightPhase).toBeNull();
   });
 });

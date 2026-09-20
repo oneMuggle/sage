@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import sys
 from typing import List
 
@@ -45,6 +46,7 @@ from backend.chat.compaction import (
 )
 from backend.chat.executors import resolve_attachments
 from backend.chat.history_context import build_request_messages, history_token_budget
+from backend.chat.sources_extractor import extract_sources_from_tool, merge_sources
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data.artifact_repo import (  # S7: 产物事件 → 活跃流推送
@@ -56,6 +58,10 @@ from backend.data.session_repo import (
     Message as DbMessage,
     MessageRepository,
     SessionRepository,
+)
+from backend.data.workspace_events import (  # right-panel R5: 工作区变更事件 → 活跃流推送
+    add_workspace_listener,
+    remove_workspace_listener,
 )
 from backend.memory import get_memory_manager
 from backend.memory.summary import (
@@ -73,6 +79,7 @@ from backend.orchestration.chat_dispatcher import (
     _classify_orchestration_mode,
 )
 from backend.orchestration.llm_factory import load_llm_config_for_chat
+from backend.services.scheduler import get_scheduler_service
 
 
 def _resolve_effective_window(  # noqa: PLR0911 — Task 5 priority cascade, each branch is a distinct user-facing mode
@@ -295,10 +302,16 @@ class SessionUpdate(BaseModel):
 
 #: PM1 (round8): 计划模式 system 指令 —— 只读调研 + 结构化计划产出；
 #: 执行被权限门（per-run READ_ONLY）与指令双重约束，批准后由前端衔接。
+#: 计划前置 Round (2026-09-19): 追加"歧义先澄清"——对照 Claude Code plan
+#: mode，调研之前先把范围/格式/验收标准的歧义问清（≤2 问），未答按合理
+#: 默认并在计划中写明假设。
 _PLAN_MODE_DIRECTIVE = (
 
     "\n\n【计划模式】当前为计划模式：你只能做只读调研（读文件/搜索/列目录等），"
-    "不能写文件、执行命令或出网修改任何状态。请基于调研输出一份结构化执行计划，"
+    "不能写文件、执行命令或出网修改任何状态。"
+    "若目标存在会显著影响方案的歧义（范围/交付格式/验收标准），先用 "
+    "ask_user_question 向用户澄清（至多 2 个问题）；用户未回答则按合理默认值"
+    "执行，并在计划中写明关键假设。请基于调研输出一份结构化执行计划，"
     "格式：\n## 目标\n## 分步计划\n（每步：做什么 / 涉及哪些文件或命令 / 预期结果）\n"
     "## 验收标准\n## 风险与注意\n计划要具体到可直接执行。用户批准计划后，"
     "你将在后续消息中被要求严格按计划执行——本轮不要尝试执行任何计划步骤。"
@@ -308,6 +321,14 @@ _PLAN_MODE_DIRECTIVE = (
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    # client_message_id (2026-09, docs/plans/2026-09-18_client-message-id-r1-plan):
+    # 前端乐观 user 消息 id 与服务端落库 id 对齐的根方案。传入时 user 消息
+    # 落库 id = f"u-{client_message_id}" (确定性); 未传 = 服务端 UUID (兼容)。
+    client_message_id: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9a-f-]{8,64}$",
+        description="前端生成的消息身份 id (UUID), 用于乐观 id 对齐与幂等",
+    )
     workspace_path: Optional[str] = None
     # 2026-07-30: 选 agent 的入口。None / 空字符串 → 端点 fallback 到 "primary"。
     # 真正的路由由 SageAgent(agent_id=...) 内部完成:从 SQLite 读 profile,
@@ -665,7 +686,7 @@ def _build_orchestration_dispatcher(
 
 
 def get_agent() -> SageAgent:
-    return SageAgent()
+    return SageAgent(scheduler_service_getter=get_scheduler_service)
 
 
 # ==================== 会话 API ====================
@@ -808,16 +829,25 @@ def _persist_compaction(
     # Task 14 (context-isolation): 续接摘要继承被压缩段的 segment_id,
     # 避免落库为 segment_id=0 导致活跃段识别错乱或段感知切片丢弃压缩历史。
     last_removed = messages[removed_count - 1] if removed_count > 0 else None
+    # R38 (2026-09-18): 续接行携带压缩统计 —— 重载后前端据此渲染压缩横幅。
+    # 口径: before = 压缩前消息数, after = 压缩后消息数(含续接行),
+    # removed = 被摘要替代的前缀长度。注意 after = before - removed + 1
+    # (续接摘要自身占一行), 前端文案已按此解释。
+    before = len(messages)
+    after = len(new_messages)
     continuation = DbMessage(
         id=str(uuid.uuid4()),
         session_id=session_id,
         role=summary["role"],
         content=summary["content"],
+        compact_info=json.dumps(
+            {"before": before, "after": after, "removed": removed_count},
+            ensure_ascii=False,
+        ),
         created_at=created_at,
         segment_id=last_removed.segment_id if last_removed is not None else 0,
     )
 
-    after = len(new_messages)
     MessageRepository().replace_prefix_with_continuation(
         session_id,
         [stale.id for stale in messages[:removed_count]],
@@ -867,9 +897,8 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
     # 且破坏"segment 间互相隔离"的口径.
     # 2026-09 修复: producer 是 async task, 全量历史读是秒级同步 IO,
     # 直接跑在事件循环上会冻结所有并发流的 NDJSON attach 与 HTTP 路由。
-    messages = await asyncio.to_thread(
-        lambda: message_repo.get_active_segment(session_id)
-    )
+    # py_compat.to_thread: py3.8 无 asyncio.to_thread（win7 同步预铺）
+    messages = await to_thread(lambda: message_repo.get_active_segment(session_id))
     if not should_compact(messages):
         return None
 
@@ -901,12 +930,13 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) 
 
 
 def _auto_checkpoint_if_enabled(session_id: str) -> str | None:
-    """round5 批次 B-2: 发送前自动快照（偏好 "auto_checkpoint" = "1" 时）。
+    """round5 批次 B-2: 发送前自动快照（偏好 "auto_checkpoint" 缺省/"1" 时）。
 
     在 run 开始前为会话绑定的工作区打一份 checkpoint，提供"整轮改动
     一键回滚"安全网。设计口径：
 
-    - **默认关**（偏好缺省/非 "1" 一律跳过）——不改变既有行为；
+    - **默认开**（偏好缺省即开启；仅显式 "0" 关闭）——安全网类开关，
+      2026-09-18 默认值收口时从"默认关"翻转；
     - 全程 fail-open：任何一步（偏好读 / 绑定 / zip）失败只记 debug，
       返回 None，绝不阻塞聊天流；
     - 快照即 CheckpointCreateTool（与 U2' 面板同一实现口径，受 8MiB/
@@ -922,7 +952,7 @@ def _auto_checkpoint_if_enabled(session_id: str) -> str | None:
         from backend.data.settings_repo import SettingsRepository
 
         enabled = SettingsRepository().get("auto_checkpoint")
-        if enabled != "1":
+        if enabled == "0":
             return None
         from backend.office.session_workspace import get_workspace_binding
 
@@ -993,14 +1023,16 @@ async def _extract_legacy_chat_memory(
 
         from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
         from backend.adapters.out.memory.adapter import MemoryAdapter
+
+        # 记忆提取异步化：廉价装配（读设置/建 adapter）仍在本函数内完成，
+        # 仅把耗时的 LLM 提取投递到后台队列，不阻塞流式请求收尾。
+        from backend.application.services.chat_service import _pop_env_observations
         from backend.memory.async_extractor import (
             ExtractionRequest,
             get_memory_extraction_queue,
         )
         from backend.memory.extractor import MemoryExtractor
 
-        # 记忆提取异步化：廉价装配（读设置/建 adapter）仍在本函数内完成，
-        # 仅把耗时的 LLM 提取投递到后台队列，不阻塞流式请求收尾。
         get_memory_extraction_queue().submit(
             ExtractionRequest(
                 memory_port=MemoryAdapter(get_memory_manager()),
@@ -1009,6 +1041,7 @@ async def _extract_legacy_chat_memory(
                 assistant_text=assistant_text,
                 session_id=session_id,
                 enabled=True,
+                tool_observations=_pop_env_observations(session_id),
             )
         )
     except Exception as exc:
@@ -1877,7 +1910,10 @@ async def chat(
 
         # 2026-07-30: chat 默认加载 primary profile,让 profile.tools 白名单生效
         # (memory_manager 之类窄权限 agent 才不会拿到 list_dir/read_file 全部工具)
-        agent = SageAgent(agent_id=data.agent_id or "primary")
+        agent = SageAgent(
+            agent_id=data.agent_id or "primary",
+            scheduler_service_getter=get_scheduler_service,
+        )
         # G5 (2026-09-06): 请求未显式带端点配置时，用「全局端点 + 会话覆盖/
         # profile 模型」解析 —— 会话里切换模型不影响其他会话与全局设置。
         if llm_config is None:
@@ -1968,6 +2004,21 @@ def _build_memory_used_event(
     except Exception as exc:  # noqa: BLE001 — 降级铁律
         logger.debug(f"memory_used event build skipped: {exc}")
         return None
+
+
+def _clear_working_segment(agent: Any, session_id: str, segment_id: int) -> None:
+    """清空共享工作记忆中指定段的消息（context-isolation Task 14）。
+
+    **必须经 ``agent.memory_manager`` 取共享实例**：``WorkingMemory`` 是普通类
+    （无单例/``__new__`` 覆盖），``WorkingMemory()`` 构造的是全新的空实例，
+    对它调 ``clear_segment`` 遍历空队列、什么都清不掉（2026-09-18 修复）。
+
+    bare agent（``memory_manager is None``）时静默跳过，不影响主流程。
+    """
+    memory_manager = getattr(agent, "memory_manager", None)
+    if memory_manager is None:
+        return
+    memory_manager.working.clear_segment(session_id, segment_id)
 
 
 @router.post("/chat/stream")
@@ -2159,6 +2210,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug("artifact_created 推送失败（队列满/关闭），忽略")
 
         add_artifact_listener(_push_artifact_event)
+
+        # right-panel R5: 写文件工具落盘 → workspace_changed 事件 → 活跃流
+        # 推送。前端变更列表据此防抖刷新（徽标实时化，不再依赖手动刷新）。
+        # 队列满静默降级（尽力而为），与 artifact 推送同口径。
+        def _push_workspace_event(event: Dict[str, Any]) -> None:
+            if event.get("session_id") != data.session_id:
+                return
+            try:
+                entry.queue.put_nowait(event)
+            except Exception:  # noqa: BLE001 — 降级铁律
+                logger.debug("workspace_changed 推送失败（队列满/关闭），忽略")
+
+        add_workspace_listener(_push_workspace_event)
         try:
             # P0-4 (2026-08-20): 终态变量前置到 try 顶部 —— finally 无条件读取
             # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
@@ -2182,8 +2246,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug("会话运行态(running)写入失败: %s", status_err)
 
             # ===== B-2 (round5 批次 B): 发送前自动快照 BEGIN =====
-            # 偏好 auto_checkpoint="1" 且会话绑定工作区时, run 开始前打一份
-            # checkpoint（一键回滚安全网）。zip 是秒级同步操作, 丢 executor
+            # 偏好 auto_checkpoint 非显式 "0"（缺省=开）且会话绑定工作区时, run
+            # 开始前打一份 checkpoint（一键回滚安全网）。zip 是秒级同步操作, 丢 executor
             # 跑, 不阻塞事件循环与流启动; 全程 fail-open（函数内部已兜底）。
             try:
                 loop = asyncio.get_running_loop()
@@ -2331,7 +2395,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     return
 
-            agent = SageAgent(agent_id=data.agent_id or "primary")
+            agent = SageAgent(
+                agent_id=data.agent_id or "primary",
+                scheduler_service_getter=get_scheduler_service,
+            )
             # PM1 (round8): 计划模式 per-run 只读门 —— 实例级 enforcer 注入
             # （run_loop 对非空 permission_enforcer 直接复用），override 为
             # READ_ONLY；全局 settings 的 permission_mode 不动。失败降级为
@@ -2395,6 +2462,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 from backend.orchestration.planner import Planner
                 from backend.orchestration.task_registry import TaskRegistry
                 from backend.orchestration.team_registry import TeamRegistry
+                from backend.tools.replan_tool import (
+                    AddTaskToPlanTool,
+                    CancelPendingTaskTool,
+                    UpdatePendingTaskTool,
+                )
                 from backend.tools.subagent_tool import (
                     CollectSubagentsTool,
                     DispatchSubagentsTool,
@@ -2421,11 +2493,23 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 llm_client=build_llm_client_from_settings(),
                             ).decompose_from_template(template_id, data.message)
                         else:
+                            # 计划前置 (2026-09-19, docs/plans/2026-09-19_
+                            # orch-plan-preflight-plan.md): 拆解前先澄清需求
+                            # （QuestionGate 结构化提问）+ 只读侦察（事实清单），
+                            # 产出注入 planner context。内部任何失败降级为
+                            # None —— 等价于现状 decompose_request(message)。
+                            from backend.orchestration.plan_preflight import (
+                                run_plan_preflight,
+                            )
+
+                            preflight_context = await run_plan_preflight(
+                                data.message, emit=entry.queue.put
+                            )
                             plan = await Planner(
                                 task_registry=TaskRegistry(),
                                 team_registry=TeamRegistry(),
                                 llm_client=build_llm_client_from_settings(),
-                            ).decompose_request(data.message)
+                            ).decompose_request(data.message, context=preflight_context)
                         plan_tasks = list(plan.tasks if plan else [])
                     except Exception as exc:  # noqa: BLE001 — 模板/规划失败降级 single
                         if template_id is not None:
@@ -2453,19 +2537,56 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 "agent_id": str(it.get("agent_id", "primary")),
                                 "goal": str(it.get("goal", "")),
                                 "depends_on": list(it.get("depends_on") or []),
+                                # 层级透传（override 可带 parent；depth 由下方
+                                # 归一化统一重算，客户端值不作权威）。
+                                "parent_task_id": it.get("parent_task_id"),
                             }
                             for it in data.plan_override
                         ]
                     else:
+                        # 任务层级（spec 2026-09-19）：Task 的 parent 是真实
+                        # task_id，计划项用 t1..tN 编号 → 需要索引映射后透传，
+                        # 否则前端树与 dispatcher 都拿不到父子关系。
+                        _index_by_task_id = {
+                            t.task_id: f"t{i}"
+                            for i, t in enumerate(plan_tasks, 1)
+                        }
                         plan_items = [
                             {
                                 "task_id": f"t{i}",
                                 "agent_id": t.parameters.get("agent_hint", "primary"),
                                 "goal": t.description or t.name,
                                 "depends_on": list(t.blocked_by),
+                                "parent_task_id": (
+                                    _index_by_task_id.get(t.parent_task_id)
+                                    if getattr(t, "parent_task_id", None)
+                                    else None
+                                ),
+                                "depth": int(getattr(t, "depth", 0) or 0),
                             }
                             for i, t in enumerate(plan_tasks, 1)
                         ]
+                    # 层级归一化（spec 2026-09-19）：depth 以后端计算为准，
+                    # override 传入值不采信；坏引用/超深 fail-open 剪枝为根。
+                    try:
+                        from backend.orchestration.plan_hierarchy import (
+                            normalize_task_hierarchy,
+                        )
+
+                        plan_items = normalize_task_hierarchy(plan_items)
+                    except Exception as hierarchy_err:  # noqa: BLE001 — 降级铁律
+                        logger.warning(
+                            "计划层级归一化失败，回落无层级: %s", hierarchy_err
+                        )
+                        plan_items = [
+                            {
+                                k: v
+                                for k, v in item.items()
+                                if k not in {"depth", "parent_task_id"}
+                            }
+                            for item in plan_items
+                        ]
+
                     dispatcher_workspace_root = None
                     try:
                         from backend.office.session_workspace import get_workspace_binding
@@ -2515,6 +2636,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         agent.profile["tools"].append("dispatch_subagents")
                         # BD (round12): collect 与 dispatch 成对加入白名单。
                         agent.profile["tools"].append("collect_subagents")
+                    # RP1 (round34, 2026-09-19): re-plan 工具族 —— conductor 在
+                    # run 中动态调整计划（改 goal / 取消任务 / 加任务并声明依赖）。
+                    # 与 dispatch_subagents 同一 tool-toggle 门：仅 multi 模式注册。
+                    agent.tool_registry.register(UpdatePendingTaskTool(dispatcher))
+                    agent.tool_registry.register(CancelPendingTaskTool(dispatcher))
+                    agent.tool_registry.register(AddTaskToPlanTool(dispatcher))
+                    if (
+                        agent.profile is not None
+                        and agent.profile.get("tools") is not None
+                    ):
+                        agent.profile["tools"].append("update_pending_task")
+                        agent.profile["tools"].append("cancel_pending_task")
+                        agent.profile["tools"].append("add_task_to_plan")
                     # O4 (2026-09-08): observe_subagents 注册 —— conductor 主动
                     # 轮询子任务进度的只读工具（此前类已实现但从未接线，生产
                     # 不可用）。快照通道未装配时降级不注册，不阻塞编排。
@@ -2579,6 +2713,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         "collect 可传 wait=false 立即获取各子任务当前状态与结果"
                         "预览快照——若已有信息足以支撑最终结论，可据此提前汇总，"
                         "无需等待全部子任务完成。"
+                        # RP1 (round34, 2026-09-19): re-plan 工具族指引 ——
+                        # 此前 conductor 只能靠上段"失败处理指令"做任务级微调，
+                        # 无法主动调整计划结构（改目标/取消/加任务）。
+                        + "\n\n发现原计划不再适用时可主动调整计划，有三个工具："
+                        "\n- update_pending_task：修改尚未派发任务的 goal 或执行"
+                        "角色，参数 task_id 必填、goal 与 agent_id 至少给一个。"
+                        "\n- cancel_pending_task：取消不再需要的任务，参数 task_id "
+                        "必填、reason 可选。未派发的直接移出计划，已派发仍在排队的"
+                        "会被跳过，运行中的会被软中断；取消后请勿重派该任务。"
+                        "\n- add_task_to_plan：把新发现的工作加入计划，参数 task_id "
+                        "/ goal / agent_id 必填，depends_on 可选且只能引用已存在的"
+                        "task_id。添加后调用 dispatch_subagents 派发即可执行。"
+                        "\n任务失败时不要原样重派 —— 先判断该改目标、换角色、取消，"
+                        "还是补充新任务。"
                     )
                     # 计划先行：子 agent 跑之前先推 task_plan（可展示、可取消）
                     # Wave 2 P1-4: 首次 dispatch 前把 run + plan 落库,供 resume 端点重建。
@@ -2791,14 +2939,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # legacy /chat/stream 此前缺少 A16 自动激活(仅 hex 路径有),
             # 补齐后用户消息匹配 SKILL.md when_to_use 时自动注入技能指令。
             # fail-safe: 任何故障静默降级,不影响对话主流程。
-            r38_activated_skill_names: list[str] = []
+            # MEDIUM-1 修复: 改用 _get_skill_adapter() (委托 InprocSkillAdapter),
+            # 而非 getattr(agent, "skills", None) (SageAgent 无 skills 属性, 恒 None)。
+            # 首次调用 _get_skill_adapter() 会同步扫描文件系统, 用 asyncio.to_thread
+            # 包裹避免阻塞事件循环。
+            r38_activated_skill_list: list[dict] = []
             try:
                 from backend.application.services.chat_service import (
                     _skill_activation_block,
                 )
 
-                r38_skills_port = getattr(agent, "skills", None)
-                r38_block, r38_activated_skill_names = _skill_activation_block(
+                r38_skills_port = await asyncio.to_thread(_get_skill_adapter)
+                r38_block, r38_activated_skill_list = _skill_activation_block(
                     data.message or "", r38_skills_port
                 )
                 if r38_block:
@@ -2809,15 +2961,27 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
             # ===== R38 A16 技能自动激活 END =====
 
+            # R82 (2026-09-19) 去重说明: 此处原有的第一段 L13 记忆注入 + R17-E
+            # 召回事件已删除 —— 它与下方 Task 14 段隔离版完全重复,导致每次
+            # 请求把记忆上下文注入两遍（双倍 token）,且旧版无 segment 隔离,
+            # 会把旧段工作记忆残留在 Task 14 修复后继续漏进请求。召回事件与
+            # r38_memories 捕获统一收敛到下方段隔离版本。
+            # R38 (2026-09-18): r38_memories 提升到本轮作用域 —— 随 assistant
+            # 行落盘（重载后 memory chip 不丢）；捕获点在下方段隔离召回处。
+            r38_memories: list = []
+
+
             # ===== R38 技能激活展示事件 BEGIN =====
             # A16 自动激活后推送 skill_activated 事件,前端渲染可展开 chip。
             # fail-safe: 任何异常只跳过事件,绝不影响对话主流程。
-            if r38_activated_skill_names:
+            # MEDIUM-3 修复: r38_activated_skill_list 已是事件载荷形状
+            # [{"name": str, "triggers_matched": List[str]}], 直接透传。
+            if r38_activated_skill_list:
                 try:
                     entry.queue.put_nowait({
                         "state": "skill_activated",
                         "session_id": data.session_id,
-                        "skills": [{"name": n, "triggers_matched": []} for n in r38_activated_skill_names],
+                        "skills": r38_activated_skill_list,
                     })
                 except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
                     logger.debug(
@@ -2828,6 +2992,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # ===== R37 文本文档附件注入 BEGIN =====
             # 已上传文本文档（attachment_media_ids）按 id 读全文，截断后并入
             # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
+            # R81 (2026-09-19): r71 citations 除推事件外还要随 assistant 行
+            # 落盘（重载后引用区块不丢）；capture 后挂首条 assistant 行。
+            r81_rag_citations: list = []
+            r81_rag_citations_written = False
             try:
                 from backend.api import chat_attachment_routes as _r66_car
                 from backend.services.attachment_context import (
@@ -2897,9 +3065,34 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     if r37_ctx is None:
                         continue
+                    # r71: RAG 检索注入发生 → 推引用溯源事件（气泡内展示）
+                    if r37_ctx.mode == "rag":
+                        r81_citation = {
+                            "media_id": r37_mid,
+                            "filename": (
+                                (_r37_ref.metadata or {}).get("original_filename")
+                                or r37_mid
+                            ),
+                            "mode": "rag",
+                            "chunks": [
+                                {"index": c.index, "score": round(c.score, 2)}
+                                for c in r37_ctx.chunks
+                            ],
+                        }
+                        r81_rag_citations.append(r81_citation)
+                        try:
+                            entry.queue.put_nowait(
+                                {
+                                    "state": "attachment_rag_used",
+                                    "session_id": data.session_id,
+                                    "citations": [r81_citation],
+                                }
+                            )
+                        except Exception:
+                            logger.debug(f"[REQ {request_id}] rag_used event push failed, ignored")
                     dynamic_context_parts.append(
                         "<attached_document id=" + repr(r37_mid) + ">" + chr(10)
-                        + r37_ctx + chr(10) + "</attached_document>"
+                        + r37_ctx.text + chr(10) + "</attached_document>"
                     )
             except Exception as r37_att_err:
                 logger.debug(f"[REQ {request_id}] attachment media inject skipped: {r37_att_err}")
@@ -2911,17 +3104,23 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 对标 S3（统一入口）：把消息里的实体引用解析为 <references> 块，
             # 并入尾部 dynamic system（易变上下文，保前缀缓存）。同步 I/O
             # 走附件线程池；任何失败静默省略，绝不阻断聊天。
+            # R86: @memory:/@wiki: 的命中同时抽取为结构化来源（process_with_sources
+            # 一次解析两用，不为溯源重跑检索），暂存后并入 r81_turn_sources。
+            r81_entity_sources: list = []
             try:
                 from backend.chat import entity_refs as _entity_refs
                 from backend.chat.executors import ATTACHMENT_EXECUTOR
 
                 if _entity_refs.extract_entity_refs(data.message):
-                    refs_block = await asyncio.get_running_loop().run_in_executor(
-                        ATTACHMENT_EXECUTOR,
-                        _entity_refs.process,
-                        data.message,
-                        data.session_id,
+                    refs_block, r81_entity_hits = (
+                        await asyncio.get_running_loop().run_in_executor(
+                            ATTACHMENT_EXECUTOR,
+                            _entity_refs.process_with_sources,
+                            data.message,
+                            data.session_id,
+                        )
                     )
+                    r81_entity_sources.extend(r81_entity_hits)
                     if refs_block:
                         dynamic_context_parts.append(refs_block)
             except Exception as refs_err:  # noqa: BLE001
@@ -2974,8 +3173,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     _old_seg = repo.get_active_segment_id(data.session_id)
                     await asyncio.to_thread(repo.advance_segment, data.session_id)
                     try:
-                        from backend.memory.working import WorkingMemory
-                        WorkingMemory().clear_segment(data.session_id, _old_seg)
+                        _clear_working_segment(agent, data.session_id, _old_seg)
                     except Exception as mem_err:
                         logger.warning("working memory clear_segment failed: %s", mem_err)
 
@@ -3026,8 +3224,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     _old_seg_auto = repo.get_active_segment_id(data.session_id)
                     new_seg = await asyncio.to_thread(repo.advance_segment, data.session_id)
                     try:
-                        from backend.memory.working import WorkingMemory
-                        WorkingMemory().clear_segment(data.session_id, _old_seg_auto)
+                        _clear_working_segment(agent, data.session_id, _old_seg_auto)
                     except Exception as wm_err:
                         logger.warning("working memory clear_segment (auto) failed: %s", wm_err)
                     history_rows = await asyncio.to_thread(
@@ -3075,6 +3272,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 后用 recall() 取结构化命中（top3），推送 memory_used 流事件；
             # 前端 Message 气泡显示"N 条记忆已应用"并可展开查看明细。
             # fail-safe：任何异常只跳过事件，绝不影响注入与对话主流程。
+            # R82 (2026-09-19): 本事件唯一推送点（原上方无段隔离的重复推送
+            # 已删除）；r38_memories 捕获同步收敛至此 —— 落库条目与实际注入
+            # 上下文（段隔离召回）同源。
             if dynamic_context_parts and not memory_off:
                 l13_evt = _build_memory_used_event(
                     getattr(agent, "memory_manager", None),
@@ -3082,6 +3282,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     session_id=data.session_id,
                 )
                 if l13_evt is not None:
+                    r38_memories = l13_evt.get("memories", []) or []
                     try:
                         entry.queue.put_nowait(l13_evt)
                     except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
@@ -3098,7 +3299,45 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 request_endpoint_id=data.endpoint_id,
                 auto_context=data.auto_context,
             )
-            l9_budget = history_token_budget(effective_window=effective_window)
+            # 上下文明细改造: reserve 不再硬编码 16384——本轮非历史开销
+            # (system/附件/动态上下文/当前输入/工具 schema) 按实际大小实测,
+            # 另加输出预算 (LLMConfig.max_tokens 默认 4096)。测量失败或
+            # 窗口未知时回退旧默认口径,绝不阻断聊天。
+            l9_reserve: Optional[int] = None
+            try:
+                if effective_window:
+                    from backend.chat.context_breakdown import measure_request_reserve
+
+                    l9_trailing = (
+                        "\n\n".join(dynamic_context_parts)
+                        if dynamic_context_parts
+                        else None
+                    )
+                    l9_user_content: Any = data.message
+                    if data.images:
+                        l9_user_content = [
+                            {"type": "text", "text": data.message},
+                            *[
+                                {"type": "image_url", "image_url": {"url": image_url}}
+                                for image_url in data.images
+                            ],
+                        ]
+                    l9_reserve = measure_request_reserve(
+                        system_content,
+                        attachment_block=attachment_block or None,
+                        trailing_system=l9_trailing,
+                        user_content=l9_user_content,
+                        tools=agent.get_available_tools(),
+                    )
+            except Exception as reserve_err:  # noqa: BLE001 — 实测失败回退默认
+                logger.debug(
+                    f"[REQ {request_id}] 预留位实测失败(回退默认 16384): {reserve_err}"
+                )
+                l9_reserve = None
+            l9_budget = history_token_budget(
+                effective_window=effective_window,
+                reserve=l9_reserve if l9_reserve is not None else 16384,
+            )
             # Task 7 (2026-09-17): context-isolation turn limit.
             # Read ``context_turn_limit`` from settings (whitelisted in Task 6).
             # Setting is stored as str; parse defensively — bad value falls back
@@ -3177,17 +3416,66 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 不破坏流。
             message_repo = MessageRepository()
             session_repo = SessionRepository()
+            # R38 (2026-09-18): 通知载荷序列化 —— sqlite3 不能直接绑定
+            # dict/list，必须 json.dumps（ensure_ascii=False 保留中文）。
+            # memory_refs 落**本轮第一条** assistant 行（与前端把 chip 挂在
+            # 首个流式气泡上的行为一致）；flag 防多步 run 重复落盘。
+            r38_activated_skills_json = (
+                json.dumps(r38_activated_skill_list, ensure_ascii=False)
+                if r38_activated_skill_list
+                else None
+            )
+            r38_memory_refs_json = (
+                json.dumps(r38_memories, ensure_ascii=False) if r38_memories else None
+            )
+            r38_memory_refs_written = False
+            # R81: r71 附件检索 citations 与本轮工具来源落库载荷 —— 均为
+            # JSON-in-TEXT 列, 序列化失败降级 None（列缺失仅丢展示不丢消息）。
+            r81_rag_citations_json = (
+                json.dumps(r81_rag_citations, ensure_ascii=False)
+                if r81_rag_citations
+                else None
+            )
+            r81_sources_json: Optional[str] = None
             user_now = int(time.time() * 1000)
             try:
-                message_repo.save(
-                    DbMessage(
-                        id=str(uuid.uuid4()),
-                        session_id=data.session_id,
-                        role="user",
-                        content=data.message,
-                        created_at=user_now,
-                    )
+                # client_message_id (2026-09): 确定性 user id —— 前端乐观消息
+                # 用同一 id, 对账按 id 精确命中 (同 id 重复落库为同内容覆写,
+                # 天然幂等); 未传时维持 UUID。
+                user_message_id = (
+                    f"u-{data.client_message_id}"
+                    if data.client_message_id
+                    else str(uuid.uuid4())
                 )
+                # client_message_id 幂等 (2026-09): 同 cmid 重试时复用既有
+                # user 消息 (内容一致), 不再重复落库 —— 避免 INSERT 主键冲突
+                # 告警与重复行。仅在带 cmid 的路径检查 (UUID 路径天然唯一)。
+                reuse_existing = False
+                if data.client_message_id:
+                    existing_user = await asyncio.to_thread(
+                        message_repo.get, user_message_id
+                    )
+                    reuse_existing = (
+                        existing_user is not None
+                        and existing_user.content == data.message
+                    )
+                    if reuse_existing:
+                        logger.info(
+                            "[REQ %s] client_message_id 幂等复用: %s",
+                            request_id,
+                            user_message_id,
+                        )
+                if not reuse_existing:
+                    message_repo.save(
+                        DbMessage(
+                            id=user_message_id,
+                            session_id=data.session_id,
+                            role="user",
+                            content=data.message,
+                            activated_skills=r38_activated_skills_json,
+                            created_at=user_now,
+                        )
+                    )
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
@@ -3204,6 +3492,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             streamed_partial_parts: List[str] = []
             # 2026-09 step-by-step: 当前迭代的 tool_calls 累积,STEP_DONE 时落盘并重置
             accumulated_tool_calls: list = []
+
+            # R81 统一参考来源: OBSERVING 事件里的检索类工具命中（web_search/
+            # web_fetch/wiki_search/wiki_answer/MCP）解析成结构化来源,done 前
+            # 推 sources_used 事件并随终稿 assistant 行落盘。提取/合并全
+            # fail-safe（sources_extractor 内部吞异常）,绝不影响对话主流程。
+            r81_turn_sources: list = []
+            # R86: @memory:/@wiki: 实体引用命中并入统一来源（按 url/path/title 去重）
+            r81_turn_sources[:] = merge_sources(r81_turn_sources, r81_entity_sources)
+            # R83 增量推送: 每个 STEP_DONE 边界把已累积来源快照推给前端（长
+            # run 中"先搜索后长文写作"时用户不必等 DONE 才看到来源）。记录
+            # 上次推送时的条数,仅在有新增时推,避免逐 step 空转刷事件。
+            r81_pushed_sources_len: int = 0
 
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
@@ -3325,6 +3625,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         if tc.get("id") == tr.tool_call_id:
                             tc["result"] = tr.content
                             break
+                    # R81: 检索类工具命中 → 解析成参考来源条目（fail-safe）
+                    r81_tool_name = getattr(evt.tool_call, "name", "") or ""
+                    if r81_tool_name:
+                        r81_turn_sources[:] = merge_sources(
+                            r81_turn_sources,
+                            extract_sources_from_tool(r81_tool_name, tr.content),
+                        )
                     await entry.queue.put(evt.to_dict())
                 # 2026-09 step-by-step: 每完成一次 ReAct 迭代(OBSERVING 之后),
                 # agent.py 在该迭代边界 yield STEP_DONE。这里把"当前 step 的累加器"
@@ -3350,10 +3657,26 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 # step_index=evt.step_index (== evt.iteration,
                                 # agent.py 在并行/串行路径都同步设置)
                                 step_index=evt.step_index,
+                                # R38: 记忆召回挂本轮首条 assistant 行
+                                memory_refs=(
+                                    r38_memory_refs_json
+                                    if not r38_memory_refs_written
+                                    else None
+                                ),
+                                # R81: 附件检索 citations 同挂首条 assistant 行
+                                rag_citations=(
+                                    r81_rag_citations_json
+                                    if not r81_rag_citations_written
+                                    else None
+                                ),
                                 created_at=step_now,
                                 model=(llm_config.get("model") if llm_config else "local"),
                             ),
                         )
+                        if r38_memory_refs_json and not r38_memory_refs_written:
+                            r38_memory_refs_written = True
+                        if r81_rag_citations_json and not r81_rag_citations_written:
+                            r81_rag_citations_written = True
                         steps_completed += 1
                     except Exception as step_db_err:
                         logger.warning(
@@ -3364,6 +3687,22 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     accumulated_tool_calls = []
                     done_reasoning = None
                     streamed_partial_parts = []
+                    # R83 增量推送: 有新增来源时在 step 边界推送累积快照 ——
+                    # 前端 updateMessage 对 sources 是整体替换语义,快照幂等。
+                    if len(r81_turn_sources) > r81_pushed_sources_len:
+                        r81_pushed_sources_len = len(r81_turn_sources)
+                        try:
+                            await entry.queue.put(
+                                {
+                                    "state": "sources_used",
+                                    "session_id": data.session_id,
+                                    "sources": list(r81_turn_sources),
+                                }
+                            )
+                        except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                            logger.debug(
+                                f"[REQ {request_id}] incremental sources_used push failed, ignored"
+                            )
                     # STEP_DONE 转发到前端,前端据此把当前 streaming 气泡快照成
                     # completed step + 重置 streaming 准备下一步。
                     await entry.queue.put(evt.to_dict())
@@ -3375,10 +3714,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             if done_content:
                 assistant_now = int(time.time() * 1000)
                 assistant_persisted = False
+                assistant_db_id = str(uuid.uuid4())
+                # R81: 本轮工具来源此时已收集完毕,序列化一次供终稿行落库。
+                if r81_turn_sources:
+                    r81_sources_json = json.dumps(
+                        r81_turn_sources, ensure_ascii=False
+                    )
                 try:
                     message_repo.save(
                         DbMessage(
-                            id=str(uuid.uuid4()),
+                            id=assistant_db_id,
                             session_id=data.session_id,
                             role="assistant",
                             content=done_content,
@@ -3399,11 +3744,29 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             step_index=(
                                 done_event.iteration if done_event is not None else 0
                             ),
+                            # R38: 单步 run 无 STEP_DONE，记忆召回挂这条终稿行
+                            memory_refs=(
+                                r38_memory_refs_json
+                                if not r38_memory_refs_written
+                                else None
+                            ),
+                            # R81: 引用落库 —— 附件 citations 同款首写 flag；
+                            # 工具来源挂终稿行（前端来源区块所在的气泡）。
+                            rag_citations=(
+                                r81_rag_citations_json
+                                if not r81_rag_citations_written
+                                else None
+                            ),
+                            sources=r81_sources_json,
                             created_at=assistant_now,
                             model=(llm_config.get("model") if llm_config else "local"),
                         )
                     )
                     assistant_persisted = True
+                    if r38_memory_refs_json and not r38_memory_refs_written:
+                        r38_memory_refs_written = True
+                    if r81_rag_citations_json and not r81_rag_citations_written:
+                        r81_rag_citations_written = True
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
                 # WS-C P0-2: 统一记忆写入路径 — assistant 落盘**成功后**才触发
@@ -3462,8 +3825,36 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # 自带 3 次退避重试, 最长可拖 15s+, 此前阻塞在 DONE 之前,
                 # 用户盯着已生成完的内容转圈。现 DONE 立即推送, 标题转后台
                 # 任务生成; 完成后落库 (侧栏在下次自然刷新时呈现)。
+                # R81: DONE 之前推送 sources_used —— 前端在收到 DONE 收尾前
+                # 就能把参考来源挂到 assistant 气泡上（与 memory_used 同为
+                # 增强信息, 非空才推）。R83: 这里是全量兜底推送 —— 覆盖无
+                # STEP_DONE 的单步 run（增量推送只在 step 边界触发）;对多步
+                # run 与前端整体替换语义幂等,重复无害。
+                if r81_turn_sources:
+                    try:
+                        await entry.queue.put(
+                            {
+                                "state": "sources_used",
+                                "session_id": data.session_id,
+                                "sources": r81_turn_sources,
+                            }
+                        )
+                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                        logger.debug(
+                            f"[REQ {request_id}] sources_used event push failed, ignored"
+                        )
                 if done_event:
-                    await entry.queue.put(done_event.to_dict())
+                    done_payload = done_event.to_dict()
+                    # client_message_id (2026-09): DONE 附带 assistant 消息的
+                    # 服务端 id, 前端据此把乐观占位 id 替换为真实 id —— 对账
+                    # 按 id 精确命中, 根治重复显示。
+                    if assistant_persisted:
+                        done_payload["message_id"] = assistant_db_id
+                    # 2026-09: 首轮对话的标题在后台生成 (DONE 先行) ——
+                    # 提示前端稍后补刷侧栏, 以呈现后台生成的标题。
+                    if sess is not None and sess.message_count <= 2:
+                        done_payload["title_pending"] = True
+                    await entry.queue.put(done_payload)
 
                 # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
                 # 后台任务生成 —— 不阻塞 producer 收尾 (SENTINEL/运行态落库),
@@ -3541,6 +3932,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 step_index=(
                                     last_evt.iteration if last_evt is not None else 0
                                 ),
+                                # R81: 中断行也带上已捕获的引用信息（首写 flag
+                                # 置位防与已落库的 step 行重复）。
+                                rag_citations=(
+                                    r81_rag_citations_json
+                                    if not r81_rag_citations_written
+                                    else None
+                                ),
+                                sources=(
+                                    json.dumps(r81_turn_sources, ensure_ascii=False)
+                                    if r81_turn_sources
+                                    else None
+                                ),
                                 created_at=int(time.time() * 1000),
                                 model=(llm_config.get("model") if llm_config else "local"),
                             )
@@ -3586,6 +3989,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug("会话运行态(%s)写入失败: %s", _terminal_status, status_err)
             # S7: 注销产物事件监听器（闭包持有 entry/queue 引用，不注销会泄漏）
             remove_artifact_listener(_push_artifact_event)
+            # right-panel R5: 注销工作区变更事件监听器（理由同上）
+            remove_workspace_listener(_push_workspace_event)
             # P2-9 (2026-08-14): 长连接结束注销注册表条目（run 级 cancel 不再命中）。
             # run_id 为 None（single 路径）时跳过 —— 从未注册过。
             if run_id:
@@ -4299,12 +4704,12 @@ class MemorySearchRequest(BaseModel):
 
 
 class MemorySaveRequest(BaseModel):
-    content: str
+    content: str = Field(min_length=1)
     memory_type: str = "episodic"
-    importance: int = 5
-    tags: List[str] = []
-    # P1 作用域轴: None/'auto' → 按会话绑定自动判定 (该端点无 session 上下文,
-    # 实际落为 user); 可显式 'user'/'project'/'global'
+    importance: int = Field(default=5, ge=1, le=10)
+    tags: List[str] = Field(default_factory=list)
+    session_id: Optional[str] = None
+    # P1 作用域轴: None/'auto' → 按会话绑定自动判定; 可显式 'user'/'project'/'global'
     scope: Optional[str] = None
     # P3: true 时走 Mem0 风格冲突消解写入 (NOOP/UPDATE/ADD), 响应带 op 字段
     conflict_check: bool = False
@@ -4593,14 +4998,51 @@ def search_memory(
     检索（'project' 需带 session_id 以解析当前项目目录）；缺省维持
     会话内旧行为。
     """
+    if type not in (None, "", "working", "episodic", "semantic"):
+        raise HTTPException(status_code=422, detail="不支持的记忆类型")
     try:
         mm = get_memory_manager()
         return mm.search_memories(
-            query=query, memory_type=type, limit=limit,
-            scope=scope, session_id=session_id,
+            query=query,
+            memory_type=type or None,
+            limit=max(1, min(limit, 100)),
+            scope=scope,
+            session_id=session_id,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        # 脱敏:不泄露用户原始查询(查询进入 URL 后会出现在错误日志里)
+        raise HTTPException(status_code=500, detail="记忆搜索失败,请查看后端日志")
+
+
+@router.get("/memory/diagnostics")
+def memory_diagnostics():
+    """Return redacted runtime evidence for diagnosing an empty memory list."""
+    from pathlib import Path
+
+    db = get_memory_manager().episodic.db
+    raw_path = str(getattr(db, "db_path", ""))
+    path = Path(raw_path)
+    try:
+        stat = path.stat()
+        size_bytes = stat.st_size
+        exists = True
+    except OSError:
+        size_bytes = 0
+        exists = False
+    path_fingerprint = hashlib.sha256(raw_path.encode("utf-8")).hexdigest()[:16]
+    return {
+        "pid": os.getpid(),
+        "build_id": os.environ.get("SAGE_BUILD_ID", "dev-build"),
+        "db": {
+            "basename": path.name,
+            "exists": exists,
+            "size_bytes": size_bytes,
+            "path_fingerprint": path_fingerprint,
+            "source": "explicit_env" if os.environ.get("SAGE_DB_PATH") else "default",
+        },
+    }
 
 
 @router.post("/memory/save")
@@ -4611,6 +5053,8 @@ def save_memory(data: MemorySaveRequest):
     ``conflict_check=true`` 时走 P3 冲突消解（NOOP 复用既有 ID / UPDATE 写新行
     并使旧行失效 / ADD 正常写入）, 响应额外带 ``op`` 字段。
     """
+    if data.memory_type not in ("working", "episodic", "semantic", "auto"):
+        raise HTTPException(status_code=422, detail="不支持的记忆类型")
     try:
         mm = get_memory_manager()
         if data.conflict_check:
@@ -4619,6 +5063,7 @@ def save_memory(data: MemorySaveRequest):
                 memory_type=data.memory_type,
                 importance=data.importance,
                 tags=data.tags,
+                session_id=data.session_id,
                 scope=data.scope,
             )
             return {"id": memory_id, "op": op, "status": "ok"}
@@ -4627,9 +5072,14 @@ def save_memory(data: MemorySaveRequest):
             memory_type=data.memory_type,
             importance=data.importance,
             tags=data.tags,
+            session_id=data.session_id,
             scope=data.scope,
         )
+        if not memory_id:
+            raise HTTPException(status_code=422, detail="记忆未写入")
         return {"id": memory_id, "status": "ok"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -4640,8 +5090,8 @@ def delete_memory(data: MemoryDeleteRequest):
     """删除记忆"""
     try:
         mm = get_memory_manager()
-        # 尝试从所有类型中删除
-        for mtype in ["episodic", "semantic"]:
+        # 尝试从所有类型中删除(working 通过合成 id 支持单条删除)
+        for mtype in ["episodic", "semantic", "working"]:
             if mm.delete_memory(data.id, mtype):
                 return {"status": "ok"}
         raise HTTPException(status_code=404, detail="记忆不存在")

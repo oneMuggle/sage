@@ -134,6 +134,8 @@ export const chatApi = {
     attachmentMediaIds?: string[],
     /** r67: 附件检索注入配置（opt-in；undefined = 现状全文注入） */
     attachmentRag?: { embed: AttachmentEmbedConfig; top_k: number } | null,
+    /** client_message_id (2026-09): 乐观 user 消息与服务端落库 id 对齐的根方案 */
+    clientMessageId?: string,
   ): Promise<{ streamId: string; cancel: () => void }> {
     // 消息原文直传,理由同 chat()。
     if (!handlers || typeof handlers.onEvent !== 'function') {
@@ -162,6 +164,7 @@ export const chatApi = {
     const { streamId } = await invoke<{ streamId: string }>('agent_chat_stream', {
       sessionId,
       message,
+      clientMessageId: clientMessageId ?? null,
       apiKey: config?.apiKey ?? null,
       apiUrl: config?.apiUrl ?? null,
       model: config?.model ?? null,

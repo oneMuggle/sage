@@ -57,9 +57,21 @@ export const orchRunClient = {
   // RV2 (round8): 构造"只重跑失败任务"的计划覆盖 —— done 子任务带
   // preset_output（结果回放，不重新执行），失败子任务原样重建。
   // 409 = run 未终态 / 无失败任务 / 无计划。
+  // RV4 (round27): taskIds 提供时退化为单任务重试（只重建所选任务及其
+  // 下游未完成闭包，其余失败任务不进入新计划）。
   rerunFailed(
     runId: string,
+    taskIds?: string[],
   ): Promise<{ session_id: string | null; goal: string; plan_override: TaskPlanItem[] }> {
-    return invoke('orchestration_rerun_failed', { run_id: runId });
+    return invoke(
+      'orchestration_rerun_failed',
+      taskIds && taskIds.length > 0 ? { run_id: runId, task_ids: taskIds } : { run_id: runId },
+    );
+  },
+  // Round 2 (2026-09-19): 计划模式 × 编排打通 —— 已批准计划文本 → 结构化
+  // 任务项（plan_override 形状）。503 = 未配置 LLM；502 = 解析失败（前端
+  // toast 引导回落单 agent 执行按钮）。
+  planItemsFromText(text: string): Promise<{ items: TaskPlanItem[]; reasoning: string }> {
+    return invoke('orchestration_plan_items', { text });
   },
 };

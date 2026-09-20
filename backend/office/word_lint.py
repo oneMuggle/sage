@@ -93,6 +93,29 @@ def _cm(value: Optional[Any]) -> Optional[float]:
 
 def _check_page(doc: Document, page: WordPageSetupSpec, issues: List[WordLintIssue]) -> None:
     section = doc.sections[0]
+
+    # Round 53：节内页码格式/起始号校验（spec 声明了才校验）。
+    if page.page_number_format is not None or page.page_number_start is not None:
+        sect_pr = section._sectPr
+        pg = sect_pr.find(qn("w:pgNumType"))
+        actual_fmt = pg.get(qn("w:fmt")) if pg is not None else None
+        actual_start = pg.get(qn("w:start")) if pg is not None else None
+        if page.page_number_format is not None and actual_fmt != page.page_number_format:
+            issues.append(_issue(
+                "page/numbering", "error",
+                f"页码格式实测 {actual_fmt or '未设置'}，期望 {page.page_number_format}",
+                f"在节属性的 pgNumType 设置 fmt={page.page_number_format}"
+                "（或用 format_spec.page.page_number_format 重新生成）",
+            ))
+        if page.page_number_start is not None and (
+            actual_start is None or int(actual_start) != page.page_number_start
+        ):
+            issues.append(_issue(
+                "page/numbering", "error",
+                f"页码起始号实测 {actual_start or '未设置'}，期望 {page.page_number_start}",
+                f"在节属性的 pgNumType 设置 start={page.page_number_start}"
+                "（或用 format_spec.page.page_number_start 重新生成）",
+            ))
     if page.margins_cm is not None:
         margins = page.margins_cm
         actual = {
@@ -304,6 +327,7 @@ def _iter_paragraphs_outside_fields(doc: Document):
 def _check_captions(doc: Document, issues: List[WordLintIssue]) -> None:
     for label, regex in (("图", _FIGURE_CAPTION_RE), ("表", _TABLE_CAPTION_RE)):
         expected = 1
+        seen_texts: dict = {}
         for para in _iter_paragraphs_outside_fields(doc):
             match = regex.match(para.text)
             if match is None:
@@ -317,9 +341,21 @@ def _check_captions(doc: Document, issues: List[WordLintIssue]) -> None:
                 ))
                 expected = actual
             expected += 1
+            # Round 48：重复题注文本提示（交叉引用按题注文本匹配指向
+            # 首个；警告级——不阻断交付）。
+            caption_text = regex.sub("", para.text, count=1).strip()
+            if caption_text in seen_texts:
+                issues.append(_issue(
+                    "caption/duplicate", "warning",
+                    f'{label}题注文本重复："{caption_text}"（第 '
+                    f"{seen_texts[caption_text]} 处与当前处）",
+                    "区分同类题注的标题文本，避免交叉引用指向首个",
+                ))
+            else:
+                seen_texts[caption_text] = expected - 1
 
 
-_CROSS_REF_RESIDUE_RE = re.compile(r"\{\{(fig|tbl):[^}]+\}\}")
+_CROSS_REF_RESIDUE_RE = re.compile(r"\{\{(fig|tbl|fn|en):[^}]+\}\}")
 
 
 def _check_cross_ref_residue(doc: Document, issues: List[WordLintIssue]) -> None:
@@ -341,6 +377,46 @@ def _check_cross_ref_residue(doc: Document, issues: List[WordLintIssue]) -> None
             "占位符仅在 office_create 生成时解析；手工编辑请直接写 图N/表N，"
             "或用原 format_spec 重新生成",
         ))
+
+
+def _check_ref_consistency(doc: Document, issues: List[WordLintIssue]) -> None:
+    """脚注/尾注引用 id 必须在对应 part 有 note（Round 63）。
+
+    正文 ``footnoteReference``/``endnoteReference`` 的 id 对照
+    footnotes/endnotes part 的真实 note id 集合（系统脚注跳过）；
+    无引用的文档零开销跳过。
+    """
+    W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    for kind, partname in (
+        ("footnote", "/word/footnotes.xml"),
+        ("endnote", "/word/endnotes.xml"),
+    ):
+        refs = [
+            int(el.get(qn("w:id")))
+            for p in doc.paragraphs
+            for el in p._p.findall(f".//{{{W}}}{kind}Reference")
+        ]
+        if not refs:
+            continue
+        note_ids: set = set()
+        for part in doc.part.package.iter_parts():
+            if str(part.partname) != partname:
+                continue
+            from xml.etree import ElementTree
+
+            root = ElementTree.fromstring(part.blob)
+            for note in root.findall(f"{{{W}}}{kind}"):
+                if note.get(f"{{{W}}}type") is None:
+                    note_ids.add(int(note.get(f"{{{W}}}id")))
+            break
+        broken = sorted({r for r in refs if r not in note_ids})
+        if broken:
+            issues.append(_issue(
+                f"{kind}/broken_ref", "error",
+                f"{len(broken)} 处 {kind}Reference 引用了不存在的 note id"
+                f"（{broken}）",
+                "文档可能被手工改动——用原 format_spec 重新生成",
+            ))
 
 
 def _check_citations(doc: Document, issues: List[WordLintIssue]) -> None:
@@ -444,6 +520,10 @@ def lint_docx(path: Path, spec: WordFormatSpec) -> WordLintResult:
     # 下都是死文本）。
     checked.append("cross_ref")
     _check_cross_ref_residue(doc, issues)
+    # Round 63：脚注/尾注引用一致性（损坏文档检出——引用 id 无对应
+    # note 时 Word 打开即报"内容有问题"）。
+    checked.append("ref_consistency")
+    _check_ref_consistency(doc, issues)
 
     errors = [i for i in issues if i.severity == "error"]
     warnings = [i for i in issues if i.severity == "warning"]

@@ -10,13 +10,13 @@ import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
 import { useChat } from '../features/send-message/useChat';
 import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
-import {
-  loadAttachmentRagConfig,
-} from '../shared/api/attachmentRagConfig';
+import { maybeIndexAttachment } from '../shared/api/attachmentAutoIndex';
+import { loadAttachmentRagConfig } from '../shared/api/attachmentRagConfig';
 import { orchRunClient } from '../shared/api/orchRunClient';
+import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
-import type { Message as MessageType } from '../shared/lib/store';
+import type { BlockedAction, Message as MessageType } from '../shared/lib/store';
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { LoadingState } from '../shared/ui/LoadingState';
@@ -31,6 +31,7 @@ import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
 import { SessionUsageBadge } from '../widgets/chat/SessionUsageBadge';
 import { TopicShiftBanner } from '../widgets/chat/TopicShiftBanner';
+import { WorkspaceBranchPicker } from '../widgets/chat/WorkspaceBranchPicker';
 import { ArchivesModal } from '../widgets/session';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
@@ -72,6 +73,7 @@ export function Chat() {
     reattachActiveStream, // R25-D4: renderer 重载后重接后端仍在跑的流
     clearTaskBoard, // Wave 3: 取消执行后清空任务板
     planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
+    preflightPhase, // Round 3 (2026-09-19): 编排拆解前置阶段（澄清/侦察指示）
     clearPlanApproval, // PM2: 清除批准状态
   } = useChat();
   // P1 (UI 优化方案 2026-09-13): 开关状态持久化 —— 重启恢复上次的面板开合
@@ -203,6 +205,9 @@ export function Chat() {
   const [archivesOpen, setArchivesOpen] = useState(false);
   const lastMsg = messages[messages.length - 1];
   const previousMessagesRef = useRef<typeof messages>([]);
+  // Round 2 (2026-09-19): 计划批准条"按计划执行（编排）"防双击 —— 结构化
+  // 请求在途时忽略再次点击，避免重复创建编排 run。
+  const planOrchBusyRef = useRef(false);
 
   // A session switch replaces the scrollable content; discard the previous
   // session's sticky-bottom state before the new message list is measured.
@@ -424,6 +429,12 @@ export function Chat() {
       // R23-D2: 图片通道打通 —— data URL 直传后端 ChatRequest.images。
       // 后端口径: ≤4 张、单张解码后 ≤5MiB；前端先行裁剪并提示。
       const MAX_IMAGES = 4;
+
+      // r75: 聊天文档附件 MIME 映射（扩展名集合用 useFileUpload.CHAT_DOCUMENT_EXTENSIONS 共享口径）
+      const CHAT_DOC_MIME: Record<string, string> = {
+        pdf: 'application/pdf',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      };
       const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
       const dataUrls = (options?.images ?? [])
         .map((img) => img.dataUrl)
@@ -436,12 +447,12 @@ export function Chat() {
       if (sized.length > MAX_IMAGES) {
         toast.warning(`最多发送 ${MAX_IMAGES} 张图片，已截取前 ${MAX_IMAGES} 张`);
       }
-      // R37: txt/md 附件 → 上传并收集 media id（与图片通道并行）
+      // R37/r75: 文档附件（txt/md/pdf/docx）→ 上传并收集 media id（与图片通道并行）
       const attachmentMediaIds: string[] = [];
       for (const att of options?.attachments ?? []) {
         if (!att.dataUrl) continue;
         const ext = att.name.split('.').pop()?.toLowerCase() ?? '';
-        if (ext !== 'txt' && ext !== 'md') continue;
+        if (!CHAT_DOCUMENT_EXTENSIONS.has(ext)) continue;
         try {
           const bytes = atob(att.dataUrl.split(',')[1] ?? '');
           const buffer = new Uint8Array(bytes.length);
@@ -449,10 +460,13 @@ export function Chat() {
           const res = (await window.electronAPI?.media?.uploadAttachment?.(
             buffer.buffer,
             att.name,
-            att.type || 'text/plain',
+            att.type || CHAT_DOC_MIME[ext] || 'text/plain',
           )) as { media_ref?: { id?: string } } | undefined;
-          if (res?.media_ref?.id) attachmentMediaIds.push(res.media_ref.id);
-          else toast.warning(`附件上传失败: ${att.name}`);
+          if (res?.media_ref?.id) {
+            attachmentMediaIds.push(res.media_ref.id);
+            // r74: 检索配置启用时自动建索引（fire-and-forget，不阻断发送）
+            maybeIndexAttachment(res.media_ref.id);
+          } else toast.warning(`附件上传失败: ${att.name}`);
         } catch {
           toast.warning(`附件上传失败: ${att.name}`);
         }
@@ -460,9 +474,7 @@ export function Chat() {
 
       // r67: 超长文档检索注入（opt-in，localStorage 配置）
       const r67Rag = loadAttachmentRagConfig();
-      const attachmentRag = r67Rag.enabled
-        ? { embed: r67Rag.embed, top_k: r67Rag.top_k }
-        : null;
+      const attachmentRag = r67Rag.enabled ? { embed: r67Rag.embed, top_k: r67Rag.top_k } : null;
 
       if (!currentSessionId) {
         const sessionId = await createSession();
@@ -746,6 +758,36 @@ export function Chat() {
     [t],
   );
 
+  // R19-W1: 网页访问拦截卡片动作 —— 把后端的建议动作翻译成前端语义。
+  // open_browser: 发一条消息请 agent 用 browser_navigate 打开（走完整工具链）；
+  // configure_credentials / configure_proxy: 跳设置网络 tab（凭据库 + 代理配置）；
+  // view_docs: 新窗口打开文档。
+  const handleBlockedAction = useCallback(
+    (action: BlockedAction) => {
+      const url = typeof action.params?.url === 'string' ? action.params.url : undefined;
+      switch (action.action) {
+        case 'open_browser':
+          if (url) void sendMessage(`请用 browser_navigate 工具打开 ${url} 并提取正文。`);
+          break;
+        case 'configure_credentials':
+        case 'configure_proxy':
+          try {
+            localStorage.setItem('sage:settings-tab', 'network');
+          } catch {
+            /* ignore */
+          }
+          navigate('/settings');
+          break;
+        case 'view_docs':
+          if (url) window.open(url, '_blank');
+          break;
+        default:
+          break;
+      }
+    },
+    [sendMessage, navigate],
+  );
+
   // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
   // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
   // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
@@ -761,10 +803,11 @@ export function Chat() {
 
   // RV3 (round8): 只重跑失败任务 —— 调 rerun-failed 拿 planOverride
   // （done 子任务带 preset_output 回放），经 chatStream 重发全新 run。
-  const handleRerunFailed = async (runId: string) => {
+  // RV4 (round27): taskIds 提供时为单任务重试（只重建所选任务及其下游）。
+  const handleRerunFailed = async (runId: string, taskIds?: string[]) => {
     if (!currentSessionId) return;
     try {
-      const res = await orchRunClient.rerunFailed(runId);
+      const res = await orchRunClient.rerunFailed(runId, taskIds);
       const sid = res.session_id ?? currentSessionId;
       await sendMessage(res.goal, sid, undefined, 'force_multi', {
         planOverride: res.plan_override,
@@ -786,6 +829,8 @@ export function Chat() {
           <h2 className="text-sm font-semibold text-text shrink-0">对话</h2>
           {/* 项目模块 P3: 当前会话绑定的项目标识（无绑定不渲染） */}
           <ProjectBadge workspacePath={workspacePath} />
+          {/* worktree 模式 (2026-09-18): 会话级分支/worktree 切换入口 */}
+          <WorkspaceBranchPicker sessionId={currentSessionId} />
           {/* U8: 会话级模型切换(G5 收尾) · U14: 会话用量徽章 · U17: 上下文占用 */}
           <SessionModelPicker sessionId={currentSessionId} />
           <SessionUsageBadge sessionId={currentSessionId} />
@@ -906,6 +951,7 @@ export function Chat() {
                 onDelete={handleDeleteMessage}
                 onQuote={handleQuote}
                 onSaveToMemory={handleSaveToMemory}
+                onBlockedAction={handleBlockedAction}
               />
             )}
             {/* 对标 S2: 内联记忆提示（"已记住"可撤销）；临时聊天不显示 */}
@@ -937,6 +983,56 @@ export function Chat() {
                     >
                       按计划执行
                     </button>
+                    {/* Round 2 (2026-09-19): 计划模式 × 编排打通 —— 计划文本
+                    经 /orch/plan-items 结构化为任务项，走 plan_override 派发
+                    （PlanCard 确认门可再编辑）。失败 toast 引导回落上方单
+                    agent 按钮。 */}
+                    <button
+                      type="button"
+                      data-testid="plan-approve-orch"
+                      className="px-2 py-1 text-xs rounded border border-primary/60 text-primary font-medium"
+                      onClick={() => {
+                        const sid = planApprovalFor;
+                        if (!sid || planOrchBusyRef.current) return;
+                        const planText =
+                          [...messages]
+                            .reverse()
+                            .find((m) => m.role === 'assistant')?.content ?? '';
+                        if (!planText.trim()) {
+                          toast.error('找不到可结构化的计划内容');
+                          return;
+                        }
+                        planOrchBusyRef.current = true;
+                        orchRunClient
+                          .planItemsFromText(planText)
+                          .then(({ items }) => {
+                            clearPlanApproval();
+                            if (items.length > 0) {
+                              void sendMessage(
+                                '请按上述已批准的计划编排执行（已生成任务卡，确认后并行执行）。',
+                                sid,
+                                undefined,
+                                undefined,
+                                { planOverride: items },
+                              );
+                            } else {
+                              toast.error('未能从计划解析出任务，请改用「按计划执行」');
+                            }
+                          })
+                          .catch((err: unknown) => {
+                            toast.error(
+                              err instanceof Error
+                                ? `计划转编排失败：${err.message.slice(0, 120)}`
+                                : '计划转编排失败（需要已配置 LLM 端点）',
+                            );
+                          })
+                          .finally(() => {
+                            planOrchBusyRef.current = false;
+                          });
+                      }}
+                    >
+                      按计划执行（编排）
+                    </button>
                     <button
                       type="button"
                       data-testid="plan-dismiss"
@@ -946,6 +1042,19 @@ export function Chat() {
                       忽略
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+            {/* Round 3 (2026-09-19): 编排拆解前置指示 —— 澄清/侦察窗口期
+            的状态可见性。taskBoard 出现（task_plan 到达）即消失。 */}
+            {preflightPhase && !taskBoard && (
+              <div className="px-4 pb-2" data-testid="orch-preflight-indicator">
+                <div className="flex items-center gap-2 px-3 py-2 rounded border border-border bg-bg-muted/40">
+                  <span className="text-xs text-text-secondary animate-pulse">
+                    {preflightPhase === 'clarify'
+                      ? '正在澄清需求…（如在输入框中回答提问，将据此生成更准的计划）'
+                      : '正在侦察收集事实…（随后生成任务计划）'}
+                  </span>
                 </div>
               </div>
             )}
@@ -1038,6 +1147,7 @@ export function Chat() {
           // 自动派发）+ 清空 taskBoard。
           onCancelExecution={(runId) => void handleCancelRun(runId)}
           onRerunFailed={(runId) => void handleRerunFailed(runId)}
+          onRetryTask={(runId, taskId) => void handleRerunFailed(runId, [taskId])}
         />
       </div>
       {/* /内容行 */}

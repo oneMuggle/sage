@@ -199,7 +199,31 @@ class BashTool(BaseTool):
             content["exec_backend"] = "docker"
         content["cwd"] = cwd or str(Path.cwd())
         if shell.is_fallback:
-            content["shell_fallback"] = build_shell_fallback_note()
+            note = build_shell_fallback_note()
+            content["shell_fallback"] = note
+            # 环境降级事实进 per-session 观察缓冲，轮末记忆蒸馏读取（PR 环境记忆化）。
+            # best-effort：记录失败不影响工具结果。
+            try:
+                from backend.tools.context import current_tool_context
+                from backend.tools.env_probe import record_observation
+
+                ctx = current_tool_context()
+                record_observation(
+                    getattr(ctx, "session_id", None) if ctx is not None else None, note
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        # Sage Python runtime hint (non-secret). When Electron propagates
+        # SAGE_RUNTIME_PYTHON, the LLM can use this path explicitly instead
+        # of guessing `python3` on PATH.
+        try:
+            from backend.tools.skill_runtime_context import get_runtime_context
+
+            rt = get_runtime_context()
+            if rt.get("python_path"):
+                content["sage_python"] = rt["python_path"]
+        except Exception:  # noqa: BLE001
+            pass
         return content
 
     @staticmethod
@@ -335,6 +359,21 @@ class BashTool(BaseTool):
                 test_failures = parse_test_failures(stdout, stderr)
                 if test_failures is not None:
                     content["test_failures"] = test_failures
+            if shell.is_fallback:
+                # 环境经验采集：fallback 下「失败→重试成功」命令对进观察缓冲，
+                # 轮末随记忆蒸馏固化为 environment 事实。best-effort。
+                try:
+                    from backend.tools.context import current_tool_context
+                    from backend.tools.env_probe import note_command_result
+
+                    ctx = current_tool_context()
+                    note_command_result(
+                        getattr(ctx, "session_id", None) if ctx is not None else None,
+                        command,
+                        process.returncode,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
             return ToolResult(
                 success=True,
                 content=self._decorate(content, shell, cwd),

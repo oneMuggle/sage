@@ -16,11 +16,42 @@ vi.mock('../../../shared/api/desktopInvoke', () => ({
   },
 }));
 
+const mockBackendRequest = vi.fn();
+vi.mock('../../../shared/api/backendRequest', () => ({
+  backendRequest: (req: { path: string }) => mockBackendRequest(req),
+}));
+
+const SAMPLE_BUILTINS = {
+  builtins: [
+    {
+      id: 'security_guard',
+      name: '安全守卫',
+      description: '拦截危险 Shell 命令',
+      icon: 'shield',
+      event: 'pre_tool_use',
+      matcher: 'bash',
+      handler: 'backend.hooks.builtin_guards.security_guard',
+      default_config: { blocklist: ['rm -rf /'] },
+    },
+    {
+      id: 'audit_log',
+      name: '操作审计日志',
+      description: '记录所有工具调用',
+      icon: 'file-text',
+      event: 'post_tool_use',
+      matcher: '*',
+      handler: 'backend.hooks.builtin_audit.audit_logger',
+      default_config: {},
+    },
+  ],
+};
+
 describe('HooksCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGet.mockResolvedValue({ value: null });
     mockSet.mockResolvedValue(undefined);
+    mockBackendRequest.mockResolvedValue(SAMPLE_BUILTINS);
   });
 
   it('renders empty state then allows adding a hook', async () => {
@@ -34,9 +65,10 @@ describe('HooksCard', () => {
     await waitFor(() => {
       expect(mockSet).toHaveBeenCalled();
     });
-    const saved = JSON.parse(
-      (mockSet.mock.calls[0][0] as { value: string }).value,
-    ) as Array<{ event: string; command: string }>;
+    const saved = JSON.parse((mockSet.mock.calls[0][0] as { value: string }).value) as Array<{
+      event: string;
+      command: string;
+    }>;
     expect(saved).toHaveLength(1);
     expect(saved[0].event).toBe('pre_tool_use');
   });
@@ -66,9 +98,9 @@ describe('HooksCard', () => {
     await waitFor(() => {
       expect(mockSet).toHaveBeenCalled();
     });
-    const saved = JSON.parse(
-      (mockSet.mock.calls[0][0] as { value: string }).value,
-    ) as Array<{ command: string }>;
+    const saved = JSON.parse((mockSet.mock.calls[0][0] as { value: string }).value) as Array<{
+      command: string;
+    }>;
     expect(saved[0].command).toBe('new-cmd');
     expect(mockSet.mock.calls[0][0].valueType).toBe('json');
   });
@@ -88,9 +120,9 @@ describe('HooksCard', () => {
     await waitFor(() => {
       expect(mockSet).toHaveBeenCalled();
     });
-    const saved = JSON.parse(
-      (mockSet.mock.calls[0][0] as { value: string }).value,
-    ) as Array<{ command: string }>;
+    const saved = JSON.parse((mockSet.mock.calls[0][0] as { value: string }).value) as Array<{
+      command: string;
+    }>;
     expect(saved).toHaveLength(1);
     expect(saved[0].command).toBe('b');
   });
@@ -101,5 +133,113 @@ describe('HooksCard', () => {
     await waitFor(() => {
       expect(screen.getByText(/暂无自定义钩子/)).toBeInTheDocument();
     });
+  });
+
+  // Phase 1: 内置钩子推荐区域
+  it('renders builtin hooks from backend and shows toggle buttons', async () => {
+    render(<HooksCard />);
+    await waitFor(() => {
+      expect(screen.getByText(/安全守卫/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/操作审计日志/)).toBeInTheDocument();
+    expect(screen.getByTestId('builtin-toggle-security_guard').textContent).toBe('启用');
+    expect(screen.getByTestId('builtin-toggle-audit_log').textContent).toBe('启用');
+  });
+
+  it('enabling a builtin adds entry with builtin_id to preferences', async () => {
+    render(<HooksCard />);
+    await waitFor(() => {
+      expect(screen.getByTestId('builtin-toggle-security_guard')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('builtin-toggle-security_guard'));
+    await waitFor(() => {
+      expect(mockSet).toHaveBeenCalled();
+    });
+    const saved = JSON.parse((mockSet.mock.calls[0][0] as { value: string }).value) as Array<{
+      builtin_id?: string;
+      hook_type?: string;
+    }>;
+    expect(saved).toHaveLength(1);
+    expect(saved[0].builtin_id).toBe('security_guard');
+    expect(saved[0].hook_type).toBe('python');
+  });
+
+  it('already enabled builtin shows "已启用" and toggling removes it', async () => {
+    mockGet.mockResolvedValue({
+      value: JSON.stringify([
+        {
+          event: 'pre_tool_use',
+          matcher: 'bash',
+          command: '',
+          hook_type: 'python',
+          handler: 'backend.hooks.builtin_guards.security_guard',
+          builtin_id: 'security_guard',
+          timeout_seconds: 10,
+        },
+      ]),
+    });
+    render(<HooksCard />);
+    await waitFor(() => {
+      expect(screen.getByTestId('builtin-toggle-security_guard').textContent).toBe('已启用');
+    });
+    fireEvent.click(screen.getByTestId('builtin-toggle-security_guard'));
+    await waitFor(() => {
+      expect(mockSet).toHaveBeenCalled();
+    });
+    const saved = JSON.parse((mockSet.mock.calls[0][0] as { value: string }).value) as unknown[];
+    expect(saved).toHaveLength(0);
+  });
+
+  it('builtin entries do not appear in the custom hook CRUD table', async () => {
+    mockGet.mockResolvedValue({
+      value: JSON.stringify([
+        {
+          event: 'pre_tool_use',
+          matcher: 'bash',
+          command: '',
+          hook_type: 'python',
+          handler: 'backend.hooks.builtin_guards.security_guard',
+          builtin_id: 'security_guard',
+          timeout_seconds: 10,
+        },
+        { event: 'stop', matcher: '*', command: 'custom', timeout_seconds: 5 },
+      ]),
+    });
+    render(<HooksCard />);
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('custom')).toBeInTheDocument();
+    });
+    expect(screen.getAllByTestId('hook-row')).toHaveLength(1);
+    expect(screen.getByTestId('builtin-toggle-security_guard').textContent).toBe('已启用');
+  });
+
+  it('gracefully degrades when backend builtins endpoint fails', async () => {
+    mockBackendRequest.mockRejectedValue(new Error('network error'));
+    render(<HooksCard />);
+    await waitFor(() => {
+      expect(screen.getByText(/暂无自定义钩子/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/推荐 Hook/)).not.toBeInTheDocument();
+  });
+
+  // Phase 2: 生命周期事件进入下拉选项
+  it('offers lifecycle events in the event dropdown', async () => {
+    render(<HooksCard />);
+    const addBtn = await screen.findByTestId('hooks-add');
+    fireEvent.click(addBtn);
+    const select = await screen.findByLabelText('钩子事件');
+    const options = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+    expect(options).toEqual(
+      expect.arrayContaining(['session_start', 'session_stop', 'error_occurred']),
+    );
+    // 既有事件不丢
+    expect(options).toEqual(
+      expect.arrayContaining([
+        'pre_tool_use',
+        'post_tool_use',
+        'user_prompt_submit',
+        'stop',
+      ]),
+    );
   });
 });

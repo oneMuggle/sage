@@ -460,7 +460,10 @@ def test_auto_mode_injects_enforcer_into_child():
             loop.run_until_complete(runner(_make_simple_task(), "researcher"))
         finally:
             loop.close()
-            asyncio.set_event_loop(None)
+            # R91: 不能 set_event_loop(None) —— 会毒化同 xdist worker 的后续
+            # 同步测试（asyncio.Queue() 构造期 get_event_loop() 直接
+            # RuntimeError）。补一个新 loop 保持 policy 可用态。
+            asyncio.set_event_loop(asyncio.new_event_loop())
 
     from backend.orchestration.subagent_approval import AutoApproveEnforcer as AliasForIsinstance
 

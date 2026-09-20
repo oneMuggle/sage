@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -153,9 +154,19 @@ class RuntimeExecTool(BaseTool):
             error=result.error,
             command=list(command.argv),
         )
+        # content 保持结构化 dict（base.ToolResult 契约）；output 设为 JSON
+        # 字符串，供 InprocToolAdapter 按字符串契约转发，再由 runtime REST
+        # 路由层反序列化给前端。注意：不能只留 content —— adapter 对 dict
+        # 做 str() 会得到 Python repr（单引号），json.loads 无法解析。
+        #
+        # 成功语义：仅当子进程以 exit_code=0 正常结束才算 success。
+        # safe_run 在 FileNotFoundError / OSError / 超时 / 信号杀死时返回
+        # exit_code=None，此时若仍判 success=True，前端会把「子进程没启动
+        # 起来 / 被超时杀死」渲染成「成功但 stdout 为空」。
         return ToolResult(
-            success=result.exit_code in (0, None),
+            success=result.exit_code == 0 and not result.timed_out,
             content=exec_result.to_dict(),
+            output=json.dumps(exec_result.to_dict(), ensure_ascii=False),
         )
 
 

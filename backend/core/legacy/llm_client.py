@@ -453,6 +453,35 @@ class LLMClient:
         return result
 
     @staticmethod
+    def _context_breakdown_snapshot(
+        body: dict, prompt_tokens: Optional[int]
+    ) -> Optional[dict]:
+        """从最终请求 payload 构建上下文分类明细快照;任何失败返 None。"""
+        try:
+            from backend.chat.context_breakdown import build_breakdown_snapshot
+
+            msgs = body.get("messages") or []
+            tools = body.get("tools")
+            if not msgs:
+                logger.warning(
+                    "context breakdown: body.messages 为空 (body keys=%s), 跳过",
+                    list(body.keys()),
+                )
+                return None
+            result = build_breakdown_snapshot(msgs, tools, prompt_tokens)
+            # 诊断: 记录分类非零项, 便于排查全 NULL 问题
+            nonzero = {
+                k: v
+                for k, v in (result.get("categories") or {}).items()
+                if v and v > 0
+            }
+            logger.debug("context breakdown: %d msgs, tools=%s, 非零分类=%s", len(msgs), bool(tools), nonzero)
+            return result
+        except Exception as bd_err:  # noqa: BLE001 — 明细是增强信息
+            logger.warning("context breakdown 异常: %s", bd_err, exc_info=True)
+            return None
+
+    @staticmethod
     def _parse_tool_calls(raw_tool_calls: list) -> List[LLMToolCall]:
         """解析工具调用"""
         result = []
@@ -649,6 +678,9 @@ class LLMClient:
                     cached_tokens=usage_dict["cached_tokens"],
                     endpoint_id=self.config.endpoint_id,
                     price_snapshot=price_snapshot,
+                    context_breakdown=self._context_breakdown_snapshot(
+                        body, usage_dict["prompt_tokens"]
+                    ),
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking skipped: %s", usage_err)
@@ -749,6 +781,9 @@ class LLMClient:
                         cached_tokens=extract_cached_tokens(stream_usage),
                         endpoint_id=self.config.endpoint_id,
                         price_snapshot=price_snapshot,
+                        context_breakdown=self._context_breakdown_snapshot(
+                            body, int(stream_usage.get("prompt_tokens") or 0)
+                        ),
                     )
                 except Exception as usage_err:
                     logger.debug("usage tracking (stream) skipped: %s", usage_err)
@@ -955,6 +990,9 @@ class LLMClient:
                     cached_tokens=usage_dict["cached_tokens"],
                     endpoint_id=self.config.endpoint_id,
                     price_snapshot=price_snapshot,
+                    context_breakdown=self._context_breakdown_snapshot(
+                        body, usage_dict["prompt_tokens"]
+                    ),
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking (stream) skipped: %s", usage_err)

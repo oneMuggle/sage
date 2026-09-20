@@ -34,6 +34,8 @@ class ExtractionRequest:
     assistant_text: str
     session_id: Optional[str]
     enabled: bool
+    #: 本轮工具执行观察到的环境事实文本（如 shell 降级提示），可为空串。
+    tool_observations: str = ""
 
 
 class MemoryExtractionQueue:
@@ -140,6 +142,7 @@ class MemoryExtractionQueue:
             assistant_text=request.assistant_text,
             session_id=request.session_id,
             enabled=request.enabled,
+            tool_observations=request.tool_observations,
         )
 
 

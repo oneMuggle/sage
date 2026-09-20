@@ -1492,6 +1492,83 @@ describe('useChat taskBoard', () => {
     });
   });
 
+  // r72 回归 + R38 修正: skill_activated 明细必须写在 user 消息上（技能由用户输入触发），
+  // 后端 legacy_routes.py:3350 将 activated_skills 写入 user message。
+  it('routes skill_activated payload to the user message', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-skills' });
+    listenMock.mockImplementationOnce(
+      async (_name: string, cb: (e: { payload: Record<string, unknown> }) => void) => {
+        Promise.resolve().then(() => {
+          cb({
+            payload: {
+              state: 'skill_activated',
+              iteration: 0,
+              skills: [{ name: 'report-writing', triggers_matched: ['/report'] }],
+            },
+          });
+          cb({ payload: { state: 'done', iteration: 0, content: 'done' } });
+        });
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+    await act(async () => {
+      await result.current.sendMessage('写一份报告');
+    });
+
+    await waitFor(() => {
+      // R38: 技能激活明细写入 user 消息（后端 legacy_routes.py:3350 同口径）
+      const user = useStore.getState().messages.find((m) => m.role === 'user');
+      expect(user?.activated_skills).toEqual([
+        { name: 'report-writing', triggers_matched: ['/report'] },
+      ]);
+    });
+    // assistant 消息不携带技能明细
+    const assistant = useStore
+      .getState()
+      .messages.find((m) => m.role === 'assistant');
+    expect(assistant?.activated_skills).toBeUndefined();
+  });
+  // r77 回归: 重接(reattach)重放时 memory_used 也要写入 memory_refs,
+  // 与主路径同口径 —— 否则页面刷新后完成的消息丢失记忆明细。
+  it('routes memory_used payload to memory_refs on replay', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-mem' });
+    const memPayload = [{ id: 'mem-1', memory_type: 'long', preview: '命中记忆' }];
+    listenMock.mockImplementationOnce(
+      async (_name: string, cb: (e: { payload: Record<string, unknown> }) => void) => {
+        Promise.resolve().then(() => {
+          cb({
+            payload: {
+              state: 'memory_used',
+              iteration: 0,
+              memories: memPayload,
+            },
+          });
+          cb({ payload: { state: 'done', iteration: 0, content: 'done' } });
+        });
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+    await act(async () => {
+      await result.current.sendMessage('带记忆的提问');
+    });
+
+    await waitFor(() => {
+      const assistant = useStore
+        .getState()
+        .messages.find((m) => m.role === 'assistant');
+      expect(assistant?.memory_refs).toEqual(memPayload);
+      expect(assistant?.memory_applied).toBe(1);
+    });
+  });
+
   it('falls back to statuses-driven progress when no task_progress arrives', async () => {
     seedActiveEndpoint();
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-4' });
@@ -1696,5 +1773,206 @@ describe('useChat subagent_event synthesized board (agent tool)', () => {
     expect(board?.plan).toHaveLength(1);
     expect(board?.plan[0]?.goal).toBe('编排目标');
     expect(board?.live?.['a1']).toBeUndefined();
+  });
+
+  // ── R38 MEDIUM-2: SSE 载荷运行时校验 ──────────────────────────────
+  // 畸形载荷必须被丢弃（不更新 UI），合法载荷正常消费。
+  describe('R38 透明度事件载荷校验', () => {
+    async function setupCapture() {
+      seedActiveEndpoint();
+      invokeMock.mockResolvedValueOnce({ streamId: 'stream-r38' });
+      let capturedCb: ((e: unknown) => void) | null = null;
+      listenMock.mockImplementationOnce(async (_name: string, cb: (e: unknown) => void) => {
+        capturedCb = cb;
+        return vi.fn();
+      });
+      const { result } = renderHook(() => useChat());
+      await waitForSettingsLoaded();
+      await act(async () => {
+        // 不驱动 done：本组用例只验证事件载荷校验，流保持挂起即可
+        (result.current.sendMessage('ping') as unknown as Promise<void>).catch(() => {});
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(capturedCb).not.toBeNull();
+      return { result, capturedCb: capturedCb! };
+    }
+
+    it('compact_triggered 字段类型不符（string 而非 number）→ 丢弃, 不插入系统消息', async () => {
+      const { result, capturedCb } = await setupCapture();
+      const before = result.current.messages.length;
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'compact_triggered',
+            iteration: 0,
+            compact: { before: '20', after: 8, removed: 12 },
+          },
+        });
+      });
+
+      expect(result.current.messages.length).toBe(before);
+      expect(result.current.messages.some((m) => m.compact_info)).toBe(false);
+    });
+
+    it('compact_triggered 合法 → 插入带 compact_info 的系统消息', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'compact_triggered',
+            iteration: 0,
+            compact: { before: 20, after: 8, removed: 12 },
+          },
+        });
+      });
+
+      const compactMsg = result.current.messages.find((m) => m.compact_info);
+      expect(compactMsg).toBeDefined();
+      expect(compactMsg?.compact_info).toEqual({ before: 20, after: 8, removed: 12 });
+    });
+
+    it('skill_activated 条目 name 非字符串 → 丢弃, 不写 activated_skills', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'skill_activated',
+            iteration: 0,
+            skills: [{ name: 123, triggers_matched: [] }],
+          },
+        });
+      });
+
+      const userMsg = result.current.messages.find((m) => m.role === 'user');
+      expect(userMsg?.activated_skills).toBeUndefined();
+    });
+
+    it('skill_activated 合法 → 命中触发词写入用户消息', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'skill_activated',
+            iteration: 0,
+            skills: [{ name: 'deploy', triggers_matched: ['部署'] }],
+          },
+        });
+      });
+
+      const userMsg = result.current.messages.find((m) => m.role === 'user');
+      expect(userMsg?.activated_skills).toEqual([
+        { name: 'deploy', triggers_matched: ['部署'] },
+      ]);
+    });
+
+    it('memory_used 条目缺 id → 丢弃, 不写 memory_refs', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'memory_used',
+            iteration: 0,
+            memories: [{ preview: '没有 id 的脏数据' }],
+          },
+        });
+      });
+
+      const asstMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(asstMsg?.memory_refs).toBeUndefined();
+      expect(asstMsg?.memory_applied).toBeUndefined();
+    });
+  });
+
+  describe('R81 sources_used 载荷校验', () => {
+    async function setupCapture() {
+      seedActiveEndpoint();
+      invokeMock.mockResolvedValueOnce({ streamId: 'stream-r58' });
+      let capturedCb: ((e: unknown) => void) | null = null;
+      listenMock.mockImplementationOnce(async (_name: string, cb: (e: unknown) => void) => {
+        capturedCb = cb;
+        return vi.fn();
+      });
+      const { result } = renderHook(() => useChat());
+      await waitForSettingsLoaded();
+      await act(async () => {
+        (result.current.sendMessage('ping') as unknown as Promise<void>).catch(() => {});
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(capturedCb).not.toBeNull();
+      return { result, capturedCb: capturedCb! };
+    }
+
+    it('合法 sources → 写入 assistant 消息', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'sources_used',
+            iteration: 0,
+            sources: [
+              { kind: 'web', title: 'Sage', url: 'https://sage.example.com', snippet: '官网' },
+              { kind: 'wiki', path: 'wiki/arch.md', title: '架构', snippet: '分层', score: 0.9 },
+              { kind: 'tool', server: 'github', tool: 'search', preview: 'issues' },
+            ],
+          },
+        });
+      });
+
+      const asstMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(asstMsg?.sources).toHaveLength(3);
+      expect(asstMsg?.sources?.[0]).toMatchObject({ kind: 'web', url: 'https://sage.example.com' });
+    });
+
+    it('kind 非法 → 整批丢弃, 不写 sources', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'sources_used',
+            iteration: 0,
+            sources: [{ kind: 'hacker-news', title: '伪造来源' }],
+          },
+        });
+      });
+
+      const asstMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(asstMsg?.sources).toBeUndefined();
+    });
+
+    it('attachment_rag_used 多事件按 media_id 合并, 不再整体覆盖', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'attachment_rag_used',
+            iteration: 0,
+            citations: [{ media_id: 'doc1', filename: 'a.pdf', mode: 'rag', chunks: [] }],
+          },
+        });
+      });
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'attachment_rag_used',
+            iteration: 0,
+            citations: [{ media_id: 'doc2', filename: 'b.pdf', mode: 'rag', chunks: [] }],
+          },
+        });
+      });
+
+      const asstMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(asstMsg?.rag_citations).toHaveLength(2);
+      expect(asstMsg?.rag_citations?.map((c) => c.media_id)).toEqual(['doc1', 'doc2']);
+    });
   });
 });

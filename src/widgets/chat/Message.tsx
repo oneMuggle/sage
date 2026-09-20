@@ -12,11 +12,9 @@ import {
   Pencil,
   RefreshCw,
   Check,
-  BrainCircuit,
   Quote,
   FileText,
-  Package,
-  Zap
+  Zap,
 } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
@@ -31,13 +29,17 @@ import { THINKING_PLACEHOLDER } from '../../features/send-message/thinkingPlaceh
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownChunks';
-import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
+import type { BlockedAction, Message as MessageType, ToolCall } from '../../shared/lib/store';
+import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
+import { BlockedCard } from './BlockedCard';
+import { CompactBanner } from './CompactBanner';
 import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownImage } from './MarkdownImage';
 import { MermaidBlock } from './MermaidBlock';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
+import { FileChangeCards } from './changes/FileChangeCard';
 
 interface MessageProps {
   message: MessageType;
@@ -61,6 +63,8 @@ interface MessageProps {
   /** right-panel R1 批次 B: tool_call_id → 产物[] 映射 —— 命中的工具卡片
    * 下渲染内联产物 chip，点击直达右侧面板产物预览（对齐 Claude） */
   artifactsByToolCall?: Record<string, Artifact[]>;
+  /** R19-W1: 网页访问拦截卡片动作回调 —— 由 Chat 层处理语义（发消息/跳设置/开浏览器） */
+  onBlockedAction?: (action: BlockedAction) => void;
 }
 
 /** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
@@ -353,6 +357,32 @@ function ToolCallTitle({ name, args }: { name: string; args: Record<string, unkn
   );
 }
 
+/** right-panel R5: 会改工作区文件的工具 —— 命中即渲染内联 diff 卡片 */
+const FILE_WRITE_TOOLS = new Set(['write_file', 'edit_file', 'apply_patch']);
+
+/**
+ * 从工具调用参数提取目标文件路径（相对工作区根,与 git 接口口径一致）。
+ * apply_patch 一次动多个文件 → 返回去重后的路径列表,逐文件各渲染一张卡。
+ * 参数畸形（LLM 输出不可信）时返回空数组,不渲染卡片。
+ */
+function fileChangePaths(tc: ToolCall): string[] {
+  if (!FILE_WRITE_TOOLS.has(tc.name)) return [];
+  const args = (tc.args && typeof tc.args === 'object' ? tc.args : {}) as Record<string, unknown>;
+  if (tc.name === 'apply_patch') {
+    if (!Array.isArray(args.patches)) return [];
+    const paths: string[] = [];
+    for (const patch of args.patches) {
+      const filePath = (patch as Record<string, unknown> | null)?.file_path;
+      if (typeof filePath === 'string' && filePath.trim() && !paths.includes(filePath.trim())) {
+        paths.push(filePath.trim());
+      }
+    }
+    return paths;
+  }
+  const raw = tc.name === 'edit_file' ? args.file_path : args.path;
+  return typeof raw === 'string' && raw.trim() ? [raw.trim()] : [];
+}
+
 /** 工具调用结果可折叠面板 — 大文件内容默认收起，避免刷屏
  *  阈值：超过 300 字符时自动折叠，用户可手动展开查看
  */
@@ -399,6 +429,7 @@ function MessageComponent({
   onQuote,
   onSaveToMemory,
   artifactsByToolCall,
+  onBlockedAction,
 }: MessageProps) {
   const { t } = useI18n();
   const isUser = message.role === 'user';
@@ -435,18 +466,22 @@ function MessageComponent({
   );
   // 2026-09 修复: 历史消息的 tool_calls 从后端原样加载时是 JSON 字符串
   // (session_repo 不做 parse), 直接 .map 会崩。双态归一化。
+  // R19-W1: 归一化拦截信封 —— 历史回读时 metadata 只存在于 result JSON 串内，
+  // 需提升到 tc.metadata 才能渲染拦截卡片（直播路径由 chatStreamStore 同源处理）。
   const toolCalls: ToolCall[] = useMemo(() => {
     const raw = message.tool_calls;
-    if (Array.isArray(raw)) return raw;
-    if (typeof raw === 'string' && raw) {
+    let list: ToolCall[] = [];
+    if (Array.isArray(raw)) {
+      list = raw;
+    } else if (typeof raw === 'string' && raw) {
       try {
         const parsed = JSON.parse(raw) as unknown;
-        return Array.isArray(parsed) ? (parsed as ToolCall[]) : [];
+        if (Array.isArray(parsed)) list = parsed as ToolCall[];
       } catch {
-        return [];
+        list = [];
       }
     }
-    return [];
+    return list.map(normalizeToolCallEnvelope);
   }, [message.tool_calls]);
   // M4: 只有 user/assistant 消息可分叉（system/tool 行没有分叉语义）
   const canFork = Boolean(onFork) && (isUser || isAssistant);
@@ -464,22 +499,33 @@ function MessageComponent({
   const canQuote = Boolean(onQuote) && (isUser || isAssistant);
   const canSaveToMemory = Boolean(onSaveToMemory) && (isUser || isAssistant);
   const [copied, setCopied] = useState(false);
-  // R17-E: 记忆召回明细展开态
-  const [memoryExpanded, setMemoryExpanded] = useState(false);
-  const memoryRefs = message.memory_refs ?? [];
   // R38: 技能激活明细展开态
   const [skillsExpanded, setSkillsExpanded] = useState(false);
   const activatedSkills = message.activated_skills ?? [];
+  // R81: 统一参考来源 —— 记忆召回 + 附件检索溯源 + 工具命中(web/wiki/MCP)
+  // 收编为一个折叠区块（类文章引用列表），N=0 时整个 chip 不渲染。
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const memoryRefs = message.memory_refs ?? [];
+  const ragCitations = message.rag_citations ?? [];
+  const toolSources = message.sources ?? [];
+  // R86: @memory: 实体引用命中（kind='memory'）——与记忆召回同渲染进记忆分组
+  const memorySources = toolSources.filter((s) => s.kind === 'memory');
+  const wikiSources = toolSources.filter((s) => s.kind === 'wiki');
+  const webSources = toolSources.filter((s) => s.kind === 'web');
+  const mcpSources = toolSources.filter((s) => s.kind === 'tool');
+  const sourcesTotal = memoryRefs.length + ragCitations.length + toolSources.length;
+  // 各分组在统一编号里的起始偏移（列表带 [1][2]… 序号, 类文章引用）
+  const ragOffset = memoryRefs.length + memorySources.length;
+  const wikiOffset = ragOffset + ragCitations.length;
+  const webOffset = wikiOffset + wikiSources.length;
+  const toolOffset = webOffset + webSources.length;
 
   // R38: 系统消息（如压缩通知）居中渲染，无头像/气泡
   // 必须在所有 Hooks 之后 return，否则违反 React Hooks 规则
   if (isSystem && message.compact_info) {
     return (
       <div className="flex justify-center my-3">
-        <div className="px-3 py-1.5 rounded-radius-sm bg-bg-subtle border border-border text-xs text-text-secondary flex items-center gap-1.5">
-          <Package className="w-3 h-3 text-muted" />
-          <span>{message.content}</span>
-        </div>
+        <CompactBanner info={message.compact_info} />
       </div>
     );
   }
@@ -505,6 +551,10 @@ function MessageComponent({
       </div>
 
       <div className={`flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
+        {/* R38: 压缩续接行 —— 横幅置于气泡上方，摘要正文/Thinking/
+            copy/regenerate/delete 等正文与 affordance 全部保留。 */}
+        {message.compact_info && <CompactBanner info={message.compact_info} />}
+
         {/* ThinkingPanel - LLM 思考过程展示（仅 assistant 消息且有 reasoning_content 时） */}
         {isAssistant && message.reasoning_content && (
           <ThinkingPanel reasoning={message.reasoning_content} isStreaming={isStreaming} />
@@ -551,6 +601,10 @@ function MessageComponent({
           <div className="mb-2 flex flex-col gap-1.5">
             {toolCalls.map((tc, idx) => {
               const hasImage = tc.metadata?.imageData;
+              // right-panel R5: 写文件工具的内联 diff 卡片（展开懒加载,
+              // 点击面板按钮直达右侧变更 Tab）
+              const changePaths = message.session_id ? fileChangePaths(tc) : [];
+              const isBlocked = Boolean(tc.metadata?.blockReason);
               return (
                 <div
                   key={`${tc.name}-${idx}`}
@@ -562,8 +616,23 @@ function MessageComponent({
                     <ToolCallTitle name={tc.name} args={tc.args} />
                     <span className="font-mono text-[10px] text-muted">{tc.name}</span>
                   </div>
-                  {/* Tool result — 大文件内容可折叠 */}
-                  {tc.result !== undefined && tc.result !== '' && !hasImage && (
+                  {/* right-panel R5/R6: 文件修改卡组（<3 个平铺,≥3 个折叠为汇总条） */}
+                  {changePaths.length > 0 && (
+                    <FileChangeCards sessionId={message.session_id} paths={changePaths} />
+                  )}
+                  {/* R19-W1: 拦截卡片 — 网页访问被反爬/登录墙/网络错误拦截时，
+                      渲染可视化卡片（原因 + 目标 URL + 建议动作按钮）代替原始错误文本 */}
+                  {isBlocked && (
+                    <BlockedCard
+                      blockReason={tc.metadata!.blockReason!}
+                      blockedUrl={tc.metadata?.blockedUrl}
+                      suggestedActions={tc.metadata?.suggestedActions}
+                      errorMessage={typeof tc.result === 'string' ? tc.result : undefined}
+                      onAction={onBlockedAction}
+                    />
+                  )}
+                  {/* Tool result — 大文件内容可折叠（拦截卡片已承载错误信息时跳过裸文本） */}
+                  {!isBlocked && tc.result !== undefined && tc.result !== '' && !hasImage && (
                     <div className="px-2 pb-1.5">
                       <ToolCallResult result={tc.result} />
                     </div>
@@ -576,9 +645,7 @@ function MessageComponent({
                         <button
                           key={art.id}
                           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-[11px] text-primary transition-colors"
-                          onClick={() =>
-                            useRightPanelStore.getState().selectArtifact(art.id)
-                          }
+                          onClick={() => useRightPanelStore.getState().selectArtifact(art.id)}
                           title="在右侧面板中查看"
                           data-testid="message-artifact-chip"
                         >
@@ -660,18 +727,20 @@ function MessageComponent({
 
         {/* 底部信息 */}
         <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
-          {message.memory_applied != null && message.memory_applied > 0 && (
+          {/* R81: 统一参考来源 chip（记忆 + 附件检索 + 工具命中收编，
+              原 memory-used / rag-citations 两个分散 chip 合并为此处） */}
+          {sourcesTotal > 0 && (
             <button
               type="button"
-              onClick={() => setMemoryExpanded((v) => !v)}
+              onClick={() => setSourcesExpanded((v) => !v)}
               className="inline-flex items-center gap-0.5 text-primary hover:underline"
-              title={t('chat.memory_toggle')}
-              data-testid="memory-used-toggle"
+              title={t('chat.sources_toggle')}
+              data-testid="message-sources-toggle"
             >
-              <BrainCircuit className="w-3 h-3" />
-              {message.memory_applied} {t('chat.memory_applied')}
+              <BookOpen className="w-3 h-3" />
+              {t('chat.sources_count').replace('{n}', String(sourcesTotal))}
               <ChevronDown
-                className={`w-3 h-3 transition-transform ${memoryExpanded ? 'rotate-180' : ''}`}
+                className={`w-3 h-3 transition-transform ${sourcesExpanded ? 'rotate-180' : ''}`}
               />
             </button>
           )}
@@ -699,20 +768,139 @@ function MessageComponent({
           </span>
         </div>
 
-        {/* R17-E: 记忆召回明细（memory_used 流事件携带，可展开） */}
-        {memoryExpanded && memoryRefs.length > 0 && (
+        {/* R81: 统一参考来源区块 —— 记忆 / 附件检索 / 知识库 / 网页 / 工具，
+            每条带统一序号 [n]（类文章引用），供用户核对来源可靠性。 */}
+        {sourcesExpanded && sourcesTotal > 0 && (
           <div
-            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-1"
-            data-testid="memory-used-list"
+            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-2"
+            data-testid="message-sources-list"
           >
-            {memoryRefs.map((ref) => (
-              <div key={ref.id} className="flex items-start gap-1.5">
-                <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
-                  {ref.memory_type}
-                </span>
-                <span className="text-text-secondary break-all">{ref.preview}</span>
+            {(memoryRefs.length > 0 || memorySources.length > 0) && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                  {t('chat.sources_group_memory')}
+                </div>
+                {memoryRefs.map((ref, i) => (
+                  <div key={`mem-${ref.id}-${i}`} className="flex items-start gap-1.5">
+                    <span className="text-muted flex-shrink-0 font-mono">[{i + 1}]</span>
+                    <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
+                      {ref.memory_type}
+                    </span>
+                    <span className="text-text-secondary break-all">{ref.preview}</span>
+                  </div>
+                ))}
+                {/* R86: @memory: 实体引用命中，序号与记忆召回连续 */}
+                {memorySources.map((s, i) => (
+                  <div key={`memsrc-${s.title}-${i}`} className="flex items-start gap-1.5">
+                    <span className="text-muted flex-shrink-0 font-mono">
+                      [{memoryRefs.length + i + 1}]
+                    </span>
+                    <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
+                      @memory
+                    </span>
+                    <span className="text-text-secondary break-all">{s.snippet || s.title}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+
+            {ragCitations.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                  {t('chat.sources_group_attachment')}
+                </div>
+                {ragCitations.map((c, i) => (
+                  <div key={`rag-${c.media_id}-${i}`} className="space-y-0.5">
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-muted flex-shrink-0 font-mono">[{ragOffset + i + 1}]</span>
+                      <span className="text-text-secondary font-mono break-all">
+                        {c.filename || c.media_id}
+                      </span>
+                    </div>
+                    {(c.chunks ?? []).length > 0 && (
+                      <div className="pl-5 text-muted font-mono">
+                        {(c.chunks ?? [])
+                          .map((ch) => `#${ch.index} (${ch.score.toFixed(2)})`)
+                          .join(' ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {wikiSources.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                  {t('chat.sources_group_wiki')}
+                </div>
+                {wikiSources.map((s, i) => (
+                  <div key={`wiki-${s.path}-${i}`} className="space-y-0.5">
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-muted flex-shrink-0 font-mono">[{wikiOffset + i + 1}]</span>
+                      <span className="text-text-secondary font-mono break-all">{s.title || s.path}</span>
+                      {s.score != null && (
+                        <span className="text-muted flex-shrink-0">({s.score.toFixed(2)})</span>
+                      )}
+                    </div>
+                    {s.snippet && (
+                      <div className="pl-5 text-muted break-all">{s.snippet}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {webSources.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                  {t('chat.sources_group_web')}
+                </div>
+                {webSources.map((s, i) => (
+                  <div key={`web-${s.url}-${i}`} className="space-y-0.5">
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-muted flex-shrink-0 font-mono">[{webOffset + i + 1}]</span>
+                      {s.url ? (
+                        <a
+                          href={s.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline break-all"
+                        >
+                          {s.title || s.url}
+                        </a>
+                      ) : (
+                        <span className="text-text-secondary break-all">{s.title}</span>
+                      )}
+                    </div>
+                    {s.snippet && (
+                      <div className="pl-5 text-muted break-all">{s.snippet}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {mcpSources.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                  {t('chat.sources_group_tool')}
+                </div>
+                {mcpSources.map((s, i) => (
+                  <div key={`tool-${s.server}-${s.tool}-${i}`} className="space-y-0.5">
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-muted flex-shrink-0 font-mono">[{toolOffset + i + 1}]</span>
+                      <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
+                        {s.server}/{s.tool}
+                      </span>
+                    </div>
+                    {s.preview && (
+                      <div className="pl-5 text-muted break-all">{s.preview}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -723,11 +911,26 @@ function MessageComponent({
             data-testid="skill-activated-list"
           >
             {activatedSkills.map((skill) => (
-              <div key={skill.name} className="flex items-start gap-1.5">
-                <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
-                  技能
-                </span>
-                <span className="text-text-secondary break-all">{skill.name}</span>
+              <div key={skill.name} className="flex flex-col gap-0.5">
+                <div className="flex items-start gap-1.5">
+                  <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
+                    技能
+                  </span>
+                  <span className="text-text-secondary break-all">{skill.name}</span>
+                </div>
+                {/* MEDIUM-3: 展示命中的触发词（extract_triggers 已小写化） */}
+                {skill.triggers_matched && skill.triggers_matched.length > 0 && (
+                  <div className="ml-5 flex flex-wrap gap-1">
+                    {skill.triggers_matched.map((trigger, idx) => (
+                      <span
+                        key={idx}
+                        className="px-1 py-0.5 rounded bg-bg-hover text-text-tertiary text-[10px]"
+                      >
+                        {trigger}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -857,6 +1060,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.onDelete === next.onDelete &&
     prev.onQuote === next.onQuote &&
     prev.onSaveToMemory === next.onSaveToMemory &&
-    prev.artifactsByToolCall === next.artifactsByToolCall
+    prev.artifactsByToolCall === next.artifactsByToolCall &&
+    prev.onBlockedAction === next.onBlockedAction
   );
 });

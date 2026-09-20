@@ -34,6 +34,7 @@ export function registerUpdateIpc(
     'update:set-strategy',
     'update:get-config',
     'update:set-channel',
+    'update:set-config-patch',
   ];
   const requireTrusted = (event: IpcMainInvokeEvent): void => {
     if (!options.isTrustedRenderer(event.sender)) throw new Error('未授权的窗口请求');
@@ -87,6 +88,13 @@ export function registerUpdateIpc(
       throw new Error('无效的更新渠道');
     }
     return updateManager.setChannel(payload as UpdateChannel);
+  });
+  register('update:set-config-patch', async (event, payload?: unknown) => {
+    requireTrusted(event as IpcMainInvokeEvent);
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+      throw new Error('无效的更新配置');
+    }
+    return updateManager.setConfigPatch(payload as Record<string, unknown>);
   });
 
   // State events are relayed to the renderer via the sendToRenderer callback

@@ -2,6 +2,10 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+const { fetchChangesSpy } = vi.hoisted(() => ({
+  fetchChangesSpy: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../../features/artifacts/useArtifacts', () => ({
   useArtifacts: vi.fn(() => ({ artifacts: [], loading: false, refresh: vi.fn() })),
 }));
@@ -9,6 +13,14 @@ vi.mock('../../../features/artifacts/useArtifacts', () => ({
 vi.mock('../../../features/artifacts/useArtifactContent', () => ({
   useArtifactContent: vi.fn(() => ({ content: null, loading: false })),
 }));
+// R4 批次 B: 变更预取 —— mock store，验证会话切换时 fetch 被触发
+vi.mock('../../../features/changes/changesListStore', () => {
+  const state = { bySession: {}, fetch: fetchChangesSpy };
+  const hook = Object.assign((selector: (s: typeof state) => unknown) => selector(state), {
+    getState: () => state,
+  });
+  return { useChangesListStore: hook };
+});
 
 // C3 (2026-08-15): RightPanel → ProgressSection → TaskTreeSection 渲染链挂载即调
 // Wave 4 (2026-09-06): PlanCardList 已删,历史编排记录移除
@@ -68,7 +80,7 @@ describe('RightPanel', () => {
 
   it('switches to Artifacts tab via store', () => {
     render(<RightPanel {...props} />);
-    fireEvent.click(screen.getByText('产物'));
+    fireEvent.click(screen.getByRole("button", { name: /产物/ }));
     expect(useRightPanelStore.getState().tab).toBe('artifacts');
     expect(screen.getByText(/暂无产物/)).toBeInTheDocument();
   });
@@ -99,7 +111,7 @@ describe('RightPanel', () => {
 
     it('clicking close button in Artifacts tab closes panel', () => {
       render(<RightPanel {...props} />);
-      fireEvent.click(screen.getByText('产物'));
+      fireEvent.click(screen.getByRole("button", { name: /产物/ }));
       fireEvent.click(screen.getByRole('button', { name: '关闭右侧面板' }));
       expect(useRightPanelStore.getState().open).toBe(false);
     });
@@ -188,13 +200,58 @@ describe('RightPanel', () => {
     it('bell toggle only on artifacts tab, flips localStorage flag', () => {
       render(<RightPanel {...props} />);
       expect(screen.queryByTestId('right-panel-auto-open-toggle')).not.toBeInTheDocument();
-      fireEvent.click(screen.getByText('产物'));
+      fireEvent.click(screen.getByRole("button", { name: /产物/ }));
       const bell = screen.getByTestId('right-panel-auto-open-toggle');
       expect(bell).toBeInTheDocument();
       fireEvent.click(bell);
       expect(localStorage.getItem('right-panel-auto-open')).toBe('0');
       fireEvent.click(bell);
       expect(localStorage.getItem('right-panel-auto-open')).toBe('1');
+    });
+  });
+  
+  describe('right-panel R2 批次 B: overlay 抽屉三件套', () => {
+    it('overlay 打开时渲染遮罩，点击遮罩关闭面板', () => {
+      render(<RightPanel {...props} variant="overlay" />);
+      const backdrop = screen.getByTestId('right-panel-overlay-backdrop');
+      expect(backdrop).toBeInTheDocument();
+      fireEvent.click(backdrop);
+      expect(useRightPanelStore.getState().open).toBe(false);
+    });
+
+    it('overlay 关闭态遮罩不可交互（pointer-events-none）', () => {
+      useRightPanelStore.setState({ open: false });
+      render(<RightPanel {...props} variant="overlay" />);
+      expect(screen.getByTestId('right-panel-overlay-backdrop').className).toContain(
+        'pointer-events-none',
+      );
+    });
+
+    it('overlay 打开时 Esc 关闭面板', () => {
+      render(<RightPanel {...props} variant="overlay" />);
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(useRightPanelStore.getState().open).toBe(false);
+    });
+
+    it('push 模式无遮罩，Esc 不关面板', () => {
+      render(<RightPanel {...props} variant="push" />);
+      expect(screen.queryByTestId('right-panel-overlay-backdrop')).not.toBeInTheDocument();
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(useRightPanelStore.getState().open).toBe(true);
+    });
+  });
+
+  describe('right-panel R4 批次 B: 变更预取', () => {
+    it('挂载即按会话预取变更列表', () => {
+      render(<RightPanel {...props} />);
+      expect(fetchChangesSpy).toHaveBeenCalledWith('sess_001');
+    });
+
+    it('会话切换时重新预取', () => {
+      const { rerender } = render(<RightPanel {...props} sessionId="sA" />);
+      fetchChangesSpy.mockClear();
+      rerender(<RightPanel {...props} sessionId="sB" />);
+      expect(fetchChangesSpy).toHaveBeenCalledWith('sB');
     });
   });
 });

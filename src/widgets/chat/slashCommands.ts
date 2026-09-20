@@ -14,6 +14,7 @@ import {
   CalendarClock,
   FileSpreadsheet,
   BookText,
+  GitBranch,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -38,8 +39,19 @@ export interface SlashCommand {
    * - 'plan': PM2 (round8) 计划模式 —— 剩余文本以 planMode 发送
    * - 'template': R27-A Prompt 模板 —— 选中即填充输入框（不发送）
    * - 'navigate': 对标 S3 页面直达 —— 跳转到 `route`（/office /journal /schedule /wiki /memory）
+   * - 'worktree': 会话级 worktree 管理 —— 前端直接执行 worktreeApi，不发消息
    */
-  mode: 'prompt' | 'clear' | 'help' | 'skill' | 'compact' | 'learn' | 'plan' | 'template' | 'navigate';
+  mode:
+    | 'prompt'
+    | 'clear'
+    | 'help'
+    | 'skill'
+    | 'compact'
+    | 'learn'
+    | 'plan'
+    | 'template'
+    | 'navigate'
+    | 'worktree';
   /** 'skill' 模式下需要执行的 SKILL.md 名称（不含 /）。 */
   skillName?: string;
   /** 'template' 模式下填充输入框的模板内容（{{变量}} 占位留给用户编辑）。 */
@@ -86,6 +98,14 @@ export const slashCommands: SlashCommand[] = [
     description: '审查当前工作区未提交改动的风险与质量',
     icon: FileDiff,
     mode: 'prompt',
+  },
+  {
+    // worktree 模式 (2026-09-18): 会话级分支/worktree 切换（前端 action）。
+    name: 'worktree',
+    label: 'worktree 管理',
+    description: '用法：/worktree new <分支> | open <分支> | merge <分支> | rm <分支> | list',
+    icon: GitBranch,
+    mode: 'worktree',
   },
   {
     name: 'translate',

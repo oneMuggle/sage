@@ -61,6 +61,13 @@ ALIASES: Dict[str, str] = {
     "subagent_approval_mode": "subagentApprovalMode",
     "run_token_budget": "runTokenBudget",
     "scratch_root": "scratchRoot",
+    # Round 1/3 (2026-09-19) 计划前置旋钮（orch_settings.plan_*_enabled）。
+    "plan_preflight_enabled": "planPreflightEnabled",
+    "plan_scout_enabled": "planScoutEnabled",
+    # RD15 (2026-09): 守门三键透出设置页, 同款 snake→camel 翻译必须同步。
+    "run_wall_clock_limit_minutes": "runWallClockLimitMinutes",
+    "subagent_task_timeout_s": "subagentTaskTimeoutS",
+    "max_retry_of_chains": "maxRetryOfChains",
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单
@@ -134,12 +141,12 @@ LEGAL_MODEL_SELECTIONS_KEYS: FrozenSet[str] = frozenset(
         "imageGenModel",
     }
 )
-# orch 段 (OrchSettings + scratchRoot). 前端 interface 只暴露 6 个数值;
-# scratchRoot 是后端配置 (spec 偏差, 见 Wave 3 P2-9 plan §3.3).
-# 2026-09 修复: 补齐 worktreeIsolation / subagentApprovalMode / runTokenBudget —
-# 三者早已存在于 OrchSettings (orch_settings.py) 且前端可编辑, 白名单漏掉
-# 导致设置页编排段任一保存都 400 invalid_settings_shape (错误又被前端
-# 静默吞掉), 三个设置永远无法持久化。
+# orch 段 (OrchSettings). 白名单必须与前端 OrchSettings interface
+# (src/entities/setting/types.ts DEFAULT_ORCH_SETTINGS) 逐键同步。
+# 2026-09 修复: 补齐 worktreeIsolation / subagentApprovalMode / runTokenBudget;
+# RD15 (round25) 透出 runWallClockLimitMinutes / subagentTaskTimeoutS /
+# maxRetryOfChains 三键后白名单未跟, 导致编排段任一保存都 400 且被前端
+# 静默吞掉——再次复发同款事故。
 LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
     {
         "maxConcurrentSubagents",
@@ -152,6 +159,13 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "subagentApprovalMode",
         "runTokenBudget",
         "scratchRoot",
+        # Round 1/3 (2026-09-19) 计划前置旋钮 —— 白名单缺失会让设置页编排段
+        # 任一保存 400 invalid_settings_shape（round26 同款回归,前端静默吞错）。
+        "planPreflightEnabled",
+        "planScoutEnabled",
+        "runWallClockLimitMinutes",
+        "subagentTaskTimeoutS",
+        "maxRetryOfChains",
     }
 )
 
@@ -170,7 +184,7 @@ def to_camel(value: Any) -> Any:
 
 def from_camel(value: Any) -> Any:
     """反向: ALIASES 仅翻译已知 snake↔camel 对; 其它 camelCase key 原样保留."""
-    if not isinstance(value, (dict, list)):
+    if not isinstance(value, (dict, list)):  # noqa: UP038 — py38 运行时 isinstance 不支持 union
         return value
     inverse = {v: k for k, v in ALIASES.items()}
     if isinstance(value, dict):
@@ -289,7 +303,7 @@ def _is_secret_key(key: Any) -> bool:
         return True
     # ``hasApiKey`` is response metadata, not the credential itself; retain it
     # so repeated redaction remains idempotent and endpoint state is preserved.
-    if normalized == "hasapikey" or normalized == "haskey":
+    if normalized in {"hasapikey", "haskey"}:
         return False
     if any(normalized.endswith(suffix) for suffix in _SECRET_SUFFIXES):
         return True

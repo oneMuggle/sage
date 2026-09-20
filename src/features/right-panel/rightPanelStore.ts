@@ -63,6 +63,8 @@ interface RightPanelState {
   maximized: boolean;
   /** 当前在产物详情视图的 artifact id（RightPanel 按列表解析出对象） */
   selectedArtifactId: string | null;
+  /** right-panel R5: 待在变更 Tab 打开的文件路径（ChangesSection 消费后清除） */
+  selectedChangePath: string | null;
   /** 每会话"已见过的产物事件计数"基线（未读徽标 = counts - seen） */
   seenArtifactCount: Record<string, number>;
   setOpen: (open: boolean) => void;
@@ -72,6 +74,9 @@ interface RightPanelState {
   /** 直达产物预览：开面板 + 切产物 Tab + 选中（内联卡片入口） */
   selectArtifact: (artifactId: string) => void;
   clearSelectedArtifact: () => void;
+  /** right-panel R5: 直达变更 diff：开面板 + 切变更 Tab + 选中文件（内联卡片入口） */
+  selectChange: (path: string) => void;
+  clearSelectedChange: () => void;
   /** 面板打开时把当前会话的未读计数清零（读 artifactEventsStore 的计数作基线） */
   markArtifactsSeen: (sessionId: string) => void;
 }
@@ -81,6 +86,7 @@ export const useRightPanelStore = create<RightPanelState>((set, get) => ({
   tab: loadInitialTab(),
   maximized: false,
   selectedArtifactId: null,
+  selectedChangePath: null,
   seenArtifactCount: {},
 
   setOpen: (open) => {
@@ -109,6 +115,10 @@ export const useRightPanelStore = create<RightPanelState>((set, get) => ({
     set({ open: true, tab: 'artifacts', selectedArtifactId: artifactId }),
 
   clearSelectedArtifact: () => set({ selectedArtifactId: null }),
+
+  selectChange: (path) => set({ open: true, tab: 'changes', selectedChangePath: path }),
+
+  clearSelectedChange: () => set({ selectedChangePath: null }),
 
   markArtifactsSeen: (sessionId) => {
     const counts = useArtifactEventsStore.getState().counts;

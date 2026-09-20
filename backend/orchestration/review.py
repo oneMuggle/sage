@@ -73,6 +73,36 @@ def compute_verdict(assertions: List[Assertion]) -> str:
     )
 
 
+#: Round 4 (2026-09-19): 验收区块存在时附带给 reviewer 的裁决指令——
+#: 把"验收未通过且未解决"映射进既有 NEGATIVE_EVIDENCE ≥0.7 → fail 规则。
+ACCEPTANCE_REVIEW_NOTE = (
+    "以上为本轮各子任务的自动验收检查结果（advisory）。若存在未通过项"
+    "且聚合结果未解决该问题，请对相关子任务给出 NEGATIVE_EVIDENCE "
+    "assertion（confidence ≥ 0.7）。"
+)
+
+
+def build_review_goal(
+    aggregated: str,
+    acceptance_block: str = "",
+    max_chars: int = 50 * 1024,
+) -> str:
+    """组装 reviewer 目标文本（Round 4 提取为纯函数便于测试）。
+
+    ``acceptance_block`` 非空时置于最前并附裁决指令；聚合文本仍按
+    ``max_chars`` 截断（截断只作用于聚合文本，保证验收区块永不被挤掉）。
+    """
+    parts = []
+    if acceptance_block and acceptance_block.strip():
+        parts.append(acceptance_block.strip())
+        parts.append(ACCEPTANCE_REVIEW_NOTE)
+    parts.append(
+        "复核以下多 agent 子任务聚合结果，逐条给出 assertion。\n"
+        + aggregated[:max_chars]
+    )
+    return "\n\n".join(parts)
+
+
 async def run_review(
     *,
     run_id: str,
@@ -83,12 +113,14 @@ async def run_review(
     llm_config: Any,
     max_chars: int = 50 * 1024,
     emit_review: Optional[Callable[[str, str, int, str], None]] = None,
+    acceptance_block: str = "",
 ) -> Dict[str, Any]:
-    """reviewer 复核聚合 → ReviewReport + markdown 块（ChatDispatcher/API lane 共用）。"""
-    review_goal = (
-        "复核以下多 agent 子任务聚合结果，逐条给出 assertion。\n"
-        + aggregated[:max_chars]
-    )
+    """reviewer 复核聚合 → ReviewReport + markdown 块（ChatDispatcher/API lane 共用）。
+
+    Round 4 (2026-09-19): ``acceptance_block`` 非空时注入 reviewer 目标
+    （验收检查结果 + 裁决指令），默认空串保持既有行为。
+    """
+    review_goal = build_review_goal(aggregated, acceptance_block, max_chars)
     lane_id = f"lane-review-{run_id}"
     task_id = f"task-review-{run_id}"
 

@@ -81,9 +81,9 @@ class LoopbackCallbackServer:
         """等待回调 URL；超时抛 TimeoutError。"""
         import asyncio
 
-        deadline = asyncio.get_event_loop().time() + timeout
+        deadline = asyncio.get_running_loop().time() + timeout
         while self._captured is None:
-            if asyncio.get_event_loop().time() > deadline:
+            if asyncio.get_running_loop().time() > deadline:
                 raise TimeoutError(f"等待 OAuth 回调超时（{timeout:.0f}s）")
             await asyncio.sleep(0.05)
         return self._captured

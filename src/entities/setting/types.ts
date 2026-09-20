@@ -112,6 +112,11 @@ export interface OrchSettings {
   // RD14 (round22): retry_of 重派链上限——同一任务被连续重派超过 N 次后
   // 拒绝再次重派，防失败计划 rerun 无限循环。
   maxRetryOfChains: number; // 10
+  // Round 1 (2026-09-19) 计划前置: multi 拆解前的澄清+侦察总开关（默认开）。
+  // 与后端 OrchSettings.plan_preflight_enabled camelCase 对齐。
+  planPreflightEnabled: boolean; // true
+  // Round 1: 侦察先行单独开关（澄清不受它控制；总闸关闭时两者皆停）。
+  planScoutEnabled: boolean; // true
 }
 
 /** All application settings */
@@ -120,13 +125,6 @@ export interface AppSettings {
   streaming: boolean;
   autoMemory: boolean;
   confirmDelete: boolean;
-
-  // Memory — separate field from autoMemory (which is "auto-extract in
-  // conversation"). memoryServerSync is the planned "sync to internal
-  // server" feature; UI exposes it but the backend endpoint is not yet
-  // wired up — see docs/plans/2026-08-09_feature-optimization-proposal.md
-  // §1.4 for the cleanup decision.
-  memoryServerSync: boolean;
 
   // Endpoint & Model
   endpoints: EndpointConfig[];
@@ -138,8 +136,8 @@ export interface AppSettings {
   temperature: number;
 
   // Task 1 (2026-08-23): IANA 时区 — 用户报告时区与本地不一致时排查用.
-  // 默认 'Asia/Shanghai' (与后端 settings_canonicalizer.DEFAULT_TIMEZONE 对齐).
-  // 后端 zoneinfo 校验, 非法值 → 422.
+  // 默认 = 系统探测时区 (见 detectSystemTimezone), 后端 zoneinfo 校验,
+  // 非法值 → 422.
   timezone: string;
 
   // 日志时区 (2026-09-17): 控制日志时间戳使用的时区.
@@ -204,7 +202,18 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   runWallClockLimitMinutes: 0,
   subagentTaskTimeoutS: 900,
   maxRetryOfChains: 10,
+  planPreflightEnabled: true,
+  planScoutEnabled: true,
 };
+
+/** 系统 IANA 时区探测；不可用 / 返回空时回退 'Asia/Shanghai'（历史默认）。 */
+export function detectSystemTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
+  } catch {
+    return 'Asia/Shanghai';
+  }
+}
 
 /** Sensible defaults for all settings */
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -213,20 +222,19 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoMemory: true,
   confirmDelete: true,
 
-  // Memory
-  memoryServerSync: false,
-
   // Endpoint & Model
   endpoints: [],
   modelSelections: DEFAULT_MODEL_SELECTIONS,
   maxContext: 4096,
-  autoContext: false,
+  // 默认走 catalog 自动解析上下文窗口（后端 modelWindows 默认口径一致）;
+  // 只有 autoContext=false 时 maxContext 才作为固定上限生效。
+  autoContext: true,
   temperature: 0.7,
 
-  // Task 1 (2026-08-23): 时区默认 'Asia/Shanghai' — 与后端 canonicalizer
-  // DEFAULT_TIMEZONE 对齐. 后端 zoneinfo 校验; 前端只 export 默认值, 由
-  // mergeWithDefaults 兜底补值.
-  timezone: 'Asia/Shanghai',
+  // Task 1 (2026-08-23): 时区默认 = 系统 IANA 时区（浏览器探测）, 探测失败
+  // 回退 'Asia/Shanghai' — 后端 canonicalizer 的 DEFAULT_TIMEZONE 仅作后端
+  // 侧兜底, 前端优先给真实本地值。后端 zoneinfo 校验; 非法值 → 422.
+  timezone: detectSystemTimezone(),
 
   // 日志时区默认 'UTC' — 保持历史行为. 用户可在设置页切换为 'local' 或 IANA 时区.
   logTimezone: 'UTC',

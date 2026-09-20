@@ -1,6 +1,6 @@
 // src/widgets/chat/__tests__/ContextMeter.test.tsx
 // U17 上下文占用指示器测试 — usageApi 全 mock;窗口映射走 modelWindows 真实表。
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { SessionUsage } from '../../../shared/api/usageApi';
@@ -32,6 +32,7 @@ function usageFixture(overrides: Partial<SessionUsage>): SessionUsage {
     // Backend resolves via model_catalog and stores in usage_events.last_effective_window
     // so ContextMeter mirrors the request's actual cap.
     effective_context_window: 200_000,
+    last_context_breakdown: null,
     ...overrides,
   };
 }
@@ -81,5 +82,53 @@ describe('ContextMeter', () => {
     expect(title).toContain('100.0k / 200.0k');
     expect(title).toContain('claude-sonnet-4');
     expect(title).toContain('40.0k');
+  });
+
+  it('点击展开分类明细弹层: 各类 token 数与占比 + 剩余空间', async () => {
+    mockFetch.mockResolvedValue(
+      usageFixture({
+        last_context_breakdown: {
+          categories: {
+            tools: 20_000,
+            system: 10_000,
+            skills: 2_000,
+            dynamic_context: 3_000,
+            current_input: 5_000,
+            history_tool: 30_000,
+            history_assistant: 20_000,
+            history_user: 10_000,
+          },
+          estimated_total: 98_000,
+          prompt_tokens: 100_000,
+          calibrated: true,
+        },
+      }),
+    );
+    render(<ContextMeter sessionId="s1" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('context-meter')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('context-meter'));
+
+    const popover = screen.getByTestId('context-meter-popover');
+    expect(popover).toBeInTheDocument();
+    // 30k/100k = 30% (占已用上下文比例)
+    expect(popover.textContent).toContain('历史 · 工具结果');
+    expect(popover.textContent).toContain('30.0k · 30%');
+    expect(popover.textContent).toContain('工具定义');
+    expect(popover.textContent).toContain('剩余空间');
+    expect(screen.getByTestId('context-meter-stacked-bar')).toBeInTheDocument();
+  });
+
+  it('无明细快照时弹层显示回退提示', async () => {
+    mockFetch.mockResolvedValue(usageFixture({}));
+    render(<ContextMeter sessionId="s1" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('context-meter')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('context-meter'));
+    expect(screen.getByTestId('context-meter-popover').textContent).toContain(
+      '暂无分类明细',
+    );
   });
 });

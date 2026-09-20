@@ -174,6 +174,106 @@ async def test_create_header_credential_origin_guard(client):
     assert resp.status_code == 403
 
 
+async def test_create_header_credential_malformed_body_hides_values(client):
+    """Pydantic 请求体校验失败（缺 domain）不得回显提交的凭据值。
+
+    FastAPI 默认 422 会在 ``detail[].input`` 原样回显 body，header 的
+    ``value`` 与 cookie 值同属敏感凭据，故与 cookie 路由统一走脱敏响应。
+    """
+    secret = "header-secret-422"
+    resp = await client.post(
+        "/api/v1/web-access/credentials/header",
+        json={"header_name": "Authorization", "value": secret},
+    )
+    assert resp.status_code == 422
+    assert resp.json() == {"ok": False, "error": "invalid_header_credential"}
+    assert secret not in resp.text
+
+
+# ---------- Round 19：cookie 型凭据导入入口 ----------
+
+
+async def test_create_cookie_credential_ok(client, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        routes,
+        "save_credential",
+        lambda domain, cookies: captured.update(domain=domain, cookies=cookies),
+    )
+    response = await client.post(
+        "/api/v1/web-access/credentials/cookie",
+        json={
+            "domain": ".example.com",
+            "cookies": [{"name": "SID", "value": "opaque", "path": "/"}],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+    assert captured == {
+        "domain": ".example.com",
+        "cookies": [{"name": "SID", "value": "opaque", "path": "/"}],
+    }
+
+
+async def test_create_cookie_credential_rejects_invalid_cookie(client, monkeypatch):
+    cookie_value = "cookie-secret-123"
+
+    def reject(domain, cookies):
+        raise ValueError(f"cookie validation failed for {cookie_value}")
+
+    monkeypatch.setattr(routes, "save_credential", reject)
+    response = await client.post(
+        "/api/v1/web-access/credentials/cookie",
+        json={
+            "domain": ".example.com",
+            "cookies": [{"name": "SID", "value": cookie_value}],
+        },
+    )
+    assert response.status_code == 422
+    assert response.json() == {
+        "ok": False,
+        "error": "invalid_cookie_credential",
+    }
+    assert cookie_value not in response.text
+
+
+async def test_create_cookie_credential_malformed_body_hides_values(client):
+    """Pydantic 请求体校验失败（cookies 类型错误）不得回显提交的 cookie 值。
+
+    FastAPI 默认 422 把 ``detail[].input`` 原样回显，明文 cookie 会随响应
+    外泄；本批次凭据路由必须统一回固定非敏感错误。
+    """
+    secret = "cookie-secret-422"
+    response = await client.post(
+        "/api/v1/web-access/credentials/cookie",
+        json={"domain": ".example.com", "cookies": secret},
+    )
+    assert response.status_code == 422
+    assert response.json() == {"ok": False, "error": "invalid_cookie_credential"}
+    assert secret not in response.text
+
+
+async def test_create_cookie_credential_missing_domain_hides_values(client):
+    """缺 domain 的 422 不得回显 cookies 列表里的明文值。"""
+    secret = "cookie-secret-missing-domain"
+    response = await client.post(
+        "/api/v1/web-access/credentials/cookie",
+        json={"cookies": [{"name": "SID", "value": secret}]},
+    )
+    assert response.status_code == 422
+    assert response.json() == {"ok": False, "error": "invalid_cookie_credential"}
+    assert secret not in response.text
+
+
+async def test_create_cookie_credential_origin_guard(client):
+    response = await client.post(
+        "/api/v1/web-access/credentials/cookie",
+        json={"domain": ".example.com", "cookies": [{"name": "SID", "value": "opaque"}]},
+        headers={"Origin": "https://evil.example"},
+    )
+    assert response.status_code == 403
+
+
 # ---------- Round 15：per-host 出网指标端点 ----------
 
 
@@ -215,3 +315,51 @@ async def test_metrics_origin_guard(client):
         "/api/v1/web-access/metrics", headers={"Origin": "https://evil.example"}
     )
     assert resp.status_code == 403
+
+
+# ---------- Round 20：诊断导出集成 web-metrics ----------
+
+
+def test_exporter_includes_web_metrics(monkeypatch):
+    """X2 闭环：诊断包 zip 含 web-metrics.json（快照非空时）。"""
+    import io
+    import json
+    import zipfile
+
+    from backend.services.llm_trace import exporter
+
+    monkeypatch.setattr(
+        "backend.tools.web_metrics.snapshot",
+        lambda: {"example.com": {"ok": 2, "fail": 0, "escalated": 1, "avg_elapsed_ms": 50}},
+    )
+    data = exporter.export_to_zip_bytes(
+        records=[],
+        include_prompts=False,
+        include_hostname=False,
+        app_version="test",
+        config_snapshot="",
+    )
+    zf = zipfile.ZipFile(io.BytesIO(data))
+    assert "web-metrics.json" in zf.namelist()
+    metrics = json.loads(zf.read("web-metrics.json"))
+    assert metrics["example.com"]["ok"] == 2
+
+
+def test_exporter_skips_web_metrics_when_empty(monkeypatch):
+    import io
+    import zipfile
+
+    from backend.services.llm_trace import exporter
+
+    monkeypatch.setattr(
+        "backend.tools.web_metrics.snapshot", lambda: {}
+    )
+    data = exporter.export_to_zip_bytes(
+        records=[],
+        include_prompts=False,
+        include_hostname=False,
+        app_version="test",
+        config_snapshot="",
+    )
+    zf = zipfile.ZipFile(io.BytesIO(data))
+    assert "web-metrics.json" not in zf.namelist()

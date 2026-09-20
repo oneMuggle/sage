@@ -344,6 +344,15 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       return `/api/v1/sessions/${sessionId}/workspace/changes/diff?path=${path}&staged=${staged}`;
     },
   },
+  // right-panel R6: 变更面板"预览"视图 —— 工作区文件内容只读
+  workspace_get_change_file: {
+    method: 'GET',
+    path: (a) => {
+      const sessionId = encodeURIComponent(String(a.sessionId));
+      const path = encodeURIComponent(String(a.path ?? ''));
+      return `/api/v1/sessions/${sessionId}/workspace/changes/file?path=${path}`;
+    },
+  },
   // U19 变更面板可操作化 (对标增强第四轮批次 B): 逐文件/逐 hunk 撤销
   workspace_revert_changes: {
     method: 'POST',
@@ -356,6 +365,40 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) =>
       `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/changes/revert-hunks`,
     body: (a) => ({ path: a.path, hunk_indices: a.hunkIndices }),
+  },
+  // 会话级 worktree 模式 (2026-09-18): 分支 picker / worktree 生命周期
+  worktree_branches: {
+    method: 'GET',
+    path: (a) => {
+      const sessionId = encodeURIComponent(String(a.sessionId));
+      const remote = a.includeRemote === false ? 'false' : 'true';
+      return `/api/v1/sessions/${sessionId}/worktree/branches?include_remote=${remote}`;
+    },
+  },
+  worktree_list: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/worktree`,
+  },
+  worktree_create: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/worktree`,
+    body: (a) => ({
+      mode: a.mode,
+      branch: a.branch,
+      base_ref: a.baseRef ?? 'HEAD',
+    }),
+  },
+  worktree_merge: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/worktree/merge`,
+    body: (a) => ({ worktree_id: a.worktreeId }),
+  },
+  worktree_delete: {
+    method: 'DELETE',
+    path: (a) =>
+      `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/worktree/${encodeURIComponent(
+        String(a.worktreeId),
+      )}?delete_branch=${a.deleteBranch === true ? 'true' : 'false'}`,
   },
   // U2' 检查点面板 (对标增强第五轮批次 A): 快照列表 / 手动快照 / 覆盖恢复。
   // restore 语义"只覆盖不删除"由前端 confirm 文案明示;POST body 必须
@@ -460,6 +503,10 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // 新增 GET /memory/summaries 端点 — 之前前端 memoryApi.getSessionSummaries()
   // 调用 invoke('get_session_summaries', ...) 找不到映射,直接 404。
   // sessionId 必填(spec step 5 严令禁止"全部 session"视图)。
+  get_memory_diagnostics: {
+    method: 'GET',
+    path: () => '/api/v1/memory/diagnostics',
+  },
   get_session_summaries: {
     method: 'GET',
     path: (a) => {
@@ -538,14 +585,16 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // PR-C §5.4: front-end memoryApi.ts 调用 invoke('search_memory'|'save_memory'),
   // 但 commands.ts 没映射 → 前端 404。后端端点已存在 (legacy_routes.py:2479, :2490)。
   search_memory: {
-    method: 'POST',
-    path: () => '/api/v1/memory/search',
-    // Body 字段: query (required), memory_type?, limit? — 缺省 limit=20
-    body: (a) => ({
-      query: a.query,
-      memory_type: a.memoryType,
-      limit: (a.limit as number) ?? 20,
-    }),
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams({
+        query: String(a?.query ?? ''),
+        limit: String((a?.limit as number) ?? 20),
+      });
+      if (a?.memoryType) params.set('type', String(a.memoryType));
+      if (a?.sessionId) params.set('session_id', String(a.sessionId));
+      return `/api/v1/memory/search?${params.toString()}`;
+    },
   },
   save_memory: {
     method: 'POST',
@@ -556,6 +605,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       memory_type: a.memoryType,
       importance: a.importance,
       tags: a.tags,
+      ...(a.sessionId ? { session_id: a.sessionId } : {}),
     }),
   },
 
@@ -832,6 +882,13 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   orchestration_rerun_failed: {
     method: 'POST',
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/rerun-failed`,
+  },
+  // Round 2 (2026-09-19): 计划模式 × 编排打通 —— 已批准计划文本 → 结构化
+  // 任务项（plan_override 形状）。503/502 语义见后端 orch_routes.plan_items。
+  orchestration_plan_items: {
+    method: 'POST',
+    path: () => '/api/v1/orch/plan-items',
+    body: (a) => ({ text: a.text }),
   },
 
   // Office document features (Phase 1.3, plan §4.1.3 step 14).

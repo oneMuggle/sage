@@ -726,4 +726,140 @@ describe('Update System Integration', () => {
       );
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Scenario 7: Phase A — 安装时登记 last-known-good 回滚数据
+  // (update-install-rollback-r1-plan §A, #1180)
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('Scenario 7: Phase A rollback data registration', () => {
+    it('installUpdate 把当前版本安装包登记为 last-known-good 回滚数据', async () => {
+      await updateManager.setStrategy('manual');
+      vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('2.0.0')));
+
+      // 先走一遍 check → download (legacy 路径会写入 2.0.0 的回滚缓存 —— 旧语义)
+      await updateManager.checkForUpdates();
+      await updateManager.downloadUpdate();
+
+      // 造"当前版本 (1.0.0)"的安装包 + rollback-meta.json —— 模拟 1.0.0
+      // 当初经由 provider 链下载时留下的回滚数据
+      const updateCache = path.join(mockUserData!, 'update-cache');
+      await fs.mkdir(updateCache, { recursive: true });
+      const oldBytes = Buffer.from('installer for 1.0.0');
+      const oldName = 'Sage-Setup-1.0.0.exe';
+      const oldSha512 = crypto.createHash('sha512').update(oldBytes).digest('hex');
+      await fs.writeFile(path.join(updateCache, oldName), oldBytes);
+      await fs.writeFile(
+        path.join(updateCache, 'rollback-meta.json'),
+        JSON.stringify({
+          version: '1.0.0',
+          filename: oldName,
+          sha512: oldSha512,
+          size: oldBytes.length,
+          signature: '',
+          fileUrl: `https://updates.sage.app/releases/1.0.0/${oldName}`,
+        }),
+      );
+
+      const { installDir } = useTempInstallDir();
+      await fs.mkdir(installDir, { recursive: true });
+
+      await updateManager.installUpdate();
+
+      const state = await readState();
+      // 升级语义不变
+      expect(state.currentVersion).toBe('2.0.0');
+      expect(state.lastKnownGoodVersion).toBe('1.0.0');
+
+      // Phase A: cachedRollbackPackage 被替换为 last-known-good (1.0.0),
+      // 而非保留下载时写入的 2.0.0 新包 —— 回滚校验从此可成立。
+      const rollback = state.cachedRollbackPackage as {
+        version: string;
+        sha512: string;
+        path: string;
+      };
+      expect(rollback.version).toBe('1.0.0');
+      expect(rollback.sha512).toBe(oldSha512);
+      expect(path.resolve(rollback.path)).toContain(path.join('update-cache', ''));
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Scenario 8: Phase A 全链消费 —— 无 .prev 时用 last-known-good 包重装
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('Scenario 8: rollback consumes last-known-good package', () => {
+    it('无 .prev 时 reinstallFromPackage 以缓存的 1.0.0 包重装并 relaunch', async () => {
+      // Seed: 2.0.0 已安装, 1.0.0 = last-known-good, 回滚数据齐全
+      // (update-cache 里有 1.0.0 安装包 + rollback-meta.json)
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+
+      const updateCache = path.join(mockUserData!, 'update-cache');
+      await fs.mkdir(updateCache, { recursive: true });
+      const oldBytes = Buffer.from('installer for 1.0.0');
+      const oldName = 'Sage-Setup-1.0.0.exe';
+      const oldSha512 = crypto.createHash('sha512').update(oldBytes).digest('hex');
+      const oldPath = path.join(updateCache, oldName);
+      await fs.writeFile(oldPath, oldBytes);
+
+      // 真实签名 (与 reinstallFromPackage 的 verifyArtifactSignature 同钥)
+      const signature = signArtifact(
+        '1.0.0',
+        oldName,
+        `https://updates.sage.app/releases/1.0.0/${oldName}`,
+        oldSha512,
+        oldBytes.length,
+      );
+
+      await stateManager.setState({
+        ...base,
+        currentVersion: '2.0.0',
+        lastKnownGoodVersion: '1.0.0',
+        cachedRollbackPackage: {
+          path: oldPath,
+          version: '1.0.0',
+          sha512: oldSha512,
+          size: oldBytes.length,
+          signature,
+          fileUrl: `https://updates.sage.app/releases/1.0.0/${oldName}`,
+        },
+      });
+
+      // 不创建 .prev —— rollback() 将走 reinstallFromPackage 分支
+      const { installDir } = useTempInstallDir();
+      await fs.mkdir(installDir, { recursive: true });
+
+      // Mock spawn: 记录安装包路径并模拟退出码 0
+      const spawnCalls: Array<{ file: string; args: string[] }> = [];
+      const mockSpawn = vi.fn().mockImplementation(() => ({
+        on: (event: string, callback: (code: number) => void) => {
+          if (event === 'exit') setTimeout(() => callback(0), 0);
+        },
+      }));
+      vi.doMock('child_process', () => ({ spawn: mockSpawn }));
+
+      // 重新导入以拾取 spawn mock
+      const { UpdateManager: FreshUpdateManager } = await import('../updateManager');
+      const freshManager = new FreshUpdateManager(updater);
+
+      await freshManager.rollback('auto-rollback:health-check-failed');
+
+      // 断言: 用 last-known-good 的 1.0.0 包静默重装 + 重启
+      expect(mockSpawn).toHaveBeenCalled();
+      const [spawnedFile, spawnedArgs] = mockSpawn.mock.calls[0];
+      expect(spawnedFile).toContain('Sage-Setup-1.0.0.exe');
+      expect(spawnedArgs).toContain('/S');
+
+      // 持久化的 currentVersion 不在此处翻转 —— 重装的 1.0.0 启动后由
+      // onAppStartup 的 installAttempt 对账恢复 (与真实升级流一致)。
+      const state = await readState();
+      expect(state.currentVersion).toBe('2.0.0');
+
+      const { app } = await import('electron');
+      expect(vi.mocked(app.relaunch)).toHaveBeenCalled();
+      expect(vi.mocked(app.exit)).toHaveBeenCalledWith(0);
+      expect(installDir).toBeTruthy();
+      void spawnCalls;
+    });
+  });
+
 });

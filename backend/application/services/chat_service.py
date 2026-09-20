@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import time
 import uuid
@@ -529,6 +530,7 @@ class ChatService:
                     assistant_text=(response.content or "").replace(SKILL_NUDGE_SUFFIX, ""),
                     session_id=session_id,
                     enabled=True,  # hex 路径保持现状行为：有 memory 即写
+                    tool_observations=_pop_env_observations(session_id),
                 )
             )
 
@@ -792,7 +794,13 @@ class ChatService:
             # 把工具结果作为 TOOL 消息回写会话历史
             tool_message = Message(
                 role=Role.TOOL,
-                content=result.output if result.success else (result.error or ""),
+                content=(
+                    result.output
+                    if isinstance(result.output, str)
+                    else json.dumps(result.output, ensure_ascii=False, default=str)
+                )
+                if result.success
+                else (result.error or ""),
                 tool_call_id=tc.id,
             )
             await self.storage.append_message(session_id, tool_message)
@@ -837,8 +845,10 @@ class ChatService:
 # --------------------------------------------------------------------------- #
 
 
-def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> Tuple[str, List[str]]:
-    """计算本轮用户消息自动激活的技能上下文块及激活技能名列表。
+def _skill_activation_block(
+    message: str, skills: Optional[SkillPort]
+) -> Tuple[str, List[Dict[str, Any]]]:
+    """计算本轮用户消息自动激活的技能上下文块及激活技能列表。
 
     结构性探测：仅当 skills adapter 实现 ``auto_activate(message)`` 扩展
     方法（``InprocSkillAdapter``）时生效；纯 ``SkillPort`` mock / 其他
@@ -849,8 +859,10 @@ def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> Tuple[
     绝不能破坏对话轮次（与记忆上下文注入同语义）。
 
     Returns:
-        ``(block, names)`` —— block 为可追加到 system prompt 的文本（含前导换行），
-        names 为激活的技能名列表（用于推送 skill_activated 事件）。
+        ``(block, skills_list)`` —— block 为可追加到 system prompt 的文本
+        （含前导换行），skills_list 为技能信息列表，每个元素形如
+        ``{"name": str, "triggers_matched": List[str]}``（用于推送
+        skill_activated 事件，调用方零翻译）。
     """
     if not message or skills is None:
         return "", []
@@ -861,15 +873,37 @@ def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> Tuple[
         result = auto_activate(message)
         block = getattr(result, "context_block", "")
         names = list(getattr(result, "names", ()))
+        # matches 字段可能不存在（duck-type 兼容 _FakeActivationResult 等测试 mock）
+        matches = getattr(result, "matches", {}) or {}
     except Exception as exc:
         logger.debug(f"A16 skill auto-activation skipped: {exc}")
         return "", []
-    return (f"\n\n{block}" if isinstance(block, str) and block else "", names if isinstance(names, list) else [])
+    if not isinstance(names, list):
+        return ("", [])
+    # 构造事件载荷形状：每个技能带其命中的触发词列表
+    skills_list: List[Dict[str, Any]] = []
+    for name in names:
+        matched = matches.get(name, ())
+        skills_list.append({
+            "name": name,
+            "triggers_matched": list(matched) if matched else [],
+        })
+    return (f"\n\n{block}" if isinstance(block, str) and block else "", skills_list)
 
 
 # --------------------------------------------------------------------------- #
 # WS-C P0-2: 统一记忆写入路径（模块级，hex ChatService 与 legacy /chat/stream 共用）
 # --------------------------------------------------------------------------- #
+
+
+def _pop_env_observations(session_id: Optional[str]) -> str:
+    """取走本轮工具观察到的环境事实（bash shell 降级提示等），无则空串。"""
+    try:
+        from backend.tools.env_probe import pop_observations
+
+        return pop_observations(session_id)
+    except Exception:  # noqa: BLE001 — 观察缺失不影响提取
+        return ""
 
 
 async def extract_and_store_memory(
@@ -879,6 +913,7 @@ async def extract_and_store_memory(
     assistant_text: str,
     session_id: Optional[str],
     enabled: bool,
+    tool_observations: str = "",
 ) -> int:
     """从一轮对话中提取原子事实并写入记忆系统（best-effort，绝不外抛）。
 
@@ -935,12 +970,28 @@ async def extract_and_store_memory(
             )
 
     try:
+        # 去重已知事实：修复此前提取器恒收到"（无）"（existing_facts 未传）。
+        existing_facts: List[str] = []
+        recent_fn = (
+            getattr(memory_port, "recent_fact_contents", None)
+            if hasattr(type(memory_port), "recent_fact_contents")
+            else None
+        )
+        if callable(recent_fn):
+            try:
+                existing_facts = list(recent_fn() or [])
+            except Exception as exc:  # noqa: BLE001 — 去重失败可容忍
+                logger.debug(f"existing_facts 读取失败(忽略): {exc}")
         facts = await extractor.extract(
             user_message=user_text or "",
             assistant_message=assistant_text or "",
+            existing_facts=existing_facts,
+            tool_observations=tool_observations,
         )
-        # 用户画像类事实类别（extractor 产出）→ 路由到 store_profile
-        profile_categories = ("preference", "goal")
+        # 用户画像类事实类别（extractor 产出）→ 路由到 store_profile。
+        # environment（本机工具链事实）进画像后随 USER PROFILE 快照置顶注入，
+        # 绕开 episodic recency/decay 限制（PR 环境记忆化）。
+        profile_categories = ("preference", "goal", "environment")
         # 结构性探测 store_profile（MemoryPort 协议外的扩展方法）:
         # 用**类级** hasattr（而非实例 getattr）—— 无 spec 的 Mock 在实例上
         # 会自动创建任意属性, 类级探测可避免误判为"已实现"（review MEDIUM）。

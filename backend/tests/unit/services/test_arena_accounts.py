@@ -1,3 +1,4 @@
+import contextlib
 import os
 import tempfile
 
@@ -17,7 +18,9 @@ def svc():
     key = Fernet.generate_key()
     s = ArenaAccountService(db_path=path, encryption_key=key)
     yield s
-    os.unlink(path)
+    s.close()  # Windows：连接未关闭时 unlink 报 WinError 32
+    with contextlib.suppress(PermissionError):
+        os.unlink(path)
 
 
 def test_create_account_round_trip(svc):
@@ -96,3 +99,43 @@ def test_derive_arena_key_is_stable_and_fernet_compatible():
     assert k1 != k3
     # Fernet must accept the derived key
     Fernet(k1)
+
+
+# ---------------------------------------------------------------------------
+# 主密钥托管（SecretBox 包装，preferences 落库；2026-09-19）
+# ---------------------------------------------------------------------------
+
+class _FakeSettingsRepo:
+    def __init__(self):
+        self.store: dict = {}
+
+    def get(self, key):
+        return self.store.get(key)
+
+    def set(self, key, value, value_type="string", category="general"):
+        self.store[key] = value
+
+
+def test_get_or_create_master_key_round_trip(monkeypatch):
+    monkeypatch.setenv("SAGE_SECRET_SCHEME", "test")
+    from backend.services.arena_accounts import (
+        MASTER_KEY_PREFERENCE,
+        get_or_create_master_key,
+    )
+
+    repo = _FakeSettingsRepo()
+    key1 = get_or_create_master_key(repo)
+    assert repo.store[MASTER_KEY_PREFERENCE].startswith("enc:test:")
+    key2 = get_or_create_master_key(repo)
+    assert key1 == key2  # 二次读取复用，不重新生成
+
+
+def test_get_or_create_master_key_regenerates_on_unwrap_failure(monkeypatch):
+    monkeypatch.setenv("SAGE_SECRET_SCHEME", "test")
+    from backend.services.arena_accounts import get_or_create_master_key
+
+    repo = _FakeSettingsRepo()
+    repo.set("arena_master_key", "enc:test:v1:bm90LWEta2V5")  # 损坏载荷
+    key = get_or_create_master_key(repo)
+    assert key  # 解包失败 → 重新生成而非拒绝启动
+    assert get_or_create_master_key(repo) == key

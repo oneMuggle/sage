@@ -292,8 +292,11 @@ class OfficeCreateTool(BaseTool):
                             "paragraphs:[{text, citations?:[key], "
                             "heading?, font_size?, bold?, italic?, color?, "
                             "align?}]（text 支持交叉引用占位符 "
-                            "{{fig:图题注}}/{{tbl:表题注}}，生成时替换为"
-                            "图N/表N；未匹配题注即生成失败）, tables:[{headers, rows[], caption?, "
+                            "{{fig:图题注}}/{{tbl:表题注}}，生成时写成 "
+                            "Word 交叉引用域（REF），显示图N/表N且更新域"
+                            "自动同步题注重排；未匹配题注即生成失败；另支持"
+                            "{{fn:备注文本}} 内联脚注与 {{en:备注文本}} "
+                            "内联尾注）, tables:[{headers, rows[], caption?, "
                             "style?, header_repeat?, column_widths_cm?, "
                             "merges?}], images?:"
                             "[{source, width_inches?, height_inches?, "
@@ -307,6 +310,23 @@ class OfficeCreateTool(BaseTool):
                             "slides），只有 word 接受纯字符串。"
                         ),
                         "properties": {
+                            "metadata": {
+                                "type": "object",
+                                "description": (
+                                    "word/excel/ppt 通用：文档核心属"
+                                    "性（「文件 → 信息」面板可见；期刊"
+                                    "/公文归档要求）。word 的 title 恒"
+                                    "取请求标题；其余显式传入才写，不"
+                                    "臆造作者。"
+                                ),
+                                "properties": {
+                                    "author": {"type": "string"},
+                                    "subject": {"type": "string"},
+                                    "keywords": {"type": "string"},
+                                    "comments": {"type": "string"},
+                                    "category": {"type": "string"},
+                                },
+                            },
                             "title": {
                                 "type": "string",
                                 "description": "word 文档标题。",
@@ -346,6 +366,32 @@ class OfficeCreateTool(BaseTool):
                                                     "left": {"type": "number"},
                                                     "right": {"type": "number"},
                                                 },
+                                            },
+                                            "page_number_format": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "decimal",
+                                                    "upperRoman",
+                                                    "lowerRoman",
+                                                    "upperLetter",
+                                                    "lowerLetter",
+                                                ],
+                                                "description": (
+                                                    "节内页码格式（论文前置"
+                                                    "罗马页码场景）"
+                                                ),
+                                            },
+                                            "page_number_start": {
+                                                "type": "integer",
+                                                "description": "页码起始号",
+                                            },
+                                            "footnote_restart_each_section": {
+                                                "type": "boolean",
+                                                "description": (
+                                                    "该节脚注编号每节重排"
+                                                    "（numRestart=eachSect，"
+                                                    "分章脚注场景）"
+                                                ),
                                             },
                                         },
                                     },

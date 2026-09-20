@@ -2,14 +2,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetSettings = vi.fn();
 const mockSetSettings = vi.fn();
+const mockSetPreference = vi.fn();
 vi.mock('../../../shared/api/settingsClient', () => ({
   settingsClient: {
     getSettings: (...args: unknown[]) => mockGetSettings(...args),
     setSettings: (...args: unknown[]) => mockSetSettings(...args),
+    setPreference: (...args: unknown[]) => mockSetPreference(...args),
   },
 }));
 
-import { loadSettings, mergeWithDefaults, saveSettings, resetSettings } from '../storage';
+import {
+  loadSettings,
+  mergeWithDefaults,
+  resetPreferencesToDefaults,
+  resetSettings,
+  saveSettings,
+} from '../storage';
 import type { AppSettings } from '../types';
 import { DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY } from '../types';
 
@@ -21,6 +29,7 @@ describe('settings storage (async)', () => {
     localStorage.clear();
     mockGetSettings.mockReset();
     mockSetSettings.mockReset();
+    mockSetPreference.mockReset();
   });
 
   describe('loadSettings', () => {
@@ -111,6 +120,61 @@ describe('settings storage (async)', () => {
       const cached = JSON.parse(localStorage.getItem(CACHE_KEY)!);
       expect(cached).toEqual(DEFAULT_SETTINGS);
       expect(mockSetSettings).toHaveBeenCalled();
+    });
+
+    it('同时重置 preferences KV 行为项', async () => {
+      await resetSettings();
+      const keys = mockSetPreference.mock.calls.map((call) => call[0]);
+      expect(keys).toContain('permission_mode');
+      expect(keys).toContain('network_policy');
+      expect(keys).toContain('hooks');
+    });
+  });
+
+  describe('resetPreferencesToDefaults', () => {
+    it('写各行为类 KV 的默认值（key/value 与对应 Tab 正常写入口径一致）', async () => {
+      await resetPreferencesToDefaults();
+      const written = new Map(
+        mockSetPreference.mock.calls.map((call) => [call[0], call[1] as string]),
+      );
+      expect(written.get('permission_mode')).toBe('workspace_write');
+      expect(JSON.parse(written.get('network_policy')!)).toEqual({
+        mode: 'online',
+        allowed_hosts: [],
+        insecure_tls_hosts: [],
+      });
+      expect(JSON.parse(written.get('web_proxy')!)).toEqual({ http: '', https: '' });
+      expect(JSON.parse(written.get('search_config')!)).toEqual({
+        order: ['bing', 'ddg'],
+        tavily_key: '',
+        zhipu_key: '',
+      });
+      expect(JSON.parse(written.get('web_access_config')!)).toEqual({
+        render_persistent: false,
+        auto_refresh_credentials: false,
+      });
+      expect(written.get('fallback_model')).toBe('');
+      // 上下文轮数限制默认不限（空串）
+      expect(written.get('context_turn_limit')).toBe('');
+      // 安全网默认开
+      expect(written.get('auto_checkpoint')).toBe('1');
+      expect(written.get('spend_limit_usd')).toBe('0');
+      expect(written.get('hooks')).toBe('[]');
+    });
+
+    it('不碰凭据 / 审批规则 / 运行时状态类 key', async () => {
+      await resetPreferencesToDefaults();
+      const keys = mockSetPreference.mock.calls.map((call) => call[0]);
+      for (const protectedKey of [
+        'browser_credential_vault',
+        'permission_rules',
+        'current_session_id',
+        'session_model_overrides',
+        'theme_mode',
+        'font_ui',
+      ]) {
+        expect(keys).not.toContain(protectedKey);
+      }
     });
   });
 

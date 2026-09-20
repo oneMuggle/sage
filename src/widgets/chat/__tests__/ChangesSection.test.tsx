@@ -1,12 +1,13 @@
 // src/widgets/chat/__tests__/ChangesSection.test.tsx
 // U1 变更面板组件测试 — workspaceApi 全 mock,不发真实请求。
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type {
   WorkspaceChanges,
   WorkspaceCheckpoint,
   WorkspaceDiff,
+  WorkspaceFileContent,
 } from '../../../shared/api/workspaceApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
@@ -14,6 +15,9 @@ import { ChangesSection } from '../changes/ChangesSection';
 
 const mockGetChanges = vi.fn<() => Promise<WorkspaceChanges>>();
 const mockGetChangeDiff = vi.fn<(path?: string, staged?: boolean) => Promise<WorkspaceDiff>>();
+const mockGetChangeFile = vi.fn<
+  (sessionId: string, path: string) => Promise<WorkspaceFileContent>
+>();
 const mockRevertChanges =
   vi.fn<
     (
@@ -37,6 +41,7 @@ vi.mock('../../../shared/api/workspaceApi', () => ({
   workspaceApi: {
     getChanges: () => mockGetChanges(),
     getChangeDiff: (path?: string, staged?: boolean) => mockGetChangeDiff(path, staged),
+    getChangeFile: (sessionId: string, path: string) => mockGetChangeFile(sessionId, path),
     revertChanges: (...args: unknown[]) => mockRevertChanges(...args),
     revertChangeHunks: (...args: unknown[]) => mockRevertHunks(...args),
     listCheckpoints: (...args: unknown[]) => mockListCheckpoints(...args),
@@ -69,9 +74,10 @@ const sampleChanges: WorkspaceChanges = {
   behind: 0,
   clean: false,
   changes: [
-    { indexStatus: '', worktreeStatus: 'M', path: 'src/app.ts' },
-    { indexStatus: 'A', worktreeStatus: '', path: 'src/new.py' },
-    { indexStatus: '', worktreeStatus: '?', path: 'notes.md' },
+    // right-panel R5: insertions/deletions 来自后端 numstat；null = 二进制/未知
+    { indexStatus: '', worktreeStatus: 'M', path: 'src/app.ts', insertions: 12, deletions: 3 },
+    { indexStatus: 'A', worktreeStatus: '', path: 'src/new.py', insertions: 40, deletions: 0 },
+    { indexStatus: '', worktreeStatus: '?', path: 'notes.md', insertions: 5, deletions: null },
   ],
 };
 
@@ -141,6 +147,136 @@ describe('ChangesSection', () => {
     });
   });
 
+  it('right-panel R5: 渲染 +/- 行数徽章（0/null 不渲染）', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+    // 已修改: +12 −3；新增: +40（deletions=0 不渲染）；未跟踪: +5（null 不渲染）
+    expect(screen.getByText('+12')).toBeInTheDocument();
+    expect(screen.getByText('−3')).toBeInTheDocument();
+    expect(screen.getByText('+40')).toBeInTheDocument();
+    expect(screen.queryByText('−40')).not.toBeInTheDocument();
+    expect(screen.getByText('+5')).toBeInTheDocument();
+    expect(screen.queryByText('−5')).not.toBeInTheDocument();
+    expect(screen.queryByText('−0')).not.toBeInTheDocument();
+  });
+
+  it('right-panel R5: selectedChangePath 直达对应文件 diff 视图并清除选中', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({
+      diff: '--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new',
+      truncated: false,
+    });
+    const { useRightPanelStore } = await import('../../../features/right-panel/rightPanelStore');
+    act(() => {
+      useRightPanelStore.getState().selectChange('src/app.ts');
+    });
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    // 直达 diff 视图（跳过列表点击）
+    await waitFor(
+      () => {
+        expect(screen.getByText('+new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+    expect(mockGetChangeDiff).toHaveBeenCalledWith('s1', 'src/app.ts');
+    // 一次性消费:选中路径被清除,避免切会话串台
+    expect(useRightPanelStore.getState().selectedChangePath).toBeNull();
+  });
+
+  it('right-panel R6: 切换预览视图懒加载文件全文', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({
+      diff: '--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new',
+      truncated: false,
+    });
+    mockGetChangeFile.mockResolvedValue({
+      path: 'src/app.ts',
+      content: "print('v2')\n",
+      truncated: false,
+    });
+    const { container } = render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('src/app.ts'));
+    await waitFor(
+      () => {
+        expect(screen.getByText('+new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+
+    // 切到预览:懒加载文件内容并渲染全文
+    fireEvent.click(screen.getByTestId('view-mode-preview'));
+    await waitFor(() => {
+      expect(mockGetChangeFile).toHaveBeenCalledWith('s1', 'src/app.ts');
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("print('v2')");
+    });
+
+    // 切回 diff 视图
+    fireEvent.click(screen.getByTestId('view-mode-diff'));
+    await waitFor(() => {
+      expect(screen.getByText('+new')).toBeInTheDocument();
+    });
+  });
+
+  it('right-panel R6: 全部审查按钮进入汇总视图', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({
+      diff: 'diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new',
+      truncated: false,
+    });
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+    // 无变更时按钮不渲染
+    expect(screen.getByTestId('review-all-button')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('review-all-button'));
+    // 进入汇总视图:返回按钮 + 文件小节（diff 内容经真实 Shiki 异步渲染）
+    await waitFor(() => {
+      expect(screen.getByTestId('review-all-back')).toBeInTheDocument();
+    });
+    await waitFor(
+      () => {
+        expect(screen.getByText('+new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+
+    // 返回列表
+    fireEvent.click(screen.getByTestId('review-all-back'));
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+  });
+
   it('opens diff view on file click and goes back', async () => {
     mockGetChanges.mockResolvedValue(sampleChanges);
     mockGetChangeDiff.mockResolvedValue({
@@ -158,11 +294,16 @@ describe('ChangesSection', () => {
     });
     fireEvent.click(screen.getByText('src/app.ts'));
 
-    // diff 视图:文件名标题 + diff 内容经 ShikiCodeBlock 渲染(高亮异步,
-    // 断言返回的原始 diff 行)
-    await waitFor(() => {
-      expect(screen.getByText('+new')).toBeInTheDocument();
-    });
+    // diff 视图:文件名标题 + diff 内容经 ShikiCodeBlock 异步高亮渲染。
+    // 全量并行跑时 worker CPU 争抢会拖慢 Shiki 高亮,默认 1s 超时不够,
+    // 显式放宽到 10s;离开 diff 视图时 onFileClick 可能再次触发加载,
+    // 因此用 findBy 轮询而非同步断言。
+    await waitFor(
+      () => {
+        expect(screen.getByText('+new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
     expect(mockGetChangeDiff).toHaveBeenCalledWith('s1', 'src/app.ts');
 
     // 返回列表
@@ -188,6 +329,50 @@ describe('ChangesSection', () => {
     await waitFor(() => {
       expect(screen.getByText(/未跟踪文件/)).toBeInTheDocument();
     });
+  });
+
+  it('P1-6: 逐 hunk 折叠 —— 折叠后内容不渲染,勾选框保留', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({ diff: TWO_HUNK_DIFF, truncated: false });
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('src/app.ts'));
+    await waitFor(
+      () => {
+        expect(screen.getByText('+a2-new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+
+    // 折叠 hunk 0 → 其内容消失,勾选框仍在（折叠态可勾选撤销）
+    fireEvent.click(screen.getByTestId('hunk-toggle-0'));
+    await waitFor(() => {
+      expect(screen.queryByText('+a2-new')).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId('hunk-checkbox-0')).toBeInTheDocument();
+    // hunk 1 不受影响
+    await waitFor(
+      () => {
+        expect(screen.getByText('+b2-new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+
+    // 再展开恢复
+    fireEvent.click(screen.getByTestId('hunk-toggle-0'));
+    await waitFor(
+      () => {
+        expect(screen.getByText('+a2-new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
   });
 
   it('U19: 勾选 hunk 后撤销所选（0-based 序号传后端）', async () => {

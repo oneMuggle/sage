@@ -54,8 +54,13 @@ triggers: []
 期刊/正式报告要插图清单/表格清单时，`format_spec` 加 `figure_index` /
 `table_index`（各占一页，收录全部 SEQ 题注；生成时带 `refresh_toc: true`
 即可一并刷出真页码）。正文写"如图 N 所示"不要手编 N——用交叉引用占位符
-`{{fig:图题注}}` / `{{tbl:表题注}}`，生成时自动替换为"图N"/"表N"
-（题注增删自动重排，未匹配题注会生成失败并提示）。
+`{{fig:图题注}}` / `{{tbl:表题注}}`，生成时写成 Word 交叉引用域
+（显示"图N"/"表N"，更新域自动跟随题注重排；未匹配题注会生成失败并
+提示）。页码惯例（前置目录罗马页码、正文阿拉伯从 1）：`format_spec.page`
+声明 `page_number_format: "lowerRoman"` 起始，`section_breaks` 新节用
+`"decimal"` + `page_number_start: 1`——页脚 PAGE 域自动跟随节格式。
+备注的落位可选脚注（页脚，`{{fn:}}`）或尾注（文末清单，`{{en:}}`）：
+随文查阅选脚注，集中查阅选尾注。
 
 ### 4. 生成或修订 docx
 

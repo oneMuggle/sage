@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { saveCurrentSessionId } from '../../entities/session/storage';
 import { invoke } from '../api/desktopInvoke';
+import type { MessageSource, RagCitation } from '../api/types';
 import { clientLogger } from '../log/client';
 
 // Re-export API modules for convenience
@@ -36,6 +37,18 @@ export interface Session {
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）
+/** R19-W1: 网页访问被拦截时后端给出的建议操作（拦截卡片按钮）。 */
+export interface BlockedAction {
+  /** 动作标识: open_browser | configure_credentials | configure_proxy | view_docs */
+  action: string;
+  /** 按钮文案（后端已本地化） */
+  label: string;
+  /** 可选图标（emoji） */
+  icon?: string;
+  /** 动作参数（如 url / domain / topic） */
+  params?: Record<string, unknown>;
+}
+
 export interface ToolCall {
   /** 后端 tool_call.id, 用于 observing 事件精确匹配 (HIGH-3 修复) */
   id?: string;
@@ -54,6 +67,14 @@ export interface ToolCall {
       source?: string;
     }>;
     apiUrls?: string[];
+    /** R19-W1: 网页访问拦截原因枚举（antibot_cf | antibot_other | login_wall |
+     *  http_4xx | http_5xx | timeout | dns | render | generic）。
+     *  存在时 chat 流渲染拦截卡片而非原始结果文本。 */
+    blockReason?: string;
+    /** R19-W1: 被拦截的目标 URL */
+    blockedUrl?: string;
+    /** R19-W1: 建议操作按钮 */
+    suggestedActions?: BlockedAction[];
   };
 }
 
@@ -76,6 +97,10 @@ export interface Message {
   activated_skills?: { name: string; triggers_matched: string[] }[];
   /** R38: 自动压缩信息（compact_triggered 流事件携带） */
   compact_info?: { before: number; after: number; removed: number };
+  /** r71: 附件检索注入溯源（attachment_rag_used 流事件携带 / get_messages 回读；wire 可为 null） */
+  rag_citations?: RagCitation[] | null;
+  /** R81: 检索类工具命中来源（sources_used 流事件携带 / get_messages 回读；wire 可为 null） */
+  sources?: MessageSource[] | null;
   reasoning_content?: string | null; // LLM 思考/推理过程（2026-09 step-by-step: 允许 null 表示该步无 reasoning 累积）
   /** 2026-09 step-by-step: 多步 ReAct 中每条 assistant 消息的步序号。null=旧消息/单步。 */
   step_index?: number | null;
@@ -105,6 +130,8 @@ interface StoreState {
   addMessage: (message: Message) => void;
   /** PR-6: 用同一 id 的新对象替换某条消息 (流式 chat 结束时写回最终 content) */
   updateMessage: (id: string, patch: Partial<Message>) => void;
+  /** client_message_id 协议: DONE 携带服务端 id 后, 把乐观占位 id 原地替换 */
+  replaceMessageId: (oldId: string, newId: string) => void;
   /** R17-B: 本地移除一条消息（配合 messageApi.delete 的删除入口） */
   removeMessage: (id: string) => void;
   clearMessages: () => void;
@@ -131,10 +158,21 @@ export function mergeLoadedMessages(
     const key = `${m.role}\u0000${m.content}`;
     serverKeyCount.set(key, (serverKeyCount.get(key) ?? 0) + 1);
   }
+  // R38 (2026-09-18): 压缩通知单独去重。本地合成的即时通知是 role=system，
+  // 持久化的续接摘要行是 role=assistant 且 content 是 LLM 写的摘要 ——
+  // (role, content) 双双不同，上面的计数去重无法命中，同一压缩会留下两条
+  // 通知。改为按 compact_info 深度相等剔除本地那条。
+  const serverCompactKeys = new Set(
+    sessionMessages.filter((m) => m.compact_info).map((m) => JSON.stringify(m.compact_info)),
+  );
   const mergedMessages = [
     ...sessionMessages,
     ...localMessages.filter((message) => {
       if (message.session_id !== sessionId || loadedIds.has(message.id)) return false;
+      // R38: 本地合成压缩通知与持久化续接行按 compact_info 去重
+      if (message.compact_info && serverCompactKeys.has(JSON.stringify(message.compact_info))) {
+        return false;
+      }
       const key = `${message.role}\u0000${message.content}`;
       const remaining = serverKeyCount.get(key) ?? 0;
       if (remaining > 0) {
@@ -258,6 +296,14 @@ export const useStore = create<StoreState>((set, _get) => ({
   updateMessage: (id, patch) => {
     set((state) => ({
       messages: state.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    }));
+  },
+
+  // client_message_id 协议: DONE 携带服务端 id 后原地替换乐观占位 id ——
+  // 此后 loadMessages 对账按 id 精确命中, 不再依赖 (role, content) 计数兜底。
+  replaceMessageId: (oldId, newId) => {
+    set((state) => ({
+      messages: state.messages.map((m) => (m.id === oldId ? { ...m, id: newId } : m)),
     }));
   },
 

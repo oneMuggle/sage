@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sqlite3
 import time
 from pathlib import Path
@@ -74,10 +75,8 @@ def create_version(
     except sqlite3.IntegrityError as e:
         # 防御性清理已写的临时快照文件
         conn.rollback()
-        try:
+        with contextlib.suppress(OSError):
             snapshot_path.unlink(missing_ok=True)
-        except OSError:
-            pass
         raise ValueError(
             f"Artifact {artifact_id} version_num {new_version} 冲突: "
             "caller 必须持有 _get_lock(artifact_id) 后调用"

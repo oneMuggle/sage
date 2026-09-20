@@ -16,7 +16,7 @@ import time
 import uuid
 from collections import deque
 from threading import Lock
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.chat.empty_response_guard import (
     EMPTY_RESPONSE_FALLBACK_TEXT,
@@ -34,6 +34,7 @@ from backend.core.legacy.context_first_aid import (
 from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
+from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_policy import ToolPolicy
 
 # ===== M6 HOOKS BEGIN: user-defined hooks around tool execution =====
@@ -243,6 +244,7 @@ class SageAgent:
         agent_id: Optional[str] = None,
         bare: bool = False,
         policy: Optional[ToolPolicy] = None,
+        scheduler_service_getter: Optional[Callable[[], Optional[SchedulerServicePort]]] = None,
     ):
         """初始化 SageAgent。
 
@@ -330,7 +332,11 @@ class SageAgent:
 
             # 初始化工具注册表
             self.tool_registry = ToolRegistry()
-            register_all_tools(self.tool_registry, policy=policy)
+            register_all_tools(
+                self.tool_registry,
+                policy=policy,
+                scheduler_service_getter=scheduler_service_getter,
+            )
             # 注入记忆管理器：register_all_tools 创建的 MemorySearchTool /
             # MemorySaveTool 默认 self.memory=None，runtime 调用会返回
             # "未初始化"。agent 路径直接把已构造的 self.memory_manager
@@ -1284,7 +1290,8 @@ class SageAgent:
                                 "content": cap_result_for_context(content_p),
                             }
                         )
-                        await run_event_hooks(
+                        # Phase 3: 钩子反馈注入 (并行路径)
+                        parallel_outcome = await run_event_hooks(
                             m6_hooks,
                             "post_tool_use",
                             tc_p.name,
@@ -1295,6 +1302,25 @@ class SageAgent:
                                 tool_output=content_p,
                                 is_error=err_p,
                             ),
+                        )
+                        if parallel_outcome.has_feedback:
+                            severity_label = {
+                                "info": "提示",
+                                "warning": "警告",
+                                "error": "错误",
+                            }.get(parallel_outcome.severity, "提示")
+                            messages.append(
+                                {
+                                    "role": "system",
+                                    "content": (
+                                        f"[钩子反馈·{severity_label}] "
+                                        f"{parallel_outcome.additional_context}"
+                                    ),
+                                }
+                            )
+                        # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
+                        await self._maybe_fire_error_hook(
+                            m6_hooks, tc_p.name, content_p, err_p
                         )
                     # 2026-09 step-by-step: 并行迭代边界，legacy_routes 收到后
                     # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
@@ -1704,15 +1730,51 @@ class SageAgent:
                                                 output_value, ensure_ascii=False, default=str
                                             )
                                         else:
-                                            err_value = result.error
-                                            if isinstance(err_value, str):
-                                                result_content = err_value or "工具执行失败"
-                                            elif err_value is None:
-                                                result_content = "工具执行失败"
-                                            else:
-                                                result_content = json.dumps(
-                                                    err_value, ensure_ascii=False, default=str
+                                            # R19-W1：web_fetch 反爬/登录墙拦截时
+                                            # result.content 是结构化 block 载荷
+                                            # （block_reason/blocked_url/suggested_actions）。
+                                            # 失败路径默认只取 error 纯字符串，前端
+                                            # JSON.parse 会抛错、结构化通道断开。此处仅
+                                            # 对该载荷改用 JSON 信封（顶层 metadata 键，
+                                            # 见 useChat.ts 的 parsed.metadata 提取），
+                                            # 前端据此渲染拦截卡片。其余工具保持原样。
+                                            block_payload = (
+                                                result.content
+                                                if isinstance(
+                                                    getattr(result, "content", None), dict
                                                 )
+                                                and result.content.get("block_reason")
+                                                else None
+                                            )
+                                            if block_payload is not None:
+                                                result_content = json.dumps(
+                                                    {
+                                                        "content": result.error or "工具执行失败",
+                                                        "metadata": {
+                                                            "blockReason": block_payload.get(
+                                                                "block_reason"
+                                                            ),
+                                                            "blockedUrl": block_payload.get(
+                                                                "blocked_url"
+                                                            ),
+                                                            "suggestedActions": block_payload.get(
+                                                                "suggested_actions", []
+                                                            ),
+                                                        },
+                                                    },
+                                                    ensure_ascii=False,
+                                                    default=str,
+                                                )
+                                            else:
+                                                err_value = result.error
+                                                if isinstance(err_value, str):
+                                                    result_content = err_value or "工具执行失败"
+                                                elif err_value is None:
+                                                    result_content = "工具执行失败"
+                                                else:
+                                                    result_content = json.dumps(
+                                                        err_value, ensure_ascii=False, default=str
+                                                    )
                                     else:
                                         is_error = False
                                         result_content = json.dumps(
@@ -1746,7 +1808,9 @@ class SageAgent:
 
                     # ===== M6 HOOKS BEGIN: post_tool_use (observe-only) =====
                     # 观察/审计专用 — 无法修改工具结果。
-                    await run_event_hooks(
+                    # Phase 3: 若钩子返回 ``additional_context``，以 system 角色
+                    # 注入对话历史，供 LLM 下一轮感知（如 lint 反馈 / 格式提醒）。
+                    hook_outcome = await run_event_hooks(
                         m6_hooks,
                         "post_tool_use",
                         tc.name,
@@ -1758,7 +1822,27 @@ class SageAgent:
                             is_error=is_error,
                         ),
                     )
+                    if hook_outcome.has_feedback:
+                        severity_label = {
+                            "info": "提示",
+                            "warning": "警告",
+                            "error": "错误",
+                        }.get(hook_outcome.severity, "提示")
+                        messages.append(
+                            {
+                                "role": "system",
+                                "content": (
+                                    f"[钩子反馈·{severity_label}] "
+                                    f"{hook_outcome.additional_context}"
+                                ),
+                            }
+                        )
                     # ===== M6 HOOKS END =====
+
+                    # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
+                    await self._maybe_fire_error_hook(
+                        m6_hooks, tc.name, result_content, is_error
+                    )
 
                 # 2026-09 step-by-step: 串行迭代边界，legacy_routes 收到后
                 # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
@@ -1889,14 +1973,62 @@ class SageAgent:
 
     # ===== M6 HOOKS BEGIN: config loader (fail-open) =====
     def _load_m6_hooks(self) -> List[HookConfig]:
-        """加载用户自定义钩子; 任何故障 → 空列表 (fail-open)。"""
+        """加载钩子 = 项目级 + 用户级 (fail-open, 任何故障 → 空列表)。
+
+        Phase 4: 项目级来自 ``<workspace>/.sage/hooks.json``, 受信任门禁
+        约束 (未信任的工作区不加载)。合并顺序 project 在前 —— 团队策略
+        优先裁决且无法被用户级配置遮蔽。
+        """
         try:
             from backend.data.settings_repo import SettingsRepository
+            from backend.hooks.merger import merge_hooks
+            from backend.hooks.project_config import load_project_hooks
 
-            return load_hooks(SettingsRepository())
+            settings_repo = SettingsRepository()
+            user_hooks = load_hooks(settings_repo)
+
+            workspace: Optional[str] = None
+            try:
+                workspace = self._office_boundary_resolver()
+            except Exception as exc:
+                # workspace 解析失败 (DB 故障等) → 跳过项目级, 用户级照常生效
+                logger.debug("M6 hooks: workspace resolution failed (project hooks skipped): %s", exc)
+
+            project_hooks = load_project_hooks(workspace, settings_repo) if workspace else []
+            return merge_hooks(project_hooks, user_hooks)
         except Exception as exc:
             logger.warning("M6 hooks load failed (fail-open): %s", exc)
             return []
+
+    async def _maybe_fire_error_hook(
+        self,
+        hooks: List[HookConfig],
+        tool_name: str,
+        content: str,
+        is_error: bool,
+    ) -> None:
+        """Phase 2: 工具执行失败时触发 ``error_occurred`` 钩子 (observe-only)。
+
+        仅在 ``is_error=True`` 且确有钩子配置时触发; 任何故障都 fail-open。
+        供外部系统 (告警 / 自动修复 / 合规审计) 订阅工具级失败。
+        """
+        if not is_error or not hooks:
+            return
+        try:
+            from backend.hooks.runner import build_error_payload
+
+            await run_event_hooks(
+                hooks,
+                "error_occurred",
+                tool_name,
+                build_error_payload(
+                    error_type="tool_error",
+                    error_message=(content or "")[:1024],
+                    tool_name=tool_name,
+                ),
+            )
+        except Exception as exc:  # pragma: no cover — 防御性, fail-open
+            logger.debug("error_occurred hook dispatch failed (fail-open): %s", exc)
 
     # ===== M6 HOOKS END =====
 
@@ -1921,7 +2053,7 @@ class SageAgent:
         if not required:
             return None
         # required 应该是字符串列表
-        if not isinstance(required, list | tuple):
+        if not isinstance(required, (list, tuple)):  # noqa: UP038 — py38 运行时 isinstance 不支持 PEP604 union
             return None
         missing = [name for name in required if name not in parameters]
         if not missing:

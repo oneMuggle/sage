@@ -419,9 +419,7 @@ describe('COMMAND_ROUTES', () => {
     // Task 11 (2026-09-17): context-isolation — 撤回自动话题切换
     const r = COMMAND_ROUTES.session_retreat_segment;
     expect(r.method).toBe('POST');
-    expect(r.path({ sessionId: 's/1' })).toBe(
-      '/api/v1/sessions/s%2F1/segments/retreat',
-    );
+    expect(r.path({ sessionId: 's/1' })).toBe('/api/v1/sessions/s%2F1/segments/retreat');
   });
 
   it('session_fork body maps camelCase args to backend snake_case fields', () => {
@@ -565,27 +563,18 @@ describe('COMMAND_ROUTES', () => {
 // 但 commands.ts 没映射 → 前端 404。后端端点 backend/api/legacy_routes.py:2479 (POST /memory/search)
 // + :2490 (POST /memory/save) 已存在, 补 IPC 桥即可。
 describe('memory IPC routes (PR-C §5.4)', () => {
-  it('has search_memory route posting to /api/v1/memory/search', () => {
+  it('has search_memory route getting /api/v1/memory/search', () => {
     const r = COMMAND_ROUTES.search_memory;
     expect(r).toBeDefined();
-    expect(r.method).toBe('POST');
-    expect(r.path({})).toBe('/api/v1/memory/search');
-  });
-
-  it('search_memory body forwards query/memoryType/limit (with default 20)', () => {
-    const r = COMMAND_ROUTES.search_memory;
-    // Default limit = 20 when caller omits it
-    expect(r.body!({ query: 'pasta' })).toEqual({
-      query: 'pasta',
-      memory_type: undefined,
-      limit: 20,
-    });
-    // Caller-provided limit preserved
-    expect(r.body!({ query: 'pasta', memoryType: 'episodic', limit: 5 })).toEqual({
-      query: 'pasta',
-      memory_type: 'episodic',
-      limit: 5,
-    });
+    expect(r.method).toBe('GET');
+    const url = new URL(
+      `http://x${r.path({ query: 'pasta', memoryType: 'episodic', limit: 5, sessionId: 's/1' })}`,
+    );
+    expect(url.pathname).toBe('/api/v1/memory/search');
+    expect(url.searchParams.get('query')).toBe('pasta');
+    expect(url.searchParams.get('type')).toBe('episodic');
+    expect(url.searchParams.get('limit')).toBe('5');
+    expect(url.searchParams.get('session_id')).toBe('s/1');
   });
 
   it('has save_memory route posting to /api/v1/memory/save', () => {

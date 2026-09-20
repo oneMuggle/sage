@@ -4,9 +4,10 @@
 提供所有内置工具的注册函数
 """
 
-from typing import Optional
+from typing import Callable, Optional
 
 from backend.domain.network_policy import NetworkPolicy
+from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_policy import ToolPolicy
 
 from .ask_user_tool import AskUserQuestionTool
@@ -82,6 +83,11 @@ from .registry import ToolRegistry
 from .repl_tool import ReplTool
 from .runtime_exec import RuntimeExecTool
 from .runtime_probe import RuntimeProbeTool
+from .schedule_tool import (
+    CancelScheduledTaskTool,
+    ListScheduledTasksTool,
+    ScheduleTaskTool,
+)
 from .search_tools import GlobSearchTool, GrepSearchTool
 from .session_search_tool import SessionSearchTool
 from .skill import SkillHotLoader
@@ -132,6 +138,7 @@ def register_all_tools(
     registry: ToolRegistry,
     policy: Optional[ToolPolicy] = None,
     network_policy: Optional[NetworkPolicy] = None,
+    scheduler_service_getter: Optional[Callable[[], Optional[SchedulerServicePort]]] = None,
 ) -> None:
     """
     注册所有内置工具到注册表
@@ -300,6 +307,12 @@ def register_all_tools(
     registry.register(ReadSageConfigTool(policy=policy))
     registry.register(UpdateSageConfigTool(policy=policy))
 
+    # 定时任务派发工具（feat/llm-schedule-tool）：把 SchedulerService 暴露给 LLM。
+    # list 为 READ；schedule / cancel 为 WRITE_LOCAL（持久化副作用，走审批）。
+    registry.register(ScheduleTaskTool(policy=policy, service_getter=scheduler_service_getter))
+    registry.register(ListScheduledTasksTool(policy=policy, service_getter=scheduler_service_getter))
+    registry.register(CancelScheduledTaskTool(policy=policy, service_getter=scheduler_service_getter))
+
     # Register MCP tools (from external MCP servers like draw.io)
     try:
         from backend.mcp import register_mcp_tools
@@ -395,5 +408,8 @@ __all__ = [
     "ImageGenerationTool",
     "ReadSageConfigTool",
     "UpdateSageConfigTool",
+    "ScheduleTaskTool",
+    "ListScheduledTasksTool",
+    "CancelScheduledTaskTool",
     "register_all_tools",
 ]

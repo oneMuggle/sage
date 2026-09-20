@@ -1718,12 +1718,21 @@ describe('UpdateManager — 内置 provider 签名校验 + 下载完整性 (2026
     expect(state.pendingUpdate?.sha512).toBe(
       crypto.createHash('sha512').update(bytes).digest('hex'),
     );
-    expect(state.cachedRollbackPackage?.path).toContain('update-cache');
-    expect(state.cachedRollbackPackage?.path).toContain('Sage-Setup-9.9.9.exe');
-    // 必须落在 userData 下 (reinstallFromPackage 的 containment 校验前提)
-    expect(path.resolve(state.cachedRollbackPackage?.path ?? '')).toContain(
-      path.resolve(mockUserData),
+    // 2026-09 Phase A (回滚语义重做): 下载不再覆盖 cachedRollbackPackage
+    // (其语义为 last-known-good); 新版本包落 userData/update-cache +
+    // rollback-meta.json, 供安装准备阶段登记为回滚数据。
+    expect(state.cachedRollbackPackage ?? null).toBeNull();
+    const managedFile = path.join(mockUserData, 'update-cache', 'Sage-Setup-9.9.9.exe');
+    const managedStats = await fs.stat(managedFile);
+    expect(managedStats.size).toBe(bytes.length);
+    const metaRaw = await fs.readFile(
+      path.join(mockUserData, 'update-cache', 'rollback-meta.json'),
+      'utf-8',
     );
+    const meta = JSON.parse(metaRaw);
+    expect(meta.version).toBe('9.9.9');
+    expect(meta.sha512).toBe(crypto.createHash('sha512').update(bytes).digest('hex'));
+    expect(meta.filename).toBe('Sage-Setup-9.9.9.exe');
   });
 
   it('内置 provider: 签名校验失败 → 下载被拒绝', async () => {

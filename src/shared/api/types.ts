@@ -148,6 +148,33 @@ export interface Message {
   reasoning_content?: string | null;
   /** Task 5 (2026-09-17): 消息子类型 —— 'topic_separator' 渲染为分隔线。 */
   subtype?: string | null;
+  /** R81: r71 附件检索溯源（get_messages 回读；流式经 AgentEvent.citations）。 */
+  rag_citations?: RagCitation[] | null;
+  /** R81: 工具命中来源（web/wiki/MCP），终稿 assistant 行落库回读。 */
+  sources?: MessageSource[] | null;
+}
+
+/** R81: 统一参考来源条目 —— backend/chat/sources_extractor.py 的提取产物。 */
+export interface MessageSource {
+  /** R86: 新增 'memory' —— @memory: 实体引用命中（渲染进记忆分组）。 */
+  kind: 'web' | 'wiki' | 'tool' | 'memory';
+  title?: string;
+  url?: string;
+  snippet?: string;
+  query?: string;
+  path?: string;
+  score?: number | null;
+  server?: string;
+  tool?: string;
+  preview?: string;
+}
+
+/** R81: 附件检索溯源（r71，原 inline 形状收敛为此类型）。 */
+export interface RagCitation {
+  media_id: string;
+  filename?: string;
+  mode: string;
+  chunks?: { index: number; score: number }[];
 }
 
 export interface ToolCall {
@@ -215,7 +242,19 @@ export type AgentState =
   // 压缩统计,载荷见 AgentEvent.compact。
   | 'compact_triggered'
   // Task 10 (2026-09-17): 自动话题检测 — 切换 segment 时由 producer 推送。
-  | 'topic_shifted';
+  | 'topic_shifted'
+  // r71: 附件检索注入溯源（引用块在气泡内可展开）,
+  // 载荷见 AgentEvent.citations。
+  | 'attachment_rag_used'
+  // Round 3 (2026-09-19): 编排拆解前置进度（需求澄清/事实侦察）,
+  // 载荷见 AgentEvent.preflight_phase。先于 task_plan 到达。
+  | 'orch_preflight'
+  // right-panel R5 (2026-09-19): 写文件工具落盘后经活跃流推送的变更信号,
+  // 前端据此防抖刷新右侧变更列表,载荷见 AgentEvent.change。
+  | 'workspace_changed'
+  // R81: 统一参考来源 —— 检索类工具命中（web/wiki/MCP）在 done 前
+  // 一次性推送, 载荷见 AgentEvent.sources。
+  | 'sources_used';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -313,6 +352,8 @@ export interface TaskPlanItem {
   goal: string;
   // P1-6 (2026-08-14): 依赖透传 —— 后端 task_plan 事件带 depends_on。
   depends_on?: string[];
+  parent_task_id?: string | null;
+  depth?: number;
 }
 
 export interface TaskPlanEvent {
@@ -344,9 +385,20 @@ export interface TaskStatusEvent {
   // BU13 (round24): 终态任务执行时长（毫秒）—— started_at→finished_at；
   // 二者齐备才携带。任务树行内渲染耗时徽章。
   duration_ms?: number;
+  // BU15 (round29): 【UI 注入，后端不发】running 状态被前端 ingestion
+  // 观察到的本地时间戳（Date.now()），任务树行内实时计时用；终态后消失。
+  runningSince?: number;
   // live-events P0 (2026-09-06): 派发本批次的 conductor 工具调用 ID —— 聊天流内
   // 把子代理实时步骤关联到 "Delegate <goal>" 卡片的关联键。
   parent_tool_call_id?: string | null;
+  // 任务层级（spec 2026-09-19）：后端 _emit_task_status 固定携带，
+  // 前端据此渲染任务树缩进/折叠。旧事件缺省 → 根节点、深度 0。
+  parent_task_id?: string | null;
+  depth?: number;
+  // RP1 (round34, 2026-09-19): 被 LLM 动态调整过计划的任务 —— conductor 在 run
+  // 中改过目标 / 新增 / 取消该任务时携带，任务树渲染"已调整"徽章（可追溯哪些
+  // 任务偏离了初始计划）。普通任务无此键。
+  adjusted?: boolean;
 }
 
 // ─── live-events P0 (2026-09-06): 子代理实时执行镜像 ───────────────────
@@ -451,6 +503,10 @@ export interface AgentEvent {
   tool_result?: AgentToolResult;
   /** producer 失败信封: LLMError.to_dict() 为 dict; 旧路径/限额拦截为 str */
   error?: string | { type?: string; message?: string; status_code?: number };
+  /** client_message_id 协议: DONE 附带 assistant 消息的服务端 id, 供前端替换占位 id */
+  message_id?: string;
+  /** 首轮对话标记: 标题将在后台生成, 前端稍后补刷侧栏 (2026-09) */
+  title_pending?: boolean;
   /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
   agent_id?: string;
   /** M1: state === 'permission_request' 时携带的审批请求详情 */
@@ -461,6 +517,8 @@ export interface AgentEvent {
   type?: string;
   subtype?: string;
   title?: string;
+  // Round 3 (2026-09-19): state === 'orch_preflight' 时的阶段载荷。
+  preflight_phase?: 'clarify' | 'scout';
   // Multi-Agent Orchestration (2026-08-11): 宽松字段（与 llmStream.ts AgentEvent 同步）
   run_id?: string;
   plan?: TaskPlanItem[];
@@ -515,6 +573,18 @@ export interface AgentEvent {
   skills?: { name: string; triggers_matched: string[] }[];
   // R38: compact_triggered 事件载荷（M4 自动压缩统计）。
   compact?: { before: number; after: number; removed: number };
+  // r71: attachment_rag_used 事件载荷（超长文档检索注入溯源）。
+  citations?: {
+    media_id: string;
+    mode: string;
+    chunks?: { index: number; score: number }[];
+    filename?: string;
+  }[];
+  // right-panel R5 (2026-09-19): workspace_changed 事件载荷（写文件工具
+  // 落盘后经活跃流推送；path 为工具视角路径，刷新语义以 git status 为准）。
+  change?: { path: string; kind?: string };
+  // R81: sources_used 事件载荷（检索类工具命中，done 前一次性推送）。
+  sources?: MessageSource[];
 }
 
 // ==================== 错误类型定义 ====================
@@ -1213,6 +1283,8 @@ export interface OfficePptSlideContent {
 export interface OfficePptReadResult {
   summary: OfficeDocumentSummary;
   slides: OfficePptSlideContent[];
+  // Round 52：core properties 回读（无属性为 null）
+  metadata?: WordMetadataSpec | null;
 }
 
 export interface OfficeWordParagraphContent {
@@ -1251,6 +1323,10 @@ export interface OfficeWordReadResult {
    * Backend: WordImagePreview in backend/office/models.py.
    */
   image_previews?: OfficeWordImagePreview[];
+  // Round 57：脚注文本清单（无脚注为空表）
+  footnotes?: string[];
+  // Round 59：尾注文本清单（无尾注为空表）
+  endnotes?: string[];
 }
 
 /** One Word comment (backend WordCommentContent). */
@@ -1432,6 +1508,8 @@ export interface PptSlideSpec {
   title: string;
   bullets?: string[];
   notes?: string;
+  /** P5-B: 版式名（title/title_content/blank），后端按模板版式名匹配；缺省为 Blank */
+  layout?: 'title_content' | 'title' | 'blank' | null;
 }
 
 export interface OfficePptGenerateRequest {
@@ -1440,6 +1518,8 @@ export interface OfficePptGenerateRequest {
   workspace_path: string;
   filename: string;
   slides: PptSlideSpec[];
+  // Round 52：文档核心属性（与 Word/Excel 对称）
+  metadata?: WordMetadataSpec;
 }
 
 export interface WordParagraphSpec {
@@ -1465,6 +1545,16 @@ export interface WordPageSetupSpec {
   size?: 'A4' | 'letter';
   orientation?: 'portrait' | 'landscape';
   margins_cm?: WordPageMarginsSpec;
+  // Round 53：节内页码格式/起始号（论文前置罗马页码场景）
+  page_number_format?:
+    | 'decimal'
+    | 'upperRoman'
+    | 'lowerRoman'
+    | 'upperLetter'
+    | 'lowerLetter';
+  page_number_start?: number;
+  // Round 58：该节脚注编号每节重排（分章脚注场景）
+  footnote_restart_each_section?: boolean;
 }
 
 /**
@@ -1533,8 +1623,7 @@ export interface WordFormatSpec {
   toc?: WordTocSpec;
   // Round 42：图目录/表目录（TOF 域，收录 SEQ 题注）
   figure_index?: WordIndexSpec;
-  table_index?: WordIndexSpec;
-  // Round 33：首页不同页眉页脚（封面页场景）
+  table_index?: WordIndexSpec;  // Round 33：首页不同页眉页脚（封面页场景）
   first_page_different?: boolean;
   first_page_header?: WordHeaderFooterSpec;
   first_page_footer?: WordHeaderFooterSpec;
@@ -1678,6 +1767,19 @@ export interface OfficeWordLintRequest {
   max_size_bytes?: number;
 }
 
+/**
+ * Round 49：文档核心属性（core properties，期刊/公文归档要求）。
+ * backend/office/models.py WordMetadataSpec 对应。
+ */
+export interface WordMetadataSpec {
+  author?: string;
+  subject?: string;
+  /** 关键词（分号分隔） */
+  keywords?: string;
+  comments?: string;
+  category?: string;
+}
+
 export interface OfficeWordGenerateRequest {
   /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
   task_id?: string;
@@ -1693,6 +1795,8 @@ export interface OfficeWordGenerateRequest {
   // Round 9 引用体系：结构化文献 + 引用样式
   references?: ReferenceSpec[];
   citation_style?: 'gbt7714' | 'apa';
+  // Round 49：文档核心属性（core properties）
+  metadata?: WordMetadataSpec;
 }
 
 export interface ExcelSheetSpec {

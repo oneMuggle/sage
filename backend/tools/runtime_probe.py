@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, List, Optional
@@ -118,9 +119,16 @@ class RuntimeProbeTool(BaseTool):
             recommended=recommended,
             errors=tuple(errors),
         )
+        payload = result.to_dict()
+        # content 保持结构化 dict（base.ToolResult 契约：content 是结构化
+        # 结果，output 是业务层主返回）。doctor 的 runtime_env 检查会直接
+        # 调用本工具并读 result.content["runtimes"]。
+        # 同时把 output 设为 JSON 字符串，供 InprocToolAdapter 按字符串契约
+        # 转发，再由 runtime REST 路由层反序列化给前端。
         return ToolResult(
             success=True,
-            content=result.to_dict(),
+            content=payload,
+            output=json.dumps(payload, ensure_ascii=False),
         )
 
 

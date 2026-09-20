@@ -124,6 +124,23 @@ class PptSlideContent(BaseModel):
     notes: Optional[str] = None
 
 
+class WordMetadataSpec(BaseModel):
+    """文档核心属性（Round 49）——Word「文件 → 信息」面板可见。
+
+    title 恒取请求 title，不在此重复；其余显式传入才写（不臆造作者）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    author: Optional[str] = Field(default=None, max_length=100)
+    subject: Optional[str] = Field(default=None, max_length=200)
+    keywords: Optional[str] = Field(
+        default=None, max_length=200, description="关键词（分号分隔）"
+    )
+    comments: Optional[str] = Field(default=None, max_length=500)
+    category: Optional[str] = Field(default=None, max_length=100)
+
+
 class OfficePptReadResult(BaseModel):
     """Result of POST /api/v1/office/ppt/read."""
 
@@ -131,6 +148,8 @@ class OfficePptReadResult(BaseModel):
 
     summary: OfficeDocumentSummary
     slides: List[PptSlideContent]
+    # Round 52：core properties 回读（文档无属性时为 None）。
+    metadata: Optional[WordMetadataSpec] = None
 
 
 class WordParagraphContent(BaseModel):
@@ -207,9 +226,16 @@ class OfficeWordReadResult(BaseModel):
     # keeps payloads produced before this field existed valid under
     # ``extra="forbid"`` (old consumers may ignore the field entirely).
     comments: List[WordCommentContent] = Field(default_factory=list)
+    # Round 51：core properties 回读（生成器 metadata 的对偶；文档无
+    # 属性时为 None）。
+    metadata: Optional[WordMetadataSpec] = None
     # Round 15：每节的页眉/页脚文本与页码域标记（生成器对偶——
     # format_spec.header/footer 写入的元素读取侧可见）。
     headers_footers: List[WordHeaderFooterContent] = Field(default_factory=list)
+    # Round 57：脚注文本清单（footnotes part 回读；无脚注为空表）。
+    footnotes: List[str] = Field(default_factory=list)
+    # Round 59：尾注文本清单（endnotes part 回读；无尾注为空表）。
+    endnotes: List[str] = Field(default_factory=list)
     # Round 15：文档中的目录域 instr 列表。
     toc_fields: List[str] = Field(default_factory=list)
     # Office display round C (P4)：内嵌图片缩略预览。additive field ——
@@ -271,6 +297,8 @@ class OfficeExcelReadResult(BaseModel):
 
     summary: OfficeDocumentSummary
     sheets: List[ExcelSheetContent]
+    # Round 51：core properties 回读（文档无属性时为 None）。
+    metadata: Optional[WordMetadataSpec] = None
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -363,6 +391,10 @@ class PptSlideSpec(BaseModel):
     image: Optional[ImageSourceSpec] = None
 
 
+#: Round 52：PPT 与 Word/Excel 的核心属性字段同一集合（别名复用）。
+PptMetadataSpec = WordMetadataSpec
+
+
 class OfficePptGenerateRequest(BaseModel):
     """POST /api/v1/office/ppt/generate."""
 
@@ -378,6 +410,11 @@ class OfficePptGenerateRequest(BaseModel):
         description="Output filename (without .pptx extension is OK; we'll add it)",
     )
     slides: _constrained_list(PptSlideSpec, min_length=1, max_length=100)
+    # Round 52：文档核心属性（与 Word/Excel 对称）。
+    metadata: Optional[PptMetadataSpec] = Field(
+        default=None,
+        description="文档核心属性；None 不写（不臆造作者）",
+    )
 
 
 class WordParagraphSpec(BaseModel):
@@ -599,6 +636,14 @@ class WordPageSetupSpec(BaseModel):
     size: Optional[Literal["A4", "letter"]] = Field(default=None)
     orientation: Optional[Literal["portrait", "landscape"]] = Field(default=None)
     margins_cm: Optional[WordPageMarginsSpec] = Field(default=None)
+    # Round 53：节内页码格式/起始号（w:pgNumType，论文前置罗马页码场景）
+    page_number_format: Optional[
+        Literal["decimal", "upperRoman", "lowerRoman", "upperLetter", "lowerLetter"]
+    ] = Field(default=None)
+    page_number_start: Optional[int] = Field(default=None, ge=0)
+    # Round 58：该节脚注编号每节重排（w:footnotePr/numRestart=eachSect；
+    # 论文/书籍分章脚注场景）。默认 False 零触碰。
+    footnote_restart_each_section: bool = Field(default=False)
 
 
 class WordBodyStyleSpec(BaseModel):
@@ -745,6 +790,11 @@ class OfficeWordGenerateRequest(BaseModel):
     format_spec: Optional[WordFormatSpec] = Field(
         default=None,
         description="版式规范；None 保持默认版式（行为与历史版本一致）",
+    )
+    # Round 49：文档核心属性（core properties，期刊/公文归档要求）。
+    metadata: Optional[WordMetadataSpec] = Field(
+        default=None,
+        description="文档核心属性；None 只写 title（取请求 title）",
     )
     # Round 9：结构化参考文献 + 文中引用标记。带 references 时文末自动
     # 生成参考文献节；paragraphs[].citations 按 key 回链，编号=首现顺序。
@@ -969,6 +1019,11 @@ class ExcelChartSpec(BaseModel):
     title: Optional[str] = Field(default=None, max_length=200)
 
 
+#: Round 50：Excel 与 Word 的核心属性字段同一集合（author→creator 等
+#: 映射是格式差异，模型无差异）——别名复用避免双份定义漂移。
+ExcelMetadataSpec = WordMetadataSpec
+
+
 class OfficeExcelGenerateRequest(BaseModel):
     """POST /api/v1/office/excel/generate."""
 
@@ -982,6 +1037,12 @@ class OfficeExcelGenerateRequest(BaseModel):
     sheets: _constrained_list(ExcelSheetSpec, min_length=1, max_length=50)
     # 批次 2.1：数据写完后统一挂载的原生图表。
     charts: _constrained_list(ExcelChartSpec, max_length=20) = Field(default_factory=list)
+    # Round 50：文档核心属性（与 Word R49 对称；author→creator 等映射
+    # 在生成器内完成）。
+    metadata: Optional[ExcelMetadataSpec] = Field(
+        default=None,
+        description="文档核心属性；None 不写（不臆造作者）",
+    )
 
 
 class ChartSeriesSpec(BaseModel):

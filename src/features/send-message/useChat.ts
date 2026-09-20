@@ -23,6 +23,7 @@ import { logger } from '../../shared/lib/logger';
 // Task 5: modelWindows imports removed — frontend no longer computes history budget.
 // Backend now resolves effective window from catalog and computes budget.
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
+import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
 import { useSettings } from '../manage-settings/useSettings';
 
 import { selectSessionSlots, useChatStreamStore, type TaskBoardState } from './chatStreamStore';
@@ -144,7 +145,8 @@ export function useChat() {
   const [errorSessionId, setErrorSessionId] = useState<string | null>(null);
   // PM2 (round8): 计划模式完成的会话 ID —— 非空时 Chat 渲染"按计划执行"批准条。
   const [planApprovalFor, setPlanApprovalFor] = useState<string | null>(null);
-  const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
+  const { messages, addMessage, updateMessage, replaceMessageId, currentSessionId, loadMessages } =
+    useStore();
   const { settings } = useSettings();
 
   // U5 (对标增强第二轮批次 B): 流式中用户继续发送 → 入队,当前回复自然
@@ -165,9 +167,8 @@ export function useChat() {
   // widget 看到 '🤔 思考中…' 占位符看不到真实 LLM 进度。
   // S2: 读当前会话的槽位 —— 切到会话 B 就看 B 的实时进度(A 的流在后台
   // 继续累积,切回 A 时内容完整可见)。
-  const { streaming, streamingToolCalls, taskBoard, completedSteps } = useChatStreamStore((s) =>
-    selectSessionSlots(s, currentSessionId),
-  );
+  const { streaming, streamingToolCalls, taskBoard, completedSteps, preflightPhase } =
+    useChatStreamStore((s) => selectSessionSlots(s, currentSessionId));
 
   // Phase 6: /btw 补充消息状态(component-local,与流式 chat 无关)
   const [isBtwStreaming, setIsBtwStreaming] = useState(false);
@@ -336,14 +337,16 @@ export function useChat() {
       setError(null);
       setErrorSessionId(null);
 
+      // client_message_id 协议 (2026-09): 乐观 user 消息直接使用与服务端
+      // 相同的确定性 id (u-<cmid>) —— 流结束对账按 id 精确命中, 根治重复。
+      const clientMessageId = crypto.randomUUID();
       const userMessage: Message = {
-        id: crypto.randomUUID(),
+        id: `u-${clientMessageId}`,
         session_id: sid,
         role: 'user',
         content,
         created_at: Date.now(),
       };
-      const userId = userMessage.id;
       addMessage(userMessage);
 
       if (!chatEndpoint?.baseUrl) {
@@ -471,10 +474,17 @@ export function useChat() {
       // 因为 ref 里混了 '🤔 思考中…' 占位符)。finishStream 用这个写 store。
       let finished = false;
       let lastDoneContent: string | null = null;
+      // client_message_id 协议: DONE 携带 assistant 消息的服务端 id
+      let lastDoneMessageId: string | null = null;
+      // 标题后台生成提示 (2026-09): 首轮 DONE 后侧栏需延迟补刷
+      let lastDoneTitlePending = false;
       // flushQueue=true 仅限流自然结束(onDone) —— 错误/中断不自动发队列消息
       const finishStream = (flushQueue = false): void => {
         if (finished) return;
         finished = true;
+        // Round 3 (2026-09-19): 流结束兜底清掉编排前置阶段指示 —— 拆解失败
+        // 降级 single 时不会有 task_plan 来清，防止指示条跨 run 残留。
+        useChatStreamStore.getState().setPreflightPhase(sid, null);
         // 2026-08-19: 从 store 读最新流式内容(跨路由保留,finishStream 内
         // 不再持有 ref — store 是单一数据源)。S2: 读本会话槽位。
         const streamSnapshot = selectSessionSlots(useChatStreamStore.getState(), sid).streaming;
@@ -504,6 +514,11 @@ export function useChat() {
             tool_calls: finalToolCalls.length > 0 ? finalToolCalls : undefined,
           });
         }
+        // client_message_id 协议: DONE 带回服务端 id 时, 把乐观占位 id
+        // 原地替换 —— 此后 loadMessages 对账按 id 精确命中。
+        if (lastDoneMessageId && lastDoneMessageId !== assistantId) {
+          replaceMessageId(assistantId, lastDoneMessageId);
+        }
         // 2026-08-19: 精准重置流式 state + toolCalls,**不清 taskBoard**
         // (与原 commit 一致:finishStream 旧实现只 setStreaming(null) + 清 ref,
         //  taskBoard 留到下条消息 startStream 触发重置。
@@ -524,6 +539,12 @@ export function useChat() {
         // 流结束后刷新侧栏会话列表（获取自动生成的标题 + S1 落库的运行态徽章）
         // hex 路径无 NDJSON session_updated 事件，此处兜底刷新
         void useStore.getState().loadSessions();
+        // 2026-09: 标题转为后台生成 (DONE 先行) —— 首轮标题尚未就绪时
+        // 延迟补刷两次, 覆盖 LLM 生成/重试的常见耗时区间。
+        if (lastDoneTitlePending) {
+          window.setTimeout(() => void useStore.getState().loadSessions(), 8000);
+          window.setTimeout(() => void useStore.getState().loadSessions(), 16000);
+        }
         // R25-D5: 消息对账 —— 网关/scheduler 等外部写库方不经本渲染进程，
         // 流结束后以服务端为准刷新一次，消除"开着会话看不到新消息"的窗口
         // （loadMessages 每次直查 get_messages，无缓存问题）。
@@ -642,26 +663,105 @@ export function useChat() {
               // R38: 透明度增强事件 — 技能激活 / 记忆召回 / 上下文压缩
               // 这些事件不影响对话主流程，仅用于 UI 展示。fail-safe: 任何
               // 异常只跳过更新，绝不阻断聊天。
+              // MEDIUM-2: 运行时载荷校验 — 防止伪造/畸形数据进入气泡文案。
+              // 校验不通过时丢弃该事件（不更新 UI），而非按畸形值渲染。
               if (evt.state === 'memory_used' && evt.memories) {
-                updateMessage(assistantId, {
-                  memory_refs: evt.memories,
-                  memory_applied: evt.memories.length,
-                });
+                // memories: 必须是数组，每项必须有 id (string)
+                const memories = evt.memories;
+                const isValidMemories =
+                  Array.isArray(memories) &&
+                  memories.every(
+                    (m) =>
+                      typeof m === 'object' &&
+                      m !== null &&
+                      typeof (m as { id?: unknown }).id === 'string',
+                  );
+                if (isValidMemories) {
+                  updateMessage(assistantId, {
+                    memory_refs: memories,
+                    memory_applied: memories.length,
+                  });
+                } else {
+                  logger.warn(requestId, 'R38.memory_used.malformed', memories);
+                }
               }
               if (evt.state === 'skill_activated' && evt.skills) {
-                updateMessage(userId, { activated_skills: evt.skills });
+                // MEDIUM-2: skills 必须是数组，每项必须有 name (string)
+                const skills = evt.skills;
+                const isValidSkills =
+                  Array.isArray(skills) &&
+                  skills.every(
+                    (s) =>
+                      typeof s === 'object' &&
+                      s !== null &&
+                      typeof (s as { name?: unknown }).name === 'string',
+                  );
+                if (isValidSkills) {
+                  updateMessage(`u-${clientMessageId}`, { activated_skills: skills });
+                } else {
+                  logger.warn(requestId, 'R38.skill_activated.malformed', skills);
+                }
               }
               if (evt.state === 'compact_triggered' && evt.compact) {
-                // 插入特殊系统消息气泡（非普通 assistant 气泡）
-                const compactMsg: Message = {
-                  id: crypto.randomUUID(),
-                  session_id: sid,
-                  role: 'system',
-                  content: `📦 上下文已压缩：${evt.compact.before} → ${evt.compact.after} 条（移除 ${evt.compact.removed} 条）`,
-                  created_at: Date.now(),
-                  compact_info: evt.compact,
+                // compact: 必须有 before/after/removed 三个 number 字段
+                const compact = evt.compact as {
+                  before?: unknown;
+                  after?: unknown;
+                  removed?: unknown;
                 };
-                addMessage(compactMsg);
+                const { before, after, removed } = compact;
+                if (
+                  typeof before === 'number' &&
+                  typeof after === 'number' &&
+                  typeof removed === 'number'
+                ) {
+                  // 插入特殊系统消息气泡（非普通 assistant 气泡）
+                  // LOW-1: 统一口径 —— "before → after 条（removed 条历史已合并为摘要）"
+                  const compactMsg: Message = {
+                    id: crypto.randomUUID(),
+                    session_id: sid,
+                    role: 'system',
+                    content: `📦 上下文已压缩：${before} → ${after} 条（${removed} 条历史已合并为摘要）`,
+                    created_at: Date.now(),
+                    compact_info: { before, after, removed },
+                  };
+                  addMessage(compactMsg);
+                } else {
+                  logger.warn(requestId, 'R38.compact_triggered.malformed', compact);
+                }
+              }
+              // r71: 附件检索注入溯源 → 引用明细随消息落库（气泡内展示）。
+              // R81 修复: 多附件各推一个事件, 按 media_id 合并而非整体替换
+              // （updateMessage 是浅合并, 直接赋值会丢掉前一个附件的引用）。
+              if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
+                const existing = useStore
+                  .getState()
+                  .messages.find((m) => m.id === assistantId)?.rag_citations;
+                const merged = [...(existing ?? [])];
+                for (const c of evt.citations) {
+                  const idx = merged.findIndex((x) => x.media_id === c.media_id);
+                  if (idx >= 0) merged[idx] = c;
+                  else merged.push(c);
+                }
+                updateMessage(assistantId, { rag_citations: merged });
+              }
+              // R81: 统一参考来源 —— 检索类工具命中（web/wiki/MCP）done 前
+              // 一次性推送。载荷校验对齐 MEDIUM-2: 数组且每项 kind 合法。
+              if (evt.state === 'sources_used' && evt.sources) {
+                const sources = evt.sources;
+                const isValidSources =
+                  Array.isArray(sources) &&
+                  sources.every(
+                    (s) =>
+                      typeof s === 'object' &&
+                      s !== null &&
+                      ['web', 'wiki', 'tool', 'memory'].includes((s as { kind?: unknown }).kind as string),
+                  );
+                if (isValidSources) {
+                  updateMessage(assistantId, { sources });
+                } else {
+                  logger.warn(requestId, 'R81.sources_used.malformed', sources);
+                }
               }
 
               // 处理 reasoning 事件：三种 state 不同处理 (2026-09-02 bug fix)
@@ -741,11 +841,14 @@ export function useChat() {
                   // React 渲染对象时触发 "Objects are not valid as a React child"。
                   const safeResult =
                     typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content ?? '');
-                  useChatStreamStore.getState().appendOrUpdateToolCall(sid, {
-                    ...targetTc,
-                    result: safeResult,
-                    metadata,
-                  });
+                  // R19-W1: 拦截信封归一化（提取可读 content + 提升 metadata 到
+                  // ToolCall.metadata），与 Message 历史回读路径共用同一实现
+                  useChatStreamStore
+                    .getState()
+                    .appendOrUpdateToolCall(
+                      sid,
+                      normalizeToolCallEnvelope({ ...targetTc, result: safeResult, metadata }),
+                    );
                 }
               }
 
@@ -771,6 +874,8 @@ export function useChat() {
                 appendContent(evt.content);
                 if (evt.state === 'done') {
                   lastDoneContent = evt.content;
+                  if (evt.message_id) lastDoneMessageId = evt.message_id;
+                  lastDoneTitlePending = evt.title_pending === true;
                 }
                 useChatStreamStore
                   .getState()
@@ -806,6 +911,7 @@ export function useChat() {
           opts?.images,
           opts?.attachmentMediaIds,
           opts?.attachmentRag,
+          clientMessageId,
         );
         // Never let a late subscription overwrite a newer run's handle.
         if (finished || activeStreamRegistry.get(sid) !== streamHandle) {
@@ -830,6 +936,7 @@ export function useChat() {
       settings,
       addMessage,
       updateMessage,
+      replaceMessageId,
       markStreamActive,
       markStreamIdle,
     ],
@@ -967,6 +1074,67 @@ export function useChat() {
             if (applyOrchestrationEventToBoard(evt, sid)) {
               return;
             }
+            // r77: 重接路径补 memory_used —— 重放时 memory_refs 不丢失（与主路径同口径）
+            // R87: 载荷校验对齐主路径 MEDIUM-2 口径（数组且每项 id 为字符串）
+            if (evt.state === 'memory_used' && evt.memories) {
+              const memories = evt.memories;
+              const isValidMemories =
+                Array.isArray(memories) &&
+                memories.every(
+                  (m) =>
+                    typeof m === 'object' &&
+                    m !== null &&
+                    typeof (m as { id?: unknown }).id === 'string',
+                );
+              if (isValidMemories && memories.length > 0) {
+                updateMessage(messageId, {
+                  memory_refs: memories,
+                  memory_applied: memories.length,
+                });
+              }
+            }
+            // r71: 重接路径同主路径 —— 检索引用明细随消息落库
+            // R87: 条目校验对齐主路径（每项须有字符串 media_id）
+            if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
+              const citations = evt.citations;
+              const isValidCitations =
+                Array.isArray(citations) &&
+                citations.every(
+                  (c) =>
+                    typeof c === 'object' &&
+                    c !== null &&
+                    typeof (c as { media_id?: unknown }).media_id === 'string',
+                );
+              if (isValidCitations) {
+                const existing = useStore
+                  .getState()
+                  .messages.find((m) => m.id === messageId)?.rag_citations;
+                const merged = [...(existing ?? [])];
+                for (const c of citations) {
+                  const idx = merged.findIndex((x) => x.media_id === c.media_id);
+                  if (idx >= 0) merged[idx] = c;
+                  else merged.push(c);
+                }
+                updateMessage(messageId, { rag_citations: merged });
+              }
+            }
+            // R81: 重接路径同主路径 —— 统一参考来源回放
+            // R85: 载荷校验对齐主路径 MEDIUM-2 口径（数组且每项 kind 合法），
+            // 重放数据源自服务端队列，风险低，但两路径口径应一致。
+            if (evt.state === 'sources_used' && evt.sources) {
+              const sources = evt.sources;
+              const isValidSources =
+                Array.isArray(sources) &&
+                sources.every(
+                  (s) =>
+                    typeof s === 'object' &&
+                    s !== null &&
+                    ['web', 'wiki', 'tool', 'memory'].includes((s as { kind?: unknown }).kind as string),
+                );
+              if (isValidSources && sources.length > 0) {
+                updateMessage(messageId, { sources });
+              }
+            }
             // 其余事件（工具 acting/observing 等）降级为 streaming meta 文案
             useChatStreamStore.getState().setStreamingMeta(sid, messageId, {
               state: evt.state,
@@ -1096,6 +1264,8 @@ export function useChat() {
     isBtwStreaming,
     /** PM2 (round8): 计划模式已完成、待用户批准的会话 ID（null = 无） */
     planApprovalFor,
+    /** Round 3 (2026-09-19): 编排拆解前置阶段（澄清/侦察指示） */
+    preflightPhase,
     /** PM2: 清除计划批准状态（批准执行或忽略时调用） */
     clearPlanApproval: useCallback(() => setPlanApprovalFor(null), []),
     reattachActiveStream,

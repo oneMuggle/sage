@@ -3,7 +3,7 @@
  *
  * - A: 复制按钮恒显（不再被 onFeedback 门控劫持）
  * - B: 删除按钮两步确认（TwoStepDelete）+ 流式中不显示
- * - E: memory_used 记忆召回明细可展开
+ * - E: 统一参考来源区块（R81 收编原 memory_used / rag_citations 两个 chip）
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -58,27 +58,100 @@ describe('Message — R17 信任感交互', () => {
     expect(screen.queryByTestId('delete-message')).not.toBeInTheDocument();
   });
 
-  it('E: memory_applied > 0 显示可展开的记忆召回开关', () => {
+  it('E: 有记忆召回时显示统一参考来源开关,展开后记忆分组可见', () => {
     const msg = makeMsg({
-      memory_applied: 2,
       memory_refs: [
         { id: 'a', memory_type: 'semantic', preview: '用户偏好深色主题' },
         { id: 'b', memory_type: 'working', preview: '正在做记忆功能' },
       ],
     });
     renderWithI18n(<Message message={msg} />);
-    expect(screen.getByTestId('memory-used-toggle')).toHaveTextContent('2');
+    expect(screen.getByTestId('message-sources-toggle')).toHaveTextContent('2');
     // 默认收起；点击展开后逐条可见
-    expect(screen.queryByTestId('memory-used-list')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('memory-used-toggle'));
-    const list = screen.getByTestId('memory-used-list');
+    expect(screen.queryByTestId('message-sources-list')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('message-sources-toggle'));
+    const list = screen.getByTestId('message-sources-list');
     expect(list).toHaveTextContent('用户偏好深色主题');
     expect(list).toHaveTextContent('正在做记忆功能');
   });
 
-  it('E: 无 memory_applied 时不显示记忆开关', () => {
+  it('E: 无任何来源时不显示参考来源开关', () => {
     renderWithI18n(<Message message={makeMsg()} />);
-    expect(screen.queryByTestId('memory-used-toggle')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('message-sources-toggle')).not.toBeInTheDocument();
+  });
+
+  // R81: 统一参考来源区块 —— 多来源类型分组 + 统一编号 + 外链
+  it('R81: 记忆/附件/工具来源统一收编, 计数为三类之和, 分组渲染带序号', () => {
+    const msg = makeMsg({
+      memory_refs: [{ id: 'a', memory_type: 'semantic', preview: '偏好深色' }],
+      rag_citations: [
+        { media_id: 'doc1', filename: 'spec.pdf', mode: 'rag', chunks: [{ index: 0, score: 0.9 }] },
+      ],
+      sources: [
+        { kind: 'web', title: 'Sage 官网', url: 'https://sage.example.com', snippet: 'AI 助手' },
+        { kind: 'wiki', title: '架构', path: 'wiki/arch.md', snippet: '分层', score: 0.87 },
+        { kind: 'tool', server: 'github', tool: 'search', preview: '3 issues' },
+      ],
+    });
+    renderWithI18n(<Message message={msg} />);
+    expect(screen.getByTestId('message-sources-toggle')).toHaveTextContent('5');
+    fireEvent.click(screen.getByTestId('message-sources-toggle'));
+    const list = screen.getByTestId('message-sources-list');
+    // 分组标题齐全
+    expect(list).toHaveTextContent('记忆');
+    expect(list).toHaveTextContent('附件检索');
+    expect(list).toHaveTextContent('知识库');
+    expect(list).toHaveTextContent('网页');
+    expect(list).toHaveTextContent('工具');
+    // 统一编号连续：记忆[1] 附件[2] 知识库[3] 网页[4] 工具[5]
+    expect(list).toHaveTextContent('[1]');
+    expect(list).toHaveTextContent('[2]');
+    expect(list).toHaveTextContent('[3]');
+    expect(list).toHaveTextContent('[4]');
+    expect(list).toHaveTextContent('[5]');
+    // 条目内容
+    expect(list).toHaveTextContent('spec.pdf');
+    expect(list).toHaveTextContent('3 issues');
+  });
+
+  it('R81: 网页来源渲染为可点击外链', () => {
+    const msg = makeMsg({
+      sources: [{ kind: 'web', title: '例站', url: 'https://example.com/a' }],
+    });
+    renderWithI18n(<Message message={msg} />);
+    fireEvent.click(screen.getByTestId('message-sources-toggle'));
+    const link = screen.getByRole('link', { name: '例站' });
+    expect(link).toHaveAttribute('href', 'https://example.com/a');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('R81: 无 url 的网页来源降级为纯文本', () => {
+    const msg = makeMsg({ sources: [{ kind: 'web', title: '无链接条目' }] });
+    renderWithI18n(<Message message={msg} />);
+    fireEvent.click(screen.getByTestId('message-sources-toggle'));
+    expect(screen.queryByRole('link', { name: '无链接条目' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('message-sources-list')).toHaveTextContent('无链接条目');
+  });
+
+  // R86: @memory: 实体引用命中（kind='memory'）渲染进记忆分组，编号与记忆召回连续
+  it('R86: memory 来源渲染进记忆分组且编号连续, 计数计入总数', () => {
+    const msg = makeMsg({
+      memory_refs: [{ id: 'a', memory_type: 'semantic', preview: '偏好深色' }],
+      sources: [
+        { kind: 'memory', title: '@memory:火锅 [episodic]', snippet: '爱吃火锅' },
+        { kind: 'web', title: '例站', url: 'https://example.com' },
+      ],
+    });
+    renderWithI18n(<Message message={msg} />);
+    expect(screen.getByTestId('message-sources-toggle')).toHaveTextContent('3');
+    fireEvent.click(screen.getByTestId('message-sources-toggle'));
+    const list = screen.getByTestId('message-sources-list');
+    expect(list).toHaveTextContent('@memory');
+    expect(list).toHaveTextContent('爱吃火锅');
+    // 记忆召回[1] + @memory 命中[2] 同组；网页条目续 [3]
+    expect(list).toHaveTextContent('[2]');
+    expect(list).toHaveTextContent('[3]');
   });
 
   // R38: 技能激活与上下文压缩透明度测试
@@ -108,7 +181,8 @@ describe('Message — R17 信任感交互', () => {
   it('R38: role=system 且含 compact_info 时渲染居中的压缩系统提示', () => {
     const msg = makeMsg({
       role: 'system',
-      content: '📦 上下文已压缩：20 → 8 条（移除 12 条）',
+      // LOW-1: 统一口径
+      content: '📦 上下文已压缩：20 → 8 条（12 条历史已合并为摘要）',
       compact_info: { before: 20, after: 8, removed: 12 },
     });
     renderWithI18n(<Message message={msg} />);
@@ -116,5 +190,25 @@ describe('Message — R17 信任感交互', () => {
     // 系统提示不应渲染用户/助手头像
     expect(screen.queryByText('U')).not.toBeInTheDocument();
     expect(screen.queryByText('S')).not.toBeInTheDocument();
+  });
+
+  it('R38: assistant 续接行 —— 横幅在气泡上方, 摘要正文与操作按钮仍保留', () => {
+    const msg = makeMsg({
+      role: 'assistant',
+      content: '这是 LLM 写的摘要正文',
+      compact_info: { before: 20, after: 8, removed: 12 },
+    });
+    renderWithI18n(<Message message={msg} />);
+    // 横幅出现
+    expect(screen.getByTestId('compact-banner')).toBeInTheDocument();
+    // 摘要正文（assistant 气泡）仍在
+    expect(screen.getByText('这是 LLM 写的摘要正文')).toBeInTheDocument();
+    // affordance 未丢失
+    expect(screen.getByTestId('copy-message')).toBeInTheDocument();
+  });
+
+  it('R38: 无 compact_info 时不渲染横幅', () => {
+    renderWithI18n(<Message message={makeMsg()} />);
+    expect(screen.queryByTestId('compact-banner')).not.toBeInTheDocument();
   });
 });

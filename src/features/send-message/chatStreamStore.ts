@@ -48,6 +48,10 @@ export interface StreamingState {
   currentAgentId: string | null;
   /** P2: 当前 ReAct 迭代轮次 */
   iteration: number;
+  /** R17-E 收尾（r71）: memory_used 载荷写入（气泡内可展开） */
+  memory_refs?: { id: string; memory_type: string; preview: string }[];
+  /** r71: attachment_rag_used 载荷写入 */
+  rag_citations?: { media_id: string; mode: string }[];
 }
 
 /** 进度可视化 5 元组（与 useChat 内 TaskBoard 同字段，提取独立文件便于 store 引用） */
@@ -132,6 +136,12 @@ export interface SessionStreamSlots {
    * 30 秒后读取时自动视为 null,避免用户切回时会话看到陈旧横幅。
    */
   shiftInfo: { segmentId: number; reason: string; createdAt: number } | null;
+  /**
+   * Round 3 (2026-09-19): 编排拆解前置阶段（需求澄清/事实侦察）。
+   * 先于 task_plan 到达时任务板还不存在，故独立于 TaskBoardState 存槽位；
+   * task_plan 初始化 / finishStream 兜底时清空。
+   */
+  preflightPhase: 'clarify' | 'scout' | null;
 }
 
 const EMPTY_SLOTS: SessionStreamSlots = {
@@ -141,6 +151,7 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   todos: [],
   completedSteps: [],
   shiftInfo: null,
+  preflightPhase: null,
 };
 
 /** 读取某会话的槽位；无该会话（或 sessionId 为 null）时返回共享空槽位。
@@ -179,7 +190,12 @@ interface ChatStreamStoreState {
   setStreamingMeta: (
     sessionId: string,
     messageId: string,
-    patch: Partial<Pick<StreamingState, 'state' | 'currentAgentId' | 'iteration'>>,
+    patch: Partial<
+      Pick<
+        StreamingState,
+        'state' | 'currentAgentId' | 'iteration' | 'memory_refs' | 'rag_citations'
+      >
+    >,
   ) => void;
   clearStream: (sessionId: string, messageId: string) => void;
 
@@ -189,6 +205,8 @@ interface ChatStreamStoreState {
 
   // —— 任务板 ——
   setTaskBoard: (sessionId: string, board: TaskBoardState | null) => void;
+  /** Round 3 (2026-09-19): 写入/清空编排拆解前置阶段指示。 */
+  setPreflightPhase: (sessionId: string, phase: 'clarify' | 'scout' | null) => void;
   updateTaskBoard: (
     sessionId: string,
     runId: string,
@@ -344,6 +362,9 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
 
   setTaskBoard: (sessionId, board) =>
     set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { taskBoard: board }) })),
+
+  setPreflightPhase: (sessionId, phase) =>
+    set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { preflightPhase: phase }) })),
 
   setTodos: (sessionId, todos) =>
     set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { todos }) })),

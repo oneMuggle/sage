@@ -46,13 +46,19 @@ async def test_skills_routes_require_local_bearer_token(client, reset_skill_adap
 
 @pytest.mark.asyncio()
 async def test_list_skills_returns_4_builtins(client, reset_skill_adapter):
-    """GET /skills 返回 4 个 builtin (search / writer / coder / travel), 默认全 enabled."""
+    """GET /skills 返回 4 个 builtin + 4 个 shipped (academic-search/paper-writing/ppt-making/report-writing)."""
     resp = await client.get(f"{PREFIX}/skills")
     assert resp.status_code == 200
     body = resp.json()
     assert isinstance(body, list)
     names = {s["name"] for s in body}
-    assert names == {"search", "writer", "coder", "travel"}
+    # Task 2 fix: shipped skills are now registered alongside builtins
+    # Check that at least the expected 8 skills are present (may include user skills from ~/.sage/skills/)
+    expected = {
+        "search", "writer", "coder", "travel",  # builtins
+        "academic-search", "paper-writing", "ppt-making", "report-writing",  # shipped
+    }
+    assert expected.issubset(names), f"Expected at least {expected}, got {names}"
     for s in body:
         assert s["enabled"] is True
         assert s["usage_count"] == 0

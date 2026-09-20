@@ -146,6 +146,32 @@ def test_web_fetch_schema():
     assert schema.parameters["required"] == ["url"]
 
 
+def test_web_fetch_schema_documents_blocked_fetch_routing():
+    tool = WebFetchTool()
+    description = tool.schema.description
+
+    routing_contract = (
+        "失败结果仅在 web_fetch 返回 success=False 且结果 JSON 含 metadata.blockReason 时才按路由处理："
+        "反爬具体值为 antibot_cf 或 antibot_other（generic antibot 仅作统称），登录墙具体值为 login_wall；"
+        "命中这些值后用 browser_navigate 打开页面并用 browser_snapshot 读取，必要时通过 "
+        "credential_domain 提供登录态；不要反复重试 web_fetch。"
+    )
+    assert routing_contract in description
+
+    for keyword in (
+        "metadata.blockReason",
+        "antibot",
+        "antibot_cf",
+        "antibot_other",
+        "login_wall",
+        "browser_navigate",
+        "browser_snapshot",
+        "credential_domain",
+        "不要反复重试 web_fetch",
+    ):
+        assert keyword in description
+
+
 def test_web_fetch_success():
     """成功获取页面"""
     with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
@@ -1734,3 +1760,45 @@ def test_render_dynamic_login_wall_retries_after_refresh(monkeypatch):
     assert state["n"] == 2
     assert content["content"] == "real body"
     assert "refreshed note" in (content.get("note") or "")
+
+
+# ---------- Round 20：并行聚合搜索指标 ----------
+
+
+def test_web_search_parallel_records_engine_metrics(monkeypatch):
+    """并行聚合模式同样逐引擎记入 search:<engine> 指标（ok / fail）。"""
+    from types import SimpleNamespace
+
+    from backend.tools import web_metrics
+
+    web_metrics.reset()
+
+    class _FakeEngine:
+        def __init__(self, name, fail):
+            self.name = name
+            self._fail = fail
+
+        def search(self, query, limit, client=None):
+            if self._fail:
+                raise RuntimeError("down")
+            return [
+                {"title": "t", "url": f"https://{self.name}.example/r", "snippet": "s"}
+            ]
+
+    chain = [_FakeEngine("good", False), _FakeEngine("bad", True)]
+    monkeypatch.setattr(
+        "backend.tools.web_tool.resolve_engine_chain", lambda config: chain
+    )
+    monkeypatch.setattr(
+        "backend.tools.web_tool.load_search_config",
+        lambda: SimpleNamespace(parallel=True, parallel_first_n=2),
+    )
+
+    tool = WebSearchTool()
+    result = tool.execute(query="sage", limit=5)
+
+    assert result.success is True
+    snap = web_metrics.snapshot()
+    assert snap["search:good"]["ok"] == 1
+    assert snap["search:bad"]["fail"] == 1
+    web_metrics.reset()

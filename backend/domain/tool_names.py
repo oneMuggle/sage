@@ -22,7 +22,10 @@
 
 不在清单内的名字（引用它们的白名单会收到启动告警，仅告警不剔除）：
 - ``wiki_search`` / ``wiki_answer``：定义于 tools/wiki_tool.py，当前未注册；
-- ``dispatch_subagents``：legacy_routes 编排模式下按会话动态注册；
+- ``dispatch_subagents`` / ``collect_subagents`` / ``observe_subagents``：
+  legacy_routes 编排模式下按会话动态注册；
+- ``update_pending_task`` / ``cancel_pending_task`` / ``add_task_to_plan``：
+  同上（re-plan 工具族，tools/replan_tool.py，与 dispatch 同一 tool-toggle 门）；
 - MCP 工具：外部服务器运行期提供。
 """
 
@@ -163,6 +166,14 @@ SANDBOX_TOOLS = ("calculator", "repl", "execute_code")
 # 字段白名单由工具实现内部维护，这里只登记名称。
 CONFIG_TOOLS = ("read_sage_config", "update_sage_config")
 
+# 定时任务派发（2026-09-19 feat/llm-schedule-tool）：把既有的 SchedulerService
+# （APScheduler + JSON 持久化）暴露给 LLM —— 此前只能经 REST API 由前端 UI 创建。
+# ``list_scheduled_tasks`` READ 自动放行；``schedule_task`` / ``cancel_scheduled_task``
+# WRITE_LOCAL 走权限审批（持久化副作用 + 未来向会话注入消息）。
+# 仅赋给 primary 主助手；子代理白名单严禁纳入 —— 防止被委派的子任务自行注册
+# 长期定时行为（与 CONFIG_TOOLS 同样的 coordinator-only 边界）。
+SCHEDULE_TOOLS = ("schedule_task", "list_scheduled_tasks", "cancel_scheduled_task")
+
 #: 全部静态注册的内置工具名（排序去重）。新增内置工具时把名字加进对应
 #: 分组即可；tests/unit/test_tool_names.py 会对照 register_all_tools 的
 #: 实际注册面校验本清单无遗漏、无多余。
@@ -187,6 +198,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(ORCH_TOOLS)
         | set(SANDBOX_TOOLS)
         | set(CONFIG_TOOLS)
+        | set(SCHEDULE_TOOLS)
     )
 )
 
@@ -209,6 +221,7 @@ __all__ = [
     "RUNTIME_PROBE_TOOLS",
     "RUNTIME_TOOLS",
     "SANDBOX_TOOLS",
+    "SCHEDULE_TOOLS",
     "SKILL_TOOLS",
     "SYMBOL_TOOLS",
     "WEB_FETCH_TOOLS",

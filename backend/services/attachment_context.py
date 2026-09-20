@@ -28,6 +28,28 @@ _QUERY_EMBED_CHARS = 2_000
 
 
 @dataclass
+class ChunkCitation:
+    """检索命中片段的溯源信息（r73 引用明细）。"""
+
+    index: int  # chunk_index + 1（1 起始，与注入块内标注一致）
+    score: float  # 余弦相似度
+
+
+@dataclass
+class AttachmentContextResult:
+    """注入决策结果：text 为注入块；mode = full | truncated | rag。"""
+
+    text: str
+    mode: str
+    #: mode=rag 时命中的片段明细（引用溯源事件用）
+    chunks: List[ChunkCitation] = None  # type: ignore[assignment] — 空列表由 __post_init__ 归一
+
+    def __post_init__(self) -> None:
+        if self.chunks is None:
+            self.chunks = []
+
+
+@dataclass
 class AttachmentRagOptions:
     """聊天请求携带的附件检索配置（opt-in；请求级嵌入配置与 wiki 同口径）。"""
 
@@ -43,8 +65,8 @@ async def build_attachment_context(
     rag: Optional[AttachmentRagOptions],
     store_path: Any,
     query_embedder: Optional[Callable[[str, Dict[str, str]], Awaitable[List[List[float]]]]] = None,
-) -> Optional[str]:
-    """返回该附件应注入的文本块；fail-safe 异常返回 None。
+) -> AttachmentContextResult:
+    """返回该附件应注入的文本块；fail-safe 异常返回 None（调用方跳过）。
 
     Args:
         media_id: 附件媒体 id（注入块标注用）
@@ -58,9 +80,13 @@ async def build_attachment_context(
     """
     try:
         if len(full_text) <= MAX_TEXT_INJECT_CHARS:
-            return full_text[:MAX_TEXT_INJECT_CHARS]
+            return AttachmentContextResult(
+                full_text[:MAX_TEXT_INJECT_CHARS], "full"
+            )
         if rag is None or query_embedder is None:
-            return full_text[:MAX_TEXT_INJECT_CHARS]
+            return AttachmentContextResult(
+                full_text[:MAX_TEXT_INJECT_CHARS], "truncated"
+            )
 
         rag_text = await _rag_injection(
             media_id,
@@ -73,7 +99,9 @@ async def build_attachment_context(
         if rag_text is not None:
             return rag_text
         # 检索不可用（无命中/嵌入失败/无索引）→ 回退现状截断注入
-        return full_text[:MAX_TEXT_INJECT_CHARS]
+        return AttachmentContextResult(
+            full_text[:MAX_TEXT_INJECT_CHARS], "truncated"
+        )
     except Exception as exc:  # noqa: BLE001 — fail-safe（R37 口径）
         logger.debug("附件上下文构建失败（跳过注入）: %s: %s", media_id, exc)
         return None
@@ -116,10 +144,12 @@ async def _rag_injection(
             len(full_text),
             len(hits),
         )
-        return (
+        return AttachmentContextResult(
             f"<attached_document id={media_id!r} mode=rag>\n"
             + "\n\n".join(parts)
-            + "\n</attached_document>"
+            + "\n</attached_document>",
+            "rag",
+            [ChunkCitation(index=hit.chunk_index + 1, score=hit.score) for hit in hits],
         )
     except Exception as rag_exc:  # noqa: BLE001 — 检索失败回退截断注入
         logger.debug("附件检索失败，回退截断注入 %s: %s", media_id, rag_exc)

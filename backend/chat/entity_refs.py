@@ -27,7 +27,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,10 @@ class ResolvedRef:
     ref: EntityRef
     items: List[str] = field(default_factory=list)
     note: Optional[str] = None  # 未命中/数据源不可用时的说明
+    # R86: 结构化命中（统一参考来源区块用）。仅 memory/wiki 两类填充 ——
+    # 它们是"被引用的参考资料"；skill/agent 是执行者，不入来源。
+    # 形状: {"kind": "memory"|"wiki", "title": str, "snippet": str, ...}
+    sources: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def extract_entity_refs(text: str) -> List[EntityRef]:
@@ -90,13 +94,22 @@ def _resolve_memory(query: str, session_id: Optional[str]) -> ResolvedRef:
         logger.debug("@memory resolve skipped: %s", exc)
         return ResolvedRef(ref, note="记忆系统不可用")
     items = []
+    sources: List[Dict[str, Any]] = []
     for r in rows or []:
         content = r.get("content") or r.get("summary") or ""
         if not content:
             continue
         mtype = r.get("memory_type") or r.get("source") or "memory"
-        items.append(f"[{mtype}] {_clip(str(content))}")
-    return ResolvedRef(ref, items=items, note=None if items else "没有匹配的记忆")
+        clipped = _clip(str(content))
+        items.append(f"[{mtype}] {clipped}")
+        sources.append(
+            {
+                "kind": "memory",
+                "title": f"@memory:{query} [{mtype}]",
+                "snippet": clipped,
+            }
+        )
+    return ResolvedRef(ref, items=items, note=None if items else "没有匹配的记忆", sources=sources)
 
 
 def _wiki_project_root() -> Optional[Path]:
@@ -127,8 +140,36 @@ def _resolve_wiki(query: str, _session_id: Optional[str]) -> ResolvedRef:
     except Exception as exc:  # noqa: BLE001
         logger.debug("@wiki resolve skipped: %s", exc)
         return ResolvedRef(ref, note="Wiki 检索失败")
-    items = [f"{r.title} ({r.path}): {_clip(r.snippet)}" for r in results if getattr(r, "title", None)]
-    return ResolvedRef(ref, items=items, note=None if items else f"Wiki「{root.name}」中没有匹配页面")
+    items = []
+    sources: List[Dict[str, Any]] = []
+    for r in results:
+        if not getattr(r, "title", None):
+            continue
+        snippet = _clip(getattr(r, "snippet", ""))
+        items.append(f"{r.title} ({r.path}): {snippet}")
+        # R90: 补 score —— 与 wiki_search 提取来源的显示口径一致。
+        # py3.8/ruff 兼容：不用 isinstance(x, (int, float))（UP038），
+        # 也不写 int | float（3.10+ 语法）。
+        raw_score = getattr(r, "score", None)
+        if isinstance(raw_score, bool):
+            raw_score = None
+        if raw_score is not None and not isinstance(raw_score, int) and not isinstance(raw_score, float):
+            raw_score = None
+        sources.append(
+            {
+                "kind": "wiki",
+                "title": str(r.title),
+                "path": str(getattr(r, "path", "") or r.title),
+                "snippet": snippet,
+                "score": round(raw_score, 2) if raw_score is not None else None,
+            }
+        )
+    return ResolvedRef(
+        ref,
+        items=items,
+        note=None if items else f"Wiki「{root.name}」中没有匹配页面",
+        sources=sources,
+    )
 
 
 def _resolve_skill(query: str, _session_id: Optional[str]) -> ResolvedRef:
@@ -240,12 +281,50 @@ def process(text: str, session_id: Optional[str] = None) -> str:
     return render_references_block(resolve_entity_refs(refs, session_id))
 
 
+def collect_entity_sources(resolved: List[ResolvedRef]) -> List[Dict[str, Any]]:
+    """R86: 把解析结果里的结构化命中展平为统一参考来源条目。
+
+    只收 memory/wiki 两类解析结果（skill/agent 是执行者而非参考资料）。
+    纯函数，供路由层并入 sources_used 管道（merge_sources 去重）。
+    """
+    out: List[Dict[str, Any]] = []
+    for r in resolved or []:
+        if r.ref.kind not in ("memory", "wiki"):
+            continue
+        for s in r.sources or []:
+            if isinstance(s, dict) and s.get("kind") in ("memory", "wiki"):
+                out.append(s)
+    return out
+
+
+def process_with_sources(
+    text: str, session_id: Optional[str] = None
+) -> Tuple[str, List[Dict[str, Any]]]:
+    """R86: ``process`` 的组合版 —— 同时返回 (references 块, 参考来源条目)。
+
+    路由层一次解析同时驱动注入与溯源（来源并入 sources_used 管道），
+    避免为溯源再跑一遍检索。任何输入返回元组，绝不抛错。
+    """
+    try:
+        refs = extract_entity_refs(text)
+        if not refs:
+            return "", []
+        resolved = resolve_entity_refs(refs, session_id)
+        block = render_references_block(resolved)
+        return block, collect_entity_sources(resolved)
+    except Exception as exc:  # noqa: BLE001 — 降级铁律，绝不阻断聊天
+        logger.debug("process_with_sources skipped: %s", exc)
+        return "", []
+
+
 __all__ = [
     "ENTITY_KINDS",
     "EntityRef",
     "ResolvedRef",
+    "collect_entity_sources",
     "extract_entity_refs",
     "process",
+    "process_with_sources",
     "render_references_block",
     "resolve_entity_refs",
 ]

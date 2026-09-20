@@ -11,7 +11,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 # ── Startup diagnostic timer (module-level) ───────────────────────────────
 # 2026-09-10 (slow-startup incident): record monotonic start BEFORE any
@@ -86,6 +86,7 @@ from backend.api.diagnostic_routes import router as diagnostic_router
 from backend.api.embedder_routes import router as embedder_router
 from backend.api.export_routes import router as export_router
 from backend.api.hex_routes import router as hex_router
+from backend.api.hooks_routes import router as hooks_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
 from backend.api.local_auth import (
@@ -116,6 +117,7 @@ from backend.api.v1 import updates as updates_router_module
 from backend.api.web_access_routes import router as web_access_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
+from backend.api.worktree_routes import router as worktree_router
 from backend.application.services.chat_service import ChatService
 from backend.application.services.wake_store import get_wake_store
 from backend.data.database import Database
@@ -170,6 +172,16 @@ def _shutdown_browser_sessions() -> None:
             logger.info("已关闭 %d 个受控浏览器实例", closed)
     except Exception as exc:  # noqa: BLE001 — shutdown must not raise
         logger.warning("浏览器 shutdown failed（异常类型=%s）", type(exc).__name__)
+
+
+def _startup_browser_temp_sweep() -> None:
+    """启动兜底清扫：回收此前进程被硬杀（未走 shutdown）遗留的浏览器临时目录。"""
+    try:
+        from backend.tools.browser_cdp import sweep_stale_browser_dirs
+
+        sweep_stale_browser_dirs()
+    except Exception as exc:  # noqa: BLE001 — 清扫失败不阻断启动
+        logger.warning("浏览器临时目录启动清扫失败（非致命，异常类型=%s）", type(exc).__name__)
 
 
 def _shutdown_repl_cleanups() -> None:
@@ -241,7 +253,7 @@ def _build_chat_service() -> ChatService:
 
     skills_adapter = InprocSkillAdapter()
 
-    inner_tools = InprocToolAdapter()
+    inner_tools = InprocToolAdapter(scheduler_service_getter=get_scheduler_service)
     compute = _build_compute_adapter()
     if compute is not None:
         from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter
@@ -473,6 +485,36 @@ async def lifespan(app: FastAPI):
     logger.info("ReviewQueue 协作对象已注入且 worker 已启动")
     _startup_mark("review-queue")
 
+    # Arena 自动化装配（feature flag 默认关）：账号池 + 单账号注册辅助。
+    # 修复既有缺口：arena 路由早已挂载但 init_arena_service 从未被调用，
+    # 端点恒 503。enabled=false 时保持 403 语义（路由侧 _config 为 None）。
+    try:
+        from backend.api.arena_routes import (
+            init_arena_service,
+            init_registration_service,
+        )
+        from backend.config.arena_automation import load_arena_automation_config
+        from backend.services.arena_accounts import get_or_create_master_key
+
+        _arena_cfg = load_arena_automation_config()
+        if _arena_cfg.enabled:
+            _arena_dir = os.environ.get("SAGE_USER_DATA_DIR") or "backend/data"
+            _arena_db = str(Path(_arena_dir) / "arena_accounts.sqlite")
+            _arena_service = init_arena_service(
+                db_path=_arena_db,
+                encryption_key=get_or_create_master_key(),
+                config=_arena_cfg,
+            )
+            init_registration_service(
+                config=_arena_cfg, account_service=_arena_service
+            )
+            logger.info("Arena 自动化已启用（账号池 + 注册辅助，db=%s）", _arena_db)
+            _startup_mark("arena")
+        else:
+            logger.info("Arena 自动化未启用（arena_automation.yaml enabled=false）")
+    except Exception:  # noqa: BLE001 — 装配失败不阻塞启动
+        logger.exception("Arena 自动化装配失败（忽略）")
+
     # A4 Suspend-Resume: wake 仓储 + 唤醒调度器 — tick 扫描到期 wake,
     # 在对应 session 注入新一轮对话恢复挂起的 agent。resumer 走
     # ChatService.run_turn（hex 模式装配后可用）；legacy 模式下记录并跳过。
@@ -639,6 +681,22 @@ async def lifespan(app: FastAPI):
         API_MODE,
     )
 
+    # 浏览器一次性目录的启动兜底清扫（与下方 _shutdown_browser_sessions 对称）：
+    # 进程被硬杀时 shutdown 钩子不会执行，遗留目录靠下次启动按 mtime 回收。
+    _startup_browser_temp_sweep()
+
+    # worktree 模式 (2026-09-18): 启动对账——登记为 active 但目录已被外部
+    # 删除的会话 worktree → 标 discarded + prune 主仓 + 悬空绑定退回主仓。
+    try:
+        from backend.api.worktree_routes import sweep_registered_worktrees
+        from backend.data.database import get_database
+
+        swept = sweep_registered_worktrees(get_database().get_connection())
+        if swept:
+            logger.info("worktree 对账: 处理 %d 条失效登记", swept)
+    except Exception:  # noqa: BLE001 — 对账失败不得阻塞启动
+        logger.warning("worktree 对账失败（忽略）", exc_info=True)
+
     if __name__ == "__main__":
         _elapsed_lifespan = time.monotonic() - _startup_t0
         print(  # noqa: T201
@@ -663,6 +721,13 @@ async def lifespan(app: FastAPI):
     _shutdown_bash_sessions()
     _shutdown_browser_sessions()
     _shutdown_repl_cleanups()
+    # Arena：停观测泵 + 关账号池 SQLite 连接（best-effort，见 arena_routes）
+    try:
+        from backend.api.arena_routes import shutdown_arena_services
+
+        shutdown_arena_services()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.debug("arena shutdown cleanup failed: %s", exc)
     sweeper_task.cancel()
     with suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
         await sweeper_task
@@ -742,27 +807,47 @@ app = FastAPI(
 )
 
 
+#: 请求体校验失败时必须隐藏输入值的路由 → 固定非敏感错误体。
+#:
+#: 这些路径的 body 携带凭据或敏感设置；FastAPI 默认 422 会把
+#: ``exc.errors()`` 里的 ``input`` 原样回显（含明文 cookie / token / 设置值），
+#: 因此在这条边界上换成不含任何输入值的定值响应。
+_SILENT_VALIDATION_RESPONSES: Dict[Tuple[str, str], Dict[str, Any]] = {
+    ("PUT", "/api/v1/settings"): {
+        "detail": {
+            "type": "invalid_settings_payload",
+            "message": "设置内容无效，请检查字段格式",
+        }
+    },
+    ("POST", "/api/v1/web-access/credentials/cookie"): {
+        "ok": False,
+        "error": "invalid_cookie_credential",
+    },
+    ("POST", "/api/v1/web-access/credentials/header"): {
+        "ok": False,
+        "error": "invalid_header_credential",
+    },
+}
+
+
 @app.exception_handler(RequestValidationError)
 async def settings_validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    """Prevent Pydantic input values from leaking on the settings PUT boundary.
+    """Prevent Pydantic input values from leaking on sensitive request bodies.
 
     FastAPI's default validation response includes ``exc.errors()``.  That
-    structure can contain the rejected input value, so this narrowly scoped
-    handler replaces it only for the settings route; every other route keeps
-    FastAPI's default validation behavior.
+    structure can contain the rejected input value, so this handler replaces
+    it with a fixed, non-sensitive body only for routes whose payload carries
+    credentials or settings; every other route keeps FastAPI's default
+    validation behavior.
     """
-    if request.method == "PUT" and request.url.path.rstrip("/") == "/api/v1/settings":
-        return JSONResponse(
-            status_code=422,
-            content={
-                "detail": {
-                    "type": "invalid_settings_payload",
-                    "message": "设置内容无效，请检查字段格式",
-                }
-            },
-        )
+    fixed_content = _SILENT_VALIDATION_RESPONSES.get(
+        (request.method, request.url.path.rstrip("/"))
+    )
+    if fixed_content is not None:
+        return JSONResponse(status_code=422, content=fixed_content)
+
     from fastapi.exception_handlers import request_validation_exception_handler
 
     return await request_validation_exception_handler(request, exc)
@@ -821,11 +906,15 @@ from backend.api.gateway_routes import router as gateway_router
 app.include_router(gateway_router, prefix="/api/v1")
 register_office_exception_handlers(app)
 app.include_router(workspace_router, prefix="/api/v1")
+# 会话级 worktree 模式 (2026-09-18): /api/v1/sessions/{id}/worktree[...]
+app.include_router(worktree_router, prefix="/api/v1")
 # 项目模块 P1 (2026-09-13): /api/v1/projects 最近项目注册表 + 项目内会话
 app.include_router(project_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
 app.include_router(permission_router, prefix="/api/v1")
 app.include_router(web_access_router, prefix="/api/v1")
+# M6 生态扩展 Phase 1: /api/v1/hooks/builtins 内置钩子元数据 (设置页"推荐 Hook")
+app.include_router(hooks_router, prefix="/api/v1")
 # M2 part B: /api/v1/questions/{pending, <id>/answer}（AskUserQuestion）
 app.include_router(question_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")

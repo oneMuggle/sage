@@ -59,6 +59,22 @@
 | 80   | [office_create schema 漂移卫生修复](./80-office-create-schema-drift.md) | R43：补 toc/section_breaks schema 声明（LLM 可发现化）+ types.ts 缺口 + 模型↔schema↔TS 三方防漂移对偶门禁 |
 | 81   | [lint 面补强：index 域在位校验](./81-lint-index-fields.md) | R44：figure_index/table_index 域在位规则（TOF 不冒充 TOC）+ lint schema 可检查子集白名单对偶门禁 |
 | 82   | [交叉引用占位符](./82-word-cross-refs.md) | R45：{{fig:}}/{{tbl:}} → 图N/表N（题注文本匹配 + fail-fast）+ 编号映射三处一致 + residue lint 规则 |
+| 83   | [交叉引用升级：REF 域 + 题注书签](./83-word-ref-fields.md) | R46：题注编号套书签 + 占位符写成 REF 复杂域（更新域自动同步重排）+ 无占位符段落零变化双路径 |
+| 84   | [repair 补 index 域插入 + SEQ 兼容](./84-repair-index-fields.md) | R48：lint→repair 闭环（缺 figure_index/table_index 自动插入 TOF）+ SEQ 题注重排不再摧毁域/书签（缺陷修复）+ caption/duplicate warning |
+| 85   | [文档核心属性](./85-word-core-metadata.md) | R49：WordMetadataSpec（author/subject/keywords/comments/category）→ docx core properties（title 恒写、不臆造作者）|
+| 86   | [Excel core properties 对称支持](./86-excel-core-metadata.md) | R50：ExcelMetadataSpec 别名复用 + generate_xlsx 写 wb.properties（creator/description 映射）+ 契约同步 |
+| 87   | [读侧 core properties 回读](./87-read-core-metadata.md) | R51：read_docx/read_xlsx 回读 metadata（全空 None；模板默认如实回读）+ 契约同步 |
+| 88   | [PPT core properties 三件套对称](./88-ppt-core-metadata.md) | R52：generate_ppt/read_ppt metadata（python-pptx 属性名与 docx 一致）+ 属性家族 docx/xlsx/pptx 收口 |
+| 89   | [分节页码格式与起始号](./89-pgnum-format.md) | R53：WordPageSetupSpec 增 page_number_format/start（w:pgNumType，论文前置罗马页码）+ 主节/分节同路径 + lint page/numbering 对偶 |
+| 90   | [Word 脚注/尾注设计评审稿](./90-word-footnotes-design.md) | R56：footnotes.xml 四件套结构分析 + {{fn:}} 内联锚点选型 + 三期分期与风险（评审稿）|
+| 91   | [脚注 Phase A 实现](./91-word-footnotes-phase-a.md) | R57：{{fn:}} 内联脚注（footnotes part 挂载 + footnoteReference + read 回读 + 无脚注零变化）|
+| 92   | [脚注 Phase B：样式注入 + 每节重编](./92-footnote-phase-b.md) | R58：FootnoteText/FootnoteReference 样式注入（幂等）+ w:footnotePr/numRestart=eachSect 节级开关 + 契约同步 |
+| 93   | [尾注 endnotes（Phase C）](./93-word-endnotes.md) | R59：{{en:}} 内联尾注（endnotes part + endnoteReference + Endnote 样式注入 + read 回读）+ 脚注/尾注混用与选型说明 |
+| 94   | [residue 补全 + append_paragraphs 交叉引用](./94-residue-update-marks.md) | R60：residue 正则补 fn/en + append_paragraphs 支持 {{fig:}}/{{tbl:}}（预校验 all-or-nothing，复用生成期书签）|
+| 95   | [append_paragraphs 支持 {{fn:}}/{{en:}}](./95-append-fn-en.md) | R61：part 追加语义（blob 增补 + 编号续接）+ 统一四类占位符解析 + update 通路全支持 |
+| 96   | [脚注/尾注引用一致性 lint](./96-ref-consistency-lint.md) | R63：footnote/endnoteReference id 对照 part note 集合（损坏文档检出）+ 无引用零开销跳过 |
+| 95   | [append_paragraphs 支持 {{fn:}}/{{en:}}](./95-append-fn-en.md) | R61：part 追加语义（blob 增补 + 编号续接）+ 统一四类占位符解析 + update 通路全支持 |
+| 92   | [LLM 定时任务工具](./92-llm-scheduled-task-tool.md) | schedule_task / list_scheduled_tasks / cancel_scheduled_task 三件套：复用 SchedulerService 单一事实源 + 会话自动绑定 + once(ISO-8601)/recurring(cron) + coordinator-only 白名单 |
 | 83   | [Python 后端代码保护方案](./83-python-code-protection.md) | Cython 二进制编译核心包 (sage_core) + Python 字节码混淆与源码剥离 (backend) + 开发与发布模式分离 (SAGE_PROTECT_CODE) |
 
 ---

@@ -31,12 +31,12 @@ class ToolResult:
 
     Attributes:
         success:  是否成功
-        output:   成功时的输出文本（已序列化为字符串）
+        output:   成功时的输出，可为文本或 JSON 兼容的结构化数据
         error:    失败时的错误描述
         metadata: 附加元数据（如耗时、token 估算等）
     """
 
     success: bool
-    output: str = ""
+    output: Any = ""
     error: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None

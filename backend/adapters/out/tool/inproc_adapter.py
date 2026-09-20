@@ -15,8 +15,9 @@
   超时返回 ``success=False, error="tool_timeout: ..."``。然后把
   ``backend.tools.base.ToolResult(success, content, error)`` 转成端口侧
   的 ``domain.tool.ToolResult(success, output, error, metadata)``。
-  ``content`` 会被 ``str()`` 序列化进 ``output``，``metadata`` 携带
-  截断标记 ``truncated`` 与 ``original_bytes``（若发生 byte 截断）。
+  ``output`` 保留 JSON 兼容的 dict/list 结构（超出 ``max_output_bytes`` 时
+  降级为截断标记）；文本输出会被 ``str()`` 序列化，两者都在 ``metadata``
+  携带截断标记 ``truncated`` 与 ``original_bytes``（若发生 byte 截断）。
 - 工具未注册时返回 ``success=False, error=...``，**不抛异常**，与端口
   契约"失败时 success=False 并携带 error"一致。
 - M1 安全加固: ``execute`` 在分发前过 ``PermissionEnforcer`` 集中执行层
@@ -29,12 +30,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
 from sage_core import ToolResult, ToolSpec
 from sage_core.repositories import ToolPort  # noqa: F401  (structural typing target)
 
+from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools.bash_validation import validate_bash
 from backend.tools.executor import (
@@ -61,6 +64,7 @@ class InprocToolAdapter:
         registry: Optional[_ToolRegistry] = None,
         policy: Optional[ToolPolicy] = None,
         enforcer_factory: Optional[Callable[[], PermissionEnforcer]] = None,
+        scheduler_service_getter: Optional[Callable[[], Optional[SchedulerServicePort]]] = None,
     ) -> None:
         # 接受外部注入（用于测试）或使用新建 registry
         self._registry = registry if registry is not None else _ToolRegistry()
@@ -76,7 +80,11 @@ class InprocToolAdapter:
             from backend.tools import register_all_tools
             from backend.tools.memory_tool import inject_memory_manager
 
-            register_all_tools(self._registry, policy=self._policy)
+            register_all_tools(
+                self._registry,
+                policy=self._policy,
+                scheduler_service_getter=scheduler_service_getter,
+            )
             # 注入共享 MemoryManager：register_all_tools 创建的 MemorySearchTool /
             # MemorySaveTool 默认 self.memory=None，runtime 调用会返回
             # "未初始化"。adapter 是 agent-less 路径（hex API 等），
@@ -154,19 +162,44 @@ class InprocToolAdapter:
         output_value = getattr(raw, "output", None)
         if output_value is None:
             output_value = raw.content
-        output_str = "" if output_value is None else str(output_value)
-        truncated_output, truncation_meta = _truncate_output(
-            output_str, self._policy.max_output_bytes
-        )
 
         metadata: Optional[Dict[str, Any]] = None
-        if truncation_meta:
-            metadata = dict(truncation_meta)
+        json_bytes: Optional[int] = None
+        if isinstance(output_value, (dict, list)):  # noqa: UP038 — py38 运行时 isinstance 不支持 X | Y
+            try:
+                structured_output = json.dumps(
+                    output_value,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    default=str,
+                )
+            except (TypeError, ValueError):
+                # 循环引用等不可序列化结构 → 退回文本路径，绝不冒泡异常。
+                json_bytes = None
+            else:
+                json_bytes = len(structured_output.encode("utf-8"))
+                if json_bytes <= self._policy.max_output_bytes:
+                    output = output_value
+                else:
+                    metadata = {
+                        "truncated": True,
+                        "original_bytes": json_bytes,
+                        "max_output_bytes": self._policy.max_output_bytes,
+                    }
+                    output = dict(metadata)
+
+        if json_bytes is None:
+            output_str = "" if output_value is None else str(output_value)
+            output, truncation_meta = _truncate_output(
+                output_str, self._policy.max_output_bytes
+            )
+            if truncation_meta:
+                metadata = dict(truncation_meta)
 
         # backend.tools.base.ToolResult -> domain.tool.ToolResult
         return ToolResult(
             success=bool(raw.success),
-            output=truncated_output,
+            output=output,
             error=raw.error,
             metadata=metadata,
         )

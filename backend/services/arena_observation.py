@@ -4,7 +4,8 @@ import json
 import logging
 import re
 from collections import deque
-from typing import Any, Deque, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Callable, Deque, Dict, List, Optional
 
 from .model_probe_py.classify import (
     collectModelFields,
@@ -64,6 +65,7 @@ class ModelObservationService:
         worker: Any,
         verdict_cap: int = DEFAULT_VERDICT_CAP,
         run_trace_resolver: Optional[RunTraceResolver] = None,
+        pump_factory: Optional[Callable[[ModelObservationService], Any]] = None,
     ):
         self._browser_session = browser_session
         self._worker = worker
@@ -71,14 +73,28 @@ class ModelObservationService:
         self._run_trace_resolver = run_trace_resolver
         self._verdicts: Deque[Dict] = deque(maxlen=verdict_cap)
         self._running = False
+        #: pump_factory(service) → 事件泵（需 start()/stop()）；None 时 start()
+        #: 只置 running 标志（测试/手动喂事件模式），不建立真实 CDP 连接
+        self._pump_factory = pump_factory
+        self._pump: Any = None
 
     def start(self) -> None:
-        """Open persistent CDP session, enable Network domain. Stubbed for now;
-        real implementation in Phase 2 task 8 once Node worker bridge lands."""
+        """Open the event pump (long-lived CDP connection → Network events)."""
+        if self._running:
+            return
+        if self._pump_factory is not None:
+            self._pump = self._pump_factory(self)
+            self._pump.start()
         self._running = True
-        logger.info("ModelObservationService started")
+        logger.info("ModelObservationService started (pump=%s)", self._pump is not None)
 
     def stop(self) -> None:
+        if self._pump is not None:
+            try:
+                self._pump.stop()
+            except Exception as exc:  # noqa: BLE001 — shutdown 不能抛
+                logger.debug("observation pump stop failed: %s", exc)
+            self._pump = None
         self._running = False
         logger.info("ModelObservationService stopped")
 
@@ -130,7 +146,13 @@ class ModelObservationService:
     # -- internal helpers -------------------------------------------------
 
     def _record_verdict(self, verdict: Dict) -> None:
-        self._verdicts.append(verdict)
+        record = dict(verdict)
+        record["observed_at"] = (
+            datetime.now(timezone.utc)  # noqa: UP017 — py38 兼容
+            .replace(tzinfo=None, microsecond=0)
+            .isoformat()
+        )
+        self._verdicts.append(record)
         while len(self._verdicts) > self._verdict_cap:
             self._verdicts.popleft()
 

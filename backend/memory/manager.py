@@ -641,6 +641,15 @@ class MemoryManager:
             return self.episodic.delete(memory_id)
         elif memory_type == "semantic":
             return self.semantic.delete(memory_id)
+        elif memory_type == "working":
+            parts = memory_id.split(":")
+            if len(parts) != 3 or parts[0] != "wm":
+                return False
+            try:
+                sequence = int(parts[2])
+            except ValueError:
+                return False
+            return self.working.delete_message(":".join(parts[1:-1]), sequence)
         else:
             logger.warning(f"不支持删除记忆类型: {memory_type}")
             return False

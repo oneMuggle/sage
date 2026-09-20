@@ -33,6 +33,10 @@ class SettingsRepository:
             "compact_threshold_tokens",
             # M6 生态扩展: 用户自定义工具钩子 (JSON 列表)
             "hooks",
+            # M6 Phase 4: 已信任的工作区绝对路径 (JSON 字符串数组) ——
+            # 未列入的工作区, 其 .sage/hooks.json 不加载 (fail-closed)
+            # 见 backend/hooks/project_config.py
+            "hooks_trusted_workspaces",
             # 内网 Web 访问: 网络模式 + host 白名单 (JSON)
             # 见 backend/tools/network_config.py
             "network_policy",
@@ -57,7 +61,7 @@ class SettingsRepository:
             # F5 花费限额 (批次 C): 今日美元成本上限, 0/缺省 = 不限
             # 读取口径见 backend/api/legacy_routes.py producer F5 块
             "spend_limit_usd",
-            # round5 批次 B-2: 发送前自动快照 ("1"/"0", 缺省 = 关)。
+            # round5 批次 B-2: 发送前自动快照 ("1"/"0", 缺省 = 开；显式 "0" 才关)。
             # 读取口径见 legacy_routes._auto_checkpoint_if_enabled
             "auto_checkpoint",
             # round5 批次 D-1: 主模型重试耗尽后的降级模型 (model id, 缺省 = 不降级)。
@@ -73,6 +77,9 @@ class SettingsRepository:
             "context_turn_limit",
             "auto_topic_detection",
             "topic_detection_threshold",
+            # Arena automation: 账号池 Fernet 主密钥（SecretBox 包装后落库，
+            # 见 backend/services/arena_accounts.py:get_or_create_master_key）
+            "arena_master_key",
         }
     )
 

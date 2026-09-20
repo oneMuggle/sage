@@ -255,11 +255,11 @@ class TestRouter:
             )
 
             # §1.3a: PRAGMA foreign_keys=ON — orchestration_lanes.task_id
-            # FKs to orchestration_tasks.task_id. The router only persists
+            # FKs to orch_plan_tasks.task_id (Phase 3 改名). The router only persists
             # the lane, not the task, so pre-insert the parent row.
             db.get_connection().execute(
                 """
-                INSERT INTO orchestration_tasks
+                INSERT INTO orch_plan_tasks
                 (task_id, name, description, status, created_at)
                 VALUES (?, ?, ?, ?, ?)
                 """,

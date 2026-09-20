@@ -155,6 +155,22 @@ async def test_execute_delegates_to_tool_and_converts_result() -> None:
     assert fake_tool.calls == [{"expression": "2+2"}]
 
 
+async def test_execute_preserves_structured_output() -> None:
+    """结构化工具结果保持字典，供 runtime API 原样返回。"""
+    payload = {"runtimes": [], "recommended": None, "errors": []}
+    fake_tool = _FakeTool(
+        "runtime_probe",
+        raw=_FakeRawResult(success=True, content=payload, error=None),
+    )
+    registry = _make_registry({"runtime_probe": fake_tool})
+    adapter = InprocToolAdapter(registry=registry)  # type: ignore[arg-type]
+
+    result = await adapter.execute("runtime_probe", {})
+
+    assert result.success is True
+    assert result.output == payload
+
+
 async def test_execute_failure_passes_error_through() -> None:
     """失败路径：error 透传，output 为空。"""
     fake_tool = _FakeTool(
@@ -233,6 +249,21 @@ def test_default_registry_is_used_when_none_provided() -> None:
     assert "calculator" in names
     # web_search 也是 builtin
     assert "web_search" in names
+
+
+def test_default_registry_propagates_scheduler_getter() -> None:
+    """自建 registry 时把 scheduler getter 传给三件调度工具。"""
+    def getter() -> None:
+        return None
+
+    adapter = InprocToolAdapter(scheduler_service_getter=getter)
+
+    for name in (
+        "schedule_task",
+        "list_scheduled_tasks",
+        "cancel_scheduled_task",
+    ):
+        assert adapter._registry.get(name)._service_getter is getter
 
 
 async def test_default_registry_execute_unknown_tool() -> None:

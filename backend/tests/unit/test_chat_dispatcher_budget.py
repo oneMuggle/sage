@@ -368,3 +368,315 @@ async def test_running_event_lacks_tokens_and_duration(tmp_path, monkeypatch):
     assert done
     assert "duration_ms" in done[0]
     assert done[0]["duration_ms"] >= 0
+
+
+# ---- BU17 (round31): 聚合块任务级消耗标注 --------------------------------------
+
+
+def _seed_run_tokens_for_dispatcher(d, task_id: str, total_tokens: int) -> None:
+    """按 dispatcher 的 session/run 窗口插一条带 task_id 的用量行。"""
+    _seed_task_usage(
+        d.session_id or "sess-agg",
+        task_id,
+        total_tokens,
+        int((d._first_dispatch_at or __import__("time").time()) * 1000) + 5,
+    )
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_block_shows_per_task_tokens(tmp_path, monkeypatch):
+    """BU17: done 任务聚合块标题带消耗行；无用量任务不显。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-bu17-1",
+        session_id="sess-bu17",
+    )
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        if state.task_id == "t1":
+            _seed_task_usage(
+                "sess-bu17",
+                "t1",
+                777,
+                int((d._first_dispatch_at or time.time()) * 1000) + 5,
+            )
+        state.status = "done"
+        state.output = f"产出 {state.task_id}"
+        return state.output
+
+    d._run_subagent = fake_run
+    d.start_background_dispatch(
+        [
+            {"task_id": "t1", "agent_id": "primary", "goal": "g1"},
+            {"task_id": "t2", "agent_id": "primary", "goal": "g2"},
+        ]
+    )
+    await d.wait_background(timeout=5)
+    snap = d.background_snapshot()
+    agg = snap["aggregate"]
+    # BU20 (round36): 消耗与耗时并排标注
+    assert "## 子任务 t1（primary）（消耗 777 tokens · 耗时" in agg
+    assert "消耗 777" in agg
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_tokens_memoized(tmp_path, monkeypatch):
+    """BU17: memo 生效 —— 二次聚合不再触发 DB 查询。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-bu17-2",
+        session_id="sess-bu17b",
+    )
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        state.status = "done"
+        state.output = "ok"
+        return "ok"
+
+    d._run_subagent = fake_run
+    d.start_background_dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+    await d.wait_background(timeout=5)
+
+    calls = {"n": 0}
+    from backend.services import usage_tracker as ut
+
+    orig = ut.UsageTracker.task_usage_since
+
+    def counting(self, session_id, task_id, since_ms):
+        calls["n"] += 1
+        return orig(self, session_id, task_id, since_ms)
+
+    monkeypatch.setattr(ut.UsageTracker, "task_usage_since", counting)
+    d._task_tokens.clear()  # dispatch 末尾聚合已预热 memo —— 清空后计量
+    d.background_snapshot()
+    d.background_snapshot()
+    assert calls["n"] == 1  # 首查入 memo，二次聚合零查询
+
+
+# ---- RT24 (round32): 编排任务持久化携带用量与时长 ------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_persist_task_state_records_usage_and_duration(tmp_path, monkeypatch):
+    """RT24: 终态落库 orch_tasks.used_tokens/duration_ms；运行历史可见。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    # orch_tasks.run_id REFERENCES orch_runs —— 先落 run 行再跑任务。
+    import json as _json
+
+    from backend.data.orch_run_repo import OrchRun, OrchRunRepository
+
+    OrchRunRepository().upsert(
+        OrchRun(
+            run_id="orch-rt24-1",
+            session_id="sess-rt24",
+            status="running",
+            created_at=int(time.time() * 1000),
+            plan_json=_json.dumps({"tasks": []}, ensure_ascii=False),
+            original_request="",
+        )
+    )
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-rt24-1",
+        session_id="sess-rt24",
+    )
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        import asyncio as _aio
+
+        if state.task_id == "t1":
+            _seed_task_usage(
+                "sess-rt24",
+                "t1",
+                4321,
+                int(time.time() * 1000),
+            )
+            await _aio.sleep(0.05)  # 可测 duration_ms > 0
+        state.status = "done"
+        state.output = f"产出 {state.task_id}"
+        return state.output
+
+    d._run_subagent = fake_run
+    d.start_background_dispatch(
+        [
+            {"task_id": "t1", "agent_id": "primary", "goal": "g1"},
+            {"task_id": "t2", "agent_id": "primary", "goal": "g2"},
+        ]
+    )
+    await d.wait_background(timeout=5)
+
+    from backend.data.orch_task_repo import OrchTaskRepository
+
+    repo = OrchTaskRepository()
+    t1 = repo.get("t1")
+    assert t1 is not None
+    assert t1.status == "done"
+    assert t1.used_tokens == 4321
+    assert t1.duration_ms is not None
+    assert t1.duration_ms >= 0
+    t2 = repo.get("t2")
+    assert t2 is not None
+    assert t2.used_tokens == 0  # 无用量任务如实写 0
+    assert t2.duration_ms is not None
+
+    # API 详情透出
+    from httpx import ASGITransport
+
+    from backend.main import app
+
+    async with __import__("httpx").AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/api/v1/orch/runs/orch-rt24-1")
+    assert resp.status_code == 200
+    tasks = {t["task_id"]: t for t in resp.json()["tasks"]}
+    assert tasks["t1"]["used_tokens"] == 4321
+    assert tasks["t1"]["duration_ms"] is not None
+
+
+# ---- BU18 (round34): 聚合头部守门行量化补全 ------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_budget_line_includes_remaining(tmp_path, monkeypatch):
+    """BU18: 预算行追加剩余额度。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-bu18-1",
+        session_id="sess-bu18a",
+    )
+    d._semaphore = asyncio.Semaphore(4)
+    d.settings.run_token_budget = 1000
+
+    async def fake_run(state):
+        _seed_task_usage("sess-bu18a", state.task_id, 120, int(time.time() * 1000))
+        state.status = "done"
+        state.output = "ok"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+    agg = d._aggregate(list(d._states.values()))  # 直跑 dispatch 无 bg_task
+    assert "剩余 880" in agg  # 1000 - 120（仅 t1 各 120）
+
+@pytest.mark.asyncio()
+async def test_aggregate_wall_clock_line_when_enabled(tmp_path, monkeypatch):
+    """BU18: 墙钟启用未触顶 → 已运行/上限行；未启用 → 无该行。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-bu18-2",
+        session_id="sess-bu18b",
+    )
+    d._semaphore = asyncio.Semaphore(4)
+    d.settings.run_wall_clock_limit_min = 30
+    d._first_dispatch_at = time.time() - 120  # 已"运行" 2 分钟
+
+    async def fake_run(state):
+        state.status = "done"
+        state.output = "ok"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+    agg = d._aggregate(list(d._states.values()))
+    assert "已运行 2 分钟 / 上限 30 分钟" in agg
+
+    d2 = ChatDispatcher(
+        stream_id="s2",
+        entry_queue=_make_queue(),
+        run_id="orch-bu18-3",
+        session_id="sess-bu18c",
+    )
+    d2._semaphore = asyncio.Semaphore(4)
+    d2._run_subagent = fake_run
+    await d2.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+    agg2 = d2._aggregate(list(d2._states.values()))
+    assert "上限" not in agg2
+
+
+# ---- BU20 (round36): 聚合块任务级时长标注 --------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_block_shows_duration_alone_when_no_tokens(tmp_path, monkeypatch):
+    """BU20: 无用量任务只显耗时；两数据皆无的任务不显标注。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-bu20-1",
+        session_id="sess-bu20",
+    )
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        if state.task_id == "t2":
+            await asyncio.sleep(0.05)
+        state.status = "done"
+        state.output = f"产出 {state.task_id}"
+        return state.output
+
+    d._run_subagent = fake_run
+    await d.dispatch(
+        [
+            {"task_id": "t1", "agent_id": "primary", "goal": "g1"},
+            {"task_id": "t2", "agent_id": "primary", "goal": "g2"},
+        ]
+    )
+    agg = d._aggregate(list(d._states.values()))
+    # 两任务都有起止 → 都有耗时；t1 无用量 → 只有耗时
+    assert "## 子任务 t1（primary）（耗时" in agg
+    assert "## 子任务 t2（primary）（耗时" in agg
+    assert "消耗" not in agg.split("已收到")[1].split("## 子任务 t1")[0]
+
+
+# ---- BU21 (round38): 聚合头部消耗速率 ------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_budget_line_includes_recent_rate(tmp_path, monkeypatch):
+    """BU21: 预算行带近5分钟速率；窗口外的历史用量不计入速率段。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-bu21-1",
+        session_id="sess-bu21",
+    )
+    d._semaphore = asyncio.Semaphore(4)
+    d.settings.run_token_budget = 1000
+
+    async def fake_run(state):
+        _seed_task_usage("sess-bu21", state.task_id, 120, int(time.time() * 1000))
+        # 10 分钟前的旧用量 —— 不进"近5分钟"窗口
+        _seed_task_usage(
+            "sess-bu21", state.task_id, 999, int((time.time() - 600) * 1000)
+        )
+        state.status = "done"
+        state.output = "ok"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+    agg = d._aggregate(list(d._states.values()))
+    # run 窗口（首派发起）本就排除 10 分钟前的旧行；速率段只含近 5 分钟
+    assert "已消耗 120 / 预算 1000 tokens（12%），剩余 880，近5分钟 120。" in agg
