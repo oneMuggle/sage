@@ -26,6 +26,21 @@ import type { LogLevel } from '../log/levels';
 
 export type UnlistenFn = () => void;
 
+export interface MemoryElectronApiBridge {
+  list: (args?: Record<string, unknown>) => Promise<unknown>;
+  search: (args: Record<string, unknown>) => Promise<unknown>;
+  save: (args: Record<string, unknown>) => Promise<unknown>;
+  delete: (args: Record<string, unknown>) => Promise<unknown>;
+  getProfile: () => Promise<unknown>;
+  diagnostics: () => Promise<unknown>;
+  createProfile: (args: Record<string, unknown>) => Promise<unknown>;
+  updateProfile: (args: Record<string, unknown>) => Promise<unknown>;
+  deleteProfile: (args: Record<string, unknown>) => Promise<unknown>;
+  getSummary: (args: Record<string, unknown>) => Promise<unknown>;
+  getRecentWrites: (args: Record<string, unknown>) => Promise<unknown>;
+  undoWrite: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
 /** Result returned by `POST /api/v1/skills/rescan` (backend `rescan_skill_mds`). */
 export interface RescanResult {
   loaded: Array<{ name: string; source: string; path: string }>;
