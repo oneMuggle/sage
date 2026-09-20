@@ -33,6 +33,7 @@ export interface MemoryElectronApiBridge {
   delete: (args: Record<string, unknown>) => Promise<unknown>;
   getProfile: () => Promise<unknown>;
   diagnostics: () => Promise<unknown>;
+  subscribe: (handler: (event: unknown) => void) => Promise<UnlistenFn | null>;
   createProfile: (args: Record<string, unknown>) => Promise<unknown>;
   updateProfile: (args: Record<string, unknown>) => Promise<unknown>;
   deleteProfile: (args: Record<string, unknown>) => Promise<unknown>;

@@ -196,7 +196,7 @@ def test_delete_memory_semantic(manager: MemoryManager) -> None:
 
 
 def test_delete_memory_working_synthetic_id(manager: MemoryManager) -> None:
-    seq_a = manager.working.add("s1", {"role": "user", "content": "keep me"})
+    manager.working.add("s1", {"role": "user", "content": "keep me"})
     seq_b = manager.working.add("s1", {"role": "user", "content": "drop me"})
 
     assert manager.delete_memory(f"wm:s1:{seq_b}", "working") is True
