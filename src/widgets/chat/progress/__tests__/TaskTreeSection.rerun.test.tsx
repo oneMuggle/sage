@@ -757,3 +757,102 @@ describe('TaskTreeSection — 级联跳过根因 (RD18)', () => {
     expect(screen.queryByTestId('task-tree-blocked-t2')).toBeNull();
   });
 });
+
+// ============================================================================
+// RD21 (round42): run 触顶原因横幅
+// ============================================================================
+
+describe('TaskTreeSection — run 触顶原因横幅 (RD21)', () => {
+  it('budget_exceeded 前缀 → 渲染预算触顶横幅（优先）', () => {
+    render(
+      <TaskTreeSection
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'cancelled',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: 'budget_exceeded: 本 run token 预算（1000）已耗尽',
+              output_preview: null,
+              retry_count: 0,
+            },
+            t2: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't2',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g2',
+              error: 'wall_clock_exceeded: 本 run 墙钟上限（30 分钟）已到',
+              output_preview: null,
+              retry_count: 0,
+            },
+          } as TaskBoardState['statuses'],
+        })}
+      />,
+    );
+    const banner = screen.getByTestId('task-tree-trip-reason');
+    expect(banner.textContent).toContain('预算已触顶');
+  });
+
+  it('wall_clock_exceeded 前缀 → 渲染墙钟横幅；普通失败不渲染', () => {
+    render(
+      <TaskTreeSection
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: 'wall_clock_exceeded: 本 run 墙钟上限（30 分钟）已到',
+              output_preview: null,
+              retry_count: 0,
+            },
+            t2: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't2',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g2',
+              error: 'boom',
+              output_preview: null,
+              retry_count: 0,
+            },
+          } as TaskBoardState['statuses'],
+        })}
+      />,
+    );
+    expect(screen.getByTestId('task-tree-trip-reason').textContent).toContain(
+      '墙钟上限已到',
+    );
+    // 普通失败（无守门前缀）不触发横幅
+    cleanup();
+    render(
+      <TaskTreeSection
+        board={makeBoard({
+          statuses: {
+            t1: {
+              state: 'task_status',
+              run_id: 'orch-rerun-ui',
+              task_id: 't1',
+              status: 'failed',
+              agent_id: 'primary',
+              goal: 'g1',
+              error: '普通失败：boom',
+              output_preview: null,
+              retry_count: 0,
+            },
+          } as TaskBoardState['statuses'],
+        })}
+      />,
+    );
+    expect(screen.queryByTestId('task-tree-trip-reason')).toBeNull();
+  });
+});
