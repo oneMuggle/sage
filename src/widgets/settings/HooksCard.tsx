@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { backendRequest } from '../../shared/api/backendRequest';
 import { invoke } from '../../shared/api/desktopInvoke';
 import { HookHistoryPanel } from './HookHistoryPanel';
+import { ProjectHooksPanel } from './ProjectHooksPanel';
 
 interface HookEntry {
   event: string;
@@ -294,6 +295,7 @@ export function HooksCard(): JSX.Element | null {
           修改即时保存;事件点: 工具前/后、消息提交、回复结束、会话创建/删除、工具出错
         </span>
       </div>
+      <ProjectHooksPanel />
       <HookHistoryPanel />
     </div>
   );
