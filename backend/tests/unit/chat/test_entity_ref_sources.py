@@ -75,10 +75,10 @@ def test_resolve_wiki_populates_sources(monkeypatch):
 
     import backend.chat.entity_refs as er
 
-    monkeypatch.setattr(er, "_wiki_project_root", lambda: object.__class__ and _FakeRoot())
+    monkeypatch.setattr(er, "_wiki_project_root", lambda: _FakeRoot())
     hits = [
-        SimpleNamespace(title="架构", path="wiki/arch.md", snippet="分层设计"),
-        SimpleNamespace(title=None, path="wiki/x.md", snippet="无标题跳过"),
+        SimpleNamespace(title="架构", path="wiki/arch.md", snippet="分层设计", score=0.8731),
+        SimpleNamespace(title=None, path="wiki/x.md", snippet="无标题跳过", score=0.1),
     ]
 
     class _FakeSearchResp:
@@ -89,7 +89,14 @@ def test_resolve_wiki_populates_sources(monkeypatch):
     resolved = er.resolve_entity_refs([EntityRef("wiki", "架构", "@wiki:架构")], session_id="s1")
     sources = collect_entity_sources(resolved)
     assert len(sources) == 1
-    assert sources[0] == {"kind": "wiki", "title": "架构", "path": "wiki/arch.md", "snippet": "分层设计"}
+    # R90: score 与 wiki_search 提取来源口径一致
+    assert sources[0] == {
+        "kind": "wiki",
+        "title": "架构",
+        "path": "wiki/arch.md",
+        "snippet": "分层设计",
+        "score": 0.87,
+    }
 
 
 class _FakeRoot:
