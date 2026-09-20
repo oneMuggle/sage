@@ -12,6 +12,8 @@ import {
   FileSpreadsheet,
   HelpCircle,
   UserCog,
+  PanelLeftClose,
+  PanelLeftOpen,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -95,9 +97,11 @@ interface SidebarProps {
   /** P1-3.6 (UI 优化方案 2026-09-13): 折叠态 → 56px icon rail。
    *  仅渲染品牌 logo + 导航图标，隐藏会话列表/sections/文字标签。 */
   collapsed?: boolean;
+  /** 折叠/展开切换回调。提供时渲染可见 toggle 按钮（不再仅依赖 Ctrl+B）。 */
+  onToggleCollapse?: () => void;
 }
 
-export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
+export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -285,8 +289,21 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
         className="h-screen bg-surface border-r border-border flex flex-col items-center flex-shrink-0"
       >
         {/* 品牌 logo（无 wordmark） */}
-        <div className="h-12 flex items-center justify-center border-b border-border w-full">
+        <div className="h-12 flex items-center justify-center border-b border-border w-full relative">
           <BrandLogo size="sm" />
+          {onToggleCollapse && (
+            <Tooltip content="展开侧边栏 (Ctrl+B)" side="right">
+              <button
+                type="button"
+                onClick={onToggleCollapse}
+                aria-label="展开侧边栏"
+                data-testid="sidebar-expand-button"
+                className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
+              >
+                <PanelLeftOpen className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          )}
         </div>
 
         {/* 导航图标（无文字标签） */}
@@ -342,6 +359,18 @@ export function Sidebar({ width = 240, collapsed = false }: SidebarProps) {
       {/* U-Brand: 替换 197-202 的硬编码 S+Sage 块为共享 <BrandLogo withWordmark />，wordmark 用 sidebar.brand */}
       <div className="h-12 flex items-center px-4 border-b border-border">
         <BrandLogo size="sm" withWordmark />
+        {onToggleCollapse && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label="折叠侧边栏"
+            data-testid="sidebar-collapse-button"
+            className="ml-auto flex items-center justify-center w-7 h-7 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
+            title="折叠侧边栏 (Ctrl+B)"
+          >
+            <PanelLeftClose className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* 导航列表 */}
