@@ -127,9 +127,11 @@ def test_runtime_context_helper_exists_and_is_non_secret(monkeypatch):
     assert "python_path" in ctx
     assert "env" in ctx
 
-    # python_path 应是注入的 fake 路径（存在性由 Task 3 实现负责;
-    # 本测试仅断言 helper 读取了环境变量,不要求实际 isfile 校验通过）
-    assert ctx["python_path"] == fake_python or ctx["python_path"] is None
+    # python_path 必须是注入的 fake 路径;收紧为严格等值,
+    # 避免 Task 3 实现返回 None 的退化实现也能过测。
+    assert ctx["python_path"] == fake_python, (
+        f"runtime context.python_path 应等于注入的 SAGE_RUNTIME_PYTHON,实际: {ctx['python_path']!r}"
+    )
 
     # env 字段是 dict,不泄漏任何密钥
     env = ctx["env"]
