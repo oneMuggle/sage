@@ -225,3 +225,34 @@ def test_merge_empty_incoming_returns_copy():
     merged = merge_sources(acc, [])
     assert merged == acc
     assert merged is not acc
+
+
+# ── R89: 去重合并补齐空字段 ───────────────────────────────────────────
+
+
+def test_merge_enriches_existing_entry_with_richer_incoming():
+    """navigate 先入（无 snippet），fetch 同 url 到达 → 补 snippet 而非丢弃。"""
+    acc = [{"kind": "web", "title": "示例页", "url": "https://a.com/x", "snippet": ""}]
+    merged = merge_sources(acc, [
+        {"kind": "web", "title": "示例页", "url": "https://a.com/x", "snippet": "正文摘要"},
+    ])
+    assert len(merged) == 1
+    assert merged[0]["snippet"] == "正文摘要"
+    assert merged[0]["title"] == "示例页"
+
+
+def test_merge_enrich_keeps_existing_nonempty_fields():
+    acc = [{"kind": "web", "title": "原标题", "url": "https://a.com"}]
+    merged = merge_sources(acc, [
+        {"kind": "web", "title": "新标题", "url": "https://a.com", "snippet": "s"},
+    ])
+    assert merged[0]["title"] == "原标题"  # 已有字段不被覆盖
+    assert merged[0]["snippet"] == "s"
+
+
+def test_merge_enrich_does_not_mutate_inputs():
+    existing = {"kind": "web", "title": "A", "url": "https://a.com", "snippet": ""}
+    incoming = {"kind": "web", "title": "A", "url": "https://a.com", "snippet": "s"}
+    merge_sources([existing], [incoming])
+    assert existing["snippet"] == ""
+    assert incoming["snippet"] == "s"
