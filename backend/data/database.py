@@ -663,8 +663,39 @@ class Database:
                 sentiment TEXT,
                 is_valid INTEGER DEFAULT 1,
                 expires_at INTEGER,
+                scope TEXT DEFAULT 'user',
+                project_key TEXT,
+                invalid_at INTEGER,
+                supersedes_id TEXT,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
             )
+        """)
+        # P1 (2026-09-18) 记忆作用域轴: scope(user/project/global) + project_key
+        # (session_workspace_bindings 的规范化 workspace_path)。存量行迁移后
+        # 取默认值 'user'（跨项目可见），与旧行为一致。
+        cursor.execute("PRAGMA table_info(memories_episodic)")
+        _episodic_columns = {row["name"] for row in cursor.fetchall()}
+        if "scope" not in _episodic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_episodic ADD COLUMN scope TEXT DEFAULT 'user'"
+            )
+        if "project_key" not in _episodic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_episodic ADD COLUMN project_key TEXT"
+            )
+        # P3 (2026-09-20) 时间有效区 (Zep/Graphiti 简化版): invalid_at 非空 =
+        # 该记忆已被更新的事实取代（"失效"），与 is_valid=0（用户删除）区分。
+        if "invalid_at" not in _episodic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_episodic ADD COLUMN invalid_at INTEGER"
+            )
+        if "supersedes_id" not in _episodic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_episodic ADD COLUMN supersedes_id TEXT"
+            )
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_episodic_scope_project
+            ON memories_episodic(scope, project_key)
         """)
 
         # win7-only（Task 4 / Gap A）：补 source_turn_id 等三列，见 _migrate_memory_traceability。
@@ -763,6 +794,31 @@ class Database:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_user_profile_importance
             ON user_profile(importance DESC)
+        """)
+
+        # 项目画像表 (P2 scope 轴: 项目级 "MEMORY.md")
+        # 与 user_profile 同构, 但按 project_key(工作区绝对路径, 与
+        # session_workspace_bindings/projects 注册表同源)分组, 冻结快照仅在
+        # 会话绑定同一项目时注入 system prompt。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS project_profile (
+                id TEXT PRIMARY KEY,
+                project_key TEXT NOT NULL,
+                content TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'convention',
+                importance INTEGER DEFAULT 5 CHECK (importance BETWEEN 1 AND 10),
+                source TEXT NOT NULL DEFAULT 'manual',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_project_profile_key
+            ON project_profile(project_key)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_project_profile_importance
+            ON project_profile(project_key, importance DESC)
         """)
 
         # Office 文档表 (Phase 1, plan §4.1.2 step 10)
@@ -1211,8 +1267,36 @@ class Database:
                 content TEXT NOT NULL,
                 summary TEXT,
                 tags TEXT DEFAULT '[]',
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                scope TEXT DEFAULT 'user',
+                project_key TEXT,
+                invalid_at INTEGER,
+                supersedes_id TEXT
             )
+        """)
+        # P1 (2026-09-18) 记忆作用域轴，同 memories_episodic。
+        cursor.execute("PRAGMA table_info(memories_semantic)")
+        _semantic_columns = {row["name"] for row in cursor.fetchall()}
+        if "scope" not in _semantic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN scope TEXT DEFAULT 'user'"
+            )
+        if "project_key" not in _semantic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN project_key TEXT"
+            )
+        # P3 (2026-09-20) 时间有效区，同 memories_episodic。
+        if "invalid_at" not in _semantic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN invalid_at INTEGER"
+            )
+        if "supersedes_id" not in _semantic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN supersedes_id TEXT"
+            )
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_semantic_scope_project
+            ON memories_semantic(scope, project_key)
         """)
 
         # FTS5 独立虚拟表用于语义记忆全文搜索（jieba 分词文本）。

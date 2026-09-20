@@ -39,10 +39,11 @@ PER_SESSION_LIMIT = 50
 #: 全局最多跟踪的 session 数（LRU）
 SESSION_LIMIT = 200
 
-#: ``WriteRecord.kind`` 取值：通用三层记忆 / 用户画像
+#: ``WriteRecord.kind`` 取值：通用三层记忆 / 用户画像 / 项目画像（P2）
 KIND_MEMORY = "memory"
 KIND_PROFILE = "profile"
-VALID_KINDS = (KIND_MEMORY, KIND_PROFILE)
+KIND_PROJECT_PROFILE = "project_profile"
+VALID_KINDS = (KIND_MEMORY, KIND_PROFILE, KIND_PROJECT_PROFILE)
 
 
 @dataclass(frozen=True)
@@ -97,7 +98,10 @@ class MemoryWriteLedger:
             kind=kind,
             content=str(content or "")[:200],
             category=str(category or "fact"),
-            memory_type=str(memory_type or ("profile" if kind == KIND_PROFILE else "episodic")),
+            memory_type=str(
+                memory_type
+                or ("episodic" if kind == KIND_MEMORY else "profile")
+            ),
             session_id=str(session_id),
             created_at=int(time.time() * 1000),
         )

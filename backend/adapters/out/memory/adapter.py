@@ -167,9 +167,18 @@ class MemoryAdapter:
         Returns:
             MemoryContext: 包含分层记忆的上下文对象
         """
+        from backend.memory import scope as memory_scope
         from backend.memory.fusion import reciprocal_rank_fusion
+        from backend.memory.scoring import rank_by_composite
 
         logger.debug(f"Retrieving memories for query: {query[:50]}...")
+
+        # P1 作用域轴：解析当前会话的项目归属，用于向量命中后的可见性过滤
+        # （无归属会话看不到任何 project 记忆；user/global/存量行始终可见）
+        current_project_key = memory_scope.resolve_session_project_key(
+            getattr(getattr(self.memory_manager, "episodic", None), "db", None),
+            session_id,
+        )
 
         # 1. 关键词检索（MemoryManager，工作记忆按 session 隔离）
         keyword_results = self.memory_manager.recall(query, limit=limit, session_id=session_id)
@@ -223,6 +232,17 @@ class MemoryAdapter:
             weights=weights,
             k=60,
         )
+        # P1 作用域轴：其他项目的 project 记忆对当前会话不可见
+        # （keyword 路径在存储层已按 session 过滤，这里是统一防线）
+        fused = [
+            item for item in fused
+            if memory_scope.is_row_visible(item, current_project_key)
+        ]
+
+        # P4 四因子重排：RRF 只回答"像不像"。composite_score 在此基础上
+        # 叠加时近性、重要性与可信度，让陈旧低可信的字面命中不再压过
+        # 更新、更可信的语义次优事实。
+        fused = rank_by_composite(fused)
 
         logger.info(
             "[retrieval] variant=%s weights=%s keyword_hits=%s vector_hits=%s fused=%s",
@@ -233,12 +253,16 @@ class MemoryAdapter:
             len(fused),
         )
 
-        # 4. 分层：用户画像（始终注入）+ 高重要性 → core，其余 → episodic/semantic
+        # 4. 分层：用户画像 + 项目画像（P2，始终注入）+ 高重要性 → core，
+        # 其余 → episodic/semantic
         # core 槽位按画像 / 检索命中**独立预算**（画像 3 + 检索 2 = 5），
         # 避免画像条目挤掉本轮检索到的高重要性事实（review MEDIUM）。
         _CORE_PROFILE_LIMIT = 3
         _CORE_RETRIEVED_LIMIT = 2
+        # P2: 项目画像独立小额度（2），不与服务端用户画像/检索命中抢槽位
+        _CORE_PROJECT_LIMIT = 2
         core_profile: List[dict] = []
+        core_project: List[dict] = []
         core_retrieved: List[dict] = []
         episodic: List[dict] = []
         semantic: List[dict] = []
@@ -246,6 +270,15 @@ class MemoryAdapter:
         #     不依赖本轮检索命中（hermes 冻结快照语义）
         if self.user_profile is not None:
             core_profile = self.user_profile.get_core_items()
+        # 4.1b 项目画像（P2）：仅当会话绑定了工作区（current_project_key
+        #      非空）时取该项目的冻结快照；未绑定恒为空。
+        if current_project_key:
+            try:
+                from backend.memory.project_profile import get_project_profile
+
+                core_project = get_project_profile().get_core_items(current_project_key)
+            except Exception as exc:  # noqa: BLE001 - best-effort 注入
+                logger.debug(f"项目画像 core 注入失败: {exc}")
         # 4.2 检索命中中的高重要性事实补入 core（独立预算）
         for item in fused[: limit * 2]:
             importance = item.get("importance", 5)
@@ -256,13 +289,17 @@ class MemoryAdapter:
             else:
                 episodic.append(item)
 
-        core = core_profile[:_CORE_PROFILE_LIMIT] + core_retrieved[:_CORE_RETRIEVED_LIMIT]
+        core = (
+            core_profile[:_CORE_PROFILE_LIMIT]
+            + core_project[:_CORE_PROJECT_LIMIT]
+            + core_retrieved[:_CORE_RETRIEVED_LIMIT]
+        )
 
         return MemoryContext(
             working=keyword_results.get("working", []),
             episodic=episodic[:limit],
             semantic=semantic[:limit],
-            core=core[: _CORE_PROFILE_LIMIT + _CORE_RETRIEVED_LIMIT],
+            core=core[: _CORE_PROFILE_LIMIT + _CORE_PROJECT_LIMIT + _CORE_RETRIEVED_LIMIT],
         )
 
     async def store(
@@ -321,6 +358,15 @@ class MemoryAdapter:
             "memory_category": memory_category,
         }
 
+        # P3 (Mem0 风格): 写入前冲突消解——NOOP 复用既有记忆 ID,
+        # UPDATE 写新行并使旧行失效;返回 None 表示按 ADD 走原路径。
+        # 消解的任何失败都不阻塞写入（退回普通 append）。
+        conflict_id = await self._resolve_conflict(
+            content, session_id, importance, metadata, memory_type
+        )
+        if conflict_id is not None:
+            return conflict_id
+
         # 调用 MemoryManager.memorize() 存储记忆（透传分类结果与会话 ID）
         memory_id = self.memory_manager.memorize(
             content=content,
@@ -333,16 +379,74 @@ class MemoryAdapter:
         # 向量化存储（仅持久层记忆:工作记忆合成 id 不入向量库）
         # Round 1: 同 retrieve(), encode 含 HTTP/ONNX 推理, 挪线程执行器
         # (T2 的队列化由该方案覆盖 —— run_in_executor 同样不阻塞事件循环)。
-        if self.vector_store is not None and memory_id and memory_type in ("episodic", "semantic"):
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None,
-                lambda: self.vector_store.add(
-                    memory_id, content, memory_type=memory_type, session_id=session_id
-                ),
-            )
+        await self._vector_add(memory_id, content, memory_type, session_id)
 
         return memory_id or ""
+
+    # ---- P3 冲突消解 -------------------------------------------------------
+
+    async def _resolve_conflict(
+        self,
+        content: str,
+        session_id: str,
+        importance: int,
+        metadata: dict,
+        memory_type: str,
+    ) -> Optional[str]:
+        """写入前冲突消解（判定 + 落库委托 manager,单一事实来源）。
+
+        Returns:
+            非 None 表示本条写入已被消解处理,调用方直接返回该值作为记忆 ID
+            （NOOP → 既有 ID, 不重复入向量库; UPDATE/ADD → 新行 ID, 向量
+            写入在此完成）。None → 不适用/失败, 调用方走原 ADD 路径。
+        """
+        if memory_type not in ("episodic", "semantic"):
+            return None
+        # 类级结构探测: Mock manager 不会误判为"已实现"（同 store_profile 模式）
+        mm = self.memory_manager
+        if not hasattr(type(mm), "memorize_with_conflict_check"):
+            return None
+
+        from backend.memory.conflict import OP_NOOP
+
+        try:
+            memory_id, op = mm.memorize_with_conflict_check(
+                content=content,
+                memory_type=memory_type,
+                importance=importance,
+                metadata=metadata,
+                session_id=session_id,
+            )
+        except Exception as exc:  # noqa: BLE001 — 消解失败不阻塞写入
+            logger.warning(f"冲突消解失败, 退回直接写入: {exc}")
+            return None
+
+        # NOOP 复用既有行——其向量早已入库（若有),不重复写
+        if op != OP_NOOP:
+            await self._vector_add(memory_id, content, memory_type, session_id)
+        return memory_id
+
+    async def _vector_add(
+        self,
+        memory_id: Optional[str],
+        content: str,
+        memory_type: str,
+        session_id: str,
+    ) -> None:
+        """持久层记忆入向量库（best-effort,工作记忆/空 ID 跳过）。"""
+        if (
+            self.vector_store is None
+            or not memory_id
+            or memory_type not in ("episodic", "semantic")
+        ):
+            return
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: self.vector_store.add(
+                memory_id, content, memory_type=memory_type, session_id=session_id
+            ),
+        )
 
     async def store_profile(
         self,

@@ -1,6 +1,6 @@
 """Integration tests for evolution task registration into SchedulerService.
 
-PR-C §5.1: verify _register_evolution_tasks() wires all 5 evolution tasks
+PR-C §5.1: verify _register_evolution_tasks() wires all 7 evolution tasks
 into the BackgroundScheduler at lifespan startup.
 """
 import logging
@@ -21,7 +21,7 @@ def _make_service(tmp_path: Path) -> SchedulerService:
 
 
 def test_lifespan_registers_all_five_evolution_tasks(tmp_path):
-    """Default schedule registers all 5 evolution tasks."""
+    """Default schedule registers all 7 evolution tasks."""
     from backend.services._evolution_register import _register_evolution_tasks
 
     svc = _make_service(tmp_path)
@@ -34,12 +34,13 @@ def test_lifespan_registers_all_five_evolution_tasks(tmp_path):
         "skill_consolidation",
         "importance_reevaluation",
         "memory_consolidation",
+        "memory_reflection",
     }
     assert set(registered.keys()) == expected
     for name in registered:
         job = svc._scheduler.get_job(f"evolution/{name}")
         assert job is not None, f"job missing: {name}"
-    assert len(registered) == 6
+    assert len(registered) == 7
 
 
 def test_yaml_override_takes_precedence_over_default(tmp_path):
@@ -74,7 +75,7 @@ def test_missing_yaml_uses_defaults(tmp_path):
         svc, config_path=tmp_path / "nope.yaml"
     )
     assert registered["memory_consolidation"] == "30 4 * * 0"
-    assert len(registered) == 6
+    assert len(registered) == 7
 
 
 def test_yaml_malformed_logs_warning_uses_defaults(tmp_path, caplog):
@@ -87,7 +88,7 @@ def test_yaml_malformed_logs_warning_uses_defaults(tmp_path, caplog):
     svc = _make_service(tmp_path)
     with caplog.at_level(logging.WARNING):
         registered = _register_evolution_tasks(svc, config_path=cfg)
-    assert len(registered) == 6
+    assert len(registered) == 7
     assert any("config.yaml" in r.message for r in caplog.records)
 
 
@@ -112,7 +113,7 @@ def test_yaml_invalid_time_field_skips_that_task(tmp_path, caplog):
     # memory_consolidation 仍在(走默认 cron),但用了 default 30 4 * * 0
     assert "memory_consolidation" in registered
     assert registered["memory_consolidation"] == "30 4 * * 0"
-    assert len(registered) == 6
+    assert len(registered) == 7
     # 日志有 warning
     assert any("memory_consolidation" in r.message for r in caplog.records)
 
@@ -190,6 +191,6 @@ def test_long_weekday_names_in_yaml_resolved_to_short_for_cron(tmp_path):
     registered = _register_evolution_tasks(svc, config_path=cfg)
 
     # 全部 5 个任务都注册成功(长星期名没让 APScheduler 抛 ValueError)
-    assert len(registered) == 6
+    assert len(registered) == 7
     assert registered["importance_reevaluation"] == "00 04 * * sun"
     assert registered["memory_consolidation"] == "30 04 * * mon"

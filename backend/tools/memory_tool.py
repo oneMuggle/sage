@@ -16,7 +16,7 @@ Task 2 (Win7 parity) 修复要点
   ``limit`` clamp 到 ``[1, 100]``,默认 20。
 """
 
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
@@ -73,6 +73,11 @@ DEFAULT_SEARCH_LIMIT = 20
 SEARCH_TYPE_ALL = "all"
 SEARCH_MEMORY_TYPES = ("all", "working", "episodic", "semantic")
 SAVE_MEMORY_TYPES = ("auto", "working", "episodic", "semantic")
+#: P1 作用域轴：session = 旧行为（会话内检索）；其余三个值走作用域轴
+#: 跨会话检索（project 需当前会话绑定 workspace，否则返回空）。
+SEARCH_MEMORY_SCOPES = ("session", "project", "user", "global")
+#: ``memory_save`` 的 scope 白名单;``auto`` = 由存储层按会话绑定判定。
+SAVE_MEMORY_SCOPES = ("auto", "user", "project", "global")
 
 
 class MemorySearchTool(BaseTool):
@@ -118,6 +123,15 @@ class MemorySearchTool(BaseTool):
                         "type": "integer",
                         "description": "返回数量 (默认 20, 上限 100)",
                     },
+                    "scope": {
+                        "type": "string",
+                        "enum": ["session", "project", "user", "global"],
+                        "description": (
+                            "检索作用域: session=当前会话(默认); "
+                            "project=本项目全部会话的记忆; "
+                            "user=用户级记忆(跨项目可见); global=全局共享知识"
+                        ),
+                    },
                 },
                 "required": ["query"],
             },
@@ -155,6 +169,7 @@ class MemorySearchTool(BaseTool):
         query: str,
         memory_type: Optional[str] = SEARCH_TYPE_ALL,
         limit: int = DEFAULT_SEARCH_LIMIT,
+        scope: Optional[str] = "session",
         **kwargs: Any,
     ) -> ToolResult:
         """
@@ -165,6 +180,8 @@ class MemorySearchTool(BaseTool):
             memory_type: ``all``/空串/None 视作 "全部类型";其余原样转发
                 到 ``MemoryManager.search_memories``。
             limit: 返回数量, clamp 到 ``[1, 100]``, 默认 20。
+            scope: ``session``(默认)/空 维持会话内检索; ``project`` /
+                ``user`` / ``global`` 走 P1 作用域轴跨会话检索。
         """
         if self.memory is None:
             return ToolResult(success=False, error="记忆管理器未初始化")
@@ -176,15 +193,27 @@ class MemorySearchTool(BaseTool):
             if context is None:
                 return ToolResult(success=False, error="记忆搜索需要可信会话上下文")
 
+            normalized_scope = (scope or "session").strip().lower()
+            if normalized_scope not in SEARCH_MEMORY_SCOPES:
+                return ToolResult(success=False, error="不支持的检索作用域")
+            cross_session = normalized_scope != "session"
+
+            search_kwargs: Dict[str, Any] = {"session_id": context.session_id}
+            if cross_session:
+                search_kwargs["scope"] = normalized_scope
             results = self.memory.search_memories(
-                query, normalized_type, clamped_limit, session_id=context.session_id
+                query, normalized_type, clamped_limit, **search_kwargs
             )
             # 持久层旧实现可能忽略 session_id；过滤所有会话标识明确不匹配的记录。
-            scoped_results = [
-                item
-                for item in (results or [])
-                if not item.get("session_id") or item.get("session_id") == context.session_id
-            ]
+            # 作用域轴检索 (project/user/global) 本就是跨会话, 跳过该过滤。
+            if cross_session:
+                scoped_results = list(results or [])
+            else:
+                scoped_results = [
+                    item
+                    for item in (results or [])
+                    if not item.get("session_id") or item.get("session_id") == context.session_id
+                ]
             truncated = scoped_results[:clamped_limit]
 
             return ToolResult(
@@ -192,6 +221,7 @@ class MemorySearchTool(BaseTool):
                 content={
                     "query": query,
                     "memory_type": memory_type,
+                    "scope": normalized_scope,
                     "results": truncated,
                 },
                 output=truncated,
@@ -247,6 +277,22 @@ class MemorySaveTool(BaseTool):
                         "type": "string",
                         "description": "会话 ID (可选, 用于按会话隔离)",
                     },
+                    "scope": {
+                        "type": "string",
+                        "description": (
+                            "作用域: auto(默认,自动判定) / user(跨项目可见) / "
+                            "project(仅本项目会话可见, 需当前会话绑定工作目录) / "
+                            "global(全局共享)"
+                        ),
+                    },
+                    "conflict_check": {
+                        "type": "boolean",
+                        "description": (
+                            "写入前冲突消解 (P3, 默认 false): true 时与同归属"
+                            "活跃记忆比对——完全重复跳过写入(NOOP), "
+                            "同主题高相似写新行并取代旧行(UPDATE)"
+                        ),
+                    },
                 },
                 "required": ["content"],
             },
@@ -259,6 +305,8 @@ class MemorySaveTool(BaseTool):
         memory_type: str = "episodic",
         tags: Optional[List[str]] = None,
         session_id: Optional[str] = None,
+        scope: str = "auto",
+        conflict_check: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
         """
@@ -271,6 +319,10 @@ class MemorySaveTool(BaseTool):
                 (默认 ``episodic``)
             tags: 标签列表 (可选)
             session_id: 会话 ID (可选, 用于按会话隔离工作记忆)
+            scope: ``auto``(默认, 按会话 workspace 绑定自动判定) /
+                ``user`` / ``project`` / ``global`` (P1 作用域轴)
+            conflict_check: true 时走 P3 冲突消解写入（NOOP/UPDATE/ADD）;
+                默认 false 保持旧的直接写入语义
 
         Returns:
             ``ToolResult(success, content, output)``,其中 ``output`` 是
@@ -281,6 +333,7 @@ class MemorySaveTool(BaseTool):
         # (Too many returns). elif 顺序保证 ``context is None`` 先匹配,
         # 后续 ``context.session_id`` 访问安全。
         context = current_tool_context()
+        normalized_scope = (scope or "auto").strip().lower()
         guard_failed: Optional[str] = None
         if self.memory is None:
             guard_failed = "记忆管理器未初始化"
@@ -290,6 +343,8 @@ class MemorySaveTool(BaseTool):
             guard_failed = "session_id 与当前会话不一致"
         elif memory_type not in SAVE_MEMORY_TYPES:
             guard_failed = "不支持的保存记忆类型"
+        elif normalized_scope not in SAVE_MEMORY_SCOPES:
+            guard_failed = "不支持的记忆作用域"
         if guard_failed is not None:
             return ToolResult(success=False, error=guard_failed)
         # 此时 ``context`` 必非 None (elif ``context is None`` 已返回)
@@ -300,14 +355,33 @@ class MemorySaveTool(BaseTool):
         # 会严格比较 args。``memorize`` 自身对 ``None`` tags 安全处理。
         forwarded_tags = list(tags) if tags is not None else None
 
+        # ``auto`` 不显式传 scope —— 保持旧调用形态, 由存储层自动判定。
+        memorize_kwargs: Dict[str, Any] = {"session_id": effective_session_id}
+        if normalized_scope != "auto":
+            memorize_kwargs["scope"] = normalized_scope
+
         try:
-            memory_id = self.memory.memorize(
-                content,
-                memory_type,
-                importance,
-                forwarded_tags,
-                session_id=effective_session_id,
-            )
+            # 类级结构探测（同 chat_service 的 store_profile 模式）:
+            # fake/Mock manager 未实现时退回普通 memorize, 不误判。
+            if conflict_check and hasattr(
+                type(self.memory), "memorize_with_conflict_check"
+            ):
+                memory_id, conflict_op = self.memory.memorize_with_conflict_check(
+                    content=content,
+                    memory_type=memory_type,
+                    importance=importance,
+                    tags=forwarded_tags,
+                    **memorize_kwargs,
+                )
+            else:
+                memory_id = self.memory.memorize(
+                    content,
+                    memory_type,
+                    importance,
+                    forwarded_tags,
+                    **memorize_kwargs,
+                )
+                conflict_op = None
         except TypeError as exc:
             # 旧 manager 不支持 session_id 时无法保证会话隔离，拒绝写入。
             if "session_id" in str(exc):
@@ -327,6 +401,8 @@ class MemorySaveTool(BaseTool):
                 "content_length": len(content),
                 "importance": importance,
                 "memory_type": memory_type,
+                "scope": normalized_scope,
+                "conflict_op": conflict_op,
             },
             output=memory_id,
         )
