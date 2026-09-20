@@ -213,6 +213,17 @@ class BashTool(BaseTool):
                 )
             except Exception:  # noqa: BLE001
                 pass
+        # Sage Python runtime hint (non-secret). When Electron propagates
+        # SAGE_RUNTIME_PYTHON, the LLM can use this path explicitly instead
+        # of guessing `python3` on PATH.
+        try:
+            from backend.tools.skill_runtime_context import get_runtime_context
+
+            rt = get_runtime_context()
+            if rt.get("python_path"):
+                content["sage_python"] = rt["python_path"]
+        except Exception:  # noqa: BLE001
+            pass
         return content
 
     @staticmethod
