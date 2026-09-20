@@ -33,6 +33,10 @@ class SettingsRepository:
             "compact_threshold_tokens",
             # M6 生态扩展: 用户自定义工具钩子 (JSON 列表)
             "hooks",
+            # M6 Phase 4: 已信任的工作区绝对路径 (JSON 字符串数组) ——
+            # 未列入的工作区, 其 .sage/hooks.json 不加载 (fail-closed)
+            # 见 backend/hooks/project_config.py
+            "hooks_trusted_workspaces",
             # 内网 Web 访问: 网络模式 + host 白名单 (JSON)
             # 见 backend/tools/network_config.py
             "network_policy",

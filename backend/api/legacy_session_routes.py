@@ -56,6 +56,27 @@ logger = logging.getLogger(__name__)
 __all__ = ["SessionModelOverride"]
 
 
+def _fire_session_hook(event: str, session_id: str, **extra: Any) -> None:
+    """触发 session_start / session_stop 生命周期钩子 (observe-only, fail-open)。
+
+    本模块端点是同步 ``def`` (FastAPI 在线程池中执行, 该线程无运行中的
+    事件循环), 因此经 ``run_event_hooks_sync`` 桥接。钩子的任何故障都被
+    吞掉 —— 生命周期通知绝不能影响会话 CRUD 本身。
+    """
+    try:
+        from backend.data.settings_repo import SettingsRepository
+        from backend.hooks.config import load_hooks
+        from backend.hooks.runner import build_session_payload, run_event_hooks_sync
+
+        hooks = load_hooks(SettingsRepository())
+        if not hooks:
+            return
+        payload = build_session_payload(event, session_id, extra=extra or None)
+        run_event_hooks_sync(hooks, event, "", payload)
+    except Exception as exc:  # pragma: no cover — 防御性, fail-open
+        logger.debug("session hook %s dispatch failed (fail-open): %s", event, exc)
+
+
 class SessionModelOverride(BaseModel):
     model_config = {"protected_namespaces": ()}
 
@@ -67,6 +88,8 @@ class SessionModelOverride(BaseModel):
 def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_session_repo)):
     """创建新会话"""
     session = repo.create(title=data.title, parent_id=data.parent_id)
+    # Phase 2: session_start 生命周期钩子 (observe-only, fail-open)
+    _fire_session_hook("session_start", session.id, title=session.title)
     return session.to_dict()
 
 
@@ -183,6 +206,8 @@ def delete_session(session_id: str, repo: SessionRepository = Depends(get_sessio
     """删除会话"""
     if not repo.delete(session_id):
         raise HTTPException(status_code=404, detail="会话不存在")
+    # Phase 2: session_stop 生命周期钩子 (observe-only, fail-open)
+    _fire_session_hook("session_stop", session_id)
     return {"status": "ok"}
 
 
