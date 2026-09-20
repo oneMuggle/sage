@@ -7,6 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import {
+  emptySessionSlots,
   useChatStreamStore,
   type SessionStreamSlots,
 } from '../../../features/send-message/chatStreamStore';
@@ -16,6 +17,7 @@ import { useStore } from '../../../shared/lib/store';
 import { TaskCenterWidget } from '../TaskCenterWidget';
 
 const slot = (messageId: string, streaming: boolean): SessionStreamSlots => ({
+  ...emptySessionSlots(),
   streaming: streaming
     ? {
         messageId,
@@ -26,12 +28,6 @@ const slot = (messageId: string, streaming: boolean): SessionStreamSlots => ({
         iteration: 0,
       }
     : null,
-  streamingToolCalls: [],
-  taskBoard: null,
-  todos: [],
-  completedSteps: [],
-  shiftInfo: null,
-      preflightPhase: null,
 });
 
 function seed(opts: {

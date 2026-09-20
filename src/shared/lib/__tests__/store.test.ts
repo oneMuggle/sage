@@ -192,3 +192,45 @@ describe('loadMessages merge behavior', () => {
     spy.mockRestore();
   });
 });
+
+describe('addMessage beforeId 锚点插入（插话回显落位）', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset();
+    useStore.setState({ messages: [], currentSessionId: 's1' });
+  });
+
+  const msg = (id: string, role: 'user' | 'assistant', content = id): Message => ({
+    id,
+    session_id: 's1',
+    role,
+    content,
+    created_at: 1,
+  });
+
+  it('把消息插到锚点之前，保持其余顺序', () => {
+    useStore.getState().addMessage(msg('u1', 'user'));
+    useStore.getState().addMessage(msg('a1', 'assistant'));
+    useStore.getState().addMessage(msg('steer1', 'user', '补充'), 'a1');
+
+    expect(useStore.getState().messages.map((m) => m.id)).toEqual(['u1', 'steer1', 'a1']);
+  });
+
+  it('锚点不存在时退回 append，不丢消息', () => {
+    useStore.getState().addMessage(msg('u1', 'user'));
+    useStore.getState().addMessage(msg('steer1', 'user', '补充'), 'ghost');
+
+    expect(useStore.getState().messages.map((m) => m.id)).toEqual(['u1', 'steer1']);
+  });
+
+  it('非当前会话的消息带锚点也不落进可见列表', () => {
+    useStore.getState().addMessage(msg('u1', 'user'));
+    useStore
+      .getState()
+      .addMessage(
+        { id: 'other', session_id: 's2', role: 'user', content: 'x', created_at: 1 },
+        'u1',
+      );
+
+    expect(useStore.getState().messages.map((m) => m.id)).toEqual(['u1']);
+  });
+});

@@ -90,6 +90,29 @@ describe('InputCard', () => {
     expect(onInterrupt).toHaveBeenCalledTimes(1);
   });
 
+  // U5 (2026-09-18): 运行中发送不再被停止按钮顶掉 —— 否则鼠标用户只剩"停止"
+  // 一条路，排队/插话能力等于不存在。
+  it('keeps send next to stop while loading so busy sends can queue', () => {
+    const onSubmit = vi.fn();
+    const onNewTopic = vi.fn();
+    render(
+      <InputCard
+        {...defaultProps}
+        value="补充一句"
+        onSubmit={onSubmit}
+        onNewTopic={onNewTopic}
+        isLoading
+        onInterrupt={vi.fn()}
+      />,
+    );
+    const sendButton = screen.getByTestId('chat-send');
+    expect(sendButton).toBeEnabled();
+    sendButton.click();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: /chat\.stop/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('chat-new-topic')).toBeNull();
+  });
+
   // U20: Emacs-style keybindings wired into the textarea.
   // Ctrl+A is intentionally NOT intercepted: native select-all wins.
   it('Ctrl+A passes through (native select-all preserved)', () => {
@@ -191,7 +214,15 @@ describe('InputCard', () => {
 describe('InputCard — Esc interrupts while streaming (RT8)', () => {
   it('calls onInterrupt on Escape while isLoading', () => {
     const onInterrupt = vi.fn();
-    render(<InputCard value="x" onChange={vi.fn()} onSubmit={vi.fn()} isLoading onInterrupt={onInterrupt} />);
+    render(
+      <InputCard
+        value="x"
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        isLoading
+        onInterrupt={onInterrupt}
+      />,
+    );
     const textarea = screen.getByRole('textbox');
     fireEvent.keyDown(textarea, { key: 'Escape' });
     expect(onInterrupt).toHaveBeenCalledTimes(1);
@@ -210,6 +241,112 @@ describe('InputCard — Esc interrupts while streaming (RT8)', () => {
     render(<InputCard value="x" onChange={vi.fn()} onSubmit={onSubmit} isLoading />);
     const textarea = screen.getByRole('textbox');
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+});
+
+// P2-a (2026-09-20): 运行中发送的三条投递通道 —— 分体按钮（鼠标可见）+
+// 修饰键（键盘可达），两条入口都必须落到同一个 onSubmitWithMode。
+describe('InputCard — delivery channels (P2-a)', () => {
+  const busy = () => {
+    const onSubmit = vi.fn();
+    const onSubmitWithMode = vi.fn();
+    render(
+      <InputCard
+        value="补充一句"
+        onChange={vi.fn()}
+        onSubmit={onSubmit}
+        onSubmitWithMode={onSubmitWithMode}
+        isLoading
+        onInterrupt={vi.fn()}
+      />,
+    );
+    return { onSubmit, onSubmitWithMode };
+  };
+
+  it('renders the split send button only while loading', () => {
+    const onSubmit = vi.fn();
+    const { rerender } = render(
+      <InputCard
+        value="补充一句"
+        onChange={vi.fn()}
+        onSubmit={onSubmit}
+        onSubmitWithMode={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('chat-delivery-menu')).toBeNull();
+    rerender(
+      <InputCard
+        value="补充一句"
+        onChange={vi.fn()}
+        onSubmit={onSubmit}
+        onSubmitWithMode={vi.fn()}
+        isLoading
+      />,
+    );
+    expect(screen.getByTestId('chat-delivery-menu')).toBeInTheDocument();
+    // 停止按钮不能被挤掉（P0 的结论：两条路都要在）
+    expect(screen.getByRole('button', { name: /chat\.stop/i })).toBeInTheDocument();
+  });
+
+  it('keeps the legacy single send button when no onSubmitWithMode is wired', () => {
+    const onSubmit = vi.fn();
+    render(<InputCard value="x" onChange={vi.fn()} onSubmit={onSubmit} isLoading />);
+    expect(screen.queryByTestId('chat-delivery-menu')).toBeNull();
+    expect(screen.getByTestId('chat-send')).toBeEnabled();
+  });
+
+  it('main button sends through the default channel (plain onSubmit)', () => {
+    const { onSubmit, onSubmitWithMode } = busy();
+    fireEvent.click(screen.getByTestId('chat-send'));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmitWithMode).not.toHaveBeenCalled();
+  });
+
+  it('menu lists all three channels with their timing hint', async () => {
+    busy();
+    fireEvent.pointerDown(screen.getByTestId('chat-delivery-menu'), { button: 0 });
+    const menu = await screen.findByRole('menu');
+    expect(menu).toBeInTheDocument();
+    const steerItem = screen.getByTestId('chat-delivery-steer');
+    expect(steerItem).toHaveTextContent('chat.delivery_steer');
+    expect(steerItem).toHaveTextContent('chat.delivery_steer_hint');
+    expect(screen.getByTestId('chat-delivery-queue')).toHaveTextContent('Alt+Enter');
+    expect(screen.getByTestId('chat-delivery-interrupt')).toHaveTextContent('Ctrl+Enter');
+  });
+
+  it('picking a menu item sends through that channel', async () => {
+    const { onSubmitWithMode } = busy();
+    fireEvent.pointerDown(screen.getByTestId('chat-delivery-menu'), { button: 0 });
+    fireEvent.click(await screen.findByTestId('chat-delivery-queue'));
+    expect(onSubmitWithMode).toHaveBeenCalledWith('queue');
+  });
+
+  it('Alt+Enter queues, Ctrl/Cmd+Enter interrupt-and-send, plain Enter keeps default', () => {
+    const { onSubmit, onSubmitWithMode } = busy();
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.keyDown(textarea, { key: 'Enter', altKey: true });
+    expect(onSubmitWithMode).toHaveBeenLastCalledWith('queue');
+
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
+    expect(onSubmitWithMode).toHaveBeenLastCalledWith('interrupt');
+
+    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true });
+    expect(onSubmitWithMode).toHaveBeenCalledTimes(3);
+    expect(onSubmitWithMode).toHaveBeenLastCalledWith('interrupt');
+
+    // 无修饰 = 默认通道，仍然走 onSubmit（旧调用方语义不变）
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmitWithMode).toHaveBeenCalledTimes(3);
+  });
+
+  it('modifier keys do nothing without onSubmitWithMode (falls back to onSubmit)', () => {
+    const onSubmit = vi.fn();
+    render(<InputCard value="x" onChange={vi.fn()} onSubmit={onSubmit} isLoading />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.keyDown(textarea, { key: 'Enter', altKey: true });
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 });

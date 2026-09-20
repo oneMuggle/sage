@@ -555,6 +555,17 @@ function MessageComponent({
             copy/regenerate/delete 等正文与 affordance 全部保留。 */}
         {message.compact_info && <CompactBanner info={message.compact_info} />}
 
+        {/* U5 (2026-09-18): 插话标注 —— 区分"新一轮提问"与"上一轮进行中补充"，
+            后者在下一迭代边界才进入 LLM 上下文，不标出来用户会以为它被忽略了。 */}
+        {message.subtype === 'steering' && (
+          <span
+            data-testid="steering-badge"
+            className="mb-1 px-1.5 py-0.5 rounded text-[11px] bg-primary/10 text-primary self-end"
+          >
+            {t('chat.steering_badge')}
+          </span>
+        )}
+
         {/* ThinkingPanel - LLM 思考过程展示（仅 assistant 消息且有 reasoning_content 时） */}
         {isAssistant && message.reasoning_content && (
           <ThinkingPanel reasoning={message.reasoning_content} isStreaming={isStreaming} />

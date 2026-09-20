@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useLaneBoardStore } from '../../../entities/orchestration/laneBoardStore';
 import {
+  emptySessionSlots,
   useChatStreamStore,
   type SessionStreamSlots,
 } from '../../../features/send-message/chatStreamStore';
@@ -24,6 +25,7 @@ vi.mock('../../../features/send-message/useChat', () => ({
 const mockedCancel = vi.mocked(cancelSessionStream);
 
 const slot = (messageId: string, streaming: boolean): SessionStreamSlots => ({
+  ...emptySessionSlots(),
   streaming: streaming
     ? {
         messageId,
@@ -34,12 +36,6 @@ const slot = (messageId: string, streaming: boolean): SessionStreamSlots => ({
         iteration: 0,
       }
     : null,
-  streamingToolCalls: [],
-  taskBoard: null,
-  todos: [],
-  completedSteps: [],
-  shiftInfo: null,
-      preflightPhase: null,
 });
 
 function seedLane(overrides: Partial<Lane> = {}): Lane {

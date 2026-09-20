@@ -44,9 +44,7 @@ describe('ChatInput — send while streaming (RT5 steering)', () => {
   it('shows the stop (interrupt) button while isLoading', () => {
     const onSend = vi.fn();
     const onInterrupt = vi.fn();
-    renderWithI18n(
-      <ChatInput onSend={onSend} isLoading onInterrupt={onInterrupt} />,
-    );
+    renderWithI18n(<ChatInput onSend={onSend} isLoading onInterrupt={onInterrupt} />);
     const stop = screen.getByRole('button', { name: /停止/ });
     fireEvent.click(stop);
     expect(onInterrupt).toHaveBeenCalledTimes(1);
@@ -59,5 +57,40 @@ describe('ChatInput — send while streaming (RT5 steering)', () => {
     const input = screen.getByPlaceholderText(/输入消息/);
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onSend).not.toHaveBeenCalled();
+  });
+
+  // P2-a (2026-09-20): ChatInput 只负责把用户显式选择的通道透传给 onSend。
+  it('Alt+Enter forwards the queue channel', () => {
+    const onSend = vi.fn();
+    renderWithI18n(<ChatInput onSend={onSend} isLoading />);
+    const input = screen.getByPlaceholderText(/输入消息/);
+    fireEvent.change(input, { target: { value: '这条等下一轮' } });
+    fireEvent.keyDown(input, { key: 'Enter', altKey: true });
+    expect(onSend).toHaveBeenCalledWith(
+      '这条等下一轮',
+      expect.objectContaining({ delivery: 'queue' }),
+    );
+  });
+
+  it('choosing a channel in the split menu forwards it', async () => {
+    const onSend = vi.fn();
+    renderWithI18n(<ChatInput onSend={onSend} isLoading />);
+    const input = screen.getByPlaceholderText(/输入消息/);
+    fireEvent.change(input, { target: { value: '换个方向' } });
+    fireEvent.pointerDown(screen.getByTestId('chat-delivery-menu'), { button: 0 });
+    fireEvent.click(await screen.findByTestId('chat-delivery-interrupt'));
+    expect(onSend).toHaveBeenCalledWith(
+      '换个方向',
+      expect.objectContaining({ delivery: 'interrupt' }),
+    );
+  });
+
+  it('plain Enter keeps the channel implicit (default = steer downstream)', () => {
+    const onSend = vi.fn();
+    renderWithI18n(<ChatInput onSend={onSend} isLoading />);
+    const input = screen.getByPlaceholderText(/输入消息/);
+    fireEvent.change(input, { target: { value: '默认插话' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onSend.mock.calls[0]?.[1]).not.toHaveProperty('delivery');
   });
 });

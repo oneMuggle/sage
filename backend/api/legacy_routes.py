@@ -2413,11 +2413,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as pm_exc:  # noqa: BLE001 — 降级不阻塞
                     logger.warning("计划模式只读门注入失败（仅指令约束）: %s", pm_exc)
             # P0 cancellation: register the primary before any blocking await.
+            # session_id 供 /chat/steer 落库插话消息时确定归属会话。
             _ACTIVE_STREAMS[stream_id] = {
                 "agent": agent,
                 "run_id": None,
                 "dispatcher": None,
                 "cancelled": False,
+                "session_id": data.session_id,
             }
 
             # Build system prompt with optional diagram tool guidance
@@ -4126,13 +4128,40 @@ class SteerRequest(BaseModel):
 _STEER_MAX_CHARS = 8192
 
 
+def _persist_steering_message(session_id: Optional[str], text: str) -> None:
+    """RT5: 把插话落库为 user 行（``subtype='steering'``）。
+
+    run 内注入只活在 agent 内存的 messages 列表里，而 producer 只落
+    ``data.message`` 一条 user 行——不落库则下一轮从 DB 装配历史时这条
+    更正凭空消失，前端气泡也会在流结束对账时被抹掉。落库失败只记日志：
+    插话已在当前 run 生效，不因持久化失败而回滚。
+    """
+    if not session_id:
+        return
+    try:
+        MessageRepository().save(
+            DbMessage(
+                id=str(uuid.uuid4()),
+                session_id=session_id,
+                role="user",
+                content=text,
+                created_at=int(time.time() * 1000),
+                subtype="steering",
+            )
+        )
+    except Exception as db_err:  # noqa: BLE001 — 持久化失败不影响已生效的注入
+        logger.warning("steering 消息落库失败: %s", db_err)
+
+
 @router.post("/chat/steer")
+@with_db_lock
 def steer_agent(data: SteerRequest):
     """RT5 (round7): 单 agent steering —— 运行中转达用户补充指示。
 
     消息在目标 run 的**下一迭代边界**注入 LLM 上下文（agent.run_loop
-    消费，与编排链 O1 边界投递同语义）。纯内存注册表 + deque 操作，
-    不走 DB 锁；失败面：
+    消费，与编排链 O1 边界投递同语义），同时落一条 ``subtype='steering'``
+    的 user 行让更正跨 run 存活。注入本身是纯内存注册表 + deque 操作，
+    DB 写走 ``@with_db_lock``。失败面：
     - 404 stream_not_found：stream 不存在/已结束
     - 409 not_running：stream 存在但 agent 不在 run 活跃窗口
       （前端收到 409 回退排队语义——run 结束后作为新消息发送）
@@ -4149,6 +4178,7 @@ def steer_agent(data: SteerRequest):
     agent_obj: SageAgent = entry["agent"]
     if not agent_obj.inject_user_message(text):
         raise HTTPException(status_code=409, detail={"code": "not_running"})
+    _persist_steering_message(entry.get("session_id"), text)
     return {"ok": True}
 
 
