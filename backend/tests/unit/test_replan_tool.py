@@ -25,6 +25,23 @@ from backend.tools.replan_tool import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _ensure_event_loop_py38():
+    """R89 win7 适配: py3.8 的 asyncio.Queue()/Event() 构造即绑定当前线程
+    事件循环 —— xdist 分桶位移后,同步测试所在 worker 可能没有遗留 loop,
+    直接 RuntimeError。文件级 autouse 兜底创建（py3.12 无此问题,fixture
+    双侧无害）。"""
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        yield
+        loop.close()
+    else:
+        yield
+
+
 def _mk_dispatcher(tmp_path, monkeypatch, plan_json: str) -> ChatDispatcher:
     db = tmp_path / "test.db"
     monkeypatch.setenv("SAGE_DB_PATH", str(db))

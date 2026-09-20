@@ -212,26 +212,52 @@ def _dedup_key(source: Dict[str, Any]) -> tuple:
     return ("tool", str(source.get("server") or ""), str(source.get("tool") or ""))
 
 
+_EMPTY_FIELDS = ("title", "snippet", "preview", "path", "url", "query", "score")
+
+
+def _enrich(existing: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
+    """R89: 用 incoming 补齐 existing 的空字段（不覆盖已有值）。
+
+    典型场景：browser_navigate 先入（无 snippet），随后 web_fetch 同 url
+    带正文摘要到达 —— 去重不丢弃，而是把摘要补进已记录的条目。
+    纯函数，返回新 dict。
+    """
+    merged = dict(existing)
+    for field in _EMPTY_FIELDS:
+        incoming_value = incoming.get(field)
+        if incoming_value in (None, ""):
+            continue
+        if merged.get(field) in (None, ""):
+            merged[field] = incoming_value
+    return merged
+
+
 def merge_sources(
     accumulated: List[Dict[str, Any]], incoming: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     """把新提取的来源并入累计列表：按 url/path 去重，总量 cap 到
-    :data:`SOURCES_CAP`。纯函数，不修改入参。"""
+    :data:`SOURCES_CAP`。R89: 命中已有条目时不简单丢弃，而是用新条目
+    补齐其空字段（保留信息更丰富的一条）。纯函数，不修改入参。"""
     if not incoming:
         return list(accumulated)
-    seen = {_dedup_key(s) for s in accumulated if isinstance(s, dict)}
-    merged = list(accumulated)
+    enriched = list(accumulated)
+    seen: Dict[tuple, int] = {}
+    for idx, s in enumerate(enriched):
+        if isinstance(s, dict):
+            seen.setdefault(_dedup_key(s), idx)
     for source in incoming:
-        if len(merged) >= SOURCES_CAP:
+        if len(enriched) >= SOURCES_CAP:
             break
         if not isinstance(source, dict):
             continue
         key = _dedup_key(source)
         if key in seen:
+            idx = seen[key]
+            enriched[idx] = _enrich(enriched[idx], source)
             continue
-        seen.add(key)
-        merged.append(source)
-    return merged
+        seen[key] = len(enriched)
+        enriched.append(source)
+    return enriched
 
 
 #: dict 形结果 → 提取函数（MCP 工具走前缀判定, 不在此表）。
