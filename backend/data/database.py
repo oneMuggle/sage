@@ -600,6 +600,8 @@ class Database:
                 expires_at INTEGER,
                 scope TEXT DEFAULT 'user',
                 project_key TEXT,
+                invalid_at INTEGER,
+                supersedes_id TEXT,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
             )
         """)
@@ -615,6 +617,16 @@ class Database:
         if "project_key" not in _episodic_columns:
             cursor.execute(
                 "ALTER TABLE memories_episodic ADD COLUMN project_key TEXT"
+            )
+        # P3 (2026-09-20) 时间有效区 (Zep/Graphiti 简化版): invalid_at 非空 =
+        # 该记忆已被更新的事实取代（"失效"），与 is_valid=0（用户删除）区分。
+        if "invalid_at" not in _episodic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_episodic ADD COLUMN invalid_at INTEGER"
+            )
+        if "supersedes_id" not in _episodic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_episodic ADD COLUMN supersedes_id TEXT"
             )
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_episodic_scope_project
@@ -1157,7 +1169,9 @@ class Database:
                 tags TEXT DEFAULT '[]',
                 created_at INTEGER NOT NULL,
                 scope TEXT DEFAULT 'user',
-                project_key TEXT
+                project_key TEXT,
+                invalid_at INTEGER,
+                supersedes_id TEXT
             )
         """)
         # P1 (2026-09-18) 记忆作用域轴，同 memories_episodic。
@@ -1170,6 +1184,15 @@ class Database:
         if "project_key" not in _semantic_columns:
             cursor.execute(
                 "ALTER TABLE memories_semantic ADD COLUMN project_key TEXT"
+            )
+        # P3 (2026-09-20) 时间有效区，同 memories_episodic。
+        if "invalid_at" not in _semantic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN invalid_at INTEGER"
+            )
+        if "supersedes_id" not in _semantic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN supersedes_id TEXT"
             )
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_semantic_scope_project

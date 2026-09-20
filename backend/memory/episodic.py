@@ -51,6 +51,7 @@ class EpisodicMemory:
         memory_type: str = "conversation",
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
+        supersedes_id: Optional[str] = None,
     ) -> str:
         """
         保存情景记忆
@@ -93,8 +94,8 @@ class EpisodicMemory:
             """
             INSERT INTO memories_episodic
             (id, content, summary, session_id, memory_type, importance, tags,
-             created_at, is_valid, scope, project_key)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+             created_at, is_valid, scope, project_key, supersedes_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
         """,
             (
                 memory_id,
@@ -107,6 +108,7 @@ class EpisodicMemory:
                 now,
                 scope,
                 project_key,
+                supersedes_id,
             ),
         )
 
@@ -161,8 +163,8 @@ class EpisodicMemory:
             like_conditions.append("(content LIKE ? OR summary LIKE ?)")
             params.extend([f"%{token}%", f"%{token}%"])
 
-        # 基础条件
-        base_sql = "SELECT * FROM memories_episodic WHERE is_valid = 1"
+        # 基础条件（P3: invalid_at 非空 = 已被更新事实取代，不再召回）
+        base_sql = "SELECT * FROM memories_episodic WHERE is_valid = 1 AND invalid_at IS NULL"
         where_parts = [base_sql]
 
         # 分词 OR 条件
@@ -237,7 +239,7 @@ class EpisodicMemory:
             cursor.execute(
                 """
                 SELECT * FROM memories_episodic
-                WHERE session_id = ? AND is_valid = 1
+                WHERE session_id = ? AND is_valid = 1 AND invalid_at IS NULL
                 ORDER BY created_at DESC
                 LIMIT ?
             """,
@@ -247,7 +249,7 @@ class EpisodicMemory:
             cursor.execute(
                 """
                 SELECT * FROM memories_episodic
-                WHERE is_valid = 1
+                WHERE is_valid = 1 AND invalid_at IS NULL
                 ORDER BY created_at DESC
                 LIMIT ?
             """,
@@ -313,6 +315,32 @@ class EpisodicMemory:
         conn.commit()
         return deleted
 
+    def invalidate(self, memory_id: str) -> bool:
+        """P3 时间有效区：把记忆标记为"已被更新的事实取代"（invalid_at=now）。
+
+        与 :meth:`delete`（用户删除, is_valid=0）区分：失效行保留内容供审计
+        与 supersedes 链追溯，但不再出现在任何检索/列表读路径。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE memories_episodic
+            SET invalid_at = ?
+            WHERE id = ? AND is_valid = 1 AND invalid_at IS NULL
+        """,
+            (int(time.time() * 1000), memory_id),
+        )
+        invalidated = cursor.rowcount > 0
+        # 与软删除同模式：失效记忆不再被向量检索命中（best-effort）
+        if invalidated:
+            try:
+                cursor.execute("DELETE FROM memories_vec WHERE memory_id = ?", (memory_id,))
+            except sqlite3.DatabaseError as exc:
+                logger.warning("向量索引失效清理失败 (memory_id=%s): %s", memory_id, exc)
+        conn.commit()
+        return invalidated
+
     def _update_access(self, memory_id: str) -> None:
         """
         更新记忆访问统计
@@ -340,7 +368,8 @@ class EpisodicMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT 1 FROM memories_episodic WHERE content = ? AND is_valid = 1 LIMIT 1",
+            "SELECT 1 FROM memories_episodic "
+            "WHERE content = ? AND is_valid = 1 AND invalid_at IS NULL LIMIT 1",
             (content,),
         )
         return cursor.fetchone() is not None
@@ -395,13 +424,13 @@ class EpisodicMemory:
         if session_id is None:
             cursor.execute("""
                 SELECT COUNT(*) FROM memories_episodic
-                WHERE is_valid = 1
+                WHERE is_valid = 1 AND invalid_at IS NULL
             """)
         else:
             cursor.execute(
                 """
                 SELECT COUNT(*) FROM memories_episodic
-                WHERE is_valid = 1 AND session_id = ?
+                WHERE is_valid = 1 AND invalid_at IS NULL AND session_id = ?
                 """,
                 (session_id,),
             )

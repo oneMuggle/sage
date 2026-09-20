@@ -122,7 +122,13 @@ def visibility_sql(
 
 
 def is_row_visible(row: Dict[str, Any], current_project_key: Optional[str]) -> bool:
-    """对已取出的行做与 :func:`visibility_sql` 等价的内存过滤。"""
+    """对已取出的行做与 :func:`visibility_sql` 等价的内存过滤。
+
+    P3 起同时兜底"时间有效区"：``invalid_at`` 非空的行（已被更新事实
+    取代）不可见——存储层读路径大多已过滤, 这里覆盖向量检索等旁路。
+    """
+    if row.get("invalid_at") is not None:
+        return False
     if (row.get("scope") or SCOPE_USER) != SCOPE_PROJECT:
         return True
     return bool(current_project_key) and row.get("project_key") == current_project_key

@@ -95,6 +95,15 @@ class SemanticMemory:
             cursor.execute(
                 "ALTER TABLE memories_semantic ADD COLUMN project_key TEXT"
             )
+        # P3 时间有效区（与 database.init_db 的迁移同规则，幂等）
+        if "invalid_at" not in columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN invalid_at INTEGER"
+            )
+        if "supersedes_id" not in columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN supersedes_id TEXT"
+            )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_semantic_session_created "
             "ON memories_semantic(session_id, created_at DESC)"
@@ -116,6 +125,7 @@ class SemanticMemory:
         session_id: Optional[str] = None,
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
+        supersedes_id: Optional[str] = None,
     ) -> str:
         """
         保存语义记忆
@@ -154,11 +164,12 @@ class SemanticMemory:
         cursor.execute(
             """
             INSERT INTO memories_semantic
-            (id, content, summary, tags, session_id, created_at, scope, project_key)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (id, content, summary, tags, session_id, created_at, scope, project_key,
+             supersedes_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (memory_id, content, summary, tags_json, session_id, now,
-             scope, project_key),
+             scope, project_key, supersedes_id),
         )
 
         # 显式同步 FTS 索引（单一事实来源：Python 侧维护，不使用触发器，
@@ -290,7 +301,8 @@ class SemanticMemory:
         sql_parts = [
             "SELECT ms.* FROM memories_semantic ms",
             "JOIN memories_semantic_fts ON memories_semantic_fts.rowid = ms.rowid",
-            "WHERE memories_semantic_fts MATCH ?",
+            # P3: 失效行(invalid_at 非空)不参与检索
+            "WHERE memories_semantic_fts MATCH ? AND ms.invalid_at IS NULL",
         ]
         params: List[Any] = [match_expr]
 
@@ -381,6 +393,8 @@ class SemanticMemory:
         sql_parts = [
             "SELECT * FROM memories_semantic",
             f"WHERE ({' OR '.join(like_conditions)})",
+            # P3: 失效行(invalid_at 非空)不参与检索
+            "AND invalid_at IS NULL",
         ]
 
         if scope:
@@ -438,6 +452,7 @@ class SemanticMemory:
             cursor.execute(
                 """
                 SELECT * FROM memories_semantic
+                WHERE invalid_at IS NULL
                 ORDER BY created_at DESC
                 LIMIT ?
             """,
@@ -447,7 +462,7 @@ class SemanticMemory:
             cursor.execute(
                 """
                 SELECT * FROM memories_semantic
-                WHERE session_id = ?
+                WHERE session_id = ? AND invalid_at IS NULL
                 ORDER BY created_at DESC
                 LIMIT ?
             """,
@@ -480,7 +495,7 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT 1 FROM memories_semantic WHERE content = ? LIMIT 1",
+            "SELECT 1 FROM memories_semantic WHERE content = ? AND invalid_at IS NULL LIMIT 1",
             (content,),
         )
         return cursor.fetchone() is not None
@@ -555,6 +570,31 @@ class SemanticMemory:
         conn.commit()
         return deleted
 
+    def invalidate(self, memory_id: str) -> bool:
+        """P3 时间有效区：标记记忆"已被更新的事实取代"（invalid_at=now）。
+
+        主表与 FTS 行保留（读路径已按 invalid_at 过滤，内容供审计与
+        supersedes 链追溯）；向量条目移除，避免语义检索再命中。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE memories_semantic
+            SET invalid_at = ?
+            WHERE id = ? AND invalid_at IS NULL
+        """,
+            (int(time.time() * 1000), memory_id),
+        )
+        invalidated = cursor.rowcount > 0
+        if invalidated:
+            try:
+                cursor.execute("DELETE FROM memories_vec WHERE memory_id = ?", (memory_id,))
+            except sqlite3.DatabaseError as exc:
+                logger.warning("向量索引失效清理失败 (memory_id=%s): %s", memory_id, exc)
+        conn.commit()
+        return invalidated
+
     def count(self, session_id: Optional[str] = None) -> int:
         """
         获取记忆总数（批次三 step 5：可按 session 过滤）
@@ -570,10 +610,10 @@ class SemanticMemory:
         cursor = conn.cursor()
 
         if session_id is None:
-            cursor.execute("SELECT COUNT(*) FROM memories_semantic")
+            cursor.execute("SELECT COUNT(*) FROM memories_semantic WHERE invalid_at IS NULL")
         else:
             cursor.execute(
-                "SELECT COUNT(*) FROM memories_semantic WHERE session_id = ?",
+                "SELECT COUNT(*) FROM memories_semantic WHERE session_id = ? AND invalid_at IS NULL",
                 (session_id,),
             )
         return cursor.fetchone()[0]

@@ -811,11 +811,33 @@ MEMORY.md：
 - **UI**: `ProjectProfileCard`("项目画像"卡片，项目选择器 + 添加/删除)，
   挂在 Memory 页用户画像之下。
 
-### 4.8.6 后续路线(未实现)
+### 4.8.6 冲突消解与时间有效区 (P3 已落地)
 
-- P3:Mem0 式冲突消解(ADD/UPDATE/DELETE/NOOP)+ `invalid_at` 时间有效区。
-- P4:每周反思(reflection)与 recency×importance×confidence×relevance 四因子评分。
+对标 Mem0 的写入决策(ADD/UPDATE/NOOP)与 Zep 的时间有效区
+(`invalid_at` 双时态简化版)：
+
+- **schema**: 两张持久层表新增 `invalid_at`(被取代时间戳)与
+  `supersedes_id`(新行指向被取代的旧行，构成可追溯链)。
+  `invalidate()` ≠ `delete()`：失效行保留内容供审计与链追溯，
+  但退出全部检索/列表/计数读路径(`get_by_id` 仍可取回)；
+  向量行随失效一并清理，`scope.is_row_visible` 兜底向量旁路。
+- **判定**: `backend/memory/conflict.py::MemoryConflictResolver`——
+  新事实先与**同归属**(scope 相同，project 时 project_key 相同)的
+  活跃记忆比对：相似度 ≥0.97 → NOOP(复用既有 ID 不写)；
+  [0.78, 0.97) → UPDATE(写新行 + 旧行 invalidate)；否则 ADD。
+  默认确定性 SequenceMatcher，`llm_decide` 钩子可注入 LLM 决策
+  (非法输出自动回退启发式)。DELETE 语义留给 P4 反思任务。
+- **接线**: `MemoryManager.memorize_with_conflict_check()` 是唯一落点，
+  `MemoryAdapter.store()`(自动提取主链路)默认经由它写入——任何消解
+  失败 best-effort 退回直接 append，绝不阻塞对话。
+  `memory_save` 工具与 `POST /memory/save` 新增可选 `conflict_check`
+  参数(默认 false 保持旧语义)，响应带 `op` 字段。
+
+### 4.8.7 后续路线(未实现)
+
+- P4:每周反思(reflection)与 recency×importance×confidence×relevance
+  四因子评分；反思任务补上 DELETE 型冲突(新事实否定旧事实)。
 
 ---
 
-_文档版本: v1.1_
+_文档版本: v1.2_

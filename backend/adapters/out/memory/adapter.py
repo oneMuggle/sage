@@ -333,6 +333,15 @@ class MemoryAdapter:
         # 构建元数据
         metadata = {"session_id": session_id, "tags": tags or []}
 
+        # P3 (Mem0 风格): 写入前冲突消解——NOOP 复用既有记忆 ID,
+        # UPDATE 写新行并使旧行失效;返回 None 表示按 ADD 走原路径。
+        # 消解的任何失败都不阻塞写入（退回普通 append）。
+        conflict_id = await self._resolve_conflict(
+            content, session_id, importance, metadata, memory_type
+        )
+        if conflict_id is not None:
+            return conflict_id
+
         # 调用 MemoryManager.memorize() 存储记忆（透传分类结果与会话 ID）
         memory_id = self.memory_manager.memorize(
             content=content,
@@ -345,16 +354,74 @@ class MemoryAdapter:
         # 向量化存储（仅持久层记忆:工作记忆合成 id 不入向量库）
         # Round 1: 同 retrieve(), encode 含 HTTP/ONNX 推理, 挪线程执行器
         # (T2 的队列化由该方案覆盖 —— run_in_executor 同样不阻塞事件循环)。
-        if self.vector_store is not None and memory_id and memory_type in ("episodic", "semantic"):
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None,
-                lambda: self.vector_store.add(
-                    memory_id, content, memory_type=memory_type, session_id=session_id
-                ),
-            )
+        await self._vector_add(memory_id, content, memory_type, session_id)
 
         return memory_id or ""
+
+    # ---- P3 冲突消解 -------------------------------------------------------
+
+    async def _resolve_conflict(
+        self,
+        content: str,
+        session_id: str,
+        importance: int,
+        metadata: dict,
+        memory_type: str,
+    ) -> Optional[str]:
+        """写入前冲突消解（判定 + 落库委托 manager,单一事实来源）。
+
+        Returns:
+            非 None 表示本条写入已被消解处理,调用方直接返回该值作为记忆 ID
+            （NOOP → 既有 ID, 不重复入向量库; UPDATE/ADD → 新行 ID, 向量
+            写入在此完成）。None → 不适用/失败, 调用方走原 ADD 路径。
+        """
+        if memory_type not in ("episodic", "semantic"):
+            return None
+        # 类级结构探测: Mock manager 不会误判为"已实现"（同 store_profile 模式）
+        mm = self.memory_manager
+        if not hasattr(type(mm), "memorize_with_conflict_check"):
+            return None
+
+        from backend.memory.conflict import OP_NOOP
+
+        try:
+            memory_id, op = mm.memorize_with_conflict_check(
+                content=content,
+                memory_type=memory_type,
+                importance=importance,
+                metadata=metadata,
+                session_id=session_id,
+            )
+        except Exception as exc:  # noqa: BLE001 — 消解失败不阻塞写入
+            logger.warning(f"冲突消解失败, 退回直接写入: {exc}")
+            return None
+
+        # NOOP 复用既有行——其向量早已入库（若有),不重复写
+        if op != OP_NOOP:
+            await self._vector_add(memory_id, content, memory_type, session_id)
+        return memory_id
+
+    async def _vector_add(
+        self,
+        memory_id: Optional[str],
+        content: str,
+        memory_type: str,
+        session_id: str,
+    ) -> None:
+        """持久层记忆入向量库（best-effort,工作记忆/空 ID 跳过）。"""
+        if (
+            self.vector_store is None
+            or not memory_id
+            or memory_type not in ("episodic", "semantic")
+        ):
+            return
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: self.vector_store.add(
+                memory_id, content, memory_type=memory_type, session_id=session_id
+            ),
+        )
 
     async def store_profile(
         self,

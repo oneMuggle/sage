@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.memory import scope as memory_scope
 from backend.memory.episodic import EpisodicMemory
@@ -83,6 +83,9 @@ class MemoryManager:
         self.episodic = episodic
         self.semantic = semantic
         self.summary_store = summary_store
+        # P3 (Mem0 风格) 冲突消解器: 惰性构造（首次判定时才建, 见
+        # get_conflict_resolver）; 仅服务 episodic/semantic 持久层。
+        self._conflict_resolver = None
 
     def remember(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         """
@@ -123,6 +126,7 @@ class MemoryManager:
         segment_id: int = 0,
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
+        supersedes_id: Optional[str] = None,
     ) -> Optional[str]:
         """
         通用记忆存储接口
@@ -140,6 +144,8 @@ class MemoryManager:
             scope: P1 作用域 ('user'|'project'|'global')，None → 存储层
                 按会话 workspace 绑定自动判定
             project_key: 项目目录（scope='project' 时生效）
+            supersedes_id: P3 冲突消解——本条记忆取代的旧记忆 ID
+                （旧条由调用方先行 invalidate()）
 
         Returns:
             记忆 ID：
@@ -168,6 +174,7 @@ class MemoryManager:
                 session_id=sid,
                 scope=scope,
                 project_key=project_key,
+                supersedes_id=supersedes_id,
             )
 
         elif resolved == "semantic":
@@ -178,11 +185,104 @@ class MemoryManager:
                 session_id=session_id,
                 scope=scope,
                 project_key=project_key,
+                supersedes_id=supersedes_id,
             )
 
         else:
             logger.warning(f"未知的记忆类型: {resolved}")
             return None
+
+    # ---- P3 冲突消解（Mem0 风格 ADD / UPDATE / NOOP） ----------------------
+
+    def get_conflict_resolver(self):
+        """惰性构造并复用 MemoryConflictResolver。"""
+        if self._conflict_resolver is None:
+            from backend.memory.conflict import MemoryConflictResolver
+
+            self._conflict_resolver = MemoryConflictResolver(self.episodic, self.semantic)
+        return self._conflict_resolver
+
+    def resolve_conflicts(
+        self,
+        content: str,
+        session_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        project_key: Optional[str] = None,
+    ):
+        """只判定不写入：返回 ``Decision``（op + targets）。
+
+        供 API / P4 反思任务在真正落库前探测冲突；异常原样上抛由调用方兜底。
+        """
+        return self.get_conflict_resolver().resolve(
+            content, session_id=session_id, scope=scope, project_key=project_key
+        )
+
+    def memorize_with_conflict_check(
+        self,
+        content: str,
+        memory_type: str = "auto",
+        importance: int = 5,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        project_key: Optional[str] = None,
+    ) -> Tuple[str, str]:
+        """带 P3 冲突消解的记忆写入。
+
+        工作记忆与未命中冲突的持久层记忆走原 ``memorize`` 路径（行为不变）；
+        NOOP 复用既有记忆（不写）；UPDATE 写新行并把同归属旧行 invalidate,
+        新行携带 ``supersedes_id``。
+
+        Returns:
+            ``(memory_id, op)``，op ∈ {add, update, noop}；
+            NOOP 无既有 ID 可复用时 memory_id 为空串。
+        """
+        from backend.memory.conflict import OP_ADD, OP_NOOP, OP_UPDATE
+
+        resolved = classify_memory_type(memory_type, importance, content)
+        if resolved not in ("episodic", "semantic"):
+            mid = self.memorize(
+                content,
+                memory_type=memory_type,
+                importance=importance,
+                tags=tags,
+                metadata=metadata,
+                session_id=session_id,
+                scope=scope,
+                project_key=project_key,
+            )
+            return mid or "", OP_ADD
+
+        decision = self.resolve_conflicts(
+            content, session_id=session_id, scope=scope, project_key=project_key
+        )
+        if decision.op == OP_NOOP:
+            return (decision.targets[0].id if decision.targets else ""), OP_NOOP
+        if decision.op == OP_UPDATE:
+            new_id, op = self.get_conflict_resolver().apply_update(
+                decision,
+                self.memorize,
+                content=content,
+                memory_type=resolved,
+                importance=importance,
+                tags=tags,
+                metadata=metadata,
+                session_id=session_id,
+            )
+            return new_id or "", op
+
+        mid = self.memorize(
+            content,
+            memory_type=memory_type,
+            importance=importance,
+            tags=tags,
+            metadata=metadata,
+            session_id=session_id,
+            scope=scope,
+            project_key=project_key,
+        )
+        return mid or "", OP_ADD
 
     def _classify_memory_type(self, content: str, importance: int) -> str:
         """

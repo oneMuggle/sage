@@ -4306,6 +4306,8 @@ class MemorySaveRequest(BaseModel):
     # P1 作用域轴: None/'auto' → 按会话绑定自动判定 (该端点无 session 上下文,
     # 实际落为 user); 可显式 'user'/'project'/'global'
     scope: Optional[str] = None
+    # P3: true 时走 Mem0 风格冲突消解写入 (NOOP/UPDATE/ADD), 响应带 op 字段
+    conflict_check: bool = False
 
 
 class MemoryDeleteRequest(BaseModel):
@@ -4604,9 +4606,22 @@ def search_memory(
 @router.post("/memory/save")
 @with_db_lock
 def save_memory(data: MemorySaveRequest):
-    """保存记忆"""
+    """保存记忆
+
+    ``conflict_check=true`` 时走 P3 冲突消解（NOOP 复用既有 ID / UPDATE 写新行
+    并使旧行失效 / ADD 正常写入）, 响应额外带 ``op`` 字段。
+    """
     try:
         mm = get_memory_manager()
+        if data.conflict_check:
+            memory_id, op = mm.memorize_with_conflict_check(
+                content=data.content,
+                memory_type=data.memory_type,
+                importance=data.importance,
+                tags=data.tags,
+                scope=data.scope,
+            )
+            return {"id": memory_id, "op": op, "status": "ok"}
         memory_id = mm.memorize(
             content=data.content,
             memory_type=data.memory_type,

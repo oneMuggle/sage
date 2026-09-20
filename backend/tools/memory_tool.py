@@ -285,6 +285,14 @@ class MemorySaveTool(BaseTool):
                             "global(全局共享)"
                         ),
                     },
+                    "conflict_check": {
+                        "type": "boolean",
+                        "description": (
+                            "写入前冲突消解 (P3, 默认 false): true 时与同归属"
+                            "活跃记忆比对——完全重复跳过写入(NOOP), "
+                            "同主题高相似写新行并取代旧行(UPDATE)"
+                        ),
+                    },
                 },
                 "required": ["content"],
             },
@@ -298,6 +306,7 @@ class MemorySaveTool(BaseTool):
         tags: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         scope: str = "auto",
+        conflict_check: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
         """
@@ -312,6 +321,8 @@ class MemorySaveTool(BaseTool):
             session_id: 会话 ID (可选, 用于按会话隔离工作记忆)
             scope: ``auto``(默认, 按会话 workspace 绑定自动判定) /
                 ``user`` / ``project`` / ``global`` (P1 作用域轴)
+            conflict_check: true 时走 P3 冲突消解写入（NOOP/UPDATE/ADD）;
+                默认 false 保持旧的直接写入语义
 
         Returns:
             ``ToolResult(success, content, output)``,其中 ``output`` 是
@@ -350,13 +361,27 @@ class MemorySaveTool(BaseTool):
             memorize_kwargs["scope"] = normalized_scope
 
         try:
-            memory_id = self.memory.memorize(
-                content,
-                memory_type,
-                importance,
-                forwarded_tags,
-                **memorize_kwargs,
-            )
+            # 类级结构探测（同 chat_service 的 store_profile 模式）:
+            # fake/Mock manager 未实现时退回普通 memorize, 不误判。
+            if conflict_check and hasattr(
+                type(self.memory), "memorize_with_conflict_check"
+            ):
+                memory_id, conflict_op = self.memory.memorize_with_conflict_check(
+                    content=content,
+                    memory_type=memory_type,
+                    importance=importance,
+                    tags=forwarded_tags,
+                    **memorize_kwargs,
+                )
+            else:
+                memory_id = self.memory.memorize(
+                    content,
+                    memory_type,
+                    importance,
+                    forwarded_tags,
+                    **memorize_kwargs,
+                )
+                conflict_op = None
         except TypeError as exc:
             # 旧 manager 不支持 session_id 时无法保证会话隔离，拒绝写入。
             if "session_id" in str(exc):
@@ -377,6 +402,7 @@ class MemorySaveTool(BaseTool):
                 "importance": importance,
                 "memory_type": memory_type,
                 "scope": normalized_scope,
+                "conflict_op": conflict_op,
             },
             output=memory_id,
         )
