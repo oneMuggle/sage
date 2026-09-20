@@ -39,6 +39,10 @@ DEFAULT_ENV_ALLOWLIST: FrozenSet[str] = frozenset(
         "REQUESTS_CA_BUNDLE",
         "CURL_CA_BUNDLE",
         "NO_PROXY",
+        # Sage Python interpreter path (non-secret; propagated by Electron so
+        # skill scripts can reference the Sage interpreter explicitly instead of
+        # guessing `python3` on PATH).
+        "SAGE_RUNTIME_PYTHON",
     }
 )
 
