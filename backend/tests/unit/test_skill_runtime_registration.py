@@ -110,11 +110,16 @@ _SECRETS = (
 )
 
 
-def test_runtime_context_helper_exists_and_is_non_secret(monkeypatch):
+def test_runtime_context_helper_exists_and_is_non_secret(monkeypatch, tmp_path):
     """``get_runtime_context()`` 返回 dict，含 ``python_path``/``env`` 键,
     且 env 字典不暴露任何已知密钥。"""
-    fake_python = "/opt/sage/venv/bin/python"
-    monkeypatch.setenv("SAGE_RUNTIME_PYTHON", fake_python)
+    # 使用 tmp_path 创建真实的可执行文件,确保 helper 的
+    # regular-file + executable 校验通过。
+    import stat as stat_mod
+    fake_python = tmp_path / "python"
+    fake_python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    fake_python.chmod(fake_python.stat().st_mode | stat_mod.S_IXUSR)
+    monkeypatch.setenv("SAGE_RUNTIME_PYTHON", str(fake_python))
 
     # 同时塞几个密钥,确保 helper 不过滤性转发
     for key in _SECRETS:
@@ -127,9 +132,9 @@ def test_runtime_context_helper_exists_and_is_non_secret(monkeypatch):
     assert "python_path" in ctx
     assert "env" in ctx
 
-    # python_path 必须是注入的 fake 路径;收紧为严格等值,
-    # 避免 Task 3 实现返回 None 的退化实现也能过测。
-    assert ctx["python_path"] == fake_python, (
+    # python_path 必须是注入的真实可执行路径;严格等值防止
+    # Task 3 实现返回 None 的退化实现也能过测。
+    assert ctx["python_path"] == str(fake_python), (
         f"runtime context.python_path 应等于注入的 SAGE_RUNTIME_PYTHON,实际: {ctx['python_path']!r}"
     )
 
