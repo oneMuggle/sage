@@ -419,9 +419,7 @@ describe('COMMAND_ROUTES', () => {
     // Task 11 (2026-09-17): context-isolation — 撤回自动话题切换
     const r = COMMAND_ROUTES.session_retreat_segment;
     expect(r.method).toBe('POST');
-    expect(r.path({ sessionId: 's/1' })).toBe(
-      '/api/v1/sessions/s%2F1/segments/retreat',
-    );
+    expect(r.path({ sessionId: 's/1' })).toBe('/api/v1/sessions/s%2F1/segments/retreat');
   });
 
   it('session_fork body maps camelCase args to backend snake_case fields', () => {
@@ -569,7 +567,9 @@ describe('memory IPC routes (PR-C §5.4)', () => {
     const r = COMMAND_ROUTES.search_memory;
     expect(r).toBeDefined();
     expect(r.method).toBe('GET');
-    const url = new URL(`http://x${r.path({ query: 'pasta', memoryType: 'episodic', limit: 5, sessionId: 's/1' })}`);
+    const url = new URL(
+      `http://x${r.path({ query: 'pasta', memoryType: 'episodic', limit: 5, sessionId: 's/1' })}`,
+    );
     expect(url.pathname).toBe('/api/v1/memory/search');
     expect(url.searchParams.get('query')).toBe('pasta');
     expect(url.searchParams.get('type')).toBe('episodic');

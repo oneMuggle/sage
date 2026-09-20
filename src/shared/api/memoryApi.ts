@@ -460,9 +460,7 @@ export const memoryApi = {
       });
       const body = (raw ?? {}) as Record<string, unknown>;
       if (body.ok === false) {
-        throw new Error(
-          typeof body.detail === 'string' ? body.detail : '记忆固化任务执行失败',
-        );
+        throw new Error(typeof body.detail === 'string' ? body.detail : '记忆固化任务执行失败');
       }
       const result = (body.result ?? {}) as Record<string, unknown>;
       return {
