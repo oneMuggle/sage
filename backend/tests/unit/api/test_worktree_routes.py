@@ -68,7 +68,8 @@ def test_new_worktree_creates_binds_and_merges(conn: sqlite3.Connection, repo: P
     r = wr.create_or_switch(
         "s1", wr.WorktreeCreateRequest(mode="new", branch="feat/a", base_ref="HEAD")
     )
-    assert r.ok and r.workspace_path
+    assert r.ok
+    assert r.workspace_path
     wt_path = Path(r.workspace_path)
     assert (wt_path / "f.txt").is_file()
     assert _branches(conn, "s1")[0] == ("feat/a", "active")
@@ -77,14 +78,16 @@ def test_new_worktree_creates_binds_and_merges(conn: sqlite3.Connection, repo: P
     r2 = wr.create_or_switch(
         "s1", wr.WorktreeCreateRequest(mode="new", branch="feat/a", base_ref="HEAD")
     )
-    assert r2.ok and r2.workspace_path == str(wt_path)
+    assert r2.ok
+    assert r2.workspace_path == str(wt_path)
 
     # worktree 内提交 → merge 合回主仓
     (wt_path / "new.txt").write_text("hello")
     _git(wt_path, "add", ".")
     _git(wt_path, "commit", "-m", "work")
     m = wr.merge_worktree("s1", wr.WorktreeMergeRequest(worktree_id=r.worktree.id))
-    assert m.result["ok"] and m.result["code"] == "merged"
+    assert m.result["ok"]
+    assert m.result["code"] == "merged"
     assert (repo / "new.txt").is_file()
     assert _branches(conn, "s1")[0][1] == "merged"
 

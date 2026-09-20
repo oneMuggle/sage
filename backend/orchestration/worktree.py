@@ -112,8 +112,8 @@ def list_worktrees(repo: Path) -> List[dict]:
         return []
     entries: List[dict] = []
     current: Optional[dict] = None
-    for line in out.splitlines():
-        line = line.rstrip()
+    for raw_line in out.splitlines():
+        line = raw_line.rstrip()
         if line.startswith("worktree "):
             if current is not None:
                 entries.append(current)

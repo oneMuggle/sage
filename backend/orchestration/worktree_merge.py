@@ -275,7 +275,7 @@ def merge_session_worktree(
         return MergeResult(ok=False, code="git-error", message=f"合并异常：{exc}")
 
 
-def _merge_session_inner(
+def _merge_session_inner(  # noqa: PLR0911 — fail-closed 多拒绝分支是设计
     worktree: str, *, branch: str, label: str
 ) -> MergeResult:
     from backend.tools.git_tool import _valid_ref

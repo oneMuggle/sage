@@ -77,7 +77,7 @@ class BranchesResponse(BaseModel):
     current_branch: str
     is_git: bool
     branches: List[BranchModel]
-    worktrees: List["WorktreeModel"]
+    worktrees: List[WorktreeModel]
 
 
 class WorktreeModel(BaseModel):
@@ -328,7 +328,7 @@ def _worktree_add(
     # 目录：主仓兄弟目录下 <slug>-<id8>；分支已存在则检出（open 语义），
     # 否则以 base_ref 为基新建（new 语义）。
     slug = sanitize_branch_suffix(branch).replace("/", "-")[:60] or "wt"
-    dest = _worktrees_root(main) / "{}-{}".format(slug, uuid.uuid4().hex[:8])
+    dest = _worktrees_root(main) / f"{slug}-{uuid.uuid4().hex[:8]}"
     branch_exists = _local_branch_exists(main, branch)
     if request.mode == "new" and branch_exists:
         raise _error(409, "branch_exists", f"分支 {branch} 已存在，请换名或选 open 模式")

@@ -112,9 +112,7 @@ def get_worktree_by_path(
     conn: sqlite3.Connection, worktree_path: str
 ) -> Optional[SessionWorktree]:
     row = conn.execute(
-        "SELECT {} FROM session_worktrees WHERE worktree_path = ?".format(
-            _SELECT_COLUMNS
-        ),
+        f"SELECT {_SELECT_COLUMNS} FROM session_worktrees WHERE worktree_path = ?",
         (worktree_path,),
     ).fetchone()
     return None if row is None else _row_to_worktree(row)
@@ -138,7 +136,7 @@ def list_session_worktrees(
     if status is not None:
         clauses.append("status = ?")
         params.append(status)
-    sql = "SELECT {} FROM session_worktrees".format(_SELECT_COLUMNS)
+    sql = f"SELECT {_SELECT_COLUMNS} FROM session_worktrees"
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY created_at DESC"
@@ -154,7 +152,7 @@ def update_worktree_status(
 ) -> Optional[SessionWorktree]:
     """流转 status（active → merged/discarded）；行不存在返回 None。"""
     if status not in _VALID_STATUSES:
-        raise ValueError("非法 worktree 状态: {!r}".format(status))
+        raise ValueError(f"非法 worktree 状态: {status!r}")
     cursor = conn.execute(
         "UPDATE session_worktrees SET status = ?, updated_at = ? WHERE id = ?",
         (status, _now_ms(now_ms), worktree_id),
@@ -163,7 +161,7 @@ def update_worktree_status(
     if cursor.rowcount == 0:
         return None
     row = conn.execute(
-        "SELECT {} FROM session_worktrees WHERE id = ?".format(_SELECT_COLUMNS),
+        f"SELECT {_SELECT_COLUMNS} FROM session_worktrees WHERE id = ?",
         (worktree_id,),
     ).fetchone()
     return None if row is None else _row_to_worktree(row)
