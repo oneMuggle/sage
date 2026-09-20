@@ -125,9 +125,7 @@ const PYTHONPATH_SEP_UNIX = ':';
  * the env's platform (e.g. tests simulating win32 on a posix runner).
  */
 function condaEnvPythonPath(condaPrefix: string, platform: NodeJS.Platform): string {
-  return platform === 'win32'
-    ? `${condaPrefix}\\python.exe`
-    : `${condaPrefix}/bin/python`;
+  return platform === 'win32' ? `${condaPrefix}\\python.exe` : `${condaPrefix}/bin/python`;
 }
 
 /**
@@ -168,12 +166,14 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
         env: {
           SAGE_DB_PATH: opts.sageDbPath,
           SAGE_USER_DATA_DIR: opts.sageUserDataDir,
+          SAGE_RUNTIME_PYTHON: sagePythonOverride,
           PYTHON_BACKEND_PORT: String(opts.port),
           SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
         },
         extraEnv: {
           SAGE_DB_PATH: opts.sageDbPath,
           SAGE_USER_DATA_DIR: opts.sageUserDataDir,
+          SAGE_RUNTIME_PYTHON: sagePythonOverride,
           PYTHON_BACKEND_PORT: String(opts.port),
           SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
         },
@@ -207,12 +207,14 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
           env: {
             SAGE_DB_PATH: opts.sageDbPath,
             SAGE_USER_DATA_DIR: opts.sageUserDataDir,
+            SAGE_RUNTIME_PYTHON: pythonBin,
             PYTHON_BACKEND_PORT: String(opts.port),
             SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
           },
           extraEnv: {
             SAGE_DB_PATH: opts.sageDbPath,
             SAGE_USER_DATA_DIR: opts.sageUserDataDir,
+            SAGE_RUNTIME_PYTHON: pythonBin,
             PYTHON_BACKEND_PORT: String(opts.port),
             SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'UTC',
           },
@@ -273,10 +275,12 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
         cwd: opts.resourcesPath,
         env: {
           ...packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
+          SAGE_RUNTIME_PYTHON: pyExe,
           PYTHON_BACKEND_PORT: String(opts.port),
         },
         extraEnv: {
           ...packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
+          SAGE_RUNTIME_PYTHON: pyExe,
           PYTHON_BACKEND_PORT: String(opts.port),
         },
         reason: 'packaged-win32-bundled',
@@ -306,10 +310,12 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
         cwd: opts.resourcesPath,
         env: {
           ...packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
+          SAGE_RUNTIME_PYTHON: pyBin,
           PYTHON_BACKEND_PORT: String(opts.port),
         },
         extraEnv: {
           ...packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
+          SAGE_RUNTIME_PYTHON: pyBin,
           PYTHON_BACKEND_PORT: String(opts.port),
         },
         reason: 'packaged-linux-bundled',

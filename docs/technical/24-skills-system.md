@@ -350,7 +350,31 @@ SKILL.md v2 的 `user-invocable` / `user-invocable-name` 字段通过 `SlashComm
 - 聊天层解析用户输入 `/review arg1 arg2` → 剥离 `/` 前缀 → POST `/skills/command`
 - 前端自动补全通过 GET `/skills/commands` 拿命令列表
 
-### 9.12 端到端验证
+### 9.12 A16 自动激活触发条件
+
+`auto_activate(query)` 使用 `when_to_use` 字段（非 `description`）作为匹配依据。只有当用户查询文本与技能的 `when_to_use` 值匹配时，技能才会被激活并注入到 system prompt 的 context block 中。
+
+**实现细节**：
+
+- `loader.py` 解析 `when_to_use` 或 `when-to-use`（连字符别名）写入 `SkillMdDocument.when_to_use`
+- `SkillMdDocument.when_to_use` 存储该值（空字符串表示无触发条件）
+- `InprocSkillAdapter.auto_activate()` 遍历所有已加载技能，过滤条件：
+  1. `isinstance(skill, SkillMdSkill)` — builtin 天然排除
+  2. `is_enabled(name)` — disabled 技能不参与
+  3. `not is_archived(name)` — 归档技能不参与
+  4. `not doc.dispatch.disable_model_invocation` — 作者显式禁止自动触发的技能不参与
+  5. `bool(doc.when_to_use)` — 无 `when_to_use` 字段的技能不参与
+- 触发短语提取支持引号短语和逗号分隔裸短语，大小写不敏感子串匹配
+- 数量上限 `MAX_AUTO_ACTIVATED_SKILLS=5`，尺寸上限 `MAX_CONTEXT_BLOCK_CHARS=32_000`
+
+**契约**：
+
+- `description` 不影响自动激活（信息性字段）
+- `requires.bins` 不影响自动激活（仅影响技能是否通过门控出现在 `list_skills()` 中）
+- 无 `when_to_use` 的技能只能通过 slash 命令手动调用
+- `auto_activate()` 永不外抛 — 内部故障降级为空结果（best-effort 契约）
+
+### 9.13 端到端验证
 
 手测冒烟流程:
 
@@ -389,7 +413,7 @@ curl -X POST http://127.0.0.1:8765/api/v1/skills/command \
   -d '{"command": "/review", "args": []}'
 ```
 
-### 9.13 风险
+### 9.14 风险
 
 - **Prompt injection**: SKILL.md body 含恶意指令。聊天层应把 body 视为不可信用户内容, 包装成 system message 而非塞进开发者模板。
 - **路径遍历**: `{baseDir}` 占位符可能被恶意替换到允许根之外。`validate_base_dir` 强制 base_dir 必须在允许根内。

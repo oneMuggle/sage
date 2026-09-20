@@ -21,6 +21,83 @@ function makeOpts(overrides: Partial<ResolveOpts> = {}): ResolveOpts {
   };
 }
 
+describe('SAGE_RUNTIME_PYTHON propagation', () => {
+  it('propagates SAGE_PYTHON override to env and extraEnv', () => {
+    const plan = resolveBackendLaunchCommand(
+      makeOpts({ isPackaged: false, env: { SAGE_PYTHON: '/opt/sage/bin/python' } }),
+    );
+    expect(plan.kind).toBe('spawn');
+    if (plan.kind === 'spawn') {
+      expect(plan.env.SAGE_RUNTIME_PYTHON).toBe('/opt/sage/bin/python');
+      expect(plan.extraEnv.SAGE_RUNTIME_PYTHON).toBe('/opt/sage/bin/python');
+    }
+  });
+
+  it('propagates direct conda Python to env and extraEnv', () => {
+    const path = '/opt/anaconda3/envs/sage-backend/bin/python';
+    const plan = resolveBackendLaunchCommand(
+      makeOpts({
+        isPackaged: false,
+        platform: 'linux',
+        env: { CONDA_PREFIX: '/opt/anaconda3/envs/sage-backend' },
+        existsSyncFn: (candidate) => candidate === path,
+      }),
+    );
+    expect(plan.kind).toBe('spawn');
+    if (plan.kind === 'spawn') {
+      expect(plan.env.SAGE_RUNTIME_PYTHON).toBe(path);
+      expect(plan.extraEnv.SAGE_RUNTIME_PYTHON).toBe(path);
+    }
+  });
+
+  it('propagates bundled Windows Python to env and extraEnv', () => {
+    const path = join('/mock', 'resources', 'python', 'python.exe');
+    const plan = resolveBackendLaunchCommand(
+      makeOpts({
+        platform: 'win32',
+        isPackaged: true,
+        existsSyncFn: (candidate) => candidate.endsWith('python.exe'),
+      }),
+    );
+    expect(plan.kind).toBe('spawn');
+    if (plan.kind === 'spawn') {
+      expect(plan.env.SAGE_RUNTIME_PYTHON).toBe(path);
+      expect(plan.extraEnv.SAGE_RUNTIME_PYTHON).toBe(path);
+    }
+  });
+
+  it('propagates bundled Linux Python to env and extraEnv', () => {
+    const path = join('/mock', 'resources', 'python', 'bin', 'python3');
+    const plan = resolveBackendLaunchCommand(
+      makeOpts({
+        platform: 'linux',
+        isPackaged: true,
+        existsSyncFn: (candidate) => candidate.endsWith('python3'),
+      }),
+    );
+    expect(plan.kind).toBe('spawn');
+    if (plan.kind === 'spawn') {
+      expect(plan.env.SAGE_RUNTIME_PYTHON).toBe(path);
+      expect(plan.extraEnv.SAGE_RUNTIME_PYTHON).toBe(path);
+    }
+  });
+
+  it('omits SAGE_RUNTIME_PYTHON for the conda wrapper fallback', () => {
+    const plan = resolveBackendLaunchCommand(
+      makeOpts({
+        isPackaged: false,
+        env: { CONDA_PREFIX: '/opt/empty/env' },
+        existsSyncFn: () => false,
+      }),
+    );
+    expect(plan.kind).toBe('spawn');
+    if (plan.kind === 'spawn') {
+      expect(plan.env).not.toHaveProperty('SAGE_RUNTIME_PYTHON');
+      expect(plan.extraEnv).not.toHaveProperty('SAGE_RUNTIME_PYTHON');
+    }
+  });
+});
+
 describe('resolveBackendLaunchCommand', () => {
   // ─────────────── Dev branch ─────────────────────────────────────────────
 
@@ -80,6 +157,7 @@ describe('resolveBackendLaunchCommand', () => {
         expect(plan.extraEnv).toEqual({
           SAGE_DB_PATH: '/mock/sage.db',
           SAGE_USER_DATA_DIR: '/mock/userData',
+          SAGE_RUNTIME_PYTHON: '/opt/anaconda3/envs/sage-backend/bin/python',
           PYTHON_BACKEND_PORT: '8765',
           SAGE_LOG_TIMEZONE: 'UTC',
         });
@@ -114,6 +192,14 @@ describe('resolveBackendLaunchCommand', () => {
         args: ['-m', 'backend.main'],
         reason: 'dev-conda',
       });
+      if (plan.kind === 'spawn') {
+        expect(plan.env.SAGE_RUNTIME_PYTHON).toBe(
+          'C:\\Users\\dev\\anaconda3\\envs\\sage-backend\\python.exe',
+        );
+        expect(plan.extraEnv.SAGE_RUNTIME_PYTHON).toBe(
+          'C:\\Users\\dev\\anaconda3\\envs\\sage-backend\\python.exe',
+        );
+      }
     });
 
     it('falls back to `conda run -n sage-backend` when CONDA_PREFIX is set but the env python is missing', () => {
@@ -136,6 +222,10 @@ describe('resolveBackendLaunchCommand', () => {
         args: ['run', '-n', 'sage-backend', 'python', '-m', 'backend.main'],
         reason: 'dev-conda',
       });
+      if (plan.kind === 'spawn') {
+        expect(plan.env).not.toHaveProperty('SAGE_RUNTIME_PYTHON');
+        expect(plan.extraEnv).not.toHaveProperty('SAGE_RUNTIME_PYTHON');
+      }
     });
 
     it('honors SAGE_PYTHON env override (e.g. "python3") for power devs', () => {
@@ -160,6 +250,7 @@ describe('resolveBackendLaunchCommand', () => {
         expect(plan.extraEnv).toEqual({
           SAGE_DB_PATH: '/mock/sage.db',
           SAGE_USER_DATA_DIR: '/mock/userData',
+          SAGE_RUNTIME_PYTHON: 'python3',
           PYTHON_BACKEND_PORT: '8765',
           SAGE_LOG_TIMEZONE: 'UTC',
         });
@@ -222,6 +313,7 @@ describe('resolveBackendLaunchCommand', () => {
           SAGE_LOG_LEVEL: 'info',
           // 2026-09-17: log timezone (default UTC)
           SAGE_LOG_TIMEZONE: 'UTC',
+          SAGE_RUNTIME_PYTHON: join('/mock', 'resources', 'python', 'python.exe'),
           // Win uses ';' as PYTHONPATH separator
           PYTHONPATH: [join('/mock', 'resources', 'backend'), join('/mock', 'resources', 'sage-core')].join(';'),
           PYTHON_BACKEND_PORT: '8765',
@@ -295,6 +387,12 @@ describe('resolveBackendLaunchCommand', () => {
         expect(plan.extraEnv.PYTHONPATH).toBe([join('/mock', 'resources', 'backend'), join('/mock', 'resources', 'sage-core')].join(':'));
         // Port travels via PYTHON_BACKEND_PORT env on packaged linux too
         expect(plan.extraEnv.PYTHON_BACKEND_PORT).toBe('8765');
+        expect(plan.env.SAGE_RUNTIME_PYTHON).toBe(
+          join('/mock', 'resources', 'python', 'bin', 'python3'),
+        );
+        expect(plan.extraEnv.SAGE_RUNTIME_PYTHON).toBe(
+          join('/mock', 'resources', 'python', 'bin', 'python3'),
+        );
         expect(plan.args).toEqual(['-m', 'backend.main']);
       }
     });
