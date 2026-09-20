@@ -2,6 +2,7 @@
 Sage 后端测试 - 共享 fixtures
 """
 
+import asyncio
 import contextlib
 import os
 import sys
@@ -38,6 +39,21 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+
+# R91: xdist 同 worker 事件循环兜底。任一测试在 finally 里
+# asyncio.set_event_loop(None) 后，同 worker 后续同步测试里 asyncio.Queue()/
+# Event() 的构造期 get_event_loop() 直接 RuntimeError（py3.8-3.11 同语义），
+# 且炸点随新增测试文件位移（R89 win7 cherry 实证：新增 sources_extractor
+# 测试文件改变 loadfile 分桶，test_replan_tool 27 例连爆）。这里保证每个
+# 测试开始时主线程有可用 loop；已有 loop（含 pytest-asyncio 管理的）时零
+# 操作。自建 loop 留在 policy 里复用，不在 teardown 关闭。
+@pytest.fixture(autouse=True)
+def _ensure_usable_event_loop():
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+    yield
 
 
 _SSL_BOOTSTRAP_TEST = os.path.join("backend", "tests", "unit", "test_ssl_bootstrap.py")
