@@ -61,6 +61,7 @@
 | 82   | [多浏览器支持：架构与诊断](./82-multi-browser-support.md) | BrowserLauncher 抽象 + Firefox CDP 差异 + discover_and_select() 优先级链 + 诊断 API 契约 + credential_vault Firefox 兼容 |
 | 83   | [Python 后端代码保护方案](./83-python-code-protection.md) | Cython 二进制编译核心包 (sage_core) + Python 字节码混淆与源码剥离 (backend) + 开发与发布模式分离 (SAGE_PROTECT_CODE) |
 | 92   | [LLM 定时任务工具](./92-llm-scheduled-task-tool.md) | schedule_task / list_scheduled_tasks / cancel_scheduled_task 三件套：复用 SchedulerService 单一事实源 + 会话自动绑定 + once(ISO-8601)/recurring(cron) + coordinator-only 白名单 |
+| 100  | [Win7 服务检测 + 修复文档打包](./100-win7-service-fix-packaging.md) | PR #1333: TrustedInstaller/wuauserv service check + `resources/win7-fix` 打包 + 弹窗动态按钮 + CI smoke env var 修复 (PR #1337) |
 
 ---
 
