@@ -84,6 +84,16 @@ extraResources:
     to: "tools"
     filter:
       - "**/*"
+  # Win7 内网启动修复文档 + 脚本 (服务禁用路径, PR feat/win7-service-fix).
+  # 用户场景: 企业组策略 / 管控软件禁用 TrustedInstaller / wuauserv 服务,
+  # Sage 启动 splash 后白屏 / 消失。runtime-check.ts 检测到 service 异常后
+  # 引导用户在资源管理器打开此目录, 用户右键 fix.bat 以管理员身份运行。
+  # 放在顶级 extraResources (与既有 5 条一致), 不引入 win.extraResources
+  # 新范式 (electron-builder 26.x 虽支持但项目零使用该特性)。
+  - from: "resources/win7-fix"
+    to: "win7-fix"
+    filter:
+      - "**/*"
   # NOTE: start-backend.bat removed — was dead code (electron/main.ts spawns
   # python.exe directly, never invoked the .bat). See PR #107/#111/#112.
 
