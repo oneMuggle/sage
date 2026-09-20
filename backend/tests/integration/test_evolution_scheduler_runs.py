@@ -136,7 +136,7 @@ def test_config_read_error_uses_defaults(tmp_path, monkeypatch, caplog):
     with caplog.at_level(logging.WARNING):
         registered = _register_evolution_tasks(svc, config_path=cfg)
 
-    assert len(registered) == 6
+    assert len(registered) == 7
     assert any("读取失败" in record.message for record in caplog.records)
 
 
