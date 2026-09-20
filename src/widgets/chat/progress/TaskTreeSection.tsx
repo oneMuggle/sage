@@ -71,6 +71,20 @@ export function TaskTreeSection({
   // BU16 (round30): run 起始时刻与墙钟上限（round25 设置键；未设置 = 0 不提示）。
   const runWallClockLimitMinutes = useSettings().settings.orch?.runWallClockLimitMinutes ?? 0;
   const runStartedAt = board.dispatchedAt ?? null;
+  // RD21 (round42): run 触顶原因 —— 从被取消/失败任务的 error 前缀推导
+  // （后端归因语义：budget_exceeded / wall_clock_exceeded，预算优先）。
+  const tripReason = useMemo(() => {
+    let budget = false;
+    let wallClock = false;
+    for (const st of Object.values(board.statuses)) {
+      if (!st.error) continue;
+      if (st.error.startsWith('budget_exceeded:')) budget = true;
+      else if (st.error.startsWith('wall_clock_exceeded:')) wallClock = true;
+    }
+    if (budget) return '⚠ 预算已触顶，剩余任务已停止派发';
+    if (wallClock) return '⚠ 墙钟上限已到，剩余任务已停止派发';
+    return null;
+  }, [board.statuses]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectTask = useRunControlStore((s) => s.selectTask);
   // B3 (2026-09-09): 单任务跳过 in-flight 集合 —— 防重复点击；终态由
@@ -201,6 +215,15 @@ export function TaskTreeSection({
     <div className="space-y-1" data-testid="task-tree">
       {!allDone && (
         <div className="text-xs text-text-secondary">已拆解为 {total} 个子任务,等待结果中…</div>
+      )}
+      {/* RD21 (round42): run 触顶原因横幅 —— 用户侧直读"为什么停"。 */}
+      {tripReason && (
+        <div
+          data-testid="task-tree-trip-reason"
+          className="text-xs text-error px-2 py-1 rounded bg-error/10"
+        >
+          {tripReason}
+        </div>
       )}
       <div className="flex items-center justify-between gap-2">
         <div className="text-xs text-text-secondary">
