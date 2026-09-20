@@ -18,6 +18,7 @@ function setup(overrides: Partial<Parameters<typeof PendingQueuePanel>[0]> = {})
     onSendNow: vi.fn(),
     onEdit: vi.fn(),
     onMoveToFront: vi.fn(),
+    onReorder: vi.fn(),
     onRemove: vi.fn(),
     onClear: vi.fn(),
     onResume: vi.fn(),
@@ -44,6 +45,23 @@ describe('PendingQueuePanel', () => {
     expect(rows[0].textContent).toContain('第一条');
     expect(rows[1].textContent).toContain('第二条');
     expect(screen.getByTestId('pending-queue')).toHaveTextContent('待发送 · 2');
+  });
+
+  it('states when the queued messages will actually go out', () => {
+    setup({ paused: false });
+    expect(screen.getByTestId('pending-queue-timing')).toHaveTextContent(
+      '按上方顺序，在当前回复结束后自动发出',
+    );
+  });
+
+  it('switches the timing line to the paused wording', () => {
+    setup({ paused: true });
+    expect(screen.getByTestId('pending-queue-timing')).toHaveTextContent('自动发送已暂停');
+  });
+
+  it('gives every queued row a drag handle', () => {
+    setup();
+    expect(screen.getAllByTitle('拖拽排序')).toHaveLength(2);
   });
 
   it('routes per-item actions with that item id', () => {

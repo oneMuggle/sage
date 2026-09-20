@@ -53,6 +53,24 @@ describe('chatStreamStore — U5 pending queue', () => {
     expect(store().sessions['s1'].queuePaused).toBe(false);
   });
 
+  it('reorders by drop target: moves an item onto another slot', () => {
+    const a = store().enqueueChat('s1', { content: 'A' });
+    const b = store().enqueueChat('s1', { content: 'B' });
+    const c = store().enqueueChat('s1', { content: 'C' });
+    const before = store().sessions['s1'].pendingQueue;
+
+    store().reorderChatQueue('s1', c.id, b.id);
+    expect(store().sessions['s1'].pendingQueue.map((m) => m.id)).toEqual([a.id, c.id, b.id]);
+
+    // 拖到自己原来的位置 / 拖到不存在的条目 → 状态原样返回（不触发 re-render）
+    const after = store().sessions['s1'].pendingQueue;
+    store().reorderChatQueue('s1', after[0].id, after[0].id);
+    expect(store().sessions['s1'].pendingQueue).toBe(after);
+    store().reorderChatQueue('s1', after[0].id, 'missing');
+    expect(store().sessions['s1'].pendingQueue).toBe(after);
+    expect(before).not.toBe(after);
+  });
+
   it('keeps queues isolated per session (S3 parallel sessions)', () => {
     store().enqueueChat('s1', { content: 'A' });
     expect(selectSessionSlots(store(), 's2').pendingQueue).toEqual([]);

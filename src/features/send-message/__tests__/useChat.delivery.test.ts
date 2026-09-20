@@ -1,5 +1,5 @@
 /**
- * useChat 投递通道测试（插话回显 / steeringAnchorId / 投递分流 P2-a）
+ * useChat 投递通道测试（插话回显 / steeringAnchorId / 投递分流 P2-a / 编排 run 投递门面 P2-c）
  *
  * 策略：mock @tauri-apps/api/core 的 invoke，从而控制 chatApi 的行为；
  * 同时在每个用例前重置 zustand store 与 localStorage，确保测试隔离。
@@ -7,11 +7,13 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
 import { usePermissionState } from '../../../entities/permission/permissionState';
 import { useQuestionState } from '../../../entities/question/questionState';
 import { SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from '../../../entities/setting/types';
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { useSettingsStore } from '../../../features/manage-settings/settingsStore';
+import type { TaskSummary } from '../../../shared/api/orchEvents';
 import { type Message, useStore } from '../../../shared/lib/store';
 import { selectSessionSlots, useChatStreamStore } from '../chatStreamStore';
 import { steeringAnchorId, useChat } from '../useChat';
@@ -204,23 +206,25 @@ describe('steeringAnchorId', () => {
   });
 });
 
+/**
+ * P2-a / P2-c 两组用例共用：起一条不发 done 的流 —— 会话维持"忙"，
+ * 才能测到忙时分支。
+ */
+async function startBusyStream(result: { current: ReturnType<typeof useChat> }): Promise<void> {
+  seedActiveEndpoint();
+  invokeMock.mockResolvedValueOnce({ streamId: 'stream-1' });
+  listenMock.mockImplementationOnce(async () => vi.fn());
+  await waitForSettingsLoaded();
+  await act(async () => {
+    await result.current.sendMessage('原始问题');
+  });
+  expect(result.current.isLoading).toBe(true);
+}
+
+const queueOf = () => selectSessionSlots(useChatStreamStore.getState(), VALID_SESSION_ID).pendingQueue;
+
 // P2-a (2026-09-20): 会话忙时三条投递通道的分流。
 describe('useChat 投递通道 (P2-a)', () => {
-  /** 起一条不发 done 的流 —— 会话维持"忙"，才能测到忙时分支。 */
-  async function startBusyStream(result: { current: ReturnType<typeof useChat> }): Promise<void> {
-    seedActiveEndpoint();
-    invokeMock.mockResolvedValueOnce({ streamId: 'stream-1' });
-    listenMock.mockImplementationOnce(async () => vi.fn());
-    await waitForSettingsLoaded();
-    await act(async () => {
-      await result.current.sendMessage('原始问题');
-    });
-    expect(result.current.isLoading).toBe(true);
-  }
-
-  const queueOf = () =>
-    selectSessionSlots(useChatStreamStore.getState(), VALID_SESSION_ID).pendingQueue;
-
   it('delivery=queue：不再尝试插话，直接带完整 payload 入队', async () => {
     const { result } = renderHook(() => useChat());
     await startBusyStream(result);
@@ -296,5 +300,125 @@ describe('useChat 投递通道 (P2-a)', () => {
     );
     expect(queueOf()).toEqual([]);
     expect(invokeMock).not.toHaveBeenCalledWith('interrupt_agent', expect.anything());
+  });
+});
+
+// P2-c (2026-09-20): 投递门面把编排 run 收进同一条插话通道。此前编排模式下
+// sendMessage 直接跳过 steering 分支去排队，用户想转向必须先去任务详情抽屉
+// 打开 ContextInput；门面要求"同一句话在两种 run 形态下走同一通道"。
+describe('useChat 投递门面 —— 编排 run (P2-c)', () => {
+  function task(id: string, status: TaskSummary['status'], revision = 7): TaskSummary {
+    return {
+      task_id: id,
+      agent_id: 'agent-a',
+      status,
+      current_step_id: null,
+      output_preview: null,
+      error: null,
+      revision,
+    };
+  }
+
+  /** 打桩"会话正在跑编排 run run-1"：run 快照 + 任务板 runId 两处都要有。 */
+  function seedOrchRun(tasks: TaskSummary[]): void {
+    useRunControlStore.getState().setRunSnapshot({
+      run_id: 'run-1',
+      status: 'running',
+      summary: {},
+      last_event_seq: 3,
+      updated_at: Date.now(),
+      tasks,
+    });
+    useChatStreamStore.getState().setTaskBoard(VALID_SESSION_ID, {
+      runId: 'run-1',
+      plan: [],
+      statuses: {},
+    });
+  }
+
+  beforeEach(() => {
+    useRunControlStore.getState().resetAll();
+  });
+
+  it('编排 run 的插话走 orch steer，不入队也不走单 agent chat_steer', async () => {
+    const { result } = renderHook(() => useChat());
+    await startBusyStream(result);
+    seedOrchRun([task('t-wait', 'planned'), task('t-1', 'running')]);
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'chat_steer') throw new Error('编排 run 不该走单 agent 的 chat_steer');
+      if (cmd === 'orchestration_steer_task')
+        return { ok: true, context_id: 'ctx-1', status: 'queued' };
+      return undefined;
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('第三个任务先跳过', undefined, undefined, 'force_multi', {
+        delivery: 'steer',
+      });
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith('orchestration_steer_task', {
+      run_id: 'run-1',
+      // 优先正在跑的 task，而不是列表第一条
+      task_id: 't-1',
+      message_type: 'additional_context',
+      content: '第三个任务先跳过',
+      apply_mode: 'next_boundary',
+      expected_task_revision: 7,
+    });
+    expect(queueOf()).toEqual([]);
+    expect(
+      result.current.messages.filter((msg) => msg.subtype === 'steering').map((msg) => msg.content),
+    ).toEqual(['第三个任务先跳过']);
+  });
+
+  it('orch steer 冲突（CAS 失败）时回退排队，不丢消息', async () => {
+    const { result } = renderHook(() => useChat());
+    await startBusyStream(result);
+    seedOrchRun([task('t-1', 'running')]);
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'orchestration_steer_task') throw new Error('task_state_changed');
+      return undefined;
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('并发冲突也要留住', undefined, undefined, 'force_multi', {
+        delivery: 'steer',
+      });
+    });
+
+    expect(queueOf().map((msg) => msg.content)).toEqual(['并发冲突也要留住']);
+    expect(result.current.messages.some((msg) => msg.subtype === 'steering')).toBe(false);
+  });
+
+  it('run 里没有可插话的 task（全终态）时直接排队，不发 steer', async () => {
+    const { result } = renderHook(() => useChat());
+    await startBusyStream(result);
+    seedOrchRun([task('t-1', 'succeeded'), task('t-2', 'failed')]);
+
+    await act(async () => {
+      await result.current.sendMessage('跑完了再补一条', undefined, undefined, 'force_multi', {
+        delivery: 'steer',
+      });
+    });
+
+    expect(invokeMock).not.toHaveBeenCalledWith('orchestration_steer_task', expect.anything());
+    expect(queueOf().map((msg) => msg.content)).toEqual(['跑完了再补一条']);
+  });
+
+  it('编排 run 下显式选择排队时不触碰 steer 端点', async () => {
+    const { result } = renderHook(() => useChat());
+    await startBusyStream(result);
+    seedOrchRun([task('t-1', 'running')]);
+
+    await act(async () => {
+      await result.current.sendMessage('排着', undefined, undefined, 'force_multi', {
+        delivery: 'queue',
+      });
+    });
+
+    expect(invokeMock).not.toHaveBeenCalledWith('orchestration_steer_task', expect.anything());
+    expect(invokeMock).not.toHaveBeenCalledWith('chat_steer', expect.anything());
+    expect(queueOf().map((msg) => msg.content)).toEqual(['排着']);
   });
 });

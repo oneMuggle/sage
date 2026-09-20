@@ -336,6 +336,8 @@ interface ChatStreamStoreState {
   takeChatFromQueue: (sessionId: string, id: string) => QueuedChatMessage | null;
   /** 置顶：把某条排队消息提到队首，改变自动发送顺序。 */
   moveChatToQueueFront: (sessionId: string, id: string) => void;
+  /** 拖拽排序：把 fromId 这条移动到 toId 当前所在下标；任一侧不存在则 noop。 */
+  reorderChatQueue: (sessionId: string, fromId: string, toId: string) => void;
   clearChatQueue: (sessionId: string) => void;
   setChatQueuePaused: (sessionId: string, paused: boolean) => void;
   /** 弹出队首（run 自然结束后 flush 用）；队列空返回 null。 */
@@ -628,6 +630,19 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
       const next = [...queue];
       const [item] = next.splice(idx, 1);
       return { sessions: writeSlots(prev.sessions, sessionId, { pendingQueue: [item, ...next] }) };
+    }),
+
+  /** 拖拽排序：把 fromId 移到 toId 当前所在的位置（落点语义同 dnd-kit arrayMove）。 */
+  reorderChatQueue: (sessionId, fromId, toId) =>
+    set((prev) => {
+      const queue = selectSessionSlots(prev, sessionId).pendingQueue;
+      const from = queue.findIndex((m) => m.id === fromId);
+      const to = queue.findIndex((m) => m.id === toId);
+      if (from < 0 || to < 0 || from === to) return prev;
+      const next = [...queue];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return { sessions: writeSlots(prev.sessions, sessionId, { pendingQueue: next }) };
     }),
 
   clearChatQueue: (sessionId) =>

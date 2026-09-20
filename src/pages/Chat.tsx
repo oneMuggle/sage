@@ -80,6 +80,7 @@ export function Chat() {
     queuePaused, // U5: 队列是否因上一轮异常收尾而暂停
     removeQueuedMessage,
     moveQueuedMessageToFront,
+    reorderQueuedMessages,
     clearQueuedMessages,
     editQueuedMessage,
     sendQueuedMessageNow,
@@ -433,6 +434,12 @@ export function Chat() {
     },
     [moveQueuedMessageToFront],
   );
+  const handleReorderQueue = useCallback(
+    (fromId: string, toId: string) => {
+      reorderQueuedMessages?.(fromId, toId);
+    },
+    [reorderQueuedMessages],
+  );
   const handleRemoveQueuedMessage = useCallback(
     (id: string) => {
       removeQueuedMessage?.(id);
@@ -608,6 +615,7 @@ export function Chat() {
             onSendNow={handleSendQueuedNow}
             onEdit={handleEditQueuedMessage}
             onMoveToFront={handleMoveQueuedToFront}
+            onReorder={handleReorderQueue}
             onRemove={handleRemoveQueuedMessage}
             onClear={handleClearQueue}
             onResume={handleResumeQueue}
