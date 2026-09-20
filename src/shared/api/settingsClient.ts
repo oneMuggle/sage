@@ -98,6 +98,9 @@ export const settingsClient = {
 
   async setPreference(key: PreferenceKey, value: string, category = 'ui'): Promise<void> {
     await ipcCall('set_preference', { key, value, value_type: 'string', category });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sage:setting-changed', { detail: { key } }));
+    }
   },
 
   // ── Context Isolation (Task 8): context_turn_limit ──────────────────────

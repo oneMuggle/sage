@@ -190,6 +190,9 @@ export const zh = {
   // ─── 设置页 ───────────────────────
   'settings.title': '设置',
   'settings.tab.general': '通用',
+  'settings.tab.basic': '基础',
+  'settings.tab.memory-knowledge': '记忆与知识',
+  'settings.tab.tools-connections': '工具与连接',
   'settings.tab.endpoints': '端点',
   'settings.tab.models': '模型',
   'settings.tab.orchestration': '编排',
