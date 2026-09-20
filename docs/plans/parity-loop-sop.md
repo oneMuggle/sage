@@ -33,7 +33,13 @@
 - 注解扫描：无 `X | Y`（PEP 604）、无 PEP 585 内建泛型直接标注；
   统一 `Optional[X]` / `List[X]`；
 - f-string 内不再嵌套同引号（py38 不支持），复杂拼接用 `%` 或预变量；
-- 相关税es在本地解释器全绿（本地 3.12 通过 ⇒ 语义大概率 OK，
+- **pydantic 运行时 API**：win7 锁 1.10.13（2.x 需 py3.9+），语法护栏查不出——
+  `from pydantic import ConfigDict` 改从 `backend.compat.win7.pydantic_compat`
+  导入（模块顶层自动 install，与 workspace_routes 同套路）；`model_dump` 等由
+  垫片覆盖，但 **`model_rebuild` 垫片没有**，跨模型引用按依赖顺序定义类消除
+  前向引用即可删掉它；`Field(pattern=...)` 在 v1 被静默忽略，路由内要有等价
+  校验兜底（详见 §4.5）；
+- 相关测试在本地解释器全绿（本地 3.12 通过 ⇒ 语义大概率 OK，
   但语法护栏与真 py38 CI 不可省）；
 - **cherry-pick 后必须 diff 回 release/win7 基线**：main 侧 hunk 可能
   静默冲掉 win7-only 代码（R23 实证：get_connection 代理身份绑定、
@@ -72,6 +78,21 @@ worktree 被删除后，常驻 shell 的 cwd 失效 → 一切 spawn 报
 从 main 搬 hunk 到 win7 分支时，win7-only 代码会被"看起来正确"的
 main 上下文覆盖（R23 三坑）。cherry-pick 失败时宁可手工解冲突，
 也不要整文件替换。
+
+### 4.5 main CI 绿 ≠ win7 兼容（#1308→#1321 实证）
+两类只有 win7 侧才暴露的坑：
+1. **pydantic v2-only API**：main 用 2.5、win7 锁 1.10.13。函数体内
+   `BranchesResponse.model_rebuild()` 这类调用在 main 全绿，cherry 到
+   win7 后 import 即 AttributeError，只有 `Backend (Python 3.8, Win7
+   LTS)` job 能抓到。处置见 §2 垫片条目。
+2. **import 结构漂移**：win7 文件可能有 main 没有的模块级导入
+   （如 main.py 的 `get_database`）。main 代码在函数内 `from X import
+   name` 无害，win7 上却使 `name` 在整个函数内变局部名 → 先用后导
+   ruff F823 + 运行时 UnboundLocalError（win7 直接炸启动）。
+本地防线：`sage-backend-py38` conda env（3.8.20 + pydantic 1.10.13，
+与 requirements-py38.txt 同版本）跑受影响测试 + `import backend.main`
+冒烟，别等 CI（该 env 缺 `cryptography`，test_arena_routes 本地收集
+不了属既有环境缺口）。
 
 ## 5. 交付质量红线
 
