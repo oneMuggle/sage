@@ -48,6 +48,27 @@ import type { LogLevel } from '../src/shared/log/levels';
 /** UnlistenFn signature mirrors Tauri 2.x for drop-in Phase 2 compatibility. */
 export type UnlistenFn = () => void;
 
+const invokeMemory = (cmd: string, args?: Record<string, unknown>) =>
+  ipcRenderer.invoke('sage:invoke', { cmd, args: args ?? {} });
+
+const memoryBridge = {
+  list: (args?: Record<string, unknown>) => invokeMemory('get_memories', args),
+  search: (args: Record<string, unknown>) => invokeMemory('search_memory', args),
+  save: (args: Record<string, unknown>) => invokeMemory('save_memory', args),
+  delete: (args: Record<string, unknown>) => invokeMemory('delete_memory', args),
+  getProfile: () => invokeMemory('get_user_profile'),
+  diagnostics: () => invokeMemory('get_memory_diagnostics'),
+  subscribe: (handler: (event: unknown) => void) =>
+    electronAPI.listen('memory-events', handler),
+  createProfile: (args: Record<string, unknown>) => invokeMemory('create_user_profile', args),
+  updateProfile: (args: Record<string, unknown>) => invokeMemory('update_user_profile', args),
+  deleteProfile: (args: Record<string, unknown>) => invokeMemory('delete_user_profile', args),
+  getSummary: (args: Record<string, unknown>) => invokeMemory('get_session_summaries', args),
+  getRecentWrites: (args: Record<string, unknown>) =>
+    invokeMemory('get_recent_memory_writes', args),
+  undoWrite: (args: Record<string, unknown>) => invokeMemory('undo_memory_write', args),
+};
+
 const electronAPI = {
   /**
    * Renderer-side log bridge — forwards to main process for file persistence.
@@ -71,6 +92,8 @@ const electronAPI = {
   invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
     return ipcRenderer.invoke('sage:invoke', { cmd, args: args ?? {} }) as Promise<T>;
   },
+
+  memory: memoryBridge,
 
   /** Authenticated raw backend relay; the local capability stays in main. */
   backendRequest<T>(request: {

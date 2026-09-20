@@ -195,6 +195,23 @@ def test_delete_memory_semantic(manager: MemoryManager) -> None:
     assert manager.delete_memory(mid, "semantic") is True
 
 
+def test_delete_memory_working_synthetic_id(manager: MemoryManager) -> None:
+    manager.working.add("s1", {"role": "user", "content": "keep me"})
+    seq_b = manager.working.add("s1", {"role": "user", "content": "drop me"})
+
+    assert manager.delete_memory(f"wm:s1:{seq_b}", "working") is True
+    remaining_contents = [m.get("content") for m in manager.working.messages]
+    assert "drop me" not in remaining_contents
+    assert "keep me" in remaining_contents
+
+
+def test_delete_memory_working_missing_sequence_returns_false(manager: MemoryManager) -> None:
+    manager.working.add("s1", {"role": "user", "content": "one"})
+    assert manager.delete_memory("wm:s1:9999", "working") is False
+    assert manager.delete_memory("wm:s1:garbage", "working") is False
+    assert manager.delete_memory("bogus-id", "working") is False
+
+
 def test_delete_memory_unknown_type(manager: MemoryManager) -> None:
     assert manager.delete_memory("any", "unknown") is False
 
