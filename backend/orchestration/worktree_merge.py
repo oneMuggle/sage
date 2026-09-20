@@ -251,3 +251,141 @@ def _conflict_files(main: Path) -> List[str]:
     return [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()][
         :_MAX_FILES_LISTED
     ]
+
+
+def merge_session_worktree(
+    worktree: str, *, branch: str, label: str = "session"
+) -> MergeResult:
+    """会话 worktree（命名分支）合回主仓当前分支。永不抛错。
+
+    与 :func:`accept_lane_worktree` 的区别：lane 是 detached 副本需现场建
+    分支；会话 worktree 已有命名分支且可能有提交历史。步骤：
+
+    1. worktree 脏 → 先把变更 commit 到该分支（add -A，身份回退）；
+    2. 主仓必须干净（脏 → 拒绝）；
+    3. 主仓 ``merge --no-ff <branch>``，冲突 → abort 回滚 + 冲突清单。
+
+    code：merged | already-updated | no-branch | worktree-missing |
+    not-a-repo | main-not-found | main-dirty | conflicts | git-error。
+    """
+    try:
+        return _merge_session_inner(worktree, branch=branch, label=label)
+    except Exception as exc:  # noqa: BLE001 — 合并绝不能抛错给路由
+        logger.warning("session merge 异常 branch=%s: %s", branch, exc)
+        return MergeResult(ok=False, code="git-error", message=f"合并异常：{exc}")
+
+
+def _merge_session_inner(  # noqa: PLR0911 — fail-closed 多拒绝分支是设计
+    worktree: str, *, branch: str, label: str
+) -> MergeResult:
+    from backend.tools.git_tool import _valid_ref
+
+    wt = Path(worktree)
+    if not wt.is_dir():
+        return MergeResult(
+            ok=False, code="worktree-missing", message=f"worktree 已不存在：{worktree}"
+        )
+    if not _is_git_repo(wt):
+        return MergeResult(ok=False, code="not-a-repo", message="worktree 不是 git 仓库")
+    if not _valid_ref(branch):
+        return MergeResult(ok=False, code="no-branch", message=f"非法分支名：{branch!r}")
+    main = find_main_repo(wt)
+    if main is None or not _is_git_repo(main):
+        return MergeResult(ok=False, code="main-not-found", message="定位主仓失败")
+    try:
+        if wt.resolve() == main.resolve():
+            return MergeResult(ok=False, code="not-a-repo", message="拒绝把仓库合进自己")
+    except OSError:
+        pass
+
+    verify = _run_git(["rev-parse", "--verify", f"refs/heads/{branch}"], wt)
+    if verify is None or verify.returncode != 0:
+        return MergeResult(
+            ok=False, code="no-branch", message=f"分支不存在：{branch}"
+        )
+
+    base = _run_git(["rev-parse", "HEAD"], main)
+    if base is None or base.returncode != 0:
+        return MergeResult(ok=False, code="git-error", message="读取主仓 HEAD 失败")
+    base_head = base.stdout.strip()
+
+    main_status = _status_porcelain(main)
+    if main_status is None:
+        return MergeResult(ok=False, code="git-error", message="读取主仓状态失败")
+    if main_status:
+        preview = "、".join(s[:60] for s in main_status[:5])
+        return MergeResult(
+            ok=False,
+            code="main-dirty",
+            message=f"主工作区有 {len(main_status)} 处未提交变更，请先提交：{preview}",
+        )
+
+    # worktree 脏：把未提交变更先落到该分支（与 lane accept 同款身份回退）
+    wt_status = _status_porcelain(wt)
+    if wt_status is None:
+        return MergeResult(ok=False, code="git-error", message="读取 worktree 状态失败")
+    if wt_status:
+        current = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], wt)
+        if current is None or current.stdout.strip() != branch:
+            switch = _run_git(["checkout", branch], wt)
+            if switch is None or switch.returncode != 0:
+                return MergeResult(
+                    ok=False, code="git-error", message="worktree 切回分支失败"
+                )
+        _run_git(["add", "-A"], wt)
+        commit = _run_git(
+            _identity_args(wt)
+            + ["commit", "-m", f"Sage {label} worktree: 收拢未提交变更", "-m", f"base: {base_head}"],
+            wt,
+        )
+        if commit is None or commit.returncode != 0:
+            tail = (commit.stderr if commit else "") or ""
+            return MergeResult(
+                ok=False,
+                code="git-error",
+                message=f"worktree 提交失败：{tail.strip()[-300:]}",
+            )
+
+    merged = _run_git(
+        _identity_args(main) + ["merge", "--no-ff", "--no-edit", branch], main
+    )
+    if merged is None or merged.returncode != 0:
+        if merged is not None and "Already up to date" in (merged.stdout or ""):
+            return MergeResult(
+                ok=True,
+                code="already-updated",
+                message="分支内容已在主分支中，无需合并",
+                branch=branch,
+                base_head=base_head,
+            )
+        conflicts = _conflict_files(main)
+        _run_git(["merge", "--abort"], main)  # best-effort 回滚
+        detail = "、".join(conflicts[:10]) if conflicts else "未知文件"
+        return MergeResult(
+            ok=False,
+            code="conflicts",
+            message=f"合并冲突（{len(conflicts)} 个文件），已回滚：{detail}",
+            branch=branch,
+            base_head=base_head,
+            conflict_files=conflicts,
+        )
+
+    merge_head = ""
+    mhead = _run_git(["rev-parse", "HEAD"], main)
+    if mhead is not None and mhead.returncode == 0:
+        merge_head = mhead.stdout.strip()
+    files: List[str] = []
+    diff = _run_git(["diff", "--name-only", base_head, merge_head or "HEAD"], main)
+    if diff is not None and diff.returncode == 0:
+        files = [ln for ln in diff.stdout.splitlines() if ln.strip()][
+            :_MAX_FILES_LISTED
+        ]
+    return MergeResult(
+        ok=True,
+        code="merged",
+        message=f"已把分支 {branch} 合并到主工作区（{len(files)} 个文件变化）",
+        branch=branch,
+        base_head=base_head,
+        merge_head=merge_head,
+        files_changed=files,
+    )

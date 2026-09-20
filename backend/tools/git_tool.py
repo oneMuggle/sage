@@ -530,34 +530,78 @@ def _valid_ref(name: str) -> bool:
 
 
 class GitBranchTool(GitToolBase):
-    """列出本地分支并标记当前分支（READ，纯只读）。"""
+    """列出分支（本地，可选远端）并附 head 提交信息与当前分支标记（READ）。"""
 
     risk = RiskClass.READ
+
+    _REF_FMT = _LOG_FIELD_SEP.join(
+        ["%(refname:short)", "%(objectname:short)", "%(committerdate:iso8601)", "%(subject)"]
+    )
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
             name="git_branch",
-            description="列出本地分支并标记当前分支。",
-            parameters={"type": "object", "properties": {}, "required": []},
+            description=(
+                "列出分支并标记当前分支，附每条分支最后一次提交（哈希/时间/标题）。"
+                "include_remote=true 时同时列出远端分支（origin/*）。只读操作。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "include_remote": {
+                        "type": "boolean",
+                        "description": "同时列出远端分支（默认否）",
+                    },
+                },
+                "required": [],
+            },
         )
 
-    def execute(self, **kwargs: Any) -> ToolResult:
+    def execute(self, include_remote: bool = False, **kwargs: Any) -> ToolResult:
         if kwargs:
-            return ToolResult(success=False, error="git_branch 不接受参数")
+            return ToolResult(
+                success=False, error=f"未知参数: {', '.join(sorted(kwargs))}"
+            )
         root, rejection = self._resolve_repo_root()
         if rejection:
             return rejection
-        out, err = _run_git(["branch", "--list"], cwd=root)
-        if err is not None:
-            return ToolResult(success=False, error=err)
+        current_out, _ = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
+        current = (current_out or "").strip()
         branches: List[Dict[str, Any]] = []
-        for raw_line in (out or "").splitlines():
-            entry = raw_line.rstrip()
-            if not entry:
-                continue
-            is_current = entry.startswith("* ")
-            name = entry[2:] if entry[:2] in ("* ", "  ") else entry
-            branches.append({"name": name, "is_current": is_current})
+        scopes: List[Tuple[str, str]] = [("refs/heads", "local")]
+        if include_remote:
+            scopes.append(("refs/remotes", "remote"))
+        for ns, kind in scopes:
+            out, err = _run_git(
+                [
+                    "for-each-ref",
+                    "--format",
+                    "%(HEAD)" + _LOG_FIELD_SEP + self._REF_FMT,
+                    ns,
+                ],
+                cwd=root,
+            )
+            if err is not None:
+                return ToolResult(success=False, error=err)
+            for line in (out or "").splitlines():
+                fields = line.split(_LOG_FIELD_SEP)
+                if len(fields) != 5:
+                    continue
+                is_head, name, head, date, subject = fields
+                if kind == "remote" and name.endswith("/HEAD"):
+                    continue
+                branches.append(
+                    {
+                        "name": name,
+                        "kind": kind,
+                        "is_current": is_head == "*" or (
+                            kind == "local" and name == current
+                        ),
+                        "head": head,
+                        "date": date,
+                        "subject": subject,
+                    }
+                )
         return ToolResult(success=True, content={"branches": branches})
 
 
