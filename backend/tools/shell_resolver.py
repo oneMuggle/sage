@@ -278,6 +278,16 @@ def _detect_powershell_version() -> Optional[str]:
     return None
 
 
+def detect_powershell_version() -> Optional[str]:
+    """公开入口：系统 PowerShell 版本（进程内缓存），非 Windows/探测失败返回 None。"""
+    return _detect_powershell_version()
+
+
+def get_bundled_python_path() -> Optional[str]:
+    """公开入口：Sage 自带 Python 可执行文件路径，未安装/非 Windows 返回 None。"""
+    return _get_bundled_python_path()
+
+
 def build_shell_fallback_note(ps_version: Optional[str] = None) -> str:
     """动态构建 fallback 消息，包含 PS 版本 + Sage 自带 Python 路径。
 
@@ -354,6 +364,8 @@ __all__ = [
     "ShellSpec",
     "SHELL_FALLBACK_NOTE",
     "build_shell_fallback_note",
+    "detect_powershell_version",
+    "get_bundled_python_path",
     "resolve_shell",
     "resolve_shell_uncached",
 ]

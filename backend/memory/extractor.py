@@ -17,6 +17,13 @@ EXTRACTION_PROMPT = """从以下对话中提取值得记住的关键事实。每
 - 独立的、原子化的（一个事实一句话）
 - 长期有效的（不是临时的状态）
 - 关于用户的偏好、习惯、身份、目标等
+- 或关于本机运行环境的长期事实（category=environment）：如操作系统/PowerShell
+  版本限制及可用替代写法、python/node 的实际路径与版本、环境类报错的
+  已验证解决方案。这类事实 importance 给 8-10，tags 含 "environment"
+
+工具执行观察（本轮工具返回的环境事实，如 shell 降级提示；可作为
+environment 类事实的直接来源）：
+{tool_observations}
 
 对话内容：
 [用户]: {user_message}
@@ -27,8 +34,8 @@ EXTRACTION_PROMPT = """从以下对话中提取值得记住的关键事实。每
 
 以 JSON 数组格式输出，每项包含：
 - content: 事实内容（一句话，中文）
-- importance: 重要性 1-10（偏好/身份类 7-9，普通事实 4-6）
-- category: preference/fact/goal/event 之一
+- importance: 重要性 1-10（环境/版本类 8-10，偏好/身份类 7-9，普通事实 4-6）
+- category: preference/fact/goal/event/environment 之一
 - tags: 相关标签（1-3 个）
 
 如果没有值得提取的事实，返回空数组 []。
@@ -62,6 +69,7 @@ class MemoryExtractor:
         user_message: str,
         assistant_message: str,
         existing_facts: Optional[List[str]] = None,
+        tool_observations: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """从对话中提取事实
 
@@ -69,6 +77,8 @@ class MemoryExtractor:
             user_message: 用户消息内容
             assistant_message: 助手回复内容
             existing_facts: 已知事实列表（用于去重）
+            tool_observations: 本轮工具执行观察到的环境事实文本（可选，
+                如 shell 降级提示），参与 environment 类事实的提取
 
         Returns:
             提取的事实列表，每项包含 content/importance/category/tags
@@ -80,7 +90,10 @@ class MemoryExtractor:
         if self._llm is not None:
             try:
                 return await self._extract_with_llm(
-                    user_message, assistant_message, existing_facts or []
+                    user_message,
+                    assistant_message,
+                    existing_facts or [],
+                    tool_observations or "",
                 )
             except Exception as e:
                 logger.warning(f"LLM 事实提取失败，降级为关键词提取: {e}")
@@ -93,12 +106,14 @@ class MemoryExtractor:
         user_message: str,
         assistant_message: str,
         existing_facts: List[str],
+        tool_observations: str = "",
     ) -> List[Dict[str, Any]]:
         """使用 LLM 提取事实"""
         prompt = EXTRACTION_PROMPT.format(
             user_message=user_message[:500],
             assistant_message=assistant_message[:500],
             existing_facts="\n".join(existing_facts[:20]) if existing_facts else "（无）",
+            tool_observations=tool_observations[:500].strip() or "（无）",
         )
 
         # 调用 LLM（兼容 LLMPort 和简单 chat() 接口）
