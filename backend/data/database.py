@@ -716,6 +716,31 @@ class Database:
             ON user_profile(importance DESC)
         """)
 
+        # 项目画像表 (P2 scope 轴: 项目级 "MEMORY.md")
+        # 与 user_profile 同构, 但按 project_key(工作区绝对路径, 与
+        # session_workspace_bindings/projects 注册表同源)分组, 冻结快照仅在
+        # 会话绑定同一项目时注入 system prompt。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS project_profile (
+                id TEXT PRIMARY KEY,
+                project_key TEXT NOT NULL,
+                content TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'convention',
+                importance INTEGER DEFAULT 5 CHECK (importance BETWEEN 1 AND 10),
+                source TEXT NOT NULL DEFAULT 'manual',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_project_profile_key
+            ON project_profile(project_key)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_project_profile_importance
+            ON project_profile(project_key, importance DESC)
+        """)
+
         # Office 文档表 (Phase 1, plan §4.1.2 step 10)
         # Stores metadata for .pptx/.docx/.xlsx documents in user workspaces.
         # Actual files live in <workspace>/office/<doc_type>/<id>/ on disk.

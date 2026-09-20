@@ -600,6 +600,20 @@ export interface UserProfileResponse {
   char_limit: number;
 }
 
+/** P2 项目画像条目（项目级 MEMORY.md，按 project_key 分组） */
+export interface ProjectProfileEntry extends UserProfileEntry {
+  project_key: string;
+}
+
+export interface ProjectProfileResponse {
+  project_key: string;
+  items: ProjectProfileEntry[];
+  categories: string[];
+  snapshot: string;
+  char_limit: number;
+  projects: string[];
+}
+
 /**
  * 单条记忆记录。Task 2 起 ``layer`` / ``source`` 由后端 ``/memory/list`` 直接
  * 注入:

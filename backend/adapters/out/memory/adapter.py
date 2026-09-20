@@ -246,12 +246,16 @@ class MemoryAdapter:
             len(fused),
         )
 
-        # 4. 分层：用户画像（始终注入）+ 高重要性 → core，其余 → episodic/semantic
+        # 4. 分层：用户画像 + 项目画像（P2，始终注入）+ 高重要性 → core，
+        # 其余 → episodic/semantic
         # core 槽位按画像 / 检索命中**独立预算**（画像 3 + 检索 2 = 5），
         # 避免画像条目挤掉本轮检索到的高重要性事实（review MEDIUM）。
         _CORE_PROFILE_LIMIT = 3
         _CORE_RETRIEVED_LIMIT = 2
+        # P2: 项目画像独立小额度（2），不与服务端用户画像/检索命中抢槽位
+        _CORE_PROJECT_LIMIT = 2
         core_profile: List[dict] = []
+        core_project: List[dict] = []
         core_retrieved: List[dict] = []
         episodic: List[dict] = []
         semantic: List[dict] = []
@@ -259,6 +263,15 @@ class MemoryAdapter:
         #     不依赖本轮检索命中（hermes 冻结快照语义）
         if self.user_profile is not None:
             core_profile = self.user_profile.get_core_items()
+        # 4.1b 项目画像（P2）：仅当会话绑定了工作区（current_project_key
+        #      非空）时取该项目的冻结快照；未绑定恒为空。
+        if current_project_key:
+            try:
+                from backend.memory.project_profile import get_project_profile
+
+                core_project = get_project_profile().get_core_items(current_project_key)
+            except Exception as exc:  # noqa: BLE001 - best-effort 注入
+                logger.debug(f"项目画像 core 注入失败: {exc}")
         # 4.2 检索命中中的高重要性事实补入 core（独立预算）
         for item in fused[: limit * 2]:
             importance = item.get("importance", 5)
@@ -269,13 +282,17 @@ class MemoryAdapter:
             else:
                 episodic.append(item)
 
-        core = core_profile[:_CORE_PROFILE_LIMIT] + core_retrieved[:_CORE_RETRIEVED_LIMIT]
+        core = (
+            core_profile[:_CORE_PROFILE_LIMIT]
+            + core_project[:_CORE_PROJECT_LIMIT]
+            + core_retrieved[:_CORE_RETRIEVED_LIMIT]
+        )
 
         return MemoryContext(
             working=keyword_results.get("working", []),
             episodic=episodic[:limit],
             semantic=semantic[:limit],
-            core=core[: _CORE_PROFILE_LIMIT + _CORE_RETRIEVED_LIMIT],
+            core=core[: _CORE_PROFILE_LIMIT + _CORE_PROJECT_LIMIT + _CORE_RETRIEVED_LIMIT],
         )
 
     async def store(

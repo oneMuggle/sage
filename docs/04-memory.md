@@ -788,13 +788,31 @@ scope 轴解决的是**归属**(这条记忆属于谁)。两者正交。
 
 ### 4.8.4 前端
 
-`src/widgets/memory/MemoryBrowser.tsx`:每条记忆渲染作用域徽章
+`src/widgets/memory/MemoryBrowser.tsx`：每条记忆渲染作用域徽章
 (用户/项目/全局，hover 显示 project_key 路径)，并提供"作用域"筛选行
 (纯前端过滤，不改后端分页契约)。
 
-### 4.8.5 后续路线(未实现)
+### 4.8.5 项目画像 (P2 已落地)
 
-- P2:项目画像进入 core 注入层(项目级 "MEMORY.md")。
+P1 的 scope 解决"检索时的可见性"；P2 补上"注入时的归属"——项目级
+MEMORY.md：
+
+- **存储**: 新表 `project_profile`(与 `user_profile` 同构 + `project_key` +
+  `source` 列)，`backend/memory/project_profile.py::ProjectProfileStore`
+  按项目维护**冻结快照**(每项目 1000 字符上限、项目内去重、安全扫描)。
+- **注入**: 会话绑定了工作区时，项目快照与用户画像一起进入 core 层——
+  legacy 走 `MemoryManager.get_context`(拼 `## PROJECT PROFILE` 段)，
+  hex 走 `MemoryAdapter.retrieve`(core 独立预算 2 槽，`MemoryContext.format`
+  以【项目画像】标签与【用户画像】分段呈现)。**未绑定会话与跨项目一律
+  不注入**。
+- **API**: `GET/POST /memory/project-profile`(归属=显式 `project_key` 或
+  从 `session_id` 解析)、`DELETE /memory/project-profile/{id}`；写入台账
+  新增 `kind='project_profile'`，`/memory/undo-write` 按 kind 路由撤销。
+- **UI**: `ProjectProfileCard`("项目画像"卡片，项目选择器 + 添加/删除)，
+  挂在 Memory 页用户画像之下。
+
+### 4.8.6 后续路线(未实现)
+
 - P3:Mem0 式冲突消解(ADD/UPDATE/DELETE/NOOP)+ `invalid_at` 时间有效区。
 - P4:每周反思(reflection)与 recency×importance×confidence×relevance 四因子评分。
 

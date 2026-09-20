@@ -287,6 +287,21 @@ class MemoryManager:
         except Exception as exc:
             logger.debug(f"用户画像快照注入失败: {exc}")
 
+        # P2 项目画像: 会话绑定了工作区才注入该项目自己的快照;
+        # 未绑定/解析失败恒为空串, 绝不注入"别的项目"的画像。
+        try:
+            project_key = memory_scope.resolve_session_project_key(
+                getattr(self.episodic, "db", None), session_id
+            )
+            if project_key:
+                from backend.memory.project_profile import get_project_profile
+
+                project_snapshot = get_project_profile().get_snapshot(project_key)
+                if project_snapshot:
+                    parts.append(project_snapshot)
+        except Exception as exc:
+            logger.debug(f"项目画像快照注入失败: {exc}")
+
         # 获取工作记忆上下文（按 session 隔离 + Task 14 按 segment_id 隔离）
         working_context = self.working.get_context(
             session_id, limit=limit, segment_id=segment_id

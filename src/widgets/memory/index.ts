@@ -4,4 +4,5 @@
 export { MemoryBrowser } from './MemoryBrowser';
 export { MemoryItem } from './MemoryItem';
 export { NewMemoryModal } from './NewMemoryModal';
+export { ProjectProfileCard } from './ProjectProfileCard';
 export { UserProfileCard } from './UserProfileCard';
