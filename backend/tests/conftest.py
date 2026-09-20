@@ -53,7 +53,6 @@ def _ensure_usable_event_loop():
         asyncio.get_event_loop()
     except RuntimeError:
         asyncio.set_event_loop(asyncio.new_event_loop())
-    yield
 
 
 _SSL_BOOTSTRAP_TEST = os.path.join("backend", "tests", "unit", "test_ssl_bootstrap.py")
