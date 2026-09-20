@@ -320,6 +320,29 @@ class WorkingMemory:
         # 持久化清空状态
         self._save_snapshot(sid)
 
+    def delete_message(self, session_id: Optional[str], sequence: int) -> bool:
+        """Delete one generated working-memory entry by its session-local sequence."""
+        sid = self._resolve(session_id)
+        target = next(
+            (
+                message
+                for message in self._messages
+                if message.get("session_id") == sid and message.get("seq") == sequence
+            ),
+            None,
+        )
+        if target is None:
+            return False
+
+        self._messages.remove(target)
+        removed_tokens = target.get("tokens", 0)
+        self._session_tokens[sid] = max(
+            0, self._session_tokens.get(sid, 0) - removed_tokens
+        )
+        self.total_tokens = max(0, self.total_tokens - removed_tokens)
+        self._save_snapshot(sid)
+        return True
+
     def clear_segment(
         self,
         session_id: Optional[str] = None,

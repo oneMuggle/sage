@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import sys
 from typing import List
 
@@ -4703,10 +4704,11 @@ class MemorySearchRequest(BaseModel):
 
 
 class MemorySaveRequest(BaseModel):
-    content: str
+    content: str = Field(min_length=1)
     memory_type: str = "episodic"
-    importance: int = 5
-    tags: List[str] = []
+    importance: int = Field(default=5, ge=1, le=10)
+    tags: List[str] = Field(default_factory=list)
+    session_id: Optional[str] = None
 
 
 class MemoryDeleteRequest(BaseModel):
@@ -4873,19 +4875,65 @@ def delete_user_profile(profile_id: str):
 
 @router.get("/memory/search")
 @with_db_lock
-def search_memory(query: str, limit: int = 20, type: Optional[str] = None):
+def search_memory(
+    query: str,
+    limit: int = 20,
+    type: Optional[str] = None,
+    session_id: Optional[str] = None,
+):
     """搜索记忆"""
+    if type not in (None, "", "working", "episodic", "semantic"):
+        raise HTTPException(status_code=422, detail="不支持的记忆类型")
     try:
         mm = get_memory_manager()
-        return mm.search_memories(query=query, memory_type=type, limit=limit)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return mm.search_memories(
+            query=query,
+            memory_type=type or None,
+            limit=max(1, min(limit, 100)),
+            session_id=session_id,
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        # 脱敏:不泄露用户原始查询(查询进入 URL 后会出现在错误日志里)
+        raise HTTPException(status_code=500, detail="记忆搜索失败,请查看后端日志")
+
+
+@router.get("/memory/diagnostics")
+def memory_diagnostics():
+    """Return redacted runtime evidence for diagnosing an empty memory list."""
+    from pathlib import Path
+
+    db = get_memory_manager().episodic.db
+    raw_path = str(getattr(db, "db_path", ""))
+    path = Path(raw_path)
+    try:
+        stat = path.stat()
+        size_bytes = stat.st_size
+        exists = True
+    except OSError:
+        size_bytes = 0
+        exists = False
+    path_fingerprint = hashlib.sha256(raw_path.encode("utf-8")).hexdigest()[:16]
+    return {
+        "pid": os.getpid(),
+        "build_id": os.environ.get("SAGE_BUILD_ID", "dev-build"),
+        "db": {
+            "basename": path.name,
+            "exists": exists,
+            "size_bytes": size_bytes,
+            "path_fingerprint": path_fingerprint,
+            "source": "explicit_env" if os.environ.get("SAGE_DB_PATH") else "default",
+        },
+    }
 
 
 @router.post("/memory/save")
 @with_db_lock
 def save_memory(data: MemorySaveRequest):
     """保存记忆"""
+    if data.memory_type not in ("working", "episodic", "semantic", "auto"):
+        raise HTTPException(status_code=422, detail="不支持的记忆类型")
     try:
         mm = get_memory_manager()
         memory_id = mm.memorize(
@@ -4893,8 +4941,13 @@ def save_memory(data: MemorySaveRequest):
             memory_type=data.memory_type,
             importance=data.importance,
             tags=data.tags,
+            session_id=data.session_id,
         )
+        if not memory_id:
+            raise HTTPException(status_code=422, detail="记忆未写入")
         return {"id": memory_id, "status": "ok"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -4905,8 +4958,8 @@ def delete_memory(data: MemoryDeleteRequest):
     """删除记忆"""
     try:
         mm = get_memory_manager()
-        # 尝试从所有类型中删除
-        for mtype in ["episodic", "semantic"]:
+        # 尝试从所有类型中删除(working 通过合成 id 支持单条删除)
+        for mtype in ["episodic", "semantic", "working"]:
             if mm.delete_memory(data.id, mtype):
                 return {"status": "ok"}
         raise HTTPException(status_code=404, detail="记忆不存在")
