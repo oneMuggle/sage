@@ -797,6 +797,31 @@ class Database:
         )
         conn.commit()
 
+        # Session worktree registry (会话级 worktree 模式, 2026-09-18).
+        # 记录 sage 为会话创建的 git worktree（对标 Claude Code per-session
+        # worktree）。会话的"当前生效目录"仍由 session_workspace_bindings 承
+        # 载；本表回答"这个会话/项目下有哪些 worktree、分支叫什么、是否已合并"
+        # —— 供 picker 列表、合并与清理使用。status: active | merged | discarded。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS session_worktrees (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                repo_root TEXT NOT NULL,
+                worktree_path TEXT NOT NULL UNIQUE,
+                branch_name TEXT,
+                base_ref TEXT NOT NULL DEFAULT 'HEAD',
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_session_worktrees_session "
+            "ON session_worktrees(session_id, created_at DESC)"
+        )
+        conn.commit()
+
         # Projects registry (项目模块 P1, 2026-09-13). 用户在侧边栏显式
         # 登记的项目目录清单（对标 Cursor Recent Workspaces / Claude Code
         # 项目 → 会话归属）。行独立于会话存在：登记过的目录即使还没有
