@@ -9,6 +9,7 @@ import contextlib
 import logging
 from typing import Any, Dict, List, Optional
 
+from backend.memory import scope as memory_scope
 from backend.memory.episodic import EpisodicMemory
 from backend.memory.semantic import SemanticMemory
 from backend.memory.summary import SessionSummaryStore
@@ -120,6 +121,8 @@ class MemoryManager:
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
         segment_id: int = 0,
+        scope: Optional[str] = None,
+        project_key: Optional[str] = None,
     ) -> Optional[str]:
         """
         通用记忆存储接口
@@ -134,6 +137,9 @@ class MemoryManager:
             segment_id: 上下文段 id（PF-2 context-isolation）。默认 0 — 向后兼容
                 既有调用方；同会话多段时区分工作记忆的可见范围。仅当
                 ``resolved == "working"`` 时生效（episodic/semantic 无段概念）。
+            scope: P1 作用域 ('user'|'project'|'global')，None → 存储层
+                按会话 workspace 绑定自动判定
+            project_key: 项目目录（scope='project' 时生效）
 
         Returns:
             记忆 ID：
@@ -156,7 +162,12 @@ class MemoryManager:
                 meta["tags"] = tags
             sid = session_id or meta.get("session_id")
             return self.episodic.save(
-                content=content, importance=importance, metadata=meta, session_id=sid
+                content=content,
+                importance=importance,
+                metadata=meta,
+                session_id=sid,
+                scope=scope,
+                project_key=project_key,
             )
 
         elif resolved == "semantic":
@@ -165,6 +176,8 @@ class MemoryManager:
                 summary=None,
                 tags=tags,
                 session_id=session_id,
+                scope=scope,
+                project_key=project_key,
             )
 
         else:
@@ -395,12 +408,19 @@ class MemoryManager:
             session_id, {"role": role, "content": content}, segment_id=segment_id
         )
 
+    def resolve_project_key(self, session_id: Optional[str]) -> Optional[str]:
+        """解析会话当前归属的项目目录（P1 作用域轴）。"""
+        return memory_scope.resolve_session_project_key(
+            getattr(self.episodic, "db", None), session_id
+        )
+
     def search_memories(
         self,
         query: str,
         memory_type: Optional[str] = None,
         limit: int = 20,
         session_id: Optional[str] = None,
+        scope: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         搜索记忆的统一接口
@@ -414,10 +434,18 @@ class MemoryManager:
             memory_type: 可选，限定记忆类型
             limit: 返回数量限制
             session_id: 可选会话 ID，用于工作记忆隔离
+            scope: P1 作用域轴跨会话检索 ('user'|'project'|'global')。
+                'project' 时以 session_id 解析当前项目目录做过滤；
+                给定时不叠加 session 隔离（工作记忆无作用域概念，跳过）
 
         Returns:
             记忆列表
         """
+        if scope in memory_scope.VALID_SCOPES:
+            return self._search_by_scope(
+                query, memory_type, limit, session_id, scope
+            )
+
         if memory_type == "episodic":
             return self.episodic.search(query, limit=limit, session_id=session_id)
         elif memory_type == "semantic":
@@ -449,6 +477,38 @@ class MemoryManager:
         results.extend(
             self.semantic.search(query, limit=limit, session_id=session_id)
         )
+        return results[:limit]
+
+    def _search_by_scope(
+        self,
+        query: str,
+        memory_type: Optional[str],
+        limit: int,
+        session_id: Optional[str],
+        scope: str,
+    ) -> List[Dict[str, Any]]:
+        """作用域轴跨会话检索（P1）。工作记忆无作用域概念，直接跳过。"""
+        project_key = None
+        if scope == memory_scope.SCOPE_PROJECT:
+            project_key = self.resolve_project_key(session_id)
+            if not project_key:
+                # 当前会话不属于任何项目 → 无项目记忆可检索
+                return []
+        if memory_type == "working":
+            return []
+        results: List[Dict[str, Any]] = []
+        if memory_type in (None, "episodic"):
+            results.extend(
+                self.episodic.search(
+                    query, limit=limit, scope=scope, project_key=project_key
+                )
+            )
+        if memory_type in (None, "semantic"):
+            results.extend(
+                self.semantic.search(
+                    query, limit=limit, scope=scope, project_key=project_key
+                )
+            )
         return results[:limit]
 
     def delete_memory(self, memory_id: str, memory_type: str) -> bool:

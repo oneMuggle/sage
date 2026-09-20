@@ -598,8 +598,27 @@ class Database:
                 sentiment TEXT,
                 is_valid INTEGER DEFAULT 1,
                 expires_at INTEGER,
+                scope TEXT DEFAULT 'user',
+                project_key TEXT,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
             )
+        """)
+        # P1 (2026-09-18) 记忆作用域轴: scope(user/project/global) + project_key
+        # (session_workspace_bindings 的规范化 workspace_path)。存量行迁移后
+        # 取默认值 'user'（跨项目可见），与旧行为一致。
+        cursor.execute("PRAGMA table_info(memories_episodic)")
+        _episodic_columns = {row["name"] for row in cursor.fetchall()}
+        if "scope" not in _episodic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_episodic ADD COLUMN scope TEXT DEFAULT 'user'"
+            )
+        if "project_key" not in _episodic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_episodic ADD COLUMN project_key TEXT"
+            )
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_episodic_scope_project
+            ON memories_episodic(scope, project_key)
         """)
 
         # 技能定义不再由 SQLite ``skills`` 表承载。
@@ -1111,8 +1130,25 @@ class Database:
                 content TEXT NOT NULL,
                 summary TEXT,
                 tags TEXT DEFAULT '[]',
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                scope TEXT DEFAULT 'user',
+                project_key TEXT
             )
+        """)
+        # P1 (2026-09-18) 记忆作用域轴，同 memories_episodic。
+        cursor.execute("PRAGMA table_info(memories_semantic)")
+        _semantic_columns = {row["name"] for row in cursor.fetchall()}
+        if "scope" not in _semantic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN scope TEXT DEFAULT 'user'"
+            )
+        if "project_key" not in _semantic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN project_key TEXT"
+            )
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_semantic_scope_project
+            ON memories_semantic(scope, project_key)
         """)
 
         # FTS5 独立虚拟表用于语义记忆全文搜索（jieba 分词文本）。

@@ -89,6 +89,12 @@ const VALID_SUMMARY_STATUSES: ReadonlySet<NonNullable<Memory['status']>> = new S
   'failed',
 ]);
 
+const VALID_MEMORY_SCOPES: ReadonlySet<NonNullable<Memory['scope']>> = new Set([
+  'user',
+  'project',
+  'global',
+]);
+
 function asOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
@@ -141,6 +147,12 @@ function coerceMemoryItem(raw: unknown): Memory {
       : layer;
   const sessionId = asOptionalString(raw.session_id);
   const sourceTurnId = asOptionalString(raw.source_turn_id);
+  const scopeRaw = asOptionalString(raw.scope);
+  const scope =
+    scopeRaw && VALID_MEMORY_SCOPES.has(scopeRaw as NonNullable<Memory['scope']>)
+      ? (scopeRaw as NonNullable<Memory['scope']>)
+      : undefined;
+  const projectKey = asOptionalString(raw.project_key);
   const statusRaw = asOptionalString(raw.status);
   const status =
     statusRaw && VALID_SUMMARY_STATUSES.has(statusRaw as NonNullable<Memory['status']>)
@@ -162,6 +174,8 @@ function coerceMemoryItem(raw: unknown): Memory {
     source,
     session_id: sessionId,
     source_turn_id: sourceTurnId,
+    scope,
+    project_key: projectKey,
     status,
     error_message: errorMessage,
     importance: asNumber(raw.importance, 0),

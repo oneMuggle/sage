@@ -68,18 +68,23 @@ Sage 的记忆系统参考人类记忆的三层模型，结合 Hermes Agent 的�
 │                              ▼                                   │
 │   ┌─────────────────────────────────────────────────────────┐   │
 │   │                   Semantic Memory                         │   │
-│   │                (语义记忆，ChromaDB 存储)                   │   │
+│   │          (语义记忆，SQLite FTS5 + sqlite-vec)             │   │
 │   │                                                           │   │
 │   │   • 知识概念                                              │   │
 │   │   • 用户画像                                             │   │
 │   │   • 技能知识                                              │   │
 │   │   • 事实性知识                                            │   │
 │   │                                                           │   │
-│   │   检索: 向量相似度 + 关键词过滤                           │   │
+│   │   检索: FTS5 全文 + jieba 分词，LIKE 兜底                 │
 │   │   更新: 版本控制，支持回滚                                 │   │
 │   └─────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> 注:早期文档中的 ChromaDB 方案已废弃，当前实现基于 SQLite(FTS5 全文 +
+> jieba 中文分词 + sqlite-vec 向量)，见 `backend/memory/semantic.py`。
+> 本章 4.2/4.3/4.4 的部分代码片段为早期设计稿，以仓库源码为准；
+> 4.8 节描述的是已落地的 **作用域(scope)轴**。
 
 ---
 
@@ -308,9 +313,9 @@ class SemanticMemory:
 
 **特点**:
 
-- ChromaDB 向量存储
+- SQLite FTS5 全文索引 + jieba 中文分词(向量侧由 sqlite-vec 承载)
 - 高维语义相似度检索
-- 支持元数据过滤
+- 支持元数据过滤(含 scope / project_key，见 4.8)
 - 版本控制支持
 
 ---
@@ -449,7 +454,7 @@ User Query: "我在北京的工作"
 │ 2. Multi-Source Retrieval                                    │
 │                                                            │
 │   ┌─────────────────┐                                     │
-│   │ Semantic Search │  ChromaDB 向量检索                    │
+│   │ Semantic Search │  SQLite FTS5 + 向量检索               │
 │   │ "北京 工作"     │  → 找到: "用户在北京工作过"           │
 │   └────────┬────────┘                                     │
 │            │                                               │
@@ -733,4 +738,66 @@ class MemoryManager:
 
 ---
 
-_文档版本: v1.0_
+## 4.8 记忆作用域 (Scope 轴，P1 已落地)
+
+三层记忆(Working/Episodic/Semantic)解决的是**时间轴**(短期→长期)；
+scope 轴解决的是**归属**(这条记忆属于谁)。两者正交。
+
+### 4.8.1 模型
+
+`memories_episodic` / `memories_semantic` 各有两列:
+
+| 列 | 取值 | 说明 |
+|---|---|---|
+| `scope` | `user` \| `project` \| `global` | 缺省 `user`(历史行迁移后同样落为 `user`) |
+| `project_key` | 工作区绝对路径或 NULL | 与 `projects` 注册表 / `session_workspace_bindings.workspace_path` 同源，不引入新 ID |
+
+三种作用域的语义(对齐 Claude Code / Cursor 的 user+project 规则分层):
+
+- **user**: 关于用户本人的偏好与事实，跨项目可见(默认)。
+- **project**: 只在绑定同一 `project_key` 的会话中可见，如项目约定、架构决策。
+- **global**: 与具体项目无关的通用知识，任何会话可见。
+
+### 4.8.2 写入:自动推导
+
+存储层 `save()` 内统一调用 `backend/memory/scope.py::finalize_scope`，
+覆盖所有写入口(manager / adapter / 固化晋升 / 抽取器):
+
+- 显式传 `scope` → 尊重调用方；`project` 缺 key 时从会话的工作区绑定解析，
+  解析不到(未绑定会话)降级为 `user`。
+- 未传 → `derive_write_scope`:会话绑定了工作区 ⇒ 倾向 `project`，否则 `user`。
+- 非 `project` 作用域强制 `project_key = NULL`。
+
+进化管线中 episodic→semantic 的晋升会**继承**原行的 scope/project_key，
+避免项目记忆晋升后泄漏为全局。
+
+### 4.8.3 读取:可见性规则
+
+```
+可见 ⇔ scope != 'project'  或  行.project_key == 当前会话.project_key
+```
+
+- 自动注入链路(recall / get_context / 向量检索)**保持 session 严格隔离**
+  (批次三 step 5 不变量)，scope 过滤是 adapter 融合后的兜底防线
+  (`is_row_visible`)。
+- 跨会话检索是显式 opt-in:`memory_search` 工具、`MemoryManager.search_memories`、
+  `GET /memory/search` 均新增 `scope` 参数(`session|project|user|global`，
+  默认 `session` 保持旧行为)；`memory_save` / `POST /memory/save` 接受
+  `scope: auto|user|project|global`。
+- `GET /memory/list` envelope 原样携带 `scope` / `project_key` 字段。
+
+### 4.8.4 前端
+
+`src/widgets/memory/MemoryBrowser.tsx`:每条记忆渲染作用域徽章
+(用户/项目/全局，hover 显示 project_key 路径)，并提供"作用域"筛选行
+(纯前端过滤，不改后端分页契约)。
+
+### 4.8.5 后续路线(未实现)
+
+- P2:项目画像进入 core 注入层(项目级 "MEMORY.md")。
+- P3:Mem0 式冲突消解(ADD/UPDATE/DELETE/NOOP)+ `invalid_at` 时间有效区。
+- P4:每周反思(reflection)与 recency×importance×confidence×relevance 四因子评分。
+
+---
+
+_文档版本: v1.1_

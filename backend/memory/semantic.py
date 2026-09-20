@@ -18,13 +18,14 @@ import logging
 import sqlite3
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.data.database import (
     backfill_semantic_fts,
     ensure_semantic_fts_schema,
     fts_row_texts,
 )
+from backend.memory import scope as memory_scope
 from backend.memory.chinese_tokenizer import tokenize, tokenize_for_search
 from backend.memory.summary_text import truncate_summary
 
@@ -65,7 +66,9 @@ class SemanticMemory:
                 summary TEXT,
                 tags TEXT DEFAULT '[]',
                 session_id TEXT,
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                scope TEXT DEFAULT 'user',
+                project_key TEXT
             )
         """)
         columns = {
@@ -82,6 +85,15 @@ class SemanticMemory:
             cursor.execute(
                 "UPDATE memories_semantic SET session_id = 'default' "
                 "WHERE session_id IS NULL"
+            )
+        # P1 作用域轴（与 database.init_db 的迁移同规则，幂等）
+        if "scope" not in columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN scope TEXT DEFAULT 'user'"
+            )
+        if "project_key" not in columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN project_key TEXT"
             )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_semantic_session_created "
@@ -102,6 +114,8 @@ class SemanticMemory:
         summary: Optional[str] = None,
         tags: Optional[List[str]] = None,
         session_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        project_key: Optional[str] = None,
     ) -> str:
         """
         保存语义记忆
@@ -111,6 +125,9 @@ class SemanticMemory:
             summary: 可选的摘要
             tags: 可选的标签列表
             session_id: 可选的关联会话 ID
+            scope: 作用域 ('user'|'project'|'global')，None → 按会话
+                workspace 绑定自动判定（见 backend.memory.scope）
+            project_key: 项目目录（scope='project' 时生效）
 
         Returns:
             生成的记忆 ID
@@ -120,6 +137,11 @@ class SemanticMemory:
 
         memory_id = str(uuid.uuid4())
         now = int(time.time() * 1000)
+
+        # P1 作用域轴：未显式声明时自动判定
+        scope, project_key = memory_scope.finalize_scope(
+            self.db, scope, project_key, session_id
+        )
 
         # 生成摘要
         if summary is None:
@@ -132,10 +154,11 @@ class SemanticMemory:
         cursor.execute(
             """
             INSERT INTO memories_semantic
-            (id, content, summary, tags, session_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (id, content, summary, tags, session_id, created_at, scope, project_key)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-            (memory_id, content, summary, tags_json, session_id, now),
+            (memory_id, content, summary, tags_json, session_id, now,
+             scope, project_key),
         )
 
         # 显式同步 FTS 索引（单一事实来源：Python 侧维护，不使用触发器，
@@ -179,6 +202,8 @@ class SemanticMemory:
         limit: int = 10,
         tags: Optional[List[str]] = None,
         session_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        project_key: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         搜索语义记忆
@@ -191,6 +216,8 @@ class SemanticMemory:
             query: 搜索关键词
             limit: 返回数量限制
             tags: 可选，按标签筛选
+            scope: P1 作用域过滤；给定时跨会话按作用域轴检索
+            project_key: scope='project' 时必填，限定项目目录
 
         Returns:
             匹配的记忆列表
@@ -198,12 +225,40 @@ class SemanticMemory:
         if not query or query.strip() == "":
             return self.get_recent(limit, session_id=session_id)
 
-        fts_results = self._search_fts(query, limit, tags, session_id=session_id)
+        fts_results = self._search_fts(
+            query, limit, tags, session_id=session_id,
+            scope=scope, project_key=project_key,
+        )
         if fts_results:
             return fts_results
 
         # FTS 无命中（如索引尚未回填）或异常 → 回退 LIKE+jieba
-        return self._search_like(query, limit, tags, session_id=session_id)
+        return self._search_like(
+            query, limit, tags, session_id=session_id,
+            scope=scope, project_key=project_key,
+        )
+
+    def _scope_conditions(
+        self,
+        scope: Optional[str],
+        project_key: Optional[str],
+        prefix: str = "",
+    ) -> Optional[Tuple[str, List[Any]]]:
+        """构造 P1 作用域 SQL 条件；scope 未给定时返回 None（维持会话隔离语义）。
+
+        返回 None 表示非法组合（project 无 key），调用方应直接返回空结果。
+        """
+        if not scope:
+            return "", []
+        p = prefix
+        if scope == memory_scope.SCOPE_PROJECT:
+            if not project_key:
+                return None
+            return f"AND {p}scope = ? AND {p}project_key = ?", [scope, project_key]
+        if scope == memory_scope.SCOPE_USER:
+            # 存量行 scope 为 NULL 时按 user 处理
+            return f"AND ({p}scope IS NULL OR {p}scope = ?)", [scope]
+        return f"AND {p}scope = ?", [scope]
 
     def _search_fts(
         self,
@@ -211,6 +266,8 @@ class SemanticMemory:
         limit: int = 10,
         tags: Optional[List[str]] = None,
         session_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        project_key: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         走 FTS5 全文索引搜索（jieba 分词 + OR MATCH）。
@@ -237,7 +294,14 @@ class SemanticMemory:
         ]
         params: List[Any] = [match_expr]
 
-        if session_id is not None:
+        scope_cond = self._scope_conditions(scope, project_key, prefix="ms.")
+        if scope_cond is None:
+            return []
+        if scope:
+            # 作用域轴检索（跨会话）：不再叠加 session 过滤
+            sql_parts.append(scope_cond[0])
+            params.extend(scope_cond[1])
+        elif session_id is not None:
             sql_parts.append("AND ms.session_id = ?")
             params.append(session_id)
 
@@ -279,6 +343,8 @@ class SemanticMemory:
         limit: int = 10,
         tags: Optional[List[str]] = None,
         session_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        project_key: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         LIKE + jieba 回退搜索（FTS 索引不可用或无命中时使用）
@@ -287,6 +353,8 @@ class SemanticMemory:
             query: 搜索关键词
             limit: 返回数量限制
             tags: 可选，按标签筛选
+            scope: 可选，P1 作用域过滤（跨会话）
+            project_key: scope='project' 时限定项目目录
 
         Returns:
             匹配的记忆列表
@@ -298,6 +366,10 @@ class SemanticMemory:
         tokens = [t.strip() for t in tokenize(query).split() if t.strip()]
         if not tokens:
             return self.get_recent(limit, session_id=session_id)
+
+        scope_cond = self._scope_conditions(scope, project_key)
+        if scope_cond is None:
+            return []
 
         # 构建 LIKE OR 条件
         like_conditions = []
@@ -311,7 +383,11 @@ class SemanticMemory:
             f"WHERE ({' OR '.join(like_conditions)})",
         ]
 
-        if session_id is not None:
+        if scope:
+            # 作用域轴检索（跨会话）：不再叠加 session 过滤
+            sql_parts.append(scope_cond[0])
+            params.extend(scope_cond[1])
+        elif session_id is not None:
             sql_parts.append("AND session_id = ?")
             params.append(session_id)
 

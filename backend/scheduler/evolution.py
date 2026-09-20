@@ -990,7 +990,7 @@ class MemoryConsolidationTask(BaseEvolutionTask):
         # 1. 提升高频访问的情景记忆为语义记忆
         cursor.execute(
             """
-            SELECT id, content, summary, tags, importance
+            SELECT id, content, summary, tags, importance, scope, project_key
             FROM memories_episodic
             WHERE is_valid = 1
             AND access_count >= ?
@@ -1015,6 +1015,10 @@ class MemoryConsolidationTask(BaseEvolutionTask):
                     content=memory["content"],
                     summary=memory.get("summary"),
                     tags=_safe_json_loads(memory.get("tags", "[]")),
+                    # P1 作用域轴：晋升保留归属，项目级记忆不会因晋升
+                    # 变成全局可见（scope 为空的存量行由存储层兜底为 user）
+                    scope=memory.get("scope"),
+                    project_key=memory.get("project_key"),
                 )
                 # 晋升软删：写入 semantic 成功后，把源 episodic 行 is_valid 置 0，
                 # 避免检索出现重复事实。semantic.save 与本 UPDATE 复用同一连接，

@@ -4303,6 +4303,9 @@ class MemorySaveRequest(BaseModel):
     memory_type: str = "episodic"
     importance: int = 5
     tags: List[str] = []
+    # P1 作用域轴: None/'auto' → 按会话绑定自动判定 (该端点无 session 上下文,
+    # 实际落为 user); 可显式 'user'/'project'/'global'
+    scope: Optional[str] = None
 
 
 class MemoryDeleteRequest(BaseModel):
@@ -4469,11 +4472,25 @@ def delete_user_profile(profile_id: str):
 
 @router.get("/memory/search")
 @with_db_lock
-def search_memory(query: str, limit: int = 20, type: Optional[str] = None):
-    """搜索记忆"""
+def search_memory(
+    query: str,
+    limit: int = 20,
+    type: Optional[str] = None,
+    scope: Optional[str] = None,
+    session_id: Optional[str] = None,
+):
+    """搜索记忆。
+
+    P1 作用域轴: ``scope`` in ('user'|'project'|'global') 时按作用域跨会话
+    检索（'project' 需带 session_id 以解析当前项目目录）；缺省维持
+    会话内旧行为。
+    """
     try:
         mm = get_memory_manager()
-        return mm.search_memories(query=query, memory_type=type, limit=limit)
+        return mm.search_memories(
+            query=query, memory_type=type, limit=limit,
+            scope=scope, session_id=session_id,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -4489,6 +4506,7 @@ def save_memory(data: MemorySaveRequest):
             memory_type=data.memory_type,
             importance=data.importance,
             tags=data.tags,
+            scope=data.scope,
         )
         return {"id": memory_id, "status": "ok"}
     except Exception as e:

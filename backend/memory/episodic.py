@@ -15,6 +15,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
+from backend.memory import scope as memory_scope
 from backend.memory.chinese_tokenizer import tokenize
 from backend.memory.summary_text import truncate_summary
 
@@ -48,6 +49,8 @@ class EpisodicMemory:
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
         memory_type: str = "conversation",
+        scope: Optional[str] = None,
+        project_key: Optional[str] = None,
     ) -> str:
         """
         保存情景记忆
@@ -58,6 +61,9 @@ class EpisodicMemory:
             metadata: 额外元数据
             session_id: 关联的会话 ID
             memory_type: 记忆类型
+            scope: 作用域 ('user'|'project'|'global')，None → 按会话
+                workspace 绑定自动判定（见 backend.memory.scope）
+            project_key: 项目目录（scope='project' 时生效）
 
         Returns:
             生成的记忆 ID
@@ -67,6 +73,11 @@ class EpisodicMemory:
 
         memory_id = str(uuid.uuid4())
         now = int(time.time() * 1000)
+
+        # P1 作用域轴：未显式声明时自动判定（绑定项目 → project，否则 user）
+        scope, project_key = memory_scope.finalize_scope(
+            self.db, scope, project_key, session_id
+        )
 
         # 处理标签
         tags = "[]"
@@ -81,10 +92,22 @@ class EpisodicMemory:
         cursor.execute(
             """
             INSERT INTO memories_episodic
-            (id, content, summary, session_id, memory_type, importance, tags, created_at, is_valid)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            (id, content, summary, session_id, memory_type, importance, tags,
+             created_at, is_valid, scope, project_key)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
         """,
-            (memory_id, content, summary, session_id, memory_type, importance, tags, now),
+            (
+                memory_id,
+                content,
+                summary,
+                session_id,
+                memory_type,
+                importance,
+                tags,
+                now,
+                scope,
+                project_key,
+            ),
         )
 
         conn.commit()
@@ -101,6 +124,8 @@ class EpisodicMemory:
         min_importance: int = 1,
         memory_type: Optional[str] = None,
         session_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        project_key: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         搜索情景记忆
@@ -113,6 +138,9 @@ class EpisodicMemory:
             limit: 返回数量限制
             min_importance: 最小重要性
             memory_type: 可选，按记忆类型筛选
+            scope: P1 作用域过滤（'user'|'project'|'global'）。给定时
+                不做 session 隔离 —— 用于同项目跨会话 / 用户级跨会话检索
+            project_key: scope='project' 时必填，限定项目目录
 
         Returns:
             匹配的记忆列表
@@ -149,8 +177,23 @@ class EpisodicMemory:
             where_parts.append("AND memory_type = ?")
             params.append(memory_type)
 
-        # 会话筛选必须在 LIMIT 之前完成，避免其他会话占满候选结果。
-        if session_id is not None:
+        # P1 作用域检索：scope 给定时按作用域轴取数（跨会话），
+        # project 作用域必须带 project_key 才有效。
+        if scope:
+            if scope == memory_scope.SCOPE_PROJECT:
+                if not project_key:
+                    return []
+                where_parts.append("AND scope = ? AND project_key = ?")
+                params.extend([scope, project_key])
+            elif scope == memory_scope.SCOPE_USER:
+                # 存量行 scope 可能为 NULL（迁移窗口外直写），按 user 处理
+                where_parts.append("AND (scope IS NULL OR scope = ?)")
+                params.append(scope)
+            else:
+                where_parts.append("AND scope = ?")
+                params.append(scope)
+        elif session_id is not None:
+            # 会话筛选必须在 LIMIT 之前完成，避免其他会话占满候选结果。
             where_parts.append("AND session_id = ?")
             params.append(session_id)
 

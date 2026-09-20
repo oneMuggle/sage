@@ -166,9 +166,17 @@ class MemoryAdapter:
         Returns:
             MemoryContext: 包含分层记忆的上下文对象
         """
+        from backend.memory import scope as memory_scope
         from backend.memory.fusion import reciprocal_rank_fusion
 
         logger.debug(f"Retrieving memories for query: {query[:50]}...")
+
+        # P1 作用域轴：解析当前会话的项目归属，用于向量命中后的可见性过滤
+        # （无归属会话看不到任何 project 记忆；user/global/存量行始终可见）
+        current_project_key = memory_scope.resolve_session_project_key(
+            getattr(getattr(self.memory_manager, "episodic", None), "db", None),
+            session_id,
+        )
 
         # 1. 关键词检索（MemoryManager，工作记忆按 session 隔离）
         keyword_results = self.memory_manager.recall(query, limit=limit, session_id=session_id)
@@ -222,6 +230,12 @@ class MemoryAdapter:
             weights=weights,
             k=60,
         )
+        # P1 作用域轴：其他项目的 project 记忆对当前会话不可见
+        # （keyword 路径在存储层已按 session 过滤，这里是统一防线）
+        fused = [
+            item for item in fused
+            if memory_scope.is_row_visible(item, current_project_key)
+        ]
 
         logger.info(
             "[retrieval] variant=%s weights=%s keyword_hits=%s vector_hits=%s fused=%s",

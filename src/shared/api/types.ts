@@ -637,6 +637,10 @@ export interface Memory {
   created_at_ms?: number;
   accessed_at?: number;
   access_count: number;
+  /** P1 作用域轴 (2026-09-18): user=跨项目可见 / project=归属某项目 / global=全局共享。 */
+  scope?: 'user' | 'project' | 'global';
+  /** scope='project' 时的项目目录 (规范化绝对路径)。 */
+  project_key?: string;
 }
 
 /**
