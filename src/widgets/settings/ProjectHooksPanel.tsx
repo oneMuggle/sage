@@ -87,9 +87,7 @@ export function ProjectHooksPanel(): JSX.Element | null {
             <div className="text-xs font-medium text-text">
               项目级 Hook 已启用 ({status.hook_count} 个)
             </div>
-            <div className="text-[10px] text-muted mt-0.5">
-              {workspace}
-            </div>
+            <div className="text-[10px] text-muted mt-0.5">{workspace}</div>
           </div>
         </div>
       </div>
@@ -105,9 +103,7 @@ export function ProjectHooksPanel(): JSX.Element | null {
           <div className="text-xs font-medium text-text">
             检测到项目级 Hook 配置 ({status.hook_count} 个)
           </div>
-          <div className="text-[10px] text-muted mt-0.5">
-            {workspace}
-          </div>
+          <div className="text-[10px] text-muted mt-0.5">{workspace}</div>
           <div className="text-[10px] text-text-secondary mt-2">
             启用后会执行该项目中的 Hook 命令。信任后可随时取消。
           </div>
