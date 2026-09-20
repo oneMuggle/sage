@@ -135,9 +135,7 @@ const PYTHONPATH_SEP_UNIX = ':';
  * the env's platform (e.g. tests simulating win32 on a posix runner).
  */
 function condaEnvPythonPath(condaPrefix: string, platform: NodeJS.Platform): string {
-  return platform === 'win32'
-    ? `${condaPrefix}\\python.exe`
-    : `${condaPrefix}/bin/python`;
+  return platform === 'win32' ? `${condaPrefix}\\python.exe` : `${condaPrefix}/bin/python`;
 }
 
 /**

@@ -102,7 +102,6 @@ describe('SAGE_RUNTIME_PYTHON propagation', () => {
   });
 });
 
-
 describe('resolveBackendLaunchCommand', () => {
   // ─────────────── Dev branch ─────────────────────────────────────────────
 
