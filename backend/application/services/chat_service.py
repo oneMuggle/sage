@@ -697,12 +697,22 @@ class ChatService:
         from backend.memory.extractor import MemoryExtractor
 
         extractor = MemoryExtractor(llm_client=self.llm)
+        # 去重已知事实（existing_facts 此前恒为空）+ 本轮工具环境观察。
+        existing_facts = []
+        recent_fn = getattr(self.memory, "recent_fact_contents", None)
+        if callable(recent_fn):
+            try:
+                existing_facts = list(recent_fn() or [])
+            except Exception as exc:  # noqa: BLE001 — 去重失败可容忍
+                logger.debug(f"existing_facts 读取失败(忽略): {exc}")
         facts = await extractor.extract(
             user_message=user_message.content or "",
             # 剥离技能 nudge 后缀, 避免提示文本被提取为"记忆事实"（review LOW）
             assistant_message=(assistant_message.content or "").replace(
                 SKILL_NUDGE_SUFFIX, ""
             ),
+            existing_facts=existing_facts,
+            tool_observations=_pop_env_observations(session_id),
         )
 
         for fact in facts:
@@ -1017,6 +1027,16 @@ def _skill_activation_block(
 # --------------------------------------------------------------------------- #
 
 
+def _pop_env_observations(session_id: Optional[str]) -> str:
+    """取走本轮工具观察到的环境事实（bash shell 降级提示等），无则空串。"""
+    try:
+        from backend.tools.env_probe import pop_observations
+
+        return pop_observations(session_id)
+    except Exception:  # noqa: BLE001 — 观察缺失不影响提取
+        return ""
+
+
 async def extract_and_store_memory(
     memory_port: Optional[MemoryPort],
     extractor: Any,
@@ -1024,6 +1044,7 @@ async def extract_and_store_memory(
     assistant_text: str,
     session_id: Optional[str],
     enabled: bool,
+    tool_observations: str = "",
 ) -> int:
     """从一轮对话中提取原子事实并写入记忆系统（best-effort，绝不外抛）。
 
@@ -1080,12 +1101,28 @@ async def extract_and_store_memory(
             )
 
     try:
+        # 去重已知事实：修复此前提取器恒收到"（无）"（existing_facts 未传）。
+        existing_facts: List[str] = []
+        recent_fn = (
+            getattr(memory_port, "recent_fact_contents", None)
+            if hasattr(type(memory_port), "recent_fact_contents")
+            else None
+        )
+        if callable(recent_fn):
+            try:
+                existing_facts = list(recent_fn() or [])
+            except Exception as exc:  # noqa: BLE001 — 去重失败可容忍
+                logger.debug(f"existing_facts 读取失败(忽略): {exc}")
         facts = await extractor.extract(
             user_message=user_text or "",
             assistant_message=assistant_text or "",
+            existing_facts=existing_facts,
+            tool_observations=tool_observations,
         )
-        # 用户画像类事实类别（extractor 产出）→ 路由到 store_profile
-        profile_categories = ("preference", "goal")
+        # 用户画像类事实类别（extractor 产出）→ 路由到 store_profile。
+        # environment（本机工具链事实）进画像后随 USER PROFILE 快照置顶注入，
+        # 绕开 episodic recency/decay 限制（PR 环境记忆化）。
+        profile_categories = ("preference", "goal", "environment")
         # 结构性探测 store_profile（MemoryPort 协议外的扩展方法）:
         # 用**类级** hasattr（而非实例 getattr）—— 无 spec 的 Mock 在实例上
         # 会自动创建任意属性, 类级探测可避免误判为"已实现"（review MEDIUM）。
