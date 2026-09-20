@@ -157,6 +157,21 @@ describe('invokeBackend', () => {
     expect((err as Error & { status_code?: number }).status_code).toBe(409);
   });
 
+  it('redacts query string from error messages so user input does not leak into logs', async () => {
+    mockedFetch.mockResolvedValueOnce(
+      mockJsonResponse('internal failure', { ok: false, status: 500 }),
+    );
+    const err = await invokeBackend(
+      'search_memory',
+      { query: '秘密口令', limit: 20 },
+      'http://x',
+    ).catch((e: unknown) => e);
+    // URL 必须仍被记录(用于运维),但原始查询字符串不得出现在抛出的错误消息中
+    expect((err as Error).message).not.toContain('秘密口令');
+    expect((err as Error).message).toMatch(/cmd=search_memory/);
+    expect((err as Error).message).toMatch(/500/);
+  });
+
   it('GET /api/v1/sessions/:id url-encodes ids with special characters', async () => {
     mockedFetch.mockResolvedValueOnce(mockJsonResponse({ id: 's/1' }));
     await invokeBackend('get_session', { id: 's/1' }, 'http://x');

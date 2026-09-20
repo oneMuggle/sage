@@ -33,6 +33,23 @@ import type {
 } from './types';
 import { ApiException, handleApiError, withRetry } from './utils';
 
+export interface MemoryDiagnostics {
+  pid: number;
+  build_id: string;
+  db: {
+    basename: string;
+    exists: boolean;
+    size_bytes: number;
+    path_fingerprint: string;
+    source: 'explicit_env' | 'default';
+  };
+}
+
+export interface MemorySaveResponse {
+  id: string | null;
+  status: 'ok';
+}
+
 /** demo 记忆数据按需加载 (R2): 仅演示模式才拉取 demo 数据模块。 */
 let demoInterceptorsPromise: Promise<typeof import('./demoInterceptors')> | null = null;
 function loadDemoInterceptors(): Promise<typeof import('./demoInterceptors')> {
@@ -244,10 +261,22 @@ function coerceSummariesListResponse(raw: unknown): MemorySummariesListResponse 
 }
 
 export const memoryApi = {
+  async getMemoryDiagnostics(): Promise<MemoryDiagnostics> {
+    try {
+      return await invoke<MemoryDiagnostics>('get_memory_diagnostics');
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
   /**
    * 搜索记忆
    */
-  async searchMemories(query: string, memoryType?: 'episodic' | 'semantic'): Promise<Memory[]> {
+  async searchMemories(
+    query: string,
+    memoryType?: 'episodic' | 'semantic',
+    sessionId?: string,
+  ): Promise<Memory[]> {
     // 演示模式 (2026-08-27): 关键词包含匹配过滤 demo 集合
     if (isDemoMode()) {
       const { searchDemoMemories } = await loadDemoInterceptors();
@@ -259,6 +288,7 @@ export const memoryApi = {
         return await invoke<Memory[]>('search_memory', {
           query,
           memoryType: memoryType || null,
+          sessionId: sessionId || null,
           limit: 20,
         });
       } catch (error) {
@@ -275,19 +305,21 @@ export const memoryApi = {
     memoryType: 'episodic' | 'semantic',
     importance: number = 5,
     tags?: string[],
-  ): Promise<Memory> {
+    sessionId?: string,
+  ): Promise<MemorySaveResponse> {
     // 内容/标签原文直传: 记忆会进入 LLM 上下文并落库, 转义是数据污染
     // (XSS 由渲染层 React 转义负责, 不在此处处理)。
     // 验证重要性值
-    const safeImportance = Math.min(10, Math.max(0, Number(importance) || 5));
+    const safeImportance = Math.min(10, Math.max(1, Number(importance) || 5));
 
     return withRetry(async () => {
       try {
-        return await invoke<Memory>('save_memory', {
+        return await invoke<MemorySaveResponse>('save_memory', {
           content,
           memoryType,
           importance: safeImportance,
           tags: Array.isArray(tags) ? tags : [],
+          sessionId: sessionId || null,
         });
       } catch (error) {
         throw handleApiError(error);

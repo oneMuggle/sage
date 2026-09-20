@@ -469,6 +469,10 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // 新增 GET /memory/summaries 端点 — 之前前端 memoryApi.getSessionSummaries()
   // 调用 invoke('get_session_summaries', ...) 找不到映射,直接 404。
   // sessionId 必填(spec step 5 严令禁止"全部 session"视图)。
+  get_memory_diagnostics: {
+    method: 'GET',
+    path: () => '/api/v1/memory/diagnostics',
+  },
   get_session_summaries: {
     method: 'GET',
     path: (a) => {
@@ -521,14 +525,16 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // PR-C §5.4: front-end memoryApi.ts 调用 invoke('search_memory'|'save_memory'),
   // 但 commands.ts 没映射 → 前端 404。后端端点已存在 (legacy_routes.py:2479, :2490)。
   search_memory: {
-    method: 'POST',
-    path: () => '/api/v1/memory/search',
-    // Body 字段: query (required), memory_type?, limit? — 缺省 limit=20
-    body: (a) => ({
-      query: a.query,
-      memory_type: a.memoryType,
-      limit: (a.limit as number) ?? 20,
-    }),
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams({
+        query: String(a?.query ?? ''),
+        limit: String((a?.limit as number) ?? 20),
+      });
+      if (a?.memoryType) params.set('type', String(a.memoryType));
+      if (a?.sessionId) params.set('session_id', String(a.sessionId));
+      return `/api/v1/memory/search?${params.toString()}`;
+    },
   },
   save_memory: {
     method: 'POST',
@@ -539,6 +545,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       memory_type: a.memoryType,
       importance: a.importance,
       tags: a.tags,
+      ...(a.sessionId ? { session_id: a.sessionId } : {}),
     }),
   },
 
