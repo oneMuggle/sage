@@ -61,25 +61,30 @@ Sage 的记忆系统参考人类记忆的三层模型，结合 Hermes Agent 的�
 │   │   • 用户偏好 (显式)                                       │   │
 │   │   • 情感标记                                              │   │
 │   │                                                           │   │
-│   │   索引: importance + access_count + recency              │   │
+│   │   检索评分: 四因子复合(见 4.8.7)                          │   │
 │   │   TTL: 可配置，默认永不过期                                │   │
 │   └──────────────────────────┬──────────────────────────────┘   │
 │                              │ 定期归档                          │
 │                              ▼                                   │
 │   ┌─────────────────────────────────────────────────────────┐   │
 │   │                   Semantic Memory                         │   │
-│   │                (语义记忆，ChromaDB 存储)                   │   │
+│   │          (语义记忆，SQLite FTS5 + sqlite-vec)             │   │
 │   │                                                           │   │
 │   │   • 知识概念                                              │   │
 │   │   • 用户画像                                             │   │
 │   │   • 技能知识                                              │   │
 │   │   • 事实性知识                                            │   │
 │   │                                                           │   │
-│   │   检索: 向量相似度 + 关键词过滤                           │   │
+│   │   检索: FTS5 全文 + jieba 分词，LIKE 兜底                 │
 │   │   更新: 版本控制，支持回滚                                 │   │
 │   └─────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> 注:早期文档中的 ChromaDB 方案已废弃，当前实现基于 SQLite(FTS5 全文 +
+> jieba 中文分词 + sqlite-vec 向量)，见 `backend/memory/semantic.py`。
+> 本章 4.2/4.3/4.4 的部分代码片段为早期设计稿，以仓库源码为准；
+> 4.8 节描述的是已落地的 **作用域(scope)轴**。
 
 ---
 
@@ -308,9 +313,9 @@ class SemanticMemory:
 
 **特点**:
 
-- ChromaDB 向量存储
+- SQLite FTS5 全文索引 + jieba 中文分词(向量侧由 sqlite-vec 承载)
 - 高维语义相似度检索
-- 支持元数据过滤
+- 支持元数据过滤(含 scope / project_key，见 4.8)
 - 版本控制支持
 
 ---
@@ -449,7 +454,7 @@ User Query: "我在北京的工作"
 │ 2. Multi-Source Retrieval                                    │
 │                                                            │
 │   ┌─────────────────┐                                     │
-│   │ Semantic Search │  ChromaDB 向量检索                    │
+│   │ Semantic Search │  SQLite FTS5 + 向量检索               │
 │   │ "北京 工作"     │  → 找到: "用户在北京工作过"           │
 │   └────────┬────────┘                                     │
 │            │                                               │
@@ -733,4 +738,140 @@ class MemoryManager:
 
 ---
 
-_文档版本: v1.0_
+## 4.8 记忆作用域 (Scope 轴，P1 已落地)
+
+三层记忆(Working/Episodic/Semantic)解决的是**时间轴**(短期→长期)；
+scope 轴解决的是**归属**(这条记忆属于谁)。两者正交。
+
+### 4.8.1 模型
+
+`memories_episodic` / `memories_semantic` 各有两列:
+
+| 列 | 取值 | 说明 |
+|---|---|---|
+| `scope` | `user` \| `project` \| `global` | 缺省 `user`(历史行迁移后同样落为 `user`) |
+| `project_key` | 工作区绝对路径或 NULL | 与 `projects` 注册表 / `session_workspace_bindings.workspace_path` 同源，不引入新 ID |
+
+三种作用域的语义(对齐 Claude Code / Cursor 的 user+project 规则分层):
+
+- **user**: 关于用户本人的偏好与事实，跨项目可见(默认)。
+- **project**: 只在绑定同一 `project_key` 的会话中可见，如项目约定、架构决策。
+- **global**: 与具体项目无关的通用知识，任何会话可见。
+
+### 4.8.2 写入:自动推导
+
+存储层 `save()` 内统一调用 `backend/memory/scope.py::finalize_scope`，
+覆盖所有写入口(manager / adapter / 固化晋升 / 抽取器):
+
+- 显式传 `scope` → 尊重调用方；`project` 缺 key 时从会话的工作区绑定解析，
+  解析不到(未绑定会话)降级为 `user`。
+- 未传 → `derive_write_scope`:会话绑定了工作区 ⇒ 倾向 `project`，否则 `user`。
+- 非 `project` 作用域强制 `project_key = NULL`。
+
+进化管线中 episodic→semantic 的晋升会**继承**原行的 scope/project_key，
+避免项目记忆晋升后泄漏为全局。
+
+### 4.8.3 读取:可见性规则
+
+```
+可见 ⇔ scope != 'project'  或  行.project_key == 当前会话.project_key
+```
+
+- 自动注入链路(recall / get_context / 向量检索)**保持 session 严格隔离**
+  (批次三 step 5 不变量)，scope 过滤是 adapter 融合后的兜底防线
+  (`is_row_visible`)。
+- 跨会话检索是显式 opt-in:`memory_search` 工具、`MemoryManager.search_memories`、
+  `GET /memory/search` 均新增 `scope` 参数(`session|project|user|global`，
+  默认 `session` 保持旧行为)；`memory_save` / `POST /memory/save` 接受
+  `scope: auto|user|project|global`。
+- `GET /memory/list` envelope 原样携带 `scope` / `project_key` 字段。
+
+### 4.8.4 前端
+
+`src/widgets/memory/MemoryBrowser.tsx`：每条记忆渲染作用域徽章
+(用户/项目/全局，hover 显示 project_key 路径)，并提供"作用域"筛选行
+(纯前端过滤，不改后端分页契约)。
+
+### 4.8.5 项目画像 (P2 已落地)
+
+P1 的 scope 解决"检索时的可见性"；P2 补上"注入时的归属"——项目级
+MEMORY.md：
+
+- **存储**: 新表 `project_profile`(与 `user_profile` 同构 + `project_key` +
+  `source` 列)，`backend/memory/project_profile.py::ProjectProfileStore`
+  按项目维护**冻结快照**(每项目 1000 字符上限、项目内去重、安全扫描)。
+- **注入**: 会话绑定了工作区时，项目快照与用户画像一起进入 core 层——
+  legacy 走 `MemoryManager.get_context`(拼 `## PROJECT PROFILE` 段)，
+  hex 走 `MemoryAdapter.retrieve`(core 独立预算 2 槽，`MemoryContext.format`
+  以【项目画像】标签与【用户画像】分段呈现)。**未绑定会话与跨项目一律
+  不注入**。
+- **API**: `GET/POST /memory/project-profile`(归属=显式 `project_key` 或
+  从 `session_id` 解析)、`DELETE /memory/project-profile/{id}`；写入台账
+  新增 `kind='project_profile'`，`/memory/undo-write` 按 kind 路由撤销。
+- **UI**: `ProjectProfileCard`("项目画像"卡片，项目选择器 + 添加/删除)，
+  挂在 Memory 页用户画像之下。
+
+### 4.8.6 冲突消解与时间有效区 (P3 已落地)
+
+对标 Mem0 的写入决策(ADD/UPDATE/NOOP)与 Zep 的时间有效区
+(`invalid_at` 双时态简化版)：
+
+- **schema**: 两张持久层表新增 `invalid_at`(被取代时间戳)与
+  `supersedes_id`(新行指向被取代的旧行，构成可追溯链)。
+  `invalidate()` ≠ `delete()`：失效行保留内容供审计与链追溯，
+  但退出全部检索/列表/计数读路径(`get_by_id` 仍可取回)；
+  向量行随失效一并清理，`scope.is_row_visible` 兜底向量旁路。
+- **判定**: `backend/memory/conflict.py::MemoryConflictResolver`——
+  新事实先与**同归属**(scope 相同，project 时 project_key 相同)的
+  活跃记忆比对：相似度 ≥0.97 → NOOP(复用既有 ID 不写)；
+  [0.78, 0.97) → UPDATE(写新行 + 旧行 invalidate)；否则 ADD。
+  默认确定性 SequenceMatcher，`llm_decide` 钩子可注入 LLM 决策
+  (非法输出自动回退启发式)。DELETE 语义留给 P4 反思任务。
+- **接线**: `MemoryManager.memorize_with_conflict_check()` 是唯一落点，
+  `MemoryAdapter.store()`(自动提取主链路)默认经由它写入——任何消解
+  失败 best-effort 退回直接 append，绝不阻塞对话。
+  `memory_save` 工具与 `POST /memory/save` 新增可选 `conflict_check`
+  参数(默认 false 保持旧语义)，响应带 `op` 字段。
+
+### 4.8.7 每周反思与四因子评分 (P4 已落地)
+
+**每周反思**(`backend/scheduler/evolution.py::MemoryReflectionTask`，
+`memory_reflection`，默认每周一 05:00，`config.yaml evolution.tasks` 可调)：
+
+- **窗口扫描**: 取近 7 天(可配 `window_days`/`sample_limit`)两张持久层
+  的活跃记忆，按**归属**(scope + project_key)分组，绝不跨组整理。
+- **确定性去重**: 组内两两相似度 ≥0.97 的近重复直接 invalidate 旧行，
+  保留最新——不依赖 LLM。
+- **LLM 整理**: 每组装编号事实喂给模型，要求输出 JSON 操作序列——
+  `MERGE`(多条合成一条更泛化的事实，写新行 + 成员全部 invalidate，
+  新行 `supersedes_id` 指向最新成员、继承归属与层级)与
+  `INVALIDATE`(**DELETE 型冲突**:新事实否定旧事实，复用 P3 的
+  `invalid_at` 时间有效区，不物理删除)。模型输出非法/越界一律跳过，
+  任务本身不因质量失败。
+- **审计**: 每次操作写 `memories_evolution_log`(`reflect_invalidate` /
+  `reflect_merge`)，任务级结果写 `evolution_log`(`memory_reflection`)；
+  后者 `MAX(created_at)` 即"上次反思时间"，无需新表。
+
+**四因子检索评分**(`backend/memory/scoring.py`)：
+
+```
+composite = 0.40·relevance + 0.15·recency + 0.25·importance + 0.20·confidence
+```
+
+- `relevance`: RRF 融合分按 2/61 归一；`recency`: 30 天半衰期，
+  取 max(created_at, accessed_at)，兼容秒/毫秒两种时间戳；
+  `importance`: 1–10 归一(缺省中性 0.5，semantic 行无此列)；
+  `confidence`: 基线 0.5，进化/固化/反思来源 +0.2，有取代链 +0.1，
+  按 `access_count` 每 10 次 +0.02 封顶 +0.2(`get_by_id` 的访问计数
+  即 Generative-Agents 式强化回路)。
+- **接线**: `MemoryAdapter.retrieve` 在 scope 兜底过滤后统一
+  `rank_by_composite` 重排——陈旧低可信的字面命中不再压过更新更可信
+  的语义次优事实；`MemoryContext.format` 的排序键优先读
+  `composite_score`。
+
+至此 scope 轴四阶段(P1 作用域 → P2 项目画像 → P3 冲突消解 →
+P4 反思与评分)全部落地。
+
+---
+
+_文档版本: v1.3_

@@ -1,8 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ProjectHooksPanel } from '../ProjectHooksPanel';
-
 // Mock backendRequest
 vi.mock('../../../shared/api/backendRequest', () => ({
   backendRequest: vi.fn(),
@@ -23,6 +21,7 @@ vi.mock('sonner', () => ({
 
 import { backendRequest } from '../../../shared/api/backendRequest';
 import { useCurrentWorkspace } from '../../../shared/lib/workspaceContext';
+import { ProjectHooksPanel } from '../ProjectHooksPanel';
 
 describe('ProjectHooksPanel', () => {
   beforeEach(() => {

@@ -28,6 +28,8 @@ import type {
   MemorySummariesListResponse,
   MemoryWriteRecord,
   MemoryWritesResponse,
+  ProjectProfileEntry,
+  ProjectProfileResponse,
   UserProfileEntry,
   UserProfileResponse,
 } from './types';
@@ -106,6 +108,12 @@ const VALID_SUMMARY_STATUSES: ReadonlySet<NonNullable<Memory['status']>> = new S
   'failed',
 ]);
 
+const VALID_MEMORY_SCOPES: ReadonlySet<NonNullable<Memory['scope']>> = new Set([
+  'user',
+  'project',
+  'global',
+]);
+
 function asOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
@@ -158,6 +166,12 @@ function coerceMemoryItem(raw: unknown): Memory {
       : layer;
   const sessionId = asOptionalString(raw.session_id);
   const sourceTurnId = asOptionalString(raw.source_turn_id);
+  const scopeRaw = asOptionalString(raw.scope);
+  const scope =
+    scopeRaw && VALID_MEMORY_SCOPES.has(scopeRaw as NonNullable<Memory['scope']>)
+      ? (scopeRaw as NonNullable<Memory['scope']>)
+      : undefined;
+  const projectKey = asOptionalString(raw.project_key);
   const statusRaw = asOptionalString(raw.status);
   const status =
     statusRaw && VALID_SUMMARY_STATUSES.has(statusRaw as NonNullable<Memory['status']>)
@@ -179,6 +193,8 @@ function coerceMemoryItem(raw: unknown): Memory {
     source,
     session_id: sessionId,
     source_turn_id: sourceTurnId,
+    scope,
+    project_key: projectKey,
     status,
     error_message: errorMessage,
     importance: asNumber(raw.importance, 0),
@@ -585,7 +601,86 @@ export const memoryApi = {
       throw handleApiError(error);
     }
   },
+
+  // ---- P2 项目画像（项目级 MEMORY.md）----------------------------------
+
+  /**
+   * 项目画像列表。归属二选一：显式 ``projectKey`` 优先，否则由后端从
+   * ``sessionId`` 的工作区绑定解析；两者都拿不到时返回空。
+   */
+  async getProjectProfile(options: {
+    projectKey?: string;
+    sessionId?: string;
+  }): Promise<ProjectProfileResponse> {
+    const empty: ProjectProfileResponse = {
+      project_key: '',
+      items: [],
+      categories: [],
+      snapshot: '',
+      char_limit: 0,
+      projects: [],
+    };
+    if (isDemoMode()) return empty;
+    try {
+      const raw = await invoke<unknown>('get_project_profile', {
+        projectKey: options.projectKey,
+        sessionId: options.sessionId,
+      });
+      if (!isRecord(raw)) return empty;
+      const items = Array.isArray(raw.items)
+        ? (raw.items as unknown[]).filter(isRecord).map(coerceProjectProfileEntry)
+        : [];
+      return {
+        project_key: asOptionalString(raw.project_key) ?? '',
+        items: items.filter((i) => i.id),
+        categories: asStringArray(raw.categories),
+        snapshot: asOptionalString(raw.snapshot) ?? '',
+        char_limit: asNumber(raw.char_limit, 0),
+        projects: asStringArray(raw.projects),
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  async createProjectProfile(
+    content: string,
+    options: {
+      projectKey?: string;
+      sessionId?: string;
+      category?: string;
+      importance?: number;
+    } = {},
+  ): Promise<ProjectProfileEntry | null> {
+    try {
+      const raw = await invoke<unknown>('create_project_profile', {
+        content,
+        projectKey: options.projectKey,
+        sessionId: options.sessionId,
+        category: options.category ?? 'convention',
+        importance: Math.min(10, Math.max(1, Math.round(Number(options.importance) || 5))),
+      });
+      return isRecord(raw) && isRecord(raw.item) ? coerceProjectProfileEntry(raw.item) : null;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  async deleteProjectProfile(id: string): Promise<void> {
+    try {
+      await invoke('delete_project_profile', { id });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
 };
+
+function coerceProjectProfileEntry(r: Record<string, unknown>): ProjectProfileEntry {
+  return {
+    ...coerceProfileEntry(r),
+    project_key: asOptionalString(r.project_key) ?? '',
+  };
+}
 
 function coerceProfileEntry(r: Record<string, unknown>): UserProfileEntry {
   return {

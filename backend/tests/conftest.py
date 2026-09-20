@@ -130,6 +130,9 @@ def setup_test_db(request):
     # MessageSearchIndex 单例绑定全局 Database（Round 2 session_search）
     from backend.data.message_search import reset_message_search_index
     from backend.main import app
+
+    # ProjectProfileStore（P2 项目画像）单例同理
+    from backend.memory.project_profile import reset_project_profile
     from backend.memory.registry import reset_memory_manager
 
     # UserProfileStore 单例同样绑定全局 Database, 必须随临时库重置
@@ -172,6 +175,7 @@ def setup_test_db(request):
     db_mod._db.init_db()
     reset_wake_store()
     reset_user_profile()
+    reset_project_profile()
     reset_write_ledger()
     reset_auto_approval_ledger()
     reset_usage_store()

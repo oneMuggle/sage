@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { memoryApi } from '../shared/api';
 import type { Memory } from '../shared/api/types';
 import { ErrorState } from '../shared/ui/ErrorState';
-import { MemoryBrowser, NewMemoryModal, UserProfileCard } from '../widgets/memory';
+import { MemoryBrowser, NewMemoryModal, ProjectProfileCard, UserProfileCard } from '../widgets/memory';
 
 const MEMORY_EXPORT_PAGE_SIZE = 100;
 const MEMORY_EXPORT_MAX_ITEMS = 1000;
@@ -119,6 +119,9 @@ export function Memory() {
 
       {/* 对标 S2 (2026-09-13): 可编辑的用户画像卡片 */}
       <UserProfileCard />
+
+      {/* P2 scope 轴: 项目级 MEMORY.md */}
+      <ProjectProfileCard />
 
       <MemoryBrowser initialType="all" refreshKey={refreshKey} />
     </div>

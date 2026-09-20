@@ -4709,6 +4709,10 @@ class MemorySaveRequest(BaseModel):
     importance: int = Field(default=5, ge=1, le=10)
     tags: List[str] = Field(default_factory=list)
     session_id: Optional[str] = None
+    # P1 作用域轴: None/'auto' → 按会话绑定自动判定; 可显式 'user'/'project'/'global'
+    scope: Optional[str] = None
+    # P3: true 时走 Mem0 风格冲突消解写入 (NOOP/UPDATE/ADD), 响应带 op 字段
+    conflict_check: bool = False
 
 
 class MemoryDeleteRequest(BaseModel):
@@ -4735,6 +4739,15 @@ class UserProfileUpdateRequest(BaseModel):
     importance: Optional[int] = None
 
 
+class ProjectProfileCreateRequest(BaseModel):
+    content: str
+    category: str = "convention"
+    importance: int = 5
+    # 归属二选一：显式 project_key 优先，否则从 session_id 解析工作区绑定。
+    project_key: Optional[str] = None
+    session_id: Optional[str] = None
+
+
 @router.get("/memory/recent-writes")
 def list_recent_memory_writes(session_id: str, after_seq: int = 0, limit: int = 20):
     """本会话最近的记忆写入（对标 ChatGPT "Memory updated" 提示）。
@@ -4759,14 +4772,22 @@ def list_recent_memory_writes(session_id: str, after_seq: int = 0, limit: int = 
 @router.post("/memory/undo-write")
 @with_db_lock
 def undo_memory_write(data: MemoryUndoWriteRequest):
-    """撤销一次刚刚发生的记忆写入（按台账 kind 路由到记忆层或画像库）。"""
-    from backend.memory.write_ledger import KIND_PROFILE, get_write_ledger
+    """撤销一次刚刚发生的记忆写入（按台账 kind 路由到记忆层 / 用户画像 / 项目画像）。"""
+    from backend.memory.write_ledger import (
+        KIND_PROFILE,
+        KIND_PROJECT_PROFILE,
+        get_write_ledger,
+    )
 
     ledger = get_write_ledger()
     rec = ledger.find(data.session_id, data.id)
     deleted = False
     try:
-        if rec is not None and rec.kind == KIND_PROFILE:
+        if rec is not None and rec.kind == KIND_PROJECT_PROFILE:
+            from backend.memory.project_profile import get_project_profile
+
+            deleted = get_project_profile().delete(data.id)
+        elif rec is not None and rec.kind == KIND_PROFILE:
             from backend.memory.user_profile import get_user_profile
 
             deleted = get_user_profile().delete(data.id)
@@ -4873,15 +4894,110 @@ def delete_user_profile(profile_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ---- P2 项目画像（项目级 MEMORY.md）--------------------------------------
+
+
+def _resolve_profile_project_key(
+    project_key: Optional[str], session_id: Optional[str]
+) -> Optional[str]:
+    """显式 project_key 优先；否则从会话的工作区绑定解析。解析不到返回 None。"""
+    key = (project_key or "").strip()
+    if key:
+        return key
+    if not session_id:
+        return None
+    from backend.memory import scope as memory_scope
+
+    return memory_scope.resolve_session_project_key(get_database(), session_id)
+
+
+@router.get("/memory/project-profile")
+def list_project_profile(
+    project_key: Optional[str] = None,
+    session_id: Optional[str] = None,
+):
+    """项目画像列表。归属解析不到时返回空列表（未绑定会话无项目画像）。"""
+    try:
+        from backend.memory.project_profile import (
+            VALID_CATEGORIES,
+            get_project_profile,
+        )
+
+        key = _resolve_profile_project_key(project_key, session_id)
+        store = get_project_profile()
+        return {
+            "project_key": key or "",
+            "items": store.list(key) if key else [],
+            "categories": list(VALID_CATEGORIES),
+            "snapshot": store.get_snapshot(key) if key else "",
+            "char_limit": store.char_limit,
+            "projects": store.projects(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/memory/project-profile")
+@with_db_lock
+def create_project_profile(data: ProjectProfileCreateRequest):
+    """新增项目画像条目；写入后立即刷新该项目的冻结快照。"""
+    try:
+        from backend.memory.project_profile import get_project_profile
+
+        key = _resolve_profile_project_key(data.project_key, data.session_id)
+        if not key:
+            raise HTTPException(
+                status_code=400,
+                detail="无法确定项目归属：请提供 project_key 或绑定工作区的 session_id",
+            )
+        store = get_project_profile()
+        pid = store.add(
+            key,
+            data.content,
+            category=data.category,
+            importance=data.importance,
+        )
+        if not pid:
+            raise HTTPException(status_code=409, detail="内容为空、与现有画像重复或被安全扫描拦截")
+        store.invalidate(key)
+        item = next((e for e in store.list(key) if e["id"] == pid), None)
+        return {"status": "ok", "item": item, "project_key": key}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/memory/project-profile/{profile_id}")
+@with_db_lock
+def delete_project_profile(profile_id: str):
+    try:
+        from backend.memory.project_profile import get_project_profile
+
+        if not get_project_profile().delete(profile_id):
+            raise HTTPException(status_code=404, detail="项目画像条目不存在")
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/memory/search")
 @with_db_lock
 def search_memory(
     query: str,
     limit: int = 20,
     type: Optional[str] = None,
+    scope: Optional[str] = None,
     session_id: Optional[str] = None,
 ):
-    """搜索记忆"""
+    """搜索记忆。
+
+    P1 作用域轴: ``scope`` in ('user'|'project'|'global') 时按作用域跨会话
+    检索（'project' 需带 session_id 以解析当前项目目录）；缺省维持
+    会话内旧行为。
+    """
     if type not in (None, "", "working", "episodic", "semantic"):
         raise HTTPException(status_code=422, detail="不支持的记忆类型")
     try:
@@ -4890,6 +5006,7 @@ def search_memory(
             query=query,
             memory_type=type or None,
             limit=max(1, min(limit, 100)),
+            scope=scope,
             session_id=session_id,
         )
     except HTTPException:
@@ -4931,17 +5048,32 @@ def memory_diagnostics():
 @router.post("/memory/save")
 @with_db_lock
 def save_memory(data: MemorySaveRequest):
-    """保存记忆"""
+    """保存记忆
+
+    ``conflict_check=true`` 时走 P3 冲突消解（NOOP 复用既有 ID / UPDATE 写新行
+    并使旧行失效 / ADD 正常写入）, 响应额外带 ``op`` 字段。
+    """
     if data.memory_type not in ("working", "episodic", "semantic", "auto"):
         raise HTTPException(status_code=422, detail="不支持的记忆类型")
     try:
         mm = get_memory_manager()
+        if data.conflict_check:
+            memory_id, op = mm.memorize_with_conflict_check(
+                content=data.content,
+                memory_type=data.memory_type,
+                importance=data.importance,
+                tags=data.tags,
+                session_id=data.session_id,
+                scope=data.scope,
+            )
+            return {"id": memory_id, "op": op, "status": "ok"}
         memory_id = mm.memorize(
             content=data.content,
             memory_type=data.memory_type,
             importance=data.importance,
             tags=data.tags,
             session_id=data.session_id,
+            scope=data.scope,
         )
         if not memory_id:
             raise HTTPException(status_code=422, detail="记忆未写入")

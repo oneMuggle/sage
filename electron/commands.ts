@@ -556,6 +556,32 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/memory/profile/${encodeURIComponent(String(a?.id ?? ''))}`,
   },
+  // P2 scope 轴: 项目画像 CRUD（项目级 MEMORY.md，归属=工作区绝对路径）
+  get_project_profile: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      if (a?.projectKey) params.set('project_key', String(a.projectKey));
+      if (a?.sessionId) params.set('session_id', String(a.sessionId));
+      const qs = params.toString();
+      return `/api/v1/memory/project-profile${qs ? `?${qs}` : ''}`;
+    },
+  },
+  create_project_profile: {
+    method: 'POST',
+    path: () => '/api/v1/memory/project-profile',
+    body: (a) => ({
+      content: a.content,
+      category: a.category,
+      importance: a.importance,
+      project_key: a.projectKey,
+      session_id: a.sessionId,
+    }),
+  },
+  delete_project_profile: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/memory/project-profile/${encodeURIComponent(String(a?.id ?? ''))}`,
+  },
   // PR-C §5.4: front-end memoryApi.ts 调用 invoke('search_memory'|'save_memory'),
   // 但 commands.ts 没映射 → 前端 404。后端端点已存在 (legacy_routes.py:2479, :2490)。
   search_memory: {

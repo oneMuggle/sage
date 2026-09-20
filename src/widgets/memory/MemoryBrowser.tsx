@@ -7,7 +7,7 @@
  * - 携带 ``session_id`` 的记忆会显示来源会话,可点击跳转
  * - 提供"按会话查看摘要"模式,通过 ``memoryApi.getSessionSummaries`` 拉取
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { memoryApi, Memory } from '../../shared/api';
@@ -18,6 +18,8 @@ const MEMORY_PAGE_SIZE = 100;
 
 type MemoryFilter = 'all' | 'episodic' | 'semantic' | 'working' | 'session_summary';
 type ViewMode = 'all' | 'summaries';
+// P1 (spec §4.3 scope 轴): 作用域筛选为纯前端过滤,不打扰后端分页契约。
+type ScopeFilter = 'all' | 'user' | 'project' | 'global';
 
 interface MemoryBrowserProps {
   initialType?: MemoryFilter;
@@ -59,12 +61,32 @@ const SUMMARY_STATUS_LABEL: Record<string, string> = {
   failed: '失败',
 };
 
+const SCOPE_FILTER_LABELS: Record<ScopeFilter, string> = {
+  all: '全部作用域',
+  user: '用户',
+  project: '项目',
+  global: '全局',
+};
+
+const SCOPE_BADGE_CLASSES: Record<string, string> = {
+  user: 'bg-success/10 text-success',
+  project: 'bg-primary/10 text-primary',
+  global: 'bg-muted/20 text-muted',
+};
+
+const SCOPE_BADGE_LABEL: Record<string, string> = {
+  user: '用户',
+  project: '项目',
+  global: '全局',
+};
+
 export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowserProps) {
   const navigate = useNavigate();
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<MemoryFilter>(initialType);
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [summarySessionId, setSummarySessionId] = useState<string>('');
   const [stats, setStats] = useState({
@@ -204,6 +226,13 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
     [navigate],
   );
 
+  // 作用域为纯前端过滤(后端 list 契约不变)。缺 scope 的旧行按 DB 默认
+  // 'user' 处理,与后端 visibility 规则一致。
+  const visibleMemories = useMemo(() => {
+    if (scopeFilter === 'all') return memories;
+    return memories.filter((m) => (m.scope ?? 'user') === scopeFilter);
+  }, [memories, scopeFilter]);
+
   return (
     <div>
       {/* 统计卡片 — step 6 起展示 4 个 source 计数。 */}
@@ -259,7 +288,7 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
 
       {/* 筛选按钮 — step 6 起扩展到 working / session_summary */}
       {viewMode === 'all' && (
-        <div className="flex gap-1.5 mb-4 flex-wrap">
+        <div className="flex gap-1.5 mb-2 flex-wrap">
           {Object.entries(FILTER_LABELS).map(([key, label]) => (
             <button
               key={key}
@@ -269,6 +298,26 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
                   : 'bg-surface text-muted hover:text-text'
               }`}
               onClick={() => setFilterType(key as MemoryFilter)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* P1 scope 轴:作用域筛选(前端过滤) */}
+      {viewMode === 'all' && (
+        <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+          <span className="text-[11px] text-muted font-mono mr-1">作用域</span>
+          {Object.entries(SCOPE_FILTER_LABELS).map(([key, label]) => (
+            <button
+              key={key}
+              className={`px-3 py-1 border border-border rounded-radius-sm text-xs cursor-pointer font-mono ${
+                scopeFilter === key
+                  ? 'bg-primary/10 text-primary border-primary'
+                  : 'bg-surface text-muted hover:text-text'
+              }`}
+              onClick={() => setScopeFilter(key as ScopeFilter)}
             >
               {label}
             </button>
@@ -289,11 +338,13 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
             重试
           </button>
         </div>
-      ) : memories.length === 0 ? (
-        <div className="text-center text-muted py-12 text-sm">暂无记忆</div>
+      ) : visibleMemories.length === 0 ? (
+        <div className="text-center text-muted py-12 text-sm">
+          {memories.length > 0 && scopeFilter !== 'all' ? '当前作用域下暂无记忆' : '暂无记忆'}
+        </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {memories.map((memory) => (
+          {visibleMemories.map((memory) => (
             <MemoryItemCard key={memory.id} memory={memory} onJumpToSession={handleJumpToSession} />
           ))}
         </div>
@@ -321,6 +372,15 @@ function MemoryItemCard({
   const source = memory.source || memory.layer || memory.memory_type || 'episodic';
   const sourceLabel = SOURCE_LABEL[source] || source;
   const sourceClass = SOURCE_BADGE_CLASSES[source] || SOURCE_BADGE_CLASSES.episodic;
+
+  // P1 scope 轴:旧行缺 scope 时按后端默认 'user' 展示。
+  const scope = memory.scope ?? 'user';
+  const scopeLabel = SCOPE_BADGE_LABEL[scope] || scope;
+  const scopeClass = SCOPE_BADGE_CLASSES[scope] || SCOPE_BADGE_CLASSES.user;
+  const scopeTitle =
+    scope === 'project' && memory.project_key
+      ? `作用域: 项目 ${memory.project_key}`
+      : `作用域: ${scope}`;
 
   const content = memory.content || memory.summary || '无内容';
   const title = (content.split('\n')[0] || '无标题').substring(0, 30);
@@ -359,6 +419,12 @@ function MemoryItemCard({
       <div className="flex items-center justify-between mb-1 gap-2">
         <span className="font-semibold text-sm text-text truncate flex-1">{title}</span>
         <div className="flex items-center gap-1.5">
+          <span
+            className={`text-[11px] px-2 py-0.5 rounded font-mono ${scopeClass}`}
+            title={scopeTitle}
+          >
+            {scopeLabel}
+          </span>
           <span
             className={`text-[11px] px-2 py-0.5 rounded font-mono ${sourceClass}`}
             title={`来源: ${source}`}
