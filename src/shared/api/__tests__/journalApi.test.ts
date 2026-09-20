@@ -56,13 +56,13 @@ describe('journalApi', () => {
     const r = await journalApi.fillFromContent({
       spec_id: 'j1',
       workspace_path: 'C:/ws',
-      content: '正文',
+      content: { title: '周报', abstract: '', sections: {}, references: [] },
       output_filename: 'out.docx',
     });
     expect(mockInvoke).toHaveBeenCalledWith('office_journal_fill_from_content', {
       spec_id: 'j1',
       workspace_path: 'C:/ws',
-      content: '正文',
+      content: { title: '周报', abstract: '', sections: {}, references: [] },
       output_filename: 'out.docx',
     });
     expect(r).toEqual(resp);
