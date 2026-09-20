@@ -33,8 +33,20 @@ test.beforeAll(async () => {
       CI: 'true',
       NODE_ENV: 'production',
     },
-    timeout: 30_000,
+    timeout: 60_000,
   });
+  const proc = app.process();
+  if (proc) {
+    const noise = /error|ERROR|Error|fatal|FATAL|cannot|Cannot|failed|Failed|throw|exception/i;
+    proc.stderr?.on('data', (d: Buffer) => {
+      const line = d.toString('utf-8');
+      if (noise.test(line)) process.stderr.write(`[electron-main stderr] ${line}`);
+    });
+    proc.stdout?.on('data', (d: Buffer) => {
+      const line = d.toString('utf-8');
+      if (noise.test(line)) process.stdout.write(`[electron-main stdout] ${line}`);
+    });
+  }
 });
 
 test.afterAll(async () => {
@@ -47,8 +59,10 @@ test.afterAll(async () => {
 test('Electron launches and exposes electronAPI', async () => {
   expect(app, 'electron app must have launched').not.toBeNull();
 
-  // Wait for first BrowserWindow
-  const window = await app!.firstWindow({ timeout: 30_000 });
+  // Wait for first BrowserWindow (raised from 30s to 60s — win7 runner cold-start
+  // often exceeds 30s before the first BrowserWindow event fires; see
+  // run 35508442379 and run 35502686540 for evidence of 30s timeouts on windows-latest).
+  const window = await app!.firstWindow({ timeout: 60_000 });
   // Wait for full page load (HTML + scripts + chunks), not just DOMContentLoaded.
   // dist/ has 300+ vendor chunks (Shiki languages, etc.) — React only mounts after
   // all <script type="module"> entries resolve.
@@ -92,7 +106,8 @@ test('Electron launches and exposes electronAPI', async () => {
 
 test('invoke IPC bridge round-trips through main process', async () => {
   expect(app).not.toBeNull();
-  const window = await app!.firstWindow({ timeout: 10_000 });
+  // Raised from 10s to 30s to match the cold-start window of the first test.
+  const window = await app!.firstWindow({ timeout: 30_000 });
   await window.waitForLoadState('domcontentloaded');
 
   // Wait for electronAPI ready (same as first test, 30s timeout to match firstWindow cold-start)
