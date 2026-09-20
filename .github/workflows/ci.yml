@@ -671,6 +671,13 @@ jobs:
         env:
           SAGE_SKIP_BACKEND: '1'
           CI: 'true'
+          # Skip Win32 runtime checks (VC++ Redist / KB patches / Win7 services).
+          # windows-latest GitHub runner has VC++ Redist, but service state is
+          # unpredictable; PR #1333's checkTrustedInstallerService() on CI
+          # triggers dialog.showMessageBox() which blocks createMainWindow()
+          # and causes firstWindow to time out / crash.
+          # See run 35510214994 for evidence (firstWindow fails after 30s).
+          SAGE_RUNTIME_CHECK_ON_START: 'false'
         run: npx playwright test e2e/electron/smoke.spec.ts --reporter=line
 
       - name: Upload smoke screenshot
