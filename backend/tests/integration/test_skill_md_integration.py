@@ -421,3 +421,70 @@ def test_adapter_extended_omits_dispatch_for_builtin(tmp_path):
             assert "dispatch" not in search
         finally:
             os.chdir(old_cwd)
+
+
+# =====================================================================
+# Task 4: External skill contract tests
+# =====================================================================
+
+
+def test_skill_without_when_to_use_does_not_auto_activate(tmp_path):
+    """Skill with description but no when_to_use must not appear in auto_activate results.
+
+    Contract: ``description`` is informational only — does NOT trigger auto-activation.
+    Only ``when_to_use`` is the A16 natural-language auto-activation trigger.
+    """
+    # Create a skill with description but NO when_to_use
+    adapter = _build_adapter_with_skillmd(tmp_path, "no-activation")
+
+    # Skill should be discoverable via list_skills
+    names = {s.name for s in adapter.list_skills()}
+    assert "no-activation" in names
+
+    # But should NOT auto-activate on any query
+    result = adapter.auto_activate("do something useful")
+    assert "no-activation" not in result.names, (
+        f"Skill without when_to_use should not auto-activate, but got: {result.names}"
+    )
+
+
+def test_slash_execution_returns_body_not_script(tmp_path):
+    """Slash command invocation (no script param) returns SKILL.md body, not script output.
+
+    Contract: slash commands return the SKILL.md body as a prompt — they do NOT
+    execute scripts unless a ``script`` parameter is explicitly supplied.
+    """
+    skill_dir = tmp_path / "slash-only"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: slash-only\n"
+        "description: Slash command test\n"
+        "version: 0.1.0\n"
+        "user-invocable: true\n"
+        "user-invocable-name: /slash-test\n"
+        "---\n\n"
+        "# Slash Only\n\n"
+        "This is the prompt body.\n",
+        encoding="utf-8",
+    )
+    # Create a scripts directory with a script (should NOT be executed)
+    scripts_dir = skill_dir / "scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "should-not-run.py").write_text(
+        "# should not execute\n", encoding="utf-8"
+    )
+
+    adapter = _build_adapter_from_existing(tmp_path)
+
+    # Execute without script parameter (slash command path)
+    result = asyncio.run(adapter.execute("slash-only", "", {}))
+
+    # Should return the body as a string, not execute a script
+    assert result.success is True
+    assert isinstance(result.content, str), (
+        f"Expected string body, got {type(result.content).__name__}"
+    )
+    assert "Slash Only" in result.content or "prompt body" in result.content
+    # Metadata confirms body path (source=skillmd), not script execution
+    assert result.metadata.get("source") == "skillmd"

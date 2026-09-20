@@ -57,9 +57,51 @@ description: 一句话描述这个技能做什么
 | `disable-model-invocation` | bool | `false` | true → 不进 system prompt,仅手动触发 |
 | `metadata` | object | `{}` | 自由元数据 (供前端展示) |
 
-## 4.4 典型示例
+## 4.4 自动激活与 slash 命令契约
 
-### 4.4.1 纯 prompt 技能 (最常见)
+### `description` vs `when_to_use`
+
+- `description` 是**信息性字段**——用于人类阅读和 LLM 上下文，**不会**触发自动激活。
+- `when_to_use` 是 A16 自动激活的**唯一触发条件**。只有当用户查询匹配 `when_to_use` 文本时，技能才会被自动激活并注入到对话上下文中。
+
+**示例**：
+
+```yaml
+description: 分析磁盘占用并生成报告
+when_to_use: 分析磁盘占用，查找大文件，清理存储
+```
+
+用户说"帮我分析磁盘占用" → 命中 `when_to_use` → 技能自动激活。
+用户说"这个技能做什么" → 不命中 → 技能不激活（但可通过 `/skill-name` 手动调用）。
+
+> **注意**：`when_to_use` 不是 frontmatter 必填字段。没有 `when_to_use` 的技能仍然出现在技能列表中，但只能通过 slash 命令手动调用，永远不会被自动激活。
+
+### Slash 命令行为
+
+当 `user-invocable: true` 时，技能暴露为 slash 命令（如 `/storage-analyzer`）：
+
+- **默认行为**：返回 SKILL.md 的 body 作为 prompt，**不执行脚本**。LLM 读取 body 后决定如何协助用户。
+- **执行脚本**：只有当调用方显式提供 `script` 参数时，才会调用 `ScriptRunner` 执行 `scripts/` 目录下的脚本（需要用户确认）。
+
+**示例**：
+
+- `/storage-analyzer` → 返回 prompt body（LLM 读取后决定如何协助）
+- `/storage-analyzer script=scan.py` → 执行 `scripts/scan.py`（需要用户确认）
+
+### `requires.bins` 与 Sage 运行时
+
+- `requires.bins` 检查系统 PATH 中是否存在指定的可执行文件（如 `git`、`docker`）。
+- **不会**使用 Sage 自带的 Python 运行时。如果技能需要 Python，应在文档中说明用户需自行安装，或使用 `scripts/` 目录下的脚本（脚本在 Sage 运行时中执行）。
+
+### 技能发现与导入
+
+- 外部技能根目录必须通过 `SAGE_SKILLS_DIR` 环境变量或设置页配置。
+- 技能目录必须包含 `SKILL.md` 文件，否则不会被发现。
+- 导入后，技能出现在 `list_skills()` 中，但**不会**自动激活，除非 `when_to_use` 匹配用户查询。
+
+## 4.5 典型示例
+
+### 4.5.1 纯 prompt 技能 (最常见)
 
 ```markdown
 ---
@@ -85,7 +127,7 @@ user-invocable-name: /review
 
 在聊天框输入 `/review` 即可触发。
 
-### 4.4.2 带门控的技能
+### 4.5.2 带门控的技能
 
 ```markdown
 ---
@@ -103,7 +145,7 @@ os: [linux, macos]
 
 只有当 `docker` 命令存在 + `DOCKER_REGISTRY_TOKEN` 环境变量已设置 + 当前平台是 Linux/macOS 时,该技能才会被加载。
 
-### 4.4.3 带脚本的技能 (高级)
+### 4.5.3 带脚本的技能 (高级)
 
 ```
 ~/.sage/skills/git-summary/
@@ -128,7 +170,7 @@ user-invocable-name: /summary
 
 执行时:用户输入 `/summary` → 弹出确认框 → 用户批准 → 沙箱执行 `summarize.py`。
 
-## 4.5 加载位置与优先级
+## 4.6 加载位置与优先级
 
 Sage 按以下顺序搜索 SKILL.md 目录 (找到第一个存在的):
 
@@ -138,9 +180,9 @@ Sage 按以下顺序搜索 SKILL.md 目录 (找到第一个存在的):
 
 **冲突处理**: 与 builtin 技能同名时,builtin 永远胜,SKILL.md 被跳过 + WARNING 日志。
 
-## 4.6 常见错误
+## 4.7 常见错误
 
-### 4.6.1 name 不合法
+### 4.7.1 name 不合法
 
 ```yaml
 # ❌ 错误 (大写字母/下划线/空格)
@@ -150,15 +192,15 @@ name: Code_Review
 name: code-review
 ```
 
-### 4.6.2 与 builtin 冲突
+### 4.7.2 与 builtin 冲突
 
 若你的 SKILL.md 名为 `search`,会被 builtin 跳过。改名即可。
 
-### 4.6.3 scripts 路径越界
+### 4.7.3 scripts 路径越界
 
 脚本必须位于技能目录下。`../escape.py` 会被路径校验拒绝。
 
-### 4.6.4 os 拼写错
+### 4.7.4 os 拼写错
 
 ```yaml
 # ❌ 错误
@@ -168,7 +210,7 @@ os: [solaris]
 os: [macos, linux]
 ```
 
-## 4.7 下一步
+## 4.8 下一步
 
 - 想把现有 builtin 转成 SKILL.md? 看 [05-skill-md-migration.md](./05-skill-md-migration.md)
 - 想了解 SKILL.md 的内部机制? 看 [`../technical/24-skills-system.md`](../technical/24-skills-system.md)
