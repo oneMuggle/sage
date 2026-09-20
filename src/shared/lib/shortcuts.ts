@@ -32,7 +32,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     group: '消息输入',
     items: [
-      { keys: 'Enter', description: '发送消息' },
+      { keys: 'Enter', description: '发送消息（运行中 = 插话）' },
+      { keys: 'Alt + Enter', description: '运行中：排队到本轮回复之后' },
+      { keys: 'Ctrl(Cmd) + Enter', description: '运行中：打断当前回复并发送' },
       { keys: 'Shift + Enter', description: '插入换行' },
       { keys: '↑（空输入时）', description: '编辑上一条发送过的消息' },
       { keys: 'Esc', description: '关闭斜杠/@ 菜单' },

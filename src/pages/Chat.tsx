@@ -7,7 +7,12 @@ import { resolveEndpoint } from '../entities/setting/types';
 import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
-import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
+import {
+  useChatStreamStore,
+  type QueuedChatMessage,
+  type TaskBoardState,
+} from '../features/send-message/chatStreamStore';
+import type { DeliveryMode } from '../features/send-message/deliveryMode';
 import { useChat } from '../features/send-message/useChat';
 import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
 import { maybeIndexAttachment } from '../shared/api/attachmentAutoIndex';
@@ -24,6 +29,7 @@ import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from 
 import { ContextMeter } from '../widgets/chat/ContextMeter';
 import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from '../widgets/chat/InterruptedRunBanner';
 import { MemoryWriteHints } from '../widgets/chat/MemoryWriteHints';
+import { PendingQueuePanel } from '../widgets/chat/PendingQueuePanel';
 import { PermissionModeSwitch } from '../widgets/chat/PermissionModeSwitch';
 import { ProjectBadge } from '../widgets/chat/ProjectBadge';
 import { RightPanel } from '../widgets/chat/RightPanel';
@@ -54,6 +60,9 @@ const EMPTY_TOOL_CALLS: readonly never[] = [];
  */
 const BOTTOM_THRESHOLD_PX = 48;
 
+/** 队列空态的稳定引用：useChat 在部分测试里被 mock 掉字段，兜底值必须是同一引用。 */
+const EMPTY_PENDING_QUEUE: readonly QueuedChatMessage[] = [];
+
 export function Chat() {
   const {
     messages,
@@ -75,6 +84,14 @@ export function Chat() {
     planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
     preflightPhase, // Round 3 (2026-09-19): 编排拆解前置阶段（澄清/侦察指示）
     clearPlanApproval, // PM2: 清除批准状态
+    pendingQueue, // U5 (2026-09-18): 本会话待发送队列
+    queuePaused, // U5: 队列是否因上一轮异常收尾而暂停
+    removeQueuedMessage,
+    moveQueuedMessageToFront,
+    clearQueuedMessages,
+    editQueuedMessage,
+    sendQueuedMessageNow,
+    resumeQueuedMessages,
   } = useChat();
   // P1 (UI 优化方案 2026-09-13): 开关状态持久化 —— 重启恢复上次的面板开合
   // right-panel R1 批次 A: 开合上抬 rightPanelStore（自动唤起/内联卡片需要
@@ -421,6 +438,11 @@ export function Chat() {
          * 后端在本轮消息前插入 topic_separator 并清空 LLM 历史窗口。
          */
         contextReset?: boolean;
+        /**
+         * P2-a: 投递通道（插话 / 排队 / 打断并发送）—— 只在当前会话已有活跃
+         * 流时有语义，空闲发送时 useChat 会忽略。
+         */
+        delivery?: DeliveryMode;
       },
     ) => {
       clearError();
@@ -496,6 +518,8 @@ export function Chat() {
           attachmentRag,
           // Task 5 (2026-09-17): 上下文重置 —— "新话题" 按钮触发
           contextReset: options?.contextReset,
+          // P2-a: 会话忙时的投递通道（插话 / 排队 / 打断并发送）
+          delivery: options?.delivery,
         });
       }
     },
@@ -641,6 +665,47 @@ export function Chat() {
       nonce: Date.now(),
     });
   }, []);
+
+  // U5 (2026-09-18): 待发送队列操作。"编辑"复用 injectedDraft 通道把排队
+  // 内容回填输入框（不触发编辑重发的 fork 语义）；"立即发送"由 useChat
+  // 负责先停当前流再发。可选调用是兜底:部分测试 mock useChat 时缺这些键。
+  const handleEditQueuedMessage = useCallback(
+    (id: string) => {
+      // 编辑重发态下 injectedDraft 被 editResendTarget 占用（约定：编辑态优先），
+      // 此时取走排队消息会无处回填、内容静默丢失 —— 因此先挡住，不动队列。
+      if (editResendTarget) {
+        toast.info('请先完成或取消当前消息的编辑');
+        return;
+      }
+      const item = editQueuedMessage?.(id);
+      if (item) setQuotedDraft({ text: item.content, nonce: Date.now() });
+    },
+    [editQueuedMessage, editResendTarget],
+  );
+  const handleSendQueuedNow = useCallback(
+    (id: string) => {
+      void sendQueuedMessageNow?.(id);
+    },
+    [sendQueuedMessageNow],
+  );
+  const handleMoveQueuedToFront = useCallback(
+    (id: string) => {
+      moveQueuedMessageToFront?.(id);
+    },
+    [moveQueuedMessageToFront],
+  );
+  const handleRemoveQueuedMessage = useCallback(
+    (id: string) => {
+      removeQueuedMessage?.(id);
+    },
+    [removeQueuedMessage],
+  );
+  const handleClearQueue = useCallback(() => {
+    clearQueuedMessages?.();
+  }, [clearQueuedMessages]);
+  const handleResumeQueue = useCallback(() => {
+    resumeQueuedMessages?.();
+  }, [resumeQueuedMessages]);
 
   const handleSendMessageWithEditResend = useCallback(
     async (content: string, options?: Parameters<typeof handleSendMessage>[1]) => {
@@ -1115,6 +1180,17 @@ export function Chat() {
               </span>
             </div>
           )}
+
+          <PendingQueuePanel
+            items={pendingQueue ?? EMPTY_PENDING_QUEUE}
+            paused={Boolean(queuePaused)}
+            onSendNow={handleSendQueuedNow}
+            onEdit={handleEditQueuedMessage}
+            onMoveToFront={handleMoveQueuedToFront}
+            onRemove={handleRemoveQueuedMessage}
+            onClear={handleClearQueue}
+            onResume={handleResumeQueue}
+          />
 
           <ChatInput
             onSend={handleSendMessageWithEditResend}

@@ -1,10 +1,34 @@
-import { BookOpen, Clock, Image, Paperclip, Plus, Send, Square, X } from 'lucide-react';
+import {
+  BookOpen,
+  ChevronDown,
+  Clock,
+  Image,
+  Paperclip,
+  Plus,
+  Send,
+  Square,
+  X,
+} from 'lucide-react';
 import { memo, useEffect, useRef } from 'react';
 import type React from 'react';
 
 import { AttachmentUpload } from '../../features/send-message/AttachmentUpload';
+import {
+  DELIVERY_MODES,
+  DEFAULT_DELIVERY_MODE,
+  deliveryModeFromKey,
+  deliveryModeMeta,
+} from '../../features/send-message/deliveryMode';
+import type { DeliveryMode } from '../../features/send-message/deliveryMode';
 import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
 import { useI18n } from '../../shared/lib/i18n';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '../../shared/ui/DropdownMenu';
 
 import { FileAttachment } from './FileAttachment';
 import { KnowledgeChip } from './KnowledgeChip';
@@ -50,6 +74,12 @@ export interface InputCardProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  /**
+   * P2-a: 按投递通道发送（插话 / 排队 / 打断并发送）。仅在会话有活跃流时有
+   * 语义 —— 空闲时 useChat 会忽略 delivery 直接正常发送，因此 Enter 始终走
+   * 这个回调也不会出错；未提供时（旧调用方）回落到 `onSubmit`。
+   */
+  onSubmitWithMode?: (mode: DeliveryMode) => void;
   /**
    * Task 5 (2026-09-17): "新话题" 按钮回调 —— 上下文重置，不发送消息。
    * 提供时渲染按钮，点击后触发此回调（ChatInput 负责组装 contextReset）。
@@ -132,6 +162,7 @@ function InputCardInner({
   value,
   onChange,
   onSubmit,
+  onSubmitWithMode,
   onNewTopic,
   placeholder = '',
   disabled = false,
@@ -171,6 +202,7 @@ function InputCardInner({
 }: InputCardProps) {
   const { t } = useI18n();
   const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0;
+  const sendDisabled = (!value.trim() && !hasAttachments) || disabled;
 
   // U20: Emacs-style editing keys (Ctrl+A/E/K/U/W, Alt+B/F) in the textarea.
   const { ref: emacsRef, handleKeyDown: handleEmacsKeyDown } = useEmacsKeybindings({
@@ -274,7 +306,11 @@ function InputCardInner({
       // set during composition.
       if (e.nativeEvent.isComposing) return;
       e.preventDefault();
-      onSubmit();
+      // P2-a: 修饰键选择投递通道（对标 Claude Code / Codex CLI：键位与可见
+      // 控件并存，绝不自动猜测意图）。无修饰 = 默认通道，语义即插话。
+      const mode = deliveryModeFromKey(e);
+      if (mode && onSubmitWithMode) onSubmitWithMode(mode);
+      else onSubmit();
     }
   };
 
@@ -501,18 +537,19 @@ function InputCardInner({
           )}
         </div>
 
-        {isLoading ? (
-          <button
-            type="button"
-            onClick={onInterrupt}
-            title={t('chat.stop')}
-            className="h-9 px-4 bg-error text-text-inverse border-none rounded-radius-sm text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-error/90 transition-colors"
-          >
-            <Square className="w-3.5 h-3.5" />
-          </button>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            {onNewTopic && (
+        <div className="flex items-center gap-1.5">
+          {isLoading ? (
+            <button
+              type="button"
+              onClick={onInterrupt}
+              title={t('chat.stop')}
+              aria-label={t('chat.stop')}
+              className="h-9 w-9 bg-error text-text-inverse border-none rounded-radius-sm text-sm cursor-pointer flex items-center justify-center hover:bg-error/90 transition-colors"
+            >
+              <Square className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            onNewTopic && (
               <button
                 type="button"
                 data-testid="chat-new-topic"
@@ -523,19 +560,75 @@ function InputCardInner({
                 <Plus className="w-3.5 h-3.5" />
                 <span>新话题</span>
               </button>
-            )}
+            )
+          )}
+          {isLoading && onSubmitWithMode ? (
+            // P2-a 分体发送按钮：调研结论是"时序不透明"才是排队功能被投诉的
+            // 主因，因此默认通道一键可发，另外两条通道必须在界面上写清楚
+            // "什么时候生效"。
+            <div
+              data-testid="delivery-group"
+              className="flex items-stretch rounded-radius-sm overflow-hidden"
+            >
+              <button
+                type="button"
+                data-testid="chat-send"
+                onClick={onSubmit}
+                disabled={sendDisabled}
+                title={t(deliveryModeMeta(DEFAULT_DELIVERY_MODE).hintKey)}
+                className="h-9 pl-4 pr-3 bg-primary text-text-inverse border-none text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {t(deliveryModeMeta(DEFAULT_DELIVERY_MODE).shortKey)}
+                <Send className="w-3.5 h-3.5" />
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    data-testid="chat-delivery-menu"
+                    aria-label={t('chat.delivery_menu')}
+                    title={t('chat.delivery_menu')}
+                    disabled={sendDisabled}
+                    className="h-9 px-1.5 bg-primary text-text-inverse border-none border-l border-text-inverse/25 cursor-pointer flex items-center hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-radius-sm"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[16rem]">
+                  <DropdownMenuLabel>{t('chat.delivery_menu')}</DropdownMenuLabel>
+                  {DELIVERY_MODES.map((m) => (
+                    <DropdownMenuItem
+                      key={m.mode}
+                      data-testid={`chat-delivery-${m.mode}`}
+                      onSelect={() => onSubmitWithMode(m.mode)}
+                      className="items-start"
+                    >
+                      <span className="flex flex-col gap-0.5 py-0.5">
+                        <span className="flex items-center justify-between gap-3 font-medium">
+                          {t(m.labelKey)}
+                          <kbd className="text-[10px] text-muted">{m.shortcut}</kbd>
+                        </span>
+                        <span className="text-[11px] font-normal text-muted">{t(m.hintKey)}</span>
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : (
             <button
               type="button"
               data-testid="chat-send"
               onClick={onSubmit}
-              disabled={(!value.trim() && !hasAttachments) || disabled}
+              disabled={sendDisabled}
+              title={isLoading ? t('chat.send_while_running') : undefined}
               className="h-9 px-4 bg-primary text-text-inverse border-none rounded-radius-sm text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {t('chat.send')}
+              {isLoading ? t('chat.send_while_running') : t('chat.send')}
               <Send className="w-3.5 h-3.5" />
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {onImageSelect && (

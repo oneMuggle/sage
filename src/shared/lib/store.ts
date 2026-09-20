@@ -127,7 +127,12 @@ interface StoreState {
   updateSession: (id: string, patch: Partial<Session>) => void;
 
   loadMessages: (sessionId: string) => Promise<void>;
-  addMessage: (message: Message) => void;
+  /**
+   * 追加一条消息；给 `beforeId` 时插到该消息之前（锚点不存在则退回 append）。
+   * 插话回显用：DB 里 steering 行的 created_at 早于本轮 assistant 行，
+   * 本地乐观副本必须落在同一相对位置，否则流末对账时气泡会跳位。
+   */
+  addMessage: (message: Message, beforeId?: string) => void;
   /** PR-6: 用同一 id 的新对象替换某条消息 (流式 chat 结束时写回最终 content) */
   updateMessage: (id: string, patch: Partial<Message>) => void;
   /** client_message_id 协议: DONE 携带服务端 id 后, 把乐观占位 id 原地替换 */
@@ -284,12 +289,17 @@ export const useStore = create<StoreState>((set, _get) => ({
   // messages 是单数组而非按会话分桶, 后台会话 (U5 忙时队列 flush /
   // 并行流 / reattach) 的乐观消息若无条件 append, 会实时"长"进用户
   // 正在看的会话; 这些消息由后端持久化, 切回时经 loadMessages 正常装载。
-  addMessage: (message) => {
-    set((state) =>
-      state.currentSessionId != null && message.session_id !== state.currentSessionId
-        ? state
-        : { messages: [...state.messages, message] },
-    );
+  addMessage: (message, beforeId) => {
+    set((state) => {
+      if (state.currentSessionId != null && message.session_id !== state.currentSessionId) {
+        return state;
+      }
+      const anchorIdx = beforeId ? state.messages.findIndex((m) => m.id === beforeId) : -1;
+      if (anchorIdx < 0) return { messages: [...state.messages, message] };
+      const next = [...state.messages];
+      next.splice(anchorIdx, 0, message);
+      return { messages: next };
+    });
   },
 
   // PR-6: 按 id 替换 (流式 chat 把占位 assistant 写回最终 content)
