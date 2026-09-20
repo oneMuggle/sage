@@ -1302,7 +1302,8 @@ class SageAgent:
                                 "content": cap_result_for_context(content_p),
                             }
                         )
-                        await run_event_hooks(
+                        # Phase 3: 钩子反馈注入 (并行路径)
+                        parallel_outcome = await run_event_hooks(
                             m6_hooks,
                             "post_tool_use",
                             tc_p.name,
@@ -1313,6 +1314,25 @@ class SageAgent:
                                 tool_output=content_p,
                                 is_error=err_p,
                             ),
+                        )
+                        if parallel_outcome.has_feedback:
+                            severity_label = {
+                                "info": "提示",
+                                "warning": "警告",
+                                "error": "错误",
+                            }.get(parallel_outcome.severity, "提示")
+                            messages.append(
+                                {
+                                    "role": "system",
+                                    "content": (
+                                        f"[钩子反馈·{severity_label}] "
+                                        f"{parallel_outcome.additional_context}"
+                                    ),
+                                }
+                            )
+                        # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
+                        await self._maybe_fire_error_hook(
+                            m6_hooks, tc_p.name, content_p, err_p
                         )
                     continue
                 # ===== L6 并行只读批次 END =====
@@ -1755,7 +1775,9 @@ class SageAgent:
 
                     # ===== M6 HOOKS BEGIN: post_tool_use (observe-only) =====
                     # 观察/审计专用 — 无法修改工具结果。
-                    await run_event_hooks(
+                    # Phase 3: 若钩子返回 ``additional_context``，以 system 角色
+                    # 注入对话历史，供 LLM 下一轮感知（如 lint 反馈 / 格式提醒）。
+                    hook_outcome = await run_event_hooks(
                         m6_hooks,
                         "post_tool_use",
                         tc.name,
@@ -1767,7 +1789,27 @@ class SageAgent:
                             is_error=is_error,
                         ),
                     )
+                    if hook_outcome.has_feedback:
+                        severity_label = {
+                            "info": "提示",
+                            "warning": "警告",
+                            "error": "错误",
+                        }.get(hook_outcome.severity, "提示")
+                        messages.append(
+                            {
+                                "role": "system",
+                                "content": (
+                                    f"[钩子反馈·{severity_label}] "
+                                    f"{hook_outcome.additional_context}"
+                                ),
+                            }
+                        )
                     # ===== M6 HOOKS END =====
+
+                    # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
+                    await self._maybe_fire_error_hook(
+                        m6_hooks, tc.name, result_content, is_error
+                    )
 
             yield AgentEvent(
                 state=AgentState.FAILED,
@@ -1888,14 +1930,62 @@ class SageAgent:
 
     # ===== M6 HOOKS BEGIN: config loader (fail-open) =====
     def _load_m6_hooks(self) -> List[HookConfig]:
-        """加载用户自定义钩子; 任何故障 → 空列表 (fail-open)。"""
+        """加载钩子 = 项目级 + 用户级 (fail-open, 任何故障 → 空列表)。
+
+        Phase 4: 项目级来自 ``<workspace>/.sage/hooks.json``, 受信任门禁
+        约束 (未信任的工作区不加载)。合并顺序 project 在前 —— 团队策略
+        优先裁决且无法被用户级配置遮蔽。
+        """
         try:
             from backend.data.settings_repo import SettingsRepository
+            from backend.hooks.merger import merge_hooks
+            from backend.hooks.project_config import load_project_hooks
 
-            return load_hooks(SettingsRepository())
+            settings_repo = SettingsRepository()
+            user_hooks = load_hooks(settings_repo)
+
+            workspace: Optional[str] = None
+            try:
+                workspace = self._office_boundary_resolver()
+            except Exception as exc:
+                # workspace 解析失败 (DB 故障等) → 跳过项目级, 用户级照常生效
+                logger.debug("M6 hooks: workspace resolution failed (project hooks skipped): %s", exc)
+
+            project_hooks = load_project_hooks(workspace, settings_repo) if workspace else []
+            return merge_hooks(project_hooks, user_hooks)
         except Exception as exc:
             logger.warning("M6 hooks load failed (fail-open): %s", exc)
             return []
+
+    async def _maybe_fire_error_hook(
+        self,
+        hooks: List[HookConfig],
+        tool_name: str,
+        content: str,
+        is_error: bool,
+    ) -> None:
+        """Phase 2: 工具执行失败时触发 ``error_occurred`` 钩子 (observe-only)。
+
+        仅在 ``is_error=True`` 且确有钩子配置时触发; 任何故障都 fail-open。
+        供外部系统 (告警 / 自动修复 / 合规审计) 订阅工具级失败。
+        """
+        if not is_error or not hooks:
+            return
+        try:
+            from backend.hooks.runner import build_error_payload
+
+            await run_event_hooks(
+                hooks,
+                "error_occurred",
+                tool_name,
+                build_error_payload(
+                    error_type="tool_error",
+                    error_message=(content or "")[:1024],
+                    tool_name=tool_name,
+                ),
+            )
+        except Exception as exc:  # pragma: no cover — 防御性, fail-open
+            logger.debug("error_occurred hook dispatch failed (fail-open): %s", exc)
 
     # ===== M6 HOOKS END =====
 

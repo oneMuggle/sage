@@ -86,6 +86,7 @@ from backend.api.diagnostic_routes import router as diagnostic_router
 from backend.api.embedder_routes import router as embedder_router
 from backend.api.export_routes import router as export_router
 from backend.api.hex_routes import router as hex_router
+from backend.api.hooks_routes import router as hooks_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
 from backend.api.local_auth import (
@@ -1070,6 +1071,8 @@ app.include_router(project_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
 app.include_router(permission_router, prefix="/api/v1")
 app.include_router(web_access_router, prefix="/api/v1")
+# M6 生态扩展 Phase 1: /api/v1/hooks/builtins 内置钩子元数据 (设置页"推荐 Hook")
+app.include_router(hooks_router, prefix="/api/v1")
 # M2 part B: /api/v1/questions/{pending, <id>/answer}（AskUserQuestion）
 app.include_router(question_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")

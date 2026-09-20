@@ -319,9 +319,21 @@ def test_config_accepts_new_events():
     assert [h.event for h in hooks] == ["user_prompt_submit", "stop"]
 
 
+def test_config_accepts_lifecycle_events():
+    """Phase 2: session_start / session_stop / error_occurred 进入白名单。"""
+    hooks = validate_hooks(
+        [
+            {"event": "session_start", "command": "echo start"},
+            {"event": "session_stop", "command": "echo stop"},
+            {"event": "error_occurred", "command": "echo err"},
+        ]
+    )
+    assert [h.event for h in hooks] == ["session_start", "session_stop", "error_occurred"]
+
+
 def test_config_still_rejects_unknown_event():
     with pytest.raises(HookConfigError):
-        validate_hooks([{"event": "session_start", "command": "echo x"}])
+        validate_hooks([{"event": "mid_tool_use", "command": "echo x"}])
 
 
 @pytest.mark.asyncio()
