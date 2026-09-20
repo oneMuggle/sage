@@ -168,7 +168,9 @@ user-invocable-name: /summary
 用户会被询问确认。
 ```
 
-执行时:用户输入 `/summary` → 弹出确认框 → 用户批准 → 沙箱执行 `summarize.py`。
+执行时:
+- 用户输入 `/summary` → 返回 prompt body(LLM 读取后协助用户)
+- 用户输入 `/summary script=summarize.py` → 弹出确认框 → 用户批准 → 沙箱执行 `summarize.py`
 
 ## 4.6 加载位置与优先级
 
