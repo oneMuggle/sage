@@ -116,6 +116,7 @@ from backend.api.v1 import updates as updates_router_module
 from backend.api.web_access_routes import router as web_access_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
+from backend.api.worktree_routes import router as worktree_router
 from backend.application.services.chat_service import ChatService
 from backend.application.services.wake_store import get_wake_store
 from backend.data.database import _SQLITE_LOCK, get_database
@@ -804,6 +805,18 @@ async def lifespan(app: FastAPI):
     # 进程被硬杀时 shutdown 钩子不会执行，遗留目录靠下次启动按 mtime 回收。
     _startup_browser_temp_sweep()
 
+    # worktree 模式 (2026-09-18): 启动对账——登记为 active 但目录已被外部
+    # 删除的会话 worktree → 标 discarded + prune 主仓 + 悬空绑定退回主仓。
+    try:
+        from backend.api.worktree_routes import sweep_registered_worktrees
+        from backend.data.database import get_database
+
+        swept = sweep_registered_worktrees(get_database().get_connection())
+        if swept:
+            logger.info("worktree 对账: 处理 %d 条失效登记", swept)
+    except Exception:  # noqa: BLE001 — 对账失败不得阻塞启动
+        logger.warning("worktree 对账失败（忽略）", exc_info=True)
+
     if __name__ == "__main__":
         _elapsed_lifespan = time.monotonic() - _startup_t0
         print(  # noqa: T201
@@ -1051,6 +1064,8 @@ from backend.api.gateway_routes import router as gateway_router
 app.include_router(gateway_router, prefix="/api/v1")
 register_office_exception_handlers(app)
 app.include_router(workspace_router, prefix="/api/v1")
+# 会话级 worktree 模式 (2026-09-18): /api/v1/sessions/{id}/worktree[...]
+app.include_router(worktree_router, prefix="/api/v1")
 # 项目模块 P1 (2026-09-13): /api/v1/projects 最近项目注册表 + 项目内会话
 app.include_router(project_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}

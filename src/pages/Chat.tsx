@@ -28,6 +28,7 @@ import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
 import { SessionUsageBadge } from '../widgets/chat/SessionUsageBadge';
 import { TopicShiftBanner } from '../widgets/chat/TopicShiftBanner';
+import { WorkspaceBranchPicker } from '../widgets/chat/WorkspaceBranchPicker';
 import { ArchivesModal } from '../widgets/session';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
@@ -780,6 +781,8 @@ export function Chat() {
           <h2 className="text-sm font-semibold text-text shrink-0">对话</h2>
           {/* 项目模块 P3: 当前会话绑定的项目标识（无绑定不渲染） */}
           <ProjectBadge workspacePath={workspacePath} />
+          {/* worktree 模式 (2026-09-18): 会话级分支/worktree 切换入口 */}
+          <WorkspaceBranchPicker sessionId={currentSessionId} />
           {/* U8: 会话级模型切换(G5 收尾) · U14: 会话用量徽章 · U17: 上下文占用 */}
           <SessionModelPicker sessionId={currentSessionId} />
           <SessionUsageBadge sessionId={currentSessionId} />

@@ -11,6 +11,7 @@ import { importOfficeReference } from '../../features/office/importOfficeReferen
 import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { type AtFileSelection } from '../../shared/api/fileSearchClient';
 import type { ChatOfficeRef } from '../../shared/api/types';
+import { worktreeApi } from '../../shared/api/worktreeApi';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 import { useSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { useI18n } from '../../shared/lib/i18n';
@@ -480,6 +481,68 @@ function ChatInputInner({
         return;
       }
 
+      // worktree 模式 (2026-09-18): /worktree new|open|merge|rm|list ——
+      // 纯前端 action 直调 worktreeApi，不发消息；成功后 refresh 会话绑定。
+      if (cmd.mode === 'worktree') {
+        if (isLoading || disabled) return;
+        const raw = value.trim().replace(/^\/worktree\s*/i, '').trim();
+        setValue('');
+        void (async () => {
+          if (!effectiveSessionId) {
+            toast.error('当前无可用会话');
+            return;
+          }
+          const [sub = 'list', ...rest] = raw.split(/\s+/);
+          const arg = rest.join(' ');
+          try {
+            if (sub === 'list') {
+              const data = await worktreeApi.branches(effectiveSessionId);
+              const lines = data.worktrees
+                .filter((w) => w.status !== 'discarded')
+                .map(
+                  (w) =>
+                    `${w.branchName ?? w.worktreePath} [${w.status}]${w.isCurrent ? ' ←当前' : ''}`,
+                );
+              toast.info(
+                lines.length
+                  ? `worktree：${lines.join('；')}`
+                  : `当前分支 ${data.currentBranch || '(无)'}，尚无 worktree`,
+              );
+              return;
+            }
+            if (!arg) {
+              toast.error('用法：/worktree new <分支> | open <分支> | merge <分支> | rm <分支>');
+              return;
+            }
+            if (sub === 'new' || sub === 'open' || sub === 'checkout') {
+              const r = await worktreeApi.create(effectiveSessionId, sub, arg);
+              toast[r.ok ? 'success' : 'error'](r.message);
+              if (r.ok) await workspaceContext?.refresh();
+              return;
+            }
+            const rows = await worktreeApi.list(effectiveSessionId);
+            const row = rows.find((w) => w.branchName === arg);
+            if (!row) {
+              toast.error(`未找到分支 ${arg} 对应的 worktree 登记`);
+              return;
+            }
+            if (sub === 'merge') {
+              const res = await worktreeApi.merge(effectiveSessionId, row.id);
+              toast[res.ok ? 'success' : 'error'](res.message);
+            } else if (sub === 'rm') {
+              const res = await worktreeApi.remove(effectiveSessionId, row.id, false);
+              toast[res.ok ? 'success' : 'error'](res.message);
+              await workspaceContext?.refresh();
+            } else {
+              toast.error(`未知子命令：${sub}（可用 new/open/merge/rm/list）`);
+            }
+          } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'worktree 操作失败');
+          }
+        })();
+        return;
+      }
+
       // PM2 (round8): /plan 计划模式 —— 以 planMode 立即发送剩余文本；
       // run 完成后 Chat 页出批准条，批准后普通消息衔接执行。
       if (cmd.mode === 'plan') {
@@ -527,6 +590,8 @@ function ChatInputInner({
       reloadPromptTemplates,
       navigate,
       t,
+      effectiveSessionId,
+      workspaceContext,
     ],
   );
 
