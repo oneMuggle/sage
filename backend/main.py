@@ -809,7 +809,6 @@ async def lifespan(app: FastAPI):
     # 删除的会话 worktree → 标 discarded + prune 主仓 + 悬空绑定退回主仓。
     try:
         from backend.api.worktree_routes import sweep_registered_worktrees
-        from backend.data.database import get_database
 
         swept = sweep_registered_worktrees(get_database().get_connection())
         if swept:
