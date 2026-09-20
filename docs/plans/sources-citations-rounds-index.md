@@ -16,6 +16,9 @@
 | R85 | 重接路径 sources_used 载荷校验对齐主路径 MEDIUM-2 口径 | #1286 `240da05b` | #1288（合并对齐） |
 | R86 | @memory:/@wiki: 实体引用命中纳入统一来源（process_with_sources 一次解析两用；kind 增 memory） | #1292 `b49f6926` | #1295 |
 | R87 | browser_navigate 纳入来源 + 重接路径 memory_used/attachment_rag_used 校验收口 | #1296 `6cf0ed89` | #1299 |
+| R88 | 专项总账（本文件） | #1301 `b6823cb7` | 文档无需对齐 |
+| R89 | merge_sources 去重改为补齐合并（navigate→fetch 同 url 摘要不丢）；附带 py38 replan 测试 loop 兜底 | #1304 `0c2a4de2` | #1305 `0c0548b1` |
+| R90 | 实体 wiki 来源补 score + browser_navigate 集成用例 + 本回填 | —（本 PR） | 文档随代码无需单独对齐 |
 
 ## 2. 专项方案要点（R81 管道全景）
 
