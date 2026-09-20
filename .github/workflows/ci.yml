@@ -687,6 +687,14 @@ jobs:
         env:
           SAGE_SKIP_BACKEND: '1'
           CI: 'true'
+          # Skip Win32 runtime checks (VC++ Redist / KB patches).
+          # GitHub's windows-latest runner has VC++ Redist preinstalled, so the
+          # checks currently pass — but if a runner image drifts (or if we later
+          # add service checks like release/win7 PR #1333), dialog.showMessageBox
+          # would block createMainWindow() and fail firstWindow. Opt out now to
+          # keep smoke focused on IPC bridge + frontend rendering only.
+          # See release/win7 run 35510214994 for the failure mode this prevents.
+          SAGE_RUNTIME_CHECK_ON_START: 'false'
         run: npx playwright test e2e/electron/smoke.spec.ts --reporter=line
 
       - name: Upload smoke screenshot
