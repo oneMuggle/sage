@@ -14,18 +14,24 @@
 no-op (记 warning)。唯有显式 ``{"decision": "deny"}`` 会阻断工具执行。
 超时杀掉整个进程组 (``start_new_session`` + ``os.killpg``; Windows 上
 尽力而为)。
+
+Phase 1 扩展: ``hook_type="python"`` 的钩子在进程内直接调用 Python
+函数 (不 spawn subprocess), 用于内置钩子。
 """
 
 from __future__ import annotations
 
 import asyncio
+import importlib
+import inspect
 import json
 import logging
 import os
 import signal
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from fnmatch import fnmatch
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from backend.hooks.config import HookConfig
 
@@ -45,6 +51,9 @@ class HookOutcome:
     updated_input: Optional[Dict[str, Any]] = None
     reason: Optional[str] = None
     messages: List[str] = field(default_factory=list)
+    # Phase 3: hook 反馈注入 — 供 AI 下一轮读取
+    additional_context: Optional[str] = None
+    severity: str = "info"  # "info" | "warning" | "error"
 
     @property
     def denied(self) -> bool:
@@ -54,10 +63,23 @@ class HookOutcome:
     def modified(self) -> bool:
         return self.decision == DECISION_MODIFY and self.updated_input is not None
 
+    @property
+    def has_feedback(self) -> bool:
+        """是否有可注入给 AI 的反馈内容。"""
+        return bool(self.additional_context)
+
 
 def matches_tool(matcher: str, tool_name: str) -> bool:
-    """glob 匹配钩子 matcher 与工具名 (``*`` 匹配全部)。"""
-    return fnmatch(tool_name, matcher or "*")
+    """glob 匹配钩子 matcher 与工具名。
+
+    - ``*`` / 空 matcher 匹配全部工具;
+    - ``|`` 分隔多个备选模式 (如 ``"write_file|edit_file"``), 任一命中即匹配。
+      不含 ``|`` 的模式行为与纯 fnmatch 完全一致 (向后兼容)。
+    """
+    pattern = (matcher or "*").strip()
+    if not pattern:
+        return True
+    return any(fnmatch(tool_name, part.strip()) for part in pattern.split("|") if part.strip())
 
 
 #: post_tool_use payload 中 tool_output 的截断上限 (审查加固: 工具结果
@@ -84,6 +106,71 @@ def build_payload(
             capped_output = capped_output[:PAYLOAD_OUTPUT_CAP] + "…[截断]"
         payload["tool_output"] = capped_output
         payload["tool_result_is_error"] = is_error
+    return payload
+
+
+# ── Phase 2: 生命周期事件 payload 构建 ──────────────────────────────
+
+
+def build_session_payload(
+    event: str,
+    session_id: str,
+    workspace: Optional[str] = None,
+    git_branch: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """构造 session_start / session_stop 事件的 payload。
+
+    Args:
+        event: "session_start" | "session_stop"
+        session_id: 会话 UUID
+        workspace: 工作区根目录
+        git_branch: 当前 git 分支
+        extra: 调用方注入的额外字段 (如 token 计数等)
+    """
+    payload: Dict[str, Any] = {
+        "hook_event_name": event,
+        "session_id": session_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),  # noqa: UP017 — py3.10 不支持 datetime.UTC
+    }
+    if workspace:
+        payload["workspace"] = workspace
+    if git_branch:
+        payload["git_branch"] = git_branch
+    if isinstance(extra, dict):
+        payload.update(extra)
+    return payload
+
+
+def build_error_payload(
+    error_type: str,
+    error_message: str,
+    tool_name: Optional[str] = None,
+    attempt_count: int = 1,
+    error_traceback: Optional[str] = None,
+) -> Dict[str, Any]:
+    """构造 error_occurred 事件的 payload。
+
+    Args:
+        error_type: "tool_error" | "llm_error" | "parse_error"
+        error_message: 错误描述
+        tool_name: 触发错误的工具名 (可选)
+        attempt_count: 当前重试次数
+        error_traceback: 堆栈 (截断到 4KB)
+    """
+    payload: Dict[str, Any] = {
+        "hook_event_name": "error_occurred",
+        "error_type": error_type,
+        "error_message": error_message,
+        "timestamp": datetime.now(timezone.utc).isoformat(),  # noqa: UP017 — py3.10 不支持 datetime.UTC
+    }
+    if tool_name:
+        payload["tool_name"] = tool_name
+    if attempt_count > 1:
+        payload["attempt_count"] = attempt_count
+    if error_traceback:
+        # 截断到 4KB 避免 payload 过大
+        payload["error_traceback"] = error_traceback[:4096]
     return payload
 
 
@@ -127,6 +214,104 @@ def _kill_process_group(proc: Optional[asyncio.subprocess.Process]) -> None:
         logger.debug("hooks: process group kill best-effort failed: %s", exc)
 
 
+# ── Python hook 进程内执行 (Phase 1: 内置钩子) ──────────────────────
+
+#: handler dotted-path → callable 缓存, 避免每次调用都 import_module
+_HANDLER_CACHE: Dict[str, Callable[..., Any]] = {}
+
+
+def _resolve_handler(handler_path: str) -> Optional[Callable[..., Any]]:
+    """解析 ``module.path:func`` 形式的 handler (fail-open → None)。
+
+    找不到 / 导入失败 / 属性非 callable 一律记 warning 并返回 None。
+    """
+    if not handler_path:
+        return None
+    cached = _HANDLER_CACHE.get(handler_path)
+    if cached is not None:
+        return cached
+    try:
+        if ":" in handler_path:
+            module_path, _, func_name = handler_path.partition(":")
+        else:
+            module_path, _, func_name = handler_path.rpartition(".")
+        if not module_path or not func_name:
+            logger.warning("hooks: malformed handler path %r (fail-open)", handler_path)
+            return None
+        module = importlib.import_module(module_path)
+        func = getattr(module, func_name, None)
+        if not callable(func):
+            logger.warning("hooks: handler %r is not callable (fail-open)", handler_path)
+            return None
+        _HANDLER_CACHE[handler_path] = func
+        return func
+    except Exception as exc:
+        logger.warning("hooks: failed to resolve handler %r (fail-open): %s", handler_path, exc)
+        return None
+
+
+async def _run_python_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:
+    """在进程内调用内置 Python 钩子处理函数。永不抛异常 (任何失败 → no-op)。
+
+    处理函数签名: ``async def handler(payload: dict, config: dict) -> dict``
+    返回的 dict 与 shell 钩子 STDOUT 同构 (decision / reason / updated_input)。
+
+    配置解析: 以 ``builtin_id`` 对应的注册表 ``default_config`` 为基底,
+    用用户的 ``config_override`` 覆盖 —— 未显式配置的钩子也拿到可用默认值
+    (否则空 config 会让安全守卫的黑名单为空 = 形同虚设)。
+    """
+    func = _resolve_handler(hook_cfg.handler)
+    if func is None:
+        return HookOutcome(decision=DECISION_NOOP, reason=f"handler not found: {hook_cfg.handler}")
+
+    config: Dict[str, Any] = {}
+    if hook_cfg.builtin_id:
+        default_config = _builtin_default_config(hook_cfg.builtin_id)
+        if default_config:
+            config.update(default_config)
+    if isinstance(hook_cfg.config_override, dict):
+        config.update(hook_cfg.config_override)
+
+    try:
+        result = func(payload_dict, config)
+        if inspect.isawaitable(result):
+            result = await asyncio.wait_for(result, timeout=hook_cfg.timeout_seconds)
+    except asyncio.TimeoutError:  # noqa: UP041 — py3.8 上不是 builtin TimeoutError 别名
+        logger.warning(
+            "hooks: python hook %s timed out after %.1fs (fail-open)",
+            hook_cfg.handler,
+            hook_cfg.timeout_seconds,
+        )
+        return HookOutcome(decision=DECISION_NOOP, reason="timeout")
+    except Exception as exc:
+        logger.warning("hooks: python hook %r raised (fail-open): %s", hook_cfg.handler, exc)
+        return HookOutcome(decision=DECISION_NOOP, reason=f"handler error: {exc}")
+
+    if not isinstance(result, dict):
+        logger.warning("hooks: python hook %r returned non-dict (fail-open)", hook_cfg.handler)
+        return HookOutcome(decision=DECISION_NOOP, reason="handler returned non-dict")
+
+    return _parse_decision_dict(result)
+
+
+def _builtin_default_config(builtin_id: str) -> Dict[str, Any]:
+    """取内置钩子的 default_config (未知 ID / 导入失败 → 空 dict, fail-open)。"""
+    try:
+        from backend.hooks.builtin import get_builtin
+
+        meta = get_builtin(builtin_id)
+        if isinstance(meta, dict):
+            defaults = meta.get("default_config")
+            if isinstance(defaults, dict):
+                return defaults
+    except Exception as exc:  # pragma: no cover — 防御性
+        logger.debug("hooks: builtin default_config lookup failed: %s", exc)
+    return {}
+
+
+_VALID_SEVERITIES = ("info", "warning", "error")
+
+
 def _parse_decision_dict(data: Dict[str, Any]) -> HookOutcome:
     """把钩子输出的 JSON 对象映射为 HookOutcome (未知 decision → no-op)。"""
     reason = data.get("reason")
@@ -134,16 +319,45 @@ def _parse_decision_dict(data: Dict[str, Any]) -> HookOutcome:
         reason = None
     decision = data.get("decision", DECISION_ALLOW)
 
+    # Phase 3: additional_context 反馈注入
+    additional = data.get("additional_context")
+    if isinstance(additional, str):
+        # 截断到 2KB, 避免单个钩子污染整个上下文
+        if len(additional) > 2048:
+            additional = additional[:2048] + "…[截断]"
+    else:
+        additional = None
+
+    severity = data.get("severity", "info")
+    if severity not in _VALID_SEVERITIES:
+        severity = "info"
+
     if decision == DECISION_DENY:
-        return HookOutcome(decision=DECISION_DENY, reason=reason or "denied by hook")
+        return HookOutcome(
+            decision=DECISION_DENY,
+            reason=reason or "denied by hook",
+            additional_context=additional,
+            severity=severity,
+        )
     if decision == DECISION_MODIFY:
         updated = data.get("updated_input")
         if isinstance(updated, dict):
-            return HookOutcome(decision=DECISION_MODIFY, updated_input=updated, reason=reason)
+            return HookOutcome(
+                decision=DECISION_MODIFY,
+                updated_input=updated,
+                reason=reason,
+                additional_context=additional,
+                severity=severity,
+            )
         logger.warning("hooks: modify without object updated_input ignored (fail-open)")
         return HookOutcome(decision=DECISION_NOOP, reason="modify without updated_input")
     if decision == DECISION_ALLOW:
-        return HookOutcome(decision=DECISION_ALLOW, reason=reason)
+        return HookOutcome(
+            decision=DECISION_ALLOW,
+            reason=reason,
+            additional_context=additional,
+            severity=severity,
+        )
     logger.warning("hooks: unknown decision %r ignored (fail-open)", decision)
     return HookOutcome(decision=DECISION_NOOP, reason=f"unknown decision: {decision!r}")
 
@@ -164,16 +378,25 @@ def _parse_stdout(stdout_text: str) -> HookOutcome:
     return _parse_decision_dict(data)
 
 
-async def run_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:
-    """执行单个钩子命令。永不抛异常 (任何失败 → no-op)。
+async def _run_http_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:
+    """调用 HTTP hook; 所有网络故障 fail-open。"""
+    from backend.hooks.http_client import send_http_hook
 
-    Args:
-        hook_cfg: 已校验的钩子配置
-        payload_dict: 经 STDIN 传入的 JSON payload
+    config = hook_cfg.config_override if isinstance(hook_cfg.config_override, dict) else {}
+    result = await send_http_hook(
+        config.get("url", ""),
+        payload_dict,
+        method=config.get("method", "POST"),
+        headers=config.get("headers", {}),
+        timeout_seconds=hook_cfg.timeout_seconds,
+    )
+    if result is None:
+        return HookOutcome(decision=DECISION_NOOP, reason="http hook failed")
+    return _parse_decision_dict(result)
 
-    Returns:
-        HookOutcome: allow / deny / modify / noop 之一
-    """
+
+async def _run_shell_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:
+    """执行 shell 钩子: spawn 子进程, STDIN/STDOUT JSON 协议。"""
     env = os.environ.copy()
     env["SAGE_HOOK_EVENT"] = str(payload_dict.get("hook_event_name", hook_cfg.event))
     env["SAGE_TOOL_NAME"] = str(payload_dict.get("tool_name", ""))
@@ -223,6 +446,78 @@ async def run_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOu
     return _parse_stdout(stdout_b.decode("utf-8", "replace"))
 
 
+def _record_execution(
+    hook_cfg: HookConfig,
+    payload_dict: Dict[str, Any],
+    outcome: HookOutcome,
+    duration_ms: float,
+) -> None:
+    """写入 hook 执行历史 (best-effort, 任何故障都不冒泡)。"""
+    try:
+        from backend.hooks.history import get_history_repo, make_record
+
+        config_snapshot: Dict[str, Any] = {
+            "event": hook_cfg.event,
+            "matcher": hook_cfg.matcher,
+            "hook_type": hook_cfg.hook_type,
+        }
+        if hook_cfg.hook_type == "shell":
+            config_snapshot["command"] = hook_cfg.command
+        elif hook_cfg.hook_type == "python":
+            config_snapshot["handler"] = hook_cfg.handler
+        elif hook_cfg.hook_type == "http":
+            cfg_dict = hook_cfg.config_override if isinstance(hook_cfg.config_override, dict) else {}
+            config_snapshot["url"] = cfg_dict.get("url", "")
+            config_snapshot["method"] = cfg_dict.get("method", "POST")
+
+        record = make_record(
+            hook_type=hook_cfg.hook_type,
+            event=hook_cfg.event,
+            tool_name=str(payload_dict.get("tool_name", "")),
+            builtin_id=hook_cfg.builtin_id,
+            command=hook_cfg.command,
+            handler=hook_cfg.handler,
+            url=hook_cfg.config_override.get("url", "") if isinstance(hook_cfg.config_override, dict) else "",
+            decision=outcome.decision,
+            duration_ms=duration_ms,
+            reason=outcome.reason,
+            hook_config_snapshot=config_snapshot,
+        )
+        get_history_repo().save(record)
+    except Exception as exc:  # pragma: no cover — 防御性
+        logger.debug("hooks: record execution failed (best-effort): %s", exc)
+
+
+async def run_hook(hook_cfg: HookConfig, payload_dict: Dict[str, Any]) -> HookOutcome:  # noqa: PLR0911 — fail-open 分支式守卫, 每路 return 都清晰
+    """执行单个钩子并记录到执行历史。永不抛异常 (任何失败 → no-op)。
+
+    ``hook_type="python"`` 走进程内调用 (内置钩子); ``"http"`` 走异步
+    HTTP 回调; ``"shell"`` spawn 子进程 + STDIN/STDOUT JSON 协议。
+
+    Args:
+        hook_cfg: 已校验的钩子配置
+        payload_dict: 传给钩子的 JSON payload
+
+    Returns:
+        HookOutcome: allow / deny / modify / noop 之一
+    """
+    import time as _time
+
+    start = _time.monotonic()
+    if hook_cfg.hook_type == "python":
+        outcome = await _run_python_hook(hook_cfg, payload_dict)
+    elif hook_cfg.hook_type == "http":
+        outcome = await _run_http_hook(hook_cfg, payload_dict)
+    else:
+        outcome = await _run_shell_hook(hook_cfg, payload_dict)
+    duration_ms = (_time.monotonic() - start) * 1000
+    _record_execution(hook_cfg, payload_dict, outcome, duration_ms)
+    return outcome
+
+
+_SEVERITY_RANK = {"info": 0, "warning": 1, "error": 2}
+
+
 async def run_event_hooks(
     hooks: List[HookConfig],
     event: str,
@@ -234,15 +529,30 @@ async def run_event_hooks(
     - ``deny`` 立即短路返回;
     - 第一个有效 ``modify`` 生效 (后续钩子仍执行, 但不再覆盖参数);
     - 钩子故障是 no-op, 不影响合并结果。
+    - Phase 3: 多钩子反馈聚合 —— ``additional_context`` 以换行拼接 (总长
+      截断到 4KB), ``severity`` 取最严格等级 (error > warning > info)。
     """
     merged = HookOutcome(decision=DECISION_ALLOW)
+    feedback_parts: List[str] = []
+    merged_severity = "info"
+
     for cfg in hooks:
         if cfg.event != event or not matches_tool(cfg.matcher, tool_name):
             continue
         outcome = await run_hook(cfg, payload)
         merged.messages.extend(outcome.messages)
+        # 聚合反馈
+        if outcome.additional_context:
+            feedback_parts.append(outcome.additional_context)
+            if _SEVERITY_RANK.get(outcome.severity, 0) > _SEVERITY_RANK.get(merged_severity, 0):
+                merged_severity = outcome.severity
+        # deny 短路 (但仍先聚合已收集的反馈)
         if outcome.denied:
             outcome.messages = merged.messages
+            # 把已聚合的反馈带上
+            if feedback_parts:
+                outcome.additional_context = _merge_feedback(feedback_parts)
+                outcome.severity = merged_severity
             return outcome
         if outcome.modified and not merged.modified:
             merged = HookOutcome(
@@ -251,4 +561,43 @@ async def run_event_hooks(
                 reason=outcome.reason,
                 messages=merged.messages,
             )
+
+    # 聚合反馈到最终 outcome
+    if feedback_parts:
+        merged.additional_context = _merge_feedback(feedback_parts)
+        merged.severity = merged_severity
     return merged
+
+
+def _merge_feedback(parts: List[str], cap: int = 4096) -> str:
+    """把多钩子的反馈拼成单字符串, 超 cap 截断。"""
+    joined = "\n".join(parts)
+    if len(joined) > cap:
+        return joined[:cap] + "…[截断]"
+    return joined
+
+
+def run_event_hooks_sync(
+    hooks: List[HookConfig],
+    event: str,
+    tool_name: str,
+    payload: Dict[str, Any],
+) -> HookOutcome:
+    """同步上下文触发钩子 (sync FastAPI 端点 / 非 async 调用方)。
+
+    FastAPI 的 ``def`` 端点在 threadpool 中执行, 该线程无运行中的事件
+    循环, 因此可以安全地 ``asyncio.run`` 一个新循环。若检测到当前线程
+    已有运行中的循环 (不应发生), 则降级为 no-op (fail-open) —— 绝不因
+    为钩子桥接失败而中断调用方。
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # 无运行循环 → 安全新建 (标准 sync 端点路径)
+        try:
+            return asyncio.run(run_event_hooks(hooks, event, tool_name, payload))
+        except Exception as exc:
+            logger.warning("hooks: sync fire failed (fail-open): %s", exc)
+            return HookOutcome(decision=DECISION_NOOP, reason=f"sync dispatch error: {exc}")
+    logger.debug("hooks: sync fire skipped — event loop already running (fail-open)")
+    return HookOutcome(decision=DECISION_NOOP, reason="event loop running")

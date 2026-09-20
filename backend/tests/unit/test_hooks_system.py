@@ -317,7 +317,7 @@ def test_config_accepts_new_events():
 
 def test_config_still_rejects_unknown_event():
     with pytest.raises(HookConfigError):
-        validate_hooks([{"event": "session_start", "command": "echo x"}])
+        validate_hooks([{"event": "bogus_event", "command": "echo x"}])
 
 
 @pytest.mark.asyncio()
