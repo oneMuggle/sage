@@ -61,7 +61,7 @@ Sage 的记忆系统参考人类记忆的三层模型，结合 Hermes Agent 的�
 │   │   • 用户偏好 (显式)                                       │   │
 │   │   • 情感标记                                              │   │
 │   │                                                           │   │
-│   │   索引: importance + access_count + recency              │   │
+│   │   检索评分: 四因子复合(见 4.8.7)                          │   │
 │   │   TTL: 可配置，默认永不过期                                │   │
 │   └──────────────────────────┬──────────────────────────────┘   │
 │                              │ 定期归档                          │
@@ -833,11 +833,45 @@ MEMORY.md：
   `memory_save` 工具与 `POST /memory/save` 新增可选 `conflict_check`
   参数(默认 false 保持旧语义)，响应带 `op` 字段。
 
-### 4.8.7 后续路线(未实现)
+### 4.8.7 每周反思与四因子评分 (P4 已落地)
 
-- P4:每周反思(reflection)与 recency×importance×confidence×relevance
-  四因子评分；反思任务补上 DELETE 型冲突(新事实否定旧事实)。
+**每周反思**(`backend/scheduler/evolution.py::MemoryReflectionTask`，
+`memory_reflection`，默认每周一 05:00，`config.yaml evolution.tasks` 可调)：
+
+- **窗口扫描**: 取近 7 天(可配 `window_days`/`sample_limit`)两张持久层
+  的活跃记忆，按**归属**(scope + project_key)分组，绝不跨组整理。
+- **确定性去重**: 组内两两相似度 ≥0.97 的近重复直接 invalidate 旧行，
+  保留最新——不依赖 LLM。
+- **LLM 整理**: 每组装编号事实喂给模型，要求输出 JSON 操作序列——
+  `MERGE`(多条合成一条更泛化的事实，写新行 + 成员全部 invalidate，
+  新行 `supersedes_id` 指向最新成员、继承归属与层级)与
+  `INVALIDATE`(**DELETE 型冲突**:新事实否定旧事实，复用 P3 的
+  `invalid_at` 时间有效区，不物理删除)。模型输出非法/越界一律跳过，
+  任务本身不因质量失败。
+- **审计**: 每次操作写 `memories_evolution_log`(`reflect_invalidate` /
+  `reflect_merge`)，任务级结果写 `evolution_log`(`memory_reflection`)；
+  后者 `MAX(created_at)` 即"上次反思时间"，无需新表。
+
+**四因子检索评分**(`backend/memory/scoring.py`)：
+
+```
+composite = 0.40·relevance + 0.15·recency + 0.25·importance + 0.20·confidence
+```
+
+- `relevance`: RRF 融合分按 2/61 归一；`recency`: 30 天半衰期，
+  取 max(created_at, accessed_at)，兼容秒/毫秒两种时间戳；
+  `importance`: 1–10 归一(缺省中性 0.5，semantic 行无此列)；
+  `confidence`: 基线 0.5，进化/固化/反思来源 +0.2，有取代链 +0.1，
+  按 `access_count` 每 10 次 +0.02 封顶 +0.2(`get_by_id` 的访问计数
+  即 Generative-Agents 式强化回路)。
+- **接线**: `MemoryAdapter.retrieve` 在 scope 兜底过滤后统一
+  `rank_by_composite` 重排——陈旧低可信的字面命中不再压过更新更可信
+  的语义次优事实；`MemoryContext.format` 的排序键优先读
+  `composite_score`。
+
+至此 scope 轴四阶段(P1 作用域 → P2 项目画像 → P3 冲突消解 →
+P4 反思与评分)全部落地。
 
 ---
 
-_文档版本: v1.2_
+_文档版本: v1.3_

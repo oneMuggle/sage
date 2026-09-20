@@ -1204,6 +1204,367 @@ class SkillConsolidationTask(BaseEvolutionTask):
             return set()
 
 
+class MemoryReflectionTask(BaseEvolutionTask):
+    """P4 每周反思（对标 Generative Agents reflection + Mem0 consolidation）。
+
+    写入口的 P3 冲突消解只看"这一次写入"；时间一长仍会积累跨时间的
+    近重复与相互矛盾的事实。反思任务每周把近窗口新增记忆按**归属**
+    (scope + project_key) 分组整理：
+
+    - 启发式路（恒执行，确定性）：组内近重复聚类（相似度 ≥0.97），
+      保留最新一条，其余 ``invalidate()``；
+    - LLM 路（best-effort）：编号事实交给模型，输出 MERGE（多条同主题
+      精炼成一条）与 INVALIDATE（被新事实否定 = DELETE 型冲突）操作。
+      模型不可用 / 输出不可解析 / 越界 id 一律忽略，绝不抛异常。
+
+    绝不跨组整理（与 P3 冲突候选的归属对齐语义一致）；每个操作写
+    ``memories_evolution_log`` 审计，任务级写 ``evolution_log``
+    （``SELECT MAX(created_at) WHERE evolution_type='memory_reflection'``
+    即"上次反思时间"，无需新表）。
+    """
+
+    DEFAULT_WINDOW_DAYS = 7
+    DEFAULT_SAMPLE_LIMIT = 120
+    #: 与 conflict.NOOP_THRESHOLD 同值：近重复判定
+    DEDUPE_SIMILARITY = 0.97
+    #: 单组送 LLM 的条数上限（控提示词体积）
+    LLM_GROUP_LIMIT = 40
+    LLM_CONTENT_TRUNC = 160
+
+    def __init__(
+        self, db=None, memory_manager=None, llm_client=None, config: dict = None
+    ):
+        super().__init__(db=db, memory_manager=memory_manager)
+        self.llm = llm_client
+        self.config = config or {}
+
+    # ---- 数据收集 ----------------------------------------------------------
+
+    def _collect_recent(self) -> List[dict]:
+        """取反思窗口内的活跃记忆（两表, 带归属与层级标记）。"""
+        try:
+            window_days = int(self.config.get("window_days", self.DEFAULT_WINDOW_DAYS))
+        except (TypeError, ValueError):
+            window_days = self.DEFAULT_WINDOW_DAYS
+        try:
+            sample_limit = int(self.config.get("sample_limit", self.DEFAULT_SAMPLE_LIMIT))
+        except (TypeError, ValueError):
+            sample_limit = self.DEFAULT_SAMPLE_LIMIT
+        cutoff_ms = int(time.time() * 1000) - window_days * 86_400_000
+
+        conn = self.db.get_connection()
+        rows: List[dict] = []
+        for layer, table, extra in (
+            ("episodic", "memories_episodic", "AND is_valid = 1"),
+            ("semantic", "memories_semantic", ""),
+        ):
+            try:
+                cursor = conn.execute(
+                    f"SELECT id, content, created_at, scope, project_key "
+                    f"FROM {table} "
+                    f"WHERE invalid_at IS NULL AND created_at >= ? {extra} "
+                    f"ORDER BY created_at DESC LIMIT ?",
+                    (cutoff_ms, sample_limit),
+                )
+            except Exception as exc:  # noqa: BLE001 — 表异常时按无候选处理
+                logger.warning(f"反思候选读取失败({layer}): {exc}")
+                continue
+            for row in cursor.fetchall():
+                d = dict(row)
+                d["memory_layer"] = layer
+                rows.append(d)
+        return rows
+
+    @staticmethod
+    def _group_by_attribution(rows: List[dict]) -> Dict[tuple, List[dict]]:
+        """按归属分组：scope + project_key 完全一致才可能互相整理。"""
+        groups: Dict[tuple, List[dict]] = {}
+        for r in rows:
+            key = (r.get("scope") or "user", r.get("project_key"))
+            groups.setdefault(key, []).append(r)
+        return groups
+
+    # ---- 启发式：组内近重复去重 ---------------------------------------------
+
+    def _heuristic_dedupe(self, groups: Dict[tuple, List[dict]]) -> List[str]:
+        from backend.memory.conflict import _similarity
+
+        invalidated_ids: List[str] = []
+        for rows in groups.values():
+            if len(rows) < 2:
+                continue
+            # created_at 降序：第一条为"最新代表"，与其近重复的旧行失效
+            ordered = sorted(rows, key=lambda r: r.get("created_at") or 0, reverse=True)
+            reps: List[dict] = []
+            for row in ordered:
+                dup_of = next(
+                    (
+                        rep
+                        for rep in reps
+                        if _similarity(row.get("content") or "", rep.get("content") or "")
+                        >= self.DEDUPE_SIMILARITY
+                    ),
+                    None,
+                )
+                if dup_of is not None:
+                    if self._invalidate(row, f"duplicate of {dup_of['id']} (reflect dedupe)"):
+                        invalidated_ids.append(row["id"])
+                else:
+                    reps.append(row)
+        return invalidated_ids
+
+    # ---- LLM 路：MERGE / INVALIDATE ----------------------------------------
+
+    async def _run_llm_ops(self, groups: Dict[tuple, List[dict]]) -> Dict[str, int]:
+        stats = {"merged": 0, "invalidated": 0}
+        llm = self._resolve_llm()
+        if llm is None:
+            return stats
+        for (scope, project_key), rows in groups.items():
+            if len(rows) < 2:
+                continue
+            ordered = sorted(rows, key=lambda r: r.get("created_at") or 0, reverse=True)
+            sample = ordered[: self.LLM_GROUP_LIMIT]
+            lines = [
+                f"{i}. [{r['memory_layer']}] {(r.get('content') or '')[: self.LLM_CONTENT_TRUNC]}"
+                for i, r in enumerate(sample, 1)
+            ]
+            prompt = (
+                "你是记忆整理器。下面是同一归属下的近期记忆（编号列出）。请输出一个 JSON 数组，"
+                "每项是一个操作，只允许两种操作：\n"
+                '1. {"op": "MERGE", "ids": [<同一主题的多条编号，2 条以上>], '
+                '"content": "<合并精炼后的一条事实，不超过 120 字>"}\n'
+                '2. {"op": "INVALIDATE", "id": <编号>, "reason": "<为什么被更晚的记忆否定或已过时>"}\n'
+                "规则：只在列表内部操作，编号必须真实存在；主题不同不要强行合并；"
+                "没有值得整理的就输出 []。只输出 JSON，无其他文字。\n\n" + "\n".join(lines)
+            )
+            content = await self._chat(llm, prompt)
+            for op_obj in self._parse_ops(content):
+                self._apply_llm_op(op_obj, sample, (scope, project_key), stats)
+        return stats
+
+    def _apply_llm_op(
+        self,
+        op_obj: dict,
+        sample: List[dict],
+        attribution: tuple,
+        stats: Dict[str, int],
+    ) -> None:
+        """应用一条 LLM 操作；编号用 1-based 序号（模型不擅长复述 UUID）。"""
+        op = str(op_obj.get("op", "")).upper()
+        if op == "MERGE":
+            members = []
+            for raw_idx in op_obj.get("ids") or []:
+                try:
+                    idx = int(raw_idx) - 1
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= idx < len(sample):
+                    members.append(sample[idx])
+            merged = str(op_obj.get("content") or "").strip()[:300]
+            if len(members) < 2 or not merged:
+                return
+            seen, uniq = set(), []
+            for m in members:
+                if m["id"] not in seen:
+                    seen.add(m["id"])
+                    uniq.append(m)
+            if not all(self._invalidate(m, f"merged by reflection: {merged[:80]}") for m in uniq):
+                # 部分失效失败也继续写合并产物（丢失的行仍在, 只是未退出检索）
+                logger.warning("反思 MERGE: 部分成员失效失败")
+            self._write_merged_fact(merged, uniq, attribution)
+            stats["merged"] += 1
+        elif op == "INVALIDATE":
+            try:
+                idx = int(op_obj.get("id")) - 1
+            except (TypeError, ValueError):
+                return
+            row = sample[idx] if 0 <= idx < len(sample) else None
+            if row is None:
+                return
+            reason = str(op_obj.get("reason") or "negated by newer fact")[:200]
+            if self._invalidate(row, f"reflect invalidate: {reason}"):
+                stats["invalidated"] += 1
+
+    def _write_merged_fact(
+        self, merged: str, members: List[dict], attribution: tuple
+    ) -> None:
+        """合并产物写回最新成员所在层，携带 supersedes 链与归属。"""
+        scope, project_key = attribution
+        newest = max(members, key=lambda r: r.get("created_at") or 0)
+        try:
+            if newest["memory_layer"] == "semantic":
+                self.memory_manager.semantic.save(
+                    content=merged,
+                    summary=None,
+                    tags=["reflection"],
+                    scope=scope,
+                    project_key=project_key,
+                    supersedes_id=newest["id"],
+                )
+            else:
+                self.memory_manager.episodic.save(
+                    content=merged,
+                    importance=6,
+                    memory_type="reflection",
+                    scope=scope,
+                    project_key=project_key,
+                    supersedes_id=newest["id"],
+                )
+            _write_evolution_log(
+                self.db,
+                memory_type=newest["memory_layer"],
+                memory_id="+".join(m["id"] for m in members)[:512],
+                operation="reflect_merge",
+                before_content=" | ".join((m.get("content") or "")[:80] for m in members),
+                after_content=merged,
+                reason="memory_reflection",
+            )
+        except Exception as exc:  # noqa: BLE001 — 单条合并失败不拖垮任务
+            logger.warning(f"反思 MERGE 落库失败: {exc}")
+
+    def _invalidate(self, row: dict, reason: str) -> bool:
+        """按层失效一条记忆 + 记忆级审计日志。"""
+        try:
+            store = (
+                self.memory_manager.episodic
+                if row["memory_layer"] == "episodic"
+                else self.memory_manager.semantic
+            )
+            ok = store.invalidate(row["id"])
+            if ok:
+                _write_evolution_log(
+                    self.db,
+                    memory_type=row["memory_layer"],
+                    memory_id=row["id"],
+                    operation="reflect_invalidate",
+                    before_content=(row.get("content") or "")[:200],
+                    reason=f"memory_reflection: {reason}"[:300],
+                )
+            return bool(ok)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"反思失效失败({row.get('id')}): {exc}")
+            return False
+
+    # ---- LLM 客户端 / 调用（与 PreferenceLearningTask 同模式） ----------------
+
+    def _resolve_llm(self):
+        if self.llm is not None:
+            return self.llm
+        try:
+            from backend.core.legacy.llm_client import LLMClient, LLMConfig
+            from backend.orchestration.llm_factory import load_llm_config_from_settings
+
+            cfg = load_llm_config_from_settings()
+            if cfg is None:
+                return None
+            return LLMClient(LLMConfig(**cfg))
+        except Exception as exc:  # noqa: BLE001 — 降级纯启发式, 不拖垮定时任务
+            logger.warning(f"记忆反思 LLM 客户端解析失败，仅走启发式去重: {exc}")
+            return None
+
+    async def _chat(self, llm, prompt: str) -> str:
+        try:
+            try:
+                from backend.domain.message import Message
+
+                response_msg = await llm.chat(messages=[Message(role="user", content=prompt)])
+                return (
+                    response_msg.content
+                    if hasattr(response_msg, "content")
+                    else str(response_msg)
+                )
+            except (ImportError, TypeError, AttributeError):
+                response = await llm.chat(messages=[{"role": "user", "content": prompt}])
+                return response if isinstance(response, str) else str(response.get("content", ""))
+        except Exception as exc:  # noqa: BLE001 — LLM 故障降级
+            logger.warning(f"记忆反思 LLM 调用失败，本轮跳过模型整理: {exc}")
+            return ""
+
+    @staticmethod
+    def _parse_ops(raw: str) -> List[dict]:
+        """宽容解析 LLM 输出的操作数组（容忍围栏与多余文字）。"""
+        if not raw:
+            return []
+        text = raw.strip()
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.lower().startswith("json"):
+                text = text[4:]
+        start, end = text.find("["), text.rfind("]")
+        if start == -1 or end <= start:
+            return []
+        try:
+            data = json.loads(text[start : end + 1])
+        except (json.JSONDecodeError, ValueError):
+            return []
+        return [o for o in data if isinstance(o, dict)][:20]
+
+    # ---- 主流程 -------------------------------------------------------------
+
+    async def run_async(self) -> Dict[str, int]:
+        logger.info("开始执行记忆反思任务...")
+        stats = {"scanned": 0, "deduped": 0, "merged": 0, "invalidated": 0}
+        try:
+            if self.memory_manager is None:
+                logger.info("记忆反思缺少 memory_manager，跳过")
+                await self._log_evolution("跳过: 无 memory_manager", "skipped")
+                return stats
+
+            rows = self._collect_recent()
+            stats["scanned"] = len(rows)
+            groups = self._group_by_attribution(rows)
+
+            deduped_ids = set(self._heuristic_dedupe(groups))
+            stats["deduped"] = len(deduped_ids)
+            if deduped_ids:
+                # 已失效行不再送 LLM（避免对同一批内容重复出 MERGE 操作）
+                groups = {
+                    key: [r for r in v if r["id"] not in deduped_ids]
+                    for key, v in groups.items()
+                }
+            llm_stats = await self._run_llm_ops(groups)
+            stats["merged"] = llm_stats["merged"]
+            stats["invalidated"] = llm_stats["invalidated"]
+
+            description = (
+                f"记忆反思完成: 扫描 {stats['scanned']}, 去重 {stats['deduped']}, "
+                f"合并 {stats['merged']}, 失效 {stats['invalidated']}"
+            )
+            await self._log_evolution(description, "success")
+            logger.info(description)
+        except Exception as exc:  # noqa: BLE001 — 定时任务兜底
+            logger.warning(f"记忆反思任务失败: {exc}")
+            await self._log_evolution(f"记忆反思失败: {exc}", "failed", str(exc))
+        return stats
+
+    async def _log_evolution(
+        self, description: str, status: str, error_message: str = None
+    ):
+        """记录进化日志（与其他任务类同构）。"""
+        try:
+            conn = self.db.get_connection()
+            conn.execute(
+                """
+                INSERT INTO evolution_log
+                (id, evolution_type, description, status, error_message,
+                 trigger_type, created_at, completed_at)
+                VALUES (?, 'memory_reflection', ?, ?, ?, 'scheduled', ?, ?)
+                """,
+                (
+                    str(uuid.uuid4()),
+                    description,
+                    status,
+                    error_message,
+                    int(time.time()),
+                    int(time.time()) if status == "success" else None,
+                ),
+            )
+            conn.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"反思进化日志写入失败: {exc}")
+
+
 
 def create_evolution_tasks(config: dict = None) -> Dict[str, BaseEvolutionTask]:
     """
@@ -1246,19 +1607,29 @@ def create_evolution_tasks(config: dict = None) -> Dict[str, BaseEvolutionTask]:
             db=db, config=config.get("skill_consolidation", {})
         )
 
+    # 共享 MemoryManager 单例（memory_consolidation / memory_reflection 都依赖）
+    mm = None
+    try:
+        from backend.memory.registry import get_memory_manager
+
+        mm = get_memory_manager()
+    except Exception:
+        pass
+
     # 记忆整合任务（"做梦"）— 默认启用，每周运行
     if config.get("memory_consolidation", {}).get("enabled", True):
-        mm = None
-        try:
-            from backend.memory.registry import get_memory_manager
-
-            mm = get_memory_manager()
-        except Exception:
-            pass
         tasks["memory_consolidation"] = MemoryConsolidationTask(
             db=db,
             memory_manager=mm,
             config=config.get("memory_consolidation", {}),
+        )
+
+    # P4 记忆反思 — 默认启用，每周一 05:00；无 LLM 时仅走启发式近重复去重
+    if config.get("memory_reflection", {}).get("enabled", True):
+        tasks["memory_reflection"] = MemoryReflectionTask(
+            db=db,
+            memory_manager=mm,
+            config=config.get("memory_reflection", {}),
         )
 
     return tasks

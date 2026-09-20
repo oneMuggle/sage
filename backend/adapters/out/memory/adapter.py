@@ -168,6 +168,7 @@ class MemoryAdapter:
         """
         from backend.memory import scope as memory_scope
         from backend.memory.fusion import reciprocal_rank_fusion
+        from backend.memory.scoring import rank_by_composite
 
         logger.debug(f"Retrieving memories for query: {query[:50]}...")
 
@@ -236,6 +237,11 @@ class MemoryAdapter:
             item for item in fused
             if memory_scope.is_row_visible(item, current_project_key)
         ]
+
+        # P4 四因子重排：RRF 只回答"像不像"。composite_score 在此基础上
+        # 叠加时近性、重要性与可信度，让陈旧低可信的字面命中不再压过
+        # 更新、更可信的语义次优事实。
+        fused = rank_by_composite(fused)
 
         logger.info(
             "[retrieval] variant=%s weights=%s keyword_hits=%s vector_hits=%s fused=%s",

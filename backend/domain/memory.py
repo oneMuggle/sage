@@ -106,9 +106,13 @@ class MemoryContext:
                 used_tokens += working_tokens
 
         # ---- 情景 + 语义记忆：按重要性排序，填充剩余预算 ----
+        # P4: 混合检索路径会带上 composite_score（四因子综合分），
+        # 优先按它排；旧调用方未打分时退回 importance/rrf_score。
         memory_items = list(self.episodic) + list(self.semantic)
         memory_items.sort(
-            key=lambda m: m.get("importance", m.get("rrf_score", 0)),
+            key=lambda m: m.get(
+                "composite_score", m.get("importance", m.get("rrf_score", 0))
+            ),
             reverse=True,
         )
 

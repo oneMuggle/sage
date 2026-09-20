@@ -22,6 +22,8 @@ _DEFAULT_SCHEDULE: Dict[str, Tuple[str, str, str]] = {
     "memory_consolidation": ("30", "4", "0"),
     # Round 5/7: 技能巡检 —— 每周六 05:30；LLM/provider 未装配时任务为 no-op
     "skill_consolidation": ("30", "5", "6"),
+    # P4 记忆反思 —— 每周一 05:00（避开周日 memory_consolidation/importance）
+    "memory_reflection": ("0", "5", "1"),
 }
 
 _TIME_RE = re.compile(r"^([0-9]{1,2}):([0-9]{2})$")
@@ -114,7 +116,7 @@ def _register_evolution_tasks(
     scheduler_service: "SchedulerService",  # type: ignore[name-defined]  # noqa: F821
     config_path: Optional[Path] = None,
 ) -> Dict[str, str]:
-    """注册 5 个 evolution 任务到 scheduler_service。返回 name → cron 映射。
+    """注册全部 evolution 任务到 scheduler_service。返回 name → cron 映射。
 
     行为:
     - 若 config_path 提供且存在 → 解析 YAML evolution.tasks.<name>.time/day
