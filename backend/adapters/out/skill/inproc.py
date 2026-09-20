@@ -90,6 +90,7 @@ class InprocSkillAdapter:
                 SubprocessSandboxAdapter,
             )
             from backend.skills.skill_md.loader import (
+                _discover_shipped_dir,
                 build_gating_context_for_dirs,
                 discover_skill_md_dirs,
             )
@@ -103,10 +104,22 @@ class InprocSkillAdapter:
             )
             from backend.skills import register_skill_md_skills
 
+            # Build registration dirs = user roots + shipped fallback (dedup by resolved path).
+            # Shipped is registered (so e.g. academic-search becomes visible) but MUST NOT
+            # be added to ScriptRunner.allowed_roots above (security boundary stays narrow).
+            registration_dirs = list(skill_dirs)
+            seen = {p.resolve() for p in registration_dirs}
+            shipped = _discover_shipped_dir()
+            if shipped is not None:
+                shipped_resolved = shipped.resolve()
+                if shipped_resolved not in seen:
+                    registration_dirs.append(shipped)
+                    seen.add(shipped_resolved)
+
             register_skill_md_skills(
                 self._registry,
-                dirs=[str(path) for path in skill_dirs],
-                gating_ctx=build_gating_context_for_dirs(skill_dirs),
+                dirs=[str(p) for p in registration_dirs],
+                gating_ctx=build_gating_context_for_dirs(registration_dirs),
                 script_runner=self._script_runner,
             )
         except Exception as exc:  # noqa: BLE001 — adapter 构造必须容错
