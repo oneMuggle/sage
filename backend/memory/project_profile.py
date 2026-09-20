@@ -107,7 +107,7 @@ class ProjectProfileStore:
         if project_key not in self._snapshot_entries and self._by_project.get(project_key):
             # 防御：构造后未显式 load/invalidate 时按当前 entries 生成一次
             self._rebuild_snapshot(project_key)
-        items = [
+        return [
             {
                 "content": e["content"],
                 "category": e["category"],
@@ -117,7 +117,6 @@ class ProjectProfileStore:
             }
             for e in self._snapshot_entries.get(project_key, [])
         ]
-        return items
 
     def list(self, project_key: str) -> List[Dict[str, Any]]:
         """列出指定项目的全部画像条目（按重要性降序）。"""
@@ -230,7 +229,7 @@ class ProjectProfileStore:
                     "content": row["content"],
                     "category": row["category"],
                     "importance": max(1, min(int(row["importance"] or 5), 10)),
-                    "source": row["source"] if "source" in row.keys() else "manual",
+                    "source": row["source"],
                     "created_at": row["created_at"],
                 }
                 for row in rows

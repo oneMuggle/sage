@@ -130,13 +130,13 @@ def setup_test_db(request):
     # MessageSearchIndex 单例绑定全局 Database（Round 2 session_search）
     from backend.data.message_search import reset_message_search_index
     from backend.main import app
+
+    # ProjectProfileStore（P2 项目画像）单例同理
+    from backend.memory.project_profile import reset_project_profile
     from backend.memory.registry import reset_memory_manager
 
     # UserProfileStore 单例同样绑定全局 Database, 必须随临时库重置
     from backend.memory.user_profile import reset_user_profile
-
-    # ProjectProfileStore（P2 项目画像）单例同理
-    from backend.memory.project_profile import reset_project_profile
 
     # MemoryWriteLedger 进程内台账（对标 S2）：跨用例清空，避免撤销/列表串味
     from backend.memory.write_ledger import reset_write_ledger
