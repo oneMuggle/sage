@@ -135,3 +135,48 @@ async def test_no_tool_calls_no_sources_event(client):
     assert not [e for e in events_seen if e.get("state") == "sources_used"]
     rows = MessageRepository().get_by_session(session.id)
     assert all(r.to_dict().get("sources") is None for r in rows)
+
+
+@pytest.mark.asyncio()
+async def test_browser_navigate_sources_flow(client):
+    """R87: agent 经受控浏览器主动访问的页面同样进来源（snippet 留空）。"""
+    session = SessionRepository().create(title="r90-navigate")
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(
+            state=AgentState.ACTING,
+            iteration=0,
+            tool_call=ToolCallRequest(id="tc-1", name="browser_navigate", arguments={"url": "https://b.example.com"}),
+        )
+        yield AgentEvent(
+            state=AgentState.OBSERVING,
+            iteration=0,
+            tool_call=ToolCallRequest(id="tc-1", name="browser_navigate", arguments={"url": "https://b.example.com"}),
+            tool_result=ToolCallResult(
+                tool_call_id="tc-1",
+                content=json.dumps({"url": "https://b.example.com", "title": "示例站"}),
+                is_error=False,
+            ),
+        )
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="已浏览该页面")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = mock_run_loop
+        MockAgent.return_value.memory_manager = None
+
+        create_stream = await client.post(
+            CHAT_STREAM_PATH,
+            json={"session_id": session.id, "message": "看看这个页面"},
+        )
+        assert create_stream.status_code == 200
+        stream_id = create_stream.json()["streamId"]
+        await _drain_stream(client, stream_id)
+
+    rows = MessageRepository().get_by_session(session.id)
+    final_rows = [r for r in rows if r.role == "assistant" and r.to_dict().get("sources")]
+    assert final_rows
+    persisted = final_rows[0].to_dict()["sources"]
+    assert persisted[0]["kind"] == "web"
+    assert persisted[0]["url"] == "https://b.example.com"
+    assert persisted[0]["title"] == "示例站"

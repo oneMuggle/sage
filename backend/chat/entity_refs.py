@@ -147,12 +147,21 @@ def _resolve_wiki(query: str, _session_id: Optional[str]) -> ResolvedRef:
             continue
         snippet = _clip(getattr(r, "snippet", ""))
         items.append(f"{r.title} ({r.path}): {snippet}")
+        # R90: 补 score —— 与 wiki_search 提取来源的显示口径一致。
+        # py3.8/ruff 兼容：不用 isinstance(x, (int, float))（UP038），
+        # 也不写 int | float（3.10+ 语法）。
+        raw_score = getattr(r, "score", None)
+        if isinstance(raw_score, bool):
+            raw_score = None
+        if raw_score is not None and not isinstance(raw_score, int) and not isinstance(raw_score, float):
+            raw_score = None
         sources.append(
             {
                 "kind": "wiki",
                 "title": str(r.title),
                 "path": str(getattr(r, "path", "") or r.title),
                 "snippet": snippet,
+                "score": round(raw_score, 2) if raw_score is not None else None,
             }
         )
     return ResolvedRef(
