@@ -1,0 +1,9 @@
+{
+  "entry": ["src/main.tsx", "electron/main.ts"],
+  "project": ["src/**/*.{ts,tsx}", "electron/**/*.ts"],
+  "ignoreBinaries": ["eslint"],
+  "rules": {
+    "exports": "warn",
+    "dependencies": "warn"
+  }
+}
