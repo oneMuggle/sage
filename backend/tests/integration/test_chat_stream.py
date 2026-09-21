@@ -91,7 +91,7 @@ async def test_chat_stream_attach_streams_ndjson_events():
             iteration=0,
             tool_call=ToolCallRequest(
                 id="c1",
-                name="calculator",
+                name="list_dir",
                 arguments={"expression": "1+1"},
             ),
         )
@@ -134,7 +134,7 @@ async def test_chat_stream_attach_streams_ndjson_events():
             done_events = [e for e in events if e["state"] == "done"]
             assert events[0]["state"] == "thinking"
             assert events[1]["state"] == "acting"
-            assert events[1]["tool_call"]["function"]["name"] == "calculator"
+            assert events[1]["tool_call"]["function"]["name"] == "list_dir"
             assert events[2]["state"] == "observing"
             # content_delta 累积 = 完整 content
             accumulated = "".join(e["content"] for e in delta_events)

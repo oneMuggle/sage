@@ -24,7 +24,6 @@ from .browser_tool import (
     BrowserScreenshotTool,
     BrowserSnapshotTool,
 )
-from .calculator import CalculatorTool
 from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, CheckpointRestoreTool
 from .codebase_search_tool import CodebaseSearchTool
 from .commit_message_tool import GitCommitMessageTool
@@ -164,7 +163,6 @@ def register_all_tools(
     if network_policy.fetch_enabled():
         registry.register(WebFetchTool(policy=policy, network_policy=network_policy))
         registry.register(HttpDownloadTool(policy=policy, network_policy=network_policy))
-    registry.register(CalculatorTool(policy=policy))
     registry.register(MemorySearchTool(policy=policy))
     # Round 2 (session_search): 跨会话对话原文检索（READ 级）
     registry.register(SessionSearchTool(policy=policy))
@@ -336,7 +334,6 @@ __all__ = [
     "WebSearchTool",
     "WebFetchTool",
     "HttpDownloadTool",
-    "CalculatorTool",
     "MemorySearchTool",
     "SessionSearchTool",
     "ExecuteCodeTool",

@@ -109,7 +109,7 @@ def test_agent_event_to_dict_with_error():
 
 def test_agent_event_to_dict_with_tool_call_and_result():
     """OBSERVING 事件同时包含 tool_call 和 tool_result。"""
-    tc = ToolCallRequest(id="c1", name="calculator", arguments={"x": 1})
+    tc = ToolCallRequest(id="c1", name="list_dir", arguments={"x": 1})
     tr = ToolCallResult(tool_call_id="c1", content="1", is_error=False)
     evt = AgentEvent(
         state=AgentState.OBSERVING,
@@ -119,7 +119,7 @@ def test_agent_event_to_dict_with_tool_call_and_result():
     )
     d = evt.to_dict()
     assert d["state"] == "observing"
-    assert d["tool_call"]["function"]["name"] == "calculator"
+    assert d["tool_call"]["function"]["name"] == "list_dir"
     assert d["tool_result"]["content"] == "1"
     assert d["tool_result"]["role"] == "tool"
 

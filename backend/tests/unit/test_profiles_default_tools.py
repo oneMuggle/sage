@@ -25,8 +25,6 @@ def test_primary_profile_includes_repl_and_execute_code():
     assert "execute_code" in _PRIMARY_SEED_TOOLS, (
         "alpha.36 (Bug #5): primary 白名单缺 execute_code — LLM 无法使用 zero-context RPC"
     )
-    # calculator 已在 _PRIMARY_CORE_TOOLS，不应重复（set 语义）
-    assert _PRIMARY_SEED_TOOLS.count("calculator") == 1
 
 
 def test_coder_profile_includes_repl_and_execute_code():

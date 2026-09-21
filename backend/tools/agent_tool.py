@@ -10,7 +10,7 @@ with lifecycle events recorded through ``EventRecorder``.
 
 Security model (defense in depth):
 - The sub-agent's tool registry is a hard READ-ONLY whitelist:
-  ``read_file, list_dir, web_search, web_fetch, memory_search, calculator``.
+  ``read_file, list_dir, web_search, web_fetch, memory_search``.
   No terminal / write / edit / repl / office — ever. The whitelist is
   enforced structurally (the tools simply are not registered), and the
   sub-agent's own ToolPolicy enforcer still applies on top.
@@ -82,7 +82,6 @@ from backend.tools.browser_tool import (
     BrowserNavigateTool,
     BrowserSnapshotTool,
 )
-from backend.tools.calculator import CalculatorTool
 from backend.tools.download_tool import HttpDownloadTool
 from backend.tools.file_tool import ListDirTool, ReadFileTool
 from backend.tools.memory_tool import MemorySearchTool
@@ -104,7 +103,6 @@ SUBAGENT_TOOL_WHITELIST: Tuple[str, ...] = (
     "web_fetch",
     "http_download",
     "memory_search",
-    "calculator",
     "browser_launch",
     "browser_navigate",
     "browser_snapshot",
@@ -166,7 +164,7 @@ SUBAGENT_TIMEOUT_S: float = _resolve_timeout()
 SUBAGENT_SYSTEM_PROMPT = (
     "You are a focused Sage sub-agent performing a delegated task. "
     "You have READ-ONLY tools: file reading, directory listing, web search/fetch, "
-    "memory search, and a calculator — plus a controlled browser channel "
+    "memory search — plus a controlled browser channel "
     "(browser_launch/navigate/snapshot/interact/cookies/close) for pages that "
     "need JavaScript rendering or a login state. You cannot modify files or run "
     "commands. File tools can only read the delegated scratch/workspace content; "
@@ -241,7 +239,6 @@ def build_readonly_tool_registry(
     registry.register(BrowserCookiesTool(policy=policy))
     registry.register(BrowserCloseTool(policy=policy))
     registry.register(MemorySearchTool(policy=policy))
-    registry.register(CalculatorTool(policy=policy))
     registry._owned_workspace_root = owned_root  # noqa: SLF001 — lifecycle metadata
     return registry
 
@@ -282,7 +279,7 @@ class AgentTool(BaseTool):
             description=(
                 "Launch a focused sub-agent to handle a delegated task. The sub-agent "
                 "has read-only tools (file/directory reading, web search/fetch, memory "
-                "search, calculator) and a controlled browser channel "
+                "search) and a controlled browser channel "
                 "(browser_launch/navigate/snapshot/interact/cookies/close, subject to "
                 "the same approval and network-mode gates), and returns a final answer. "
                 "Use it to parallelize investigation work without polluting the main "

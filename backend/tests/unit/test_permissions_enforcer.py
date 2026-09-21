@@ -277,7 +277,7 @@ def test_classify_tool_known_tools():
         "web_fetch",
         "office_list",
         "office_read",
-        "calculator",
+        "list_dir",
     ):
         assert classify_tool(name) is ToolCapability.READ, name
     assert classify_tool("write_file") is ToolCapability.WRITE

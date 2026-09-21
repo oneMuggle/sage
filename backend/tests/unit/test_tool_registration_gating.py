@@ -46,7 +46,7 @@ def test_non_outbound_tools_survive_every_mode():
     """门禁只影响出网工具，本地工具在任何模式下都在。"""
     for mode in (NetworkMode.ONLINE, NetworkMode.INTRANET, NetworkMode.OFFLINE):
         names = _names(NetworkPolicy(mode=mode))
-        for tool in ("read_file", "write_file", "bash", "calculator", "memory_search"):
+        for tool in ("read_file", "write_file", "bash", "list_dir", "memory_search"):
             assert tool in names, f"{tool} 在 {mode.value} 模式下消失了"
 
 

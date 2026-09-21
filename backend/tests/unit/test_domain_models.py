@@ -98,10 +98,10 @@ class TestAgentDecision:
     def test_decision_acting_payload(self) -> None:
         decision = AgentDecision(
             state=AgentState.ACTING,
-            action_name="calculator",
+            action_name="list_dir",
             action_args={"expr": "1+1"},
         )
-        assert decision.action_name == "calculator"
+        assert decision.action_name == "list_dir"
         assert decision.action_args == {"expr": "1+1"}
 
 

@@ -31,7 +31,7 @@ def test_list_tools_returns_specs_from_mock_registry() -> None:
     """list_tools 把 ToolSchema 转成 ToolSpec 列表，参数原样透传。"""
     # Arrange: 构造一个 mock tool 暴露 name/description/parameters
     mock_tool = type("FakeTool", (), {})()
-    mock_tool.name = "calculator"
+    mock_tool.name = "list_dir"
     mock_tool.description = "Math operations"
     mock_tool.parameters = {
         "type": "object",
@@ -44,7 +44,7 @@ def test_list_tools_returns_specs_from_mock_registry() -> None:
             "FakeSchema",
             (),
             {
-                "name": "calculator",
+                "name": "list_dir",
                 "description": "Math operations",
                 "parameters": mock_tool.parameters,
             },
@@ -60,7 +60,7 @@ def test_list_tools_returns_specs_from_mock_registry() -> None:
     assert len(tools) == 1
     spec = tools[0]
     assert isinstance(spec, ToolSpec)
-    assert spec.name == "calculator"
+    assert spec.name == "list_dir"
     assert spec.description == "Math operations"
     assert spec.parameters == {
         "type": "object",
@@ -138,13 +138,13 @@ def _make_registry(tools: Dict[str, _FakeTool]) -> Any:
 async def test_execute_delegates_to_tool_and_converts_result() -> None:
     """成功路径：execute(**args) 委派，content -> output，error=None。"""
     fake_tool = _FakeTool(
-        "calculator",
+        "list_dir",
         raw=_FakeRawResult(success=True, content=42, error=None),
     )
-    registry = _make_registry({"calculator": fake_tool})
+    registry = _make_registry({"list_dir": fake_tool})
     adapter = InprocToolAdapter(registry=registry)  # type: ignore[arg-type]
 
-    result = await adapter.execute("calculator", {"expression": "2+2"})
+    result = await adapter.execute("list_dir", {"expression": "2+2"})
 
     assert isinstance(result, ToolResult)
     assert result.success is True
@@ -174,13 +174,13 @@ async def test_execute_preserves_structured_output() -> None:
 async def test_execute_failure_passes_error_through() -> None:
     """失败路径：error 透传，output 为空。"""
     fake_tool = _FakeTool(
-        "calculator",
+        "list_dir",
         raw=_FakeRawResult(success=False, content=None, error="Invalid input"),
     )
-    registry = _make_registry({"calculator": fake_tool})
+    registry = _make_registry({"list_dir": fake_tool})
     adapter = InprocToolAdapter(registry=registry)  # type: ignore[arg-type]
 
-    result = await adapter.execute("calculator", {})
+    result = await adapter.execute("list_dir", {})
 
     assert result.success is False
     assert result.output == ""
@@ -245,8 +245,8 @@ def test_default_registry_is_used_when_none_provided() -> None:
     """
     adapter = InprocToolAdapter()
     names = {t.name for t in adapter.list_tools()}
-    # 至少包含 builtin 工具 (calculator 永远在, 不依赖 MCP)
-    assert "calculator" in names
+    # 至少包含 builtin 工具 (list_dir 永远在, 不依赖 MCP)
+    assert "list_dir" in names
     # web_search 也是 builtin
     assert "web_search" in names
 

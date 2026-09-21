@@ -167,8 +167,8 @@ async def test_hooks_present_disables_parallel():
 async def test_parallel_budget_overflow_falls_back():
     """批次超出预算余量 → 回退串行守卫(在精确超限点终止)。"""
     t1 = _FakeTool("read_file")
-    t2 = _FakeTool("calculator")
-    tools = {"read_file": t1, "calculator": t2}
+    t2 = _FakeTool("list_dir")
+    tools = {"read_file": t1, "list_dir": t2}
 
     import os
     os.environ["SAGE_MAX_TOOL_CALLS_PER_RUN"] = "2"
@@ -178,7 +178,7 @@ async def test_parallel_budget_overflow_falls_back():
                 ("read_file", "{}"), ("read_file", "{}"),
             )),
             LLMResponse(content="", tool_calls=_tool_calls(
-                ("read_file", "{}"), ("calculator", "{}"),
+                ("read_file", "{}"), ("list_dir", "{}"),
             )),
             LLMResponse(content="never"),
         ])

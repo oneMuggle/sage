@@ -45,7 +45,7 @@ SCENARIOS: Dict[str, List[Dict[str, Any]]] = {
             "tool_calls": [
                 {
                     "id": "call_parity_1",
-                    "name": "calculator",
+                    "name": "list_dir",
                     "arguments": '{"expression": "6*7"}',
                 }
             ],

@@ -22,7 +22,7 @@ pytestmark = pytest.mark.integration
 CALCULATOR_TOOL_SCHEMA = {
     "type": "function",
     "function": {
-        "name": "calculator",
+        "name": "list_dir",
         "description": "计算数学表达式",
         "parameters": {
             "type": "object",
@@ -103,7 +103,7 @@ async def test_parity_tool_call_round_trip(mock_server):
     assert len(first.tool_calls) == 1
     tool_call = first.tool_calls[0]
     assert tool_call.id == "call_parity_1"
-    assert tool_call.name == "calculator"
+    assert tool_call.name == "list_dir"
     assert json.loads(tool_call.arguments) == {"expression": "6*7"}
 
     # 模拟 agent 循环: 回填 assistant + tool 消息, 第二轮请求

@@ -28,6 +28,9 @@ class FakeRepo:
     def get(self, agent_id):
         return dict(self.stored[agent_id]) if agent_id in self.stored else None
 
+    def list_all(self):
+        return [dict(row) for row in self.stored.values()]
+
     def upsert(self, data):
         self.upserts.append(data)
         self.stored[data["id"]] = data
@@ -76,6 +79,10 @@ def test_legacy_primary_gets_bash_trio_appended(monkeypatch):
     for tool in EXEC_TOOLS:
         assert tool in stored["primary"]["tools"]
     for tool in legacy:
+        # 2026-09-21: calculator 已被工具移除, 退役工具清理段会从 profile 中
+        # 摘除, 不属于"既有工具不丢"的承诺范围。
+        if tool == "calculator":
+            continue
         assert tool in stored["primary"]["tools"]
 
 
@@ -130,7 +137,6 @@ def test_legacy_coder_gets_bash_output_kill_shell(monkeypatch):
         "read_file",
         "write_file",
         "bash",
-        "calculator",
         "bash_output",
         "kill_shell",
     ]

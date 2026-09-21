@@ -121,7 +121,7 @@ async def test_run_turn_uses_mock_tool_registry():
     llm_response = Message(
         role=Role.ASSISTANT,
         content="",
-        tool_calls=[ToolCall(name="calculator", args={"expression": "2+2"})],
+        tool_calls=[ToolCall(name="list_dir", args={"expression": "2+2"})],
     )
     service = _make_service(llm_responses=[llm_response])
     sid = await service.storage.create_session()
@@ -129,7 +129,7 @@ async def test_run_turn_uses_mock_tool_registry():
     await service.run_turn(sid, Message(role=Role.USER, content="compute"))
     # 工具被 InprocToolAdapter 通过 registry.get(name) 找到并 execute(**args)
     assert service.tools._registry.get.called  # type: ignore[attr-defined]
-    assert service.tools._registry.get.call_args.args[0] == "calculator"
+    assert service.tools._registry.get.call_args.args[0] == "list_dir"
     # 工具的 execute 被调用，参数是 args 解包
     mock_tool = service.tools._registry.get.return_value  # type: ignore[attr-defined]
     mock_tool.execute.assert_called_once_with(expression="2+2")
@@ -155,7 +155,7 @@ async def test_complex_turn_appends_skill_nudge():
     llm_response = Message(
         role=Role.ASSISTANT,
         content="完成复杂任务",
-        tool_calls=[ToolCall(name="calculator", args={"expression": "2+2"})] * 4,
+        tool_calls=[ToolCall(name="list_dir", args={"expression": "2+2"})] * 4,
     )
     service = _make_service(llm_responses=[llm_response])
     sid = await service.storage.create_session()
