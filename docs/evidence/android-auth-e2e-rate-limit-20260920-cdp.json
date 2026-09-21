@@ -1,0 +1,32 @@
+{
+  "url": "https://arena.ai/agent",
+  "bodyText": "What would you like to do?\n\n1+1=\n\nConnect your GitHub\nNEW\nConnect",
+  "snapshot": {
+    "url": "https://arena.ai/agent",
+    "browserSourceBefore": "https://arena.ai/agent",
+    "browserSourceAfter": "https://arena.ai/agent",
+    "snapshotConsistent": true,
+    "main": true,
+    "conversation": false,
+    "promptConfirmed": false,
+    "thinking": false,
+    "generating": false,
+    "activity": false,
+    "failed": false,
+    "response": false,
+    "generationStamp": "",
+    "progressSignature": "",
+    "responseSignature": "",
+    "completionConfirmed": false,
+    "messageIdentity": "",
+    "draft": "1+1=",
+    "editor": true,
+    "blocker": "",
+    "termsPending": false,
+    "sendReady": true,
+    "newLinks": 0,
+    "canExpand": true,
+    "attachmentNames": [],
+    "conversationAttachments": []
+  }
+}

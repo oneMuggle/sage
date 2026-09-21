@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Arena 模型助手</string>
+    <string name="channel_automation">自动化任务</string>
+    <string name="notification_title">Arena 自动化运行中</string>
+</resources>

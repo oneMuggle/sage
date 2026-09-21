@@ -1,0 +1,2 @@
+# 复制为 local.properties（该文件不入库）
+sdk.dir=D\:\\Android\\Sdk

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- 方案 §7：Android 14+ 前台服务必须声明 type -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@android:drawable/sym_def_app_icon"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false"
+        android:theme="@style/Theme.ArenaCompanion">
+
+        <!-- 启动入口是实例选择器：代理与活动权都是进程级的，
+             必须先选定唯一活动实例再进会话页面。 -->
+        <activity
+            android:name=".app.InstancePickerActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".app.MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <!-- 方案 §4：.cmd / .lnk 会话入口 → deep link，语义保留 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="arena-companion" android:host="open" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".app.GalleryActivity"
+            android:exported="false"
+            android:parentActivityName=".app.InstancePickerActivity" />
+
+        <activity
+            android:name=".app.SettingsActivity"
+            android:exported="false"
+            android:parentActivityName=".app.InstancePickerActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".app.QueueStatusActivity"
+            android:exported="false"
+            android:parentActivityName=".app.InstancePickerActivity" />
+
+        <activity
+            android:name=".app.ConversationDetailActivity"
+            android:exported="false"
+            android:parentActivityName=".app.GalleryActivity" />
+
+        <activity
+            android:name=".app.RegisterActivity"
+            android:exported="false"
+            android:parentActivityName=".app.InstancePickerActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <service
+            android:name=".app.AutomationService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+</manifest>

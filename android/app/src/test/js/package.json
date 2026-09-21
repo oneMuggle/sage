@@ -1,0 +1,11 @@
+{
+  "name": "arena-companion-android-bridge-tests",
+  "private": true,
+  "description": "PageBridge.js / ModelRename.js / ModelArchive.js 离线回归（node + jsdom），fixture 取自 arena.ai 真实 DOM",
+  "scripts": {
+    "test": "node run-all.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}
