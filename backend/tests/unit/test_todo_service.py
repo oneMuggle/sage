@@ -479,3 +479,98 @@ def test_count_todos_matches_list_todos_filters(todo_service):
         assert todo_service.count_todos(**kwargs) == len(
             todo_service.list_todos(limit=1000, **kwargs)
         )
+
+
+# --- Task 7: reminder bookkeeping ---
+
+
+def test_get_unfired_24h_reminders_filters_correctly(todo_service):
+    """Only pending/in_progress, within 24 h, with latch = 0."""
+    now = datetime.now()
+    todo_service.create_todo(
+        title="soon", due_at=(now + timedelta(hours=12)).isoformat()
+    )
+    todo_service.create_todo(
+        title="later", due_at=(now + timedelta(hours=36)).isoformat()
+    )
+    todo_service.create_todo(
+        title="past", due_at=(now - timedelta(hours=1)).isoformat()
+    )
+    done = todo_service.create_todo(
+        title="done", due_at=(now + timedelta(hours=6)).isoformat()
+    )
+    todo_service.complete_todo(done.id)
+
+    unfired = todo_service.get_unfired_24h_reminders()
+    assert [t.title for t in unfired] == ["soon"]
+
+
+def test_mark_24h_fired_removes_todo_from_next_query(todo_service):
+    """mark_24h_fired is the latch — calling it makes the todo disappear from
+    ``get_unfired_24h_reminders``."""
+    now = datetime.now()
+    created = todo_service.create_todo(
+        title="soon", due_at=(now + timedelta(hours=12)).isoformat()
+    )
+
+    assert len(todo_service.get_unfired_24h_reminders()) == 1
+
+    todo_service.mark_24h_fired(created.id)
+    assert todo_service.get_unfired_24h_reminders() == []
+
+
+def test_mark_1h_fired_same_behavior(todo_service):
+    now = datetime.now()
+    created = todo_service.create_todo(
+        title="very soon", due_at=(now + timedelta(minutes=45)).isoformat()
+    )
+    assert len(todo_service.get_unfired_1h_reminders()) == 1
+    todo_service.mark_1h_fired(created.id)
+    assert todo_service.get_unfired_1h_reminders() == []
+
+
+def test_update_due_at_resets_both_latches(todo_service):
+    """Changing due_at resets both latches — a rescheduled todo must remind."""
+    now = datetime.now()
+    created = todo_service.create_todo(
+        title="T", due_at=(now + timedelta(hours=12)).isoformat()
+    )
+    todo_service.mark_24h_fired(created.id)
+    todo_service.mark_1h_fired(created.id)
+
+    # 23 h, not the brief's 36 h: 36 h falls outside the 24 h window that
+    # ``get_unfired_24h_reminders`` queries, which would make the ``== 1``
+    # assertion false with *or* without the reset — vacuous. 23 h is inside
+    # the 24 h window (reset observable) and outside the 1 h window (so the
+    # companion ``== 0`` assertion still holds). See Ruling 12.
+    todo_service.update_todo(
+        created.id, due_at=(now + timedelta(hours=23)).isoformat()
+    )
+
+    assert len(todo_service.get_unfired_24h_reminders()) == 1
+    assert len(todo_service.get_unfired_1h_reminders()) == 0
+
+
+def test_update_status_resets_both_latches(todo_service):
+    """Reopening a completed todo resets both latches."""
+    now = datetime.now()
+    created = todo_service.create_todo(
+        title="T", due_at=(now + timedelta(hours=12)).isoformat()
+    )
+    todo_service.mark_24h_fired(created.id)
+    todo_service.complete_todo(created.id)
+
+    todo_service.update_todo(created.id, status="pending")
+    assert len(todo_service.get_unfired_24h_reminders()) == 1
+
+
+def test_update_unrelated_field_does_not_reset_latches(todo_service):
+    """Changing title/priority must NOT reset the latches."""
+    now = datetime.now()
+    created = todo_service.create_todo(
+        title="T", due_at=(now + timedelta(hours=12)).isoformat()
+    )
+    todo_service.mark_24h_fired(created.id)
+
+    todo_service.update_todo(created.id, title="New title", priority="high")
+    assert todo_service.get_unfired_24h_reminders() == []

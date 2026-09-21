@@ -127,6 +127,9 @@ from backend.domain.wake import Wake
 from backend.memory import get_memory_manager
 from backend.model_catalog.repository import CatalogRepository
 from backend.orchestration.wake_scheduler import WakeScheduler
+from backend.scheduler.todo_reminder import (
+    init_todo_reminder_scheduler,
+)
 from backend.services.scheduler import (
     get_scheduler_service,
     init_scheduler_service,
@@ -459,6 +462,12 @@ async def lifespan(app: FastAPI):
     logger.info("TodoService initialised")
     _startup_mark("todo_service")
 
+    # Todo reminder scheduler — hybrid scan + precise triggers (spec §6)
+    todo_reminder_scheduler = init_todo_reminder_scheduler(todo_service)
+    app.state.todo_reminder_scheduler = todo_reminder_scheduler
+    logger.info("TodoReminderScheduler started")
+    _startup_mark("todo_reminder_scheduler")
+
     # R19-B: SQLite 自动备份 —— 启动时后台线程备份一次（fail-safe, 不阻塞
     # 启动）+ 每日 03:10 定时备份（独立于 evolution 任务, 只做整库在线复制）。
     def _startup_backup() -> None:
@@ -751,6 +760,30 @@ async def lifespan(app: FastAPI):
     # Phase 8: stop APScheduler cleanly so jobs do not fire after shutdown
     if hasattr(app.state, "scheduler") and app.state.scheduler is not None:
         app.state.scheduler.shutdown()
+
+    # Phase 8b: stop todo reminder scheduler
+    if (
+        hasattr(app.state, "todo_reminder_scheduler")
+        and app.state.todo_reminder_scheduler is not None
+    ):
+        try:
+            app.state.todo_reminder_scheduler.stop()
+        except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+            logger.warning("TodoReminderScheduler stop failed: %s", exc)
+
+    # M1/M2 审批/提问闸口：关闭时重置全局单例。否则 TestClient（或多次
+    # lifespan 启停）之后 `_global_gate` 残留装配——后续 agent 循环对
+    # EXECUTE 工具调用会把审批挂起直到 300s 超时，测试间互相污染。
+    # （对齐上面 scheduler / HeartbeatMonitor 的 shutdown 清理模式。）
+    try:
+        from backend.services.permission_gate import reset_permission_gate
+        from backend.services.question_gate import reset_question_gate
+
+        reset_permission_gate()
+        reset_question_gate()
+        logger.info("PermissionGate / QuestionGate 单例已清理")
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("PermissionGate/QuestionGate reset failed: %s", exc)
 
     # A4: stop WakeScheduler before tearing down chat services
     if hasattr(app.state, "wake_scheduler") and app.state.wake_scheduler is not None:

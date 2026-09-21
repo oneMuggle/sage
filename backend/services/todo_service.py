@@ -270,6 +270,14 @@ class TodoService:
         if updates.get("due_at") is not None:
             updates["due_at"] = _to_local_naive_iso(updates["due_at"])
 
+        # A new due_at or status redefines this todo's reminder schedule, so
+        # both latches reset — otherwise a rescheduled or reopened todo would
+        # never remind again. The keys below are literal Python strings, not
+        # caller input.
+        if "due_at" in updates or "status" in updates:
+            updates["reminder_24h_fired"] = 0
+            updates["reminder_1h_fired"] = 0
+
         updates["updated_at"] = datetime.now().isoformat()
 
         set_clause = ", ".join(f"{k} = ?" for k in updates)
@@ -426,6 +434,64 @@ class TodoService:
         rows = cursor.fetchall()
 
         return [self._row_to_todo(row) for row in rows]
+
+    # --- reminder bookkeeping ---
+    #
+    # The ``reminder_*_fired`` columns are one-shot latches: a reminder is
+    # sent at most once per todo per horizon. ``TodoReminderScheduler``
+    # owns the *when*; this service owns the *columns*. Writes here do
+    # **not** bump ``updated_at`` — they are bookkeeping, not content
+    # changes.
+
+    def get_unfired_24h_reminders(self) -> List[Todo]:
+        """Pending/in_progress todos due within 24 h whose 24 h latch is 0."""
+        now = datetime.now()
+        cutoff = now + timedelta(hours=24)
+        conn = self.db.get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM todos "
+            "WHERE status IN ('pending', 'in_progress') "
+            "AND due_at IS NOT NULL "
+            "AND due_at > ? AND due_at <= ? "
+            "AND reminder_24h_fired = 0 "
+            "ORDER BY due_at ASC",
+            (now.isoformat(), cutoff.isoformat()),
+        )
+        return [self._row_to_todo(r) for r in cursor.fetchall()]
+
+    def mark_24h_fired(self, todo_id: int) -> None:
+        """Latch the 24 h reminder. Does not bump ``updated_at``."""
+        conn = self.db.get_connection()
+        conn.execute(
+            "UPDATE todos SET reminder_24h_fired = 1 WHERE id = ?",
+            (todo_id,),
+        )
+        conn.commit()
+
+    def get_unfired_1h_reminders(self) -> List[Todo]:
+        """Pending/in_progress todos due within 1 h whose 1 h latch is 0."""
+        now = datetime.now()
+        cutoff = now + timedelta(hours=1)
+        conn = self.db.get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM todos "
+            "WHERE status IN ('pending', 'in_progress') "
+            "AND due_at IS NOT NULL "
+            "AND due_at > ? AND due_at <= ? "
+            "AND reminder_1h_fired = 0 "
+            "ORDER BY due_at ASC",
+            (now.isoformat(), cutoff.isoformat()),
+        )
+        return [self._row_to_todo(r) for r in cursor.fetchall()]
+
+    def mark_1h_fired(self, todo_id: int) -> None:
+        """Latch the 1 h reminder. Does not bump ``updated_at``."""
+        conn = self.db.get_connection()
+        conn.execute(
+            "UPDATE todos SET reminder_1h_fired = 1 WHERE id = ?",
+            (todo_id,),
+        )
+        conn.commit()
 
     def get_startup_summary(self) -> dict:
         """Aggregate counts for the startup dashboard notification.
