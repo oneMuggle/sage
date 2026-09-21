@@ -389,7 +389,8 @@ def test_get_startup_summary_buckets(todo_service):
     """Todos land in the correct summary bucket."""
     now = datetime.now()
     todo_service.create_todo(title="Overdue", due_at=(now - timedelta(hours=2)).isoformat())
-    todo_service.create_todo(title="Today", due_at=(now + timedelta(hours=2)).isoformat())
+    # Use 1 hour instead of 2 to avoid date boundary issues when test runs near midnight
+    todo_service.create_todo(title="Today", due_at=(now + timedelta(hours=1)).isoformat())
     todo_service.create_todo(title="Upcoming", due_at=(now + timedelta(days=3)).isoformat())
     todo_service.create_todo(title="High", priority="high")
 
