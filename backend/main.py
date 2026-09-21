@@ -112,6 +112,7 @@ from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.system_routes import router as system_router
 from backend.api.theme_router import router as theme_router
+from backend.api.todo_router import build_router as build_todo_router
 from backend.api.usage_routes import router as usage_router
 from backend.api.v1 import updates as updates_router_module
 from backend.api.web_access_routes import router as web_access_router
@@ -129,6 +130,10 @@ from backend.orchestration.wake_scheduler import WakeScheduler
 from backend.services.scheduler import (
     get_scheduler_service,
     init_scheduler_service,
+)
+from backend.services.todo_service import (
+    get_todo_service,
+    init_todo_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -447,6 +452,12 @@ async def lifespan(app: FastAPI):
         len(_evo_registered),
         list(_evo_registered.keys()),
     )
+
+    # Todo service — personal task management
+    todo_service = init_todo_service(get_database())
+    app.state.todo_service = todo_service
+    logger.info("TodoService initialised")
+    _startup_mark("todo_service")
 
     # R19-B: SQLite 自动备份 —— 启动时后台线程备份一次（fail-safe, 不阻塞
     # 启动）+ 每日 03:10 定时备份（独立于 evolution 任务, 只做整库在线复制）。
@@ -967,6 +978,9 @@ app.include_router(embedder_router, prefix="/api/v1")
 
 # Phase 8: scheduled tasks — mounted for both API modes (independent feature)
 app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v1")
+
+# Todo personal task management
+app.include_router(build_todo_router(get_todo_service), prefix="/api/v1")
 
 # M3: MCP multi-server management (status / servers CRUD)
 app.include_router(mcp_router, prefix="/api/v1")

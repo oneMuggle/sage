@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel
 
@@ -482,3 +482,20 @@ class TodoService:
         data["is_recurring"] = bool(data["is_recurring"])
 
         return Todo(**data)
+
+
+# ---------- process-wide singleton ----------
+
+_global_service: Optional[TodoService] = None
+
+
+def get_todo_service() -> Optional[TodoService]:
+    """Return the process-wide TodoService if it has been initialised."""
+    return _global_service
+
+
+def init_todo_service(db: Any) -> TodoService:
+    """Initialise the global service. Must be called once during app startup."""
+    global _global_service
+    _global_service = TodoService(db)
+    return _global_service
