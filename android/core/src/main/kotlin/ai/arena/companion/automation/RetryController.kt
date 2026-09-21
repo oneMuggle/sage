@@ -391,7 +391,10 @@ class RetryController(
                         pause("右侧有不同的草稿，已保留；请自行处理后继续"); return
                     }
                     page.act("fill", prompt)
-                    if (running && epoch == currentEpoch) move("send")
+                    // ref: RetryController.Tick.cs L127 直接 Move("send")：桌面端的附件在 Configure 时已经由
+                    //      CDP 塞进 input，prepare 阶段只是兜底。安卓端投递必须发生在草稿填好、发送之前，
+                    //      所以有附件要求时先经 prepare；没有附件（或未注入 preparation）行为与桌面端完全一致。
+                    if (running && epoch == currentEpoch) move(if (preparation?.required == true) "prepare" else "send")
                     return
                 }
                 "prepare" -> {

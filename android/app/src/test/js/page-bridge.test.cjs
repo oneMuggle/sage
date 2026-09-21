@@ -43,11 +43,13 @@ const shell = (inner, o = {}) =>
 const snap = (w, prompt = '1+1=') => w.__ARENA_PAGE_BRIDGE__.snapshot(prompt);
 const { check, done } = runner('PageBridge regression');
 
-check('bridge exposes version 3 with snapshot/act', () => {
+check('bridge exposes version 4 with snapshot/act/attachment helpers', () => {
   const w = page(shell(''));
-  assert.equal(w.__ARENA_PAGE_BRIDGE__.version, 3);
+  assert.equal(w.__ARENA_PAGE_BRIDGE__.version, 4);
   assert.equal(typeof w.__ARENA_PAGE_BRIDGE__.snapshot, 'function');
   assert.equal(typeof w.__ARENA_PAGE_BRIDGE__.act, 'function');
+  assert.equal(typeof w.__ARENA_PAGE_BRIDGE__.attachmentsReady, 'function');
+  assert.equal(typeof w.__ARENA_PAGE_BRIDGE__.attachmentEntry, 'function');
   w.close();
 });
 
@@ -335,6 +337,117 @@ check('collapsed sidebar: canExpand only with a unique Expand sidebar button', (
 check('staged attachment names come from Remove buttons outside the log', () => {
   const w = page(shell(log(userMsg('u1', '<p>1+1=</p>')), { mainExtra: '<button aria-label="Remove photo.png"></button>' }), { url: CONV });
   assert.equal(JSON.stringify(snap(w).attachmentNames), JSON.stringify(['photo.png']));
+  w.close();
+});
+
+// ---- 附件（B35）：attachmentsReady / attachmentEntry ---------------------------------------
+const ready = (w, names) => w.__ARENA_PAGE_BRIDGE__.attachmentsReady(names);
+const entry = (w) => w.__ARENA_PAGE_BRIDGE__.attachmentEntry();
+const removeBtn = (name) => `<button aria-label="Remove ${name}"></button>`;
+
+check('attachmentsReady: empty list is always ready, even without main', () => {
+  const w = page('<div>loading…</div>');
+  assert.equal(ready(w, []), true);
+  assert.equal(ready(w, ['a.txt']), false);
+  w.close();
+});
+
+check('attachmentsReady: exact name set match is required', () => {
+  const w = page(shell('', { mainExtra: removeBtn('a.txt') + removeBtn('b.png') }));
+  assert.equal(ready(w, ['a.txt', 'b.png']), true);
+  assert.equal(ready(w, ['b.png', 'a.txt']), true);
+  assert.equal(ready(w, ['a.txt']), false);          // 多了一个 → 不就绪
+  assert.equal(ready(w, ['a.txt', 'b.png', 'c']), false);
+  assert.equal(ready(w, ['A.txt', 'b.png']), false); // 名字大小写严格
+  w.close();
+});
+
+check('attachmentsReady: visible upload progress blocks readiness; Remove inside log does not count', () => {
+  const busy = page(shell('', { mainExtra: removeBtn('a.txt') + '<div role="progressbar"></div>' }));
+  assert.equal(ready(busy, ['a.txt']), false);
+  busy.close();
+  const hiddenBusy = page(shell('', { mainExtra: removeBtn('a.txt') + '<div role="progressbar" hidden></div>' }));
+  assert.equal(ready(hiddenBusy, ['a.txt']), true);
+  hiddenBusy.close();
+  const inLog = page(shell(log(userMsg('u1', '<p>1+1=</p>' + removeBtn('a.txt')))), { url: CONV });
+  assert.equal(ready(inLog, ['a.txt']), false);
+  inLog.close();
+});
+
+check('attachmentEntry: no main / conversation already has text / no input → count 0 with reason', () => {
+  const json = (v) => JSON.stringify(v);
+  const none = page('<div>loading…</div>');
+  assert.equal(json(entry(none)), json({ count: 0, reason: 'no main' }));
+  none.close();
+  const conv = page(shell(log(userMsg('u1', '<p>1+1=</p>')), { mainExtra: '<input type="file">' }), { url: CONV });
+  assert.equal(json(entry(conv)), json({ count: 0, reason: 'conversation' }));
+  conv.close();
+  const blank = page(shell(''));
+  assert.equal(json(entry(blank)), json({ count: 0, reason: 'no input' }));
+  blank.close();
+});
+
+check('attachmentEntry: two visible inputs are ambiguous and nothing is marked', () => {
+  const w = page(shell('', { mainExtra: '<div><input type="file" id="a"></div><div><input type="file" id="b"></div>' }));
+  assert.equal(entry(w).count, 2);
+  assert.equal(entry(w).reason, 'ambiguous');
+  assert.equal(w.document.querySelectorAll('[data-arena-bound-upload]').length, 0);
+  w.close();
+});
+
+check('attachmentEntry: input whose parent is hidden is ignored', () => {
+  const w = page(shell('', { mainExtra: '<div hidden><input type="file"></div>' }));
+  assert.equal(entry(w).count, 0);
+  w.close();
+});
+
+check('attachmentEntry: unique input is marked; hidden input resolves trigger via label[for]', () => {
+  const w = page(shell('', {
+    mainExtra: '<div><input type="file" id="up" accept="image/*" multiple style="display:none">' +
+      '<label for="up">Attach files</label></div>',
+  }));
+  const e = entry(w);
+  assert.equal(e.count, 1);
+  assert.equal(e.accept, 'image/*');
+  assert.equal(e.multiple, true);
+  assert.equal(e.trigger, true);
+  assert.equal(e.label, 'Attach files');
+  assert.equal(typeof e.x, 'number');
+  assert.equal(typeof e.y, 'number');
+  assert.ok(e.width > 0 && e.height > 0);
+  assert.equal(w.document.querySelector('input[data-arena-bound-upload="true"]').id, 'up');
+  // 再次调用先清掉旧标记再打新标记，不会累计
+  entry(w);
+  assert.equal(w.document.querySelectorAll('[data-arena-bound-upload]').length, 1);
+  w.close();
+});
+
+check('attachmentEntry: hidden input with a single sibling button uses that button; two siblings fall back to label match', () => {
+  const one = page(shell('', { mainExtra: '<div><input type="file" style="display:none"><button aria-label="Add photos"></button></div>' }));
+  const e1 = entry(one);
+  assert.equal(e1.count, 1); assert.equal(e1.trigger, true); assert.equal(e1.label, 'Add photos');
+  one.close();
+  const two = page(shell('', {
+    mainExtra: '<div><input type="file" style="display:none"><button aria-label="Attach file"></button><button aria-label="Voice"></button></div>',
+  }));
+  const e2 = entry(two);
+  assert.equal(e2.count, 1); assert.equal(e2.trigger, true); assert.equal(e2.label, 'Attach file');
+  two.close();
+  const noneNamed = page(shell('', {
+    mainExtra: '<div><input type="file" style="display:none"><button aria-label="Mic"></button><button aria-label="Voice"></button></div>',
+  }));
+  const e3 = entry(noneNamed);
+  assert.equal(e3.count, 1); assert.equal(e3.trigger, false);
+  noneNamed.close();
+});
+
+check('attachmentEntry: trigger search never picks the Send button or log-area buttons', () => {
+  const w = page(shell(log(''), {
+    mainExtra: '<div><input type="file" style="display:none"><button aria-label="Send message"></button><button aria-label="Stop generating"></button></div>',
+  }));
+  const e = entry(w);
+  assert.equal(e.count, 1);
+  assert.equal(e.trigger, false);
   w.close();
 });
 

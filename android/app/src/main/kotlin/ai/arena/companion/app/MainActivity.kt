@@ -6,6 +6,7 @@ import ai.arena.companion.R
 import ai.arena.companion.account.AccountVault
 import ai.arena.companion.account.AuthFlow
 import ai.arena.companion.account.LoginTaskStart
+import ai.arena.companion.automation.AttachmentUpload
 import ai.arena.companion.automation.ConversationRenamer
 import ai.arena.companion.automation.ManualCollection
 import ai.arena.companion.automation.ModelRetentionCatalog
@@ -57,6 +58,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var probeReader: WebViewProbeReader
     private lateinit var renameExecutor: WebViewRenameExecutor
     private lateinit var archiveBridge: WebViewArchiveBridge
+    private lateinit var attachmentPage: WebViewAttachmentPage
     private var controller: RetryController? = null
     private var authFlow: AuthFlow? = null
     private var loginTaskStart: LoginTaskStart? = null
@@ -124,6 +126,8 @@ class MainActivity : AppCompatActivity() {
         probeReader = WebViewProbeReader(webView)
         renameExecutor = WebViewRenameExecutor(webView)
         archiveBridge = WebViewArchiveBridge(webView)
+        // B35：附件只在 prepare 阶段经 onShowFileChooser 交付；未武装时回调返回 false，行为与之前一致。
+        attachmentPage = WebViewAttachmentPage(webView, "$packageName.attachments").also { it.install() }
 
         webView.postDelayed({ runCatching { BatteryOptimizationHelper.promptIfNeeded(this) } }, 2000)
 
@@ -296,7 +300,11 @@ class MainActivity : AppCompatActivity() {
             isAllowed = page::isAllowed,
             delay = { ms -> delay(ms) },
         )
-        val c = RetryController(page, probeReader, renamer).apply {
+        // ref: MainForm.TaskSettings.cs PrepareTask —— 每次开始前把附件清单交给上传器（三项全查，坏附件直接阻止启动）。
+        val upload = AttachmentUpload(attachmentPage, currentUrl = { webView.url })
+        runCatching { upload.configure(settings.attachments) }
+            .onFailure { toast("附件校验失败，已阻止启动：${it.message}"); releaseSession(); return }
+        val c = RetryController(page, probeReader, renamer, preparation = upload).apply {
             stepPauseSeconds = settings.stepPauseSeconds
             stepPauseJitterSeconds = settings.stepPauseJitterSeconds
             maximumNoProgressSeconds = settings.maximumNoProgressSeconds

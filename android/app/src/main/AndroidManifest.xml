@@ -74,5 +74,16 @@
             android:name=".app.AutomationService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- B35：绑定附件经 content:// 交给 WebView 的文件选择回调；不导出、不授予外部应用。 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.attachments"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/attachment_paths" />
+        </provider>
     </application>
 </manifest>

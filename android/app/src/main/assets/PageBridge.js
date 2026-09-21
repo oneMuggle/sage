@@ -52,6 +52,8 @@
   var FAILED_STATUS = /^(Stopped|Generation stopped|Error|Something went wrong|已停止|生成已停止|生成失败)[.!。！]?$/i;
   var RATE_LIMIT = /rate limit|too many requests|429 too many|try again later|quota exceeded|limit reached|请稍后/i;
   var CHALLENGE = /security verification|verify you are human|需要人机验证|人机身份验证|complete this quick security check/i;
+  // 附件入口按钮的标签（只在 label[for] / 包裹 label / 同容器唯一按钮都找不到时才用，且要求唯一命中）。
+  var ATTACH_LABEL = /attach|upload|add file|add files|choose file|添加附件|上传|附件/i;
 
   function all(sel, root) {
     if (root === null) return [];
@@ -249,6 +251,83 @@
       .map(function (t) { return t.slice(7); });
   }
 
+  // ref: 桌面端 __arenaCompanion.attachmentsReady —— 绑定附件必须一个不少地出现在 "Remove <name>"
+  //      列表里、数量恰好相等、且 main 内没有上传中的进度指示；空清单恒为就绪。
+  function attachmentsReady(names) {
+    names = Array.isArray(names) ? names : [];
+    if (!names.length) return true;
+    var mainEl = mainElement();
+    if (!mainEl) return false;
+    var attached = stagedNames(mainEl);
+    var busy = all('[role="progressbar"],.animate-spin', mainEl).some(shown);
+    if (busy || attached.length !== names.length) return false;
+    for (var i = 0; i < names.length; i++) if (attached.indexOf(names[i]) < 0) return false;
+    return true;
+  }
+
+  function cssEscape(s) {
+    try { if (window.CSS && CSS.escape) return CSS.escape(s); } catch (e) {}
+    return String(s).replace(/["\\]/g, '\\$&');
+  }
+
+  // 能被真实触摸的附件入口：input 自身可见就点 input；否则依次找 label[for=id]、包裹它的 label、
+  // 与 input 同一父容器里唯一的可用按钮、最后是 main 内标签匹配 ATTACH_LABEL 的唯一按钮。都没有则放弃。
+  function attachmentTrigger(input, mainEl) {
+    if (visible(input)) return input;
+    if (input.id) {
+      var labels = all('label[for="' + cssEscape(input.id) + '"]').filter(visible);
+      if (labels.length === 1) return labels[0];
+    }
+    var wrap = input.closest('label');
+    if (wrap && visible(wrap)) return wrap;
+    var parent = input.parentElement;
+    if (parent) {
+      var siblings = buttons(parent).filter(visible).filter(function (b) { return !b.disabled; });
+      if (siblings.length === 1) return siblings[0];
+    }
+    var named = buttons(mainEl).filter(visible).filter(function (b) {
+      return !b.disabled && !b.closest('[role="log"]') && ATTACH_LABEL.test(label(b));
+    });
+    return named.length === 1 ? named[0] : null;
+  }
+
+  // ref: 桌面端 AttachmentUpload.Stage 的定位脚本 —— main 可见、对话区没有文字（只在空白新对话里暂存）、
+  //      父级可见的 input[type=file] 恰好一个，才标记 data-arena-bound-upload 并返回 count=1。
+  //      安卓没有 CDP DOM.setFileInputFiles，文件只能经 WebChromeClient.onShowFileChooser 交付，而 Blink 要求
+  //      文件选择必须由用户激活触发，所以这里额外给出可触摸入口的视口坐标（CSS px），由原生侧派发真实触摸。
+  function attachmentEntry() {
+    var mainEl = mainElement();
+    if (!mainEl) return { count: 0, reason: 'no main' };
+    var logs = all(SELECTORS.log, mainEl).filter(shown);
+    if (logs.some(function (l) { return norm(text(l)).length > 0; })) return { count: 0, reason: 'conversation' };
+    var inputs = all('input[type="file"]', mainEl).filter(function (e) {
+      return e.parentElement && e.parentElement.getClientRects().length > 0;
+    });
+    if (inputs.length !== 1) return { count: inputs.length, reason: inputs.length ? 'ambiguous' : 'no input' };
+    var input = inputs[0];
+    all('[data-arena-bound-upload]').forEach(function (e) { e.removeAttribute('data-arena-bound-upload'); });
+    input.setAttribute('data-arena-bound-upload', 'true');
+    var out = { count: 1, accept: input.accept || '', multiple: !!input.multiple, trigger: false };
+    var trigger = attachmentTrigger(input, mainEl);
+    if (!trigger) return out;
+    trigger.scrollIntoView({ block: 'center', inline: 'center' });
+    var r = trigger.getBoundingClientRect();
+    var vv = window.visualViewport;
+    out.trigger = true;
+    out.label = label(trigger).slice(0, 80);
+    out.x = r.left + r.width / 2;
+    out.y = r.top + r.height / 2;
+    out.width = r.width;
+    out.height = r.height;
+    out.offsetX = vv ? vv.offsetLeft : 0;
+    out.offsetY = vv ? vv.offsetTop : 0;
+    out.scale = vv && vv.scale ? vv.scale : 1;
+    out.dpr = window.devicePixelRatio || 1;
+    out.innerWidth = window.innerWidth;
+    out.innerHeight = window.innerHeight;
+    return out;
+  }
+
   // ref: 桌面端 __arenaGenerationTracker —— 每次提交（点发送 / 回车 / 重新生成）与每次
   //      「开始生成」上升沿都让 revision 自增，同一提示词重发或 Regenerate 才能得到不同的 generationStamp。
   if (!window.__arenaGenerationTracker) {
@@ -436,5 +515,12 @@
     }
   }
 
-  window.__ARENA_PAGE_BRIDGE__ = { version: 3, snapshot: snapshot, act: act, selectors: SELECTORS };
+  window.__ARENA_PAGE_BRIDGE__ = {
+    version: 4,
+    snapshot: snapshot,
+    act: act,
+    attachmentsReady: attachmentsReady,
+    attachmentEntry: attachmentEntry,
+    selectors: SELECTORS,
+  };
 })();

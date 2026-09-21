@@ -294,3 +294,11 @@ S0 剩余项（#12）建议穿插在 B33/B34 的真机时段完成，不单独�
 - B35 部分完成：`android/` 与 `docs/mcp-android-*.md`、`docs/evidence/` 收进 git（`android/.gitignore` 用 `!**/data/` 放回被根规则误忽略的源码目录），
   根 `nul` 删除，`WebViewArenaPage.parse()` 解析附件字段；附件上传本身仍未做。详见进度文档第三十二批。
 - B33 仍需设备。
+
+## 10. 实施记录（2026-09-21，第三十三批）
+
+- B35 收尾：`AttachmentUpload`（对 `AttachmentUpload.cs`）+ `WebViewAttachmentPage`（`onShowFileChooser` 回填 + 原生触摸触发）+
+  `PageBridge.attachmentsReady / attachmentEntry`；`RetryController.fill` 在有附件时转 `prepare`。
+  证据：`page-bridge.test.cjs` 38 例、`:core:test` 190 通过、`:app:assembleDebug` 通过（APK 2026-09-21 21:13）。**真机未验证**，
+  尤其是附件入口定位与触摸坐标换算。详见进度文档第三十三批。
+- §6 计划表 B31–B35 至此全部有代码；B33 及 B31 / B32 / B34 / B35 的真机项仍待设备。

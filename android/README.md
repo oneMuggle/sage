@@ -44,8 +44,25 @@
   在此之前不要把「发送 → 回答 → 重命名 → 归档」闭环当作已验证功能。
 - 未保留模型的网站归档（`ModelArchive.js` + `WebsiteArchiver.kt`）：第三十二批按桌面端逐句移植并接入
   `RetryController.websiteArchive`；只有离线回归，**真机未验证**。
-- 附件上传（`RequestPreparation`）：仍未实现；快照里的 `attachmentNames` / `conversationAttachments`
-  已解析进 `PageState`，但没有任何东西会把绑定附件放进输入区，设置页的附件目前只是保存。
+- 附件上传（`AttachmentUpload` + `WebViewAttachmentPage`）：第三十三批按桌面端 `AttachmentUpload.cs` 移植。
+  安卓没有 CDP `DOM.setFileInputFiles`，交付改为「原生触摸附件入口 → 页面打开文件选择 →
+  `WebChromeClient.onShowFileChooser` 回填 `content://` URI」；`fill` 后有附件时先进 `prepare`，
+  `attachmentsReady` 确认「Remove <name>」清单一致才允许发送。只有离线回归与构建，**真机未验证**，
+  尤其是附件入口按钮的定位规则（`PageBridge.attachmentEntry`）。
+
+### 附件交付（B35）
+
+| 步骤 | 位置 | 失败时 |
+|---|---|---|
+| 校验绑定附件（存在 / 字节 / 哈希） | `AttachmentUpload.configure`（`startAutomation` 开始前） | 阻止启动 |
+| 定位唯一 `input[type=file]` 与可触摸入口 | `PageBridge.attachmentEntry()` | 暂停：「没有找到唯一可用的附件上传入口」/「附件入口无法触发」 |
+| 武装回调 → 派发真实触摸 → 页面打开文件选择 | `WebViewAttachmentPage.deliver` | 4 秒内无回调 → 暂停：「附件入口已变化」 |
+| 回调时再核 URL / 单多选兼容后交 URI | `onShowFileChooser` | 交空值并按失败处理 |
+| 等 `Remove <name>` 清单一致且无进度条 | `prepare` 阶段 ≤ 60 秒 | 暂停：「附件上传尚未确认，已暂停，不会无附件发送」 |
+
+每轮只投递一次（`submitted` 守卫），发送瞬间还会再 `check()` 一次；未武装期间 `onShowFileChooser` 返回 false。
+文件经 `FileProvider`（`<applicationId>.attachments`，`res/xml/attachment_paths.xml`）以只读 `content://` 暴露，
+来源是 `TaskSettingsStore.import` 复制到应用私有目录的副本。
 
 ### 运行参数（设置页）
 

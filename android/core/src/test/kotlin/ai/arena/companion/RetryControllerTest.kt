@@ -5,6 +5,7 @@ import ai.arena.companion.automation.PageReadTimeoutException
 import ai.arena.companion.automation.PageState
 import ai.arena.companion.automation.ProbeReader
 import ai.arena.companion.automation.ProbeSnapshot
+import ai.arena.companion.automation.RequestPreparation
 import ai.arena.companion.automation.RetryController
 import java.time.Instant
 import kotlinx.coroutines.test.runTest
@@ -43,7 +44,115 @@ class RetryControllerTest {
         page: FakePage,
         clock: FakeClock,
         probe: FakeProbe = FakeProbe(),
-    ) = RetryController(page, probe, null, { clock.now })
+        preparation: RequestPreparation? = null,
+    ) = RetryController(page, probe, null, { clock.now }, preparation)
+
+    /** 对 IRequestPreparation 的最小假件：required / ready 可控，记录 prepare / check / beginRound 次数。 */
+    private class FakePreparation(override var required: Boolean = true) : RequestPreparation {
+        var ready = false
+        var prepares = 0; var checks = 0; var rounds = 0
+        override fun beginRound() { rounds++ }
+        override suspend fun prepare(): Boolean { prepares++; return ready }
+        override suspend fun check(): Boolean { checks++; return ready }
+    }
+
+    /** 把阶段机推到 fill 已执行后的那一步：inspect → new → waitNew → fill。 */
+    private suspend fun driveThroughFill(c: RetryController, page: FakePage) {
+        c.tick()                                   // inspect -> new
+        assertEquals("new", c.phase)
+        c.tick()                                   // new -> waitNew（act new）
+        assertEquals("waitNew", c.phase)
+        page.state = page.state.copy(url = "https://arena.ai/agent", conversation = false, editor = true, draft = "")
+        c.tick()                                   // waitNew -> fill
+        assertEquals("fill", c.phase)
+        c.tick()                                   // fill -> prepare / send
+    }
+
+    @Test
+    fun `without attachments fill goes straight to send exactly like the desktop flow`() = runTest {
+        val clock = FakeClock(); val page = FakePage()
+        val prep = FakePreparation(required = false)
+        val c = controller(page, clock, preparation = prep)
+        c.start("1+1=", 1)
+        driveThroughFill(c, page)
+        assertEquals("send", c.phase)
+        assertEquals(0, prep.prepares)
+        assertEquals(2, prep.rounds)               // start() 与 new 阶段各触发一次 beginRound（对 C# L152 / Tick L114）
+    }
+
+    @Test
+    fun `with attachments fill enters prepare, waits for readiness and never sends before it`() = runTest {
+        val clock = FakeClock(); val page = FakePage()
+        val prep = FakePreparation(required = true)
+        val c = controller(page, clock, preparation = prep)
+        c.start("1+1=", 1)
+        driveThroughFill(c, page)
+        assertEquals("prepare", c.phase)
+        c.tick(); c.tick()
+        assertEquals("prepare", c.phase)
+        assertEquals(2, prep.prepares)
+        assertTrue(page.acts.none { it == "send" })
+        prep.ready = true
+        c.tick()
+        assertEquals("send", c.phase)
+        page.state = page.state.copy(draft = "1+1=", sendReady = true)
+        c.tick()
+        assertEquals("confirm", c.phase)
+        assertEquals(1, page.acts.count { it == "send" })
+        assertTrue(prep.checks >= 1)               // send 前必经 check()
+    }
+
+    @Test
+    fun `prepare phase pauses after 60 seconds without confirmation and does not send`() = runTest {
+        val clock = FakeClock(); val page = FakePage()
+        val prep = FakePreparation(required = true)
+        val c = controller(page, clock, preparation = prep)
+        c.start("1+1=", 1)
+        driveThroughFill(c, page)
+        assertEquals("prepare", c.phase)
+        clock.advance(59); c.tick()
+        assertTrue(c.running)
+        clock.advance(2); c.tick()
+        assertFalse(c.running)
+        assertEquals("附件上传尚未确认，已暂停，不会无附件发送", c.message)
+        assertTrue(page.acts.none { it == "send" })
+    }
+
+    @Test
+    fun `send phase pauses when the attachment check fails at the last moment`() = runTest {
+        val clock = FakeClock(); val page = FakePage()
+        val prep = FakePreparation(required = true).apply { ready = true }
+        val c = controller(page, clock, preparation = prep)
+        c.start("1+1=", 1)
+        driveThroughFill(c, page)
+        c.tick()                                   // prepare -> send
+        assertEquals("send", c.phase)
+        prep.ready = false
+        page.state = page.state.copy(draft = "1+1=", sendReady = true)
+        c.tick()
+        assertFalse(c.running)
+        assertEquals("发送前附件发生改变，请检查后重新开始", c.message)
+        assertTrue(page.acts.none { it == "send" })
+    }
+
+    @Test
+    fun `stage failure inside prepare pauses with the readable reason`() = runTest {
+        val clock = FakeClock(); val page = FakePage()
+        val prep = object : RequestPreparation {
+            override val required = true
+            override fun beginRound() {}
+            override suspend fun prepare(): Boolean = throw IllegalStateException("没有找到唯一可用的附件上传入口")
+            override suspend fun check(): Boolean = false
+        }
+        val c = controller(page, clock, preparation = prep)
+        c.start("1+1=", 1)
+        driveThroughFill(c, page)
+        assertEquals("prepare", c.phase)
+        c.tick()
+        assertFalse(c.running)
+        assertEquals("操作已暂停：没有找到唯一可用的附件上传入口", c.message)
+        assertTrue(page.acts.none { it == "send" })
+    }
 
     @Test
     fun `title truncates model segment and keeps timestamp`() {

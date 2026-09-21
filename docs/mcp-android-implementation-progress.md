@@ -1337,11 +1337,87 @@ git commit 82a8eab4（main）                   android/ + docs/evidence/ + docs
       且本地归档不新增记录、`websiteArchivedRounds` 加一。
 - [ ] B34 真机：Archive 菜单项文案 / 确认框标题若与 `ARCHIVE` / `ARCHIVE_DIALOG` 正则不符，先用 CDP 抓 DOM 再改正则，不放宽为包含匹配。
 - [x] B35：`android/`（含 `data/` 源码目录）与 `docs/mcp-android-*.md`、`docs/evidence/` 收进 git；根 `nul` 删除。
-- [ ] B35：附件上传（`RequestPreparation` + `onShowFileChooser`）。
+- [x] B35：附件上传（`RequestPreparation` + `onShowFileChooser`）——第三十三批完成代码，见下。
 
 ## 已知未覆盖
 
 - 未观察到任何模型名前，设置页无法勾选归档模型（提示先跑一轮），这是有意为之，不自造清单。
 - `ModelArchive.js` 的「当前行消失」证据在移动端可能永远不成立（侧栏 Sheet 收起后 New Chat 不可见），届时只有 toast 一条路。
 - B33（模型阶段真机验证）仍需设备。
+
+---
+
+# 第三十三批：附件上传移植（B35 收尾）
+
+- 日期：2026-09-21
+- 性质：代码移植 + 离线回归 + 构建验证；**无真机**。B35 最后一项「附件随消息上传」代码落地，§6 计划表 B31–B35 至此全部有实现。
+- 依据：`docs/mcp-android-prompt-confirm-timeout-20260921.md` §6 B35；桌面端 `src/AttachmentUpload.cs`、
+  `assets/PageBridge.js`（`attachmentsReady`）、`RetryController.Tick.cs` L130-L136、`RetryController.RateLimit.cs` L88-L95、`MainForm.TaskSettings.cs` `PrepareTask`。
+
+## 背景
+
+第三十二批之后 `RetryController` 的 `preparation` 仍为 null：设置页绑定的附件只是落盘，阶段机从 `fill` 直接到 `send`，
+`prepare` 分支和发送前 `check()` 从未被走到。桌面端的实现依赖 CDP `DOM.setFileInputFiles` 把文件直接塞进 `<input type=file>`；
+安卓 WebView 没有这条路，唯一的交付口是 `WebChromeClient.onShowFileChooser`，而 Blink 只允许**用户激活**触发文件选择——
+脚本里 `input.click()` 无效。本批据此设计了安卓版交付链路，其余语义与桌面端逐句对齐。
+
+## 交付
+
+| 文件 | 变更 |
+|---|---|
+| `android/app/src/main/assets/PageBridge.js` | version 3 → 4。新增 `attachmentsReady(names)`（对桌面端同名函数：`Remove <name>` 集合与绑定名严格相等、main 内无 progressbar / animate-spin）与 `attachmentEntry()`（对桌面端 `Stage` 的定位脚本：main 可见、对话区无文字、父级可见的 `input[type=file]` 恰好一个，打 `data-arena-bound-upload` 标记；额外给出可触摸入口的视口坐标 / visualViewport 偏移 / scale / dpr）。入口按 input 自身可见 → `label[for]` → 包裹 label → 同父容器唯一按钮 → main 内标签匹配 `ATTACH_LABEL` 的唯一按钮 依次解析，都不成立则 `trigger:false`。 |
+| `android/core/src/main/kotlin/ai/arena/companion/automation/AttachmentUpload.kt` | 新增 `AttachmentEntry`、`AttachmentPage`（ready / entry / deliver 三个页面能力）与 `AttachmentUpload : RequestPreparation`。`configure` 三项全查并重置 `submitted`；`check` 在 Required 时先 `ensureArena`（只认 `https://arena.ai/agent` 与 `/agent/<uuid>`）；`prepare` = check → 未就绪且本轮未投递才 `stage()` 一次；`stage` 要求 `entry.count == 1` 且 `trigger`，`deliver` 返回 false 抛「附件入口已变化」。错误文案与 C# 一致。 |
+| `android/core/src/main/kotlin/ai/arena/companion/automation/RetryController.kt` | `fill` 阶段：`preparation?.required == true` 时 `move("prepare")`，否则照旧 `move("send")`。这是本批对阶段机的唯一改动；桌面端在 `Configure` 时就已用 CDP 塞好文件，所以 L127 直接进 `send`，安卓的投递必须发生在草稿填好、发送之前。`prepare` / `send` / 限流重试里的既有附件分支未动。 |
+| `android/app/src/main/kotlin/ai/arena/companion/app/WebViewAttachmentPage.kt` | 新增。`ready` / `entry` 各一次 evaluate；`deliver`：用 `FileProvider` 生成只读 `content://`，武装回调 → 主线程向 WebView 派发 `ACTION_DOWN`/`ACTION_UP`（CSS px → 减 visualViewport 偏移 → 乘 scale × dpr）→ 等 `onShowFileChooser` 最多 4 秒。回调里再核 URL 在 arena.ai/agent、单选 input 不接受多文件，不符交 null。未武装时回调返回 false。 |
+| `android/app/src/main/kotlin/ai/arena/companion/app/MainActivity.kt` | `attachmentPage.install()`；`startAutomation` 前 `AttachmentUpload.configure(settings.attachments)`，校验失败 toast 并 `releaseSession()` 阻止启动（对 `PrepareTask`）；`RetryController(..., preparation = upload)`。 |
+| `android/app/src/main/AndroidManifest.xml`、`res/xml/attachment_paths.xml` | 新增 `FileProvider`（`${applicationId}.attachments`，`exported=false`，`files-path .`）。 |
+| `android/app/src/test/js/page-bridge.test.cjs` | 29 → 38 例：attachmentsReady 3 例（空清单 / 严格集合相等 / 进度条与 log 内 Remove 不算）、attachmentEntry 6 例（无 main / 有对话 / 无 input / 双 input 歧义不打标记 / 隐藏父级忽略 / label[for] / 同级唯一按钮 / 标签回退 / 绝不选 Send）。 |
+| `android/core/src/test/kotlin/ai/arena/companion/{AttachmentUploadTest,RetryControllerTest}.kt` | 新增 6 + 5 例：无附件直通 send、有附件进 prepare 且就绪前绝不 send、prepare 60 秒暂停、send 前 check 失败暂停、stage 抛错 → 「操作已暂停：…」；AttachmentUpload 的 configure / 每轮一次投递 / 域名限制 / 入口与交付失败文案 / verify 失败不投递。 |
+| `android/README.md` | 附件状态改为「已移植、真机未验证」，补「附件交付（B35）」步骤表。 |
+
+## 关键语义与取舍
+
+1. **交付方式是安卓唯一的实质差异。** 桌面端 `Configure` 时就把文件塞进 input，`prepare` 只是兜底；安卓必须在 `fill` 之后、
+   `send` 之前由页面打开文件选择再回填，所以 `fill` 在有附件时转 `prepare`。没有附件（`required == false`）或未注入 `preparation`
+   时，阶段序列与桌面端逐字相同，第三十一批之前的所有 `RetryControllerTest` 用例未改一处。
+2. **真实触摸，不是 `click()`。** Blink 的文件选择需要 transient user activation；`dispatchTouchEvent` 走的是与用户手指相同的输入管线，
+   页面收到的是可信事件。坐标换算 `((x - visualViewport.offsetLeft) * scale * devicePixelRatio)` 假设 WebView 以 1:1 显示，
+   落点超出 `webView.width/height` 直接返回 false 不触摸。这一步真机上最可能出偏差，README 已标注。
+3. **回调只在 4 秒武装窗口内有效，且只消费一次。** 窗口外 `onShowFileChooser` 返回 false（等于之前没有 WebChromeClient），
+   避免「用户自己点了附件按钮，我们的文件被塞进去」。回调到来还要再核 URL 与单多选兼容——`FileChooserParams.mode` 不是
+   `MODE_OPEN_MULTIPLE` 而绑定了多个文件时交 null 并按失败暂停，不会只传第一个。
+4. **入口定位宁缺毋滥。** `attachmentEntry` 对 input 的要求与桌面端 `Stage` 相同（唯一 + 父级可见 + 空白新对话）；触发器五级回退里
+   每一级都要求唯一命中，`ATTACH_LABEL` 只是最后一级，且排除 `[role=log]` 内按钮，绝不会落到 Send / Stop 上（有回归用例）。
+   找不到触发器抛「附件入口无法触发」而不是猜。
+5. **`ensureArena` 放行 `/agent/<uuid>`**（桌面端 `AbsolutePath.StartsWith("/agent/")` 同义）：限流重试时草稿在同一会话里恢复，
+   `check()` 会在会话页被调用。
+6. **`FileProvider` 路径 `files-path .`**：附件副本在 `<filesDir>/instances/<实例>/Attachments/<sha256>/<name>`，provider 不导出、
+   URI 只随回调交给 WebView 进程内的 Blink，不授予外部应用。
+
+## 验证结果
+
+```text
+node run-all.cjs                              PageBridge 38 / Rename bridge 33 / Archive bridge 29 checks passed
+JAVA_HOME=jdk17 ./gradlew :core:test          190 tests, 0 failures（第三十二批 179 → +11）
+JAVA_HOME=jdk17 ./gradlew :app:assembleDebug  BUILD SUCCESSFUL；:app:bridgeJsTest 在 preBuild 执行并通过
+APK                                           android/app/build/outputs/apk/debug/app-debug.apk（2026-09-21 21:13，含 assets/PageBridge.js 25582 B、res/xml/attachment_paths.xml）
+```
+
+## 验收状态与真机复核清单
+
+- [x] B35 代码：`AttachmentUpload` / `WebViewAttachmentPage` / `PageBridge.attachmentsReady + attachmentEntry` / `fill → prepare` 接线 / FileProvider。
+- [ ] B35 真机：设置页绑定 1 个图片 → 开始 → 状态应依次为「正在检查页面」→（fill）→ prepare 期间页面弹出文件选择随即自动关闭 →
+      输入区出现该文件缩略图与「Remove <name>」→ 「已提交第 1 次」。若卡在 prepare 60 秒后暂停「附件上传尚未确认」，
+      先用 CDP 执行 `__ARENA_PAGE_BRIDGE__.attachmentEntry()` 看 `count` / `trigger` / `label` / 坐标，再决定是改入口规则还是坐标换算。
+- [ ] B35 真机：绑定 2 个文件，确认 Arena 的 input 是 `multiple`（否则会按「只接受单个文件」暂停，这是预期行为）。
+- [ ] B35 真机：手动点页面自己的附件按钮，确认弹出的是系统选择器而不是被我们的文件填充（武装窗口外回调必须返回 false）。
+- [ ] B33 / B34 真机项沿用第三十一、三十二批清单。
+
+## 已知未覆盖
+
+- `attachmentEntry` 的触发器规则与坐标换算都没有在真机 DOM 上校准过；Arena 若把附件按钮做成 `[role=menuitem]` 或放在
+  Radix Popover 里（点开才有 input），当前规则会得到 `count: 0, reason: 'no input'` 并暂停，需要按真机 DOM 补一级「先打开菜单」。
+- 限流重试路径的附件分支（`RateLimit` L88-L95 对应代码）本批未加单测；逻辑未改，但 `retryPrepared` 与新的 `submitted`
+  守卫叠加后，每次 cooldown 至多再投递一次。
+- `WebViewAttachmentPage` 没有 instrumentation 测试（需要设备）。
 
