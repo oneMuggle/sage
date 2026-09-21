@@ -121,8 +121,7 @@ from backend.api.workspace_routes import router as workspace_router
 from backend.api.worktree_routes import router as worktree_router
 from backend.application.services.chat_service import ChatService
 from backend.application.services.wake_store import get_wake_store
-from backend.data.database import Database
-from backend.data.database import get_database
+from backend.data.database import Database, get_database
 from backend.data.session_repo import MessageRepository, SessionRepository
 from backend.domain.wake import Wake
 from backend.memory import get_memory_manager
