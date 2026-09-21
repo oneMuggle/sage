@@ -1,5 +1,4 @@
 """Test todos table migration"""
-import pytest
 from backend.data.database import Database
 
 
