@@ -204,6 +204,99 @@ def _truncate_to_byte_cap(data: Dict[str, Any], max_bytes: int) -> Dict[str, Any
     }
 
 
+def _resolve_workspace_fallback(
+    conn: sqlite3.Connection,
+    session_id: str,
+) -> Optional[str]:
+    """Resolve a fallback workspace path for sessions with no active binding.
+
+    Producer paths (``backend/api/legacy_routes.py``) set
+    ``binding_generation=0`` for ordinary chat streams that never went
+    through ``authorize_chat_office_request`` — see F2 (2026-08-12).
+    Before this helper the LLM-side ``office_list`` / ``office_read`` were
+    effectively workspace-blind for those streams and always returned
+    ``[]`` even when the session obviously belonged to a project the user
+    had been iterating on moments earlier. Mirrors the design intent of
+    Claude Projects (project-scoped resources) and Cursor (recent
+    workspaces as the implicit context for any tool call):
+
+        1. Session's most recent binding — even if revoked, the user's
+           last-known workspace is the strongest signal of intent.
+        2. Most recently opened project in ``projects`` — covers the
+           "fresh session that just inherited a recent project" case
+           (sidebar "open" landed here without yet binding a session).
+        3. ``None`` — return empty so the LLM gets the same
+           indistinguishable-from-empty result as the existing
+           no-binding path. No path is ever echoed.
+
+    The candidate path MUST still exist on disk and resolve to a
+    directory. Workspace folders get moved / unmounted between sessions;
+    silently returning the stale path would leak its on-disk layout and
+    return rows from a workspace the user no longer has.
+
+    Returns the canonical absolute path string (matches
+    :class:`SessionWorkspaceBinding.workspace_path` shape so the existing
+    ``list_documents(conn, path)`` query is a drop-in).
+    """
+    # Step 1: session's most recent binding (any status).
+    row = conn.execute(
+        """
+        SELECT workspace_path FROM session_workspace_bindings
+        WHERE session_id = ?
+        ORDER BY generation DESC
+        LIMIT 1
+        """,
+        (session_id,),
+    ).fetchone()
+    if row is not None:
+        candidate = row["workspace_path"]
+        if _path_is_alive(candidate):
+            logger.info(
+                "office fallback: session %s -> last binding %s",
+                session_id,
+                candidate,
+            )
+            return candidate
+
+    # Step 2: most recently opened project from the registry.
+    row = conn.execute(
+        """
+        SELECT path FROM projects
+        ORDER BY last_opened_at DESC, created_at DESC, id DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if row is not None:
+        candidate = row["path"]
+        if _path_is_alive(candidate):
+            logger.info(
+                "office fallback: session %s -> recent project %s",
+                session_id,
+                candidate,
+            )
+            return candidate
+
+    return None
+
+
+def _path_is_alive(path_str: str) -> bool:
+    """Return True if ``path_str`` exists and is a directory.
+
+    Used by :func:`_resolve_workspace_fallback` so a workspace that was
+    moved / unlinked between sessions does not silently sneak back in.
+    Wrapped in try/except because real filesystems race — a directory
+    that passed ``exists()`` can be unlinked before ``is_dir()`` runs.
+    """
+    try:
+        p = Path(path_str)
+    except (TypeError, ValueError):
+        return False
+    try:
+        return p.exists() and p.is_dir()
+    except OSError:
+        return False
+
+
 class OfficeToolService:
     """Scoped read/list over the active session-workspace binding.
 
@@ -232,14 +325,29 @@ class OfficeToolService:
 
         Returns an empty list (not an error) for revoked / mismatched
         bindings so the tool output does not leak filesystem state.
+
+        Fallback: when ``binding_generation == 0`` (no producer-side
+        binding — ordinary chat streams without explicit office refs),
+        :func:`_resolve_workspace_fallback` widens the scope to the
+        session's last-known workspace or the most recently opened
+        project. Stale generation values (``> 0``) deliberately fall
+        through to ``[]`` so a rebound workspace never leaks its docs
+        to a caller holding an old generation handle.
         """
         binding = get_active_workspace(
             conn, session_id, expected_generation=binding_generation
         )
-        if binding is None:
+        if binding is not None:
+            workspace_path: Optional[str] = binding.workspace_path
+        elif binding_generation == 0:
+            workspace_path = _resolve_workspace_fallback(conn, session_id)
+        else:
+            workspace_path = None
+
+        if workspace_path is None:
             return []
 
-        docs = list_documents(conn, binding.workspace_path, include_archived=False)
+        docs = list_documents(conn, workspace_path, include_archived=False)
 
         # Apply caller-supplied filters. ``query`` matches case-insensitively
         # against both the user-visible original filename and the on-disk
@@ -320,13 +428,25 @@ class OfficeToolService:
         Returns ``None`` when the binding is stale, revoked, or the
         document is missing / archived / cross-workspace -- callers treat
         this uniformly as ``document_not_found``.
+
+        Fallback: same gating as :meth:`list` — ``binding_generation == 0``
+        widens the lookup to :func:`_resolve_workspace_fallback` so a
+        caller without an explicit binding can still address a doc by id
+        (mirrors the read-only widen).
         """
         binding = get_active_workspace(
             conn, session_id, expected_generation=binding_generation
         )
-        if binding is None:
+        if binding is not None:
+            workspace_path = binding.workspace_path
+        elif binding_generation == 0:
+            workspace_path = _resolve_workspace_fallback(conn, session_id)
+        else:
+            workspace_path = None
+
+        if workspace_path is None:
             return None
-        return get_document_in_workspace(conn, doc_id, binding.workspace_path)
+        return get_document_in_workspace(conn, doc_id, workspace_path)
 
     def read(
         self,
