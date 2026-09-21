@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-> 🧹 **alpha.47 暂无未发布变更**
+> 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 ## [v0.4.9-alpha.47] - 2026-09-21
 
