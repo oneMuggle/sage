@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "global": {
+    "maxFileLines": 800,
+    "maxContractLines": 300,
+    "forbidCycles": true,
+    "forbidDeepImports": true,
+    "managedOnly": true
+  },
+  "modules": [
+    { "id": "frontend-shared", "roots": ["src/shared"] },
+    { "id": "frontend-entities", "roots": ["src/entities"], "requires": ["frontend-shared"] },
+    { "id": "frontend-features", "roots": ["src/features"], "requires": ["frontend-shared", "frontend-entities"] },
+    { "id": "frontend-widgets", "roots": ["src/widgets"], "requires": ["frontend-shared", "frontend-entities", "frontend-features"] },
+    { "id": "frontend-pages", "roots": ["src/pages"], "requires": ["frontend-shared", "frontend-entities", "frontend-features", "frontend-widgets"] },
+    { "id": "backend-domain", "roots": ["backend/domain"] },
+    { "id": "backend-ports", "roots": ["backend/ports"], "requires": ["backend-domain"] },
+    { "id": "backend-application", "roots": ["backend/application"], "requires": ["backend-domain", "backend-ports"] },
+    { "id": "backend-adapters", "roots": ["backend/adapters"], "requires": ["backend-domain", "backend-ports", "backend-application"] },
+    { "id": "backend-api", "roots": ["backend/api"], "requires": ["backend-domain", "backend-ports", "backend-application"] }
+  ]
+}
