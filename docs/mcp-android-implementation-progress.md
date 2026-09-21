@@ -1326,6 +1326,7 @@ node run-all.cjs                              PageBridge 29 / Rename bridge 33 /
 ./gradlew :app:assembleDebug                  BUILD SUCCESSFUL；:app:bridgeJsTest 在 preBuild 执行并通过
 APK                                           android/app/build/outputs/apk/debug/app-debug.apk（2026-09-21 20:18 起，含 assets/ModelArchive.js 14516 B）
 git status --short --ignored android          仅 .gradle/ .kotlin/ build/ local.properties 被忽略
+git commit 82a8eab4（main）                   android/ + docs/evidence/ + docs/mcp-android-*.md 共 130 个文件入库；未推送，未触碰其他已改动 / 已暂存文件
 ```
 
 ## 验收状态与真机复核清单
