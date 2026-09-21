@@ -21,11 +21,7 @@ export function ArenaAccountsToggle() {
       label="Arena 自动化"
       desc="启用后侧边栏显示「Arena 账号」入口。用于多账号批量自动化评测，普通用户无需开启。"
     >
-      <Toggle
-        value={enabled}
-        onChange={setEnabled}
-        testId="toggle-arena-accounts"
-      />
+      <Toggle value={enabled} onChange={setEnabled} testId="toggle-arena-accounts" />
     </SettingRow>
   );
 }

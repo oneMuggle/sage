@@ -109,13 +109,8 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useI18n();
-  const {
-    sessions,
-    currentSessionId,
-    setCurrentSessionId,
-    loadSessions,
-    updateSession,
-  } = useStore();
+  const { sessions, currentSessionId, setCurrentSessionId, loadSessions, updateSession } =
+    useStore();
   const { settings } = useSettings();
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const [moreOpen, setMoreOpen] = useState<boolean>(readMoreOpen);
@@ -402,7 +397,9 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
               )}
             >
               <Icon className="w-4 h-4" />
-              <span>{item.labelKey === 'sidebar.nav.agents' ? t('sidebar.nav.agents') : item.label}</span>
+              <span>
+                {item.labelKey === 'sidebar.nav.agents' ? t('sidebar.nav.agents') : item.label}
+              </span>
               {/* U9: 对话入口的待处理数量（AttnBadge，带数字） */}
               {item.path === '/chat' && <AttnBadge count={attentionCount} />}
             </Link>
@@ -447,7 +444,11 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
                     )}
                   >
                     <Icon className="w-4 h-4" />
-                    <span>{item.labelKey === 'sidebar.nav.agents' ? t('sidebar.nav.agents') : item.label}</span>
+                    <span>
+                      {item.labelKey === 'sidebar.nav.agents'
+                        ? t('sidebar.nav.agents')
+                        : item.label}
+                    </span>
                   </Link>
                 );
               })}

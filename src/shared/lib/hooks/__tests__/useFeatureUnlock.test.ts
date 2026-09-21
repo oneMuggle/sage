@@ -73,7 +73,7 @@ describe('useFeatureUnlock — unlock', () => {
   it('unlocks and persists the key', () => {
     const { result } = renderHook(() => useFeatureUnlock('skills'));
     expect(result.current[0]).toBe(false);
-    act(() => result.current[1]());
+    act(() => result.current[1](true));
     expect(result.current[0]).toBe(true);
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).toContain('skills');
@@ -81,8 +81,8 @@ describe('useFeatureUnlock — unlock', () => {
 
   it('is idempotent — unlocking twice keeps a single entry', () => {
     const { result } = renderHook(() => useFeatureUnlock('skills'));
-    act(() => result.current[1]());
-    act(() => result.current[1]());
+    act(() => result.current[1](true));
+    act(() => result.current[1](true));
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored.filter((k: string) => k === 'skills')).toHaveLength(1);
     expect(result.current[0]).toBe(true);
@@ -91,7 +91,7 @@ describe('useFeatureUnlock — unlock', () => {
   it('does not clobber other already-unlocked keys', () => {
     localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['office']));
     const { result } = renderHook(() => useFeatureUnlock('skills'));
-    act(() => result.current[1]());
+    act(() => result.current[1](true));
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).toEqual(expect.arrayContaining(['office', 'skills']));
   });
@@ -103,7 +103,7 @@ describe('useFeatureUnlock — unlock', () => {
     };
     try {
       const { result } = renderHook(() => useFeatureUnlock('skills'));
-      act(() => result.current[1]());
+      act(() => result.current[1](true));
       // 写入失败但内存态仍解锁
       expect(result.current[0]).toBe(true);
     } finally {
@@ -119,7 +119,7 @@ describe('useFeatureUnlock — sync across instances', () => {
     expect(sidebar.result.current[0]).toBe(false);
     expect(page.result.current[0]).toBe(false);
 
-    act(() => page.result.current[1]());
+    act(() => page.result.current[1](true));
 
     expect(page.result.current[0]).toBe(true);
     expect(sidebar.result.current[0]).toBe(true);
@@ -129,7 +129,7 @@ describe('useFeatureUnlock — sync across instances', () => {
     const skills = renderHook(() => useFeatureUnlock('skills'));
     const office = renderHook(() => useFeatureUnlock('office'));
 
-    act(() => skills.result.current[1]());
+    act(() => skills.result.current[1](true));
 
     expect(skills.result.current[0]).toBe(true);
     expect(office.result.current[0]).toBe(false);
@@ -243,10 +243,7 @@ describe('useFeatureUnlock — lock', () => {
   });
 
   it('lock does not disturb other unlocked keys', () => {
-    localStorage.setItem(
-      FEATURE_UNLOCK_STORAGE_KEY,
-      JSON.stringify(['office', 'arena-accounts']),
-    );
+    localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['office', 'arena-accounts']));
     const { result } = renderHook(() => useFeatureUnlock('arena-accounts'));
     act(() => result.current[1](false));
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
