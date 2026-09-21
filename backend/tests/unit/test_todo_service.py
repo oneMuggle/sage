@@ -1,5 +1,6 @@
 """Test TodoService"""
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -133,3 +134,93 @@ def test_delete_todo(todo_service):
 
     assert result is True
     assert todo_service.get_todo(created.id) is None
+
+
+# --- fix-round (B/C/D) tests ---
+
+
+def test_update_returns_none_for_missing_id(todo_service):
+    """update_todo returns None for a non-existent id (signature is Optional[Todo])."""
+    assert todo_service.update_todo(99999, title="Ghost") is None
+
+
+def test_update_none_clears_nullable_field(todo_service):
+    """Explicit None clears a nullable field (description)."""
+    created = todo_service.create_todo(title="X", description="keep me?")
+    assert created.description == "keep me?"
+
+    updated = todo_service.update_todo(created.id, description=None)
+    assert updated.description is None
+
+
+def test_update_absent_key_leaves_field_unchanged(todo_service):
+    """A key not passed at all leaves its column untouched."""
+    created = todo_service.create_todo(title="X", description="keep me")
+    updated = todo_service.update_todo(created.id, title="New title")
+
+    assert updated.title == "New title"
+    assert updated.description == "keep me"
+
+
+def test_update_rejects_none_title(todo_service):
+    """title is NOT NULL in the schema; explicit None must raise, not crash as IntegrityError."""
+    created = todo_service.create_todo(title="Original")
+
+    with pytest.raises(ValueError, match="title is NOT NULL"):
+        todo_service.update_todo(created.id, title=None)
+
+
+def test_update_none_project_tag_clears_project_id(todo_service):
+    """Explicit project_tag=None must clear both the tag and the auto-linked project id."""
+    conn = todo_service.db.get_connection()
+    pid = "abcdef01234567890abcdef012345678"
+    conn.execute(
+        "INSERT INTO projects (id, path, name, created_at, last_opened_at) VALUES (?,?,?,?,?)",
+        (pid, "/tmp/y", "Work", 0, 0),
+    )
+    conn.commit()
+
+    linked = todo_service.create_todo(title="T", project_tag="Work")
+    assert linked.project_tag == "Work"
+    assert linked.project_id == pid
+
+    cleared = todo_service.update_todo(linked.id, project_tag=None)
+    assert cleared.project_tag is None
+    assert cleared.project_id is None
+
+
+def test_tz_aware_due_at_normalized_on_create(todo_service):
+    """A tz-aware due_at (e.g. from ``Date.toISOString()``) is normalized to naive local."""
+    todo = todo_service.create_todo(title="T", due_at="2026-09-25T15:00:00+00:00")
+
+    parsed = datetime.fromisoformat(todo.due_at)
+    assert parsed.tzinfo is None
+    # Same UTC instant, rendered in local time
+    expected = datetime(2026, 9, 25, 15, 0, tzinfo=timezone.utc)  # noqa: UP017
+    assert parsed.astimezone(timezone.utc) == expected  # noqa: UP017
+
+
+def test_tz_aware_due_at_with_z_normalized_on_create(todo_service):
+    """``...Z`` suffix (the canonical JS ``Date.toISOString()`` output) must parse."""
+    todo = todo_service.create_todo(title="T", due_at="2026-09-25T15:00:00Z")
+    parsed = datetime.fromisoformat(todo.due_at)
+    assert parsed.tzinfo is None
+    expected = datetime(2026, 9, 25, 15, 0, tzinfo=timezone.utc)  # noqa: UP017
+    assert parsed.astimezone(timezone.utc) == expected  # noqa: UP017
+
+
+def test_update_due_at_normalized(todo_service):
+    """update_todo also normalizes a tz-aware due_at."""
+    created = todo_service.create_todo(title="T")
+    updated = todo_service.update_todo(created.id, due_at="2026-09-25T15:00:00+00:00")
+
+    parsed = datetime.fromisoformat(updated.due_at)
+    assert parsed.tzinfo is None
+    expected = datetime(2026, 9, 25, 15, 0, tzinfo=timezone.utc)  # noqa: UP017
+    assert parsed.astimezone(timezone.utc) == expected  # noqa: UP017
+
+
+def test_naive_due_at_is_unchanged(todo_service):
+    """Naive inputs pass through untouched (no conversion)."""
+    todo = todo_service.create_todo(title="T", due_at="2026-09-25T15:00:00")
+    assert todo.due_at == "2026-09-25T15:00:00"
