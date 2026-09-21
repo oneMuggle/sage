@@ -19,11 +19,69 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Cryptography 惰性加载 (2026-09-21 Win7 alpha.51 启动崩溃修复)
+#
+# 背景：cryptography 47.0.0 在部分 Win7 SP1 机器上加载失败（KB3033929 缺失
+# 或 AV 拦截 Rust 扩展），导致整个后端无法启动。Arena 自动化是可选功能，
+# 不应因 cryptography 不可用而阻塞启动。
+#
+# 方案：将 cryptography 导入改为惰性加载，首次调用时才 import；提供
+# ``crypto_available()`` 探测函数供 main.py 启动期判断；加载失败时 log
+# 清晰错误但不抛异常，让 main.py 跳过 arena 装配继续启动。
+# ---------------------------------------------------------------------------
+
+_CRYPTO_CACHE: Optional[Dict[str, Any]] = None
+_CRYPTO_LOAD_ERROR: Optional[str] = None
+
+
+def _lazy_crypto() -> Optional[Dict[str, Any]]:
+    """惰性加载 cryptography 原语，缓存首次成功结果。
+
+    Returns
+    -------
+    dict or None
+        ``{"Fernet": ..., "hashes": ..., "PBKDF2HMAC": ...}`` 或 None（不可用）。
+        不可用时会设置 ``_CRYPTO_LOAD_ERROR`` 并 log warning。
+    """
+    global _CRYPTO_CACHE, _CRYPTO_LOAD_ERROR
+    if _CRYPTO_CACHE is not None:
+        return _CRYPTO_CACHE
+    if _CRYPTO_LOAD_ERROR is not None:
+        # 已经尝试过且失败了，不重复尝试（避免启动期多次 log）
+        return None
+    try:
+        from cryptography.fernet import Fernet  # noqa: WPS433 — 惰性导入
+        from cryptography.hazmat.primitives import hashes  # noqa: WPS433
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC  # noqa: WPS433
+
+        _CRYPTO_CACHE = {
+            "Fernet": Fernet,
+            "hashes": hashes,
+            "PBKDF2HMAC": PBKDF2HMAC,
+        }
+        logger.debug("cryptography 加载成功")
+        return _CRYPTO_CACHE
+    except Exception as e:  # noqa: BLE001 — 任何导入失败（ImportError / OSError / C-level panic）
+        _CRYPTO_LOAD_ERROR = f"{type(e).__name__}: {e}"
+        logger.warning(
+            "cryptography 不可用（Arena 自动化将被禁用）: %s — "
+            "可能原因：Win7 缺少 KB3033929 / cryptography 47.0.0 Rust 扩展被 AV 拦截 / "
+            "Python embeddable 目录损坏",
+            _CRYPTO_LOAD_ERROR,
+        )
+        return None
+
+
+def crypto_available() -> bool:
+    """探测 cryptography 是否可加载。
+
+    在 main.py 启动期调用，决定是否装配 Arena 服务。惰性：首次调用时尝试
+    加载，后续调用直接返回缓存结果。
+    """
+    return _lazy_crypto() is not None
 
 
 def derive_arena_key(token: str, machine_id: str) -> bytes:
@@ -31,8 +89,21 @@ def derive_arena_key(token: str, machine_id: str) -> bytes:
 
     Uses PBKDF2-HMAC-SHA256 with the machine_id as salt and 480,000 iterations,
     producing a 32-byte key that is urlsafe-base64 encoded for Fernet consumption.
+
+    Raises
+    ------
+    RuntimeError
+        cryptography 不可用时抛出，调用方应捕获并降级。
     """
     import base64
+
+    crypto = _lazy_crypto()
+    if crypto is None:
+        raise RuntimeError(
+            f"derive_arena_key: cryptography 不可用（{_CRYPTO_LOAD_ERROR}）"
+        )
+    PBKDF2HMAC = crypto["PBKDF2HMAC"]
+    hashes = crypto["hashes"]
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -57,9 +128,21 @@ def get_or_create_master_key(settings_repo: Optional[Any] = None) -> bytes:
     sage (same tradeoff as app_settings apiKey encryption).
 
     ``settings_repo`` is injectable for tests; defaults to SettingsRepository.
+
+    Raises
+    ------
+    RuntimeError
+        cryptography 不可用时抛出，调用方应捕获并降级（Arena 功能禁用）。
     """
     from backend.data.settings_repo import SettingsRepository
     from backend.services.secret_box import decrypt_secret, encrypt_secret
+
+    crypto = _lazy_crypto()
+    if crypto is None:
+        raise RuntimeError(
+            f"get_or_create_master_key: cryptography 不可用（{_CRYPTO_LOAD_ERROR}）"
+        )
+    Fernet = crypto["Fernet"]
 
     repo = settings_repo or SettingsRepository()
     stored = repo.get(MASTER_KEY_PREFERENCE)
@@ -120,6 +203,12 @@ class ArenaAccountService:
         encryption_key: bytes,
         failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
     ):
+        crypto = _lazy_crypto()
+        if crypto is None:
+            raise RuntimeError(
+                f"ArenaAccountService: cryptography 不可用（{_CRYPTO_LOAD_ERROR}）"
+            )
+        Fernet = crypto["Fernet"]
         self._db_path = db_path
         self._fernet = Fernet(encryption_key)
         self._failure_threshold = failure_threshold

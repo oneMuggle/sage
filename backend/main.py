@@ -608,28 +608,48 @@ async def lifespan(app: FastAPI):
     # Arena 自动化装配（feature flag 默认关）：账号池 + 单账号注册辅助。
     # 修复既有缺口：arena 路由早已挂载但 init_arena_service 从未被调用，
     # 端点恒 503。enabled=false 时保持 403 语义（路由侧 _config 为 None）。
+    #
+    # 2026-09-21 Win7 alpha.51 启动崩溃修复：cryptography 47.0.0 在部分 Win7
+    # SP1 机器上加载失败（KB3033929 缺失 / AV 拦截 Rust 扩展），导致整个后端
+    # 无法启动。现在 arena 装配分三步惰性执行：
+    #   1. 读配置（纯 YAML，无 cryptography 依赖）
+    #   2. 仅当 enabled=true 时探测 cryptography 是否可加载
+    #   3. 探测通过才 import arena_accounts（触发 cryptography 实际加载）
+    # 任何一步失败都 log warning + 跳过 arena，不阻塞后端启动。
     try:
-        from backend.api.arena_routes import (
-            init_arena_service,
-            init_registration_service,
-        )
         from backend.config.arena_automation import load_arena_automation_config
-        from backend.services.arena_accounts import get_or_create_master_key
 
         _arena_cfg = load_arena_automation_config()
         if _arena_cfg.enabled:
-            _arena_dir = os.environ.get("SAGE_USER_DATA_DIR") or "backend/data"
-            _arena_db = str(Path(_arena_dir) / "arena_accounts.sqlite")
-            _arena_service = init_arena_service(
-                db_path=_arena_db,
-                encryption_key=get_or_create_master_key(),
-                config=_arena_cfg,
-            )
-            init_registration_service(
-                config=_arena_cfg, account_service=_arena_service
-            )
-            logger.info("Arena 自动化已启用（账号池 + 注册辅助，db=%s）", _arena_db)
-            _startup_mark("arena")
+            # 仅当用户显式启用 arena 时才探测 cryptography
+            from backend.services.arena_accounts import crypto_available
+
+            if not crypto_available():
+                logger.warning(
+                    "Arena 自动化启用但 cryptography 不可用 —— "
+                    "功能将被降级为禁用（Arena 端点返回 403）"
+                )
+                _startup_mark("arena-skip-crypto-unavailable")
+            else:
+                # cryptography 探测通过，安全导入 arena 相关模块
+                from backend.api.arena_routes import (
+                    init_arena_service,
+                    init_registration_service,
+                )
+                from backend.services.arena_accounts import get_or_create_master_key
+
+                _arena_dir = os.environ.get("SAGE_USER_DATA_DIR") or "backend/data"
+                _arena_db = str(Path(_arena_dir) / "arena_accounts.sqlite")
+                _arena_service = init_arena_service(
+                    db_path=_arena_db,
+                    encryption_key=get_or_create_master_key(),
+                    config=_arena_cfg,
+                )
+                init_registration_service(
+                    config=_arena_cfg, account_service=_arena_service
+                )
+                logger.info("Arena 自动化已启用（账号池 + 注册辅助，db=%s）", _arena_db)
+                _startup_mark("arena")
         else:
             logger.info("Arena 自动化未启用（arena_automation.yaml enabled=false）")
     except Exception:  # noqa: BLE001 — 装配失败不阻塞启动
