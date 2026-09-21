@@ -1751,6 +1751,37 @@ class Database:
 
         ensure_journal_tables()
 
+        # Todos table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS todos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT,
+                status TEXT DEFAULT 'pending',
+                priority TEXT DEFAULT 'medium',
+                effective_urgency TEXT,
+                due_at TEXT,
+                completed_at TEXT,
+                project_tag TEXT,
+                project_id INTEGER,
+                is_recurring INTEGER DEFAULT 0,
+                recurrence_rule TEXT,
+                parent_id INTEGER,
+                reminder_24h_fired INTEGER DEFAULT 0,
+                reminder_1h_fired INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id),
+                FOREIGN KEY (parent_id) REFERENCES todos(id)
+            )
+        """)
+
+        # Indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_todos_due_at ON todos(due_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_todos_project_tag ON todos(project_tag)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_todos_parent_id ON todos(parent_id)")
+
         conn.commit()
         logger.info("数据库初始化完成: %s", self.db_path)  # D4 (P6): 遗留 print 收敛到 logging
 
