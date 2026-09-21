@@ -99,7 +99,6 @@ def test_default_seed_coder_uses_current_tool_names():
         "bash",
         "bash_output",
         "kill_shell",
-        "calculator",
         "runtime_probe",
         "project_diagnose",
         "runtime_exec",
@@ -404,7 +403,7 @@ def test_legacy_primary_plan_write_pruned(monkeypatch):
         "primary": {
             "id": "primary",
             "enabled": True,
-            "tools": ["calculator", "read_file", "plan_write", "todo_write"],
+            "tools": ["read_file", "plan_write", "todo_write"],
         },
         "researcher": {"id": "researcher", "enabled": True, "tools": []},
     }
@@ -413,7 +412,6 @@ def test_legacy_primary_plan_write_pruned(monkeypatch):
     profiles.ensure_default_agents()
     assert "plan_write" not in stored["primary"]["tools"]
     # 其余工具原样保留
-    assert "calculator" in stored["primary"]["tools"]
     assert "todo_write" in stored["primary"]["tools"]
 
 

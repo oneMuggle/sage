@@ -373,7 +373,6 @@ backend/
 │   │   ├── MemorySearchTool
 │   │   └── MemorySaveTool
 │   │
-│   ├── calculator.py        # 计算器工具
 │   └── delegate.py         # 委托工具
 │
 ├── skills/                  # 技能系统

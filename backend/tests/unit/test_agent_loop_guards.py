@@ -24,7 +24,7 @@ def _text_response(content: str) -> LLMResponse:
     return LLMResponse(content=content, tool_calls=[])
 
 
-def _tool_response(name: str = "calculator", expression: str = "1+1") -> LLMResponse:
+def _tool_response(name: str = "list_dir", expression: str = "1+1") -> LLMResponse:
     return LLMResponse(
         content="",
         tool_calls=[
@@ -173,13 +173,13 @@ class TestRepetitionGuard:
 class TestProfileParallelGuard:
     def test_parallel_batch_rejects_tool_outside_profile_whitelist(self):
         agent = SageAgent()
-        agent.profile = {"tools": ["calculator"]}
+        agent.profile = {"tools": ["list_dir"]}
         allowed_tool = MagicMock(risk=RiskClass.READ, is_blocking=False)
         agent.tool_registry.get = MagicMock(return_value=allowed_tool)
         enforcer = MagicMock()
         enforcer.check.return_value = MagicMock(allowed=True, needs_approval=False)
         batch = [
-            LLMToolCall(id="call_1", name="calculator", arguments='{"expression":"1+1"}'),
+            LLMToolCall(id="call_1", name="list_dir", arguments='{"expression":"1+1"}'),
             LLMToolCall(id="call_2", name="read_file", arguments='{"path":"x"}'),
         ]
 

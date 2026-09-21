@@ -15,7 +15,7 @@ def test_default_seed_includes_todo_write():
 
 
 _LEGACY_SEED = [
-    "calculator", "memory_search", "memory_save", "list_dir", "read_file",
+    "memory_search", "memory_save", "list_dir", "read_file",
     "grep_search", "glob_search", "file_summary", "agent",
 ]
 

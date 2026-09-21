@@ -537,7 +537,6 @@ class BaseTool(ABC):
 | read_file     | 读取文件        | file:read  |
 | write_file    | 写入文件        | file:write |
 | web_search    | 网络搜索        | network    |
-| calculator    | 计算器          | none       |
 | memory_search | 搜索记忆        | memory     |
 | memory_save   | 保存记忆        | memory     |
 

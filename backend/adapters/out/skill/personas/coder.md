@@ -4,7 +4,7 @@ name: Code Coworker
 icon: code
 tagline: Work in a codebase — read, edit, run, verify
 description: A software-engineering persona for navigating codebases, implementing changes, and verifying them with tests.
-tools: [read_file, write_file, list_dir, terminal, calculator]
+tools: [read_file, write_file, list_dir, terminal]
 connectors: false
 recommended_models: [claude-sonnet-4-5, gpt-4-1]
 default_mode: workspace_write

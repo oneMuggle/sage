@@ -244,7 +244,6 @@ backend/
 │   ├── terminal.py       # 终端工具
 │   ├── file_tool.py      # 文件工具
 │   ├── web_tool.py       # 网络工具
-│   └── calculator.py     # 计算器
 ├── skills/                 # 技能系统（当前入口见 technical/24-skills-system.md）
 │   ├── __init__.py         # 导出技能注册与 SKILL.md 加载入口
 │   ├── base.py             # BaseSkill / SkillSchema / SkillResult 契约

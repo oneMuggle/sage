@@ -16,6 +16,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from backend.core.legacy.agent import SageAgent
+from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.permissions import ToolCapability
 from backend.core.legacy.agent_state import AgentEvent, AgentState
 from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
 from backend.data.settings_repo import SettingsRepository
@@ -34,8 +36,46 @@ def _install_hooks(hooks: List[dict]) -> None:
     SettingsRepository().set_json("hooks", hooks)
 
 
+
+class _FakeCalcTool(BaseTool):
+    """临时数学工具 —— 仅在 hooks 集成测试中注册, 替代已退役的 CalculatorTool。"""
+
+    def __init__(self):
+        super().__init__()
+        self._n = "fake_calc"
+        self._d = "临时计算工具(测试用)"
+
+    @property
+    def name(self) -> str:
+        return self._n
+
+    @property
+    def risk_class(self):
+        return ToolCapability.READ
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name=self._n,
+            description=self._d,
+            parameters={
+                "type": "object",
+                "properties": {"expression": {"type": "string", "description": "数学表达式"}},
+                "required": ["expression"],
+            },
+        )
+
+    def execute(self, **arguments) -> ToolResult:
+        expr = arguments.get("expression", "0")
+        try:
+            value = eval(expr, {"__builtins__": {}})  # noqa: S307 — 测试替身
+        except Exception as exc:
+            return ToolResult(success=False, error=str(exc))
+        return ToolResult(success=True, content={"expression": expr, "result": value})
+
+
 def _make_agent(tool_call_name: str, tool_call_args: str, final_text: str) -> SageAgent:
     agent = SageAgent()
+    agent.tool_registry.register(_FakeCalcTool())
     agent.llm_client = MagicMock()
     agent.llm_client.chat = AsyncMock(
         side_effect=[
@@ -99,16 +139,16 @@ async def test_pre_hook_modify_replaces_args_after_schema_revalidation(tmp_path)
         "json.load(sys.stdin)\n"
         "print(json.dumps({'decision': 'modify', 'updated_input': {'expression': '2+2'}}))\n",
     )
-    _install_hooks([{"event": "pre_tool_use", "matcher": "calc*", "command": cmd}])
+    _install_hooks([{"event": "pre_tool_use", "matcher": "fake_calc*", "command": cmd}])
 
-    agent = _make_agent("calculator", '{"expression": "1+1"}', "完成")
+    agent = _make_agent("fake_calc", '{"expression": "1+1"}', "完成")
     events, _messages = await _collect(agent)
 
     observing = next(e for e in events if e.state == AgentState.OBSERVING)
     assert observing.tool_result.is_error is False
-    content = json.loads(observing.tool_result.content)
-    assert content["expression"] == "2+2"
-    assert content["result"] == 4
+    result_content = json.loads(observing.tool_result.content)
+    assert result_content["expression"] == "2+2"
+    assert result_content["result"] == 4
 
 
 @pytest.mark.asyncio()
@@ -122,14 +162,14 @@ async def test_pre_hook_modify_failing_revalidation_keeps_original_args(tmp_path
     )
     _install_hooks([{"event": "pre_tool_use", "matcher": "*", "command": cmd}])
 
-    agent = _make_agent("calculator", '{"expression": "3*3"}', "完成")
+    agent = _make_agent("fake_calc", '{"expression": "3*3"}', "完成")
     events, _messages = await _collect(agent)
 
     observing = next(e for e in events if e.state == AgentState.OBSERVING)
     assert observing.tool_result.is_error is False
-    content = json.loads(observing.tool_result.content)
-    assert content["expression"] == "3*3"
-    assert content["result"] == 9
+    result_content = json.loads(observing.tool_result.content)
+    assert result_content["expression"] == "3*3"
+    assert result_content["result"] == 9
 
 
 @pytest.mark.asyncio()
@@ -137,13 +177,12 @@ async def test_failing_hook_is_fail_open(tmp_path):
     """非零退出的钩子 → no-op, 工具照常执行。"""
     _install_hooks([{"event": "pre_tool_use", "matcher": "*", "command": "exit 2"}])
 
-    agent = _make_agent("calculator", '{"expression": "5+5"}', "完成")
+    agent = _make_agent("fake_calc", '{"expression": "5+5"}', "完成")
     events, _messages = await _collect(agent)
 
     observing = next(e for e in events if e.state == AgentState.OBSERVING)
     assert observing.tool_result.is_error is False
-    content = json.loads(observing.tool_result.content)
-    assert content["result"] == 10
+    assert json.loads(observing.tool_result.content)["result"] == 10
     assert any(e.state == AgentState.DONE for e in events)
 
 
@@ -161,9 +200,9 @@ async def test_post_hook_observes_result(tmp_path):
         "                'event': payload.get('hook_event_name')}, ensure_ascii=False)\n"
         ")\n",
     )
-    _install_hooks([{"event": "post_tool_use", "matcher": "calc*", "command": cmd}])
+    _install_hooks([{"event": "post_tool_use", "matcher": "fake_calc*", "command": cmd}])
 
-    agent = _make_agent("calculator", '{"expression": "7+1"}', "完成")
+    agent = _make_agent("fake_calc", '{"expression": "4+4"}', "完成")
     events, _messages = await _collect(agent)
 
     assert any(e.state == AgentState.DONE for e in events)

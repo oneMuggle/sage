@@ -54,7 +54,7 @@ async def test_list_agents_profile_preserves_all_fields(client):
     assert primary["role"] == "coordinator"
     assert primary["system_prompt"]  # 非空
     assert isinstance(primary["tools"], list)
-    assert "calculator" in primary["tools"]
+    assert "list_dir" in primary["tools"]
     assert isinstance(primary["memory_access"], list)
     assert "working" in primary["memory_access"]
     assert primary["model_config"]["model"] == "gpt-4"

@@ -33,7 +33,7 @@ def _make_response(content: str = "", tool_calls: list = None) -> LLMResponse:
     )
 
 
-def _make_tool_call(call_id: str, name: str = "calculator", args: str = '{"expression": "1+1"}') -> LLMToolCall:
+def _make_tool_call(call_id: str, name: str = "list_dir", args: str = '{"expression": "1+1"}') -> LLMToolCall:
     return LLMToolCall(id=call_id, name=name, arguments=args)
 
 

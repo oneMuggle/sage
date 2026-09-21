@@ -191,7 +191,6 @@ def test_register_all_tools_registers_builtin_set():
         "web_search",
         "web_fetch",
         "http_download",
-        "calculator",
         "memory_search",
         "memory_save",
     }

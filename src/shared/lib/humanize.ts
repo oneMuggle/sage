@@ -170,8 +170,6 @@ export function humanizeToolCall(tool: string, args?: ToolArgs | null): Humanize
         verb: 'Delegate',
         object: trunc(strArg(a, 'description') || strArg(a, 'prompt'), MAX_OBJECT),
       };
-    case 'calculator':
-      return { verb: 'Calculate', object: trunc(strArg(a, 'expression'), MAX_OBJECT) };
     case 'ask_user_question':
       return { verb: 'Ask', object: trunc(strArg(a, 'question'), MAX_OBJECT) };
     case 'skill':

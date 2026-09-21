@@ -766,12 +766,12 @@ describe('useChat', () => {
 
     act(() => {
       capturedCb!({
-        payload: { state: 'acting', iteration: 0, tool_call: { function: { name: 'calculator' } } },
+        payload: { state: 'acting', iteration: 0, tool_call: { function: { name: 'read_file' } } },
       });
     });
-    // 关键断言 2: acting 后应该是 "🔧 调工具 calculator…",之前 thinking 占位已清掉
+    // 关键断言 2: acting 后应该是 "🔧 调工具 read_file…",之前 thinking 占位已清掉
     const afterActing = result.current.messages.find((m) => m.role === 'assistant');
-    expect(afterActing?.content).toBe('🔧 调工具 calculator…');
+    expect(afterActing?.content).toBe('🔧 调工具 read_file…');
 
     act(() => {
       capturedCb!({ payload: { state: 'observing', iteration: 0 } });

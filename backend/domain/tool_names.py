@@ -158,7 +158,7 @@ MULTIMODAL_TOOLS = ("text_to_speech", "speech_to_text", "generate_image")
 ORCH_TOOLS = ("agent", "todo_write", "structured_output", "ask_user_question")
 
 # Round 8: execute_code —— 子进程 RPC 工具调用（EXEC 级权限面与 bash 等同）
-SANDBOX_TOOLS = ("calculator", "repl", "execute_code")
+SANDBOX_TOOLS = ("repl", "execute_code")
 
 # 系统自省与配置（2026-09-18 feat/agents-entry-config-query）：
 # ``read_sage_config`` READ 自动放行，``update_sage_config`` WRITE_LOCAL 走权限审批。

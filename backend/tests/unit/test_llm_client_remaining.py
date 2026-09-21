@@ -246,13 +246,13 @@ def test_parse_tool_calls_full_fields():
         {
             "id": "call-1",
             "type": "function",
-            "function": {"name": "calculator", "arguments": '{"x": 1}'},
+            "function": {"name": "list_dir", "arguments": '{"x": 1}'},
         }
     ]
     out = LLMClient._parse_tool_calls(raw)
     assert len(out) == 1
     assert out[0].id == "call-1"
-    assert out[0].name == "calculator"
+    assert out[0].name == "list_dir"
     assert out[0].arguments == '{"x": 1}'
 
 

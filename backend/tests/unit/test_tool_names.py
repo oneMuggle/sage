@@ -60,7 +60,7 @@ def test_validate_profile_tools_warns_on_unknown(monkeypatch):
     repo = FakeRepo(
         [
             {"id": "legacy", "tools": ["terminal", "read_file"]},  # 旧名 terminal
-            {"id": "ok", "tools": ["bash", "calculator"]},
+            {"id": "ok", "tools": ["bash", "list_dir"]},
             {"id": "empty", "tools": []},
         ]
     )

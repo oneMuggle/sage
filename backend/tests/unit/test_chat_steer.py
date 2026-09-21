@@ -44,7 +44,7 @@ async def test_steering_consumed_at_iteration_boundary():
     """run 中注入的消息在下一迭代边界以【用户补充】前缀进入 LLM 上下文。"""
     agent = SageAgent()
     agent.llm_client = MagicMock()
-    tool_call = LLMToolCall(id="c1", name="calculator", arguments="{}")
+    tool_call = LLMToolCall(id="c1", name="list_dir", arguments="{}")
     calls = {"n": 0}
 
     async def _chat(messages, tools=None):

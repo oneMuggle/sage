@@ -130,7 +130,7 @@ async def test_two_step_run_writes_one_step_and_one_final_assistant():
             iteration=0,
             tool_call=ToolCallRequest(
                 id="call_a",
-                name="calculator",
+                name="list_dir",
                 arguments={"expression": "1+1"},
             ),
         )
@@ -202,7 +202,7 @@ async def test_two_step_run_writes_one_step_and_one_final_assistant():
     assert rows[1]["tool_calls"] is not None
     tool_calls_data = json.loads(rows[1]["tool_calls"])
     assert len(tool_calls_data) >= 1
-    assert tool_calls_data[0]["name"] == "calculator"
+    assert tool_calls_data[0]["name"] == "list_dir"
 
     # 第 3 行:final (step_index=1, 无 tool_calls)
     assert rows[2]["role"] == "assistant"
