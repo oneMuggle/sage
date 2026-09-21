@@ -51,6 +51,7 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     // 高级入口隐藏
     expect(screen.queryByText('编排')).not.toBeInTheDocument();
     expect(screen.queryByText('Office')).not.toBeInTheDocument();
+    expect(screen.queryByText('Arena 账号')).not.toBeInTheDocument();
   });
 
   it('unlocks the entry for the currently visited advanced route', () => {
@@ -59,6 +60,7 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     expect(screen.getByText('编排')).toBeInTheDocument();
     // 未访问的高级入口仍然隐藏
     expect(screen.queryByText('Office')).not.toBeInTheDocument();
+    expect(screen.queryByText('Arena 账号')).not.toBeInTheDocument();
     // 解锁状态已持久化
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).toContain('orchestration');
@@ -69,13 +71,25 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     renderSidebarAt('/chat');
     expect(screen.getByText('编排')).toBeInTheDocument();
     expect(screen.queryByText('Office')).not.toBeInTheDocument();
+    expect(screen.queryByText('Arena 账号')).not.toBeInTheDocument();
   });
 
   it('shows all advanced entries when all are unlocked', () => {
-    localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['orchestration', 'office']));
+    localStorage.setItem(
+      FEATURE_UNLOCK_STORAGE_KEY,
+      JSON.stringify(['orchestration', 'office', 'arena-accounts']),
+    );
     renderSidebarAt('/chat');
     expect(screen.getByText('编排')).toBeInTheDocument();
     expect(screen.getByText('Office')).toBeInTheDocument();
+    expect(screen.getByText('Arena 账号')).toBeInTheDocument();
+  });
+
+  it('unlocks arena-accounts when visiting /arena-accounts directly', () => {
+    renderSidebarAt('/arena-accounts');
+    expect(screen.getByText('Arena 账号')).toBeInTheDocument();
+    const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
+    expect(stored).toContain('arena-accounts');
   });
 });
 

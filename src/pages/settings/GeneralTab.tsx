@@ -20,6 +20,7 @@ import { GatewayCard } from '../../widgets/settings/GatewayCard';
 import { HooksCard } from '../../widgets/settings/HooksCard';
 import { UsagePanel } from '../../widgets/settings/UsagePanel';
 
+import { ArenaAccountsToggle } from './ArenaAccountsToggle';
 import { ContextTurnLimitSelect } from './ContextTurnLimitSelect';
 import { FontSettingsSection } from './FontSettingsSection';
 import { ThemeSelector } from './ThemeSelector';
@@ -561,11 +562,11 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => Promise<voi
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">高级</h3>
         <DiagnosticCard />
+        <ArenaAccountsToggle />
       </section>
     </div>
   );
 }
-
 
 /**
  * r67: 超长文档检索注入（实验）——附件 >100k 字符时按相关度检索注入。
@@ -596,10 +597,7 @@ export function AttachmentRagCard() {
         label="启用附件检索"
         desc="文档超过 10 万字符时不再整段截断，改为嵌入问题并注入最相关的片段（需在下方填写嵌入端点）"
       >
-        <Toggle
-          value={config.enabled}
-          onChange={(v) => update({ enabled: v })}
-        />
+        <Toggle value={config.enabled} onChange={(v) => update({ enabled: v })} />
       </SettingRow>
       {config.enabled && (
         <div className="mt-2 space-y-2 grid grid-cols-2 gap-2">
