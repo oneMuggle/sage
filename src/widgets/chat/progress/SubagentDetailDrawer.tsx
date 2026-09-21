@@ -74,7 +74,7 @@ export function SubagentDetailDrawer({ open, onClose }: SubagentDetailDrawerProp
 
   return (
     <div
-      className="fixed inset-y-0 right-0 w-96 bg-bg-primary border-l border-border-primary shadow-lg z-50 flex flex-col"
+      className="absolute inset-y-0 right-0 w-96 bg-bg-primary border-l border-border-primary shadow-lg z-50 flex flex-col"
       data-testid="subagent-detail-drawer"
     >
       {/* Header */}
