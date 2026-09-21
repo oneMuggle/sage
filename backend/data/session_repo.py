@@ -139,7 +139,9 @@ class SessionRepository:
             """
             SELECT * FROM sessions
             WHERE is_archived = 0
-            ORDER BY is_pinned DESC, updated_at DESC
+            ORDER BY is_pinned DESC,
+                     CASE WHEN run_status IN ('running', 'suspended') THEN 1 ELSE 0 END DESC,
+                     updated_at DESC
             LIMIT ? OFFSET ?
         """,
             (limit, offset),

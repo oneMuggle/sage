@@ -38,14 +38,12 @@ const renderWithI18n = (ui: React.ReactNode) => render(<I18nProvider>{ui}</I18nP
 
 const baseProps = {
   sessions,
-  order: ['s1', 's2'],
   currentSessionId: null as string | null,
   collapsed: false,
   onToggleCollapsed: () => {},
   onSelect: () => {},
   onDelete: () => {},
   onNewSession: () => {},
-  onOrderChange: () => {},
 };
 
 describe('ConversationsSection', () => {
