@@ -2,6 +2,7 @@ export { ConversationsSection } from './sections/ConversationsSection';
 export { CronJobSection } from './sections/CronJobSection';
 export { ProjectSection } from './sections/ProjectSection';
 export { TeamSection } from './sections/TeamSection';
+export { TodoSection } from './sections/TodoSection';
 export { SiderSection } from './SiderSection';
 export { TwoStepDelete } from './TwoStepDelete';
 export { useSiderSections } from './useSiderSections';

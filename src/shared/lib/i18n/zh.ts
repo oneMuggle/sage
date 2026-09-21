@@ -1167,6 +1167,11 @@ export const zh = {
 
   // ─── F12 消息全文搜索 (对标增强第五轮批次 B) ─────
   'session.message_hits': '消息内容命中 {count} 条',
+
+  // ─── Todos 侧边栏预览 ─────
+  'todos.title': '待办事项',
+  'todos.create': '新建待办',
+  'todos.empty': '暂无待办',
 } as const;
 
 export type TranslationKey = keyof typeof zh;
