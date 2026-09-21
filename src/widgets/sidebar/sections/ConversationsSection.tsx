@@ -4,25 +4,22 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { sessionApi } from '../../../shared/api/sessionApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import type { Session } from '../../../shared/lib/store';
-import { SortableSessionList } from '../../session/SortableSessionList';
+import { SessionList } from '../../session/SessionList';
 import { VirtualSessionList } from '../../session/VirtualSessionList';
 import { SiderSection } from '../SiderSection';
 
 /** P1 (UI 优化方案 2026-09-13): 超过该数量的会话列表切换虚拟化渲染 ——
- *  全量 DOM 渲染在数百会话时拖慢侧栏。虚拟化分支不支持拖拽排序（列表
- *  超阈值时手动排序价值有限），搜索过滤后低于阈值自动回到可拖拽列表。 */
+ *  全量 DOM 渲染在数百会话时拖慢侧栏。排序由后端 SQL 完成,前端无拖拽。 */
 const VIRTUALIZE_THRESHOLD = 120;
 
 interface ConversationsSectionProps {
   sessions: Session[];
-  order: string[];
   currentSessionId: string | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onSelect: (sessionId: string) => void;
   onDelete: (sessionId: string) => void;
   onNewSession: () => void;
-  onOrderChange: (next: string[]) => void;
   /** U4': 重命名回调(透传给 SessionItem) */
   onRename?: (sessionId: string, title: string) => Promise<void>;
 }
@@ -32,19 +29,16 @@ const MESSAGE_SEARCH_DEBOUNCE_MS = 300;
 
 export function ConversationsSection({
   sessions,
-  order,
   currentSessionId,
   collapsed,
   onToggleCollapsed,
   onSelect,
   onDelete,
   onNewSession,
-  onOrderChange,
   onRename,
 }: ConversationsSectionProps) {
   const { t } = useI18n();
-  // U4': 标题过滤——sessions 全量已在前端内存,纯前端 filter;
-  // 只影响展示,不动 dnd 持久化顺序。
+  // U4': 标题过滤——sessions 全量已在前端内存,纯前端 filter;只影响展示。
   const [searchQuery, setSearchQuery] = useState('');
   // F12: 消息内容命中计数（≥2 字符时防抖搜索,会话 id → 命中条数）
   const [messageHits, setMessageHits] = useState<Map<string, number>>(new Map());
@@ -136,7 +130,6 @@ export function ConversationsSection({
           ) : displaySessions.length > VIRTUALIZE_THRESHOLD ? (
             <VirtualSessionList
               sessions={displaySessions}
-              order={order}
               currentSessionId={currentSessionId}
               onSelect={onSelect}
               onDelete={onDelete}
@@ -145,13 +138,11 @@ export function ConversationsSection({
               maxHeight="50vh"
             />
           ) : (
-            <SortableSessionList
+            <SessionList
               sessions={displaySessions}
-              order={order}
               currentSessionId={currentSessionId}
               onSelect={onSelect}
               onDelete={onDelete}
-              onOrderChange={onOrderChange}
               onRename={onRename}
               messageHitsBySession={messageHits}
             />

@@ -16,7 +16,7 @@ import {
   PanelLeftOpen,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -27,7 +27,6 @@ import { testEndpointConnection } from '../../features/manage-endpoints/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { deleteSessionCascade } from '../../features/send-message/useChat';
 import { sessionApi } from '../../shared/api/sessionApi';
-import { useStoredSiderOrder } from '../../shared/lib/dnd/useStoredSiderOrder';
 import { unlockFeature, useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
@@ -41,7 +40,6 @@ import {
 } from '../sidebar';
 
 const SECTION_KEYS = ['conversations', 'cron', 'project', 'team'] as const;
-const SESSION_ORDER_KEY = 'sage:sider:order:v1';
 
 // 导航项配置。
 // 对标 S3 (2026-09-13, 竞品对标 §2.2 导航收敛): 一级只保留高频 4 项，
@@ -137,18 +135,9 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
     collapsed: collapsedSections,
     toggleCollapsed,
   } = useSiderSections(SECTION_KEYS);
-  const { orderedItems, reorder } = useStoredSiderOrder({
-    storageKey: SESSION_ORDER_KEY,
-    items: sessions,
-    getId: (s) => s.id,
-  });
-  // R18-B: 置顶分区 —— 置顶组稳定在前（组内保持手动拖拽顺序），未置顶在后。
-  const pinnedFirstItems = useMemo(() => {
-    const pinned = orderedItems.filter((it) => it.is_pinned);
-    if (pinned.length === 0) return orderedItems;
-    return [...pinned, ...orderedItems.filter((it) => !it.is_pinned)];
-  }, [orderedItems]);
-  const orderedSessionIds = pinnedFirstItems.map((s) => s.id);
+  // 会话排序完全交给后端 SQL (`SessionRepository.list()`):
+  //   is_pinned DESC, run_status IN ('running','suspended') DESC, updated_at DESC
+  // 前端不再持有 localStorage 拖拽顺序。
 
   // U9: Live-Dot vs Attention-Badge 分离。
   // 待处理数 = 审批与提问两个串行卡点之和（后端单 agent 循环，各至多 1 项挂起），
@@ -241,8 +230,7 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
       case 'conversations':
         return (
           <ConversationsSection
-            sessions={pinnedFirstItems}
-            order={orderedSessionIds}
+            sessions={sessions}
             currentSessionId={currentSessionId}
             collapsed={isCollapsed}
             onToggleCollapsed={() => toggleCollapsed(key)}
@@ -250,13 +238,6 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
             onDelete={(id) => void deleteSessionCascade(id)}
             onNewSession={handleNewSession}
             onRename={handleRenameSession}
-            onOrderChange={(newOrder) => {
-              const oldIndex = orderedSessionIds.indexOf(String(newOrder[0]));
-              const newIndex = newOrder.indexOf(String(newOrder[0]));
-              if (oldIndex !== -1 && newIndex !== -1) {
-                reorder(oldIndex, newIndex);
-              }
-            }}
           />
         );
       case 'cron':

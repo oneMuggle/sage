@@ -1,7 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useMemo, useRef } from 'react';
 
-import { sortSiderItemsByStoredOrder } from '../../shared/lib/dnd/siderOrder';
 import type { Session } from '../../shared/lib/store';
 
 import { SessionItem } from './SessionItem';
@@ -38,41 +37,29 @@ interface VirtualSessionListProps {
   onSelect: (sessionId: string) => void;
   onDelete: (sessionId: string) => void;
   maxHeight?: string;
-  /**
-   * 可选:由 useStoredSiderOrder 提供的会话顺序。
-   * 提供且非空时按此顺序排序(未在 order 中的会话追加到末尾)。
-   * 缺失或为空数组时使用默认的 pin + 时间降序排序。
-   */
-  order?: readonly string[];
-  /** P1: 重命名回调(与 SortableSessionList 参数对齐,虚拟化分支功能不缩水) */
+  /** P1: 重命名回调(与 SessionList 参数对齐,虚拟化分支功能不缩水) */
   onRename?: (sessionId: string, title: string) => Promise<void>;
   /** P1: F12 消息内容命中计数(会话 id → 命中条数;缺省不显示徽标) */
   messageHitsBySession?: Map<string, number>;
 }
 
+/**
+ * 虚拟化会话列表。超阈值（>120 条）时启用，仅做渲染分组（按时间分桶）。
+ * 排序由后端 SQL 完成，前端不再传入 order 也不再做二次排序。
+ */
 export function VirtualSessionList({
   sessions,
   currentSessionId,
   onSelect,
   onDelete,
   maxHeight = 'calc(100vh - 320px)',
-  order,
   onRename,
   messageHitsBySession,
 }: VirtualSessionListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
-  // 排序:有 order 用 order;没有则保持 pin 优先 + 时间降序的默认行为
-  const sorted = useMemo(() => {
-    if (order && order.length > 0) {
-      return sortSiderItemsByStoredOrder(sessions, [...order]);
-    }
-    return [...sessions].sort((a, b) => {
-      if (a.is_pinned && !b.is_pinned) return -1;
-      if (!a.is_pinned && b.is_pinned) return 1;
-      return (b.last_message_at ?? b.updated_at) - (a.last_message_at ?? a.updated_at);
-    });
-  }, [sessions, order]);
+  // 直接使用后端返回的顺序；二次排序（pin/时间）已在 SQL 层完成。
+  const sorted = useMemo(() => sessions, [sessions]);
 
   // 构建扁平列表 (含分组头)
   const items: ListItem[] = [];
