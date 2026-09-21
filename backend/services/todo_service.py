@@ -167,14 +167,14 @@ class TodoService:
     ) -> List[Todo]:
         """List todos with optional filters.
 
-        Sorting happens **before** ``LIMIT``/``OFFSET``: sorting a 50-row page
-        client-side would reorder a window, not the list.
+        ``sort_by`` is a dict-key lookup into ``_SORT_EXPRS`` — no caller-
+        supplied string reaches SQL as an identifier.  An unsupported key
+        raises :class:`KeyError`; the router validates before this is
+        reachable (see ``todo_router.py``).  ``sort_order`` collapses
+        everything that is not ``"desc"`` to ``ASC`` — also validated by
+        the router.
 
-        ``sort_by`` selects a whitelisted ORDER BY expression from
-        ``_SORT_EXPRS``; an unsupported key raises :class:`ValueError` rather
-        than silently falling back to the default, so a caller can tell
-        "your sort was ignored" from "your sort was applied". Same for
-        ``sort_order`` outside ``{"asc", "desc"}``.
+        Sorting happens **before** ``LIMIT``/``OFFSET``.
         """
         query = "SELECT * FROM todos WHERE 1=1"
         params = []
@@ -193,14 +193,9 @@ class TodoService:
             query += " AND priority = ?"
             params.append(priority)
 
-        sort_expr = _SORT_EXPRS.get(sort_by)
-        if sort_expr is None:
-            raise ValueError(f"unsupported sort_by: {sort_by!r}")
-        order = sort_order.lower()
-        if order not in ("asc", "desc"):
-            raise ValueError(f"unsupported sort_order: {sort_order!r}")
-
-        query += f" ORDER BY {sort_expr} {order.upper()} LIMIT ? OFFSET ?"
+        sort_expr = _SORT_EXPRS[sort_by]
+        direction = "DESC" if sort_order == "desc" else "ASC"
+        query += f" ORDER BY {sort_expr} {direction} LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         conn = self.db.get_connection()
@@ -518,10 +513,9 @@ class TodoService:
         Keys:
         - ``total`` — all rows regardless of status
         - ``by_status`` — ``{status: count}``, only statuses that occur
-        - ``by_priority`` — ``{priority: count}`` over pending/in_progress
-          only, so it lines up with ``overdue``/``due_today`` (which are also
-          pending/in_progress-scoped). Completed/cancelled priorities would
-          otherwise be double-counted against a live workload.
+        - ``by_priority`` — ``{priority: count}`` over all rows, only
+          priorities that occur.  ``sum(by_priority.values()) == total``
+          always holds.
         - ``overdue`` — pending/in_progress with ``due_at < now``
         - ``due_today`` — pending/in_progress with ``now <= due_at <= end of today``
         - ``completed_today`` — completed where ``DATE(completed_at) = DATE(now)``
@@ -545,8 +539,7 @@ class TodoService:
         by_status = {row["status"]: row["n"] for row in cursor.fetchall()}
 
         cursor = conn.execute(
-            "SELECT priority, COUNT(*) AS n FROM todos "
-            "WHERE status IN ('pending', 'in_progress') GROUP BY priority"
+            "SELECT priority, COUNT(*) AS n FROM todos GROUP BY priority"
         )
         by_priority = {row["priority"]: row["n"] for row in cursor.fetchall()}
 
