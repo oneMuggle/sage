@@ -83,13 +83,13 @@ def test_office_subclass_overrides_to_true():
 def test_registry_no_context_hides_office_tools():
     """With context=None, office-only tools are hidden; normal tools visible."""
     reg = ToolRegistry()
-    reg.register(_DummyTool(name="calculator"))
+    reg.register(_DummyTool(name="list_dir"))
     reg.register(_DummyTool(name="memory_search"))
     reg.register(_OfficeTool(name="office_read"))
 
     schemas = reg.get_schemas_for_llm()  # legacy call, context defaults to None
     names = {s["name"] for s in schemas}
-    assert "calculator" in names
+    assert "list_dir" in names
     assert "memory_search" in names
     assert "office_read" not in names
 
@@ -97,14 +97,14 @@ def test_registry_no_context_hides_office_tools():
 def test_registry_with_context_exposes_office_tools():
     """With an active context, office tools are visible alongside normal tools."""
     reg = ToolRegistry()
-    reg.register(_DummyTool(name="calculator"))
+    reg.register(_DummyTool(name="list_dir"))
     reg.register(_OfficeTool(name="office_read"))
     reg.register(_OfficeTool(name="office_write"))
 
     ctx = _ctx()
     schemas = reg.get_schemas_for_llm(context=ctx)
     names = {s["name"] for s in schemas}
-    assert names == {"calculator", "office_read", "office_write"}
+    assert names == {"list_dir", "office_read", "office_write"}
 
 
 def test_registry_with_context_does_not_hide_normal_tools():
@@ -125,12 +125,12 @@ def test_registry_filter_uses_current_tool_context_when_context_arg_none():
     returns None outside any set block, so the filter hides office tools.
     """
     reg = ToolRegistry()
-    reg.register(_DummyTool(name="calculator"))
+    reg.register(_DummyTool(name="list_dir"))
     reg.register(_OfficeTool(name="office_read"))
 
     schemas = reg.get_schemas_for_llm(context=None)
     names = {s["name"] for s in schemas}
-    assert names == {"calculator"}
+    assert names == {"list_dir"}
 
 
 def test_registry_filter_uses_current_context_when_no_arg_given():
@@ -138,7 +138,7 @@ def test_registry_filter_uses_current_context_when_no_arg_given():
     active context, office tools appear.
     """
     reg = ToolRegistry()
-    reg.register(_DummyTool(name="calculator"))
+    reg.register(_DummyTool(name="list_dir"))
     reg.register(_OfficeTool(name="office_read"))
 
     ctx = _ctx()
@@ -148,7 +148,7 @@ def test_registry_filter_uses_current_context_when_no_arg_given():
         schemas = reg.get_schemas_for_llm()
         names = {s["name"] for s in schemas}
         assert "office_read" in names
-        assert "calculator" in names
+        assert "list_dir" in names
     finally:
         reset_tool_context(token)
 

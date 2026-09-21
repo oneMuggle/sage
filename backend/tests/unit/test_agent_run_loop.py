@@ -57,7 +57,7 @@ async def test_run_loop_executes_tool_and_observes():
     """LLM 返回工具调用时，状态机经过 THINKING → ACTING → OBSERVING → THINKING → DONE。"""
     tool_call = LLMToolCall(
         id="call_1",
-        name="calculator",
+        name="list_dir",
         arguments='{"expression": "1+1"}',
     )
     agent = SageAgent()
@@ -93,7 +93,7 @@ async def test_run_loop_executes_tool_and_observes():
 @pytest.mark.asyncio()
 async def test_run_loop_respects_max_iterations():
     """max_iterations=2 时，应发出 FAILED。"""
-    tool_call = LLMToolCall(id="c", name="calculator", arguments="{}")
+    tool_call = LLMToolCall(id="c", name="list_dir", arguments="{}")
     agent = SageAgent()
     agent.llm_client = MagicMock()
     agent.llm_client.chat = AsyncMock(return_value=_make_response(tool_calls=[tool_call]))
@@ -122,7 +122,7 @@ async def test_run_loop_default_budget_is_10(profile, label):
     此前硬编码 5，与 dataclass 默认（profiles.py）和 DB 列默认
     （database.py）的 10 不一致，异常降级路径会静默砍半预算。
     """
-    tool_call = LLMToolCall(id="c", name="calculator", arguments="{}")
+    tool_call = LLMToolCall(id="c", name="list_dir", arguments="{}")
     agent = SageAgent()
     agent.profile = profile
     agent.llm_client = MagicMock()
@@ -152,7 +152,7 @@ async def test_run_loop_tool_success_yields_observation_with_content():
     """工具调用成功:THINKING → ACTING → OBSERVING(带 tool_result) → THINKING → DONE。"""
     tool_call = LLMToolCall(
         id="call_ok",
-        name="calculator",
+        name="list_dir",
         arguments='{"expression": "2+2"}',
     )
     agent = SageAgent()
@@ -184,7 +184,7 @@ async def test_run_loop_tool_success_yields_observation_with_content():
 
     # ACTING 携带 tool_call
     assert acting.tool_call is not None
-    assert acting.tool_call.name == "calculator"
+    assert acting.tool_call.name == "list_dir"
 
     # OBSERVING 携带 tool_call 和 tool_result
     assert observing.tool_call is not None
@@ -207,7 +207,7 @@ async def test_run_loop_tool_returns_error_observation_continues():
     """工具返回 success=False → 标记 is_error=True 但不进入 FAILED,继续 THINKING 循环。"""
     tool_call = LLMToolCall(
         id="call_err",
-        name="calculator",
+        name="list_dir",
         arguments='{"expression": "bad"}',
     )
     agent = SageAgent()

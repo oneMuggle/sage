@@ -52,7 +52,6 @@
 | list_dir      | 列出目录内容    | file:read  | ✅   |
 | web_search    | 网络搜索        | network    | ✅   |
 | web_fetch     | 获取网页内容    | network    | ✅   |
-| calculator    | 数学计算        | none       | ❌   |
 | memory_search | 搜索记忆        | memory     | ✅   |
 | memory_save   | 保存记忆        | memory     | ✅   |
 | delegate_task | 委托子任务      | none       | ✅   |
@@ -567,92 +566,6 @@ class MemorySaveTool(BaseTool):
             return {"success": False, "error": str(e)}
 ```
 
-### 6.2.6 Calculator 工具
-
-```python
-# backend/tools/calculator.py
-import ast
-import operator
-from typing import Dict, Any
-
-from .base import BaseTool, ToolSchema
-
-class CalculatorTool(BaseTool):
-    """计算器工具 - 安全数学计算"""
-
-    # 支持的运算符
-    OPERATORS = {
-        ast.Add: operator.add,
-        ast.Sub: operator.sub,
-        ast.Mult: operator.mul,
-        ast.Div: operator.truediv,
-        ast.Pow: operator.pow,
-        ast.Mod: operator.mod,
-        ast.USub: operator.neg,
-    }
-
-    def _build_schema(self) -> ToolSchema:
-        return ToolSchema(
-            name="calculator",
-            description="进行数学计算。支持: +, -, *, /, **, %。",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "expression": {
-                        "type": "string",
-                        "description": "数学表达式，如: 2 + 2, (10 + 5) * 2"
-                    }
-                },
-                "required": ["expression"]
-            }
-        )
-
-    async def execute(self, expression: str, **kwargs) -> Dict[str, Any]:
-        """计算表达式"""
-        try:
-            # 安全计算 - 只允许数字和运算符
-            result = self._safe_eval(expression)
-
-            return {
-                "success": True,
-                "expression": expression,
-                "result": result
-            }
-
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"计算错误: {str(e)}"
-            }
-
-    def _safe_eval(self, expr: str) -> float:
-        """安全求值"""
-        node = ast.parse(expr, mode='eval')
-        return self._eval_node(node.body)
-
-    def _eval_node(self, node):
-        if isinstance(node, ast.Constant):
-            if isinstance(node.value, (int, float)):
-                return node.value
-            raise ValueError("Only numbers allowed")
-
-        if isinstance(node, ast.BinOp):
-            left = self._eval_node(node.left)
-            right = self._eval_node(node.right)
-            op_type = type(node.op)
-            if op_type in self.OPERATORS:
-                return self.OPERATORS[op_type](left, right)
-            raise ValueError(f"Unsupported operator: {op_type}")
-
-        if isinstance(node, ast.UnaryOp):
-            operand = self._eval_node(node.operand)
-            op_type = type(node.op)
-            if op_type in self.OPERATORS:
-                return self.OPERATORS[op_type](operand)
-            raise ValueError(f"Unsupported operator: {op_type}")
-
-        raise ValueError(f"Unsupported expression: {ast.dump(node)}")
-```
 
 ---
 
@@ -667,7 +580,6 @@ from .terminal import TerminalTool
 from .file_tool import ReadFileTool, WriteFileTool, ListDirTool
 from .web_tool import WebSearchTool, WebFetchTool
 from .memory_tool import MemorySearchTool, MemorySaveTool
-from .calculator import CalculatorTool
 
 def create_default_registry(memory_manager=None) -> ToolRegistry:
     """创建默认工具注册表"""
@@ -680,7 +592,6 @@ def create_default_registry(memory_manager=None) -> ToolRegistry:
     registry.register(ListDirTool())
     registry.register(WebSearchTool())
     registry.register(WebFetchTool())
-    registry.register(CalculatorTool())
 
     # 记忆工具
     if memory_manager:
@@ -735,7 +646,6 @@ class PermissionManager:
             "web_fetch": Permission.NETWORK,
             "memory_search": Permission.MEMORY,
             "memory_save": Permission.MEMORY,
-            "calculator": None,
         }
 
         required = tool_permissions.get(tool_name)

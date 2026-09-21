@@ -501,9 +501,9 @@ class TestRiskOverrides:
 
     def test_override_tightens_to_exec(self, tmp_path):
         """覆盖收紧为 EXEC → 交互模式需询问"""
-        overrides = lambda name: RiskClass.EXEC if name == "calculator" else None  # noqa: E731
+        overrides = lambda name: RiskClass.EXEC if name == "list_dir" else None  # noqa: E731
         engine = PermissionEngine(tmp_path, risk_overrides=overrides)
-        decision = engine.evaluate("calculator", {"expression": "1+1"})
+        decision = engine.evaluate("list_dir", {"expression": "1+1"})
 
         assert decision.allowed is False
         assert decision.needs_user is True

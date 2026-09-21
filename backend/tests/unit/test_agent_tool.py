@@ -113,7 +113,6 @@ class TestReadonlyWhitelist:
             "web_fetch",
             "http_download",
             "memory_search",
-            "calculator",
             # Round 6 B2: 浏览器通道（受审批与网络模式门禁）
             "browser_launch",
             "browser_navigate",

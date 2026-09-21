@@ -87,7 +87,7 @@ async def test_multi_mode_emits_task_plan_and_registers_dispatch_tool():
         instance.tool_registry = type(
             "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
         )()
-        instance.profile = {"tools": ["calculator"]}
+        instance.profile = {"tools": ["list_dir"]}
 
         with patch("backend.orchestration.planner.Planner") as MockPlanner:
             MockPlanner.return_value.decompose_request = _mock_plan()
@@ -160,7 +160,7 @@ async def test_single_mode_has_no_orchestration_events_or_tool():
         instance.tool_registry = type(
             "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
         )()
-        instance.profile = {"tools": ["calculator"]}
+        instance.profile = {"tools": ["list_dir"]}
 
         with patch(
             "backend.api.legacy_routes._classify_orchestration_mode",
@@ -198,7 +198,7 @@ async def test_force_single_skips_orchestration_even_for_complex_message():
         instance = MockAgent.return_value
         instance.run_loop = mock_run_loop
         instance.tool_registry = type("TR", (), {"register": lambda self, tool: None})()
-        instance.profile = {"tools": ["calculator"]}
+        instance.profile = {"tools": ["list_dir"]}
 
         async with httpx.AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
@@ -233,7 +233,7 @@ async def test_multi_degrades_to_single_when_plan_has_one_task():
         instance.tool_registry = type(
             "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
         )()
-        instance.profile = {"tools": ["calculator"]}
+        instance.profile = {"tools": ["list_dir"]}
 
         with patch("backend.orchestration.planner.Planner") as MockPlanner:
             MockPlanner.return_value.decompose_request = _mock_plan(
@@ -274,7 +274,7 @@ async def test_multi_mode_injects_plan_block_into_run_loop_system_content():
         instance.tool_registry = type(
             "TR", (), {"register": lambda self, tool: None}
         )()
-        instance.profile = {"tools": ["calculator"]}
+        instance.profile = {"tools": ["list_dir"]}
 
         with patch("backend.orchestration.planner.Planner") as MockPlanner:
             MockPlanner.return_value.decompose_request = _mock_plan()
@@ -326,7 +326,7 @@ async def test_explicit_null_orchestration_mode_does_not_422():
         instance.tool_registry = type(
             "TR", (), {"register": lambda self, tool: None}
         )()
-        instance.profile = {"tools": ["calculator"]}
+        instance.profile = {"tools": ["list_dir"]}
 
         with patch(
             "backend.api.legacy_routes._classify_orchestration_mode",
@@ -389,7 +389,7 @@ async def test_plain_chat_sets_tool_context_for_artifact_recording():
         instance.tool_registry = type(
             "TR", (), {"register": lambda self, tool: None}
         )()
-        instance.profile = {"tools": ["calculator"]}
+        instance.profile = {"tools": ["list_dir"]}
 
         with patch(
             "backend.api.legacy_routes._classify_orchestration_mode",
@@ -463,7 +463,7 @@ async def test_task_plan_event_includes_depends_on():
         instance.tool_registry = type(
             "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
         )()
-        instance.profile = {"tools": ["calculator"]}
+        instance.profile = {"tools": ["list_dir"]}
 
         with patch("backend.orchestration.planner.Planner") as MockPlanner:
             MockPlanner.return_value.decompose_request = _decompose_with_deps
@@ -553,7 +553,7 @@ async def test_template_mode_decomposes_via_deterministic_template():
         instance.tool_registry = type(
             "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
         )()
-        instance.profile = {"tools": ["calculator"]}
+        instance.profile = {"tools": ["list_dir"]}
 
         with patch("backend.orchestration.planner.Planner") as MockPlanner:
             MockPlanner.return_value.decompose_from_template = AsyncMock(
@@ -609,7 +609,7 @@ async def test_override_path_skips_decompose_and_preserves_task_id():
         instance.tool_registry = type(
             "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
         )()
-        instance.profile = {"tools": ["calculator"]}
+        instance.profile = {"tools": ["list_dir"]}
 
         async with httpx.AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
@@ -676,7 +676,7 @@ async def test_multi_mode_passes_preflight_context_to_planner(monkeypatch):
         instance.tool_registry = type(
             "TR", (), {"register": lambda self, tool: None}
         )()
-        instance.profile = {"tools": ["calculator"]}
+        instance.profile = {"tools": ["list_dir"]}
 
         with patch("backend.orchestration.planner.Planner") as MockPlanner:
             MockPlanner.return_value.decompose_request = _decompose_capture

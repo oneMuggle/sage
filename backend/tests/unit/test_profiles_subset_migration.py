@@ -46,13 +46,13 @@ def _seed_repo(monkeypatch, stored):
 
 def test_primary_subset_gets_missing_appended(monkeypatch):
     """PR-3 时期 primary 种子(5 工具) → 差集段追加所有缺的当前默认项。"""
-    legacy_5 = ["calculator", "memory_search", "memory_save", "list_dir", "read_file"]
-    stored = {"primary": {"id": "primary", "enabled": True, "tools": list(legacy_5)}}
+    legacy_4 = ["memory_search", "memory_save", "list_dir", "read_file"]
+    stored = {"primary": {"id": "primary", "enabled": True, "tools": list(legacy_4)}}
     _seed_repo(monkeypatch, stored)
     profiles.ensure_default_agents()
     result = stored["primary"]["tools"]
     # 原有 5 项顺序不变, 位于最前
-    assert result[:5] == legacy_5
+    assert result[:4] == legacy_4
     # 当前默认集全部就位
     assert set(profiles._PRIMARY_CURRENT_DEFAULT_TOOLS).issubset(set(result))
     # 无重复
@@ -149,7 +149,7 @@ def test_subset_migration_idempotent(monkeypatch):
     stored = {
         "primary": {
             "id": "primary", "enabled": True,
-            "tools": ["calculator", "memory_search", "memory_save", "list_dir", "read_file"],
+            "tools": ["memory_search", "memory_save", "list_dir", "read_file"],
         },
         "researcher": {
             "id": "researcher", "enabled": True,

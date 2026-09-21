@@ -14,11 +14,14 @@ Sage Agent 通过 OpenAI 兼容的 `function_calling` 协议扩展 LLM 能力。
 
 ## 当前内置工具
 
-- `calculator` — 数学计算（AST 白名单）
 - `read_file` / `write_file` / `list_dir` — 文件操作
 - `web_search` / `web_fetch` — 网络访问
 - `memory_search` / `memory_save` — 记忆系统
 - `terminal` — 终端命令
+
+## 退役工具
+
+- `calculator` — 数学计算（AST 白名单，2026-09-21 退役，复杂数学走 `repl`/`execute_code`，简单心算 LLM 自行处理）
 
 ## 添加新工具
 

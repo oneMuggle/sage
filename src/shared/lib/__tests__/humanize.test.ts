@@ -175,11 +175,7 @@ describe('humanizeToolCall — Sage backend tools', () => {
     });
   });
 
-  it('renders calculator, agent, ask_user_question and skill', () => {
-    expect(humanizeToolCall('calculator', { expression: '2 + 2' })).toEqual({
-      verb: 'Calculate',
-      object: '2 + 2',
-    });
+  it('renders agent, ask_user_question and skill', () => {
     expect(humanizeToolCall('agent', { description: 'review auth module' })).toEqual({
       verb: 'Delegate',
       object: 'review auth module',

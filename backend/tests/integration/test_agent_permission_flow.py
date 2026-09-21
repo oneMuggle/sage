@@ -213,7 +213,7 @@ async def test_run_loop_workspace_write_mode_executes_read_tools_without_prompt(
     init_permission_gate()
     agent = SageAgent()
     agent.llm_client = MagicMock()
-    calc_call = LLMToolCall(id="c1", name="calculator", arguments='{"expression": "1+1"}')
+    calc_call = LLMToolCall(id="c1", name="list_dir", arguments='{"expression": "1+1"}')
     agent.llm_client.chat = AsyncMock(
         side_effect=[
             _make_response(content="", tool_calls=[calc_call]),

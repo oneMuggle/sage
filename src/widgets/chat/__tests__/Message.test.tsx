@@ -31,14 +31,14 @@ describe('Message', () => {
       created_at: 0,
       tool_calls: [
         {
-          name: 'calculator',
-          args: { expression: '1+1' },
-          result: '2',
+          name: 'read_file',
+          args: { path: '/tmp/foo2' },
+          result: 'content with 2',
         },
       ],
     };
     const { container } = renderWithI18n(<Message message={msg} />);
-    expect(container.textContent).toContain('calculator');
+    expect(container.textContent).toContain('Read');
     expect(container.textContent).toContain('2');
   });
 
@@ -228,7 +228,7 @@ describe('ToolCallResultDefensiveRender', () => {
       role: 'assistant',
       content: '工具返回',
       created_at: 0,
-      tool_calls: [{ name: 'calculator', args: {}, result: '42' }],
+      tool_calls: [{ name: 'read_file', args: {}, result: '42' }],
     };
     const { container } = renderWithI18n(<Message message={msg} />);
     expect(container.textContent).toContain('42');
@@ -241,7 +241,7 @@ describe('ToolCallResultDefensiveRender', () => {
       role: 'assistant',
       content: '工具返回',
       created_at: 0,
-      tool_calls: [{ name: 'calculator', args: {}, result: null }],
+      tool_calls: [{ name: 'read_file', args: {}, result: null }],
     } as unknown as MessageType;
     expect(() => renderWithI18n(<Message message={msg} />)).not.toThrow();
   });

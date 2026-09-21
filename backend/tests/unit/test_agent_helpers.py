@@ -147,7 +147,7 @@ def test_execute_tool_returns_tool_result_dict():
     )
     agent.tool_registry.get = MagicMock(return_value=mock_tool)
 
-    result = agent.execute_tool("calculator", {"expression": "1+1"})
+    result = agent.execute_tool("list_dir", {"expression": "1+1"})
     assert result == {"out": 42}
     mock_tool.execute.assert_called_once_with(expression="1+1")
 
@@ -182,7 +182,7 @@ def test_get_available_tools_delegates_to_tool_registry():
     agent = SageAgent()
     # ToolRegistry.get_schemas_for_llm 返回 flat 格式 (name/description/parameters)
     flat_schemas = [
-        {"name": "calculator", "description": "do math", "parameters": {}},
+        {"name": "list_dir", "description": "do math", "parameters": {}},
     ]
     agent.tool_registry.get_schemas_for_llm = MagicMock(return_value=flat_schemas)
 
@@ -192,7 +192,7 @@ def test_get_available_tools_delegates_to_tool_registry():
         {
             "type": "function",
             "function": {
-                "name": "calculator",
+                "name": "list_dir",
                 "description": "do math",
                 "parameters": {},
             },
