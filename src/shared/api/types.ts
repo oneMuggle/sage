@@ -2205,3 +2205,90 @@ export interface JournalFillFromContentResponse {
   gen_id: string;
   bytes_written: number;
 }
+
+// ============================================================================
+// Todo subsystem (personal todolist)
+//
+// NOTE: `TodoStatus` and `TodoItem` already exist earlier in this file
+// (agent self-maintained checklist snapshots, 3-state). They are a different
+// concept — do NOT redefine, rename, or reuse them here.
+// ============================================================================
+
+export type TodoPriority = 'high' | 'medium' | 'low';
+
+export type TodoItemStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+
+export type TodoUrgency = 'critical' | 'urgent' | 'normal';
+
+export interface Todo {
+  id: number;
+  title: string;
+  description?: string | null;
+  status: TodoItemStatus;
+  priority: TodoPriority;
+  effective_urgency?: TodoUrgency | null;
+  due_at?: string | null;
+  completed_at?: string | null;
+  project_tag?: string | null;
+  project_id?: string | null;
+  is_recurring: boolean;
+  recurrence_rule?: string | null;
+  parent_id?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTodoInput {
+  title: string;
+  description?: string;
+  due_at?: string;
+  priority?: TodoPriority;
+  project_tag?: string;
+  recurrence_rule?: string;
+}
+
+export interface UpdateTodoInput {
+  title?: string;
+  description?: string;
+  due_at?: string;
+  priority?: TodoPriority;
+  project_tag?: string;
+  status?: 'pending' | 'in_progress' | 'cancelled';
+  recurrence_rule?: string;
+}
+
+export interface TodoSummary {
+  overdue: Todo[];
+  today: Todo[];
+  upcoming: Todo[];
+  high_priority: Todo[];
+  total_pending: number;
+  total_completed_today: number;
+}
+
+export interface TodoStats {
+  total: number;
+  by_status: Record<string, number>;
+  by_priority: Record<string, number>;
+  overdue: number;
+  due_today: number;
+  completed_today: number;
+}
+
+export interface TodoListResponse {
+  items: Todo[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface TodoListParams {
+  status?: string;
+  project_tag?: string;
+  priority?: TodoPriority;
+  include_completed?: boolean;
+  sort_by?: 'due_at' | 'priority' | 'created_at';
+  sort_order?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
