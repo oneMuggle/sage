@@ -31,7 +31,8 @@
     "test:nightly": "playwright test --project=electron-stub-smoke --project=electron-stub-deep --project=electron-live-boot --project=electron-live-deep --grep=@nightly",
     "test:release": "playwright test --project=electron-stub-smoke --project=electron-stub-deep --project=electron-live-boot --project=electron-live-deep",
     "test:dev": "playwright test --project=electron-stub-smoke --ui",
-    "knip": "knip"
+    "knip": "knip",
+    "verify:pre-push": "npm run lint && node scripts/architecture-check.mjs"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",

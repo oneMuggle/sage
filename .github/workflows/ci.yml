@@ -705,6 +705,20 @@ jobs:
           path: e2e/electron/screenshots/*.png
           if-no-files-found: ignore
 
+  # ========== Architecture check: file-size policy enforcement ==========
+  # - Runs scripts/architecture-check.mjs (zero-dep, stdlib-only)
+  # - Enforces 800-line max per source file
+  # - Lightweight (~2s), runs on every PR to prevent regressions
+  architecture-check:
+    name: Architecture check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/architecture-check.mjs
+
   # ========== All-checks aggregator ==========
   # - 强门禁：backend + frontend + electron-smoke 全部 success 才算通过
   # - 非门禁信号 job（不进 needs，红了不阻塞合并）：backend-legacy（API_MODE
@@ -713,7 +727,7 @@ jobs:
   # - PR 也能在 backend job 上跑（见 backend/backend-py38 的 if: 改 PR + push 都触发）
   all-green:
     name: All Checks
-    needs: [backend, backend-py38, frontend, electron-smoke, dependency-audit]
+    needs: [backend, backend-py38, frontend, electron-smoke, dependency-audit, architecture-check]
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
@@ -723,6 +737,8 @@ jobs:
           # 必过项：frontend + electron-smoke 永远要过
           [ "${{ needs.frontend.result }}" = "success" ]
           [ "${{ needs.electron-smoke.result }}" = "success" ]
+          # Architecture check runs on every trigger; must pass.
+          [ "${{ needs.architecture-check.result }}" = "success" ]
           # Dependency audit only runs for main/develop and their PRs; release/win7
           # intentionally remains on its independent Python 3.8 dependency contract.
           if [ "${{ needs.dependency-audit.result }}" != "success" ] && [ "${{ needs.dependency-audit.result }}" != "skipped" ]; then
