@@ -50,6 +50,10 @@ const ArenaAccounts = lazy(() =>
   import('./pages/ArenaAccounts').then((m) => ({ default: m.default })),
 );
 
+// Task 12 (2026-09-21): 待办子系统 - 完整管理页
+// 与 sidebar TodoSection（预览前 5 条）互补：列出全部待办、新建 / 完成 / 取消 / 删除。
+const TodoPage = lazy(() => import('./pages/TodoPage').then((m) => ({ default: m.TodoPage })));
+
 // ChatRoute 内直接调用 hook 形式的 useStore setter 会引入条件调用问题,
 // 用 getState() 命令式写入更直白(与 App useEffect 里的用法一致)。
 const setCurrentSessionIdFromStore = (id: string) => useStore.getState().setCurrentSessionId(id);
@@ -216,6 +220,8 @@ function App() {
             <Route path="model-catalog" element={<ModelCatalog />} />
             {/* 2026-09-19: Arena 账号池 + 注册辅助 + 模型观测 */}
             <Route path="arena-accounts" element={<ArenaAccounts />} />
+            {/* Task 12 (2026-09-21): 待办完整管理页（侧边栏 Plus 按钮跳转入口） */}
+            <Route path="todos" element={<TodoPage />} />
           </Route>
         </Routes>
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />

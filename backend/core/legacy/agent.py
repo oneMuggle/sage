@@ -62,6 +62,7 @@ from backend.services.question_gate import (
     QuestionRequest,
     get_question_gate,
 )
+from backend.services.todo_service import get_todo_service
 from backend.tools import ToolRegistry, register_all_tools
 from backend.tools.ask_user_tool import ASK_USER_QUESTION_TOOL_NAME, validate_ask_user_args
 from backend.tools.base import ToolResult
@@ -336,6 +337,7 @@ class SageAgent:
                 self.tool_registry,
                 policy=policy,
                 scheduler_service_getter=scheduler_service_getter,
+                todo_service_getter=get_todo_service,
             )
             # 注入记忆管理器：register_all_tools 创建的 MemorySearchTool /
             # MemorySaveTool 默认 self.memory=None，runtime 调用会返回

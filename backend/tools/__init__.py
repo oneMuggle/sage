@@ -155,7 +155,7 @@ def register_all_tools(
             三个定时工具仍然注册，但内部 service 为空——调用时返回"未初始化"。
         todo_service_getter:
             待办服务延迟获取器（Task 5-13 的 add_todo/list_todos/... 需要）。
-            ``None`` 时五个待办工具不注册——后续任务接线时注入。
+            ``None`` 时五个待办工具仍然注册，但内部 service 为空——调用时返回"未初始化"。
     """
     policy = policy or ToolPolicy()
     network_policy = network_policy if network_policy is not None else load_network_policy()
@@ -329,27 +329,26 @@ def register_all_tools(
 
         logging.getLogger(__name__).warning(f"Failed to register MCP tools: {exc}")
 
-    # Todo 持久化管理工具（Task 5-13）：依赖 TodoService，由调用方通过
-    # ``todo_service_getter`` 注入。未注入时这五个工具不注册——LLM 看不见，
-    # 避免"工具在但 service 空"的半初始化状态。
-    # 延迟 import 在 if 块内，避免无 todo_service_getter 的调用方（测试 fixture、
-    # agent-less hex 路径）被拉进 todo_mgmt_tool 的依赖图。
-    if todo_service_getter:
-        todo_service = todo_service_getter()
-        if todo_service:
-            from backend.tools.todo_mgmt_tool import (
-                AddTodoTool,
-                CompleteTodoTool,
-                DeleteTodoTool,
-                ListTodosTool,
-                UpdateTodoTool,
-            )
+    # Todo 持久化管理工具（Task 5-13）：依赖 TodoService（service-getter
+    # 延迟解析）。tools 始终注册（ALL_BUILTIN_TOOL_NAMES 已纳入，与
+    # schedule 工具一致）；``todo_service_getter`` 决定 execute() 时能否
+    # 取到 service —— ``None`` 时返回 NO_SERVICE_ERROR，不静默缺工具。
+    # 直接 import 而非延迟：register_all_tools 是启动期单次调用，且
+    # todo_mgmt_tool 依赖 TodoService（已被 todo_service_getter 调用方
+    # 拉起），不存在循环。
+    from backend.tools.todo_mgmt_tool import (
+        AddTodoTool,
+        CompleteTodoTool,
+        DeleteTodoTool,
+        ListTodosTool,
+        UpdateTodoTool,
+    )
 
-            registry.register(AddTodoTool(todo_service=todo_service, policy=policy))
-            registry.register(ListTodosTool(todo_service=todo_service, policy=policy))
-            registry.register(CompleteTodoTool(todo_service=todo_service, policy=policy))
-            registry.register(UpdateTodoTool(todo_service=todo_service, policy=policy))
-            registry.register(DeleteTodoTool(todo_service=todo_service, policy=policy))
+    registry.register(AddTodoTool(todo_service_getter=todo_service_getter, policy=policy))
+    registry.register(ListTodosTool(todo_service_getter=todo_service_getter, policy=policy))
+    registry.register(CompleteTodoTool(todo_service_getter=todo_service_getter, policy=policy))
+    registry.register(UpdateTodoTool(todo_service_getter=todo_service_getter, policy=policy))
+    registry.register(DeleteTodoTool(todo_service_getter=todo_service_getter, policy=policy))
 
 
 __all__ = [

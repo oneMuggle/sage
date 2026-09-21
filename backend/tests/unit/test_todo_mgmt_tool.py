@@ -34,7 +34,7 @@ def _make_todo(**overrides):
 def test_add_todo_tool_schema():
     """Verify add_todo tool schema and risk class."""
     mock_service = Mock(spec=TodoService)
-    tool = AddTodoTool(todo_service=mock_service)
+    tool = AddTodoTool(todo_service_getter=lambda: mock_service)
 
     assert tool.schema.name == "add_todo"
     assert "title" in tool.schema.parameters["properties"]
@@ -46,7 +46,7 @@ def test_add_todo_tool_execute():
     mock_service = Mock(spec=TodoService)
     mock_service.create_todo.return_value = _make_todo()
 
-    tool = AddTodoTool(todo_service=mock_service)
+    tool = AddTodoTool(todo_service_getter=lambda: mock_service)
     result = tool.execute(title="Test", priority="medium")
 
     assert result.success is True
@@ -58,7 +58,7 @@ def test_list_todos_tool_execute():
     mock_service = Mock(spec=TodoService)
     mock_service.list_todos.return_value = [_make_todo()]
 
-    tool = ListTodosTool(todo_service=mock_service)
+    tool = ListTodosTool(todo_service_getter=lambda: mock_service)
     result = tool.execute()
 
     assert result.success is True
@@ -70,7 +70,7 @@ def test_list_todos_all_includes_completed():
     mock_service = Mock(spec=TodoService)
     mock_service.list_todos.return_value = []
 
-    tool = ListTodosTool(todo_service=mock_service)
+    tool = ListTodosTool(todo_service_getter=lambda: mock_service)
     result = tool.execute(status="all")
 
     assert result.success is True
@@ -92,7 +92,7 @@ def test_complete_todo_tool_execute():
         updated_at="2026-09-21T11:00:00",
     )
 
-    tool = CompleteTodoTool(todo_service=mock_service)
+    tool = CompleteTodoTool(todo_service_getter=lambda: mock_service)
     result = tool.execute(todo_id=1)
 
     assert result.success is True
@@ -108,7 +108,7 @@ def test_update_todo_tool_execute():
         updated_at="2026-09-21T11:00:00",
     )
 
-    tool = UpdateTodoTool(todo_service=mock_service)
+    tool = UpdateTodoTool(todo_service_getter=lambda: mock_service)
     result = tool.execute(todo_id=1, title="Updated", priority="high")
 
     assert result.success is True
@@ -119,7 +119,7 @@ def test_delete_todo_tool_execute():
     mock_service = Mock(spec=TodoService)
     mock_service.delete_todo.return_value = True
 
-    tool = DeleteTodoTool(todo_service=mock_service)
+    tool = DeleteTodoTool(todo_service_getter=lambda: mock_service)
     result = tool.execute(todo_id=1)
 
     assert result.success is True
@@ -129,17 +129,17 @@ def test_delete_todo_tool_execute():
 def test_list_todos_tool_risk_is_read():
     """list_todos is a pure query -- RiskClass.READ."""
     mock_service = Mock(spec=TodoService)
-    tool = ListTodosTool(todo_service=mock_service)
+    tool = ListTodosTool(todo_service_getter=lambda: mock_service)
     assert tool.risk == RiskClass.READ
 
 
 def test_mutating_tools_risk_is_write_local():
     """add/complete/update/delete mutate local state -- RiskClass.WRITE_LOCAL."""
     mock_service = Mock(spec=TodoService)
-    assert AddTodoTool(todo_service=mock_service).risk == RiskClass.WRITE_LOCAL
-    assert CompleteTodoTool(todo_service=mock_service).risk == RiskClass.WRITE_LOCAL
-    assert UpdateTodoTool(todo_service=mock_service).risk == RiskClass.WRITE_LOCAL
-    assert DeleteTodoTool(todo_service=mock_service).risk == RiskClass.WRITE_LOCAL
+    assert AddTodoTool(todo_service_getter=lambda: mock_service).risk == RiskClass.WRITE_LOCAL
+    assert CompleteTodoTool(todo_service_getter=lambda: mock_service).risk == RiskClass.WRITE_LOCAL
+    assert UpdateTodoTool(todo_service_getter=lambda: mock_service).risk == RiskClass.WRITE_LOCAL
+    assert DeleteTodoTool(todo_service_getter=lambda: mock_service).risk == RiskClass.WRITE_LOCAL
 
 
 def test_complete_todo_not_found():
@@ -147,7 +147,7 @@ def test_complete_todo_not_found():
     mock_service = Mock(spec=TodoService)
     mock_service.complete_todo.return_value = None
 
-    tool = CompleteTodoTool(todo_service=mock_service)
+    tool = CompleteTodoTool(todo_service_getter=lambda: mock_service)
     result = tool.execute(todo_id=404)
 
     assert result.success is False
@@ -159,7 +159,7 @@ def test_delete_todo_not_found():
     mock_service = Mock(spec=TodoService)
     mock_service.delete_todo.return_value = False
 
-    tool = DeleteTodoTool(todo_service=mock_service)
+    tool = DeleteTodoTool(todo_service_getter=lambda: mock_service)
     result = tool.execute(todo_id=404)
 
     assert result.success is False
@@ -171,7 +171,7 @@ def test_update_todo_not_found():
     mock_service = Mock(spec=TodoService)
     mock_service.update_todo.return_value = None
 
-    tool = UpdateTodoTool(todo_service=mock_service)
+    tool = UpdateTodoTool(todo_service_getter=lambda: mock_service)
     result = tool.execute(todo_id=404)
 
     assert result.success is False
@@ -183,8 +183,17 @@ def test_add_todo_service_exception_returns_failure():
     mock_service = Mock(spec=TodoService)
     mock_service.create_todo.side_effect = RuntimeError("db down")
 
-    tool = AddTodoTool(todo_service=mock_service)
+    tool = AddTodoTool(todo_service_getter=lambda: mock_service)
     result = tool.execute(title="Test")
 
     assert result.success is False
     assert "db down" in result.error
+
+
+def test_tool_reports_uninitialized_service():
+    """Tool returns NO_SERVICE_ERROR when getter returns None."""
+    tool = AddTodoTool(todo_service_getter=lambda: None)
+    result = tool.execute(title="Test")
+
+    assert result.success is False
+    assert "未初始化" in (result.error or "")
