@@ -2,12 +2,30 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+
+def _to_local_naive_iso(value: str) -> str:
+    """Normalize an ISO8601 string to naive local time.
+
+    - Naive input: passed through unchanged.
+    - Offset-aware input: converted to local time and the tzinfo is dropped.
+    - ``...Z`` suffix: accepted (canonical ``Date.toISOString()`` output; py3.10
+      ``datetime.fromisoformat`` does not parse it natively, so we rewrite it
+      to ``+00:00`` first — this matches the project convention in
+      ``backend/model_catalog/schemas.py:146``).
+    """
+    normalized = value.replace("Z", "+00:00")
+    dt = datetime.fromisoformat(normalized)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone().replace(tzinfo=None)
+    return dt.isoformat()
+
 
 # ``todos`` columns that map onto :class:`Todo`, in model-field order.
 # Deliberately excludes ``reminder_24h_fired`` / ``reminder_1h_fired`` — those
@@ -81,11 +99,15 @@ class TodoService:
         recurrence_rule: Optional[str] = None
     ) -> Todo:
         """Create a new todo and return the persisted row."""
-        now = datetime.now(timezone.utc).isoformat()  # noqa: UP017 — py38 兼容
+        now = datetime.now().isoformat()
         is_recurring = 1 if recurrence_rule else 0
 
         # Auto-link project
         project_id = self._auto_link_project(project_tag) if project_tag else None
+
+        # Normalize due_at: naive pass-through, tz-aware → naive local
+        if due_at is not None:
+            due_at = _to_local_naive_iso(due_at)
 
         conn = self.db.get_connection()
         cursor = conn.execute(
@@ -153,22 +175,40 @@ class TodoService:
 
         return [self._row_to_todo(row) for row in rows]
 
-    def update_todo(self, todo_id: int, **fields) -> Todo:
+    def update_todo(self, todo_id: int, **fields) -> Optional[Todo]:
         """Update todo fields.
 
-        Only keys in ``_UPDATABLE_FIELDS`` are honoured; ``None`` values are
-        dropped, i.e. ``None`` means "leave unchanged" rather than "clear".
+        * Key **absent** from ``fields``: column is untouched.
+        * Key present with a non-``None`` value: column is set to that value.
+        * Key present with an explicit ``None``: nullable column is cleared.
+        * ``title`` cannot be cleared (``NOT NULL`` in the schema); explicit
+          ``None`` raises :class:`ValueError` rather than an opaque SQL error.
+
+        Returns ``None`` if ``todo_id`` does not exist.
         """
-        updates = {k: v for k, v in fields.items() if k in _UPDATABLE_FIELDS and v is not None}
+        updates = {k: v for k, v in fields.items() if k in _UPDATABLE_FIELDS}
+
+        # ``title`` is NOT NULL in the schema — reject ``None`` explicitly so
+        # callers see a clear Python-level error instead of a SQLite
+        # ``IntegrityError`` from deep in the stack.
+        if updates.get("title") is None and "title" in updates:
+            raise ValueError("title is NOT NULL and cannot be cleared")
 
         if not updates:
             return self.get_todo(todo_id)
 
-        # Auto-link project if project_tag changed
-        if updates.get("project_tag"):
-            updates["project_id"] = self._auto_link_project(updates["project_tag"])
+        # Auto-link / clear project when project_tag changed (None clears both)
+        if "project_tag" in updates:
+            project_tag = updates["project_tag"]
+            updates["project_id"] = (
+                self._auto_link_project(project_tag) if project_tag else None
+            )
 
-        updates["updated_at"] = datetime.now(timezone.utc).isoformat()  # noqa: UP017 — py38 兼容
+        # Normalize due_at: naive pass-through, tz-aware → naive local
+        if updates.get("due_at") is not None:
+            updates["due_at"] = _to_local_naive_iso(updates["due_at"])
+
+        updates["updated_at"] = datetime.now().isoformat()
 
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         values = list(updates.values()) + [todo_id]
