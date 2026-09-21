@@ -414,3 +414,68 @@ def test_get_startup_summary_total_completed_today(todo_service):
 
     assert summary["total_pending"] == 1
     assert summary["total_completed_today"] == 2
+
+
+# --- fix round 1: sort params + get_todo_stats ---
+
+
+def test_list_todos_default_sort_puts_undated_last(todo_service):
+    """Default due_at sort: SQLite's bare ``due_at ASC`` puts NULLs first, which
+    reads backwards to a user — undated items must sort *after* dated ones."""
+    todo_service.create_todo(title="undated")
+    todo_service.create_todo(title="dated", due_at="2099-01-01T00:00:00")
+
+    todos = todo_service.list_todos()
+
+    assert [t.title for t in todos] == ["dated", "undated"]
+
+
+def test_get_todo_stats_counts_all_statuses(todo_service):
+    """``total`` is all-rows, unlike /summary which only counts pending/in_progress."""
+    todo_service.create_todo(title="Pending")
+    done = todo_service.create_todo(title="Done")
+    dropped = todo_service.create_todo(title="Dropped")
+
+    todo_service.complete_todo(done.id)
+    todo_service.cancel_todo(dropped.id)
+
+    stats = todo_service.get_todo_stats()
+
+    assert stats["total"] == 3
+    assert stats["by_status"] == {
+        "pending": 1,
+        "completed": 1,
+        "cancelled": 1,
+    }
+
+
+def test_count_todos_matches_list_todos_filters(todo_service):
+    """count_todos must mirror list_todos' filter block exactly — if the two
+    drift, the REST layer's ``total`` starts describing a different match set
+    than ``items``."""
+    todo_service.create_todo(title="P1")
+    todo_service.create_todo(title="P2", priority="high")
+    done = todo_service.create_todo(title="Done")
+    todo_service.complete_todo(done.id)
+
+    # default: pending/in_progress only
+    assert todo_service.count_todos() == 2
+    # include_completed widens to every status
+    assert todo_service.count_todos(include_completed=True) == 3
+    # status="all" widens the same way
+    assert todo_service.count_todos(status="all") == 3
+    # priority filter
+    assert todo_service.count_todos(priority="high") == 1
+    # combined
+    assert todo_service.count_todos(priority="high", include_completed=True) == 1
+
+    # and the count agrees with what list_todos would return unbounded
+    for kwargs in (
+        {},
+        {"include_completed": True},
+        {"status": "all"},
+        {"priority": "high"},
+    ):
+        assert todo_service.count_todos(**kwargs) == len(
+            todo_service.list_todos(limit=1000, **kwargs)
+        )
