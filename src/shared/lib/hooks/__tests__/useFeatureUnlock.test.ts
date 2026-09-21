@@ -4,9 +4,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   useFeatureUnlock,
   unlockFeature,
+  lockFeature,
   isFeatureUnlocked,
   FEATURE_UNLOCK_STORAGE_KEY,
   FEATURE_UNLOCK_EVENT,
+  FEATURE_UNLOCK_LOCK_EVENT,
 } from '../useFeatureUnlock';
 
 beforeEach(() => {
@@ -71,7 +73,7 @@ describe('useFeatureUnlock — unlock', () => {
   it('unlocks and persists the key', () => {
     const { result } = renderHook(() => useFeatureUnlock('skills'));
     expect(result.current[0]).toBe(false);
-    act(() => result.current[1]());
+    act(() => result.current[1](true));
     expect(result.current[0]).toBe(true);
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).toContain('skills');
@@ -79,8 +81,8 @@ describe('useFeatureUnlock — unlock', () => {
 
   it('is idempotent — unlocking twice keeps a single entry', () => {
     const { result } = renderHook(() => useFeatureUnlock('skills'));
-    act(() => result.current[1]());
-    act(() => result.current[1]());
+    act(() => result.current[1](true));
+    act(() => result.current[1](true));
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored.filter((k: string) => k === 'skills')).toHaveLength(1);
     expect(result.current[0]).toBe(true);
@@ -89,7 +91,7 @@ describe('useFeatureUnlock — unlock', () => {
   it('does not clobber other already-unlocked keys', () => {
     localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['office']));
     const { result } = renderHook(() => useFeatureUnlock('skills'));
-    act(() => result.current[1]());
+    act(() => result.current[1](true));
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).toEqual(expect.arrayContaining(['office', 'skills']));
   });
@@ -101,7 +103,7 @@ describe('useFeatureUnlock — unlock', () => {
     };
     try {
       const { result } = renderHook(() => useFeatureUnlock('skills'));
-      act(() => result.current[1]());
+      act(() => result.current[1](true));
       // 写入失败但内存态仍解锁
       expect(result.current[0]).toBe(true);
     } finally {
@@ -117,7 +119,7 @@ describe('useFeatureUnlock — sync across instances', () => {
     expect(sidebar.result.current[0]).toBe(false);
     expect(page.result.current[0]).toBe(false);
 
-    act(() => page.result.current[1]());
+    act(() => page.result.current[1](true));
 
     expect(page.result.current[0]).toBe(true);
     expect(sidebar.result.current[0]).toBe(true);
@@ -127,7 +129,7 @@ describe('useFeatureUnlock — sync across instances', () => {
     const skills = renderHook(() => useFeatureUnlock('skills'));
     const office = renderHook(() => useFeatureUnlock('office'));
 
-    act(() => skills.result.current[1]());
+    act(() => skills.result.current[1](true));
 
     expect(skills.result.current[0]).toBe(true);
     expect(office.result.current[0]).toBe(false);
@@ -215,5 +217,84 @@ describe('imperative helpers', () => {
       window.removeEventListener(FEATURE_UNLOCK_EVENT, listener);
     }
     expect(dispatched).toBe(false);
+  });
+});
+
+describe('useFeatureUnlock — lock', () => {
+  it('setUnlocked(false) locks a previously-unlocked key', () => {
+    localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['arena-accounts']));
+    const { result } = renderHook(() => useFeatureUnlock('arena-accounts'));
+    expect(result.current[0]).toBe(true);
+
+    act(() => result.current[1](false));
+
+    expect(result.current[0]).toBe(false);
+    const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
+    expect(stored).not.toContain('arena-accounts');
+  });
+
+  it('lock is idempotent — locking an already-locked key is a no-op', () => {
+    const { result } = renderHook(() => useFeatureUnlock('arena-accounts'));
+    expect(result.current[0]).toBe(false);
+    act(() => result.current[1](false));
+    expect(result.current[0]).toBe(false);
+    const stored = localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY);
+    expect(stored == null).toBe(true);
+  });
+
+  it('lock does not disturb other unlocked keys', () => {
+    localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['office', 'arena-accounts']));
+    const { result } = renderHook(() => useFeatureUnlock('arena-accounts'));
+    act(() => result.current[1](false));
+    const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
+    expect(stored).toEqual(['office']);
+  });
+
+  it('lockFeature broadcasts the lock event with the key', () => {
+    unlockFeature('arena-accounts');
+    const seen: string[] = [];
+    const listener = (e: Event) => seen.push((e as CustomEvent<string>).detail);
+    window.addEventListener(FEATURE_UNLOCK_LOCK_EVENT, listener);
+    try {
+      lockFeature('arena-accounts');
+    } finally {
+      window.removeEventListener(FEATURE_UNLOCK_LOCK_EVENT, listener);
+    }
+    // 只对真正从 unlocked → locked 状态变化的 key 发事件；lock 一个未解锁的 key 是 no-op。
+    expect(seen).toEqual(['arena-accounts']);
+  });
+
+  it('lockFeature does not dispatch when the key was not unlocked', () => {
+    let dispatched = false;
+    const listener = () => {
+      dispatched = true;
+    };
+    window.addEventListener(FEATURE_UNLOCK_LOCK_EVENT, listener);
+    try {
+      lockFeature('arena-accounts');
+    } finally {
+      window.removeEventListener(FEATURE_UNLOCK_LOCK_EVENT, listener);
+    }
+    expect(dispatched).toBe(false);
+  });
+
+  it('updates a second instance when the first locks (custom event)', () => {
+    localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['arena-accounts']));
+    const sidebar = renderHook(() => useFeatureUnlock('arena-accounts'));
+    const page = renderHook(() => useFeatureUnlock('arena-accounts'));
+    expect(sidebar.result.current[0]).toBe(true);
+    expect(page.result.current[0]).toBe(true);
+
+    act(() => page.result.current[1](false));
+
+    expect(page.result.current[0]).toBe(false);
+    expect(sidebar.result.current[0]).toBe(false);
+  });
+
+  it('isFeatureUnlocked reflects lock immediately', () => {
+    unlockFeature('arena-accounts');
+    expect(isFeatureUnlocked('arena-accounts')).toBe(true);
+    lockFeature('arena-accounts');
+    expect(isFeatureUnlocked('arena-accounts')).toBe(false);
   });
 });
