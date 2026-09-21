@@ -9,6 +9,7 @@ from typing import Callable, Optional
 from backend.domain.network_policy import NetworkPolicy
 from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_policy import ToolPolicy
+from backend.services.todo_service import TodoService  # forward-ref for register_all_tools
 
 from .ask_user_tool import AskUserQuestionTool
 from .asr_tool import SpeechToTextTool
@@ -138,16 +139,23 @@ def register_all_tools(
     policy: Optional[ToolPolicy] = None,
     network_policy: Optional[NetworkPolicy] = None,
     scheduler_service_getter: Optional[Callable[[], Optional[SchedulerServicePort]]] = None,
+    todo_service_getter: Optional[Callable[[], Optional[TodoService]]] = None,
 ) -> None:
     """
     注册所有内置工具到注册表
 
     Args:
-        registry: 工具注册表
-        policy:   M2 工具策略（缺省 ``ToolPolicy()``）；透传给每个内置工具。
+        registry:   工具注册表
+        policy:     M2 工具策略（缺省 ``ToolPolicy()``）；透传给每个内置工具。
         network_policy: 网络策略；``None`` 时从 settings 读。决定三个出网工具
             是否注册 —— 内网/气隙模式下不注册比返回错误更省 token，因为 LLM
             看到工具就会试（与 ``get_schemas_for_llm`` 隐藏 office 工具同理）。
+        scheduler_service_getter:
+            定时任务服务延迟获取器（``ScheduleTaskTool`` 等需要）。``None`` 时
+            三个定时工具仍然注册，但内部 service 为空——调用时返回"未初始化"。
+        todo_service_getter:
+            待办服务延迟获取器（Task 5-13 的 add_todo/list_todos/... 需要）。
+            ``None`` 时五个待办工具不注册——后续任务接线时注入。
     """
     policy = policy or ToolPolicy()
     network_policy = network_policy if network_policy is not None else load_network_policy()
@@ -319,6 +327,28 @@ def register_all_tools(
         import logging
 
         logging.getLogger(__name__).warning(f"Failed to register MCP tools: {exc}")
+
+    # Todo 持久化管理工具（Task 5-13）：依赖 TodoService，由调用方通过
+    # ``todo_service_getter`` 注入。未注入时这五个工具不注册——LLM 看不见，
+    # 避免"工具在但 service 空"的半初始化状态。
+    # 延迟 import 在 if 块内，避免无 todo_service_getter 的调用方（测试 fixture、
+    # agent-less hex 路径）被拉进 todo_mgmt_tool 的依赖图。
+    if todo_service_getter:
+        todo_service = todo_service_getter()
+        if todo_service:
+            from backend.tools.todo_mgmt_tool import (
+                AddTodoTool,
+                CompleteTodoTool,
+                DeleteTodoTool,
+                ListTodosTool,
+                UpdateTodoTool,
+            )
+
+            registry.register(AddTodoTool(todo_service=todo_service, policy=policy))
+            registry.register(ListTodosTool(todo_service=todo_service, policy=policy))
+            registry.register(CompleteTodoTool(todo_service=todo_service, policy=policy))
+            registry.register(UpdateTodoTool(todo_service=todo_service, policy=policy))
+            registry.register(DeleteTodoTool(todo_service=todo_service, policy=policy))
 
 
 __all__ = [
