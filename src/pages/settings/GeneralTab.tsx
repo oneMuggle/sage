@@ -20,6 +20,7 @@ import { GatewayCard } from '../../widgets/settings/GatewayCard';
 import { HooksCard } from '../../widgets/settings/HooksCard';
 import { UsagePanel } from '../../widgets/settings/UsagePanel';
 
+import { ArenaAccountsToggle } from './ArenaAccountsToggle';
 import { ContextTurnLimitSelect } from './ContextTurnLimitSelect';
 import { FontSettingsSection } from './FontSettingsSection';
 import { ThemeSelector } from './ThemeSelector';
@@ -561,6 +562,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => Promise<voi
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">高级</h3>
         <DiagnosticCard />
+        <ArenaAccountsToggle />
       </section>
     </div>
   );

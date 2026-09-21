@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * Sticky-Unlock Chips / 渐进式功能披露 (U10)
@@ -18,6 +18,9 @@ export const FEATURE_UNLOCK_STORAGE_KEY = 'sage-feature-unlock';
 
 /** 同标签页内跨组件同步用的自定义事件名。 */
 export const FEATURE_UNLOCK_EVENT = 'sage:feature-unlock';
+
+/** 同标签页内跨组件同步用的"加锁"自定义事件名。 */
+export const FEATURE_UNLOCK_LOCK_EVENT = 'sage:feature-unlock:lock';
 
 /** 从 localStorage 读取已解锁集合，解析失败时安全回退为空集合。 */
 function readUnlocked(): Set<string> {
@@ -68,43 +71,76 @@ export function unlockFeature(featureKey: string): void {
 }
 
 /**
+ * 主动加锁一个 feature（幂等）。与 `unlockFeature` 对称，用于"已显式启用但想关闭"的场景
+ * ——例如用户在设置中关闭 Arena 自动化开关，希望侧边栏立刻收回。
+ */
+export function lockFeature(featureKey: string): void {
+  const unlocked = readUnlocked();
+  if (!unlocked.has(featureKey)) return;
+  unlocked.delete(featureKey);
+  writeUnlocked(unlocked);
+  try {
+    window.dispatchEvent(new CustomEvent<string>(FEATURE_UNLOCK_LOCK_EVENT, { detail: featureKey }));
+  } catch {
+    // 极端环境下退化为仅持久化
+  }
+}
+
+/**
  * 订阅某 feature 的解锁状态。
  *
- * @returns `[isUnlocked, unlock]`
+ * @returns `[isUnlocked, setUnlocked]`
  *   - `isUnlocked`：该 feature 是否已解锁（初始值从 localStorage hydrate）。
- *   - `unlock`：永久解锁该 feature。
+ *   - `setUnlocked(true)`：永久解锁；`setUnlocked(false)`：永久加锁。
  *
  * 同步机制：
- *   - 同标签页：监听 `FEATURE_UNLOCK_EVENT` 自定义事件（`unlockFeature` 触发）。
+ *   - 同标签页：监听 `FEATURE_UNLOCK_EVENT` / `FEATURE_UNLOCK_LOCK_EVENT` 自定义事件。
  *   - 跨标签页：监听 `storage` 事件。
  */
-export function useFeatureUnlock(featureKey: string): [boolean, () => void] {
-  const [unlocked, setUnlocked] = useState<boolean>(() => isFeatureUnlocked(featureKey));
+export function useFeatureUnlock(
+  featureKey: string,
+): [boolean, (next?: boolean) => void] {
+  const [unlocked, setUnlockedState] = useState<boolean>(() => isFeatureUnlocked(featureKey));
 
   useEffect(() => {
     // 挂载 / featureKey 变化时重新同步，堵住 render→subscribe 之间的理论竞态窗口，
     // 并保证动态 key 场景下不会停留在旧 key 的状态。
-    setUnlocked(isFeatureUnlocked(featureKey));
+    setUnlockedState(isFeatureUnlocked(featureKey));
     const onUnlock = (event: Event) => {
       const detail = (event as CustomEvent<string>).detail;
       if (detail === featureKey) {
-        setUnlocked(true);
+        setUnlockedState(true);
+      }
+    };
+    const onLock = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      if (detail === featureKey) {
+        setUnlockedState(false);
       }
     };
     const onStorage = (event: StorageEvent) => {
       if (event.key === FEATURE_UNLOCK_STORAGE_KEY || event.key === null) {
-        setUnlocked(isFeatureUnlocked(featureKey));
+        setUnlockedState(isFeatureUnlocked(featureKey));
       }
     };
     window.addEventListener(FEATURE_UNLOCK_EVENT, onUnlock);
+    window.addEventListener(FEATURE_UNLOCK_LOCK_EVENT, onLock);
     window.addEventListener('storage', onStorage);
     return () => {
       window.removeEventListener(FEATURE_UNLOCK_EVENT, onUnlock);
+      window.removeEventListener(FEATURE_UNLOCK_LOCK_EVENT, onLock);
       window.removeEventListener('storage', onStorage);
     };
   }, [featureKey]);
 
-  const unlock = useCallback(() => unlockFeature(featureKey), [featureKey]);
+  const setUnlocked = (next: boolean = true): void => {
+    // 默认值 `true` 保持向后兼容：旧调用 `setUnlocked()` 等同 `unlockFeature`。
+    if (next) {
+      unlockFeature(featureKey);
+    } else {
+      lockFeature(featureKey);
+    }
+  };
 
-  return [unlocked, unlock];
+  return [unlocked, setUnlocked];
 }
