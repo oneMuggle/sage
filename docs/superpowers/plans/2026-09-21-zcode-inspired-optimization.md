@@ -288,18 +288,111 @@ git commit -m "ci: integrate architecture-check into pre-push and CI
 
 - [ ] **Step 1: 创建 `DESIGN.md`**
 
-参考 ZCode 的 `DESIGN.md`，为 Sage 写简化版，包含：
-- Product Character（calm, dense, operational）
-- Theme Modes（System/Light/Dark）
-- Color Palette（语义颜色变量）
-- Typography（`text-ui-*` 标尺）
-- Spacing（4px 基础单元）
-- Radius（容器阶梯：xl → lg → md → sm）
-- Components（Buttons / Inputs / Cards）
-- Elevation and Depth
-- Motion
+```markdown
+# Sage Design System
 
-（具体内容见 design spec §4.1）
+> 日期：2026-09-21
+> 状态：强制约束
+> 优先级：最高（覆盖所有其他 UI 规范）
+
+## 1. Product Character
+
+Sage 是一个 **calm, dense, operational** 的个人知识管理工具。
+- Calm: 低戏剧、快速响应、不抢注意力
+- Dense: 信息密度高，操作效率高
+- Operational: 以任务为导向，不是展示型产品
+
+## 2. Theme Modes
+
+支持 3 种主题模式：
+- **System**: 跟随操作系统设置
+- **Light**: 强制浅色
+- **Dark**: 强制深色
+
+主题切换通过 `data-theme='dark'` 属性控制，CSS 变量自动切换。
+
+## 3. Color Palette（语义颜色）
+
+| Token | Light | Dark | 用途 |
+|---|---|---|---|
+| `--color-background` | `#ffffff` | `#0f172a` | 页面背景 |
+| `--color-card` | `#f8f9fa` | `#1e293b` | 卡片背景 |
+| `--color-surface` | `#f3f4f6` | `#334155` | 输入框、按钮背景 |
+| `--color-popover` | `#ffffff` | `#1e293b` | 下拉菜单、弹窗 |
+| `--color-border` | `#e5e7eb` | `#334155` | 边框 |
+| `--color-foreground` | `#111827` | `#f1f5f9` | 主文本 |
+| `--color-foreground-subtle` | `#6b7280` | `#94a3b8` | 次要文本、说明 |
+
+**禁止**：直接使用 `text-white/60`、`border-black/10` 等临时拼凑色。
+
+## 4. Typography（`text-ui-*` 标尺）
+
+所有操作界面文本**只能**采用以下标尺：
+
+| Token | 计算 | 默认值 | 用途 |
+|---|---|---|---|
+| `text-ui-xl` | `--ui-font-size + 4px` | 18px | 页面标题 |
+| `text-ui-lg` | `--ui-font-size + 2px` | 16px | 区块标题 |
+| `text-ui-base` | `--ui-font-size` | 14px | 正文（默认） |
+| `text-ui-caption` | `--ui-font-size - 1px` | 13px | 紧凑说明 |
+| `text-ui-sm` | `--ui-font-size - 2px` | 12px | 次要信息、时间戳 |
+| `text-ui-xs` | `--ui-font-size - 4px` | 10px | 快捷键徽标 |
+
+**基准字号**：由设置中的 `--ui-font-size`（默认 14px）驱动。
+**严禁**修改根 `html` 的 `font-size`（避免破坏 CodeMirror/Monaco 渲染）。
+
+**例外**：代码预览、Diff 视口允许保持等宽字号。
+
+## 5. Spacing
+
+基础单元：**4px**。
+
+所有间距必须是 4 的倍数：`p-1` (4px)、`p-2` (8px)、`p-3` (12px)、`p-4` (16px)、`p-6` (24px)、`p-8` (32px)。
+
+## 6. Radius（容器阶梯）
+
+最外层 rounded-xl，内部递减：
+
+| 层级 | Radius | 用途 |
+|---|---|---|
+| 最外层 | `rounded-xl` (12px) | 页面容器、模态框 |
+| 中层 | `rounded-lg` (8px) | 卡片、面板 |
+| 内层 | `rounded-md` (6px) | 按钮、输入框 |
+| 最小 | `rounded-sm` (4px) | 徽标、标签 |
+| 特批 | `rounded-2xl` (16px) | 输入框、弹窗（需要更高视觉权重） |
+
+## 7. Components
+
+### Buttons
+- 主按钮：`bg-ui-bg text-ui-foreground border-ui-border`
+- 次要按钮：`bg-ui-surface text-ui-foreground`
+- 危险按钮：`bg-red-500 text-white`
+
+### Cards
+- 背景：`bg-ui-card`
+- 边框：`border border-ui-border`
+- 圆角：`rounded-xl`
+
+### Inputs
+- 背景：`bg-ui-surface`
+- 边框：`border border-ui-border`
+- 圆角：`rounded-md` 或 `rounded-2xl`（特批）
+
+## 8. Elevation and Depth
+
+**背景对比优先于阴影**。
+
+- Light 模式：通过 `bg-ui-bg` vs `bg-ui-card` 的色差区分层级
+- Dark 模式：通过 `bg-ui-bg` (#0f172a) vs `bg-ui-card` (#1e293b) 的色差区分层级
+
+阴影仅用于浮层（弹窗、下拉菜单）：`shadow-lg`。
+
+## 9. Motion
+
+- 快速：动画时长 150-200ms
+- 低戏剧：使用 `ease-out` 缓动，不使用弹跳或夸张效果
+- 目的性：动画用于引导注意力，不是装饰
+```
 
 - [ ] **Step 2: Commit**
 
@@ -551,11 +644,152 @@ git commit -m "feat(ui): unify Button and Card to use design tokens
 
 - [ ] **Step 1: 创建 `docs/GLOSSARY.md`**
 
-包含 10 个核心术语：
-- Office / Office Tool / Sandbox Tool / Agent Profile / Scheduler
-- Working Memory / Arena / MCP Server / Lockstep / Cherry-pick
+```markdown
+# Sage 领域词汇表
 
-（具体内容见 design spec §5.1）
+> 日期：2026-09-21
+> 状态：强制约束
+> 用途：统一 Sage 项目的领域术语，避免歧义和误读
+
+## 核心术语
+
+### Office
+
+**正确定义**：用户文档工作区（Office CRUD 的抽象）。Office 是一个逻辑容器，包含多个文档和工具配置。
+
+**常见误读/禁用词**：
+- ❌ 不要与 Office Template 混淆（Template 是 Office 的初始化配置）
+- ❌ 不要与 Office Tool 混淆（Tool 是 Office 内的具体工具）
+
+---
+
+### Office Tool
+
+**正确定义**：工具集中的具体工具（`office_read` / `office_write` / `office_list` / `office_archive`）。Office Tool 是 Office 子系统暴露给 Agent 的操作接口。
+
+**常见误读/禁用词**：
+- ❌ 不要简称 "office"（Office 是容器，Office Tool 是工具）
+- ❌ 不要与 Sandbox Tool 混淆（Sandbox Tool 是 profile 白名单暴露的工具集合）
+
+---
+
+### Sandbox Tool
+
+**正确定义**：由 profile 白名单暴露给 agent 的工具集合。不是所有内置工具都是 sandbox tool——只有被 profile 显式允许的工具才会出现在 agent 的工具列表中。
+
+**常见误读/禁用词**：
+- ❌ 不要等同于 "所有内置工具"（内置工具需要 profile 白名单才能暴露）
+- ❌ 不要与 MCP Server 混淆（MCP Server 是外部进程通信协议实例）
+
+---
+
+### Agent Profile
+
+**正确定义**：定义 agent 可见工具集 + 系统 prompt 的配置对象。Profile 决定 agent 能看见什么工具、不能看见什么工具。
+
+**常见误读/禁用词**：
+- ❌ 不要与 agent 混淆（agent 是运行时实例，profile 是配置）
+- ❌ 不要与 "角色" 混淆（profile 是技术配置，不是人设）
+
+---
+
+### Scheduler
+
+**正确定义**：`SchedulerService` + `register_evolution_task`（apscheduler 3.10.4 驱动）。Scheduler 是定时任务调度系统，支持周期性任务和一次性任务。
+
+**常见误读/禁用词**：
+- ❌ 不要叫 cron（`cron.py` 已删除，Scheduler 是基于 apscheduler 的）
+- ❌ 不要与 "定时任务" 混淆（定时任务是 Scheduler 调度的具体任务，Scheduler 是调度器本身）
+
+---
+
+### Working Memory
+
+**正确定义**：`WorkingMemory` 实例——**非单例**，必须通过 `agent.memory_manager.working` 共享。Working Memory 存储当前会话的短期记忆。
+
+**常见误读/禁用词**：
+- ❌ **严禁**直接 `WorkingMemory()` 新建实例（会创建空实例，导致 context_reset 串味）
+- ❌ 不要与 "长期记忆" 混淆（Working Memory 是短期的，Long-term Memory 是持久的）
+
+**正确用法**：
+```python
+# ✅ 正确：通过 agent 的 memory_manager 访问
+working_memory = agent.memory_manager.working
+
+# ❌ 错误：直接新建实例
+working_memory = WorkingMemory()  # 会创建空实例！
+```
+
+---
+
+### Arena
+
+**正确定义**：模型评测池（CDP + 账户池）。Arena 用于自动化评测不同模型的表现，默认已隐藏（PR #1347/#1349）。
+
+**常见误读/禁用词**：
+- ❌ 不要与 "测试环境" 混淆（Arena 是产品功能，不是开发测试）
+- ❌ 不要认为 Arena 是主路径（Arena 已默认隐藏，不是常用功能）
+
+---
+
+### MCP Server
+
+**正确定义**：外部进程通信协议实例（Model Context Protocol）。MCP Server 是独立进程，通过标准协议与 Sage 通信，提供额外工具能力。
+
+**常见误读/禁用词**：
+- ❌ 不要与 builtin tool 混淆（builtin tool 是内置工具，MCP Server 是外部进程）
+- ❌ 不要与 "插件" 混淆（插件是更高层的抽象，MCP Server 是底层协议）
+
+---
+
+### Lockstep
+
+**正确定义**：双分支版本号同步（main + release/win7）。Lockstep 仅对 `package.json` + `CHANGELOG`，不应用于功能性改动。
+
+**常见误读/禁用词**：
+- ❌ 不要用于功能性改动的同步（功能性改动应该 cherry-pick，不是 lockstep）
+- ❌ 不要与 "合并分支" 混淆（lockstep 只同步版本号，不合并代码）
+
+---
+
+### Cherry-pick
+
+**正确定义**：单/批 commit 跨分支搬运。Cherry-pick 是双分支同步的主要手段，用于将功能性改动从一个分支搬到另一个分支。
+
+**常见误读/禁用词**：
+- ❌ 不要用 `merge release → develop`（会带入 release 元数据，如版本号、CHANGELOG）
+- ❌ 不要与 "合并" 混淆（cherry-pick 是选择性搬运，merge 是全量合并）
+
+**正确用法**：
+```bash
+# ✅ 正确：cherry-pick 单个 commit
+git cherry-pick abc1234
+
+# ❌ 错误：merge release 分支
+git merge release/win7  # 会带入 release 元数据！
+```
+
+---
+
+## 术语关系图
+
+```
+Office (容器)
+  └─ Office Tool (office_read / office_write / office_list / office_archive)
+
+Agent Profile (配置)
+  └─ Sandbox Tool (profile 白名单暴露的工具集合)
+       ├─ Office Tool
+       ├─ Builtin Tool
+       └─ MCP Server (外部进程)
+
+Scheduler (调度器)
+  └─ Scheduled Task (定时任务)
+
+Working Memory (短期记忆)
+  └─ 必须通过 agent.memory_manager.working 访问
+```
+```
 
 - [ ] **Step 2: Commit**
 
@@ -778,12 +1012,198 @@ git commit -m "feat(ui): add createLogger pattern for frontend scoped logging
 
 - [ ] **Step 1: 创建 `docs/technical/15-state-ownership.md`**
 
-包含三条铁律：
-1. 单一状态所有者
-2. 接口 + 依赖方向 + 事件顺序 + 幂等边界
-3. 跨模块事件传播
+```markdown
+# 状态所有者原则
 
-（具体内容见 design spec §5.3）
+> 日期：2026-09-21
+> 状态：强制约束
+> 优先级：最高（覆盖所有其他状态管理规范）
+
+本文档定义 Sage 项目中状态管理的三条铁律。所有状态（内存、持久化、UI）必须遵守这些原则。
+
+---
+
+## 铁律 1：单一状态所有者
+
+**每个状态有且仅有一个写入路径，禁止重复状态或多条写入路径。**
+
+### 为什么？
+
+- 多条写入路径导致状态不一致
+- 重复状态导致同步问题
+- 调试时无法确定"谁改了这个状态"
+
+### 反例：WorkingMemory 不是单例
+
+```python
+# ❌ 错误：直接新建实例
+working_memory = WorkingMemory()  # 创建空实例，导致 context_reset 串味
+
+# ✅ 正确：通过 agent 的 memory_manager 访问共享实例
+working_memory = agent.memory_manager.working
+```
+
+**教训**：[[sage-working-memory-not-singleton]] —— `WorkingMemory()` 新建空实例导致 context_reset 跨段串味。
+
+### 正确模式
+
+```python
+# Backend: 通过服务层访问
+class OfficeService:
+    def __init__(self, office_repo: OfficeRepository):
+        self._office_repo = office_repo  # 单一所有者
+
+    async def get_office(self, office_id: str) -> Office:
+        return await self._office_repo.find_by_id(office_id)
+```
+
+```typescript
+// Frontend: 通过 Zustand store 访问
+const useOfficeStore = create<OfficeState>((set) => ({
+  currentOffice: null,
+  setCurrentOffice: (office) => set({ currentOffice: office }),
+}));
+
+// ✅ 正确：通过 store 访问
+const office = useOfficeStore((state) => state.currentOffice);
+
+// ❌ 错误：直接修改组件本地状态（与 store 重复）
+const [localOffice, setLocalOffice] = useState(null);
+```
+
+---
+
+## 铁律 2：接口 + 依赖方向 + 事件顺序 + 幂等边界
+
+**UI 组件通过 hooks 访问服务，不直接调用实现；backend 服务层必须定义 ports（接口），adapters 实现。**
+
+### 依赖方向
+
+```
+Frontend:
+  UI Component → Hook → Service → Store
+  (不允许跳过 Hook 直接调用 Service)
+
+Backend:
+  API → Service → Port (接口) → Adapter (实现)
+  (不允许 Service 直接依赖 Adapter 实现)
+```
+
+### 事件顺序
+
+当状态变更时，必须明确事件传播顺序：
+
+```
+1. 用户操作 → UI Component
+2. UI Component → Hook (调用 Service)
+3. Service → Backend API
+4. Backend → 状态变更
+5. Backend → WebSocket 推送事件
+6. Frontend → 接收事件 → 更新 Store
+7. Store → UI Component 重新渲染
+```
+
+**禁止**：
+- ❌ UI Component 直接调用 Backend API
+- ❌ Backend 直接修改 Frontend Store（必须通过事件）
+- ❌ 跳过 Hook，Service 直接操作 DOM
+
+### 幂等边界
+
+所有跨模块操作必须是幂等的：
+
+```python
+# ✅ 正确：幂等操作
+async def process_document(doc_id: str):
+    if await self._is_processed(doc_id):
+        return  # 已处理，跳过
+    await self._mark_as_processed(doc_id)
+    await self._do_actual_processing(doc_id)
+
+# ❌ 错误：非幂等操作
+async def process_document(doc_id: str):
+    await self._do_actual_processing(doc_id)  # 重复调用会重复处理
+```
+
+---
+
+## 铁律 3：跨模块事件传播
+
+**状态变更通过事件广播，而不是直接修改消费者状态。**
+
+### 为什么？
+
+- 直接修改消费者状态导致模块耦合
+- 事件广播允许模块独立演进
+- 事件可以记录、回放、调试
+
+### 示例：后端状态变更 → 前端更新
+
+```python
+# Backend: 状态变更时推送事件
+class OfficeService:
+    async def update_office(self, office_id: str, data: dict):
+        office = await self._office_repo.update(office_id, data)
+        # ✅ 正确：通过 WebSocket 推送事件
+        await self._event_bus.emit("office.updated", {"office_id": office_id})
+        return office
+
+    # ❌ 错误：直接修改前端状态（后端不应该知道前端的存在）
+    async def update_office(self, office_id: str, data: dict):
+        office = await self._office_repo.update(office_id, data)
+        await self._frontend_store.set_current_office(office)  # 耦合！
+```
+
+```typescript
+// Frontend: 订阅事件并更新 Store
+const useOfficeEvents = () => {
+  const setCurrentOffice = useOfficeStore((state) => state.setCurrentOffice);
+
+  useEffect(() => {
+    const unsubscribe = ws.subscribe("office.updated", (event) => {
+      // ✅ 正确：接收事件，更新 Store
+      setCurrentOffice(event.data);
+    });
+    return unsubscribe;
+  }, []);
+};
+```
+
+### 事件命名规范
+
+```
+<domain>.<action>
+
+示例：
+- office.created
+- office.updated
+- office.deleted
+- session.started
+- session.ended
+- memory.added
+```
+
+---
+
+## 检查清单
+
+在修改状态相关代码前，检查：
+
+- [ ] 这个状态有且仅有一个写入路径吗？
+- [ ] 是否有重复状态（同一个数据存在多处）？
+- [ ] UI 组件是否通过 Hook 访问服务？
+- [ ] Backend 服务层是否依赖 Port（接口）而非 Adapter（实现）？
+- [ ] 状态变更是否通过事件广播？
+- [ ] 跨模块操作是否幂等？
+
+---
+
+## 相关 Memory 条目
+
+- [[sage-working-memory-not-singleton]]：WorkingMemory 非单例教训
+- [[sage-settings-toggle-a11y-gap]]：UI 组件 a11y 缺陷（状态所有者不明确）
+- [[py38-run-in-executor-contextvar-loss]]：ContextVar 丢失（状态传播问题）
+```
 
 - [ ] **Step 2: Commit**
 
