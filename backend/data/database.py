@@ -1796,7 +1796,7 @@ class Database:
                 due_at TEXT,
                 completed_at TEXT,
                 project_tag TEXT,
-                project_id INTEGER,
+                project_id TEXT,
                 is_recurring INTEGER DEFAULT 0,
                 recurrence_rule TEXT,
                 parent_id INTEGER,
@@ -1804,8 +1804,13 @@ class Database:
                 reminder_1h_fired INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                FOREIGN KEY (project_id) REFERENCES projects(id),
-                FOREIGN KEY (parent_id) REFERENCES todos(id)
+                -- ON DELETE SET NULL (not the default NO ACTION): projects and
+                -- todo templates are hard-deleted by their owners
+                -- (ProjectRepo.remove), and PRAGMA foreign_keys=ON means a
+                -- plain FK would turn those deletions into IntegrityError.
+                -- Todo rows survive as standalone items instead.
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+                FOREIGN KEY (parent_id) REFERENCES todos(id) ON DELETE SET NULL
             )
         """)
 
