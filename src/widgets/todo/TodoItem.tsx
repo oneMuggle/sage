@@ -18,7 +18,7 @@ export function TodoItem({ todo }: TodoItemProps) {
   }[todo.effective_urgency ?? 'normal'];
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 hover:bg-bg-hover rounded-radius-sm">
+    <div className="group flex items-center gap-2 px-3 py-2 hover:bg-bg-hover rounded-radius-sm">
       <button
         onClick={() => void complete(todo.id)}
         className="w-5 h-5 rounded-full border border-border hover:bg-success/10 flex items-center justify-center"
