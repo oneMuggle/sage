@@ -1401,6 +1401,7 @@ node run-all.cjs                              PageBridge 38 / Rename bridge 33 /
 JAVA_HOME=jdk17 ./gradlew :core:test          190 tests, 0 failures（第三十二批 179 → +11）
 JAVA_HOME=jdk17 ./gradlew :app:assembleDebug  BUILD SUCCESSFUL；:app:bridgeJsTest 在 preBuild 执行并通过
 APK                                           android/app/build/outputs/apk/debug/app-debug.apk（2026-09-21 21:13，含 assets/PageBridge.js 25582 B、res/xml/attachment_paths.xml）
+git commit 4d021a9d（main）                   本批 13 个文件入库；未推送，未触碰其他已改动 / 已暂存文件
 ```
 
 ## 验收状态与真机复核清单
