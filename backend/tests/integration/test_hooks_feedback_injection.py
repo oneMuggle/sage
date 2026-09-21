@@ -48,14 +48,11 @@ def _make_agent(tool_call_name: str, tool_call_args: str, final_text: str) -> Sa
     )
     # Mock 工具执行：阻止真实执行（bash/calc 等），返回模拟结果
     # 集成测试只验证钩子反馈注入，不验证工具实际执行
-    if tool_call_name in agent.tool_registry:
-        tool = agent.tool_registry.get(tool_call_name)
-        if tool is not None:
-
-            def _mock_execute(**kwargs):
-                return f"[mocked] {tool_call_name} executed"
-
-            tool.execute = _mock_execute
+    tool = agent.tool_registry.get(tool_call_name)
+    if tool is not None:
+        def _mock_execute(**kwargs):
+            return f"[mocked] {tool_call_name} executed"
+        tool.execute = _mock_execute
     return agent
 
 
