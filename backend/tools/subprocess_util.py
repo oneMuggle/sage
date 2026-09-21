@@ -587,7 +587,9 @@ def kill_process_tree(  # noqa: PLR0917
     if should_signal:
         if os.name == "nt":
             # Windows: taskkill.exe /T 递归终止进程树；失败回退到 leader kill。
-            killed = _windows_kill_process_tree(process)
+            killed = _windows_kill_process_tree(
+                process, leader_exit_observed=leader_exit_observed,
+            )
         elif process_group_id is None or process_group_id != process.pid:
             # POSIX: 只有启动后捕获并验证的独立组才允许发信号。任何不确定性
             # （包括缺少 waitid 的 exited leader、或组验证失败）均 fail closed。
@@ -607,8 +609,14 @@ def kill_process_tree(  # noqa: PLR0917
     return killed
 
 
-def _windows_kill_process_tree(process: Any) -> bool:
-    """Windows: ``taskkill.exe /T`` 递归终止，失败回退到 leader ``kill()``。"""
+def _windows_kill_process_tree(process: Any, *, leader_exit_observed: bool = False) -> bool:
+    """Windows: ``taskkill.exe /T`` 递归终止，失败回退到 leader ``kill()``。
+
+    ``leader_exit_observed=True`` 表示调用方已确认 leader 进程退出（例如
+    ``process.wait()`` 成功返回）。此时 taskkill 找不到进程属正常现象，
+    不再回退到 ``process.kill()`` ——— 后者会对已退出进程抛出
+    ``ProcessLookupError``，误将成功状态记为失败。
+    """
     pid = process.pid
     taskkill_argv = ["taskkill.exe", "/PID", str(pid), "/T", "/F"]
     try:
@@ -624,6 +632,12 @@ def _windows_kill_process_tree(process: Any) -> bool:
             raise OSError(f"taskkill exited with code {result.returncode}")
         return True
     except (OSError, subprocess.SubprocessError) as exc:
+        if leader_exit_observed:
+            # Leader 已退出，taskkill 找不到进程属正常，不再尝试 process.kill()
+            # ——已退出进程无法再被 kill，回退只会引入 ProcessLookupError。
+            # 残留子进程由下次 _retry_pending_cleanups 兜底清理。
+            logger.debug("taskkill 失败但 leader 已退出，视为成功: %s", exc)
+            return True
         # taskkill.exe 缺失 / 超时 / 拒绝 —— 退化为杀 leader，避免泄漏。
         logger.debug("taskkill 失败，回退到 leader kill: %s", exc)
         try:
