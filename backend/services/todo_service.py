@@ -63,6 +63,21 @@ _UPDATABLE_FIELDS = frozenset(
     }
 )
 
+# Whitelisted ORDER BY expressions for :meth:`TodoService.list_todos`. Used as a
+# dict lookup so no caller-supplied string ever reaches SQL as an identifier.
+#   - ``due_at``: ``(due_at IS NULL)`` first so undated todos sort LAST when
+#     ascending — SQLite's bare ``due_at ASC`` puts NULLs first, which reads
+#     backwards to a user.
+#   - ``priority``: a CASE is required; lexicographic ASC gives
+#     ``high, low, medium``.
+# Deliberately no secondary tiebreaker key: the spec documents one sort key, and
+# a hidden secondary key makes ``sort_order=desc`` behave inconsistently.
+_SORT_EXPRS = {
+    "due_at": "(due_at IS NULL), due_at",
+    "priority": "CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END",
+    "created_at": "created_at",
+}
+
 
 class Todo(BaseModel):
     """Todo item model"""
@@ -146,16 +161,28 @@ class TodoService:
         priority: Optional[str] = None,
         include_completed: bool = False,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
+        sort_by: str = "due_at",
+        sort_order: str = "asc"
     ) -> List[Todo]:
-        """List todos with optional filters."""
+        """List todos with optional filters.
+
+        Sorting happens **before** ``LIMIT``/``OFFSET``: sorting a 50-row page
+        client-side would reorder a window, not the list.
+
+        ``sort_by`` selects a whitelisted ORDER BY expression from
+        ``_SORT_EXPRS``; an unsupported key raises :class:`ValueError` rather
+        than silently falling back to the default, so a caller can tell
+        "your sort was ignored" from "your sort was applied". Same for
+        ``sort_order`` outside ``{"asc", "desc"}``.
+        """
         query = "SELECT * FROM todos WHERE 1=1"
         params = []
 
         if status and status != "all":
             query += " AND status = ?"
             params.append(status)
-        elif not include_completed:
+        elif not (include_completed or status == "all"):
             query += " AND status IN ('pending', 'in_progress')"
 
         if project_tag:
@@ -166,7 +193,14 @@ class TodoService:
             query += " AND priority = ?"
             params.append(priority)
 
-        query += " ORDER BY due_at ASC, created_at DESC LIMIT ? OFFSET ?"
+        sort_expr = _SORT_EXPRS.get(sort_by)
+        if sort_expr is None:
+            raise ValueError(f"unsupported sort_by: {sort_by!r}")
+        order = sort_order.lower()
+        if order not in ("asc", "desc"):
+            raise ValueError(f"unsupported sort_order: {sort_order!r}")
+
+        query += f" ORDER BY {sort_expr} {order.upper()} LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         conn = self.db.get_connection()
@@ -174,6 +208,39 @@ class TodoService:
         rows = cursor.fetchall()
 
         return [self._row_to_todo(row) for row in rows]
+
+    def count_todos(
+        self,
+        status: Optional[str] = None,
+        project_tag: Optional[str] = None,
+        priority: Optional[str] = None,
+        include_completed: bool = False,
+    ) -> int:
+        """Count todos matching the same filters list_todos applies.
+
+        The filter block below is deliberately byte-for-byte parallel to
+        :meth:`list_todos`. If the two drift, ``total`` stops being the match
+        count and clients render wrong pagination.
+        """
+        query = "SELECT COUNT(*) FROM todos WHERE 1=1"
+        params: List[Any] = []
+
+        if status and status != "all":
+            query += " AND status = ?"
+            params.append(status)
+        elif not (include_completed or status == "all"):
+            query += " AND status IN ('pending', 'in_progress')"
+
+        if project_tag:
+            query += " AND project_tag = ?"
+            params.append(project_tag)
+
+        if priority:
+            query += " AND priority = ?"
+            params.append(priority)
+
+        conn = self.db.get_connection()
+        return int(conn.execute(query, params).fetchone()[0])
 
     def update_todo(self, todo_id: int, **fields) -> Optional[Todo]:
         """Update todo fields.
@@ -443,6 +510,77 @@ class TodoService:
             "high_priority": high_priority,
             "total_pending": total_pending,
             "total_completed_today": total_completed_today,
+        }
+
+    def get_todo_stats(self) -> dict:
+        """Aggregate counts for the statistics endpoint.
+
+        Keys:
+        - ``total`` — all rows regardless of status
+        - ``by_status`` — ``{status: count}``, only statuses that occur
+        - ``by_priority`` — ``{priority: count}`` over pending/in_progress
+          only, so it lines up with ``overdue``/``due_today`` (which are also
+          pending/in_progress-scoped). Completed/cancelled priorities would
+          otherwise be double-counted against a live workload.
+        - ``overdue`` — pending/in_progress with ``due_at < now``
+        - ``due_today`` — pending/in_progress with ``now <= due_at <= end of today``
+        - ``completed_today`` — completed where ``DATE(completed_at) = DATE(now)``
+
+        Time semantics and SQL predicates are reused verbatim from
+        :meth:`get_startup_summary` — naive local timestamps throughout.
+        """
+        now = datetime.now()
+        today_end = now.replace(hour=23, minute=59, second=59)
+        now_iso = now.isoformat()
+        today_end_iso = today_end.isoformat()
+
+        conn = self.db.get_connection()
+
+        cursor = conn.execute("SELECT COUNT(*) FROM todos")
+        total = cursor.fetchone()[0]
+
+        cursor = conn.execute(
+            "SELECT status, COUNT(*) AS n FROM todos GROUP BY status"
+        )
+        by_status = {row["status"]: row["n"] for row in cursor.fetchall()}
+
+        cursor = conn.execute(
+            "SELECT priority, COUNT(*) AS n FROM todos "
+            "WHERE status IN ('pending', 'in_progress') GROUP BY priority"
+        )
+        by_priority = {row["priority"]: row["n"] for row in cursor.fetchall()}
+
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM todos "
+            "WHERE status IN ('pending', 'in_progress') "
+            "AND due_at IS NOT NULL AND due_at < ?",
+            (now_iso,),
+        )
+        overdue = cursor.fetchone()[0]
+
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM todos "
+            "WHERE status IN ('pending', 'in_progress') "
+            "AND due_at IS NOT NULL "
+            "AND due_at >= ? AND due_at <= ?",
+            (now_iso, today_end_iso),
+        )
+        due_today = cursor.fetchone()[0]
+
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM todos "
+            "WHERE status = 'completed' AND DATE(completed_at) = DATE(?)",
+            (now_iso,),
+        )
+        completed_today = cursor.fetchone()[0]
+
+        return {
+            "total": total,
+            "by_status": by_status,
+            "by_priority": by_priority,
+            "overdue": overdue,
+            "due_today": due_today,
+            "completed_today": completed_today,
         }
 
 

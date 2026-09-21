@@ -28,6 +28,9 @@ class CreateTodoIn(BaseModel):
     project_tag: Optional[str] = None
     recurrence_rule: Optional[str] = None
 
+    class Config:
+        extra = "forbid"
+
 
 class UpdateTodoIn(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=200)
@@ -78,6 +81,15 @@ class SummaryOut(BaseModel):
     total_completed_today: int
 
 
+class StatsOut(BaseModel):
+    total: int
+    by_status: Dict[str, int]
+    by_priority: Dict[str, int]
+    overdue: int
+    due_today: int
+    completed_today: int
+
+
 def _todo_to_dict(todo: Todo) -> Dict[str, Any]:
     return todo.model_dump()
 
@@ -96,14 +108,24 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
 
     @router.get("/todos", response_model=TodoListOut)
     def list_todos(
-        status: Optional[str] = Query(default=None),
+        status: Optional[str] = Query(
+            default=None,
+            pattern="^(pending|in_progress|completed|cancelled|all)$",
+        ),
         project_tag: Optional[str] = Query(default=None),
-        priority: Optional[str] = Query(default=None),
+        priority: Optional[str] = Query(default=None, pattern="^(high|medium|low)$"),
         include_completed: bool = Query(default=False),
+        sort_by: str = Query(default="due_at", pattern="^(due_at|priority|created_at)$"),
+        sort_order: str = Query(default="asc", pattern="^(asc|desc)$"),
         limit: int = Query(default=50, ge=1, le=500),
         offset: int = Query(default=0, ge=0),
         svc: TodoService = Depends(service_dep),
     ) -> Dict[str, Any]:
+        # ``status=all`` is the documented escape hatch for the
+        # pending/in_progress-only default, so it has to reach the service as
+        # ``include_completed=True`` — the filter block treats any other
+        # ``status`` value as an equality match and would return 0 rows.
+        include_completed = include_completed or status == "all"
         items = svc.list_todos(
             status=status,
             project_tag=project_tag,
@@ -111,10 +133,21 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
             include_completed=include_completed,
             limit=limit,
             offset=offset,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+        # ``total`` is the number of rows matching the filters, NOT the length
+        # of this page — a ``?limit=2`` response must still report the full
+        # match count or the client cannot render pagination controls.
+        total = svc.count_todos(
+            status=status,
+            project_tag=project_tag,
+            priority=priority,
+            include_completed=include_completed,
         )
         return {
             "items": [_todo_to_dict(t) for t in items],
-            "total": len(items),
+            "total": total,
             "limit": limit,
             "offset": offset,
         }
@@ -139,6 +172,10 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
     def get_summary(svc: TodoService = Depends(service_dep)) -> Dict[str, Any]:
         return svc.get_startup_summary()
 
+    @router.get("/todos/stats", response_model=StatsOut)
+    def get_stats(svc: TodoService = Depends(service_dep)) -> Dict[str, Any]:
+        return svc.get_todo_stats()
+
     @router.get("/todos/{todo_id}", response_model=TodoOut)
     def get_todo(
         todo_id: int, svc: TodoService = Depends(service_dep)
@@ -154,19 +191,13 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
         payload: UpdateTodoIn,
         svc: TodoService = Depends(service_dep),
     ) -> Dict[str, Any]:
-        changes: Dict[str, Any] = {}
-        for field in (
-            "title",
-            "description",
-            "due_at",
-            "priority",
-            "project_tag",
-            "status",
-            "recurrence_rule",
-        ):
-            value = getattr(payload, field)
-            if value is not None:
-                changes[field] = value
+        # ``exclude_unset`` preserves the three-way distinction
+        # :meth:`TodoService.update_todo` documents: a key absent from the
+        # payload leaves the column untouched, while an explicit ``null``
+        # clears it. The previous ``if value is not None`` loop collapsed
+        # "clear this field" into "leave it alone", so no nullable column
+        # could ever be cleared over REST.
+        changes = payload.model_dump(exclude_unset=True)
         todo = svc.update_todo(todo_id, **changes)
         if todo is None:
             raise HTTPException(status_code=404, detail="todo not found")
@@ -201,6 +232,12 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
         cancelled = svc.cancel_todo(todo_id)
         if not cancelled:
             raise HTTPException(status_code=404, detail="todo not found")
-        return _todo_to_dict(svc.get_todo(todo_id))
+        todo = svc.get_todo(todo_id)
+        if todo is None:
+            # The row vanished between the UPDATE and the re-fetch (a
+            # concurrent DELETE). ``_todo_to_dict(None)`` would raise
+            # AttributeError and surface as an opaque 500.
+            raise HTTPException(status_code=404, detail="todo not found")
+        return _todo_to_dict(todo)
 
     return router
