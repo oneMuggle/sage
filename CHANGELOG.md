@@ -5,7 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+
 ## [Unreleased]
+
+> 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
+
+## [v0.4.9-alpha.47] - 2026-09-21
+
+### Added
+- feat(settings): 默认隐藏 Arena 账号入口，设置页提供显式开关 (#1347) (418148e2)
+- feat(ui): session list auto-sort — pinned > active > newest first (#1351) (8f0c0dac)
+
+### Fixed
+- fix(chat): subagent detail drawer no longer overlays RightPanel (#1352) (0245a091)
+- fix(win7): REPL 资源清理失败误报（Windows 正常退出路径）(#1345) (#1346) (c02c467b)
+
+## [v0.4.9-alpha.46] - 2026-09-20
+
 
 > 🧹 **Word 写作能力 Round 63：脚注/尾注引用一致性 lint**（方案 `docs/plans/2026-09-19_r63-ref-consistency-plan.md`）
 
@@ -213,6 +229,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed(web-access)
 - `BROWSER_TOOLS` 新增 `browser_downloads`（READ）；coder 默认工具白名单经 `*BROWSER_TOOLS` 自动带上；`browser_launch` 结果新增 `download_tracking`
+
 
 
 ## [v0.4.9-alpha.45] - 2026-09-19
