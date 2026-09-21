@@ -283,12 +283,12 @@ def test_list_sort_order_pinned_first_then_active_then_by_time(setup_test_db):
     # session-4 最新，session-0 最旧
     s0, s1, s2, s3, s4 = sessions
 
-    # 设置不同状态——
-    # s0: idle 即最旧、默认
-    # s1: running 即活跃
-    # s2: completed 终态，等同 idle
-    # s3: suspended 即活跃
-    # s4: pinned 置顶、最新
+    # 设置不同状态，各会话角色如下：
+    # - s0 是 idle，即最旧、默认
+    # - s1 是 running，即活跃
+    # - s2 是 completed 终态，等同 idle
+    # - s3 是 suspended，即活跃
+    # - s4 是 pinned 置顶、最新
     repo.update_run_status(s1.id, "running")
     repo.update_run_status(s2.id, "completed")
     repo.update_run_status(s3.id, "suspended")
@@ -310,7 +310,7 @@ def test_list_sort_order_pinned_first_then_active_then_by_time(setup_test_db):
     inactive_ids = [i for i in ids if i in (s0.id, s2.id)]
     assert inactive_ids == [s2.id, s0.id], "非活跃会话按 updated_at DESC"
 
-    # 完整顺序——
+    # 最终排序验证：pinned > suspended > running > completed > idle
     # s4 pinned > s3 suspended > s1 running > s2 completed > s0 idle
     assert ids == [s4.id, s3.id, s1.id, s2.id, s0.id]
 
