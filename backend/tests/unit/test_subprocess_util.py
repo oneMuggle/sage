@@ -510,3 +510,85 @@ class TestSpawnVerifiedExtraEnv:
             assert b"child_value" in stdout
         finally:
             del os.environ["SAGE_TEST_OVERRIDE"]
+
+
+# ---------------------------------------------------------------------------
+# _windows_kill_process_tree（leader_exit_observed 参数回归测试）
+# ---------------------------------------------------------------------------
+
+
+class TestWindowsKillProcessTreeLeaderExitObserved:
+    """验证 _windows_kill_process_tree 在 leader 已退出时的行为。
+
+    Windows 上 observe_process_exit 永远返回 None，REPL 正常退出后调用
+    kill_process_tree 清理残留子进程。此时 taskkill.exe 找不到进程返回非 0，
+    不应回退到 process.kill()（会对已退出进程抛 ProcessLookupError）。
+    """
+
+    def test_leader_exit_observed_taskkill_failure_treated_as_success(self) -> None:
+        """taskkill 失败 + leader 已退出 → 返回 True，不调用 process.kill()。"""
+        fake_process = mock.Mock()
+        fake_process.pid = 12345
+        fake_process.kill.side_effect = ProcessLookupError("process already exited")
+
+        with mock.patch.object(
+            subprocess_util.subprocess, "run",
+            side_effect=OSError("taskkill not found"),
+        ):
+            result = subprocess_util._windows_kill_process_tree(
+                fake_process, leader_exit_observed=True,
+            )
+
+        assert result is True
+        fake_process.kill.assert_not_called()
+
+    def test_leader_not_observed_taskkill_failure_falls_back_to_kill(self) -> None:
+        """taskkill 失败 + leader 未确认退出 → 回退到 process.kill()。"""
+        fake_process = mock.Mock()
+        fake_process.pid = 12345
+        fake_process.kill.return_value = None  # kill 成功
+
+        with mock.patch.object(
+            subprocess_util.subprocess, "run",
+            side_effect=OSError("taskkill not found"),
+        ):
+            result = subprocess_util._windows_kill_process_tree(
+                fake_process, leader_exit_observed=False,
+            )
+
+        assert result is True
+        fake_process.kill.assert_called_once()
+
+    def test_leader_exit_observed_taskkill_success(self) -> None:
+        """taskkill 成功 + leader 已退出 → 返回 True（与 leader 未退出时行为一致）。"""
+        fake_process = mock.Mock()
+        fake_process.pid = 12345
+
+        fake_result = mock.Mock()
+        fake_result.returncode = 0
+
+        with mock.patch.object(
+            subprocess_util.subprocess, "run", return_value=fake_result,
+        ):
+            result = subprocess_util._windows_kill_process_tree(
+                fake_process, leader_exit_observed=True,
+            )
+
+        assert result is True
+        fake_process.kill.assert_not_called()
+
+    def test_default_leader_exit_observed_is_false(self) -> None:
+        """默认参数 leader_exit_observed=False（向后兼容）。"""
+        fake_process = mock.Mock()
+        fake_process.pid = 12345
+        fake_process.kill.return_value = None
+
+        with mock.patch.object(
+            subprocess_util.subprocess, "run",
+            side_effect=OSError("taskkill not found"),
+        ):
+            # 不传 leader_exit_observed，应回退到 process.kill()
+            result = subprocess_util._windows_kill_process_tree(fake_process)
+
+        assert result is True
+        fake_process.kill.assert_called_once()

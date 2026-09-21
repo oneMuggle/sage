@@ -25,6 +25,7 @@ REPL 工具 - Python 代码片段隔离执行（移植 claw-code execute_repl）
 import contextlib
 import logging
 import math
+import os
 import subprocess
 import sys
 import tempfile
@@ -430,6 +431,8 @@ class ReplTool(BaseTool):
                     process, reap=False, process_group_id=process_group_id
                 )
             else:
+                # Windows 或未提供 waitid 的平台：observe_process_exit 无法
+                # 观察退出状态，退回阻塞等待。
                 try:
                     process.wait(timeout=effective_timeout)
                 except subprocess.TimeoutExpired:
@@ -437,6 +440,23 @@ class ReplTool(BaseTool):
                     process_group_killed = kill_process_tree(
                         process, reap=False, process_group_id=process_group_id
                     )
+                else:
+                    # 进程已正常退出。在 Windows 上，此时必须显式清理可
+                    # 能残留的子进程（Python 子进程若产生孙进程，它们会
+                    # 继承匿名管道句柄，导致 collector 无法检测到 EOF）。
+                    # ``kill_exited_group=True`` 配合 ``leader_exit_observed``
+                    # 让 ``kill_process_tree`` 跳过已退出的 leader，仅处
+                    # 理子进程；``_windows_kill_process_tree`` 在 leader 已
+                    # 退出时将 taskkill "找不到进程" 视为成功。
+                    if os.name == "nt":
+                        leader_exit_observed = True
+                        process_group_killed = kill_process_tree(
+                            process,
+                            reap=False,
+                            process_group_id=process_group_id,
+                            kill_exited_group=True,
+                            leader_exit_observed=True,
+                        )
 
             cleanup_error: Optional[BaseException] = None
             if not process_group_killed:
