@@ -1,6 +1,4 @@
 """Test TodoService"""
-import pytest
-from datetime import datetime
 from backend.services.todo_service import Todo
 
 
