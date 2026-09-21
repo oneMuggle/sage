@@ -448,6 +448,7 @@ export const en: Record<TranslationKey, string> = {
 
   // ─── Sidebar sections ─────────────
   'sider.section.conversations': 'Conversations',
+  'sider.section.todos': 'Todos',
   'sider.section.cron': 'Scheduled Tasks',
   'sider.section.project': 'Projects',
   'sider.section.team': 'Team',

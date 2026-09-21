@@ -27,7 +27,9 @@ export function TodoSection({ collapsed, onToggleCollapsed }: TodoSectionProps) 
   return (
     <SiderSection
       sectionKey="todos"
-      label={t('todos.title')}
+      // sidebar label is decoupled from `todos.title` (used by TodoPage H1) so the
+      // sidebar entry stays a single short word "待办" matching `sider.section.*` siblings.
+      label={t('sider.section.todos')}
       icon={ListTodo}
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}
