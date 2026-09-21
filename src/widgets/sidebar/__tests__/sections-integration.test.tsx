@@ -81,6 +81,23 @@ describe('Sidebar Sections Integration', () => {
         latency: 42,
       }),
     }));
+
+    vi.mock('../../../entities/todo/todoStore', () => ({
+      useTodoStore: (selector: (s: Record<string, unknown>) => unknown) =>
+        selector({
+          todos: [],
+          loading: false,
+          error: null,
+          summary: null,
+          load: vi.fn(),
+          create: vi.fn(),
+          update: vi.fn(),
+          delete: vi.fn(),
+          complete: vi.fn(),
+          cancel: vi.fn(),
+          loadSummary: vi.fn(),
+        }),
+    }));
   });
 
   it('renders all sections in default order', () => {
@@ -93,6 +110,7 @@ describe('Sidebar Sections Integration', () => {
     );
 
     expect(screen.getByText('会话')).toBeInTheDocument();
+    expect(screen.getByText('待办')).toBeInTheDocument();
     expect(screen.getByText('定时任务')).toBeInTheDocument();
     expect(screen.getByText('项目')).toBeInTheDocument();
     expect(screen.getByText('团队')).toBeInTheDocument();
@@ -123,7 +141,7 @@ describe('Sidebar Sections Integration', () => {
     // Pre-populate localStorage with collapsed state
     localStorage.setItem(
       SECTIONS_CONFIG_KEY,
-      JSON.stringify({ order: ['conversations', 'cron', 'project', 'team'], collapsed: ['cron'] }),
+      JSON.stringify({ order: ['conversations', 'todos', 'cron', 'project', 'team'], collapsed: ['cron'] }),
     );
 
     render(
@@ -142,7 +160,7 @@ describe('Sidebar Sections Integration', () => {
   });
 
   it('persists section order from localStorage', async () => {
-    const customOrder = { order: ['team', 'project', 'cron', 'conversations'], collapsed: [] };
+    const customOrder = { order: ['conversations', 'todos', 'cron', 'project', 'team'], collapsed: [] };
     localStorage.setItem(SECTIONS_CONFIG_KEY, JSON.stringify(customOrder));
 
     const { container } = render(
@@ -155,7 +173,7 @@ describe('Sidebar Sections Integration', () => {
 
     await waitFor(() => {
       const sections = container.querySelectorAll('[data-section-key]');
-      expect(sections.length).toBe(4);
+      expect(sections.length).toBe(5);
     });
   });
 
@@ -173,6 +191,7 @@ describe('Sidebar Sections Integration', () => {
     await waitFor(() => {
       // Should still render all sections with default order
       expect(screen.getByText('会话')).toBeInTheDocument();
+      expect(screen.getByText('待办')).toBeInTheDocument();
       expect(screen.getByText('定时任务')).toBeInTheDocument();
       expect(screen.getByText('项目')).toBeInTheDocument();
       expect(screen.getByText('团队')).toBeInTheDocument();
@@ -194,6 +213,7 @@ describe('Sidebar Sections Integration', () => {
     await waitFor(() => {
       // Should render all sections, appending missing ones
       expect(screen.getByText('会话')).toBeInTheDocument();
+      expect(screen.getByText('待办')).toBeInTheDocument();
       expect(screen.getByText('定时任务')).toBeInTheDocument();
       expect(screen.getByText('项目')).toBeInTheDocument();
       expect(screen.getByText('团队')).toBeInTheDocument();

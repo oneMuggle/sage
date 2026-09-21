@@ -37,10 +37,11 @@ import {
   CronJobSection,
   ProjectSection,
   TeamSection,
+  TodoSection,
   useSiderSections,
 } from '../sidebar';
 
-const SECTION_KEYS = ['conversations', 'cron', 'project', 'team'] as const;
+const SECTION_KEYS = ['conversations', 'todos', 'cron', 'project', 'team'] as const;
 const SESSION_ORDER_KEY = 'sage:sider:order:v1';
 
 // 导航项配置。
@@ -256,6 +257,13 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
                 reorder(oldIndex, newIndex);
               }
             }}
+          />
+        );
+      case 'todos':
+        return (
+          <TodoSection
+            collapsed={isCollapsed}
+            onToggleCollapsed={() => toggleCollapsed(key)}
           />
         );
       case 'cron':

@@ -415,6 +415,7 @@ export const zh = {
 
   // ─── 侧边栏分组 ─────────────────────
   'sider.section.conversations': '会话',
+  'sider.section.todos': '待办',
   'sider.section.cron': '定时任务',
   'sider.section.project': '项目',
   'sider.section.team': '团队',
