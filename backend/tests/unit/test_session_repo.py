@@ -252,3 +252,87 @@ def test_r38_migration_adds_columns_to_legacy_db(setup_test_db):
         r["name"] for r in cursor.execute("PRAGMA table_info(messages)").fetchall()
     ]
     assert cols_again.count("activated_skills") == 1
+
+
+# =============================================================================
+# 会话列表排序测试 (2026-09-21)
+# =============================================================================
+
+
+def test_list_sort_order_pinned_first_then_active_then_by_time(setup_test_db):
+    """list() 排序: 置顶 > 活跃(running/suspended) > updated_at DESC。
+
+    验证三层排序优先级:
+    1. is_pinned DESC — 置顶会话永远在最前
+    2. run_status IN ('running','suspended') DESC — 活跃流次之
+    3. updated_at DESC — 同优先级内按时间降序
+    """
+    import time
+
+    from backend.data.session_repo import SessionRepository
+
+    repo = SessionRepository()
+
+    # 创建 5 个会话，间隔 1ms 保证 updated_at 不同
+    sessions = []
+    for i in range(5):
+        s = repo.create(title=f"session-{i}")
+        sessions.append(s)
+        time.sleep(0.001)
+
+    # session-4 最新，session-0 最旧
+    s0, s1, s2, s3, s4 = sessions
+
+    # 设置不同状态，各会话角色如下：
+    # - s0 是 idle，即最旧、默认
+    # - s1 是 running，即活跃
+    # - s2 是 completed 终态，等同 idle
+    # - s3 是 suspended，即活跃
+    # - s4 是 pinned 置顶、最新
+    repo.update_run_status(s1.id, "running")
+    repo.update_run_status(s2.id, "completed")
+    repo.update_run_status(s3.id, "suspended")
+    repo.pin(s4.id, True)
+
+    result = repo.list()
+    ids = [s.id for s in result]
+
+    # s4 pinned 排第一
+    assert ids[0] == s4.id, "置顶会话应排第一"
+
+    # s3 suspended 和 s1 running 是活跃会话，排在非活跃之前
+    # s3 updated_at > s1 updated_at，所以 s3 在 s1 前
+    active_ids = [i for i in ids if i in (s1.id, s3.id)]
+    assert active_ids == [s3.id, s1.id], "活跃会话按 updated_at DESC，s3 比 s1 新"
+
+    # 非活跃会话 s2 completed 和 s0 idle 按 updated_at DESC
+    # s2 updated_at > s0 updated_at
+    inactive_ids = [i for i in ids if i in (s0.id, s2.id)]
+    assert inactive_ids == [s2.id, s0.id], "非活跃会话按 updated_at DESC"
+
+    # 最终排序验证：pinned > suspended > running > completed > idle
+    # s4 pinned > s3 suspended > s1 running > s2 completed > s0 idle
+    assert ids == [s4.id, s3.id, s1.id, s2.id, s0.id]
+
+
+def test_list_sort_order_excludes_failed_from_active(setup_test_db):
+    """failed 状态不算活跃，排在 idle 同层（按 updated_at DESC）。"""
+    import time
+
+    from backend.data.session_repo import SessionRepository
+
+    repo = SessionRepository()
+
+    s1 = repo.create(title="idle-session")
+    time.sleep(0.001)
+    s2 = repo.create(title="failed-session")
+    repo.update_run_status(s2.id, "failed")
+    time.sleep(0.001)
+    s3 = repo.create(title="running-session")
+    repo.update_run_status(s3.id, "running")
+
+    result = repo.list()
+    ids = [s.id for s in result]
+
+    # running 在最前，然后 s2 (failed, newer)，最后 s1 (idle, older)
+    assert ids == [s3.id, s2.id, s1.id]

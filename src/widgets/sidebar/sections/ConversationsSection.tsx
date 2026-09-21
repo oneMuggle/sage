@@ -15,14 +15,12 @@ const VIRTUALIZE_THRESHOLD = 120;
 
 interface ConversationsSectionProps {
   sessions: Session[];
-  order: string[];
   currentSessionId: string | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onSelect: (sessionId: string) => void;
   onDelete: (sessionId: string) => void;
   onNewSession: () => void;
-  onOrderChange: (next: string[]) => void;
   /** U4': 重命名回调(透传给 SessionItem) */
   onRename?: (sessionId: string, title: string) => Promise<void>;
 }
@@ -32,14 +30,12 @@ const MESSAGE_SEARCH_DEBOUNCE_MS = 300;
 
 export function ConversationsSection({
   sessions,
-  order,
   currentSessionId,
   collapsed,
   onToggleCollapsed,
   onSelect,
   onDelete,
   onNewSession,
-  onOrderChange,
   onRename,
 }: ConversationsSectionProps) {
   const { t } = useI18n();
@@ -136,7 +132,6 @@ export function ConversationsSection({
           ) : displaySessions.length > VIRTUALIZE_THRESHOLD ? (
             <VirtualSessionList
               sessions={displaySessions}
-              order={order}
               currentSessionId={currentSessionId}
               onSelect={onSelect}
               onDelete={onDelete}
@@ -147,11 +142,9 @@ export function ConversationsSection({
           ) : (
             <SortableSessionList
               sessions={displaySessions}
-              order={order}
               currentSessionId={currentSessionId}
               onSelect={onSelect}
               onDelete={onDelete}
-              onOrderChange={onOrderChange}
               onRename={onRename}
               messageHitsBySession={messageHits}
             />
