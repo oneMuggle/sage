@@ -36,11 +36,11 @@ def test_agent_event_done_has_content():
 
 
 def test_tool_call_request_serialization():
-    tc = ToolCallRequest(id="call_1", name="calculator", arguments={"expression": "1+1"})
+    tc = ToolCallRequest(id="call_1", name="list_dir", arguments={"expression": "1+1"})
     d = tc.to_dict()
     assert d["id"] == "call_1"
     assert d["type"] == "function"
-    assert d["function"]["name"] == "calculator"
+    assert d["function"]["name"] == "list_dir"
     assert d["function"]["arguments"] == '{"expression": "1+1"}'
 
 

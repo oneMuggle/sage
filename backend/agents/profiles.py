@@ -91,7 +91,6 @@ class AgentProfile:
 # 2026-08-01 加代码探索三件套，解决大代码库分析时 max_iterations_exceeded
 # 问题（PR #264）。agent/todo_write 见下方迁移段注释。
 _PRIMARY_CORE_TOOLS = (
-    "calculator",
     *MEMORY_TOOLS,
     "list_dir",
     "read_file",
@@ -134,7 +133,6 @@ _PRIMARY_SEED_TOOLS = (
     # alpha.36 (Bug #5): 沙箱代码执行（repl / execute_code）。此前只在
     # domain/tool_names.SANDBOX_TOOLS 防漂移校验中出现，从未进 profile
     # 白名单——LLM 根本看不见这两个工具，用户抱怨"代码执行工具没法执行代码"。
-    # calculator 已在 _PRIMARY_CORE_TOOLS，这里只补 repl / execute_code。
     "repl",
     "execute_code",
     # 2026-09-18 feat/agents-entry-config-query: 系统自省与配置工具 read_sage_config 与 update_sage_config
@@ -156,7 +154,6 @@ _CODER_SEED_TOOLS = (
     "read_file",
     "write_file",
     *EXEC_TOOLS,
-    "calculator",
     *RUNTIME_PROBE_TOOLS,
     *RUNTIME_EXEC_TOOLS,
     *GIT_TOOLS,
@@ -752,6 +749,16 @@ def ensure_default_agents() -> int:
         if set(tools) == _CODER_TOOLS_BEFORE_BASH_OUTPUT:
             coder["tools"] = tools + ["bash_output", "kill_shell"]
             repo.upsert(coder)
+    # 2026-09-21: 清理已退役的 calculator 工具 —— 从所有 profile 的 tools
+    # 列表中移除 "calculator"（工具已删除，保留只会触发 validate_profile_tools 告警）。
+    # 防御性跳过：测试 FakeRepo 不一定实现 list_all。
+    list_all = getattr(repo, "list_all", None)
+    if callable(list_all):
+        for profile in list_all():
+            tools = profile.get("tools") or []
+            if "calculator" in tools:
+                profile["tools"] = [t for t in tools if t != "calculator"]
+                repo.upsert(profile)
     return inserted
 
 

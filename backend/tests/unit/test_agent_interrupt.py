@@ -43,7 +43,7 @@ async def test_pre_set_interrupt_flag_yields_failed_without_llm_call():
 async def test_interrupt_between_iterations_stops_before_next_llm_call():
     """第 0 轮 LLM 返回 tool_calls（调用期间置位）→ 第 1 轮顶部 FAILED。"""
     tool_call = LLMToolCall(
-        id="call_1", name="calculator", arguments='{"expression": "1+1"}'
+        id="call_1", name="list_dir", arguments='{"expression": "1+1"}'
     )
     agent = SageAgent()
     agent.llm_client = MagicMock()

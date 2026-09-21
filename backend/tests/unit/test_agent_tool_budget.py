@@ -28,11 +28,11 @@ async def test_run_loop_aborts_when_tool_budget_exceeded(monkeypatch):
     # 第 1 轮 2 个工具调用（正好用完预算）,第 2 轮再发 1 个（超限）,
     # 第 3 轮本应给 DONE——但守卫应在第 2 轮的第 3 个调用处终止。
     round1 = LLMResponse(content="", tool_calls=[
-        LLMToolCall(id="c1", name="calculator", arguments='{"expression": "1+1"}'),
-        LLMToolCall(id="c2", name="calculator", arguments='{"expression": "2+2"}'),
+        LLMToolCall(id="c1", name="list_dir", arguments='{"expression": "1+1"}'),
+        LLMToolCall(id="c2", name="list_dir", arguments='{"expression": "2+2"}'),
     ])
     round2 = LLMResponse(content="", tool_calls=[
-        LLMToolCall(id="c3", name="calculator", arguments='{"expression": "3+3"}'),
+        LLMToolCall(id="c3", name="list_dir", arguments='{"expression": "3+3"}'),
     ])
     final = LLMResponse(content="done")
     llm = _mock_llm_with_tool_calls([round1, round2, final])
@@ -55,7 +55,7 @@ async def test_run_loop_within_budget_completes(monkeypatch):
     """未超预算的正常多工具会话不受影响。"""
     monkeypatch.setenv("SAGE_MAX_TOOL_CALLS_PER_RUN", "25")
     round1 = LLMResponse(content="", tool_calls=[
-        LLMToolCall(id="c1", name="calculator", arguments='{"expression": "1+1"}'),
+        LLMToolCall(id="c1", name="list_dir", arguments='{"expression": "1+1"}'),
     ])
     final = LLMResponse(content="done")
     llm = _mock_llm_with_tool_calls([round1, final])
@@ -75,7 +75,7 @@ async def test_run_loop_within_budget_completes(monkeypatch):
 async def test_invalid_json_args_returned_as_error_result():
     """arguments 非法 JSON → is_error 工具结果回传 LLM + tool 消息,循环继续。"""
     bad_call = LLMResponse(content="", tool_calls=[
-        LLMToolCall(id="c1", name="calculator", arguments='{"expression": 1+1}'),  # 非法 JSON
+        LLMToolCall(id="c1", name="list_dir", arguments='{"expression": 1+1}'),  # 非法 JSON
     ])
     final = LLMResponse(content="recovered")
     llm = _mock_llm_with_tool_calls([bad_call, final])

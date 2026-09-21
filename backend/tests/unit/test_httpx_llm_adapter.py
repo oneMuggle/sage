@@ -87,7 +87,7 @@ def test_from_domain_message_with_tool_calls_serializes_args_as_json():
     msg = Message(
         role=Role.ASSISTANT,
         content="",
-        tool_calls=[ToolCall(name="calculator", args={"x": 1, "y": 2}, id="call-1")],
+        tool_calls=[ToolCall(name="list_dir", args={"x": 1, "y": 2}, id="call-1")],
     )
     result = HttpxLLMAdapter.from_domain(msg)
     assert result["role"] == "assistant"
@@ -97,7 +97,7 @@ def test_from_domain_message_with_tool_calls_serializes_args_as_json():
             "id": "call-1",
             "type": "function",
             "function": {
-                "name": "calculator",
+                "name": "list_dir",
                 "arguments": '{"x": 1, "y": 2}',
             },
         }

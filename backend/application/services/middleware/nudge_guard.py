@@ -42,7 +42,6 @@ DEFAULT_PASSIVE_READ_TOOLS: FrozenSet[str] = frozenset({
     "memory_search",
     "office_list",
     "office_read",
-    "calculator",
 })
 
 # 表明用户期望"动作"而非"信息"的关键词（中英文）

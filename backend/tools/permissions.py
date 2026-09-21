@@ -57,7 +57,6 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "web_fetch": ToolCapability.READ,
     "office_list": ToolCapability.READ,
     "office_read": ToolCapability.READ,
-    "calculator": ToolCapability.READ,
     # M2 agent 工具面扩展（移植 claw-code tool surface）
     "glob_search": ToolCapability.READ,
     "grep_search": ToolCapability.READ,

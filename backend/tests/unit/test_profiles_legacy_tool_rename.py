@@ -46,24 +46,24 @@ def test_terminal_renames_to_bash(monkeypatch):
     stored = {
         "primary":    {"id": "primary",    "enabled": True, "tools": []},
         "researcher": {"id": "researcher", "enabled": True, "tools": []},
-        "coder":      {"id": "coder",      "enabled": True, "tools": ["terminal", "calculator"]},
+        "coder":      {"id": "coder",      "enabled": True, "tools": ["terminal"]},
     }
     repo = _seed_repo(monkeypatch, stored)
     profiles.ensure_default_agents()
     assert "terminal" not in stored["coder"]["tools"]
     assert "bash" in stored["coder"]["tools"]
-    assert stored["coder"]["tools"] == ["bash", "calculator"]
+    assert stored["coder"]["tools"] == ["bash"]
     coder_upserts = [u for u in repo.upserts if u["id"] == "coder"]
     assert len(coder_upserts) == 1
 
 
 def test_file_read_and_file_write_renames(monkeypatch):
     stored = {
-        "coder": {"id": "coder", "enabled": True, "tools": ["file_read", "file_write", "calculator"]},
+        "coder": {"id": "coder", "enabled": True, "tools": ["file_read", "file_write"]},
     }
     _seed_repo(monkeypatch, stored)
     profiles.ensure_default_agents()
-    assert stored["coder"]["tools"] == ["read_file", "write_file", "calculator"]
+    assert stored["coder"]["tools"] == ["read_file", "write_file"]
 
 
 def test_renames_preserve_user_extras(monkeypatch):
@@ -95,19 +95,19 @@ def test_renames_idempotent_no_upsert(monkeypatch):
 def test_renames_only_affects_three_legacy_names(monkeypatch):
     """映射表外的名字(无论旧名还是用户私有)完全不动。"""
     stored = {
-        "coder": {"id": "coder", "enabled": True, "tools": ["foo", "bar", "calculator"]},
+        "coder": {"id": "coder", "enabled": True, "tools": ["foo", "bar"]},
     }
     _seed_repo(monkeypatch, stored)
     profiles.ensure_default_agents()
     # 既无 rename 触发, 后续兜底段也不动 (foo/bar 不在 _PRIMARY_CURRENT_DEFAULT_TOOLS)
     # —— coder 的"当前默认 ⊆ DB"判定为不相交, 跳过 upsert
-    assert stored["coder"]["tools"] == ["foo", "bar", "calculator"]
+    assert stored["coder"]["tools"] == ["foo", "bar"]
 
 
 def test_renames_apply_to_all_agents_not_just_coder(monkeypatch):
     """重命名段遍历所有 agent, 不限定 coder。"""
     stored = {
-        "primary":    {"id": "primary",    "enabled": True, "tools": ["terminal", "calculator"]},
+        "primary":    {"id": "primary",    "enabled": True, "tools": ["terminal"]},
         "researcher": {"id": "researcher", "enabled": True, "tools": ["file_read"]},
     }
     _seed_repo(monkeypatch, stored)

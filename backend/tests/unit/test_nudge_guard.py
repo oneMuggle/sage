@@ -110,7 +110,7 @@ class TestNudgeGuardTrigger:
                 _call("memory_search"),
                 _call("office_list"),
                 _call("office_read"),
-                _call("calculator"),
+                _call("list_dir"),
                 _call("list_dir"),
             ],
         )

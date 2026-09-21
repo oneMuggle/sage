@@ -27,14 +27,14 @@ class _FakeBroken:
 
 
 class FakeRegistry:
-    """最小注册表 —— calculator + 恒失败工具"""
+    """最小注册表 —— list_dir (mock) + 恒失败工具"""
 
     def __init__(self):
         self.calls: list = []
 
     def get(self, name):
         self.calls.append(name)
-        if name == "calculator":
+        if name == "list_dir":
             return _FakeCalc()
         if name == "broken":
             return _FakeBroken()
@@ -56,7 +56,7 @@ class TestBasicExecution:
 
     def test_rpc_call_returns_value(self, tool):
         result = tool.execute(
-            code="v = sage.call('calculator', expression='6*7')\nprint(v)"
+            code="v = sage.call('list_dir', expression='6*7')\nprint(v)"
         )
         assert result.success is True
         assert result.content["rpc_calls"] == 1
@@ -68,7 +68,7 @@ class TestBasicExecution:
         code = (
             "total = 0\n"
             "for i in range(5):\n"
-            "    total += sage.call('calculator', expression=str(i)) or 0\n"
+            "    total += sage.call('list_dir', expression=str(i)) or 0\n"
             "print(total)"
         )
         result = tool.execute(code=code)

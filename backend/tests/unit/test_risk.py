@@ -241,7 +241,6 @@ class TestBuiltinToolDeclarations:
             "web_search": RiskClass.EXTERNAL,
             "web_fetch": RiskClass.EXTERNAL,
             "http_download": RiskClass.EXTERNAL,
-            "calculator": RiskClass.READ,
             "memory_search": RiskClass.READ,
             "memory_save": RiskClass.WRITE_LOCAL,
             "office_list": RiskClass.READ,

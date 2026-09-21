@@ -46,7 +46,7 @@ async def test_chat_sends_tools_when_provided(client):
             {
                 "type": "function",
                 "function": {
-                    "name": "calculator",
+                    "name": "list_dir",
                     "description": "数学计算",
                     "parameters": {
                         "type": "object",
