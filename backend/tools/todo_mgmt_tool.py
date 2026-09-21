@@ -16,25 +16,56 @@ per-session). The tools in *this* module operate on the persistent
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Callable, Optional
 
 from backend.domain.risk import RiskClass
+from backend.domain.tool_policy import ToolPolicy  # noqa: F401 -- for type hint
 from backend.services.todo_service import TodoService
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 
 logger = logging.getLogger(__name__)
 
 
+TodoServiceGetter = Callable[[], Optional[TodoService]]  # noqa: UP045 — Py3.8 compat (UP007/UP035 already disabled)
+
+NO_SERVICE_ERROR = "待办服务未初始化，无法执行本操作。"
+
+
+def _default_todo_service_getter() -> Optional[TodoService]:  # noqa: UP045 — Py3.8 compat
+    """Return no service unless the application composition root injects one.
+
+    Tools are wired up via ``register_all_tools(..., todo_service_getter=...)``.
+    In tests and isolated fixtures the getter returns None and tools degrade
+    gracefully rather than crashing on ``None.todo_service.method()``.
+    """
+    return None
+
+
 class _TodoServiceMixin:
     """Shared constructor for the todo-service-backed tools.
 
-    Keeps the five tool classes terse -- each just overrides
-    :meth:`_build_schema` and :meth:`execute`.
+    Mirrors :class:`schedule_tool.ScheduleTaskTool` getter pattern: the service
+    is resolved lazily per execute call, so an uninitialised ``TodoService``
+    yields a friendly "未初始化" ``ToolResult`` instead of a ``None`` AttributeError.
     """
 
-    def __init__(self, todo_service: TodoService, **kwargs: Any) -> None:
-        super().__init__(**kwargs)  # type: ignore[misc]
-        self.todo_service = todo_service
+    def __init__(
+        self,
+        *,
+        policy: Optional[ToolPolicy] = None,  # noqa: UP045 — Py3.8 compat
+        todo_service_getter: Optional[TodoServiceGetter] = None,  # noqa: UP045 — Py3.8 compat
+        **kwargs: Any,
+    ) -> None:
+        # Forward to BaseTool.__init__ (which accepts policy). Extra kwargs are
+        # accepted but not used -- allows forward-compatible kwarg expansion.
+        super().__init__(policy=policy, **kwargs)  # type: ignore[arg-type]
+        self._todo_service_getter: TodoServiceGetter = (
+            todo_service_getter or _default_todo_service_getter
+        )
+
+    def _get_service(self) -> Optional[TodoService]:  # noqa: UP045 — Py3.8 compat
+        """Resolve the service lazily (per execute call)."""
+        return self._todo_service_getter()
 
 
 class AddTodoTool(_TodoServiceMixin, BaseTool):
@@ -80,8 +111,11 @@ class AddTodoTool(_TodoServiceMixin, BaseTool):
         )
 
     def execute(self, **kwargs: Any) -> ToolResult:
+        service = self._get_service()
+        if service is None:
+            return ToolResult(success=False, error=NO_SERVICE_ERROR)
         try:
-            todo = self.todo_service.create_todo(
+            todo = service.create_todo(
                 title=kwargs["title"],
                 description=kwargs.get("description"),
                 due_at=kwargs.get("due_at"),
@@ -145,12 +179,15 @@ class ListTodosTool(_TodoServiceMixin, BaseTool):
         )
 
     def execute(self, **kwargs: Any) -> ToolResult:
+        service = self._get_service()
+        if service is None:
+            return ToolResult(success=False, error=NO_SERVICE_ERROR)
         try:
             status = kwargs.get("status")
             include_completed = kwargs.get("include_completed", False)
             if status == "all":
                 include_completed = True
-            todos = self.todo_service.list_todos(
+            todos = service.list_todos(
                 status=status,
                 project_tag=kwargs.get("project_tag"),
                 priority=kwargs.get("priority"),
@@ -198,9 +235,12 @@ class CompleteTodoTool(_TodoServiceMixin, BaseTool):
         )
 
     def execute(self, **kwargs: Any) -> ToolResult:
+        service = self._get_service()
+        if service is None:
+            return ToolResult(success=False, error=NO_SERVICE_ERROR)
         try:
             todo_id = kwargs["todo_id"]
-            todo = self.todo_service.complete_todo(todo_id)
+            todo = service.complete_todo(todo_id)
             if todo is None:
                 return ToolResult(
                     success=False, error=f"todo {todo_id} not found"
@@ -252,9 +292,12 @@ class UpdateTodoTool(_TodoServiceMixin, BaseTool):
         )
 
     def execute(self, **kwargs: Any) -> ToolResult:
+        service = self._get_service()
+        if service is None:
+            return ToolResult(success=False, error=NO_SERVICE_ERROR)
         try:
             todo_id = kwargs.pop("todo_id")
-            todo = self.todo_service.update_todo(todo_id, **kwargs)
+            todo = service.update_todo(todo_id, **kwargs)
             if todo is None:
                 return ToolResult(
                     success=False, error=f"todo {todo_id} not found"
@@ -292,9 +335,12 @@ class DeleteTodoTool(_TodoServiceMixin, BaseTool):
         )
 
     def execute(self, **kwargs: Any) -> ToolResult:
+        service = self._get_service()
+        if service is None:
+            return ToolResult(success=False, error=NO_SERVICE_ERROR)
         try:
             todo_id = kwargs["todo_id"]
-            deleted = self.todo_service.delete_todo(todo_id)
+            deleted = service.delete_todo(todo_id)
             if not deleted:
                 return ToolResult(
                     success=False, error=f"todo {todo_id} not found"

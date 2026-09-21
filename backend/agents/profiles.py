@@ -28,6 +28,7 @@ from backend.domain.tool_names import (
     RUNTIME_PROBE_TOOLS,
     SCHEDULE_TOOLS,
     SYMBOL_TOOLS,
+    TODO_TOOLS,
     WEB_FETCH_TOOLS,
 )
 
@@ -144,6 +145,11 @@ _PRIMARY_SEED_TOOLS = (
     # 把此前仅前端 UI 可用的 SchedulerService 暴露给自然语言对话。
     # 与 CONFIG_TOOLS 同样 coordinator-only —— 子代理白名单严禁纳入。
     *SCHEDULE_TOOLS,
+    # 2026-09-21 feat/todolist-subsystem (Task 12): Todo 持久化管理 5 件套。
+    # primary 作为 coordinator 代用户添加/查询/更新/完成/删除 todo —— 与
+    # SCHEDULE_TOOLS / CONFIG_TOOLS 同模式 coordinator-only，子代理白名单
+    # 严禁纳入。
+    *TODO_TOOLS,
 )
 
 # coder：bash 三件齐备（同上）。2026-09-03 PR #381 把 TerminalTool 重写为
