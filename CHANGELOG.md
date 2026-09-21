@@ -16,7 +16,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
+
 ## [Unreleased]
+
+> 🧹 **alpha.52-win7 暂无未发布变更**
+
+## [v0.4.9-alpha.52-win7] - 2026-09-21
+
+### Added
+- feat(settings): 默认隐藏 Arena 账号入口 (win7 cherry-pick) (#1349) (100fc924)
+
+### Fixed
+- fix(chat): subagent detail drawer no longer overlays RightPanel (#1352) (#1355) (cda22cbb)
+- fix(win7): lazy cryptography loading — backend resilient to crypto binary failure (#1348) (cc82bfc6)
+- fix(win7): REPL 资源清理失败误报（Windows 正常退出路径）(#1345) (9ad3e54f)
+
 
 > 🌐 **网页访问能力优化 Round 18：web_search 纳入 per-host 指标 + 指标 UI 刷新/重置**（方案 `docs/plans/2026-09-18_web-access-optimization-round18.md`）
 
@@ -203,6 +217,7 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ### Changed(web-access)
 - `BROWSER_TOOLS` 新增 `browser_downloads`（READ）；coder 默认工具白名单经 `*BROWSER_TOOLS` 自动带上；`browser_launch` 结果新增 `download_tracking`
+
 
 
 ## [v0.4.9-alpha.43-win7] - 2026-09-17
