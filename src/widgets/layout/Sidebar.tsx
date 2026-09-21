@@ -86,10 +86,14 @@ function readMoreOpen(): boolean {
  *
  * 只登记"多数用户不需要"的入口。`/skills` 曾在此处，但技能页是 SKILL.md 体系的
  * 唯一 UI 入口，门控它会形成自锁——入口可见性依赖"已经用过入口"。
+ *
+ * `/arena-accounts` 同样面向 Arena 自动化高级用户，普通用户用不到：
+ * 默认隐藏，直接访问 URL 或在设置页开启 Arena 自动化开关后永久解锁。
  */
 const ADVANCED_FEATURE_BY_PATH: Record<string, string> = {
   '/orchestration': 'orchestration',
   '/office': 'office',
+  '/arena-accounts': 'arena-accounts',
 };
 
 interface SidebarProps {
@@ -171,9 +175,11 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
   // 渐进式功能披露 (U10)：高级入口的解锁状态。
   const [orchestrationUnlocked] = useFeatureUnlock('orchestration');
   const [officeUnlocked] = useFeatureUnlock('office');
+  const [arenaAccountsUnlocked] = useFeatureUnlock('arena-accounts');
   const unlockedByFeature: Record<string, boolean> = {
     orchestration: orchestrationUnlocked,
     office: officeUnlocked,
+    'arena-accounts': arenaAccountsUnlocked,
   };
 
   useEffect(() => {
