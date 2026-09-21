@@ -37,7 +37,7 @@ interface VirtualSessionListProps {
   onSelect: (sessionId: string) => void;
   onDelete: (sessionId: string) => void;
   maxHeight?: string;
-  /** P1: 重命名回调(与 SortableSessionList 参数对齐,虚拟化分支功能不缩水) */
+  /** P1: 重命名回调(与 SessionList 参数对齐,虚拟化分支功能不缩水) */
   onRename?: (sessionId: string, title: string) => Promise<void>;
   /** P1: F12 消息内容命中计数(会话 id → 命中条数;缺省不显示徽标) */
   messageHitsBySession?: Map<string, number>;
