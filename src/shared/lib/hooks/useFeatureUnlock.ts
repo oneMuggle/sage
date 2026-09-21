@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 /**
  * Sticky-Unlock Chips / 渐进式功能披露 (U10)
@@ -80,7 +80,9 @@ export function lockFeature(featureKey: string): void {
   unlocked.delete(featureKey);
   writeUnlocked(unlocked);
   try {
-    window.dispatchEvent(new CustomEvent<string>(FEATURE_UNLOCK_LOCK_EVENT, { detail: featureKey }));
+    window.dispatchEvent(
+      new CustomEvent<string>(FEATURE_UNLOCK_LOCK_EVENT, { detail: featureKey }),
+    );
   } catch {
     // 极端环境下退化为仅持久化
   }
@@ -97,9 +99,7 @@ export function lockFeature(featureKey: string): void {
  *   - 同标签页：监听 `FEATURE_UNLOCK_EVENT` / `FEATURE_UNLOCK_LOCK_EVENT` 自定义事件。
  *   - 跨标签页：监听 `storage` 事件。
  */
-export function useFeatureUnlock(
-  featureKey: string,
-): [boolean, (next?: boolean) => void] {
+export function useFeatureUnlock(featureKey: string): [boolean, (next: boolean) => void] {
   const [unlocked, setUnlockedState] = useState<boolean>(() => isFeatureUnlocked(featureKey));
 
   useEffect(() => {
@@ -133,14 +133,16 @@ export function useFeatureUnlock(
     };
   }, [featureKey]);
 
-  const setUnlocked = (next: boolean = true): void => {
-    // 默认值 `true` 保持向后兼容：旧调用 `setUnlocked()` 等同 `unlockFeature`。
-    if (next) {
-      unlockFeature(featureKey);
-    } else {
-      lockFeature(featureKey);
-    }
-  };
+  const setUnlocked = useCallback(
+    (next: boolean): void => {
+      if (next) {
+        unlockFeature(featureKey);
+      } else {
+        lockFeature(featureKey);
+      }
+    },
+    [featureKey],
+  );
 
   return [unlocked, setUnlocked];
 }
