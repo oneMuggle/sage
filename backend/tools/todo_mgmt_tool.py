@@ -146,11 +146,15 @@ class ListTodosTool(_TodoServiceMixin, BaseTool):
 
     def execute(self, **kwargs: Any) -> ToolResult:
         try:
+            status = kwargs.get("status")
+            include_completed = kwargs.get("include_completed", False)
+            if status == "all":
+                include_completed = True
             todos = self.todo_service.list_todos(
-                status=kwargs.get("status"),
+                status=status,
                 project_tag=kwargs.get("project_tag"),
                 priority=kwargs.get("priority"),
-                include_completed=kwargs.get("include_completed", False),
+                include_completed=include_completed,
                 limit=kwargs.get("limit", 50),
             )
             return ToolResult(

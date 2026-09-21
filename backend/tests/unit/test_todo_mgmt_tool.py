@@ -65,6 +65,24 @@ def test_list_todos_tool_execute():
     assert len(result.content["todos"]) == 1
 
 
+def test_list_todos_all_includes_completed():
+    """status='all' widens the query to include completed todos."""
+    mock_service = Mock(spec=TodoService)
+    mock_service.list_todos.return_value = []
+
+    tool = ListTodosTool(todo_service=mock_service)
+    result = tool.execute(status="all")
+
+    assert result.success is True
+    mock_service.list_todos.assert_called_once_with(
+        status="all",
+        project_tag=None,
+        priority=None,
+        include_completed=True,
+        limit=50,
+    )
+
+
 def test_complete_todo_tool_execute():
     """Verify complete_todo marks todo as completed."""
     mock_service = Mock(spec=TodoService)
@@ -142,6 +160,18 @@ def test_delete_todo_not_found():
     mock_service.delete_todo.return_value = False
 
     tool = DeleteTodoTool(todo_service=mock_service)
+    result = tool.execute(todo_id=404)
+
+    assert result.success is False
+    assert "not found" in result.error
+
+
+def test_update_todo_not_found():
+    """update_todo returns failure when the todo does not exist."""
+    mock_service = Mock(spec=TodoService)
+    mock_service.update_todo.return_value = None
+
+    tool = UpdateTodoTool(todo_service=mock_service)
     result = tool.execute(todo_id=404)
 
     assert result.success is False
