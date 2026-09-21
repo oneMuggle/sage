@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from pydantic import BaseModel
@@ -230,6 +230,221 @@ class TodoService:
         deleted = cursor.rowcount > 0
         conn.commit()
         return deleted
+
+    # --- state changes ---
+
+    def complete_todo(self, todo_id: int) -> Optional[Todo]:
+        """Mark a todo as completed.
+
+        Sets ``status='completed'`` and stamps ``completed_at`` and
+        ``updated_at`` to the current local time. Returns the refreshed
+        :class:`Todo`, or ``None`` if ``todo_id`` does not exist (mirrors
+        :meth:`update_todo` semantics).
+        """
+        existing = self.get_todo(todo_id)
+        if existing is None:
+            return None
+
+        now = datetime.now().isoformat()
+        conn = self.db.get_connection()
+        conn.execute(
+            "UPDATE todos SET status = 'completed', completed_at = ?, "
+            "updated_at = ? WHERE id = ?",
+            (now, now, todo_id),
+        )
+        conn.commit()
+        return self.get_todo(todo_id)
+
+    def cancel_todo(self, todo_id: int) -> bool:
+        """Mark a todo as cancelled. Returns True if a row was updated."""
+        now = datetime.now().isoformat()
+        conn = self.db.get_connection()
+        cursor = conn.execute(
+            "UPDATE todos SET status = 'cancelled', updated_at = ? "
+            "WHERE id = ?",
+            (now, todo_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+    # --- urgency ---
+
+    @staticmethod
+    def _compute_urgency(due_at_str: Optional[str], priority: str,
+                         now: datetime) -> str:
+        """Return the effective_urgency value for a single todo row.
+
+        Rules:
+        - ``due_at`` NULL → ``"normal"``.
+        - ``hours_until_due < 1`` → ``"critical"``.
+        - ``hours_until_due < 24`` → ``"urgent"``.
+        - else → ``"normal"``.
+        - Upgrade: ``priority == "high"`` and ``hours_until_due < 24`` →
+          ``"critical"``.
+        """
+        if not due_at_str:
+            return "normal"
+
+        due_at = datetime.fromisoformat(due_at_str)
+        hours_until_due = (due_at - now).total_seconds() / 3600
+
+        if hours_until_due < 1:
+            urgency = "critical"
+        elif hours_until_due < 24:
+            urgency = "urgent"
+        else:
+            urgency = "normal"
+
+        if priority == "high" and hours_until_due < 24:
+            urgency = "critical"
+
+        return urgency
+
+    def refresh_effective_urgency(self) -> int:
+        """Recalculate ``effective_urgency`` for all pending/in_progress todos.
+
+        Returns the number of rows updated.
+        """
+        now = datetime.now()
+        now_iso = now.isoformat()
+
+        conn = self.db.get_connection()
+        cursor = conn.execute(
+            "SELECT id, due_at, priority FROM todos "
+            "WHERE status IN ('pending', 'in_progress')"
+        )
+        rows = cursor.fetchall()
+
+        for row in rows:
+            urgency = self._compute_urgency(row["due_at"], row["priority"], now)
+            conn.execute(
+                "UPDATE todos SET effective_urgency = ?, updated_at = ? "
+                "WHERE id = ?",
+                (urgency, now_iso, row["id"]),
+            )
+
+        conn.commit()
+        return len(rows)
+
+    # --- query helpers ---
+
+    def get_due_soon_todos(self, within_seconds: int) -> List[Todo]:
+        """Pending/in_progress todos due within ``within_seconds`` from now.
+
+        Past-due items are excluded — those belong to :meth:`get_overdue_todos`.
+        """
+        now = datetime.now()
+        cutoff = now + timedelta(seconds=within_seconds)
+
+        conn = self.db.get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM todos "
+            "WHERE status IN ('pending', 'in_progress') "
+            "AND due_at IS NOT NULL "
+            "AND due_at > ? AND due_at <= ? "
+            "ORDER BY due_at ASC",
+            (now.isoformat(), cutoff.isoformat()),
+        )
+        rows = cursor.fetchall()
+
+        return [self._row_to_todo(row) for row in rows]
+
+    def get_overdue_todos(self) -> List[Todo]:
+        """Pending/in_progress todos past their due_at."""
+        now = datetime.now().isoformat()
+
+        conn = self.db.get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM todos "
+            "WHERE status IN ('pending', 'in_progress') "
+            "AND due_at IS NOT NULL AND due_at < ? "
+            "ORDER BY due_at ASC",
+            (now,),
+        )
+        rows = cursor.fetchall()
+
+        return [self._row_to_todo(row) for row in rows]
+
+    def get_startup_summary(self) -> dict:
+        """Aggregate counts for the startup dashboard notification.
+
+        Keys:
+        - ``overdue`` — pending/in_progress, ``due_at < now``
+        - ``today`` — pending/in_progress, ``now <= due_at <= end_of_today``
+        - ``upcoming`` — pending/in_progress, ``end_of_today < due_at <= now + 7d``
+        - ``high_priority`` — pending/in_progress, ``priority = 'high'``
+        - ``total_pending`` — count of pending/in_progress
+        - ``total_completed_today`` — completed where
+          ``DATE(completed_at) = DATE(now)``
+        """
+        now = datetime.now()
+        today_end = now.replace(hour=23, minute=59, second=59)
+        week_end = now + timedelta(days=7)
+        now_iso = now.isoformat()
+        today_end_iso = today_end.isoformat()
+        week_end_iso = week_end.isoformat()
+
+        conn = self.db.get_connection()
+
+        cursor = conn.execute(
+            "SELECT * FROM todos "
+            "WHERE status IN ('pending', 'in_progress') "
+            "AND due_at IS NOT NULL AND due_at < ? "
+            "ORDER BY due_at ASC",
+            (now_iso,),
+        )
+        overdue = [self._row_to_todo(r) for r in cursor.fetchall()]
+
+        cursor = conn.execute(
+            "SELECT * FROM todos "
+            "WHERE status IN ('pending', 'in_progress') "
+            "AND due_at IS NOT NULL "
+            "AND due_at >= ? AND due_at <= ? "
+            "ORDER BY due_at ASC",
+            (now_iso, today_end_iso),
+        )
+        today = [self._row_to_todo(r) for r in cursor.fetchall()]
+
+        cursor = conn.execute(
+            "SELECT * FROM todos "
+            "WHERE status IN ('pending', 'in_progress') "
+            "AND due_at IS NOT NULL "
+            "AND due_at > ? AND due_at <= ? "
+            "ORDER BY due_at ASC",
+            (today_end_iso, week_end_iso),
+        )
+        upcoming = [self._row_to_todo(r) for r in cursor.fetchall()]
+
+        cursor = conn.execute(
+            "SELECT * FROM todos "
+            "WHERE status IN ('pending', 'in_progress') "
+            "AND priority = 'high' "
+            "ORDER BY due_at ASC"
+        )
+        high_priority = [self._row_to_todo(r) for r in cursor.fetchall()]
+
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM todos "
+            "WHERE status IN ('pending', 'in_progress')"
+        )
+        total_pending = cursor.fetchone()[0]
+
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM todos "
+            "WHERE status = 'completed' AND DATE(completed_at) = DATE(?)",
+            (now_iso,),
+        )
+        total_completed_today = cursor.fetchone()[0]
+
+        return {
+            "overdue": overdue,
+            "today": today,
+            "upcoming": upcoming,
+            "high_priority": high_priority,
+            "total_pending": total_pending,
+            "total_completed_today": total_completed_today,
+        }
+
 
     def _auto_link_project(self, project_tag: str) -> Optional[str]:
         """Auto-link project_tag to a ``projects`` row, returning its TEXT id."""
