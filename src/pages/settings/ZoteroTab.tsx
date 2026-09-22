@@ -190,11 +190,7 @@ export function ZoteroTab() {
         <div className="flex items-center gap-2">
           <span
             className={`inline-block h-2 w-2 rounded-full ${
-              connected
-                ? 'bg-green-500'
-                : statusLoading
-                  ? 'bg-amber-400 animate-pulse'
-                  : 'bg-faint'
+              connected ? 'bg-green-500' : statusLoading ? 'bg-amber-400 animate-pulse' : 'bg-faint'
             }`}
           />
           <span className="text-sm text-primary">
@@ -257,7 +253,9 @@ export function ZoteroTab() {
             {pathSaving ? '…' : t('settings.zotero.path.save')}
           </button>
         </div>
-        {pathSaved && <p className="mt-1 text-xs text-green-400">{t('settings.zotero.path.saved')}</p>}
+        {pathSaved && (
+          <p className="mt-1 text-xs text-green-400">{t('settings.zotero.path.saved')}</p>
+        )}
       </div>
 
       {/* Search + results (only when connected) */}
@@ -397,16 +395,13 @@ export function ZoteroTab() {
                                     <p className="text-secondary mt-0.5">{a.comment}</p>
                                   )}
                                   {a.page_label && (
-                                    <p className="text-faint text-[10px]">
-                                      p. {a.page_label}
-                                    </p>
+                                    <p className="text-faint text-[10px]">p. {a.page_label}</p>
                                   )}
                                 </div>
                               ))}
                               {annotations.length > 10 && (
                                 <p className="text-faint text-[10px]">
-                                  +{annotations.length - 10}{' '}
-                                  {t('settings.zotero.annotations.more')}
+                                  +{annotations.length - 10} {t('settings.zotero.annotations.more')}
                                 </p>
                               )}
                             </div>
