@@ -36,7 +36,7 @@ def _state(**overrides):
 
 
 def _handler(state):
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0911 — 脚本化假邮箱后端：每个 return 一种路由
         url = str(request.url)
         state["urls"].append(url)
         if "/zh" in url and "/api/" not in url:

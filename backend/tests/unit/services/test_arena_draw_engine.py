@@ -10,7 +10,6 @@
 
 import base64
 import json
-import threading
 import time as _time
 from typing import Any, Dict, List, Optional
 
@@ -19,7 +18,6 @@ from cryptography.fernet import Fernet
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.api import arena_routes
 from backend.api.arena_routes import init_arena_service, router, shutdown_arena_service
 from backend.config.arena_automation import ArenaAutomationConfig
 from backend.services import arena_draw_engine as de
@@ -32,7 +30,6 @@ from backend.services.arena_draw_engine import (
     draw_once,
     gate_key,
 )
-
 
 # ── helpers ────────────────────────────────────────────────────────────
 
@@ -183,7 +180,9 @@ def test_gate_ladder_escalates_and_resets():
     assert st["gap"] == pytest.approx(min(60.0, 5.0 * 3), abs=0.01)
     gate.gate_reset(key)
     st = gate.gate_status(key)
-    assert st["level"] == 0 and st["left"] == 0.0 and st["gap"] == 0.0
+    assert st["level"] == 0
+    assert st["left"] == 0.0
+    assert st["gap"] == 0.0
 
 
 def test_gate_decay_after_quiet_period():
@@ -216,7 +215,8 @@ def test_gate_reject_double_counting():
     assert gate.rej_count("a") == 2
     assert gate.rej_count() == 3
     gate.reset_rejects()
-    assert gate.rej_count() == 0 and gate.rej_count("a") == 0
+    assert gate.rej_count() == 0
+    assert gate.rej_count("a") == 0
 
 
 # ── DrawClient ─────────────────────────────────────────────────────────
@@ -242,7 +242,8 @@ def test_create_chat_429_plain_and_switch():
     c = _client(FakeSession(responses=[FakeResponse(429, text="Too Many Requests")]), gate)
     with pytest.raises(RateLimited) as ei:
         c.create_chat({})
-    assert ei.value.cf is False and ei.value.switch is False
+    assert ei.value.cf is False
+    assert ei.value.switch is False
 
     gate2 = Gate()
     gate2.set_switch_level(1)
@@ -260,7 +261,8 @@ def test_create_chat_429_cf_forces_switch():
     )
     with pytest.raises(RateLimited) as ei:
         c.create_chat({})
-    assert ei.value.cf is True and ei.value.switch is True
+    assert ei.value.cf is True
+    assert ei.value.switch is True
 
 
 def test_create_chat_recaptcha_reject_counted():
@@ -403,9 +405,12 @@ def test_draw_once_hit_renames_and_keeps(monkeypatch):
     cache = FakeCache()
     client = StubClient()
     res = draw_once(ACCOUNT, "pw", cache, Gate(), keep_pattern="astra", client=client)
-    assert res["ok"] and res["kept"]
-    assert res["model"] == "GPT-6 Astra" and res["internal"] == "gpt-6-astra-low"
-    assert res["reasoning"] == 123 and res["tier"] == "low"
+    assert res["ok"]
+    assert res["kept"]
+    assert res["model"] == "GPT-6 Astra"
+    assert res["internal"] == "gpt-6-astra-low"
+    assert res["reasoning"] == 123
+    assert res["tier"] == "low"
     assert any(c.startswith("rename:gpt-6-astra-low·r123") for c in client.calls)
     # 消费语义：取票必须 consume=True
     assert cache.get_calls[0]["consume"] is True
@@ -416,19 +421,24 @@ def test_draw_once_miss_archive_with_delete_fallback(monkeypatch):
     client = StubClient()
     client.archive_ok = False
     res = draw_once(ACCOUNT, "pw", FakeCache(), Gate(), keep_pattern="astra", miss_action="archive", client=client)
-    assert res["ok"] and not res["kept"]
-    assert "archive" in client.calls and "delete" in client.calls
+    assert res["ok"]
+    assert not res["kept"]
+    assert "archive" in client.calls
+    assert "delete" in client.calls
 
 
 def test_draw_once_miss_delete_and_keep(monkeypatch):
     _patch_round(monkeypatch, model="Claude Fable", internal="claude-fable-5.1")
     client = StubClient()
     res = draw_once(ACCOUNT, "pw", FakeCache(), Gate(), keep_pattern="astra", miss_action="delete", client=client)
-    assert res["ok"] and not res["kept"] and "delete" in client.calls
+    assert res["ok"]
+    assert not res["kept"]
+    assert "delete" in client.calls
 
     client2 = StubClient()
     res2 = draw_once(ACCOUNT, "pw", FakeCache(), Gate(), keep_pattern="astra", miss_action="keep", client=client2)
-    assert res2["ok"] and not res2["kept"]
+    assert res2["ok"]
+    assert not res2["kept"]
     assert not any(c.startswith(("archive", "delete", "rename")) for c in client2.calls)
 
 
@@ -446,7 +456,8 @@ def test_draw_once_require_reasoning_discards(monkeypatch):
         ACCOUNT, "pw", FakeCache(), Gate(), keep_pattern="astra",
         require_reasoning=True, client=client,
     )
-    assert res["ok"] and not res["kept"]
+    assert res["ok"]
+    assert not res["kept"]
     assert not any(c.startswith("rename") for c in client.calls)
 
 
@@ -475,7 +486,8 @@ def test_draw_once_switch_propagates(monkeypatch):
     client = StubClient()
     client.create_error = RateLimited("429 到档", cf=True, switch=True)
     res = draw_once(ACCOUNT, "pw", FakeCache(), Gate(), client=client)
-    assert res["switch"] is True and not res["ok"]
+    assert res["switch"] is True
+    assert not res["ok"]
 
 
 def test_token_cache_consume_semantics():
@@ -484,7 +496,8 @@ def test_token_cache_consume_semantics():
     cache = TokenWindowCache(max_age_sec=60.0)
     cache.push("T" * 600)
     first = cache.get(wait_sec=0.1, consume=True)
-    assert first is not None and first["token"] == "T" * 600
+    assert first is not None
+    assert first["token"] == "T" * 600
     assert cache.get(wait_sec=0.1) is None            # 已消费：槽位清空
     assert cache.health()["ready"] is False
     cache.push("U" * 600)
@@ -571,7 +584,9 @@ def test_draw_job_round_trip(monkeypatch):
         job_store=store, token_cache=FakeCache(),
     )
     job = _wait_job(store, job_id)
-    assert job.status == "done" and job.ok == 4 and job.failed == 0
+    assert job.status == "done"
+    assert job.ok == 4
+    assert job.failed == 0
     assert len(accounts.draws) == 4
     assert sorted(accounts.released) == ["acc-0", "acc-0", "acc-1", "acc-1"]
     assert all(c["gate"] and c["cache"] for c in calls)
@@ -614,7 +629,6 @@ def test_draw_job_reject_breaker_cools_down(monkeypatch):
     def fake_sleep(seconds, cancel=None, step=0.4):
         if seconds and seconds > 0.01:
             cooldowns.append(seconds)
-        return None
 
     monkeypatch.setattr(de, "_sleep_cancellable", fake_sleep)
     monkeypatch.setattr(de, "draw_once", fake_draw_once)
@@ -632,13 +646,13 @@ def test_draw_job_reject_breaker_cools_down(monkeypatch):
 def test_start_draw_job_validates_params():
     accounts = FakeAccounts(n=1)
     store = de.JobStore()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="account_ids"):
         de.start_draw_job({"rounds_per_account": 1}, accounts, _draw_config(), job_store=store)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="miss_action"):
         de.start_draw_job(
             {"all_accounts": True, "miss_action": "nuke"}, accounts, _draw_config(), job_store=store
         )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="unknown account"):
         de.start_draw_job(
             {"account_ids": ["ghost"], "rounds_per_account": 1}, accounts, _draw_config(), job_store=store
         )
@@ -716,10 +730,12 @@ def test_api_draw_job_round_trip(client, monkeypatch):
         if snap["status"] in ("done", "failed", "stopped"):
             break
         _time.sleep(0.05)
-    assert snap["status"] == "done" and snap["ok"] == 1
+    assert snap["status"] == "done"
+    assert snap["ok"] == 1
 
     draws = client.get(f"/api/v1/arena/accounts/{account_id}/draws").json()
-    assert len(draws) == 1 and draws[0]["model"] == "GPT-6 Astra"
+    assert len(draws) == 1
+    assert draws[0]["model"] == "GPT-6 Astra"
 
     all_draws = client.get("/api/v1/arena/draws").json()
     assert len(all_draws) == 1

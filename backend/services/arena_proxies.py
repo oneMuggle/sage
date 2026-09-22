@@ -240,12 +240,12 @@ class ProxyApi:
         if response.status_code >= 400 or not data.get("success", data.get("code") == 0):
             raise ArenaProxyError(f"代理接口失败: {str(data)[:150]}")
         rows = data.get("data") or []
-        first = rows[0] if isinstance(rows, (list, tuple)) and rows else rows
+        first = rows[0] if isinstance(rows, (list, tuple)) and rows else rows  # noqa: UP038 — py38 运行时 isinstance 不支持 PEP604
         host, port_value = "", 0
         if isinstance(first, dict):
             host = str(first.get("ip") or first.get("host") or "").strip()
             port_value = first.get("port") or 0
-        elif isinstance(first, (list, tuple)) and len(first) >= 2:
+        elif isinstance(first, (list, tuple)) and len(first) >= 2:  # noqa: UP038 — py38 运行时 isinstance 不支持 PEP604
             host = str(first[0] or "").strip()
             port_value = first[1]
         elif isinstance(first, str):

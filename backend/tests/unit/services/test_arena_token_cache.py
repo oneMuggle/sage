@@ -7,9 +7,6 @@
 - max_age 过期拒绝；request_proxy_change 的 relay 映射（凭据不达 Chromium）。
 """
 
-import contextlib
-import os
-import tempfile
 import threading
 import time as _time
 

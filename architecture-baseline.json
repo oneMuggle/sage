@@ -65,8 +65,10 @@
     "src/shared/lib/i18n/en.ts": 1234,
     "src/shared/lib/i18n/zh.ts": 1210,
     "src/widgets/chat/Message.tsx": 1067,
-    "src/widgets/chat/progress/__tests__/TaskTreeSection.rerun.test.tsx": 859,
+    "src/widgets/chat/progress/__tests__/TaskTreeSection.rerun.test.tsx": 904,
     "src/widgets/sidebar/sections/ProjectSection.tsx": 938,
-    "tests/electron/test_stub_backend.py": 896
+    "tests/electron/test_stub_backend.py": 896,
+    "backend/api/arena_routes.py": 873,
+    "backend/services/arena_draw_engine.py": 1054
   }
 }

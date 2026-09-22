@@ -56,7 +56,8 @@ def test_hardware_id_falls_back_to_mac(monkeypatch):
     monkeypatch.setattr(mid, "_windows_machine_guid", lambda: "")
     monkeypatch.setattr(mid, "_linux_machine_id", lambda: "")
     value = mid.hardware_id()
-    assert isinstance(value, str) and value
+    assert isinstance(value, str)
+    assert value
 
 
 def test_hardware_id_prefers_platform_guid(monkeypatch):

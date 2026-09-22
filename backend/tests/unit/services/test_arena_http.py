@@ -58,7 +58,7 @@ def test_httpx_session_posts_json_body():
 
 
 def test_stream_get_yields_sse_chunks():
-    payload = b"data: {\"records\": [{\"headers\": [[\"public-access-token\", \"x\"]]}]}\n\n"
+    payload = b'data: {"records": [{"headers": [["public-access-token", "x"]]}]}\n\n'
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=payload, headers={"Content-Type": "text/event-stream"})

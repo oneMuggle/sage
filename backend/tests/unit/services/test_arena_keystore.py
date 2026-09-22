@@ -33,7 +33,8 @@ def test_master_key_file_permissions(tmp_path):
         # Windows maps os.chmod onto the readonly attribute only (observed mode
         # is 0o666), so the real protection is the file living under the
         # per-user profile; DPAPI wrapping is tracked as future hardening.
-        assert path.is_file() and path.stat().st_size > 0
+        assert path.is_file()
+        assert path.stat().st_size > 0
     else:
         assert stat.S_IMODE(mode) == 0o600
 
