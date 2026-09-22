@@ -1,5 +1,5 @@
-import { X, Loader2 } from 'lucide-react';
-import { useEffect } from 'react';
+import { BookOpen, ChevronDown, X, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
@@ -15,11 +15,13 @@ import { useBtwCommand } from './useBtwCommand';
  *
  * 显示 /btw 命令触发的问题和流式响应
  * 支持点击关闭按钮和 Escape 键关闭
+ * R92: 答案下方展示统一参考来源（sources_used，紧凑列表可折叠）
  */
 export function BtwOverlay() {
   const { t } = useI18n();
   const { close } = useBtwCommand();
-  const { isOpen, question, answer, isLoading } = useBtwState();
+  const { isOpen, question, answer, isLoading, sources } = useBtwState();
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
 
   // Escape 键关闭
   useEffect(() => {
@@ -42,6 +44,15 @@ export function BtwOverlay() {
   if (!isOpen) {
     return null;
   }
+
+  const kindLabel = (kind: string | undefined) =>
+    kind === 'wiki'
+      ? t('chat.sources_group_wiki')
+      : kind === 'memory'
+        ? t('chat.sources_group_memory')
+        : kind === 'tool'
+          ? t('chat.sources_group_tool')
+          : t('chat.sources_group_web');
 
   return (
     <div
@@ -86,6 +97,54 @@ export function BtwOverlay() {
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
               {answer}
             </ReactMarkdown>
+          </div>
+        )}
+
+        {/* R92: 统一参考来源（紧凑列表，类主聊天的来源区块但无分组） */}
+        {sources.length > 0 && (
+          <div className="mt-2 border-t border-border/50 pt-2" data-testid="btw-sources">
+            <button
+              type="button"
+              onClick={() => setSourcesExpanded((v) => !v)}
+              className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+              data-testid="btw-sources-toggle"
+            >
+              <BookOpen className="w-3 h-3" />
+              {t('chat.sources_count').replace('{n}', String(sources.length))}
+              <ChevronDown
+                className={`w-3 h-3 transition-transform ${sourcesExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {sourcesExpanded && (
+              <div className="mt-1 space-y-1 text-xs" data-testid="btw-sources-list">
+                {sources.map((s, i) => (
+                  <div key={`${s.url ?? s.path ?? s.title}-${i}`} className="space-y-0.5">
+                    <div className="flex items-start gap-1.5">
+                      <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
+                        {kindLabel(s.kind)}
+                      </span>
+                      {s.url ? (
+                        <a
+                          href={s.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline break-all"
+                        >
+                          {s.title || s.url}
+                        </a>
+                      ) : (
+                        <span className="text-text-secondary break-all">
+                          {s.title || s.path || s.preview}
+                        </span>
+                      )}
+                    </div>
+                    {s.snippet && (
+                      <div className="pl-5 text-muted break-all line-clamp-2">{s.snippet}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
