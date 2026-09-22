@@ -163,6 +163,8 @@ def test_401_with_token_clears_record_and_names_reauth():
     def responder(method, request, seen):
         if method == "initialize":
             return _rpc({"serverInfo": {}}, session_id="SID-1")
+        if method == "notifications/initialized":
+            return httpx.Response(200)
         return httpx.Response(401, json={"error": "unauthorized"})
 
     client, _ = _make_client(_config(), store, responder)
@@ -204,6 +206,8 @@ def test_404_on_established_session_raises_expired():
     def responder(method, request, seen):
         if method == "initialize":
             return _rpc({"serverInfo": {}}, session_id="SID-1")
+        if method == "notifications/initialized":
+            return httpx.Response(200)
         return httpx.Response(404, json={"error": "gone"})
 
     client, _ = _make_client(_config(), store, responder)
