@@ -29,6 +29,7 @@ import { useSettings } from '../manage-settings/useSettings';
 import { selectSessionSlots, useChatStreamStore, type TaskBoardState } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
 import { notifySession, shouldNotify } from './sessionNotify';
+import { isValidSourcesPayload } from './sourcesPayload';
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 
 /**
@@ -746,21 +747,13 @@ export function useChat() {
                 updateMessage(assistantId, { rag_citations: merged });
               }
               // R81: 统一参考来源 —— 检索类工具命中（web/wiki/MCP）done 前
-              // 一次性推送。载荷校验对齐 MEDIUM-2: 数组且每项 kind 合法。
+              // 一次性推送。载荷校验对齐 MEDIUM-2: 数组且每项 kind 合法
+              // （R92: 校验收敛到 sourcesPayload.ts，主/重接/btw 三路径共用）。
               if (evt.state === 'sources_used' && evt.sources) {
-                const sources = evt.sources;
-                const isValidSources =
-                  Array.isArray(sources) &&
-                  sources.every(
-                    (s) =>
-                      typeof s === 'object' &&
-                      s !== null &&
-                      ['web', 'wiki', 'tool', 'memory'].includes((s as { kind?: unknown }).kind as string),
-                  );
-                if (isValidSources) {
-                  updateMessage(assistantId, { sources });
+                if (isValidSourcesPayload(evt.sources)) {
+                  updateMessage(assistantId, { sources: evt.sources });
                 } else {
-                  logger.warn(requestId, 'R81.sources_used.malformed', sources);
+                  logger.warn(requestId, 'R81.sources_used.malformed', evt.sources);
                 }
               }
 
@@ -1119,21 +1112,9 @@ export function useChat() {
               }
             }
             // R81: 重接路径同主路径 —— 统一参考来源回放
-            // R85: 载荷校验对齐主路径 MEDIUM-2 口径（数组且每项 kind 合法），
-            // 重放数据源自服务端队列，风险低，但两路径口径应一致。
-            if (evt.state === 'sources_used' && evt.sources) {
-              const sources = evt.sources;
-              const isValidSources =
-                Array.isArray(sources) &&
-                sources.every(
-                  (s) =>
-                    typeof s === 'object' &&
-                    s !== null &&
-                    ['web', 'wiki', 'tool', 'memory'].includes((s as { kind?: unknown }).kind as string),
-                );
-              if (isValidSources && sources.length > 0) {
-                updateMessage(messageId, { sources });
-              }
+            // R85: 载荷校验对齐主路径 MEDIUM-2 口径（R92 收敛到共享 helper）。
+            if (evt.state === 'sources_used' && isValidSourcesPayload(evt.sources)) {
+              updateMessage(messageId, { sources: evt.sources });
             }
             // 其余事件（工具 acting/observing 等）降级为 streaming meta 文案
             useChatStreamStore.getState().setStreamingMeta(sid, messageId, {
@@ -1176,6 +1157,12 @@ export function useChat() {
             onEvent: (evt) => {
               if (evt.state === 'content_delta' && evt.content) {
                 useBtwState.getState().appendDelta(evt.content);
+              } else if (evt.state === 'sources_used' && evt.sources) {
+                // R92: /btw 走同一 /chat/stream 管道 —— sources_used 同样到达，
+                // 载荷校验（共享 helper）通过后写入 btw 状态（浮层渲染）。
+                if (isValidSourcesPayload(evt.sources)) {
+                  useBtwState.getState().setSources(evt.sources);
+                }
               } else if (evt.state === 'done') {
                 if (evt.content) {
                   useBtwState.getState().appendDelta(evt.content);

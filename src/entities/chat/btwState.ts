@@ -1,6 +1,8 @@
 // src/entities/chat/btwState.ts
 import { create } from 'zustand';
 
+import type { MessageSource } from '../../shared/api/types';
+
 /**
  * Btw 状态机 — 与 spec Phase 6 一致
  *
@@ -20,10 +22,13 @@ export interface BtwState {
   answer: string;
   isLoading: boolean;
   parentTaskRunning: boolean;
+  /** R92: sources_used 事件带来的统一参考来源（/btw 走同一 /chat/stream 管道） */
+  sources: MessageSource[];
   open: (question: string) => void;
   close: () => void;
   appendDelta: (delta: string) => void;
   setLoading: (v: boolean) => void;
+  setSources: (sources: MessageSource[]) => void;
 }
 
 const initial = {
@@ -32,13 +37,16 @@ const initial = {
   answer: '',
   isLoading: false,
   parentTaskRunning: false,
+  sources: [] as MessageSource[],
 };
 
 export const useBtwState = create<BtwState>((set) => ({
   ...initial,
-  open: (question) => set({ isOpen: true, question, answer: '', isLoading: true }),
+  open: (question) =>
+    set({ isOpen: true, question, answer: '', isLoading: true, sources: [] }),
   close: () => set({ ...initial }),
   appendDelta: (delta) =>
     set((prev) => ({ ...prev, answer: prev.answer + delta, isLoading: false })),
   setLoading: (v) => set({ isLoading: v }),
+  setSources: (sources) => set({ sources }),
 }));
