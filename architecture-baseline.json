@@ -39,7 +39,7 @@
     "backend/tools/browser_cdp.py": 952,
     "backend/tools/browser_tool.py": 1010,
     "backend/tools/credential_vault.py": 897,
-    "backend/tools/download_tool.py": 1099,
+    "backend/tools/download_tool.py": 1116,
     "backend/tools/office_analyze_tool.py": 981,
     "backend/tools/office_create_tool.py": 1580,
     "backend/tools/web_tool.py": 1455,
